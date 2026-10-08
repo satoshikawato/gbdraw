@@ -22,7 +22,7 @@ from gbdraw.api import (
 from gbdraw.api.config import load_default_config
 from gbdraw.exceptions import ValidationError
 from gbdraw.session_request_codec import decode_canonical_request
-from gbdraw.web_support.error_adapter import serialize_web_error
+from gbdraw.web_support.feature_override_table import read_feature_override_table_json
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 HUMAN = REPO_ROOT / "gbdraw" / "web" / "tutorial-data" / "human-mitochondrion" / "HmmtDNA.gbk"
@@ -99,20 +99,42 @@ def test_python_api_rejects_a_non_positive_scale_interval(draw: Any, options_typ
         assert excinfo.value.diagnostic == EXPECTED_DIAGNOSTIC
 
 
-def test_a_web_generate_request_rejects_what_a_session_load_reads_as_automatic(tmp_path: Path) -> None:
-    # Web Generate decodes its request without the Session read rules.
-    with materialize_session(
-        load_session_document(_session(MAIN_API_LINEAR_NEGATIVE)), output_directory=tmp_path
-    ) as materialized:
-        with pytest.raises(Exception, match=r"objects\.scale\.interval") as excinfo:
-            decode_canonical_request(
-                materialized.document._data["renderRequest"],
-                resource_paths=materialized.resource_paths,
-                output_directory=tmp_path,
-            )
-    web_error = serialize_web_error(excinfo.value, operation="render", stage="decode")
-    assert web_error["code"] == "INPUT_INVALID"
-    assert web_error["context"] == {"reason": "POSITIVE_INTEGER_OR_AUTO", "configPath": "objects.scale.interval"}
+@pytest.mark.parametrize(
+    "fixture",
+    [MAIN_CLI_CIRCULAR_ZERO, MAIN_API_LINEAR_NEGATIVE, MAIN_WEB_FLAT_CIRCULAR_ZERO],
+    ids=["cli-config", "api-overrides", "web-flat-overrides"],
+)
+def test_the_request_decoder_reads_a_non_positive_interval_as_automatic(fixture: Path, tmp_path: Path) -> None:
+    # The Web keeps a loaded request as its committed request and Worker helpers
+    # (Load Feature Edits TSV, Similarity alignment) decode it directly; a fresh Web
+    # request carries the field literally (R7). Both mean the automatic interval.
+    session = _session(fixture)
+    stored = session["renderRequest"]
+    with materialize_session(load_session_document(session), output_directory=tmp_path) as materialized:
+        decoded = decode_canonical_request(
+            stored, resource_paths=materialized.resource_paths, output_directory=tmp_path
+        )
+        automatic = decode_canonical_request(
+            _without_stored_interval(session)["renderRequest"],
+            resource_paths=materialized.resource_paths,
+            output_directory=tmp_path,
+        )
+    assert decoded == automatic
+    assert stored == session["renderRequest"] == _session(fixture)["renderRequest"]
+
+
+def test_load_feature_edits_tsv_reads_against_a_loaded_non_positive_interval(tmp_path: Path) -> None:
+    session = _session(MAIN_CLI_CIRCULAR_ZERO)
+    table = tmp_path / "feature-overrides.tsv"
+    table.write_text("record\tfeature_selector\tfeature_visibility\tlabel_visibility\tlabel_text\n", encoding="utf-8")
+    with materialize_session(load_session_document(session), output_directory=tmp_path) as materialized:
+        result = json.loads(read_feature_override_table_json(
+            str(table),
+            json.dumps(session["renderRequest"]),
+            json.dumps({key: str(path) for key, path in materialized.resource_paths.items()}),
+            str(tmp_path / "out"),
+        ))
+    assert result == {"rows": [], "unmatchedRows": []}
 
 
 def _python_replay_svg(session: dict[str, Any], tmp_path: Path, name: str) -> dict[str, bytes]:

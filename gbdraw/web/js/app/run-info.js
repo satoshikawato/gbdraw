@@ -908,8 +908,7 @@ const CONFIG_VALUE_OPTIONS = Object.freeze({
   'objects.depth.max_depth': '--depth_max',
   'objects.depth.large_tick_interval': '--depth_large_tick_interval',
   'objects.depth.small_tick_interval': '--depth_small_tick_interval',
-  'objects.depth.tick_font_size': '--depth_tick_font_size',
-  'objects.scale.interval': '--scale_interval'
+  'objects.depth.tick_font_size': '--depth_tick_font_size'
 });
 
 const CIRCULAR_CONFIG_VALUE_OPTIONS = Object.freeze({
@@ -977,6 +976,9 @@ const appendConfigOverrides = (args, request) => {
     ...CONFIG_VALUE_OPTIONS,
     ...(request.mode === 'linear' ? LINEAR_CONFIG_VALUE_OPTIONS : CIRCULAR_CONFIG_VALUE_OPTIONS)
   }).forEach(([path, option]) => appendOption(args, option, take(path)));
+  // D-04: a request reads a scale interval of 0 or less as automatic, which the CLI writes as no flag.
+  const scaleInterval = take('objects.scale.interval');
+  appendOption(args, '--scale_interval', typeof scaleInterval === 'number' && scaleInterval <= 0 ? null : scaleInterval);
 
   appendBooleanOption(args, take('canvas.show_gc'), '--gc', '--no-gc');
   appendBooleanOption(args, take('canvas.show_skew'), '--skew', '--no-skew');

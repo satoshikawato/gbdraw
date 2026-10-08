@@ -1127,10 +1127,11 @@ Retired names and their replacements are listed under
   draws `NC_002333.2`). This covers LOSAT rings and precomputed `--conservation_blast` rings.
   Sessions now store every ring label, and a saved Session keeps the labels it was drawn with.
   GenBank and DDBJ rings still take the DEFINITION, then the organism.
-- Scale interval (CLI, Python API, web app): a scale interval of 0 or less is rejected with an
-  error that names `--scale_interval` or `objects.scale.interval`. Before, it was accepted and
-  drew the automatic interval. A Session that stores such a value still loads and draws the
-  automatic interval.
+- Scale interval (CLI, Python API, web app): the CLI and the Python option objects reject a scale
+  interval of 0 or less with an error that names `--scale_interval` or `objects.scale.interval`,
+  and the web app's Scale Interval field starts at 1. Before, the value was accepted and drew the
+  automatic interval. A Session or web request that holds such a value still draws the automatic
+  interval.
 - Tick labels (CLI, Python API, web app): a manual interval that is not a whole unit prints the
   decimals it needs. A 500 bp Circular interval read "0 kbp, 1 kbp, 1 kbp, 2 kbp", and a 250 bp
   Linear interval wrote 2250 as "2.2 kbp". Automatic intervals are unchanged (OV-201).

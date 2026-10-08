@@ -469,14 +469,6 @@ assert.deepEqual(
   assert.equal(state.activeDrawing().adv.arrow_head_length_ratio, null);
   assert.equal(state.activeDrawing().adv.arrow_shaft_width_ratio, 1.0);
 
-  // D-04: a Session saved before the min-1 field may hold 0 or less, which drew automatic.
-  for (const [stored, expected] of [[0, null], [-5, null], [250, 250]]) {
-    const scaleConfig = structuredClone(savedConfig);
-    scaleConfig.adv.scale_interval = stored;
-    applyConfigData(state.activeDrawing(), scaleConfig);
-    assert.equal(state.activeDrawing().adv.scale_interval, expected, `scale_interval ${stored}`);
-  }
-
   Object.keys(state.activeDrawing().unmanagedConfigOverrides).forEach((path) => {
     delete state.activeDrawing().unmanagedConfigOverrides[path];
   });
@@ -624,8 +616,9 @@ assert.equal(
 );
 
 {
-  // D-04: a loaded Session whose interval is 0 or less regenerates with the
-  // automatic interval, so the Source recipe never writes a value the CLI rejects.
+  // D-04: a request reads a Scale Interval of 0 or less as the automatic interval
+  // (a loaded Session may hold one; Generate sends the field literally, R7), so the
+  // Source recipe omits it instead of writing a value the CLI rejects.
   const { applyConfigData, buildConfigData } = await import(
     pathToFileURL(join(tempDir, 'js', 'services', 'config.js'))
   );
@@ -641,6 +634,7 @@ assert.equal(
     const canonical = buildCanonicalRenderRequest({
       state, drawing: state.activeDrawing(), filesData: { c_gb: genbank, linearSeqs: [] }, comparisonPlanSnapshot: null
     });
+    assert.equal(canonical.renderRequest.diagramOptions.configOverrides['objects.scale.interval'], stored);
     const recipe = await buildSourceRecipe(canonical);
     assert.equal(recipe.available, true, recipe.unavailableReason);
     const index = recipe.args.indexOf('--scale_interval');

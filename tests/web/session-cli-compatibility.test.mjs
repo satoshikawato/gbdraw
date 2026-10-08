@@ -351,9 +351,10 @@ await test('a 0.13.0 Gallery Session with Custom Track Slots off loads without t
 
 // D-04: the main b05a6bb8 Web writer (Session 33, request schema 2; provenance in
 // tests/fixtures/sessions/scale-interval.provenance.json) saved a Scale Interval of 0
-// as the flat override `scale_interval` and drew the automatic interval. Load
-// keeps that meaning, so the next Generate requests the automatic interval.
-await test('a main v33 Web Session with Scale Interval 0 loads as the automatic interval', async () => {
+// as the flat override `scale_interval` and drew the automatic interval. Load shows
+// the stored 0, and the next request sends it literally under the current path (R7);
+// the Python request decoder reads it as automatic (tests/test_scale_interval_domain.py).
+await test('a main v33 Web Session with Scale Interval 0 loads into the current request path', async () => {
   const bytes = gunzipSync(await readFile(path.join(
     root, 'tests/fixtures/sessions/scale-interval-zero-circular-web.v33.gbdraw-session.json.gz'
   )));
@@ -363,12 +364,54 @@ await test('a main v33 Web Session with Scale Interval 0 loads as the automatic 
   const result = await load(bytes);
   assert.equal(result.status, 'ok', result.error?.stack);
   assert.equal(state.mode.value, 'circular');
-  assert.equal(state.activeDrawing().adv.scale_interval, null);
+  assert.equal(state.activeDrawing().adv.scale_interval, 0);
   const filesData = await serializeActiveRenderFiles('circular', state, state.activeDrawing());
   const candidate = buildCanonicalRenderRequest({
     state, drawing: state.activeDrawing(), filesData, comparisonPlanSnapshot: null
   });
   const overrides = candidate.renderRequest.diagramOptions.configOverrides ?? {};
-  assert.equal(overrides['objects.scale.interval'] ?? null, null);
+  assert.equal(overrides['objects.scale.interval'], 0);
   assert.equal(Object.hasOwn(overrides, 'scale_interval'), false);
+});
+
+// D-04 (review 2 item 1): Web Load checks the stored configuration and keeps the
+// stored request as the committed request, which Worker helpers decode directly.
+// Sessions that store a Scale Interval of 0 or less (main fe6861f0 CLI and typed API,
+// main b05a6bb8 Web; scale-interval.provenance.json) load, and Load Feature Edits TSV
+// reads against their committed request.
+await test('a Session with a Scale Interval of 0 or less loads and reads a Feature Edits TSV', async () => {
+  for (const [name, stored] of [
+    ['scale-interval-zero-circular-cli.v44', (request) => request.diagramOptions.config.objects.scale.interval],
+    ['scale-interval-negative-linear-api.v44', (request) => request.diagramOptions.configOverrides['objects.scale.interval']],
+    // Load rebuilds a schema 2 request from the loaded fields (current path, literal 0).
+    ['scale-interval-zero-circular-web.v33', (request) => request.diagramOptions.configOverrides['objects.scale.interval']]
+  ]) {
+    const fixture = path.join(root, `tests/fixtures/sessions/${name}.gbdraw-session.json.gz`);
+    const result = await load(gunzipSync(await readFile(fixture)));
+    assert.equal(result.status, 'ok', `${name}: ${JSON.stringify(result.error?.context ?? result.error)}`);
+    const committed = getCommittedCanonicalRenderRequest();
+    assert.ok(stored(committed) <= 0, name);
+    const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-scale-interval-'));
+    try {
+      await writeFile(path.join(directory, 'request.json'), JSON.stringify(committed));
+      await writeFile(path.join(directory, 'table.tsv'),
+        'record\tfeature_selector\tfeature_visibility\tlabel_visibility\tlabel_text\n');
+      const output = execFileSync('python', ['-c', `
+import gzip, json, sys
+from pathlib import Path
+from gbdraw.api import load_session_document, materialize_session
+from gbdraw.web_support.feature_override_table import read_feature_override_table_json
+fixture, directory = sys.argv[1], Path(sys.argv[2])
+document = load_session_document(json.loads(gzip.decompress(Path(fixture).read_bytes())))
+with materialize_session(document, output_directory=directory / 'out') as materialized:
+    print(read_feature_override_table_json(
+        str(directory / 'table.tsv'), (directory / 'request.json').read_text(),
+        json.dumps({key: str(value) for key, value in materialized.resource_paths.items()}),
+        str(directory / 'out')))
+`, fixture, directory], { encoding: 'utf8', cwd: root });
+      assert.deepEqual(JSON.parse(output), { rows: [], unmatchedRows: [] }, name);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  }
 });

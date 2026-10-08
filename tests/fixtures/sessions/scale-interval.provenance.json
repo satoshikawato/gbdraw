@@ -1,5 +1,5 @@
 {
-  "purpose": "Positive fixtures for the D-04 Session read rule: a stored scale interval <= 0 draws the automatic interval.",
+  "purpose": "Positive fixtures for the D-04 request read rule: a stored scale interval <= 0 draws the automatic interval.",
   "record": "tests/fixtures/regex_rules.gb (sha256 e33d282b370b092a0d3b4ccf26a70db9b01f3b28ea8758b728fee1812b7be88b), copied as record.gb",
   "compression": "gzip -n -9",
   "fixtures": {

@@ -66,7 +66,7 @@ Unset `Thresholds` values resolve through the mode profile:
 
 E-value, bitscore, and identity must be finite and non-negative; identity is limited to `0`–`100`. Alignment length must be a non-negative integer.
 
-In `config` and `config_overrides`, font sizes must be greater than zero, stroke widths zero or greater, and `objects.scale.interval` a positive integer or `None` (automatic); offsets, spacing, `track_axis_gap`, and label rotation keep their current ranges. When `config_overrides` sets `objects.definition.circular.font_size` without `objects.definition.circular.interval`, the interval becomes the font size plus 2, truncated to an integer, as with the command-line `--definition_font_size`. An invalid value raises `ValidationError` before rendering.
+In `config` and `config_overrides`, font sizes must be greater than zero, stroke widths zero or greater, and `objects.scale.interval` a positive integer or `None` (automatic; a Session that stores 0 or less draws the automatic interval); offsets, spacing, `track_axis_gap`, and label rotation keep their current ranges. When `config_overrides` sets `objects.definition.circular.font_size` without `objects.definition.circular.interval`, the interval becomes the font size plus 2, truncated to an integer, as with the command-line `--definition_font_size`. An invalid value raises `ValidationError` before rendering.
 
 ## Layout and track options
 

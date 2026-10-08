@@ -245,14 +245,16 @@ showed the name without the extension before.
 
 ## Unreleased: a scale interval of 0 or less
 
-Session version 46 and request schema 9 are unchanged. `--scale_interval`, the
-Python API's `objects.scale.interval`, and Web **Generate Diagram** reject a
-scale interval of 0 or less. Earlier writers stored such a value and drew the
-automatic interval, so a Session that stores one in
-`renderRequest.diagramOptions.config`, in `configOverrides` (including the
-flat `scale_interval` that earlier Web Sessions wrote), or in a Session 27–30
-`cliInvocation` still replays with the automatic interval, and Web Load
-shows the field as Auto. Saving it again stores no interval.
+Session version 46 and request schema 9 are unchanged. `--scale_interval` and
+`objects.scale.interval` in the Python option objects (`config` and
+`config_overrides`) reject a scale interval of 0 or less, and the web app's
+Scale Interval field starts at 1. A render request and a Session read a value
+of 0 or less as the automatic interval, as every earlier writer drew it:
+in `renderRequest.diagramOptions.config`, in `configOverrides` (including the
+flat `scale_interval` that earlier Web Sessions wrote), and in a Session 27–30
+`cliInvocation`. Web Load shows the stored value in the field, **Generate
+Diagram** draws the automatic interval, and the Source recipe omits
+`--scale_interval`. A value of 0 or less typed into the field behaves the same.
 
 ## Unreleased: CLI and Python LOSATN / TLOSATX results
 

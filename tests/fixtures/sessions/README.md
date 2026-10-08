@@ -140,8 +140,9 @@ CLI (in `diagramOptions.config`) and typed API (in `configOverrides`, where
 `main`'s Web Save also writes it), by the release tag `0.13.0` CLI (in
 `cliInvocation`), and by the first-parent `main` commit `b05a6bb8` Web Save
 (the flat `configOverrides.scale_interval` of Session 31–3x). Those writers drew such a value as the automatic interval.
-They are the positive fixtures for the reader that keeps drawing it so after
-fresh input rejects it (D-04, `test_scale_interval_domain.py`). The commands
+They are the positive fixtures for the request decoder, which still reads it
+as automatic while the CLI and the Python option objects reject it as input
+(D-04, `test_scale_interval_domain.py`). The commands
 and hashes are in `scale-interval.provenance.json`.
 
 `precomputed-ring-unlabelled-cli.v44.gbdraw-session.json.gz` and

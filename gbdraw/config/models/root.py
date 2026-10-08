@@ -22,8 +22,8 @@ _STYLE_LEAF_DOMAINS = (
     (("font_size",), "POSITIVE", "font sizes must be finite numbers greater than zero"),
     (("stroke_width", "tick_width"), "NONNEGATIVE", "stroke widths must be finite numbers of zero or greater"),
 )
-# D-04: None keeps the automatic interval; a Session that stores <= 0 is read
-# as None before it reaches here (gbdraw/api/session_compat.py).
+# D-04: None keeps the automatic interval. A request (a Session, the Web) that
+# carries <= 0 is read as None before it reaches here (session_request_codec.py).
 _EXACT_LEAF_DOMAINS = {
     "objects.scale.interval": ("POSITIVE_INTEGER_OR_AUTO", "expected a positive integer or None"),
 }

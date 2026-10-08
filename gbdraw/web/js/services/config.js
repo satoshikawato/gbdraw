@@ -2565,7 +2565,6 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true }
       drawing.adv[key].splice(0, drawing.adv[key].length, ...cloneJsonData(drawing.adv[key]));
     });
   }
-  drawing.adv.scale_interval = normalizePositiveNumberOrNull(drawing.adv.scale_interval);
   drawing.adv.depth_window_size = normalizePositiveNumberOrNull(drawing.adv.depth_window_size);
   drawing.adv.depth_step_size = normalizePositiveNumberOrNull(drawing.adv.depth_step_size);
   drawing.adv.depth_large_tick_interval = normalizePositiveNumberOrNull(
