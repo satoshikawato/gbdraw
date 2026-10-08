@@ -1158,11 +1158,41 @@ def _gap_between_inner_outer_tracks(
     inner_scale: float = 1.0,
     outer_scale: float = 1.0,
 ) -> float:
-    """Return required clearance between adjacent physical radial sides."""
+    """Facing gap of two adjacent rows: the inner row's outer gap or the outer row's inner gap, whichever is larger.
+
+    Every placement and the order check use this rule, also after a pinned row
+    and across a group boundary.
+    """
 
     return max(
         _scaled_inside_auto_outer_gap(inner_intent, inner_scale),
         _scaled_inside_auto_inner_gap(outer_intent, outer_scale),
+    )
+
+
+def _outer_limit_below_rows(
+    limit_px: float,
+    rows_above: Sequence[tuple[_RadialSlotIntent, float]],
+    intent: _RadialSlotIntent,
+) -> float:
+    """Outer limit of ``intent`` below placed rows, each with the edge facing it."""
+
+    return min(
+        [float(limit_px)]
+        + [float(edge_px) - _gap_between_inner_outer_tracks(intent, row) for row, edge_px in rows_above]
+    )
+
+
+def _inner_limit_above_rows(
+    limit_px: float,
+    rows_below: Sequence[tuple[_RadialSlotIntent, float]],
+    intent: _RadialSlotIntent,
+) -> float:
+    """Inner limit of ``intent`` above placed rows, each with the edge facing it."""
+
+    return max(
+        [float(limit_px)]
+        + [float(edge_px) + _gap_between_inner_outer_tracks(row, intent) for row, edge_px in rows_below]
     )
 
 
@@ -1264,17 +1294,13 @@ def _place_inside_auto_stack_group(
             resolved_group.append(resolved)
             if _slot_reserves(intent) and resolved.reserved_band_px is not None:
                 working_occupied.append((intent.slot_id, resolved.reserved_band_px))
-            if resolved.packing_band_px is not None:
-                next_inner_intent = intents[intent_index + 1] if intent_index + 1 < len(intents) else None
-                gap_to_next = (
-                    _gap_between_inner_outer_tracks(
-                        next_inner_intent,
-                        intent,
-                        inner_scale=scale,
-                        outer_scale=scale,
-                    )
-                    if next_inner_intent is not None
-                    else _scaled_inside_auto_inner_gap(intent, scale)
+            next_inner_intent = intents[intent_index + 1] if intent_index + 1 < len(intents) else None
+            if resolved.packing_band_px is not None and next_inner_intent is not None:
+                gap_to_next = _gap_between_inner_outer_tracks(
+                    next_inner_intent,
+                    intent,
+                    inner_scale=scale,
+                    outer_scale=scale,
                 )
                 working_outer = min(
                     working_outer,
@@ -1328,13 +1354,9 @@ def _place_outside_auto_stack_group(
         resolved_group.append(resolved)
         if _slot_reserves(intent) and resolved.reserved_band_px is not None:
             working_occupied.append((intent.slot_id, resolved.reserved_band_px))
-        if resolved.packing_band_px is not None:
-            next_outer_intent = intents[intent_index + 1] if intent_index + 1 < len(intents) else None
-            gap_to_next = (
-                _gap_between_inner_outer_tracks(intent, next_outer_intent)
-                if next_outer_intent is not None
-                else max(0.0, float(intent.outer_gap_px))
-            )
+        next_outer_intent = intents[intent_index + 1] if intent_index + 1 < len(intents) else None
+        if resolved.packing_band_px is not None and next_outer_intent is not None:
+            gap_to_next = _gap_between_inner_outer_tracks(intent, next_outer_intent)
             working_inner = max(working_inner, float(resolved.packing_band_px.outer_px) + gap_to_next)
 
     return tuple(resolved_group)
@@ -1505,13 +1527,9 @@ def _place_inside_auto_group_with_width_scale(
         resolved_group.append(resolved)
         if _slot_reserves(intent) and resolved.reserved_band_px is not None:
             working_occupied.append((intent.slot_id, resolved.reserved_band_px))
-        if resolved.packing_band_px is not None:
-            next_inner_intent = intents[intent_index + 1] if intent_index + 1 < len(intents) else None
-            gap_to_next = (
-                _gap_between_inner_outer_tracks(next_inner_intent, intent)
-                if next_inner_intent is not None
-                else max(0.0, float(intent.inner_gap_px))
-            )
+        next_inner_intent = intents[intent_index + 1] if intent_index + 1 < len(intents) else None
+        if resolved.packing_band_px is not None and next_inner_intent is not None:
+            gap_to_next = _gap_between_inner_outer_tracks(next_inner_intent, intent)
             working_outer = min(working_outer, float(resolved.packing_band_px.inner_px) - gap_to_next)
 
     if _group_fits_window_and_order(
@@ -1678,7 +1696,7 @@ def _future_unresolved_inside_span_px(
     ordered_intents: Sequence[_RadialSlotIntent],
     *,
     start_pos: int,
-    current_outer_intent: _RadialSlotIntent | None,
+    current_outer_intent: _RadialSlotIntent,
     axis_radius_px: float,
     canvas_config: CircularCanvasConfigurator,
     cfg: GbdrawConfig,
@@ -1695,12 +1713,7 @@ def _future_unresolved_inside_span_px(
             break
         if future.side != "inside" or future.placement_policy == "hard":
             break
-        spacing_before = (
-            _gap_between_inner_outer_tracks(future, outer_neighbor)
-            if outer_neighbor is not None
-            else max(0.0, float(future.outer_gap_px))
-        )
-        span += spacing_before + _minimum_future_inside_width_px(
+        span += _gap_between_inner_outer_tracks(future, outer_neighbor) + _minimum_future_inside_width_px(
             future,
             axis_radius_px=axis_radius_px,
             canvas_config=canvas_config,
@@ -1741,7 +1754,7 @@ def _inside_placement_window(
     ordered_intents: Sequence[_RadialSlotIntent],
     *,
     start_pos: int,
-    current_outer_intent: _RadialSlotIntent | None,
+    current_outer_intent: _RadialSlotIntent,
     inside_max_outer: float,
     occupied: Sequence[tuple[str, RadialBand]],
     axis_radius_px: float,
@@ -1765,11 +1778,7 @@ def _inside_placement_window(
         future_hard_intent, future_hard_slot = future_hard
         # _next_future_hard_slot only returns slots that have a packing band.
         assert future_hard_slot.packing_band_px is not None
-        gap_to_future_hard = (
-            _gap_between_inner_outer_tracks(future_hard_intent, current_outer_intent)
-            if current_outer_intent is not None
-            else max(0.0, float(future_hard_intent.outer_gap_px))
-        )
+        gap_to_future_hard = _gap_between_inner_outer_tracks(future_hard_intent, current_outer_intent)
         # Mirror of top-down packing: the gap separates the packing bands, while
         # a reserved band may touch the pinned row.
         reserved_inner_limit = max(
@@ -1980,6 +1989,10 @@ def _resolve_circular_radial_layout(
     )
     outside_min_inner = axis_radius_px + outside_axis_gap_px
     inside_max_outer = axis_radius_px - inside_axis_gap_px
+    # Placed rows that bound the next row of a side, each with its edge that
+    # faces that row; the next row keeps the facing gap from every one of them.
+    rows_below_outside: list[tuple[_RadialSlotIntent, float]] = []
+    rows_above_inside: list[tuple[_RadialSlotIntent, float]] = []
     # Stack order runs from the outermost row to the innermost. A pinned row
     # bounds the rows after it on its own side (below); a pinned feature row
     # also bounds every row on the other side of the axis.
@@ -1988,15 +2001,9 @@ def _resolve_circular_radial_layout(
         if slot_intent is None or resolved.packing_band_px is None or resolved.renderer != "features":
             continue
         if resolved.side != "outside":
-            outside_min_inner = max(
-                outside_min_inner,
-                max(axis_radius_px, float(resolved.packing_band_px.outer_px)) + max(0.0, float(slot_intent.outer_gap_px)),
-            )
+            rows_below_outside.append((slot_intent, max(axis_radius_px, float(resolved.packing_band_px.outer_px))))
         if resolved.side != "inside":
-            inside_max_outer = min(
-                inside_max_outer,
-                min(axis_radius_px, float(resolved.packing_band_px.inner_px)) - max(0.0, float(slot_intent.inner_gap_px)),
-            )
+            rows_above_inside.append((slot_intent, min(axis_radius_px, float(resolved.packing_band_px.inner_px))))
 
     ordered_intents = sorted(intents, key=lambda item: item.slot_index)
 
@@ -2014,7 +2021,7 @@ def _resolve_circular_radial_layout(
                     outside_intents,
                     start_pos=outside_pos + len(outside_group) - 1,
                     current_inner_intent=outside_group[-1],
-                    outside_min_inner=outside_min_inner,
+                    outside_min_inner=_inner_limit_above_rows(outside_min_inner, rows_below_outside, outside_group[0]),
                     resolved_by_index=resolved_by_index,
                 ),
                 feature_dict=feature_dict,
@@ -2033,7 +2040,7 @@ def _resolve_circular_radial_layout(
             outer_px = float(outside_band.outer_px)
             if intent.renderer == "features":
                 outer_px = max(axis_radius_px, outer_px)
-            outside_min_inner = max(outside_min_inner, outer_px + max(0.0, float(intent.outer_gap_px)))
+            rows_below_outside.append((intent, outer_px))
 
     for intent_pos, intent in enumerate(ordered_intents):
         already_resolved = resolved_by_index.get(intent.slot_index)
@@ -2046,7 +2053,7 @@ def _resolve_circular_radial_layout(
                 inner_px = float(already_resolved.packing_band_px.inner_px)
                 if intent.renderer == "features":
                     inner_px = min(axis_radius_px, inner_px)
-                inside_max_outer = min(inside_max_outer, inner_px - max(0.0, float(intent.inner_gap_px)))
+                rows_above_inside.append((intent, inner_px))
             continue
 
         if intent.side == "overlay":
@@ -2062,6 +2069,8 @@ def _resolve_circular_radial_layout(
                 depth_config=depth_config,
             )
         else:
+            # Every group starts with this row, which faces the rows above it.
+            outer_limit = _outer_limit_below_rows(inside_max_outer, rows_above_inside, intent)
             movable_group = _inside_movable_stack_group_from(
                 ordered_intents,
                 intent_pos,
@@ -2072,7 +2081,7 @@ def _resolve_circular_radial_layout(
                     ordered_intents,
                     start_pos=intent_pos + len(movable_group) - 1,
                     current_outer_intent=movable_group[-1],
-                    inside_max_outer=inside_max_outer,
+                    inside_max_outer=outer_limit,
                     occupied=occupied,
                     axis_radius_px=axis_radius_px,
                     canvas_config=canvas_config,
@@ -2100,10 +2109,7 @@ def _resolve_circular_radial_layout(
                     if _slot_reserves(group_intent) and group_resolved.reserved_band_px is not None:
                         occupied.append((group_intent.slot_id, group_resolved.reserved_band_px))
                     if group_resolved.packing_band_px is not None:
-                        inside_max_outer = min(
-                            inside_max_outer,
-                            float(group_resolved.packing_band_px.inner_px) - max(0.0, float(group_intent.inner_gap_px)),
-                        )
+                        rows_above_inside.append((group_intent, float(group_resolved.packing_band_px.inner_px)))
                 continue
 
             preferred_group = _preferred_numeric_group_from(
@@ -2116,7 +2122,7 @@ def _resolve_circular_radial_layout(
                     ordered_intents,
                     start_pos=intent_pos + len(preferred_group) - 1,
                     current_outer_intent=preferred_group[-1],
-                    inside_max_outer=inside_max_outer,
+                    inside_max_outer=outer_limit,
                     occupied=occupied,
                     axis_radius_px=axis_radius_px,
                     canvas_config=canvas_config,
@@ -2144,10 +2150,7 @@ def _resolve_circular_radial_layout(
                     if _slot_reserves(group_intent) and group_resolved.reserved_band_px is not None:
                         occupied.append((group_intent.slot_id, group_resolved.reserved_band_px))
                     if group_resolved.packing_band_px is not None:
-                        inside_max_outer = min(
-                            inside_max_outer,
-                            float(group_resolved.packing_band_px.inner_px) - max(0.0, float(group_intent.inner_gap_px)),
-                        )
+                        rows_above_inside.append((group_intent, float(group_resolved.packing_band_px.inner_px)))
                 continue
 
             inside_group = _inside_auto_stack_group_from(
@@ -2161,7 +2164,7 @@ def _resolve_circular_radial_layout(
                 ordered_intents,
                 start_pos=intent_pos + len(inside_group) - 1,
                 current_outer_intent=inside_group[-1],
-                inside_max_outer=inside_max_outer,
+                inside_max_outer=outer_limit,
                 occupied=occupied,
                 axis_radius_px=axis_radius_px,
                 canvas_config=canvas_config,
@@ -2198,7 +2201,7 @@ def _resolve_circular_radial_layout(
                         ordered_intents,
                         start_pos=intent_pos + len(fallback_group) - 1,
                         current_outer_intent=fallback_group[-1],
-                        inside_max_outer=inside_max_outer,
+                        inside_max_outer=outer_limit,
                         occupied=occupied,
                         axis_radius_px=axis_radius_px,
                         canvas_config=canvas_config,
@@ -2227,10 +2230,7 @@ def _resolve_circular_radial_layout(
                     if _slot_reserves(group_intent) and group_resolved.reserved_band_px is not None:
                         occupied.append((group_intent.slot_id, group_resolved.reserved_band_px))
                     if group_resolved.packing_band_px is not None:
-                        inside_max_outer = min(
-                            inside_max_outer,
-                            float(group_resolved.packing_band_px.inner_px) - max(0.0, float(group_intent.inner_gap_px)),
-                        )
+                        rows_above_inside.append((group_intent, float(group_resolved.packing_band_px.inner_px)))
                 continue
             resolved = _place_inside_auto(
                 intent,
@@ -2254,10 +2254,7 @@ def _resolve_circular_radial_layout(
             )
             occupied.append((intent.slot_id, band))
         if resolved.packing_band_px is not None and resolved.side == "inside":
-            inside_max_outer = min(
-                inside_max_outer,
-                float(resolved.packing_band_px.inner_px) - max(0.0, float(intent.inner_gap_px)),
-            )
+            rows_above_inside.append((intent, float(resolved.packing_band_px.inner_px)))
 
     by_id = {slot.id: slot for slot in resolved_by_index.values()}
     for intent in intents:

@@ -241,17 +241,19 @@ def _pinned(slot_id: str, renderer: str, radius_px: float, width_px: float = 20.
             "Pinned circular track slot 'PRIVATE_SLOT' overlaps reserved circular slot 'definition'.",
             {"reason": "CENTER_RESERVED", "slotIndex": 0},
         ),
-        # The row after a pinned row asks for a wider gap than the pinned row leaves.
+        # A row pinned farther out than an unpinned row listed before it; the
+        # order check skips the pinned feature row between them.
         (
             (
-                _pinned("gc_content", "dinucleotide_content", 60.0, 10.0),
-                CircularTrackSlot(id="PRIVATE_SLOT", renderer="dinucleotide_skew", outer_gap_px=20.0),
+                CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+                _pinned("features", "features", 50.0),
+                _pinned("PRIVATE_SLOT", "dinucleotide_skew", 90.0, 10.0),
             ),
             None,
             False,
             "Circular track slot order cannot be honored with the supplied pinned geometry: "
             "'PRIVATE_SLOT' would overlap or move outside 'gc_content'.",
-            {"reason": "CANNOT_FIT", "slotIndex": 1},
+            {"reason": "CANNOT_FIT", "slotIndex": 2},
         ),
         # An outside row has no room between the axis and the pinned row above it.
         (

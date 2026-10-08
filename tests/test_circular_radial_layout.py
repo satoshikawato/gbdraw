@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from gbdraw.canvas import CircularCanvasConfigurator
+from gbdraw.circular import circular_main
 from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.configurators import DepthConfigurator
 from gbdraw.layout.circular_depth_axis import resolve_depth_axis_footprint
+from gbdraw.exceptions import ValidationError
 from gbdraw.diagrams.circular.radial_layout import (
     build_circular_feature_layout,
     measure_circular_feature_stack,
@@ -684,3 +687,179 @@ def test_outside_row_after_a_pinned_feature_row_lies_between_it_and_the_axis() -
 
     assert by_id["gc_skew"].inner_px >= canvas_config.radius
     assert by_id["gc_skew"].outer_px < by_id["features"].inner_px
+
+
+_FACING_GAP_PX = 20.0
+
+
+def _facing_gap_stack(case: str) -> tuple[list[CircularTrackSlot], str, str]:
+    """Slots, then the outer and the inner row of the adjacent pair."""
+
+    if case == "inside_after_pin":
+        return [
+            CircularTrackSlot(id="pinned", renderer="dinucleotide_content", side="inside", radius=ScalarSpec(0.6, "factor")),
+            CircularTrackSlot(id="next", renderer="dinucleotide_skew", side="inside", outer_gap_px=_FACING_GAP_PX),
+        ], "pinned", "next"
+    if case == "inside_after_pin_gap_on_pin":
+        return [
+            CircularTrackSlot(
+                id="pinned",
+                renderer="dinucleotide_content",
+                side="inside",
+                radius=ScalarSpec(0.6, "factor"),
+                inner_gap_px=_FACING_GAP_PX,
+            ),
+            CircularTrackSlot(id="next", renderer="dinucleotide_skew", side="inside"),
+        ], "pinned", "next"
+    if case == "outside_after_pin":
+        return [
+            CircularTrackSlot(id="above", renderer="dinucleotide_skew", side="outside", inner_gap_px=_FACING_GAP_PX),
+            CircularTrackSlot(id="pinned", renderer="dinucleotide_content", side="outside", radius=ScalarSpec(1.3, "factor")),
+        ], "above", "pinned"
+    if case == "inside_after_overlay_boundary":
+        return [
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", side="inside"),
+            CircularTrackSlot(id="ticks", renderer="ticks", side="overlay"),
+            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", side="inside", outer_gap_px=_FACING_GAP_PX),
+        ], "gc_content", "gc_skew"
+    if case == "inside_after_pinned_features":
+        return [
+            CircularTrackSlot(
+                id="features",
+                renderer="features",
+                side="inside",
+                radius=ScalarSpec(0.8, "factor"),
+                params={"lane_direction": "inside"},
+            ),
+            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", side="inside", outer_gap_px=_FACING_GAP_PX),
+        ], "features", "gc_skew"
+    if case == "inside_below_outside_features_across_axis":
+        return [
+            CircularTrackSlot(
+                id="features",
+                renderer="features",
+                side="outside",
+                radius=ScalarSpec(1.0, "factor"),
+                params={"lane_direction": "outside"},
+            ),
+            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", side="inside", outer_gap_px=_FACING_GAP_PX),
+        ], "features", "gc_skew"
+    if case == "outside_above_inside_features_across_axis":
+        return [
+            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", side="outside", inner_gap_px=_FACING_GAP_PX),
+            CircularTrackSlot(
+                id="features",
+                renderer="features",
+                side="inside",
+                radius=ScalarSpec(1.0, "factor"),
+                params={"lane_direction": "inside"},
+            ),
+        ], "gc_skew", "features"
+    assert case == "between_ordinary_rows"
+    return [
+        CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", side="inside"),
+        CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", side="inside", outer_gap_px=_FACING_GAP_PX),
+    ], "gc_content", "gc_skew"
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "inside_after_pin",
+        "inside_after_pin_gap_on_pin",
+        "outside_after_pin",
+        "inside_after_overlay_boundary",
+        "inside_after_pinned_features",
+        "inside_below_outside_features_across_axis",
+        "outside_above_inside_features_across_axis",
+        "between_ordinary_rows",
+    ],
+)
+def test_adjacent_rows_keep_the_larger_facing_gap_after_a_pin_or_group_boundary(case: str) -> None:
+    # GX-04: the gap between two adjacent rows is the larger of the inner row's
+    # outer gap and the outer row's inner gap, wherever the rows are placed.
+    canvas_config, cfg = _small_radial_canvas()
+    canvas_config.radius = 300.0
+    slots, outer_id, inner_id = _facing_gap_stack(case)
+
+    layout = resolve_circular_radial_layout(
+        total_length=1000,
+        canvas_config=canvas_config,
+        slots=slots,
+        feature_dict={"a": _Feature(0)},
+    )
+
+    by_id = {slot.id: slot.packing_band_px for slot in layout.slots}
+    assert by_id[outer_id].inner_px - by_id[inner_id].outer_px == pytest.approx(_FACING_GAP_PX)
+
+
+_HMMTDNA = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
+
+
+def test_cli_outer_gap_after_a_pinned_row_is_reserved(tmp_path: Path) -> None:
+    # GX-04: this stack failed with "order cannot be honored"; without the pin it rendered.
+    circular_main(
+        [
+            "--gbk",
+            str(_HMMTDNA),
+            "--circular_track_slot",
+            "gc_content:dinucleotide_content@side=inside,r=0.6",
+            "--circular_track_slot",
+            "gc_skew:dinucleotide_skew@side=inside,outer_gap_px=20",
+            "--circular_track_axis_index",
+            "0",
+            "-f",
+            "svg",
+            "-o",
+            str(tmp_path / "gx04"),
+        ]
+    )
+
+    assert (tmp_path / "gx04.svg").is_file()
+
+
+def _gx05_args(gc_content_radius: str, output: Path) -> list[str]:
+    return [
+        "--gbk",
+        str(_HMMTDNA),
+        "--track_type",
+        "tuckin",
+        "--separate_strands",
+        "--labels",
+        "none",
+        "-k",
+        "CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region",
+        "--circular_track_slot",
+        "features:features@lane_direction=inside",
+        "--circular_track_slot",
+        "ticks:ticks@side=inside,tick_label_layout=label_in_tick_out",
+        "--circular_track_slot",
+        f"gc_content:dinucleotide_content@side=inside,r={gc_content_radius}",
+        "--circular_track_slot",
+        "gc_skew:dinucleotide_skew@side=inside",
+        "--circular_track_axis_index",
+        "0",
+        "-f",
+        "svg",
+        "-o",
+        str(output),
+    ]
+
+
+def test_cli_pin_beyond_the_room_of_uncompressible_rows_fails_with_cannot_fit(tmp_path: Path) -> None:
+    # GX-05: Auto never compresses feature or tick rows, and a row with a radius
+    # keeps its width, so nothing between gc_content and the Axis can give way.
+    # gc_content's Auto radius is 0.60128 R; r=0.6013 is 0.007 px beyond the room
+    # features and ticks need, so it reports CANNOT_FIT. r=0.6 leaves them room.
+    circular_main(_gx05_args("0.6", tmp_path / "fits"))
+    assert (tmp_path / "fits.svg").is_file()
+
+    with pytest.raises(ValidationError, match="'ticks' cannot fit inside between") as error:
+        circular_main(_gx05_args("0.6013", tmp_path / "beyond"))
+    assert error.value.diagnostic == {
+        "code": "TRACK_LAYOUT",
+        "reason": "CANNOT_FIT",
+        "innerPx": 275,
+        "outerPx": 386,
+        "slotIndex": 1,
+    }
