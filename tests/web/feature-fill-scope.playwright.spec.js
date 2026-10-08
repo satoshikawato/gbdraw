@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { seeds, load, popup: openFeaturePopup } = require('./helpers/mode-transition.cjs');
 
 const loadGallerySession = async (page, filename) => evaluateWithRetainedPromise(page, async (name) => {
   const response = await fetch(`/gbdraw/web/gallery/sessions/${name}`);
@@ -346,4 +347,31 @@ test('Feature stroke width steppers defer scope selection and stroke changes kee
   expect(redone.featureStrokes).toEqual(changed.featureStrokes);
   expect(redone.legendStroke).toEqual(changed.legendStroke);
   expect(redone.featureStrokeOverrides).toBe(changed.featureStrokeOverrides);
+});
+
+// OV-161 (gui-fix GX-16): right after a Session load, Cancel on the Color
+// Change Scope dialog closes it at once and records no History step. Cancel
+// used to run inside a History step, so it first waited for that step's
+// intent capture, which took seconds on a freshly loaded Session. The dialog
+// is opened from its state, as the accessibility spec does, so no earlier
+// History step has captured the intent yet.
+test('Cancel closes the Color Change Scope dialog at once after a Session load and records no step (OV-161)', async ({
+  browser
+}) => {
+  test.setTimeout(240_000);
+  const page = await load(browser, seeds.circular);
+  try {
+    await openFeaturePopup(page);
+    const undoCount = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+    await page.evaluate(() => Object.assign(window.__GBDRAW_APP__.featureStyleScopeDialog, { kind: 'fill', show: true }));
+    const dialog = page.getByRole('heading', { name: 'Color Change Scope' }).locator('..');
+    await expect(dialog).toBeVisible();
+    const started = Date.now();
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(dialog).toBeHidden({ timeout: 60_000 });
+    expect(Date.now() - started, 'milliseconds from Cancel to a closed dialog').toBeLessThan(1000);
+    expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoCount);
+  } finally {
+    await page.context().close();
+  }
 });

@@ -2987,6 +2987,7 @@ export const createAppSetup = () => {
     requestFeatureColorChange,
     setFeatureColorValue,
     updateClickedFeatureColor,
+    cancelFeatureStyleScope,
     handleColorScopeChoice,
     handleFeatureStyleScopeChoice,
     handleLegendNameCommit,
@@ -3438,10 +3439,23 @@ export const createAppSetup = () => {
     'Change legend stroke color',
     setLegendEntryStrokeColorValue
   );
-  const handleColorScopeChoiceWithHistory = undoableAction('Change feature color', handleColorScopeChoice);
-  const handleFeatureStyleScopeChoiceWithHistory = (...args) => history.runUndoable(
-    featureStyleScopeDialog.kind === 'stroke' ? 'Change feature stroke' : 'Change feature color',
-    () => handleFeatureStyleScopeChoice(...args)
+  // OV-161: Cancel closes a scope dialog at once and records no History step;
+  // only a real choice is one undoable step, as with askLabelOn and
+  // handleLabelOnChoice. Cancel used to wait for the step's intent capture,
+  // which after a Session load took seconds.
+  /**
+   * @param {() => string} label
+   * @param {(choice: string, ...rest: any[]) => any} handler
+   */
+  const scopeChoiceWithHistory = (label, handler) => (/** @type {string} */ choice, /** @type {any[]} */ ...rest) => (
+    choice === 'cancel'
+      ? cancelFeatureStyleScope()
+      : history.runUndoable(label(), () => handler(choice, ...rest))
+  );
+  const handleColorScopeChoiceWithHistory = scopeChoiceWithHistory(() => 'Change feature color', handleColorScopeChoice);
+  const handleFeatureStyleScopeChoiceWithHistory = scopeChoiceWithHistory(
+    () => (featureStyleScopeDialog.kind === 'stroke' ? 'Change feature stroke' : 'Change feature color'),
+    handleFeatureStyleScopeChoice
   );
   const handleLegendNameCommitWithHistory = undoableAction('Rename legend item', handleLegendNameCommit);
   const handleLegendRenameChoiceWithHistory = undoableAction('Rename legend item', handleLegendRenameChoice);
