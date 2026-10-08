@@ -3,7 +3,7 @@
 Guidance for automated agents working in this repository.
 
 ## Read First
-- コード1行増やすごとに技術負債が増えると心得よ。
+- コード1行増やすごとに技術負債が増えると心得よ。負債は行数ではなく、増えた変更点・分岐・重複で数える。
 - See `CLAUDE.md` for project-wide guidance.
 - If working on the web UI, also read `gbdraw/web/CLAUDE.md`.
 
@@ -161,7 +161,7 @@ For changes affecting Web runtime or normative Web behavior contracts:
 ## Pull request communication
 
 - Before creating, changing, or reviewing PR wording,
-  read and apply `.agents/skills/write-clear-pull-request/SKILL.md`.
+  read and apply `.claude/skills/write-clear-pull-request/SKILL.md`.
 - Prepare the title and body file. Run
   `node tools/check-pr-language.mjs --title "<title>" --body-file <path>` once
   before `gh pr create`, using the same wording.

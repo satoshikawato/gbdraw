@@ -22,7 +22,7 @@ const { buildLegendIntents, legendRowRules } = await import(pathToFileURL(join(t
 assert.doesNotMatch(colorActionsSource, /serializeCleanSvg|results\.value\[[^\]]+\]\s*=/);
 
 const ref = (value) => ({ value });
-// The mounted SVG as `getAllFeatureLegendGroups` (app/legend/utils.js) reads it:
+// The mounted SVG as `getAllFeatureLegendGroups` (services/legend-svg.js) reads it:
 // `#legend` holding one `#feature_legend` group, or no legend.
 const legendSvg = (featureLegend = null) => ({
   getElementById: (id) => (id === 'legend' && featureLegend
@@ -149,7 +149,6 @@ const actions = createFeatureColorActions({
     addedLegendCaptions: ref(new Set())
   },
   nextTick: async () => {},
-  compactLegendEntries: () => {},
   onLegendGeometryChanged: () => {
     legendGeometryChangedCount += 1;
   },
@@ -825,7 +824,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
         addedLegendCaptions: ref(new Set())
       },
       nextTick: async () => {},
-      compactLegendEntries: () => {}, onLegendGeometryChanged: () => {}, extractLegendEntries: () => {},
+      onLegendGeometryChanged: () => {}, extractLegendEntries: () => {},
       ruleActions: {
         runWithRuleMatches: runWithRuleMatchesOf(createRulePreparation({ state: renameState, evaluate: evaluatePythonRules }), renameState),
         commitSpecificRules: async (nextRules) => { committed.push(nextRules.map((rule) => ({ ...rule }))); return true; },
@@ -913,36 +912,45 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
 
   // Different types, a row without features, and a target without live features
   // offer no Merge; a programmatic Merge is refused like Cancel (OV-62).
+  // `source` is the renamed row's index, `target` the caption it takes.
+  const gcSkew = (color) => build({
+    entries: [{ caption: 'CDS', color: '#54bcf8', featureIds: ['t1'] },
+      { caption: 'GC skew (+)', color: '#6dded3' }, { caption: 'GC skew (-)', color }],
+    order: ['CDS', 'GC skew (+)', 'GC skew (-)'],
+    features: [{ ...trna, type: 'CDS', legendCaption: 'CDS' }]
+  });
   const noMerge = {
-    differentTypes: () => build({
+    differentTypes: { source: 0, target: 'rRNA', make: () => build({
       entries: [{ caption: 'tRNA', color: '#e8b441', featureIds: ['t1'] }, { caption: 'rRNA', color: '#71ee7d', featureIds: ['r1'] }],
       order: ['tRNA', 'rRNA'],
       features: [trna, { ...trna, id: 'r1', svg_id: 'r1', type: 'rRNA' }]
-    }),
+    }) },
     // The colors match: the row still asks, as a silent rename would draw two rows of one caption.
-    differentTypesSameColor: () => build({
+    differentTypesSameColor: { source: 0, target: 'rRNA', make: () => build({
       entries: [{ caption: 'tRNA', color: '#e8b441', featureIds: ['t1'] }, { caption: 'rRNA', color: '#e8b441', featureIds: ['r1'] }],
       order: ['tRNA', 'rRNA'],
       features: [trna, { ...trna, id: 'r1', svg_id: 'r1', type: 'rRNA' }]
-    }),
-    featureless: () => build({
+    }) },
+    featureless: { source: 1, target: 'tRNA', make: () => build({
       entries: [{ caption: 'tRNA', color: '#e8b441', featureIds: ['t1'] }, { caption: 'GC content', color: '#a1a1a1' }],
       order: ['tRNA', 'GC content'],
       features: [trna]
-    })
+    }) },
+    // OV-151 (GUI audit FL-04, PD-OI-061 revision 2): two rows without features
+    // on one track, GC skew (+) onto GC skew (-), with other and with equal colors.
+    featurelessSameTrack: { source: 1, target: 'GC skew (-)', suffixed: 'GC skew (-) (1)', make: () => gcSkew('#ad72e3') },
+    featurelessSameTrackSameColor: { source: 1, target: 'GC skew (-)', suffixed: 'GC skew (-) (1)', make: () => gcSkew('#6dded3') }
   };
-  for (const [name, make] of Object.entries(noMerge)) {
-    const source = name === 'featureless' ? 1 : 0;
-    const target = name === 'featureless' ? 'tRNA' : 'rRNA';
+  for (const [name, { source, target, suffixed: expectedSuffix, make }] of Object.entries(noMerge)) {
     const refused = make();
-    const caption = refused.stateLegendEntries.value[source].caption;
+    const captions = refused.stateLegendEntries.value.map((entry) => entry.caption);
     await refused.renameActions.renameLegendEntry(source, target);
     assert.equal(refused.legendRenameDialog.show, true, name);
     assert.equal(refused.legendRenameDialog.mergeAvailable, false, name);
     await refused.renameActions.handleLegendRenameChoice('merge');
     assert.equal(refused.legendRenameDialog.show, false, name);
     assert.equal(refused.committed.length, 0, name);
-    assert.equal(refused.stateLegendEntries.value[source].caption, caption, name);
+    assert.deepEqual(refused.stateLegendEntries.value.map((entry) => entry.caption), captions, name);
     const suffixed = make();
     await suffixed.renameActions.renameLegendEntry(source, target);
     await suffixed.renameActions.handleLegendRenameChoice('suffix');
@@ -950,6 +958,24 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
       ? suffixed.committed.at(-1)[0].cap : suffixed.stateLegendEntries.value[source].caption;
     assert.notEqual(suffixedCaption, target, name);
     assert.ok(suffixedCaption.startsWith(target), name);
+    if (!expectedSuffix) continue;
+    // A row without features renames in the Legend only: no rule commit, one
+    // rename that Generate replays, and nothing that reaches the target row.
+    assert.equal(suffixedCaption, expectedSuffix, name);
+    assert.equal(suffixed.committed.length, 0, name);
+    assert.deepEqual(suffixed.stateLegendEntries.value.map((entry) => entry.caption),
+      captions.map((caption, index) => (index === source ? expectedSuffix : caption)), `${name}: one row per caption, order kept`);
+    const plan = compileDirectEditorMutationPlan({
+      catalogAdmission: { resultNames: ['a.svg'], renderedTargetsByOverrideKey: new Map(), resultIndexesByRenderedId: new Map() },
+      legendEntries: suffixed.stateLegendEntries.value,
+      originalLegendOrder: suffixed.originalOrder.value
+    });
+    const operations = plan.operationsByResult[0];
+    assert.deepEqual(operations.legendRenames.map(({ from, to }) => [from, to]), [[captions[source], expectedSuffix]], name);
+    const touchingTarget = Object.entries(operations).flatMap(([kind, list]) => (Array.isArray(list) ? list : [])
+      .filter((operation) => [operation?.caption, operation?.from, operation?.to].includes(target))
+      .map((operation) => [kind, operation]));
+    assert.deepEqual(touchingTarget, [], `${name}: no operation reaches ${target}`);
   }
 
   // A target owned by a specific-color rule keeps PD-OI-042 disambiguation

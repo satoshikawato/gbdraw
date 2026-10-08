@@ -23,6 +23,7 @@ const setup = (evaluate = evaluatePythonRules) => {
   let previousIntents = [];
   let openTransaction = null;
   const legendApplies = [];
+  let rerenders = 0;
   const transact = scope => async (label, commit) => {
     const before=JSON.stringify(state.manualSpecificRules);
     openTransaction = label;
@@ -44,8 +45,8 @@ const setup = (evaluate = evaluatePythonRules) => {
       state.legendEntries.value=intents;
       state.results.value=[{name:'figure',content:'after'}];
     } };
-  }, projectPaletteAndRules:()=>true, nextTick:async()=>{}});
-  return {state,actions,preparation,notices,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents};
+  }, projectPaletteAndRules:()=>true, ports:{requestAutomaticRerender:()=>{rerenders+=1;return true;}}, nextTick:async()=>{}});
+  return {state,actions,preparation,notices,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents, rerenders:()=>rerenders};
 };
 const rules = [
   {feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:'Shared',fromFile:true},
@@ -90,9 +91,11 @@ for (const outcome of ['stale','error']) {
     s.state.addedLegendCaptions.value.add('Independent manual legend');
     const before=JSON.stringify(s.state.manualSpecificRules), result=s.state.results.value;
     const captions=[...s.state.fileLegendCaptions.value], count=s.transactions.length;
+    let replacements=0;
     s.setLegendPreparation(async()=>{
       if(outcome==='error') throw new Error('measurement failed');
-      s.state.svgResultIdentity.value='replacement';
+      // Every preparation goes stale, so no attempt may commit (OV-166 retries).
+      s.state.svgResultIdentity.value=`replacement-${++replacements}`;
     });
     const candidate=rules.map(r=>({...r,cap:'Changed'}));
     if(outcome==='error') await assert.rejects(()=>s.actions.commitSpecificRules(candidate),/measurement failed/);
@@ -104,6 +107,28 @@ for (const outcome of ['stale','error']) {
   });
 }
 
+
+// OV-166: a rule commit made during an automatic rerender waits for the
+// rerender, but its preparation can still span the binding of the Result the
+// rerender wrote: the binder reads that Result's Legend rows, which changes
+// the inputs the candidate was prepared from while the Results stay the same.
+// The commit prepares once more against the bound Result and applies; it is
+// not dropped.
+test('a rule commit whose preparation spans the rerendered Result binding prepares again and applies (OV-166)', async () => {
+  const s=setup();
+  const results=s.state.results.value;
+  let preparations=0;
+  s.setLegendPreparation(async()=>{
+    preparations+=1;
+    // The binder's extraction of the rerendered Result, once.
+    if(preparations===1) s.state.legendEntries.value=[{caption:'CDS',originalCaption:'CDS',color:'#808080'}];
+  });
+  assert.equal(await s.actions.commitSpecificRules(rules),true);
+  assert.equal(preparations,2,'one more preparation, against the bound Result');
+  assert.deepEqual(s.state.manualSpecificRules.map(r=>r.cap),['Shared [#112233]','Shared [#445566]']);
+  assert.equal(s.transactions.length,1);
+  assert.notEqual(results,s.state.results.value,'the Legend rows applied');
+});
 
 test('historical caption ownership retains every source color before normalization',async()=>{
   const s=setup();s.state.manualSpecificRules.push(...rules.map(rule=>({...rule})));
@@ -274,4 +299,39 @@ test('a rule commit retires the Legend color a popup edit left on a row it recol
   assert.equal(await s.actions.commitSpecificRules([{ ...rule, color: '#445566' }]), true);
   assert.equal(Object.hasOwn(s.state.legendColorOverrides, 'Shared'), false, 'the recolored row drops the stale Legend color');
   assert.equal(s.state.legendColorOverrides.Other, '#abcdef', 'a row the commit does not draw keeps its Legend color');
+});
+
+test('a rule commit that removes a rule row retires the Legend color copied from its rule (OV-152)', async () => {
+  const s = setup();
+  const shared = { feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: 'Shared' };
+  const kept = { feat: 'CDS', qual: 'gene', val: 'b', color: '#445566', cap: 'Kept' };
+  const unmatched = { feat: 'CDS', qual: 'gene', val: 'none', color: '#778899', cap: 'Unmatched' };
+  s.state.errorLog = { value: null };
+  s.state.manualSpecificRules.push({ ...shared }, { ...kept }, { ...unmatched });
+  // The popup's copy of the rule color, a Legend color set on a row no rule
+  // draws, and copies on rows whose rules stay.
+  Object.assign(s.state.legendColorOverrides, {
+    Shared: '#112233', Direct: '#abcdef', Kept: '#445566', Unmatched: '#778899'
+  });
+  assert.equal(await s.actions.removeSpecificRule(0), true);
+  assert.equal(Object.hasOwn(s.state.legendColorOverrides, 'Shared'), false, 'the removed rule row drops the copied color');
+  assert.deepEqual(s.state.legendColorOverrides, { Direct: '#abcdef', Kept: '#445566', Unmatched: '#778899' },
+    'rows no removed rule drew keep their Legend colors, also a rule that draws no feature now');
+  assert.equal(s.transactions.length, 1, 'the retirement is part of the rule step');
+
+  // A Legend color that is not the removed rule's color is no copy of it.
+  s.state.legendColorOverrides.Kept = '#000000';
+  assert.equal(await s.actions.clearAllSpecificRules(), true);
+  assert.deepEqual(s.state.legendColorOverrides, { Direct: '#abcdef', Kept: '#000000' },
+    'Clear All retires the copies of every rule it removes and keeps the other colors');
+
+  // Rules that recolor a whole type keep its caption; removing the last of
+  // them asks Python to draw the type's default row again.
+  const typeRule = { feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: 'CDS' };
+  assert.equal(await s.actions.commitSpecificRules([{ ...typeRule }, { ...typeRule, val: 'b' }]), true);
+  const before = s.rerenders();
+  assert.equal(await s.actions.removeSpecificRule(0), true);
+  assert.equal(s.rerenders(), before, 'a rule of the type row remains');
+  assert.equal(await s.actions.removeSpecificRule(0), true);
+  assert.equal(s.rerenders(), before + 1, 'the last rule of the type row asks for the rerender');
 });

@@ -8,6 +8,7 @@ from typing import Mapping, NewType, Sequence
 
 from Bio.SeqRecord import SeqRecord
 
+from gbdraw.core.numeric import compensated_sum
 from gbdraw.exceptions import ValidationError
 from gbdraw.layout.linear import AxisGapResolution, CollisionBand, resolve_axis_gap
 from gbdraw.layout.record_placement import (
@@ -225,7 +226,7 @@ def solve_linear_layout(
             max(gap, row_items[index].right_inset + row_items[index + 1].left_inset)
             for index in range(len(row_items) - 1)
         ]
-        row_width = sum(sequence_widths) + sum(effective_gaps)
+        row_width = compensated_sum(sequence_widths) + compensated_sum(effective_gaps)
         cursor = 0.5 * (width - row_width) if align_center else 0.0
         content_left = min(content_left, cursor - row_items[0].left_inset)
         horizontal_row: list[tuple[LinearRecordMeasurement, float, float]] = []

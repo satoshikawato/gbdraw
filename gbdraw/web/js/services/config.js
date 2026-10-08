@@ -79,7 +79,7 @@ import {
 import {
   buildSessionFeatureRecoveryPlan,
   extractSessionSourceFeatures
-} from '../app/session-feature-metadata.js';
+} from './session-feature-recovery.js';
 import {
   analyzeCatalogSequenceSourceCoverage,
   buildRestoredMatchSequenceSources,
@@ -131,7 +131,7 @@ import {
   validateFeatureCatalog,
   validateFeatureCatalogForImport
 } from './feature-catalog.js';
-import { migrateLegacyRecordDisplayDrafts } from '../app/record-display-options.js';
+import { migrateLegacyRecordDisplayDrafts } from './record-display-model.js';
 import {
   buildOrthogroupFeatureIndex,
   enrichFeaturesWithOrthogroups,
@@ -169,7 +169,7 @@ import {
   validateDerivedProteinReferences,
   validateProteinRawEntryReferences,
   validateProteinIdentityManifest
-} from '../app/losat-cache.js';
+} from './losat-cache.js';
 import {
   arrowHeadLengthRatioForState,
   defaultFeatureRendering,
@@ -844,11 +844,14 @@ const normalizeSessionLegendEntries = (entries) => {
     const color = normalizeSessionLegendColor(entry.color);
     if (!caption || !color || captions.has(caption)) return;
     captions.add(caption);
+    // `showStroke`, the Stroke options disclosure that earlier Sessions saved,
+    // is view state (OV-157).
+    const stored = cloneJsonData(entry);
+    delete stored.showStroke;
     normalized.push({
-      ...cloneJsonData(entry),
+      ...stored,
       caption,
       color,
-      showStroke: Boolean(entry.showStroke),
       featureIds: Array.isArray(entry.featureIds)
         ? entry.featureIds.map((id) => String(id || '').trim()).filter(Boolean)
         : []

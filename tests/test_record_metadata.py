@@ -18,7 +18,7 @@ from gbdraw.exceptions import GbdrawError
 from gbdraw.io.genome import load_gbks, load_gff_fasta
 
 # The Web upload fast path reimplements this inference in
-# gbdraw/web/js/app/record-discovery.js. Both suites assert the same table, so
+# gbdraw/web/js/services/record-discovery.js. Both suites assert the same table, so
 # the two implementations cannot drift apart unnoticed.
 _CASES = json.loads(
     (Path(__file__).parent / "fixtures" / "record_metadata_inference_cases.json").read_text(

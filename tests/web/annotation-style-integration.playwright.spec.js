@@ -8,7 +8,7 @@ const { reveal, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cj
 const inspect = (page, mode) => page.evaluate(async mode => {
   const { state: s } = await import('./js/state.js');
   const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
-  const { getAllFeatureLegendGroups } = await import('./js/app/legend/utils.js');
+  const { getAllFeatureLegendGroups } = await import('./js/services/legend-svg.js');
   const svg = s.results.value[s.selectedResultIndex.value].content;
   const root = new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement;
   return {

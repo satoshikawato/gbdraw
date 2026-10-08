@@ -181,7 +181,7 @@ def main():
             )
             # Force the existing parser/helper boundary by rejecting only this source's text read.
             helper = page.evaluate("""async () => {
-              const {discoverSequenceRecords}=await import('./js/app/record-discovery.js');
+              const {discoverSequenceRecords}=await import('./js/services/record-discovery.js');
               const source=window.__GBDRAW_APP__.files.c_gb;
               return await discoverSequenceRecords({file:source,format:'genbank',
                 readText:async()=>{throw new Error('S01 forced fast-path miss');}});

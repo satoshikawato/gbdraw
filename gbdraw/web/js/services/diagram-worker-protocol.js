@@ -7,7 +7,6 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   CONVERT_MAIN_SESSION_COMPARISON_FRAME: 'convertMainSessionComparisonFrame',
   EXTRACT_CDS_PROTEIN_FASTA: 'extractCdsProteinFasta',
   EXTRACT_FIRST_FASTA: 'extractFirstFasta',
-  GENERATE_LEGEND_ENTRY_SVG: 'generateLegendEntrySvg',
   HYDRATE_PROTEIN_LOSAT_TSV: 'hydrateProteinLosatTsv',
   LIST_GFF_FASTA_RECORDS: 'listGffFastaRecords',
   LIST_SEQUENCE_RECORDS: 'listSequenceRecords',

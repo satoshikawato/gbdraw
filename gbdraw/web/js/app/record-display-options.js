@@ -1,12 +1,20 @@
 // @ts-check
 // Source-bound editable rotation intent. The request service owns serialization.
-import { resolveDisambiguatedRecordSelection } from '../services/record-options.js';
+import {
+  buildRecordDisplayRows,
+  parseRecordDisplayStart,
+  recordDisplayKey,
+  recordDisplaySurface,
+  requestedRecordTransform,
+  requireReverseComplementOverride,
+  validateAnchorIntent
+} from '../services/record-display-model.js';
 import { resolveFeatureAnchor } from './record-display/feature-anchor.js';
 import { matchesSessionResourceDescriptor } from '../services/session-resource-backing.js';
 import { cloneJsonData } from '../services/json-clone.js';
 import { featureIdentityKey, requestFeaturePlacements } from '../services/feature-placement.js';
 import { committedRecordForKey, committedRecordUsesSource } from '../services/feature-identity.js';
-import { circularDiscoveryForInput } from './record-discovery.js';
+import { circularDiscoveryForInput } from '../services/record-discovery.js';
 import { RECORD_READ_ERROR_LABEL } from './linear-record-selector.js';
 
 // Session Load reads no record bytes (776a2f93), so a loaded Result can have a
@@ -14,159 +22,6 @@ import { RECORD_READ_ERROR_LABEL } from './linear-record-selector.js';
 // not stale: its kind lets an explicit record action read them.
 export const RECORD_TARGET_NOT_DISCOVERED = 'not-discovered';
 const recordTargetError = (kind, message) => Object.assign(new Error(message), { kind });
-
-export const recordDisplayKey = ({ scope, sourceUid, selector }) => {
-  if (!['circular', 'linear'].includes(scope) || !sourceUid || !/^#[1-9]\d*$/.test(selector)) {
-    throw new Error('Record display requires a scope, source UID, and exact record selector.');
-  }
-  return JSON.stringify([scope, sourceUid, selector]);
-};
-
-export const buildRecordDisplayRows = ({ scope, sourceUid, source, records, selector = '' }) => {
-  const selection = resolveDisambiguatedRecordSelection(records, selector);
-  if (!['unspecified', 'resolved'].includes(selection.status)) {
-    throw new Error(`Record selector is ${selection.status}: ${selector}.`);
-  }
-  return (selection.record ? [selection.record] : selection.entries).map((record) => {
-    const row = { ...record, scope, sourceUid, source };
-    return { ...row, key: recordDisplayKey(row) };
-  });
-};
-
-export const reconcileRecordDisplayDrafts = (drafts, discoveredRows, replacedSourceUids = []) => {
-  // Pass all discovered rows, including inactive selectors. A source replacement
-  // purges its drafts even when the existing source card keeps its UID.
-  const keys = new Set(discoveredRows.map(recordDisplayKey));
-  return drafts.filter((draft) => !replacedSourceUids.includes(draft.sourceUid)
-    && keys.has(recordDisplayKey(draft)));
-};
-
-export const parseRecordDisplayStart = (value) => {
-  if (value === null || (typeof value === 'string' && !value.trim())) return null;
-  if (!['string', 'number'].includes(typeof value)) throw new Error('Display start must be an integer.');
-  const number = Number(value);
-  if (!Number.isSafeInteger(number) || number < 1) {
-    throw new Error('Display start must be a positive integer.');
-  }
-  return number;
-};
-
-const ANCHOR_INTENT_KEYS = [
-  'anchor',
-  'biologicalFeatureId',
-  'offsetBp',
-  'orientForward',
-  'placement',
-  'recordKey',
-  'schema'
-];
-
-export const validateAnchorIntent = (intent) => {
-  if (intent === null) return null;
-  if (!intent || Object.keys(intent).sort().join(',') !== ANCHOR_INTENT_KEYS.join(',')
-    || intent.schema !== 1
-    || typeof intent.recordKey !== 'string' || !intent.recordKey || intent.recordKey.includes('\0')
-    || typeof intent.biologicalFeatureId !== 'string' || !intent.biologicalFeatureId
-    || intent.biologicalFeatureId.includes('\0')
-    || !['anchor', 'feature-end'].includes(intent.placement)
-    || (intent.placement === 'anchor'
-      ? !['five-prime', 'midpoint', 'three-prime'].includes(intent.anchor)
-      : intent.anchor !== null)
-    || !Number.isSafeInteger(intent.offsetBp)
-    || typeof intent.orientForward !== 'boolean') {
-    throw new Error('Invalid record display anchor intent.');
-  }
-  return intent;
-};
-
-export const migrateLegacyRecordDisplayDrafts = (drafts) => {
-  if (!Array.isArray(drafts)) return drafts;
-  return drafts.map((draft) => {
-    if (!draft || Object.hasOwn(draft, 'reverseComplementOverride')
-      || Object.hasOwn(draft, 'anchorIntent')) return draft;
-    return { ...draft, reverseComplementOverride: null, anchorIntent: null };
-  });
-};
-
-export const validateRecordDisplayDrafts = (drafts) => {
-  if (!Array.isArray(drafts)) throw new Error('Record display drafts must be an array.');
-  const identities = new Set();
-  for (const draft of drafts) {
-    if (!draft || Object.keys(draft).sort().join(',') !== 'anchorIntent,recordId,reverseComplementOverride,scope,selector,sourceUid,startCoordinate,topologyOverride'
-      || typeof draft.recordId !== 'string' || draft.recordId.includes('\0')
-      || typeof draft.sourceUid !== 'string' || draft.sourceUid.includes('\0')
-      || (draft.topologyOverride !== null && typeof draft.topologyOverride !== 'boolean')
-      || (draft.reverseComplementOverride !== null
-        && typeof draft.reverseComplementOverride !== 'boolean')
-      || (draft.startCoordinate !== null && (!Number.isSafeInteger(draft.startCoordinate) || draft.startCoordinate < 1))) {
-      throw new Error('Invalid record display draft; only source-bound requested intent is supported.');
-    }
-    validateAnchorIntent(draft.anchorIntent);
-    const key = recordDisplayKey(draft);
-    if (identities.has(key)) throw new Error('Duplicate record display draft identity.');
-    identities.add(key);
-  }
-  return drafts;
-};
-
-export const recordDisplaySurface = (row, draft = {}, { cropped = false, reverse = false } = {}) => {
-  const override = draft.topologyOverride ?? null;
-  if (override !== null && typeof override !== 'boolean') throw new Error('Topology override must be boolean or null.');
-  const effectiveCircular = override ?? row.detectedTopology === 'circular';
-  const lengthKnown = Number.isSafeInteger(row.recordLength) && row.recordLength > 0;
-  return {
-    effectiveCircular,
-    startEnabled: effectiveCircular && lengthKnown && !cropped,
-    disabledReason: cropped ? 'Display start is unavailable for a cropped record.'
-      : !lengthKnown ? 'Record length is unavailable.'
-        : !effectiveCircular ? 'Display start requires a circular record.' : '',
-    currentStart: reverse ? (lengthKnown ? row.recordLength : null) : 1
-  };
-};
-
-export const requestedRecordDisplay = (row, draft = {}, context = {}) => {
-  const surface = recordDisplaySurface(row, draft, context);
-  const start = parseRecordDisplayStart(draft.startCoordinate ?? null);
-  if (surface.startEnabled && start !== null && start > row.recordLength) {
-    throw new Error(`Display start for ${row.recordId} must be between 1 and ${row.recordLength}.`);
-  }
-  return { isCircular: draft.topologyOverride ?? null,
-    startCoordinate: surface.startEnabled ? start : null };
-};
-
-export const canonicalRecordReverseComplement = (record) => Boolean(
-  record?.region ? record.region.reverseComplement : record?.presentation?.reverseComplement
-);
-
-export const writeCanonicalRecordReverseComplement = (record, reverseComplement) => {
-  if (typeof reverseComplement !== 'boolean') throw new Error('Record orientation must be boolean.');
-  if (record.region) {
-    record.region.reverseComplement = reverseComplement;
-    record.presentation.reverseComplement = false;
-  } else record.presentation.reverseComplement = reverseComplement;
-};
-
-export const effectiveRecordReverseComplement = (row, draft = {}, context = {}) => {
-  const inherited = Boolean(context.reverse ?? row.reverse);
-  if (Boolean(context.cropped ?? row.cropped)) return inherited;
-  const override = draft.reverseComplementOverride ?? null;
-  if (override !== null && typeof override !== 'boolean') {
-    throw new Error('Reverse-complement override must be boolean or null.');
-  }
-  return override ?? inherited;
-};
-
-export const requestedRecordTransform = (row, draft = {}, context = {}) => ({
-  display: requestedRecordDisplay(row, draft, context),
-  reverseComplement: effectiveRecordReverseComplement(row, draft, context)
-});
-
-const requireReverseComplementOverride = (value) => {
-  if (value !== null && typeof value !== 'boolean') {
-    throw new Error('Reverse-complement override must be boolean or null.');
-  }
-  return value;
-};
 
 /**
  * @typedef {object} RecordDisplayControlsOptions

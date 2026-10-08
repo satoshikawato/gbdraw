@@ -15,6 +15,7 @@ from ....analysis.gc import calculate_gc_percent
 from ....canvas import CircularCanvasConfigurator
 from ....config.models import GbdrawConfig
 from ....core.record_metadata import infer_record_source_metadata
+from ....core.numeric import compensated_sum
 from ....core.text import (
     calculate_bbox_dimensions,
     calculate_svg_bbox_dimensions,
@@ -403,7 +404,7 @@ class DefinitionGroup:
                 widths.append(float(width))
                 heights.append(float(height))
 
-            width = sum(widths)
+            width = compensated_sum(widths)
             height = max(heights, default=font_size)
             text_anchor = str(attribs.get("text-anchor", "start")).strip().lower()
             if text_anchor == "middle":

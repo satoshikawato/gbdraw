@@ -1,5 +1,5 @@
 // @ts-check
-import { parseTransform, replaceLeadingTranslate } from './transform-utils.js';
+import { parseTransform, replaceLeadingTranslate } from '../../services/svg-transform.js';
 import {
   bindCompositionMetadata,
   COMPOSITION_SCHEMA_ATTRIBUTE,

@@ -26,6 +26,7 @@ from gbdraw.legend.metrics import (
     legend_line_height,
     legend_text_x_offset,
 )
+from gbdraw.core.text import measurement_font_file
 from gbdraw.exceptions import ValidationError
 from gbdraw.layout.spatial import Aabb, union_aabbs
 
@@ -47,18 +48,28 @@ class LegendMeasurement:
     num_of_columns: int
     num_of_items_per_line: int
     has_gradient: bool
+    font_file: str | None
+    wrap_width: float
     circular_layout: CircularLegendLayout | None = None
     linear_layout: LinearLegendLayout | None = None
     local_bounds: Aabb = Aabb(0.0, 0.0, 0.0, 0.0)
 
     @property
-    def reflow_metrics(self) -> dict[str, float]:
-        """Return Python-owned constraints for browser legend editing."""
+    def reflow_metrics(self) -> dict[str, object]:
+        """Return Python-owned constraints and layout inputs for browser legend editing.
+
+        ``fontFile``, ``fontSize``, ``dpi`` and ``wrapWidth`` are the exact
+        values the layout measured and wrapped the captions with.
+        """
 
         return {
             "colorRectSize": float(self.color_rect_size),
+            "dpi": int(self.dpi),
+            "fontFile": self.font_file,
+            "fontSize": float(self.font_size),
             "lineHeight": legend_line_height(self.color_rect_size),
             "textXOffset": legend_text_x_offset(self.color_rect_size),
+            "wrapWidth": float(self.wrap_width),
         }
 
 
@@ -197,6 +208,8 @@ class LegendDrawingConfigurator:
         self.color_rect_size: float = cfg.objects.legends.color_rect_size.for_length_param(self.length_param)
         self.dominant_baseline: str = cfg.objects.legends.dominant_baseline
         self.dpi: int = cfg.canvas.dpi
+        # The Legend layout measures captions without a weight or style.
+        self.font_file: str | None = measurement_font_file(self.font_family)
 
     def _measurement(
         self,
@@ -209,6 +222,7 @@ class LegendDrawingConfigurator:
         num_of_columns: int,
         num_of_items_per_line: int,
         has_gradient: bool,
+        wrap_width: float,
         circular_layout: CircularLegendLayout | None = None,
         linear_layout: LinearLegendLayout | None = None,
         local_bounds: Aabb | None = None,
@@ -227,6 +241,8 @@ class LegendDrawingConfigurator:
             num_of_columns=int(num_of_columns),
             num_of_items_per_line=int(num_of_items_per_line),
             has_gradient=bool(has_gradient),
+            font_file=self.font_file,
+            wrap_width=float(wrap_width),
             circular_layout=circular_layout,
             linear_layout=linear_layout,
             local_bounds=(
@@ -246,6 +262,7 @@ class LegendDrawingConfigurator:
             num_of_columns=0,
             num_of_items_per_line=0,
             has_gradient=False,
+            wrap_width=0.0,
         )
 
     def measure_legend(
@@ -280,6 +297,7 @@ class LegendDrawingConfigurator:
                 num_of_columns=circular_layout.num_columns,
                 num_of_items_per_line=circular_layout.num_items_per_line,
                 has_gradient=circular_layout.has_gradient,
+                wrap_width=wrap_width,
                 circular_layout=circular_layout,
                 local_bounds=_circular_legend_local_bounds(
                     circular_layout,
@@ -324,6 +342,7 @@ class LegendDrawingConfigurator:
             ),
             num_of_items_per_line=num_items_per_line,
             has_gradient=layout.has_gradient,
+            wrap_width=wrap_width,
             linear_layout=layout,
             local_bounds=_linear_legend_local_bounds(
                 layout,

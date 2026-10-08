@@ -119,6 +119,7 @@ from gbdraw.configurators import (
     LegendDrawingConfigurator,
 )
 from gbdraw.core.sequence import create_dict_for_sequence_lengths
+from gbdraw.core.numeric import compensated_sum
 from gbdraw.diagrams.circular.assemble import (
     CircularAssemblyResult,
     _assemble_circular_diagram_result,
@@ -927,7 +928,7 @@ def _pack_circular_record_bounds(
         rows.append(tuple(range(cursor, len(record_bounds))))
 
     row_widths = tuple(
-        sum(record_bounds[index].width for index in row)
+        compensated_sum(record_bounds[index].width for index in row)
         + max(0, len(row) - 1) * float(column_gap_px)
         for row in rows
     )
@@ -936,7 +937,7 @@ def _pack_circular_record_bounds(
         for row in rows
     )
     grid_width = max(row_widths)
-    grid_height = sum(row_heights) + max(0, len(rows) - 1) * float(row_gap_px)
+    grid_height = compensated_sum(row_heights) + max(0, len(rows) - 1) * float(row_gap_px)
 
     translations: list[tuple[float, float] | None] = [None] * len(record_bounds)
     row_top = 0.0

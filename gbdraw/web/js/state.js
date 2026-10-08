@@ -601,7 +601,7 @@ const sidebarWidth = ref(320); // Initial width in pixels
 const isResizing = ref(false);
 
 // Legend Editor state
-const legendEntries = ref([]); // [{caption, originalCaption, color, yPos, showStroke, featureIds}]
+const legendEntries = ref([]); // [{caption, originalCaption, color, yPos, featureIds}]
 const deletedLegendEntries = ref([]); // Track deleted entries for restoration
 const originalLegendOrder = ref([]); // Store original order from generation
 const originalLegendColors = ref({}); // Store original colors: { caption: color }
@@ -613,6 +613,10 @@ const legendStrokeOverrides = reactive({});
 
 // Legend color overrides: { caption: color } - tracks custom colors set via Legend Editor
 const legendColorOverrides = reactive({});
+
+// The Legend editor rows whose stroke options are shown, by caption: view
+// state, which History and the Session do not hold (OV-157).
+const legendStrokeOptionsOpen = reactive(new Set());
 
 // Original stroke values from SVG generation (gbdraw's auto-determined defaults)
 const originalSvgStroke = ref({ color: null, width: null });
@@ -1139,6 +1143,7 @@ export const state = {
   newLegendColor,
   legendStrokeOverrides,
   legendColorOverrides,
+  legendStrokeOptionsOpen,
   originalSvgStroke,
   legendDragging,
   legendDragStart,

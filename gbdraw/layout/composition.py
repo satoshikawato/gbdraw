@@ -234,11 +234,16 @@ class CompositionPlacement:
 
 @dataclass(frozen=True, slots=True)
 class CompositionPlan:
-    """Resolved final canvas and automatic item placements."""
+    """Resolved final canvas and automatic item placements.
+
+    ``primary_local_bounds`` is the request's primary bounds, kept exactly as
+    given; ``primary_bounds`` is the same box after the automatic translation.
+    """
 
     canvas_bounds: Aabb
     view_box: tuple[float, float, float, float]
     primary_bounds: Aabb
+    primary_local_bounds: Aabb
     placements: tuple[CompositionPlacement, ...]
     spacing: CompositionSpacing
     overlay_obstacles: tuple[Aabb, ...] = ()
@@ -250,6 +255,8 @@ class CompositionPlan:
             raise TypeError("canvas_bounds must be an Aabb")
         if not isinstance(self.primary_bounds, Aabb):
             raise TypeError("primary_bounds must be an Aabb")
+        if not isinstance(self.primary_local_bounds, Aabb):
+            raise TypeError("primary_local_bounds must be an Aabb")
         view_box = tuple(float(value) for value in self.view_box)
         if len(view_box) != 4 or not all(math.isfinite(value) for value in view_box):
             raise ValueError("view_box must contain four finite values")
@@ -694,6 +701,7 @@ def plan_composition(request: CompositionRequest) -> CompositionPlan:
         canvas_bounds=canvas_bounds,
         view_box=(0.0, 0.0, canvas_bounds.width, canvas_bounds.height),
         primary_bounds=primary_placement.final_bounds,
+        primary_local_bounds=request.primary.local_bounds,
         placements=placements,
         spacing=request.spacing,
         overlay_obstacles=tuple(
