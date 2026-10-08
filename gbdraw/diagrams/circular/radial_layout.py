@@ -1137,17 +1137,28 @@ def _inside_movable_stack_group_from(
     ordered_intents: Sequence[_RadialSlotIntent],
     start_pos: int,
     resolved_by_index: Mapping[int, CircularResolvedSlot],
+    *,
+    keep_preset_lanes: bool,
 ) -> list[_RadialSlotIntent]:
-    """Auto rows and pinned Auto-width rows, up to a row of a preset-lane group (GX-19)."""
+    """Auto rows and pinned Auto-width rows that pack as one stack.
+
+    With ``keep_preset_lanes`` the group ends where a preset-lane group starts
+    (GX-19); without it, preset-lane rows without a radius reflow in the stack.
+    """
 
     group: list[_RadialSlotIntent] = []
     for future_pos in range(start_pos, len(ordered_intents)):
         future = ordered_intents[future_pos]
         if future.slot_index in resolved_by_index or future.side != "inside":
             break
-        if future.placement_policy != "auto" and not _anchored_inside(future):
+        if keep_preset_lanes and _preferred_numeric_group_from(
+            ordered_intents, future_pos, resolved_by_index, keep_preset_lanes=True
+        ):
             break
-        if _preferred_numeric_group_from(ordered_intents, future_pos, resolved_by_index):
+        reflowing_preset_lane = (
+            not keep_preset_lanes and _preferred_inside_numeric(future) and not future.explicit_anchor
+        )
+        if not (future.placement_policy == "auto" or _anchored_inside(future) or reflowing_preset_lane):
             break
         group.append(future)
     return group
@@ -1451,20 +1462,22 @@ def _preferred_numeric_group_from(
     ordered_intents: Sequence[_RadialSlotIntent],
     start_pos: int,
     resolved_by_index: Mapping[int, CircularResolvedSlot],
+    *,
+    keep_preset_lanes: bool,
 ) -> list[_RadialSlotIntent]:
-    """Inside numeric rows on preset lanes, with the pinned Auto-width rows among them.
+    """Inside numeric rows on preset lanes, placed at their preset anchors or packed.
 
     The default stack places its numeric rows this way, so a preset stack with
-    nothing typed draws the default figure (GX-19). A pinned row with an Auto
-    width joins the group it touches and keeps its radius (GX-17); a run
-    without a preset-lane row is not a preferred group.
+    nothing typed draws the default figure (GX-19). With ``keep_preset_lanes``
+    a pinned row with an Auto width joins the group it touches and keeps its
+    radius (GX-17); a run without a preset-lane row is not a preferred group.
     """
 
     group: list[_RadialSlotIntent] = []
     for future in ordered_intents[start_pos:]:
         if future.slot_index in resolved_by_index:
             break
-        if not (_anchored_inside(future) or _preferred_inside_numeric(future)):
+        if not (_preferred_inside_numeric(future) or (keep_preset_lanes and _anchored_inside(future))):
             break
         group.append(future)
     if not any(_preferred_inside_numeric(member) for member in group):
@@ -1945,6 +1958,7 @@ class _RadialLayoutInputs(TypedDict):
     preferred_anchor_slot_ids: Collection[str]
     depth_config: DepthConfigurator | None
     center_reserved_radius_explicit: bool
+    keep_preset_lanes: bool
 
 
 def resolve_circular_radial_layout(
@@ -1976,7 +1990,18 @@ def resolve_circular_radial_layout(
         preferred_anchor_slot_ids=preferred_anchor_slot_ids,
         depth_config=depth_config,
         center_reserved_radius_explicit=center_reserved_radius_explicit,
+        keep_preset_lanes=True,
     )
+    try:
+        return _resolve_circular_radial_layout(
+            definition_reserved_radius_px=definition_reserved_radius_px,
+            **layout_inputs,
+        )
+    except ValidationError:
+        # A preset lane is a preference (GX-19): when keeping the preset-lane
+        # rows at their anchors leaves the stack no room, they reflow with the
+        # Auto rows around them, and a failure names that layout's cause.
+        layout_inputs["keep_preset_lanes"] = False
     try:
         return _resolve_circular_radial_layout(
             definition_reserved_radius_px=definition_reserved_radius_px,
@@ -2006,6 +2031,7 @@ def _resolve_circular_radial_layout(
     preferred_anchor_slot_ids: Collection[str] = (),
     depth_config: DepthConfigurator | None = None,
     center_reserved_radius_explicit: bool = False,
+    keep_preset_lanes: bool = True,
 ) -> CircularRadialLayout:
     cfg = canvas_config.profile.config
     axis_radius_px = float(canvas_config.radius)
@@ -2174,6 +2200,7 @@ def _resolve_circular_radial_layout(
                 ordered_intents,
                 intent_pos,
                 resolved_by_index,
+                keep_preset_lanes=keep_preset_lanes,
             )
             if movable_group and (len(movable_group) > 1 or _anchored_inside(intent)):
                 placement_window = _inside_placement_window(
@@ -2216,6 +2243,7 @@ def _resolve_circular_radial_layout(
                 ordered_intents,
                 intent_pos,
                 resolved_by_index,
+                keep_preset_lanes=keep_preset_lanes,
             )
             if preferred_group:
                 placement_window = _inside_placement_window(
@@ -2295,6 +2323,7 @@ def _resolve_circular_radial_layout(
                         ordered_intents,
                         intent_pos,
                         resolved_by_index,
+                        keep_preset_lanes=keep_preset_lanes,
                     )
                     if len(fallback_group) <= len(inside_group):
                         raise

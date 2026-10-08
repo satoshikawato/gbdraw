@@ -2586,6 +2586,30 @@ def _slot_geometry(layout) -> dict[str, tuple[float, ...]]:
     }
 
 
+def test_preset_lane_rows_reflow_when_their_preset_anchors_leave_no_room(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # GX-19: a preset anchor is a preference. Here keeping gc_skew on its
+    # preset lane leaves the ticks no room above the pinned feature row, so
+    # gc_skew reflows with the Auto rows, as before.
+    layout = _capture_circular_radial_layout(
+        monkeypatch,
+        track_type="tuckin",
+        circular_track_slots=[
+            "features:features@lane_direction=inside,r=0.6",
+            "ticks:ticks@side=inside,tick_label_layout=label_in_tick_out",
+            "gc_skew:dinucleotide_skew@side=inside,w=10px",
+            "at_skew:dinucleotide_skew@side=inside,nt=AT",
+        ],
+        circular_track_axis_index=0,
+    )
+
+    inside = [slot for slot in layout.slots if slot.side == "inside" and slot.renderer != "features"]
+    assert [slot.id for slot in inside] == ["ticks", "gc_skew", "at_skew"]
+    for outer_slot, inner_slot in zip(inside, inside[1:]):
+        assert inner_slot.reserved_band_px.outer_px <= outer_slot.reserved_band_px.inner_px + 1e-6
+
+
 @pytest.mark.parametrize("input_filename", ["HmmtDNA.gbk", "MG1655.gbk"])
 @pytest.mark.parametrize("track_type", ["tuckin", "middle", "spreadout"])
 def test_preset_stack_with_nothing_typed_matches_the_default_stack(
