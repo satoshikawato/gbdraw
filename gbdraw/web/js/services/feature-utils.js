@@ -31,8 +31,8 @@ const featureLocationParts = (feature) => (
 );
 
 // The 1-based coordinates of every part, without the strand. Also the location
-// of the fallback caption of an unnamed feature.
-const formatFeatureRange = (feature) => featureLocationParts(feature).map((part) => {
+// of the fallback caption of an unnamed feature, here and in the rule editor.
+export const formatFeatureRange = (feature) => featureLocationParts(feature).map((part) => {
   const display = String(part?.display || '').trim();
   if (display) return display;
   const start = Number(part?.start);

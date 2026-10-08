@@ -6,7 +6,7 @@ import { firstMatchingRule, ruleMatchesReady, runWhenPrepared } from '../rule-ma
 import { ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { resolveColorToHex } from '../../utils/color-utils.js';
 import { parseSpecificRules, serializeSpecificRules } from '../../services/file-imports.js';
-import { getFeatureColorRuleHash } from '../../services/feature-utils.js';
+import { formatFeatureRange, getFeatureColorRuleHash } from '../../services/feature-utils.js';
 import {
   buildLegendIntents, createRuleLegendCaptions, legendRowRules, rendererLegendRows, ruleLegendCaption
 } from '../../services/specific-color-rules.js';
@@ -448,7 +448,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   };
 
   const getIndividualFeatureLabel = (feat) => {
-    return feat.product || feat.gene || feat.locus_tag || `${feat.type} at ${feat.start}..${feat.end}`;
+    return feat.product || feat.gene || feat.locus_tag || `${feat.type} at ${formatFeatureRange(feat)}`;
   };
 
   const getEditableLabelEntryForFeature = (feat) => {

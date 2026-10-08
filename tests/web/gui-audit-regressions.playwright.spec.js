@@ -183,8 +183,9 @@ test('malformed annotations preserve the draft and a valid import is undoable', 
   const before = await page.evaluate(() => JSON.stringify(window.__GBDRAW_APP__.annotationSets));
   const upload = panel.locator('input[type=file]');
   await upload.setInputFiles({ name: 'bad.tsv', mimeType: 'text/plain', buffer: Buffer.from('set_id\tid\tmark\tfeature_selector\ns\ta\thighlight\t;\n') });
-  await expect.poll(() => dialogs.length).toBe(1);
-  expect(dialogs[0]).toContain('feature_selector requires');
+  // FL-14: the panel notice names the error; no browser alert.
+  await expect(panel.getByRole('status')).toContainText('feature_selector requires');
+  expect(dialogs).toEqual([]);
   expect(await page.evaluate(() => JSON.stringify(window.__GBDRAW_APP__.annotationSets))).toBe(before);
   await upload.setInputFiles({ name: 'good.tsv', mimeType: 'text/plain', buffer: Buffer.from('set_id\tid\tmark\tstart\tend\nloaded\ta\tband\t1\t8\n') });
   await expect(panel.getByLabel('Annotation set id')).toHaveValue('loaded');
