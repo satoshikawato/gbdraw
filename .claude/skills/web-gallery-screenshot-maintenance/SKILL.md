@@ -15,11 +15,7 @@ Before editing or reviewing Gallery tutorial screenshots, writing, or structured
 
 - `CLAUDE.md`
 - `gbdraw/web/CLAUDE.md`
-- `docs/WEB_GALLERY_OPERATION_SCREENSHOTS_PLAN.md`, if present
-- `docs/WEB_GALLERY_REAL_UI_SCREENSHOT_ROLLOUT_PLAN.md`, if present
-- `docs/WEB_GALLERY_DROPDOWN_SCREENSHOT_PLAN.md`, if present
-- `docs/internal/WEB_GALLERY_OPERATION_SCREENSHOT_REGISTER.md`, if present
-- `docs/WEB_GALLERY_SCREENSHOT_RECAPTURE_PLAN.md`, if present
+- `docs/internal/WEB_GALLERY_OPERATION_SCREENSHOT_REGISTER.md`
 
 Then inspect the target tutorial JSON and media directory:
 
@@ -62,7 +58,9 @@ Then inspect the target tutorial JSON and media directory:
 10. For sweeping audits, make a temporary contact sheet of referenced media for each tutorial and inspect the updated contact sheet after fixes. For every recrop or replacement, also compare the old and new images side by side at the same displayed size. Reject the replacement when it makes the operated control less compact, removes a useful selected target, or adds page area without adding information needed for the documented action.
 11. Record screenshot, writing, and structured-content decisions in the operation register or the active screenshot plan before replacing files. If no active register exists, create or update `docs/internal/WEB_GALLERY_OPERATION_SCREENSHOT_REGISTER.md`.
 12. After tutorial references are fixed, scan `gbdraw/web/gallery/media/` for WebP files unreferenced by tutorial JSON. If tests or docs still refer to an otherwise stale media fixture, update them to use current referenced media before deleting the stale file.
-13. Keep batches small. Do not migrate every tutorial in one risky change.
+13. Migrate and verify a few tutorials at a time, not every tutorial in one
+    step. A batch is a verified commit; group commits into pull requests
+    under the `gbdraw-ship-pr` rules.
     For an explicitly exhaustive audit, batching must not reduce semantic
     coverage: do not omit required captures, assertions, or focused crops to
     save model tokens, runtime, or image count.
@@ -107,8 +105,7 @@ Use the real UI the user operates.
 - When one operation crop already includes another operation's entire control area, keep the broader crop only if it remains compact at Gallery size and every extra area helps explain the action. Otherwise keep the narrower crop or recrop the shared panel. Prefer a single truthful panel crop over consecutive screenshots that repeat the same controls, but do not trade away compactness merely to reduce the image count.
 - Post-generation editor screenshots must come from the exact restored session for that example. Before capturing drawers such as Legend, Features, or Orthogroups, verify the restored editor state matches the example-specific generated result. A generic or stale drawer state, such as a BGC legend editor showing only `CDS`, is a `replace`, even if it is a real drawer crop.
 - Drawer screenshots must show the named active drawer tab and must not be overlapped by a popup or another drawer's controls. Legend drawer crops should be scrolled so the entries named by the caption are visible.
-- If a restored session's saved editor state and rendered SVG disagree, fix the app restore behavior or refresh the session artifact before capturing. Do not document the broken intermediate state as the tutorial screenshot.
-- If a restored session's UI controls disagree with the tutorial command or rendered output, fix the app restore behavior or refresh the session artifact before capturing. This includes settings that may exist only in `cliInvocation.args` in older sessions, such as multi-record `--multi_record_position` tokens.
+- If a restored session's saved editor state or UI controls disagree with the rendered SVG or the tutorial command, fix the app restore behavior or refresh the session artifact before capturing; do not document the broken intermediate state. This includes settings that may exist only in `cliInvocation.args` in older sessions, such as multi-record `--multi_record_position` tokens.
 - Treat capture metadata as executable documentation even when the current bitmap is retained. Its active tab, selected values, target selector, and crop composition must reproduce the visible screenshot state; do not leave a recipe that would silently replace a Details image with Qualifiers or otherwise change the documented action on the next refresh.
 - For ordered or movable controls such as track slots, comparison series, and record rows, replay the tutorial steps against the reset/default state and compare the resulting order with the saved Gallery session. Document every required move explicitly instead of relying on a pre-arranged restored session.
 - When capturing a drawer, keep the actual drawer controls visible, but exclude unrelated floating preview controls if they visually overlap the drawer; use temporary capture-only CSS rather than permanent app changes.
@@ -133,7 +130,7 @@ Capture standards:
 - Use device scale factor 2 or higher; use 3 for dense forms and popup/detail screenshots. Treat requests such as "150 dpi" as a demand for a higher-density source bitmap: increase device scale factor or crop tighter, never upscale an existing low-resolution image.
 - When the request is only to improve resolution, preserve the same semantic crop. Increase device scale factor, capture density, or source viewport as needed, but do not include extra sibling slots, following sections, or unrelated context. For stack/list panels, compute the clip bottom from the same last visible row rather than from the whole container.
 - Before overwriting an existing tutorial image, preserve or render the previous image for a same-size side-by-side review. Do not accept the new capture until the action remains at least as easy to identify, the crop is no less compact without a documented reason, and any clicked feature or ribbon remains visibly associated with its popup.
-- Save temporary PNGs under `/tmp` and commit WebP only.
+- Save temporary PNGs under `$TMPDIR` (the task folder) and commit WebP only.
 - Use WebP quality 92-95 for UI controls and dense forms.
 - Do not upscale a crop. Recapture at higher scale instead.
 - Keep labels and selected values readable at the rendered Gallery size.
@@ -191,10 +188,10 @@ Use structured display when tutorial content has repeated fields.
 Run focused checks after each tutorial or batch:
 
 ```bash
-python -m json.tool gbdraw/web/gallery/tutorials/<example-id>.json >/tmp/<example-id>.json.check
+python -m json.tool gbdraw/web/gallery/tutorials/<example-id>.json >"$TMPDIR/<example-id>.json.check"
 python tools/capture_gallery_tutorial_screenshots.py --example <example-id> --check
 node --check gbdraw/web/gallery/gallery.js
-npx playwright test tests/web/gallery-tutorial.playwright.spec.js --project=chromium
+python3 .claude/scripts/run_quiet.py --log "$TMPDIR/gallery-tutorial.log" -- npx playwright test tests/web/gallery-tutorial.playwright.spec.js --project=chromium
 ```
 
 If Node Playwright is unavailable, use Python Playwright for equivalent media and viewport checks.
