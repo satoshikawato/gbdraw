@@ -294,7 +294,9 @@ gain one when you turn the stack on; use **Reset**.
 whether or not the custom stack is in use, and turning the option off enables
 those rows again. Rows you disabled yourself stay disabled. A row's resolved
 **(auto)** geometry comes from the last generated diagram and appears only for
-rows it drew; a disabled row shows the estimate.
+rows it drew; any other row, and every row before the first Generate, shows an
+estimate written as "≈ … (estimate)". A ticks row's **Radius** note is the tick
+anchor, the radius that a typed **Radius** pins, not the centre of its band.
 
 ### Follow a Result and its settings draft
 
