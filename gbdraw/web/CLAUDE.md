@@ -550,11 +550,11 @@ WEB_CHANGE_POLICY.md "Design-rule co-change"). The detectors are
 closures `owner-graph.forward-closure.v2`, state backdoors, whole-object ports,
 projection call shapes, heavy derived trigger sites
 `heavy-derived.trigger-site.v2`, and import direction
-`layer.import-direction.v1`, which ranks modules with `webLayerOf` and records
-each upward import in `LAYER_IMPORT_BASELINE`);
+`layer.import-direction.v1`, which ranks modules with `webLayerOf`; no upward
+import is allowed, and none is recorded);
 `node tools/report-web-owner-graph.mjs --at worktree` prints the current
-subjects. Fix a new upward import by moving the imported code down or taking
-a port, not by recording it.
+subjects. Fix an upward import by moving the imported code down or taking a
+port.
 
 Run `node --test tests/web/owner-graph-baseline.test.mjs` before and after a
 change to `gbdraw/web/js`. A new subject means the change couples owners:
@@ -566,8 +566,8 @@ and Projection (`docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md`); without
 a record, ask the Owner before implementing it.
 
 Guards: `tests/web/owner-graph-baseline.test.mjs` (every observed subject is in
-the baseline with a count no higher than recorded, per detector, and every
-upward import is in `LAYER_IMPORT_BASELINE`) and
+the baseline with a count no higher than recorded, per detector, and no module
+imports from a higher layer) and
 `tests/web/owner-graph-detectors.test.mjs` (the detectors).
 
 ### R14: Typed boundaries

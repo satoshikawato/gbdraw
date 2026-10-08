@@ -65,15 +65,6 @@ const PROJECTION_SHAPE_BASELINE = {
   'composition': 1
 };
 
-// Upward imports under the R13 layers (`webLayerOf` in
-// tools/web-owner-graph-detectors.mjs): a module imports its own layer and
-// lower ones. Each entry is `layer.import-direction.v1|importer->target` with
-// the number of distinct names the importer takes from the target. A slice
-// that moves the imported code down removes its entries in the same pull
-// request; the list ends empty. May only shrink.
-const LAYER_IMPORT_BASELINE = {
-};
-
 const SUBJECT_DETECTORS = [
   'owner-graph.injection-edge.v1',
   'owner-graph.forward-closure.v2',
@@ -109,13 +100,12 @@ test('the distinct projection call shapes per domain do not grow (R3, R13)', () 
     'fewer projection call shapes: lower these PROJECTION_SHAPE_BASELINE entries in this pull request');
 });
 
-test('every upward import under the R13 layers is in the baseline, and every baseline entry is still observed', () => {
-  const observed = new Map(Object.entries(results['layer.import-direction.v1'].countsBySubject)
-    .map(([subject, count]) => [`layer.import-direction.v1|${subject}`, count]));
-  const added = [...observed].filter(([key, count]) => !(key in LAYER_IMPORT_BASELINE) || count > LAYER_IMPORT_BASELINE[key]);
-  const fixed = Object.entries(LAYER_IMPORT_BASELINE).filter(([key, count]) => !observed.has(key) || observed.get(key) < count);
-  assert.deepEqual(added.map(([key, count]) => `${key}: ${count}`), [],
-    'new upward imports (R13): import from the same layer or a lower one (move the code down, or take a port), or register the entry in an authority-only pull request');
-  assert.deepEqual(fixed.map(([key, count]) => `${key}: ${count} -> ${observed.get(key) ?? 0}`), [],
-    'fixed upward imports: lower or remove these LAYER_IMPORT_BASELINE entries in this pull request');
+// R13 layers (`webLayerOf` in tools/web-owner-graph-detectors.mjs): a module
+// imports its own layer and lower ones. The layering slices removed every
+// upward import, so none is allowed.
+test('no module imports from a higher R13 layer', () => {
+  const upward = Object.entries(results['layer.import-direction.v1'].countsBySubject)
+    .map(([subject, count]) => `${subject}: ${count}`);
+  assert.deepEqual(upward, [],
+    'upward imports (R13): import from the same layer or a lower one (move the code down, or take a port)');
 });
