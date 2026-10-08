@@ -4888,7 +4888,7 @@ def write_session_json(
                     filename="",
                     mode="wb",
                     fileobj=raw_file,
-                    compresslevel=9,
+                    compresslevel=6,
                     mtime=0,
                 ) as compressed_file:
                     with io.TextIOWrapper(compressed_file, encoding="utf-8") as text_file:
