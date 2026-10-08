@@ -1827,7 +1827,8 @@ export const createAppSetup = () => {
     });
     // The shown Result already has Auto's outcome: say what it shows.
     const applied = getCommittedLinearDefinitionVisibility();
-    const effect = linearLabelAutoFields.value.every((row) => applied[row.visibilityKey] === shown)
+    const effect = linearLabelAutoFields.value
+      .every((/** @type {{ visibilityKey: string }} */ row) => applied[row.visibilityKey] === shown)
       ? `Auto ${shown ? 'shows' : 'hides'} these fields throughout the diagram`
       : `Auto will ${shown ? 'show' : 'hide'} these fields throughout the diagram on the next successful Generate`;
     return shown

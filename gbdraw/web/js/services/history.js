@@ -237,7 +237,9 @@ export const createHistoryManager = ({
     throw new Error('createHistoryManager requires applyCheckpoint.');
   }
 
+  /** @type {any[]} */
   const undoStack = [];
+  /** @type {any[]} */
   const redoStack = [];
   const revision = makeRef(0);
   // Transaction open/close notifies mutationPending() without a document revision.

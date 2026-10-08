@@ -422,8 +422,10 @@ export const setupGlobalUiEvents = ({
   // A click whose press began in a popup (a drag released past the popup's
   // clamp, a text selection) is not a click outside it.
   let pressStartedInPopup = false;
+  /** @param {MouseEvent} e */
   const rememberPressTarget = (e) => {
-    pressStartedInPopup = Boolean(e.target?.closest?.('.feature-popup, .pairwise-match-popup, .label-popup'));
+    pressStartedInPopup = e.target instanceof Element
+      && Boolean(e.target.closest('.feature-popup, .pairwise-match-popup, .label-popup'));
   };
 
   const closeFeaturePopup = (e) => {
