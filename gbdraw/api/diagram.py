@@ -3206,25 +3206,24 @@ def assemble_circular_diagram_from_records(
         record_group.translate(record_dx, record_dy)
         used_ids.add(f"record_{record_index}")
 
-        # The record canvases are not read again after this merge, so their
-        # elements move into the merged canvas instead of being copied.
-        moved_definitions: list[object] = []
-        moved_elements: list[object] = []
+        copied_definitions: list[object] = []
+        copied_elements: list[object] = []
         for element in result.drawing.elements:
+            copied = copy.deepcopy(element)
             if _is_defs_element(element):
-                moved_definitions.extend(
-                    list(getattr(element, "elements", ()) or ())
+                copied_definitions.extend(
+                    list(getattr(copied, "elements", ()) or ())
                 )
                 continue
-            _strip_nested_composition_roles(element)
-            _suffix_fixed_top_level_group_id(element, record_index)
-            moved_elements.append(element)
+            _strip_nested_composition_roles(copied)
+            _suffix_fixed_top_level_group_id(copied, record_index)
+            copied_elements.append(copied)
 
-        for definition in moved_definitions:
+        for definition in copied_definitions:
             _strip_nested_composition_roles(definition)
 
         _uniquify_copied_subtrees_ids(
-            (*moved_definitions, *moved_elements),
+            (*copied_definitions, *copied_elements),
             record_index=record_index,
             used_ids=used_ids,
             bind_record_identity=(
@@ -3241,10 +3240,10 @@ def assemble_circular_diagram_from_records(
                 )
             ),
         )
-        for definition in moved_definitions:
+        for definition in copied_definitions:
             merged_canvas.defs.add(definition)
-        for moved in moved_elements:
-            record_group.add(moved)
+        for copied in copied_elements:
+            record_group.add(copied)
         merged_canvas.add(record_group)
         record_targets.append(record_group)
         grid_overlay_obstacles.extend(
