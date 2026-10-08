@@ -42,7 +42,7 @@ from gbdraw.comparisons.losat_runtime import (
     run_losat_search,
 )
 from gbdraw.exceptions import ValidationError
-from gbdraw.io.comparison_sequences import ComparisonSequenceFile
+from gbdraw.io.comparison_sequences import ComparisonSequenceFile, comparison_file_stem
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ _DEFAULT_GENCODE = 1
 def ring_losat_filename(source_path: str, program: str) -> str:
     """Raw TSV name of one ring, as the Web names it."""
 
-    stem = re.sub(r"\.[^.]+$", "", os.path.basename(str(source_path))) or "comparison"
+    stem = comparison_file_stem(str(source_path)) or "comparison"
     cleaned = re.sub(r"[^\w.-]+", "_", f"{stem}.circular_conservation.{program}.tsv")
     return cleaned.strip("_") or "gbdraw_session"
 

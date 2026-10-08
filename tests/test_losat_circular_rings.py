@@ -199,8 +199,8 @@ def test_saved_session_replays_without_losat(tmp_path: Path, monkeypatch: pytest
     assert [entry["args"] for entry in entries] == [["--query-gencode", "1", "--db-gencode", "1"]] * 2
     assert entries[0]["runtime"]["source"] == "explicit"
     labels = session["renderRequest"]["diagramOptions"]["conservationLabels"]
-    # Default labels: FASTA file name; GenBank DEFINITION.
-    assert labels == ["NC_002333.2.fna", "Drosophila melanogaster mitochondrion, complete genome"]
+    # Default labels: FASTA file name without the extension (D-03); GenBank DEFINITION.
+    assert labels == ["NC_002333.2", "Drosophila melanogaster mitochondrion, complete genome"]
 
     def no_runtime(*_args, **_kwargs):
         raise AssertionError("Session replay resolved a LOSAT runtime.")
