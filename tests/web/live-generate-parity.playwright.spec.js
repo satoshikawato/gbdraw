@@ -767,7 +767,7 @@ for (const [name, { states, color, caption, direct, remove }] of Object.entries(
   test(`a Legend color copied from popup rules leaves with them: ${name} (${states.mode})`, async ({ page }) => {
     test.setTimeout(180_000);
     await open(page, states);
-    const stored = () => page.evaluate(async () => ({ ...(await import('/gbdraw/web/js/state.js')).state.legendColorOverrides }));
+    const stored = () => page.evaluate(async () => ({ ...(await import('/gbdraw/web/js/state.js')).state.activeDrawing().legendColorOverrides }));
     const ruleCount = () => page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.length);
     const liveFill = async () => (await semanticSnapshot(page)).legend.find((row) => row.caption === caption)?.fill;
     await legendRowColor(page, direct, '#7b2cbf');

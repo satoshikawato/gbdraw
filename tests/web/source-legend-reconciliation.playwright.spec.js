@@ -377,7 +377,7 @@ const legendView = async page => ({
       (features[id] ||= new Set()).add(stroke(element));
     });
     return {
-      entries: s.legendEntries.value.map(entry => `${entry.caption} ${entry.color}`),
+      entries: s.activeDrawing().legendEntries.value.map(entry => `${entry.caption} ${entry.color}`),
       swatches: getAllFeatureLegendGroups(svg).map(group => [...group.querySelectorAll('g[data-legend-key]')]
         .map(row => `${row.getAttribute('data-legend-key')}: ${stroke(getLegendEntrySwatch(row))}`).sort()),
       features: Object.fromEntries(Object.entries(features).map(([id, strokes]) => [id, [...strokes].sort().join(', ')]))
@@ -724,7 +724,7 @@ test('M13 circular: Stroke options is a disclosure without a History step or a s
     expect(await undoCount(), 'closing it records no step').toBe(start + 1);
 
     const saved = readSession(await download(page, 'Save Session', testInfo.outputPath('stroke-options.gbdraw-session.json.gz')));
-    const { legend } = saved.editorState;
+    const { legend } = saved.modes.circular.editorState;
     expect(legend.entries.filter(e => Object.hasOwn(e, 'showStroke')), 'the Session does not save the disclosure').toEqual([]);
     expect(Number(legend.strokeOverrides[caption]?.strokeWidth), 'the stroke edit is saved').toBe(2);
     expect(page.externalRequests).toEqual([]);
@@ -817,7 +817,7 @@ for (const mode of ['linear', 'circular']) {
 
       const saved = testInfo.outputPath(`restore-${mode}.gbdraw-session.json.gz`);
       const session = readSession(await download(page, 'Save Session', saved));
-      expect(session.editorState.legend.deletedEntries.map(entry => entry.caption), 'the Session saves the shorter list').toEqual(['CDS']);
+      expect(session.modes[mode].editorState.legend.deletedEntries.map(entry => entry.caption), 'the Session saves the shorter list').toEqual(['CDS']);
       const restored = await legendLayoutNumbers(page);
       await expectLiveEqualsGenerate(page, { label: `${mode}: Restore` });
       expect(await legendLayoutNumbers(page), 'Restore: the screen is the Generate').toEqual(restored);
