@@ -185,7 +185,7 @@
 | UJ-03 | P3 | 別の PR で修正済み | #857、#870（FL-01 を含む） |
 | UJ-04 | P3 | 修正済み | #939 |
 | UJ-05 | P3 | 修正済み | #939 |
-| UJ-06 | P3 | 修正済み | Lane B（`fix/web-gui-audit-b`）（**Load an example**。例の Session は pip package にも入れる。D-B05） |
+| UJ-06 | P3 | 修正済み | Lane B（`fix/web-gui-audit-b`）（**Load an example**。Owner 2026-10-08: 同じ origin が Gallery の `examples.json` を配信するとき（gbdraw.app）だけボタンを出し、すべての例を選べる chooser を開く。pip package は Gallery を同梱しない。D-B05 を置き換える） |
 | UJ-07 | P3 | 修正済み | #939 |
 | UJ-08 | P3 | 修正済み | Lane B（`fix/web-gui-audit-b`）（b-run）。入力のエラーだけを、検出が成功した時に消す |
 | UJ-09 | P3 | 修正済み | Lane B（`fix/web-gui-audit-b`）（b-session）。**Load Session** の前に確認を出す |

@@ -6,6 +6,7 @@ import gzip
 import hashlib
 import html
 import importlib.util
+import io
 import json
 import os
 import re
@@ -260,9 +261,10 @@ def test_local_web_package_data_excludes_gallery_assets() -> None:
     assert "bin/*/*" in build_support.get_excluded_package_data_patterns(include_browser_wheel=True)
     assert "bin/*/*" in build_support.get_excluded_package_data_patterns(include_browser_wheel=False)
 
+    # UJ-06 (Owner 2026-10-08): the local GUI ships no Gallery catalog or
+    # Session, so its empty state shows no Load an example.
     assert [pattern for pattern in package_data_patterns if "web/gallery" in pattern] == [
-        "web/gallery/palettes/palettes.json",
-        "web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json",
+        "web/gallery/palettes/palettes.json"
     ]
     assert "web/js/services/*.js" in package_data_patterns
     assert "web/tutorial-data/*.json" in package_data_patterns
@@ -280,6 +282,32 @@ def test_local_web_package_data_excludes_gallery_assets() -> None:
     assert (
         "gbdraw/web/tutorial-data/" in build_support._BROWSER_WHEEL_FORBIDDEN_PREFIXES
     )
+
+
+@pytest.mark.parametrize(
+    "member",
+    [
+        "gbdraw/web/gallery/examples.json",
+        "gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json",
+        "gbdraw/web/gallery/sessions/majanivirus_orthogroup.gbdraw-session.json.gz",
+    ],
+)
+def test_distribution_checks_reject_gallery_catalog_and_sessions(
+    tmp_path: Path, member: str
+) -> None:
+    verify_module = _load_verify_module()
+    wheel_path = tmp_path / "gbdraw-0.0.0-py3-none-any.whl"
+    with zipfile.ZipFile(wheel_path, "w") as wheel:
+        wheel.writestr(member, "{}")
+    with pytest.raises(RuntimeError, match="Wheel ships Gallery catalog or Session files"):
+        verify_module.inspect_wheel(wheel_path)
+    sdist_path = tmp_path / "gbdraw-0.0.0.tar.gz"
+    with tarfile.open(sdist_path, "w:gz") as sdist:
+        info = tarfile.TarInfo(f"gbdraw-0.0.0/{member}")
+        info.size = 2
+        sdist.addfile(info, io.BytesIO(b"{}"))
+    with pytest.raises(RuntimeError, match="Sdist ships Gallery catalog or Session files"):
+        verify_module.inspect_sdist(sdist_path)
 
 
 def test_index_links_to_open_source_notices() -> None:
@@ -1434,10 +1462,7 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
     assert [
         path.relative_to(build_root).as_posix()
         for path in sorted((build_root / "gbdraw/web/gallery").rglob("*")) if path.is_file()
-    ] == [
-        "gbdraw/web/gallery/palettes/palettes.json",
-        "gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json",
-    ]
+    ] == ["gbdraw/web/gallery/palettes/palettes.json"]
     copied_wheels = sorted(
         path.name for path in (build_root / "gbdraw" / "web").glob("gbdraw-*.whl")
     )
@@ -1493,10 +1518,7 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
             name for name in outer_names if name.startswith("gbdraw/web/gallery/")
         )
         assert browser_wheels == [browser_wheel_member]
-        assert gallery_members == [
-            "gbdraw/web/gallery/palettes/palettes.json",
-            "gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json",
-        ]
+        assert gallery_members == ["gbdraw/web/gallery/palettes/palettes.json"]
         assert "gbdraw/web/js/services/record-discovery.js" in outer_names
         assert "gbdraw/web/js/services/record-options.js" in outer_names
         assert "gbdraw/web/js/app/linear-record-selector.js" in outer_names
