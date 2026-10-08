@@ -2035,10 +2035,12 @@ def test_refresh_rewrites_retired_flags_in_the_recorded_cli_invocation(
 
 
 def _stored_output_prefixes(session: dict[str, object]) -> tuple[object, object]:
-    """The Output Prefix as the form field and the render request store it."""
+    """The Output Prefix as the form field of the Result's mode slice and the
+    render request store it."""
 
+    mode = session["renderRequest"]["mode"]  # type: ignore[index]
     return (
-        session["config"]["form"]["prefix"],  # type: ignore[index]
+        session["modes"][mode]["config"]["form"]["prefix"],  # type: ignore[index]
         session["renderRequest"]["output"]["prefix"],  # type: ignore[index]
     )
 
@@ -2085,13 +2087,17 @@ def test_stored_session_refresh_publishes_gallery_id_and_input_file_names(
 
 def test_refresh_sets_every_stored_output_prefix() -> None:
     session = {
-        "config": {"form": {"prefix": "out", "species": "kept"}},
-        "renderRequest": {"output": {"prefix": "out", "format": "svg"}},
+        "modes": {
+            "circular": {"config": {"form": {"prefix": "out", "species": "kept"}}},
+            "linear": {"config": {"form": {"prefix": "out"}}},
+        },
+        "renderRequest": {"mode": "circular", "output": {"prefix": "out", "format": "svg"}},
     }
 
-    assert refresh_gallery_sessions_module._set_output_prefix(session, "card-id") == 2
+    assert refresh_gallery_sessions_module._set_output_prefix(session, "card-id") == 3
     assert _stored_output_prefixes(session) == ("card-id", "card-id")
-    assert session["config"]["form"]["species"] == "kept"
+    assert session["modes"]["linear"]["config"]["form"]["prefix"] == "card-id"
+    assert session["modes"]["circular"]["config"]["form"]["species"] == "kept"
     assert refresh_gallery_sessions_module._set_output_prefix(session, "card-id") == 0
 
 

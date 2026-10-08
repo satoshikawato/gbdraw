@@ -1026,10 +1026,16 @@ def _set_output_prefix(session: dict[str, Any], prefix: str) -> int:
     Returns the number of fields changed.
     """
 
+    containers: list[object] = []
+    # Session 46 keeps the form field in each mode slice (``modes.<mode>``).
+    modes = session.get("modes")
+    for mode_slice in modes.values() if isinstance(modes, dict) else ():
+        config = mode_slice.get("config") if isinstance(mode_slice, dict) else None
+        containers.append(config.get("form") if isinstance(config, dict) else None)
+    request = session.get("renderRequest")
+    containers.append(request.get("output") if isinstance(request, dict) else None)
     changed = 0
-    for section, key in (("config", "form"), ("renderRequest", "output")):
-        owner = session.get(section)
-        container = owner.get(key) if isinstance(owner, dict) else None
+    for container in containers:
         if isinstance(container, dict) and container.get("prefix") != prefix:
             container["prefix"] = prefix
             changed += 1
