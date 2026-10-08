@@ -2788,8 +2788,6 @@ export const createRunAnalysis = ({
           validateDepthStyleSettings();
         }
 
-        assertActiveModeInputs?.('circular', state);
-
         const sourceMode = String(drawing.circularConservation.source || '').trim().toLowerCase() === 'upload'
           ? 'upload'
           : 'losat';
@@ -3695,7 +3693,6 @@ export const createRunAnalysis = ({
             : new Set(comparisonResolution.edges
                 .filter((edge) => edge.source === 'losat')
                 .flatMap((edge) => [edge.queryIndex, edge.subjectIndex]));
-          assertActiveModeInputs?.('linear', state);
           for (let i = 0; i < linearSeqs.length; i++) {
             const seq = linearSeqs[i];
             if (lInputType.value === 'gb') {
@@ -5036,6 +5033,15 @@ export const createRunAnalysis = ({
         return outcome;
       };
       if (cancelBeforeRender()) return outcome;
+      // UI-07: the active mode's input check runs before anything here starts
+      // the diagram Worker, so a missing input is named at once.
+      try {
+        assertActiveModeInputs?.(mode.value, state);
+      } catch (cause) {
+        outcome = await failOperation(cause, { handle: null, stage: 'request-validation',
+          isCurrent: isCurrentAlert, isCurrentOperation, recovery: results.value.length ? 'preserved' : 'no-result' });
+        return outcome;
+      }
       await settleComparisonRecordLabels();
       if (!isCurrentOperation()) return { status: 'stale' };
       if (cancelBeforeRender()) return outcome;
