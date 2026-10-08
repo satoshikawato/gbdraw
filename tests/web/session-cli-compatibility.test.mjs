@@ -348,3 +348,27 @@ await test('a 0.13.0 Gallery Session with Custom Track Slots off loads without t
     assert.match(failed.error.summary, new RegExp(`^The track settings are invalid\\. Track row ${row}\\. Field: spacing\\. `), label);
   }
 });
+
+// D-04: the main b05a6bb8 Web writer (Session 33, request schema 2; provenance in
+// tests/fixtures/sessions/scale-interval.provenance.json) saved a Scale Interval of 0
+// as the flat override `scale_interval` and drew the automatic interval. Load
+// keeps that meaning, so the next Generate requests the automatic interval.
+await test('a main v33 Web Session with Scale Interval 0 loads as the automatic interval', async () => {
+  const bytes = gunzipSync(await readFile(path.join(
+    root, 'tests/fixtures/sessions/scale-interval-zero-circular-web.v33.gbdraw-session.json.gz'
+  )));
+  const session = JSON.parse(bytes);
+  assert.equal(session.version, 33);
+  assert.equal(session.renderRequest.diagramOptions.configOverrides.scale_interval, 0);
+  const result = await load(bytes);
+  assert.equal(result.status, 'ok', result.error?.stack);
+  assert.equal(state.mode.value, 'circular');
+  assert.equal(state.activeDrawing().adv.scale_interval, null);
+  const filesData = await serializeActiveRenderFiles('circular', state, state.activeDrawing());
+  const candidate = buildCanonicalRenderRequest({
+    state, drawing: state.activeDrawing(), filesData, comparisonPlanSnapshot: null
+  });
+  const overrides = candidate.renderRequest.diagramOptions.configOverrides ?? {};
+  assert.equal(overrides['objects.scale.interval'] ?? null, null);
+  assert.equal(Object.hasOwn(overrides, 'scale_interval'), false);
+});

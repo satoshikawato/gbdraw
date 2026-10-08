@@ -40,6 +40,16 @@
       "storedAt": "cliInvocation.args (--scale_interval 0); no renderRequest",
       "sessionVersion": 30,
       "sha256": "2aad57e8144ce18faa583c09c3c113f262a12a3b823236c7aebe27d5a07009dd"
+    },
+    "scale-interval-zero-circular-web.v33.gbdraw-session.json.gz": {
+      "sourceCommit": "b05a6bb89e65b6a0b211a1ee10c1a3a402c21165",
+      "history": "first-parent main (Session 31 writer 10d3a3d2 through 17e2c9de stored the flat override scale_interval)",
+      "writer": "Web Save Session of the app at b05a6bb8 (browser wheel built in a detached worktree at that commit), driven by Python Playwright",
+      "command": "Circular, upload record.gb, Axis & Scale > Scale Interval = 0, session title flat-scale-interval, Save Session; the download is stored unchanged (browser gzip, not gzip -n -9)",
+      "storedAt": "renderRequest.diagramOptions.configOverrides.scale_interval = 0 and config.adv.scale_interval = 0 (session-request.js:292 optionalNumber(adv.scale_interval); index.html:3408 Scale Interval input without min)",
+      "sessionVersion": 33,
+      "requestSchema": 2,
+      "sha256": "e929612238c1e4d49f2614c3b2af36ace6549036435b3e7381215916cbc6d4e1"
     }
   }
 }

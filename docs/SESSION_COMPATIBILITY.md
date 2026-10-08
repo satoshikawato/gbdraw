@@ -249,8 +249,9 @@ Session version 46 and request schema 9 are unchanged. `--scale_interval`, the
 Python API's `objects.scale.interval`, and Web **Generate Diagram** reject a
 scale interval of 0 or less. Earlier writers stored such a value and drew the
 automatic interval, so a Session that stores one in
-`renderRequest.diagramOptions.config`, in `configOverrides`, or in a Session
-27–30 `cliInvocation` still replays with the automatic interval, and Web Load
+`renderRequest.diagramOptions.config`, in `configOverrides` (including the
+flat `scale_interval` that earlier Web Sessions wrote), or in a Session 27–30
+`cliInvocation` still replays with the automatic interval, and Web Load
 shows the field as Auto. Saving it again stores no interval.
 
 ## Unreleased: CLI and Python LOSATN / TLOSATX results

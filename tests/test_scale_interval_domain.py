@@ -33,6 +33,8 @@ MAIN_CLI_CIRCULAR_ZERO = SESSIONS / "scale-interval-zero-circular-cli.v44.gbdraw
 MAIN_API_LINEAR_NEGATIVE = SESSIONS / "scale-interval-negative-linear-api.v44.gbdraw-session.json.gz"
 RELEASED_CLI_LINEAR_NEGATIVE = SESSIONS / "scale-interval-negative-linear-cli.v30.gbdraw-session.json.gz"
 RELEASED_CLI_CIRCULAR_ZERO = SESSIONS / "scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz"
+# main b05a6bb8 Web Save Session (Session 33, request schema 2): the flat key configOverrides.scale_interval.
+MAIN_WEB_FLAT_CIRCULAR_ZERO = SESSIONS / "scale-interval-zero-circular-web.v33.gbdraw-session.json.gz"
 CLI_MODULES = {"circular": circular_cli_module, "linear": linear_cli_module}
 EXPECTED_DIAGNOSTIC = {
     "code": "INPUT_INVALID",
@@ -51,7 +53,8 @@ def _without_stored_interval(session: dict[str, Any]) -> dict[str, Any]:
     if options.get("config") is not None:
         options["config"]["objects"]["scale"]["interval"] = None
     if options.get("configOverrides") is not None:
-        options["configOverrides"]["objects.scale.interval"] = None
+        key = "scale_interval" if "scale_interval" in options["configOverrides"] else "objects.scale.interval"
+        options["configOverrides"][key] = None
     return stored
 
 
@@ -112,12 +115,11 @@ def test_a_web_generate_request_rejects_what_a_session_load_reads_as_automatic(t
     assert web_error["context"] == {"reason": "POSITIVE_INTEGER_OR_AUTO", "configPath": "objects.scale.interval"}
 
 
-def _python_replay_svg(session: dict[str, Any], tmp_path: Path, name: str) -> bytes:
+def _python_replay_svg(session: dict[str, Any], tmp_path: Path, name: str) -> dict[str, bytes]:
     output_directory = tmp_path / name
     with materialize_session(load_session_document(session), output_directory=output_directory) as materialized:
         render_session(materialized)
-    (svg,) = output_directory.glob("*.svg")
-    return svg.read_bytes()
+    return {svg.name: svg.read_bytes() for svg in output_directory.glob("*.svg")}
 
 
 def _cli_replay_svg(session: dict[str, Any], tmp_path: Path, name: str) -> bytes:
@@ -129,7 +131,11 @@ def _cli_replay_svg(session: dict[str, Any], tmp_path: Path, name: str) -> bytes
     return (tmp_path / f"{name}.svg").read_bytes()
 
 
-@pytest.mark.parametrize("fixture", [MAIN_CLI_CIRCULAR_ZERO, MAIN_API_LINEAR_NEGATIVE], ids=["cli-config", "api-overrides"])
+@pytest.mark.parametrize(
+    "fixture",
+    [MAIN_CLI_CIRCULAR_ZERO, MAIN_API_LINEAR_NEGATIVE, MAIN_WEB_FLAT_CIRCULAR_ZERO],
+    ids=["cli-config", "api-overrides", "web-flat-overrides"],
+)
 def test_a_main_session_with_a_non_positive_interval_draws_the_automatic_interval(
     fixture: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

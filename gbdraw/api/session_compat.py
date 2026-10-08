@@ -1413,8 +1413,9 @@ def _read_non_positive_scale_interval_as_automatic(payload: dict[str, Any]) -> N
     """Read a stored scale interval <= 0 as the automatic interval (D-04).
 
     Writers before D-04 stored any typed integer (main fe6861f0: the CLI in
-    ``config``, the Web and typed API in ``configOverrides``) and drew <= 0 as
-    automatic; fresh requests now reject it.
+    ``config``, the Web and typed API in ``configOverrides``; main b05a6bb8 Web
+    Save as the flat ``scale_interval``) and drew <= 0 as automatic; fresh
+    requests now reject it.
     """
 
     options = payload.get("diagramOptions")
@@ -1424,7 +1425,7 @@ def _read_non_positive_scale_interval_as_automatic(payload: dict[str, Any]) -> N
     objects = config.get("objects") if isinstance(config, dict) else None
     scale = objects.get("scale") if isinstance(objects, dict) else None
     overrides = options.get("configOverrides")
-    for holder, key in ((scale, "interval"), (overrides, "objects.scale.interval")):
+    for holder, key in ((scale, "interval"), (overrides, "objects.scale.interval"), (overrides, "scale_interval")):
         if not isinstance(holder, dict):
             continue
         value = holder.get(key)
