@@ -1,6 +1,8 @@
 # Multi-drawing project: design (synthesis)
 
-Revision 4.1, 2026-10-07 (§8.1 and §9 status refreshed). Orchestrator: session gbdraw-09. Code base read: `origin/dev` `b355b8ae`
+Revision 5, 2026-10-07 (§8 rewritten to the consolidated PR plan of Owner R9-1; phone layout UI-10 in §5 and W3;
+Z2 text measurement cited for W3/R3; Reset dialog scopes in U-3; §9 statuses). Orchestrator: session gbdraw-ff
+(earlier gbdraw-09). Code base read: `origin/dev` `b355b8ae`
 (Session 46 shape: Phase E `ov80/plan.md` rev 3 §4, Owner answers QA-QC of 2026-10-07).
 **Target release: v0.15.0** for drawings (Owner R5-1: 「Multiple drawing projectは次のバージョン(v0.15.0)に持ち越せばいいから、このセッションはまずデザインに徹してください。」).
 **Two per-mode steps land in 0.14.0 first** and this design builds on them (§0.3):
@@ -33,14 +35,15 @@ Owner replies are verbatim in `owner/owner-replies.txt` (R1-x, R2-x, R3-x); ques
 
 | Step | Release | Owner | Session | Shape change |
 | --- | --- | --- | --- | --- |
-| E1 + Q0 | 0.14.0 | gbdraw-09 | 45 (dev-only, extended; never released) | optional top-level `otherModeResult` = the other mode's committed set (request, Results, catalog, run metadata, CLI invocation, generated Legend refs, applied palette, alignment receipt); one shared resource table; the explicit `transitionDiagramMode` |
-| per-mode store PR-0a/0b/0c, PR-1 | 0.14.0 | gbdraw-9b | 46 | top-level `modes.{circular,linear}`, each slice = today's `config` (minus `modeProfiles` and LOSAT execution), `features`, the Legend part of `editorState` (+ `featureStrokes`), four `ui` keys (`layoutPreferences` slot, `canvasPadding`, `pendingPalette*`, `linearTypographyLinked`); top-level `config`/`features` retired; R2 rows lose `scope`; committed set top-level; `otherModeResult` unchanged; `ui.losatExecution`. Old Sessions: JS split on Web Load + Python twin (tokens copy/own/profile/layout/show-if-source/depth/result-mode/by-scope/by-side/by-leaf/by-binding) |
+| E1 + Q0 | 0.14.0 | gbdraw-09 (now gbdraw-ff) | 45 (dev-only, extended; never released) | optional top-level `otherModeResult` = the other mode's committed set (request, Results, catalog, run metadata, CLI invocation, generated Legend refs, applied palette, alignment receipt); one shared resource table; the explicit `transitionDiagramMode` |
+| per-mode store PR-0a (#934), PER-MODE (PR-0b/0c, PR-1) | 0.14.0 | Phase E (gbdraw-9b, now gbdraw-87) | 46 | top-level `modes.{circular,linear}`, each slice = today's `config` (minus `modeProfiles` and LOSAT execution), `features`, the Legend part of `editorState` (+ `featureStrokes`), four `ui` keys (`layoutPreferences` slot, `canvasPadding`, `pendingPalette*`, `linearTypographyLinked`); top-level `config`/`features` retired; R2 rows lose `scope`; committed set top-level; `otherModeResult` unchanged; `ui.losatExecution`. Old Sessions: JS split on Web Load + Python twin (tokens copy/own/profile/layout/show-if-source/depth/result-mode/by-scope/by-side/by-leaf/by-binding) |
 | drawings (this design) | v0.15.0 | this campaign | 47 | `drawings[]`; each 46 mode slice + its committed set → one drawing; the other mode's drawing only when it shows use (R1-2, rule in §3.1) |
 
-Phase E sequence: layering A → **E1** → layering B → PR-0a → 0b → 0c → PR-1 → layering C → D.
+Phase E sequence: layering A → layering B (#927) → PR-0a (#934) → **E1** → PER-MODE (PR-0b, PR-0c, PR-1,
+layering C) and LEGEND (layering D), one after the other → AUTHORITY (§8.1).
 Owner answers for 0.14.0 (Phase E QA-QC): one History in which a mode switch is a step, and Reset Settings
 resets both modes (QA); no copy-from-other-mode action (QB); 0.14.0 is held for PR-1 (QC); PD-OI-063 is read
-per mode. Per-drawing History and "Reset this drawing (+ others if checked)" (R3-4) arrive with drawings.
+per mode. Per-drawing History and the drawing scopes of the Reset dialog (U-3) arrive with drawings.
 
 
 ### 0.1 Owner decisions
@@ -62,7 +65,7 @@ per mode. Per-drawing History and "Reset this drawing (+ others if checked)" (R3
 | K | PD-OI-086 (and PD-OI-044 rev 2) enter the Contract through a Contract-only PR first (Review REQUIRED, no auto-merge), before the implementation. | R2-4 |
 | U-1 | A drawing bar under the header spans the settings pane and the Preview. A fresh Session is one Circular drawing plus a dashed "Linear" offer tab that creates a blank Linear drawing on first click. The Circular/Linear switch goes. Empty drawings are not saved. | R3-1 |
 | U-2 | Delete asks for confirmation when the drawing has a Result or edits; the header Undo covers the active drawing's steps and drawing-list steps (add, duplicate, rename, move, delete), newest first; activating a drawing is navigation, not a step. | R3-3 |
-| U-3 | Reset Settings resets the active drawing, with an "Also reset the other N drawings" checkbox (default off); files, record selection, Depth files and the Result stay. | R3-4 |
+| U-3 | Reset Settings asks **Reset this drawing / Reset all drawings / Cancel**: Phase E's Reset dialog with drawing scopes (§5). The second button replaces R3-4's "Also reset the other N drawings" checkbox; the two scopes are the same. Files, record selection, Depth files and the Result stay. | R3-4; Owner to Phase E, 2026-10-07 (「このモードだけか全部か選択可能にする」) |
 | PRI | **First runtime deliverable of v0.15.0: each mode/drawing keeps its own Result.** A Generate never replaces another drawing's Result; switching back shows that drawing's own Result with its drags and edits. | Owner via Phase E, 2026-10-07 (「すごくイヤだねこのbehavior. なくしたいね」) |
 | SAVE | **A Session file saves every Result.** Per-mode Results never ship with a Save that drops a visible Result; they ship together with a format that stores every drawing's Result. | R4-1 (「それは完全にregressionじゃん。ダメだよこれは。Session fileはすべてのResultを保存して。」) |
 | OV-104 | The OV-104 stopgap was not to be merged while E1 was a day away (R4-2); with the move to v0.15.0 Phase E re-asks the Owner for 0.14.0. | R4-2, R5-1 |
@@ -349,6 +352,9 @@ From `runtime.md` (adopted; it rejects `mechanisms.md` 6.6's field accessor view
 - **Caches**: one Worker for all drawings; Generate is one at a time project-wide. Content tokens
   (sha256) and a retain set covering every drawing's bound inputs replace the "last request only" caches
   in the transport, the Worker and `PreparedBiologicalInputCache` (W5 / IN-A, measured first).
+- **Text measurement**: one JS path, Phase E's Z2 port (§8.2, "Text measurement"). Its font metrics load
+  once per page (`loadLegendFontMetrics()`) and serve every drawing; they are neither drawing nor project
+  state.
 - **Memory**: N drawings each hold a live Result and catalog (Vibrio catalog ≈ 34 MB); X is gated on a
   measured Vibrio Circular + Linear project.
 
@@ -359,6 +365,11 @@ From `runtime.md` (adopted; it rejects `mechanisms.md` 6.6's field accessor view
   Session: `[O Circular] [: = Linear (+) :] [+ v]`. Phone: one picker row. Accessible names stay
   "Circular" and "Linear" for the first drawings, so tutorials ("Select Linear") and most of the 125 test
   selectors survive.
+- **Phone and tablet widths** (UI-10, handed over by gbdraw-41; Owner 2026-10-07: the phone layout moves to
+  the drawings UI): at ≤ 768 px, the picker row is followed by **Settings | Preview** tabs instead of one
+  stacked page. Today, at 390 px, the Preview starts about 1,850 px down the page and is 254 px tall, and the
+  Editor drawer inside it is 203 px tall (`gui-fix-20261006/handover/ui-10/`). The Preview tab gives the
+  Preview and the Editor drawer the viewport height.
 - **"+ New drawing"** (C-menu): New Circular, New Linear (blank); Duplicate; New with the style of
   "<active>" (choose mode); "From a record or region…" (first release, R4-3).
 - **New drawing from a region** (`design-parts/region.md`; R7-1..R7-3):
@@ -390,7 +401,19 @@ From `runtime.md` (adopted; it rejects `mechanisms.md` 6.6's field accessor view
   "Choose its input files": Session files (N)…, Upload…; picking a file is an explicit copy (C-new).
 - **Inputs** (I-1, I-2): each drawing keeps its Input Genomes panel; every uploader offers "Session
   files"; replacing a file used elsewhere asks "this drawing / all N drawings".
-- **Reset** (U-3), **Delete and Undo** (U-2), **Export** (active drawing; ZIP later), **Save/Load**
+- **Reset Settings** (U-3) uses Phase E's Reset dialog: step RS of its edit unification, with or after U3b
+  in v0.15.0 (`owner-coupling-phase-e-20261005/edit-unify/reset-dialog.md`, Owner round 2 of 2026-10-07).
+  W3 renames its scopes and adds no second dialog. The chosen drawings' settings and edits return to the
+  defaults. The edits show on the displayed Result at once (reconcile); settings that apply on Generate
+  change at the next Generate. Files, record selection, Depth files and Results stay. One History step;
+  Cancel records nothing.
+
+  | 0.14.0 (PD-OI-086) | Phase E dialog (per mode) | v0.15.0 drawings |
+  | --- | --- | --- |
+  | Reset Settings (`window.confirm`) resets both modes | Reset all modes | Reset all drawings (another drawing's Result is reconciled when it is next shown) |
+  | (none) | Reset this mode | Reset this drawing (the active drawing) |
+  | Cancel of the confirm | Cancel | Cancel |
+- **Delete and Undo** (U-2), **Export** (active drawing; ZIP later), **Save/Load**
   (all drawings; opens the drawing active at save), **Gallery** (opens the drawing the example names),
   **Generate** overlay names the drawing.
 - Text changes: `ux.md` 3.3.
@@ -407,8 +430,8 @@ the four naming fields — Session title = project; drawing name = tab and defau
 
 ## 7. Contract
 
-- Phase E's per-mode store record lands first (0.14.0) and takes **PD-OI-086** (Contract rev 33; P0a
-  sent to the Owner 2026-10-07). The drawings record of this design takes the **next free id**
+- Phase E's per-mode store record lands first (0.14.0) and takes **PD-OI-086** (Contract rev 33, merged
+  as #909). The drawings record of this design takes the **next free id**
   (PD-OI-087 or later, rev 34 or later), concern
   `session.project-drawings`, choice `A / PROJECT-WITH-DRAWINGS`; it extends the per-mode record from
   "per mode" to "per drawing" and states the per-drawing reading of every record that still holds
@@ -423,16 +446,19 @@ the four naming fields — Session title = project; drawing name = tab and defau
 - S00 decision 2's scope is superseded (already by the 0.14.0 per-mode record); its migration rule stays.
 - R13 reaction introduced: replacing or removing a project input used by other drawings (I-2); owner = the
   drawing-list / input owner named in X; channel `port`.
-- Route (K): P0a Contract-only PR (Review REQUIRED, no auto-merge) at the start of the v0.15.0 work, after
-  the Owner approves the receipt; P0b `gbdraw/web/CLAUDE.md` wording (R2, R11, R14, Module ownership,
-  app-shell, drawing-switch rule) separately; P0c `tools/web-change-policy.json` owner expansion if X adds an
-  owner. All before X.
+- Route (K): P0a (Contract, after the Owner approves the receipt) and P0b (`gbdraw/web/CLAUDE.md` wording:
+  R2, R11, R14, Module ownership, app-shell, drawing-switch rule) ship together as AUTHORITY-15 (R9-1; Review
+  REQUIRED, no auto-merge), with P0c (`tools/web-change-policy.json` owner expansion) if X adds an owner. It
+  holds only authority files and lands first in v0.15.0, so the Contract still precedes the implementation (K).
 - **Relation to PD-OI-086** (Contract rev 33, merged into dev as #909 at `d474ac01`; receipt SHA-256 `ee7ef6a5…`). The rationale of
   PD-OI-086 says the drawings inherit its shape. The drawings record replaces four of its terms:
   - one History in which a mode switch is a step;
   - Reset Settings resets both modes;
   - 27-44 Load without Python;
   - the limit of two diagrams (Circular and Linear).
+
+  If the Contract change of Phase E's Reset dialog (`reset-dialog.md` header: "this mode" or "all modes")
+  lands first, the drawings record renames those scopes to drawings (U-3) instead.
 
   Open for P0a, and the contract agent checks the precedent:
   - (a) **recommended**: a new concern `session.project-drawings`, with a `Supersedes` line that names those terms of PD-OI-086 scenario revision 1;
@@ -445,66 +471,126 @@ the four naming fields — Session title = project; drawing name = tab and defau
 
 ## 8. PR sequence
 
+Owner R9-1 (2026-10-07): 「PRはできるかぎりまとめて本数を減らして下さい。」 Work ships in as few PRs as the
+runtime, authority and Contract rules allow. Inside a PR each item stays its own commit, and the commit order
+states the dependencies. This replaces revision 4's 11-13 v0.15.0 PRs.
+
 ### 8.1 v0.14.0 (bug-fix track; this campaign, beside Phase E's per-mode store)
 
-Status on 2026-10-07 (dev `46067d77`).
+Status on 2026-10-08 (dev `acd35a17`). This campaign's PRs have all merged; Phase E's AUTHORITY is the last
+0.14.0 PR. A new 0.14.0 finding goes into the owning session's open PR, otherwise it waits.
 
-| # | PR | Content | Files (main) | Status |
-| --- | --- | --- | --- | --- |
-| 1 | #908 OV-102 | Python placement-draft migration for 41-44 CLI replay; pre-render draft validation; shared vector; main-saved fixtures | `session_io.py`, `cli_utils/session.py`, tests | merged |
-| 2 | #910 PY-C core | seeded Python resource table + reference walker; CLI re-save keeps IDs | `session_request_codec.py`, `cli_utils/session.py`, `session_io.py`, tests | merged |
-| 3 | #913 R0 OV-119 | Depth TSV positions through the record coordinate map (crop window, reverse complement) | `gbdraw/analysis/depth.py`, tests, input-formats doc | merged |
-| 4 | E1 + Q0 | per-mode artifact slots, `transitionDiagramMode`, switch refused during Generate, reflow or a History restore (OV-116), per-Result cache live identities, History restore port; `otherModeResult` writer/reader (Web) and validator/CLI (Python); one Load pipeline for both sets. Fixes OV-104, OV-107, OV-83/100, OV-108, OV-113, OV-115, OV-116, OV-117 by construction | ~13 Web files + Python session files, tests | review fixes (REVIEW-1) in progress; lands after Phase E's layering B (Owner); Review REQUIRED. Written as 45; PR-1 rewrites it as 46 |
-| 5 | small fixes, each STANDARD | #918 OV-114 (CLI keeps v40-44 rendered-ID edits; Python twin of the JS migration, shared vectors); #919 OV-112 (History counts each artifact once); #920 OV-131 (Label TSV that applies to no label keeps the edits); OV-130 (actionable errors for an other-mode setting and a stale Reset alignment receipt); OV-132 (Python twin of the `hash=` → `featureIdentity` annotation-target move, shared vectors); OV-134 (own-key lookups in `feature-edit-migration.js`); OV-103 (resource `checksum` accepted and verified once in both Python loaders) | by finding | #918-#920 in CI; the rest open in the order #918 → OV-132 → OV-134, OV-103, ≤ 2-3 of ours in CI |
-| — | E0 fixtures | F1-F3 (v44/v42 two-mode Sessions from main), branch `test/session-two-mode-fixtures` | fixtures only | pushed; for Phase E's PR-1 migration tests |
+| PR | Content | Status |
+| --- | --- | --- |
+| #908 OV-102 | Python placement-draft migration for 41-44 CLI replay; pre-render draft validation; shared vector; main-saved fixtures | merged |
+| #910 PY-C core | seeded Python resource table + reference walker; CLI re-save keeps IDs | merged |
+| #913 OV-119 | Depth TSV positions through the record coordinate map (crop window, reverse complement) | merged |
+| #918 OV-114 | CLI keeps v40-44 rendered-ID edits; Python twin of the JS migration, shared vectors | merged |
+| #919 OV-112 | History counts each artifact once | merged |
+| #920 OV-131 | a Label TSV that applies to no label keeps the edits | merged |
+| #925 OV-130 | actionable errors for an other-mode setting and a stale Reset alignment receipt | merged |
+| #928 OV-132 | Python twin of the `hash=` → `featureIdentity` annotation-target move, shared vectors | merged |
+| #930 OV-134 | own-key lookups in `feature-edit-migration.js` | merged |
+| #931 OV-103 | resource `checksum` accepted and verified once in both Python loaders | merged |
+| #932 OV-136 | a label rerender keeps a loaded Session's Result names | merged |
+| #935 OV-140 | Python named colors: `seashell` corrected, `rebeccapurple` added | merged |
+| #936 OV-138 | a CLI re-save keeps an empty label text empty (text tables read as text) | merged |
+| #937 E1 + Q0 | per-mode artifact slots, `transitionDiagramMode`, switch refused during Generate, reflow or a History restore (OV-116), per-Result cache live identities, History restore port; `otherModeResult` writer/reader (Web) and validator/CLI (Python); one Load pipeline for both sets. Fixes OV-104, OV-107, OV-83/100, OV-108, OV-113, OV-115, OV-116, OV-117 by construction. Its review findings OV-142 (cross-mode Legend arrival) and OV-143 (single-mode Legend geometry) went to PER-MODE and LEGEND | merged (dev `5947d457`); written as 45, PER-MODE rewrote it as 46 |
+| E0 fixtures | F1-F3 (v44/v42 two-mode Sessions from main), branch `test/session-two-mode-fixtures` | in PER-MODE (#945) |
 
-OV-106 and OV-135 are fixed in Phase E's PR-1. OV-133 moves to v0.15.0 with PY-F.
+Phase E's track (gbdraw-87), after PR-0a (#934) and E1:
+- **LEGEND** #940, merged (dev `52a103c5`) (runtime): OV-125..129, OV-150, OV-151 (+ gbdraw-41's Legend
+  leftovers); OV-143; K + Z1 (Python GPOS kerning, `legendReflow` metadata, reference SVG and Gallery
+  refresh); Z2 (Legend measurement port, §8.2); Z3 (Legend layout through the port, JS reflow deleted);
+  layering D.
+- **PER-MODE** #945, merged (dev `acd35a17`) (runtime, Session 46): PR-0b + PR-0c + PR-1 (Web half, with our
+  Python half `feat/session-46-python` merged in), OV-142, layering C, Gallery and docs regenerated, version
+  sweep.
+- **AUTHORITY**, this PR (Owner approval, no auto-merge): DOC (the mode-scoped `gbdraw/web/CLAUDE.md` rule) +
+  POST authority + parity spec split + FINDINGS, plus this design revision.
+- PD-OI-086 (Contract rev 33) merged as #909.
 
-Phase E's track (for reference): OV-83/108 guard → layering A → (E1) → layering B → PR-0a/0b/0c (readers
-name a mode; `state.drawings.{circular,linear}` + `DrawingState`, guard `tests/web/drawing-context.test.mjs`)
-→ PR-1 (per-mode storage, Session 46, split + Python twin, Gallery regenerated) → layering C → D. Its
-Contract-only P0a (PD-OI-086, rev 33) is with the Owner.
+### 8.2 v0.15.0 (drawings): three PRs
 
-### 8.2 v0.15.0 (drawings)
+After the 0.14.0 promotion, in this order. The steps of revision 4 (P0a/P0b, PY-*, R1-R3, IN-A/W5, W1-W4, X)
+keep their names as commits.
 
-| # | PR | Content | Notes |
-| --- | --- | --- | --- |
-| 1 | P0a | Contract: drawings record (PD-OI-087+), OIC-028, PD-OI-044 rev 2 if still needed | Owner approval, no auto-merge |
-| 2 | P0b | `gbdraw/web/CLAUDE.md` wording | authority-only |
-| 3 | PY-B | API: drawing views generalized beyond `circular`/`linear` (`SessionDrawing`, `SessionDrawingSpec`, `render_session_drawings`) | format-neutral |
-| 4 | PY-D | `gbdraw render --session [--drawing] [--list_drawings]`, joint preflight, project-scoped parse cache with measurements | format-neutral |
-| 5 | PY-F | port the remaining JS-only 27-44 migrations to Python with parity vectors (`feature-edit-migration.js`, legacy `config.js` paths, `gallery-session-migration.js`; Phase E's split already has its Python twin); the composition test of 3.2 | before X |
-| 5b | R1 | `gbdraw/auto_sizes.py` (size class, window and tick tiers, Auto values per setting; replaces three inline window-tier copies in `api/diagram.py`), `autoSizes` in the generated profiles, Web Auto hints and `AUTO_SETTING_FIELDS` (replaces the hand copies in `auto-value-display.js`, `circular-track-slots.js`); reference SVGs unchanged | format-neutral; touches `session-request.js` → serialize with W1 |
-| 6 | IN-A / W5 | content tokens (sha256) and a retain set for transport, Worker and `PreparedBiologicalInputCache`; LOSAT caches out of the artifact owner set | measured first |
-| 7 | W1 | generalize `state.drawings` (PR-0a, keyed by mode) to drawing ids; fold E1's artifact slots into `DrawingState`; guard `drawing-context.test.mjs` | behaviour-neutral |
-| 8 | W2 | History router per drawing + drawing-list stack; `selectDrawing` generalizes `transitionDiagramMode`; switch becomes navigation | behaviour-neutral for N = 2 |
-| 9 | X | Session 47: `drawings[]`, per-drawing input drafts with resource IDs, `depthSeries`, the 46 → 47 step (Python + JS twin, vectors), Python for 27-44 on Load, removals (top-level `modes`/committed set/`otherModeResult`, `generatedMode`, the 27-44 JS migrations), Gallery and fixtures regenerated (+ F4, F5), memory gate | one format PR |
-| 9b | R2 | `derive_region_drawing` / `RegionSelection` (Python API) + vectors | after PY-B / X |
-| 10 | W3 + R3 | drawing bar, creation menu (New / Duplicate / New with style / From a record or region — R4-3), rename, move, delete + Undo, Reset dialog, Session files picker, Replace dialog (I-2); R3 = region dialog, popup and selection-toolbar entries, `services/region-drawing.js`, carry-over (R7-1), size rule (R7-2) | first drawings UI release |
-| 11 | W4 | Export all (ZIP), Generate all, Gallery multi-drawing examples, tutorial disposition | later |
+**1. AUTHORITY-15** (authority-only; Owner approval, no auto-merge; §7).
+
+| Commit | Content | Notes |
+| --- | --- | --- |
+| P0a | Contract: drawings record (PD-OI-087+), OIC-028, PD-OI-044 rev 2 if still needed | after the Owner approves the receipt |
+| P0b | `gbdraw/web/CLAUDE.md` wording (R2, R11, R14, Module ownership, app-shell, drawing-switch rule) | |
+| P0c | `tools/web-change-policy.json` owner expansion | only if X adds an owner |
+
+**2. PYTHON-15** (format-neutral: reads 46 and older, writes no 47). Branch `feat/session-drawings-python`
+(agent py15, on E1 `818ef8a4`), built from the earlier PY-B, PY-D, R1 and R2 branches.
+
+| Commit | Content | Order |
+| --- | --- | --- |
+| PY-B | API: drawing views generalized beyond `circular`/`linear` (`SessionDrawing`, `SessionDrawingSpec`, `render_session_drawings`); format access in one module (`gbdraw/session_drawings.py`), so 46 and 47 change one place | first |
+| PY-D | `gbdraw render --session [--drawing] [--list_drawings]`, joint preflight, project-scoped parse cache with measurements | after PY-B |
+| R1 (Python) | `gbdraw/auto_sizes.py` (size class, window and tick tiers, Auto values per setting; replaces the inline window-tier copies in `api/diagram.py`), `autoSizes` in the generated profiles; reference SVGs unchanged | after PY-D; rebases over LEGEND's K and re-proves byte identity |
+| R2 | `derive_region_drawing` / `RegionSelection` (Python API) + vectors; it returns PY-B's real `SessionDrawingSpec` (the local stub is gone) | after PY-B and R1 |
+| OV-137 | the Circular tick track channel reads the configured length threshold, not a literal `50000`; failing-first test | next to R1 |
+| PY-F | port the remaining JS-only 27-44 migrations to Python with parity vectors (`feature-edit-migration.js`, legacy `config.js` paths, `gallery-session-migration.js`; Phase E's split already has its Python twin); the composition test of 3.2 | written after PER-MODE lands (it builds on the `feat/session-46-python` chain); before X |
+| OV-133 | CLI re-save of Sessions 31-39 keeps rendered-ID feature edits (catalog rebuilt from the sources) | with PY-F |
+
+**3. DRAWINGS** (runtime + format, Session 47; Review REQUIRED): the first drawings UI release.
+
+| Commit | Content | Order |
+| --- | --- | --- |
+| W1 | generalize `state.drawings` (keyed by mode since PR-0a and PER-MODE) to drawing ids; fold E1's artifact slots into `DrawingState`; guard `drawing-context.test.mjs` | first; behaviour-neutral |
+| R1 (Web) | Web Auto hints and `AUTO_SETTING_FIELDS` from `autoSizes` (replaces the hand copies in `auto-value-display.js`, `circular-track-slots.js`) | after W1 (both touch `session-request.js`) |
+| W2 | History router per drawing + drawing-list stack; `selectDrawing` generalizes `transitionDiagramMode`; switch becomes navigation | after W1; behaviour-neutral for N = 2 |
+| IN-A / W5 | content tokens (sha256) and a retain set for transport, Worker and `PreparedBiologicalInputCache`; LOSAT caches out of the artifact owner set | measured first; before X |
+| X | Session 47: `drawings[]`, per-drawing input drafts with resource IDs, `depthSeries`, the 46 → 47 step (Python + JS twin, vectors), Python for 27-44 on Load, removals (top-level `modes`/committed set/`otherModeResult`, `generatedMode`, the 27-44 JS migrations), Gallery and fixtures regenerated (+ F4, F5), memory gate | the only format commit; needs P0a and PY-F |
+| OV-139 | a CLI re-save keeps every drawing's LOSAT artifacts (caches per drawing) | test after X |
+| W3 | drawing bar, creation menu (New / Duplicate / New with style / From a record or region — R4-3), rename, move, delete + Undo, Reset dialog with drawing scopes (U-3, on Phase E's RS dialog), Session files picker, Replace dialog (I-2); phone layout: picker row and Settings / Preview tabs at ≤ 768 px (UI-10, §5) | after X |
+| R3 | region dialog, popup and selection-toolbar entries, `services/region-drawing.js`, carry-over (R7-1), size rule (R7-2) | after W3's add/duplicate/Undo owner |
+| W4 | Export all (ZIP), Generate all, Gallery multi-drawing examples, tutorial disposition | only if the Owner puts it in 0.15.0; otherwise later (0.2: ZIP later) |
+
+**Text measurement (W3, R3).** Phase E's Z2 port (branch `feat/web-legend-layout-port`, landing in LEGEND)
+is the Web's one text-measurement path:
+- `gbdraw/web/js/services/legend-layout.js` (state-free): `measureTextBox(metrics, { text, fontFile,
+  fontSize, dpi }) → { width, height }` is Python's `calculate_bbox_dimensions` for one bundled face, in
+  Python's layout units (at dpi 96, 4/3 of CSS px). Beside it: `loadLegendFontMetrics()` (lazy, once per
+  page), `resolveBundledFontFace(metrics, fontFamily)`, the Linear and Circular Legend layouts and
+  `planLegendComposition`.
+- `gbdraw/web/js/utils/legend-font-metrics.generated.js`: a lazy leaf with the Liberation Regular metrics
+  and GPOS kerning pairs, written by `tools/generate_legend_font_metrics.py` (`--check`).
+- `tests/fixtures/legend_layout_vectors.json`: shared by pytest and node.
+
+W3 and R3 measure text only through it, for example a region-dialog preview of a label, definition or Legend
+size, or the layout of Legend edits carried into a duplicate or region drawing (Z3's path). They add no canvas
+`measureText` or hidden-SVG `getBBox` path. HTML chrome such as the drawing-bar tabs sizes by CSS.
 
 ## 9. Findings
 
-The campaign's findings list (OV-100 to OV-135) stays in the campaign folder. Status per finding:
+The campaign's findings list (OV-100 to OV-141, `FINDINGS.md`) stays in the campaign folder. Status:
 
-- Fixed or fixing in 0.14.0 (this campaign): OV-102 (#908), OV-103, OV-112 (#919), OV-114 (#918), OV-119
-  (#913), OV-130, OV-131 (#920), OV-132, OV-134; by E1: OV-104, OV-107, OV-113, OV-115, OV-116, OV-117.
-- Phase E: OV-100 (= OV-83), OV-105, OV-108, OV-109; OV-106 and OV-135 in PR-1.
-- Drawings (v0.15.0): OV-101 (Show Depth cleared on switch), OV-110 (unpruned composition deltas), OV-111
-  (reflow outside the owner set; W1), OV-133 (CLI re-save of Sessions 31-39 drops rendered-ID edits; PY-F).
-- OV-118: main only; already fixed on dev.
+- **Fixed in 0.14.0 (merged)**: OV-102 (#908), OV-103 (#931), OV-112 (#919), OV-114 (#918), OV-119 (#913),
+  OV-130 (#925), OV-131 (#920), OV-132 (#928), OV-134 (#930), OV-136 (#932), OV-140 (#935).
+- **0.14.0, open**: OV-138 (#936); by E1: OV-104, OV-107, OV-113, OV-115, OV-116, OV-117.
+- **Phase E**: OV-100 (= OV-83), OV-105, OV-108; in PER-MODE (PR-1): OV-101 (per-mode Show Depth, no repair
+  watcher), OV-106, OV-109, OV-135.
+- **v0.15.0**: PYTHON-15: OV-133 (PY-F), OV-137 (next to R1). DRAWINGS: OV-110 (unpruned composition deltas;
+  W1/X), OV-111 (reflow outside the owner set; W1), OV-139 (LOSAT artifacts per drawing; X).
+- **Elsewhere**: OV-141 (Web `SVG_COLOR_NAMES` lacks `rebeccapurple`) goes to gbdraw-41's G16. OV-118: main
+  only; already fixed on dev.
 
 ## 10. Risks
 
-- **X size** (format + store + removals + Gallery): mitigated by landing W0, W1a-c, W2 and the Python
-  PRs first (format-neutral), the field-name decision, and per-mode input shapes kept in X.
+- **DRAWINGS size** (format + store + removals + Gallery + UI in one Review REQUIRED PR, R9-1): mitigated by
+  PYTHON-15 landing first (format-neutral), the behaviour-neutral commits (W1, W2, IN-A/W5) before X, one
+  commit per step so review reads them in order, the field-name decision, and per-mode input shapes kept in X.
 - **Migration completeness**: parity vectors before JS migrations are deleted; F1-F3; "no saved
   non-default leaf lost" test over all 29+ fixtures; SVG identity of drawing A vs old replay.
 - **Old-file Load latency** (M-Py): measured in X; the migrator receives the document skeleton only, not
   resource bytes, Results or caches (PD-OI-045 performance).
 - **Memory** with N drawings: shared History budget, live-artifact metric, gate on Vibrio C+L.
 - **Promotion**: no dev → main promotion between the first PR that writes 47 and X's completion; the 47
-  writer lands only in X (`py.md` 6). PY-B/PY-D/PY-F stay format-neutral (they read 46 and older).
+  writer lands only in X, inside DRAWINGS (`py.md` 6). PYTHON-15 stays format-neutral (it reads 46 and older).
 - **Rule 3.1-3d**: comparison per registry row needs Phase E's registry to stay the single row list;
   a row added outside it would be ignored by the B signal. Guard: the 46 → 47 vectors enumerate every
   registry row once.

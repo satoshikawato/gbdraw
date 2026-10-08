@@ -13,17 +13,13 @@
       "workers/diagram-generation-worker.js"
     ],
     "app/right-drawer.js": [
-      "app/app-setup.js",
-      "services/config.js"
+      "app/app-setup.js"
     ],
     "services/config.js": [
       "app/app-setup.js"
     ],
     "services/diagram-generation.js": [
       "app/app-setup.js",
-      "app/feature-metadata-extraction.js",
-      "app/legend/entry-actions.js",
-      "app/record-discovery.js",
       "app/run-analysis.js",
       "services/feature-metadata-extraction.js",
       "services/record-discovery.js"
@@ -65,7 +61,6 @@
     "services/svg-result-ingestion.js": [
       "app/candidate-render.js",
       "app/preview-runtime.js",
-      "app/session-feature-metadata.js",
       "app/watchers.js",
       "services/config.js",
       "services/session-feature-recovery.js",
