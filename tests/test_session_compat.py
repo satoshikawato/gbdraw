@@ -1662,6 +1662,33 @@ def test_legacy_source_reads_match_the_reads_web_load_makes(case: dict[str, Any]
     ]
 
 
+def test_a_schema_2_linear_card_with_two_records_keys_its_edits_by_record(tmp_path: Path) -> None:
+    # OV-149 with OV-133: the CLI indexes the request records as Web Load
+    # promotes them. feature-edits-linear-crop-rc.v33 with a two-record GenBank
+    # file as its second card (no selector or region, so `all`): the edit of the
+    # third drawn record (TESTB, reverse-complemented; drawn hash f10b226a6)
+    # names TESTB's source feature f8d05c32c in record `<card>:2`.
+    session = json.loads(gzip.decompress(
+        (Path(__file__).parent / "fixtures" / "sessions" / "feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz")
+        .read_bytes()
+    ))
+    two_records = (Path(__file__).parent / "fixtures" / "web_batch_two_records.gb").read_bytes()
+    session["resources"]["record-2-genbank"].update(
+        data=base64.b64encode(two_records).decode("ascii"), size=len(two_records)
+    )
+    for field in ("featureVisibilityOverrides", "labelTextFeatureOverrides",
+                  "labelTextFeatureOverrideSources", "labelVisibilityOverrides"):
+        session["features"][field] = {}
+    session["features"]["featureVisibilityOverrides"] = {"f10b226a6_record_3": "off"}
+    card = session["renderRequest"]["records"][1]["recordKey"]
+
+    upgraded = upgrade_session_document(session, temporary_directory=tmp_path).document.to_dict()
+
+    assert list(upgraded["modes"]["linear"]["features"]["featureOverrides"]) == [
+        json.dumps([f"{card}:2", "f8d05c32c"], separators=(",", ":"))
+    ]
+
+
 @pytest.mark.parametrize("index", ["x", None, "missing"])
 def test_a_malformed_record_index_fails_the_upgrade_as_without_edits(
     index: object, tmp_path: Path

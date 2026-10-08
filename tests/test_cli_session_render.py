@@ -13,6 +13,7 @@ import base64
 import gzip
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -358,3 +359,24 @@ def test_a_resave_reads_session_39_table_rows_as_the_current_writer_writes_them(
     render_main(["--session", str(tmp_path / "fig.gbdraw-session.json"), "-o", str(tmp_path / "again"), "-f", "svg"])
     assert (tmp_path / "again.svg").read_bytes() == (tmp_path / "fig.svg").read_bytes()
     assert "had extra cells" not in caplog.text
+
+
+def test_a_schema_2_linear_record_without_selector_draws_every_record(tmp_path: Path) -> None:
+    # OV-149: feature-edits-linear-crop-rc.v33 (request schema 2) with a
+    # two-record GenBank file as its second card. As Web Load promotes it, the
+    # card without selector or region draws both records, keyed <recordKey>:<n>.
+    session = json.loads(
+        gzip.decompress((SESSION_FIXTURES / "feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz").read_bytes())
+    )
+    two_records = (REPO_ROOT / "tests" / "fixtures" / "web_batch_two_records.gb").read_bytes()
+    session["resources"]["record-2-genbank"].update(
+        data=base64.b64encode(two_records).decode("ascii"), size=len(two_records)
+    )
+    path = tmp_path / "two-records.v33.json"
+    path.write_text(json.dumps(session), encoding="utf-8")
+
+    linear_main(["--session", str(path), "-o", str(tmp_path / "two"), "-f", "svg"])
+
+    card = session["renderRequest"]["records"][1]["recordKey"]
+    keys = re.findall(r'data-record-key="([^"]+)"', (tmp_path / "two.svg").read_text(encoding="utf-8"))
+    assert sorted(keys) == sorted([session["renderRequest"]["records"][0]["recordKey"], f"{card}:1", f"{card}:2"])

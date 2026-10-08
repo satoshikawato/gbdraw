@@ -2042,6 +2042,23 @@ def _first(feature: Mapping[str, Any], *fields: str) -> object:
     return None
 
 
+def _promoted_request_records(request: Mapping[str, Any]) -> object:
+    """The request records with the cardinality Web Load promotes schema 1-5 records to (OV-149)."""
+
+    from .session_request_codec import legacy_record_cardinality
+
+    records = request.get("records")
+    schema = request.get("schema")
+    if not isinstance(records, list) or not isinstance(schema, int) or schema >= 6:
+        return records
+    return [
+        {**record, "cardinality": legacy_record_cardinality(request.get("mode"), record).value}
+        if isinstance(record, Mapping)
+        else record
+        for record in records
+    ]
+
+
 def _legacy_feature_index(legacy: object, mode: object) -> list[_IndexedFeature]:
     """The source features of a Session without a feature catalog (31-33, 39).
 
@@ -3644,7 +3661,7 @@ def migrate_session_flat_draft(
         has_catalog = isinstance(catalog, Mapping)
         read_again = source_features if isinstance(source_features, Mapping) else {}
         legacy = None if has_catalog else {
-            "records": request.get("records"),
+            "records": _promoted_request_records(request),
             "features": next(
                 (
                     candidates
