@@ -5,7 +5,8 @@ and the helper files Run info offered. This script runs each recipe with the
 CLI from this checkout in a fresh work directory and compares the CLI SVG with
 the GUI SVG through tests/utils/svg_compare.compare_svgs, ignoring the same
 binding attributes as the Gallery publication parity check plus the root
-baseProfile attribute.
+baseProfile attribute. A probe whose GUI SVG equals the baseline SVG reports
+NO_EFFECT instead of MATCH.
 
 Usage:
     python tools/audit/parity_replay.py <probe-dir> <input> [<input> ...]
@@ -74,10 +75,14 @@ def replay_probe(probe_dir: Path, entry: dict, inputs: list[Path]) -> dict:
         max_differences=8,
         ignored_attributes=IGNORED_ATTRIBUTES,
     )
+    outcome = "DIFF"
+    if comparison.equal:
+        # A probe whose GUI SVG equals the baseline set nothing the renderer sees,
+        # so its MATCH proves nothing about the option.
+        outcome = "NO_EFFECT" if entry.get("sameAsBaseline") else "MATCH"
     return {
         "name": name,
-        "outcome": "MATCH" if comparison.equal else "DIFF",
-        "same_as_baseline_in_gui": entry.get("sameAsBaseline"),
+        "outcome": outcome,
         "message": comparison.message,
         "differences": comparison.differences,
     }

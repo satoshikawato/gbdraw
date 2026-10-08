@@ -21,23 +21,30 @@ const CIRCULAR_PROBES = [
   ['species_title_bottom', 'a.form.species="Homo sapiens"; a.form.strain="Ref"; a.adv.plot_title_position="bottom"; a.adv.keep_full_definition_with_plot_title=true;'],
   ['nt_AT_window', 'a.adv.nt="AT"; a.adv.window_size=200; a.adv.step_size=50;'],
   ['scale_interval', 'a.adv.scale_interval=2000;'],
-  ['scale_interval_neg', 'a.adv.scale_interval=-1000;'],
+  // A non-positive Scale Interval falls back to the automatic interval on both surfaces
+  // (gbdraw/svg/circular_ticks.py), so it draws the baseline. The edge probed instead is an
+  // interval longer than the 16.6 kb record: no tick labels.
+  ['scale_interval_over_length', 'a.adv.scale_interval=20000;'],
   ['strokes', 'a.adv.block_stroke_width=1.5; a.adv.block_stroke_color="#ff0000"; a.adv.axis_stroke_width=4; a.adv.axis_stroke_color="#0000ff";'],
   ['def_font', 'a.adv.def_font_size=30;'],
   ['legend_sizes', 'a.adv.legend_font_size=10; a.adv.legend_box_size=12;'],
-  ['gc_mode_absolute', 'a.adv.gc_content_mode="absolute"; a.adv.gc_content_min_percent=20; a.adv.gc_content_max_percent=60;'],
+  ['gc_mode_percent', 'a.adv.gc_content_mode="percent"; a.adv.gc_content_min_percent=20; a.adv.gc_content_max_percent=60;'],
   ['no_gc_no_skew', 'a.form.suppress_gc=true; a.form.suppress_skew=true;'],
   ['single_strand', 'a.form.separate_strands=false;'],
   ['reverse', 'a.form.circular_reverse=true;'],
-  ['region', 'a.form.circular_region_start=1000; a.form.circular_region_end=9000;'],
+  // The region fields are enabled only with Multi-Record Canvas off.
+  ['region', 'a.form.multi_record_canvas=false; a.form.circular_region_start=1000; a.form.circular_region_end=9000;'],
   ['no_multi_canvas', 'a.form.multi_record_canvas=false;'],
   ['arrow_ratio', 'a.adv.arrow_head_length_ratio=0.5; a.adv.arrow_shaft_width_ratio=0.5;'],
   ['label_rendering_curved', 'a.form.labels_mode="both"; a.adv.label_rendering="curved";'],
   ['label_spacing_offsets', 'a.form.labels_mode="both"; a.adv.circular_label_spacing=8; a.adv.outer_label_x_offset=1.1; a.adv.inner_label_y_offset=0.9;'],
   ['tick_font', 'a.adv.tick_label_font_size=20;'],
   ['hide_scale', 'a.form.show_scale=false;'],
-  ['palette_forest', 'a.selectedPalette="forest";'],
-  ['center_radius', 'a.adv.center_reserved_radius=100;'],
+  // The Palette select runs updatePalette on change; the v-model alone does not recolor.
+  ['palette_forest', 'a.selectedPalette="forest"; a.updatePalette();'],
+  // The reservation moves tracks only when it exceeds the free center (HmmtDNA: 100 px moves
+  // nothing, 250 px leaves no room for the feature track).
+  ['center_radius', 'a.adv.center_reserved_radius=150;'],
   ['feature_width', 'a.adv.feature_width_circular=40;'],
   ['gc_width_radius', 'a.adv.gc_content_width_circular=30; a.adv.gc_content_radius_circular=0.5;'],
   ['labels_placement_radial', 'a.form.labels_mode="out"; a.adv.circular_label_placement="radial";'],
