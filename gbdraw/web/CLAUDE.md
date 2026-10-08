@@ -308,8 +308,9 @@ frame (F with the effective reverse complement applied); and Src, input-file
 coordinates. Raw rows and **Save Raw LOSAT TSV** stay in F. Every comparison
 table is read in F, and only the Python planner projects orientation to V.
 Human-readable coordinates (popups, FASTA headers) lead with Src. The Linear
-orientation owner is the File card's `region_reverse`
-(`app/record-display-options.js`).
+orientation owner is the File card's `region_reverse`, written by
+`app/record-display-options.js`; `services/record-display-model.js`
+(`effectiveRecordReverseComplement`) derives the effective orientation.
 
 Reuse compares every input that is knowable without extraction as data; an
 invalidation event is only an optimization. LOSAT job planning is one pure plan
@@ -632,8 +633,9 @@ member object, so a setting or an edit made in one mode never reaches the other
   in `tests/web/helpers/drawing-state.mjs`. A value both modes should share is
   a Product decision: record it in the Product Contract before moving it out
   of the drawing.
-- A state-free service takes the `drawing` it reads as a parameter and never
-  resolves the active one. An owner resolves `state.activeDrawing()`, the
+- A state-free service never resolves the active drawing: it takes the
+  `drawing` it reads, or the mode whose drawing it reads (for example the
+  mode of the Result it handles). An owner resolves `state.activeDrawing()`, the
   drawing of the shown mode, once per action, or the drawing of the mode its
   action is about, and passes it down. Generate resolves its drawing once, at
   the entry of `runAnalysis`; its request, validation, and commit use that
@@ -653,8 +655,8 @@ member object, so a setting or an edit made in one mode never reaches the other
   twin. A Session 45 is not read.
 
 Guards: `tests/web/drawing-context.test.mjs` (the key classes, one drawing per
-mode, no drawing key read from `state`, no service resolving the active drawing,
-and Generate resolving it once); `tests/web/per-mode-drawings.test.mjs` (no
+mode, no drawing key read from `state`, no `activeDrawing` identifier in
+`services/`, and Generate resolving it once); `tests/web/per-mode-drawings.test.mjs` (no
 shared member object, and each mode's request carries its own drawing's
 values); `tests/web/mode-scoped-session.test.mjs` (the Session 46 round trip,
 and a Session 45 or a field outside the registry rejected);

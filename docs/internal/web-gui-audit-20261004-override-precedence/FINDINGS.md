@@ -39,6 +39,7 @@ OV-29、OV-31、OV-32 は見つけた PR の中で直した。残る課題その
 2026-10-06 の Phase E（owner-coupling、#813）と、その途中で行った調査で、さらに OV-35〜OV-48 を見つけた（OV-37 は不具合ではなかった。
 OV-41 は見た目だけ）。OV-35 は #810 の修正を #824 に載せ直したときに見つけた。OV-36 は E5（#832）、OV-38〜OV-40 は残る観察の調査、
 OV-42〜OV-45 は live と Generate の食い違いを調べるテスト（#839）、OV-46 は OV-45 の修正中に、OV-47 は OV-42〜OV-44 の修正（#857）の確認中に、OV-48 は #871 の CI の失敗を調べて見つけた。
+2026-10-08 の Phase E の AUTHORITY と CHECKER の PR の作業で、OV-162 と OV-163 を見つけた。どちらも利用者に見える不具合ではない（検査の抜けと、使われない移行のコード）。
 
 | ID | クラス | 重大度 | 症状 | 根本原因 |
 |---|---|---|---|---|
@@ -88,6 +89,8 @@ OV-42〜OV-45 は live と Generate の食い違いを調べるテスト（#839�
 | OV-46 | H | Generate の失敗 | 1 つの Result だけが描く generated の legend の行に Legend だけの色を付けると、Generate が `RESULT_INVALID` で失敗する（OV-44 と同じ種類） | RC-15 |
 | OV-47 | H | 状態の不一致 | batch で、Result 2 を表示したまま Generate（または #857 の自動 rerender）をすると、Result 1 の Undo と "Sort by default" が Python の legend の順に戻らない | RC-15 |
 | OV-48 | H | Generate の失敗 | 自動 rerender が Generate の実行中に始まると、Generate が Result もメッセージも出さずに終わる | RC-17 |
+| OV-162 | — | 検査の抜け | R13 の layer の検査が `mode-scoped-settings.generated.js` を順位なし（`null`）として飛ばし、その file の import を調べない | 生成した leaf を leaf の一覧に足していなかった |
+| OV-163 | — | 使われない移行 | JS の Circular slot の schema 3 の移行 `migrateImportedCircularTrackSlots` に、読める入力がない | Session 22〜26 を読まなくなった後も移行が残った |
 
 ## 根本原因
 
@@ -632,6 +635,27 @@ OV-42〜OV-45 は live と Generate の食い違いを調べるテスト（#839�
 - 修正: #879。`processing` の間は rerender を始めず、要求は Generate が終わった後に 1 回だけ実行する。Generate が実行中の rerender を追い越すのは今までどおり。
   同じ spec の `:888`（Label On の後に編集が見えない）はテストが rerender の終わる前に読んでいただけで、製品の不具合ではなかった（OV-48b、#879 でテストを直した）。
 
+### OV-162: R13 の layer の検査が生成した leaf を調べない
+
+- 見つけ方: Phase E の AUTHORITY で R13 の leaf に `mode-scoped-settings.generated.js` を書いたときに、`tools/web-owner-graph-detectors.mjs` の `webLayerOf` を確かめた。
+- 期待: R13 の leaf はどれも順位 0 で、その file の import も検査される。
+- 実際: `webLayerOf` は `null` を返し、検査は `null` の側の辺を両方向とも飛ばす。
+- 原因: 生成した leaf（`tools/generate_mode_scoped_settings.py` が書く）を detector の leaf の一覧に足していなかった。
+- 修正: checker だけの PR（`chore/web-checker-phase-e`、AUTHORITY の PR の merge の後に出す）。leaf の一覧に足し、順位 0 を test で固定する。
+  この file は何も import しないので、新しく許す辺はない。今後の import が検査されるようになるだけ。
+
+### OV-163: JS の Circular slot の schema 3 の移行に、読める入力がない
+
+- 場所（`dev` `2d2fa500`）: `services/config.js:663` の `migrateImportedCircularTrackSlots`。呼び出しは `:1636`、`:1682`、`:1969`、`:2073`。
+- 経緯: Circular slot の schema は 6e8a0636（2026-05-21）で 3、b32258ab（2026-06-15）で 4 になった。`main` の first-parent では、
+  schema 3 を書いたのは 6042581b（2026-05-22、Session 22）から 3d4fae37（2026-06-11、Session 26）まで。Session 27 を書く最初の `main` の
+  commit（f265bdd7、2026-06-15）はすでに schema 4 を書く。release tag 0.12.0、0.12.1、0.13.0 はどれも schema 4（それより前の tag には定数がない）。
+- 読める Session（`SUPPORTED_SESSION_VERSIONS`、`services/config.js:387`）は 27 以降なので、schema 3 の slot を持つ Session は読まれない。
+  Python はすでに schema 3 を拒否する（`gbdraw/session_io.py`）。
+- 判断: CLAUDE.md の "Persisted-format compatibility" は、旧形式が `main` の first-parent か release tag にあった証拠を求める。schema 3 は
+  `main` に載ったが、それを運ぶ Session 22〜26 は読まれず、release tag にはない。移行には支えになる入力がないので、消すのが規則に合う。
+- 処置: runtime の変更なので、Phase E の AUTHORITY（文書と guard だけ）には入れず、後の runtime の PR で消す（Owner-delegated 2026-10-08）。
+
 ## 再現しなかった候補
 
 - **Feature visibility On と feature type の除外（A）**: tRNA を Features から外しても、On にした tRNA は描かれる
@@ -717,7 +741,7 @@ R-1〜R-7 の状態。原因と修正の一行は「残る課題」に書いた�
 | R-6 | 修正。GFF3 を 1 回だけ解析する | #793 |
 | R-7 | 修正。変形なしの record の `hash=` だけ移す | #811 |
 
-新しく見つけた OV-17〜OV-48 の状態（OV-35 以降は 2026-10-06）。
+新しく見つけた OV-17〜OV-48、OV-162、OV-163 の状態（OV-35 以降は 2026-10-06、OV-162 と OV-163 は 2026-10-08）。
 
 | ID | 状態 | PR |
 |---|---|---|
@@ -753,6 +777,8 @@ R-1〜R-7 の状態。原因と修正の一行は「残る課題」に書いた�
 | OV-46 | 修正 PR。描く Result が分からない行は、どれか 1 つの Result が描けばよい（選択 A） | #871 |
 | OV-47 | 修正。Result ごとの既定の順 | #870（`test.fail` は #857） |
 | OV-48 | 修正。rerender は Generate の実行中に始まらず、終わった後に 1 回だけ走る | #879 |
+| OV-162 | 修正 PR。leaf の一覧に足す（新しく許す辺はない） | checker だけの PR（AUTHORITY の後） |
+| OV-163 | 延期。runtime の変更なので後の runtime の PR で消す（Owner-delegated 2026-10-08） | — |
 
 OV-42〜OV-45 を見つけた live と Generate の parity のテスト（17 の case と 2 の表の確認）は #839 で入った。OV-42、OV-43、OV-44 の case は修正まで `test.fail`、
 OV-45 の case は #845 で外れた。
