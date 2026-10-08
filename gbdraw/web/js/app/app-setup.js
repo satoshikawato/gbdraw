@@ -4695,18 +4695,27 @@ export const createAppSetup = () => {
   // Replacing or removing the file resets it in the replacement's History step.
   const RETIRED_LINEAR_RECORD_PRESENTATION = Object.freeze({ region_record_id: '', region_start: null,
     region_end: null, region_reverse: false, definition: '', record_subtitle: '' });
+  // The record reference names a record of the old file, so any replacement retires it.
+  const RETIRED_LINEAR_RECORD_REFERENCE = Object.freeze({ region_record_id: '' });
   /** @param {DrawingState} drawing */
-  const retireCircularRecordPresentation = ({ form, adv }) => {
+  const retireCircularRecordSelector = ({ form, adv }) => {
     form.circular_record_selector = '';
+    if (adv.circular_grouping_intent === 'single') adv.circular_grouping_intent = 'auto';
+  };
+  /** @param {DrawingState} drawing */
+  const retireCircularRecordPresentation = (drawing) => {
+    const { form } = drawing;
+    retireCircularRecordSelector(drawing);
     form.circular_region_start = null;
     form.circular_region_end = null;
     form.circular_reverse = false;
     form.circular_record_label = '';
     form.circular_record_subtitle = '';
-    if (adv.circular_grouping_intent === 'single') adv.circular_grouping_intent = 'auto';
   };
   // D-32: one record replacing one record (a new version of the same genome)
-  // keeps it; a removed file or a replaced multi-record file retires it.
+  // keeps its crop and titles; a removed file or a replaced multi-record file
+  // retires them. The record selector names a record of the old file, so any
+  // replacement retires it.
   /** @param {{ removed: boolean, previousRecordCount: number }} replacement */
   const sourceReplacementRetiresPresentation = ({ removed, previousRecordCount }) => removed || previousRecordCount > 1;
   /**
@@ -4722,10 +4731,11 @@ export const createAppSetup = () => {
     const previous = files[field];
     if (previous === nextValue) return;
     files[field] = nextValue;
-    if (!previous || !sourceReplacementRetiresPresentation({
+    if (!previous) return;
+    if (sourceReplacementRetiresPresentation({
       removed: !nextValue, previousRecordCount: circularRecordList.value.length
-    })) return;
-    retireCircularRecordPresentation(drawing);
+    })) retireCircularRecordPresentation(drawing);
+    else retireCircularRecordSelector(drawing);
   };
   const setCircularRecordPresentationSelector = (value) => {
     const drawing = state.drawings.circular;
@@ -5054,9 +5064,9 @@ export const createAppSetup = () => {
       ...group.sequence,
       [field]: nextValue,
       ...(field === 'gb' && nextValue ? { file_definition: '', file_subtitle: '' } : {}),
-      ...(seq[field] && sourceReplacementRetiresPresentation({
+      ...(!seq[field] ? {} : sourceReplacementRetiresPresentation({
         removed: !nextValue, previousRecordCount: group.records.length
-      }) ? RETIRED_LINEAR_RECORD_PRESENTATION : {})
+      }) ? RETIRED_LINEAR_RECORD_PRESENTATION : RETIRED_LINEAR_RECORD_REFERENCE)
     });
     const keepSource = field === 'gb' ? Boolean(nextValue) : Boolean(replacement.gff || replacement.fasta);
     applyLinearSeqMutation(drawing, linearSeqs.flatMap((entry) => (

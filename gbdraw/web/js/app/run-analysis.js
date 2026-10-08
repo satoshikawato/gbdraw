@@ -5044,6 +5044,18 @@ export const createRunAnalysis = ({
     const initialResults = results.value;
     /** @type {string | null} */
     let historyRecovery = null;
+    // UJ-10: whether the draft this run reads is the one of the shown Result.
+    // It is read when the run settles its draft or when Cancel is observed,
+    // whichever comes first, so an edit committed before either counts.
+    const readRunDraftIsShown = () => {
+      const signature = readDraftSignature?.() || '';
+      return Boolean(signature) && shownGenerateDraft?.signature === signature
+        && shownGenerateDraft.results === results.value;
+    };
+    /** @param {boolean} draftIsShown */
+    const preserveCanceledResult = (draftIsShown) => {
+      failedGeneratePreservedResult.value = results.value.length > 0 && (draftIsShown ? 'current' : true);
+    };
     let runDraftIsShown = false;
     processing.value = true;
     processingStatus.value = 'Preparing input files...';
@@ -5060,7 +5072,7 @@ export const createRunAnalysis = ({
         if (!generationCancelRequested.value) return null;
         processingStatus.value = 'Canceled.';
         outcome = { status: 'canceled' };
-        failedGeneratePreservedResult.value = results.value.length > 0;
+        preserveCanceledResult(readRunDraftIsShown());
         return outcome;
       };
       if (cancelBeforeRender()) return outcome;
@@ -5088,9 +5100,7 @@ export const createRunAnalysis = ({
       const execute = (handle) => {
         beforeHandle = handle || generatedArtifactHandle;
         // History has settled the draft this run reads.
-        const signature = readDraftSignature?.() || '';
-        runDraftIsShown = Boolean(signature) && shownGenerateDraft?.signature === signature
-          && shownGenerateDraft.results === results.value;
+        runDraftIsShown = readRunDraftIsShown();
         return runAnalysisInternal(drawing, {
           decorationContinuity, comparisonPlanSnapshot, generatedArtifactHandle: beforeHandle,
           comparisonExecution, isCurrentOperation, isCurrentAlert
@@ -5154,8 +5164,7 @@ export const createRunAnalysis = ({
         outcome = publicOutcome;
       }
       if (outcome?.status === 'canceled' && isCurrentOperation()) {
-        // 'current': the canceled run read the draft of the shown Result (UJ-10).
-        failedGeneratePreservedResult.value = results.value.length > 0 && (runDraftIsShown ? 'current' : true);
+        preserveCanceledResult(runDraftIsShown);
       } else if (outcome?.status === 'ok') {
         failedGeneratePreservedResult.value = false;
         if (generationFailureRecovery) generationFailureRecovery.value = null;
