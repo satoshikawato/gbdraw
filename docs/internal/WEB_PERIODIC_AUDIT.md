@@ -117,9 +117,9 @@ procedure and the checklist. The admission rules for a `PROMOTION` stay in
    step index, the steps so far, and the differences. The same seed and
    `GBDRAW_RANDOM_WALK_STEPS` replay the same walk; `-g "<fixture name>"`
    replays one fixture. Each mismatch is a finding (OV-xx): log it, and either
-   fix it or mark the matching case `test.fail` in
-   `tests/web/live-generate-parity.playwright.spec.js` per R3 (naming the
-   finding) before the promotion. Pick a new seed for each promotion and
+   fix it or mark the matching case `test.fail` in the
+   `tests/web/live-generate-parity*.playwright.spec.js` specs per R3 (naming
+   the finding) before the promotion. Pick a new seed for each promotion and
    record it in the promotion pull request.
 
 ## Carrying evidence forward

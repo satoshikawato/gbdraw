@@ -158,7 +158,7 @@ the Owner may want to override.
   diagnostics in that file under `tests/web/types/tsconfig.strict-null.json`,
   which extends the guard config and adds only `strictNullChecks: true`.
   The test compares both ways, like `TYPE_DEBT_BASELINE`
-  (`tests/test_type_check_ratchet.py`) and `LAYER_IMPORT_BASELINE`:
+  (`tests/test_type_check_ratchet.py`):
   - a count above its entry fails and lists the diagnostics;
   - a count below its entry fails until the same pull request lowers or
     removes the entry;
@@ -354,7 +354,7 @@ Check overlaps again before opening each pull request: `gh pr list` and
 - Every S pull request lists its (b) and (c) changes. Every (c) has an OV
   number and either a test or a separate runtime pull request.
 - No cast in the S pull requests removes `null` without a reason line (D19).
-- The owner-graph baseline and `LAYER_IMPORT_BASELINE` have not grown.
+- The owner-graph baseline has not grown, and no upward import was added.
 - The final report lists the merged pull requests, the counts (unused 44 to 0;
   strictNullChecks 1,114 through each pull request to the end), the number of
   (a) changes, the (b) and (c) lists, the Owner-delegated choices, lessons for

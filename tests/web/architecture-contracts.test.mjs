@@ -230,17 +230,6 @@ const importersOf = (target) => [...directImports]
   .map(([owner]) => owner)
   .sort();
 
-// The Web layering slice S6 moves three modules from app/ to services/. The exact
-// lists below name whichever path exists, so the move is a runtime-only change.
-// The cleanup that follows the slice drops this table and keeps the new paths.
-const SLICE_MOVES = Object.freeze({
-  'app/feature-metadata-extraction.js': 'services/feature-metadata-extraction.js',
-  'app/record-discovery.js': 'services/record-discovery.js',
-  'app/session-feature-metadata.js': 'services/session-feature-recovery.js'
-});
-const atCurrentPath = (path) => (
-  productionSources.has(path) ? path : (SLICE_MOVES[path] ?? path)
-);
 const specifierFrom = (owner, target) => {
   const specifier = posix.relative(posix.dirname(owner), target);
   return specifier.startsWith('.') ? specifier : `./${specifier}`;
@@ -269,8 +258,8 @@ const assertMetadataImportOwners = (sources) => {
     `${owner}: only the named pure warning validator is permitted`);
   }
   assert.deepEqual(identityCallers.sort(), [
-    atCurrentPath('app/session-feature-metadata.js'), 'services/svg-result-ingestion.js'
-  ].sort());
+    'services/session-feature-recovery.js', 'services/svg-result-ingestion.js'
+  ]);
 };
 
 // The Result replacement ceilings below count Result writes and SVG serialization
@@ -376,23 +365,17 @@ test('Worker construction and the diagram-generation client have explicit owners
   assert.deepEqual(
     occurrenceOwners(/\brunFeatureExtraction\b/g),
     new Map([
-      [atCurrentPath('app/feature-metadata-extraction.js'), 2],
+      ['services/feature-metadata-extraction.js', 2],
       ['services/diagram-generation.js', 1],
       ['workers/diagram-generation-worker.js', 2]
     ])
   );
-  assert.deepEqual(importersOf('services/diagram-generation.js'), importersWithRetiringOwners(
-    'services/diagram-generation.js',
-    [
-      'app/app-setup.js',
-      'app/feature-metadata-extraction.js',
-      'app/record-discovery.js',
-      'app/run-analysis.js'
-    ].map(atCurrentPath),
-    // The Legend editor's added-row helper (GENERATE_LEGEND_ENTRY_SVG) retires
-    // with the zero-shift Legend layout, and its import with it.
-    ['app/legend/entry-actions.js', 'app/results.js']
-  ));
+  assert.deepEqual(importersOf('services/diagram-generation.js'), [
+    'app/app-setup.js',
+    'app/run-analysis.js',
+    'services/feature-metadata-extraction.js',
+    'services/record-discovery.js'
+  ]);
 });
 
 test('Pyodide initialization and helper execution are Worker-only', () => {
@@ -509,11 +492,11 @@ test('History intent and SVG admission have one production ownership path', () =
   assert.deepEqual(importersOf('services/svg-result-ingestion.js'), [
     'app/candidate-render.js',
     'app/preview-runtime.js',
-    'app/session-feature-metadata.js',
     'app/watchers.js',
     'services/config.js',
+    'services/session-feature-recovery.js',
     'state.js'
-  ].map(atCurrentPath).sort());
+  ]);
   assertMetadataImportOwners(productionSources);
   assert.deepEqual(importersOf('services/svg-result-normalization.js'), importersWithRetiringOwners(
     'services/svg-result-normalization.js',
@@ -521,7 +504,7 @@ test('History intent and SVG admission have one production ownership path', () =
     ['app/svg-styles.js']
   ));
   assert.doesNotMatch(
-    productionSources.get(atCurrentPath('app/session-feature-metadata.js')),
+    productionSources.get('services/session-feature-recovery.js'),
     /DOMParser|parseFromString|result\?\.content/
   );
   assert.match(
@@ -546,12 +529,11 @@ test('History intent and SVG admission have one production ownership path', () =
   );
   // An older Session's Result gets the legacy composition once, in the
   // admission transform of services/config.js after its legend entry groups
-  // (and, in the stroke form, before its strokes). Exactly one of two forms
-  // holds: services/config.js calls the owners directly, or it calls the
-  // composition root's transformLegacyResultSvg port (R13 layering plan D4 B1)
-  // and app/app-setup.js calls the owners; the owners stay in app/ either way.
-  // In the stroke-free form (edit-unify U2a) the saved bytes show the strokes,
-  // the executor is the only writer of a live stroke edit, and no stroke
+  // (and, in the stroke form, before its strokes): services/config.js calls the
+  // composition root's transformLegacyResultSvg port (R13 layering plan D4 B1),
+  // and app/app-setup.js calls the owners, which stay in app/. In the
+  // stroke-free form (edit-unify U2a) the saved bytes show the strokes, the
+  // executor is the only writer of a live stroke edit, and no stroke
   // projection or reapply is left anywhere.
   const configSource = productionSources.get('services/config.js');
   const setupSource = productionSources.get('app/app-setup.js');
@@ -570,31 +552,18 @@ test('History intent and SVG admission have one production ownership path', () =
     occurrenceOwners(/\bexport const (?:normalizeLegacyComposition|applyStrokeOverridesToSvg)\b/g),
     new Map(legacyOwnerModules.map((module) => [module, 1]))
   );
-  const directForm = new RegExp(String.raw`normalizeLegacyLegendEntryGroups\(svg\)[\s\S]+normalizeLegacyComposition\(svg,` + strokeCall)
-    .test(configSource)
-    && legacyOwnerModules.every((module) => configImports.has(module))
-    && !/\btransformLegacyResultSvg\b/.test(configSource)
-    && !/\btransformLegacyResultSvg\b/.test(setupSource)
-    && legacyCompositionCalls.size === 1
-    && legacyCompositionCalls.get('services/config.js') === 1
-    && (strokeFree || legacyStrokeCalls.get('services/config.js') === 1)
-    && !legacyStrokeCalls.has('app/app-setup.js');
-  const portForm = /normalizeLegacyLegendEntryGroups\(svg\)[\s\S]+transformLegacyResultSvg\(svg,/
-    .test(configSource)
-    && legacyOwnerModules.every((module) => !configImports.has(module))
-    && !/\bnormalizeLegacyComposition\b|\bapplyStrokeOverridesToSvg\b/.test(configSource)
-    && new RegExp(String.raw`export const transformLegacyResultSvg\b[\s\S]+COMPOSITION_SCHEMA_ATTRIBUTE\) === null[\s\S]+COMPOSITION_METADATA_ATTRIBUTE\) === null[\s\S]+normalizeLegacyComposition\(svg,` + strokeCall)
-      .test(setupSource)
-    && legacyOwnerModules.every((module) => directImports.get('app/app-setup.js').has(module))
-    && legacyCompositionCalls.size === 1
-    && legacyCompositionCalls.get('app/app-setup.js') === 1
-    && (strokeFree || legacyStrokeCalls.get('app/app-setup.js') === 1)
-    && !legacyStrokeCalls.has('services/config.js')
-    && occurrenceOwners(/\btransformLegacyResultSvg\(svg,/g).get('services/config.js') === 1;
-  assert.ok(
-    directForm !== portForm,
-    `legacy Session Result transform must match exactly one form: ${JSON.stringify({ directForm, portForm })}`
+  assert.match(configSource, /normalizeLegacyLegendEntryGroups\(svg\)[\s\S]+transformLegacyResultSvg\(svg,/);
+  assert.deepEqual(legacyOwnerModules.filter((module) => configImports.has(module)), []);
+  assert.doesNotMatch(configSource, /\bnormalizeLegacyComposition\b|\bapplyStrokeOverridesToSvg\b/);
+  assert.match(
+    setupSource,
+    new RegExp(String.raw`export const transformLegacyResultSvg\b[\s\S]+COMPOSITION_SCHEMA_ATTRIBUTE\) === null[\s\S]+COMPOSITION_METADATA_ATTRIBUTE\) === null[\s\S]+normalizeLegacyComposition\(svg,` + strokeCall)
   );
+  assert.deepEqual(legacyOwnerModules.filter((module) => !directImports.get('app/app-setup.js').has(module)), []);
+  assert.deepEqual(legacyCompositionCalls, new Map([['app/app-setup.js', 1]]));
+  assert.equal(legacyStrokeCalls.get('app/app-setup.js'), strokeFree ? undefined : 1);
+  assert.equal(legacyStrokeCalls.has('services/config.js'), false);
+  assert.deepEqual(occurrenceOwners(/\btransformLegacyResultSvg\(svg,/g), new Map([['services/config.js', 1]]));
   assert.deepEqual(occurrenceOwners(/\bbuildHistorySnapshot\b/g), new Map());
   assert.deepEqual(occurrenceOwners(/\bapplyHistorySnapshot\b/g), new Map());
 });
@@ -604,15 +573,9 @@ test('right drawer availability and transitions have one production owner', () =
     ...occurrenceOwners(/\b(?:showRightDrawer|rightDrawerTab)\.value\s*=(?!=)/g).keys()
   ];
 
-  // Exactly one module writes the drawer state. R13 layering slice S8 moves the
-  // state functions from app/right-drawer.js to services/right-drawer-state.js
-  // and leaves the controller in app/right-drawer.js; until the POST layering
-  // guard pins the new path, either path may be the one owner.
-  assert.equal(transitionOwners.length, 1, `right drawer transitions have one owner: ${JSON.stringify(transitionOwners)}`);
-  assert.ok(
-    ['app/right-drawer.js', 'services/right-drawer-state.js'].includes(transitionOwners[0]),
-    `right drawer transitions are owned by a known module: ${JSON.stringify(transitionOwners)}`
-  );
+  // Exactly one module writes the drawer state: services/right-drawer-state.js
+  // (R13 layering slice S8). The controller stays in app/right-drawer.js.
+  assert.deepEqual(transitionOwners, ['services/right-drawer-state.js']);
   assert.deepEqual(
     occurrenceOwners(/\b(?:showFeaturePanel|showLegendPanel)\b/g),
     new Map()
@@ -900,7 +863,7 @@ test('shared privileged detectors preserve the characterized current-source fact
 });
 
 test('metadata validation callers cannot acquire identity or namespace access', () => {
-  const recovery = atCurrentPath('app/session-feature-metadata.js');
+  const recovery = 'services/session-feature-recovery.js';
   const admission = new Map([
     [recovery, `import { normalizeRenderedFeatureId } from '${specifierFrom(recovery, 'services/session-feature-metadata.js')}';`],
     ['services/svg-result-ingestion.js', "import { collectRenderedFeatureIdentitiesFromSvgRoot } from './session-feature-metadata.js';"]

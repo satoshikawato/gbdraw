@@ -1,0 +1,518 @@
+// PD-OI-066 (R1, R3): Legend edits on the live Result equal the next Generate:
+// the automatic rerender a Legend source asks for (OV-35, OV-42 to OV-44),
+// Legend colors on rows that the draft removes or that only one Result or mode
+// draws (OV-63, OV-80), and Legend renames (OV-62). The matrix of edit kinds is
+// in live-generate-parity.playwright.spec.js.
+const { test, expect } = require('@playwright/test');
+const { readFileSync } = require('node:fs');
+const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const {
+  expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult
+} = require('./helpers/live-generate-parity.cjs');
+const {
+  SINGLE_FIXTURE, open, generate, popupEdit, addVisibilityRule, appAction, addColorRule, history,
+  FL1_OFF, legendRowColor, FL1_ALPHA, DEPTH_TSV, colorLegendRow, openCanvas, renameRow
+} = require('./helpers/live-generate-parity-steps.cjs');
+
+test.describe.configure({ retries: 0 });
+
+// Counts the diagram renders (Generate and the automatic rerender) from here on.
+const countRenders = async (page) => {
+  await page.evaluate(() => {
+    window.__parityRenders = 0;
+    window.__GBDRAW_TEST_HOOKS__ = {
+      ...window.__GBDRAW_TEST_HOOKS__,
+      beforeDiagramGenerationResponse: () => { window.__parityRenders += 1; }
+    };
+  });
+  return () => page.evaluate(() => window.__parityRenders);
+};
+
+// With Auto Reflow off, an edit that changes no Legend source asks for no
+// rerender: the other labels may wait for the reflow (Owner, OV-35), and the
+// Result still shows what Generate draws apart from that placement.
+test('an edit that changes no Legend source does not rerender with Auto Reflow off', async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await addColorRule(page, FL1_ALPHA);
+  await generate(page);
+  const renders = await countRenders(page);
+  await popupEdit(page, 'FL2', { labelText: 'beta protein, edited live' });
+  expect(await renders(), 'label text').toBe(0);
+  await appAction(page, 'setSpecificRuleField', 0, 'color', '#7b2cbf');
+  expect(await renders(), 'color of a rule a drawn feature uses').toBe(0);
+  await popupEdit(page, 'FL2', { labelVisibility: 'off' });
+  expect(await renders(), 'Label visibility Off').toBe(0);
+  await popupEdit(page, 'FL2', { visibility: 'off' });
+  expect(await renders(), 'Off for a CDS after the first').toBe(0);
+  await expectLiveEqualsGenerate(page, { label: 'edits that change no Legend source' });
+});
+
+// An edit that changes a Legend source rerenders once, whether Auto Reflow
+// would also place the labels or not.
+test('an edit that changes a Legend source rerenders once', async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  let renders = await countRenders(page);
+  await addVisibilityRule(page, FL1_OFF);
+  expect(await renders(), 'visibility rule, Auto Reflow off').toBe(1);
+  await page.evaluate(() => { window.__GBDRAW_APP__.autoLabelReflowEnabled = true; });
+  renders = await countRenders(page);
+  await appAction(page, 'removeFeatureVisibilityRule', 0);
+  expect(await renders(), 'visibility rule delete, Auto Reflow on').toBe(1);
+  renders = await countRenders(page);
+  await addColorRule(page, FL1_ALPHA);
+  expect(await renders(), 'color rule, Auto Reflow on').toBe(1);
+  await expectLiveEqualsGenerate(page, { label: 'edits that change a Legend source' });
+});
+
+// OV-60: renaming a generated Legend row (GC content) onto the caption of a
+// color rule that draws no row is an explicit rename; Generate draws it too.
+test('a Legend rename onto the caption of a color rule without a drawn row equals Generate', async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^NOMATCH$', color: '#c83366', cap: 'Zeta' });
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'GC content'), 'Zeta');
+  });
+  await settleLive(page);
+  const captions = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption));
+  expect(captions, 'the renamed row is drawn live').toContain('Zeta');
+  await expectLiveEqualsGenerate(page, { label: 'Legend rename onto the caption of a color rule without a row' });
+});
+
+// OV-46: a Legend-only color on a generated row that only one Result of a batch
+// draws. The compiler cannot tell which Result draws the row, so each Result may
+// miss it; the Generate succeeds when one Result draws it.
+test('a Legend color on a row only one Result draws survives the next Generate', async ({ page }) => {
+  test.setTimeout(150_000);
+  await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+  await popupEdit(page, 'TESTA_0005', { fill: '#c83366' });
+  await generate(page);
+  const legendOf = async (index) => {
+    await showResult(page, index);
+    return (await semanticSnapshot(page)).legend;
+  };
+  const before = [await legendOf(0), await legendOf(1)];
+  expect(before[0].map(({ caption }) => caption)).toContain('other proteins');
+  expect(before[1].map(({ caption }) => caption)).not.toContain('other proteins');
+  await showResult(page, 0);
+  expect(await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return app.updateLegendEntryColor(app.legendEntries.findIndex((entry) => entry.caption === 'other proteins'), '#00aa00');
+  })).toBeTruthy();
+  await settleLive(page);
+  await generate(page);
+  const after = [await legendOf(0), await legendOf(1)];
+  expect(after[0].find(({ caption }) => caption === 'other proteins').fill.toLowerCase()).toBe('#00aa00');
+  expect(after[1]).toEqual(before[1]);
+});
+
+// OV-152 (GUI audit FL-02): a popup color for a whole Legend row writes rules
+// and keeps a copy of their color as the row's Legend color. Removing those
+// rules (Clear All, or deleting the last of them) retires the copy in the same
+// History step, so the row takes the palette color its features return to,
+// live and at Generate. Undo brings back the rules and the copy. A Legend color
+// set on a row that no rule draws stays.
+const COPIED_LEGEND_COLOR_CASES = {
+  'Clear All after Apply to all CDS': {
+    states: { mode: 'circular', results: 'single', reflow: 'off' },
+    color: (page) => popupEdit(page, 'FL1', { fill: '#e63946', scope: 'caption' }),
+    caption: 'CDS',
+    direct: 'repeat_region',
+    remove: (page) => appAction(page, 'clearAllSpecificRules')
+  },
+  'deleting the rule of a one-feature row': {
+    states: { mode: 'linear', results: 'single', reflow: 'on' },
+    color: (page) => popupEdit(page, { type: 'repeat_region' }, { fill: '#e63946' }),
+    caption: 'repeat_region',
+    direct: 'CDS',
+    remove: (page) => appAction(page, 'removeSpecificRule', 0)
+  }
+};
+for (const [name, { states, color, caption, direct, remove }] of Object.entries(COPIED_LEGEND_COLOR_CASES)) {
+  test(`a Legend color copied from popup rules leaves with them: ${name} (${states.mode})`, async ({ page }) => {
+    test.setTimeout(180_000);
+    await open(page, states);
+    const stored = () => page.evaluate(async () => ({ ...(await import('/gbdraw/web/js/state.js')).state.activeDrawing().legendColorOverrides }));
+    const ruleCount = () => page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.length);
+    const liveFill = async () => (await semanticSnapshot(page)).legend.find((row) => row.caption === caption)?.fill;
+    await legendRowColor(page, direct, '#7b2cbf');
+    await color(page);
+    const colored = await stored();
+    expect(colored).toEqual({ [direct]: '#7b2cbf', [caption]: '#e63946' });
+    const rules = await ruleCount();
+    expect(rules).toBeGreaterThan(0);
+
+    await remove(page);
+    expect(await ruleCount()).toBe(0);
+    expect(await stored(), 'the copy leaves; the Legend color of a row no rule draws stays')
+      .toEqual({ [direct]: '#7b2cbf' });
+    await history(page, 'undo');
+    expect(await ruleCount(), 'Undo brings back the rules').toBe(rules);
+    expect(await stored(), 'and the copy, in the same step').toEqual(colored);
+    expect(await liveFill()).toBe('#e63946');
+    await history(page, 'redo');
+    expect(await stored()).toEqual({ [direct]: '#7b2cbf' });
+
+    const palette = (await page.evaluate(async (type) => (
+      String((await import('/gbdraw/web/js/state.js')).state.appliedPaletteColors.value[type])
+    ), caption)).toLowerCase();
+    expect(await liveFill(), 'the live row takes the palette color').toBe(palette);
+    const { generated } = await expectLiveEqualsGenerate(page, { label: `${name}: after the removal` });
+    expect(generated.legend.find((row) => row.caption === caption)?.fill, 'Generate draws the palette color').toBe(palette);
+    expect(generated.legend.find((row) => row.caption === direct)?.fill).toBe('#7b2cbf');
+  });
+}
+
+// OV-63: Python's Legend row facts excuse only a row the draft removed. A Legend
+// style on a key no feature of the records can produce is a stale operation, and
+// the Generate still fails at result admission.
+test('a Legend style no feature can produce still fails the Generate', async ({ page }) => {
+  test.setTimeout(90_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const { state } = await import('/gbdraw/web/js/state.js');
+    state.originalLegendOrder.value = [...state.originalLegendOrder.value, 'Ghost'];
+    app.legendEntries.push({ caption: 'Ghost', originalCaption: 'Ghost', color: '#123456', yPos: 400 });
+    state.activeDrawing().legendColorOverrides.Ghost = '#123456';
+  });
+  const outcome = await generateAndWaitForResult(page, { expectedStatus: 'error' });
+  expect(outcome.errorSummary).toContain('could not be accepted');
+  expect(await page.evaluate(() => JSON.stringify(window.__GBDRAW_APP__.errorLog))).toContain('RESULT_INVALID');
+});
+
+// OV-63 siblings: a Legend style on a row that the draft then removes by another
+// route than hiding features (a track switched off, a feature type deselected, the
+// Legend set to none). Each case colors the row, removes it, and requires that
+// Generate succeeds. A track slot edit is live, so its Result must equal
+// Generate's; the GC and skew switches, the Features selection, and the Legend
+// position apply on Generate, so those cases check the Generate Result for the
+// absent rows.
+const SIBLINGS = [
+  {
+    name: 'GC content row after GC content is switched off',
+    mode: 'circular',
+    absent: ['GC content'],
+    run: async (page) => {
+      await colorLegendRow(page, 'GC content');
+      await appAction(page, 'setCircularGcSuppressed', true);
+    }
+  },
+  {
+    name: 'feature type row after the type is deselected in the Features selection',
+    mode: 'circular',
+    absent: ['repeat_region'],
+    run: async (page) => {
+      await colorLegendRow(page, 'repeat_region');
+      await page.evaluate(() => {
+        const features = window.__GBDRAW_APP__.adv.features;
+        features.splice(features.indexOf('repeat_region'), 1);
+      });
+      await settleLive(page);
+    }
+  },
+  {
+    name: 'GC skew row after its track is disabled',
+    mode: 'circular',
+    run: async (page) => {
+      await colorLegendRow(page, 'GC skew (+)');
+      await page.evaluate(() => {
+        const app = window.__GBDRAW_APP__;
+        app.setCircularTrackSlotEnabled(app.adv.circular_track_slots.find((slot) => slot.id === 'gc_skew'), false);
+      });
+      await settleLive(page);
+    }
+  },
+  {
+    name: 'GC content row after its track slot is removed',
+    mode: 'circular',
+    run: async (page) => {
+      await colorLegendRow(page, 'GC content');
+      await page.evaluate(() => {
+        const app = window.__GBDRAW_APP__;
+        app.removeCircularTrackSlot(app.adv.circular_track_slots.findIndex((slot) => slot.id === 'gc_content'));
+      });
+      await settleLive(page);
+    }
+  },
+  {
+    name: 'Depth row after Show Depth is switched off, Circular',
+    mode: 'circular',
+    absent: ['depth'],
+    run: async (page) => {
+      await page.evaluate((text) => {
+        window.__GBDRAW_APP__.setCircularDepthFile(0, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' }));
+      }, DEPTH_TSV);
+      await settleLive(page);
+      await generate(page);
+      await colorLegendRow(page, 'depth');
+      await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = false; });
+      await settleLive(page);
+    }
+  },
+  {
+    name: 'Depth row after Show Depth is switched off, Linear',
+    mode: 'linear',
+    absent: ['depth'],
+    run: async (page) => {
+      await page.evaluate((text) => {
+        const app = window.__GBDRAW_APP__;
+        app.setLinearDepthFile(app.linearSeqs[0], 0, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' }));
+      }, DEPTH_TSV);
+      await settleLive(page);
+      await generate(page);
+      await colorLegendRow(page, 'depth');
+      await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = false; });
+      await settleLive(page);
+    }
+  },
+  {
+    name: 'GC skew row after GC skew is switched off',
+    mode: 'circular',
+    absent: ['GC skew (-)'],
+    run: async (page) => {
+      await colorLegendRow(page, 'GC skew (-)');
+      await appAction(page, 'setCircularSkewSuppressed', true);
+    }
+  },
+  {
+    name: 'a feature row after the Legend is set to none, Circular one record',
+    absent: ['CDS'],
+    mode: 'circular',
+    canvas: false,
+    run: async (page) => {
+      await colorLegendRow(page, 'CDS');
+      await page.evaluate(() => { window.__GBDRAW_APP__.form.legend = 'none'; });
+      await settleLive(page);
+    }
+  },
+  {
+    name: 'a feature row after the Legend is set to none, Linear',
+    absent: ['CDS'],
+    mode: 'linear',
+    run: async (page) => {
+      await colorLegendRow(page, 'CDS');
+      await page.evaluate(() => { window.__GBDRAW_APP__.form.legend = 'none'; });
+      await settleLive(page);
+    }
+  },
+  {
+    name: 'a feature row after the Legend is set to none, Circular Multi-Record Canvas',
+    absent: ['CDS'],
+    mode: 'circular',
+    canvas: true,
+    run: async (page) => {
+      await colorLegendRow(page, 'CDS');
+      await page.evaluate(() => { window.__GBDRAW_APP__.form.legend = 'none'; });
+      await settleLive(page);
+    }
+  }
+];
+
+for (const { name, mode, canvas = null, absent = null, run } of SIBLINGS) {
+  test(`a Legend color survives Generate: ${name}`, async ({ page }) => {
+    test.setTimeout(120_000);
+    await openCanvas(page, mode, canvas);
+    await run(page);
+    if (!absent) {
+      await expectLiveEqualsGenerate(page, { label: name });
+      return;
+    }
+    await generate(page);
+    const captions = (await semanticSnapshot(page)).legend.map(({ caption }) => caption);
+    for (const caption of absent) expect(captions, name).not.toContain(caption);
+  });
+}
+
+// OV-81: the Legend color of a Depth row hidden by Show Depth is kept; showing
+// Depth again draws the row in that color.
+const DEPTH_ADDERS = [
+  ['circular', (text) => { window.__GBDRAW_APP__.setCircularDepthFile(0, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' })); }],
+  ['linear', (text) => { const app = window.__GBDRAW_APP__; app.setLinearDepthFile(app.linearSeqs[0], 0, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' })); }]
+];
+for (const [mode, addDepth] of DEPTH_ADDERS) {
+  test(`a Depth Legend color returns when Show Depth is switched on again (${mode})`, async ({ page }) => {
+    test.setTimeout(120_000);
+    await openCanvas(page, mode, null);
+    await page.evaluate(addDepth, DEPTH_TSV);
+    await settleLive(page);
+    await generate(page);
+    await colorLegendRow(page, 'depth', '#7b2cbf');
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = false; });
+    await settleLive(page);
+    await generate(page);
+    expect((await semanticSnapshot(page)).legend.map(({ caption }) => caption)).not.toContain('depth');
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = true; });
+    await settleLive(page);
+    await generate(page);
+    const row = (await semanticSnapshot(page)).legend.find(({ caption }) => caption === 'depth');
+    expect(row?.fill.toLowerCase()).toBe('#7b2cbf');
+  });
+
+  // OV-88, OV-120: a Depth row renamed in the Legend is excused like an
+  // unrenamed one: its rename and the styles under the new name do not fail the
+  // Generate. The Result without the row keeps the rename and its color dormant,
+  // so the row returns as `Coverage` in its color.
+  test(`a Depth row renamed in the Legend does not fail Generate while Show Depth hides it (${mode})`, async ({ page }) => {
+    test.setTimeout(120_000);
+    await openCanvas(page, mode, null);
+    await page.evaluate(addDepth, DEPTH_TSV);
+    await settleLive(page);
+    await generate(page);
+    await renameRow(page, 'depth', 'Coverage');
+    await settleLive(page);
+    await colorLegendRow(page, 'Coverage', '#7b2cbf');
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = false; });
+    await settleLive(page);
+    await generate(page);
+    const hidden = (await semanticSnapshot(page)).legend.map(({ caption }) => caption);
+    expect(hidden).not.toContain('Coverage');
+    expect(hidden).not.toContain('depth');
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = true; });
+    await settleLive(page);
+    await generate(page);
+    const returned = (await semanticSnapshot(page)).legend;
+    expect(returned.map(({ caption }) => caption), 'the row returns under its rename').not.toContain('depth');
+    expect(returned.find(({ caption }) => caption === 'Coverage')?.fill.toLowerCase(), 'Coverage in its color').toBe('#7b2cbf');
+  });
+}
+
+// OV-80: Legend styles belong to the drawing of their mode (PD-OI-086). A color
+// set on one mode's Result, on a row the other mode does not draw, stays in that
+// mode's drawing only, does not fail the other mode's Generate, and returns with
+// the row. Show Depth is per mode, so the Depth case returns with Depth on.
+const LOCTEST_FIXTURE = 'tests/fixtures/feature_location_search.gb';
+const switchMode = async (page, target) => {
+  await page.getByRole('button', { name: target === 'linear' ? 'Linear' : 'Circular', exact: true }).click();
+  await page.waitForFunction((value) => window.__GBDRAW_APP__?.mode === value, target);
+  await settleLive(page);
+};
+const OTHER_MODE_ROWS = [
+  { name: 'a feature type only the Linear file has', from: 'linear', linearFile: LOCTEST_FIXTURE, row: 'tRNA' },
+  { name: 'a feature type only the Circular file has', from: 'circular', linearFile: LOCTEST_FIXTURE, row: 'repeat_region' },
+  ...['linear', 'circular'].map((from) => ({
+    name: `an annotation set of a selected ${from === 'linear' ? 'Linear' : 'Circular'} feature`,
+    from,
+    row: 'Region X',
+    // A selected-feature target belongs to the mode of the Result it was picked on (R2).
+    prepare: (page) => evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      app.selectedFeatureIds = [app.extractedFeatures.find((feature) => feature.type === 'CDS').svg_id];
+      await window.Vue.nextTick();
+      app.addAnnotationSet();
+      const set = app.annotationSets[app.annotationSets.length - 1];
+      await app.addSelectedFeatureAnnotations(set);
+      app.setAnnotationSetLegendLabel(set, 'Region X');
+    })
+  })),
+  {
+    name: 'a Depth series only Linear has',
+    from: 'linear',
+    row: 'depth',
+    prepare: (page) => page.evaluate((text) => {
+      const app = window.__GBDRAW_APP__;
+      app.setLinearDepthFile(app.linearSeqs[0], 0, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' }));
+    }, DEPTH_TSV)
+  }
+];
+for (const { name, from, linearFile = SINGLE_FIXTURE, row, prepare = null } of OTHER_MODE_ROWS) {
+  test(`a Legend color on ${name} survives the other mode's Generate (OV-80)`, async ({ page }) => {
+    test.setTimeout(180_000);
+    const other = from === 'linear' ? 'circular' : 'linear';
+    await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+    await switchMode(page, 'linear');
+    await page.evaluate(async ({ text, fileName }) => {
+      window.__GBDRAW_APP__.setLinearSeqPrimaryFile(0, 'gb', new File([text], fileName, { type: 'text/plain', lastModified: 1000 }));
+      await window.Vue.nextTick();
+    }, { text: readFileSync(linearFile, 'utf8'), fileName: linearFile.split('/').pop() });
+    await settleLive(page);
+    await switchMode(page, from);
+    await generate(page);
+    if (prepare) {
+      await prepare(page);
+      await settleLive(page);
+      await generate(page);
+    }
+    await colorLegendRow(page, row);
+    await switchMode(page, other);
+    await generate(page);
+    expect((await semanticSnapshot(page)).legend.map(({ caption }) => caption), `${other} draws no ${row} row`).not.toContain(row);
+    expect(await page.evaluate(async ({ caption, own, shown }) => {
+      const { state } = await import('/gbdraw/web/js/state.js');
+      return {
+        stored: state.drawings[own].legendColorOverrides[caption] ?? null,
+        other: state.drawings[shown].legendColorOverrides[caption] ?? null
+      };
+    }, { caption: row, own: from, shown: other }), `the color stays stored in ${from} only`).toEqual({ stored: '#7b2cbf', other: null });
+    await switchMode(page, from);
+    await generate(page);
+    const drawn = (await semanticSnapshot(page)).legend.find(({ caption }) => caption === row);
+    expect(drawn?.fill.toLowerCase(), `${from} draws ${row} in the color`).toBe('#7b2cbf');
+  });
+}
+
+// OV-62 (PD-OI-061 amended): two Legend rows merge only when both draw features
+// of one same type. Anything else offers Suffix and Cancel only.
+const legendCaptions = (page) => page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption));
+const choose = async (page, choice) => {
+  await evaluateWithRetainedPromise(page, async (picked) => { await window.__GBDRAW_APP__.handleLegendRenameChoice(picked); }, choice);
+  await settleLive(page);
+};
+const mergeButton = (page) => page.getByRole('button', { name: /Merge into existing/ });
+const suffixButton = (page) => page.getByRole('button', { name: /add a suffix/ });
+
+test('a Legend rename of GC content onto CDS offers no Merge, and Suffix equals Generate', async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#e63946', cap: 'CDS' });
+  const before = await legendCaptions(page);
+  await renameRow(page, 'GC content', 'CDS');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'the rename asks').toBe(true);
+  await expect(mergeButton(page), 'Merge is not offered').toHaveCount(0);
+  await expect(suffixButton(page), 'Suffix is offered').toHaveCount(1);
+  await choose(page, 'merge');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'a refused Merge closes the dialog').toBe(false);
+  expect(await legendCaptions(page), 'a refused Merge changes no row').toEqual(before);
+  await renameRow(page, 'GC content', 'CDS');
+  await choose(page, 'suffix');
+  const renamed = await legendCaptions(page);
+  expect(renamed.filter((caption) => caption === 'CDS'), 'one row keeps the caption CDS').toHaveLength(1);
+  expect(renamed, 'GC content is gone').not.toContain('GC content');
+  expect(renamed.some((caption) => caption !== 'CDS' && caption.startsWith('CDS')), 'the plot has a suffixed caption').toBe(true);
+  await expectLiveEqualsGenerate(page, { label: 'GC content renamed onto CDS with Suffix' });
+});
+
+const RULE_ROWS = [
+  { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#e63946', cap: 'alpha' },
+  { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2a9d8f', cap: 'beta' },
+  { feat: 'repeat_region', qual: 'note', val: '^RPT_ONE$', color: '#7b2cbf', cap: 'rep' }
+];
+
+test('a Legend rename between rows of different feature types offers no Merge', async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  for (const rule of RULE_ROWS) await addColorRule(page, rule);
+  await renameRow(page, 'rep', 'alpha');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'the rename asks').toBe(true);
+  await expect(mergeButton(page), 'Merge is not offered').toHaveCount(0);
+  await choose(page, 'suffix');
+  const renamed = await legendCaptions(page);
+  expect(renamed.filter((caption) => caption === 'alpha'), 'one row keeps the caption').toHaveLength(1);
+  expect(renamed.some((caption) => caption !== 'alpha' && caption.startsWith('alpha')), 'the repeat row has a suffixed caption').toBe(true);
+  await expectLiveEqualsGenerate(page, { label: 'repeat_region row renamed onto a CDS row with Suffix' });
+});
+
+// Two color-rule rows of one feature type: the target is owned by a rule, so the
+// rename keeps its PD-OI-042 disambiguation instead of asking, and Generate agrees.
+test('a Legend rename of a rule row onto another rule row of one feature type equals Generate', async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  for (const rule of RULE_ROWS) await addColorRule(page, rule);
+  await renameRow(page, 'beta', 'alpha');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'a rule-owned caption does not ask').toBe(false);
+  await settleLive(page);
+  await expectLiveEqualsGenerate(page, { label: 'same-type rule row renamed onto a rule row' });
+});
