@@ -1138,19 +1138,18 @@ def _inside_movable_stack_group_from(
     start_pos: int,
     resolved_by_index: Mapping[int, CircularResolvedSlot],
 ) -> list[_RadialSlotIntent]:
+    """Auto rows and pinned Auto-width rows, up to a row of a preset-lane group (GX-19)."""
+
     group: list[_RadialSlotIntent] = []
-    for future in ordered_intents[start_pos:]:
-        if future.slot_index in resolved_by_index:
+    for future_pos in range(start_pos, len(ordered_intents)):
+        future = ordered_intents[future_pos]
+        if future.slot_index in resolved_by_index or future.side != "inside":
             break
-        if future.side != "inside" or (future.explicit_anchor and not _anchored_inside(future)):
+        if future.placement_policy != "auto" and not _anchored_inside(future):
             break
-        if future.placement_policy == "auto" or _anchored_inside(future):
-            group.append(future)
-            continue
-        if future.placement_policy == "preferred" and future.renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS:
-            group.append(future)
-            continue
-        break
+        if _preferred_numeric_group_from(ordered_intents, future_pos, resolved_by_index):
+            break
+        group.append(future)
     return group
 
 
@@ -1453,18 +1452,32 @@ def _preferred_numeric_group_from(
     start_pos: int,
     resolved_by_index: Mapping[int, CircularResolvedSlot],
 ) -> list[_RadialSlotIntent]:
+    """Inside numeric rows on preset lanes, with the pinned Auto-width rows among them.
+
+    The default stack places its numeric rows this way, so a preset stack with
+    nothing typed draws the default figure (GX-19). A pinned row with an Auto
+    width joins the group it touches and keeps its radius (GX-17); a run
+    without a preset-lane row is not a preferred group.
+    """
+
     group: list[_RadialSlotIntent] = []
     for future in ordered_intents[start_pos:]:
         if future.slot_index in resolved_by_index:
             break
-        if (
-            future.placement_policy != "preferred"
-            or future.side != "inside"
-            or future.renderer not in NUMERIC_CIRCULAR_TRACK_RENDERERS
-        ):
+        if not (_anchored_inside(future) or _preferred_inside_numeric(future)):
             break
         group.append(future)
+    if not any(_preferred_inside_numeric(member) for member in group):
+        return []
     return group
+
+
+def _preferred_inside_numeric(intent: _RadialSlotIntent) -> bool:
+    return (
+        intent.placement_policy == "preferred"
+        and intent.side == "inside"
+        and intent.renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS
+    )
 
 
 def _group_packing_span(resolved_group: Sequence[CircularResolvedSlot]) -> RadialBand | None:
@@ -1569,7 +1582,8 @@ def _place_inside_auto_group_with_width_scale(
     resolved_group: list[CircularResolvedSlot] = []
     for intent_index, intent in enumerate(intents):
         width_px = _scaled_preferred_width(intent, width_scale)
-        resolved = _place_inside_auto_fixed_width(
+        place = _measure_anchored_inside if _anchored_inside(intent) else _place_inside_auto_fixed_width
+        resolved = place(
             intent,
             width_px=width_px,
             compressed=width_px < float(intent.width_px) - LAYOUT_EPSILON,
@@ -2161,7 +2175,7 @@ def _resolve_circular_radial_layout(
                 intent_pos,
                 resolved_by_index,
             )
-            if len(movable_group) > 1 or _anchored_inside(intent):
+            if movable_group and (len(movable_group) > 1 or _anchored_inside(intent)):
                 placement_window = _inside_placement_window(
                     ordered_intents,
                     start_pos=intent_pos + len(movable_group) - 1,
@@ -2218,6 +2232,7 @@ def _resolve_circular_radial_layout(
                     feature_dict=feature_dict,
                     depth_config=depth_config,
                     resolved_by_index=resolved_by_index,
+                    group=preferred_group,
                 )
                 resolved_group = _place_preferred_numeric_group(
                     preferred_group,

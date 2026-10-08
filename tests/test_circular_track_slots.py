@@ -909,10 +909,16 @@ def test_circular_preset_slots_do_not_emit_origin_metadata() -> None:
 
 
 @pytest.mark.circular
-def test_blank_builtin_numeric_slots_reflow_as_movable_stack_without_explicit_radius() -> None:
+def test_blank_builtin_numeric_slots_keep_the_preset_anchors_of_the_default_stack() -> None:
+    # GX-19: a preset stack with nothing typed resolves like the default stack;
+    # here the preset anchors fit, so both keep them.
     from gbdraw.canvas import CircularCanvasConfigurator
     from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
-    from gbdraw.diagrams.circular.presets import CircularPresetContext, circular_track_slots_from_preset_order
+    from gbdraw.diagrams.circular.presets import (
+        CircularPresetContext,
+        circular_radial_plan_for_preset,
+        circular_track_slots_from_preset_order,
+    )
     from gbdraw.diagrams.circular.radial_layout import resolve_circular_radial_layout
 
     record = _load_record()
@@ -966,12 +972,23 @@ def test_blank_builtin_numeric_slots_reflow_as_movable_stack_without_explicit_ra
 
     assert not by_id["gc_content"].explicit_anchor
     assert not by_id["gc_skew"].explicit_anchor
-    assert by_id["gc_content"].anchor_radius_px != pytest.approx(
+    assert by_id["gc_content"].anchor_radius_px == pytest.approx(
         float(canvas_config.radius) * float(track_dict["2"])
     )
-    assert by_id["gc_skew"].anchor_radius_px != pytest.approx(
+    assert by_id["gc_skew"].anchor_radius_px == pytest.approx(
         float(canvas_config.radius) * float(track_dict["3"])
     )
+    default_plan = circular_radial_plan_for_preset("middle", context)
+    default_layout = resolve_circular_radial_layout(
+        total_length=len(record.seq),
+        canvas_config=canvas_config,
+        slots=default_plan.slots,
+        preferred_anchor_slot_ids=default_plan.preferred_anchor_slot_ids,
+    )
+    expected = _slot_geometry(default_layout)
+    assert _slot_geometry(layout).keys() == expected.keys()
+    for key, geometry in _slot_geometry(layout).items():
+        assert geometry == pytest.approx(expected[key], abs=1e-6), key
     assert by_id["features"].packing_band_px.center_px > by_id["ticks"].packing_band_px.center_px
     assert by_id["ticks"].packing_band_px.center_px > by_id["gc_content"].packing_band_px.center_px
     assert by_id["gc_content"].packing_band_px.center_px > by_id["gc_skew"].packing_band_px.center_px
@@ -2567,6 +2584,27 @@ def _slot_geometry(layout) -> dict[str, tuple[float, ...]]:
         )
         for slot in layout.slots
     }
+
+
+@pytest.mark.parametrize("input_filename", ["HmmtDNA.gbk", "MG1655.gbk"])
+@pytest.mark.parametrize("track_type", ["tuckin", "middle", "spreadout"])
+def test_preset_stack_with_nothing_typed_matches_the_default_stack(
+    monkeypatch: pytest.MonkeyPatch,
+    input_filename: str,
+    track_type: str,
+) -> None:
+    # GX-19: turning on "Use custom stack" without typing anything keeps the
+    # default figure. On MG1655 the numeric rows used to pack under the ticks
+    # instead of keeping their preset anchors.
+    default = _capture_circular_radial_layout(monkeypatch, track_type=track_type, input_filename=input_filename)
+    monkeypatch.undo()
+    preset_stack = _web_preset_layout(monkeypatch, track_type, input_filename)
+
+    observed = _slot_geometry(preset_stack)
+    expected = _slot_geometry(default)
+    assert observed.keys() == expected.keys()
+    for key, geometry in expected.items():
+        assert observed[key] == pytest.approx(geometry, abs=1e-6), key
 
 
 @pytest.mark.parametrize("input_filename", ["HmmtDNA.gbk", "MG1655.gbk"])

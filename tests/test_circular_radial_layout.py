@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -884,6 +886,40 @@ def test_cli_pinned_row_with_an_explicit_width_keeps_it(tmp_path: Path) -> None:
         "outerPx": 386,
         "slotIndex": 1,
     }
+
+
+def test_cli_preset_stack_with_nothing_typed_draws_the_default_figure(tmp_path: Path) -> None:
+    # GX-19: the Web sends this stack when "Use custom stack" is turned on and
+    # nothing is typed. On MG1655 Middle it packed gc_content under the ticks
+    # (0.759 R) instead of keeping the default 0.75 R.
+    common = ["--gbk", str(Path(__file__).parent / "test_inputs" / "MG1655.gbk"), "--track_type", "middle", "-f", "svg"]
+    circular_main([*common, "-o", str(tmp_path / "default")])
+    circular_main(
+        [
+            *common,
+            "--circular_track_slot",
+            "features:features@lane_direction=split",
+            "--circular_track_slot",
+            "ticks:ticks@side=inside,tick_label_layout=label_in_tick_out",
+            "--circular_track_slot",
+            "gc_content:dinucleotide_content@side=inside",
+            "--circular_track_slot",
+            "gc_skew:dinucleotide_skew@side=inside",
+            "--circular_track_axis_index",
+            "0",
+            "-o",
+            str(tmp_path / "preset_stack"),
+        ]
+    )
+
+    # A custom stack wraps each row in a slot group, so compare what is drawn:
+    # every path and transform. Digests, as a diff of large SVGs is too slow to print.
+    def drawn(name: str) -> str:
+        text = (tmp_path / f"{name}.svg").read_text()
+        values = sorted(re.findall(r' (?:d|transform)="([^"]*)"', text))
+        return hashlib.sha256("\n".join(values).encode()).hexdigest()
+
+    assert drawn("preset_stack") == drawn("default")
 
 
 def _pinned_below_a_fixed_row(radius: float, **pinned_fields) -> CircularRadialLayout:
