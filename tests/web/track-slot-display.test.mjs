@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const repoRoot = process.cwd();
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-track-slot-display-'));
@@ -29,7 +30,8 @@ await cp(
 );
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 // The track-slot leaves the slot editors import.
-for (const leaf of ['depth-track-state.js', 'track-slot-display.js', 'track-slot-validation.js']) {
+for (const leaf of ['depth-track-state.js', 'track-slot-display.js', 'track-slot-validation.js',
+  'circular-track-slot-model.js', 'linear-track-slot-model.js']) {
   await cp(
     join(repoRoot, 'gbdraw', 'web', 'js', 'services', leaf),
     join(tempRoot, 'services', leaf)
@@ -134,7 +136,7 @@ test('Linear placement actions preserve the Axis boundary and row sides', () => 
     },
     linearSeqs: []
   };
-  const editor = createLinearTrackSlotEditor({ state });
+  const editor = createLinearTrackSlotEditor({ state: withDrawings(state) });
   const order = () => state.adv.linear_track_slots.map((slot) => slot.id);
   const sides = () => state.adv.linear_track_slots.map((slot) => slot.side);
 
@@ -191,7 +193,7 @@ test('Linear editor requests resolved geometry with each public slot ID', () => 
     }]
   };
   const linearEditor = createLinearTrackSlotEditor({
-    state: {
+    state: withDrawings({
       form: { linear_track_layout: 'middle', show_depth: true },
       adv: {
         linear_track_slots: linearSlots,
@@ -206,7 +208,7 @@ test('Linear editor requests resolved geometry with each public slot ID', () => 
       annotationSets: [],
       selectedResultIndex: { value: 0 },
       trackSlotResolvedGeometry: { value: linearGeometry }
-    }
+    })
   });
   assert.equal(
     linearEditor.linearTrackSlotGeometryAutoText(linearSlots[0], 0, 'height'),
@@ -245,7 +247,7 @@ test('Circular editor requests resolved geometry with each public slot ID', () =
     }]
   };
   const circularEditor = createCircularTrackSlotEditor({
-    state: {
+    state: withDrawings({
       mode: { value: 'circular' },
       form: {
         track_type: 'tuckin', show_depth: true, suppress_gc: false,
@@ -271,7 +273,7 @@ test('Circular editor requests resolved geometry with each public slot ID', () =
       annotationSets: [],
       selectedResultIndex: { value: 0 },
       trackSlotResolvedGeometry: { value: circularGeometry }
-    }
+    })
   });
   for (const [slotIndex, expected] of [
     [0, '18 px (auto)'],
@@ -355,8 +357,8 @@ test('disabled rows show their estimate in both editors', () => {
     selectedResultIndex: { value: 0 },
     trackSlotResolvedGeometry: { value: geometry }
   });
-  const resolved = createCircularTrackSlotEditor({ state: circularState(circularGeometry) });
-  const estimated = createCircularTrackSlotEditor({ state: circularState(null) });
+  const resolved = createCircularTrackSlotEditor({ state: withDrawings(circularState(circularGeometry)) });
+  const estimated = createCircularTrackSlotEditor({ state: withDrawings(circularState(null)) });
   const circularText = (editor, index, field) => (
     editor.circularTrackSlotGeometryAutoText(editor.circularTrackSlots()[index], index, field)
   );
@@ -373,7 +375,7 @@ test('disabled rows show their estimate in both editors', () => {
     { id: 'gc_content', renderer: 'dinucleotide_content', enabled: false, side: 'below', height: null, spacing: null, z: 0, params: { nt: 'GC' } }
   ];
   const linearEditor = createLinearTrackSlotEditor({
-    state: {
+    state: withDrawings({
       form: { linear_track_layout: 'middle', show_depth: false },
       adv: {
         linear_track_slots: linearSlots,
@@ -392,7 +394,7 @@ test('disabled rows show their estimate in both editors', () => {
           records: [{ resultIndex: 0, recordIndex: 0, slots: [{ slotIndex: 1, slotId: 'gc_content', heightPx: 77 }] }]
         }
       }
-    }
+    })
   });
   assert.equal(linearEditor.linearTrackSlotGeometryAutoText(linearSlots[1], 1, 'height'), '77 px (auto)');
   assert.notEqual(linearEditor.linearTrackSlotGeometryAutoText(linearSlots[2], 2, 'height'), '77 px (auto)');

@@ -41,6 +41,9 @@ const KEPT = [
   'originalLegendOrder'
 ];
 
+// The kept members of the app state and of the shown mode's drawing.
+const memberOf = (key) => (Object.hasOwn(state, key) ? state : state.activeDrawing())[key];
+
 const fillCircularArtifact = async () => {
   const canonical = JSON.parse(await readFile('gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', 'utf8'));
   adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
@@ -67,9 +70,9 @@ const fillCircularArtifact = async () => {
     linearRecordTranslations: [{ recordKey: 'r', x: 1, y: 2 }], legendEntries: [{ caption: 'CDS' }],
     deletedLegendEntries: [{ caption: 'gene' }], originalLegendOrder: ['CDS', 'tRNA']
   };
-  Object.entries(kept).forEach(([key, value]) => { state[key].value = value; });
-  state.manualSpecificRules.splice(0, state.manualSpecificRules.length, { qual: 'product', val: 'x', color: '#333333', cap: 'X' });
-  state.fileLegendCaptions.value = new Set(['From file']);
+  Object.entries(kept).forEach(([key, value]) => { memberOf(key).value = value; });
+  state.activeDrawing().manualSpecificRules.splice(0, state.activeDrawing().manualSpecificRules.length, { qual: 'product', val: 'x', color: '#333333', cap: 'X' });
+  state.activeDrawing().fileLegendCaptions.value = new Set(['From file']);
   state.linearSeqs.splice(0, state.linearSeqs.length, { uid: 'seq-1', region_reverse: true });
   state.matchSequenceRegistry.register({ origin: 'linear-record', sourceKey: 'k1', recordId: 'R1', sequence: 'ACGT' });
   return { values, kept };
@@ -84,7 +87,7 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   const { values, kept } = await fillCircularArtifact();
   const committed = canonicalRenderArtifactOwner.capture();
   const registryOwner = state.matchSequenceRegistry.captureTrustedOwner();
-  const rules = [...state.manualSpecificRules];
+  const rules = [...state.activeDrawing().manualSpecificRules];
 
   const circular = snapshots.captureArtifactSlot();
   assert.ok(Object.isFrozen(circular));
@@ -102,9 +105,9 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   assert.equal(state.appliedPaletteName.value, 'tableau');
   assert.strictEqual(state.appliedPaletteColors.value, values.appliedPaletteColors);
   // Draft and project state stays.
-  Object.entries(kept).forEach(([key, value]) => assert.strictEqual(state[key].value, value, key));
-  assert.deepEqual(state.manualSpecificRules, rules);
-  assert.deepEqual([...state.fileLegendCaptions.value], ['From file']);
+  Object.entries(kept).forEach(([key, value]) => assert.strictEqual(memberOf(key).value, value, key));
+  assert.deepEqual(state.activeDrawing().manualSpecificRules, rules);
+  assert.deepEqual([...state.activeDrawing().fileLegendCaptions.value], ['From file']);
   assert.equal(state.linearSeqs[0].region_reverse, true);
 
   const linear = snapshots.captureArtifactSlot();
@@ -113,7 +116,7 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   assert.strictEqual(canonicalRenderArtifactOwner.capture().committedCanonicalSession, committed.committedCanonicalSession);
   assert.strictEqual(canonicalRenderArtifactOwner.capture().activeSessionResourceTable, committed.activeSessionResourceTable);
   assert.strictEqual(state.matchSequenceRegistry.captureTrustedOwner(), registryOwner);
-  Object.entries(kept).forEach(([key, value]) => assert.strictEqual(state[key].value, value, key));
+  Object.entries(kept).forEach(([key, value]) => assert.strictEqual(memberOf(key).value, value, key));
 
   // The Linear slot captured while empty installs as empty again.
   snapshots.installArtifactSlot(linear, { mode: 'linear' });

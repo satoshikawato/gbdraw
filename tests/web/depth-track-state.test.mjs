@@ -16,6 +16,7 @@ const {
   activeDepthTrackIndices,
   clearDepthTrackSourceAt,
   depthSeriesLegendCaptions,
+  depthTrackConfigForEdit,
   depthTrackCoverageCount,
   depthFileSlotsFromValue,
   depthSlotTrackIndex,
@@ -182,4 +183,23 @@ console.log(`depth-track-state tests passed (${fileURLToPath(sourceUrl)})`);
   ];
   assert.deepEqual(depthSeriesLegendCaptions({ depthTracks: tracks, slots }), ['depth', 'Depth 2', 'Coverage']);
   assert.deepEqual(depthSeriesLegendCaptions(), []);
+}
+
+{
+  // TK-03: an edit writes a series the mode has; an index past the mode's
+  // series names none, so nothing is written and the series list does not grow.
+  const tracks = [{ label: 'a', color: '#111111' }, { label: 'b', color: '#222222' }];
+  const second = depthTrackConfigForEdit(tracks, 1, 2);
+  assert.equal(second, tracks[1]);
+  assert.equal(depthTrackConfigForEdit(tracks, 2, 2), null, 'index 2 of two series');
+  assert.equal(depthTrackConfigForEdit(tracks, 5, 2), null, 'index 5 of two series');
+  assert.equal(tracks.length, 2, 'the series list does not grow');
+  // A series the mode has but the list does not hold yet gets its defaults.
+  const short = [{ label: 'a', color: '#111111' }];
+  const added = depthTrackConfigForEdit(short, 1, 2, { color: '#4A90E2' });
+  assert.equal(short.length, 2);
+  assert.equal(added, short[1]);
+  // A mode without series still edits its first (default) series.
+  assert.notEqual(depthTrackConfigForEdit([], 0, 0), null);
+  assert.equal(depthTrackConfigForEdit([], 1, 0), null);
 }

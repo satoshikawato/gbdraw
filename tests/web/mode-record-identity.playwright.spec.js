@@ -1,7 +1,8 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
+const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
 
 const seed = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json';
 const external = new WeakMap();
@@ -47,7 +48,7 @@ const snapshot = page => page.evaluate(async () => {
   const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
   const feature = state.extractedFeatures.value.find(f => f.biological_feature_id === 'fb8ff22d9');
   return { mode: state.mode.value, records: state.circularRecordList.value,
-    placements: state.featurePlacementOverrides,
+    placements: state.activeDrawing().featurePlacementOverrides,
     feature: feature && { recordKey: feature.record_key, biologicalFeatureId: feature.biological_feature_id },
     featureCount: state.extractedFeatures.value.length,
     committedPlacements: getCommittedCanonicalRenderRequest()?.diagramOptions.featurePlacements || [],
@@ -87,7 +88,7 @@ for (const committed of [false, true]) {
       if (committed) await generate(page);
       const before = await snapshot(page);
       expect(before.feature).toEqual({ recordKey: 'record-1', biologicalFeatureId: 'fb8ff22d9' });
-      expect(Object.values(before.placements)).toEqual([{ scope: 'circular', ...before.feature,
+      expect(Object.values(before.placements)).toEqual([{ ...before.feature,
         placement: { kind: 'lane', side: 'outward', level: 1 } }]);
       await page.evaluate(async () => { window.__MODE_SOURCE__ = (await import('./js/state.js')).state.files.c_gb; });
       const checkReturned = async () => {
@@ -161,7 +162,7 @@ for (const committed of [false, true]) {
 // record key (not the Session's `record-1`), so the old row reaches no request
 // and is removed; an unrelated file loaded after removal does not take it
 // either.
-const placementKeys = page => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.featurePlacementOverrides));
+const placementKeys = page => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.activeDrawing().featurePlacementOverrides));
 for (const operation of ['replacement', 'removal']) {
   test(`Circular source ${operation} after mode inactivity unbinds the old identity and Generate drops its placement`, async ({ browser }) => {
     test.setTimeout(180000);
@@ -171,7 +172,7 @@ for (const operation of ['replacement', 'removal']) {
       await placement(page, 'outward');
       const before = await snapshot(page);
       const placed = Object.keys(before.placements);
-      expect(placed).toEqual([JSON.stringify(['circular', before.feature.recordKey, before.feature.biologicalFeatureId])]);
+      expect(placed).toEqual([JSON.stringify([before.feature.recordKey, before.feature.biologicalFeatureId])]);
       const source = await page.evaluate(async () => {
         const { state } = await import('./js/state.js');
         window.__MODE_SOURCE__ = state.files.c_gb;
@@ -248,3 +249,84 @@ test('no-placement Circular and Linear mode round trips remain generatable', asy
     } finally { await page.context().close(); }
   }
 });
+
+// OV-105: annotation sets are kept per mode (PD-OI-086). A target record
+// picked in one mode belongs to that mode's set: the other mode has no such
+// annotation, so its Generate requests and draws nothing and shows no record
+// selector for it, and the first mode draws it again on its record.
+const TWO_RECORDS = 'tests/fixtures/web_batch_two_records.gb';
+const TESTB = '#2 · TESTB · 4,000 bp';
+const regionPanel = page => page.locator('details').filter({ has: page.locator('summary[aria-label="Region Annotations"]') });
+const recordSelect = page => regionPanel(page).getByLabel('Annotation target record');
+const loadInMode = async (page, mode) => {
+  if (mode === 'circular') {
+    await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(TWO_RECORDS);
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60000 }).toBe(2);
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = true; });
+    return;
+  }
+  await page.evaluate(({ text, name }) => {
+    const app = window.__GBDRAW_APP__;
+    app.linearComparisonPlan.mode = 'none';
+    app.setLinearSeqPrimaryFile(0, 'gb', new File([text], name, { type: 'text/plain', lastModified: 1 }));
+  }, { text: readFileSync(TWO_RECORDS, 'utf8'), name: 'web_batch_two_records.gb' });
+};
+const openRegions = page => regionPanel(page).evaluate(details => { details.open = true; });
+const binding = page => page.evaluate(() => (
+  window.__GBDRAW_APP__.annotationSets[0].annotations[0].metadata._gbdraw_web_target_record_key));
+const hasOv105 = page => page.evaluate(() => window.__GBDRAW_APP__.annotationSets.some(set => set.id === 'ov105'
+  || set.annotations.some(annotation => annotation.id === 'ov105')));
+// Generate, then the records the region is drawn on and the region rows of the request.
+const generateRegion = async page => {
+  const outcome = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  return page.evaluate(async outcome => {
+    const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
+    const drawn = window.__GBDRAW_APP__.results.flatMap(result => [
+      ...new DOMParser().parseFromString(result.content || '', 'image/svg+xml')
+        .querySelectorAll('[data-gbdraw-annotation-id="ov105"]')
+    ].map(element => element.getAttribute('data-gbdraw-record-id')));
+    const requested = getCommittedCanonicalRenderRequest()?.diagramOptions.annotations?.sets
+      .flatMap(set => set.annotations.map(annotation => annotation.id)) || [];
+    return { outcome, drawn: [...new Set(drawn)], requested };
+  }, outcome);
+};
+
+for (const [first, second] of [['circular', 'linear'], ['linear', 'circular']]) {
+  test(`OV-105: a target record picked in ${first} waits in ${second} and draws again in ${first}`, async ({ page }) => {
+    test.setTimeout(300000);
+    page.on('dialog', dialog => dialog.accept());
+    await openApp(page);
+    if (first === 'linear') await switchMode(page, 'linear');
+    await loadInMode(page, first);
+    await page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      const item = app.addCoordinateAnnotation(app.addAnnotationSet('ov105'), { start: 100, end: 2000 });
+      item.id = 'ov105';
+      item.mark = 'band';
+    });
+    await openRegions(page);
+    await expect(recordSelect(page).locator('option', { hasText: TESTB })).toHaveCount(1, { timeout: 60000 });
+    await recordSelect(page).selectOption({ label: TESTB });
+    const picked = await binding(page);
+    expect(picked).toMatch(new RegExp(`^\\["${first}",`));
+    const drawnInFirst = { outcome: { status: 'ok' }, drawn: ['TESTB'], requested: ['ov105'] };
+    expect(await generateRegion(page)).toEqual(drawnInFirst);
+
+    // The same file in the other mode: its sets have no ov105 annotation, so
+    // Generate requests and draws nothing and no record selector shows.
+    await switchMode(page, second);
+    await loadInMode(page, second);
+    expect(await hasOv105(page), `${second} has no ov105 annotation`).toBe(false);
+    expect(await generateRegion(page)).toEqual({ outcome: { status: 'ok' }, drawn: [], requested: [] });
+    await openRegions(page);
+    await expect(recordSelect(page)).toHaveCount(0);
+
+    await switchMode(page, first);
+    expect(await hasOv105(page), `${first} keeps its ov105 annotation`).toBe(true);
+    expect(await generateRegion(page)).toEqual(drawnInFirst);
+    await openRegions(page);
+    await expect(recordSelect(page).locator('option:checked')).toHaveText(TESTB);
+    await expect(recordSelect(page)).toBeEnabled();
+    expect(await binding(page)).toBe(picked);
+  });
+}

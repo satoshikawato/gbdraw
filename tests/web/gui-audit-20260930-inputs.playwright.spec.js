@@ -105,7 +105,7 @@ test('Prokka-style GenBank records keep their LOCUS names through Circular Gener
     await app.setLinearComparisonGlobalAction('losat');
     app.setLinearComparisonLosatMode('blastn');
     // Serial LOSAT: the Playwright server does not send COOP/COEP.
-    app.losat.executionMode = 'serial';
+    app.losatExecution.executionMode = 'serial';
   }, [PROKKA_R2C, PROKKA_R3C]);
   await settle(page);
   await generateAndWaitForResult(page);

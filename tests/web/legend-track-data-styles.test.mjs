@@ -106,3 +106,29 @@ test('a new name that the new data names keeps its styles when the rename is ret
   assert.deepEqual(legendEntries.value, [{ caption: 'depth', originalCaption: 'depth' }]);
   assert.deepEqual(legendColorOverrides, { Coverage: '#7b2cbf' });
 });
+
+// OV-120: a renamed row a Generate hid (Show Depth off) waits in the drawing;
+// removing its data retires the waiting rename and its styles like a shown one.
+test('a data change retires a waiting Legend rename of a caption it stops naming (OV-120)', () => {
+  const named = new Set(['depth', 'Region X']);
+  const legendColorOverrides = { Coverage: '#7b2cbf', 'Region Y': '#111111' };
+  const legendStrokeOverrides = { Coverage: { strokeWidth: 2 } };
+  const dormantLegendEntries = {
+    value: [
+      { caption: 'Coverage', originalCaption: 'depth', color: '#7b2cbf' },
+      { caption: 'Region Y', originalCaption: 'Region X', color: '#111111' }
+    ]
+  };
+  const retire = buildLegendStyleRetirement({
+    legendColorOverrides,
+    legendStrokeOverrides,
+    legendEntries: { value: [] },
+    dormantLegendEntries,
+    projectLegendEntries: () => assert.fail('no shown rename to retire'),
+    namedCaptions: () => new Set(named)
+  });
+  retire(() => named.delete('depth'));
+  assert.deepEqual(dormantLegendEntries.value, [{ caption: 'Region Y', originalCaption: 'Region X', color: '#111111' }]);
+  assert.deepEqual(legendColorOverrides, { 'Region Y': '#111111' });
+  assert.deepEqual(legendStrokeOverrides, {});
+});

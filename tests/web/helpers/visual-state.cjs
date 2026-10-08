@@ -84,7 +84,7 @@ const label = async (page, text) => {
   // and writes the text only after the choice (UI-02, shape (b)).
   const notShown = page.getByRole('heading', { name: 'Label Not Shown', exact: true });
   const written = async () => Object.values(await page.evaluate(async () =>
-    (await import('./js/state.js')).state.featureOverrides)).map((row) => row.labelText).includes(text);
+    (await import('./js/state.js')).state.activeDrawing().featureOverrides)).map((row) => row.labelText).includes(text);
   await expect.poll(async () => (await notShown.isVisible()) || (await written())).toBe(true);
   if (await notShown.isVisible()) {
     await page.getByRole('button', { name: /Show this label/ }).click();

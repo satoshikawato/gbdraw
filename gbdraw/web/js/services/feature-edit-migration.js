@@ -1,19 +1,36 @@
 // @ts-check
-/** @import { FeatureOverrideDraft, FeatureOverrideDraftRow, FeatureRequestRecord } from './feature-placement.js' */
+/** @import { FeatureOverrideDraft, FeatureOverrideDraftRow, FeaturePlacementDraft, FeatureRequestRecord } from './feature-placement.js' */
 import {
+  canonicalFeaturePlacements,
   featureIdentityKey,
-  featureIdentityKeyOf,
   normalizeFeatureOverrideLabelText,
-  parseFeatureIdentityKey,
   recordKeyBelongsToRequest
 } from './feature-placement.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 
 // Session 44 and older kept per-feature edits in four maps keyed by rendered
-// SVG ID. Session 45 keys them by original-source feature identity
+// SVG ID. Session 46 keys them by original-source feature identity
 // (`features.featureOverrides`, design Q4 4.3). This reader maps each old key
 // through the Session's saved feature catalog once, then the current model
 // applies. Each migrated row names the mode of the Session's diagram, whose
-// records the catalog names (R2).
+// records the catalog names (R2): the Session 46 split (mode-scoped-migration.js)
+// moves it into that mode's drawing and drops the mode. The Python twins of
+// these migrations share their vectors, so the rows keep that shape.
+
+// A migrated row's key: [scope, recordKey, biologicalFeatureId].
+/**
+ * @param {unknown} scope
+ * @param {string} recordKey
+ * @param {string} biologicalFeatureId
+ * @returns {string}
+ */
+const scopedIdentityKey = (scope, recordKey, biologicalFeatureId) => (
+  (scope === 'circular' || scope === 'linear') && featureIdentityKey(recordKey, biologicalFeatureId)
+    ? JSON.stringify([scope, recordKey, biologicalFeatureId])
+    : ''
+);
+/** @param {Record<string, any>} row */
+const scopedIdentityKeyOf = (row) => scopedIdentityKey(row?.scope, row?.recordKey, row?.biologicalFeatureId);
 export const RENDERED_ID_FEATURE_EDIT_FIELDS = Object.freeze([
   'featureVisibilityOverrides',
   'labelVisibilityOverrides',
@@ -79,7 +96,7 @@ const catalogIndex = (catalog, mode) => {
   (isObject(catalog) && Array.isArray(catalog.items) ? catalog.items : []).forEach((item) => {
     const recordKeys = Array.isArray(item?.recordKeys) ? item.recordKeys.map(text) : [];
     (Array.isArray(item?.features) ? item.features : []).forEach((feature) => {
-      const key = featureIdentityKey(mode, text(feature?.recordKey), text(feature?.biologicalFeatureId));
+      const key = scopedIdentityKey(mode, text(feature?.recordKey), text(feature?.biologicalFeatureId));
       const svgId = text(feature?.svgId).replace(RENDERED_PART_SUFFIX, '');
       if (!key || !svgId) return;
       if (!renderedById.has(svgId)) renderedById.set(svgId, new Set());
@@ -88,7 +105,7 @@ const catalogIndex = (catalog, mode) => {
     (Array.isArray(item?.biologicalFeatures) ? item.biologicalFeatures : []).forEach((feature) => {
       const recordKey = text(feature?.recordKey);
       const biologicalFeatureId = text(feature?.biologicalFeatureId);
-      const key = featureIdentityKey(mode, recordKey, biologicalFeatureId);
+      const key = scopedIdentityKey(mode, recordKey, biologicalFeatureId);
       if (!key) return;
       biological.push({
         key,
@@ -181,7 +198,7 @@ const legacyIndex = ({ features = [], biologicalFeatures = [], records = [], mod
     if (!drawnHash || !recordKey) return;
     const duplicated = (hashCounts.get(JSON.stringify([recordKey, entry.sourceHash])) || 0) > 1;
     if (duplicated && entry.sourceIndex === null) return;
-    const key = featureIdentityKey(mode, recordKey, duplicated ? `${entry.sourceHash}~${entry.sourceIndex}` : entry.sourceHash);
+    const key = scopedIdentityKey(mode, recordKey, duplicated ? `${entry.sourceHash}~${entry.sourceIndex}` : entry.sourceHash);
     const recordOrdinal = ordinalOf(entry.input, entry.recordIndex);
     const once = JSON.stringify([key, drawnHash, recordOrdinal]);
     if (!key || seen.has(once)) return;
@@ -207,7 +224,7 @@ const resolveOldKey = (renderedId, index) => {
   return candidates.length === 1 ? [candidates[0].key] : [];
 };
 
-// The identities a Session before 45 reached with the `hash` row it sent for
+// The identities a Session before 46 reached with the `hash` row it sent for
 // a Feature visibility edit: every feature drawn with, or whose source has,
 // that hash (each copy of a duplicated record, each feature at the same
 // coordinates). Owner decision Q1 = A keeps the edit on the one it named.
@@ -237,7 +254,7 @@ export const hasRenderedIdFeatureEdits = (features) => isObject(features)
   && RENDERED_ID_FEATURE_EDIT_FIELDS.some((field) => isObject(features[field]) && Object.keys(features[field]).length > 0);
 
 /**
- * Maps the rendered-ID edit maps of a Session older than 45 to draft rows
+ * Maps the rendered-ID edit maps of a Session older than 46 to draft rows
  * keyed by source identity in the mode of its diagram (`mode`). `catalog` is
  * the Session's saved feature catalog (schema 3, 4, or 5); a Session without
  * one gives `legacy`: its request records and source features read again
@@ -268,10 +285,12 @@ export const migrateRenderedIdFeatureEdits = ({ features, mode, catalog = null, 
   const index = catalog ? catalogIndex(catalog, mode) : legacyIndex({ ...legacy, mode });
   const rowFor = (key) => {
     if (!rows[key]) {
-      // `key` comes from `featureIdentityKey` through the index, so `parseFeatureIdentityKey`
-      // reads it back whole (scope, recordKey, biologicalFeatureId).
+      // `key` comes from `scopedIdentityKey` through the index.
+      const [scope, recordKey, biologicalFeatureId] = JSON.parse(key);
       rows[key] = /** @type {FeatureOverrideDraftRow} */ ({
-        ...parseFeatureIdentityKey(key),
+        scope,
+        recordKey,
+        biologicalFeatureId,
         featureVisibility: null,
         labelVisibility: null,
         labelText: null,
@@ -326,7 +345,7 @@ export const migrateRenderedIdFeatureEdits = ({ features, mode, catalog = null, 
 };
 
 /**
- * The Session 45 `features` of an older Session's `features`: the edit maps
+ * The Session 46 `features` of an older Session's `features`: the edit maps
  * become `featureOverrides`. When a label map is migrated, the saved label
  * table is cleared: it was the copy of those maps built at the last Generate
  * (the same invariant the editor keeps when label edits change).
@@ -390,7 +409,7 @@ const boundRecordKey = (selector, { recordKeys, recordIds }) => {
 };
 
 /**
- * R-7 (Owner decision 2026-10-05): a Session before 45 named a selected
+ * R-7 (Owner decision 2026-10-05): a Session before 46 named a selected
  * feature in an annotation by `hash=<hash>` (a featureSpan target), which the
  * renderer matches in the drawn record, and a hand-written target looks the
  * same. Load moves such a target to the feature's source identity, in the mode
@@ -422,7 +441,7 @@ export const migrateSessionAnnotationTargets = ({ annotationSets, mode, catalog 
       || !request || drawnTransformed(request)) return null;
     const migrated = { kind: 'featureIdentity', scope: mode, ...matches[0],
       envelope: target.envelope, circularPath: target.circularPath };
-    return featureIdentityKeyOf(migrated) ? migrated : null;
+    return scopedIdentityKeyOf(migrated) ? migrated : null;
   };
   const migratedSets = (Array.isArray(annotationSets) ? annotationSets : []).map((set) => (
     !Array.isArray(set?.annotations) ? set : {
@@ -441,7 +460,7 @@ export const migrateSessionAnnotationTargets = ({ annotationSets, mode, catalog 
 const LANE_MODES = new Map([['outward', 'circular'], ['inward', 'circular'], ['above', 'linear'], ['below', 'linear']]);
 
 /**
- * The Session 45 Feature placement drafts of a Session 41-44 draft keyed by
+ * The mode-scoped Feature placement drafts of a Session 41-44 draft keyed by
  * [recordKey, biologicalFeatureId]. Such a row reached every request with its
  * record key, so a Main row is kept for both modes and a lane row for the mode
  * of its side. A row whose key does not encode it is kept as is, and the draft
@@ -461,8 +480,26 @@ export const migrateSessionFeaturePlacements = (placements) => {
     if (modes.length === 0) migrated.push([key, row]);
     modes.forEach((scope) => {
       const scoped = { scope, ...row };
-      migrated.push([featureIdentityKeyOf(scoped) || key, scoped]);
+      migrated.push([scopedIdentityKeyOf(scoped) || key, scoped]);
     });
   });
   return Object.fromEntries(migrated);
+};
+
+// A Session 41-44 draft's placement rows as `migrateSessionFeaturePlacements`
+// names their mode (`[scope, recordKey, biologicalFeatureId]`); each is checked
+// as a row of its mode. The Session 46 split moves each row into its mode's
+// drawing.
+/** @param {unknown} placements */
+export const validateScopedFeaturePlacements = (placements) => {
+  if (!isObject(placements)) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
+  for (const [key, row] of Object.entries(/** @type {Record<string, any>} */ (placements))) {
+    const { scope, ...rest } = isObject(row) ? row : {};
+    if (!['circular', 'linear'].includes(scope) || key !== scopedIdentityKeyOf(row)) {
+      throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
+    }
+    canonicalFeaturePlacements(/** @type {FeaturePlacementDraft} */ ({
+      [featureIdentityKey(rest.recordKey, rest.biologicalFeatureId)]: rest
+    }), scope);
+  }
 };

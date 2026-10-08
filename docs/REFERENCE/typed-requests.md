@@ -55,7 +55,7 @@ Each plan exposes `preflight_outputs()`. A single Circular or Linear plan valida
 
 ## Output rules
 
-`RenderOutputRequest.output_prefix` is one filename component, not a path. It rejects POSIX and Windows separators, `.` and `..`, ASCII control characters, and Windows-reserved device, stream, and wildcard names. Put directories in `output_directory`. Dots inside a valid prefix are preserved.
+`RenderOutputRequest.output_prefix` is one filename component, not a path. It rejects POSIX and Windows separators, `.` and `..`, ASCII control characters, and Windows-reserved device, stream, and wildcard names. Put directories in `output_directory`. Dots inside a valid prefix are preserved. It is at most 200 bytes in UTF-8. A rejected prefix raises `INPUT_INVALID` with `field: output_prefix` and reason `REQUIRED`, `FILENAME` or `FILENAME_LENGTH`. The web app sends the typed **Output Prefix** as typed; a prefix it derives from a record ID replaces the characters a browser replaces in a download name (`"~*/:<>?\|` and control characters) with `_`, drops leading and trailing dots and spaces, and puts `_` before a Windows device name, so a Result is saved under its own name.
 
 A render always writes the base `.svg` plus requested additional formats. Existing regular files are replaceable only with `overwrite=True`; directories, special files, dangling symlinks, invalid parents, and target collisions are errors. Circular batches require unique resolved targets.
 
@@ -137,7 +137,7 @@ Materialized paths expire when the materialization context closes. `session_to_r
 Session conversion rejects values from the wrong mode. For example, a Circular
 request containing Linear track values raises `SessionConversionError`.
 
-A Session 45 saved by the Web app can hold a Result set of each mode, the second
+A Session 46 saved by the Web app can hold a Result set of each mode, the second
 in `otherModeResult`. `SessionDocument.drawings` names the sets by mode
 (`("circular", "linear")`, the top-level set first), and
 `SessionDocument.drawing("linear")` returns the document with that set at the

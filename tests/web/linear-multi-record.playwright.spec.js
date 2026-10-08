@@ -401,7 +401,7 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
     expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle())).toMatchObject({ status: 'saved' });
     const savedPath = await (await download).path();
     const saved = JSON.parse(gunzipSync(readFileSync(savedPath)));
-    expect(saved.config.form.keep_definition_left_aligned).toBe(locked);
+    expect(saved.modes.linear.config.form.keep_definition_left_aligned).toBe(locked);
     expect(saved.renderRequest).toEqual(requestBefore);
     await page.reload();
     await waitForAppShell(page);
@@ -419,7 +419,7 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
     ])).toBe(locked);
     for (const malformed of [null, 'false', 0, {}]) {
       const invalid = structuredClone(saved);
-      invalid.config.form.keep_definition_left_aligned = malformed;
+      invalid.modes.linear.config.form.keep_definition_left_aligned = malformed;
       const stable = await measureDefinitionColumns(page);
       const runs = await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length);
       const outcome = await evaluateWithRetainedPromise(page, async raw => {
@@ -466,7 +466,7 @@ test('Linear Lock Definition Column measures single, shared, and mixed rows afte
     Object.assign(app.adv, { linear_show_replicon: true, linear_accession_visibility: 'hide', linear_length_visibility: 'hide' });
     await app.setLinearRecordLayoutEnabled(true);
     const { state } = await import('/gbdraw/web/js/state.js');
-    state.unmanagedConfigOverrides['canvas.linear.definition_gap'] = 37;
+    state.activeDrawing().unmanagedConfigOverrides['canvas.linear.definition_gap'] = 37;
     state.linearRecordTranslations.value = app.linearSeqs.map((seq, index) => ({
       recordKey: seq.uid, x: [-85, 40, -35, 75][index], y: 0
     }));
@@ -1515,7 +1515,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
   expect(session.webFiles.bindings.linearSeqs[0].region_record_id).toBe('AutomaticA');
   expect(session.renderRequest.records.map((record) => record.cardinality)).toEqual(['exactly_one', 'exactly_one']);
   expect(session.renderRequest.records.map((record) => record.selector)).toEqual([{ kind: 'recordId', value: 'AutomaticA' }, { kind: 'recordId', value: 'AutomaticB' }]);
-  expect(session.config.linearRecordLayout.rows.map((entry) => entry.row)).toEqual([1, 1]);
+  expect(session.modes.linear.config.linearRecordLayout.rows.map((entry) => entry.row)).toEqual([1, 1]);
   expect(new Set(
     session.renderRequest.records.map((record) => record.source.resourceId)
   ).size).toBe(1);
@@ -1805,7 +1805,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
     app.setLinearComparisonLosatMode('blastp');
     app.setLinearComparisonLosatpMode('collinear');
     app.setLinearComparisonLosatMode('blastn');
-    app.losat.executionMode = 'serial';
+    app.losatExecution.executionMode = 'serial';
     const [first, second, third] = app.linearSeqs;
     const blastRow = 'MixedRecA\tMixedRecB\t100\t60\t0\t0\t1\t60\t1\t60\t1e-30\t150\n';
     app.linearComparisonPlan.mode = 'adjacent';
@@ -2917,7 +2917,7 @@ test('protein raw cache survives cancellation and derived options preserve searc
     await app.setLinearComparisonGlobalAction('losat');
     app.setLinearComparisonLosatMode('blastp');
     app.setLinearComparisonLosatpMode('collinear');
-    app.losat.executionMode = 'serial';
+    app.losatExecution.executionMode = 'serial';
     app.losat.blastp.collinearInferOrthogroups = true;
     for (const field of [
       'orthogroupMembershipMode',
@@ -3180,7 +3180,7 @@ const uploadCompleteRecordSources = async (page, contents =
       show_labels_linear: 'none', legend: 'bottom'
     });
     Object.assign(app.adv, { min_bitscore: 0, evalue: 1, identity: 0, alignment_length: 0 });
-    app.losat.executionMode = 'serial';
+    app.losatExecution.executionMode = 'serial';
     await app.setLinearRecordLayoutEnabled(true);
     app.linearSeqs.forEach((seq, index) => app.setLinearRecordRow(seq.uid, index < 2 ? 1 : 2));
     await app.setLinearComparisonGlobalAction('losat');
@@ -3726,10 +3726,13 @@ test('@comparison-contract multi-record defaults render a shared Circular canvas
   test.setTimeout(300000);
   await installDiagramRequestObserver(page);
   await openApp(page);
-  expect(await page.evaluate(() => ({
-    circular: window.__GBDRAW_APP__.form.multi_record_canvas,
-    linear: window.__GBDRAW_APP__.linearRecordLayoutEnabled
-  }))).toEqual({ circular: true, linear: true });
+  expect(await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return {
+      circular: state.drawings.circular.form.multi_record_canvas,
+      linear: state.drawings.linear.linearRecordLayoutEnabled.value
+    };
+  })).toEqual({ circular: true, linear: true });
   await page.evaluate((content) => {
     const app = window.__GBDRAW_APP__;
     app.files.c_gb = new File([content], 'shared.gb', { type: 'text/plain', lastModified: 1 });
@@ -3745,9 +3748,12 @@ test('@comparison-contract multi-record defaults render a shared Circular canvas
   await uploadCompleteRecordSources(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearRecordRows.map(({ row }) => row)))
     .toEqual([1, 1, 2, 2, 2]);
+  // Each mode has its own drawing (PD-OI-086): the Circular opt-out is the
+  // Circular drawing's, set while Linear is shown.
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
-    app.form.multi_record_canvas = false;
+    const { state } = await import('./js/state.js');
+    state.drawings.circular.form.multi_record_canvas = false;
     await app.setLinearRecordLayoutEnabled(false);
     app.sessionTitle = 'explicit-layout-opt-outs';
   });
@@ -3759,16 +3765,22 @@ test('@comparison-contract multi-record defaults render a shared Circular canvas
   const loaded = page.waitForEvent('dialog');
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
   await (await loaded).accept();
-  expect(await page.evaluate(() => ({
-    circular: window.__GBDRAW_APP__.form.multi_record_canvas,
-    linear: window.__GBDRAW_APP__.linearRecordLayoutEnabled
-  }))).toEqual({ circular: false, linear: false });
+  expect(await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return {
+      circular: state.drawings.circular.form.multi_record_canvas,
+      linear: state.drawings.linear.linearRecordLayoutEnabled.value
+    };
+  })).toEqual({ circular: false, linear: false });
   page.once('dialog', (dialog) => dialog.accept());
   await page.evaluate(() => window.__GBDRAW_APP__.resetSettings());
-  expect(await page.evaluate(() => ({
-    circular: window.__GBDRAW_APP__.form.multi_record_canvas,
-    linear: window.__GBDRAW_APP__.linearRecordLayoutEnabled
-  }))).toEqual({ circular: true, linear: true });
+  expect(await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return {
+      circular: state.drawings.circular.form.multi_record_canvas,
+      linear: state.drawings.linear.linearRecordLayoutEnabled.value
+    };
+  })).toEqual({ circular: true, linear: true });
 });
 
 test('@comparison-contract one uploaded source stays one file card through record moves, replacement, and removal', async ({ page }, testInfo) => {
@@ -3840,7 +3852,7 @@ test('@comparison-contract one uploaded source stays one file card through recor
 
 test('@comparison-contract LOSAT Settings preserve execution controls and unbounded members through Save and Load', async ({ page }, testInfo) => {
   await openApp(page);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.losat.executionMode)).toBe('threaded');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.losatExecution.executionMode)).toBe('threaded');
   await uploadCompleteRecordSources(page);
   const settings = page.locator('[data-linear-comparison-disclosure="settings"]');
   await expect(settings).toHaveAttribute('open', '');
@@ -3886,7 +3898,7 @@ test('@comparison-contract LOSAT Settings preserve execution controls and unboun
   }
   page.once('dialog', (dialog) => dialog.accept());
   await page.evaluate(() => window.__GBDRAW_APP__.resetSettings());
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.losat.executionMode)).toBe('threaded');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.losatExecution.executionMode)).toBe('threaded');
 });
 
 test('@comparison-contract record rotation adds zero LOSATP source jobs and survives reverse complement and fresh Load', async ({ page }) => {

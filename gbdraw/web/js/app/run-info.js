@@ -1,13 +1,17 @@
 // @ts-check
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
-  buildCircularTrackSlotSpec,
-  parseCircularTrackSlotSpec
+  buildCircularTrackSlotSpec
 } from './circular-track-slots.js';
 import {
-  buildLinearTrackSlotSpec,
-  parseLinearTrackSlotSpec
+  parseCircularTrackSlotSpec
+} from '../services/circular-track-slot-model.js';
+import {
+  buildLinearTrackSlotSpec
 } from './linear-track-slots.js';
+import {
+  parseLinearTrackSlotSpec
+} from '../services/linear-track-slot-model.js';
 import { countGenBankRecords } from '../services/genbank-header.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import { base64ToBytes } from '../services/byte-utils.js';

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const repoRoot = process.cwd();
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-track-slot-validation-'));
@@ -29,7 +30,8 @@ await cp(
 );
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 // The track-slot leaves the slot editors import.
-for (const leaf of ['depth-track-state.js', 'track-slot-display.js', 'track-slot-validation.js']) {
+for (const leaf of ['depth-track-state.js', 'track-slot-display.js', 'track-slot-validation.js',
+  'circular-track-slot-model.js', 'linear-track-slot-model.js']) {
   await cp(
     join(repoRoot, 'gbdraw', 'web', 'js', 'services', leaf),
     join(tempRoot, 'services', leaf)
@@ -45,16 +47,23 @@ const {
   pathToFileURL(join(tempRoot, 'services', 'track-slot-validation.js'))
 );
 const {
-  buildLinearTrackSlotPayload,
   buildLinearTrackSlotSpec,
-  normalizeLinearTrackSlots,
-  parseLinearTrackSlotSpec,
   createLinearTrackSlotEditor
 } = await import(
   pathToFileURL(join(tempRoot, 'app', 'linear-track-slots.js'))
 );
-const { buildCircularTrackSlotPayload, buildCircularTrackSlotSpec, normalizeCircularTrackSlot, parseCircularTrackSlotSpec } = await import(
+const {
+  buildLinearTrackSlotPayload,
+  normalizeLinearTrackSlots,
+  parseLinearTrackSlotSpec
+} = await import(
+  pathToFileURL(join(tempRoot, 'services', 'linear-track-slot-model.js'))
+);
+const { buildCircularTrackSlotSpec } = await import(
   pathToFileURL(join(tempRoot, 'app', 'circular-track-slots.js'))
+);
+const { buildCircularTrackSlotPayload, normalizeCircularTrackSlot, parseCircularTrackSlotSpec } = await import(
+  pathToFileURL(join(tempRoot, 'services', 'circular-track-slot-model.js'))
 );
 
 const feature = (id = 'features', overrides = {}) => ({
@@ -258,7 +267,7 @@ test('Linear editor live validation uses visible feature-underlay intent', () =>
     files: { linearSeqs: [] },
     annotationSets: []
   };
-  const editor = createLinearTrackSlotEditor({ state });
+  const editor = createLinearTrackSlotEditor({ state: withDrawings(state) });
   assert.match(
     editor.linearTrackGlobalIssues().join(' '),
     /exactly one enabled Linear Features row/
@@ -594,12 +603,12 @@ test('reports an enabled Depth row on a series without a source in both modes', 
 test('Linear editor shows the row issue after a File clear keeps the series', () => {
   const slots = [feature(), depth('depth_1', 0, { custom: 'manual' }), depth('depth_2', 1)];
   const editor = createLinearTrackSlotEditor({
-    state: {
+    state: withDrawings({
       form: { linear_track_layout: 'middle', show_depth: true },
       adv: { linear_track_slots: slots, linear_track_slots_axis_index: 0, nt: 'GC', depth_tracks: [] },
       linearSeqs: [{ depth: [null, { name: 'b.depth.tsv' }] }],
       annotationSets: []
-    }
+    })
   });
   assert.equal(editor.linearTrackSlotIssue(slots[1], 1), "Linear Depth track 'depth_1' has no logical Depth source.");
   assert.equal(editor.linearTrackSlotIssue(slots[2], 2), '');
@@ -834,7 +843,7 @@ test('omitted pixel fields remain auto and disabled valid drafts retain geometry
 test('invalid depth height remains editable without overwriting its last valid config', () => {
   const slot = depth('depth', 0, { height: '10px' });
   const state = { form: { linear_track_layout: 'middle' }, adv: { linear_track_slots: [slot], depth_tracks: [{ height: 10 }] }, files: { linearSeqs: [] }, annotationSets: [] };
-  const editor = createLinearTrackSlotEditor({ state });
+  const editor = createLinearTrackSlotEditor({ state: withDrawings(state) });
   editor.setLinearTrackSlotHeight(slot, 'px');
   assert.equal(slot.height, 'px');
   assert.equal(editor.linearTrackSlotHeightValue(slot), 'px');

@@ -55,10 +55,6 @@ export const ARTIFACT_SLOT_KEYS = Object.freeze(Object.keys(ARTIFACT_SLOT_EMPTY)
  *   (`originalLegendOrder`). The Legend owner keeps each Result's inventory (OV-47), so an install
  *   does not write it: the mode transition hands it to the Legend owner, which adopts it when the
  *   Result is displayed.
- * @property {readonly Record<string, any>[] | null} legendRows The Legend rows shown with the selected
- *   Result (`legendEntries`), or null when they were never shown (a Result loaded from a Session's
- *   `otherModeResult`). The Legend edits stay shared between the modes until per-drawing Legend
- *   edits: a switch rebuilds the arriving Result's rows from these and the shared edits made since.
  * @property {any} matchSequenceOwner The match-sequence registry's trusted owner, or null.
  * @property {Record<string, any> | null} runtimeState The runtime owner's state (committed Session, CLI helper files).
  * @property {Readonly<Record<string, any>> | null} transportIdentity The History transport identity of the artifact.
@@ -67,13 +63,13 @@ export const ARTIFACT_SLOT_KEYS = Object.freeze(Object.keys(ARTIFACT_SLOT_EMPTY)
 
 /**
  * @param {{ mode: 'circular' | 'linear', values: Record<string, any>, legendInventory?: readonly string[],
- *   legendRows?: readonly Record<string, any>[] | null, matchSequenceOwner?: any,
+ *   matchSequenceOwner?: any,
  *   runtimeState?: Record<string, any> | null, transportIdentity?: Readonly<Record<string, any>> | null,
  *   retainedBytes?: number }} slot
  * @returns {Readonly<ArtifactSlot>}
  */
 export const createArtifactSlot = ({
-  mode, values, legendInventory = [], legendRows = null, matchSequenceOwner = null, runtimeState = null,
+  mode, values, legendInventory = [], matchSequenceOwner = null, runtimeState = null,
   transportIdentity = null, retainedBytes = 0
 }) => {
   const unknown = Object.keys(values).filter((key) => !ARTIFACT_SLOT_KEYS.includes(key));
@@ -85,7 +81,6 @@ export const createArtifactSlot = ({
       key, Object.hasOwn(values, key) ? values[key] : ARTIFACT_SLOT_EMPTY[key](slotMode, null)
     ]))),
     legendInventory: Object.freeze([...legendInventory]),
-    legendRows: legendRows ? Object.freeze([...legendRows]) : null,
     matchSequenceOwner,
     runtimeState,
     transportIdentity,

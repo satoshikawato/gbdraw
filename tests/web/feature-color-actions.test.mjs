@@ -4,6 +4,7 @@ import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const repoRoot = process.cwd();
 const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js');
@@ -124,7 +125,7 @@ const { createRulePreparation, firstMatchingRule, runWhenPrepared } = await impo
 const runWithRuleMatchesOf = (preparation, state) => (rules, commit) => runWhenPrepared(state, () => [preparation.prepare(rules)], commit);
 const preparationState = { extractedFeatures, biologicalFeatures, manualSpecificRules };
 const actions = createFeatureColorActions({
-  state: {
+  state: withDrawings({
     results: ref([]),
     selectedResultIndex: ref(0),
     appliedPaletteColors: ref({ CDS: '#cccccc' }),
@@ -147,17 +148,17 @@ const actions = createFeatureColorActions({
     skipCaptureBaseConfig: ref(false),
     skipExtractOnSvgChange: ref(false),
     addedLegendCaptions: ref(new Set())
-  },
+  }),
   nextTick: async () => {},
   onLegendGeometryChanged: () => {
     legendGeometryChangedCount += 1;
   },
   extractLegendEntries: () => {},
   ruleActions: {
-    runWithRuleMatches: runWithRuleMatchesOf(createRulePreparation({ state: preparationState, evaluate: evaluatePythonRules }), preparationState),
+    runWithRuleMatches: runWithRuleMatchesOf(createRulePreparation({ state: withDrawings(preparationState), evaluate: evaluatePythonRules }), preparationState),
     commitSpecificRules: async (rules, _label, {afterCommit = () => {}, previousLegendIntents = []} = {}) => {
       committedLegendIntents.push(previousLegendIntents);
-      const preparation = createRulePreparation({state:{extractedFeatures,biologicalFeatures,manualSpecificRules},evaluate:evaluatePythonRules});
+      const preparation = createRulePreparation({state:withDrawings({extractedFeatures,biologicalFeatures,manualSpecificRules}),evaluate:evaluatePythonRules});
       const candidate = await preparation.prepareCandidate(rules);
       if (!candidate) return false;
       const drawn = new Set(extractedFeatures.value.map(feature => firstMatchingRule(feature, candidate.rules)));
@@ -723,11 +724,11 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
   const resetClicked = ref(null);
   const resetFeatures = ref([trnaA, trnaB, rrna]);
   const resetPreparation = createRulePreparation({
-    state: { extractedFeatures: resetFeatures, biologicalFeatures: resetFeatures, manualSpecificRules: resetRules },
+    state: withDrawings({ extractedFeatures: resetFeatures, biologicalFeatures: resetFeatures, manualSpecificRules: resetRules }),
     evaluate: evaluatePythonRules
   });
   const resetActions = createFeatureColorActions({
-    state: {
+    state: withDrawings({
       results: ref([]),
       selectedResultIndex: ref(0),
       appliedPaletteColors: ref({ tRNA: '#e8b441', rRNA: '#71ee7d' }),
@@ -750,7 +751,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
       skipCaptureBaseConfig: ref(false),
       skipExtractOnSvgChange: ref(false),
       addedLegendCaptions: ref(new Set())
-    },
+    }),
     nextTick: async () => {},
     ruleActions: {
       runWithRuleMatches: runWithRuleMatchesOf(resetPreparation, { extractedFeatures: resetFeatures, biologicalFeatures: resetFeatures, manualSpecificRules: resetRules }),
@@ -813,7 +814,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
     const featureList = ref(features);
     const renameState = { extractedFeatures: featureList, biologicalFeatures: featureList, manualSpecificRules: rules };
     const renameActions = createFeatureColorActions({
-      state: {
+      state: withDrawings({
         results: ref([]), selectedResultIndex: ref(0), appliedPaletteColors: ref({ tRNA: '#e8b441' }),
         manualSpecificRules: rules, extractedFeatures: featureList, biologicalFeatures: featureList,
         featureColorOverrides: {}, svgContainer: ref({ querySelector: (selector) => selector === 'svg' ? svgRoot : null }),
@@ -822,11 +823,11 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
         originalLegendOrder: originalOrder, originalLegendColors: ref({}), originalSvgStroke: ref({ color: null, width: null }),
         featureStrokeOverrides: {}, skipCaptureBaseConfig: ref(false), skipExtractOnSvgChange: ref(false),
         addedLegendCaptions: ref(new Set())
-      },
+      }),
       nextTick: async () => {},
       onLegendGeometryChanged: () => {}, extractLegendEntries: () => {},
       ruleActions: {
-        runWithRuleMatches: runWithRuleMatchesOf(createRulePreparation({ state: renameState, evaluate: evaluatePythonRules }), renameState),
+        runWithRuleMatches: runWithRuleMatchesOf(createRulePreparation({ state: withDrawings(renameState), evaluate: evaluatePythonRules }), renameState),
         commitSpecificRules: async (nextRules) => { committed.push(nextRules.map((rule) => ({ ...rule }))); return true; },
         getEffectiveLegendCaption: (feature) => feature.legendCaption || rules.find((rule) => rule.feat === feature.type)?.cap || feature.type,
         getLegendRowRules: (caption) => legendRowRules(caption, {

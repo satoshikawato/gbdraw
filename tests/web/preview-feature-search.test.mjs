@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const ref = (value) => ({ value });
 const watchers = [];
@@ -85,7 +86,7 @@ const state = {
   featureList: ref({ rows: [feature, hidden] }),
   featureListState: (row) => ({ drawn: row === feature, renderedId: row === feature ? row.svg_id : '' }),
   orthogroups: ref([]),
-  adv: { rich_feature_popup: true },
+  richFeaturePopup: ref(true),
   previewFeatureSearchInput: ref(''),
   previewFeatureSearchQuery: ref(''),
   previewFeatureSearchField: ref('all'),
@@ -103,7 +104,7 @@ const { createPreviewFeatureSearch } = await import(
   '../../gbdraw/web/js/app/feature-search/preview-actions.js'
 );
 const search = createPreviewFeatureSearch({
-  state,
+  state: withDrawings(state),
   watch(source, callback) {
     watchers.push({ source, callback });
   },

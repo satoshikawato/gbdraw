@@ -6,6 +6,7 @@
 // feature with neither, and the edits wait in the draft for Circular.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
+const { gunzipSync } = require('node:zlib');
 const { basename } = require('node:path');
 const { generateAndWaitForResult, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { openFresh, loadSessionFile, settle } = require('./helpers/audit-browser.cjs');
@@ -24,7 +25,7 @@ const committed = (page, id) => page.evaluate(async (featureId) => {
     featurePlacements: request.diagramOptions.featurePlacements,
     featureOverrides: request.diagramOptions.featureOverrides,
     drawn: state.extractedFeatures.value.filter((feature) => feature.biological_feature_id === featureId).length,
-    drafts: [Object.keys(state.featurePlacementOverrides), Object.keys(state.featureOverrides)]
+    drafts: [Object.keys(state.activeDrawing().featurePlacementOverrides), Object.keys(state.activeDrawing().featureOverrides)]
   };
 }, id);
 
@@ -59,7 +60,7 @@ test('a Circular Main placement and Feature visibility edit stay out of Linear r
   });
   await settle(page);
   expect(target.recordKey).toBe('record-1');
-  const key = JSON.stringify(['circular', target.recordKey, target.id]);
+  const key = JSON.stringify([target.recordKey, target.id]);
   const circularRows = {
     featurePlacements: [{ recordKey: target.recordKey, biologicalFeatureId: target.id, placement: { kind: 'main' } }],
     featureOverrides: [{ recordKey: target.recordKey, biologicalFeatureId: target.id,
@@ -81,12 +82,18 @@ test('a Circular Main placement and Feature visibility edit stay out of Linear r
     return [
       feature.scope,
       app.featurePlacementActions.valueFor(feature),
-      getFeatureVisibilityOverride(state.featureOverrides, feature),
+      getFeatureVisibilityOverride(state.activeDrawing().featureOverrides, feature),
       app.featureListState(feature).drawn
     ];
   }, target.id)).toEqual(['linear', 'auto', 'default', true]);
-  // A mode change and the Linear Generate keep the Circular rows (R2).
-  expect(linear.drafts).toEqual([[key], [key]]);
+  // A mode change and the Linear Generate keep the Circular rows in the
+  // Circular drawing (R2, PD-OI-086); the Linear drawing has none.
+  expect(linear.drafts).toEqual([[], []]);
+  expect(await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const drawing = state.drawings.circular;
+    return [Object.keys(drawing.featurePlacementOverrides), Object.keys(drawing.featureOverrides)];
+  })).toEqual([[key], [key]]);
 
   await switchMode(page, 'circular');
   await generateAndWaitForResult(page);
@@ -94,10 +101,10 @@ test('a Circular Main placement and Feature visibility edit stay out of Linear r
   expect(circular).toMatchObject({ mode: 'circular', recordKeys: ['record-1'], ...circularRows, drawn: 0 });
 });
 
-// OV-84 (R2, OIPC-C06): a per-feature stroke is keyed `recordKey\0featureId`,
-// without the mode. A Generate that does not draw the feature, such as one in
-// the other mode, keeps the stroke in the draft and in a saved Session, and the
-// next Generate of the stroke's mode draws it again.
+// OV-84 (R2, OIPC-C06): a per-feature stroke is keyed `recordKey\0featureId`
+// in the drawing of its mode (PR-1). A Generate of the other mode neither draws
+// nor removes it; a saved Session keeps each mode's strokes in its slice, and
+// the next Generate of the stroke's mode draws it again.
 const STROKE_FIXTURE = 'tests/fixtures/forced_label_underlay.gb';
 const STROKE = { strokeColor: '#ff0000', strokeWidth: 3 };
 
@@ -174,28 +181,35 @@ for (const [mode, otherMode] of [['circular', 'linear'], ['linear', 'circular']]
       await switchMode(page, otherMode);
       await loadStrokeInput(page, otherMode);
       await generateAndWaitForResult(page);
-      // The other mode draws the same file under its own record key.
+      // The other mode draws the same file under its own record key, and its
+      // drawing holds no stroke of the first mode.
       expect(await page.evaluate((strokeKey) => window.__GBDRAW_APP__.extractedFeatures
         .some((item) => item.stable_override_key === strokeKey), key)).toBe(false);
-      expect(await strokeOf(page, key)).toEqual({ override: STROKE, drawn: false });
-      // A stroke of each mode: the Session keeps both.
+      expect(await strokeOf(page, key)).toEqual({ override: null, drawn: false });
+      // A stroke of each mode: the Session keeps each in its mode's slice.
       const otherKey = await strokeFirstCds(page);
       await settle(page);
       expect(otherKey).not.toBe(key);
-      expect(await strokesAfterSessionRoundTrip(page, browser, testInfo, [key, otherKey], `${mode}-stroke`))
-        .toEqual({ [key]: STROKE, [otherKey]: STROKE });
+      const bytes = await download(page, 'Save Session', testInfo.outputPath(`${mode}-stroke.gbdraw-session.json`));
+      const saved = JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString('utf8'));
+      expect(saved.modes[mode].editorState.featureStrokes.overrides[key]).toMatchObject(STROKE);
+      expect(saved.modes[otherMode].editorState.featureStrokes.overrides[otherKey]).toMatchObject(STROKE);
+      expect(saved.modes[otherMode].editorState.featureStrokes.overrides[key]).toBeUndefined();
+      expect(await strokesAfterSessionRoundTrip(page, browser, testInfo, [otherKey], `${mode}-stroke-loaded`))
+        .toEqual({ [otherKey]: STROKE });
 
       await switchMode(page, mode);
       await generateAndWaitForResult(page);
       expect(await strokeOf(page, key)).toEqual({ override: STROKE, drawn: true });
-      expect(await strokeOf(page, otherKey)).toEqual({ override: STROKE, drawn: false });
+      expect(await strokeOf(page, otherKey)).toEqual({ override: null, drawn: false });
     });
 }
 
-// A stroke whose feature the replacing file does not have draws nothing and
-// does not fail Generate or Save Session; it waits in the draft and draws again
-// when a file with that feature returns.
-test('a feature stroke on a replaced Circular file stays dormant without failing Generate or Save Session (OV-84)',
+// OV-84 (Owner-delegated 2026-10-07): a source replacement retires the stroke
+// of a feature the new file does not have, as it does the feature's label
+// edits; Generate and Save Session do not fail, and the stroke does not return
+// with the old file.
+test('a feature stroke on a replaced Circular file is retired without failing Generate or Save Session (OV-84)',
   async ({ page, browser }, testInfo) => {
     test.setTimeout(360_000);
     await openFresh(page);
@@ -206,12 +220,12 @@ test('a feature stroke on a replaced Circular file stays dormant without failing
 
     await loadStrokeInput(page, 'circular', LAMBDA);
     await generateAndWaitForResult(page);
-    expect(await strokeOf(page, key)).toEqual({ override: STROKE, drawn: false });
+    expect(await strokeOf(page, key)).toEqual({ override: null, drawn: false });
     expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content.includes('stroke="#ff0000"'))).toBe(false);
     expect(await strokesAfterSessionRoundTrip(page, browser, testInfo, [key], 'replaced-stroke'))
-      .toEqual({ [key]: STROKE });
+      .toEqual({ [key]: null });
 
     await loadStrokeInput(page, 'circular');
     await generateAndWaitForResult(page);
-    expect(await strokeOf(page, key)).toEqual({ override: STROKE, drawn: true });
+    expect(await strokeOf(page, key)).toEqual({ override: null, drawn: false });
   });

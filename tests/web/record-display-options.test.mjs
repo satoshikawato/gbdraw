@@ -14,6 +14,7 @@ import { createDefaultForm, createDefaultAdv } from '../../gbdraw/web/js/service
 import { adoptCurrentSessionResources, createCombinedSessionResourceFileView, createSessionResourceFileView } from '../../gbdraw/web/js/services/session-resource-backing.js';
 import { readFileBytes } from '../../gbdraw/web/js/services/file-content-cache.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const source = {};
 const records = [
@@ -63,20 +64,26 @@ const anchorIntent = {
 };
 
 test('record display drafts use one exact transform and provenance contract', () => {
+  // A drawing's draft: its mode is the drawing's (PR-1).
   const draft = {
-    scope: 'linear', sourceUid: 'card-1', selector: '#1', recordId: 'same',
+    sourceUid: 'card-1', selector: '#1', recordId: 'same',
     topologyOverride: null, startCoordinate: 25, reverseComplementOverride: true,
     anchorIntent
   };
   const drafts = [draft];
   assert.equal(validateRecordDisplayDrafts(drafts), drafts);
   assert.equal(validateAnchorIntent(anchorIntent), anchorIntent);
-  assert.deepEqual(migrateLegacyRecordDisplayDrafts([{
+  // A Session 41-44 draft names its mode until the Session 46 split.
+  const migrated = migrateLegacyRecordDisplayDrafts([{
     scope: 'linear', sourceUid: 'card-1', selector: '#1', recordId: 'same',
     topologyOverride: null, startCoordinate: 25
-  }])[0], { ...draft, reverseComplementOverride: null, anchorIntent: null });
+  }]);
+  assert.deepEqual(migrated[0], { scope: 'linear', ...draft, reverseComplementOverride: null, anchorIntent: null });
+  assert.equal(validateRecordDisplayDrafts(migrated, { scoped: true }), migrated);
+  assert.throws(() => validateRecordDisplayDrafts(migrated));
   for (const invalid of [
     { ...draft, extra: true },
+    { ...draft, scope: 'linear' },
     { ...draft, reverseComplementOverride: 'true' },
     { ...draft, anchorIntent: { ...anchorIntent, schema: 2 } }
   ]) assert.throws(() => validateRecordDisplayDrafts([invalid]));
@@ -178,7 +185,7 @@ const compositeControls = ({ linear = false, discovered = true, createHistory = 
     linearRecordStatusFor: () => linearDiscovery.status, linearRecordErrorFor: () => linearDiscovery.error,
     runUndoable: history.runUndoable, getCommittedRequest, getCommittedSession: () => committed });
   // The composition root's port: the pure check over the record display's binding.
-  const actions = createFeaturePlacementActions({ state, runUndoable: history.runUndoable, getCommittedRequest,
+  const actions = createFeaturePlacementActions({ state: withDrawings(state), runUndoable: history.runUndoable, getCommittedRequest,
     isCurrentFeature: (feature) => isCurrentFeature(feature, controls.sourceBinding()) });
   const feature = { scope: state.mode.value, record_key: 'record-2', biological_feature_id: 'logical-feature' };
   return { state, actions, controls, feature, file, makeFile, linearDiscovery, history,

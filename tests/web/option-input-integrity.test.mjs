@@ -78,8 +78,9 @@ const filesFor = (mode) => (mode === 'circular'
   ? { c_gb: genbank, linearSeqs: [] }
   : { linearSeqs: [{ uid: 'first', gb: genbank, losat_gencode: 1, region_record_id: '', region_start: null, region_end: null, region_reverse: false }] });
 const comparisonPlanSnapshot = { hasComparisonIntent: true, hasLosatIntent: false, edges: [] };
-const project = (mode, adv) => buildCanonicalRenderRequest({
-  state: baseState(mode, adv),
+const project = (mode, adv, state = baseState(mode, adv)) => buildCanonicalRenderRequest({
+  state,
+  drawing: state,
   filesData: filesFor(mode),
   ...(mode === 'linear' ? { comparisonPlanSnapshot } : {})
 }).renderRequest;
@@ -204,10 +205,10 @@ test('comparison thresholds resolve once on the generated domains without rewrit
 test('Generate keeps the numeric draft: no Generate-path draft assignments are added (R7 ratchet)', () => {
   // Generate-path draft assignments in run-analysis.js may only shrink (69 on
   // dev before X-02). Lower the baseline when one is removed.
-  const BASELINE = 46;
+  const BASELINE = 44;
   const source = readFileSync(new URL('../../gbdraw/web/js/app/run-analysis.js', import.meta.url), 'utf8');
   const assignments = source.split('\n').filter((line) => (
-    /^\s*(adv|form|circularConservation|losat(\.[a-z]+)?)\.[a-zA-Z_]+(\[[^\]]*\])?\s*=[^=]/.test(line)
+    /^\s*(drawing\.)?(adv|form|circularConservation|losat(\.[a-z]+)?)\.[a-zA-Z_]+(\[[^\]]*\])?\s*=[^=]/.test(line)
     || /(adv|form|circularConservation)\.[a-z_]+\.splice\(/.test(line)
   ));
   assert.equal(assignments.length, BASELINE, assignments.join('\n'));

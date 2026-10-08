@@ -32,6 +32,11 @@ await writeFile(
   'utf8'
 );
 await writeFile(
+  join(tempRoot, 'utils', 'named-colors.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'named-colors.js'), 'utf8'),
+  'utf8'
+);
+await writeFile(
   join(tempDir, 'specific-color-rules.js'),
   await readFile(join(sourceDir, 'specific-color-rules.js'), 'utf8'),
   'utf8'
@@ -253,7 +258,8 @@ for (const [name, parse, text, read, expected, repairs, valid] of [
   ['Default colors', parseColorTable,
     'feature_type\tcolor\nCDS\t#54bcf8\ntRNA\tred\t\nrRNA\n\tblue\n',
     (parsed) => parsed.colors,
-    { CDS: '#54bcf8', tRNA: 'red' },
+    // A color name reads as its CSS hex, as in the browser (OV-160).
+    { CDS: '#54bcf8', tRNA: '#FF0000' },
     [{ row: 3, repair: 'joined' }, { row: 4, repair: 'dropped' }, { row: 5, repair: 'dropped' }], 'CDS\t#54bcf8']
 ]) {
   const parsed = parse(text, { legacyRows: true });

@@ -1,0 +1,321 @@
+{
+  "schemaVersion": 1,
+  "description": "Option-value steps of migratePersistedWebOptionValues (services/config.js), Sessions 27-39; Python twin migrate_persisted_web_option_values.",
+  "cases": [
+    {
+      "name": "retired Linear track layouts become above and below",
+      "input": {
+        "config": {
+          "form": {
+            "linear_track_layout": "spreadout",
+            "prefix": "p"
+          }
+        }
+      },
+      "expected": {
+        "config": {
+          "form": {
+            "linear_track_layout": "above",
+            "prefix": "p"
+          }
+        }
+      }
+    },
+    {
+      "name": "tuckin becomes below",
+      "input": {
+        "config": {
+          "form": {
+            "linear_track_layout": "tuckin"
+          }
+        }
+      },
+      "expected": {
+        "config": {
+          "form": {
+            "linear_track_layout": "below"
+          }
+        }
+      }
+    },
+    {
+      "name": "a retired value is read trimmed and case-blind",
+      "input": {
+        "config": {
+          "form": {
+            "linear_track_layout": " SpreadOut "
+          },
+          "adv": {
+            "label_placement": " On_Feature "
+          }
+        }
+      },
+      "expected": {
+        "config": {
+          "form": {
+            "linear_track_layout": "above"
+          },
+          "adv": {
+            "label_placement": "above_feature"
+          }
+        }
+      }
+    },
+    {
+      "name": "on_feature becomes above_feature and sqrt becomes auto",
+      "input": {
+        "config": {
+          "adv": {
+            "label_placement": "on_feature",
+            "multi_record_size_mode": "sqrt",
+            "nt": "GC"
+          }
+        }
+      },
+      "expected": {
+        "config": {
+          "adv": {
+            "label_placement": "above_feature",
+            "multi_record_size_mode": "auto",
+            "nt": "GC"
+          }
+        }
+      }
+    },
+    {
+      "name": "current values stay",
+      "input": {
+        "config": {
+          "form": {
+            "linear_track_layout": "middle"
+          },
+          "adv": {
+            "label_placement": "above_feature",
+            "multi_record_size_mode": "equal"
+          }
+        }
+      },
+      "expected": {
+        "config": {
+          "form": {
+            "linear_track_layout": "middle"
+          },
+          "adv": {
+            "label_placement": "above_feature",
+            "multi_record_size_mode": "equal"
+          }
+        }
+      }
+    },
+    {
+      "name": "an empty or null value reads as the default",
+      "input": {
+        "config": {
+          "form": {
+            "linear_track_layout": ""
+          },
+          "adv": {
+            "label_placement": null,
+            "multi_record_size_mode": ""
+          }
+        }
+      },
+      "expected": {
+        "config": {
+          "form": {
+            "linear_track_layout": "middle"
+          },
+          "adv": {
+            "label_placement": "auto",
+            "multi_record_size_mode": "auto"
+          }
+        }
+      }
+    },
+    {
+      "name": "an unknown Linear track layout is refused",
+      "input": {
+        "config": {
+          "form": {
+            "linear_track_layout": "diagonal"
+          }
+        }
+      },
+      "error": "Linear track layout must be one of: above, middle, below."
+    },
+    {
+      "name": "an unknown label placement is refused",
+      "input": {
+        "config": {
+          "adv": {
+            "label_placement": "inside"
+          }
+        }
+      },
+      "error": "Linear label placement must be one of: auto, above_feature."
+    },
+    {
+      "name": "an unknown multi-record size mode is refused",
+      "input": {
+        "config": {
+          "adv": {
+            "multi_record_size_mode": "sqrt2"
+          }
+        }
+      },
+      "error": "Circular multi-record size mode must be one of: auto, linear, equal."
+    },
+    {
+      "name": "a draft without these fields is unchanged",
+      "input": {
+        "config": {
+          "form": {
+            "prefix": "p"
+          },
+          "adv": {
+            "nt": "AT"
+          }
+        }
+      },
+      "expected": {
+        "config": {
+          "form": {
+            "prefix": "p"
+          },
+          "adv": {
+            "nt": "AT"
+          }
+        }
+      }
+    },
+    {
+      "name": "CLI-written Session 30 (release 0.13.0 era)",
+      "fixture": "tests/fixtures/sessions/cli-linear-protein.v30.gbdraw-session.json.gz",
+      "expected": {
+        "config": {
+          "form": {
+            "prefix": "legacy-protein",
+            "species": "",
+            "strain": "",
+            "plot_title": "",
+            "separate_strands": false,
+            "legend": "bottom",
+            "scale_style": "bar",
+            "linear_track_layout": "middle",
+            "linear_ruler_on_axis": false,
+            "align_center": false,
+            "keep_definition_left_aligned": false,
+            "show_gc": false,
+            "show_skew": false,
+            "show_depth": false,
+            "normalize_length": false,
+            "show_labels_linear": "none"
+          },
+          "adv": {
+            "plot_title_position": "bottom",
+            "blastSource": "losat",
+            "losatProgram": "blastp"
+          },
+          "losat": {
+            "outfmt": "6",
+            "parallelWorkers": null,
+            "executionMode": "auto",
+            "totalThreadBudget": "safe",
+            "threadsPerJob": "auto",
+            "blastn": {
+              "task": "megablast"
+            },
+            "blastp": {
+              "mode": "orthogroup",
+              "maxHits": 5,
+              "candidateLimit": null,
+              "orthogroupMembershipMode": "anchor_core_v1",
+              "orthogroupMemberMaxHits": 5,
+              "collinearMinAnchors": 1,
+              "collinearMaxGeneGap": 0,
+              "collinearMaxDiagonalDrift": 0,
+              "collinearMaxConflictsInMergeGap": 1,
+              "collinearMaxParalogLinksPerOrthogroup": 2,
+              "collinearColorMode": "orientation",
+              "collinearUnitMode": "auto",
+              "collinearAnchorMode": "rbh",
+              "collinearSearchScope": "adjacent"
+            }
+          },
+          "cliOptions": {
+            "schema": 1,
+            "mode": "argv",
+            "rawArgs": [
+              "--gbk",
+              "P1.gb",
+              "P2.gb",
+              "--protein_blastp_mode",
+              "orthogroup",
+              "-o",
+              "legacy-protein"
+            ],
+            "options": [
+              {
+                "option": "--gbk",
+                "key": "gbk",
+                "values": [
+                  "P1.gb",
+                  "P2.gb"
+                ]
+              },
+              {
+                "option": "--protein_blastp_mode",
+                "key": "protein_blastp_mode",
+                "values": [
+                  "orthogroup"
+                ]
+              },
+              {
+                "option": "-o",
+                "key": "output",
+                "values": [
+                  "legacy-protein"
+                ]
+              }
+            ],
+            "byKey": {
+              "gbk": [
+                [
+                  "P1.gb",
+                  "P2.gb"
+                ]
+              ],
+              "protein_blastp_mode": [
+                "orthogroup"
+              ],
+              "output": [
+                "legacy-protein"
+              ]
+            },
+            "positionals": []
+          },
+          "colors": {},
+          "palette": "default",
+          "rules": [],
+          "qualifierPriorityRules": [],
+          "filterMode": "None",
+          "whitelist": [],
+          "blacklistText": "",
+          "blastSource": "losat",
+          "losatProgram": "blastp",
+          "circularConservation": {
+            "enabled": false,
+            "source": "losat",
+            "losat_program": "blastn",
+            "subject_gencode": 1,
+            "reference": "auto",
+            "labels": "",
+            "series": [],
+            "ring_width": null,
+            "ring_gap": null
+          }
+        }
+      }
+    }
+  ]
+}

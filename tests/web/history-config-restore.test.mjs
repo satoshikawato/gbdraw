@@ -24,20 +24,20 @@ for (const [domain, key, first, second] of [
   ['adv', 'window_size', 100, 200],
   ['adv', 'block_stroke_color', '#123456', '#abcdef']
 ]) {
-  state[domain][key] = null;
+  state.activeDrawing()[domain][key] = null;
   await history.initializeIntentBaseline();
-  await history.runUndoable('Set explicit value', () => { state[domain][key] = first; });
-  await history.runUndoable('Change explicit value', () => { state[domain][key] = second; });
+  await history.runUndoable('Set explicit value', () => { state.activeDrawing()[domain][key] = first; });
+  await history.runUndoable('Change explicit value', () => { state.activeDrawing()[domain][key] = second; });
   await history.undo();
-  assert.equal(state[domain][key], first, `${domain}.${key}: explicit to explicit`);
+  assert.equal(state.activeDrawing()[domain][key], first, `${domain}.${key}: explicit to explicit`);
   await history.undo();
-  assert.equal(state[domain][key], null, `${domain}.${key}: explicit to Auto`);
+  assert.equal(state.activeDrawing()[domain][key], null, `${domain}.${key}: explicit to Auto`);
   await history.redo();
-  assert.equal(state[domain][key], first, `${domain}.${key}: Redo explicit value`);
+  assert.equal(state.activeDrawing()[domain][key], first, `${domain}.${key}: Redo explicit value`);
 }
 
 applyConfigData(state.activeDrawing(), { form: JSON.parse('{"unknown":1,"__proto__":{"polluted":true}}') });
-assert.equal(Object.hasOwn(state.form, 'unknown'), false);
+assert.equal(Object.hasOwn(state.activeDrawing().form, 'unknown'), false);
 assert.equal({}.polluted, undefined);
 
 state.similarityAlignmentPlan.value = {
@@ -111,7 +111,7 @@ console.log('History restores nullable config values and preserves key guards.')
   await artifactHistory.captureBaseline();
   assert.equal(JSON.stringify(artifactHistory.getCurrentCheckpoint()).includes(marker), false);
   await artifactHistory.runUndoableCheckpoint('Change legend', () => {
-    state.legendEntries.value = [{ caption: 'SE-01', color: '#123456' }];
+    state.activeDrawing().legendEntries.value = [{ caption: 'SE-01', color: '#123456' }];
   });
   for (const direction of ['undo', 'redo', 'undo']) {
     await artifactHistory[direction]();
@@ -125,7 +125,7 @@ console.log('History restores nullable config values and preserves key guards.')
   assert.equal(state.featureCatalog.value, null, 'an unadmitted catalog never enters state');
   state.featureCatalog.value = null;
   state.results.value = [];
-  state.legendEntries.value = [];
+  state.activeDrawing().legendEntries.value = [];
   console.log('History and Session rollback keep the admitted feature catalog by reference.');
 }
 
@@ -138,20 +138,20 @@ console.log('History restores nullable config values and preserves key guards.')
     buildEditorStateData, applyEditorStateData, buildUiStateData, applyUiStateData
   } = await import('../../gbdraw/web/js/services/config.js');
   state.mode.value = 'circular';
-  state.adv.circular_track_slots.forEach((slot) => {
+  state.activeDrawing().adv.circular_track_slots.forEach((slot) => {
     slot.side = null;
     delete slot.params.lane_direction;
   });
-  state.adv.circular_track_slots_axis_index = null;
-  state.adv.linear_track_slots_axis_index = null;
-  Object.assign(state.layoutPreferences.circular.multi, { legend: null, plotTitlePosition: null });
+  state.activeDrawing().adv.circular_track_slots_axis_index = null;
+  state.activeDrawing().adv.linear_track_slots_axis_index = null;
+  Object.assign(state.activeDrawing().layoutPreferences.circular.multi, { legend: null, plotTitlePosition: null });
   state.originalSvgStroke.value = { color: 'gray', width: 1 };
   const unsetValues = () => ({
-    sides: state.adv.circular_track_slots.map((slot) => slot.side),
-    laneDirection: state.adv.circular_track_slots.map((slot) => slot.params.lane_direction ?? '<unset>'),
-    circularAxis: state.adv.circular_track_slots_axis_index,
-    linearAxis: state.adv.linear_track_slots_axis_index,
-    multiLayout: { ...state.layoutPreferences.circular.multi },
+    sides: state.activeDrawing().adv.circular_track_slots.map((slot) => slot.side),
+    laneDirection: state.activeDrawing().adv.circular_track_slots.map((slot) => slot.params.lane_direction ?? '<unset>'),
+    circularAxis: state.activeDrawing().adv.circular_track_slots_axis_index,
+    linearAxis: state.activeDrawing().adv.linear_track_slots_axis_index,
+    multiLayout: { ...state.activeDrawing().layoutPreferences.circular.multi },
     originalSvgStroke: { ...state.originalSvgStroke.value }
   });
   const unset = unsetValues();
@@ -180,9 +180,9 @@ console.log('History restores nullable config values and preserves key guards.')
   await restoreHistory.captureBaseline();
   await restoreHistory.initializeIntentBaseline();
   await restoreHistory.runUndoable('Rich Feature Popup', () => {
-    state.adv.rich_feature_popup = !state.adv.rich_feature_popup;
+    state.richFeaturePopup.value = !state.richFeaturePopup.value;
   });
-  await restoreHistory.runUndoable('Label Mode', () => { state.form.labels_mode = 'both'; });
+  await restoreHistory.runUndoable('Label Mode', () => { state.activeDrawing().form.labels_mode = 'both'; });
   const edited = settings();
   for (const direction of ['undo', 'redo', 'undo', 'undo', 'redo', 'redo']) {
     await restoreHistory[direction]();
@@ -191,7 +191,7 @@ console.log('History restores nullable config values and preserves key guards.')
   assert.equal(settings(), edited, 'Undo and Redo return to the edited settings');
 
   await restoreHistory.runUndoableCheckpoint('Change legend', () => {
-    state.legendEntries.value = [{ caption: 'F-1', color: '#123456' }];
+    state.activeDrawing().legendEntries.value = [{ caption: 'F-1', color: '#123456' }];
   });
   const checkpointed = settings();
   for (const direction of ['undo', 'redo']) {
@@ -204,14 +204,14 @@ console.log('History restores nullable config values and preserves key guards.')
   // its own step and never writes into the checkpoint it was restored from.
   const steps = restoreHistory.getUndoCount();
   await restoreHistory.runUndoable('Move features outside', () => {
-    state.adv.circular_track_slots[0].side = 'outside';
+    state.activeDrawing().adv.circular_track_slots[0].side = 'outside';
   });
   assert.equal(restoreHistory.getUndoCount(), steps + 1, 'an edit after a restore adds one step');
   for (const direction of ['undo', 'undo', 'redo']) {
     await restoreHistory[direction]();
     assert.deepEqual(unsetValues(), unset, `${direction} after a later edit keeps the checkpoint unset`);
   }
-  state.legendEntries.value = [];
+  state.activeDrawing().legendEntries.value = [];
   state.originalSvgStroke.value = { color: null, width: null };
   console.log('History Undo and Redo keep unset settings unset.');
 }

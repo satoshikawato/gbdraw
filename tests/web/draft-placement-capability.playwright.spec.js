@@ -162,15 +162,17 @@ const placeLane = (page, side) => page.evaluate(async (lane) => {
   const app = window.__GBDRAW_APP__;
   const feature = app.extractedFeatures.find((item) => item.type === 'CDS');
   await app.featurePlacementActions.setPlacement([feature], lane);
-  return { key: JSON.stringify([feature.scope, feature.record_key, feature.biological_feature_id]), product: feature.product };
+  return { key: JSON.stringify([feature.record_key, feature.biological_feature_id]), product: feature.product };
 }, side);
 const placeOutward = (page) => placeLane(page, 'outward');
+// The placements are Circular edits: `row` is the Circular drawing's row, also
+// while Linear is shown (PD-OI-086).
 const placementState = (page, key) => page.evaluate(async (overrideKey) => {
   const { state } = await import('./js/state.js');
   const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
   const app = window.__GBDRAW_APP__;
   const feature = app.extractedFeatures.find((item) => item.type === 'CDS');
-  return { row: state.featurePlacementOverrides[overrideKey]?.placement?.side || null,
+  return { row: state.drawings.circular.featurePlacementOverrides[overrideKey]?.placement?.side || null,
     committed: getCommittedCanonicalRenderRequest().diagramOptions.featurePlacements.map((row) => row.placement.side || 'main'),
     pending: app.recordDisplayControls.hasPendingChanges.value,
     popup: feature ? app.featurePlacementActions.valueFor(feature) : null };
@@ -226,8 +228,8 @@ test('a Circular lane placement waits in Circular while Linear generates (OV-08)
 const placementDialog = (page) => page.getByRole('dialog', { name: 'Reset Feature placements?', exact: true });
 const layoutState = (page, key) => page.evaluate(async (overrideKey) => {
   const { state } = await import('./js/state.js');
-  return { trackType: state.form.track_type, separate: state.form.separate_strands,
-    row: state.featurePlacementOverrides[overrideKey]?.placement?.side || null,
+  return { trackType: state.activeDrawing().form.track_type, separate: state.activeDrawing().form.separate_strands,
+    row: state.activeDrawing().featurePlacementOverrides[overrideKey]?.placement?.side || null,
     undo: window.__GBDRAW_HISTORY__.getUndoCount() };
 }, key);
 const committedPlacements = (page) => page.evaluate(async () => {
@@ -329,7 +331,7 @@ test('an unsupported lane from a loaded Session names the feature on Generate (O
     const { product } = await placeOutward(page);
     const saved = testInfo.outputPath('outward.gbdraw-session.json');
     const session = JSON.parse(gunzipSync(await download(page, 'Save Session', saved)));
-    session.config.form.track_type = 'spreadout';
+    session.modes.circular.config.form.track_type = 'spreadout';
     const edited = testInfo.outputPath('outward-spreadout.gbdraw-session.json');
     await fs.writeFile(edited, JSON.stringify(session));
     await page.context().close();

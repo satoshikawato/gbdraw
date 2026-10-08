@@ -34,7 +34,7 @@ test('FL-12 two or more specific rules show one line on what Move rule up/down o
     await page.evaluate(async () => {
       const { state } = await import('./js/state.js');
       for (const [i, color] of ['#112233', '#445566'].entries()) {
-        state.manualSpecificRules.push({ feat: 'CDS', qual: 'product', val: `rule${i}`, color, cap: '' });
+        state.activeDrawing().manualSpecificRules.push({ feat: 'CDS', qual: 'product', val: `rule${i}`, color, cap: '' });
       }
     });
     await expect(hint).toHaveCount(1);

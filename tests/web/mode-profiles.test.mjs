@@ -16,12 +16,10 @@ await writeFile(join(tempDir, 'package.json'), '{"type":"module"}', 'utf8');
 
 const {
   MODE_DEFAULT_FEATURE_TYPES,
-  MODE_PROFILE_STATE_SCHEMA,
   MODE_PROFILE_VERSION,
   comparisonFiltersForMode,
   comparisonProfileDefault,
   comparisonStateForMode,
-  createModeProfileStateManager,
   effectiveLinearAxisColor,
   managedAdvStateForMode,
   modeProfile,
@@ -119,162 +117,6 @@ assert.deepEqual(
 );
 assert.ok(semanticParity.reviewedModeDifferences.every(({ reason }) => reason.trim()));
 
-const managedState = managedAdvStateForMode('circular');
-const manager = createModeProfileStateManager('circular', managedState);
-manager.transition(managedState, 'circular', 'linear');
-assert.deepEqual(managedState, managedAdvStateForMode('linear'));
-assert.equal(managedState.pairwise_match_style, 'curve');
-managedState.identity = 70;
-managedState.alignment_length = '';
-managedState.pairwise_match_style = 'ribbon';
-manager.transition(managedState, 'linear', 'circular');
-assert.deepEqual(managedState, managedAdvStateForMode('circular'));
-manager.transition(managedState, 'circular', 'linear');
-assert.equal(managedState.identity, 70);
-assert.equal(managedState.pairwise_match_style, 'ribbon');
-assert.equal(
-  managedState.alignment_length,
-  '',
-  'a blank customization must not be treated as the numeric default zero'
-);
-assert.equal(managedState.axis_stroke_color, 'lightgray');
-
-const importedLinearState = {
-  ...managedAdvStateForMode('linear'),
-  identity: 91,
-  axis_stroke_color: 'gray'
-};
-const importedManager = createModeProfileStateManager(
-  'circular',
-  managedAdvStateForMode('circular')
-);
-importedManager.invalidate('linear');
-importedManager.transition(importedLinearState, 'linear', 'circular');
-importedManager.transition(importedLinearState, 'circular', 'linear');
-assert.equal(importedLinearState.identity, 91);
-assert.equal(importedLinearState.axis_stroke_color, 'gray');
-
-{
-  const liveState = {
-    ...managedAdvStateForMode('circular'),
-    identity: 88,
-    axis_stroke_color: '#123456'
-  };
-  const profileManager = createModeProfileStateManager('circular', liveState);
-  profileManager.transition(liveState, 'circular', 'linear');
-  liveState.evalue = '1e-9';
-  liveState.identity = 77;
-
-  const exported = profileManager.exportState();
-  assert.equal(exported.schema, MODE_PROFILE_STATE_SCHEMA);
-  assert.equal(exported.activeMode, 'linear');
-  assert.deepEqual(Object.keys(exported.profiles).sort(), ['circular', 'linear']);
-  assert.equal(exported.profiles.circular.values.identity, 88);
-  assert.equal(exported.profiles.circular.values.axis_stroke_color, '#123456');
-  assert.equal(exported.profiles.circular.managed.identity, false);
-  assert.equal(exported.profiles.linear.values.evalue, '1e-9');
-  assert.equal(exported.profiles.linear.values.identity, 77);
-  assert.equal(exported.profiles.linear.managed.evalue, false);
-  assert.equal(exported.profiles.linear.managed.identity, false);
-
-  const restoredState = managedAdvStateForMode('circular');
-  const restoredManager = createModeProfileStateManager('circular', restoredState);
-  restoredManager.importState(exported, 'linear', restoredState);
-  assert.equal(restoredState.evalue, '1e-9');
-  assert.equal(restoredState.identity, 77);
-  restoredState.identity = 66;
-  restoredManager.transition(restoredState, 'linear', 'circular');
-  assert.equal(restoredState.identity, 88);
-  assert.equal(restoredState.axis_stroke_color, '#123456');
-  restoredManager.transition(restoredState, 'circular', 'linear');
-  assert.equal(restoredState.identity, 66);
-
-  const roundTrip = restoredManager.exportState();
-  assert.equal(roundTrip.profiles.linear.values.identity, 66);
-  assert.equal(roundTrip.profiles.linear.managed.identity, false);
-}
-
-{
-  const restoredState = {
-    ...managedAdvStateForMode('linear'),
-    identity: 91,
-    axis_stroke_color: 'gray'
-  };
-  const restoredManager = createModeProfileStateManager('circular', {});
-  restoredManager.importState(null, 'linear', restoredState);
-  const exported = restoredManager.exportState();
-  assert.equal(exported.activeMode, 'linear');
-  assert.equal(exported.profiles.linear.values.identity, 91);
-  assert.equal(exported.profiles.linear.managed.identity, false);
-  assert.deepEqual(
-    exported.profiles.circular.values,
-    { ...managedAdvStateForMode('circular'), plot_title: '' }
-  );
-  assert.throws(
-    () => restoredManager.importState({ schema: 999, profiles: {} }, 'linear', restoredState),
-    /mode profile state schema/
-  );
-}
-
-{
-  // Title and title/definition fonts are per-mode (GUI remediation S00 decision 2).
-  const adv = { ...managedAdvStateForMode('circular'), plot_title_font_size: 32, def_font_size: 18 };
-  const form = { plot_title: 'Circular title' };
-  const profileManager = createModeProfileStateManager('circular', adv, form);
-  const changed = profileManager.transition(adv, 'circular', 'linear');
-  assert.equal(form.plot_title, '');
-  assert.equal(adv.plot_title_font_size, null);
-  assert.equal(adv.def_font_size, null);
-  assert.ok(['plot_title', 'plot_title_font_size', 'def_font_size'].every((field) => changed.includes(field)));
-  form.plot_title = 'Linear title';
-  adv.def_font_size = 12;
-  profileManager.transition(adv, 'linear', 'circular');
-  assert.deepEqual([form.plot_title, adv.plot_title_font_size, adv.def_font_size], ['Circular title', 32, 18]);
-  profileManager.transition(adv, 'circular', 'linear');
-  assert.deepEqual([form.plot_title, adv.plot_title_font_size, adv.def_font_size], ['Linear title', null, 12]);
-
-  const exported = profileManager.exportState();
-  assert.equal(exported.profiles.circular.values.plot_title, 'Circular title');
-  assert.equal(exported.profiles.circular.managed.plot_title, false);
-  assert.equal(exported.profiles.linear.values.plot_title, 'Linear title');
-  assert.equal(exported.profiles.linear.values.def_font_size, 12);
-
-  // Save -> fresh Load keeps each mode's explicit values.
-  const restoredAdv = { ...managedAdvStateForMode('linear'), def_font_size: 12 };
-  const restoredForm = { plot_title: 'Linear title' };
-  const restoredManager = createModeProfileStateManager('circular', {}, restoredForm);
-  restoredManager.importState(exported, 'linear', restoredAdv);
-  restoredManager.transition(restoredAdv, 'linear', 'circular');
-  assert.deepEqual([restoredForm.plot_title, restoredAdv.plot_title_font_size, restoredAdv.def_font_size], ['Circular title', 32, 18]);
-}
-
-{
-  // An older writer stored one flat title/font value. It belongs to the active
-  // mode only; the inactive mode starts from fresh defaults.
-  const legacyProfiles = {
-    schema: MODE_PROFILE_STATE_SCHEMA,
-    activeMode: 'circular',
-    profiles: {
-      circular: { values: { identity: 70 }, managed: { identity: true } },
-      linear: { values: { identity: 0 }, managed: { identity: true } }
-    }
-  };
-  for (const payload of [legacyProfiles, null]) {
-    const adv = { ...managedAdvStateForMode('circular'), plot_title_font_size: 32, def_font_size: 18 };
-    const form = { plot_title: 'Vibrio nigripulchritudo' };
-    const profileManager = createModeProfileStateManager('circular', {}, form);
-    profileManager.importState(payload, 'circular', adv);
-    assert.equal(form.plot_title, 'Vibrio nigripulchritudo');
-    profileManager.transition(adv, 'circular', 'linear');
-    assert.deepEqual([form.plot_title, adv.plot_title_font_size, adv.def_font_size], ['', null, null]);
-    profileManager.transition(adv, 'linear', 'circular');
-    assert.deepEqual([form.plot_title, adv.plot_title_font_size, adv.def_font_size], ['Vibrio nigripulchritudo', 32, 18]);
-    const exported = profileManager.exportState();
-    assert.equal(exported.profiles.circular.managed.plot_title, false);
-    assert.equal(exported.profiles.linear.values.plot_title, '');
-  }
-}
-
 assert.equal(
   effectiveLinearAxisColor(),
   expectedModes.linear.linearAxisColor
@@ -323,25 +165,52 @@ assert.equal(
   'adjacent',
   'fresh Collinear LOSATP must search adjacent record pairs by default'
 );
-assert.equal(Object.keys(state.form).includes('legend'), false);
-assert.equal(Object.keys(state.adv).includes('plot_title_position'), false);
-assert.equal(state.form.multi_record_canvas, true);
-assert.equal(state.linearRecordLayoutEnabled.value, true);
-state.form.multi_record_canvas = false;
-state.form.legend = 'right';
-state.adv.plot_title_position = 'top';
-assert.deepEqual(state.layoutPreferences.circular.single, {
+// Each mode has its own drawing (PR-1). A drawing starts from its mode's
+// profile, and its `form.legend` and `adv.plot_title_position` read and write
+// its own mode's layout slot, whichever mode is shown.
+const { circular: circularDrawing, linear: linearDrawing } = state.drawings;
+assert.notEqual(circularDrawing, linearDrawing);
+for (const drawing of [circularDrawing, linearDrawing]) {
+  assert.equal(Object.keys(drawing.form).includes('legend'), false);
+  assert.equal(Object.keys(drawing.adv).includes('plot_title_position'), false);
+  assert.equal(drawing.form.multi_record_canvas, true);
+  assert.equal(drawing.linearRecordLayoutEnabled.value, true);
+}
+for (const [drawing, modeName] of [[circularDrawing, 'circular'], [linearDrawing, 'linear']]) {
+  const managed = managedAdvStateForMode(modeName);
+  assert.deepEqual(
+    Object.fromEntries(Object.keys(managed).map((key) => [key, drawing.adv[key]])),
+    managed,
+    `the ${modeName} drawing starts from its mode's profile`
+  );
+}
+state.mode.value = 'linear';
+circularDrawing.form.multi_record_canvas = false;
+circularDrawing.form.legend = 'right';
+circularDrawing.adv.plot_title_position = 'top';
+assert.deepEqual(circularDrawing.layoutPreferences.circular.single, {
   legend: 'right',
   plotTitlePosition: 'top'
 });
-state.mode.value = 'linear';
-state.form.legend = 'left';
-state.adv.plot_title_position = 'center';
-assert.deepEqual(state.layoutPreferences.linear, {
+state.mode.value = 'circular';
+linearDrawing.form.legend = 'left';
+linearDrawing.adv.plot_title_position = 'center';
+assert.deepEqual(linearDrawing.layoutPreferences.linear, {
   legend: 'left',
   plotTitlePosition: 'center'
 });
+assert.deepEqual(circularDrawing.layoutPreferences.circular.single, {
+  legend: 'right',
+  plotTitlePosition: 'top'
+}, 'a Linear layout edit leaves the Circular drawing');
+// A value set in one drawing stays out of the other, and a mode switch moves
+// nothing between them.
+circularDrawing.adv.identity = 88;
+linearDrawing.adv.identity = 77;
+state.mode.value = 'linear';
 state.mode.value = 'circular';
+assert.deepEqual([circularDrawing.adv.identity, linearDrawing.adv.identity], [88, 77]);
+assert.equal(state.activeDrawing(), circularDrawing);
 const formDefaults = createDefaultForm();
 assert.deepEqual(
   {
@@ -391,21 +260,19 @@ assert.deepEqual(
     pathToFileURL(join(tempDir, 'js', 'services', 'reset.js'))
   );
   state.mode.value = 'circular';
-  Object.assign(state.adv, createDefaultAdv('circular'));
-  state.modeProfileStateManager.reset('circular', state.adv);
-  state.adv.identity = 88;
-  state.modeProfileStateManager.transition(state.adv, 'circular', 'linear');
+  state.drawings.circular.adv.identity = 88;
+  state.drawings.circular.form.plot_title = 'Circular title';
   state.mode.value = 'linear';
-  state.adv.identity = 77;
-  state.form.show_scale = false;
-  state.linearTypographyLinked.value = false;
-  state.adv.scale_font_size = 18;
-  state.adv.ruler_label_font_size = 11;
-  state.adv.circular_track_slots_enabled = true;
-  state.adv.circular_track_slots_axis_index = 1;
-  state.adv.circular_track_slots.splice(
+  state.activeDrawing().adv.identity = 77;
+  state.activeDrawing().form.show_scale = false;
+  state.activeDrawing().linearTypographyLinked.value = false;
+  state.activeDrawing().adv.scale_font_size = 18;
+  state.activeDrawing().adv.ruler_label_font_size = 11;
+  state.activeDrawing().adv.circular_track_slots_enabled = true;
+  state.activeDrawing().adv.circular_track_slots_axis_index = 1;
+  state.activeDrawing().adv.circular_track_slots.splice(
     0,
-    state.adv.circular_track_slots.length,
+    state.activeDrawing().adv.circular_track_slots.length,
     {
       id: 'custom_annotation',
       renderer: 'annotations',
@@ -420,11 +287,11 @@ assert.deepEqual(
       }
     }
   );
-  state.adv.linear_track_slots_enabled = true;
-  state.adv.linear_track_slots_axis_index = 1;
-  state.adv.linear_track_slots.splice(
+  state.activeDrawing().adv.linear_track_slots_enabled = true;
+  state.activeDrawing().adv.linear_track_slots_axis_index = 1;
+  state.activeDrawing().adv.linear_track_slots.splice(
     0,
-    state.adv.linear_track_slots.length,
+    state.activeDrawing().adv.linear_track_slots.length,
     {
       id: 'custom_spacer',
       renderer: 'spacer',
@@ -438,11 +305,11 @@ assert.deepEqual(
   const retainedFile = { name: 'retained.gb' };
   state.files.c_gb = retainedFile;
   const retainedComparisonFile = { name: 'retained-comparison.tsv' };
-  state.linearComparisonPlan.mode = 'selected';
-  state.linearComparisonPlan.defaultSource = 'upload';
-  state.linearComparisonPlan.edges.splice(
+  state.activeDrawing().linearComparisonPlan.mode = 'selected';
+  state.activeDrawing().linearComparisonPlan.defaultSource = 'upload';
+  state.activeDrawing().linearComparisonPlan.edges.splice(
     0,
-    state.linearComparisonPlan.edges.length,
+    state.activeDrawing().linearComparisonPlan.edges.length,
     {
       id: 'generated-only',
       queryUid: 'a',
@@ -477,70 +344,66 @@ assert.deepEqual(
       losatFilename: 'custom-subject.fna'
     }
   );
-  state.losat.blastp.collinearSearchScope = 'adjacent';
-  state.unmanagedConfigOverrides['objects.gc_content.percent_background_opacity'] = 0.42;
+  state.activeDrawing().losat.blastp.collinearSearchScope = 'adjacent';
+  state.activeDrawing().unmanagedConfigOverrides['objects.gc_content.percent_background_opacity'] = 0.42;
 
   resetSettings(state);
-  assert.equal(state.form.multi_record_canvas, true);
-  assert.equal(state.linearRecordLayoutEnabled.value, true);
+  assert.equal(state.activeDrawing().form.multi_record_canvas, true);
+  assert.equal(state.activeDrawing().linearRecordLayoutEnabled.value, true);
 
   const resetAdvDefaults = createDefaultAdv('linear');
-  const resetProfiles = state.modeProfileStateManager.exportState();
-  assert.deepEqual(
-    resetProfiles.profiles.circular.values,
-    { ...managedAdvStateForMode('circular'), plot_title: '' }
-  );
-  assert.deepEqual(
-    resetProfiles.profiles.linear.values,
-    { ...managedAdvStateForMode('linear'), plot_title: '' }
-  );
-  assert.ok(Object.values(resetProfiles.profiles.circular.managed).every(Boolean));
-  assert.ok(Object.values(resetProfiles.profiles.linear.managed).every(Boolean));
-  assert.equal(state.adv.circular_track_slots_enabled, false);
-  assert.equal(state.adv.linear_track_slots_enabled, false);
-  assert.equal(state.form.show_scale, true);
-  assert.equal(state.linearTypographyLinked.value, true);
-  assert.equal(state.adv.scale_font_size, null);
-  assert.equal(state.adv.ruler_label_font_size, null);
-  assert.deepEqual(state.unmanagedConfigOverrides, {});
+  // Reset returns both drawings to their own mode's defaults.
+  for (const modeName of ['circular', 'linear']) {
+    const drawing = state.drawings[modeName];
+    const managed = managedAdvStateForMode(modeName);
+    assert.deepEqual(Object.fromEntries(Object.keys(managed).map((key) => [key, drawing.adv[key]])), managed);
+    assert.equal(drawing.form.plot_title, '');
+  }
+  assert.equal(state.activeDrawing().adv.circular_track_slots_enabled, false);
+  assert.equal(state.activeDrawing().adv.linear_track_slots_enabled, false);
+  assert.equal(state.activeDrawing().form.show_scale, true);
+  assert.equal(state.activeDrawing().linearTypographyLinked.value, true);
+  assert.equal(state.activeDrawing().adv.scale_font_size, null);
+  assert.equal(state.activeDrawing().adv.ruler_label_font_size, null);
+  assert.deepEqual(state.activeDrawing().unmanagedConfigOverrides, {});
   assert.equal(
-    state.losat.blastp.collinearSearchScope,
+    state.activeDrawing().losat.blastp.collinearSearchScope,
     'adjacent',
     'Reset must restore the fresh adjacent Collinear default'
   );
   assert.deepEqual(
-    state.adv.circular_track_slots,
+    state.activeDrawing().adv.circular_track_slots,
     resetAdvDefaults.circular_track_slots
   );
   assert.deepEqual(
-    state.adv.linear_track_slots,
+    state.activeDrawing().adv.linear_track_slots,
     resetAdvDefaults.linear_track_slots
   );
   assert.equal(
-    state.adv.circular_track_slots_axis_index,
+    state.activeDrawing().adv.circular_track_slots_axis_index,
     resetAdvDefaults.circular_track_slots_axis_index
   );
   assert.equal(
-    state.adv.linear_track_slots_axis_index,
+    state.activeDrawing().adv.linear_track_slots_axis_index,
     resetAdvDefaults.linear_track_slots_axis_index
   );
   assert.equal(state.files.c_gb, retainedFile);
-  assert.equal(state.linearComparisonPlan.mode, 'none');
-  assert.equal(state.linearComparisonPlan.defaultSource, 'losat');
+  assert.equal(state.activeDrawing().linearComparisonPlan.mode, 'none');
+  assert.equal(state.activeDrawing().linearComparisonPlan.defaultSource, 'losat');
   assert.deepEqual(
-    state.linearComparisonPlan.edges.map((edge) => edge.id),
+    state.activeDrawing().linearComparisonPlan.edges.map((edge) => edge.id),
     ['retained-file', 'retained-name']
   );
-  assert.equal(state.linearComparisonPlan.edges[0].file, retainedComparisonFile);
-  assert.equal(state.linearComparisonPlan.edges[0].source, 'upload');
-  assert.equal(state.linearComparisonPlan.edges[0].included, false);
-  assert.equal(state.linearComparisonPlan.edges[0].fileActive, false);
-  assert.equal(state.linearComparisonPlan.edges[0].losatFilenameActive, false);
-  assert.equal(state.linearComparisonPlan.edges[1].losatFilename, 'custom-subject.fna');
-  assert.equal(state.linearComparisonPlan.edges[1].source, 'losat');
-  assert.equal(state.linearComparisonPlan.edges[1].included, false);
-  assert.equal(state.linearComparisonPlan.edges[1].fileActive, false);
-  assert.equal(state.linearComparisonPlan.edges[1].losatFilenameActive, false);
+  assert.equal(state.activeDrawing().linearComparisonPlan.edges[0].file, retainedComparisonFile);
+  assert.equal(state.activeDrawing().linearComparisonPlan.edges[0].source, 'upload');
+  assert.equal(state.activeDrawing().linearComparisonPlan.edges[0].included, false);
+  assert.equal(state.activeDrawing().linearComparisonPlan.edges[0].fileActive, false);
+  assert.equal(state.activeDrawing().linearComparisonPlan.edges[0].losatFilenameActive, false);
+  assert.equal(state.activeDrawing().linearComparisonPlan.edges[1].losatFilename, 'custom-subject.fna');
+  assert.equal(state.activeDrawing().linearComparisonPlan.edges[1].source, 'losat');
+  assert.equal(state.activeDrawing().linearComparisonPlan.edges[1].included, false);
+  assert.equal(state.activeDrawing().linearComparisonPlan.edges[1].fileActive, false);
+  assert.equal(state.activeDrawing().linearComparisonPlan.edges[1].losatFilenameActive, false);
 }
 
 {
@@ -548,44 +411,40 @@ assert.deepEqual(
     pathToFileURL(join(tempDir, 'js', 'services', 'config.js'))
   );
   state.mode.value = 'circular';
-  Object.assign(state.adv, createDefaultAdv('circular'));
-  state.modeProfileStateManager.reset('circular', state.adv);
-  state.adv.identity = 88;
-  state.modeProfileStateManager.transition(state.adv, 'circular', 'linear');
+  Object.assign(state.activeDrawing().adv, createDefaultAdv('circular'));
+  state.activeDrawing().adv.identity = 88;
   state.mode.value = 'linear';
-  state.adv.identity = 77;
-  state.form.show_scale = false;
-  state.losat.blastp.collinearSearchScope = 'adjacent';
-  state.unmanagedConfigOverrides['objects.blast_match.curve_tension'] = 0.25;
+  state.activeDrawing().adv.identity = 77;
+  state.activeDrawing().form.show_scale = false;
+  state.activeDrawing().losat.blastp.collinearSearchScope = 'adjacent';
+  state.activeDrawing().unmanagedConfigOverrides['objects.blast_match.curve_tension'] = 0.25;
   const savedConfig = structuredClone(buildConfigData(state.activeDrawing()));
 
+  // A drawing's configuration is its own mode's (Session 46 `modes.<mode>.config`).
   assert.equal(savedConfig.form.show_scale, false);
-  assert.equal(savedConfig.modeProfiles.profiles.circular.values.identity, 88);
-  assert.equal(savedConfig.modeProfiles.profiles.circular.managed.identity, false);
-  assert.equal(savedConfig.modeProfiles.profiles.linear.values.identity, 77);
-  assert.equal(savedConfig.modeProfiles.profiles.linear.managed.identity, false);
+  assert.equal(Object.hasOwn(savedConfig, 'modeProfiles'), false);
+  assert.equal(savedConfig.adv.identity, 77);
+  assert.equal(buildConfigData(state.drawings.circular).adv.identity, 88);
   assert.equal(savedConfig.losat.blastp.collinearSearchScope, 'adjacent');
   assert.deepEqual(savedConfig.unmanagedConfigOverrides, {
     'objects.blast_match.curve_tension': 0.25
   });
 
-  Object.assign(state.adv, createDefaultAdv('linear'));
-  state.modeProfileStateManager.reset('linear', state.adv);
-  state.form.show_scale = true;
-  state.unmanagedConfigOverrides.stale = true;
+  Object.assign(state.activeDrawing().adv, createDefaultAdv('linear'));
+  state.activeDrawing().form.show_scale = true;
+  state.activeDrawing().unmanagedConfigOverrides.stale = true;
   applyConfigData(state.activeDrawing(), savedConfig);
-  assert.equal(state.form.show_scale, false);
-  assert.equal(state.adv.identity, 77);
-  assert.deepEqual(state.unmanagedConfigOverrides, {
+  assert.equal(state.activeDrawing().form.show_scale, false);
+  assert.equal(state.activeDrawing().adv.identity, 77);
+  assert.deepEqual(state.activeDrawing().unmanagedConfigOverrides, {
     'objects.blast_match.curve_tension': 0.25
   });
   assert.equal(
-    state.losat.blastp.collinearSearchScope,
+    state.activeDrawing().losat.blastp.collinearSearchScope,
     'adjacent',
     'an explicit saved-session adjacent scope must survive current-reader loading'
   );
-  state.modeProfileStateManager.transition(state.adv, 'linear', 'circular');
-  assert.equal(state.adv.identity, 88);
+  assert.equal(state.drawings.circular.adv.identity, 88, 'applying the Linear drawing leaves the Circular one');
 
   // Arrange in rows: omission takes the fresh default; explicit false is kept.
   for (const [layout, expected] of [[undefined, true], [{ rows: [] }, true], [{ enabled: false, rows: [] }, false]]) {
@@ -593,38 +452,25 @@ assert.deepEqual(
     if (layout === undefined) delete layoutConfig.linearRecordLayout;
     else layoutConfig.linearRecordLayout = layout;
     applyConfigData(state.activeDrawing(), layoutConfig);
-    assert.equal(state.linearRecordLayoutEnabled.value, expected, JSON.stringify(layout));
+    assert.equal(state.activeDrawing().linearRecordLayoutEnabled.value, expected, JSON.stringify(layout));
   }
 
   const cliProjectedNumericConfig = structuredClone(savedConfig);
   cliProjectedNumericConfig.adv.arrow_head_length_ratio = '1.25';
   cliProjectedNumericConfig.adv.arrow_shaft_width_ratio = '0.25';
   applyConfigData(state.activeDrawing(), cliProjectedNumericConfig);
-  assert.equal(state.adv.arrow_head_length_ratio, 1.25);
-  assert.equal(state.adv.arrow_shaft_width_ratio, 0.25);
+  assert.equal(state.activeDrawing().adv.arrow_head_length_ratio, 1.25);
+  assert.equal(state.activeDrawing().adv.arrow_shaft_width_ratio, 0.25);
 
   const cliProjectedAutoConfig = structuredClone(savedConfig);
   cliProjectedAutoConfig.adv.arrow_head_length_ratio = 'auto';
   cliProjectedAutoConfig.adv.arrow_shaft_width_ratio = '1';
   applyConfigData(state.activeDrawing(), cliProjectedAutoConfig);
-  assert.equal(state.adv.arrow_head_length_ratio, null);
-  assert.equal(state.adv.arrow_shaft_width_ratio, 1.0);
+  assert.equal(state.activeDrawing().adv.arrow_head_length_ratio, null);
+  assert.equal(state.activeDrawing().adv.arrow_shaft_width_ratio, 1.0);
 
-  const version39Config = structuredClone(savedConfig);
-  delete version39Config.modeProfiles;
-  state.mode.value = 'linear';
-  Object.assign(state.adv, createDefaultAdv('linear'));
-  state.modeProfileStateManager.reset('linear', state.adv);
-  applyConfigData(state.activeDrawing(), version39Config);
-  const migratedProfiles = state.modeProfileStateManager.exportState();
-  assert.equal(migratedProfiles.profiles.linear.values.identity, 77);
-  assert.equal(migratedProfiles.profiles.linear.managed.identity, false);
-  assert.deepEqual(
-    migratedProfiles.profiles.circular.values,
-    { ...managedAdvStateForMode('circular'), plot_title: '' }
-  );
-  Object.keys(state.unmanagedConfigOverrides).forEach((path) => {
-    delete state.unmanagedConfigOverrides[path];
+  Object.keys(state.activeDrawing().unmanagedConfigOverrides).forEach((path) => {
+    delete state.activeDrawing().unmanagedConfigOverrides[path];
   });
 
 }
@@ -655,17 +501,16 @@ const genbank = {
 
 for (const modeName of ['circular', 'linear']) {
   state.mode.value = modeName;
-  Object.assign(state.form, createDefaultForm());
-  Object.assign(state.adv, createDefaultAdv(modeName));
-  state.modeProfileStateManager.reset(modeName, state.adv);
+  Object.assign(state.activeDrawing().form, createDefaultForm());
+  Object.assign(state.activeDrawing().adv, createDefaultAdv(modeName));
   state.cInputType.value = 'gb';
   state.lInputType.value = 'gb';
   state.circularRecordList.value = [];
-  state.linearRecordLayoutEnabled.value = false;
+  state.activeDrawing().linearRecordLayoutEnabled.value = false;
   if (modeName === 'linear') {
-    state.linearComparisonPlan.mode = 'adjacent';
-    state.linearComparisonPlan.defaultSource = 'losat';
-    state.linearComparisonPlan.edges.splice(0);
+    state.activeDrawing().linearComparisonPlan.mode = 'adjacent';
+    state.activeDrawing().linearComparisonPlan.defaultSource = 'losat';
+    state.activeDrawing().linearComparisonPlan.edges.splice(0);
   }
 
   const filesData = modeName === 'circular'
@@ -683,15 +528,16 @@ for (const modeName of ['circular', 'linear']) {
       };
   const comparisonPlanSnapshot = modeName === 'linear'
     ? resolveLinearComparisonPlan({
-        plan: state.linearComparisonPlan,
+        plan: state.activeDrawing().linearComparisonPlan,
         sequences: filesData.linearSeqs,
         layout: [],
-        losatProgram: state.losatProgram.value,
-        blastpMode: state.losat.blastp.mode
+        losatProgram: state.activeDrawing().losatProgram.value,
+        blastpMode: state.activeDrawing().losat.blastp.mode
       })
     : null;
   const canonical = buildCanonicalRenderRequest({
     state,
+    drawing: state.activeDrawing(),
     filesData,
     comparisonPlanSnapshot
   });
@@ -726,14 +572,14 @@ for (const modeName of ['circular', 'linear']) {
 }
 
 state.mode.value = 'linear';
-Object.assign(state.form, createDefaultForm());
-Object.assign(state.adv, createDefaultAdv('linear'));
-Object.assign(state.losat, createDefaultLosat());
-state.losatProgram.value = 'blastp';
-state.losat.blastp.mode = 'collinear';
-state.linearComparisonPlan.mode = 'adjacent';
-state.linearComparisonPlan.defaultSource = 'losat';
-state.linearComparisonPlan.edges.splice(0);
+Object.assign(state.activeDrawing().form, createDefaultForm());
+Object.assign(state.activeDrawing().adv, createDefaultAdv('linear'));
+Object.assign(state.activeDrawing().losat, createDefaultLosat());
+state.activeDrawing().losatProgram.value = 'blastp';
+state.activeDrawing().losat.blastp.mode = 'collinear';
+state.activeDrawing().linearComparisonPlan.mode = 'adjacent';
+state.activeDrawing().linearComparisonPlan.defaultSource = 'losat';
+state.activeDrawing().linearComparisonPlan.edges.splice(0);
 const defaultCollinearRecords = ['record-1', 'record-2', 'record-3'].map((uid) => ({
   uid,
   gb: genbank,
@@ -743,14 +589,15 @@ const defaultCollinearRecords = ['record-1', 'record-2', 'record-3'].map((uid) =
   region_reverse: false
 }));
 const defaultCollinearSnapshot = resolveLinearComparisonPlan({
-  plan: state.linearComparisonPlan,
+  plan: state.activeDrawing().linearComparisonPlan,
   sequences: defaultCollinearRecords,
   layout: [],
-  losatProgram: state.losatProgram.value,
-  blastpMode: state.losat.blastp.mode
+  losatProgram: state.activeDrawing().losatProgram.value,
+  blastpMode: state.activeDrawing().losat.blastp.mode
 });
 const defaultCollinearRequest = buildCanonicalRenderRequest({
   state,
+  drawing: state.activeDrawing(),
   filesData: {
     linearSeqs: defaultCollinearRecords,
     linearComparisons: [],

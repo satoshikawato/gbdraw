@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const repoRoot = process.cwd();
 const ref = (value) => ({ value });
@@ -589,13 +590,13 @@ const state = {
   featurePopupSize: { width: 0, height: 0 },
   featureSelectionDrag: { active: false },
   skipCaptureBaseConfig: ref(false),
-  adv: { rich_feature_popup: false }
+  richFeaturePopup: ref(false)
 };
 const { createFeatureSvgActions } = await import(
   pathToFileURL(join(tempDir, 'app', 'feature-editor', 'svg-actions.js'))
 );
 const featureActions = createFeatureSvgActions({
-  state,
+  state: withDrawings(state),
   getFeatureColor: () => '#123456',
   getEffectiveLegendCaption: () => '',
   featureSelection,

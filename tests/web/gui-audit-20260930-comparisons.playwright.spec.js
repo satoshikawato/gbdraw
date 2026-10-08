@@ -41,7 +41,7 @@ const useLosat = async (page, { task, proteinMode = null, configure = null }) =>
     await app.setLinearComparisonGlobalAction('losat');
     app.setLinearComparisonLosatMode(options.task);
     if (options.proteinMode) app.setLinearComparisonLosatpMode(options.proteinMode);
-    app.losat.executionMode = 'serial';
+    app.losatExecution.executionMode = 'serial';
     app.adv.pairwise_match_style = 'ribbon';
   }, { task, proteinMode });
   if (configure) await page.evaluate(configure);

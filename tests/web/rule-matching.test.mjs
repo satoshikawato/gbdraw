@@ -3,13 +3,14 @@ import { test } from 'node:test';
 import { createRulePreparation, firstMatchingRule, rebindRuleColorOverrides, runWhenPrepared } from '../../gbdraw/web/js/app/rule-matching.js';
 import { ruleMatchesFeature } from '../../gbdraw/web/js/services/rule-matchers.js';
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const setup = (evaluate = evaluatePythonRules) => {
   const features = ['NADH', 'β-lactamase', 'ı', 'other'].map((product, i) => ({
     type: 'CDS', svg_id: `f${i}`, qualifiers: { product: [product] }
   }));
   const state = { extractedFeatures: { value: features }, manualSpecificRules: [], svgResultIdentity: { value: 'one' } };
-  return { state, features, preparation: createRulePreparation({ state, evaluate }) };
+  return { state, features, preparation: createRulePreparation({ state: withDrawings(state), evaluate }) };
 };
 const rule = val => ({ feat: 'CDS', qual: 'product', val });
 const run = (state, preparation, rules, commit) => runWhenPrepared(state, () => [preparation.prepare(rules)], commit);
@@ -82,7 +83,7 @@ test('25,000-feature matching is prepared once and reused synchronously', async 
 test('full candidate normalizes captions on matching cache hits and retains provenance', async () => {
   const messages = [];
   const { state, features } = setup();
-  const preparation = createRulePreparation({ state, evaluate: evaluatePythonRules, notify: message => messages.push(message) });
+  const preparation = createRulePreparation({ state: withDrawings(state), evaluate: evaluatePythonRules, notify: message => messages.push(message) });
   const source = [
     { ...rule('NADH'), color: '#112233', cap: 'Shared', fromFile: true },
     { ...rule('other'), color: '#445566', cap: 'Shared' },
@@ -113,7 +114,7 @@ for (const replace of [s => { s.files.t_color = {}; }, s => { s.results.value = 
     state.results = { value: [] };
     state.legendEntries = { value: [] };
     let release;
-    const preparation = createRulePreparation({ state, evaluate: payload => new Promise(resolve => { release = () => evaluatePythonRules(payload).then(resolve); }) });
+    const preparation = createRulePreparation({ state: withDrawings(state), evaluate: payload => new Promise(resolve => { release = () => evaluatePythonRules(payload).then(resolve); }) });
     const pending = preparation.prepareCandidate([{...rule('NADH'), color:'#112233', cap:'Shared'}]);
     replace(state);
     await release();
@@ -125,7 +126,7 @@ for (const replace of [s => { s.files.t_color = {}; }, s => { s.results.value = 
 test('canceled caption helper cannot admit rules or emit a notification', async () => {
   const {state}=setup();
   const notices=[];
-  const preparation=createRulePreparation({state,evaluate:async()=>{throw new Error('canceled');},notify:value=>notices.push(value)});
+  const preparation=createRulePreparation({state: withDrawings(state),evaluate:async()=>{throw new Error('canceled');},notify:value=>notices.push(value)});
   await assert.rejects(()=>preparation.prepareCandidate([{...rule('NADH'),color:'#112233',cap:'Shared'}]),/canceled/);
   assert.deepEqual(state.manualSpecificRules,[]);
   assert.deepEqual(notices,[]);

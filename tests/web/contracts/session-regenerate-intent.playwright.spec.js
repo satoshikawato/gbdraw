@@ -74,29 +74,33 @@ const jsonDigest = (value) => createHash('sha256')
   .update(JSON.stringify(stableValue(value)))
   .digest('hex');
 
+// The draft of a Session's committed mode (Session 46 `modes.<mode>`).
+const sessionDraft = (session) => session.modes?.[session.renderRequest?.mode || session.ui?.mode] || {};
+
 const sessionCanonicalEvidence = (session) => {
+  const draft = sessionDraft(session);
   const active = {
-    palette: session.config?.palette,
-    colors: session.config?.colors,
-    rules: (session.config?.rules || []).map((rule) => ({
+    palette: draft.config?.palette,
+    colors: draft.config?.colors,
+    rules: (draft.config?.rules || []).map((rule) => ({
       ...rule,
       fromFile: Boolean(rule.fromFile)
     })),
-    qualifierPriorityRules: session.config?.qualifierPriorityRules,
-    filterMode: session.config?.filterMode,
-    whitelist: session.config?.whitelist,
-    blacklistText: session.config?.blacklistText,
+    qualifierPriorityRules: draft.config?.qualifierPriorityRules,
+    filterMode: draft.config?.filterMode,
+    whitelist: draft.config?.whitelist,
+    blacklistText: draft.config?.blacklistText,
     form: {
-      plot_title: session.config?.form?.plot_title,
-      labels_mode: session.config?.form?.labels_mode,
-      show_scale: session.config?.form?.show_scale
+      plot_title: draft.config?.form?.plot_title,
+      labels_mode: draft.config?.form?.labels_mode,
+      show_scale: draft.config?.form?.show_scale
     },
     adv: {
-      axis_stroke_width: session.config?.adv?.axis_stroke_width,
-      label_font_size: session.config?.adv?.label_font_size,
-      feature_width_circular: session.config?.adv?.feature_width_circular
+      axis_stroke_width: draft.config?.adv?.axis_stroke_width,
+      label_font_size: draft.config?.adv?.label_font_size,
+      feature_width_circular: draft.config?.adv?.feature_width_circular
     },
-    annotationSetIds: (session.config?.annotationSets || []).map(({ id }) => id)
+    annotationSetIds: (draft.config?.annotationSets || []).map(({ id }) => id)
   };
   return {
     renderRequestSha256: jsonDigest(session.renderRequest),
@@ -182,7 +186,7 @@ const loadCurrentSession = async (page, filePath, session) => {
   expect(probe.metrics.activeConfigCanonicalOverwriteCount || 0).toBe(0);
 
   const suppliedDomains = ACTIVE_CONFIG_DOMAINS.filter((domain) => (
-    Object.prototype.hasOwnProperty.call(session.config, domain)
+    Object.prototype.hasOwnProperty.call(sessionDraft(session).config || {}, domain)
   ));
   const restored = probe.details.find(
     (entry) => entry.name === 'currentWriterActiveConfigRestoreCount'
@@ -209,9 +213,9 @@ const saveCurrentSession = async (page, title) => {
     const resultBefore = state.results.value;
     const requestBefore = getCommittedCanonicalRenderRequest();
     const overridesBefore = JSON.stringify([
-      state.featureColorOverrides, state.featureStrokeOverrides,
-      state.featureOverrides, state.legendColorOverrides,
-      state.legendStrokeOverrides
+      state.activeDrawing().featureColorOverrides, state.activeDrawing().featureStrokeOverrides,
+      state.activeDrawing().featureOverrides, state.activeDrawing().legendColorOverrides,
+      state.activeDrawing().legendStrokeOverrides
     ]);
     const result = await window.__GBDRAW_APP__.saveSessionWithTitle();
     return {
@@ -220,9 +224,9 @@ const saveCurrentSession = async (page, title) => {
         resultUnchanged: state.results.value === resultBefore,
         requestUnchanged: getCommittedCanonicalRenderRequest() === requestBefore,
         overridesUnchanged: JSON.stringify([
-          state.featureColorOverrides, state.featureStrokeOverrides,
-          state.featureOverrides, state.legendColorOverrides,
-          state.legendStrokeOverrides
+          state.activeDrawing().featureColorOverrides, state.activeDrawing().featureStrokeOverrides,
+          state.activeDrawing().featureOverrides, state.activeDrawing().legendColorOverrides,
+          state.activeDrawing().legendStrokeOverrides
         ]) === overridesBefore,
         savePending: state.sessionSavePending.value,
         availability: state.sessionOperationAvailability('save')
@@ -342,7 +346,8 @@ const prepareLoadedPreviewDirectEditTarget = (page, expected = null) => page.eva
       || ''
     ).trim();
     // The draft key of the feature's per-feature edits (design Q4).
-    const identityKey = (feature) => JSON.stringify([feature.scope, feature.record_key, feature.biological_feature_id]);
+    // A drawing's rows are keyed by the identity pair (PR-1).
+    const identityKey = (feature) => JSON.stringify([feature.record_key, feature.biological_feature_id]);
     const hasFeatureElement = (id) => Boolean(
       svg.querySelector(`[data-gbdraw-feature-id="${CSS.escape(id)}"]`)
       || svg.querySelector(`[data-gbdraw-rendered-feature-id="${CSS.escape(id)}"]`)
@@ -543,13 +548,12 @@ const bindLoadedPreviewDirectEditLabel = (page, expected = null) => page.evaluat
     target.labelFeature = resolved.labelFeature;
     target.labelFeatureId = featureId(resolved.labelFeature);
     target.labelFeatureIdentity = JSON.stringify([
-      resolved.labelFeature.scope, resolved.labelFeature.record_key, resolved.labelFeature.biological_feature_id
+      resolved.labelFeature.record_key, resolved.labelFeature.biological_feature_id
     ]);
     target.labelKey = String(resolved.labelEntry.key || '');
     target.labelVisibilityFeature = resolved.labelVisibilityFeature;
     target.labelVisibilityFeatureId = featureId(resolved.labelVisibilityFeature);
     target.labelVisibilityFeatureIdentity = JSON.stringify([
-      resolved.labelVisibilityFeature.scope,
       resolved.labelVisibilityFeature.record_key,
       resolved.labelVisibilityFeature.biological_feature_id
     ]);
@@ -648,7 +652,7 @@ const captureLoadedPreviewDirectEditState = (page) => page.evaluate(async () => 
   if (!target) throw new Error('The loaded-preview direct-edit target is not configured.');
   // A per-feature edit by the identity key the target recorded; a hidden
   // feature is no longer drawn after Generate (design Q4).
-  const featureEdit = (identityKey, field) => state.featureOverrides[identityKey]?.[field] ?? null;
+  const featureEdit = (identityKey, field) => state.activeDrawing().featureOverrides[identityKey]?.[field] ?? null;
   const svg = state.svgContainer.value?.querySelector?.('svg');
   if (!svg) throw new Error('The loaded SVG preview is no longer mounted.');
   const resultContent = String(
@@ -802,13 +806,13 @@ const captureLoadedPreviewDirectEditState = (page) => page.evaluate(async () => 
       legend: legendAttributes(resultSvg)
     },
     overrides: {
-      fill: plain(state.featureColorOverrides[target.featureOverrideKey]),
-      stroke: plain(state.featureStrokeOverrides[target.featureOverrideKey]),
+      fill: plain(state.activeDrawing().featureColorOverrides[target.featureOverrideKey]),
+      stroke: plain(state.activeDrawing().featureStrokeOverrides[target.featureOverrideKey]),
       visibility: featureEdit(target.visibilityFeatureIdentity, 'featureVisibility'),
       labelText: featureEdit(target.labelFeatureIdentity, 'labelText'),
       labelVisibility: featureEdit(target.labelVisibilityFeatureIdentity, 'labelVisibility'),
-      legendColor: state.legendColorOverrides[target.legendCaption] ?? null,
-      legendStroke: plain(state.legendStrokeOverrides[target.legendCaption])
+      legendColor: state.activeDrawing().legendColorOverrides[target.legendCaption] ?? null,
+      legendStroke: plain(state.activeDrawing().legendStrokeOverrides[target.legendCaption])
     },
     history: {
       undoCount: window.__GBDRAW_HISTORY__.getUndoCount(),
@@ -981,41 +985,41 @@ const capturePageEvidence = (page, savedSvg = null) => page.evaluate(async (save
           : state.lInputType.value
       },
       palette: {
-        selected: state.selectedPalette.value,
-        currentColors: sortedObject(state.currentColors.value),
+        selected: state.activeDrawing().selectedPalette.value,
+        currentColors: sortedObject(state.activeDrawing().currentColors.value),
         selectedDefaults: sortedObject(
-          state.paletteDefinitions.value?.[state.selectedPalette.value] || {}
+          state.paletteDefinitions.value?.[state.activeDrawing().selectedPalette.value] || {}
         ),
         instantPreview: state.paletteInstantPreviewEnabled.value,
         appliedName: state.appliedPaletteName.value,
         appliedColors: sortedObject(state.appliedPaletteColors.value),
-        pendingName: state.pendingPaletteName.value,
-        pendingColors: sortedObject(state.pendingPaletteColors.value)
+        pendingName: state.activeDrawing().pendingPaletteName.value,
+        pendingColors: sortedObject(state.activeDrawing().pendingPaletteColors.value)
       },
-      specificRules: state.manualSpecificRules.map((rule) => ({
+      specificRules: state.activeDrawing().manualSpecificRules.map((rule) => ({
         ...plain(rule),
         fromFile: Boolean(rule.fromFile)
       })),
-      qualifierPriorityRules: plain(state.manualPriorityRules),
+      qualifierPriorityRules: plain(state.activeDrawing().manualPriorityRules),
       filters: {
-        mode: state.filterMode.value,
-        whitelist: plain(state.manualWhitelist),
-        blacklistText: state.manualBlacklist.value
+        mode: state.activeDrawing().filterMode.value,
+        whitelist: plain(state.activeDrawing().manualWhitelist),
+        blacklistText: state.activeDrawing().manualBlacklist.value
       },
       form: {
-        plot_title: state.form.plot_title,
-        labels_mode: state.form.labels_mode,
-        show_scale: state.form.show_scale,
-        legend: state.form.legend,
-        track_type: state.form.track_type
+        plot_title: state.activeDrawing().form.plot_title,
+        labels_mode: state.activeDrawing().form.labels_mode,
+        show_scale: state.activeDrawing().form.show_scale,
+        legend: state.activeDrawing().form.legend,
+        track_type: state.activeDrawing().form.track_type
       },
       adv: {
-        axis_stroke_width: state.adv.axis_stroke_width,
-        label_font_size: state.adv.label_font_size,
-        feature_width_circular: state.adv.feature_width_circular,
-        plot_title_position: state.adv.plot_title_position
+        axis_stroke_width: state.activeDrawing().adv.axis_stroke_width,
+        label_font_size: state.activeDrawing().adv.label_font_size,
+        feature_width_circular: state.activeDrawing().adv.feature_width_circular,
+        plot_title_position: state.activeDrawing().adv.plot_title_position
       },
-      annotations: state.annotationSets.map((set) => ({
+      annotations: state.activeDrawing().annotationSets.map((set) => ({
         id: set.id,
         annotations: set.annotations.map((annotation) => ({
           id: annotation.id,
@@ -1029,9 +1033,9 @@ const capturePageEvidence = (page, savedSvg = null) => page.evaluate(async (save
         }))
       })),
       tracks: {
-        enabled: state.adv.circular_track_slots_enabled,
-        axisIndex: state.adv.circular_track_slots_axis_index,
-        slots: state.adv.circular_track_slots.map((slot) => ({
+        enabled: state.activeDrawing().adv.circular_track_slots_enabled,
+        axisIndex: state.activeDrawing().adv.circular_track_slots_axis_index,
+        slots: state.activeDrawing().adv.circular_track_slots.map((slot) => ({
           id: slot.id,
           renderer: slot.renderer,
           enabled: slot.enabled,
@@ -1041,21 +1045,21 @@ const capturePageEvidence = (page, savedSvg = null) => page.evaluate(async (save
         }))
       },
       layout: {
-        preferences: plain(state.layoutPreferences),
+        preferences: plain(state.activeDrawing().layoutPreferences),
         linearRecordLayout: {
-          enabled: state.linearRecordLayoutEnabled.value,
-          recordGap: state.linearRecordGap.value,
-          rows: plain(state.linearRecordRows)
+          enabled: state.activeDrawing().linearRecordLayoutEnabled.value,
+          recordGap: state.activeDrawing().linearRecordGap.value,
+          rows: plain(state.activeDrawing().linearRecordRows)
         }
       },
       editorOverrides: {
-        fills: sortedObject(state.featureColorOverrides),
-        strokes: normalizeStrokeOverrides(state.featureStrokeOverrides),
-        featureOverrides: sortedObject(state.featureOverrides),
-        legendColors: sortedObject(state.legendColorOverrides),
-        legendStrokes: normalizeStrokeOverrides(state.legendStrokeOverrides),
-        orthogroupNames: sortedObject(state.orthogroupNameOverrides),
-        orthogroupDescriptions: sortedObject(state.orthogroupDescriptionOverrides)
+        fills: sortedObject(state.activeDrawing().featureColorOverrides),
+        strokes: normalizeStrokeOverrides(state.activeDrawing().featureStrokeOverrides),
+        featureOverrides: sortedObject(state.activeDrawing().featureOverrides),
+        legendColors: sortedObject(state.activeDrawing().legendColorOverrides),
+        legendStrokes: normalizeStrokeOverrides(state.activeDrawing().legendStrokeOverrides),
+        orthogroupNames: sortedObject(state.activeDrawing().orthogroupNameOverrides),
+        orthogroupDescriptions: sortedObject(state.activeDrawing().orthogroupDescriptionOverrides)
       }
     },
     svg: {
@@ -1165,19 +1169,19 @@ const applyDivergentDraft = async (page) => evaluateWithRetainedPromise(page, as
   const history = window.__GBDRAW_HISTORY__;
   state.autoLabelReflowEnabled.value = false;
 
-  const orange = state.paletteDefinitions.value.orange || state.currentColors.value;
+  const orange = state.paletteDefinitions.value.orange || state.activeDrawing().currentColors.value;
   const draftColors = normalizePaletteColors({
     ...orange,
     CDS: '#0b4f6c',
     tRNA: '#f59e0b'
   });
-  state.selectedPalette.value = 'orange';
-  state.currentColors.value = draftColors;
+  state.activeDrawing().selectedPalette.value = 'orange';
+  state.activeDrawing().currentColors.value = draftColors;
   state.paletteInstantPreviewEnabled.value = false;
-  state.pendingPaletteName.value = 'orange';
-  state.pendingPaletteColors.value = { ...draftColors };
+  state.activeDrawing().pendingPaletteName.value = 'orange';
+  state.activeDrawing().pendingPaletteColors.value = { ...draftColors };
 
-  state.manualSpecificRules.splice(0, state.manualSpecificRules.length, {
+  state.activeDrawing().manualSpecificRules.splice(0, state.activeDrawing().manualSpecificRules.length, {
     feat: 'CDS',
     qual: 'gene',
     val: '^ND2$',
@@ -1185,28 +1189,28 @@ const applyDivergentDraft = async (page) => evaluateWithRetainedPromise(page, as
     cap: 'Saved ND2 rule',
     fromFile: false
   });
-  state.manualPriorityRules.splice(0, state.manualPriorityRules.length, {
+  state.activeDrawing().manualPriorityRules.splice(0, state.activeDrawing().manualPriorityRules.length, {
     feat: 'CDS',
     order: 'product,gene'
   });
-  state.filterMode.value = 'Whitelist';
-  state.manualWhitelist.splice(0, state.manualWhitelist.length, {
+  state.activeDrawing().filterMode.value = 'Whitelist';
+  state.activeDrawing().manualWhitelist.splice(0, state.activeDrawing().manualWhitelist.length, {
     feat: 'CDS',
     qual: 'gene',
     key: 'ND1'
   });
-  state.manualBlacklist.value = 'hypothetical, draft-only';
-  Object.assign(state.form, {
+  state.activeDrawing().manualBlacklist.value = 'hypothetical, draft-only';
+  Object.assign(state.activeDrawing().form, {
     plot_title: 'Saved active draft',
     labels_mode: 'both',
     show_scale: false
   });
-  Object.assign(state.adv, {
+  Object.assign(state.activeDrawing().adv, {
     axis_stroke_width: 6,
     label_font_size: 27,
     feature_width_circular: 18
   });
-  state.annotationSets.splice(0, state.annotationSets.length, createAnnotationSet({
+  state.activeDrawing().annotationSets.splice(0, state.activeDrawing().annotationSets.length, createAnnotationSet({
     id: 'saved-regenerate-annotations',
     legendLabel: 'Saved annotation',
     annotations: [{
@@ -1253,16 +1257,16 @@ const applyDivergentDraft = async (page) => evaluateWithRetainedPromise(page, as
   app.clickedFeature.labelText = 'Saved direct label';
   app.clickedFeature.labelVisibility = 'off';
   await app.updateClickedFeatureLabelText();
-  const labelVisibilityApplied = state.featureOverrides[
-    JSON.stringify([labelFeature.scope, labelFeature.record_key, labelFeature.biological_feature_id])
+  const labelVisibilityApplied = state.activeDrawing().featureOverrides[
+    JSON.stringify([labelFeature.record_key, labelFeature.biological_feature_id])
   ]?.labelVisibility === 'off';
   const visibilityApplied = await app.setFeatureVisibility(
     feature,
     'off',
     { triggerReflow: false, scope: { id: 'feature' } }
   );
-  state.legendColorOverrides['Saved direct fill'] = '#7c3aed';
-  state.legendStrokeOverrides['Saved direct fill'] = {
+  state.activeDrawing().legendColorOverrides['Saved direct fill'] = '#7c3aed';
+  state.activeDrawing().legendStrokeOverrides['Saved direct fill'] = {
     strokeColor: '#111827',
     strokeWidth: 4
   };
@@ -1271,17 +1275,17 @@ const applyDivergentDraft = async (page) => evaluateWithRetainedPromise(page, as
   await new Promise((resolveFrame) => (
     requestAnimationFrame(() => requestAnimationFrame(resolveFrame))
   ));
-  const fillOverrideKey = Object.keys(state.featureColorOverrides).find((key) => (
-    state.featureColorOverrides[key]?.color === '#7c3aed'
+  const fillOverrideKey = Object.keys(state.activeDrawing().featureColorOverrides).find((key) => (
+    state.activeDrawing().featureColorOverrides[key]?.color === '#7c3aed'
   ));
-  const strokeOverrideKey = Object.keys(state.featureStrokeOverrides).find((key) => (
-    state.featureStrokeOverrides[key]?.strokeColor === '#111827'
+  const strokeOverrideKey = Object.keys(state.activeDrawing().featureStrokeOverrides).find((key) => (
+    state.activeDrawing().featureStrokeOverrides[key]?.strokeColor === '#111827'
   ));
   return {
     featureId,
-    featureIdentity: JSON.stringify([feature.scope, feature.record_key, feature.biological_feature_id]),
+    featureIdentity: JSON.stringify([feature.record_key, feature.biological_feature_id]),
     labelFeatureId,
-    labelFeatureIdentity: JSON.stringify([labelFeature.scope, labelFeature.record_key, labelFeature.biological_feature_id]),
+    labelFeatureIdentity: JSON.stringify([labelFeature.record_key, labelFeature.biological_feature_id]),
     fillOverrideKey,
     strokeOverrideKey,
     fillApplied,
@@ -1659,7 +1663,7 @@ test('loaded current preview supports direct edits before the first Generate', a
     app.clickedFeature.labelVisibility = 'off';
     await app.updateClickedFeatureLabelText();
     const edit = (drawn, field) => app.featureOverrides[
-      JSON.stringify([drawn?.scope, drawn?.record_key, drawn?.biological_feature_id])
+      JSON.stringify([drawn?.record_key, drawn?.biological_feature_id])
     ]?.[field];
     return {
       requested,
@@ -1733,15 +1737,14 @@ test('loaded current preview supports direct edits before the first Generate', a
   ).toBe(await page.evaluate(() => (
     window.__GBDRAW_APP__.results[window.__GBDRAW_APP__.selectedResultIndex].content
   )));
-  expect(saved.session.config).toMatchObject({
+  const savedDraft = sessionDraft(saved.session);
+  expect(savedDraft.config).toMatchObject({
     form: { plot_title: DIRECT_REGENERATED_TITLE }
   });
-  expect(saved.session.ui).toMatchObject({
-    layoutPreferences: {
-      circular: { single: { plotTitlePosition: 'top' } }
-    }
+  expect(savedDraft.ui).toMatchObject({
+    layoutPreferences: { single: { plotTitlePosition: 'top' } }
   });
-  expect(saved.session.features).toMatchObject({
+  expect(savedDraft.features).toMatchObject({
     featureColorOverrides: {
       [target.featureOverrideKey]: { color: DIRECT_FILL }
     },
@@ -1751,7 +1754,7 @@ test('loaded current preview supports direct edits before the first Generate', a
       [target.labelVisibilityFeatureIdentity]: { labelVisibility: 'off' }
     }
   });
-  expect(saved.session.editorState).toMatchObject({
+  expect(savedDraft.editorState).toMatchObject({
     legend: {
       colorOverrides: { [target.legendCaption]: DIRECT_LEGEND_COLOR },
       strokeOverrides: {
@@ -1996,8 +1999,8 @@ test('divergent draft and direct editor overrides survive repeated Save, Load, a
   );
   expect(savedPreview.active).toEqual(savedDraftIntent.active);
   expect(savedPreview.history).toEqual(savedDraftIntent.history);
-  expect(divergentSave.session.config.palette).toBe('orange');
-  expect(divergentSave.session.config.colors).toMatchObject({
+  expect(sessionDraft(divergentSave.session).config.palette).toBe('orange');
+  expect(sessionDraft(divergentSave.session).config.colors).toMatchObject({
     CDS: '#0b4f6c',
     tRNA: '#f59e0b'
   });
@@ -2235,7 +2238,7 @@ test('bare legacy configuration drives the next canonical request and SVG', asyn
   const generated = await runGenerate(page);
   expect(svgEquivalence(generated.svg, baseline.svg).visual).toBe(false);
   const saved = await saveCurrentSession(page, 'legacy-config-generated');
-  expect(saved.session.config).toMatchObject({
+  expect(sessionDraft(saved.session).config).toMatchObject({
     palette: 'orange',
     colors: { CDS: '#0b4f6c', tRNA: '#f59e0b' },
     filterMode: 'Blacklist',
@@ -2251,10 +2254,10 @@ test('bare legacy configuration drives the next canonical request and SVG', asyn
       feature_width_circular: 22
     }
   });
-  expect(saved.session.config.rules).toEqual([
+  expect(sessionDraft(saved.session).config.rules).toEqual([
     expect.objectContaining({ val: '^ND3$', color: '#be123c' })
   ]);
-  expect(saved.session.config.qualifierPriorityRules).toEqual([
+  expect(sessionDraft(saved.session).config.qualifierPriorityRules).toEqual([
     { feat: 'CDS', order: 'product,gene' }
   ]);
   const colors = saved.session.renderRequest.diagramOptions.colors;

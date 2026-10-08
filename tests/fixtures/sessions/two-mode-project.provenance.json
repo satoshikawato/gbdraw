@@ -1,0 +1,62 @@
+{
+  "purpose": "Positive fixtures for the Session 27-44 reader that splits one Web draft into drawings (PD-OI-086): one with both modes used and a Linear Result saved while Circular is shown, one with a second mode set up from settings alone.",
+  "history": "first-parent main",
+  "writer": "gbdraw/web/js/services/config.js Save Session (Web), bytes kept unchanged",
+  "checkout": "git worktree add --detach <dir> <sourceCommit>; python tools/prepare_browser_wheel.py; served with python3 -m http.server <port> --bind 127.0.0.1 --directory <dir>",
+  "tools": {
+    "node": "v26.8.2",
+    "playwright": "1.61.0",
+    "python": "3.13.3"
+  },
+  "inputs": {
+    "TESTA.gb": "TESTA record of tests/fixtures/web_batch_two_records.gb (sha256 eea3934500b19ca9fca528766ae984577bb132716285e8387c04f5a0e3ce2ae5): bytes 0..6916 (the LOCUS line to the first //), sha256 e477b0c7bc42daccca2bfd718c135f24ebc2153230c5e54cb8762a0e00133080",
+    "TESTB.gb": "TESTB record of the same file: bytes 6917..end, sha256 d44e9566f033fbc07f42aa3b94a26c301354f7e5225f0e2a87370c6913f4a962",
+    "testa.depth.tsv": "python3 -c \"import sys;[print(f'{sys.argv[1]}\\t{i}\\t{10+(i*7)%90}') for i in range(1,4001)]\" TESTA > testa.depth.tsv (sha256 7e076a1bbd24690a7891ca6de4bbc73f5a06a24104349957492f541269dec590); used by two-mode-project only, bound in both modes (one stored resource)"
+  },
+  "sessions": {
+    "two-mode-project.v44.gbdraw-session.json.gz": {
+      "sourceCommit": "fe6861f06d0eaaecac0ba4ee6b1c3095019789df",
+      "wheel": "gbdraw-0.14.0-py3-none-any.whl",
+      "sessionVersion": 44,
+      "steps": [
+        "Circular; GenBank/DDBJ File TESTA.gb; Depth TSV testa.depth.tsv (Show Depth turns on); Plot Title CIRC_TITLE, Plot Title Font Size 20, Default font size 14; Legend position Right; Window 500, Step 50, Dinucleotide AT; Depth legend title cov_c, Depth color #aa3300; Generate",
+        "Linear; Linear input file 1 GenBank / DDBJ File TESTA.gb with Depth TSV testa.depth.tsv; Add sequence, Linear input file 2 TESTB.gb with Reverse complement for sequence 2 on; Plot Title LIN_TITLE; Accession visibility Show; Legend position Top; Run LOSAT for all adjacent pairs, LOSAT Mode LOSATP, LOSATP mode Collinear blocks, LOSATP Max target seqs 7; then Set no comparison (the edited limit stays in the draft); Generate",
+        "Linear Result, Editor drawer, Legend tab: CDS color #112233 (window.__GBDRAW_APP__.updateLegendEntryColor, the function the Legend editor calls; the drawer has no color control at this commit); tRNA stroke options: Color mode, #333333, width 1.5; rename tRNA to tRNA_RENAMED (GC content is not drawn in Linear); delete cov_c; Add row MANUAL_ROW #445566 (window.__GBDRAW_APP__.newLegendCaption/newLegendColor then addNewLegendEntry(), the function the Legend editor calls; the drawer has no Add row control at this commit); Sort A-Z; Generate",
+        "Specific rules: CDS, product, regex hypothetical, color #778899 (matches no TESTA/TESTB feature); Generate",
+        "Linear Result, Editor drawer, Features tab, File 2 TESTB: popup of TESTB_0001, Feature placement Main (Applied on the next successful Generate); popup of TESTB_0002, Label text PROBE_L, Apply Label; the Enable Labels dialog answered Show all labels (show_labels_linear all); do not Generate",
+        "Linear record settings: Display start TESTB #1 = 201 (staged record-display row, scope linear, Applies on Generate); do not Generate",
+        "Circular: Display start TESTA #1 = 101 (staged record-display row, scope circular, Applies on Generate); do not Generate",
+        "Stay on Circular (ui.mode circular, committed Result Linear); Save Session; the Session title prompt answered two-mode-project"
+      ],
+      "deviationsFromTheDesignRecipe": [
+        "Feature placement is Main, not lane 1: a Linear lane (above) is accepted only while Linear is the active mode, and Save Session while Circular is shown fails with UNKNOWN (validateCurrentWriterActiveConfig validates every placement row against the active mode). Reproduced with Separate Strands off and lane above on a TESTB CDS.",
+        "The Circular staged record-display row comes from Display start TESTA #1, not from the feature popup Record actions: at this commit Record actions Apply and regenerate commits and regenerates immediately, and the Circular Result no longer exists after the Linear Generate. A staged Linear row (Display start TESTB #1) was added.",
+        "Legend color change and Add row use the application functions named above because the Legend drawer at this commit has no control for them.",
+        "The label edit raised the Enable Labels dialog; Show all labels was chosen."
+      ],
+      "expected": {
+        "drawings": "2: Linear (A: Result, Legend edits, rule, feature edits, placement, linear record-display row) and Circular (B: no Result, Circular inputs and Depth, Circular profile and layout values, rule, GC and Depth settings, Show Depth on, circular record-display row)",
+        "activeDrawing": "Circular",
+        "resources": "TESTA.gb and testa.depth.tsv stored once (c_gb and linearSeqs[0].gb share resourceId record-1-genbank; c_depth and linearSeqs[0].depth share depth-tracks-1-source-record-1)"
+      },
+      "sha256": "495ead373dc685eb073214e3d366501b620171b233f4e5fe9cd6f374153d45c5",
+      "decompressedSha256": "1a8b6490bc8156df2dbfed090d96c03f5361292da416ae4aa605412b16932c30"
+    },
+    "inactive-class-m.v44.gbdraw-session.json.gz": {
+      "sourceCommit": "fe6861f06d0eaaecac0ba4ee6b1c3095019789df",
+      "wheel": "gbdraw-0.14.0-py3-none-any.whl",
+      "sessionVersion": 44,
+      "steps": [
+        "Circular; GenBank/DDBJ File TESTA.gb; Generate",
+        "Linear without inputs: Plot Title LIN_ONLY; Accession visibility Show; Length / Coordinates visibility Hide; Legend position Top",
+        "Circular; Save Session; the Session title prompt answered inactive-class-m"
+      ],
+      "expected": {
+        "drawings": "C1=A: Circular (A, Result) and Linear (B, no inputs, LIN_ONLY, Accession Show, Length Hide, legend Top); C1=C: Circular only (values lost; needs a supersession)",
+        "activeDrawing": "Circular"
+      },
+      "sha256": "f5896c39a3ad5048dff497697a586c60ac3ae54b3e58ffb3334c1553abe526af",
+      "decompressedSha256": "2b612114bff3711dea2a74abadd0352142787b1fef2d684c2314dfaf652c8b19"
+    }
+  }
+}

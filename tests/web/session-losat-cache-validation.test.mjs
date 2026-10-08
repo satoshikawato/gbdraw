@@ -495,21 +495,21 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
 
   assert.equal(result.status, 'ok');
   assert.equal(result.comparisonDisposition, 'DECISION_REQUIRED');
-  assert.equal(state.importedComparisonIntent.disposition, 'DECISION_REQUIRED');
-  assert.equal(state.importedComparisonIntent.action, null);
+  assert.equal(state.activeDrawing().importedComparisonIntent.disposition, 'DECISION_REQUIRED');
+  assert.equal(state.activeDrawing().importedComparisonIntent.action, null);
   assert.deepEqual(state.files.linearCanonicalComparisons, []);
-  assert.equal(state.linearComparisonPlan.edges.length, 0);
+  assert.equal(state.activeDrawing().linearComparisonPlan.edges.length, 0);
   assert.deepEqual(
     getCommittedCanonicalSession().renderRequest.comparisons,
     renderRequest.comparisons
   );
-  assert.equal(state.losatProgram.value, 'blastn');
-  assert.equal(state.losat.executionMode, 'threaded');
-  assert.equal(state.losat.parallelWorkers, '3');
-  assert.equal(state.losat.totalThreadBudget, '12');
-  assert.equal(state.losat.blastn.task, 'dc-megablast');
-  assert.equal(state.losat.blastp.mode, 'collinear');
-  assert.equal(state.losat.blastp.maxHits, 1);
+  assert.equal(state.activeDrawing().losatProgram.value, 'blastn');
+  assert.equal(state.losatExecution.executionMode, 'threaded');
+  assert.equal(state.losatExecution.parallelWorkers, '3');
+  assert.equal(state.losatExecution.totalThreadBudget, '12');
+  assert.equal(state.activeDrawing().losat.blastn.task, 'dc-megablast');
+  assert.equal(state.activeDrawing().losat.blastp.mode, 'collinear');
+  assert.equal(state.activeDrawing().losat.blastp.maxHits, 1);
   assert.equal(state.selectedOrthogroupAlignmentFeature.value, '');
 
   state.files.linearCanonicalComparisons = [];
@@ -525,7 +525,7 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
     ]
   );
 
-  const serialized = await serializeActiveRenderFiles(state.mode.value, state);
+  const serialized = await serializeActiveRenderFiles(state.mode.value, state, state.activeDrawing());
   assert.equal(serialized.linearCanonicalComparisons[0].file.data, btoa(proteinTable));
   assert.equal(
     serialized.linearCanonicalComparisons[1].file.data,
@@ -924,9 +924,9 @@ ORIGIN
       interactiveMetadataPolicy: 'auto'
     }
   };
-  state.circularConservation.series.splice(
+  state.activeDrawing().circularConservation.series.splice(
     0,
-    state.circularConservation.series.length,
+    state.activeDrawing().circularConservation.series.length,
     {
       sourceIndex: 4,
       label: 'Old label',
@@ -956,13 +956,13 @@ ORIGIN
   assert.equal(state.files.c_conservation_fastas.length, 2);
   assert.equal(state.files.c_conservation_fastas[0], null);
   assert.equal(state.files.c_conservation_fastas[1].name, 'comparison.fna');
-  assert.equal(state.circularConservation.source, 'losat');
+  assert.equal(state.activeDrawing().circularConservation.source, 'losat');
   assert.deepEqual(
     {
-      sourceIndex: state.circularConservation.series[0].sourceIndex,
-      label: state.circularConservation.series[0].label,
-      color: state.circularConservation.series[0].color,
-      losatGencode: state.circularConservation.series[0].losat_gencode
+      sourceIndex: state.activeDrawing().circularConservation.series[0].sourceIndex,
+      label: state.activeDrawing().circularConservation.series[0].label,
+      color: state.activeDrawing().circularConservation.series[0].color,
+      losatGencode: state.activeDrawing().circularConservation.series[0].losat_gencode
     },
     {
       sourceIndex: 0,
@@ -971,11 +971,11 @@ ORIGIN
       losatGencode: 11
     }
   );
-  assert.equal(state.circularConservation.series[1].sourceIndex, 1);
-  assert.equal(state.circularConservation.series[1].losat_gencode, 4);
+  assert.equal(state.activeDrawing().circularConservation.series[1].sourceIndex, 1);
+  assert.equal(state.activeDrawing().circularConservation.series[1].losat_gencode, 4);
 
   state.mode.value = 'circular';
-  const serialized = await serializeActiveRenderFiles(state.mode.value, state);
+  const serialized = await serializeActiveRenderFiles(state.mode.value, state, state.activeDrawing());
   assert.equal(serialized.c_conservation_blasts[0].data, '');
   assert.equal(serialized.c_conservation_fastas[0], null);
   assert.equal(serialized.c_conservation_fastas[1].data, btoa(fasta));
@@ -998,10 +998,10 @@ test('legacy standalone config import migrates retired values without a writer e
   const result = await importSession(event);
 
   assert.equal(result.status, 'legacy');
-  assert.equal(state.form.prefix, 'legacy-standalone');
-  assert.equal(state.form.linear_track_layout, 'below');
-  assert.equal(state.adv.label_placement, 'above_feature');
-  assert.equal(state.adv.multi_record_size_mode, 'auto');
+  assert.equal(state.activeDrawing().form.prefix, 'legacy-standalone');
+  assert.equal(state.activeDrawing().form.linear_track_layout, 'below');
+  assert.equal(state.activeDrawing().adv.label_placement, 'above_feature');
+  assert.equal(state.activeDrawing().adv.multi_record_size_mode, 'auto');
   assert.deepEqual(alerts, [
     'Legacy configuration loaded. Save as a session to use the current format.'
   ]);

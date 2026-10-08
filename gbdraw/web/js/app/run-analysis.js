@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { DrawingState } from '../state.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { PreviousResultRestoreOptions, ReadinessExpectation, ReadinessExpectationOptions, ReadyReceipt } from './preview-runtime.js' */
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
@@ -40,11 +41,13 @@ import {
 import { labelDrawingBlocker } from './feature-editor/label-actions.js';
 import {
   applyCircularSuppressControlsToSlots,
+  hasEnabledCircularTrackRenderer
+} from './circular-track-slots.js';
+import {
   applyCircularTrackOrderPlacements,
   clampCircularTrackAxisIndex,
-  hasEnabledCircularTrackRenderer,
   inferLegacyAxisIndexFromFeature
-} from './circular-track-slots.js';
+} from '../services/circular-track-slot-model.js';
 import {
   normalizeFileList,
   orderedConservationSources
@@ -54,7 +57,7 @@ import {
   clampLinearTrackAxisIndex,
   normalizeLinearTrackSlots,
   resolveLinearTrackAxisIndex
-} from './linear-track-slots.js';
+} from '../services/linear-track-slot-model.js';
 import { getDepthTrackFallbackLabel } from './depth-tracks.js';
 import {
   activeDepthTrackIndices,
@@ -1196,14 +1199,14 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {Record<string, any>} state App state (state.js; not yet typed).
  * @property {RulePreparation | null} [rulePreparation] The rule owner's preparation, which Generate runs before it draws.
  * @property {(feature: Record<string, any>) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
- * @property {(comparisonPlanSnapshot: Record<string, any> | null, linearRecordCatalog: any, runState: any) => any} serializeCanonicalFiles
- *   The Session owner's serialization of the active render files; `runState` is a copy of `state`.
+ * @property {(comparisonPlanSnapshot: Record<string, any> | null, linearRecordCatalog: any, drawing: DrawingState) => any} serializeCanonicalFiles
+ *   The Session owner's serialization of the active render files, chosen by the run's drawing.
  * @property {number} canonicalSessionVersion `SESSION_VERSION` of the Session owner.
  * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean }) => void} adoptCanonicalRenderArtifacts
  *   The Session owner's adoption of a candidate's request, resources, and files.
  * @property {(() => (Record<string, any> | null)) | null} [getCommittedCanonicalSession] The committed canonical Session.
- * @property {(session: Record<string, any> | null | undefined, projectIdentity: (...args: any[]) => any) => any} [captureDecorationContinuity]
- *   The Legend layout owner's capture of the decoration positions a rerender keeps.
+ * @property {(session: Record<string, any> | null | undefined, projectIdentity: (...args: any[]) => any, drawing: Record<string, any>) => any} [captureDecorationContinuity]
+ *   The Legend layout owner's capture of the decoration positions a rerender of the drawing keeps.
  * @property {() => Record<string, any> | Promise<Record<string, any>>} captureGeneratedArtifactHandle History's capture of the current generated artifact.
  * @property {() => ({ results: any[] } & Record<string, any>)} captureGeneratedArtifactOwnerSet
  * @property {(ownerSet: Record<string, any>, options: { selectedResultIndex: number, installResults: (results: any[]) => void }) => void} installGeneratedArtifactOwnerSet
@@ -1226,8 +1229,6 @@ export const executeCanonicalRenderCandidate = async ({
  *   services/config.js owns the active-mode input check shared with Save.
  * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
  * @property {(options?: { rerender?: boolean }) => void} clearLabelBuildNotices The label owner's port.
- * @property {(() => readonly string[]) | null} [readOtherModeLegendInventory]
- *   E1: the Legend inventory of the other mode's Result (the composition root's artifact slot).
  * @property {typeof prepareCandidateRenderCommit} [prepareCandidateCommit] Test seam.
  */
 
@@ -1264,7 +1265,6 @@ export const createRunAnalysis = ({
   // R13: the label owner's ports (app/feature-editor/label-actions.js).
   closeLabelTextScopeDialog,
   clearLabelBuildNotices,
-  readOtherModeLegendInventory = null,
   prepareCandidateCommit = prepareCandidateRenderCommit
 }) => {
   const {
@@ -1284,28 +1284,12 @@ export const createRunAnalysis = ({
     zoom,
     skipCaptureBaseConfig,
     matchSequenceRegistry,
-    featureColorOverrides,
-    featureOverrides,
-    featureVisibilityRules,
-    featureStrokeOverrides,
-    legendColorOverrides,
-    legendStrokeOverrides,
-    selectedPalette,
-    currentColors,
     paletteDefinitions,
     appliedPaletteName,
     appliedPaletteColors,
-    filterMode,
-    manualSpecificRules,
-    manualWhitelist,
-    manualPriorityRules,
-    form,
-    adv,
     mode,
     cInputType,
     lInputType,
-    losatProgram,
-    losat,
     losatCacheInfo,
     losatThreadingStatus,
     losatCache,
@@ -1313,23 +1297,13 @@ export const createRunAnalysis = ({
     proteinIdentityManifest,
     legacyProteinRawCandidates,
     legacyProteinDerivedEvidence,
-    circularConservation,
-    annotationSets,
     orthogroups,
     selectedOrthogroupAlignmentFeature,
-    orthogroupNameOverrides,
-    orthogroupDescriptionOverrides,
-    orthogroupDormantOverrides,
     selectedOrthogroupId,
     circularRecordList,
     circularRecordDiscovery,
     files,
     linearSeqs,
-    linearRecordLayoutEnabled,
-    linearRecordRows,
-    linearComparisonPlan,
-    linearComparisonResolution,
-    importedComparisonIntent,
     shouldDeferCircularPreviewUpdates,
     extractedFeatures,
     biologicalFeatures,
@@ -1341,10 +1315,7 @@ export const createRunAnalysis = ({
     selectedFeatureRecordIdx,
     labelReflowProcessing,
     labelReflowLastError,
-    legendEntries,
-    deletedLegendEntries,
-    originalLegendOrder,
-    addedLegendCaptions
+    originalLegendOrder
   } = state;
   if (
     typeof captureGeneratedArtifactHandle !== 'function'
@@ -1368,23 +1339,19 @@ export const createRunAnalysis = ({
   };
   // Show Depth off leaves the Depth sources out of the request, so Python cannot name
   // the Depth rows a Legend style may still address; the draft names them (OV-81).
-  const unrequestedDepthCaptions = (canonical) => (
+  /** @param {DrawingState} drawing */
+  const unrequestedDepthCaptions = (drawing, canonical) => (
     canonical.renderRequest.diagramOptions?.depthTracks
       ? []
       : depthSeriesLegendCaptions({
-          depthTracks: adv.depth_tracks,
-          slots: canonical.renderRequest.mode === 'linear' ? adv.linear_track_slots : adv.circular_track_slots
+          depthTracks: drawing.adv.depth_tracks,
+          slots: canonical.renderRequest.mode === 'linear' ? drawing.adv.linear_track_slots : drawing.adv.circular_track_slots
         })
   );
-  // E1 (OV-80): Legend edits stay shared between the modes until per-drawing
-  // Legend edits. A mode without a Result of its own shows the rows of the other
-  // mode's Result, and its first Generate carries their edits; a row that only
-  // the other mode's Result draws may be absent from this Result.
-  const otherModeLegendCaptions = () => (
-    results.value.length === 0 && typeof readOtherModeLegendInventory === 'function'
-      ? [...readOtherModeLegendInventory()]
-      : []
-  );
+  // A target-record transform and a label reflow draw the committed Results
+  // again, with the settings and edits of the committed request's mode.
+  /** @param {Record<string, any> | null | undefined} committed */
+  const committedDrawing = (committed) => state.drawings[committed?.renderRequest?.mode === 'linear' ? 'linear' : 'circular'];
   let pendingReflowRequestId = 0;
   let activeReflowRequestId = 0;
   // A rerender requested while Generate (or a committed-candidate run) is in
@@ -1490,7 +1457,8 @@ export const createRunAnalysis = ({
     sessionImportRollbackInProgress?.value
   );
 
-  const buildLatestCliHelperFiles = (runInfo, generatedCliFileMap, archiveBaseName) => {
+  /** @param {DrawingState} drawing */
+  const buildLatestCliHelperFiles = (drawing, runInfo, generatedCliFileMap, archiveBaseName) => {
     const helperFiles = Array.isArray(runInfo?.helperFiles) ? runInfo.helperFiles : [];
     if (helperFiles.length === 0) {
       return {
@@ -1520,7 +1488,7 @@ export const createRunAnalysis = ({
         };
       })
       .filter(Boolean);
-    const archiveStem = makeSafeFilename(`${archiveBaseName || form.prefix || 'out'}-cli-files`);
+    const archiveStem = makeSafeFilename(`${archiveBaseName || drawing.form.prefix || 'out'}-cli-files`);
     return {
       files,
       archiveName: `${archiveStem}.zip`
@@ -1640,16 +1608,17 @@ export const createRunAnalysis = ({
   };
 
   // D-21: names follow the exact member set; the rest stay dormant.
-  const rekeyCommittedOrthogroupOverrides = (previousGroups, candidateGroups) => {
+  /** @param {DrawingState} drawing */
+  const rekeyCommittedOrthogroupOverrides = (drawing, previousGroups, candidateGroups) => {
     const next = rekeyOrthogroupOverrides({
       previousGroups,
       candidateGroups,
-      names: orthogroupNameOverrides,
-      descriptions: orthogroupDescriptionOverrides,
-      dormant: orthogroupDormantOverrides
+      names: drawing.orthogroupNameOverrides,
+      descriptions: drawing.orthogroupDescriptionOverrides,
+      dormant: drawing.orthogroupDormantOverrides
     });
-    [[orthogroupNameOverrides, next.names], [orthogroupDescriptionOverrides, next.descriptions],
-      [orthogroupDormantOverrides, next.dormant]].forEach(([target, values]) => {
+    [[drawing.orthogroupNameOverrides, next.names], [drawing.orthogroupDescriptionOverrides, next.descriptions],
+      [drawing.orthogroupDormantOverrides, next.dormant]].forEach(([target, values]) => {
       Object.keys(target).forEach((key) => delete target[key]);
       Object.assign(target, values);
     });
@@ -1677,20 +1646,23 @@ export const createRunAnalysis = ({
     return '';
   };
 
-  const buildLosatSuffix = () => {
-    if (losatProgram.value === 'blastn') return 'losatn';
-    if (losatProgram.value === 'blastp') return 'losatp';
+  /** @param {DrawingState} drawing */
+  const buildLosatSuffix = (drawing) => {
+    if (drawing.losatProgram.value === 'blastn') return 'losatn';
+    if (drawing.losatProgram.value === 'blastp') return 'losatp';
     return 'tlosatx';
   };
 
-  const buildLosatFilename = (leftLabel, rightLabel) => (
-    losatEdgeFilename(leftLabel, rightLabel, buildLosatSuffix())
+  /** @param {DrawingState} drawing */
+  const buildLosatFilename = (drawing, leftLabel, rightLabel) => (
+    losatEdgeFilename(leftLabel, rightLabel, buildLosatSuffix(drawing))
   );
 
-  const getResolvedLinearEdge = (edgeKey) => {
+  /** @param {DrawingState} drawing */
+  const getResolvedLinearEdge = (drawing, edgeKey) => {
     const normalizedKey = String(edgeKey || '').trim();
     if (!normalizedKey) return null;
-    const edges = linearComparisonResolution?.value?.edges;
+    const edges = drawing.linearComparisonResolution?.value?.edges;
     return (Array.isArray(edges) ? edges : []).find((edge) => edge.edgeKey === normalizedKey) || null;
   };
 
@@ -1702,13 +1674,14 @@ export const createRunAnalysis = ({
   };
 
   /**
+   * @param {DrawingState} drawing
    * @param {string} edgeKey
    * @param {{ recordId?: string } | null} [queryEntry]
    * @param {{ recordId?: string } | null} [subjectEntry]
    */
-  const getLosatPairDefaultName = (edgeKey, queryEntry = null, subjectEntry = null) => {
+  const losatPairDefaultName = (drawing, edgeKey, queryEntry = null, subjectEntry = null) => {
     const cacheEntry = getLosatCacheInfoEntry(edgeKey);
-    const edge = getResolvedLinearEdge(edgeKey) || cacheEntry;
+    const edge = getResolvedLinearEdge(drawing, edgeKey) || cacheEntry;
     const queryIndex = Number(edge?.queryIndex);
     const subjectIndex = Number(edge?.subjectIndex);
     const leftLabel = getSeqLabel(
@@ -1719,7 +1692,17 @@ export const createRunAnalysis = ({
       linearSeqs[subjectIndex],
       subjectEntry?.recordId || `seq_${Number.isInteger(subjectIndex) ? subjectIndex + 1 : 2}`
     );
-    return buildLosatFilename(leftLabel, rightLabel);
+    return buildLosatFilename(drawing, leftLabel, rightLabel);
+  };
+  // LOSAT pairs are the Linear comparisons: their names follow the Linear drawing.
+  /**
+   * @param {string} edgeKey
+   * @param {{ recordId?: string } | null} [queryEntry]
+   * @param {{ recordId?: string } | null} [subjectEntry]
+   */
+  const getLosatPairDefaultName = (edgeKey, queryEntry = null, subjectEntry = null) => {
+    const drawing = state.drawings.linear;
+    return losatPairDefaultName(drawing, edgeKey, queryEntry, subjectEntry);
   };
 
   const normalizeLosatFilename = (name, fallback) => {
@@ -1728,28 +1711,31 @@ export const createRunAnalysis = ({
     return makeSafeFilename(withExt);
   };
 
+  // How LOSAT runs is one app-level setting (`state.losatExecution`) for both
+  // drawings: the Linear comparisons and the Circular conservation series.
   const getLosatParallelWorkers = () => {
-    const raw = String(losat.parallelWorkers || 'auto').trim().toLowerCase();
+    const raw = String(state.losatExecution.parallelWorkers || 'auto').trim().toLowerCase();
     if (raw === 'auto') return undefined;
     const parsed = Number(raw);
     return Number.isInteger(parsed) && parsed >= 1 ? parsed : undefined;
   };
 
   const getLosatExecutionMode = () => {
-    const raw = String(losat.executionMode || 'auto').trim().toLowerCase();
+    const raw = String(state.losatExecution.executionMode || 'auto').trim().toLowerCase();
     return ['auto', 'serial', 'threaded'].includes(raw) ? raw : 'auto';
   };
 
-  const getLosatThreadsPerJob = () => {
-    if (losatProgram.value !== 'blastp') return 1;
-    const raw = String(losat.threadsPerJob || 'auto').trim().toLowerCase();
+  /** @param {DrawingState} drawing */
+  const getLosatThreadsPerJob = (drawing) => {
+    if (drawing.losatProgram.value !== 'blastp') return 1;
+    const raw = String(state.losatExecution.threadsPerJob || 'auto').trim().toLowerCase();
     if (raw === 'auto') return undefined;
     const parsed = Number(raw);
     return Number.isInteger(parsed) && parsed >= 1 ? parsed : undefined;
   };
 
   const getLosatTotalThreadBudget = () => {
-    const raw = String(losat.totalThreadBudget || 'safe').trim().toLowerCase();
+    const raw = String(state.losatExecution.totalThreadBudget || 'safe').trim().toLowerCase();
     if (raw === 'safe' || raw === 'auto') return undefined;
     if (raw === 'available') {
       return Math.max(1, Number(globalThis.navigator?.hardwareConcurrency || 4) || 4);
@@ -1760,10 +1746,6 @@ export const createRunAnalysis = ({
     return Math.min(parsed, hardwareBudget);
   };
 
-  const normalizeLabelRendering = (value) => {
-    const normalized = String(value || '').trim().toLowerCase();
-    return ['embedded_only', 'external_only'].includes(normalized) ? normalized : 'auto';
-  };
 
   const hydrateLosatDownloadText = async (cacheKey, cached) => {
     if (classifyRawLosatCacheEntry(cached) !== 'protein-current') {
@@ -1793,12 +1775,13 @@ export const createRunAnalysis = ({
   };
 
   const downloadLosatPair = async (edgeKey, customName) => {
+    const drawing = state.drawings.linear;
     const entry = getLosatCacheInfoEntry(edgeKey);
     const cacheMap = losatCache.value;
     if (!entry || !cacheMap) return;
     const cached = cacheMap.get(entry.key);
     if (!isCurrentRawLosatCacheEntry(cached)) return;
-    const defaultName = getLosatPairDefaultName(entry.edgeKey || edgeKey);
+    const defaultName = losatPairDefaultName(drawing, entry.edgeKey || edgeKey);
     const fallbackOrdinal = Number.isInteger(Number(entry.ordinal))
       ? Number(entry.ordinal)
       : 0;
@@ -1820,11 +1803,12 @@ export const createRunAnalysis = ({
   };
 
   const setLosatPairFilename = (edgeKey, customName) => {
+    const drawing = state.drawings.linear;
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const entry = getLosatCacheInfoEntry(edgeKey);
     if (!entry) return;
-    const defaultName = getLosatPairDefaultName(entry.edgeKey || edgeKey);
+    const defaultName = losatPairDefaultName(drawing, entry.edgeKey || edgeKey);
     const fallbackOrdinal = Number.isInteger(Number(entry.ordinal))
       ? Number(entry.ordinal)
       : 0;
@@ -1844,16 +1828,17 @@ export const createRunAnalysis = ({
     circularDiscoveryTargetsCurrentInput()
   );
 
-  const validateDepthInputPresence = () => {
+  /** @param {DrawingState} drawing */
+  const validateDepthInputPresence = (drawing) => {
     const linear = mode.value === 'linear';
-    const slots = linear ? adv.linear_track_slots : adv.circular_track_slots;
+    const slots = linear ? drawing.adv.linear_track_slots : drawing.adv.circular_track_slots;
     const customDepthRequested = (
-      (linear ? adv.linear_track_slots_enabled : adv.circular_track_slots_enabled) === true &&
+      (linear ? drawing.adv.linear_track_slots_enabled : drawing.adv.circular_track_slots_enabled) === true &&
       (Array.isArray(slots) ? slots : []).some((slot) => (
         slot?.enabled !== false && String(slot?.renderer || '') === 'depth'
       ))
     );
-    if (!form.show_depth && !customDepthRequested) return '';
+    if (!drawing.form.show_depth && !customDepthRequested) return '';
     let rows;
     if (linear) {
       rows = linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
@@ -1902,6 +1887,7 @@ export const createRunAnalysis = ({
   };
 
   const runCircularRecordRefresh = async ({ suppress = false, automatic = false, reuseFinalError = false } = {}) => {
+    const drawing = state.drawings.circular;
     // An inactive Circular source keeps its records and Multi-Record Canvas
     // order; only a read still running for it is superseded.
     if (mode.value !== 'circular') {
@@ -1919,8 +1905,8 @@ export const createRunAnalysis = ({
       && circularRecordDiscovery.status === 'error' && discoveryErrorIsFinal(circularRecordDiscovery.error)) return;
     const refreshGeneration = ++circularRecordRefreshGeneration;
     if (suppress || recordDiscoverySuppressed()) return;
-    if (!Array.isArray(adv.multi_record_positions)) {
-      adv.multi_record_positions = [];
+    if (!Array.isArray(drawing.adv.multi_record_positions)) {
+      drawing.adv.multi_record_positions = [];
     }
     const inputType = cInputType.value;
     const primaryFile = inputType === 'gff' ? files.c_gff : files.c_gb;
@@ -1956,7 +1942,7 @@ export const createRunAnalysis = ({
     });
     circularRecordList.value = [];
     if (!hasCompleteInput) {
-      adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
+      drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length);
       return;
     }
     if (
@@ -2004,8 +1990,8 @@ export const createRunAnalysis = ({
       circularRecordDiscovery.canonicalRecordIdentities = nextRecords
         .filter((record) => record.recordKey)
         .map(({ selector, record_id, recordKey }) => ({ selector, record_id, recordKey }));
-      const nextPositions = mergeCircularRecordPositions(nextRecords, adv.multi_record_positions);
-      adv.multi_record_positions.splice(0, adv.multi_record_positions.length, ...nextPositions);
+      const nextPositions = mergeCircularRecordPositions(nextRecords, drawing.adv.multi_record_positions);
+      drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length, ...nextPositions);
     } catch (error) {
       if (
         refreshGeneration !== circularRecordRefreshGeneration ||
@@ -2025,7 +2011,7 @@ export const createRunAnalysis = ({
       circularRecordList.value = [];
       circularRecordDiscovery.status = 'error';
       circularRecordDiscovery.error = formatError(error, inputType === 'gff' ? 'listGffFastaRecords' : 'listSequenceRecords', 'helper');
-      adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
+      drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length);
     }
   };
 
@@ -2064,26 +2050,32 @@ export const createRunAnalysis = ({
   // went stale during the preparation, and is admitted (`shouldAdmit`) while
   // the run and the rule inputs it was prepared from stay current. The run
   // commits the feature color overrides rebound to the normalized captions.
-  const prepareAndAdmitCandidate = async (isCurrent, options) => {
+  /**
+   * @param {DrawingState} drawing
+   * @param {() => boolean} isCurrent
+   * @param {Record<string, any>} [options]
+   */
+  const prepareAndAdmitCandidate = async (drawing, isCurrent, options) => {
     if (!rulePreparation) {
-      return { rules: manualSpecificRules, featureColorOverrides, shouldAdmit: isCurrent, notifyChanges: () => {} };
+      return { rules: drawing.manualSpecificRules, featureColorOverrides: drawing.featureColorOverrides, shouldAdmit: isCurrent, notifyChanges: () => {} };
     }
-    const candidate = await rulePreparation.prepareCandidate(manualSpecificRules, options);
+    const candidate = await rulePreparation.prepareCandidate(drawing.manualSpecificRules, options);
     if (!candidate || !isCurrent()) return null;
     return {
       rules: candidate.rules,
-      featureColorOverrides: rebindRuleColorOverrides(featureColorOverrides, manualSpecificRules, candidate.rules),
+      featureColorOverrides: rebindRuleColorOverrides(drawing.featureColorOverrides, drawing.manualSpecificRules, candidate.rules),
       shouldAdmit: () => rulePreparation.isCurrent(candidate.snapshot) && isCurrent(),
       notifyChanges: () => rulePreparation.notifyChanges(candidate)
     };
   };
 
   /**
+   * @param {DrawingState} drawing
    * @param {{ decorationContinuity?: any, comparisonPlanSnapshot?: Record<string, any> | null,
    *   generatedArtifactHandle?: Record<string, any> | null, comparisonExecution?: Record<string, any> | null,
    *   isCurrentOperation?: () => boolean, isCurrentAlert?: () => boolean }} [options]
    */
-  const runAnalysisInternal = async ({
+  const runAnalysisInternal = async (drawing, {
     decorationContinuity = null,
     comparisonPlanSnapshot = null,
     generatedArtifactHandle = null,
@@ -2091,11 +2083,14 @@ export const createRunAnalysis = ({
     isCurrentOperation = () => true,
     isCurrentAlert = () => true
   } = {}) => {
-    const runState = { ...state };
-    const { linearSeqs } = runState;
     /** @type {Awaited<ReturnType<typeof prepareAndAdmitCandidate>>} */
     let colorCandidate = null;
-    let candidateRules = manualSpecificRules;
+    let candidateRules = drawing.manualSpecificRules;
+    // The request reads the run's drawing with the color rules the run
+    // admits (`candidateRules`), and the label projection the run built.
+    let requestDrawing = drawing;
+    /** @type {ReturnType<typeof requestLabelProjection> | null} */
+    let generatedLabelProjection = null;
     let failureStage = 'request-validation';
     recordSessionLifecycleEvent('generate-start');
     recordSessionLifecycleEvent('generation-input-resolution-start');
@@ -2107,16 +2102,16 @@ export const createRunAnalysis = ({
             ? resolveLinearComparisonPlan({
                 plan: { mode: 'none', defaultSource: 'losat', edges: [] },
                 sequences: linearSeqs,
-                layout: linearRecordLayoutEnabled.value ? linearRecordRows : [],
-                losatProgram: losatProgram.value,
-                blastpMode: normalizeBlastpMode(losat.blastp?.mode)
+                layout: drawing.linearRecordLayoutEnabled.value ? drawing.linearRecordRows : [],
+                losatProgram: drawing.losatProgram.value,
+                blastpMode: normalizeBlastpMode(drawing.losat.blastp?.mode)
               })
             : comparisonPlanSnapshot || resolveLinearComparisonPlan({
-                plan: linearComparisonPlan,
+                plan: drawing.linearComparisonPlan,
                 sequences: linearSeqs,
-                layout: linearRecordLayoutEnabled.value ? linearRecordRows : [],
-                losatProgram: losatProgram.value,
-                blastpMode: normalizeBlastpMode(losat.blastp?.mode)
+                layout: drawing.linearRecordLayoutEnabled.value ? drawing.linearRecordRows : [],
+                losatProgram: drawing.losatProgram.value,
+                blastpMode: normalizeBlastpMode(drawing.losat.blastp?.mode)
               })
         )
       : null;
@@ -2145,10 +2140,12 @@ export const createRunAnalysis = ({
       ?? extractedFeatures.value;
     let workingBiologicalFeatures = committedArtifactHandle?.ownerSet?.biologicalFeatures
       ?? biologicalFeatures?.value;
-    const hasSourceBoundEditorIntent = Object.keys(featureOverrides).length > 0
-      || Object.keys(state.featurePlacementOverrides || {}).length > 0
-      || Object.keys(legendColorOverrides).length > 0 || Object.keys(legendStrokeOverrides).length > 0
-      || legendEntries.value.some(entry => entry.originalCaption && entry.originalCaption !== entry.caption);
+    const hasSourceBoundEditorIntent = Object.keys(drawing.featureOverrides).length > 0
+      || Object.keys(drawing.featurePlacementOverrides || {}).length > 0
+      || Object.keys(drawing.featureStrokeOverrides).length > 0
+      || Object.keys(drawing.legendColorOverrides).length > 0 || Object.keys(drawing.legendStrokeOverrides).length > 0
+      || drawing.legendEntries.value.some(entry => entry.originalCaption && entry.originalCaption !== entry.caption)
+      || drawing.dormantLegendEntries.value.length > 0;
     // The committed records whose source this Generate replaces or drops. The
     // metadata of a Session without a feature catalog has no record keys.
     const replacedFeatures = hasSourceBoundEditorIntent
@@ -2292,7 +2289,7 @@ export const createRunAnalysis = ({
         }
       }
     }
-    const depthInputError = validateDepthInputPresence();
+    const depthInputError = validateDepthInputPresence(drawing);
     if (depthInputError) {
       const error = formatError(depthInputError);
       if (activeLosatAbortController === generationAbortController) {
@@ -2302,7 +2299,7 @@ export const createRunAnalysis = ({
         restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
     }
     const previousSelectedResultIndex = selectedResultIndex.value;
-    const activeRunColors = currentColors.value;
+    const activeRunColors = drawing.currentColors.value;
     const manualRunStartedAt = getNow();
     const manualRunStartedAtIso = new Date().toISOString();
     /** @type {Record<string, any> | null} */
@@ -2326,6 +2323,7 @@ export const createRunAnalysis = ({
 
     try {
       colorCandidate = await prepareAndAdmitCandidate(
+        drawing,
         () => generationToken === latestGenerationToken && !generationCancelRequested.value,
         { onProgress: onDiagramProgress }
       );
@@ -2334,11 +2332,11 @@ export const createRunAnalysis = ({
         return { status: 'stale' };
       }
       candidateRules = colorCandidate.rules;
-      runState.manualSpecificRules = candidateRules;
+      requestDrawing = { ...drawing, manualSpecificRules: candidateRules };
       if (mode.value === 'linear') {
         requireLinearComparisonPlanSnapshot(activeComparisonPlanSnapshot);
       }
-      if (typeof validateAnnotationTargets === 'function' && annotationSets.length > 0) {
+      if (typeof validateAnnotationTargets === 'function' && drawing.annotationSets.length > 0) {
         const annotationError = validateAnnotationTargets();
         if (annotationError) throw diagnosticError(annotationError.code, annotationError.context);
       }
@@ -2455,10 +2453,10 @@ export const createRunAnalysis = ({
         return true;
       };
 
-      const normalizedOutputPrefix = String(form.prefix || '').trim();
+      const normalizedOutputPrefix = String(drawing.form.prefix || '').trim();
 
       const activePaletteName = String(
-        selectedPalette?.value || appliedPaletteName.value || 'default'
+        drawing.selectedPalette?.value || appliedPaletteName.value || 'default'
       ).trim() || 'default';
       const paletteBaseColors = normalizePaletteColors(
         paletteDefinitions.value?.[activePaletteName] ||
@@ -2478,21 +2476,21 @@ export const createRunAnalysis = ({
         stageTextFile('/combined_t.tsv', tContent);
       }
 
-      if (Array.isArray(annotationSets) && annotationSets.length > 0) {
-        stageTextFile('/web_annotations.tsv', encodeAnnotationTable(annotationSets), {
+      if (Array.isArray(drawing.annotationSets) && drawing.annotationSets.length > 0) {
+        stageTextFile('/web_annotations.tsv', encodeAnnotationTable(drawing.annotationSets), {
           name: 'annotations.tsv',
           slot: 'generatedFiles.web_annotations'
         });
       }
 
-      if (filterMode.value === 'Whitelist') {
-        const wlContent = serializeLabelWhitelistRules(manualWhitelist);
+      if (drawing.filterMode.value === 'Whitelist') {
+        const wlContent = serializeLabelWhitelistRules(drawing.manualWhitelist);
         if (wlContent) {
           stageTextFile('/manual_wl.tsv', wlContent);
         }
       }
 
-      const pContent = serializeQualifierPriorityRules(manualPriorityRules);
+      const pContent = serializeQualifierPriorityRules(drawing.manualPriorityRules);
       if (pContent.trim() !== '') {
         stageTextFile('/priority.tsv', pContent);
       }
@@ -2500,21 +2498,21 @@ export const createRunAnalysis = ({
       // The staged label table is the request's: label rules only; per-feature
       // label edits travel as featureOverrides rows (design Q4). One projection
       // per Generate serves the staged copy and the request (CW-02).
-      runState.generatedLabelProjection = requestLabelProjection(runState);
-      const labelTableTsv = requestLabelTableTsv(runState, runState.generatedLabelProjection);
+      generatedLabelProjection = requestLabelProjection(state, requestDrawing);
+      const labelTableTsv = requestLabelTableTsv(state, requestDrawing, generatedLabelProjection);
       if (labelTableTsv) {
         stageTextFile('/web_label_table.tsv', labelTableTsv);
       }
       // Per-feature Feature visibility decides LOSATP's proteins as the rules do;
       // the helper resolves one record's rows as Generate does (R4).
       const proteinVisibilityRows = (recordKeys) => requestFeatureOverrides(
-        featureOverrides, mode.value, recordKeys.map((recordKey) => ({ recordKey }))
+        drawing.featureOverrides, recordKeys.map((recordKey) => ({ recordKey }))
       ).filter((row) => row.featureVisibility !== null)
         .map((row) => ({ ...row, labelVisibility: null, labelText: null }));
       /** @type {string | null} */
       let featureVisibilityTablePath = null;
       let featureVisibilityCacheKey = '';
-      const featureVisibilityTsv = serializeFeatureVisibilityRules(featureVisibilityRules?.value || []);
+      const featureVisibilityTsv = serializeFeatureVisibilityRules(drawing.featureVisibilityRules?.value || []);
       if (featureVisibilityTsv.trim()) {
         featureVisibilityTablePath = '/web_feature_visibility_table.tsv';
         featureVisibilityCacheKey = featureVisibilityTsv;
@@ -2522,37 +2520,37 @@ export const createRunAnalysis = ({
       }
       const validateDepthStyleSettings = () => {
         if (
-          adv.depth_min !== null &&
-          adv.depth_min !== undefined &&
-          adv.depth_min !== '' &&
-          adv.depth_max !== null &&
-          adv.depth_max !== undefined &&
-          adv.depth_max !== '' &&
-          Number(adv.depth_min) > Number(adv.depth_max)
+          drawing.adv.depth_min !== null &&
+          drawing.adv.depth_min !== undefined &&
+          drawing.adv.depth_min !== '' &&
+          drawing.adv.depth_max !== null &&
+          drawing.adv.depth_max !== undefined &&
+          drawing.adv.depth_max !== '' &&
+          Number(drawing.adv.depth_min) > Number(drawing.adv.depth_max)
         ) {
           throw new Error('Depth minimum must be less than or equal to depth maximum.');
         }
         if (
-          adv.depth_large_tick_interval !== null &&
-          adv.depth_large_tick_interval !== undefined &&
-          adv.depth_large_tick_interval !== ''
+          drawing.adv.depth_large_tick_interval !== null &&
+          drawing.adv.depth_large_tick_interval !== undefined &&
+          drawing.adv.depth_large_tick_interval !== ''
         ) {
-          if (Number(adv.depth_large_tick_interval) <= 0) throw new Error('Depth large tick interval must be greater than 0.');
+          if (Number(drawing.adv.depth_large_tick_interval) <= 0) throw new Error('Depth large tick interval must be greater than 0.');
         }
         if (
           mode.value === 'circular' &&
-          adv.depth_small_tick_interval !== null &&
-          adv.depth_small_tick_interval !== undefined &&
-          adv.depth_small_tick_interval !== ''
+          drawing.adv.depth_small_tick_interval !== null &&
+          drawing.adv.depth_small_tick_interval !== undefined &&
+          drawing.adv.depth_small_tick_interval !== ''
         ) {
-          if (Number(adv.depth_small_tick_interval) <= 0) throw new Error('Depth small tick interval must be greater than 0.');
+          if (Number(drawing.adv.depth_small_tick_interval) <= 0) throw new Error('Depth small tick interval must be greater than 0.');
         }
         if (
-          adv.depth_tick_font_size !== null &&
-          adv.depth_tick_font_size !== undefined &&
-          adv.depth_tick_font_size !== ''
+          drawing.adv.depth_tick_font_size !== null &&
+          drawing.adv.depth_tick_font_size !== undefined &&
+          drawing.adv.depth_tick_font_size !== ''
         ) {
-          if (Number(adv.depth_tick_font_size) <= 0) throw new Error('Depth tick font size must be greater than 0.');
+          if (Number(drawing.adv.depth_tick_font_size) <= 0) throw new Error('Depth tick font size must be greater than 0.');
         }
       };
       const normalizeDepthTrackValue = (value) => {
@@ -2574,30 +2572,30 @@ export const createRunAnalysis = ({
       );
       const ensureDepthTrackConfigAt = (index) => {
         const idx = Math.max(0, Number(index) || 0);
-        if (!Array.isArray(adv.depth_tracks)) adv.depth_tracks = [];
-        while (adv.depth_tracks.length <= idx) {
-          const nextIndex = adv.depth_tracks.length;
-          adv.depth_tracks.push({
+        if (!Array.isArray(drawing.adv.depth_tracks)) drawing.adv.depth_tracks = [];
+        while (drawing.adv.depth_tracks.length <= idx) {
+          const nextIndex = drawing.adv.depth_tracks.length;
+          drawing.adv.depth_tracks.push({
             label: getDepthTrackFallbackLabel(nextIndex),
-            color: nextIndex === 0 ? String(adv.depth_color || '#4A90E2') : '',
+            color: nextIndex === 0 ? String(drawing.adv.depth_color || '#4A90E2') : '',
             height: null,
             large_tick_interval: null,
             small_tick_interval: null,
             tick_font_size: null
           });
         }
-        const config = adv.depth_tracks[idx];
+        const config = drawing.adv.depth_tracks[idx];
         if (!config || typeof config !== 'object' || Array.isArray(config)) {
-          adv.depth_tracks[idx] = {
+          drawing.adv.depth_tracks[idx] = {
             label: getDepthTrackFallbackLabel(idx),
-            color: idx === 0 ? String(adv.depth_color || '#4A90E2') : '',
+            color: idx === 0 ? String(drawing.adv.depth_color || '#4A90E2') : '',
             height: null,
             large_tick_interval: null,
             small_tick_interval: null,
             tick_font_size: null
           };
         }
-        return adv.depth_tracks[idx];
+        return drawing.adv.depth_tracks[idx];
       };
       const syncDepthSlotLegendLabelsFromTrackConfigs = (slots, trackFiles = []) => {
         if (!Array.isArray(slots)) return;
@@ -2609,7 +2607,7 @@ export const createRunAnalysis = ({
         }
         syncDepthSlotLabels(/** @type {any} */ ({
           slots,
-          depthTracks: adv.depth_tracks,
+          depthTracks: drawing.adv.depth_tracks,
           activeCount: trackCount
         }));
       };
@@ -2636,13 +2634,13 @@ export const createRunAnalysis = ({
         }
       };
       const normalizeGcContentPercentState = () => {
-        adv.gc_content_mode = String(adv.gc_content_mode || '').trim().toLowerCase() === 'percent'
+        drawing.adv.gc_content_mode = String(drawing.adv.gc_content_mode || '').trim().toLowerCase() === 'percent'
           ? 'percent'
           : 'deviation';
-        if (adv.gc_content_mode !== 'percent') return;
+        if (drawing.adv.gc_content_mode !== 'percent') return;
 
-        const minPercent = Number(adv.gc_content_min_percent);
-        const maxPercent = Number(adv.gc_content_max_percent);
+        const minPercent = Number(drawing.adv.gc_content_min_percent);
+        const maxPercent = Number(drawing.adv.gc_content_max_percent);
         if (!Number.isFinite(minPercent)) {
           throw new Error('GC content minimum percent must be a finite number.');
         }
@@ -2652,63 +2650,63 @@ export const createRunAnalysis = ({
         if (minPercent > maxPercent) {
           throw new Error('GC content minimum percent must be less than or equal to maximum percent.');
         }
-        adv.gc_content_min_percent = minPercent;
-        adv.gc_content_max_percent = maxPercent;
+        drawing.adv.gc_content_min_percent = minPercent;
+        drawing.adv.gc_content_max_percent = maxPercent;
 
         if (
-          adv.gc_content_tick_interval !== null &&
-          adv.gc_content_tick_interval !== undefined &&
-          adv.gc_content_tick_interval !== ''
+          drawing.adv.gc_content_tick_interval !== null &&
+          drawing.adv.gc_content_tick_interval !== undefined &&
+          drawing.adv.gc_content_tick_interval !== ''
         ) {
-          if (Number(adv.gc_content_tick_interval) <= 0) throw new Error('GC content large tick interval must be greater than 0.');
+          if (Number(drawing.adv.gc_content_tick_interval) <= 0) throw new Error('GC content large tick interval must be greater than 0.');
         }
         if (
-          adv.gc_content_small_tick_interval !== null &&
-          adv.gc_content_small_tick_interval !== undefined &&
-          adv.gc_content_small_tick_interval !== ''
+          drawing.adv.gc_content_small_tick_interval !== null &&
+          drawing.adv.gc_content_small_tick_interval !== undefined &&
+          drawing.adv.gc_content_small_tick_interval !== ''
         ) {
-          if (Number(adv.gc_content_small_tick_interval) <= 0) throw new Error('GC content small tick interval must be greater than 0.');
+          if (Number(drawing.adv.gc_content_small_tick_interval) <= 0) throw new Error('GC content small tick interval must be greater than 0.');
         }
         if (
-          adv.gc_content_tick_font_size !== null &&
-          adv.gc_content_tick_font_size !== undefined &&
-          adv.gc_content_tick_font_size !== ''
+          drawing.adv.gc_content_tick_font_size !== null &&
+          drawing.adv.gc_content_tick_font_size !== undefined &&
+          drawing.adv.gc_content_tick_font_size !== ''
         ) {
-          if (Number(adv.gc_content_tick_font_size) <= 0) throw new Error('GC content tick font size must be greater than 0.');
+          if (Number(drawing.adv.gc_content_tick_font_size) <= 0) throw new Error('GC content tick font size must be greater than 0.');
         }
       };
       normalizeGcContentPercentState();
 
       if (mode.value === 'circular') {
-        const normalizedCircularPlotTitle = String(form.plot_title || '').trim();
-        const normalizedPlotTitlePosition = normalizeCircularPlotTitlePosition(adv.plot_title_position);
-        const useCircularTrackSlots = adv.circular_track_slots_enabled === true;
+        const normalizedCircularPlotTitle = String(drawing.form.plot_title || '').trim();
+        const normalizedPlotTitlePosition = normalizeCircularPlotTitlePosition(drawing.adv.plot_title_position);
+        const useCircularTrackSlots = drawing.adv.circular_track_slots_enabled === true;
         const circularTrackAxisIndex = clampCircularTrackAxisIndex(
-          adv.circular_track_slots_axis_index,
-          Array.isArray(adv.circular_track_slots) ? adv.circular_track_slots.length : 0
+          drawing.adv.circular_track_slots_axis_index,
+          Array.isArray(drawing.adv.circular_track_slots) ? drawing.adv.circular_track_slots.length : 0
         );
         const circularTrackSlots = useCircularTrackSlots
           ? applyCircularSuppressControlsToSlots(
               applyCircularTrackOrderPlacements(
-                adv.circular_track_slots,
-                adv.nt,
-                form.track_type,
+                drawing.adv.circular_track_slots,
+                drawing.adv.nt,
+                drawing.form.track_type,
                 circularTrackAxisIndex
               ),
-              form
+              drawing.form
             )
           : [];
         if (useCircularTrackSlots) {
-          adv.circular_track_slots.splice(0, adv.circular_track_slots.length, ...circularTrackSlots);
+          drawing.adv.circular_track_slots.splice(0, drawing.adv.circular_track_slots.length, ...circularTrackSlots);
           const circularTrackOnAxisIndex = circularTrackSlots.findIndex((slot) => slot?.side === 'overlay');
           const normalizedCircularTrackAxisIndex = circularTrackOnAxisIndex >= 0
             ? circularTrackOnAxisIndex
             : (
                 circularTrackAxisIndex === null
-                  ? inferLegacyAxisIndexFromFeature(circularTrackSlots, form.track_type)
+                  ? inferLegacyAxisIndexFromFeature(circularTrackSlots, drawing.form.track_type)
                   : circularTrackAxisIndex
               );
-          adv.circular_track_slots_axis_index = clampCircularTrackAxisIndex(
+          drawing.adv.circular_track_slots_axis_index = clampCircularTrackAxisIndex(
             normalizedCircularTrackAxisIndex,
             circularTrackSlots.length
           );
@@ -2716,32 +2714,25 @@ export const createRunAnalysis = ({
         // Numeric settings (plot title font size, center radius, label
         // spacing, multi-record ratios, ring geometry) are projected literally
         // by the request and validated by Python; Generate keeps the draft.
-        const keepFullDefinitionWithPlotTitle = Boolean(adv.keep_full_definition_with_plot_title);
-        form.plot_title = normalizedCircularPlotTitle;
-        adv.plot_title_position = normalizedPlotTitlePosition;
-        adv.keep_full_definition_with_plot_title = keepFullDefinitionWithPlotTitle;
+        const keepFullDefinitionWithPlotTitle = Boolean(drawing.adv.keep_full_definition_with_plot_title);
+        drawing.form.plot_title = normalizedCircularPlotTitle;
+        drawing.adv.plot_title_position = normalizedPlotTitlePosition;
+        drawing.adv.keep_full_definition_with_plot_title = keepFullDefinitionWithPlotTitle;
 
-        const labelsModeRaw =
-          typeof form.labels_mode === 'string'
-            ? form.labels_mode
-            : (form.allow_inner_labels ? 'both' : (form.show_labels ? 'out' : 'none'));
-        const labelsMode = String(labelsModeRaw || 'none').trim().toLowerCase();
-        const normalizedLabelRendering = labelsMode === 'none' ? 'auto' : normalizeLabelRendering(adv.label_rendering);
-        adv.label_rendering = normalizedLabelRendering;
         const normalizedCircularLabelPlacement =
-          String(adv.circular_label_placement || '').trim().toLowerCase() === 'radial'
+          String(drawing.adv.circular_label_placement || '').trim().toLowerCase() === 'radial'
             ? 'radial'
             : 'horizontal';
-        adv.circular_label_placement = normalizedCircularLabelPlacement;
-        if (form.multi_record_canvas) {
+        drawing.adv.circular_label_placement = normalizedCircularLabelPlacement;
+        if (drawing.form.multi_record_canvas) {
           const effectiveRecordPositions = mergeCircularRecordPositions(
             circularRecordList.value,
-            adv.multi_record_positions
+            drawing.adv.multi_record_positions
           );
-          requireCurrentCircularMultiRecordSizeMode(adv.multi_record_size_mode);
-          adv.multi_record_positions.splice(
+          requireCurrentCircularMultiRecordSizeMode(drawing.adv.multi_record_size_mode);
+          drawing.adv.multi_record_positions.splice(
             0,
-            adv.multi_record_positions.length,
+            drawing.adv.multi_record_positions.length,
             ...effectiveRecordPositions
           );
         }
@@ -2784,7 +2775,7 @@ export const createRunAnalysis = ({
         }
         const hasCircularDepthFile = circularDepthEntries.length > 0;
         const circularSlotNeedsDepth = useCircularTrackSlots && hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth');
-        if (form.show_depth || circularSlotNeedsDepth) {
+        if (drawing.form.show_depth || circularSlotNeedsDepth) {
           if (!hasCircularDepthFile) throw new Error('Please upload a Depth TSV file or disable Show depth track.');
           for (let depthIndex = 0; depthIndex < circularDepthEntries.length; depthIndex += 1) {
             const entry = circularDepthEntries[depthIndex];
@@ -2799,27 +2790,27 @@ export const createRunAnalysis = ({
 
         assertActiveModeInputs?.('circular', state);
 
-        const sourceMode = String(circularConservation.source || '').trim().toLowerCase() === 'upload'
+        const sourceMode = String(drawing.circularConservation.source || '').trim().toLowerCase() === 'upload'
           ? 'upload'
           : 'losat';
         const circularConservationSourceFiles = sourceMode === 'upload'
           ? normalizeFileList(files.c_conservation_blasts)
           : normalizeFileList(files.c_conservation_fastas);
         const shouldDrawCircularPairwiseComparisons = circularConservationSourceFiles.length > 0;
-        circularConservation.enabled = shouldDrawCircularPairwiseComparisons;
+        drawing.circularConservation.enabled = shouldDrawCircularPairwiseComparisons;
 
         if (shouldDrawCircularPairwiseComparisons) {
           setProcessingStatus('Preparing conservation comparisons...');
           // Thresholds are evaluated before conservation work; the request
           // projects the same resolution, and the draft keeps what was typed.
-          resolveComparisonThresholds(adv, 'circular');
+          resolveComparisonThresholds(drawing.adv, 'circular');
 
           const runCircularLosatConservation = async (comparisonEntries) => {
             const circularLosatProgram = normalizeCircularConservationLosatProgram(
-              circularConservation.losat_program
+              drawing.circularConservation.losat_program
             );
-            circularConservation.losat_program = circularLosatProgram;
-            const subjectGencode = normalizePositiveInteger(circularConservation.subject_gencode, 1);
+            drawing.circularConservation.losat_program = circularLosatProgram;
+            const subjectGencode = normalizePositiveInteger(drawing.circularConservation.subject_gencode, 1);
             const buildExtraArgs = (comparisonGencode) => {
               if (circularLosatProgram === 'tblastx') {
                 return [
@@ -2829,7 +2820,7 @@ export const createRunAnalysis = ({
                   String(subjectGencode)
                 ];
               }
-              const normalizedTask = String(losat.blastn?.task || 'megablast').trim() || 'megablast';
+              const normalizedTask = String(drawing.losat.blastn?.task || 'megablast').trim() || 'megablast';
               return ['--task', normalizedTask];
             };
             const circularLosatSuffix = circularLosatProgram === 'tblastx' ? 'tlosatx' : 'losatn';
@@ -2868,7 +2859,7 @@ export const createRunAnalysis = ({
               const cacheMetadata = {
                 flow: 'circular-conservation',
                 program: circularLosatProgram,
-                outfmt: String(losat.outfmt || '6'),
+                outfmt: String(drawing.losat.outfmt || '6'),
                 args: extraArgs,
                 queryCanonicalHash: queryHash,
                 subjectCanonicalHash: subjectHash
@@ -2901,7 +2892,7 @@ export const createRunAnalysis = ({
                   subjectSequenceKey,
                   queryCanonicalHash: queryHash,
                   subjectCanonicalHash: subjectHash,
-                  outfmt: losat.outfmt || '6',
+                  outfmt: drawing.losat.outfmt || '6',
                   extraArgs
                 });
               }
@@ -2942,7 +2933,7 @@ export const createRunAnalysis = ({
                   text: result.text,
                   program: circularLosatProgram,
                   flow: 'circular-conservation',
-                  outfmt: String(losat.outfmt || '6'),
+                  outfmt: String(drawing.losat.outfmt || '6'),
                   args: job?.extraArgs || [],
                   queryCanonicalHash: job?.queryCanonicalHash || '',
                   subjectCanonicalHash: job?.subjectCanonicalHash || '',
@@ -2979,8 +2970,8 @@ export const createRunAnalysis = ({
             if (blastFiles.length === 0) {
               throw new Error('Please upload at least one BLAST outfmt 6/7 file for Pairwise Comparisons.');
             }
-            const rawReference = String(circularConservation.reference || 'auto').trim().toLowerCase();
-            circularConservation.reference = ['query', 'subject'].includes(rawReference)
+            const rawReference = String(drawing.circularConservation.reference || 'auto').trim().toLowerCase();
+            drawing.circularConservation.reference = ['query', 'subject'].includes(rawReference)
               ? rawReference
               : 'auto';
             workingLosatCacheInfo = [];
@@ -2989,10 +2980,10 @@ export const createRunAnalysis = ({
             if (comparisonFiles.length === 0) {
               throw new Error('Please upload at least one comparison sequence file for Pairwise Comparisons.');
             }
-            const conservationEntries = orderedConservationSources(comparisonFiles, circularConservation);
-            const conservationSeries = buildConservationSeries(comparisonFiles, circularConservation);
+            const conservationEntries = orderedConservationSources(comparisonFiles, drawing.circularConservation);
+            const conservationSeries = buildConservationSeries(comparisonFiles, drawing.circularConservation);
             const conservationResults = await runCircularLosatConservation(conservationEntries);
-            circularConservation.reference = 'subject';
+            drawing.circularConservation.reference = 'subject';
             resolvedCircularConservation = conservationResults.map((result, index) => {
               /** @type {Record<string, any>} */
               const source = conservationEntries[index] || {};
@@ -3011,17 +3002,17 @@ export const createRunAnalysis = ({
           workingLosatCacheInfo = [];
         }
       } else {
-        requireCurrentLinearTrackLayout(form.linear_track_layout);
-        const useLinearTrackSlots = adv.linear_track_slots_enabled === true;
+        requireCurrentLinearTrackLayout(drawing.form.linear_track_layout);
+        const useLinearTrackSlots = drawing.adv.linear_track_slots_enabled === true;
         let linearTrackSlots = [];
         /** @type {number | null} */
         let linearTrackSlotAxisIndex = null;
         let linearSlotNeedsDepth = false;
         if (useLinearTrackSlots) {
           linearTrackSlots = normalizeLinearTrackSlots(
-            adv.linear_track_slots,
-            adv.nt,
-            form.linear_track_layout
+            drawing.adv.linear_track_slots,
+            drawing.adv.nt,
+            drawing.form.linear_track_layout
           );
           linearSlotNeedsDepth = linearTrackSlots.some(
             (slot) => slot.enabled !== false && slot.renderer === 'depth'
@@ -3046,7 +3037,7 @@ export const createRunAnalysis = ({
             linearDepthRepresentativeFiles()
           );
           linearTrackSlotAxisIndex = clampLinearTrackAxisIndex(
-            adv.linear_track_slots_axis_index,
+            drawing.adv.linear_track_slots_axis_index,
             linearTrackSlots.length
           );
           linearTrackSlotAxisIndex = resolveLinearTrackAxisIndex(
@@ -3056,90 +3047,90 @@ export const createRunAnalysis = ({
           linearTrackSlots = applyLinearTrackOrderPlacements(
             linearTrackSlots,
             linearTrackSlotAxisIndex,
-            adv.nt,
-            form.linear_track_layout
+            drawing.adv.nt,
+            drawing.form.linear_track_layout
           );
-          adv.linear_track_slots_axis_index = linearTrackSlotAxisIndex;
-          adv.linear_track_slots.splice(0, adv.linear_track_slots.length, ...linearTrackSlots);
+          drawing.adv.linear_track_slots_axis_index = linearTrackSlotAxisIndex;
+          drawing.adv.linear_track_slots.splice(0, drawing.adv.linear_track_slots.length, ...linearTrackSlots);
         }
         // This branch is Linear mode, where the 'A resolved Linear comparison plan is required.' check above
         // throws when the snapshot is null.
         const comparisonResolution = /** @type {NonNullable<typeof activeComparisonPlanSnapshot>} */ (activeComparisonPlanSnapshot);
         const hasComparisonIntent = comparisonResolution.hasComparisonIntent === true;
         const hasLosatIntent = comparisonResolution.hasLosatIntent === true;
-        const useProteinBlastp = hasLosatIntent && losatProgram.value === 'blastp';
+        const useProteinBlastp = hasLosatIntent && drawing.losatProgram.value === 'blastp';
         const blastpMode = useProteinBlastp
-          ? requireCurrentProteinBlastpMode(losat.blastp?.mode)
-          : String(losat.blastp?.mode ?? '');
+          ? requireCurrentProteinBlastpMode(drawing.losat.blastp?.mode)
+          : String(drawing.losat.blastp?.mode ?? '');
         const usePairwiseBlastp = useProteinBlastp && blastpMode === 'pairwise';
         const useOrthogroupBlastp = useProteinBlastp && blastpMode === 'orthogroup';
         const useCollinearBlastp = useProteinBlastp && blastpMode === 'collinear';
         if (hasComparisonIntent) {
           setProcessingStatus('Preparing comparisons...');
-          adv.pairwise_match_style = normalizeCurrentPairwiseMatchStyle(
-            adv.pairwise_match_style,
+          drawing.adv.pairwise_match_style = normalizeCurrentPairwiseMatchStyle(
+            drawing.adv.pairwise_match_style,
             'ribbon'
           );
         }
         // One resolution per Generate feeds LOSAT post-processing and caches.
         const comparisonThresholds = hasComparisonIntent
-          ? resolveComparisonThresholds(adv, 'linear')
+          ? resolveComparisonThresholds(drawing.adv, 'linear')
           : null;
 
         const blastpMaxHits = usePairwiseBlastp
-          ? requireCurrentProteinBlastpMaxHits(losat.blastp?.maxHits)
+          ? requireCurrentProteinBlastpMaxHits(drawing.losat.blastp?.maxHits)
           : 5;
         const blastpCandidateLimit = useProteinBlastp
-          ? resolveProteinBlastpCandidateLimit(losat.blastp?.candidateLimit)
+          ? resolveProteinBlastpCandidateLimit(drawing.losat.blastp?.candidateLimit)
           : null;
         const orthogroupMembershipMode = useOrthogroupBlastp || useCollinearBlastp
           ? requireCurrentOrthogroupMembershipMode(
-              losat.blastp?.orthogroupMembershipMode
+              drawing.losat.blastp?.orthogroupMembershipMode
             )
           : 'anchor_core_v1';
         const orthogroupMemberMaxHits = useOrthogroupBlastp || useCollinearBlastp
           ? requireCurrentOrthogroupMemberMaxHits(
-              losat.blastp?.orthogroupMemberMaxHits
+              drawing.losat.blastp?.orthogroupMemberMaxHits
             )
           : null;
         const collinearMinAnchors = useCollinearBlastp
-          ? requireCurrentCollinearMinAnchors(losat.blastp?.collinearMinAnchors)
+          ? requireCurrentCollinearMinAnchors(drawing.losat.blastp?.collinearMinAnchors)
           : 1;
         const collinearMaxUnitGap = useCollinearBlastp
-          ? requireCurrentCollinearMaxUnitGap(losat.blastp?.collinearMaxUnitGap)
+          ? requireCurrentCollinearMaxUnitGap(drawing.losat.blastp?.collinearMaxUnitGap)
           : 0;
         const collinearMaxDiagonalDrift = useCollinearBlastp
           ? requireCurrentCollinearMaxDiagonalDrift(
-              losat.blastp?.collinearMaxDiagonalDrift
+              drawing.losat.blastp?.collinearMaxDiagonalDrift
             )
           : 0;
         const collinearMaxConflictsInMergeGap = useCollinearBlastp
           ? requireCurrentCollinearMaxConflicts(
-              losat.blastp?.collinearMaxConflictsInMergeGap
+              drawing.losat.blastp?.collinearMaxConflictsInMergeGap
             )
           : 1;
         const collinearMaxParalogLinksPerOrthogroup = useCollinearBlastp
           ? requireCurrentCollinearMaxParalogLinks(
-              losat.blastp?.collinearMaxParalogLinksPerOrthogroup
+              drawing.losat.blastp?.collinearMaxParalogLinksPerOrthogroup
             )
           : 2;
         const collinearColorMode = useCollinearBlastp
-          ? requireCurrentCollinearColorMode(losat.blastp?.collinearColorMode)
+          ? requireCurrentCollinearColorMode(drawing.losat.blastp?.collinearColorMode)
           : 'orientation';
         const collinearUnitMode = useCollinearBlastp
-          ? requireCurrentCollinearUnitMode(losat.blastp?.collinearUnitMode)
+          ? requireCurrentCollinearUnitMode(drawing.losat.blastp?.collinearUnitMode)
           : 'auto';
         const collinearAnchorMode = useCollinearBlastp
-          ? requireCurrentCollinearAnchorMode(losat.blastp?.collinearAnchorMode)
+          ? requireCurrentCollinearAnchorMode(drawing.losat.blastp?.collinearAnchorMode)
           : 'rbh';
         const collinearMergeOrientation = useCollinearBlastp
           ? requireCurrentCollinearMergeOrientation(
-              losat.blastp?.collinearMergeOrientation
+              drawing.losat.blastp?.collinearMergeOrientation
             )
           : 'either';
-        const collinearInferOrthogroups = requireCurrentCollinearInferOrthogroups(losat.blastp?.collinearInferOrthogroups);
+        const collinearInferOrthogroups = requireCurrentCollinearInferOrthogroups(drawing.losat.blastp?.collinearInferOrthogroups);
         const collinearSearchScope = useCollinearBlastp
-          ? requireCurrentCollinearSearchScope(losat.blastp?.collinearSearchScope)
+          ? requireCurrentCollinearSearchScope(drawing.losat.blastp?.collinearSearchScope)
           : 'adjacent';
 
         const reuseResolvedProteinArtifacts = useProteinBlastp
@@ -3176,55 +3167,48 @@ export const createRunAnalysis = ({
         if (useLosat) recordSessionLifecycleEvent('losat-cache-preparation-start');
 
         if (useProteinBlastp) {
-          losat.blastp.mode = blastpMode;
-          losat.blastp.candidateLimit = blastpCandidateLimit;
+          drawing.losat.blastp.mode = blastpMode;
+          drawing.losat.blastp.candidateLimit = blastpCandidateLimit;
         }
         if (usePairwiseBlastp) {
-          losat.blastp.maxHits = blastpMaxHits;
+          drawing.losat.blastp.maxHits = blastpMaxHits;
         } else if (useOrthogroupBlastp) {
-          losat.blastp.orthogroupMembershipMode = orthogroupMembershipMode;
-          losat.blastp.orthogroupMemberMaxHits = orthogroupMemberMaxHits;
+          drawing.losat.blastp.orthogroupMembershipMode = orthogroupMembershipMode;
+          drawing.losat.blastp.orthogroupMemberMaxHits = orthogroupMemberMaxHits;
         } else if (useCollinearBlastp) {
-          losat.blastp.orthogroupMembershipMode = orthogroupMembershipMode;
-          losat.blastp.orthogroupMemberMaxHits = orthogroupMemberMaxHits;
-          losat.blastp.collinearMinAnchors = collinearMinAnchors;
-          losat.blastp.collinearMaxUnitGap = collinearMaxUnitGap;
-          losat.blastp.collinearMaxDiagonalDrift = collinearMaxDiagonalDrift;
-          losat.blastp.collinearMaxConflictsInMergeGap = collinearMaxConflictsInMergeGap;
-          losat.blastp.collinearMaxParalogLinksPerOrthogroup =
+          drawing.losat.blastp.orthogroupMembershipMode = orthogroupMembershipMode;
+          drawing.losat.blastp.orthogroupMemberMaxHits = orthogroupMemberMaxHits;
+          drawing.losat.blastp.collinearMinAnchors = collinearMinAnchors;
+          drawing.losat.blastp.collinearMaxUnitGap = collinearMaxUnitGap;
+          drawing.losat.blastp.collinearMaxDiagonalDrift = collinearMaxDiagonalDrift;
+          drawing.losat.blastp.collinearMaxConflictsInMergeGap = collinearMaxConflictsInMergeGap;
+          drawing.losat.blastp.collinearMaxParalogLinksPerOrthogroup =
             collinearMaxParalogLinksPerOrthogroup;
-          losat.blastp.collinearColorMode = collinearColorMode;
-          losat.blastp.collinearUnitMode = collinearUnitMode;
-          losat.blastp.collinearAnchorMode = collinearAnchorMode;
-          losat.blastp.collinearMergeOrientation = collinearMergeOrientation;
-          losat.blastp.collinearSearchScope = collinearSearchScope;
+          drawing.losat.blastp.collinearColorMode = collinearColorMode;
+          drawing.losat.blastp.collinearUnitMode = collinearUnitMode;
+          drawing.losat.blastp.collinearAnchorMode = collinearAnchorMode;
+          drawing.losat.blastp.collinearMergeOrientation = collinearMergeOrientation;
+          drawing.losat.blastp.collinearSearchScope = collinearSearchScope;
         }
 
-        const normalizedPlotTitle = String(form.plot_title || '').trim();
-        const normalizedPlotTitlePosition = normalizeLinearPlotTitlePosition(adv.plot_title_position);
-        adv.linear_show_replicon = adv.linear_show_replicon === true;
-        adv.linear_accession_visibility = requireLinearLabelVisibilityMode(
-          adv.linear_accession_visibility,
+        const normalizedPlotTitle = String(drawing.form.plot_title || '').trim();
+        const normalizedPlotTitlePosition = normalizeLinearPlotTitlePosition(drawing.adv.plot_title_position);
+        drawing.adv.linear_show_replicon = drawing.adv.linear_show_replicon === true;
+        drawing.adv.linear_accession_visibility = requireLinearLabelVisibilityMode(
+          drawing.adv.linear_accession_visibility,
           'Linear Accession visibility'
         );
-        adv.linear_length_visibility = requireLinearLabelVisibilityMode(
-          adv.linear_length_visibility,
+        drawing.adv.linear_length_visibility = requireLinearLabelVisibilityMode(
+          drawing.adv.linear_length_visibility,
           'Linear Length / Coordinates visibility'
         );
-        adv.linear_definition_line_styles = normalizeDefinitionLineStyleState(adv.linear_definition_line_styles);
-        form.plot_title = normalizedPlotTitle;
-        adv.plot_title_position = normalizedPlotTitlePosition;
+        drawing.adv.linear_definition_line_styles = normalizeDefinitionLineStyleState(drawing.adv.linear_definition_line_styles);
+        drawing.form.plot_title = normalizedPlotTitle;
+        drawing.adv.plot_title_position = normalizedPlotTitlePosition;
 
-        const normalizedLabelPlacement = requireCurrentLinearLabelPlacement(
-          adv.label_placement
-        );
-        let normalizedLabelRendering = form.show_labels_linear === 'none' ? 'auto' : normalizeLabelRendering(adv.label_rendering);
-        if (normalizedLabelPlacement === 'above_feature') {
-          normalizedLabelRendering = 'auto';
-        }
-        adv.label_rendering = normalizedLabelRendering;
+        requireCurrentLinearLabelPlacement(drawing.adv.label_placement);
         if (hasComparisonIntent) {
-          const comparisonHeight = classifyOptionalPositiveNumber(adv.comparison_height);
+          const comparisonHeight = classifyOptionalPositiveNumber(drawing.adv.comparison_height);
           if (comparisonHeight.status === 'invalid') {
             throw diagnosticError('INPUT_INVALID', { field: 'match_height', reason: 'POSITIVE_OR_AUTO' });
           }
@@ -3308,7 +3292,7 @@ export const createRunAnalysis = ({
             }
           : null;
         const losatExecutionMode = useLosat ? getLosatExecutionMode() : 'serial';
-        const losatRequestedThreadsPerJob = useLosat ? getLosatThreadsPerJob() : undefined;
+        const losatRequestedThreadsPerJob = useLosat ? getLosatThreadsPerJob(drawing) : undefined;
         const losatRequestedTotalThreadBudget = useLosat ? getLosatTotalThreadBudget() : undefined;
         const losatRuntimeWarmup = useLosat
           ? prepareLosatRuntime({ includeThreaded: losatExecutionMode !== 'serial' }).then((runtime) => {
@@ -3539,7 +3523,7 @@ export const createRunAnalysis = ({
             return {
               identityKind: 'protein',
               program: 'blastp',
-              outfmt: String(losat.outfmt || '6'),
+              outfmt: String(drawing.losat.outfmt || '6'),
               args: argsKey,
               queryProteinSetHash: queryEntry.proteinSetHash,
               subjectProteinSetHash: subjectEntry.proteinSetHash,
@@ -3553,8 +3537,8 @@ export const createRunAnalysis = ({
           const subjectHash = await getSeqHash(subjectIdx);
           return {
             identityKind: 'nucleotide',
-            program: losatProgram.value,
-            outfmt: String(losat.outfmt || '6'),
+            program: drawing.losatProgram.value,
+            outfmt: String(drawing.losat.outfmt || '6'),
             args: argsKey,
             queryCanonicalHash: queryHash,
             subjectCanonicalHash: subjectHash
@@ -3660,7 +3644,8 @@ export const createRunAnalysis = ({
           const edge = comparisonResolution.edges.find(
             (candidate) => candidate.edgeKey === spec.edgeKey
           );
-          const fallback = getLosatPairDefaultName(
+          const fallback = losatPairDefaultName(
+            drawing,
             spec.edgeKey,
             queryEntry,
             subjectEntry
@@ -3689,9 +3674,9 @@ export const createRunAnalysis = ({
 
         const buildLosatArgs = (queryIdx, subjectIdx) => {
           const args = [];
-          if (losatProgram.value === 'blastn') {
-            pushArg(args, '--task', losat.blastn.task);
-          } else if (losatProgram.value === 'tblastx') {
+          if (drawing.losatProgram.value === 'blastn') {
+            pushArg(args, '--task', drawing.losat.blastn.task);
+          } else if (drawing.losatProgram.value === 'tblastx') {
             pushArg(args, '--query-gencode', losatRecordGencode(linearSeqs[queryIdx]));
             pushArg(args, '--db-gencode', losatRecordGencode(linearSeqs[subjectIdx]));
           } else {
@@ -3819,7 +3804,7 @@ export const createRunAnalysis = ({
             resolution: comparisonResolution,
             recordCount: linearSeqs.length,
             recordUids: linearSeqs.map((seq) => seq.uid),
-            program: losatProgram.value,
+            program: drawing.losatProgram.value,
             blastpMode,
             collinearInferOrthogroups,
             collinearSearchScope
@@ -3889,8 +3874,8 @@ export const createRunAnalysis = ({
           // CLI Sessions can specify a complete two-dimensional row layout.
           // For collinearity, every pair across adjacent rows is displayed;
           // the Web comparison-plan edges alone do not represent those pairs.
-          const canonicalGridRows = useCollinearBlastp && linearRecordLayoutEnabled.value
-            ? linearSeqs.map((seq) => linearRecordRows.find((entry) => entry.uid === seq.uid))
+          const canonicalGridRows = useCollinearBlastp && drawing.linearRecordLayoutEnabled.value
+            ? linearSeqs.map((seq) => drawing.linearRecordRows.find((entry) => entry.uid === seq.uid))
             : null;
           const hasCanonicalGridRows = canonicalGridRows?.length > 1
             && canonicalGridRows.every((entry) => entry?.canonicalRow === entry.row
@@ -3993,12 +3978,12 @@ export const createRunAnalysis = ({
                   queryIndex: spec.queryIndex,
                   subjectIndex: spec.subjectIndex,
                   cacheKey,
-                  program: losatProgram.value,
+                  program: drawing.losatProgram.value,
                   querySequenceKey: queryEntry.sequenceKey,
                   subjectSequenceKey: subjectEntry.sequenceKey,
                   queryCanonicalHash,
                   subjectCanonicalHash,
-                  outfmt: losat.outfmt || '6',
+                  outfmt: drawing.losat.outfmt || '6',
                   extraArgs: losatArgs,
                   cacheMetadata,
                   batch
@@ -4017,7 +4002,7 @@ export const createRunAnalysis = ({
             sourceJobs.push({
               ...members[0],
               cacheKey: await hashText(JSON.stringify([
-                losatProgram.value, losat.outfmt || '6', batch.args,
+                drawing.losatProgram.value, drawing.losat.outfmt || '6', batch.args,
                 batch.query.hash, batch.subject.hash
               ])),
               querySequenceKey: batch.query.sequenceKey,
@@ -4088,8 +4073,8 @@ export const createRunAnalysis = ({
                 identityKind: isProteinEntry ? 'protein' : 'nucleotide',
                 ...(isProteinEntry ? { idEncoding: 'runtime-handle-v1' } : {}),
                 text: result.text,
-                program: losatProgram.value,
-                outfmt: String(losat.outfmt || '6'),
+                program: drawing.losatProgram.value,
+                outfmt: String(drawing.losat.outfmt || '6'),
                 args: job?.extraArgs || [],
                 ...(cacheMetadata.searchContext ? { searchContext: cacheMetadata.searchContext } : {}),
                 ...(isProteinEntry
@@ -4107,7 +4092,7 @@ export const createRunAnalysis = ({
                       queryCanonicalHash: job?.queryCanonicalHash || '',
                       subjectCanonicalHash: job?.subjectCanonicalHash || ''
                     }),
-                runtime: webLosatRuntimeRecord(losatProgram.value)
+                runtime: webLosatRuntimeRecord(drawing.losatProgram.value)
               };
               cacheMap.set(result.cacheKey, rawEntry);
             });
@@ -4439,8 +4424,8 @@ export const createRunAnalysis = ({
             candidateLimitRequested: useProteinBlastp ? blastpCandidateLimit : null,
             candidateLimitEffective: useProteinBlastp ? blastpCandidateLimit : null,
             collinearSearchScope: useCollinearBlastp ? collinearSearchScope : null,
-            program: useProteinBlastp ? 'blastp' : losatProgram.value,
-            outfmt: String(losat.outfmt || '6'),
+            program: useProteinBlastp ? 'blastp' : drawing.losatProgram.value,
+            outfmt: String(drawing.losat.outfmt || '6'),
             rawTsvEntryCount: losatTiming.rawTsvEntryCount,
             rawTsvBytes: losatTiming.rawTsvBytes,
             rawTsvLargestEntryBytes: losatTiming.rawTsvLargestEntryBytes,
@@ -4500,7 +4485,7 @@ export const createRunAnalysis = ({
             )
           });
         }
-        if ((!useLinearTrackSlots && form.show_depth) || linearSlotNeedsDepth) {
+        if ((!useLinearTrackSlots && drawing.form.show_depth) || linearSlotNeedsDepth) {
           const depthRows = linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
           const totalDepthFiles = depthRows.reduce((sum, row) => sum + row.filter(Boolean).length, 0);
           if (totalDepthFiles === 0) {
@@ -4520,8 +4505,8 @@ export const createRunAnalysis = ({
         }
       }
 
-      if (annotationSets.length > 0) {
-        stageTextFile('/web_annotations.tsv', encodeAnnotationTable(annotationSets), {
+      if (drawing.annotationSets.length > 0) {
+        stageTextFile('/web_annotations.tsv', encodeAnnotationTable(drawing.annotationSets), {
           name: 'annotations.tsv',
           slot: 'generatedFiles.web_annotations'
         });
@@ -4540,7 +4525,7 @@ export const createRunAnalysis = ({
       const serializedFiles = await serializeCanonicalFiles(
         activeComparisonPlanSnapshot,
         linearRecordCatalog,
-        runState
+        requestDrawing
       );
       recordSessionLifecycleEvent('serialize-canonical-files-end');
       throwIfGenerationCanceled();
@@ -4551,15 +4536,11 @@ export const createRunAnalysis = ({
         ...entry,
         fasta: candidateFiles.c_conservation_fastas?.[entry.sourceIndex] || null
       }));
-      const candidateRequestState = {
-        ...runState,
-        selectedOrthogroupAlignmentFeature: {
-          value: workingSelectedOrthogroupAlignmentFeature
-        }
-      };
       recordSessionLifecycleEvent('canonical-request-construction-start');
       const canonical = buildCanonicalRenderRequest({
-        state: candidateRequestState,
+        state,
+        drawing: requestDrawing,
+        generatedLabelProjection,
         filesData: candidateFiles,
         recordDisplayRows: recordDisplayRows?.value || [],
         comparisonPlanSnapshot: activeComparisonPlanSnapshot,
@@ -4680,16 +4661,16 @@ export const createRunAnalysis = ({
         prepareCommitInput: {
           sourceReplaced,
           featureColorOverrides: colorCandidate.featureColorOverrides,
-          featureStrokeOverrides,
-          featureOverrides,
-          legendEntries: legendEntries.value,
-          deletedLegendEntries: deletedLegendEntries.value,
+          featureStrokeOverrides: drawing.featureStrokeOverrides,
+          featureOverrides: drawing.featureOverrides,
+          legendEntries: drawing.legendEntries.value,
+          deletedLegendEntries: drawing.deletedLegendEntries.value,
+          dormantLegendEntries: drawing.dormantLegendEntries.value,
           originalLegendOrder: originalLegendOrder.value,
-          addedLegendCaptions: addedLegendCaptions.value,
-          unrequestedDepthCaptions: unrequestedDepthCaptions(canonical),
-          otherModeLegendCaptions: otherModeLegendCaptions(),
-          legendColorOverrides,
-          legendStrokeOverrides,
+          addedLegendCaptions: drawing.addedLegendCaptions.value,
+          unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical),
+          legendColorOverrides: drawing.legendColorOverrides,
+          legendStrokeOverrides: drawing.legendStrokeOverrides,
           manualSpecificRules: candidateRules
         },
         timingEntries: postGbdrawTimingEntries
@@ -4762,6 +4743,7 @@ export const createRunAnalysis = ({
           candidateRunInfo.losatTelemetry = cloneJsonData(structuredLosatTelemetry);
         }
         candidateCliHelpers = buildLatestCliHelperFiles(
+          drawing,
           candidateRunInfo,
           generatedCliFileMap,
           normalizedOutputPrefix || 'out'
@@ -4811,17 +4793,17 @@ export const createRunAnalysis = ({
         lastRunInfo: candidateRunInfo,
         pairwiseMatchFactors: { ...(pairwiseMatchFactors?.value || {}) },
         editableLabels: [],
-        generatedLegendPosition: form.legend,
+        generatedLegendPosition: drawing.form.legend,
         generatedMode: mode.value,
         generatedMultiRecordCanvas:
-          mode.value === 'circular' ? Boolean(form.multi_record_canvas) : false,
+          mode.value === 'circular' ? Boolean(drawing.form.multi_record_canvas) : false,
         generatedCircularPlotTitlePosition: mode.value === 'circular'
-          ? normalizeCircularPlotTitlePosition(adv.plot_title_position)
+          ? normalizeCircularPlotTitlePosition(drawing.adv.plot_title_position)
           : currentOwnerSet.generatedCircularPlotTitlePosition,
         appliedPaletteName: String(
-          selectedPalette?.value || appliedPaletteName.value || 'default'
+          drawing.selectedPalette?.value || appliedPaletteName.value || 'default'
         ),
-        appliedPaletteColors: { ...currentColors.value },
+        appliedPaletteColors: { ...drawing.currentColors.value },
         pendingPaletteName: '',
         pendingPaletteColors: {}
       };
@@ -4890,7 +4872,7 @@ export const createRunAnalysis = ({
       const candidateGroupIds = candidateGroups
         .map((group) => String(group?.id || '').trim())
         .filter(Boolean);
-      rekeyCommittedOrthogroupOverrides(previousOrthogroups, candidateGroups);
+      rekeyCommittedOrthogroupOverrides(drawing, previousOrthogroups, candidateGroups);
       if (
         !workingSelectedOrthogroupId
         || !candidateGroupIds.includes(String(workingSelectedOrthogroupId || '').trim())
@@ -4900,9 +4882,9 @@ export const createRunAnalysis = ({
       selectedOrthogroupId.value = workingSelectedOrthogroupId;
       featureExtractionPending.value = false;
       featureExtractionError.value = null;
-      Object.keys(featureColorOverrides).forEach((key) => delete featureColorOverrides[key]);
+      Object.keys(drawing.featureColorOverrides).forEach((key) => delete drawing.featureColorOverrides[key]);
       Object.assign(
-        featureColorOverrides,
+        drawing.featureColorOverrides,
         cloneJsonValue(candidateCommit.featureColorOverrides, {})
       );
       // Feature strokes stay in the draft when this Result does not draw their
@@ -4947,17 +4929,19 @@ export const createRunAnalysis = ({
       // source removes only the edits whose feature that source no longer has,
       // and the edits of records the request dropped; Python names them.
       featureEditRemovalCount.value = sourceReplaced ? pruneUnmatchedFeatureOverrides({
-        featureOverrides,
-        featurePlacementOverrides: state.featurePlacementOverrides,
+        featureOverrides: drawing.featureOverrides,
+        featurePlacementOverrides: drawing.featurePlacementOverrides,
+        featureStrokeOverrides: drawing.featureStrokeOverrides,
         notices: canonicalExecution.featureIdentityNotices,
-        // Record keys name records of one mode; the reconcile reaches only its edits (R2).
-        scope: canonical.renderRequest.mode,
         replacedRecordKeys: replacedFeatures.filter((feature) => feature.scope === canonical.renderRequest.mode)
           .map((feature) => String(feature.record_key)),
         previousRecords: previousRequestRecords,
         currentRecords: canonical.renderRequest.records || [],
         biologicalFeatures: candidateBiologicalFeatures
       }) : 0;
+      // OV-120: a source replacement also retires the renames of the Legend
+      // rows the new Result does not draw (as the OV-84 strokes).
+      if (sourceReplaced) drawing.dormantLegendEntries.value = [];
       if (typeof setGeneratedArtifactIdentity === 'function') {
         setGeneratedArtifactIdentity(generationResponse.artifactIdentity, {
           results: candidateCommit.results
@@ -4968,9 +4952,9 @@ export const createRunAnalysis = ({
         // target-only renders and Similarity alignment use it without LOSATP.
         adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
       }
-      if (!useCommittedComparison && importedComparisonIntent) {
+      if (!useCommittedComparison && drawing.importedComparisonIntent) {
         Object.assign(
-          importedComparisonIntent,
+          drawing.importedComparisonIntent,
           createImportedComparisonIntentState(),
           { disposition: IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE }
         );
@@ -5018,6 +5002,7 @@ export const createRunAnalysis = ({
     comparisonExecution = null,
     { prepareGenerate = null, afterGenerate = null } = {}
   ) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     /** @type {Record<string, any> | null} */
@@ -5037,7 +5022,7 @@ export const createRunAnalysis = ({
     generationCancelRequested.value = false;
     recordSessionLifecycleEvent('generate.processing-published');
     try {
-      const decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity);
+      const decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity, drawing);
       await nextTick();
       await waitForAfterPaint();
       if (!isCurrentOperation()) return { status: 'stale' };
@@ -5065,7 +5050,7 @@ export const createRunAnalysis = ({
       }
       const execute = (handle) => {
         beforeHandle = handle || generatedArtifactHandle;
-        return runAnalysisInternal({
+        return runAnalysisInternal(drawing, {
           decorationContinuity, comparisonPlanSnapshot, generatedArtifactHandle: beforeHandle,
           comparisonExecution, isCurrentOperation, isCurrentAlert
         });
@@ -5081,11 +5066,11 @@ export const createRunAnalysis = ({
               // part of the Result, so Undo and Redo restore them, and the
               // removal count, with this step.
               captureIntentCheckpoint: () => ({
-                placements: cloneJsonData(state.featurePlacementOverrides) || {},
+                placements: cloneJsonData(drawing.featurePlacementOverrides) || {},
                 removed: Number(featureEditRemovalCount.value) || 0
               }),
               restoreIntentCheckpoint: ({ placements, removed }) => {
-                restorePlacements(state.featurePlacementOverrides, placements);
+                restorePlacements(drawing.featurePlacementOverrides, placements);
                 featureEditRemovalCount.value = removed;
               },
               onCheckpointCapture: onGeneratedArtifactCheckpointCapture,
@@ -5154,11 +5139,12 @@ export const createRunAnalysis = ({
   };
 
   /**
+   * @param {DrawingState} drawing
    * @param {{ canonical: Record<string, any>, decorationContinuity?: any, generatedArtifactHandle?: Record<string, any> | null,
    *   commitIntent?: (() => any) | null, alignmentResetBefore?: any, alignmentResetReceipt?: any, operation?: string,
    *   isCurrentOperation?: () => boolean, isCurrentAlert?: () => boolean }} options
    */
-  const runCommittedCanonicalCandidateInternal = async ({
+  const runCommittedCanonicalCandidateInternal = async (drawing, {
     canonical,
     decorationContinuity = null,
     generatedArtifactHandle = null,
@@ -5236,17 +5222,18 @@ export const createRunAnalysis = ({
         prepareCommit: prepareCandidateCommit,
         prepareCommitInput: {
           sourceReplaced: false,
-          featureColorOverrides,
-          featureStrokeOverrides,
-          featureOverrides,
-          legendEntries: legendEntries.value,
-          deletedLegendEntries: deletedLegendEntries.value,
+          featureColorOverrides: drawing.featureColorOverrides,
+          featureStrokeOverrides: drawing.featureStrokeOverrides,
+          featureOverrides: drawing.featureOverrides,
+          legendEntries: drawing.legendEntries.value,
+          deletedLegendEntries: drawing.deletedLegendEntries.value,
+          dormantLegendEntries: drawing.dormantLegendEntries.value,
           originalLegendOrder: originalLegendOrder.value,
-          addedLegendCaptions: addedLegendCaptions.value,
-          unrequestedDepthCaptions: unrequestedDepthCaptions(canonical),
-          legendColorOverrides,
-          legendStrokeOverrides,
-          manualSpecificRules
+          addedLegendCaptions: drawing.addedLegendCaptions.value,
+          unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical),
+          legendColorOverrides: drawing.legendColorOverrides,
+          legendStrokeOverrides: drawing.legendStrokeOverrides,
+          manualSpecificRules: drawing.manualSpecificRules
         },
         timingEntries
       });
@@ -5409,6 +5396,7 @@ export const createRunAnalysis = ({
     alignmentResetReceipt = undefined,
     operation = 'generate'
   }) => {
+    const drawing = committedDrawing(canonical);
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     /** @type {Record<string, any> | null} */
@@ -5427,13 +5415,13 @@ export const createRunAnalysis = ({
     processingStatus.value = 'Preparing target record...';
     generationCancelRequested.value = false;
     try {
-      const decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity);
+      const decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity, drawing);
       await nextTick();
       await waitForAfterPaint();
       if (!isCurrentOperation()) return { status: 'stale' };
       const execute = (handle) => {
         beforeHandle = handle;
-        return runCommittedCanonicalCandidateInternal({
+        return runCommittedCanonicalCandidateInternal(drawing, {
           canonical, decorationContinuity, generatedArtifactHandle: beforeHandle,
           commitIntent, alignmentResetBefore, alignmentResetReceipt, operation, isCurrentOperation, isCurrentAlert
         });
@@ -5540,7 +5528,8 @@ export const createRunAnalysis = ({
 
   // A label reflow re-renders the committed Session with the current editor
   // tables (R1(c), N-16): it never reads the settings draft.
-  const runLabelReflowCandidate = async ({ requestId, decorationContinuity }) => {
+  /** @param {DrawingState} drawing */
+  const runLabelReflowCandidate = async (drawing, { requestId, decorationContinuity }) => {
     if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) {
       return { status: 'skipped' };
     }
@@ -5558,7 +5547,7 @@ export const createRunAnalysis = ({
     skipCaptureBaseConfig.value = true;
     const isCurrent = () => generationToken === latestGenerationToken && requestId === pendingReflowRequestId;
     try {
-      colorCandidate = await prepareAndAdmitCandidate(isCurrent);
+      colorCandidate = await prepareAndAdmitCandidate(drawing, isCurrent);
       if (!colorCandidate) return { status: 'stale' };
       const candidateRules = colorCandidate.rules;
       const canonical = projectCommittedEditorIntent({
@@ -5567,8 +5556,9 @@ export const createRunAnalysis = ({
           featureCatalog: featureCatalog?.value ?? null,
           legacyOrthogroupState: { groups: cloneJsonData(orthogroups.value || []) }
         },
-        state: {
-          ...state,
+        state,
+        drawing: {
+          ...drawing,
           selectedPalette: appliedPaletteName,
           currentColors: appliedPaletteColors,
           manualSpecificRules: candidateRules
@@ -5584,15 +5574,16 @@ export const createRunAnalysis = ({
         prepareCommit: prepareReflowResultCommit,
         prepareCommitInput: {
           featureColorOverrides: colorCandidate.featureColorOverrides,
-          featureStrokeOverrides,
-          featureOverrides,
-          legendEntries: legendEntries.value,
-          deletedLegendEntries: deletedLegendEntries.value,
+          featureStrokeOverrides: drawing.featureStrokeOverrides,
+          featureOverrides: drawing.featureOverrides,
+          legendEntries: drawing.legendEntries.value,
+          deletedLegendEntries: drawing.deletedLegendEntries.value,
+          dormantLegendEntries: drawing.dormantLegendEntries.value,
           originalLegendOrder: originalLegendOrder.value,
-          addedLegendCaptions: addedLegendCaptions.value,
-          unrequestedDepthCaptions: unrequestedDepthCaptions(canonical),
-          legendColorOverrides,
-          legendStrokeOverrides,
+          addedLegendCaptions: drawing.addedLegendCaptions.value,
+          unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical),
+          legendColorOverrides: drawing.legendColorOverrides,
+          legendStrokeOverrides: drawing.legendStrokeOverrides,
           manualSpecificRules: candidateRules
         },
         timingEntries,
@@ -5645,6 +5636,7 @@ export const createRunAnalysis = ({
   };
 
   const runLabelReflow = async () => {
+    const drawing = committedDrawing(getCommittedCanonicalSession?.());
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     pendingReflowRequestId += 1;
@@ -5661,12 +5653,12 @@ export const createRunAnalysis = ({
         activeReflowRequestId = pendingReflowRequestId;
         let decorationContinuity;
         try {
-          decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity);
+          decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity, drawing);
         } catch (error) {
           labelReflowLastError.value = liveEditFailure(formatError(error));
           return;
         }
-        await runLabelReflowCandidate({
+        await runLabelReflowCandidate(drawing, {
           decorationContinuity,
           requestId: activeReflowRequestId
         });

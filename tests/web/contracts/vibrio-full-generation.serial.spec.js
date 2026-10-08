@@ -242,11 +242,11 @@ const activeIntentSummary = (page) => page.evaluate(async () => {
   };
   const plain = (value) => JSON.parse(JSON.stringify(value ?? null));
   const overrides = {
-    fills: plain(state.featureColorOverrides),
-    strokes: plain(state.featureStrokeOverrides),
-    featureOverrides: plain(state.featureOverrides),
-    legendColors: plain(state.legendColorOverrides),
-    legendStrokes: plain(state.legendStrokeOverrides)
+    fills: plain(state.activeDrawing().featureColorOverrides),
+    strokes: plain(state.activeDrawing().featureStrokeOverrides),
+    featureOverrides: plain(state.activeDrawing().featureOverrides),
+    legendColors: plain(state.activeDrawing().legendColorOverrides),
+    legendStrokes: plain(state.activeDrawing().legendStrokeOverrides)
   };
   const digest = async (value) => {
     const bytes = new TextEncoder().encode(JSON.stringify(stable(value)));
@@ -259,61 +259,61 @@ const activeIntentSummary = (page) => page.evaluate(async () => {
       ? state.cInputType.value
       : state.lInputType.value,
     palette: {
-      selected: state.selectedPalette.value,
-      currentColorsSha256: await digest(state.currentColors.value),
-      currentColorCount: Object.keys(state.currentColors.value || {}).length,
+      selected: state.activeDrawing().selectedPalette.value,
+      currentColorsSha256: await digest(state.activeDrawing().currentColors.value),
+      currentColorCount: Object.keys(state.activeDrawing().currentColors.value || {}).length,
       instantPreview: state.paletteInstantPreviewEnabled.value,
       applied: state.appliedPaletteName.value,
-      pending: state.pendingPaletteName.value
+      pending: state.activeDrawing().pendingPaletteName.value
     },
     rules: {
-      specificCount: state.manualSpecificRules.length,
-      specificSha256: await digest(state.manualSpecificRules),
-      priorityCount: state.manualPriorityRules.length,
-      prioritySha256: await digest(state.manualPriorityRules)
+      specificCount: state.activeDrawing().manualSpecificRules.length,
+      specificSha256: await digest(state.activeDrawing().manualSpecificRules),
+      priorityCount: state.activeDrawing().manualPriorityRules.length,
+      prioritySha256: await digest(state.activeDrawing().manualPriorityRules)
     },
     filters: {
-      mode: state.filterMode.value,
-      whitelistCount: state.manualWhitelist.length,
-      blacklistText: state.manualBlacklist.value
+      mode: state.activeDrawing().filterMode.value,
+      whitelistCount: state.activeDrawing().manualWhitelist.length,
+      blacklistText: state.activeDrawing().manualBlacklist.value
     },
     form: {
-      plotTitle: state.form.plot_title,
-      labelsMode: state.form.labels_mode,
-      showScale: state.form.show_scale,
-      legend: state.form.legend
+      plotTitle: state.activeDrawing().form.plot_title,
+      labelsMode: state.activeDrawing().form.labels_mode,
+      showScale: state.activeDrawing().form.show_scale,
+      legend: state.activeDrawing().form.legend
     },
     adv: {
-      axisStrokeWidth: state.adv.axis_stroke_width,
-      labelFontSize: state.adv.label_font_size,
-      featureWidthCircular: state.adv.feature_width_circular,
-      plotTitlePosition: state.adv.plot_title_position
+      axisStrokeWidth: state.activeDrawing().adv.axis_stroke_width,
+      labelFontSize: state.activeDrawing().adv.label_font_size,
+      featureWidthCircular: state.activeDrawing().adv.feature_width_circular,
+      plotTitlePosition: state.activeDrawing().adv.plot_title_position
     },
-    annotationSetIds: state.annotationSets.map(({ id }) => id),
+    annotationSetIds: state.activeDrawing().annotationSets.map(({ id }) => id),
     circularTracks: {
-      enabled: state.adv.circular_track_slots_enabled,
-      slots: state.adv.circular_track_slots.map(({ id, renderer, enabled }) => ({
+      enabled: state.activeDrawing().adv.circular_track_slots_enabled,
+      slots: state.activeDrawing().adv.circular_track_slots.map(({ id, renderer, enabled }) => ({
         id,
         renderer,
         enabled
       }))
     },
-    linearComparisonPlan: plain(state.linearComparisonPlan),
+    linearComparisonPlan: plain(state.activeDrawing().linearComparisonPlan),
     proteinSearch: {
-      mode: state.losat.blastp.mode,
-      candidateLimit: state.losat.blastp.candidateLimit,
-      memberMaxHits: state.losat.blastp.orthogroupMemberMaxHits,
-      unitMode: state.losat.blastp.collinearUnitMode,
-      anchorMode: state.losat.blastp.collinearAnchorMode,
-      mergeOrientation: state.losat.blastp.collinearMergeOrientation,
-      searchScope: state.losat.blastp.collinearSearchScope
+      mode: state.activeDrawing().losat.blastp.mode,
+      candidateLimit: state.activeDrawing().losat.blastp.candidateLimit,
+      memberMaxHits: state.activeDrawing().losat.blastp.orthogroupMemberMaxHits,
+      unitMode: state.activeDrawing().losat.blastp.collinearUnitMode,
+      anchorMode: state.activeDrawing().losat.blastp.collinearAnchorMode,
+      mergeOrientation: state.activeDrawing().losat.blastp.collinearMergeOrientation,
+      searchScope: state.activeDrawing().losat.blastp.collinearSearchScope
     },
     linearRecordLayout: {
-      enabled: state.linearRecordLayoutEnabled.value,
-      recordGap: state.linearRecordGap.value,
-      rows: plain(state.linearRecordRows)
+      enabled: state.activeDrawing().linearRecordLayoutEnabled.value,
+      recordGap: state.activeDrawing().linearRecordGap.value,
+      rows: plain(state.activeDrawing().linearRecordRows)
     },
-    layoutPreferences: plain(state.layoutPreferences),
+    layoutPreferences: plain(state.activeDrawing().layoutPreferences),
     editorOverrides: {
       counts: Object.fromEntries(
         Object.entries(overrides).map(([name, values]) => [name, Object.keys(values || {}).length])

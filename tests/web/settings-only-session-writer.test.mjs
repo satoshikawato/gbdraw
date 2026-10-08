@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { gunzipSync } from 'node:zlib';
 import { readFile } from 'node:fs/promises';
+import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 
 // Exercise the existing coordinator and gzip writer with browser I/O stubbed.
 globalThis.window = {
@@ -16,8 +17,10 @@ globalThis.document = {
   body: { appendChild: () => {} },
   createElement: () => ({ addEventListener: () => {}, click: () => {}, parentNode: null })
 };
-const { SESSION_VERSION, exportSession, buildConfigData } = await import('../../gbdraw/web/js/services/config.js');
+const { SESSION_VERSION, exportSession, buildConfigData, importSession } = await import('../../gbdraw/web/js/services/config.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+globalThis.alert = () => {};
+installSessionImportWorker();
 const { adoptCurrentSessionDocument } = await import('../../gbdraw/web/js/services/session-authority.js');
 
 const savedDocument = async title => {
@@ -31,19 +34,20 @@ test('source-free Save emits no render metadata and preserves valid raw scalar d
   const fresh = await savedDocument('fresh settings');
   assert.equal(fresh.renderRequest, null);
   assert.equal(fresh.runMetadata, undefined);
-  assert.deepEqual(fresh.config, JSON.parse(JSON.stringify(freshConfig)));
+  // The shown mode's drawing is its slice (Session 46).
+  assert.deepEqual(fresh.modes.circular.config, JSON.parse(JSON.stringify(freshConfig)));
   assert.deepEqual(buildConfigData(state.activeDrawing()), freshConfig);
   assert.equal(adoptCurrentSessionDocument(fresh, SESSION_VERSION).canonical, null);
 
-  state.adv.circular_track_slots_enabled = true;
-  state.adv.circular_track_slots.splice(0, state.adv.circular_track_slots.length, {
+  state.activeDrawing().adv.circular_track_slots_enabled = true;
+  state.activeDrawing().adv.circular_track_slots.splice(0, state.activeDrawing().adv.circular_track_slots.length, {
     id: 'features', renderer: 'features', enabled: true, side: 'inside',
     width: { value: '1.', unit: 'px' }, radius: { value: '1e-3', unit: 'factor' },
     inner_gap_px: null, outer_gap_px: null, z: 0, params: { lane_direction: 'inside' }
   });
   const before = buildConfigData(state.activeDrawing());
   const saved = await savedDocument('typed text settings');
-  assert.deepEqual(saved.config, JSON.parse(JSON.stringify(before)));
+  assert.deepEqual(saved.modes.circular.config, JSON.parse(JSON.stringify(before)));
   assert.deepEqual(buildConfigData(state.activeDrawing()), before);
   assert.deepEqual(saved.results, []);
   assert.equal(saved.editorState.featureCatalog, null);
@@ -53,15 +57,15 @@ test('source-free Save emits no render metadata and preserves valid raw scalar d
   const forbiddenMetadata = structuredClone(saved);
   forbiddenMetadata.runMetadata = { annotationWarnings: [] };
   assert.throws(() => adoptCurrentSessionDocument(forbiddenMetadata, SESSION_VERSION), /committed render artifacts/);
-  state.adv.circular_track_slots[0].width = { value: '1e', unit: 'px' };
+  state.activeDrawing().adv.circular_track_slots[0].width = { value: '1e', unit: 'px' };
   await assert.rejects(exportSession('unfinished settings'), /width|positive|scalar/i);
-  assert.deepEqual(state.adv.circular_track_slots[0].width, { value: '1e', unit: 'px' });
+  assert.deepEqual(state.activeDrawing().adv.circular_track_slots[0].width, { value: '1e', unit: 'px' });
 });
 
 const { writeCircularMeasureValue, changeCircularMeasureUnit } = await import(
   '../../gbdraw/web/js/services/circular-track-measure.js'
 );
-const { buildCircularTrackSlotPayload } = await import('../../gbdraw/web/js/app/circular-track-slots.js');
+const { buildCircularTrackSlotPayload } = await import('../../gbdraw/web/js/services/circular-track-slot-model.js');
 const { projectSettingsOnlySession } = await import('../../gbdraw/web/js/services/session-request.js');
 const scalarFixtures = JSON.parse(await readFile(new URL(
   '../../docs/internal/issue-619-implementation-plan-20260927/SESSION_RESULTS/scalar-fixtures.json', import.meta.url
@@ -76,7 +80,7 @@ test('current gzip writer/admission keeps S00 valid scalars and codec drafts, in
   );
   for (const [mode, enabled] of [['circular', true], ['circular', false], ['linear', false]]) {
     state.mode.value = mode;
-    const slot = state.adv.circular_track_slots[0];
+    const slot = state.activeDrawing().adv.circular_track_slots[0];
     slot.enabled = enabled;
     for (const [index, [scalar, expected]] of cases.entries()) {
       slot.width = structuredClone(scalar);
@@ -101,7 +105,7 @@ test('current gzip writer/admission keeps S00 valid scalars and codec drafts, in
 
 test('writer and current admission reject invalid scalar drafts without altering them', async () => {
   state.mode.value = 'circular';
-  const slot = state.adv.circular_track_slots[0];
+  const slot = state.activeDrawing().adv.circular_track_slots[0];
   slot.enabled = true;
   slot.width = writeCircularMeasureValue('1.', 'px');
   slot.radius = null;
@@ -112,14 +116,24 @@ test('writer and current admission reject invalid scalar drafts without altering
     { value: '', unit: 'px' }, { value: 1, unit: 'em' }, { value: true, unit: 'px' },
     { value: Infinity, unit: 'px' }, Infinity, NaN
   ]) {
-    slot.width = scalar;
+    // A rejected Load restores the drawing's slots, so the slot is read again.
+    state.activeDrawing().adv.circular_track_slots[0].width = scalar;
     const before = buildConfigData(state.activeDrawing());
     await assert.rejects(exportSession('invalid scalar settings'), /width|positive|scalar/i);
     assert.deepEqual(buildConfigData(state.activeDrawing()), before);
+    // Session 46 Load checks each slice as a current-writer draft of its mode
+    // (a value JSON cannot write is the writer's check only).
+    const text = JSON.stringify(scalar);
+    if (text === undefined || text === 'null' || /null/.test(text)) continue;
     const invalid = structuredClone(valid);
-    invalid.config.adv.circular_track_slots[0].width = scalar;
+    invalid.modes.circular.config.adv.circular_track_slots[0].width = scalar;
     const invalidBefore = structuredClone(invalid);
-    assert.throws(() => adoptCurrentSessionDocument(invalid, SESSION_VERSION), /width|positive|scalar/i);
+    const loaded = await importSession({
+      target: { files: [new Blob([JSON.stringify(invalid)], { type: 'application/json' })], value: 'selected' }
+    });
+    assert.equal(loaded.status, 'error', text);
     assert.deepEqual(invalid, invalidBefore);
+    // A rejected Load leaves the drawing as it was.
+    assert.deepEqual(buildConfigData(state.activeDrawing()), before, `drawing after the rejected Load of ${text}`);
   }
 });

@@ -29,19 +29,19 @@ const inspect = page => page.evaluate(async () => {
   const result = s.results.value[s.selectedResultIndex.value].content;
   const svg = new DOMParser().parseFromString(result, 'image/svg+xml').documentElement;
   return JSON.parse(JSON.stringify({
-    entries: s.legendEntries.value.map(e => e.caption).sort(), original: s.originalLegendOrder.value,
-    entryState: s.legendEntries.value, originalColors: s.originalLegendColors.value,
-    manualRules: s.manualSpecificRules, strokes: s.legendStrokeOverrides,
+    entries: s.activeDrawing().legendEntries.value.map(e => e.caption).sort(), original: s.originalLegendOrder.value,
+    entryState: s.activeDrawing().legendEntries.value, originalColors: s.originalLegendColors.value,
+    manualRules: s.activeDrawing().manualSpecificRules, strokes: s.activeDrawing().legendStrokeOverrides,
     selectedResult: s.selectedResultIndex.value,
     resultsDigest: await digest(s.results.value),
     mountedDigest: await digest(s.svgContainer.value.querySelector('svg').outerHTML),
     requestDigest: await digest(getCommittedCanonicalRenderRequest()),
     result: captions(svg), mounted: captions(s.svgContainer.value.querySelector('svg')),
-    side: s.form.legend, fontSize: s.adv.legend_font_size, preferences: s.layoutPreferences.legend,
-    layoutPreferences: s.layoutPreferences,
-    palette: s.selectedPalette.value, colors: s.currentColors.value,
+    side: s.activeDrawing().form.legend, fontSize: s.activeDrawing().adv.legend_font_size, preferences: s.activeDrawing().layoutPreferences.legend,
+    layoutPreferences: s.activeDrawing().layoutPreferences,
+    palette: s.activeDrawing().selectedPalette.value, colors: s.activeDrawing().currentColors.value,
     featureIds: s.extractedFeatures.value.map(f => f.stable_feature_id),
-    overrides: s.legendColorOverrides, deleted: s.deletedLegendEntries.value
+    overrides: s.activeDrawing().legendColorOverrides, deleted: s.activeDrawing().deletedLegendEntries.value
   }));
 });
 const expectEntries = async (page, expected) => {
@@ -377,7 +377,7 @@ const legendView = async page => ({
       (features[id] ||= new Set()).add(stroke(element));
     });
     return {
-      entries: s.legendEntries.value.map(entry => `${entry.caption} ${entry.color}`),
+      entries: s.activeDrawing().legendEntries.value.map(entry => `${entry.caption} ${entry.color}`),
       swatches: getAllFeatureLegendGroups(svg).map(group => [...group.querySelectorAll('g[data-legend-key]')]
         .map(row => `${row.getAttribute('data-legend-key')}: ${stroke(getLegendEntrySwatch(row))}`).sort()),
       features: Object.fromEntries(Object.entries(features).map(([id, strokes]) => [id, [...strokes].sort().join(', ')]))
@@ -724,7 +724,7 @@ test('M13 circular: Stroke options is a disclosure without a History step or a s
     expect(await undoCount(), 'closing it records no step').toBe(start + 1);
 
     const saved = readSession(await download(page, 'Save Session', testInfo.outputPath('stroke-options.gbdraw-session.json.gz')));
-    const { legend } = saved.editorState;
+    const { legend } = saved.modes.circular.editorState;
     expect(legend.entries.filter(e => Object.hasOwn(e, 'showStroke')), 'the Session does not save the disclosure').toEqual([]);
     expect(Number(legend.strokeOverrides[caption]?.strokeWidth), 'the stroke edit is saved').toBe(2);
     expect(page.externalRequests).toEqual([]);
@@ -817,7 +817,7 @@ for (const mode of ['linear', 'circular']) {
 
       const saved = testInfo.outputPath(`restore-${mode}.gbdraw-session.json.gz`);
       const session = readSession(await download(page, 'Save Session', saved));
-      expect(session.editorState.legend.deletedEntries.map(entry => entry.caption), 'the Session saves the shorter list').toEqual(['CDS']);
+      expect(session.modes[mode].editorState.legend.deletedEntries.map(entry => entry.caption), 'the Session saves the shorter list').toEqual(['CDS']);
       const restored = await legendLayoutNumbers(page);
       await expectLiveEqualsGenerate(page, { label: `${mode}: Restore` });
       expect(await legendLayoutNumbers(page), 'Restore: the screen is the Generate').toEqual(restored);

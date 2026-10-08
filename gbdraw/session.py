@@ -105,7 +105,7 @@ class SessionDocument:
     def drawings(self) -> tuple[DrawingId, ...]:
         """The drawings with a committed request, top-level set first.
 
-        A drawing is named by its mode: Session 45 holds at most one Circular
+        A drawing is named by its mode: Session 46 holds at most one Circular
         and one Linear Result set (the second in ``otherModeResult``).
         """
 

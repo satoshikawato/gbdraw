@@ -26,8 +26,8 @@ const { promoteGallerySessionToCurrent } = await import(
   '../../gbdraw/web/js/services/gallery-session-migration.js'
 );
 const { FEATURE_CATALOG_SCHEMA } = await import('../../gbdraw/web/js/services/feature-catalog.js');
-// Session 45 keys per-feature edits by source identity (design Q4).
-const { FEATURE_IDENTITY_SESSION_VERSION: CURRENT_SESSION_VERSION } = await import(
+// Session 46 keeps each diagram mode's draft in `modes` (PD-OI-086).
+const { MODE_SCOPED_SESSION_VERSION: CURRENT_SESSION_VERSION } = await import(
   '../../gbdraw/web/js/services/session-authority.js'
 );
 
@@ -73,10 +73,17 @@ for (const name of sessionNames) {
   const result = await prepareGallerySessionForPublication(source);
   assert.equal(result.session.version, CURRENT_SESSION_VERSION, name);
   assert.equal(result.session.editorState.featureCatalog.schema, FEATURE_CATALOG_SCHEMA, name);
+  // Publication writes the slice of the Session's mode only; the other mode
+  // takes its defaults (plan 4.3). The draft has no home outside `modes`.
+  const mode = result.session.renderRequest.mode;
+  assert.deepEqual(Object.keys(result.session.modes), [mode], name);
+  for (const field of ['config', 'features']) assert.equal(Object.hasOwn(result.session, field), false, name);
+  const slice = result.session.modes[mode];
+  assert.equal(typeof slice.ui.layoutPreferences, 'object', name);
   // A Session written by the CLI carries no Web draft rows.
-  assert.deepEqual(result.session.features.featureOverrides ?? {}, {}, name);
+  assert.deepEqual(slice.features?.featureOverrides ?? {}, {}, name);
   for (const field of ['featureVisibilityOverrides', 'labelVisibilityOverrides', 'labelTextFeatureOverrides',
-    'labelTextFeatureOverrideSources']) assert.equal(Object.hasOwn(result.session.features, field), false, name);
+    'labelTextFeatureOverrideSources']) assert.equal(Object.hasOwn(slice.features || {}, field), false, name);
   assert.equal(result.session.renderRequest.schema, CANONICAL_REQUEST_SCHEMA, name);
   const plan = result.session.renderRequest.layout?.similarityAlignment;
   if (plan) {
@@ -104,18 +111,18 @@ for (const name of sessionNames) {
   );
   const readiness = await validateGalleryPublicationReadiness(result.session);
   assert.equal(readiness.equivalence.equivalent, true, name);
-  // The unused mode has no published draft intent: fresh Linear display values
-  // for Circular files and the fresh Circular grid default for Linear files.
-  const { form: publishedForm, adv: publishedAdv } = result.session.config;
-  if (result.session.renderRequest.mode === 'circular') {
-    assert.deepEqual([publishedAdv.linear_show_replicon, publishedAdv.linear_accession_visibility,
-      publishedAdv.linear_length_visibility], [false, 'auto', 'auto'], name);
+  // The slice holds no field of the other mode alone (registry `own`).
+  const { form: publishedForm, adv: publishedAdv } = slice.config;
+  if (mode === 'circular') {
+    for (const field of ['linear_show_replicon', 'linear_accession_visibility', 'linear_length_visibility']) {
+      assert.equal(Object.hasOwn(publishedAdv, field), false, `${name} ${field}`);
+    }
   } else {
-    assert.equal(publishedForm.multi_record_canvas, true, name);
+    assert.equal(Object.hasOwn(publishedForm, 'multi_record_canvas'), false, name);
   }
   if (name === 'tobacco-chloroplast.gbdraw-session.json') {
-    assert.equal(result.session.config.rules.length, 71, name);
-    assert.deepEqual(result.session.config.qualifierPriorityRules, [
+    assert.equal(slice.config.rules.length, 71, name);
+    assert.deepEqual(slice.config.qualifierPriorityRules, [
       { feat: 'CDS', order: 'gene,old_locus_tag' }
     ], name);
   }
@@ -221,7 +228,7 @@ for (const field of ['cli_circular_track_order', 'cli_circular_track_slots']) {
 for (const version of [27, 30, 34, 38, 43]) {
   assert.throws(
     () => admitGallerySession({ ...lambda, version }),
-    /supports current version 45 or historical versions 31-33\/39-44/
+    /supports current version 46 or historical versions 31-33\/39-44/
   );
 }
 

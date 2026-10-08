@@ -318,7 +318,7 @@ test('a Session 44 with crop and reverse complement keeps its feature edits', as
   await loadSession(page, 'tests/fixtures/sessions/feature-edits-crop-rc.v44.gbdraw-session.json.gz');
   const rows = await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
-    return Object.values(state.featureOverrides).map((row) => [row.biologicalFeatureId, row.featureVisibility,
+    return Object.values(state.activeDrawing().featureOverrides).map((row) => [row.biologicalFeatureId, row.featureVisibility,
       row.labelVisibility, row.labelText]).sort();
   });
   expect(rows).toEqual([
@@ -362,7 +362,7 @@ const LINEAR_V33 = 'tests/fixtures/sessions/feature-edits-linear-crop-rc.v33.gbd
 
 const featureOverrideRows = (page) => page.evaluate(async () => {
   const { state } = await import('/gbdraw/web/js/state.js');
-  return Object.values(state.featureOverrides).map((row) => [row.recordKey, row.biologicalFeatureId,
+  return Object.values(state.activeDrawing().featureOverrides).map((row) => [row.recordKey, row.biologicalFeatureId,
     row.featureVisibility, row.labelVisibility, row.labelText]).sort();
 });
 
@@ -442,7 +442,7 @@ test('an older Session whose sources cannot be read again fails to load and keep
     const app = window.__GBDRAW_APP__;
     const { state } = await import('/gbdraw/web/js/state.js');
     return { mode: app.mode, results: app.results.map((result) => result.content),
-      rows: Object.values(state.featureOverrides).map((row) => [row.biologicalFeatureId, row.featureVisibility,
+      rows: Object.values(state.activeDrawing().featureOverrides).map((row) => [row.biologicalFeatureId, row.featureVisibility,
         row.labelVisibility, row.labelText]).sort(), records: app.linearSeqs.map((seq) => seq.gb?.name || null) };
   });
   const previous = await loaded();

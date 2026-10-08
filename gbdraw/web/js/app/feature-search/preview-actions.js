@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { DrawingState } from '../../state.js' */
 import {
   buildFeatureSearchIndex,
   formatSearchMatchDetail,
@@ -55,7 +56,6 @@ export const createPreviewFeatureSearch = ({
     featureList,
     featureListState,
     orthogroups,
-    adv,
     previewFeatureSearchInput,
     previewFeatureSearchQuery,
     previewFeatureSearchField,
@@ -69,7 +69,8 @@ export const createPreviewFeatureSearch = ({
     clickedFeature
   } = state;
 
-  const getPopupMode = () => (adv?.rich_feature_popup === false ? 'simple' : 'rich');
+  // The rich popup is an app preference (`state.richFeaturePopup`), not a drawing setting.
+  const getPopupMode = () => (state.richFeaturePopup.value === false ? 'simple' : 'rich');
   let refreshRequestId = 0;
   let appliedSearchField = normalizeFeatureSearchField(previewFeatureSearchField.value, { popupMode: getPopupMode() });
   let appliedQualifierKey = String(previewFeatureSearchQualifierKey.value || '');
@@ -99,7 +100,8 @@ export const createPreviewFeatureSearch = ({
   // hidden feature is found too (R-5). A drawn feature is found by its
   // rendered ID; one the Result does not draw by its source identity.
   let featuresBySearchId = new Map();
-  const ensureSearchIndex = () => {
+  /** @param {DrawingState} drawing */
+  const ensureSearchIndex = (drawing) => {
     if (!searchIndex) {
       const labels = new Map((state.editableLabels?.value || []).map((entry) => [entry.featureId, entry]));
       featuresBySearchId = new Map();
@@ -116,8 +118,8 @@ export const createPreviewFeatureSearch = ({
             search_labels: [
               feature.search_labels,
               entry?.text,
-              featureOverrideValue(state.featureOverrides, feature, 'labelText'),
-              ...sources.map((source) => state.labelTextBulkOverrides?.[source])
+              featureOverrideValue(drawing.featureOverrides, feature, 'labelText'),
+              ...sources.map((source) => drawing.labelTextBulkOverrides?.[source])
             ]
           };
         }),
@@ -175,7 +177,8 @@ export const createPreviewFeatureSearch = ({
     disposePreviewFeatureSearchDomState(appliedSearchDomState);
   };
 
-  const refreshSearchNow = ({ preserveActive = true, center = false } = {}) => {
+  /** @param {DrawingState} drawing */
+  const refreshSearchNow = (drawing, { preserveActive = true, center = false } = {}) => {
     const popupMode = getPopupMode();
     const normalizedField = normalizeFeatureSearchField(appliedSearchField, { popupMode });
     appliedSearchField = normalizedField;
@@ -192,7 +195,7 @@ export const createPreviewFeatureSearch = ({
       return;
     }
     const featureIndex = ensureFeatureElementIndex(svg);
-    const index = ensureSearchIndex();
+    const index = ensureSearchIndex(drawing);
     const searchResult = runFeatureSearch({
       features: featureList.value.rows,
       renderedFeatureIds: new Set(index.featureOrder),
@@ -231,10 +234,11 @@ export const createPreviewFeatureSearch = ({
   };
 
   const scheduleRefreshSearch = (options = {}) => {
+    const drawing = state.activeDrawing();
     const requestId = ++refreshRequestId;
     nextTick(() => {
       if (requestId !== refreshRequestId) return;
-      refreshSearchNow(options);
+      refreshSearchNow(drawing, options);
     });
   };
 
@@ -379,10 +383,10 @@ export const createPreviewFeatureSearch = ({
   });
   watch([
     () => (state.editableLabels?.value || []).map((entry) => [entry.featureId, entry.sourceText, entry.text]),
-    () => Object.values(state.featureOverrides || {}).map((row) => [row.recordKey, row.biologicalFeatureId, row.labelText]),
-    () => state.labelTextBulkOverrides,
-    () => state.orthogroupNameOverrides,
-    () => state.orthogroupDescriptionOverrides
+    () => Object.values(state.activeDrawing().featureOverrides || {}).map((row) => [row.recordKey, row.biologicalFeatureId, row.labelText]),
+    () => state.activeDrawing().labelTextBulkOverrides,
+    () => state.activeDrawing().orthogroupNameOverrides,
+    () => state.activeDrawing().orthogroupDescriptionOverrides
   ], () => {
     invalidateSearchIndex();
     if (queryIsActive() && isActiveResultReady?.()) scheduleRefreshSearch();

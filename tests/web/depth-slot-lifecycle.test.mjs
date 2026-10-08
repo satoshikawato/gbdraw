@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const repoRoot = process.cwd();
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-depth-slot-lifecycle-'));
@@ -26,7 +27,8 @@ await cp(
 );
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 // The track-slot leaves the slot editors import.
-for (const leaf of ['depth-track-state.js', 'track-slot-display.js', 'track-slot-validation.js']) {
+for (const leaf of ['depth-track-state.js', 'track-slot-display.js', 'track-slot-validation.js',
+  'circular-track-slot-model.js', 'linear-track-slot-model.js']) {
   await cp(
     join(repoRoot, 'gbdraw', 'web', 'js', 'services', leaf),
     join(tempRoot, 'services', leaf)
@@ -82,7 +84,7 @@ const MODES = {
         annotationSets: [],
         circularRecordList: { value: [] }
       };
-      const editor = createCircularTrackSlotEditor({ state });
+      const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
       editor.normalizeCircularTrackSlots();
       return {
         state,
@@ -114,7 +116,7 @@ const MODES = {
         linearSeqs: [{ depth: sourceRow(sourced, width) }],
         annotationSets: []
       };
-      const editor = createLinearTrackSlotEditor({ state });
+      const editor = createLinearTrackSlotEditor({ state: withDrawings(state) });
       editor.normalizeLinearTrackSlots();
       return {
         state,

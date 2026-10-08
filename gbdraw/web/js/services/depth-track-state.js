@@ -290,6 +290,24 @@ export const ensureDepthTrackConfigShape = (tracks, count, defaults = {}) => {
   return targetTracks;
 };
 
+// The settings of Depth series `index` for an edit (TK-03). An edit writes a
+// series the drawing's mode has: `seriesCount` series, at least one. An index
+// past them names no series, so there is nothing to write and the series list
+// does not grow; the series up to `index` get their default fields.
+/**
+ * @param {Record<string, any>[]} tracks
+ * @param {number} index
+ * @param {number} seriesCount
+ * @param {Record<string, any>} [defaults]
+ * @returns {Record<string, any> | null}
+ */
+export const depthTrackConfigForEdit = (tracks, index, seriesCount, defaults = {}) => {
+  const idx = Math.max(0, Number(index) || 0);
+  if (!Array.isArray(tracks) || idx >= Math.max(1, Number(seriesCount) || 0)) return null;
+  ensureDepthTrackConfigShape(tracks, idx + 1, defaults);
+  return tracks[idx];
+};
+
 /** @param {ReconcileDepthTracksToFilesOptions} [options] */
 export const reconcileDepthTracksToFiles = ({
   files,

@@ -108,7 +108,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   });
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    app.adv.rich_feature_popup = true;
+    app.richFeaturePopup = true;
     app.form.prefix = 'UNRELATED_PENDING_PREFIX';
   });
 
@@ -215,7 +215,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.svgContent)).toBe(before.svg);
   expect(await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
-    return state.recordDisplayDrafts.length;
+    return state.activeDrawing().recordDisplayDrafts.length;
   })).toBe(0);
   expect(await page.evaluate(async () => (
     (await import('/gbdraw/web/js/services/config.js')).getCommittedCanonicalRenderRequest()
@@ -228,7 +228,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.svgContent)).toBe(transformedSvg);
   expect(await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
-    return state.recordDisplayDrafts[0];
+    return state.activeDrawing().recordDisplayDrafts[0];
   })).toMatchObject({
     startCoordinate: expectedStart,
     anchorIntent: {
@@ -247,7 +247,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
     .toBe(before.history + 1);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.evaluate(() => { window.__GBDRAW_APP__.adv.rich_feature_popup = false; });
+  await page.evaluate(() => { window.__GBDRAW_APP__.richFeaturePopup = false; });
   await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
   const simplePopup = page.locator('.feature-popup--simple');
   await expect(simplePopup).toBeVisible();
@@ -314,7 +314,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
     return {
       svg: window.__GBDRAW_APP__.svgContent,
       history: window.__GBDRAW_HISTORY__.getUndoCount(),
-      drafts: JSON.stringify(state.recordDisplayDrafts)
+      drafts: JSON.stringify(state.activeDrawing().recordDisplayDrafts)
     };
   });
   await staleActions.getByRole('button', { name: 'Apply and regenerate' }).click();
@@ -330,7 +330,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
     return {
       svg: window.__GBDRAW_APP__.svgContent,
       history: window.__GBDRAW_HISTORY__.getUndoCount(),
-      drafts: JSON.stringify(state.recordDisplayDrafts)
+      drafts: JSON.stringify(state.activeDrawing().recordDisplayDrafts)
     };
   })).toEqual(staleBefore);
   await page.evaluate(async () => {
@@ -351,7 +351,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   expect(saved.version).toBe(CURRENT_SESSION_VERSION);
   expect(saved.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
   expect(saved.renderRequest.records[0].display.startCoordinate).toBe(expectedStart);
-  expect(saved.config.recordDisplayDrafts[0].anchorIntent).toMatchObject({
+  expect(saved.modes[saved.ui.mode].config.recordDisplayDrafts[0].anchorIntent).toMatchObject({
     schema: 1,
     placement: 'anchor',
     anchor: 'midpoint',
@@ -366,7 +366,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   expect(await page.evaluate(() => window.__GBDRAW_APP__.svgContent)).toBe(transformedSvg);
   expect(await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
-    return state.recordDisplayDrafts[0];
+    return state.activeDrawing().recordDisplayDrafts[0];
   })).toMatchObject({
     startCoordinate: expectedStart,
     anchorIntent: {
@@ -499,7 +499,7 @@ test('Apply on Generate stages rotations that one Generate applies together', as
       runs: window.__GBDRAW_DIAGRAM_RUNS__.length,
       svg: window.__GBDRAW_APP__.svgContent,
       history: window.__GBDRAW_HISTORY__.getUndoCount(),
-      drafts: Object.fromEntries(state.recordDisplayDrafts
+      drafts: Object.fromEntries(state.activeDrawing().recordDisplayDrafts
         .map(({ recordId, startCoordinate }) => [recordId, startCoordinate]))
     };
   });
@@ -654,7 +654,7 @@ test('both modes record rotation resolves the same circular source anchor', asyn
       const { state } = await import('/gbdraw/web/js/state.js');
       const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
       const record = request.records.find((entry) => entry.recordKey === recordKey);
-      const draft = state.recordDisplayDrafts.find((entry) => (
+      const draft = state.activeDrawing().recordDisplayDrafts.find((entry) => (
         entry.anchorIntent?.recordKey === recordKey
       ));
       return {
@@ -712,7 +712,7 @@ const openLoadedRecordActions = async (page, { query, recordId, reads = 1 }) => 
   const recordReads = () => page.evaluate(() => window.__GBDRAW_RECORD_RESOURCE_READS__);
   const undoCount = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
   expect(await recordReads()).toBe(0);
-  await page.evaluate(() => { window.__GBDRAW_APP__.adv.rich_feature_popup = true; });
+  await page.evaluate(() => { window.__GBDRAW_APP__.richFeaturePopup = true; });
   const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
   await search.fill(query);
   await search.press('Enter');
@@ -917,7 +917,7 @@ test('Linear CLI Session keeps --region and --reverse_complement through Load an
   await installDiagramRequestObserver(page);
   await openApp(page);
   await loadSessionFile(page, session);
-  await page.evaluate(() => { window.__GBDRAW_APP__.adv.rich_feature_popup = true; });
+  await page.evaluate(() => { window.__GBDRAW_APP__.richFeaturePopup = true; });
   const openRecordActions = async (query) => {
     const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
     await search.fill(query);
@@ -1661,7 +1661,7 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
     state.selectedResultIndex.value = 0;
     state.svgContainer.value = container;
     state.featureCatalog.value = catalog;
-    state.featureOverrides[JSON.stringify([state.generatedMode.value, 'record-a', 'biological-a'])] = {
+    state.activeDrawing().featureOverrides[JSON.stringify([state.generatedMode.value, 'record-a', 'biological-a'])] = {
       scope: state.generatedMode.value,
       recordKey: 'record-a',
       biologicalFeatureId: 'biological-a',
@@ -1670,8 +1670,8 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
       labelText: 'Live feature label',
       labelSourceText: null
     };
-    state.orthogroupNameOverrides['group-a'] = 'Live group name';
-    state.orthogroupDescriptionOverrides['group-a'] = 'Live description';
+    state.activeDrawing().orthogroupNameOverrides['group-a'] = 'Live group name';
+    state.activeDrawing().orthogroupDescriptionOverrides['group-a'] = 'Live description';
 
     let downloadedBlob = null;
     const originalCreateObjectURL = URL.createObjectURL;

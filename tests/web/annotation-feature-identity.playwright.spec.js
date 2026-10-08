@@ -111,7 +111,7 @@ test('OV-03: an annotation of a selected feature on a cropped record stays on it
   expect(await drawnAnnotations(page)).toEqual([{ id: 'feature_1', recordIndex: 0, segments: [[2200, 2300]] }]);
   expect(await annotationWarnings(page)).toEqual([]);
   expect(await annotationTargets(page)).toEqual([{
-    kind: 'featureIdentity', scope: 'linear', recordKey: X.recordKey, biologicalFeatureId: X.identity,
+    kind: 'featureIdentity', recordKey: X.recordKey, biologicalFeatureId: X.identity,
     envelope: 'outer_bounds', circularPath: 'shortest'
   }]);
   await expect(panel(page).locator('[data-annotation-feature-identity]'))
@@ -194,7 +194,7 @@ test('an annotation of one same-coordinate feature in one copy of a record stays
   await annotateSelection(page, [twin.svgId]);
   await generate(page);
   const target = {
-    kind: 'featureIdentity', scope: 'linear', recordKey: secondKey, biologicalFeatureId: twin.identity,
+    kind: 'featureIdentity', recordKey: secondKey, biologicalFeatureId: twin.identity,
     envelope: 'outer_bounds', circularPath: 'shortest'
   };
   expect(await annotationTargets(page)).toEqual([target]);
@@ -267,8 +267,8 @@ test('a Circular annotation of a selected feature waits in the draft while anoth
 // R2, OV-21 of the override-precedence audit: a Gallery Session's Linear
 // record and a Circular grid of the same file both use the record key
 // `record-1`, so a feature has the same [recordKey, feature ID] in both modes.
-// An annotation of a feature selected in Circular names its mode: the Linear
-// request does not carry it, and it waits in the draft for Circular.
+// An annotation of a feature selected in Circular belongs to the Circular
+// drawing: the Linear request does not carry it, and it waits there for Circular.
 test('OV-21: an annotation of a selected Circular feature stays out of Linear requests with the same record key', async ({ page }) => {
   test.setTimeout(360_000);
   const switchMode = async (mode) => {
@@ -309,8 +309,14 @@ test('OV-21: an annotation of a selected Circular feature stays out of Linear re
   expect(await requestTargets()).toEqual({ mode: 'linear', recordKeys: ['record-1'], targets: [] });
   expect(await drawnAnnotations(page)).toEqual([]);
   expect(await annotationWarnings(page)).toEqual([]);
-  // A mode change and the Linear Generate keep the Circular target (R2).
-  expect(await annotationTargets(page)).toEqual([{ ...target, scope: 'circular' }]);
+  // A mode change and the Linear Generate keep the Circular target in the
+  // Circular drawing (R2, PD-OI-086); the Linear drawing has none.
+  expect(await annotationTargets(page)).toEqual([]);
+  expect(await page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    return JSON.parse(JSON.stringify(state.drawings.circular.annotationSets
+      .flatMap((set) => set.annotations.map((item) => item.target))));
+  })).toEqual([target]);
 
   await switchMode('circular');
   await generate(page);
@@ -343,7 +349,7 @@ test('R-7: a Session 44 hash annotation of one untransformed feature moves to it
     return getCommittedCanonicalRenderRequest().records[0].recordKey;
   });
   const targets = await annotationTargets(page);
-  expect(targets[0]).toEqual({ kind: 'featureIdentity', scope: 'linear', recordKey: testa,
+  expect(targets[0]).toEqual({ kind: 'featureIdentity', recordKey: testa,
     biologicalFeatureId: 'fef810304', envelope: 'outer_bounds', circularPath: 'shortest' });
   expect(targets.slice(1).map((target) => [target.kind, target.selectors])).toEqual([
     ['featureSpan', [{ key: 'hash', value: 'f3ccacda4' }]],

@@ -11,9 +11,11 @@ globalThis.window = {
 };
 globalThis.document = {};
 
-const { serializeActiveRenderFiles } = await import(
+const { serializeActiveRenderFiles: serializeDrawingFiles } = await import(
   '../../gbdraw/web/js/services/config.js'
 );
+// A fixture state is its own drawing.
+const serializeActiveRenderFiles = (mode, fixture, ...rest) => serializeDrawingFiles(mode, fixture, fixture, ...rest);
 const {
   adoptCurrentSessionResources,
   createSessionResourceFileView

@@ -75,9 +75,9 @@ const snapshot = (page) => page.evaluate(async () => {
     rows: state.circularRecordList.value.map(row => [row.selector, row.record_id]),
     primary: state.files.c_gb?.name || state.files.c_gff?.name || null,
     result: state.results.value[0]?.content || null,
-    selector: state.form.circular_record_selector,
-    grouping: state.adv.circular_grouping_intent,
-    grid: state.form.multi_record_canvas
+    selector: state.activeDrawing().form.circular_record_selector,
+    grouping: state.activeDrawing().adv.circular_grouping_intent,
+    grid: state.activeDrawing().form.multi_record_canvas
   };
 });
 const waitStatus = (page, status) => expect.poll(() => page.evaluate(async () => (

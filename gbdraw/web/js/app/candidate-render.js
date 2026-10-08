@@ -23,8 +23,8 @@ import {
  * @property {boolean} [sourceReplaced]
  * @property {Iterable<string>} [addedLegendCaptions] Captions the renderer drew without a manual rule.
  * @property {Iterable<string>} [unrequestedDepthCaptions] Captions of Depth series the request left out (Show Depth off); Python cannot name their rows (OV-81).
- * @property {Iterable<string>} [otherModeLegendCaptions] OV-80 (E1): the generated rows of the other mode's Result, whose Legend
- *   rows a mode without a Result of its own shows. Their styles and renames apply where this Result draws the row.
+ * @property {Record<string, any>[]} [dormantLegendEntries] OV-120: renamed rows an earlier Generate did not draw. Their
+ *   renames and styles apply where this Result draws the row again.
  * @property {Record<string, any>} [legendColorOverrides]
  * @property {Record<string, any>} [legendStrokeOverrides]
  * @property {Record<string, any>[]} [manualSpecificRules]
@@ -130,11 +130,12 @@ const renderedResultIndexes = (catalogAdmission, renderedId) => (
   catalogAdmission.resultIndexesByRenderedId.get(renderedId) || new Set()
 );
 
-// Per-feature edits name a source identity in one mode; each Result of that
-// mode draws it with its own rendered ID (design Q4 6.2, R2).
-const identityTargets = (catalogAdmission, row) => (row?.scope === catalogAdmission.mode
-  ? resolvedStableTargets(catalogAdmission, biologicalFeatureKey(row?.recordKey, row?.biologicalFeatureId))
-  : []);
+// Per-feature edits name a source identity in the drawing of the catalog's
+// mode; each Result of that mode draws it with its own rendered ID (design Q4
+// 6.2, R2).
+const identityTargets = (catalogAdmission, row) => (
+  resolvedStableTargets(catalogAdmission, biologicalFeatureKey(row?.recordKey, row?.biologicalFeatureId))
+);
 
 const normalizedLegendEntries = (entries) => (
   Array.isArray(entries)
@@ -163,7 +164,7 @@ const compilePlanBundle = ({
   sourceReplaced = false,
   addedLegendCaptions = [],
   unrequestedDepthCaptions = [],
-  otherModeLegendCaptions = [],
+  dormantLegendEntries = [],
   legendColorOverrides = {},
   legendStrokeOverrides = {},
   manualSpecificRules = [],
@@ -257,8 +258,13 @@ const compilePlanBundle = ({
   // The rule reads the caption an operation addresses in Python's output, so a
   // rename of the row and the styles under its new name are excused too (OV-88).
   const unrequestedDepth = new Set(Array.from(unrequestedDepthCaptions || []).map(text).filter(Boolean));
-  // OV-80: a row only the other mode's Result drew may be absent from this one.
-  const otherModeRows = new Set(Array.from(otherModeLegendCaptions || []).map(text).filter(Boolean));
+  // OV-120: a renamed row an earlier Generate hid (GC off, Show Depth off)
+  // waits in the drawing; this Result may draw it again or still leave it out.
+  const shownOriginals = new Set(currentEntries.map((entry) => entry.originalCaption));
+  const dormantEntries = normalizedLegendEntries(dormantLegendEntries)
+    .filter((entry) => entry.caption !== entry.originalCaption && !shownOriginals.has(entry.originalCaption)
+      && !deletedCaptions.has(entry.originalCaption));
+  const dormantOriginals = new Set(dormantEntries.map((entry) => entry.originalCaption));
   const renderedIdsByDirectCaption = new Map();
   Object.entries(featureColorOverrides || {}).forEach(([key, override]) => {
     const caption = text(override?.caption);
@@ -323,7 +329,6 @@ const compilePlanBundle = ({
         from: entry.originalCaption,
         to: entry.caption,
         allowMissing: sourceReplaced || manualCaptions.has(entry.caption) || unrequestedDepth.has(entry.originalCaption)
-          || otherModeRows.has(entry.originalCaption)
       });
     }
     if (
@@ -344,20 +349,27 @@ const compilePlanBundle = ({
     }
   });
 
+  dormantEntries.forEach((entry) => {
+    addToResults(operationsByResult, allResultIndexes, 'legendRenames', {
+      from: entry.originalCaption, to: entry.caption, allowMissing: true
+    });
+  });
+
   // Category style preferences outlive the current generated entry projection.
   // Apply a returning category's preference without synthesizing a manual row.
-  const entriesByCaption = new Map(currentEntries.map(entry => [entry.caption, entry]));
+  const entriesByCaption = new Map([...dormantEntries, ...currentEntries].map(entry => [entry.caption, entry]));
   const styledCaptions = new Set([...Object.keys(legendColorOverrides), ...Object.keys(legendStrokeOverrides)]);
   styledCaptions.forEach(caption => {
     const entry = entriesByCaption.get(caption);
     const originalCaption = entry?.originalCaption || caption;
     if (deletedCaptions.has(originalCaption)) return;
-    const isOriginal = originalCaptions.has(originalCaption);
+    const dormant = dormantOriginals.has(originalCaption);
+    const isOriginal = dormant || originalCaptions.has(originalCaption);
     const targetCaption = isOriginal ? originalCaption : caption;
     const namedIds = [...(renderedIdsByDirectCaption.get(caption) || [])];
     const legendRenderedIds = entry && entry.featureIds.length > 0 ? entry.featureIds : namedIds;
     const allowMissing = !entry || (sourceReplaced && isOriginal) || unrequestedDepth.has(targetCaption)
-      || otherModeRows.has(originalCaption) || (rendererDerivedCaptions.has(caption)
+      || dormant || (rendererDerivedCaptions.has(caption)
       && (legendRenderedIds.length === 0 || legendRenderedIds.every(id => hiddenRenderedIds.has(id))));
     // Each Result styles only the category features it renders. A batch Result
     // that renders none of them draws no row for the category (OV-45).

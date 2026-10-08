@@ -12,6 +12,17 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Custom Track Slots (web app): stepping a Depth row's track index past the loaded
+  Depth series (for example ArrowUp then ArrowDown) no longer adds a series that made
+  Generate and **Save Session** fail with "Depth series 3"; a label edit on a row whose
+  index names no series changes nothing (TK-03).
+- Color Change Scope (web app): **Cancel** closes the dialog at once and records no
+  Undo step, also right after a Session load, when it used to wait seconds (OV-161).
+- Output Prefix (web app): the typed **Output Prefix** reaches Python as typed, so
+  `../../x` fails Generate with an error that names **Output Prefix** instead of
+  drawing a Result named `.._.._x.svg` that the browser saved as `_.._x.svg`. A
+  Result named from a record ID is named as the browser saves it: a record such
+  as `gi|1|ref|X` draws `gi_1_ref_X.svg` instead of failing Generate (FL-10).
 - Layout (CLI and Python API): Legend, multi-record and definition coordinates no
   longer depend on the Python version. The side-by-side rows of a Circular Legend, the
   multi-record grid, the rows of a multi-record Linear diagram, and the definition text
@@ -41,6 +52,11 @@ write-up of a release.
   color, so the CLI draws it as the Web app does. Before, it resolved to `#2E8B57`
   (seagreen). `rebeccapurple` (`#663399`) is now accepted. The other 146 CSS color
   names were already correct.
+- Color names (web app): the web app resolves a color name with the same CSS table
+  as Python, also where the browser offers no canvas, so a named Legend color or
+  stroke in a Session (for example `gray`, the stroke an SVG had before an edit)
+  loads as its hex value instead of being dropped (OV-160). An unknown name is
+  still dropped.
 - Sessions (CLI and Python API): a Session that a CLI run wrote with `--session_output` or
   `--save_session` no longer replays an empty label text as the label "nan". A label
   override row with an empty label text hides the label when the written Session is
@@ -189,14 +205,31 @@ write-up of a release.
   title on one mode's Result no longer makes the other mode's Generate fail.
   The mode buttons wait while Generate, a label update, or an Undo or Redo
   runs, and an Undo or Redo of a switch waits for Generate or a label update.
-  Settings, Legend edits, and the palette are still
-  shared between the modes: a mode's Result shown again shows the Legend
-  renames, added rows, deletions, and row order made in the other mode, as
-  its next Generate draws them, for the rows it draws. A rename of a feature
-  row redraws that Result once it is shown.
-- Sessions: **Save Session** writes the Result of each mode. Session 45 gains an
-  optional `otherModeResult` field for the Result set of the mode that is not at
-  the top level; its request uses the same resource table. **Load Session**
+- Diagram modes (web app): Circular and Linear each keep their own settings and
+  edits: form and advanced settings, palette and color rules, filters, Legend
+  edits, feature and label edits, Feature placements, annotation sets, Depth
+  series, custom track stacks, and layout positions. A change made in one mode,
+  and its Generate, no longer reach the other mode, and a mode switch changes no
+  setting. **Reset Settings** resets both modes, and one **Undo** restores both.
+  The input files, LOSAT run settings, and the rich feature popup stay shared.
+  This fixes Show Depth turned off by a switch or by the other mode's Depth file
+  removal (OV-82, OV-101); a Linear Generate that failed after two Circular
+  Depth series; a Circular Generate that reset the Linear Label rendering
+  (OV-159); a Legend style or rename on a row the other mode does not draw that
+  failed Generate (OV-80); a Legend rename and its styles lost while Generate
+  hides the row (OV-120); the other mode's Legend reordered or repainted on a
+  switch (OV-142); an annotation's target record picked in one mode lost after
+  a switch to the other mode (OV-105); an unmanaged config override of one mode failing the
+  other mode's Generate and Save (OV-106); and the Depth panels writing the
+  Depth series when they draw (OV-109). A source replacement now also removes
+  the strokes of features the new source does not have (OV-84) and the Legend
+  renames of rows the new Result does not draw.
+- Sessions: **Save Session** writes the settings and the Result of each mode.
+  Session 46 keeps each mode's settings and edits in `modes.circular` and
+  `modes.linear` and gains an optional `otherModeResult` field for the Result
+  set of the mode that is not at the top level; its request uses the same
+  resource table. Loading a Session 27–44 gives each mode its settings from the
+  one saved draft; the development-only Session 45 is rejected. **Load Session**
   shows the saved mode when it has a Result, otherwise the mode that has one.
   A Result from a Session saved by an older gbdraw that waits in the other mode
   still needs one Generate before **Save Session**: the message names its mode,
@@ -479,8 +512,8 @@ decisions are in
   edits are kept by the feature's source identity and sent as
   `diagramOptions.featureOverrides` rows, so an edit stays on its feature after
   crop, reverse complement, record reordering and record copies, in the live
-  preview, after Generate, and through Save and Load. Session version 45 stores
-  them as `features.featureOverrides`; Session 44 and older Web Sessions move
+  preview, after Generate, and through Save and Load. Session version 46 stores
+  them as each mode's `features.featureOverrides`; Session 44 and older Web Sessions move
   their rendered-ID edits onto the feature they name, and Load reports how many
   edits it could not match. A Generate that replaces a source removes the edits
   of features the new source does not have; other unmatched edits stay until

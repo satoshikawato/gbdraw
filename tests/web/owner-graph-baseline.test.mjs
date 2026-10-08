@@ -72,12 +72,6 @@ const PROJECTION_SHAPE_BASELINE = {
 // that moves the imported code down removes its entries in the same pull
 // request; the list ends empty. May only shrink.
 const LAYER_IMPORT_BASELINE = {
-  'layer.import-direction.v1|services/config.js->app/circular-track-slots.js': 7,
-  'layer.import-direction.v1|services/config.js->app/linear-track-slots.js': 7,
-  'layer.import-direction.v1|services/gallery-session-migration.js->app/circular-track-slots.js': 3,
-  'layer.import-direction.v1|services/session-active-config-contract.js->app/linear-track-slots.js': 4,
-  'layer.import-direction.v1|services/session-request.js->app/circular-track-slots.js': 10,
-  'layer.import-direction.v1|services/session-request.js->app/linear-track-slots.js': 5
 };
 
 const SUBJECT_DETECTORS = [

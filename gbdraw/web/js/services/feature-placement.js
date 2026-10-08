@@ -4,12 +4,13 @@ import { diagnosticError } from '../utils/error-normalization.js';
 import { cloneJsonData } from './json-clone.js';
 
 // Drafts keyed by original-source feature identity: Feature placement rows and
-// per-feature edits (design Q4). A request chooses its record keys, so both
-// modes can use the same key for the same feature (`record-1` in a Gallery or
-// Python Session); each draft row therefore names its mode (`scope`, as record
-// display drafts do). Each draft map is
-// {JSON.stringify([scope, recordKey, biologicalFeatureId]): row}; this module
-// owns the key, the row checks, and the projection onto a render request (R2).
+// per-feature edits (design Q4). Each diagram mode's drawing holds its own
+// drafts (PD-OI-086), so a row is of its drawing's mode and names only its
+// feature. Each draft map is {JSON.stringify([recordKey, biologicalFeatureId]): row};
+// this module owns the key, the row checks, and the projection onto a render
+// request (R2). Sessions 41-44 saved rows that also named their mode (`scope`);
+// their migration keeps that shape until the Session 46 split moves each row to
+// its mode's drawing.
 
 /**
  * @typedef {'circular' | 'linear'} FeatureMode
@@ -18,7 +19,6 @@ import { cloneJsonData } from './json-clone.js';
 /**
  * The identity a draft key names.
  * @typedef {object} FeatureIdentity
- * @property {string} scope The mode of the request that chose the record key.
  * @property {string} recordKey
  * @property {string} biologicalFeatureId
  */
@@ -37,8 +37,8 @@ import { cloneJsonData } from './json-clone.js';
  */
 
 /**
- * A draft row: a request row that names its mode.
- * @typedef {FeaturePlacementRow & { scope: string }} FeaturePlacementDraftRow
+ * A draft row: a request row of its drawing's mode.
+ * @typedef {FeaturePlacementRow} FeaturePlacementDraftRow
  */
 
 /**
@@ -52,9 +52,9 @@ import { cloneJsonData } from './json-clone.js';
  */
 
 /**
- * A draft row: a request row that names its mode and keeps the Web-only
- * `labelSourceText`, the label's text before any edit.
- * @typedef {FeatureOverrideRow & { scope: string, labelSourceText: string | null }} FeatureOverrideDraftRow
+ * A draft row: a request row that keeps the Web-only `labelSourceText`, the
+ * label's text before any edit.
+ * @typedef {FeatureOverrideRow & { labelSourceText: string | null }} FeatureOverrideDraftRow
  */
 
 /** @typedef {Record<string, FeaturePlacementDraftRow>} FeaturePlacementDraft */
@@ -72,30 +72,27 @@ const invalidRow = () => diagnosticError('INPUT_INVALID', { field: 'schema', rea
 const validIdentityText = (value) => typeof value === 'string' && Boolean(value.trim()) && !value.includes('\0');
 
 /**
- * @param {string} scope
  * @param {string} recordKey
  * @param {string} biologicalFeatureId
  * @returns {string} The draft key, or '' for an invalid identity.
  */
-export const featureIdentityKey = (scope, recordKey, biologicalFeatureId) => (
-  Object.hasOwn(SIDES, scope) && validIdentityText(recordKey) && validIdentityText(biologicalFeatureId)
-    ? JSON.stringify([scope, recordKey, biologicalFeatureId])
+export const featureIdentityKey = (recordKey, biologicalFeatureId) => (
+  validIdentityText(recordKey) && validIdentityText(biologicalFeatureId)
+    ? JSON.stringify([recordKey, biologicalFeatureId])
     : ''
 );
 
-// The identity key of a draft row or a catalog feature (an admitted catalog
-// gives each rendered and biological feature its Result's mode as `scope`).
+// The identity key of a draft row or a catalog feature.
 /**
  * @param {Record<string, any> | null | undefined} feature
  * @returns {string}
  */
 export const featureIdentityKeyOf = (feature) => featureIdentityKey(
-  feature?.scope,
   feature?.record_key ?? feature?.recordKey,
   feature?.biological_feature_id ?? feature?.biologicalFeatureId
 );
 
-// The identity a draft key names ({scope, recordKey, biologicalFeatureId}), or null.
+// The identity a draft key names ({recordKey, biologicalFeatureId}), or null.
 /**
  * @param {string} key
  * @returns {FeatureIdentity | null}
@@ -103,25 +100,18 @@ export const featureIdentityKeyOf = (feature) => featureIdentityKey(
 export const parseFeatureIdentityKey = (key) => {
   let parts;
   try { parts = JSON.parse(key); } catch { return null; }
-  if (!Array.isArray(parts) || featureIdentityKey(.../** @type {[string, string, string]} */ (parts)) !== key) return null;
-  const [scope, recordKey, biologicalFeatureId] = parts;
-  return { scope, recordKey, biologicalFeatureId };
+  if (!Array.isArray(parts) || parts.length !== 2
+    || featureIdentityKey(.../** @type {[string, string]} */ (parts)) !== key) return null;
+  const [recordKey, biologicalFeatureId] = parts;
+  return { recordKey, biologicalFeatureId };
 };
 
-// A draft map of rows that name their mode.
+// A draft map of rows.
 /**
  * @param {Array<Record<string, any>>} rows
  * @returns {Record<string, any>}
  */
 export const featureDraftMap = (rows) => Object.fromEntries(rows.map((row) => [featureIdentityKeyOf(row), row]));
-
-// The draft rows of a request's rows, which are of the request's mode.
-/**
- * @param {Array<Record<string, any>>} rows Request rows.
- * @param {string} mode
- * @returns {Record<string, any>}
- */
-export const draftRowsOfRequest = (rows, mode) => featureDraftMap(rows.map((row) => ({ scope: mode, ...row })));
 
 const compareSourceIdentity = (left, right) => {
   const a = Array.from(left, (value) => value.codePointAt(0));
@@ -133,8 +123,7 @@ const compareSourceIdentity = (left, right) => {
 };
 
 // Validates a draft map (or a request array) of identity rows with one row
-// check, and returns the rows in code-point order of their identity. A draft
-// row names its mode; a request row is of the request's mode.
+// check, and returns the rows in code-point order of their identity.
 const canonicalIdentityRows = (overrides, projectRow) => {
   const draft = !Array.isArray(overrides);
   const rows = draft ? Object.entries(overrides || {}) : overrides.map((row) => [null, row]);
@@ -144,18 +133,17 @@ const canonicalIdentityRows = (overrides, projectRow) => {
       || !validIdentityText(row.recordKey) || !validIdentityText(row.biologicalFeatureId)) {
       throw invalidRow();
     }
-    const identity = draft ? featureIdentityKeyOf(row) : JSON.stringify([row.recordKey, row.biologicalFeatureId]);
+    const identity = featureIdentityKeyOf(row);
     if (!identity || (draft && key !== identity) || identities.has(identity)) throw invalidRow();
     identities.add(identity);
     return projectRow(row, draft);
-  }).sort((a, b) => compareSourceIdentity(a.scope || '', b.scope || '')
-    || compareSourceIdentity(a.recordKey, b.recordKey)
+  }).sort((a, b) => compareSourceIdentity(a.recordKey, b.recordKey)
     || compareSourceIdentity(a.biologicalFeatureId, b.biologicalFeatureId));
 };
 
 // Record keys are chosen per request, so a request carries only the draft rows
-// of its own mode and records (an ALL record also owns its <recordKey>:<n>
-// expansions); the other mode's rows stay in the draft for that mode (OV-08, R2).
+// of its records (an ALL record also owns its <recordKey>:<n> expansions); the
+// rows of other records stay in the draft (OV-08, R2).
 /**
  * @param {unknown} recordKey
  * @param {FeatureRequestRecord[]} [records]
@@ -169,26 +157,22 @@ export const recordKeyBelongsToRequest = (recordKey, records = []) => (
 
 /**
  * @param {Record<string, any> | null | undefined} row
- * @param {string} mode
  * @param {FeatureRequestRecord[]} [records]
  * @returns {boolean}
  */
-export const rowBelongsToRequest = (row, mode, records = []) => (
-  row?.scope === mode && recordKeyBelongsToRequest(row?.recordKey, records)
-);
+export const rowBelongsToRequest = (row, records = []) => recordKeyBelongsToRequest(row?.recordKey, records);
 
-// Placement validation shared by the codec and editable drafts: a request row
-// takes the sides of the request's mode, a draft row those of its own mode.
+// Placement validation shared by the codec and editable drafts: a row takes the
+// lane sides of its request's or drawing's mode.
 /**
  * @param {FeaturePlacementDraft | FeaturePlacementRow[] | null | undefined} overrides
  *   An editor draft map, or request rows.
- * @param {string | null} [mode] The request's mode, for request rows.
- * @returns {Array<FeaturePlacementRow | FeaturePlacementDraftRow>}
+ * @param {string | null} mode The mode of the request or drawing.
+ * @returns {FeaturePlacementRow[]}
  */
-export const canonicalFeaturePlacements = (overrides, mode = null) => canonicalIdentityRows(overrides, (row, draft) => {
-  if (Object.keys(row).sort().join(',')
-    !== `biologicalFeatureId,placement,recordKey${draft ? ',scope' : ''}`) throw invalidRow();
-  const sides = SIDES[draft ? row.scope : mode] || [];
+export const canonicalFeaturePlacements = (overrides, mode) => canonicalIdentityRows(overrides, (row) => {
+  if (Object.keys(row).sort().join(',') !== 'biologicalFeatureId,placement,recordKey') throw invalidRow();
+  const sides = SIDES[/** @type {FeatureMode} */ (mode)] || [];
   const target = row.placement;
   if (!target || (target.kind === 'main'
     ? Object.keys(target).join(',') !== 'kind'
@@ -197,19 +181,11 @@ export const canonicalFeaturePlacements = (overrides, mode = null) => canonicalI
     throw invalidRow();
   }
   return {
-    ...(draft ? { scope: row.scope } : {}),
     recordKey: row.recordKey,
     biologicalFeatureId: row.biologicalFeatureId,
     placement: { ...target }
   };
 });
-
-/**
- * @template {Record<string, any>} T
- * @param {T} row
- * @returns {Omit<T, 'scope'>}
- */
-const requestRow = ({ scope: _scope, ...row }) => row;
 
 /**
  * @param {FeaturePlacementDraft | null | undefined} overrides
@@ -218,8 +194,9 @@ const requestRow = ({ scope: _scope, ...row }) => row;
  * @returns {FeaturePlacementRow[]}
  */
 export const requestFeaturePlacements = (overrides, mode, records = []) => canonicalFeaturePlacements(
-  Object.fromEntries(Object.entries(overrides || {}).filter(([, row]) => rowBelongsToRequest(row, mode, records)))
-).map(requestRow);
+  Object.fromEntries(Object.entries(overrides || {}).filter(([, row]) => rowBelongsToRequest(row, records))),
+  mode
+);
 
 // Replaces the Feature placement draft with copies of a checkpoint's draft rows:
 // Undo, Redo, and the rollback of a Generate restore the placements it removed
@@ -240,7 +217,7 @@ export const restorePlacements = (overrides, placements) => {
 // projection read (B6). A draft row may hold only that source text.
 export const FEATURE_OVERRIDE_EDIT_FIELDS = Object.freeze(['featureVisibility', 'labelVisibility', 'labelText']);
 const REQUEST_OVERRIDE_FIELDS = 'biologicalFeatureId,featureVisibility,labelText,labelVisibility,recordKey';
-const DRAFT_OVERRIDE_FIELDS = 'biologicalFeatureId,featureVisibility,labelSourceText,labelText,labelVisibility,recordKey,scope';
+const DRAFT_OVERRIDE_FIELDS = 'biologicalFeatureId,featureVisibility,labelSourceText,labelText,labelVisibility,recordKey';
 const FEATURE_VISIBILITY_VALUES = new Set(['on', 'off', 'exclude_matching']);
 const LABEL_VISIBILITY_VALUES = new Set(['on', 'off']);
 
@@ -268,7 +245,6 @@ const checkedOverrideRow = (row, draft) => {
     throw invalidRow();
   }
   return {
-    ...(draft ? { scope: row.scope } : {}),
     recordKey: row.recordKey,
     biologicalFeatureId: row.biologicalFeatureId,
     featureVisibility: row.featureVisibility,
@@ -286,37 +262,36 @@ const checkedOverrideRow = (row, draft) => {
  */
 export const canonicalFeatureOverrides = (overrides) => canonicalIdentityRows(overrides, checkedOverrideRow);
 
-// The request rows of the current request's mode and records: the draft's
-// edits, and the label text that a bulk label edit gives a feature without its
-// own (`bulkLabelText`, {identityKey: text}). Rows of other records and of the
-// other mode stay in the draft (R2).
+// The request rows of the current request's records: the draft's edits, and
+// the label text that a bulk label edit gives a feature without its own
+// (`bulkLabelText`, {identityKey: text}). Rows of other records stay in the
+// draft (R2).
 /**
  * @param {FeatureOverrideDraft | null | undefined} overrides
- * @param {string} mode
  * @param {FeatureRequestRecord[]} [records]
  * @param {{ bulkLabelText?: Record<string, string> }} [options]
  * @returns {FeatureOverrideRow[]}
  */
-export const requestFeatureOverrides = (overrides, mode, records = [], { bulkLabelText = {} } = {}) => {
+export const requestFeatureOverrides = (overrides, records = [], { bulkLabelText = {} } = {}) => {
   const rows = new Map();
   Object.entries(overrides || {}).forEach(([key, row]) => {
-    if (rowBelongsToRequest(row, mode, records)) rows.set(key, row);
+    if (rowBelongsToRequest(row, records)) rows.set(key, row);
   });
   Object.entries(bulkLabelText || {}).forEach(([key, text]) => {
     const row = rows.get(key);
     const labelText = normalizeFeatureOverrideLabelText(text);
     if (row?.labelText || !labelText) return;
     const identity = parseFeatureIdentityKey(key);
-    if (!identity || !rowBelongsToRequest(identity, mode, records)) return;
+    if (!identity || !rowBelongsToRequest(identity, records)) return;
     rows.set(key, { ...(row || emptyOverrideRow(identity)), labelText });
   });
   return /** @type {FeatureOverrideDraftRow[]} */ (
     canonicalFeatureOverrides(Object.fromEntries([...rows].filter(([, row]) => hasEdit(row))))
-  ).map(({ labelSourceText: _source, ...row }) => requestRow(row));
+  ).map(({ labelSourceText: _source, ...row }) => row);
 };
 
-const emptyOverrideRow = ({ scope, recordKey, biologicalFeatureId }) => ({
-  scope,
+/** @param {FeatureIdentity} identity */
+const emptyOverrideRow = ({ recordKey, biologicalFeatureId }) => ({
   recordKey,
   biologicalFeatureId,
   featureVisibility: null,
@@ -352,7 +327,7 @@ export const updateFeatureOverride = (overrides, feature, patch) => {
   // A non-empty key is the JSON of a valid identity, so it parses back.
   const next = { ...(overrides[key] || emptyOverrideRow(/** @type {FeatureIdentity} */ (parseFeatureIdentityKey(key)))) };
   Object.entries(patch || {}).forEach(([field, value]) => {
-    if (!(field in next) || ['scope', 'recordKey', 'biologicalFeatureId'].includes(field)) return;
+    if (!(field in next) || ['recordKey', 'biologicalFeatureId'].includes(field)) return;
     next[field] = value === undefined ? null : value;
   });
   const keep = hasEdit(next) || next.labelSourceText !== null;

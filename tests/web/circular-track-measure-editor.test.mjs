@@ -8,7 +8,7 @@ import {
 import {
   parseOptionalCircularScalar, validateCustomTrackPlan
 } from '../../gbdraw/web/js/services/track-slot-validation.js';
-import { buildCircularTrackSlotPayload } from '../../gbdraw/web/js/app/circular-track-slots.js';
+import { buildCircularTrackSlotPayload } from '../../gbdraw/web/js/services/circular-track-slot-model.js';
 import {
   createDefaultAdv, createDefaultForm, validateCurrentWriterActiveConfig
 } from '../../gbdraw/web/js/services/session-active-config-contract.js';
@@ -144,14 +144,15 @@ test('tobacco Gallery pairs and precision survive read and real canonical reques
   ];
   const before = structuredClone(tobacco);
   for (const [id, field, valueText, selectedUnit] of expected) {
-    const scalar = tobacco.config.adv.circular_track_slots.find(slot => slot.id === id)[field];
+    // The Circular drawing's slots (Session 46 `modes.circular`).
+    const scalar = tobacco.modes.circular.config.adv.circular_track_slots.find(slot => slot.id === id)[field];
     assert.deepEqual(readCircularMeasure(scalar), { valueText, selectedUnit, isAuto: false, error: null });
     const draft = writeCircularMeasureValue(valueText, selectedUnit);
     assert.deepEqual(parseOptionalCircularScalar(draft), scalar);
   }
   const projected = projectCanonicalSessionRequest(tobacco);
   for (const [id, field] of expected) {
-    const raw = tobacco.config.adv.circular_track_slots.find(slot => slot.id === id)[field];
+    const raw = tobacco.modes.circular.config.adv.circular_track_slots.find(slot => slot.id === id)[field];
     const draft = projected.config.adv.circular_track_slots.find(slot => slot.id === id)[field];
     assert.deepEqual(parseOptionalCircularScalar(draft), raw);
   }

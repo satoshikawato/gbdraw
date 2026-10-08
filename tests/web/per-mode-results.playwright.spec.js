@@ -2,7 +2,7 @@
 // Linear each hold one Result slot. A Generate replaces only its own mode's
 // Result, a switch shows the arriving mode's Result (or the empty Preview), and
 // Save writes every Result: the shown mode's set at the top level and the other
-// mode's set in `otherModeResult` (Session 45). PD-OI-045, PD-OI-052,
+// mode's set in `otherModeResult` (Session 46). PD-OI-045, PD-OI-052,
 // PD-OI-066, OIPC-C06, OIPC-C07.
 const { test, expect } = require('@playwright/test');
 const { execFileSync } = require('node:child_process');
@@ -205,12 +205,11 @@ test('each mode keeps its own Result, with its Legend drag, across switches', as
   expect((await shown(page)).identity).toBe(linear.identity);
 });
 
-// REVIEW-1 M1 (PD-OI-063, PD-OI-066): the Legend edits stay shared between the
-// modes until per-drawing Legend edits. A rename, an added row, and a moved
-// row made on the Circular Result reach Linear's first Generate where Linear
-// draws the row, and the Circular Result keeps them when it is shown again:
-// no duplicate row, the order kept, and Sort by default back to its own
-// generated order.
+// PR-1 (PD-OI-086): each mode's drawing keeps its own Legend edits. A rename,
+// an added row, and a moved row made on the Circular Result stay in Circular:
+// Linear's first Generate draws its own rows, and the Circular Result keeps the
+// edit when it is shown again, with Sort by default back to its own generated
+// order. (Until PR-1 these edits reached the other mode: REVIEW-1 M1.)
 const legendState = async (page) => ({
   rows: await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption)),
   // The drawn rows, sorted: a duplicate row shows twice.
@@ -218,6 +217,7 @@ const legendState = async (page) => ({
 });
 const sorted = (captions) => [...captions].sort();
 const CIRCULAR_ROWS = ['CDS', 'repeat_region', 'GC content', 'GC skew (+)', 'GC skew (-)'];
+const LINEAR_ROWS = ['CDS', 'repeat_region'];
 const LEGEND_EDITS = [
   {
     name: 'a rename',
@@ -225,8 +225,7 @@ const LEGEND_EDITS = [
       const app = window.__GBDRAW_APP__;
       await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'CDS'), 'Coding');
     }),
-    // The rows Linear draws, and the Circular rows Sort by default shows.
-    linear: ['Coding', 'repeat_region'],
+    // The Circular rows Sort by default shows.
     byDefault: ['Coding', ...CIRCULAR_ROWS.slice(1)]
   },
   {
@@ -237,7 +236,6 @@ const LEGEND_EDITS = [
       app.newLegendColor = '#7b2cbf';
       await app.addNewLegendEntry();
     }),
-    linear: ['CDS', 'repeat_region', 'Extra'],
     byDefault: [...CIRCULAR_ROWS, 'Extra']
   },
   {
@@ -246,12 +244,11 @@ const LEGEND_EDITS = [
       const app = window.__GBDRAW_APP__;
       app.moveLegendEntryUp(app.legendEntries.findIndex((entry) => entry.caption === 'repeat_region'));
     }),
-    linear: ['CDS', 'repeat_region'],
     byDefault: CIRCULAR_ROWS
   }
 ];
-for (const { name, edit, linear, byDefault } of LEGEND_EDITS) {
-  test(`${name} on the Legend reaches the other mode's first Generate and stays on return`, async ({ page }) => {
+for (const { name, edit, byDefault } of LEGEND_EDITS) {
+  test(`${name} on the Circular Legend stays in Circular and on return`, async ({ page }) => {
     test.setTimeout(240_000);
     await openBothSources(page);
     await generate(page);
@@ -260,13 +257,12 @@ for (const { name, edit, linear, byDefault } of LEGEND_EDITS) {
     await settleLive(page);
     const circular = (await legendState(page)).rows;
     expect(circular, 'the edit').not.toEqual(CIRCULAR_ROWS);
-    const linearRows = circular.filter((caption) => linear.includes(caption));
 
     await showMode(page, 'linear');
     await generate(page);
     const generated = await legendState(page);
-    expect(generated.rows, 'Linear Legend rows').toEqual(linearRows);
-    expect(generated.drawn, 'Linear Result').toEqual(sorted(linearRows));
+    expect(generated.rows, 'Linear Legend rows').toEqual(LINEAR_ROWS);
+    expect(generated.drawn, 'Linear Result').toEqual(sorted(LINEAR_ROWS));
 
     await showMode(page, 'circular');
     const returned = await legendState(page);
@@ -281,12 +277,9 @@ for (const { name, edit, linear, byDefault } of LEGEND_EDITS) {
   });
 }
 
-// REVIEW-2 A, B, C (PD-OI-063, PD-OI-066): Legend edits stay shared between
-// the modes while both have a Result. A Result shown again by a switch shows
-// what its next Generate draws, in the user's order: renames, added rows and
-// deletes made on the other mode's Result included, and nothing reordered by
-// a switch alone.
-const LINEAR_ROWS = ['CDS', 'repeat_region'];
+// With both Results, a Result shown again by a switch shows what its next
+// Generate draws, in its own order: a rename, an added row, or a delete made on
+// the other mode's Result leaves it, and a switch alone reorders nothing.
 const bothResults = async (page) => {
   await openBothSources(page);
   await generate(page);
@@ -325,70 +318,67 @@ const expectGeneratedGeometry = async (page, label) => {
   await generate(page);
   expect(await legendGeometry(page), `${label}: the next Generate's Legend slots`).toEqual(shownGeometry);
 };
+const DEFAULT_ROWS = { circular: CIRCULAR_ROWS, linear: LINEAR_ROWS };
 
 for (const [first, second] of [['circular', 'linear'], ['linear', 'circular']]) {
-  test(`a Legend rename made in ${second} with both Results shows on the ${first} Result when it is shown again`, async ({ page }) => {
+  test(`a Legend rename made in ${second} with both Results leaves the ${first} Result`, async ({ page }) => {
     test.setTimeout(300_000);
     await bothResults(page);
     await showMode(page, second);
     await renameRow(page, 'CDS', 'Coding');
-    const expected = { circular: ['Coding', ...CIRCULAR_ROWS.slice(1)], linear: ['Coding', LINEAR_ROWS[1]] };
     const renamed = (await legendState(page)).rows;
-    expect(sorted(renamed)).toEqual(sorted(expected[second]));
+    expect(sorted(renamed)).toEqual(sorted(['Coding', ...DEFAULT_ROWS[second].slice(1)]));
     await showMode(page, first);
-    // The rename is a specific color rule: Python draws the row again.
-    await expect.poll(async () => sorted((await legendState(page)).rows)).toEqual(sorted(expected[first]));
-    await settleLive(page);
-    const shownAgain = (await legendState(page)).rows;
-    await expectShownAsGenerated(page, shownAgain, `${first} shown again`);
+    await expectShownAsGenerated(page, DEFAULT_ROWS[first], `${first} shown again`);
     await generate(page);
-    await expectShownAsGenerated(page, shownAgain, `the next ${first} Generate`);
+    await expectShownAsGenerated(page, DEFAULT_ROWS[first], `the next ${first} Generate`);
     await showMode(page, second);
     await expectShownAsGenerated(page, renamed, `${second} after a round trip`);
   });
 }
 
-test('an added row does not move the Legend of either Result in a round trip', async ({ page }) => {
+test('an added row stays in its mode and moves neither Legend in a round trip', async ({ page }) => {
   test.setTimeout(300_000);
   await bothResults(page);
   await addExtraRow(page);
   const linear = [...LINEAR_ROWS, 'Extra'];
-  const circular = [...CIRCULAR_ROWS, 'Extra'];
   await expectShownAsGenerated(page, linear, 'Linear after the addition');
   await showMode(page, 'circular');
-  await expectShownAsGenerated(page, circular, 'Circular shown again');
+  await expectShownAsGenerated(page, CIRCULAR_ROWS, 'Circular shown again');
   await showMode(page, 'linear');
   await expectShownAsGenerated(page, linear, 'Linear after a round trip');
   await showMode(page, 'circular');
-  await expectShownAsGenerated(page, circular, 'Circular after a round trip');
-  await expectGeneratedGeometry(page, 'Circular with the added row');
-  await expectShownAsGenerated(page, circular, 'the next Circular Generate');
+  await expectShownAsGenerated(page, CIRCULAR_ROWS, 'Circular after a round trip');
+  await expectGeneratedGeometry(page, 'Circular');
+  await expectShownAsGenerated(page, CIRCULAR_ROWS, 'the next Circular Generate');
   await showMode(page, 'linear');
   await expectGeneratedGeometry(page, 'Linear with the added row');
   await expectShownAsGenerated(page, linear, 'the next Linear Generate');
 });
 
-test('an added row deleted in the other mode stays deleted in both', async ({ page }) => {
+test('an added row deleted in its mode stays deleted and never reaches the other mode', async ({ page }) => {
   test.setTimeout(300_000);
   await bothResults(page);
   await addExtraRow(page);
   await showMode(page, 'circular');
-  await expectShownAsGenerated(page, [...CIRCULAR_ROWS, 'Extra'], 'Circular with the added row');
+  await expectShownAsGenerated(page, CIRCULAR_ROWS, 'Circular without the added row');
+  await showMode(page, 'linear');
+  await expectShownAsGenerated(page, [...LINEAR_ROWS, 'Extra'], 'Linear with the added row');
   await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     await app.deleteLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'Extra'));
   });
   await settleLive(page);
-  await expectShownAsGenerated(page, CIRCULAR_ROWS, 'Circular after the delete');
-  await showMode(page, 'linear');
-  await expectShownAsGenerated(page, LINEAR_ROWS, 'Linear shown again');
+  await expectShownAsGenerated(page, LINEAR_ROWS, 'Linear after the delete');
   await showMode(page, 'circular');
-  await expectShownAsGenerated(page, CIRCULAR_ROWS, 'Circular after a round trip');
-  await expectGeneratedGeometry(page, 'Circular after the delete');
-  await expectShownAsGenerated(page, CIRCULAR_ROWS, 'the next Circular Generate');
+  await expectShownAsGenerated(page, CIRCULAR_ROWS, 'Circular shown again');
   await showMode(page, 'linear');
+  await expectShownAsGenerated(page, LINEAR_ROWS, 'Linear after a round trip');
   await expectGeneratedGeometry(page, 'Linear after the delete');
   await expectShownAsGenerated(page, LINEAR_ROWS, 'the next Linear Generate');
+  await showMode(page, 'circular');
+  await expectGeneratedGeometry(page, 'Circular');
+  await expectShownAsGenerated(page, CIRCULAR_ROWS, 'the next Circular Generate');
 });
 
 test('Undo and Redo walk a Generate in each mode across the switch between them', async ({ page }) => {

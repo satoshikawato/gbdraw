@@ -9,6 +9,7 @@ const {
   createDefaultAdv,
   createDefaultForm,
   createDefaultLosat,
+  createDefaultLosatExecution,
   validateCurrentWriterActiveConfig,
   validateImportedCircularTrackSlots
 } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
@@ -30,13 +31,19 @@ assert.deepEqual(CURRENT_WRITER_FORM_FIELDS, [
   ...Object.keys(createDefaultForm()),
   'legend'
 ]);
+// `rich_feature_popup` is read from a Session 40-44 draft only; Session 46
+// keeps it as the app-level `ui.richFeaturePopup` (PR-1).
 assert.deepEqual(CURRENT_WRITER_ADV_FIELDS, [
   ...Object.keys(createDefaultAdv()),
   'plot_title_position',
-  'losatProgram'
+  'losatProgram',
+  'rich_feature_popup'
 ]);
+assert.equal(Object.hasOwn(createDefaultAdv(), 'rich_feature_popup'), false);
 assert.equal(createDefaultLosat().blastp.candidateLimit, null);
-assert.equal(createDefaultLosat().executionMode, 'threaded');
+// How LOSAT runs is one app-level setting (`ui.losatExecution`).
+assert.equal(Object.hasOwn(createDefaultLosat(), 'executionMode'), false);
+assert.equal(createDefaultLosatExecution().executionMode, 'threaded');
 assert.equal(createDefaultLosat().blastp.collinearSearchScope, 'adjacent');
 assert.equal(createDefaultLosat().blastp.collinearMergeOrientation, 'either');
 assert.equal(createDefaultAdv('circular').pairwise_match_style, 'ribbon');

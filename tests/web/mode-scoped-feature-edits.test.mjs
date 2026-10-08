@@ -1,8 +1,9 @@
 // R2 (residual R-1 of the override-precedence audit): Circular and Linear can
 // use the same record key (`record-1` in a Gallery or Python Session) for the
-// same feature. Each draft row names its mode (`scope`), so a request, the
-// live projection, and every reconcile reach only the rows of their own mode,
-// and a mode change keeps the other mode's rows in the draft.
+// same feature. PR-1: each mode has its own drawing, so the same identity has
+// one draft row in each drawing, keyed by the identity pair without a mode; a
+// request, the live projection, and every reconcile read the drawing of their
+// own mode, and the other drawing keeps its rows.
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -14,6 +15,7 @@ import {
 } from '../../gbdraw/web/js/services/feature-visibility.js';
 import { replaceFeatureEdits } from '../../gbdraw/web/js/app/feature-editor/feature-edit-table.js';
 import { migrateSessionFeaturePlacements } from '../../gbdraw/web/js/services/feature-edit-migration.js';
+import { unscopedDraftRows } from '../../gbdraw/web/js/services/mode-scoped-migration.js';
 import {
   canonicalFeatureOverrides,
   canonicalFeaturePlacements,
@@ -25,7 +27,6 @@ import {
 
 const MODES = ['circular', 'linear'];
 const SIDES = { circular: ['outward', 'inward'], linear: ['above', 'below'] };
-const other = (mode) => (mode === 'circular' ? 'linear' : 'circular');
 // A catalog feature: an admitted catalog gives each feature its Result's mode.
 const feature = (scope, recordKey, biologicalFeatureId) => ({
   scope, record_key: recordKey, biological_feature_id: biologicalFeatureId
@@ -34,36 +35,38 @@ const feature = (scope, recordKey, biologicalFeatureId) => ({
 const records = [{ recordKey: 'record-1' }, { recordKey: 'all-input', cardinality: 'all' }];
 const recordKeys = ['record-1', 'all-input:2'];
 
-// Both draft maps hold, for each mode, every edit kind on the same identities.
-const drafts = () => {
+// Each mode's drawing holds every edit kind on the same identities.
+const drawingDrafts = (mode) => {
   const featureOverrides = {};
   const featurePlacementOverrides = {};
   const bulkLabelText = {};
-  MODES.forEach((mode) => recordKeys.forEach((recordKey) => ['f1', 'f2', 'f3'].forEach((id, index) => {
+  recordKeys.forEach((recordKey) => ['f1', 'f2', 'f3'].forEach((id, index) => {
     const item = feature(mode, recordKey, id);
     updateFeatureOverride(featureOverrides, item, [
       { featureVisibility: 'off' }, { labelVisibility: 'on', labelText: `${mode} text` }, { labelSourceText: 'source' }
     ][index]);
-    const row = { scope: mode, recordKey, biologicalFeatureId: id, placement: index === 0
+    const row = { recordKey, biologicalFeatureId: id, placement: index === 0
       ? { kind: 'main' } : { kind: 'lane', side: SIDES[mode][index - 1], level: 1 } };
     featurePlacementOverrides[featureIdentityKeyOf(row)] = row;
     bulkLabelText[featureIdentityKeyOf(item)] = `${mode} bulk`;
-  })));
+  }));
   return { featureOverrides, featurePlacementOverrides, bulkLabelText };
 };
+const drawings = () => ({ circular: drawingDrafts('circular'), linear: drawingDrafts('linear') });
 
-test('a draft row reaches only the requests of its own mode (both draft maps)', () => {
-  const { featureOverrides, featurePlacementOverrides, bulkLabelText } = drafts();
-  // The same identity in the two modes is two draft rows.
-  assert.equal(Object.keys(featureOverrides).length, 2 * recordKeys.length * 3);
-  assert.equal(Object.keys(featurePlacementOverrides).length, 2 * recordKeys.length * 3);
+test('each drawing reaches only the requests of its own mode (both draft maps)', () => {
+  const drafts = drawings();
   MODES.forEach((mode) => {
+    const { featureOverrides, featurePlacementOverrides, bulkLabelText } = drafts[mode];
+    // One row per identity in each drawing.
+    assert.equal(Object.keys(featureOverrides).length, recordKeys.length * 3);
+    assert.equal(Object.keys(featurePlacementOverrides).length, recordKeys.length * 3);
     const placements = requestFeaturePlacements(featurePlacementOverrides, mode, records);
     assert.equal(placements.length, recordKeys.length * 3);
     placements.forEach((row) => assert.ok(row.placement.kind === 'main' || SIDES[mode].includes(row.placement.side)));
     // Python accepts the rows as the request's (no draft-only field).
     assert.deepEqual(canonicalFeaturePlacements(placements, mode), placements);
-    const overrides = requestFeatureOverrides(featureOverrides, mode, records, { bulkLabelText });
+    const overrides = requestFeatureOverrides(featureOverrides, records, { bulkLabelText });
     assert.equal(overrides.length, recordKeys.length * 3);
     overrides.forEach((row) => {
       assert.ok(!Object.hasOwn(row, 'scope'));
@@ -73,68 +76,59 @@ test('a draft row reaches only the requests of its own mode (both draft maps)', 
   });
 });
 
-test('the draft key encodes the row mode, and a row without one is invalid', () => {
-  const row = { scope: 'circular', recordKey: 'record-1', biologicalFeatureId: 'f1', placement: { kind: 'main' } };
-  assert.equal(featureIdentityKeyOf(row), JSON.stringify(['circular', 'record-1', 'f1']));
-  assert.equal(featureIdentityKeyOf({ recordKey: 'record-1', biologicalFeatureId: 'f1' }), '');
-  assert.throws(() => canonicalFeaturePlacements({ [JSON.stringify(['linear', 'record-1', 'f1'])]: row }));
-  assert.throws(() => canonicalFeaturePlacements({ [JSON.stringify(['record-1', 'f1'])]: row }));
-  // A lane names a side of its own mode.
+test('the draft key is the identity pair, and a row that names a mode is invalid', () => {
+  const row = { recordKey: 'record-1', biologicalFeatureId: 'f1', placement: { kind: 'main' } };
+  assert.equal(featureIdentityKeyOf(row), JSON.stringify(['record-1', 'f1']));
+  assert.equal(featureIdentityKeyOf({ recordKey: '', biologicalFeatureId: 'f1' }), '');
+  assert.deepEqual(canonicalFeaturePlacements({ [featureIdentityKeyOf(row)]: row }, 'circular'), [row]);
+  // The mode is the drawing's, never a row field.
+  assert.throws(() => canonicalFeaturePlacements({ [featureIdentityKeyOf(row)]: { scope: 'circular', ...row } }, 'circular'));
+  assert.throws(() => canonicalFeaturePlacements({ [JSON.stringify(['circular', 'record-1', 'f1'])]: row }, 'circular'));
+  // A lane names a side of its drawing's mode.
   assert.throws(() => canonicalFeaturePlacements({ [featureIdentityKeyOf(row)]: {
-    ...row, placement: { kind: 'lane', side: 'above', level: 1 } } }));
-  const { scope: _scope, ...modeless } = row;
-  assert.throws(() => canonicalFeaturePlacements({ [JSON.stringify(['record-1', 'f1'])]: modeless }));
+    ...row, placement: { kind: 'lane', side: 'above', level: 1 } } }, 'circular'));
 });
 
-test('notices, the source-replacing reconcile, and Remove unmatched touch only their mode', () => {
+test('notices, the source-replacing reconcile, and Remove unmatched touch only the drawing they are given', () => {
   MODES.forEach((mode) => {
+    const other = mode === 'circular' ? 'linear' : 'circular';
     const notices = recordKeys.map((recordKey) => ({
       recordKey, biologicalFeatureId: 'f1', status: 'unresolved', kinds: ['placement', 'feature_visibility'], resultIndex: 0
     }));
-    const { featureOverrides, featurePlacementOverrides } = drafts();
-    assert.equal(countUnresolvedFeatureEdits({ featureOverrides, featurePlacementOverrides, notices, scope: mode }),
-      2 * recordKeys.length);
-    assert.equal(removeUnresolvedFeatureEdits({ featureOverrides, featurePlacementOverrides, notices, scope: mode }),
-      2 * recordKeys.length);
-    const kept = drafts();
-    Object.entries(kept.featurePlacementOverrides).forEach(([key, row]) => {
-      if (row.scope === other(mode)) assert.deepEqual(featurePlacementOverrides[key], row);
-    });
-    Object.entries(kept.featureOverrides).forEach(([key, row]) => {
-      if (row.scope === other(mode)) assert.deepEqual(featureOverrides[key], row);
-    });
+    const drafts = drawings();
+    const otherBefore = structuredClone(drafts[other]);
+    assert.equal(countUnresolvedFeatureEdits({ ...drafts[mode], notices }), 2 * recordKeys.length);
+    assert.equal(removeUnresolvedFeatureEdits({ ...drafts[mode], notices }), 2 * recordKeys.length);
+    assert.deepEqual(drafts[other], otherBefore);
 
-    const pruned = drafts();
+    const pruned = drawings();
     const removed = pruneUnmatchedFeatureOverrides({
-      ...pruned, notices, scope: mode, replacedRecordKeys: recordKeys,
+      ...pruned[mode], notices, replacedRecordKeys: recordKeys,
       previousRecords: [...records, { recordKey: 'dropped' }], currentRecords: records, biologicalFeatures: []
     });
     // The unresolved placements and visibility edits, and the source texts of
-    // features the replaced source lost, of this mode only.
+    // features the replaced source lost.
     assert.equal(removed, 2 * recordKeys.length);
-    Object.entries(kept.featureOverrides).forEach(([key, row]) => {
-      if (row.scope === other(mode)) assert.deepEqual(pruned.featureOverrides[key], row);
-      else assert.equal(pruned.featureOverrides[key]?.labelSourceText ?? null, null);
-    });
+    Object.values(pruned[mode].featureOverrides).forEach((row) => assert.equal(row.labelSourceText ?? null, null));
+    assert.deepEqual(pruned[other], otherBefore);
   });
 });
 
-test('Load Feature Edits TSV replaces only the edits of the committed mode', () => {
-  const { featureOverrides } = drafts();
-  const before = structuredClone(featureOverrides);
-  replaceFeatureEdits(featureOverrides, [{
+test('Load Feature Edits TSV replaces the edits of its drawing only', () => {
+  const drafts = drawings();
+  const circularBefore = structuredClone(drafts.circular.featureOverrides);
+  replaceFeatureEdits(drafts.linear.featureOverrides, [{
     recordKey: 'record-1', biologicalFeatureId: 'f9', featureVisibility: 'on', labelVisibility: null, labelText: null
-  }], 'linear', records);
-  Object.entries(before).forEach(([key, row]) => {
-    if (row.scope === 'circular') assert.deepEqual(featureOverrides[key], row);
-  });
-  assert.deepEqual(requestFeatureOverrides(featureOverrides, 'linear', records), [{
+  }], records);
+  assert.deepEqual(drafts.circular.featureOverrides, circularBefore);
+  assert.deepEqual(requestFeatureOverrides(drafts.linear.featureOverrides, records), [{
     recordKey: 'record-1', biologicalFeatureId: 'f9', featureVisibility: 'on', labelVisibility: null, labelText: null
   }]);
 });
 
 // A Session 44 draft placement reached every request with its record key (a
-// lane failed the other mode's Generate). Session 45 keeps that reach.
+// lane failed the other mode's Generate). The migration gives each row the
+// modes it reaches, and the split puts it into those drawings (plan 4.2).
 test('Session 44 placement drafts take a mode: a lane its side, a Main row both', () => {
   const main = { recordKey: 'record-1', biologicalFeatureId: 'f1', placement: { kind: 'main' } };
   const lane = { recordKey: 'record-1', biologicalFeatureId: 'f2', placement: { kind: 'lane', side: 'below', level: 1 } };
@@ -147,13 +141,18 @@ test('Session 44 placement drafts take a mode: a lane its side, a Main row both'
     [JSON.stringify(['linear', 'record-1', 'f1'])]: { scope: 'linear', ...main },
     [JSON.stringify(['linear', 'record-1', 'f2'])]: { scope: 'linear', ...lane }
   });
-  canonicalFeaturePlacements(migrated);
+  const circular = unscopedDraftRows(migrated, 'circular');
+  const linear = unscopedDraftRows(migrated, 'linear');
+  assert.deepEqual(circular, { [JSON.stringify(['record-1', 'f1'])]: main });
+  assert.deepEqual(linear, { [JSON.stringify(['record-1', 'f1'])]: main, [JSON.stringify(['record-1', 'f2'])]: lane });
+  canonicalFeaturePlacements(circular, 'circular');
+  canonicalFeaturePlacements(linear, 'linear');
 });
 
-// The next path that indexes a draft map by a hand-built [recordKey, feature]
-// key would read or write the other mode's row: draft keys come only from
-// services/feature-placement.js. The Session 44 migration reads the old key,
-// and the exported SVG's runtime indexes the catalog of its one Result.
+// A path that indexes a draft map by a hand-built [recordKey, feature] key
+// would drift from the draft owner's key: draft keys come only from
+// services/feature-placement.js. The Session 44 migration reads and writes the
+// old keys, and the exported SVG's runtime indexes the catalog of its one Result.
 test('only the draft owner builds a draft identity key', () => {
   const root = new URL('../../gbdraw/web/js/', import.meta.url).pathname;
   const files = [];

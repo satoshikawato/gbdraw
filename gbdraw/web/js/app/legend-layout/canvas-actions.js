@@ -16,7 +16,6 @@ import {
 export const createLegendCanvasActions = ({ state, commitActiveResultEdit = null }) => {
   const {
     svgContainer,
-    canvasPadding,
     diagramElements,
     diagramElementOriginalTransforms,
     diagramOffset,
@@ -33,22 +32,24 @@ export const createLegendCanvasActions = ({ state, commitActiveResultEdit = null
   // applies it before the candidate is published, and a displayed Result
   // receives the current value. Applying the same padding twice is a no-op.
   const applyCanvasPadding = () => {
+    const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
     const svg = currentSvg();
     if (!svg) return false;
     bindCompositionMetadata(svg);
-    if (!applyCanvasPaddingToSvg(svg, canvasPadding)) return false;
+    if (!applyCanvasPaddingToSvg(svg, drawing.canvasPadding)) return false;
     return Boolean(commitActiveResultEdit?.('canvas-padding'));
   };
 
   const resetCanvasPadding = () => {
+    const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
-    canvasPadding.top = 0;
-    canvasPadding.right = 0;
-    canvasPadding.bottom = 0;
-    canvasPadding.left = 0;
+    drawing.canvasPadding.top = 0;
+    drawing.canvasPadding.right = 0;
+    drawing.canvasPadding.bottom = 0;
+    drawing.canvasPadding.left = 0;
     return applyCanvasPadding();
   };
 

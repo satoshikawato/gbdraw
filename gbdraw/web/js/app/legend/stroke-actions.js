@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { DrawingState } from '../../state.js' */
 import {
   FEATURE_SELECTOR,
   getFeatureElementIndex,
@@ -177,10 +178,6 @@ export const applyStrokeOverridesToSvg = ({
 export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null }) => {
   const {
     extractedFeatures,
-    legendEntries,
-    legendStrokeOverrides,
-    featureColorOverrides,
-    featureStrokeOverrides,
     originalSvgStroke,
     svgContainer,
     legendStrokeOptionsOpen
@@ -212,12 +209,16 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
 
   const persistStrokeEdit = (reason) => commitActiveResultEdit?.(reason);
 
-  const liveFeatureEdits = () => featureEditFacts(extractedFeatures.value, { featureColorOverrides, featureStrokeOverrides });
+  /** @param {DrawingState} drawing */
+  const liveFeatureEdits = (drawing) => featureEditFacts(extractedFeatures.value, { featureColorOverrides: drawing.featureColorOverrides, featureStrokeOverrides: drawing.featureStrokeOverrides });
   // The features of the mounted Result that a stroke on the Legend row
   // `caption` reaches (`legendRowFeatureIds`, OV-123).
-  /** @param {Element} svg @param {string} caption */
-  const rowFeatureIds = (svg, caption) => mountedLegendRowFeatureIds(
-    svg, caption, legendEntries.value, liveFeatureEdits().ofRow(caption)
+  /**
+   * @param {DrawingState} drawing
+   * @param {Element} svg @param {string} caption
+   */
+  const rowFeatureIds = (drawing, svg, caption) => mountedLegendRowFeatureIds(
+    svg, caption, drawing.legendEntries.value, liveFeatureEdits(drawing).ofRow(caption)
   );
 
   // The stroke the renderer gives a feature block, read from the first feature
@@ -226,21 +227,22 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
   // path that an edit reached gives the stroke the edit recorded it replaced:
   // its Legend row's (the row's swatch as drawn), else its own (OV-123).
   const captureOriginalStroke = () => {
+    const drawing = state.activeDrawing();
     const svg = svgContainer.value?.querySelector?.('svg');
     const firstFeaturePath = Array.from(svg?.querySelectorAll?.('path[id^="f"]') || [])
       .find((path) => !isAutoFeatureUnderlay(path));
     if (!svg || !firstFeaturePath) return;
     const svgId = getFeatureIdentity(firstFeaturePath);
-    const edits = liveFeatureEdits();
+    const edits = liveFeatureEdits(drawing);
     const recorded = [
-      ...Object.entries(legendStrokeOverrides)
+      ...Object.entries(drawing.legendStrokeOverrides)
         .filter(([caption]) => mountedLegendRowFeatureIds(
-          svg, caption, legendEntries.value, { namedIds: edits.ofRow(caption).namedIds }
+          svg, caption, drawing.legendEntries.value, { namedIds: edits.ofRow(caption).namedIds }
         ).includes(svgId))
         .map(([, override]) => override),
       ...extractedFeatures.value
         .filter((feature) => String(feature?.svg_id || '').trim() === svgId)
-        .map((feature) => featureStrokeOverrides[featureOverrideKey(feature)])
+        .map((feature) => drawing.featureStrokeOverrides[featureOverrideKey(feature)])
     ].find((override) => hasOwn(override, 'originalStrokeColor'));
     const widthValue = recorded && hasOwn(recorded, 'originalStrokeWidth')
       ? recorded.originalStrokeWidth
@@ -266,81 +268,86 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
   };
 
   const getLegendEntryStrokeColor = (idx) => {
-    const entry = legendEntries.value[idx];
+    const drawing = state.activeDrawing();
+    const entry = drawing.legendEntries.value[idx];
     if (!entry) return '';
-    const override = legendStrokeOverrides[entry.caption];
+    const override = drawing.legendStrokeOverrides[entry.caption];
     if (override && override.strokeColor !== undefined) return override.strokeColor;
     return '';
   };
 
   const getLegendEntryStrokeWidth = (idx) => {
-    const entry = legendEntries.value[idx];
+    const drawing = state.activeDrawing();
+    const entry = drawing.legendEntries.value[idx];
     if (!entry) return '';
-    const override = legendStrokeOverrides[entry.caption];
+    const override = drawing.legendStrokeOverrides[entry.caption];
     if (override && override.strokeWidth !== undefined) return override.strokeWidth;
     return '';
   };
 
   const updateLegendEntryStrokeColor = (idx, color) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const entry = legendEntries.value[idx];
+    const entry = drawing.legendEntries.value[idx];
     if (!entry) return false;
     const normalized = String(color || '').trim();
-    if (String(legendStrokeOverrides[entry.caption]?.strokeColor || '').trim() === normalized) {
+    if (String(drawing.legendStrokeOverrides[entry.caption]?.strokeColor || '').trim() === normalized) {
       return false;
     }
 
-    if (!legendStrokeOverrides[entry.caption]) {
-      legendStrokeOverrides[entry.caption] = {
+    if (!drawing.legendStrokeOverrides[entry.caption]) {
+      drawing.legendStrokeOverrides[entry.caption] = {
         ...captureLegendSwatchStroke(entry.caption),
         strokeColor: normalized,
         strokeWidth: getLegendEntryStrokeWidth(idx)
       };
     }
-    legendStrokeOverrides[entry.caption].strokeColor = normalized;
+    drawing.legendStrokeOverrides[entry.caption].strokeColor = normalized;
 
     applyStrokeToFeaturesByCaption(entry.caption, normalized, null);
     return true;
   };
 
   const updateLegendEntryStrokeWidth = (idx, width) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const entry = legendEntries.value[idx];
+    const entry = drawing.legendEntries.value[idx];
     if (!entry) return false;
 
     const widthVal = parseFloat(width);
     if (isNaN(widthVal)) return false;
-    if (Number(legendStrokeOverrides[entry.caption]?.strokeWidth) === widthVal) return false;
+    if (Number(drawing.legendStrokeOverrides[entry.caption]?.strokeWidth) === widthVal) return false;
 
-    if (!legendStrokeOverrides[entry.caption]) {
-      legendStrokeOverrides[entry.caption] = {
+    if (!drawing.legendStrokeOverrides[entry.caption]) {
+      drawing.legendStrokeOverrides[entry.caption] = {
         ...captureLegendSwatchStroke(entry.caption),
         strokeColor: getLegendEntryStrokeColor(idx),
         strokeWidth: widthVal
       };
     }
-    legendStrokeOverrides[entry.caption].strokeWidth = widthVal;
+    drawing.legendStrokeOverrides[entry.caption].strokeWidth = widthVal;
 
     applyStrokeToFeaturesByCaption(entry.caption, null, widthVal);
     return true;
   };
 
   const setLegendEntryStrokeColorValue = (idx, value) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const entry = legendEntries.value[idx];
+    const entry = drawing.legendEntries.value[idx];
     if (!entry) return;
     if (value !== null) {
       return updateLegendEntryStrokeColor(idx, String(value || '').trim());
     }
-    const override = legendStrokeOverrides[entry.caption];
+    const override = drawing.legendStrokeOverrides[entry.caption];
     if (!override || !Object.prototype.hasOwnProperty.call(override, 'strokeColor')) return false;
     if (override) {
       delete override.strokeColor;
       if (override.strokeWidth === undefined || override.strokeWidth === '') {
-        delete legendStrokeOverrides[entry.caption];
+        delete drawing.legendStrokeOverrides[entry.caption];
       }
     }
     const inheritedColor = originalSvgStroke.value.color;
@@ -352,16 +359,17 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
   };
 
   const resetLegendEntryStroke = (idx) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const entry = legendEntries.value[idx];
+    const entry = drawing.legendEntries.value[idx];
     if (!entry) return false;
     if (!svgContainer.value) return false;
 
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return false;
 
-    const override = legendStrokeOverrides[entry.caption];
+    const override = drawing.legendStrokeOverrides[entry.caption];
     const originalColor = originalSvgStroke.value.color;
     const originalWidth = originalSvgStroke.value.width;
     const originalSwatchColor = hasOwn(override, 'originalStrokeColor')
@@ -373,7 +381,7 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
     let updatedCount = 0;
 
     const featureIndex = getFeatureElementIndex(svg);
-    rowFeatureIds(svg, entry.caption).forEach((svgId) => {
+    rowFeatureIds(drawing, svg, entry.caption).forEach((svgId) => {
       getFeatureElements(svg, svgId, featureIndex).forEach((el) => {
         if (restoreFeatureStroke(el)) updatedCount++;
       });
@@ -386,10 +394,10 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
     });
 
     const overrideRemoved = Object.prototype.hasOwnProperty.call(
-      legendStrokeOverrides,
+      drawing.legendStrokeOverrides,
       entry.caption
     );
-    if (overrideRemoved) delete legendStrokeOverrides[entry.caption];
+    if (overrideRemoved) delete drawing.legendStrokeOverrides[entry.caption];
 
     if (updatedCount > 0) {
       persistStrokeEdit('reset-legend-stroke');
@@ -398,6 +406,7 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
   };
 
   const resetAllStrokes = () => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!svgContainer.value) return false;
@@ -416,7 +425,7 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
     // A row with a stroke edit returns to the stroke its swatch was drawn
     // with, which the edit recorded; the other swatches are as drawn (the GC
     // and Depth rows have their track's stroke, not the feature stroke).
-    Object.entries(legendStrokeOverrides).forEach(([caption, override]) => {
+    Object.entries(drawing.legendStrokeOverrides).forEach(([caption, override]) => {
       const color = hasOwn(override, 'originalStrokeColor') ? override.originalStrokeColor : originalColor;
       const width = hasOwn(override, 'originalStrokeWidth') ? override.originalStrokeWidth : originalWidth;
       getLegendSwatches(svg, caption).forEach((swatch) => {
@@ -425,10 +434,10 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
     });
 
     const overridesRemoved =
-      Object.keys(legendStrokeOverrides).length > 0 ||
-      Object.keys(featureStrokeOverrides).length > 0;
-    Object.keys(legendStrokeOverrides).forEach((key) => delete legendStrokeOverrides[key]);
-    Object.keys(featureStrokeOverrides).forEach((key) => delete featureStrokeOverrides[key]);
+      Object.keys(drawing.legendStrokeOverrides).length > 0 ||
+      Object.keys(drawing.featureStrokeOverrides).length > 0;
+    Object.keys(drawing.legendStrokeOverrides).forEach((key) => delete drawing.legendStrokeOverrides[key]);
+    Object.keys(drawing.featureStrokeOverrides).forEach((key) => delete drawing.featureStrokeOverrides[key]);
 
     if (updatedCount > 0) {
       persistStrokeEdit('reset-all-strokes');
@@ -447,6 +456,7 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
     strokeWidth,
     { removeStroke = false, inherit = false } = {}
   ) => {
+    const drawing = state.activeDrawing();
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
@@ -454,7 +464,7 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
     let updatedCount = 0;
 
     const featureIndex = getFeatureElementIndex(svg);
-    const reached = rowFeatureIds(svg, caption);
+    const reached = rowFeatureIds(drawing, svg, caption);
     reached.forEach((svgId) => {
       getFeatureElements(svg, svgId, featureIndex).forEach((el) => {
         const color = inherit ? featureBaseStroke(el).color : strokeColor;
@@ -513,22 +523,23 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
   };
 
   const reapplyStrokeOverrides = () => {
+    const drawing = state.activeDrawing();
     if (!svgContainer.value) return false;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return false;
 
     if (
-      Object.keys(legendStrokeOverrides).length === 0 &&
-      Object.keys(featureStrokeOverrides).length === 0
+      Object.keys(drawing.legendStrokeOverrides).length === 0 &&
+      Object.keys(drawing.featureStrokeOverrides).length === 0
     ) return false;
-    migrateLegacyFeatureOverrides(featureStrokeOverrides, extractedFeatures.value);
+    migrateLegacyFeatureOverrides(drawing.featureStrokeOverrides, extractedFeatures.value);
     const totalUpdated = applyStrokeOverridesToSvg({
       svg,
       features: extractedFeatures.value,
-      legendEntries: legendEntries.value,
-      legendStrokeOverrides,
-      featureColorOverrides,
-      featureStrokeOverrides
+      legendEntries: drawing.legendEntries.value,
+      legendStrokeOverrides: drawing.legendStrokeOverrides,
+      featureColorOverrides: drawing.featureColorOverrides,
+      featureStrokeOverrides: drawing.featureStrokeOverrides
     });
 
     if (totalUpdated > 0) {
@@ -539,6 +550,7 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
 
   /** @param {{ changes?: unknown }} [options] `changes` is a History change list; anything else is ignored. */
   const reconcileStrokeOverrides = ({ changes = null } = {}) => {
+    const drawing = state.activeDrawing();
     const svg = svgContainer.value?.querySelector?.('svg');
     if (!svg) return false;
     const originalColor = originalSvgStroke.value.color;
@@ -577,7 +589,7 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
         collectBaseline(
           target,
           key,
-          isFeatureStroke ? featureStrokeOverrides[key] : legendStrokeOverrides[key]
+          isFeatureStroke ? drawing.featureStrokeOverrides[key] : drawing.legendStrokeOverrides[key]
         );
       });
 
@@ -593,7 +605,7 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
           ? baseline.originalStrokeWidth
           : originalWidth;
         const featureIndex = getFeatureElementIndex(svg);
-        rowFeatureIds(svg, caption).forEach((featureId) => {
+        rowFeatureIds(drawing, svg, caption).forEach((featureId) => {
           getFeatureElements(svg, featureId, featureIndex).forEach((element) => {
             if (restoreFeatureStroke(element)) changed = true;
           });

@@ -71,11 +71,11 @@ assert.equal(inputReads, 0);
 
 state.results.value = [];
 state.featureCatalog.value = null;
-state.adv.circular_track_slots_enabled = true;
-state.adv.circular_track_slots_axis_index = 0;
-state.adv.circular_track_slots.splice(
+state.activeDrawing().adv.circular_track_slots_enabled = true;
+state.activeDrawing().adv.circular_track_slots_axis_index = 0;
+state.activeDrawing().adv.circular_track_slots.splice(
   0,
-  state.adv.circular_track_slots.length,
+  state.activeDrawing().adv.circular_track_slots.length,
   {
     id: 'features',
     renderer: 'features',
@@ -91,6 +91,7 @@ state.adv.circular_track_slots.splice(
 );
 const committed = buildCanonicalRenderRequest({
   state,
+  drawing: state.activeDrawing(),
   filesData: {
     c_gb: {
       name: 'legacy.gbk',
@@ -103,7 +104,7 @@ const committed = buildCanonicalRenderRequest({
   }
 });
 adoptCanonicalRenderArtifacts(committed, { adoptOwnedRequest: true });
-state.adv.circular_track_slots[0].width = '16px';
+state.activeDrawing().adv.circular_track_slots[0].width = '16px';
 
 const retainedCircularFiles = {
   blasts: [{ name: 'retained-blast.tsv' }],
@@ -114,7 +115,7 @@ state.files.c_conservation_blasts = retainedCircularFiles.blasts;
 state.files.c_conservation_fastas = retainedCircularFiles.fastas;
 state.files.c_conservation_sequence_sources = retainedCircularFiles.sources;
 state.files.c_conservation_blasts_source = 'upload';
-Object.assign(state.circularConservation, {
+Object.assign(state.activeDrawing().circularConservation, {
   enabled: false,
   source: 'upload',
   reference: 'query',
@@ -122,9 +123,9 @@ Object.assign(state.circularConservation, {
   ring_width: 0.12,
   ring_gap: 0.03
 });
-state.circularConservation.series.splice(
+state.activeDrawing().circularConservation.series.splice(
   0,
-  state.circularConservation.series.length,
+  state.activeDrawing().circularConservation.series.length,
   { label: 'Retained', sourceIndex: 0 }
 );
 const failedAdoption = structuredClone(committed);
@@ -158,7 +159,7 @@ assert.equal(
   retainedCircularFiles.sources
 );
 assert.equal(state.files.c_conservation_blasts_source, 'upload');
-assert.deepEqual(state.circularConservation.series, [{
+assert.deepEqual(state.activeDrawing().circularConservation.series, [{
   label: 'Retained',
   sourceIndex: 0
 }]);
@@ -187,7 +188,7 @@ try {
   const session = JSON.parse(gunzipSync(
     Buffer.from(await saved.blob.arrayBuffer())
   ).toString('utf8'));
-  assert.equal(session.config.adv.circular_track_slots[0].width, '16px');
+  assert.equal(session.modes.circular.config.adv.circular_track_slots[0].width, '16px');
   assert.equal(
     session.renderRequest.diagramOptions.tracks.circularTrackSlots[0].width,
     null

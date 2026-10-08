@@ -234,11 +234,11 @@ test('S03 Linear LOSAT draft edits never replace the committed request before Ge
   expect(await page.evaluate(()=>window.__GBDRAW_APP__.errorLog?.summary||'')).toBe('');
   expect(await keepCommitted(page,'losatCommitted')).toBe(true);
   await page.evaluate(async()=>{
-    const {state}=await import('./js/state.js');state.losat.blastn.task='blastn';await window.Vue.nextTick();
+    const {state}=await import('./js/state.js');state.activeDrawing().losat.blastn.task='blastn';await window.Vue.nextTick();
   });
   expect(await committedIs(page,'losatCommitted')).toBe(true);
   await page.evaluate(async()=>{
-    const {state}=await import('./js/state.js');state.losat.blastn.task='megablast';await window.Vue.nextTick();
+    const {state}=await import('./js/state.js');state.activeDrawing().losat.blastn.task='megablast';await window.Vue.nextTick();
   });
   expect(await committedIs(page,'losatCommitted')).toBe(true);
 });

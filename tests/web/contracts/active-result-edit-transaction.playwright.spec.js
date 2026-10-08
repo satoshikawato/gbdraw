@@ -147,7 +147,7 @@ test.describe('active Result Feature fill transaction', () => {
         targetRules: plain(app.manualSpecificRules.filter((rule) => (
           rule.feat === caption && String(rule.cap || '') === caption
         ))),
-        legendOverride: String(state.legendColorOverrides[caption] || '').toLowerCase(),
+        legendOverride: String(state.activeDrawing().legendColorOverrides[caption] || '').toLowerCase(),
         legendEntryColor: String(
           app.legendEntries.find((entry) => entry.caption === caption)?.color || ''
         ).toLowerCase()
@@ -324,21 +324,25 @@ test.describe('active Result Feature fill transaction', () => {
     const savedSessionPath = await sessionDownload.path();
     expect(savedSessionPath).toBeTruthy();
     const savedSession = readSavedSession(savedSessionPath);
+    // The shown mode's edits are its slice (Session 46).
+    const savedSlice = savedSession.modes[savedSession.ui.mode];
     expect(savedSession).toMatchObject({
       format: 'gbdraw-session',
       version: CURRENT_SESSION_VERSION,
-      renderRequest: { schema: CURRENT_REQUEST_SCHEMA },
+      renderRequest: { schema: CURRENT_REQUEST_SCHEMA }
+    });
+    expect(savedSlice).toMatchObject({
       editorState: {
         legend: { colorOverrides: { [TARGET_CAPTION]: AFTER_COLOR } }
       }
     });
     for (const { key } of inventory.targets) {
-      expect(savedSession.features.featureColorOverrides[key]).toEqual({
+      expect(savedSlice.features.featureColorOverrides[key]).toEqual({
         color: AFTER_COLOR,
         caption: TARGET_CAPTION
       });
     }
-    const savedRules = savedSession.config.rules.filter((rule) => (
+    const savedRules = savedSlice.config.rules.filter((rule) => (
       rule.feat === TARGET_CAPTION && rule.cap === TARGET_CAPTION
     ));
     expect(savedRules).toHaveLength(inventory.targets.length);

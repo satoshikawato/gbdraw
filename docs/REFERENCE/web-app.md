@@ -40,6 +40,16 @@ local environment or prepared command-line evidence.
 | Circular | One GenBank/GBFF container or one matched GFF3 + FASTA pair | One Circular result, separate results, or one multi-record canvas |
 | Linear | Ordered GenBank rows or matched GFF3 + FASTA rows | One Linear result with an independent comparison plan |
 
+Circular and Linear each keep their own settings and edits: the form and
+advanced settings, palette and color rules, filters, Legend edits, feature and
+label edits, Feature placements, annotation sets, Depth series, custom track
+stacks, and the layout positions. A change made in one mode stays in that mode,
+including a Generate; switching modes changes no setting and shows that mode's
+settings and Result. **Reset Settings** resets both modes, and one **Undo**
+restores both. The input files, LOSAT run settings (run mode and threads), and
+the rich feature popup are shared. A saved Session keeps each mode's settings
+(Session 46, [compatibility](session-and-request-compatibility.md)).
+
 A Circular GenBank upload uses **GenBank/DDBJ File**. Each Linear **File** card
 starts with its **GenBank / DDBJ File** uploader, or its matched GFF3 and FASTA
 uploaders, followed by **File defaults (applied to all records)** and a closed
@@ -116,7 +126,11 @@ review is a local selection, not an applied Result or a generation-setting chang
 **Generate Diagram** recalculates placement and resets zoom. Supported color,
 label, visibility, legend text and order, canvas padding, and record-layout
 edits are carried forward. Generate places legend entries in the edited order
-on its new layout; an entry that appears later follows them. Canvas padding
+on its new layout; an entry that appears later follows them. A legend rename
+of a row that Generate does not draw, such as GC content while it is off or a
+Depth row while **Show Depth** is off, waits with the colors under the new name
+and applies when a later Generate draws the row; removing the row's data
+removes it. Canvas padding
 applies once to every Result, including each Result of a batch. For the same
 diagram, a manually moved legend, plot title, or Linear scale keeps its offset
 from the newly calculated position. The absolute position can change when
@@ -480,9 +494,8 @@ matching selection. This navigation changes no value and creates no Undo entry.
 Choose **Show** yourself if shared rows should retain that field, then Generate.
 
 Plot-title text, position, and size share the **Plot Title** subsection.
-Circular and Linear keep their own plot-title text, plot-title **Font size**,
-and **Record Labels** **Default font size**; switching modes restores the values
-last used in that mode. Record label defaults and the per-line **Style** disclosures share
+Like every setting, the plot-title text, plot-title **Font size**, and
+**Record Labels** **Default font size** are kept per mode. Record label defaults and the per-line **Style** disclosures share
 **Record Labels**.
 The independent **Legend · position** section owns legend position, swatch size,
 and font size. Opening or closing these native disclosures is not saved.
@@ -869,10 +882,9 @@ feature that names the source feature the same way; the editor shows it as
 feature after crop, reverse complement, record order, or record copy changes.
 When the feature is not drawn, for example outside the crop, Generate skips
 the annotation and reports it in the annotation notice; the annotation stays.
-The annotation belongs to the mode the feature was selected in. A request
-carries it only in that mode and while its record is drawn, so drawing another
-record or the other mode keeps it in the draft without drawing it, also when
-both modes name the record the same way. Loading a Session saved before this
+The annotation belongs to the annotation set of the mode the feature was
+selected in, and a request carries it only while its record is drawn, so
+drawing another record keeps it in the draft without drawing it. Loading a Session saved before this
 form (Session 40–44) turns a `hash=` annotation into such an annotation only
 when its record is drawn without a crop, reverse complement, or rotation and
 the hash names one feature, so the figure does not change, and reports how
@@ -884,8 +896,8 @@ records of the current diagram in the `--feature_override_table` format that
 the Source recipe uses (`#<index>` of the record and
 `hash=<biologicalFeatureId>`), so the CLI and the Python API read the same
 file. **Load Feature Edits TSV** reads such a table against the records of the
-current diagram and replaces their feature edits as one **Undo** step; edits of
-the other mode's records stay. A row whose record or feature the current
+current diagram and replaces their feature edits as one **Undo** step; the
+other mode's edits are its own and stay. A row whose record or feature the current
 diagram does not have is counted in the message and not applied. A table with
 any other defect is rejected with the row it names and changes nothing.
 **Export Label TSV** and the Feature visibility **TSV** write rules only.
@@ -1127,11 +1139,11 @@ coordinates, is shown once in place of the controls.
 Open the feature popup and choose **Feature placement** in its **Layout**
 group: Auto, Main, or an available directional lane 1. Bulk selection uses
 **Selected feature placements**.
-When a change to **Track Preset**, **Track Layout**, **Separate Strands** (in
-either mode's panel), **Use custom stack**, a custom stack Reset, or a custom
-stack row (adding, deleting, enabling, moving, or changing its renderer, lane, or
-placement) would leave placements without their lane, a dialog asks first. It
-names the mode when the placements belong to the other mode. **Reset N
+When a change to **Track Preset**, **Track Layout**, **Separate Strands**,
+**Use custom stack**, a custom stack Reset, or a custom stack row (adding,
+deleting, enabling, moving, or changing its renderer, lane, or placement) would
+leave placements of the shown mode without their lane, a dialog asks first.
+The other mode's placements are its own and never change. **Reset N
 placements to Auto** applies the change and sets exactly those placements to
 Auto as one undoable step; **Cancel change**, Escape, or a click outside keeps
 the setting and the placements. Loading a Session, Undo, Redo, and **Reset

@@ -325,7 +325,9 @@ def gallery_input(root, name, pc):
                  "runtimeAndProteinSequenceIdentityMatch": True,
                  "savedSearchSettings": [{k: v for k, v in e.items() if k not in ("text", "filename", "key")}
                                          for e in entries],
-                 "savedLosatConfig": session["config"]["losat"],
+                 # Session 46 keeps the LOSAT search settings in the Linear slice.
+                 "savedLosatConfig": (session.get("modes", {}).get("linear", {}).get("config")
+                                      or session["config"])["losat"],
                  "rawSearchTime": None, "historicalSourceInvocations": None}
     return session, extraction, records, raw, inventory
 

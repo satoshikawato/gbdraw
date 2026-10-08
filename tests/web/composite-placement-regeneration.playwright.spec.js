@@ -16,7 +16,8 @@ const compositeSeed = async (testInfo) => {
   const output = testInfo.outputPath('two-source.gbdraw-session.json.gz');
   await fs.writeFile(input, JSON.stringify({ format: single.format, version: single.version,
     results: [], editorState: { featureCatalog: null }, ui: { ...single.ui, generatedMultiRecordCanvas: true },
-    config: { ...single.config, form: { ...single.config.form, multi_record_canvas: true } },
+    modes: { circular: { ...single.modes.circular, config: { ...single.modes.circular.config,
+      form: { ...single.modes.circular.config.form, multi_record_canvas: true } } } },
     renderRequest: { ...single.renderRequest, grouping: 'grid',
       records: [...single.renderRequest.records, second], layout: { multiRecordSizeMode: 'auto',
         multiRecordMinRadiusRatio: 0.55, multiRecordColumnGapRatio: 0.1, multiRecordRowGapRatio: 0.05,
@@ -105,7 +106,7 @@ for (const composite of [false, true]) {
           source: { name: state.files.c_gb.name, size: state.files.c_gb.size,
             components: binding?.descriptors?.map((part) => part.resourceId) || [] },
           form: config.buildConfigData(state.activeDrawing()).form, geometry: state.trackSlotResolvedGeometry.value,
-          catalog: state.featureCatalog.value, placements: state.featurePlacementOverrides };
+          catalog: state.featureCatalog.value, placements: state.activeDrawing().featurePlacementOverrides };
       });
       await fs.writeFile(testInfo.outputPath(`${stage}.json`), JSON.stringify({ selected, enabled, ...state }, null, 2));
       return { ...state, recordOrder: selected.map((feature) => [feature.record_key, feature.record_id]) };

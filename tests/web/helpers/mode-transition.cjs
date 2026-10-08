@@ -94,9 +94,9 @@ const snapshot = page => page.evaluate(async () => {
     // Per-feature edits by identity key, one map per edited field.
     ...Object.fromEntries([['labels', 'labelText'], ['labelSources', 'labelSourceText'], ['visibility', 'labelVisibility'],
       ['featureVisibility', 'featureVisibility']].map(([name, field]) => [name, Object.fromEntries(
-      Object.entries(s.featureOverrides).filter(([, row]) => row[field] !== null).map(([key, row]) => [key, row[field]]))])),
-    bulkLabels: { ...s.labelTextBulkOverrides }, visibilityRules: [...s.featureVisibilityManualRules],
-    colors: { ...s.featureColorOverrides }, rules: s.manualSpecificRules.map(rule => ({ ...rule, fromFile: Boolean(rule.fromFile) })),
+      Object.entries(s.activeDrawing().featureOverrides).filter(([, row]) => row[field] !== null).map(([key, row]) => [key, row[field]]))])),
+    bulkLabels: { ...s.activeDrawing().labelTextBulkOverrides }, visibilityRules: [...s.activeDrawing().featureVisibilityManualRules],
+    colors: { ...s.activeDrawing().featureColorOverrides }, rules: s.activeDrawing().manualSpecificRules.map(rule => ({ ...rule, fromFile: Boolean(rule.fromFile) })),
     featureCount: s.extractedFeatures.value.length,
     resultIdentity: result ? ingestion.getCommittedSvgResultRuntimeIdentity(result) : null,
     markedMounted: result ? ingestion.isCommittedSvgResultMounted(result) : false,

@@ -16,18 +16,24 @@ import {
 } from '../../gbdraw/web/js/services/feature-placement.js';
 
 import { resolveLinearComparisonPlan } from '../../gbdraw/web/js/services/linear-comparisons.js';
+import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 
 const target = (recordKey = 'card', biologicalFeatureId = 'feature') => ({
   recordKey, biologicalFeatureId, placement: { kind: 'main' }
 });
-const draft = (row, startCoordinate) => ({ scope: row.scope, sourceUid: row.sourceUid,
+// A drawing's record display draft: its mode is the drawing's (PR-1).
+const draft = (row, startCoordinate) => ({ sourceUid: row.sourceUid,
   selector: row.selector, recordId: row.recordId, topologyOverride: null, startCoordinate,
   reverseComplementOverride: null, anchorIntent: null });
-const stateFor = (mode) => buildCanonicalRequestState({
-  session: { renderRequest: { records: [] } },
-  projection: { mode, inputType: 'gb', files: {}, config: {} },
-  config: { form: createDefaultForm(), adv: createDefaultAdv(mode), colors: {} }
-});
+// One fixture holds the request state and its drawing.
+const stateFor = (mode) => {
+  const { state, drawing } = buildCanonicalRequestState({
+    session: { renderRequest: { records: [] } },
+    projection: { mode, inputType: 'gb', files: {}, config: {} },
+    config: { form: createDefaultForm(), adv: createDefaultAdv(mode), colors: {} }
+  });
+  return Object.assign(state, drawing);
+};
 const text = 'LOCUS       same 100 bp DNA circular\n//\nLOCUS       same 100 bp DNA circular\n//\n';
 const file = { name: 'same.gb', size: text.length, type: 'text/plain', lastModified: 0, data: btoa(text) };
 
@@ -68,10 +74,10 @@ for (const mode of ['circular', 'linear']) {
     state.adv.feature_overlap_tolerance_bp = 2;
     const recordKey = mode === 'circular' ? 'record-2' : 'card:2';
     const override = target(recordKey);
-    const draftRow = { scope: mode, ...override };
-    state.featurePlacementOverrides = { [JSON.stringify([mode, recordKey, 'feature'])]: draftRow };
+    const draftRow = { ...override };
+    state.featurePlacementOverrides = { [featureIdentityKeyOf(draftRow)]: draftRow };
     const filesData = { c_gb: file, linearSeqs: [{ uid: 'card', gb: file }] };
-    const result = buildCanonicalRenderRequest({ state, filesData, recordDisplayRows: rows, comparisonPlanSnapshot: mode === 'linear'
+    const result = buildCanonicalRenderRequest({ state, drawing: state, filesData, recordDisplayRows: rows, comparisonPlanSnapshot: mode === 'linear'
       ? resolveLinearComparisonPlan({ plan: state.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [], losatProgram: 'blastn', blastpMode: 'orthogroup' }) : null });
     assert.equal(result.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
     assert.deepEqual(result.renderRequest.records.map((record) => record.display.startCoordinate), [1, 71]);
@@ -90,39 +96,35 @@ for (const mode of ['circular', 'linear']) {
   });
 }
 
-// OV-08, R-1 (R2): each draft row names its mode, so the draft keeps both
-// modes' rows and a request carries only the rows of its own mode and records,
-// also when the other mode uses the same record key.
-test('a request carries only its records\' placement rows and the draft keeps the other mode', () => {
-  const row = (scope, recordKey, biologicalFeatureId, side) => ({ scope, recordKey, biologicalFeatureId,
+// OV-08, R-1 (R2): a drawing's request carries only the rows of its own
+// records; the drawing keeps the rows of records the request does not draw.
+// The other mode's rows are the other drawing's (PR-1), so a lane of the
+// other mode's side is invalid in this drawing.
+test('a request carries only its records\' placement rows and the draft keeps the others', () => {
+  const row = (recordKey, biologicalFeatureId, side) => ({ recordKey, biologicalFeatureId,
     placement: side ? { kind: 'lane', side, level: 1 } : { kind: 'main' } });
-  const rows = [row('circular', 'record-1', 'circular', 'outward'), row('linear', 'card', 'above', 'above'),
-    row('linear', 'card', 'main'), row('circular', 'card', 'collision', 'inward'), row('circular', 'card', 'main'),
-    row('linear', 'removed', 'gone', 'below')];
-  const overrides = Object.fromEntries(rows.map((entry) => [
-    JSON.stringify([entry.scope, entry.recordKey, entry.biologicalFeatureId]), entry]));
-  assert.equal(canonicalFeaturePlacements(overrides).length, rows.length);
-  // A draft lane is a side of its own mode.
+  const rows = [row('card', 'above', 'above'), row('card', 'main'), row('removed', 'gone', 'below')];
+  const overrides = Object.fromEntries(rows.map((entry) => [featureIdentityKeyOf(entry), entry]));
+  assert.equal(canonicalFeaturePlacements(overrides, 'linear').length, rows.length);
+  // A draft lane is a side of its drawing's mode.
   assert.throws(() => canonicalFeaturePlacements({ ...overrides,
-    [JSON.stringify(['linear', 'card', 'wrong'])]: row('linear', 'card', 'wrong', 'inward') }),
+    [featureIdentityKeyOf(row('card', 'wrong'))]: row('card', 'wrong', 'inward') }, 'linear'),
   (error) => error.code === 'INPUT_INVALID' && error.context.field === 'schema');
   const state = stateFor('linear');
   state.featurePlacementOverrides = overrides;
   // Per-feature edits follow the same rule.
-  const edit = (scope, featureVisibility) => ({ scope, recordKey: 'card', biologicalFeatureId: 'main',
+  const edit = (featureVisibility) => ({ recordKey: 'card', biologicalFeatureId: 'main',
     featureVisibility, labelVisibility: null, labelText: null, labelSourceText: null });
-  state.featureOverrides = { [JSON.stringify(['circular', 'card', 'main'])]: edit('circular', 'off'),
-    [JSON.stringify(['linear', 'card', 'main'])]: edit('linear', 'on') };
+  state.featureOverrides = { [featureIdentityKeyOf(edit('on'))]: edit('on') };
   const filesData = { linearSeqs: [{ uid: 'card', gb: file }] };
-  const { renderRequest } = buildCanonicalRenderRequest({ state, filesData, comparisonPlanSnapshot:
+  const { renderRequest } = buildCanonicalRenderRequest({ state, drawing: state, filesData, comparisonPlanSnapshot:
     resolveLinearComparisonPlan({ plan: state.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [], losatProgram: 'blastn', blastpMode: 'orthogroup' }) });
-  const requestRow = ({ scope: _scope, ...entry }) => entry;
-  assert.deepEqual(renderRequest.diagramOptions.featurePlacements, [requestRow(rows[1]), requestRow(rows[2])]);
+  assert.deepEqual(renderRequest.diagramOptions.featurePlacements, [rows[0], rows[1]]);
   assert.deepEqual(renderRequest.diagramOptions.featureOverrides, [
     { recordKey: 'card', biologicalFeatureId: 'main', featureVisibility: 'on', labelVisibility: null, labelText: null }
   ]);
   assert.equal(Object.keys(state.featurePlacementOverrides).length, rows.length);
-  assert.equal(Object.keys(state.featureOverrides).length, 2);
+  assert.equal(Object.keys(state.featureOverrides).length, 1);
 });
 
 test('the Web names the feature of a placement row that Python reports (OV-09)', () => {
@@ -140,13 +142,13 @@ test('the Web names the feature of a placement row that Python reports (OV-09)',
 });
 
 test('a Generate intent checkpoint restores the placement draft through its owner (R13)', () => {
-  const lane = (scope, recordKey, side) => ({
-    scope, recordKey, biologicalFeatureId: 'feature', placement: { kind: 'lane', side, level: 1 }
+  const lane = (recordKey, side) => ({
+    recordKey, biologicalFeatureId: 'feature', placement: { kind: 'lane', side, level: 1 }
   });
-  const kept = lane('circular', 'record-1', 'outward');
+  const kept = lane('record-1', 'outward');
   const key = featureIdentityKeyOf(kept);
   const checkpoint = { [key]: kept };
-  const removed = lane('linear', 'record-2', 'above');
+  const removed = lane('record-2', 'inward');
   const overrides = { [featureIdentityKeyOf(removed)]: removed };
   restorePlacements(overrides, checkpoint);
   assert.deepEqual(overrides, checkpoint);
@@ -166,7 +168,7 @@ test('Main, resolved side, bulk Auto and history share one draft owner', async (
     featureCatalog: { value: { items: [{ recordKeys: ['card'] }] } },
     trackSlotResolvedGeometry: { value: { mode: 'linear', records: [{ recordIndex: 0, resultIndex: 0,
       featurePlacementTargets: [{ kind: 'main' }, { kind: 'lane', side: 'below', level: 1 }] }] } } };
-  const actions = createFeaturePlacementActions({ state, isCurrentFeature: () => true,
+  const actions = createFeaturePlacementActions({ state: withDrawings(state), isCurrentFeature: () => true,
     getCommittedRequest: () => ({ mode: 'linear', records: [{ recordKey: 'card' }], grouping: 'single' }),
     runUndoable: async (label, fn) => { transactions.push({ label, before: structuredClone(overrides) }); fn(); } });
   assert.equal(actions.choices(features).find((choice) => choice.value === 'above').enabled, true);
@@ -188,7 +190,7 @@ for (const mode of ['circular', 'linear']) {
       featurePlacementOverrides: {}, featureCatalog: { value: { items: [{ recordKeys: ['record-1'] }] } },
       trackSlotResolvedGeometry: { value: { mode, records: [] } } };
     const geometry = structuredClone(state.trackSlotResolvedGeometry.value);
-    const actions = createFeaturePlacementActions({ state, getCommittedRequest: () => ({ mode }),
+    const actions = createFeaturePlacementActions({ state: withDrawings(state), getCommittedRequest: () => ({ mode }),
       isCurrentFeature: (entry) => entry === feature, runUndoable: (_label, fn) => fn() });
     const sides = mode === 'circular' ? ['outward', 'inward'] : ['above', 'below'];
     const check = (enabled) => {
@@ -241,12 +243,17 @@ for (const mode of ['circular', 'linear']) {
 // exactly those rows; cancel records nothing (OV-09, R10, R11). The stack
 // editors' edits use the same transition (tests/web/track-layout-transition.test.mjs).
 test('a layout edit that drops lanes asks before it resets those placements', async () => {
-  const lane = (scope, recordKey, side) => ({ scope, recordKey, biologicalFeatureId: 'f',
+  const lane = (recordKey, side) => ({ recordKey, biologicalFeatureId: 'f',
     placement: { kind: 'lane', side, level: 1 } });
-  const overrides = { outward: lane('circular', 'c', 'outward'), above: lane('linear', 'l', 'above'),
-    main: { scope: 'circular', recordKey: 'c', biologicalFeatureId: 'g', placement: { kind: 'main' } } };
-  const state = { mode: { value: 'circular' }, form: { ...createDefaultForm(), track_type: 'middle' },
-    adv: createDefaultAdv('circular'), featurePlacementOverrides: overrides };
+  const main = (recordKey) => ({ recordKey, biologicalFeatureId: 'g', placement: { kind: 'main' } });
+  // Each mode's drawing holds its own placements (PR-1).
+  const circularOverrides = { outward: lane('c', 'outward'), main: main('c') };
+  const linearOverrides = { above: lane('l', 'above'), main: main('l') };
+  const circular = { form: { ...createDefaultForm(), track_type: 'middle' }, adv: createDefaultAdv('circular'),
+    featurePlacementOverrides: circularOverrides };
+  const linear = { form: { ...createDefaultForm(), linear_track_layout: 'middle', separate_strands: false },
+    adv: createDefaultAdv('linear'), featurePlacementOverrides: linearOverrides };
+  const state = withModeDrawings({ mode: { value: 'circular' } }, { circular, linear });
   const steps = [];
   const actions = createFeaturePlacementActions({ state, getCommittedRequest: () => null, isCurrentFeature: () => true,
     runUndoable: async (label, fn) => { steps.push(label); fn(); } });
@@ -258,37 +265,37 @@ test('a layout edit that drops lanes asks before it resets those placements', as
   };
 
   assert.deepEqual(ask(select('spreadout', 'Track Preset'), 'track_type'),
-    { open: true, count: 1, setting: 'Track Preset', value: 'Spreadout', scope: '' });
+    { open: true, count: 1, setting: 'Track Preset', value: 'Spreadout' });
   assert.equal(await actions.resolveLayoutChange('cancel'), false);
   assert.equal(actions.layoutChange.open, false);
-  assert.equal(state.form.track_type, 'middle');
-  assert.deepEqual(Object.keys(overrides), ['outward', 'above', 'main']);
+  assert.equal(circular.form.track_type, 'middle');
+  assert.deepEqual(Object.keys(circularOverrides), ['outward', 'main']);
   assert.deepEqual(steps, []);
 
   ask(select('tuckin', 'Track Preset'), 'track_type');
   await actions.resolveLayoutChange('reset');
-  assert.equal(state.form.track_type, 'tuckin');
-  // The other mode's lane and the Main row stay (R2).
-  assert.deepEqual(Object.keys(overrides), ['above', 'main']);
+  assert.equal(circular.form.track_type, 'tuckin');
+  // The Main row and the other drawing's lane stay (R2).
+  assert.deepEqual(Object.keys(circularOverrides), ['main']);
+  assert.deepEqual(Object.keys(linearOverrides), ['above', 'main']);
   assert.deepEqual(steps, ['Change setting and reset Feature placements']);
   // With no drawable lane to lose, the edit applies now and the control's
   // History adapter records it (R11).
   actions.changeLayoutSetting(select('middle', 'Track Preset'), 'track_type');
   assert.equal(actions.layoutChange.open, false);
-  assert.equal(state.form.track_type, 'middle');
+  assert.equal(circular.form.track_type, 'middle');
   assert.equal(steps.length, 1);
 
   state.mode.value = 'linear';
-  state.adv = createDefaultAdv('linear');
-  Object.assign(state.form, { linear_track_layout: 'middle', separate_strands: false });
   const strands = { target: { type: 'checkbox', checked: true, getAttribute: () => 'Separate Strands' } };
   assert.deepEqual(ask(strands, 'separate_strands'),
-    { open: true, count: 1, setting: 'Separate Strands', value: 'On', scope: '' });
+    { open: true, count: 1, setting: 'Separate Strands', value: 'On' });
   // The checkbox shows the kept value while the dialog asks.
   assert.equal(strands.target.checked, false);
   await actions.resolveLayoutChange('reset');
-  assert.equal(state.form.separate_strands, true);
-  assert.deepEqual(Object.keys(overrides), ['main']);
+  assert.equal(linear.form.separate_strands, true);
+  assert.deepEqual(Object.keys(linearOverrides), ['main']);
+  assert.equal(circular.form.separate_strands, createDefaultForm().separate_strands);
 });
 
 test('historical session 40 schema 6 promotes without Generate and preserves cardinality', async () => {

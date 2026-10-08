@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { DrawingState } from '../../state.js' */
 import { resolveColorToHex } from '../../utils/color-utils.js';
 import { reportRuleRunFailure, runWhenPrepared } from '../rule-matching.js';
 import {
@@ -175,13 +176,9 @@ export const createFeatureSvgActions = ({
   const {
     orthogroups,
     collinearGroups,
-    orthogroupNameOverrides,
-    orthogroupDescriptionOverrides,
     extractedFeatures,
     biologicalFeatures,
     featuresBySvgId,
-    featureColorOverrides,
-    featureOverrides,
     svgContainer,
     clickedFeature,
     clickedFeaturePos,
@@ -190,8 +187,7 @@ export const createFeatureSvgActions = ({
     matchSequenceRegistry,
     selectedAnnotation,
     featurePopupSize,
-    featureSelectionDrag,
-    adv
+    featureSelectionDrag
   } = state;
   /** @type {DelegatedFeatureHandlers | null} */
   let delegatedFeatureHandlers = null;
@@ -436,13 +432,14 @@ export const createFeatureSvgActions = ({
 
   // `renderedSvgId` is '' for a feature the displayed Result does not draw.
   /**
+   * @param {DrawingState} drawing
    * @param {Record<string, any>} feat
    * @param {Element | null} [featureElement]
    * @param {string} [renderedSvgId]
    */
-  const buildClickedFeaturePayload = (feat, featureElement = null, renderedSvgId = undefined) => {
+  const buildClickedFeaturePayload = (drawing, feat, featureElement = null, renderedSvgId = undefined) => {
     const defaultLabel = getFeatureCaption(feat);
-    const existingOverride = getFeatureOverride(featureColorOverrides, feat);
+    const existingOverride = getFeatureOverride(drawing.featureColorOverrides, feat);
     const effectiveCaption = String(getEffectiveLegendCaption?.(feat) || existingOverride?.caption || defaultLabel || '').trim();
     const locationText = formatFeatureLocation(feat);
     const locationParts = Array.isArray(feat.location_parts) ? feat.location_parts : [];
@@ -462,7 +459,7 @@ export const createFeatureSvgActions = ({
     const currentStrokeWidth = parseFloat(featureElement?.getAttribute('stroke-width') ?? '') || 0.5;
 
     const actualSvgId = String(renderedSvgId ?? renderedFeatureSvgId(feat)).trim();
-    const visibilityMode = normalizeVisibilityMode(featureOverrideValue(featureOverrides, feat, 'featureVisibility'));
+    const visibilityMode = normalizeVisibilityMode(featureOverrideValue(drawing.featureOverrides, feat, 'featureVisibility'));
 
     return {
       id: feat.id,
@@ -516,10 +513,11 @@ export const createFeatureSvgActions = ({
   };
 
   /**
+   * @param {DrawingState} drawing
    * @param {Record<string, any>} feat
    * @param {{ clientX: number, clientY: number } | null} [eventLike]
    */
-  const openPreparedFeatureEditor = (feat, eventLike = null) => {
+  const openPreparedFeatureEditor = (drawing, feat, eventLike = null) => {
     if (!feat) return null;
     if (!svgContainer.value) return null;
     const svg = svgContainer.value.querySelector('svg');
@@ -548,13 +546,13 @@ export const createFeatureSvgActions = ({
     const featureElement = renderedSvgId
       ? getFeatureFillElements(svg, renderedSvgId)[0] || featureElements[0] || null
       : null;
-    clickedFeature.value = buildClickedFeaturePayload(target, featureElement, renderedSvgId);
+    clickedFeature.value = buildClickedFeaturePayload(drawing, target, featureElement, renderedSvgId);
     if (featurePopupSize) {
       featurePopupSize.width = 0;
       featurePopupSize.height = 0;
     }
 
-    const popupPosition = getPopupPosition(eventLike, adv?.rich_feature_popup === false ? 440 : 720);
+    const popupPosition = getPopupPosition(eventLike, state.richFeaturePopup.value === false ? 440 : 720);
     clickedFeaturePos.x = popupPosition.x;
     clickedFeaturePos.y = popupPosition.y;
     if (typeof onFeaturePopupOpened === 'function') {
@@ -568,11 +566,14 @@ export const createFeatureSvgActions = ({
    * @param {Record<string, any>} feat
    * @param {{ clientX: number, clientY: number } | null} [eventLike]
    */
-  const openFeatureEditorForFeature = (feat, eventLike = null) => reportRuleRunFailure(
-    state, 'feature-extraction', () => runWhenPrepared(
-      state, () => [prepareDrawnFeatureMatches({ strict: true })], () => openPreparedFeatureEditor(feat, eventLike)
-    )
-  );
+  const openFeatureEditorForFeature = (feat, eventLike = null) => {
+    const drawing = state.activeDrawing();
+    return reportRuleRunFailure(
+      state, 'feature-extraction', () => runWhenPrepared(
+        state, () => [prepareDrawnFeatureMatches({ strict: true })], () => openPreparedFeatureEditor(drawing, feat, eventLike)
+      )
+    );
+  };
 
   const hoverSummaryIsAllowed = () => {
     if (clickedFeature.value) return false;
@@ -757,26 +758,28 @@ export const createFeatureSvgActions = ({
       : orthogroups?.value || []
   );
 
-  const buildMatchPayload = (matchElement, featureLookup) => buildMatchPopupPayload(matchElement, {
+  /** @param {DrawingState} drawing */
+  const buildMatchPayload = (drawing, matchElement, featureLookup) => buildMatchPopupPayload(matchElement, {
     featureLookup,
     sourceFeatures: Array.isArray(biologicalFeatures?.value) && biologicalFeatures.value.length > 0
       ? biologicalFeatures.value
       : (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []),
     orthogroups: groupsForMatch(matchElement),
-    orthogroupNameOverrides,
-    orthogroupDescriptionOverrides,
+    orthogroupNameOverrides: drawing.orthogroupNameOverrides,
+    orthogroupDescriptionOverrides: drawing.orthogroupDescriptionOverrides,
     resolveSequenceSource: matchSequenceRegistry?.resolve
   });
 
   // The summary builder reads a function as well as a list.
   const buildMatchHoverSummary = (matchElement) => buildPairwiseMatchHoverSummary(matchElement, /** @type {any} */ ({
     orthogroups: () => groupsForMatch(matchElement),
-    orthogroupNameOverrides
+    orthogroupNameOverrides: state.activeDrawing().orthogroupNameOverrides
   }));
 
   const openPairwiseMatchPopup = (matchElement, eventLike, featureLookup) => {
+    const drawing = state.activeDrawing();
     if (!matchElement || !clickedPairwiseMatch || !clickedPairwiseMatchPos) return null;
-    const payload = buildMatchPayload(matchElement, featureLookup);
+    const payload = buildMatchPayload(drawing, matchElement, featureLookup);
     if (!payload) return null;
     hideHoverSummary();
     clickedFeature.value = null;

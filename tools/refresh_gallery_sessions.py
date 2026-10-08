@@ -732,7 +732,10 @@ def _validate_staged_gallery_session(
             f"{session_path.name} has no canonical schema-"
             f"{expected_request_schema} render request"
         )
-    config = session.get("config")
+    modes = session.get("modes")
+    # Session 46 keeps the Linear draft in its Linear slice.
+    linear = modes.get("linear") if isinstance(modes, Mapping) else None
+    config = linear.get("config") if isinstance(linear, Mapping) else session.get("config")
     if isinstance(config, Mapping) and "linearRecordLayout" in config:
         plan = config.get("linearComparisonPlan")
         if not isinstance(plan, Mapping):
@@ -1023,10 +1026,16 @@ def _set_output_prefix(session: dict[str, Any], prefix: str) -> int:
     Returns the number of fields changed.
     """
 
+    containers: list[object] = []
+    # Session 46 keeps the form field in each mode slice (``modes.<mode>``).
+    modes = session.get("modes")
+    for mode_slice in modes.values() if isinstance(modes, dict) else ():
+        config = mode_slice.get("config") if isinstance(mode_slice, dict) else None
+        containers.append(config.get("form") if isinstance(config, dict) else None)
+    request = session.get("renderRequest")
+    containers.append(request.get("output") if isinstance(request, dict) else None)
     changed = 0
-    for section, key in (("config", "form"), ("renderRequest", "output")):
-        owner = session.get(section)
-        container = owner.get(key) if isinstance(owner, dict) else None
+    for container in containers:
         if isinstance(container, dict) and container.get("prefix") != prefix:
             container["prefix"] = prefix
             changed += 1

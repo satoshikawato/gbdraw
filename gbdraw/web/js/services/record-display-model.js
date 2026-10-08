@@ -5,11 +5,14 @@
 // (app/record-display-options.js) edit it.
 import { resolveDisambiguatedRecordSelection } from './record-options.js';
 
-export const recordDisplayKey = ({ scope, sourceUid, selector }) => {
-  if (!['circular', 'linear'].includes(scope) || !sourceUid || !/^#[1-9]\d*$/.test(selector)) {
-    throw new Error('Record display requires a scope, source UID, and exact record selector.');
+// A record display row or draft names its source input and record. A drawing
+// holds the drafts of its own mode's inputs (PD-OI-086): `circular`, or a
+// Linear File card's UID.
+export const recordDisplayKey = ({ sourceUid, selector }) => {
+  if (!sourceUid || !/^#[1-9]\d*$/.test(selector)) {
+    throw new Error('Record display requires a source UID and exact record selector.');
   }
-  return JSON.stringify([scope, sourceUid, selector]);
+  return JSON.stringify([sourceUid, selector]);
 };
 
 export const buildRecordDisplayRows = ({ scope, sourceUid, source, records, selector = '' }) => {
@@ -78,11 +81,21 @@ export const migrateLegacyRecordDisplayDrafts = (drafts) => {
   });
 };
 
-export const validateRecordDisplayDrafts = (drafts) => {
+// A Session 41-44 draft also named each row's mode (`scoped`); the Session 46
+// split moves each row into its mode's drawing.
+/**
+ * @param {unknown} drafts
+ * @param {{ scoped?: boolean }} [options]
+ */
+export const validateRecordDisplayDrafts = (drafts, { scoped = false } = {}) => {
   if (!Array.isArray(drafts)) throw new Error('Record display drafts must be an array.');
+  const fields = scoped
+    ? 'anchorIntent,recordId,reverseComplementOverride,scope,selector,sourceUid,startCoordinate,topologyOverride'
+    : 'anchorIntent,recordId,reverseComplementOverride,selector,sourceUid,startCoordinate,topologyOverride';
   const identities = new Set();
   for (const draft of drafts) {
-    if (!draft || Object.keys(draft).sort().join(',') !== 'anchorIntent,recordId,reverseComplementOverride,scope,selector,sourceUid,startCoordinate,topologyOverride'
+    if (!draft || Object.keys(draft).sort().join(',') !== fields
+      || (scoped && !['circular', 'linear'].includes(draft.scope))
       || typeof draft.recordId !== 'string' || draft.recordId.includes('\0')
       || typeof draft.sourceUid !== 'string' || draft.sourceUid.includes('\0')
       || (draft.topologyOverride !== null && typeof draft.topologyOverride !== 'boolean')
@@ -92,7 +105,7 @@ export const validateRecordDisplayDrafts = (drafts) => {
       throw new Error('Invalid record display draft; only source-bound requested intent is supported.');
     }
     validateAnchorIntent(draft.anchorIntent);
-    const key = recordDisplayKey(draft);
+    const key = scoped ? JSON.stringify([draft.scope, recordDisplayKey(draft)]) : recordDisplayKey(draft);
     if (identities.has(key)) throw new Error('Duplicate record display draft identity.');
     identities.add(key);
   }

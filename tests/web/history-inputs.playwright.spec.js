@@ -122,7 +122,7 @@ for (const inputMethod of ['keyboard', 'pointer']) {
     const savedPath = testInfo.outputPath('restored.gbdraw-session.json.gz');
     await download.saveAs(savedPath);
     const saved = JSON.parse(gunzipSync(readFileSync(savedPath)));
-    expect(saved.config.form.labels_mode).toBe('out');
+    expect(saved.modes[saved.ui.mode].config.form.labels_mode).toBe('out');
     expect(await generate(page)).toBe(originalSvg);
 
     const freshContext = await browser.newContext({ baseURL });
@@ -257,15 +257,18 @@ test('Linear File removal choices are atomic, undoable, and preserve one slot', 
 });
 
 // R11 input matrix (SE-02, SE-03, SE-04): control type x input means x focus
-// state. Every changed control adds exactly one step, and Undo is LIFO.
-const controlState = (page) => page.evaluate(() => {
+// state. Every changed control adds exactly one step, and Undo is LIFO. The
+// text and label controls are edited in Circular, so their values are read from
+// the Circular drawing also while Linear is shown (PD-OI-086).
+const controlState = (page) => page.evaluate(async () => {
   const app = window.__GBDRAW_APP__;
+  const { state } = await import('./js/state.js');
   return {
-    rich: app.adv.rich_feature_popup,
+    rich: app.richFeaturePopup,
     input: app.cInputType,
-    prefix: app.form.prefix,
+    prefix: state.drawings.circular.form.prefix,
     mode: app.mode,
-    labels: app.form.labels_mode
+    labels: state.drawings.circular.form.labels_mode
   };
 });
 const historyCounts = (page) => page.evaluate(() => [
@@ -524,7 +527,7 @@ test('a GenBank or DDBJ ring added through Add Seq keeps its record label throug
     const { state } = await import('/gbdraw/web/js/state.js');
     const file = new File([text], 'ring-typed.gbk', { type: 'text/plain', lastModified: 0 });
     window.__GBDRAW_APP__.addCircularConservationComparisonFile({ target: { files: [file], value: '' } });
-    state.circularConservation.series[state.circularConservation.series.length - 1].label = 'Typed ring';
+    state.activeDrawing().circularConservation.series[state.activeDrawing().circularConservation.series.length - 1].label = 'Typed ring';
   }, ringFlatFile({ definition: 'synthetic ring typed.' }));
   await expectState(typed, 3, 0, 'typed ring added');
   await expectHistory(page, baseline + 3, 0, 'Change uploaded file');

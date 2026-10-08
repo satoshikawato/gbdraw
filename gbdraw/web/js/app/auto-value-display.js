@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { DrawingState } from '../state.js' */
 import { normalizeOptionalText } from '../services/track-slot-display.js';
 import { requireCurrentLinearTrackLayout } from '../services/current-option-values.js';
 
@@ -228,10 +229,11 @@ const circularWidthText = (state, renderer) => {
     : formatShortLong(value, formatPx, null);
 };
 
-const circularFeatureRadius = (state, lengthParam) => {
-  const preset = normalizeTrackPreset(state?.form?.track_type);
+/** @param {DrawingState} drawing */
+const circularFeatureRadius = (drawing, lengthParam) => {
+  const preset = normalizeTrackPreset(drawing?.form?.track_type);
   const laneWidth = circularWidthForRenderer('features', lengthParam);
-  const laneCount = state?.form?.separate_strands ? 2 : 1;
+  const laneCount = drawing?.form?.separate_strands ? 2 : 1;
   const spacing = previewSpacingPx();
   const bandWidth = (laneCount * laneWidth) + (Math.max(0, laneCount - 1) * spacing);
   if (preset === 'tuckin') {
@@ -243,9 +245,10 @@ const circularFeatureRadius = (state, lengthParam) => {
   return 1.0;
 };
 
-const circularBuiltinTrackId = (renderer, state) => {
-  const showDepth = Boolean(state?.form?.show_depth);
-  const showGc = !Boolean(state?.form?.suppress_gc);
+/** @param {DrawingState} drawing */
+const circularBuiltinTrackId = (renderer, drawing) => {
+  const showDepth = Boolean(drawing?.form?.show_depth);
+  const showGc = !Boolean(drawing?.form?.suppress_gc);
   if (renderer === 'depth') return showDepth ? 2 : 2;
   if (renderer === 'dinucleotide_content') return showDepth ? 3 : 2;
   if (renderer === 'dinucleotide_skew') {
@@ -255,51 +258,58 @@ const circularBuiltinTrackId = (renderer, state) => {
   return null;
 };
 
-const circularRadiusForRenderer = (state, renderer, lengthParam) => {
-  if (renderer === 'features') return circularFeatureRadius(state, lengthParam);
-  const trackId = circularBuiltinTrackId(renderer, state);
+/** @param {DrawingState} drawing */
+const circularRadiusForRenderer = (drawing, renderer, lengthParam) => {
+  if (renderer === 'features') return circularFeatureRadius(drawing, lengthParam);
+  const trackId = circularBuiltinTrackId(renderer, drawing);
   if (trackId === null) return null;
-  const preset = normalizeTrackPreset(state?.form?.track_type);
+  const preset = normalizeTrackPreset(drawing?.form?.track_type);
   return DEFAULTS.circular.trackDict[normalizeLengthParam(lengthParam) || 'long']?.[preset]?.[trackId] ?? null;
 };
 
-const circularRadiusText = (state, renderer) => {
-  const value = circularLengthValues(state, (lengthParam) => circularRadiusForRenderer(state, renderer, lengthParam));
+/** @param {DrawingState} drawing */
+const circularRadiusText = (state, drawing, renderer) => {
+  const value = circularLengthValues(state, (lengthParam) => circularRadiusForRenderer(drawing, renderer, lengthParam));
   return typeof value === 'number'
     ? withAuto(formatFactor(value))
     : formatShortLong(value, formatFactor, null);
 };
 
-/** @param {{ height?: any } | null} [trackConfig] */
-const depthTickFontSize = (state, trackConfig = null) => {
+/**
+ * @param {DrawingState} drawing
+ * @param {{ height?: any } | null} [trackConfig]
+ */
+const depthTickFontSize = (state, drawing, trackConfig = null) => {
   const mode = String(state?.mode?.value || state?.mode || 'circular');
   if (mode === 'linear') {
     const trackHeight = parsePositiveNumber(trackConfig?.height)
-      ?? parsePositiveNumber(state?.adv?.depth_height)
+      ?? parsePositiveNumber(drawing?.adv?.depth_height)
       ?? DEFAULTS.linear.depthHeightPx;
     return Math.max(5, Math.min(8, trackHeight * 0.7));
   }
-  const trackWidth = parsePositiveNumber(state?.adv?.depth_width_circular)
+  const trackWidth = parsePositiveNumber(drawing?.adv?.depth_width_circular)
     ?? circularWidthForRenderer('depth', activeCircularLengthParam(state) || 'long');
   return Math.max(5, Math.min(8, trackWidth * 0.22));
 };
 
-const gcTickFontSize = (state) => {
+/** @param {DrawingState} drawing */
+const gcTickFontSize = (state, drawing) => {
   const mode = String(state?.mode?.value || state?.mode || 'circular');
   if (mode === 'linear') {
-    const trackHeight = parsePositiveNumber(state?.adv?.gc_height) ?? DEFAULTS.linear.defaultGcHeightPx;
+    const trackHeight = parsePositiveNumber(drawing?.adv?.gc_height) ?? DEFAULTS.linear.defaultGcHeightPx;
     return Math.max(5, Math.min(8, trackHeight * 0.7));
   }
-  const trackWidth = parsePositiveNumber(state?.adv?.gc_content_width_circular)
+  const trackWidth = parsePositiveNumber(drawing?.adv?.gc_content_width_circular)
     ?? circularWidthForRenderer('dinucleotide_content', activeCircularLengthParam(state) || 'long');
   return Math.max(5, Math.min(8, trackWidth * 0.22));
 };
 
 const lengthDependentPx = (state, values) => formatShortLong(values, formatPx, activeLengthParam(state));
 
-const dinucleotideWindowText = (state, field) => {
-  const manualWindow = parsePositiveNumber(state?.adv?.window_size);
-  const manualStep = parsePositiveNumber(state?.adv?.step_size);
+/** @param {DrawingState} drawing */
+const dinucleotideWindowText = (state, drawing, field) => {
+  const manualWindow = parsePositiveNumber(drawing?.adv?.window_size);
+  const manualStep = parsePositiveNumber(drawing?.adv?.step_size);
   if (field === 'window' && manualWindow !== null) return withAuto(formatBp(manualWindow));
   if (field === 'step' && manualStep !== null) return withAuto(formatBp(manualStep));
 
@@ -310,9 +320,10 @@ const dinucleotideWindowText = (state, field) => {
   return `${values.join('/')} (auto)`;
 };
 
-const depthWindowText = (state, field) => {
+/** @param {DrawingState} drawing */
+const depthWindowText = (state, drawing, field) => {
   const sourceField = field === 'window' ? 'window_size' : 'step_size';
-  const manualSource = parsePositiveNumber(state?.adv?.[sourceField]);
+  const manualSource = parsePositiveNumber(drawing?.adv?.[sourceField]);
   if (manualSource !== null) {
     const divisor = field === 'window' ? 10 : 10;
     const minValue = field === 'window' ? 100 : 1;
@@ -331,11 +342,12 @@ const depthWindowText = (state, field) => {
     : '10/100/1k bp (auto)';
 };
 
-const linearAxisGapText = (state) => {
-  const layout = String(state?.form?.linear_track_layout || 'middle').toLowerCase();
+/** @param {DrawingState} drawing */
+const linearAxisGapText = (drawing) => {
+  const layout = String(drawing?.form?.linear_track_layout || 'middle').toLowerCase();
   if (layout === 'middle') return 'ignored';
-  const manualHeight = parsePositiveNumber(state?.adv?.feature_height);
-  const multiplier = state?.form?.separate_strands ? 0.25 : 0.30;
+  const manualHeight = parsePositiveNumber(drawing?.adv?.feature_height);
+  const multiplier = drawing?.form?.separate_strands ? 0.25 : 0.30;
   if (manualHeight !== null) return withAuto(formatPx(manualHeight * multiplier));
   return formatShortLong(
     {
@@ -347,8 +359,9 @@ const linearAxisGapText = (state) => {
   );
 };
 
-const linearLabelPlacementText = (state) => {
-  const layout = requireCurrentLinearTrackLayout(state?.form?.linear_track_layout);
+/** @param {DrawingState} drawing */
+const linearLabelPlacementText = (drawing) => {
+  const layout = requireCurrentLinearTrackLayout(drawing?.form?.linear_track_layout);
   return layout === 'below' ? 'below' : 'above';
 };
 
@@ -363,30 +376,32 @@ const scaleIntervalText = (state) => {
   return interval ? withAuto(formatBp(interval)) : 'by record length (auto)';
 };
 
-const plotTitleText = (state) => {
+/** @param {DrawingState} drawing */
+const plotTitleText = (state, drawing) => {
   if (String(state?.mode?.value || state?.mode || 'circular') !== 'circular') return '';
-  if (String(state?.adv?.plot_title_position || 'none') === 'none') return '';
-  const pieces = [state?.form?.species, state?.form?.strain]
+  if (String(drawing?.adv?.plot_title_position || 'none') === 'none') return '';
+  const pieces = [drawing?.form?.species, drawing?.form?.strain]
     .map((value) => String(value || '').trim())
     .filter(Boolean);
   return pieces.length ? `${pieces.join(' ')} (auto)` : 'species + strain (auto)';
 };
 
-const autoTextByKey = (state, key, context = null) => {
+/** @param {DrawingState} drawing */
+const autoTextByKey = (state, drawing, key, context = null) => {
   switch (key) {
-    case 'depthWindow': return depthWindowText(state, 'window');
-    case 'depthStep': return depthWindowText(state, 'step');
+    case 'depthWindow': return depthWindowText(state, drawing, 'window');
+    case 'depthStep': return depthWindowText(state, drawing, 'step');
     case 'depthMin': return '0 (auto)';
     case 'depthMax': return 'from depth data (auto)';
     case 'circularDepthWidth': return circularWidthText(state, 'depth');
     case 'linearDepthHeight': return withAuto(formatPx(DEFAULTS.linear.depthHeightPx));
-    case 'linearDepthTrackHeight': return withAuto(formatPx(parsePositiveNumber(state?.adv?.depth_height) ?? DEFAULTS.linear.depthHeightPx));
+    case 'linearDepthTrackHeight': return withAuto(formatPx(parsePositiveNumber(drawing?.adv?.depth_height) ?? DEFAULTS.linear.depthHeightPx));
     case 'depthLargeTick': return 'endpoints only';
-    case 'depthTickFont': return withAuto(formatPx(depthTickFontSize(state, context)));
-    case 'conservationReference': return state?.circularConservation?.source === 'losat' ? 'subject (auto)' : 'detect side (auto)';
+    case 'depthTickFont': return withAuto(formatPx(depthTickFontSize(state, drawing, context)));
+    case 'conservationReference': return drawing?.circularConservation?.source === 'losat' ? 'subject (auto)' : 'detect side (auto)';
     case 'conservationRingWidth': return circularWidthText(state, 'sequence_conservation');
     case 'conservationRingGap': return withAuto(formatPx(previewSpacingPx()));
-    case 'plotTitle': return plotTitleText(state);
+    case 'plotTitle': return plotTitleText(state, drawing);
     case 'definitionFontSize':
       return String(state?.mode?.value || state?.mode || 'circular') === 'circular'
         ? withAuto(formatPx(DEFAULTS.circular.definitionFontSizePx))
@@ -394,7 +409,7 @@ const autoTextByKey = (state, key, context = null) => {
     case 'legendBoxSize': return lengthDependentPx(state, DEFAULTS.legend.boxSizePx);
     case 'legendFontSize': return lengthDependentPx(state, DEFAULTS.legend.fontSizePx);
     case 'linearFeatureHeight': return lengthDependentPx(state, DEFAULTS.linear.defaultCdsHeightPx);
-    case 'linearAxisGap': return linearAxisGapText(state);
+    case 'linearAxisGap': return linearAxisGapText(drawing);
     case 'circularFeatureWidth': return circularWidthText(state, 'features');
     case 'blockStrokeWidth': return lengthDependentPx(state, DEFAULTS.feature.blockStrokeWidthPx);
     case 'lineStrokeWidth': return lengthDependentPx(state, DEFAULTS.feature.lineStrokeWidthPx);
@@ -403,7 +418,7 @@ const autoTextByKey = (state, key, context = null) => {
         ? lengthDependentPx(state, DEFAULTS.circular.labelFontSizePx)
         : lengthDependentPx(state, DEFAULTS.linear.labelFontSizePx);
     case 'labelRendering': return 'per label';
-    case 'linearLabelPlacement': return linearLabelPlacementText(state);
+    case 'linearLabelPlacement': return linearLabelPlacementText(drawing);
     case 'circularLabelSpacing': return withAuto(formatPx(DEFAULTS.labels.spacingPx));
     case 'linearLabelSpacing': return withAuto(formatPx(DEFAULTS.labels.spacingPx));
     case 'labelRadiusOffset': return withAuto(roundDisplayNumber(DEFAULTS.labels.radiusOffset, 1));
@@ -416,14 +431,14 @@ const autoTextByKey = (state, key, context = null) => {
     case 'rulerLabelFontSize': return lengthDependentPx(state, DEFAULTS.linear.rulerLabelFontSizePx);
     case 'scaleInterval': return scaleIntervalText(state);
     case 'tickLabelFontSize': return withAuto(formatPx(DEFAULTS.circular.tickLabelFontSizePx));
-    case 'dinucleotideWindow': return dinucleotideWindowText(state, 'window');
-    case 'dinucleotideStep': return dinucleotideWindowText(state, 'step');
-    case 'gcTickFont': return withAuto(formatPx(gcTickFontSize(state)));
+    case 'dinucleotideWindow': return dinucleotideWindowText(state, drawing, 'window');
+    case 'dinucleotideStep': return dinucleotideWindowText(state, drawing, 'step');
+    case 'gcTickFont': return withAuto(formatPx(gcTickFontSize(state, drawing)));
     case 'linearGcHeight': return withAuto(formatPx(DEFAULTS.linear.defaultGcHeightPx));
     case 'circularGcWidth': return circularWidthText(state, 'dinucleotide_content');
-    case 'circularGcRadius': return circularRadiusText(state, 'dinucleotide_content');
+    case 'circularGcRadius': return circularRadiusText(state, drawing, 'dinucleotide_content');
     case 'circularSkewWidth': return circularWidthText(state, 'dinucleotide_skew');
-    case 'circularSkewRadius': return circularRadiusText(state, 'dinucleotide_skew');
+    case 'circularSkewRadius': return circularRadiusText(state, drawing, 'dinucleotide_skew');
     case 'pairwiseMatchHeight': return withAuto(formatPx(DEFAULTS.linear.comparisonHeightPx));
     default: return '';
   }
@@ -433,7 +448,10 @@ const autoTextByKey = (state, key, context = null) => {
  * @param {Record<string, any>} state the Web state; its shape belongs to `state.js`
  */
 export const createAutoValueDisplay = (state) => {
-  const autoValueText = (key, context = null) => autoTextByKey(state, key, context);
+  const autoValueText = (key, context = null) => {
+    const drawing = state.activeDrawing();
+    return autoTextByKey(state, drawing, key, context);
+  };
   const autoValueVisible = (value, key, context = null) => (
     normalizeOptionalText(value) === null && autoValueText(key, context) !== ''
   );

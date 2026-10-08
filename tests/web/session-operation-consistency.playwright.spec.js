@@ -145,7 +145,7 @@ for (const operation of ['save', 'load']) {
       await download.saveAs(path);
       const saved = JSON.parse(gunzipSync(readFileSync(path)));
       expect(saved.ui.zoom).not.toBe(browsedZoom);
-      expect(saved.config).toEqual(JSON.parse(await page.evaluate(() => window.beforeSession.config)));
+      expect(saved.modes[saved.ui.mode].config).toEqual(JSON.parse(await page.evaluate(() => window.beforeSession.config)));
     }
     await expectIntact(page);
     await expect(page.getByRole('button', { name: 'Load Session', exact: true })).toBeEnabled();

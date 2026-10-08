@@ -75,10 +75,10 @@ const DEFAULT_PLAN = { mode: 'none', defaultSource: 'losat', edges: [] };
 // (app-setup.js: a valid plan with comparison intent) waits until the user sets
 // up a comparison, and no LOSAT run starts from the draft.
 const assertNoReplacementDraft = () => {
-  assert.deepEqual(state.linearComparisonPlan, DEFAULT_PLAN);
+  assert.deepEqual(state.activeDrawing().linearComparisonPlan, DEFAULT_PLAN);
   const draft = resolveLinearComparisonPlan({
-    plan: state.linearComparisonPlan, sequences: state.linearSeqs, layout: [],
-    losatProgram: state.losatProgram.value, blastpMode: state.losat.blastp.mode
+    plan: state.activeDrawing().linearComparisonPlan, sequences: state.linearSeqs, layout: [],
+    losatProgram: state.activeDrawing().losatProgram.value, blastpMode: state.activeDrawing().losat.blastp.mode
   });
   assert.equal(draft.valid && draft.hasComparisonIntent, false);
   assert.equal(draft.hasLosatIntent, false);
@@ -105,12 +105,12 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
         assert.equal(result.status, 'ok', result.error?.stack);
         assert.equal(state.mode.value, mode);
         assert.equal((mode === 'circular' ? state.cInputType : state.lInputType).value, label === 'gff' ? 'gff' : 'gb');
-        assert.equal(state.importedComparisonIntent.disposition, 'EDITABLE');
+        assert.equal(state.activeDrawing().importedComparisonIntent.disposition, 'EDITABLE');
         assert.deepEqual(getCommittedCanonicalRenderRequest(), session.renderRequest);
         assert.ok(state.results.value.length > 0);
-        if (label === 'single') assert.equal(state.form.labels_mode, 'out');
+        if (label === 'single') assert.equal(state.activeDrawing().form.labels_mode, 'out');
         assert.equal(session.renderRequest.diagramOptions.output.legend, legend);
-        assert.equal(state.form.legend, legend);
+        assert.equal(state.activeDrawing().form.legend, legend);
         if (mode === 'linear') {
           assert.deepEqual(state.linearSeqs.map(seq => seq.uid), fileRecordKeys(session.renderRequest));
           // B13: without -b the CLI commits only a disabled protein pipeline
@@ -119,15 +119,15 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
           assert.ok(session.renderRequest.comparisons.every(item => (
             item.kind === 'generatedProteinComparison' && item.mode === 'none' && item.pairs.length === 0
           )));
-          assert.deepEqual(state.linearComparisonPlan, { mode: 'none', defaultSource: 'losat', edges: [] });
-          assert.notEqual(state.losatProgram.value, 'blastp');
-          const filesData = await serializeActiveRenderFiles('linear', state);
+          assert.deepEqual(state.activeDrawing().linearComparisonPlan, { mode: 'none', defaultSource: 'losat', edges: [] });
+          assert.notEqual(state.activeDrawing().losatProgram.value, 'blastp');
+          const filesData = await serializeActiveRenderFiles('linear', state, state.activeDrawing());
           const comparisonPlanSnapshot = resolveLinearComparisonPlan({
-            plan: state.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
-            losatProgram: state.losatProgram.value, blastpMode: state.losat.blastp.mode
+            plan: state.activeDrawing().linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
+            losatProgram: state.activeDrawing().losatProgram.value, blastpMode: state.activeDrawing().losat.blastp.mode
           });
           assert.equal(comparisonPlanSnapshot.hasLosatIntent, false);
-          const candidate = buildCanonicalRenderRequest({ state, filesData, comparisonPlanSnapshot });
+          const candidate = buildCanonicalRenderRequest({ state, drawing: state.activeDrawing(), filesData, comparisonPlanSnapshot });
           assert.deepEqual(candidate.renderRequest.comparisons, []);
         }
         const projectedFiles = mode === 'linear' ? state.linearSeqs.map(seq => seq.gb)
@@ -145,7 +145,8 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
           assert.equal(hash(await readFileBytes(state.files.c_gff)), hash(await readFile(args[1])));
           assert.equal(hash(await readFileBytes(state.files.c_fasta)), hash(await readFile(args[3])));
         }
-        // The original malformed adjunct is still invalid, even beside a valid request.
+        // A draft outside `modes` is a Session-format error, even beside a
+        // valid request (Session 46 keeps the Web draft in `modes`).
         const before = getCommittedCanonicalRenderRequest();
         const errorLog = console.error;
         console.error = () => {};
@@ -153,7 +154,7 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
           const rejected = await load(JSON.stringify({ ...session, config: { adv: {} } }));
           assert.equal(rejected.status, 'error');
           assert.equal(rejected.error.code, 'INPUT_INVALID');
-          assert.deepEqual(rejected.error.context, {field:'config',reason:'FIELDS'});
+          assert.deepEqual(rejected.error.context, {field:'schema',reason:'FIELDS'});
           assert.deepEqual(getCommittedCanonicalRenderRequest(), before);
         } finally {
           console.error = errorLog;
@@ -179,7 +180,7 @@ await test('a main v42 CLI Linear BLAST sidecar keeps a read-only comparison wit
   assert.deepEqual(session.webFiles.bindings.linearSeqs.map(seq => seq.uid), ['cli-seq-1', 'cli-seq-2']);
   const result = await load(bytes);
   assert.equal(result.status, 'ok', result.error?.stack);
-  assert.equal(state.importedComparisonIntent.disposition, 'PRESERVED_READ_ONLY');
+  assert.equal(state.activeDrawing().importedComparisonIntent.disposition, 'PRESERVED_READ_ONLY');
   assert.deepEqual(state.linearSeqs.map(seq => seq.uid), ['record-1', 'record-2']);
   assert.deepEqual(fileRecordKeys(getCommittedCanonicalRenderRequest()), ['record-1', 'record-2']);
   assertNoReplacementDraft();
@@ -206,12 +207,13 @@ await test('a multi-record CLI Linear BLAST Session inherits its comparison onto
     assert.equal(session.webFiles.bindings.linearSeqs.length, 1);
     const result = await load(bytes);
     assert.equal(result.status, 'ok', result.error?.stack);
-    assert.equal(state.importedComparisonIntent.disposition, 'PRESERVED_READ_ONLY');
+    assert.equal(state.activeDrawing().importedComparisonIntent.disposition, 'PRESERVED_READ_ONLY');
     assertNoReplacementDraft();
     // The candidate Generate builds after Inherit (run-analysis.js: empty plan, committed comparison).
-    const filesData = await serializeActiveRenderFiles('linear', state);
+    const filesData = await serializeActiveRenderFiles('linear', state, state.activeDrawing());
     const candidate = buildCanonicalRenderRequest({
       state,
+      drawing: state.activeDrawing(),
       filesData: { ...filesData, linearCanonicalComparisons: [] },
       comparisonPlanSnapshot: resolveLinearComparisonPlan({
         plan: { mode: 'none', defaultSource: 'losat', edges: [] },
@@ -258,15 +260,15 @@ await test('a CLI Linear protein Session keeps the adjacent LOSATP plan it drew'
       [['generatedProteinComparison', 'orthogroup']]);
     const result = await load(bytes);
     assert.equal(result.status, 'ok', result.error?.stack);
-    assert.equal(state.importedComparisonIntent.disposition, 'EDITABLE');
-    assert.deepEqual(state.linearComparisonPlan, { ...DEFAULT_PLAN, mode: 'adjacent' });
-    assert.equal(state.losatProgram.value, 'blastp');
-    const filesData = await serializeActiveRenderFiles('linear', state);
+    assert.equal(state.activeDrawing().importedComparisonIntent.disposition, 'EDITABLE');
+    assert.deepEqual(state.activeDrawing().linearComparisonPlan, { ...DEFAULT_PLAN, mode: 'adjacent' });
+    assert.equal(state.activeDrawing().losatProgram.value, 'blastp');
+    const filesData = await serializeActiveRenderFiles('linear', state, state.activeDrawing());
     const comparisonPlanSnapshot = resolveLinearComparisonPlan({
-      plan: state.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
-      losatProgram: state.losatProgram.value, blastpMode: state.losat.blastp.mode
+      plan: state.activeDrawing().linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
+      losatProgram: state.activeDrawing().losatProgram.value, blastpMode: state.activeDrawing().losat.blastp.mode
     });
-    const candidate = buildCanonicalRenderRequest({ state, filesData, comparisonPlanSnapshot });
+    const candidate = buildCanonicalRenderRequest({ state, drawing: state.activeDrawing(), filesData, comparisonPlanSnapshot });
     assert.deepEqual(candidate.renderRequest.comparisons.map(item => [item.kind, item.mode]),
       [['generatedProteinComparison', 'orthogroup']]);
   } finally {
@@ -289,15 +291,15 @@ await test('a 0.13.0 CLI Linear protein sidecar keeps the adjacent LOSATP plan i
   const loadDraft = async (document) => {
     const result = await load(JSON.stringify(document));
     assert.equal(result.status, 'ok', result.error?.stack);
-    const filesData = await serializeActiveRenderFiles('linear', state);
+    const filesData = await serializeActiveRenderFiles('linear', state, state.activeDrawing());
     const comparisonPlanSnapshot = resolveLinearComparisonPlan({
-      plan: state.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
-      losatProgram: state.losatProgram.value, blastpMode: state.losat.blastp.mode
+      plan: state.activeDrawing().linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
+      losatProgram: state.activeDrawing().losatProgram.value, blastpMode: state.activeDrawing().losat.blastp.mode
     });
-    const candidate = buildCanonicalRenderRequest({ state, filesData, comparisonPlanSnapshot });
+    const candidate = buildCanonicalRenderRequest({ state, drawing: state.activeDrawing(), filesData, comparisonPlanSnapshot });
     return {
-      plan: structuredClone(state.linearComparisonPlan),
-      program: state.losatProgram.value,
+      plan: structuredClone(state.activeDrawing().linearComparisonPlan),
+      program: state.activeDrawing().losatProgram.value,
       comparisons: candidate.renderRequest.comparisons.map(item => [item.kind, item.mode])
     };
   };
@@ -331,8 +333,8 @@ await test('a 0.13.0 Gallery Session with Custom Track Slots off loads without t
   const result = await load(bytes);
   assert.equal(result.status, 'ok', JSON.stringify(result.error));
   assert.equal(state.mode.value, 'linear');
-  assert.equal(state.adv.circular_track_slots.length, session.config.adv.circular_track_slots.length);
-  assert.ok(state.adv.circular_track_slots.every(slot => !Object.hasOwn(slot, 'spacing')));
+  assert.equal(state.activeDrawing().adv.circular_track_slots.length, session.config.adv.circular_track_slots.length);
+  assert.ok(state.activeDrawing().adv.circular_track_slots.every(slot => !Object.hasOwn(slot, 'spacing')));
   for (const [label, edit, row] of [
     ['Custom Track Slots on', adv => { adv.circular_track_slots_enabled = true; }, 1],
     ['a non-null spacing', adv => { adv.circular_track_slots[1].spacing = '4px'; }, 2]

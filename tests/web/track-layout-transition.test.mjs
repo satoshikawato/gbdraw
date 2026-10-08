@@ -15,10 +15,12 @@ import {
 } from '../../gbdraw/web/js/app/feature-editor/placement-actions.js';
 import { createCircularTrackSlotEditor } from '../../gbdraw/web/js/app/circular-track-slots.js';
 import { createLinearTrackSlotEditor } from '../../gbdraw/web/js/app/linear-track-slots.js';
+import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 
 const WEB = 'gbdraw/web';
 const MODES = ['circular', 'linear'];
-const lane = (scope, side) => ({ scope, recordKey: `${scope}-record`, biologicalFeatureId: `${scope}-cds`,
+// A drawing's lane row; its mode is the drawing's (PR-1).
+const lane = (name, side) => ({ recordKey: `${name}-record`, biologicalFeatureId: `${name}-cds`,
   placement: { kind: 'lane', side, level: 1 } });
 const draftState = (mode = 'circular') => {
   const adv = createDefaultAdv(mode);
@@ -41,13 +43,18 @@ const everything = ({ form, adv }) => JSON.stringify({ form, adv });
 
 test('a stack edit that drops a lane asks, Cancel keeps the draft, and Reset is one step (Q3)', async () => {
   const state = draftState('circular');
+  // The Linear drawing holds its own lane; a Circular edit never reaches it (R2).
+  const linear = draftState('linear');
+  linear.featurePlacementOverrides.l = lane('linear', 'above');
+  const linearBefore = everything(linear);
+  const store = withModeDrawings(state, { circular: state, linear });
   const steps = [];
-  const placement = createFeaturePlacementActions({ state, getCommittedRequest: () => null, isCurrentFeature: () => true,
+  const placement = createFeaturePlacementActions({ state: store, getCommittedRequest: () => null, isCurrentFeature: () => true,
     runUndoable: async (label, fn) => { steps.push(label); fn(); } });
-  const editor = createCircularTrackSlotEditor({ state, changeTrackLayout: placement.changeTrackLayout });
+  const editor = createCircularTrackSlotEditor({ state: store, changeTrackLayout: placement.changeTrackLayout });
   editor.normalizeCircularTrackSlots();
-  createLinearTrackSlotEditor({ state }).normalizeLinearTrackSlots();
-  Object.assign(state.featurePlacementOverrides, { c: lane('circular', 'outward'), l: lane('linear', 'above') });
+  Object.assign(state.featurePlacementOverrides, { c: lane('circular', 'outward'),
+    m: { recordKey: 'circular-record', biologicalFeatureId: 'main-cds', placement: { kind: 'main' } } });
   const features = () => state.adv.circular_track_slots.findIndex((slot) => slot.renderer === 'features');
   const before = everything(state);
   const click = () => {
@@ -57,7 +64,7 @@ test('a stack edit that drops a lane asks, Cancel keeps the draft, and Reset is 
   };
   assert.equal(editor.moveCircularTrackSlotOutside(features(), click()), false);
   assert.deepEqual({ ...placement.layoutChange },
-    { open: true, count: 1, setting: 'Move outside Axis', value: '', scope: '' });
+    { open: true, count: 1, setting: 'Move outside Axis', value: '' });
   assert.equal(everything(state), before);
   await placement.resolveLayoutChange('cancel');
   assert.equal(placement.layoutChange.open, false);
@@ -67,27 +74,19 @@ test('a stack edit that drops a lane asks, Cancel keeps the draft, and Reset is 
   editor.moveCircularTrackSlotOutside(features(), click());
   await placement.resolveLayoutChange('reset');
   assert.equal(state.adv.circular_track_slots[features()].params.lane_direction, 'outside');
-  // Only the lost row goes; the other mode's lane keeps its draft row (R2).
-  assert.deepEqual(Object.keys(state.featurePlacementOverrides), ['l']);
+  // Only the lost row goes; the Main row stays.
+  assert.deepEqual(Object.keys(state.featurePlacementOverrides), ['m']);
   assert.deepEqual(steps, ['Change setting and reset Feature placements']);
 
-  // The Circular panel's Separate Strands is the Linear predicate's input.
+  // Separate Strands of the Circular drawing is no input of a Circular lane,
+  // and the Linear drawing has its own: the edit applies now and the control's
+  // adapter records it.
   const strands = { type: 'checkbox', checked: true, getAttribute: () => 'Separate Strands' };
-  assert.equal(placement.changeLayoutSetting({ target: strands }, 'separate_strands'), false);
-  assert.deepEqual({ ...placement.layoutChange },
-    { open: true, count: 1, setting: 'Separate Strands', value: 'On', scope: 'Linear ' });
-  assert.equal(strands.checked, false);
-  assert.equal(state.form.separate_strands, false);
-  await placement.resolveLayoutChange('cancel');
-  assert.equal(state.form.separate_strands, false);
-  assert.deepEqual(steps, ['Change setting and reset Feature placements']);
-
-  // An edit that loses no lane applies now; the control's adapter records it.
-  state.featurePlacementOverrides.l.placement = { kind: 'main' };
-  assert.equal(placement.changeLayoutSetting({ target: { ...strands, checked: true } }, 'separate_strands'), undefined);
+  assert.equal(placement.changeLayoutSetting({ target: strands }, 'separate_strands'), undefined);
   assert.equal(state.form.separate_strands, true);
   assert.equal(placement.layoutChange.open, false);
   assert.equal(steps.length, 1);
+  assert.equal(everything(linear), linearBefore);
 });
 
 // Each editor export runs with every call below, on a stack whose feature row
@@ -138,7 +137,7 @@ for (const mode of MODES) {
         { id: 'gap', renderer: 'spacer', enabled: true, side: 'below', height: '12px', params: {} });
       const windows = [];
       // The port applies every edit and records the inputs around it.
-      const editor = EDITORS[mode]({ state, changeTrackLayout: (apply) => {
+      const editor = EDITORS[mode]({ state: withDrawings(state), changeTrackLayout: (apply) => {
         const entry = project(state);
         try { return apply(); } finally { windows.push([entry, project(state)]); }
       } });
@@ -197,7 +196,6 @@ const WRITERS = {
   'app/app-setup.js': { removeCircularDepthTrack: 'reconcile', removeLinearDepthTrack: 'reconcile' },
   'app/feature-editor/placement-actions.js': { changeLayoutSetting: 'transition', restoreTrackLayout: 'transition' },
   'app/run-analysis.js': { runAnalysisInternal: 'reconcile' },
-  'mode-profiles.js': { writeManagedState: 'other fields' },
   'services/config.js': { applyConfigData: 'restore', migratePersistedWebOptionValues: 'payload',
     reconcileDepthTrackStateAfterSessionFiles: 'restore', restoreStoredNonCanonicalConfig: 'payload' },
   'services/gallery-session-migration.js': { migratePersistedGalleryConfig: 'payload' },

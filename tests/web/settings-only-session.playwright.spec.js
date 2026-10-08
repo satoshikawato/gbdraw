@@ -149,8 +149,11 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
     const saved = await save(page, testInfo, 'first');
     expect(saved.document.version).toBe(CURRENT_SESSION_VERSION);
     expect(saved.document).not.toHaveProperty('runMetadata');
-    expect(saved.document.config.adv).not.toHaveProperty('linear_show_accession');
-    expect(saved.document.config.adv).not.toHaveProperty('linear_show_length');
+    // Each mode's settings are its slice (Session 46).
+    for (const mode of ['circular', 'linear']) {
+      expect(saved.document.modes[mode].config.adv).not.toHaveProperty('linear_show_accession');
+      expect(saved.document.modes[mode].config.adv).not.toHaveProperty('linear_show_length');
+    }
     assertSourceFree(await snapshot(page));
     await assertDiagramWorkerIdle(page);
 
@@ -167,7 +170,7 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
     expect(after.config).toEqual(before.config);
     await assertDiagramWorkerIdle(restored);
     const again = await save(restored, testInfo, 'second');
-    expect(again.document.config).toEqual(saved.document.config);
+    expect(again.document.modes).toEqual(saved.document.modes);
     expect(again.document.resources).toEqual(saved.document.resources);
     await restored.getByRole('button', { name: 'Linear', exact: true }).click();
     expect((await snapshot(restored)).config.form.show_labels_linear).toBe('all');
@@ -257,12 +260,11 @@ test('settings-only Load replaces existing work and rejected candidates preserve
     ['request', d => { delete d.renderRequest; }, { field: 'schema' }],
     ['null-request-with-result', d => { d.renderRequest = null; }, { field: 'schema' }],
     ['resource', d => { d.resources = {}; }, { field: 'schema' }],
-    ['config', d => { d.config.form = []; }, { field: 'config' }],
+    ['config', d => { d.modes.circular.config.form = []; }, { field: 'schema' }],
     ['binding', d => { d.webFiles.bindings.c_gb.resourceId = 'absent'; }, { field: 'schema' }],
     ['version', d => { d.version = 999; }, { field: 'schema' }],
-    // This valid-shaped profile reaches the existing apply transaction before
-    // its managed flag is rejected, exercising rollback after reset has begun.
-    ['profile-rollback', d => { d.config.modeProfiles.profiles.circular.managed.axis_stroke_color = 'invalid'; }, { field: 'config' }]
+    // A Session 46 holds the draft in `modes` only (Session format).
+    ['retired-config', d => { d.config = structuredClone(d.modes.circular.config); }, { field: 'schema' }]
   ];
   for (const [name, mutate, error] of cases) {
     const candidate = structuredClone(full.document);
@@ -291,12 +293,12 @@ test('settings-only Load replaces existing work and rejected candidates preserve
   expect(saved.document.resources).toEqual({});
 });
 
-test('both mode profiles and auxiliary file bytes survive settings-only Save Load Save', async ({ page, browser }, testInfo) => {
+test('both modes\' settings and auxiliary file bytes survive settings-only Save Load Save', async ({ page, browser }, testInfo) => {
   test.setTimeout(1_800_000);
   page.setDefaultTimeout(20000);
   page.on('dialog', dialog => dialog.accept(dialog.type() === 'prompt' ? 'Profiles and priority' : undefined));
   await openApp(page);
-  // Exercise the existing mode-profile owner with distinct explicit values.
+  // Distinct explicit values in each mode's drawing.
   await page.evaluate(() => { window.__GBDRAW_APP__.adv.axis_stroke_color = '#13579b'; });
   await page.getByRole('button', { name: 'Linear', exact: true }).click();
   await (await reveal(page.locator('#linear-show-labels'))).selectOption('all');
@@ -314,8 +316,8 @@ test('both mode profiles and auxiliary file bytes survive settings-only Save Loa
   await assertDiagramWorkerIdle(page);
   const binding = original.document.webFiles.bindings.qualifier_priority;
   expect(Buffer.from(original.document.resources[binding.resourceId].data, 'base64')).toEqual(bytes);
-  expect(original.document.config.modeProfiles.profiles.circular.values.axis_stroke_color).toBe('#13579b');
-  expect(original.document.config.modeProfiles.profiles.linear.values.axis_stroke_color).toBe('#2468ac');
+  expect(original.document.modes.circular.config.adv.axis_stroke_color).toBe('#13579b');
+  expect(original.document.modes.linear.config.adv.axis_stroke_color).toBe('#2468ac');
   const context = await browser.newContext();
   try {
     const restored = await context.newPage();
@@ -326,9 +328,8 @@ test('both mode profiles and auxiliary file bytes survive settings-only Save Loa
     assertSourceFree(state);
     expect(state.mode).toBe('linear');
     expect(state.config.adv.axis_stroke_color).toBe('#2468ac');
-    expect(state.config.modeProfiles).toEqual(original.document.config.modeProfiles);
     const again = await save(restored, testInfo, 'profiles-again');
-    expect(again.document.config).toEqual(original.document.config);
+    expect(again.document.modes).toEqual(original.document.modes);
     expect(again.document.webFiles).toEqual(original.document.webFiles);
     expect(again.document.resources).toEqual(original.document.resources);
     await restored.getByRole('button', { name: 'Circular', exact: true }).click();

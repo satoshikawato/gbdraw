@@ -3,20 +3,21 @@ import test from 'node:test';
 
 import { LABEL_ABSENCE_REASONS, createFeatureLabelActions } from '../../gbdraw/web/js/app/feature-editor/label-actions.js';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 installFakeSvgDom();
 globalThis.CSS ||= { escape: (value) => String(value) };
 
 const ref = (value) => ({ value });
 
-// Per-feature label and visibility edits are identity rows of the Result's
-// mode (design Q4, R2).
+// Per-feature label and visibility edits are identity rows of the drawing of
+// the Result's mode (design Q4, R2; PR-1: the drawing is the mode, so a row
+// has no scope).
 const featureFor = (featureId, type = 'CDS') => ({
   svg_id: featureId, type, scope: 'linear', record_key: 'record-1', biological_feature_id: `bio-${featureId}`
 });
-const keyFor = (featureId) => JSON.stringify(['linear', 'record-1', `bio-${featureId}`]);
+const keyFor = (featureId) => JSON.stringify(['record-1', `bio-${featureId}`]);
 const rowFor = (featureId, fields = {}) => ({
-  scope: 'linear',
   recordKey: 'record-1',
   biologicalFeatureId: `bio-${featureId}`,
   featureVisibility: null,
@@ -101,7 +102,7 @@ const buildHarness = ({
   };
   const actions = createFeatureLabelActions({
     ref, computed: get => ({ get value() { return get(); } }),
-    state,
+    state: withDrawings(state),
     commitActiveResultEdit(reason) {
       assert.equal(reason, 'feature-label');
       mutations.commit += 1;

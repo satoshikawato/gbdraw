@@ -5,6 +5,7 @@ import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js'
 import { createLegendManager } from '../../gbdraw/web/js/app/legend.js';
 import { diffLegendIntents } from '../../gbdraw/web/js/services/specific-color-rules.js';
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const setup = (evaluate = evaluatePythonRules) => {
   const state = {
@@ -18,7 +19,7 @@ const setup = (evaluate = evaluatePythonRules) => {
     newSpecRule: {feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:'Shared'}
   };
   const notices = [], transactions = [], transactionScopes = [];
-  const preparation = createRulePreparation({state, evaluate, notify:message=>notices.push(message)});
+  const preparation = createRulePreparation({state: withDrawings(state), evaluate, notify:message=>notices.push(message)});
   let prepareLegend = async () => {};
   let previousIntents = [];
   let openTransaction = null;
@@ -33,7 +34,7 @@ const setup = (evaluate = evaluatePythonRules) => {
       transactionScopes.push(scope);
     }
   };
-  const actions = createFeatureRuleActions({ref:value=>({value}),computed:get=>({get value(){return get();}}),state, rulePreparation:preparation,
+  const actions = createFeatureRuleActions({ref:value=>({value}),computed:get=>({get value(){return get();}}),state: withDrawings(state), rulePreparation:preparation,
     runUndoableCheckpoint: transact('checkpoint'),
     runUndoable: transact('intent'),
     prepareFileLegendEntries: async (intents, {isCurrent,previousFileIntents}) => {
@@ -161,8 +162,8 @@ test('biological safety rows and hidden rendered features do not create unused l
   s.state.biologicalFeatures = { value: [{ type: 'CDS', svg_id: 'unrendered', qualifiers: { gene: ['c'] } }] };
   // Per-feature visibility is the feature's identity row (design Q4).
   Object.assign(s.state.extractedFeatures.value[1], { scope: 'circular', record_key: 'record-1', biological_feature_id: 'bio-b' });
-  s.state.featureOverrides[JSON.stringify(['circular', 'record-1', 'bio-b'])] = {
-    scope: 'circular', recordKey: 'record-1', biologicalFeatureId: 'bio-b',
+  s.state.featureOverrides[JSON.stringify(['record-1', 'bio-b'])] = {
+    recordKey: 'record-1', biologicalFeatureId: 'bio-b',
     featureVisibility: 'off', labelVisibility: null, labelText: null, labelSourceText: null
   };
   let intents = null;
@@ -249,7 +250,7 @@ test('the Legend editor recolors the rule of a suffixed row, and only that row',
     legendStrokeOverrides: {}, legendColorOverrides: {}, adv: {}
   };
   const committed = [];
-  const legend = createLegendManager({ state, commitLegendRowRules: (next, label) => {
+  const legend = createLegendManager({ state: withDrawings(state), commitLegendRowRules: (next, label) => {
     committed.push({ rules: next, label });
     return true;
   } });

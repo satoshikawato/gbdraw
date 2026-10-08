@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { DrawingState } from '../../state.js' */
 import {
   applyFeatureVisibilityOverrideChanges,
   buildFeatureVisibilityChanges,
@@ -62,9 +63,6 @@ export const createFeatureVisibilityActions = ({
     clickedFeature,
     extractedFeatures,
     orthogroups,
-    featureVisibilityManualRules,
-    featureVisibilityRules,
-    featureOverrides,
     featureVisibilityScopeDialog,
     resultGenerationKey,
     results,
@@ -210,10 +208,11 @@ export const createFeatureVisibilityActions = ({
   const followLabels = (options) => ports.applyFeatureVisibilityToLabels(options);
 
   // The visibility table holds rules only; per-feature edits are identity rows.
-  const visibilityRuleRows = () => (
-    Array.isArray(featureVisibilityRules?.value)
-      ? featureVisibilityRules.value
-      : featureVisibilityManualRules.map((rule) => normalizeFeatureVisibilityRule(rule))
+  /** @param {DrawingState} drawing */
+  const visibilityRuleRows = (drawing) => (
+    Array.isArray(drawing.featureVisibilityRules?.value)
+      ? drawing.featureVisibilityRules.value
+      : drawing.featureVisibilityManualRules.map((rule) => normalizeFeatureVisibilityRule(rule))
   );
 
   const featureSvgId = (feature) => normalizeText(feature?.svg_id ?? feature?.svgId ?? feature?.id);
@@ -243,8 +242,9 @@ export const createFeatureVisibilityActions = ({
   // the caller declines it (`legend`), a changed Legend source of any Result
   // (OV-42). The resolver reads Python's rule matches, so an action prepares
   // them first (`prepareDrawn`).
-  const drawnChanges = (features, { targeted = false, legend = true } = {}) => {
-    const context = featureDrawnContext(state, { diagramOptions: getCommittedRequest()?.diagramOptions });
+  /** @param {DrawingState} drawing */
+  const drawnChanges = (drawing, features, { targeted = false, legend = true } = {}) => {
+    const context = featureDrawnContext(drawing, { diagramOptions: getCommittedRequest()?.diagramOptions });
     const catalogFeatures = resultCatalogFeatures(state);
     let needsRerender = false;
     const changes = features.flatMap((feature) => {
@@ -272,11 +272,12 @@ export const createFeatureVisibilityActions = ({
   // Applies the projection; returns whether a mounted element changed and
   // whether the rerender must draw a feature or the Legend.
   /**
+   * @param {DrawingState} drawing
    * @param {Record<string, any>[]} features
    * @param {{ targeted?: boolean, legend?: boolean, reason?: string }} [projection]
    */
-  const projectDrawn = (features, { targeted = false, legend = true, ...options } = {}) => {
-    const { changes, needsRerender } = drawnChanges(features, { targeted, legend });
+  const projectDrawn = (drawing, features, { targeted = false, legend = true, ...options } = {}) => {
+    const { changes, needsRerender } = drawnChanges(drawing, features, { targeted, legend });
     return { updated: applyVisibilityPreviewChanges(changes, options), needsRerender };
   };
   // Also the reaction the popup and Label On ask this owner for: the matches
@@ -287,10 +288,11 @@ export const createFeatureVisibilityActions = ({
    */
   const prepareDrawn = (options) => rulePreparation?.prepareDrawn?.(options) ?? true;
 
-  const updateClickedFeatureVisibilityFromRules = (features) => {
+  /** @param {DrawingState} drawing */
+  const updateClickedFeatureVisibilityFromRules = (drawing, features) => {
     const clicked = clickedFeature.value?.feat;
     if (!clicked || !features.some((feature) => sameFeature(feature, clicked))) return;
-    clickedFeature.value.featureVisibility = getFeatureVisibilityOverride(featureOverrides, clicked);
+    clickedFeature.value.featureVisibility = getFeatureVisibilityOverride(drawing.featureOverrides, clicked);
   };
 
   const nextFrame = () => /** @type {Promise<void>} */ (new Promise((resolve) => {
@@ -315,11 +317,12 @@ export const createFeatureVisibilityActions = ({
   };
 
   const buildSelectedFeaturesVisibilityCommand = (features, modeRaw) => {
+    const drawing = state.activeDrawing();
     const targetFeatures = uniqueFeaturesBySvgId(Array.isArray(features) ? features : [])
       .filter((feature) => featureIdentityKeyOf(feature));
     if (targetFeatures.length === 0) return null;
 
-    const changes = buildFeatureVisibilityChanges(targetFeatures, modeRaw, featureOverrides);
+    const changes = buildFeatureVisibilityChanges(targetFeatures, modeRaw, drawing.featureOverrides);
     if (changes.length === 0) return null;
     const changedKeys = new Set(changes.map(featureIdentityKeyOf));
     const changedFeatures = targetFeatures.filter((feature) => changedKeys.has(featureIdentityKeyOf(feature)));
@@ -332,15 +335,15 @@ export const createFeatureVisibilityActions = ({
       const useAfter = direction === 'apply';
       const overrideChanged = changes.some((change) => change.before !== change.after);
       applyFeatureVisibilityOverrideChanges(
-        featureOverrides,
+        drawing.featureOverrides,
         changes.map((change) => ({
           ...change,
           mode: useAfter ? change.after : change.before
         }))
       );
-      const { updated, needsRerender } = projectDrawn(changedFeatures, { reason, targeted: true });
+      const { updated, needsRerender } = projectDrawn(drawing, changedFeatures, { reason, targeted: true });
       if (!updated && !overrideChanged) return false;
-      updateClickedFeatureVisibilityFromRules(targetFeatures);
+      updateClickedFeatureVisibilityFromRules(drawing, targetFeatures);
       followLabels({ rerender: needsRerender });
       return true;
     };
@@ -365,15 +368,16 @@ export const createFeatureVisibilityActions = ({
 
   // A feature or similarity-group scope: the identity rows of its features.
   // Returns whether the rerender must draw one of them.
-  const applyFeatureVisibilityScope = (feat, modeRaw, scope) => {
+  /** @param {DrawingState} drawing */
+  const applyFeatureVisibilityScope = (drawing, feat, modeRaw, scope) => {
     const nextMode = normalizeVisibilityMode(modeRaw);
     const targetFeatures = scope?.id === 'orthogroup'
       ? uniqueFeaturesBySvgId(scope.features || [])
       : [feat];
     targetFeatures.forEach((targetFeat) => {
-      setFeatureVisibilityOverride(featureOverrides, targetFeat, nextMode);
+      setFeatureVisibilityOverride(drawing.featureOverrides, targetFeat, nextMode);
     });
-    const { needsRerender } = projectDrawn(targetFeatures, { targeted: true });
+    const { needsRerender } = projectDrawn(drawing, targetFeatures, { targeted: true });
     showClickedFeatureVisibility(targetFeatures, nextMode);
     return needsRerender;
   };
@@ -389,7 +393,8 @@ export const createFeatureVisibilityActions = ({
   // nothing.
   let projectionRun = 0;
   let ruleTableError = null;
-  const runProjection = async ({ legend = true } = {}) => {
+  /** @param {DrawingState} drawing */
+  const runProjection = async (drawing, { legend = true } = {}) => {
     const run = ++projectionRun;
     const prepared = /** @type {any} */ (await prepareDrawn());
     if (run !== projectionRun) return null;
@@ -401,7 +406,7 @@ export const createFeatureVisibilityActions = ({
     }
     if (ruleTableError && state.errorLog?.value === ruleTableError) state.errorLog.value = null;
     ruleTableError = null;
-    return projectDrawn(displayedFeatures(), { legend });
+    return projectDrawn(drawing, displayedFeatures(), { legend });
   };
 
   // The one projection of this domain (R3), which History apply, the display
@@ -414,7 +419,8 @@ export const createFeatureVisibilityActions = ({
   // table (`reflow`) also places the labels, as a visibility edit does.
   // Returns whether the Result changed.
   const projectFeatureVisibility = async ({ rerender = false, reflow = false } = {}) => {
-    const projection = await runProjection({ legend: rerender });
+    const drawing = state.activeDrawing();
+    const projection = await runProjection(drawing, { legend: rerender });
     if (!projection) return false;
     const drawsMissing = rerender && projection.needsRerender;
     if (projection.updated || reflow || drawsMissing) followLabels({ reflow, rerender: drawsMissing });
@@ -428,13 +434,14 @@ export const createFeatureVisibilityActions = ({
   // rerender and Generate draw them; a rule that draws a feature the Result
   // does not draw asks for the rerender (R-5). The draft keeps a rule that
   // Generate rejects.
-  const editFeatureVisibilityRules = async (edit) => {
+  /** @param {DrawingState} drawing */
+  const editFeatureVisibilityRules = async (drawing, edit) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const rules = [...featureVisibilityManualRules];
+    const rules = [...drawing.featureVisibilityManualRules];
     if (edit(rules) === false) return false;
-    featureVisibilityManualRules.splice(0, featureVisibilityManualRules.length, ...rules);
-    const projection = await runProjection();
+    drawing.featureVisibilityManualRules.splice(0, drawing.featureVisibilityManualRules.length, ...rules);
+    const projection = await runProjection(drawing);
     if (projection?.updated || projection?.needsRerender) followLabels({ rerender: projection.needsRerender });
     return true;
   };
@@ -450,7 +457,8 @@ export const createFeatureVisibilityActions = ({
     featureVisibilityScopeDialog.scopes = [];
   };
 
-  const setFeatureVisibility = (feat, modeRaw, options = {}) => {
+  /** @param {DrawingState} drawing */
+  const setFeatureVisibilityIn = (drawing, feat, modeRaw, options = {}) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!featureIdentityKeyOf(feat)) return false;
@@ -458,15 +466,25 @@ export const createFeatureVisibilityActions = ({
     const triggerReflow = options.triggerReflow !== false;
     const scope = options.scope || { id: 'feature' };
     const nextMode = normalizeVisibilityMode(modeRaw);
-    const previousMode = getFeatureVisibilityOverride(featureOverrides, feat);
+    const previousMode = getFeatureVisibilityOverride(drawing.featureOverrides, feat);
 
-    const needsRerender = applyFeatureVisibilityScope(feat, nextMode, scope);
+    const needsRerender = applyFeatureVisibilityScope(drawing, feat, nextMode, scope);
 
     if (previousMode !== nextMode) {
       followLabels({ reflow: triggerReflow, rerender: needsRerender });
     }
 
     return previousMode !== nextMode;
+  };
+
+  /**
+   * @param {Record<string, any>} feat
+   * @param {string} modeRaw
+   * @param {Record<string, any>} [options]
+   */
+  const setFeatureVisibility = (feat, modeRaw, options = {}) => {
+    const drawing = state.activeDrawing();
+    return setFeatureVisibilityIn(drawing, feat, modeRaw, options);
   };
 
   const setSelectedFeaturesVisibility = async (features, modeRaw) => {
@@ -478,16 +496,17 @@ export const createFeatureVisibilityActions = ({
   };
 
   const updateClickedFeatureVisibility = async (modeRaw) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value?.feat) return false;
     const feat = clickedFeature.value.feat;
     const scopes = buildVisibilityScopes(feat);
     const nextMode = normalizeVisibilityMode(modeRaw);
-    const previousMode = getFeatureVisibilityOverride(featureOverrides, feat);
+    const previousMode = getFeatureVisibilityOverride(drawing.featureOverrides, feat);
     if (scopes.length <= 1) {
       await prepareDrawn();
-      return setFeatureVisibility(feat, nextMode, { triggerReflow: true, scope: scopes[0] });
+      return setFeatureVisibilityIn(drawing, feat, nextMode, { triggerReflow: true, scope: scopes[0] });
     }
     featureVisibilityScopeDialog.show = true;
     featureVisibilityScopeDialog.feat = feat;
@@ -498,6 +517,7 @@ export const createFeatureVisibilityActions = ({
   };
 
   const handleFeatureVisibilityScopeChoice = async (scopeId) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (scopeId === 'cancel' || !featureVisibilityScopeDialog.show) {
@@ -515,7 +535,7 @@ export const createFeatureVisibilityActions = ({
     clearFeatureVisibilityScopeDialog();
     if (isRuleScope(scope)) {
       const ruleInput = { featureType: scope.featureType, qualifier: scope.qualifier, value: scope.value, label: scope.label };
-      await editFeatureVisibilityRules((rules) => {
+      await editFeatureVisibilityRules(drawing, (rules) => {
         if (nextMode === 'default') removeEditorQualifierFeatureVisibilityRule(rules, ruleInput);
         else upsertEditorQualifierFeatureVisibilityRule(rules, ruleInput, nextMode);
       });
@@ -523,33 +543,44 @@ export const createFeatureVisibilityActions = ({
       return previousMode !== nextMode;
     }
     await prepareDrawn();
-    const needsRerender = applyFeatureVisibilityScope(feat, nextMode, scope);
+    const needsRerender = applyFeatureVisibilityScope(drawing, feat, nextMode, scope);
     if (previousMode !== nextMode) followLabels({ rerender: needsRerender });
     return previousMode !== nextMode;
   };
 
-  const setFeatureVisibilityRuleField = (index, field, value) => editFeatureVisibilityRules((rules) => {
-    if (!ruleFields.has(field) || !rules[index]) return false;
-    rules[index] = normalizeFeatureVisibilityRule({ ...rules[index], [field]: value });
-  });
+  const setFeatureVisibilityRuleField = (index, field, value) => {
+    const drawing = state.activeDrawing();
+    return editFeatureVisibilityRules(drawing, (rules) => {
+      if (!ruleFields.has(field) || !rules[index]) return false;
+      rules[index] = normalizeFeatureVisibilityRule({ ...rules[index], [field]: value });
+    });
+  };
 
-  const moveFeatureVisibilityRule = (index, offset) => editFeatureVisibilityRules((rules) => {
+  /** @param {DrawingState} drawing */
+  const moveFeatureVisibilityRule = (drawing, index, offset) => editFeatureVisibilityRules(drawing, (rules) => {
     const target = index + offset;
     if (!rules[index] || target < 0 || target >= rules.length) return false;
     rules.splice(target, 0, ...rules.splice(index, 1));
   });
 
-  const addFeatureVisibilityRule = () => editFeatureVisibilityRules((rules) => {
-    rules.push(createDefaultFeatureVisibilityRule());
-  });
+  const addFeatureVisibilityRule = () => {
+    const drawing = state.activeDrawing();
+    return editFeatureVisibilityRules(drawing, (rules) => {
+      rules.push(createDefaultFeatureVisibilityRule());
+    });
+  };
 
-  const removeFeatureVisibilityRule = (index) => editFeatureVisibilityRules((rules) => {
-    if (!rules[index]) return false;
-    rules.splice(index, 1);
-  });
+  const removeFeatureVisibilityRule = (index) => {
+    const drawing = state.activeDrawing();
+    return editFeatureVisibilityRules(drawing, (rules) => {
+      if (!rules[index]) return false;
+      rules.splice(index, 1);
+    });
+  };
 
   const downloadFeatureVisibilityRulesTsv = () => {
-    const text = serializeFeatureVisibilityRules(visibilityRuleRows());
+    const drawing = state.activeDrawing();
+    const text = serializeFeatureVisibilityRules(visibilityRuleRows(drawing));
     if (!text.trim()) {
       alert('No valid feature visibility rules to export.');
       return;
@@ -576,8 +607,14 @@ export const createFeatureVisibilityActions = ({
     featureVisibilityRuleDetail,
     buildSelectedFeaturesVisibilityCommand,
     handleFeatureVisibilityScopeChoice,
-    moveFeatureVisibilityRuleDown: (index) => moveFeatureVisibilityRule(index, 1),
-    moveFeatureVisibilityRuleUp: (index) => moveFeatureVisibilityRule(index, -1),
+    moveFeatureVisibilityRuleDown: (index) => {
+      const drawing = state.activeDrawing();
+      return moveFeatureVisibilityRule(drawing, index, 1);
+    },
+    moveFeatureVisibilityRuleUp: (index) => {
+      const drawing = state.activeDrawing();
+      return moveFeatureVisibilityRule(drawing, index, -1);
+    },
     prepareDrawnFeatureMatches: prepareDrawn,
     projectFeatureVisibility,
     removeFeatureVisibilityRule,

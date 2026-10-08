@@ -363,7 +363,7 @@ test('DOM edits Save and fresh Load retain draft apart from committed Result; fa
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionSavePending);
   expect(await snapshot(page)).toEqual(edited);
   const saved = JSON.parse(gunzipSync(readFileSync(path)));
-  const row = saved.config.adv.circular_track_slots.find(slot => slot.id === 'gc_content');
+  const row = saved.modes.circular.config.adv.circular_track_slots.find(slot => slot.id === 'gc_content');
   expect(row.width).toEqual({ value: '1.', unit: 'px' });
   const fresh = await browser.newPage({ baseURL: testInfo.project.use.baseURL });
   try {
@@ -380,7 +380,7 @@ test('DOM edits Save and fresh Load retain draft apart from committed Result; fa
     expect(restored.resultHashes).toEqual(before.resultHashes);
     await expectCounts(fresh, 0);
     const rejected = structuredClone(saved);
-    rejected.config.adv.circular_track_slots.find(slot => slot.id === 'gc_content').width = { value: '1e', unit: 'px' };
+    rejected.modes.circular.config.adv.circular_track_slots.find(slot => slot.id === 'gc_content').width = { value: '1e', unit: 'px' };
     await load(fresh, { name: 'invalid.gbdraw-session.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(rejected)) }, false);
     expect(await snapshot(fresh)).toEqual(restored);
     await expect(valueControl(fresh, 'gc_content', 'Width')).toHaveValue('1.');
@@ -422,7 +422,7 @@ test('typed and legacy scalars display without writes; decimal, exponent, and pr
     expect(await workerCounts(page)).toEqual(workers);
     await edit(page, text);
     const projected = await page.evaluate(async () => {
-      const { buildCircularTrackSlotPayload } = await import('./js/app/circular-track-slots.js');
+      const { buildCircularTrackSlotPayload } = await import('./js/services/circular-track-slot-model.js');
       return buildCircularTrackSlotPayload(window.__GBDRAW_APP__.adv.circular_track_slots.find(row => row.id === 'gc_content')).width;
     });
     expect(projected).toEqual(value === null ? null : { value, unit });
@@ -550,7 +550,8 @@ for (const continuation of ['disabled', 'inactive biological']) {
       window.__GBDRAW_APP__.adv.circular_track_slots.find(row => row.id === 'gc_content').enabled = false;
     });
     // E1: each mode keeps its own Result. The Circular Result and its committed
-    // request stay with Circular; Linear, which has no Result, shows none.
+    // request stay with Circular; Linear, which has no Result, shows none. The
+    // Circular slots are the Circular drawing's (PR-1).
     const circular = await snapshot(page);
     if (continuation === 'inactive biological') await page.getByRole('button', { name: 'Linear', exact: true }).click();
     const before = await snapshot(page);
@@ -559,23 +560,19 @@ for (const continuation of ['disabled', 'inactive biological']) {
       expect(before.resultHashes).toEqual([]);
     }
     const saved = await save(page, testInfo, continuation.replaceAll(' ', '-'));
-    expect(saved.document.config.adv.circular_track_slots).toEqual(before.config.adv.circular_track_slots);
+    expect(saved.document.modes.circular.config.adv.circular_track_slots).toEqual(circular.config.adv.circular_track_slots);
     await freshLoad(browser, testInfo, saved.path, async fresh => {
       const restored = await snapshot(fresh);
-      expect(restored.config.adv.circular_track_slots).toEqual(before.config.adv.circular_track_slots);
+      expect(restored.config.adv.circular_track_slots).toEqual(circular.config.adv.circular_track_slots);
       expect(restored.request).toEqual(await promoteRequest(fresh, circular.request));
       expect(restored.resultHashes).toEqual(circular.resultHashes);
       if (continuation === 'inactive biological') {
         // The saved mode has no Result, so the Session opens on the mode that has one.
         await expect(fresh.getByRole('button', { name: 'Circular', exact: true }))
           .toHaveAttribute('aria-pressed', 'true');
-        expect(restored.config.modeProfiles.activeMode).toBe('circular');
       }
       await openPanel(fresh);
       await expect(valueControl(fresh, 'gc_content', 'Width')).toHaveValue('0.12345678901234567');
-      if (continuation === 'inactive biological') {
-        expect(before.config.modeProfiles.activeMode).toBe('linear');
-      }
     });
   });
 }
@@ -588,7 +585,7 @@ test('source-free settings Save and fresh Load retain an inactive disabled scala
       const app = window.__GBDRAW_APP__;
       app.adv.circular_track_slots_enabled = true;
       app.adv.circular_track_slots = slots.filter(row => row.renderer !== 'annotations');
-    }, JSON.parse(readFileSync(fixture, 'utf8')).config.adv.circular_track_slots);
+    }, JSON.parse(readFileSync(fixture, 'utf8')).modes.circular.config.adv.circular_track_slots);
     await openPanel(page);
     await edit(page, '1e-12');
     await selectUnit(page, 'px');
@@ -626,6 +623,7 @@ test('CLI-origin Session continues through numeric edits, Generate, Save and fre
   const path = `${prefix}.gbdraw-session.json`;
   const cli = JSON.parse(readFileSync(path, 'utf8'));
   expect(cli.config).toBeUndefined();
+  expect(cli.modes).toBeUndefined();
   await load(page, path);
   const before = await snapshot(page);
   expect(before.request).toEqual(cli.renderRequest);

@@ -11,10 +11,10 @@ const inspect = (page, mode) => page.evaluate(async mode => {
     svg: s.results.value[s.selectedResultIndex.value].content,
     request: getCommittedCanonicalRenderRequest(),
     geometry: JSON.parse(JSON.stringify(s.trackSlotResolvedGeometry.value)),
-    slots: JSON.parse(JSON.stringify(s.adv[`${mode}_track_slots`])),
+    slots: JSON.parse(JSON.stringify(s.activeDrawing().adv[`${mode}_track_slots`])),
     features: s.extractedFeatures.value.length,
-    rules: JSON.parse(JSON.stringify(s.manualSpecificRules.map(rule => ({ ...rule, fromFile: Boolean(rule.fromFile) })))),
-    annotations: JSON.parse(JSON.stringify(s.annotationSets)),
+    rules: JSON.parse(JSON.stringify(s.activeDrawing().manualSpecificRules.map(rule => ({ ...rule, fromFile: Boolean(rule.fromFile) })))),
+    annotations: JSON.parse(JSON.stringify(s.activeDrawing().annotationSets)),
     dispatched: window.__PIXEL_REQUESTS__?.at(-1) || null,
     runs: window.__PIXEL_REQUESTS__?.length || 0,
     processing: s.processing.value,
@@ -146,7 +146,7 @@ for (const width of [1440, 390]) {
       const sessionPath = testInfo.outputPath('pixel.gbdraw-session.json.gz');
       const savedBytes = await download(page, 'Save Session', sessionPath);
       const saved = JSON.parse(gunzipSync(savedBytes));
-      const savedSlot = saved.config.adv[`${mode}_track_slots`].find(slot => slot.id === 'gc_content');
+      const savedSlot = saved.modes[mode].config.adv[`${mode}_track_slots`].find(slot => slot.id === 'gc_content');
       expect(savedSlot.enabled).toBe(false);
       if (mode === 'linear') { expect(savedSlot.height).toBe('10px'); expect(savedSlot.spacing).toBe('10px'); }
       else { expect(savedSlot.inner_gap_px).toBe('10'); expect(savedSlot.outer_gap_px).toBe('10'); }

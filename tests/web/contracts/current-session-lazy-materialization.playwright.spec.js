@@ -523,7 +523,7 @@ test('two rings of one sequence save and restore with one cached LOSAT table', a
           errorLog: app.errorLog ? JSON.parse(JSON.stringify(app.errorLog)) : null,
           content,
           comparisonNames: state.files.c_conservation_fastas.map(({ name }) => name),
-          labels: state.circularConservation.series.map(({ label }) => label),
+          labels: state.activeDrawing().circularConservation.series.map(({ label }) => label),
           cacheKeys: Array.from(state.losatCache.value.keys()),
           cacheInfo: state.losatCacheInfo.value.map(({ key, filename }) => ({ key, filename })),
           slots: [...documentRoot.querySelectorAll(
@@ -726,7 +726,7 @@ test('a GenBank ring file reuses the FASTA ring search, records the Web runtime,
         errorLog: app.errorLog,
         content,
         losatCalls: window.__GBDRAW_RING_PROBE__.losatCalls,
-        labels: state.circularConservation.series.map(({ label }) => label),
+        labels: state.activeDrawing().circularConservation.series.map(({ label }) => label),
         rows: Object.fromEntries(entries.map(([key, entry]) => [key, entry.text])),
         cacheKeys: entries.map(([key]) => key)
       };
@@ -757,7 +757,7 @@ test('a GenBank ring file reuses the FASTA ring search, records the Web runtime,
     await page.evaluate(async (rows) => {
       const { state } = await import('/gbdraw/web/js/state.js');
       window.__GBDRAW_RING_PROBE__.rows = rows;
-      state.losat.executionMode = 'serial';
+      state.losatExecution.executionMode = 'serial';
       state.losatCache.value = new Map();
       state.losatCacheInfo.value = [];
       window.__GBDRAW_RING_PROBE__.searchRun = null;
@@ -921,14 +921,14 @@ test('GenBank and DDBJ ring rows added without a label take the CLI default labe
         const file = new File([text], name, { type: 'text/plain', lastModified: 0 });
         app.addCircularConservationComparisonFile({ target: { files: [file], value: '' } });
         // Typed before the reader answers: the typed label wins.
-        if (typed) state.circularConservation.series[state.circularConservation.series.length - 1].label = typed;
+        if (typed) state.activeDrawing().circularConservation.series[state.activeDrawing().circularConservation.series.length - 1].label = typed;
       }
       // Generate waits for the pending reads, then draws the rows' labels.
       const result = await app.runAnalysis();
       return {
         result,
         errorLog: app.errorLog,
-        labels: state.circularConservation.series.map(({ label }) => label)
+        labels: state.activeDrawing().circularConservation.series.map(({ label }) => label)
       };
     }, ringFiles);
     expect(run.result, JSON.stringify(run.errorLog)).toEqual({ status: 'ok' });
@@ -975,7 +975,7 @@ test('GenBank and DDBJ ring rows added without a label take the CLI default labe
         status: result?.status,
         message: result?.message,
         errorLog: window.__GBDRAW_APP__.errorLog,
-        labels: state.circularConservation.series.map(({ label }) => label)
+        labels: state.activeDrawing().circularConservation.series.map(({ label }) => label)
       };
     }, savedText);
     expect(restored.status, `${restored.message} ${JSON.stringify(restored.errorLog)}`).toBe('ok');

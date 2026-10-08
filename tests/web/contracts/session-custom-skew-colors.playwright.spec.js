@@ -286,7 +286,7 @@ test('explicit AT-skew colors survive schema-5 Load, Generate, Save, fresh Load,
   expect(saved.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
   expect(requestEvidence(saved.renderRequest).at.params).toEqual(expectedAtParams);
   expect(
-    saved.config.adv.circular_track_slots.find((slot) => slot.id === AT_SLOT_ID).params
+    saved.modes.circular.config.adv.circular_track_slots.find((slot) => slot.id === AT_SLOT_ID).params
   ).toEqual(expectedAtParams);
 
   const freshContext = await browser.newContext();

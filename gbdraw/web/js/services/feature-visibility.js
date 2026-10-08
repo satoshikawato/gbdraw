@@ -255,18 +255,17 @@ const KIND_FIELDS = Object.freeze({
   feature_visibility: 'featureVisibility', label_visibility: 'labelVisibility', label_text: 'labelText'
 });
 
-// Python's `unresolved` notices of a request of mode `scope` by identity key:
-// the edit kinds whose feature the source does not have (design Q4 3.4).
+// Python's `unresolved` notices of a request by identity key: the edit kinds
+// whose feature the source does not have (design Q4 3.4).
 /**
  * @param {any} notices
- * @param {string} scope
  * @param {(recordKey: string) => boolean} [recordKeyFilter]
  */
-const unresolvedNoticeKinds = (notices, scope, recordKeyFilter = () => true) => {
+const unresolvedNoticeKinds = (notices, recordKeyFilter = () => true) => {
   const unresolved = new Map();
   (Array.isArray(notices) ? notices : []).forEach((notice) => {
     if (notice?.status !== 'unresolved' || !recordKeyFilter(notice.recordKey)) return;
-    const key = featureIdentityKey(scope, notice.recordKey, notice.biologicalFeatureId);
+    const key = featureIdentityKey(notice.recordKey, notice.biologicalFeatureId);
     if (key) unresolved.set(key, new Set([...(unresolved.get(key) || []), ...(notice.kinds || [])]));
   });
   return unresolved;
@@ -322,15 +321,17 @@ const removeFeatureEdits = ({
 // replaced a source removes the edits Python reported `unresolved` for a
 // replaced record (Feature placement rows included), and every edit of a
 // record that the previous request of this mode had and this request has not.
-// A label source text kept for a bulk edit goes with its feature. Edits of
-// features outside the crop or display stay dormant, and the other mode's
-// edits wait for their mode (R2). Returns the count of removed edits.
+// A label source text kept for a bulk edit goes with its feature, and so does
+// a per-feature stroke (OV-84, Owner-delegated 2026-10-07): a stroke of a
+// feature the replaced source still has stays. Edits of features outside the
+// crop or display stay dormant; the drafts are those of the request's drawing,
+// so the other mode's edits are not read (R2). Returns the count of removed edits.
 /**
  * @param {{
  *   featureOverrides?: Record<string, any>,
  *   featurePlacementOverrides?: Record<string, any>,
+ *   featureStrokeOverrides?: Record<string, any>,
  *   notices?: Record<string, any>[],
- *   scope?: string,
  *   replacedRecordKeys?: string[],
  *   previousRecords?: Record<string, any>[],
  *   currentRecords?: Record<string, any>[],
@@ -340,35 +341,43 @@ const removeFeatureEdits = ({
 export const pruneUnmatchedFeatureOverrides = ({
   featureOverrides = {},
   featurePlacementOverrides = {},
+  featureStrokeOverrides = {},
   notices = [],
-  scope = '',
   replacedRecordKeys = [],
   previousRecords = [],
   currentRecords = [],
   biologicalFeatures = []
 } = {}) => {
   const replaced = new Set(replacedRecordKeys);
-  const present = new Set((Array.isArray(biologicalFeatures) ? biologicalFeatures : [])
-    .map(featureIdentityKeyOf).filter(Boolean));
-  return removeFeatureEdits({
+  const presentFeatures = Array.isArray(biologicalFeatures) ? biologicalFeatures : [];
+  const present = new Set(presentFeatures.map(featureIdentityKeyOf).filter(Boolean));
+  const presentStrokeKeys = new Set(presentFeatures.map(stableKeyOf).filter(Boolean));
+  let removedStrokes = 0;
+  Object.keys(featureStrokeOverrides || {}).forEach((key) => {
+    const recordKey = key.split('\0')[0];
+    if (!key.includes('\0') || !replaced.has(recordKey) || presentStrokeKeys.has(key)) return;
+    delete featureStrokeOverrides[key];
+    removedStrokes += 1;
+  });
+  return removedStrokes + removeFeatureEdits({
     featureOverrides,
     featurePlacementOverrides,
-    unresolved: unresolvedNoticeKinds(notices, scope, (recordKey) => replaced.has(recordKey)),
+    unresolved: unresolvedNoticeKinds(notices, (recordKey) => replaced.has(recordKey)),
     // The records are those of canonical render requests, which all carry `recordKey`.
-    dropped: (row) => rowBelongsToRequest(row, scope, /** @type {FeatureRequestRecord[]} */ (previousRecords))
-      && !rowBelongsToRequest(row, scope, /** @type {FeatureRequestRecord[]} */ (currentRecords)),
-    sourceGone: (key, row) => row?.scope === scope && replaced.has(row?.recordKey) && !present.has(key)
+    dropped: (row) => rowBelongsToRequest(row, /** @type {FeatureRequestRecord[]} */ (previousRecords))
+      && !rowBelongsToRequest(row, /** @type {FeatureRequestRecord[]} */ (currentRecords)),
+    sourceGone: (key, row) => replaced.has(row?.recordKey) && !present.has(key)
   });
 };
 
 // The unresolved edits the drafts still hold after a Generate that replaced no
 // source; "Remove N unmatched feature edits" removes them (an explicit Reset,
-// R2). `scope` is the mode of the request whose notices these are.
+// R2). The drafts are those of the drawing of the request whose notices these are.
 export const countUnresolvedFeatureEdits = ({
-  featureOverrides = {}, featurePlacementOverrides = {}, notices = [], scope = ''
+  featureOverrides = {}, featurePlacementOverrides = {}, notices = []
 } = {}) => {
   let count = 0;
-  unresolvedNoticeKinds(notices, scope).forEach((kinds, key) => {
+  unresolvedNoticeKinds(notices).forEach((kinds, key) => {
     if (kinds.has('placement') && featurePlacementOverrides?.[key]) count += 1;
     const row = featureOverrides?.[key];
     Object.entries(KIND_FIELDS).forEach(([kind, field]) => {
@@ -379,9 +388,9 @@ export const countUnresolvedFeatureEdits = ({
 };
 
 export const removeUnresolvedFeatureEdits = ({
-  featureOverrides = {}, featurePlacementOverrides = {}, notices = [], scope = ''
+  featureOverrides = {}, featurePlacementOverrides = {}, notices = []
 } = {}) => (
-  removeFeatureEdits({ featureOverrides, featurePlacementOverrides, unresolved: unresolvedNoticeKinds(notices, scope) })
+  removeFeatureEdits({ featureOverrides, featurePlacementOverrides, unresolved: unresolvedNoticeKinds(notices) })
 );
 
 export const splitLegacyVisibilityRules = (rules) => {
@@ -409,16 +418,17 @@ export const splitLegacyVisibilityRules = (rules) => {
 // request's diagram options (a label rerender keeps the last Generate's); the
 // edits and rules are the current ones, which a label rerender and Generate
 // both carry.
-export const featureDrawnContext = (state, {
+/** @param {Record<string, any>} drawing The drawing whose edits and rules decide. */
+export const featureDrawnContext = (drawing, {
   diagramOptions = /** @type {{ selectedFeaturesSet?: unknown } | null} */ (null),
-  featureOverrides = state?.featureOverrides
+  featureOverrides = drawing?.featureOverrides
 } = {}) => ({
   featureOverrides: featureOverrides || {},
-  rules: requestFeatureVisibilityRules(state?.featureVisibilityManualRules),
+  rules: requestFeatureVisibilityRules(drawing?.featureVisibilityManualRules),
   selectedTypes: Array.isArray(diagramOptions?.selectedFeaturesSet)
     ? new Set(diagramOptions.selectedFeaturesSet.map(String))
     : null,
-  colorRules: Array.isArray(state?.manualSpecificRules) ? state.manualSpecificRules : []
+  colorRules: Array.isArray(drawing?.manualSpecificRules) ? drawing.manualSpecificRules : []
 });
 
 // "Is this feature drawn?" as Generate answers it

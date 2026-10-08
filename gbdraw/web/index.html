@@ -2259,7 +2259,7 @@
                                         <div class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                                             <div>
                                                 <span class="linear-primary-label mb-1">Execution <help-tip id="help-comparison-execution" text="Auto chooses threaded LOSAT only when browser support and workload allow it."></help-tip></span>
-                                                <select v-model="losat.executionMode" aria-label="LOSAT execution" aria-describedby="help-comparison-execution" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                                <select v-model="losatExecution.executionMode" aria-label="LOSAT execution" aria-describedby="help-comparison-execution" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                                     <option value="auto">Auto ({{ losatEffectiveExecutionMode }})</option>
                                                     <option value="serial">Serial</option>
                                                     <option value="threaded">{{ losatThreadedOptionLabel }}</option>
@@ -2267,7 +2267,7 @@
                                             </div>
                                             <div>
                                                 <label class="linear-primary-label mb-1">Total threads</label>
-                                                <select v-model="losat.totalThreadBudget" aria-label="LOSAT total threads" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                                <select v-model="losatExecution.totalThreadBudget" aria-label="LOSAT total threads" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                                     <option value="safe">Safe ({{ losatSafeThreadBudget }})</option>
                                                     <option value="available">Available ({{ losatHardwareThreads }})</option>
                                                     <option v-for="option in losatTotalThreadBudgetOptions" :key="`losat-budget-${option.value}`" :value="option.value">{{ option.label }}</option>
@@ -2275,14 +2275,14 @@
                                             </div>
                                             <div>
                                                 <label class="linear-primary-label mb-1">Parallel runs</label>
-                                                <select v-model="losat.parallelWorkers" aria-label="LOSAT parallel runs" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                                <select v-model="losatExecution.parallelWorkers" aria-label="LOSAT parallel runs" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                                     <option :value="undefined">Auto ({{ losatAutoPairWorkers }} {{ losatAutoPairWorkers === 1 ? 'run' : 'runs' }})</option>
                                                     <option v-for="option in losatPairWorkerOptions" :key="`losat-pair-workers-${option.value}`" :value="option.value">{{ option.label }}</option>
                                                 </select>
                                             </div>
                                             <div>
                                                 <label class="linear-primary-label mb-1">Threads per run</label>
-                                                <select v-model="losat.threadsPerJob" aria-label="LOSAT threads per run" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable || (losatThreadsPerJobFixed)">
+                                                <select v-model="losatExecution.threadsPerJob" aria-label="LOSAT threads per run" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable || (losatThreadsPerJobFixed)">
                                                     <option value="auto">Auto ({{ losatEffectiveThreadsPerJob }})</option>
                                                     <option v-for="option in losatThreadOptions" :key="`losat-threads-${option.value}`" :value="option.value">{{ option.label }}</option>
                                                 </select>
@@ -2510,7 +2510,7 @@
 
                         <div class="flex items-center rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs">
                             <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                <input type="checkbox" v-model="adv.rich_feature_popup" aria-describedby="help-rich-feature-popup" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                <input type="checkbox" v-model="richFeaturePopup" aria-describedby="help-rich-feature-popup" class="form-checkbox" :disabled="!semanticMutationAvailable">
                                 <span>Rich Feature Popup</span>
                             </label>
                             <help-tip id="help-rich-feature-popup" text="When enabled, feature clicks show Details, Qualifiers, and Sequence tabs. Disable for the compact edit-only popup."></help-tip>
@@ -5075,7 +5075,7 @@
                             </button>
                         </div>
                         <div class="gfs-row">
-                            <input v-if="adv.rich_feature_popup !== false"
+                            <input v-if="richFeaturePopup !== false"
                                    type="text"
                                    v-model="previewFeatureSearchQualifierKey"
                                    data-history-ignore
@@ -5324,7 +5324,7 @@
                          :aria-label="`Feature details: ${clickedFeature.label}`"
                          :class="[
                            'fixed z-50 feature-popup custom-scrollbar bg-white rounded-xl shadow-2xl border border-slate-200 p-4',
-                           adv.rich_feature_popup ? '' : 'feature-popup--simple'
+                           richFeaturePopup ? '' : 'feature-popup--simple'
                          ]"
                          :style="featurePopupStyle">
                         <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100">
@@ -5337,7 +5337,7 @@
                                 <i class="ph ph-x" aria-hidden="true"></i>
                             </button>
                         </div>
-                        <div v-if="adv.rich_feature_popup" class="grid grid-cols-4 gap-1 bg-slate-100 rounded-lg p-1 mb-3" data-nodrag="true">
+                        <div v-if="richFeaturePopup" class="grid grid-cols-4 gap-1 bg-slate-100 rounded-lg p-1 mb-3" data-nodrag="true">
                             <button type="button"
                                     @click="clickedFeature.activeTab = 'edit'"
                                     :class="[
@@ -5376,7 +5376,7 @@
                             </button>
                         </div>
                         <div class="feature-popup-body custom-scrollbar" data-nodrag="true">
-                        <div v-if="!adv.rich_feature_popup || clickedFeature.activeTab === 'edit'" class="space-y-3">
+                        <div v-if="!richFeaturePopup || clickedFeature.activeTab === 'edit'" class="space-y-3">
                         <section aria-labelledby="feature-popup-appearance-heading" data-feature-popup-group="appearance">
                             <h3 id="feature-popup-appearance-heading" class="mb-2 text-xs font-bold text-slate-600"><span class="uppercase tracking-wider">Appearance</span> <span class="font-normal text-slate-500">· updates the current Result</span></h3>
                             <div class="feature-popup-grid">
@@ -5874,7 +5874,7 @@
                             </div>
                         </section>
                         </div>
-                        <div v-else-if="adv.rich_feature_popup && clickedFeature.activeTab === 'details'" class="space-y-3" data-nodrag="true">
+                        <div v-else-if="richFeaturePopup && clickedFeature.activeTab === 'details'" class="space-y-3" data-nodrag="true">
                             <div class="max-h-[24rem] overflow-auto custom-scrollbar border border-slate-100 rounded-lg">
                                 <div v-for="row in clickedFeature.detailRows"
                                      :key="`feature-detail-${row.key}`"
@@ -5890,7 +5890,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div v-else-if="adv.rich_feature_popup && clickedFeature.activeTab === 'qualifiers'" class="space-y-3" data-nodrag="true">
+                        <div v-else-if="richFeaturePopup && clickedFeature.activeTab === 'qualifiers'" class="space-y-3" data-nodrag="true">
                             <div v-if="clickedFeature.qualifierRows.length > 0" class="max-h-[28rem] overflow-auto custom-scrollbar border border-slate-100 rounded-lg">
                                 <div v-for="row in clickedFeature.qualifierRows"
                                      :key="`feature-qualifier-${row.key}`"
@@ -5912,7 +5912,7 @@
                                 No qualifiers available.
                             </div>
                         </div>
-                        <div v-else-if="adv.rich_feature_popup && clickedFeature.activeTab === 'sequence'" class="space-y-3" data-nodrag="true">
+                        <div v-else-if="richFeaturePopup && clickedFeature.activeTab === 'sequence'" class="space-y-3" data-nodrag="true">
                             <div v-if="clickedFeature.sequenceWarnings.length > 0" class="border border-amber-200 bg-amber-50 rounded-lg px-3 py-2">
                                 <div v-for="warning in clickedFeature.sequenceWarnings"
                                      :key="`feature-sequence-warning-${warning}`"
@@ -7657,7 +7657,7 @@
                 <h2 id="placement-layout-change-title" class="text-base font-bold text-slate-800">Reset Feature placements?</h2>
                 <p id="placement-layout-change-description" class="mt-2 text-sm leading-relaxed text-slate-600">
                     <template v-if="featurePlacementActions.layoutChange.value">Changing {{ featurePlacementActions.layoutChange.setting }} to {{ featurePlacementActions.layoutChange.value }}</template><template v-else>{{ featurePlacementActions.layoutChange.setting }}</template>
-                    leaves {{ featurePlacementActions.layoutChange.count }} {{ featurePlacementActions.layoutChange.scope }}Feature placement{{ featurePlacementActions.layoutChange.count === 1 ? ' without its lane' : 's without their lanes' }}.
+                    leaves {{ featurePlacementActions.layoutChange.count }} Feature placement{{ featurePlacementActions.layoutChange.count === 1 ? ' without its lane' : 's without their lanes' }}.
                 </p>
                 <div class="mt-4 grid min-w-0 gap-2 sm:grid-cols-2">
                     <button type="button" data-history-managed data-placement-layout-primary :disabled="!semanticMutationAvailable" @click="featurePlacementActions.resolveLayoutChange('reset')"

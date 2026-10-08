@@ -65,7 +65,7 @@ visibility, Label visibility, and label text edits keyed by rendered feature
 ID: a cropped and a reverse-complemented Linear record (Sessions 44 and 33),
 two Circular records with the same ID, and a Circular Session 33. The
 Sessions 33 have no feature catalog. They are the positive fixtures for the
-readers that move those edits onto source identities in Session 45. The steps,
+readers that move those edits onto source identities (Session 46). The steps,
 inputs, and hashes are in `feature-edits.provenance.json`.
 
 `whitelist-tab-keyword.v39.gbdraw-session.json.gz` is a Web **Save Session**
@@ -82,7 +82,7 @@ Session** download, kept unchanged, from first-parent `main` commit `fe6861f0`
 so each names its feature by `hash=`: a feature whose hash names one source
 feature, one of two CDS at the same coordinates, and a feature of a
 reverse-complemented record. It is the positive fixture for the reader that
-moves such targets onto source identities in Session 45. The steps, inputs,
+moves such targets onto source identities (Session 46). The steps, inputs,
 and hashes are in `selected-feature-annotations.provenance.json`.
 
 `lambda_basic_linear.v44-schema8.gbdraw-session.json.gz` and
@@ -90,8 +90,42 @@ and hashes are in `selected-feature-annotations.provenance.json`.
 version 44, request schema 8, feature catalog schema 4 Gallery Sessions from
 first-parent `main` commit `fe6861f0`
 (`git show fe6861f0:gbdraw/web/gallery/sessions/<name>.gbdraw-session.json`),
-compressed with `gzip -n -9`, before the Gallery refresh to Session 45. Their
+compressed with `gzip -n -9`, before the Gallery refreshes after it. Their
 decompressed SHA-256 values are
 `46d72e44f6f54c0fbf6c9c93c806a2f11570e1d024fa3f7552312042637abbad` (lambda) and
 `e532e83bf78d6ad63cfb228336b7ff3dcb3b82076a399da787e771b69abce649` (HmmtDNA).
 `gallery-session-publication.test.mjs` promotes them to the current writer.
+
+`two-mode-project.v44.gbdraw-session.json.gz` is a Web **Save Session**
+download, kept unchanged, from first-parent `main` commit `fe6861f0`
+(Session 44). Both modes were used: Circular holds `TESTA.gb` with a Depth TSV
+and Circular title, font, legend, GC, and Depth settings; Linear holds `TESTA.gb`
+(same Depth TSV) and `TESTB.gb` (reverse complemented) with Legend edits, a color
+rule, a feature placement, and a label edit. The Linear Result is the committed
+Result while `ui.mode` is `circular`, both modes have a staged record-display
+row, and the inactive Linear profile holds an edited plot title. It is the
+positive fixture for the reader that splits one Session 27–44 draft into
+drawings; `TESTA.gb` and the Depth TSV are stored once for both modes.
+`inactive-class-m.v44.gbdraw-session.json.gz` is a Web **Save Session**
+download from the same commit: Circular has `TESTA.gb` and a Result, and Linear
+has no inputs but an edited plot title, Accession, Length, and legend position.
+It is the control that shows whether inactive-mode values survive. The steps,
+inputs, deviations, and hashes are in `two-mode-project.provenance.json`.
+
+`two-mode-thresholds.v42.gbdraw-session.json.gz` is a Web **Save Session**
+download, kept unchanged, from first-parent `main` commit `3fd50841`
+(Session 42). Linear holds `TESTA.gb` and `TESTB.gb` with the flat title
+`FLAT_TITLE`; the Circular E-value and Identity thresholds, which Session 42
+stores as a five-field `modeProfiles` entry, were edited while Circular held no
+inputs. It is the positive fixture for the Session 40–42 reader. The steps,
+inputs, and hashes are in `two-mode-thresholds.provenance.json`.
+
+`mode-split-vectors.json` holds the shared cases of the split of a Session 27–44
+draft into Session 46 mode slices: a fixture above or an inline flat draft, the
+split context, and the JSON pointers the split writes (`expect`) or leaves to
+Load (`expectAbsent`). `expectedModes` are the slices of the JavaScript split as
+Web Load makes it (`tests/web/mode-split-vectors.test.mjs`); the Python split
+(`tests/test_mode_split_vectors.py`) must equal them. `loadDefaults` are the
+values Session 46 Load gives the pointers the split leaves absent. A Session
+27–39 case has no `expectedModes`: Web Load reads such a Session's settings from
+its request, which the Python split does not.

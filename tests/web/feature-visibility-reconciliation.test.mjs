@@ -11,10 +11,10 @@ import {
   removeUnresolvedFeatureEdits
 } from '../../gbdraw/web/js/services/feature-visibility.js';
 
-// The rows of a Linear request; R2 scopes each draft row to its mode.
-const key = (recordKey, featureId, scope = 'linear') => JSON.stringify([scope, recordKey, featureId]);
+// The rows of the Linear drawing (R2; PR-1: each mode's drawing holds its own
+// rows, keyed by the identity pair).
+const key = (recordKey, featureId) => JSON.stringify([recordKey, featureId]);
 const row = (recordKey, biologicalFeatureId, fields) => ({
-  scope: 'linear',
   recordKey,
   biologicalFeatureId,
   featureVisibility: null,
@@ -24,7 +24,7 @@ const row = (recordKey, biologicalFeatureId, fields) => ({
   ...fields
 });
 const placement = (recordKey, biologicalFeatureId) => ({
-  scope: 'linear', recordKey, biologicalFeatureId, placement: { kind: 'main' }
+  recordKey, biologicalFeatureId, placement: { kind: 'main' }
 });
 const notice = (recordKey, biologicalFeatureId, status, kinds) => ({
   recordKey, biologicalFeatureId, status, kinds, resultIndex: 0
@@ -48,7 +48,6 @@ test('source replacement removes only edits whose feature the new source does no
       notice('seq-a', 'gone', 'unresolved', ['placement', 'feature_visibility', 'label_text']),
       notice('seq-a', 'cropped', 'crop_excluded', ['feature_visibility'])
     ],
-    scope: 'linear',
     replacedRecordKeys: ['seq-a'],
     previousRecords: [{ recordKey: 'seq-a' }, { recordKey: 'seq-b' }],
     currentRecords: [{ recordKey: 'seq-a' }, { recordKey: 'seq-b' }],
@@ -61,26 +60,30 @@ test('source replacement removes only edits whose feature the new source does no
   assert.deepEqual(Object.keys(featurePlacementOverrides), [key('seq-a', 'kept')]);
 });
 
-test('a record the request dropped loses its edits; another mode keeps its own (R2)', () => {
+test('a record the request dropped loses its edits; the other drawing keeps its own (R2)', () => {
   const featureOverrides = {
-    [key('seq-a', 'f1')]: row('seq-a', 'f1', { featureVisibility: 'off', labelText: 'A' }),
-    [key('seq-a', 'f1', 'circular')]: row('seq-a', 'f1', { scope: 'circular', labelVisibility: 'on' }),
-    [key('circular-x', 'f1', 'circular')]: row('circular-x', 'f1', { scope: 'circular', labelVisibility: 'on' })
+    [key('seq-a', 'f1')]: row('seq-a', 'f1', { featureVisibility: 'off', labelText: 'A' })
   };
+  // The Circular drawing's rows on the same record key are its own map.
+  const circularOverrides = {
+    [key('seq-a', 'f1')]: row('seq-a', 'f1', { labelVisibility: 'on' }),
+    [key('circular-x', 'f1')]: row('circular-x', 'f1', { labelVisibility: 'on' })
+  };
+  const circularBefore = structuredClone(circularOverrides);
   const featurePlacementOverrides = { [key('seq-a', 'f1')]: placement('seq-a', 'f1') };
   const removed = pruneUnmatchedFeatureOverrides({
     featureOverrides,
     featurePlacementOverrides,
     notices: [],
-    scope: 'linear',
     replacedRecordKeys: ['seq-a'],
     previousRecords: [{ recordKey: 'seq-a' }, { recordKey: 'seq-b' }],
     currentRecords: [{ recordKey: 'seq-b' }],
     biologicalFeatures: []
   });
   assert.equal(removed, 3);
-  assert.deepEqual(Object.keys(featureOverrides), [key('seq-a', 'f1', 'circular'), key('circular-x', 'f1', 'circular')]);
+  assert.deepEqual(featureOverrides, {});
   assert.deepEqual(featurePlacementOverrides, {});
+  assert.deepEqual(circularOverrides, circularBefore);
 });
 
 test('a kept label source text goes with a feature the replaced source lost', () => {
@@ -90,7 +93,6 @@ test('a kept label source text goes with a feature the replaced source lost', ()
   };
   assert.equal(pruneUnmatchedFeatureOverrides({
     featureOverrides,
-    scope: 'linear',
     replacedRecordKeys: ['seq-a'],
     biologicalFeatures: [{ scope: 'linear', record_key: 'seq-a', biological_feature_id: 'kept' }]
   }), 0);
@@ -101,12 +103,36 @@ test('without a replaced source unresolved edits stay until the user removes the
   const featureOverrides = { [key('seq-a', 'gone')]: row('seq-a', 'gone', { labelText: 'X', featureVisibility: 'off' }) };
   const featurePlacementOverrides = { [key('seq-a', 'gone')]: placement('seq-a', 'gone') };
   const notices = [notice('seq-a', 'gone', 'unresolved', ['placement', 'feature_visibility', 'label_text'])];
-  const scope = 'linear';
   assert.equal(pruneUnmatchedFeatureOverrides({
-    featureOverrides, featurePlacementOverrides, notices, scope, replacedRecordKeys: []
+    featureOverrides, featurePlacementOverrides, notices, replacedRecordKeys: []
   }), 0);
-  assert.equal(countUnresolvedFeatureEdits({ featureOverrides, featurePlacementOverrides, notices, scope }), 3);
-  assert.equal(removeUnresolvedFeatureEdits({ featureOverrides, featurePlacementOverrides, notices, scope }), 3);
+  assert.equal(countUnresolvedFeatureEdits({ featureOverrides, featurePlacementOverrides, notices }), 3);
+  assert.equal(removeUnresolvedFeatureEdits({ featureOverrides, featurePlacementOverrides, notices }), 3);
   assert.deepEqual([featureOverrides, featurePlacementOverrides], [{}, {}]);
-  assert.equal(countUnresolvedFeatureEdits({ featureOverrides, featurePlacementOverrides, notices, scope }), 0);
+  assert.equal(countUnresolvedFeatureEdits({ featureOverrides, featurePlacementOverrides, notices }), 0);
+});
+
+// OV-84 (Owner-delegated 2026-10-07): a source replacement retires the
+// per-feature strokes of features the new source does not have, as it does
+// their label edits; a stroke of a feature the new source still has, and a
+// stroke on a record the Generate did not replace, stay.
+test('source replacement retires the strokes of features the new source lost (OV-84)', () => {
+  const stroke = (recordKey, featureId) => `${recordKey}\0${featureId}`;
+  const featureStrokeOverrides = {
+    [stroke('seq-a', 'gone')]: { strokeColor: '#111111', strokeWidth: 2 },
+    [stroke('seq-a', 'kept')]: { strokeColor: '#222222', strokeWidth: 3 },
+    [stroke('seq-b', 'other')]: { strokeColor: '#333333', strokeWidth: 1 }
+  };
+  const removed = pruneUnmatchedFeatureOverrides({
+    featureStrokeOverrides,
+    replacedRecordKeys: ['seq-a'],
+    previousRecords: [{ recordKey: 'seq-a' }, { recordKey: 'seq-b' }],
+    currentRecords: [{ recordKey: 'seq-a' }, { recordKey: 'seq-b' }],
+    biologicalFeatures: [{ scope: 'linear', record_key: 'seq-a', biological_feature_id: 'kept' }]
+  });
+  assert.equal(removed, 1);
+  assert.deepEqual(Object.keys(featureStrokeOverrides).sort(), [stroke('seq-a', 'kept'), stroke('seq-b', 'other')].sort());
+  // Without a replaced source, every stroke stays dormant until its feature returns.
+  assert.equal(pruneUnmatchedFeatureOverrides({ featureStrokeOverrides, replacedRecordKeys: [] }), 0);
+  assert.equal(Object.keys(featureStrokeOverrides).length, 2);
 });

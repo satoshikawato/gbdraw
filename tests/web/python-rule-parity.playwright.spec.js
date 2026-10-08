@@ -11,6 +11,13 @@ const loadSession = async (page) => {
 // #857); the Result and its Legend are Python's once it has finished.
 const rerendered = (page) => page.waitForFunction(() => !window.__GBDRAW_APP__.processing
   && !window.__GBDRAW_APP__.labelReflowProcessing);
+// The wait runs from a promise the page retains: V8 can collect a promise that
+// page.evaluate awaits ("Promise was collected"), which Playwright reports as a
+// destroyed execution context.
+const waitForColorTableImport = (page) => evaluateWithRetainedPromise(page, async () => {
+  const a = window.__GBDRAW_APP__;
+  await a.waitForAuxiliaryFileImport(a.files.t_color);
+});
 const fills = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
   return app.extractedFeatures.filter((feature) => {
@@ -208,7 +215,7 @@ test('invalid color TSV preserves the selected file, preview, rules and History'
   await loadSession(page);
   const upload = page.getByLabel('Specific Table (-t)', { exact: true });
   await upload.setInputFiles({ name: 'valid.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\tproduct\t(?i)NADH\t#f01234\t\n') });
-  await page.evaluate(async () => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files.t_color); });
+  await waitForColorTableImport(page);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(1);
   const inspect = () => page.evaluate(() => {
     const a = window.__GBDRAW_APP__;
@@ -216,7 +223,7 @@ test('invalid color TSV preserves the selected file, preview, rules and History'
   });
   const before = await inspect();
   await upload.setInputFiles({ name: 'invalid.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\tproduct\t(?<enzyme>NADH)\t#abcdef\tInvalid\n') });
-  await page.evaluate(async () => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files.t_color); });
+  await waitForColorTableImport(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({code:'REGEX_SYNTAX',context:{reason:'UNKNOWN_EXTENSION'}});
   await expect.poll(inspect).toEqual(before);
   await generateAndWaitForResult(page);
@@ -232,7 +239,8 @@ test('25,000-feature Python preparation keeps the event loop responsive and reus
     const { ruleMatchesFeature } = await import('/gbdraw/web/js/services/rule-matchers.js');
     const { runDiagramHelperOperation, DIAGRAM_HELPER_OPERATIONS } = await import('/gbdraw/web/js/services/diagram-generation.js');
     const features = Array.from({ length: 25000 }, (_, i) => ({ type: 'CDS', svg_id: `f${i}`, qualifiers: { product: [i % 2 ? 'other' : 'β-lactamase'] } }));
-    const state = { extractedFeatures: { value: features }, manualSpecificRules: [] };
+    const drawing = { manualSpecificRules: [] };
+    const state = { extractedFeatures: { value: features }, activeDrawing: () => drawing };
     let calls = 0;
     const preparation = createRulePreparation({ state, evaluate: async payload => {
       calls++;

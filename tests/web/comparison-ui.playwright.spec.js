@@ -23,7 +23,7 @@ const preservedComparisonSession = () => {
     queryRecordIndex: 0,
     subjectRecordIndex: 1
   }));
-  session.config.linearComparisonPlan = {
+  session.modes.linear.config.linearComparisonPlan = {
     mode: 'none',
     defaultSource: 'losat',
     edges: []
@@ -495,7 +495,7 @@ test('imported comparison resolutions are explicit and create one History entry 
 
   const setIntent = (disposition, message) => page.evaluate(async ({ next, explanation }) => {
     const { state } = await import('/gbdraw/web/js/state.js');
-    Object.assign(state.importedComparisonIntent, {
+    Object.assign(state.activeDrawing().importedComparisonIntent, {
       disposition: next,
       action: null,
       message: explanation,
@@ -630,7 +630,7 @@ test('preserved imported comparison generates only after explicit inheritance', 
   const savedSession = JSON.parse(
     gunzipSync(readFileSync(await download.path())).toString('utf8')
   );
-  expect(savedSession.config.importedComparisonResolution).toEqual({ action: 'INHERIT' });
+  expect(savedSession.modes.linear.config.importedComparisonResolution).toEqual({ action: 'INHERIT' });
   expect(savedSession.renderRequest.comparisons).toEqual(generated.comparisons);
   expect(savedSession.results[savedSession.ui.selectedResultIndex].content)
     .toBe(generated.result);
@@ -1056,7 +1056,7 @@ test('comparison controls drive appearance and current Session round trips', { t
   const sessionPath = await sessionDownload.path();
   const sessionBuffer = readFileSync(sessionPath);
   const session = JSON.parse(gunzipSync(sessionBuffer).toString('utf8'));
-  expect(session.config.losat.blastp).toMatchObject({
+  expect(session.modes.linear.config.losat.blastp).toMatchObject({
     mode: 'collinear',
     candidateLimit: 23,
     maxHits: 3,
@@ -1069,7 +1069,7 @@ test('comparison controls drive appearance and current Session round trips', { t
     collinearSearchScope: 'all',
     collinearColorMode: 'orientation_identity'
   });
-  expect(session.config.adv).toMatchObject({
+  expect(session.modes.linear.config.adv).toMatchObject({
     pairwise_match_style: 'curve',
     comparison_height: 85
   });
@@ -1492,4 +1492,33 @@ test('mobile layout has no overflow, fixed-action overlap, or semantic tab-order
     && advancedBox.y + advancedBox.height > generateBox.y
   );
   expect(overlap).toBe(false);
+});
+
+// Plan OV-80 §8 S2 (the OIC-017 owner spec): F1, a Session 44 whose Linear
+// LOSATP draft has the flat Max target seqs 7 beside a saved Collinear limit
+// of 5, loads 7 into the Linear drawing for Collinear, and a LOSATP mode round
+// trip through Similarity groups keeps 7.
+test('a loaded Session 44 keeps the Collinear Max target seqs through a LOSATP mode round trip (F1)', async ({ page }) => {
+  test.setTimeout(300000);
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  page.on('dialog', (dialog) => dialog.accept());
+  await page.locator(
+    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+  ).setInputFiles('tests/fixtures/sessions/two-mode-project.v44.gbdraw-session.json.gz');
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180000 });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
+  const linearBlastp = () => page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const { mode, candidateLimit } = state.drawings.linear.losat.blastp;
+    return { mode, candidateLimit };
+  });
+  expect(await linearBlastp()).toEqual({ mode: 'collinear', candidateLimit: 7 });
+  if (await page.evaluate(() => window.__GBDRAW_APP__.mode) !== 'linear') {
+    await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  }
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.setLinearComparisonLosatpMode('orthogroup'))).toBe(true);
+  expect((await linearBlastp()).mode).toBe('orthogroup');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.setLinearComparisonLosatpMode('collinear'))).toBe(true);
+  expect(await linearBlastp()).toEqual({ mode: 'collinear', candidateLimit: 7 });
 });

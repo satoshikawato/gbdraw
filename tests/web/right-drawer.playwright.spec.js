@@ -813,8 +813,8 @@ test(`individual Feature, Label, and Legend edits update the mounted SVG: ${live
       labelPartsHidden: labelParts.every((element) => element.getAttribute('display') === 'none'),
       resultLabelPartsHidden: resultLabelParts.length === labelParts.length
         && resultLabelParts.every((element) => element.getAttribute('display') === 'none'),
-      labelVisibilityOverride: ((feature) => app.featureOverrides[JSON.stringify([feature?.scope, feature?.record_key, feature?.biological_feature_id])]?.labelVisibility ?? undefined)(app.extractedFeatures.find((item) => item.svg_id === labeledFeature.svg_id)),
-      labelOverride: ((feature) => app.featureOverrides[JSON.stringify([feature?.scope, feature?.record_key, feature?.biological_feature_id])]?.labelText ?? undefined)(app.extractedFeatures.find((item) => item.svg_id === labeledFeature.svg_id)),
+      labelVisibilityOverride: ((feature) => app.featureOverrides[JSON.stringify([feature?.record_key, feature?.biological_feature_id])]?.labelVisibility ?? undefined)(app.extractedFeatures.find((item) => item.svg_id === labeledFeature.svg_id)),
+      labelOverride: ((feature) => app.featureOverrides[JSON.stringify([feature?.record_key, feature?.biological_feature_id])]?.labelText ?? undefined)(app.extractedFeatures.find((item) => item.svg_id === labeledFeature.svg_id)),
       legendFill,
       legendEntryColor: app.legendEntries[legendIndex]?.color,
       featureResultContent,
@@ -872,7 +872,7 @@ test(`individual Feature, Label, and Legend edits update the mounted SVG: ${live
     await expect(page.locator('[data-live-application-feedback]')).toContainText('Live edit failed');
     // B11: a Worker failure that changes no input keeps Retry.
     await expect(page.locator('[data-live-application-feedback]')).toContainText('Retry the live edit or use Generate.');
-    expect(await page.evaluate((id) => ((feature) => window.__GBDRAW_APP__.featureOverrides[JSON.stringify([feature?.scope, feature?.record_key, feature?.biological_feature_id])]?.labelText ?? undefined)(window.__GBDRAW_APP__.extractedFeatures.find((item) => item.svg_id === id)), target)).toBe('S05 direct label retained');
+    expect(await page.evaluate((id) => ((feature) => window.__GBDRAW_APP__.featureOverrides[JSON.stringify([feature?.record_key, feature?.biological_feature_id])]?.labelText ?? undefined)(window.__GBDRAW_APP__.extractedFeatures.find((item) => item.svg_id === id)), target)).toBe('S05 direct label retained');
     const retained = await snapshot(page);
     expect(retained.result).toContain('S05 direct label retained');
     await page.keyboard.press('Escape');
@@ -891,7 +891,7 @@ test(`individual Feature, Label, and Legend edits update the mounted SVG: ${live
       error: window.__GBDRAW_APP__.labelReflowLastError
     })), { timeout: 180000 }).toEqual({ busy: false, error: null });
     await expect(page.locator('[data-live-application-feedback]')).toHaveCount(0);
-    expect(await page.evaluate((id) => ((feature) => window.__GBDRAW_APP__.featureOverrides[JSON.stringify([feature?.scope, feature?.record_key, feature?.biological_feature_id])]?.labelText ?? undefined)(window.__GBDRAW_APP__.extractedFeatures.find((item) => item.svg_id === id)), target)).toBe('S05 retry label succeeds');
+    expect(await page.evaluate((id) => ((feature) => window.__GBDRAW_APP__.featureOverrides[JSON.stringify([feature?.record_key, feature?.biological_feature_id])]?.labelText ?? undefined)(window.__GBDRAW_APP__.extractedFeatures.find((item) => item.svg_id === id)), target)).toBe('S05 retry label succeeds');
     expect((await snapshot(page)).result).toContain('S05 retry label succeeds');
     await expect(page.locator('.right-drawer')).toHaveAttribute('aria-hidden', 'false');
   }
@@ -915,15 +915,13 @@ test('adjacent Collinear mixed groups remain selectable after current-session sa
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  // The Python writer has no active Web draft; derive it from this request.
+  // The Python writer has no Web draft: Load takes the request's projection, and
+  // the mode's slice (Session 46) holds only the comparison plan this test sets.
   const session = Buffer.from(await page.evaluate(async (source) => {
-    const { projectCanonicalSessionRequest } = await import('./js/services/session-request.js');
     const document = JSON.parse(source);
-    document.config = projectCanonicalSessionRequest({
-      renderRequest: document.renderRequest, resources: document.resources,
-      webFiles: document.webFiles
-    }).config;
-    document.config.linearComparisonPlan = { mode: 'none', defaultSource: 'losat', edges: [] };
+    document.modes = { [document.renderRequest.mode]: {
+      config: { linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] } }
+    } };
     return JSON.stringify(document);
   }, typedSession));
   const importSession = async (bytes, name) => evaluateWithRetainedPromise(page, async ({ bytes, name }) => {
@@ -1323,13 +1321,13 @@ test('similarity-group rows update every displayed field and retain current clic
   await expect(row('s05_row_1')).toContainText('2 records');
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
-    state.orthogroupNameOverrides.s05_row_1 = 'Renamed group';
+    state.activeDrawing().orthogroupNameOverrides.s05_row_1 = 'Renamed group';
   });
   await expect(row('s05_row_1')).toContainText('Renamed group');
   await expect(row('s05_row_1')).toContainText('Edited');
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
-    delete state.orthogroupNameOverrides.s05_row_1;
+    delete state.activeDrawing().orthogroupNameOverrides.s05_row_1;
     state.orthogroups.value[0].member_count = 0;
     state.orthogroups.value[0].members.push({});
   });

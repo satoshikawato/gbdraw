@@ -399,7 +399,7 @@ def test_vibrio_capture_keeps_publication_comparisons_active() -> None:
     assert session_path is not None
     with gzip.open(session_path, "rt", encoding="utf-8") as handle:
         session = json.load(handle)
-    assert session["config"]["linearComparisonPlan"] == {
+    assert session["modes"]["linear"]["config"]["linearComparisonPlan"] == {
         "mode": "adjacent",
         "defaultSource": "losat",
         "edges": [],

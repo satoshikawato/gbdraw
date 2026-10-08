@@ -25,7 +25,7 @@ const noDerivedStatus = async (page, edit = null) => {
     try {
       if (edit) {
         const { state } = await import('./js/state.js');
-        state.adv[edit.field] = edit.value;
+        state.activeDrawing().adv[edit.field] = edit.value;
         await window.Vue.nextTick();
       }
       return { committed: getCommittedCanonicalRenderRequest(), calls };
@@ -98,7 +98,7 @@ test('Undo Generate restores request A and Result A while preserving draft B thr
     const path = testInfo.outputPath('undo.gbdraw-session.json.gz');
     const saved = JSON.parse(gunzipSync(await download(page, 'Save Session', path)));
     expect.soft(saved.renderRequest).toEqual(a.request);
-    expect(saved.config.form.labels_mode).toBe('none');
+    expect(saved.modes[saved.ui.mode].config.form.labels_mode).toBe('none');
     const fresh = await load(browser, path);
     try {
       const loaded = await inspect(fresh, testInfo, 'fresh-load');
@@ -134,10 +134,10 @@ test('Live palette and its History keep the scale draft out of the committed req
     const before = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
     await page.evaluate(async () => {
       const { state } = await import('./js/state.js');
-      await window.__GBDRAW_HISTORY__.runUndoable('Change scale', () => { state.adv.scale_interval = 12345; });
+      await window.__GBDRAW_HISTORY__.runUndoable('Change scale', () => { state.activeDrawing().adv.scale_interval = 12345; });
       state.paletteInstantPreviewEnabled.value = true;
       await window.__GBDRAW_HISTORY__.runUndoable('Live palette', async () => {
-        state.currentColors.value = { ...state.currentColors.value, CDS:'#123456' };
+        state.activeDrawing().currentColors.value = { ...state.activeDrawing().currentColors.value, CDS:'#123456' };
         await window.Vue.nextTick();
       });
     });
@@ -149,7 +149,7 @@ test('Live palette and its History keep the scale draft out of the committed req
       await noDerivedStatus(page);
     }
     await page.evaluate(async () => {
-      const { state } = await import('./js/state.js'); state.adv.scale_interval = null;
+      const { state } = await import('./js/state.js'); state.activeDrawing().adv.scale_interval = null;
       await window.Vue.nextTick();
     });
     await noDerivedStatus(page);
@@ -165,7 +165,7 @@ test('Live palette and its History keep the scale draft out of the committed req
     await noDerivedStatus(page);
     expect(await page.evaluate(()=>window.__GBDRAW_APP__.results[0].content)).toBe(applied);
     await page.evaluate(async()=>{
-      const {state}=await import('./js/state.js');state.currentColors.value={...state.currentColors.value,CDS:'#345678'};
+      const {state}=await import('./js/state.js');state.activeDrawing().currentColors.value={...state.activeDrawing().currentColors.value,CDS:'#345678'};
       await window.Vue.nextTick();
     });
     expect(await page.evaluate(()=>window.__GBDRAW_APP__.results[0].content)).toBe(applied);
@@ -208,7 +208,7 @@ test('Circular definition settings apply on Generate and keep crop length, GC% a
   try {
     await page.evaluate(async () => {
       const { state } = await import('./js/state.js');
-      Object.assign(state.form, {
+      Object.assign(state.activeDrawing().form, {
         multi_record_canvas: false, circular_region_start: 1000, circular_region_end: 9000,
         circular_record_label: 'Custom label', circular_record_subtitle: 'Sub'
       });
@@ -230,7 +230,7 @@ test('Circular definition settings apply on Generate and keep crop length, GC% a
     for (const [owner, field, value] of edits) {
       await page.evaluate(async ({ owner, field, value }) => {
         const { state } = await import('./js/state.js');
-        state[owner][field] = value;
+        state.activeDrawing()[owner][field] = value;
         await window.Vue.nextTick();
       }, { owner, field, value });
       await expectUnchangedResult(page, committed);
@@ -248,8 +248,8 @@ test('Circular definition settings apply on Generate and keep crop length, GC% a
     await expect(page.getByText('Applies on Generate: plot title and record-label settings.', { exact: true })).toBeVisible();
     const saved = JSON.parse(gunzipSync(await download(page, 'Save Session', testInfo.outputPath('draft.gbdraw-session.json.gz'))));
     expect(hash(saved.results[0].content)).toBe(hash(committed));
-    expect(saved.config.form.species).toBe('Mus musculus');
-    expect(saved.config.adv.def_font_size).toBe(22);
+    expect(saved.modes[saved.ui.mode].config.form.species).toBe('Mus musculus');
+    expect(saved.modes[saved.ui.mode].config.adv.def_font_size).toBe(22);
 
     await generate(page);
     const applied = await svgFacts(page, await resultContent(page));
@@ -278,9 +278,9 @@ test('Global stroke settings apply on Generate and leave the Result unchanged be
     await expect(page.getByText('Applies on Generate: block and line stroke colors and widths.', { exact: true })).toBeVisible();
     await page.evaluate(async () => {
       const { state } = await import('./js/state.js');
-      state.adv.scale_interval = 12345;
+      state.activeDrawing().adv.scale_interval = 12345;
       await window.__GBDRAW_HISTORY__.runUndoable('Stroke draft', async () => {
-        Object.assign(state.adv, {
+        Object.assign(state.activeDrawing().adv, {
           block_stroke_color: '#ff0000', line_stroke_width: 3,
           axis_stroke_color: '#00ff00', axis_stroke_width: 4
         });
@@ -303,8 +303,8 @@ test('Global stroke settings apply on Generate and leave the Result unchanged be
 
     await page.evaluate(async () => {
       const { state } = await import('./js/state.js');
-      state.adv.scale_interval = null;
-      state.adv.block_stroke_width = 5;
+      state.activeDrawing().adv.scale_interval = null;
+      state.activeDrawing().adv.block_stroke_width = 5;
       await window.Vue.nextTick();
     });
     await page.evaluate(() => { window.__GBDRAW_APP__.errorLog = null; });
@@ -331,8 +331,8 @@ for (const mode of ['circular', 'linear']) {
       const draftValue = mode === 'circular' ? 12345 : 19;
       const prior = await page.evaluate(async ({field,draftValue}) => {
         const { state } = await import('./js/state.js');
-        const value = state.adv[field];
-        await window.__GBDRAW_HISTORY__.runUndoable('Scale draft', () => { state.adv[field] = draftValue; });
+        const value = state.activeDrawing().adv[field];
+        await window.__GBDRAW_HISTORY__.runUndoable('Scale draft', () => { state.activeDrawing().adv[field] = draftValue; });
         return value;
       }, {field,draftValue});
       await noDerivedStatus(page);
@@ -341,7 +341,7 @@ for (const mode of ['circular', 'linear']) {
         state.autoLabelReflowEnabled.value = false;
         state.paletteInstantPreviewEnabled.value = true;
         await window.__GBDRAW_HISTORY__.runUndoable('Live color', async () => {
-          state.currentColors.value = { ...state.currentColors.value, CDS:'#123456' };
+          state.activeDrawing().currentColors.value = { ...state.activeDrawing().currentColors.value, CDS:'#123456' };
           await window.Vue.nextTick();
         });
       });
@@ -364,11 +364,11 @@ for (const mode of ['circular', 'linear']) {
       }
       expect(await page.evaluate(() => [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()])).toEqual(history);
       await page.evaluate(async ({field,prior}) => {
-        const { state } = await import('./js/state.js');state.adv[field]=prior;await window.Vue.nextTick();
+        const { state } = await import('./js/state.js');state.activeDrawing().adv[field]=prior;await window.Vue.nextTick();
       }, {field,prior});
       await noDerivedStatus(page);
       await page.evaluate(async ({field,draftValue}) => {
-        const { state } = await import('./js/state.js');state.adv[field]=draftValue;await window.Vue.nextTick();
+        const { state } = await import('./js/state.js');state.activeDrawing().adv[field]=draftValue;await window.Vue.nextTick();
       },{field,draftValue});
       await noDerivedStatus(page);
       await expect(page.getByRole('button',{name:'Generate Diagram',exact:true})).not.toHaveAccessibleDescription(/recalculates placement/);
@@ -423,8 +423,8 @@ for (const mode of ['circular','linear']) {
       await generate(page);
       await page.evaluate(async mode => {
         const { state } = await import('./js/state.js');
-        window.s04ScalePrior=state.adv[mode==='circular'?'scale_interval':'scale_font_size'];
-        state.adv[mode==='circular'?'scale_interval':'scale_font_size']=mode==='circular'?12345:19;
+        window.s04ScalePrior=state.activeDrawing().adv[mode==='circular'?'scale_interval':'scale_font_size'];
+        state.activeDrawing().adv[mode==='circular'?'scale_interval':'scale_font_size']=mode==='circular'?12345:19;
         state.autoLabelReflowEnabled.value=true;
         window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse=()=>new Promise((resolve,reject)=>{
           window.failS04Reflow=()=>reject(new Error('S04 forced live rerender failure'));
@@ -444,13 +444,13 @@ for (const mode of ['circular','linear']) {
       await expect(page.locator('[data-live-application-feedback]')).toContainText('Live edit failed');
       await noDerivedStatus(page);
       await page.evaluate(async mode=>{
-        const {state}=await import('./js/state.js');state.adv[mode==='circular'?'scale_interval':'scale_font_size']=window.s04ScalePrior;
+        const {state}=await import('./js/state.js');state.activeDrawing().adv[mode==='circular'?'scale_interval':'scale_font_size']=window.s04ScalePrior;
         await window.Vue.nextTick();
       },mode);
       await noDerivedStatus(page);
       await expect(page.locator('[data-live-application-feedback]')).toContainText('Live edit failed');
       await page.evaluate(async mode=>{
-        const {state}=await import('./js/state.js');state.adv[mode==='circular'?'scale_interval':'scale_font_size']=mode==='circular'?12345:19;
+        const {state}=await import('./js/state.js');state.activeDrawing().adv[mode==='circular'?'scale_interval':'scale_font_size']=mode==='circular'?12345:19;
         await window.Vue.nextTick();
       },mode);
       expect((await snapshot(page)).result).toBe(direct.result);
@@ -541,7 +541,7 @@ for (const mode of ['linear', 'circular']) {
           sameCatalog: Boolean(catalog) && window.Vue.toRaw(state.featureCatalog.value) === catalog,
           sameHistory: JSON.stringify(counts) === JSON.stringify([
             window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()
-          ]), width: state.adv.block_stroke_width
+          ]), width: state.activeDrawing().adv.block_stroke_width
         };
       });
       expect(rollback).toEqual({ status: 'error', error: { code: 'UNKNOWN', stage: 'request-validation' },

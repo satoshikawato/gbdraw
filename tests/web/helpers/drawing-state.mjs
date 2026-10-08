@@ -1,22 +1,21 @@
 // The drawing context of the Web state (gbdraw/web/js/state.js): every `state`
-// key in exactly one class. A drawing holds one diagram mode's settings, its
-// editor edits, and the values derived from them, under their `state` names and
-// kinds; services read them from the drawing they are given
-// (tests/web/drawing-context.test.mjs). Every other key is a generated
-// artifact, a project input or cache, an app setting or catalog, or transient.
-// Both modes share one drawing until the per-mode settings change.
+// key and drawing member in exactly one class. A drawing holds one diagram
+// mode's settings, its editor edits, and the values derived from them; only
+// the drawing holds them (tests/web/drawing-context.test.mjs). Every `state`
+// key is a generated artifact, a project input or cache, an app setting or
+// catalog, transient, or the drawing store. Each diagram mode has its own
+// drawing (PR-1, Session 46 `modes`).
 
 export const DRAWING_DRAFT_KEYS = Object.freeze([
   'form', 'adv', 'losat', 'losatProgram', 'circularConservation', 'linearComparisonPlan',
   'linearRecordLayoutEnabled', 'linearRecordGap', 'linearRecordRows', 'recordDisplayDrafts',
-  'unmanagedConfigOverrides', 'importedComparisonIntent', 'layoutPreferences', 'linearTypographyLinked',
-  'modeProfileStateManager'
+  'unmanagedConfigOverrides', 'importedComparisonIntent', 'layoutPreferences', 'linearTypographyLinked'
 ]);
 
 export const DRAWING_EDITOR_KEYS = Object.freeze([
   'featureOverrides', 'featurePlacementOverrides', 'featureColorOverrides', 'featureStrokeOverrides',
   'featureVisibilityManualRules', 'labelTextBulkOverrides', 'canonicalLabelOverrideRows', 'legendEntries',
-  'deletedLegendEntries', 'legendColorOverrides', 'legendStrokeOverrides', 'addedLegendCaptions',
+  'deletedLegendEntries', 'dormantLegendEntries', 'legendColorOverrides', 'legendStrokeOverrides', 'addedLegendCaptions',
   'fileLegendCaptions', 'manualSpecificRules', 'manualPriorityRules', 'filterMode', 'manualBlacklist',
   'manualWhitelist', 'selectedPalette', 'currentColors', 'pendingPaletteName', 'pendingPaletteColors',
   'annotationSets', 'orthogroupNameOverrides', 'orthogroupDescriptionOverrides', 'orthogroupDormantOverrides',
@@ -51,10 +50,12 @@ export const PROJECT_KEYS = Object.freeze([
   'legacyProteinRawCandidates', 'legacyProteinDerivedEvidence'
 ]);
 
-// App settings and catalogs outside any drawing, and the shown mode.
+// App settings and catalogs outside any drawing, and the shown mode. LOSAT
+// execution and the rich feature popup are app settings (Session
+// `ui.losatExecution`, `ui.richFeaturePopup`).
 export const UI_KEYS = Object.freeze([
   'mode', 'downloadDpi', 'autoLabelReflowEnabled', 'paletteInstantPreviewEnabled', 'paletteDefinitions',
-  'paletteNames', 'specificRulePresets', 'featureKeys', 'defaultColorKeys'
+  'paletteNames', 'specificRulePresets', 'featureKeys', 'defaultColorKeys', 'losatExecution', 'richFeaturePopup'
 ]);
 
 // Never saved: progress and operation flags, input drafts, selection, search,
@@ -102,12 +103,19 @@ export const drawingOf = (fixture) => Object.freeze(Object.fromEntries(
   DRAWING_KEYS.filter((key) => Object.hasOwn(fixture, key)).map((key) => [key, fixture[key]])
 ));
 
-// The fixture with the drawing store that services read (`state.drawings`):
-// both modes share the fixture's drawing, as in state.js.
-export const withDrawings = (fixture) => {
-  const drawing = drawingOf(fixture);
-  return Object.assign(fixture, {
-    drawings: Object.freeze({ circular: drawing, linear: drawing }),
-    activeDrawing: () => drawing
-  });
-};
+// The fixture with the drawing store that services and owners read
+// (`state.drawings`, `state.activeDrawing()`): the fixture is the drawing of
+// both modes, so a member the test replaces later is read. A test of per-mode
+// behavior uses `withModeDrawings`. The store is not enumerable, so a test that
+// clones or serializes the fixture sees only its members.
+export const withDrawings = (fixture) => Object.defineProperties(fixture, {
+  drawings: { value: Object.freeze({ circular: fixture, linear: fixture }), configurable: true },
+  activeDrawing: { value: () => fixture, configurable: true }
+});
+
+// The fixture with one drawing per mode, as in state.js: `activeDrawing()`
+// follows `fixture.mode.value`.
+export const withModeDrawings = (fixture, { circular, linear }) => Object.defineProperties(fixture, {
+  drawings: { value: Object.freeze({ circular, linear }), configurable: true },
+  activeDrawing: { value: () => (fixture.mode?.value === 'linear' ? linear : circular), configurable: true }
+});

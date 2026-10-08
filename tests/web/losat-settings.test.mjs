@@ -3,6 +3,7 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 globalThis.window = {
   Vue: {
@@ -61,10 +62,9 @@ const resolved = ({ mode = 'adjacent', defaultSource = 'losat', sources = [], va
 const state = {
   linearSeqs: Array.from({ length: 5 }, (_, index) => ({ uid: `record-${index}` })),
   linearComparisonResolution: resolved({ sources: ['losat', 'losat', 'losat', 'losat'] }),
+  // How LOSAT runs is one app-level setting (`state.losatExecution`, PR-1).
+  losatExecution: { totalThreadBudget: 'safe', threadsPerJob: '32', parallelWorkers: undefined },
   losat: {
-    totalThreadBudget: 'safe',
-    threadsPerJob: '32',
-    parallelWorkers: undefined,
     blastp: {
       mode: 'orthogroup',
       collinearSearchScope: 'adjacent'
@@ -73,19 +73,18 @@ const state = {
   losatProgram: { value: 'blastp' }
 };
 
-const settings = createLosatSettings({ state });
+const settings = createLosatSettings({ state: withDrawings(state) });
 
-assert.equal(state.losat.threadsPerJob, '32');
+assert.equal(state.losatExecution.threadsPerJob, '32');
 assert.equal(settings.losatEffectiveThreadsPerJob.value, 4);
 assert(settings.losatThreadOptions.value.some((option) => option.value === '32'));
 
 const loadingOrderState = {
   linearSeqs: Array.from({ length: 5 }, (_, index) => ({ uid: `record-${index}` })),
   linearComparisonResolution: resolved({ sources: ['losat', 'losat', 'losat', 'losat'] }),
+  // How LOSAT runs is one app-level setting (`state.losatExecution`, PR-1).
+  losatExecution: { totalThreadBudget: 'safe', threadsPerJob: '32', parallelWorkers: undefined },
   losat: {
-    totalThreadBudget: 'safe',
-    threadsPerJob: '32',
-    parallelWorkers: undefined,
     blastp: {
       mode: 'orthogroup',
       collinearSearchScope: 'adjacent'
@@ -94,28 +93,27 @@ const loadingOrderState = {
   losatProgram: { value: 'blastn' }
 };
 
-createLosatSettings({ state: loadingOrderState });
-assert.equal(loadingOrderState.losat.threadsPerJob, '32');
+createLosatSettings({ state: withDrawings(loadingOrderState) });
+assert.equal(loadingOrderState.losatExecution.threadsPerJob, '32');
 
 const noneState = {
   linearSeqs: Array.from({ length: 3 }, (_, index) => ({ uid: `record-${index}` })),
   linearComparisonResolution: resolved({ mode: 'none', sources: [] }),
+  // How LOSAT runs is one app-level setting (`state.losatExecution`, PR-1).
+  losatExecution: { totalThreadBudget: '17', threadsPerJob: '32', parallelWorkers: '9' },
   losat: {
-    totalThreadBudget: '17',
-    threadsPerJob: '32',
-    parallelWorkers: '9',
     blastp: { mode: 'pairwise', collinearSearchScope: 'adjacent' }
   },
   losatProgram: { value: 'blastn' }
 };
-const noneSettings = createLosatSettings({ state: noneState });
+const noneSettings = createLosatSettings({ state: withDrawings(noneState) });
 assert.equal(noneSettings.losatEstimatedJobCount.value, 0);
 assert.equal(noneSettings.losatMaxPairWorkers.value, 0);
 assert.equal(noneSettings.losatAutoPairWorkers.value, 0);
 assert.deepEqual(noneSettings.losatPairWorkerOptions.value, []);
-assert.equal(noneState.losat.totalThreadBudget, '17');
-assert.equal(noneState.losat.threadsPerJob, '32');
-assert.equal(noneState.losat.parallelWorkers, '9');
+assert.equal(noneState.losatExecution.totalThreadBudget, '17');
+assert.equal(noneState.losatExecution.threadsPerJob, '32');
+assert.equal(noneState.losatExecution.parallelWorkers, '9');
 
 const mixedState = {
   linearSeqs: Array.from({ length: 4 }, (_, index) => ({ uid: `record-${index}` })),
@@ -124,15 +122,14 @@ const mixedState = {
     defaultSource: 'upload',
     sources: ['losat', 'upload', 'losat']
   }),
+  // How LOSAT runs is one app-level setting (`state.losatExecution`, PR-1).
+  losatExecution: { totalThreadBudget: 'safe', threadsPerJob: 'auto', parallelWorkers: undefined },
   losat: {
-    totalThreadBudget: 'safe',
-    threadsPerJob: 'auto',
-    parallelWorkers: undefined,
     blastp: { mode: 'pairwise', collinearSearchScope: 'adjacent' }
   },
   losatProgram: { value: 'blastn' }
 };
-const mixedSettings = createLosatSettings({ state: mixedState });
+const mixedSettings = createLosatSettings({ state: withDrawings(mixedState) });
 assert.equal(mixedSettings.losatEstimatedJobCount.value, 2);
 mixedState.losatProgram.value = 'blastp';
 assert.equal(mixedSettings.losatEstimatedJobCount.value, 2);
@@ -140,15 +137,14 @@ assert.equal(mixedSettings.losatEstimatedJobCount.value, 2);
 const expansionState = {
   linearSeqs: Array.from({ length: 5 }, (_, index) => ({ uid: `record-${index}` })),
   linearComparisonResolution: resolved({ sources: ['losat', 'losat', 'losat', 'losat'] }),
+  // How LOSAT runs is one app-level setting (`state.losatExecution`, PR-1).
+  losatExecution: { totalThreadBudget: 'safe', threadsPerJob: 'auto', parallelWorkers: undefined },
   losat: {
-    totalThreadBudget: 'safe',
-    threadsPerJob: 'auto',
-    parallelWorkers: undefined,
     blastp: { mode: 'orthogroup', collinearSearchScope: 'all' }
   },
   losatProgram: { value: 'blastp' }
 };
-const expansionSettings = createLosatSettings({ state: expansionState });
+const expansionSettings = createLosatSettings({ state: withDrawings(expansionState) });
 assert.equal(
   expansionSettings.losatEstimatedJobCount.value,
   25,
@@ -199,7 +195,7 @@ expansionState.linearComparisonResolution = { value: {
   })))
 } };
 // The computed owner retains its original resolution ref.
-const batchedSettings = createLosatSettings({ state: expansionState });
+const batchedSettings = createLosatSettings({ state: withDrawings(expansionState) });
 assert.equal(batchedSettings.losatEstimatedJobCount.value, 1);
 
 // Four source jobs must use the selected total, rather than stay at two threads per job.
@@ -209,37 +205,37 @@ Object.defineProperty(globalThis, 'navigator', {
 const budgetState = {
   linearSeqs: [{ uid: 'a' }, { uid: 'b' }],
   linearComparisonResolution: resolved({ sources: ['losat'] }),
-  losat: { totalThreadBudget: '32', threadsPerJob: 'auto', parallelWorkers: undefined,
-    blastp: { mode: 'orthogroup', collinearSearchScope: 'all' } },
+  losatExecution: { totalThreadBudget: '32', threadsPerJob: 'auto', parallelWorkers: undefined },
+  losat: { blastp: { mode: 'orthogroup', collinearSearchScope: 'all' } },
   losatProgram: { value: 'blastp' }
 };
-const budgetSettings = createLosatSettings({ state: budgetState });
+const budgetSettings = createLosatSettings({ state: withDrawings(budgetState) });
 for (const [budget, runs, threads] of [['32', 4, 8], ['16', 4, 4], ['2', 2, 1], ['safe', 4, 8], ['available', 4, 16]]) {
-  budgetState.losat.totalThreadBudget = budget;
+  budgetState.losatExecution.totalThreadBudget = budget;
   assert.equal(budgetSettings.losatAutoPairWorkers.value, runs);
   assert.equal(budgetSettings.losatEffectiveThreadsPerJob.value, threads);
   assert(runs * threads <= budgetSettings.losatTotalThreadBudget.value);
-  assert.equal(budgetState.losat.threadsPerJob, 'auto');
-  assert.equal(budgetState.losat.parallelWorkers, undefined);
+  assert.equal(budgetState.losatExecution.threadsPerJob, 'auto');
+  assert.equal(budgetState.losatExecution.parallelWorkers, undefined);
 }
-budgetState.losat.totalThreadBudget = '32';
-budgetState.losat.parallelWorkers = '2';
+budgetState.losatExecution.totalThreadBudget = '32';
+budgetState.losatExecution.parallelWorkers = '2';
 assert.equal(budgetSettings.losatEffectiveThreadsPerJob.value, 16);
 assert.equal(budgetSettings.losatMaxPairWorkers.value, 4);
-budgetState.losat.threadsPerJob = '8';
-budgetState.losat.totalThreadBudget = '4';
+budgetState.losatExecution.threadsPerJob = '8';
+budgetState.losatExecution.totalThreadBudget = '4';
 assert.equal(budgetSettings.losatEffectiveThreadsPerJob.value, 4);
 assert(budgetSettings.losatThreadOptions.value.some(option => option.value === '8' && option.label.includes('4 effective')));
 assert(budgetSettings.losatPairWorkerOptions.value.some(option => option.value === '2' && option.label.includes('1 effective')));
-assert.equal(budgetState.losat.threadsPerJob, '8');
-assert.equal(budgetState.losat.parallelWorkers, '2');
-budgetState.losat.totalThreadBudget = '32';
+assert.equal(budgetState.losatExecution.threadsPerJob, '8');
+assert.equal(budgetState.losatExecution.parallelWorkers, '2');
+budgetState.losatExecution.totalThreadBudget = '32';
 assert.equal(budgetSettings.losatEffectiveThreadsPerJob.value, 8);
 assert.equal(budgetSettings.losatMaxPairWorkers.value, 4);
 for (const mode of ['blastn', 'tblastx']) {
   budgetState.losatProgram.value = mode;
   assert.equal(budgetSettings.losatEffectiveThreadsPerJob.value, 1);
-  assert.equal(budgetState.losat.threadsPerJob, '8');
+  assert.equal(budgetState.losatExecution.threadsPerJob, '8');
 }
 console.log('losat total-budget allocation tests passed');
 

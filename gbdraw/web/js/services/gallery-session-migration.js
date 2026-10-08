@@ -3,7 +3,7 @@ import {
   migrateLegacyCircularTrackSlot,
   migrateLegacyCircularTrackSlotSpec,
   parseCircularTrackSlotSpec
-} from '../app/circular-track-slots.js';
+} from './circular-track-slot-model.js';
 import {
   migratePersistedCircularMultiRecordSizeMode,
   migratePersistedLinearLabelPlacement,
@@ -24,7 +24,6 @@ import {
 } from './linear-comparisons.js';
 import { textToBase64, textToBytes } from './file-content-cache.js';
 
-/** @import { GbdrawSession } from './config.js' */
 
 const isPlainObject = (value) => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -568,7 +567,7 @@ const preserveComparisonResources = (session, promoted) => {
 /**
  * @param {Record<string, any>} session A validated Session of version 31-33 or 39.
  * @param {string[]} args
- * @returns {GbdrawSession}
+ * @returns {Record<string, any>} A current-request Session with its flat draft (`config`), which publication and Load split into mode slices.
  */
 const promoteCliAuthoredSession = (session, args) => {
   const sourceConfig = session.renderRequest.diagramOptions?.config;
@@ -590,7 +589,7 @@ const promoteCliAuthoredSession = (session, args) => {
  * @param {Record<string, any>} session A validated Session of version 31-33 or 39.
  * @param {string[]} args
  * @param {boolean} [forceWebDraft]
- * @returns {GbdrawSession}
+ * @returns {Record<string, any>} A current-request Session with its flat draft (`config`), which publication and Load split into mode slices.
  */
 const promoteGuiAuthoredSession = (session, args, forceWebDraft = true) => {
   const projection = projectCanonicalSessionRequest({
@@ -620,21 +619,20 @@ const promoteGuiAuthoredSession = (session, args, forceWebDraft = true) => {
   const config = migratedDraft.config;
   const filesData = migratedDraft.filesData;
   hydrateLinearFilePresentations(filesData, args);
-  const state = /** @type {Record<string, any>} */ (
-    buildCanonicalRequestState({ session, projection, config, filesData })
-  );
-  restoreConservationFiles(session, filesData, state.circularConservation);
+  const { state, drawing } = buildCanonicalRequestState({ session, projection, config, filesData });
+  restoreConservationFiles(session, filesData, drawing.circularConservation);
   const comparisonPlanSnapshot = projection.mode === 'linear'
     ? resolveLinearComparisonPlan({
-        plan: state.linearComparisonPlan,
+        plan: drawing.linearComparisonPlan,
         sequences: filesData.linearSeqs,
-        layout: state.linearRecordLayoutEnabled.value ? state.linearRecordRows : [],
-        losatProgram: state.losatProgram.value,
-        blastpMode: state.losat?.blastp?.mode
+        layout: drawing.linearRecordLayoutEnabled.value ? drawing.linearRecordRows : [],
+        losatProgram: drawing.losatProgram.value,
+        blastpMode: drawing.losat?.blastp?.mode
       })
     : null;
   const promotedCore = buildCanonicalRenderRequest({
     state,
+    drawing,
     filesData,
     comparisonPlanSnapshot
   });
@@ -644,11 +642,12 @@ const promoteGuiAuthoredSession = (session, args, forceWebDraft = true) => {
   if (isPlainObject(orthogroupState)) {
     delete orthogroupState.selectedOrthogroupAlignmentFeature;
   }
-  const promoted = /** @type {GbdrawSession} */ ({
+  const promoted = ({
     ...session,
     format: 'gbdraw-session',
-    // The current Session version (services/config.js SESSION_VERSION).
-    version: 45,
+    // The current Session version (services/config.js SESSION_VERSION); the
+    // flat draft goes to its mode slice when publication prepares it.
+    version: 46,
     config: cloneJson(config),
     renderRequest: promotedCore.renderRequest,
     resources: promotedCore.resources,
@@ -665,7 +664,7 @@ const promoteGuiAuthoredSession = (session, args, forceWebDraft = true) => {
 
 /**
  * @param {Record<string, any>} session An unvalidated historical Gallery Session.
- * @returns {GbdrawSession}
+ * @returns {Record<string, any>} A current-request Session with its flat draft (`config`), which publication and Load split into mode slices.
  */
 export const promoteGallerySessionToCurrent = (session) => {
   if (!isPlainObject(session) || !isPlainObject(session.renderRequest)) {

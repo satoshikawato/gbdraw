@@ -7,12 +7,13 @@ import {
 import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
 import { resultCatalogFeatures } from '../../gbdraw/web/js/services/feature-catalog.js';
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const ref = (value) => ({ value });
 // The live projection reads Python's rule matches (R4) and the committed
 // request's feature types.
 const rulePreparationFor = (state) => createRulePreparation({
-  state,
+  state: withDrawings(state),
   evaluate: evaluatePythonRules,
   visibilityRules: () => requestFeatureVisibilityRules(state.featureVisibilityManualRules)
 });
@@ -53,7 +54,7 @@ const actionState = {
   })
 };
 const actions = createFeatureVisibilityActions({
-  state: actionState,
+  state: withDrawings(actionState),
   rulePreparation: rulePreparationFor(actionState),
   getCommittedRequest: committedRequest(['CDS']),
   applyVisibilityPreviewChanges: (changes, options = {}) => {
@@ -302,7 +303,7 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
   };
   const productPreparation = rulePreparationFor(productState);
   const productActions = createFeatureVisibilityActions({
-    state: productState,
+    state: withDrawings(productState),
     rulePreparation: productPreparation,
     getCommittedRequest: committedRequest(['CDS', 'tRNA']),
     applyVisibilityPreviewChanges: (changes) => {
@@ -359,7 +360,7 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
     errorLog: ref(null)
   };
   const panel = createFeatureVisibilityActions({
-    state: panelState,
+    state: withDrawings(panelState),
     rulePreparation: rulePreparationFor(panelState),
     getCommittedRequest: committedRequest(['CDS']),
     applyVisibilityPreviewChanges: (changes) => changes.reduce((changed, { featureId, mode }) => {
@@ -457,7 +458,7 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
   };
   const ports = {};
   const owner = createFeatureVisibilityActions({
-    state: portState,
+    state: withDrawings(portState),
     rulePreparation: rulePreparationFor(portState),
     getCommittedRequest: committedRequest(['CDS']),
     applyVisibilityPreviewChanges: (changes) => {

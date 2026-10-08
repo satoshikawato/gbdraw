@@ -215,3 +215,54 @@ export const migrateLegacyLayoutPreferences = (
     }
   };
 };
+
+// The `ui` fields of the layout before Session 44 kept `ui.layoutPreferences`.
+export const LEGACY_LAYOUT_PREFERENCE_FIELDS = Object.freeze([
+  'legend',
+  'circularLegendPosition',
+  'linearLegendPosition',
+  'circularPlotTitlePosition',
+  'linearPlotTitlePosition',
+  'circularSingleRecordLegendPosition',
+  'circularSingleRecordPlotTitlePosition',
+  'circularMultiRecordLegendPosition',
+  'circularMultiRecordPlotTitlePosition'
+]);
+
+const isRecord = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+// Partial objects remain authoritative for session compatibility; normalization
+// supplies the current defaults for omitted branches.
+const hasStoredLayoutPreferences = (ui) => (
+  isRecord(ui?.layoutPreferences) ||
+  LEGACY_LAYOUT_PREFERENCE_FIELDS.some((field) => storedText(ui?.[field]))
+);
+
+/**
+ * The layout preferences a Session 27-44 restores (Session Load and Gallery
+ * publication). A saved layout owner (current or legacy `ui` fields) wins.
+ * Without one, a canonical Session takes the layout projected from its
+ * committed request (`projected`). Legacy fields migrate with the committed
+ * values (canonical) or `active` (other payloads) as their fallback.
+ * @param {Record<string, any>} ui
+ * @param {{ mode: string, multiRecord: boolean, projected?: unknown,
+ *   active: { legend: any, plotTitlePosition: any } }} context
+ */
+export const restoredLayoutPreferences = (ui, { mode, multiRecord, projected = null, active }) => {
+  if (projected && !hasStoredLayoutPreferences(ui)) return normalizeLayoutPreferences(projected);
+  const fallback = projected ? resolveActiveLayoutPreference(projected, mode, multiRecord) : active;
+  const migrationUi = (
+    !isRecord(ui?.layoutPreferences) &&
+    mode === 'linear' &&
+    !storedText(ui?.linearLegendPosition) &&
+    storedText(ui?.legend)
+  )
+    ? { ...ui, linearLegendPosition: ui.legend }
+    : ui;
+  return migrateLegacyLayoutPreferences(migrationUi, {
+    mode,
+    multiRecord,
+    activeLegend: fallback.legend,
+    activePlotTitlePosition: fallback.plotTitlePosition
+  });
+};

@@ -300,15 +300,15 @@ test('clicking the text of a checkbox label records an Undo step', async ({ page
   const label = page.locator('label.option-label', { hasText: 'Rich Feature Popup' }).first();
   await reveal(label);
   const before = await page.evaluate(() => ({
-    value: window.__GBDRAW_APP__.adv.rich_feature_popup, undo: window.__GBDRAW_HISTORY__.getUndoCount()
+    value: window.__GBDRAW_APP__.richFeaturePopup, undo: window.__GBDRAW_HISTORY__.getUndoCount()
   }));
   await label.locator('span').first().click();
   await settle(page);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.rich_feature_popup)).toBe(!before.value);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.richFeaturePopup)).toBe(!before.value);
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(before.undo + 1);
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settle(page);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.rich_feature_popup)).toBe(before.value);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.richFeaturePopup)).toBe(before.value);
 });
 
 test('a checkbox click while a text field has focus records its own Undo step', async ({ page }) => {
@@ -320,7 +320,7 @@ test('a checkbox click while a text field has focus records its own Undo step', 
     .locator('input[type=checkbox]');
   await reveal(checkbox);
   const before = await page.evaluate(() => ({
-    value: window.__GBDRAW_APP__.adv.rich_feature_popup, undo: window.__GBDRAW_HISTORY__.getUndoCount()
+    value: window.__GBDRAW_APP__.richFeaturePopup, undo: window.__GBDRAW_HISTORY__.getUndoCount()
   }));
   await prefix.fill('audit');
   await checkbox.click();
@@ -329,7 +329,7 @@ test('a checkbox click while a text field has focus records its own Undo step', 
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settle(page);
   expect(await page.evaluate(() => ({
-    value: window.__GBDRAW_APP__.adv.rich_feature_popup, prefix: window.__GBDRAW_APP__.form.prefix
+    value: window.__GBDRAW_APP__.richFeaturePopup, prefix: window.__GBDRAW_APP__.form.prefix
   }))).toEqual({ value: before.value, prefix: 'audit' });
 });
 
@@ -387,7 +387,7 @@ test('default threaded LOSAT without cross-origin isolation reports a recognized
     app.setLinearComparisonLosatMode('blastp');
   }, BATCH_RECORDS);
   await settle(page);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.losat.executionMode)).toBe('threaded');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.losatExecution.executionMode)).toBe('threaded');
   const outcome = await generateAndWaitForResult(page, { expectedStatus: 'error', requireCommittedResult: false });
   expect(outcome.health.errorCode).not.toBe('UNKNOWN');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog?.stage)).not.toBe('request-validation');
@@ -411,4 +411,38 @@ test('a CLI Session keeps its legend position through load and the first Generat
   expect(await page.evaluate(async () => (
     (await import('/gbdraw/web/js/state.js')).state.generatedLegendPosition.value
   ))).toBe('upper_left');
+});
+
+// FL-10: the typed Output Prefix reaches Python as typed. A value that is not
+// one file name fails Generate before rendering and names the field.
+test('an Output Prefix that is not one file name fails Generate and names the field (FL-10)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openWithGenBank(page, HMMT);
+  const prefix = await reveal(page.locator('#output-prefix'));
+  await prefix.fill('../../x');
+  await settle(page);
+  await generateAndWaitForResult(page, { expectedStatus: 'error', requireCommittedResult: false });
+  expect(await page.evaluate(() => {
+    const { code, context } = window.__GBDRAW_APP__.errorLog || {};
+    return { code, field: context?.field, reason: context?.reason };
+  })).toEqual({ code: 'INPUT_INVALID', field: 'output_prefix', reason: 'FILENAME' });
+  await expect(page.getByRole('alert', { name: 'Generation Error' })).toContainText('Field: Output Prefix');
+});
+
+// FL-10: a Result named from a record ID is named as the browser saves it, so
+// the downloaded SVG has the Result's name.
+test('a Result named from a record ID downloads under its own name (FL-10)', async ({ page }, testInfo) => {
+  test.setTimeout(300_000);
+  const text = readFileSync(HMMT, 'utf8').replace(/^VERSION {5}\S+/m, 'VERSION     gi|1|ref|X');
+  await openWithGenBank(page, { name: 'gi-record.gb', mimeType: 'text/plain', buffer: Buffer.from(text) });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.map((record) => record.record_id)))
+    .toEqual(['gi|1|ref|X']);
+  await generateAndWaitForResult(page);
+  const name = await page.evaluate(() => window.__GBDRAW_APP__.results[0].name);
+  expect(name).toBe('gi_1_ref_X.svg');
+  const pending = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'SVG', exact: true }).click();
+  const download = await pending;
+  expect(download.suggestedFilename()).toBe(name);
+  await download.saveAs(testInfo.outputPath(download.suggestedFilename()));
 });

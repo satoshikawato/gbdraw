@@ -136,11 +136,12 @@ export const createLegendLayout = ({
   };
 
   return {
-    captureDecorationContinuity: (canonical, projectRecordIdentity) => captureDecorationContinuity({
+    /** @param {Record<string, any>} drawing The drawing of the run that keeps the decorations. */
+    captureDecorationContinuity: (canonical, projectRecordIdentity, drawing) => captureDecorationContinuity({
       canonical, projectRecordIdentity, results: state.results.value, catalog: state.featureCatalog.value,
       mountedSvg: state.svgContainer.value?.querySelector?.('svg') || null,
       selectedResultIndex: state.selectedResultIndex.value,
-      canvasPadding: state.canvasPadding
+      canvasPadding: drawing.canvasPadding
     }),
     ...canvasActions,
     ...repositionActions,

@@ -14,6 +14,7 @@ import {
 } from '../../gbdraw/web/js/services/feature-edit-migration.js';
 import { canonicalFeatureOverrides } from '../../gbdraw/web/js/services/feature-placement.js';
 import { annotationOptionsPayload, normalizeAnnotationSets } from '../../gbdraw/web/js/services/annotation-state.js';
+import { splitDraftIntoModes, unscopedDraftRows } from '../../gbdraw/web/js/services/mode-scoped-migration.js';
 
 const fixture = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixtures/sessions/${name}`, import.meta.url))));
 // Migrated rows name the mode of the Session's diagram (R2).
@@ -54,7 +55,8 @@ test('v44 Linear crop and reverse complement: rule 1 maps each drawn ID to its f
   ]) assert.equal(Object.hasOwn(features, field), false, field);
   // The saved label table was built from the migrated maps.
   assert.deepEqual(features.labelOverrideRows, []);
-  assert.equal(canonicalFeatureOverrides(features.featureOverrides).length, 3);
+  // The Session 46 split gives the rows to the Linear drawing without their mode.
+  assert.equal(canonicalFeatureOverrides(unscopedDraftRows(features.featureOverrides, 'linear')).length, 3);
 });
 
 test('v44 Circular canvas with one record twice: each copy keeps its own edits', () => {
@@ -305,13 +307,16 @@ test('R-7: a hash target of one feature of an untransformed record moves to its 
   assert.deepEqual({ ...migrated[0].annotations[1], target: null }, {
     id: 'a2', target: null, label: 'L2', mark: 'band', lane: null, style: null, legendLabel: null, metadata: { kept: '1' }
   });
-  // The draft owner accepts the target, and the Linear request carries it.
+  // The draft owner accepts the target; the Session 46 split gives it to the
+  // Linear drawing only, whose request carries it.
   const records = [{ recordKey: 'other', cardinality: 'exactly_one' }];
-  const payload = annotationOptionsPayload(normalizeAnnotationSets(migrated), 'linear', records);
+  const { modes } = splitDraftIntoModes({ config: { annotationSets: normalizeAnnotationSets(migrated) }, ui: { mode: 'linear' } },
+    { committedMode: 'linear' });
+  const payload = annotationOptionsPayload(normalizeAnnotationSets(modes.linear.config.annotationSets), records);
   assert.deepEqual(payload.sets[0].annotations[1].target, {
     kind: 'featureIdentity', recordKey: 'other', biologicalFeatureId: 'f4', envelope: 'segments', circularPath: 'reverse'
   });
-  assert.deepEqual(annotationOptionsPayload(normalizeAnnotationSets(migrated), 'circular', records)
+  assert.deepEqual(annotationOptionsPayload(normalizeAnnotationSets(modes.circular.config.annotationSets), records)
     .sets[0].annotations.map((item) => item.id), ['a1', 'a3']);
 });
 

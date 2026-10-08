@@ -25,7 +25,7 @@ assert(Object.isFrozen(a));
 assert.deepEqual(Object.keys(a).sort(), ['activeSessionResourceTable', 'committedCanonicalSession']);
 assert.equal(a.committedCanonicalSession.renderRequest.diagramOptions.configOverrides['labels.circular.scope'], 'outer');
 assert.strictEqual(a.committedCanonicalSession.renderRequest, getCommittedCanonicalRenderRequest());
-state.form.labels_mode = 'out';
+state.activeDrawing().form.labels_mode = 'out';
 state.results.value = [{ name: 'a.svg', content: '<svg id="a"/>' }];
 const snapshots = createHistorySnapshotService({
   state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData
@@ -40,7 +40,7 @@ const history = createHistoryManager({
   compareGeneratedArtifactHandles: snapshots.compareGeneratedArtifactHandles
 });
 await history.initializeIntentBaseline();
-await history.runUndoable('Change labels', () => { state.form.labels_mode = 'none'; });
+await history.runUndoable('Change labels', () => { state.activeDrawing().form.labels_mode = 'none'; });
 const next = structuredClone(canonical);
 next.renderRequest.diagramOptions.configOverrides['labels.circular.scope'] = 'none';
 await history.runUndoableArtifactReplacement('Generate diagram', () => {
@@ -53,7 +53,7 @@ await history.undo();
 assert.strictEqual(getCommittedCanonicalRenderRequest(), a.committedCanonicalSession.renderRequest);
 assert.strictEqual(canonicalRenderArtifactOwner.capture().activeSessionResourceTable, a.activeSessionResourceTable);
 assert.equal(state.results.value[0].name, 'a.svg');
-assert.equal(state.form.labels_mode, 'none');
+assert.equal(state.activeDrawing().form.labels_mode, 'none');
 await history.redo();
 assert.strictEqual(getCommittedCanonicalRenderRequest(), b.committedCanonicalSession.renderRequest);
 assert.strictEqual(canonicalRenderArtifactOwner.capture().activeSessionResourceTable, b.activeSessionResourceTable);
@@ -61,7 +61,7 @@ assert.equal(state.results.value[0].name, 'b.svg');
 assert.equal(getCommittedCanonicalRenderRequest().diagramOptions.configOverrides['labels.circular.scope'], 'none');
 await history.undo();
 await history.undo();
-assert.equal(state.form.labels_mode, 'out');
+assert.equal(state.activeDrawing().form.labels_mode, 'out');
 
 await assert.rejects(history.runUndoableArtifactReplacement('Failed Generate', () => {
   adoptCanonicalRenderArtifacts(next, { adoptOwnedRequest: true });

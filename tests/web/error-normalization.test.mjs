@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { normalizeCircularGeometryShortcuts } from '../../gbdraw/web/js/app/circular-track-slots.js';
+import { normalizeCircularGeometryShortcuts } from '../../gbdraw/web/js/services/circular-track-slot-model.js';
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
 import { deserializeWorkerError, normalizeGenerationResponse } from '../../gbdraw/web/js/services/diagram-generation.js';
 globalThis.self = {};

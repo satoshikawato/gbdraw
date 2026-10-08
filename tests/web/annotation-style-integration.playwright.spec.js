@@ -14,10 +14,10 @@ const inspect = (page, mode) => page.evaluate(async mode => {
   return {
     svg, request: getCommittedCanonicalRenderRequest(),
     warnings: JSON.parse(JSON.stringify(s.annotationWarnings.value)),
-    annotations: JSON.parse(JSON.stringify(s.annotationSets)),
+    annotations: JSON.parse(JSON.stringify(s.activeDrawing().annotationSets)),
     geometry: JSON.parse(JSON.stringify(s.trackSlotResolvedGeometry.value)),
-    slots: JSON.parse(JSON.stringify(s.adv[`${mode}_track_slots`])),
-    rules: JSON.parse(JSON.stringify(s.manualSpecificRules.map(rule => ({ ...rule, fromFile: Boolean(rule.fromFile) })))),
+    slots: JSON.parse(JSON.stringify(s.activeDrawing().adv[`${mode}_track_slots`])),
+    rules: JSON.parse(JSON.stringify(s.activeDrawing().manualSpecificRules.map(rule => ({ ...rule, fromFile: Boolean(rule.fromFile) })))),
     legends: getAllFeatureLegendGroups(root).map(group => [...group.querySelectorAll('g[data-legend-key]')].map(entry => ({
       caption: entry.getAttribute('data-legend-key'), color: entry.querySelector('path[fill]')?.getAttribute('fill')
     }))),
@@ -222,8 +222,8 @@ for (const width of [1440, 390]) {
         const saved = JSON.parse(gunzipSync(await download(page, 'Save Session', sessionPath)));
         expect(saved.runMetadata.annotationWarnings).toEqual(final.warnings);
         expect(saved.renderRequest).toEqual(final.request);
-        expect(saved.config.adv[`${mode}_track_slots`].find(slot => slot.id === 'gc_content').enabled).toBe(false);
-        expect(JSON.stringify(saved.config.annotationSets)).not.toContain('PRIVATE-AUX-CELL');
+        expect(saved.modes[mode].config.adv[`${mode}_track_slots`].find(slot => slot.id === 'gc_content').enabled).toBe(false);
+        expect(JSON.stringify(saved.modes[mode].config.annotationSets)).not.toContain('PRIVATE-AUX-CELL');
         restored = await load(browser, sessionPath, { width, height: 1000 });
         const loaded = await inspect(restored, mode);
         expect(artifact(loaded)).toEqual(artifact(final)); expect(loaded.rules).toEqual(final.rules);

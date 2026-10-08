@@ -896,11 +896,11 @@ def test_protein_popup_state_uses_catalog_commit_path() -> None:
     for fragment in (
         "const setLinearComparisonLosatFilename = (id, value) => {",
         "const deactivateLinearComparisonLosatFilename = (id) => {",
-        "const updateResolvedLosatFilenameDraft = (edgeKey, updater) => {",
+        "const updateResolvedLosatFilenameDraft = (drawing, edgeKey, updater) => {",
     ):
         start = app_setup.index(fragment)
         body = app_setup[start : start + 1_600]
-        assert "replaceLinearComparisonPlan(next, { invalidate: false });" in body
+        assert "replaceLinearComparisonPlan(drawing, next, { invalidate: false });" in body
 
     for fragment in (
         "kind: 'collinearityResult'",
@@ -931,6 +931,6 @@ def test_protein_popup_state_uses_catalog_commit_path() -> None:
         "collinearGroups,",
         "orthogroups: groupsForMatch(matchElement),",
         "orthogroups: () => groupsForMatch(matchElement),",
-        "const payload = buildMatchPayload(matchElement, featureLookup);",
+        "const payload = buildMatchPayload(drawing, matchElement, featureLookup);",
     ):
         assert fragment in svg_actions

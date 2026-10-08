@@ -162,7 +162,8 @@ for (const entry of cases) {
           expect(outcome.status).toBe('saved');
           webFile = testInfo.outputPath('web-current.gbdraw-session.json.gz');
           await (await saved).saveAs(webFile);
-          expect((await readSession(webFile)).config.form).toBeTruthy();
+          const webSession = await readSession(webFile);
+          expect(webSession.modes[webSession.renderRequest.mode].config.form).toBeTruthy();
         }
         await fs.writeFile(testInfo.outputPath(`${phase}-state.json`), JSON.stringify({
           before: { ...before, selected: undefined, mounted: undefined },

@@ -488,7 +488,9 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
 
     assert saved == sidecar
     payload = load_session(sidecar)
-    assert payload["features"] == {}
+    # A CLI-written Session has no Web draft: no flat draft and no mode slices.
+    assert "features" not in payload
+    assert "modes" not in payload
     assert payload["orthogroupState"] == {}
     catalog = payload["editorState"]["featureCatalog"]
     assert catalog["schema"] == CURRENT_FEATURE_CATALOG_SCHEMA
@@ -543,7 +545,7 @@ def test_current_session_version_matches_web_config() -> None:
     if "SESSION_VERSION" in supported_match.group(1):
         web_supported_versions.add(int(match.group(1)))
 
-    assert CURRENT_SESSION_VERSION == 45
+    assert CURRENT_SESSION_VERSION == 46
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
         {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, CURRENT_SESSION_VERSION}
     )
@@ -644,14 +646,15 @@ def test_current_session_feature_catalog_is_single_and_lossless(
         feature_catalog=catalog,
         canonical_request=_canonical_request("linear"),
     )
-    payload["features"]["selectedFeatureRecordIdx"] = 0
+    payload["modes"] = {"linear": {"config": {"palette": "default"}}}
     path = tmp_path / "schema-3-feature-catalog.gbdraw-session.json"
 
     write_session_json(path, payload)
 
     on_disk = json.loads(path.read_text(encoding="utf-8"))
     assert on_disk["editorState"]["featureCatalog"] == catalog
-    assert on_disk["features"] == {"selectedFeatureRecordIdx": 0}
+    assert on_disk["modes"] == {"linear": {"config": {"palette": "default"}}}
+    assert "features" not in on_disk
     assert on_disk["orthogroupState"] == {}
     assert load_session(path) == on_disk
     assert load_session_document(path).to_dict() == on_disk
@@ -688,17 +691,22 @@ def test_current_session_feature_catalog_is_single_and_lossless(
             missing_empty_catalog,
         )
 
-    for field in ("features", "orthogroupState"):
-        invalid_container = copy.deepcopy(on_disk)
-        invalid_container[field] = []
-        with pytest.raises(
-            ValidationError,
-            match=rf"Session {field} must be an object",
-        ):
-            write_session_json(
-                tmp_path / f"invalid-{field}.json",
-                invalid_container,
-            )
+    invalid_container = copy.deepcopy(on_disk)
+    invalid_container["orthogroupState"] = []
+    with pytest.raises(
+        ValidationError,
+        match=r"Session orthogroupState must be an object",
+    ):
+        write_session_json(
+            tmp_path / "invalid-orthogroupState.json",
+            invalid_container,
+        )
+    # Session 46 keeps the Web draft in the mode slices only.
+    flat_draft = copy.deepcopy(on_disk)
+    flat_draft["features"] = {}
+    with pytest.raises(ValidationError, match="it cannot contain features") as excinfo:
+        write_session_json(tmp_path / "flat-draft.json", flat_draft)
+    assert excinfo.value.diagnostic == {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
 
     interactive_result = copy.deepcopy(on_disk)
     interactive_result["results"][0]["name"] = "out.interactive.svg"
@@ -744,28 +752,15 @@ def test_current_session_feature_catalog_is_single_and_lossless(
             duplicate_feature,
         )
 
-    duplicated_legacy = copy.deepcopy(on_disk)
-    duplicated_legacy["features"]["biologicalFeatures"] = []
-    with pytest.raises(
-        ValidationError,
-        match="derived feature payloads",
-    ):
-        write_session_json(
-            tmp_path / "duplicated-legacy.json",
-            duplicated_legacy,
-        )
-
-    for field in ("featureSelectorSafetyScope", "featureRecordIds"):
+    # A Session 44 draft cannot duplicate the catalog in its flat features.
+    for field in ("biologicalFeatures", "featureSelectorSafetyScope", "featureRecordIds"):
         duplicated_legacy = copy.deepcopy(on_disk)
-        duplicated_legacy["features"][field] = []
+        duplicated_legacy["features"] = {field: []}
         with pytest.raises(
             ValidationError,
             match="derived feature payloads",
         ):
-            write_session_json(
-                tmp_path / f"duplicated-{field}.json",
-                duplicated_legacy,
-            )
+            session_io_module._validate_current_feature_catalog_authority(duplicated_legacy, 44)
 
 
 def test_feature_catalog_compaction_falls_back_for_partial_metadata() -> None:
@@ -893,7 +888,7 @@ def test_current_session_rejects_obsolete_web_state_field_names(
         generated_at=datetime(2026, 7, 30),
         canonical_request=_canonical_request("linear"),
     )
-    payload["config"] = config
+    payload["modes"] = {"linear": {"config": config}}
 
     with pytest.raises(ValidationError, match=re.escape(message)):
         validate_session(payload)
@@ -903,6 +898,7 @@ def test_current_session_rejects_obsolete_web_state_field_names(
     assert not output_path.exists()
 
     payload["version"] = 33
+    payload["config"] = payload.pop("modes")["linear"]["config"]
     payload.get("webFiles", {}).pop("bindings", None)
     payload["renderRequest"]["schema"] = 2
     validate_session(payload)
@@ -980,10 +976,10 @@ def test_alignment_session_requires_reset_receipt_for_request_schema_8_and_later
     session_io_module._validate_alignment_reset_receipt(session)
 
 
-def test_session_version_45_keys_feature_edits_by_source_identity() -> None:
-    # Design Q4: Session 45 stores per-feature edits as identity rows and
-    # rejects the retired rendered-ID maps. Each row names the mode of its
-    # record key (R2), so both modes keep their own row for `record-1`.
+def test_session_version_46_keys_feature_edits_by_source_identity_per_mode() -> None:
+    # Design Q4: per-feature edits are identity rows. Session 46 keeps each
+    # mode's rows in its own slice (PD-OI-086), so both modes keep their own
+    # row for `record-1` and a row names no mode.
     payload = build_session_json(
         SessionBuildContext(
             mode="circular",
@@ -996,7 +992,6 @@ def test_session_version_45_keys_feature_edits_by_source_identity() -> None:
         canonical_request=_canonical_request("circular"),
     )
     row = {
-        "scope": "circular",
         "recordKey": "record-1",
         "biologicalFeatureId": "feature-1",
         "featureVisibility": "off",
@@ -1011,43 +1006,40 @@ def test_session_version_45_keys_feature_edits_by_source_identity() -> None:
         "labelText": None,
         "labelSourceText": "nad2",
     }
-    other_mode = {**row, "scope": "linear", "labelText": None, "labelSourceText": None}
+    other_mode = {**row, "labelText": None, "labelSourceText": None}
 
-    def key(scope: str, feature_id: str) -> str:
-        return json.dumps([scope, "record-1", feature_id], separators=(",", ":"))
+    def key(feature_id: str) -> str:
+        return json.dumps(["record-1", feature_id], separators=(",", ":"))
 
-    payload["features"] = {
-        "featureOverrides": {
-            key("circular", "feature-1"): row,
-            key("circular", "feature-2"): source_only,
-            key("linear", "feature-1"): other_mode,
-        }
+    payload["modes"] = {
+        "circular": {"features": {"featureOverrides": {key("feature-1"): row, key("feature-2"): source_only}}},
+        "linear": {"features": {"featureOverrides": {key("feature-1"): other_mode}}},
     }
 
-    assert payload["version"] == CURRENT_SESSION_VERSION == 45
+    assert payload["version"] == CURRENT_SESSION_VERSION == 46
     validate_session(payload)
 
-    pair_key = json.dumps(["record-1", "feature-1"], separators=(",", ":"))
+    triple_key = json.dumps(["circular", "record-1", "feature-1"], separators=(",", ":"))
     for broken_features in (
         {"featureVisibilityOverrides": {"rendered-1": "off"}},
-        {"featureOverrides": {key("circular", "feature-1"): {**row, "recordKey": "record-2"}}},
-        {"featureOverrides": {key("linear", "feature-1"): row}},
-        {"featureOverrides": {pair_key: {k: v for k, v in row.items() if k != "scope"}}},
-        {"featureOverrides": {key("circular", "feature-1"): {k: v for k, v in row.items() if k != "labelSourceText"}}},
-        {"featureOverrides": {key("circular", "feature-1"): {**row, "featureVisibility": None, "labelText": None,
-                                                             "labelSourceText": None}}},
-        {"featureOverrides": {key("circular", "feature-1"): {**row, "labelText": "two\nlines"}}},
+        {"featureOverrides": {key("feature-1"): {**row, "recordKey": "record-2"}}},
+        {"featureOverrides": {triple_key: row}},
+        {"featureOverrides": {key("feature-1"): {**row, "scope": "circular"}}},
+        {"featureOverrides": {key("feature-1"): {k: v for k, v in row.items() if k != "labelSourceText"}}},
+        {"featureOverrides": {key("feature-1"): {**row, "featureVisibility": None, "labelText": None,
+                                                 "labelSourceText": None}}},
+        {"featureOverrides": {key("feature-1"): {**row, "labelText": "two\nlines"}}},
     ):
         broken = copy.deepcopy(payload)
-        broken["features"] = broken_features
+        broken["modes"]["circular"]["features"] = broken_features
         with pytest.raises(ValidationError):
             validate_session(broken)
 
 
-def test_session_version_45_keeps_feature_placement_drafts_of_both_modes() -> None:
-    # R2: a Linear Session keeps the Circular lane rows for the Circular mode;
-    # each row's lane must be a side of its own mode. Session 44 rows (a JSON
-    # pair) belonged to the Session's mode.
+def test_session_version_46_keeps_feature_placement_drafts_of_each_mode() -> None:
+    # A Linear Session keeps the Circular lane rows in the Circular slice;
+    # each slice's lanes must be sides of its own mode. Session 44 rows (a
+    # JSON pair) belonged to the Session's mode.
     payload = build_session_json(
         SessionBuildContext(mode="linear", output_prefix="out", render_formats=("svg",)),
         svg_results=(("out", "<svg></svg>"),),
@@ -1056,38 +1048,45 @@ def test_session_version_45_keeps_feature_placement_drafts_of_both_modes() -> No
         canonical_request=_canonical_request("linear"),
     )
 
-    def placement(scope: str, side: str | None) -> tuple[str, dict]:
+    def placement(side: str | None) -> tuple[str, dict]:
         target = {"kind": "main"} if side is None else {"kind": "lane", "side": side, "level": 1}
-        row = {"scope": scope, "recordKey": "record-1", "biologicalFeatureId": f"f-{side}", "placement": target}
-        return json.dumps([scope, "record-1", f"f-{side}"], separators=(",", ":")), row
+        row = {"recordKey": "record-1", "biologicalFeatureId": f"f-{side}", "placement": target}
+        return json.dumps(["record-1", f"f-{side}"], separators=(",", ":")), row
 
-    rows = dict(placement(*args) for args in (("circular", "outward"), ("linear", "above"), ("circular", None)))
-    payload["config"] = {"adv": {}, "featurePlacementOverrides": rows}
+    payload["modes"] = {
+        "circular": {"config": {"adv": {}, "featurePlacementOverrides": dict(
+            placement(side) for side in ("outward", None)
+        )}},
+        "linear": {"config": {"adv": {}, "featurePlacementOverrides": dict([placement("above")])}},
+    }
     validate_session(payload)
 
-    wrong_side_key, wrong_side = placement("linear", "outward")
-    _, modeless = placement("linear", "above")
-    modeless.pop("scope")
+    wrong_side_key, wrong_side = placement("outward")
+    above_key, above = placement("above")
     for broken in (
         {wrong_side_key: wrong_side},
-        {json.dumps(["record-1", "f-above"], separators=(",", ":")): modeless},
-        {placement("circular", "outward")[0]: placement("linear", "above")[1]},
+        {json.dumps(["linear", "record-1", "f-above"], separators=(",", ":")): above},
+        {above_key: {"scope": "linear", **above}},
+        {wrong_side_key: above},
     ):
         invalid = copy.deepcopy(payload)
-        invalid["config"]["featurePlacementOverrides"] = broken
+        invalid["modes"]["linear"]["config"]["featurePlacementOverrides"] = broken
         with pytest.raises(ValidationError):
             validate_session(invalid)
 
     legacy = copy.deepcopy(payload)
     legacy["version"] = 44
+    legacy.pop("modes")
     legacy["editorState"]["featureCatalog"]["schema"] = 4
     legacy["renderRequest"]["schema"] = 8
     legacy["renderRequest"]["diagramOptions"].pop("featureOverrides", None)
     legacy_row = {"recordKey": "record-1", "biologicalFeatureId": "f1", "placement": {"kind": "main"}}
-    legacy["config"]["featurePlacementOverrides"] = {
+    legacy["config"] = {"adv": {}, "featurePlacementOverrides": {
         json.dumps(["record-1", "f1"], separators=(",", ":")): legacy_row
-    }
+    }}
     validate_session(legacy)
+    with pytest.raises(ValidationError, match="Session version 44 cannot contain modes"):
+        validate_session({**legacy, "modes": {}})
 
 
 def test_session_version_44_validates_record_rotation_draft_and_version_42_shape() -> None:
@@ -1102,41 +1101,45 @@ def test_session_version_44_validates_record_rotation_draft_and_version_42_shape
         generated_at=datetime(2026, 9, 23),
         canonical_request=_canonical_request("circular"),
     )
-    payload["config"] = {
-        "adv": {},
-        "recordDisplayDrafts": [
-            {
-                "scope": "circular",
-                "sourceUid": "source-1",
-                "selector": "#1",
-                "recordId": "record-1",
-                "topologyOverride": None,
-                "startCoordinate": 3,
-                "reverseComplementOverride": True,
-                "anchorIntent": {
-                    "schema": 1,
-                    "recordKey": "record-1",
-                    "biologicalFeatureId": "feature-1",
-                    "placement": "anchor",
-                    "anchor": "five-prime",
-                    "offsetBp": -2,
-                    "orientForward": True,
-                },
-            }
-        ],
+    draft = {
+        "sourceUid": "source-1",
+        "selector": "#1",
+        "recordId": "record-1",
+        "topologyOverride": None,
+        "startCoordinate": 3,
+        "reverseComplementOverride": True,
+        "anchorIntent": {
+            "schema": 1,
+            "recordKey": "record-1",
+            "biologicalFeatureId": "feature-1",
+            "placement": "anchor",
+            "anchor": "five-prime",
+            "offsetBp": -2,
+            "orientForward": True,
+        },
     }
+    # Session 46: each mode slice holds its own rows, which name no mode.
+    payload["modes"] = {"circular": {"config": {"adv": {}, "recordDisplayDrafts": [draft]}}}
 
     validate_session(payload)
+    scoped = copy.deepcopy(payload)
+    scoped["modes"]["circular"]["config"]["recordDisplayDrafts"][0]["scope"] = "circular"
+    with pytest.raises(ValidationError, match="Invalid record display draft fields"):
+        validate_session(scoped)
 
     legacy = copy.deepcopy(payload)
     legacy["version"] = 42
+    legacy.pop("modes")
     legacy["editorState"]["featureCatalog"]["schema"] = 3
-    legacy_draft = legacy["config"]["recordDisplayDrafts"][0]
+    legacy_draft = {"scope": "circular", **draft}
     legacy_draft.pop("reverseComplementOverride")
     legacy_draft.pop("anchorIntent")
-    legacy["config"]["adv"] = {
-        "linear_show_accession": True,
-        "linear_show_length": False,
+    legacy["config"] = {
+        "adv": {
+            "linear_show_accession": True,
+            "linear_show_length": False,
+        },
+        "recordDisplayDrafts": [legacy_draft],
     }
     validate_session(legacy)
 
@@ -1153,11 +1156,10 @@ def test_session_version_44_rejects_invalid_record_rotation_anchor_intent() -> N
         generated_at=datetime(2026, 9, 23),
         canonical_request=_canonical_request("circular"),
     )
-    payload["config"] = {
+    payload["modes"] = {"circular": {"config": {
         "adv": {},
         "recordDisplayDrafts": [
             {
-                "scope": "circular",
                 "sourceUid": "source-1",
                 "selector": "#1",
                 "recordId": "record-1",
@@ -1175,7 +1177,7 @@ def test_session_version_44_rejects_invalid_record_rotation_anchor_intent() -> N
                 },
             }
         ],
-    }
+    }}}
 
     with pytest.raises(ValidationError, match="Invalid record display anchor intent"):
         validate_session(payload)
@@ -1522,12 +1524,15 @@ def test_current_writer_requires_typed_request_to_promote_legacy_schema() -> Non
     assert promoted["version"] == CURRENT_SESSION_VERSION
     assert promoted["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
     assert "selectedOrthogroupAlignmentFeature" not in promoted["orthogroupState"]
-    assert promoted["config"]["adv"]["depth_large_tick_interval"] == 10
-    assert promoted["config"]["adv"]["depth_tracks"] == [
-        {"large_tick_interval": 5}
-    ]
+    assert "config" not in promoted
+    for mode in ("circular", "linear"):
+        adv = promoted["modes"][mode]["config"]["adv"]
+        assert adv["depth_large_tick_interval"] == 10
+        assert adv["depth_tracks"] == [{"large_tick_interval": 5}]
+    # LOSATP settings belong to the Linear slice.
+    assert "blastp" not in promoted["modes"]["circular"]["config"].get("losat", {})
     assert (
-        promoted["config"]["losat"]["blastp"]["collinearMaxUnitGap"]
+        promoted["modes"]["linear"]["config"]["losat"]["blastp"]["collinearMaxUnitGap"]
         == 2
     )
 
@@ -1635,33 +1640,45 @@ def test_version_39_writer_promotes_once_and_preserves_web_inventory() -> None:
     assert source["version"] == 39
     assert promoted["version"] == CURRENT_SESSION_VERSION
     assert rewritten["version"] == CURRENT_SESSION_VERSION
+    # The second write copies the first one's mode slices.
+    assert rewritten["modes"] == promoted["modes"]
     for payload in (promoted, rewritten):
         assert "files" not in payload
+        assert "config" not in payload and "features" not in payload
+        circular, linear = (payload["modes"][mode] for mode in ("circular", "linear"))
         assert payload["webFiles"]["linearRecords"] == source["webFiles"][
             "linearRecords"
         ]
         assert payload["webFiles"]["bindings"]["schema"] == 2
         assert "linearCanonicalComparisons" not in payload["webFiles"]["bindings"]
-        assert payload["config"]["linearComparisonPlan"] == {
+        assert linear["config"]["linearComparisonPlan"] == {
             "mode": "adjacent",
             "defaultSource": "losat",
             "edges": [],
         }
-        assert "blastSource" not in payload["config"]
-        assert "comparisons" not in payload["config"]["linearRecordLayout"]
-        assert payload["editorState"]["legend"] == source["editorState"]["legend"]
+        assert "linearComparisonPlan" not in circular["config"]
+        assert "blastSource" not in linear["config"]
+        assert "comparisons" not in linear["config"]["linearRecordLayout"]
+        # The Legend edits go to the saved Result's mode (R1-3).
+        assert linear["editorState"]["legend"] == source["editorState"]["legend"]
+        assert "editorState" not in circular
+        assert "legend" not in payload["editorState"]
         assert payload["editorState"]["featureCatalog"]["schema"] == CURRENT_FEATURE_CATALOG_SCHEMA
         assert len(payload["editorState"]["featureCatalog"]["items"]) == 1
-        assert payload["features"] == {"selectedFeatureRecordIdx": 0}
+        assert "features" not in circular and "features" not in linear
         assert (
-            payload["config"]["adv"]["circular_track_slots"]
+            circular["config"]["adv"]["circular_track_slots"]
             == source["config"]["adv"]["circular_track_slots"]
         )
-        assert (
-            payload["config"]["adv"]["linear_track_slots"]
-            == source["config"]["adv"]["linear_track_slots"]
-        )
-        assert payload["config"]["modeProfiles"] == source["config"]["modeProfiles"]
+        assert "circular_track_slots" not in linear["config"]["adv"]
+        # Web Load gives each Linear slot its own params (schema 2).
+        assert linear["config"]["adv"]["linear_track_slots"] == [
+            {**slot, "params": {}} for slot in source["config"]["adv"]["linear_track_slots"]
+        ]
+        # The shown mode keeps its flat value; the other mode its saved profile.
+        assert linear["config"]["adv"]["identity"] == source["config"]["adv"]["identity"]
+        assert circular["config"]["adv"]["identity"] == 88
+        assert "modeProfiles" not in circular["config"]
 
 
 def test_genuine_version_39_shape_retains_disabled_layout_upload_draft() -> None:
@@ -1782,9 +1799,10 @@ def test_pre40_web_comparison_draft_migrates_directly_to_final_plan() -> None:
         canonical_request=_canonical_request("linear"),
     )
 
-    assert "blastSource" not in promoted["config"]
-    assert "comparisons" not in promoted["config"]["linearRecordLayout"]
-    assert promoted["config"]["linearComparisonPlan"] == {
+    linear_config = promoted["modes"]["linear"]["config"]
+    assert "blastSource" not in linear_config
+    assert "comparisons" not in linear_config["linearRecordLayout"]
+    assert linear_config["linearComparisonPlan"] == {
         "mode": "selected",
         "defaultSource": "upload",
         "edges": [
@@ -1883,12 +1901,12 @@ def test_current_comparison_authority_rejects_retired_version40_shape() -> None:
         generated_at=datetime(2026, 7, 21),
         canonical_request=_canonical_request("linear"),
     )
-    payload["config"] = {"form": {}, "adv": {}, "blastSource": "losat"}
+    payload["modes"] = {"linear": {"config": {"form": {}, "adv": {}, "blastSource": "losat"}}}
     with pytest.raises(ValidationError, match="retired blastSource"):
         validate_session(payload)
 
-    payload["config"].pop("blastSource")
-    payload["config"]["linearRecordLayout"] = {
+    payload["modes"]["linear"]["config"].pop("blastSource")
+    payload["modes"]["linear"]["config"]["linearRecordLayout"] = {
         "enabled": False,
         "recordGap": 24,
         "rows": [],
@@ -1916,10 +1934,15 @@ def test_current_session_rejects_retired_circular_track_draft_paths(
         generated_at=datetime(2026, 8, 23),
         canonical_request=_canonical_request("circular"),
     )
-    payload["config"] = {"form": {}, "adv": {field: []}}
+    payload["modes"] = {"circular": {"config": {"form": {}, "adv": {field: []}}}}
 
-    with pytest.raises(ValidationError, match=rf"config\.adv\.{field}"):
+    with pytest.raises(ValidationError, match=rf"modes\.circular\.config\.adv cannot contain {field}"):
         validate_session(payload)
+    flat = copy.deepcopy(payload)
+    flat["version"] = 44
+    flat["config"] = flat.pop("modes")["circular"]["config"]
+    with pytest.raises(ValidationError, match=rf"config\.adv\.{field}"):
+        session_io_module._validate_current_retired_active_config_paths(flat)
 
 
 def test_current_comparison_authority_validates_file_bindings() -> None:
@@ -1935,8 +1958,9 @@ def test_current_comparison_authority_validates_file_bindings() -> None:
         canonical_request=_canonical_request("linear"),
     )
     resource_id = next(iter(payload["resources"]))
-    payload["config"] = {"form": {}, "adv": {}}
-    payload["config"]["linearComparisonPlan"] = {
+    # Session 46 keeps the comparison draft in the Linear slice.
+    payload["modes"] = {"linear": {"config": {"form": {}, "adv": {}}}}
+    payload["modes"]["linear"]["config"]["linearComparisonPlan"] = {
         "mode": "selected",
         "defaultSource": "losat",
         "edges": [
@@ -3357,11 +3381,7 @@ def test_circular_cli_save_session_round_trip(tmp_path: Path, examples_dir: Path
     assert len(catalog["items"]) == len(payload["results"]) == 1
     assert catalog["items"][0]["features"]
     assert catalog["items"][0]["biologicalFeatures"]
-    assert not {
-        "extractedFeatures",
-        "biologicalFeatures",
-        "featureCatalog",
-    }.intersection(payload["features"])
+    assert "features" not in payload and "modes" not in payload
     assert "groups" not in payload["orthogroupState"]
     assert payload["cliInvocation"]["mode"] == "circular"
     assert payload["cliInvocation"]["fileBindings"][0]["slot"] == "files.c_gb"

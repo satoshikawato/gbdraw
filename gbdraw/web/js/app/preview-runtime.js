@@ -24,12 +24,10 @@ import {
  * @property {boolean} [skipLegendExtraction]
  * @property {boolean} [trustedRestore] A restored artifact: its editor state is already current.
  * @property {boolean} [replaceGeneratedLegend]
+ * @property {boolean} [modeArrival] The Result is shown again by a mode switch, in its own mode's drawing.
  * @property {readonly string[]} [requiredLabelFeatureIds]
  * @property {readonly string[]} [optionalLabelFeatureIds]
  * @property {{ featureIds: readonly string[], report: (error: unknown) => void }} [reportedLabelBinding]
- * @property {{ legendRows: readonly Record<string, any>[] | null }} [modeSwitch] E1: the Result is shown again
- *   by a mode switch (or opened on its mode by Session Load); its Legend rows are rebuilt from these rows
- *   (null: from its SVG) and the shared Legend edits.
  */
 
 /**
