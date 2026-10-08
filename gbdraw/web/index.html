@@ -1618,7 +1618,7 @@
                                     </div>
                                     <div class="grid grid-cols-[1fr_44px] gap-1.5 items-end">
                                         <div>
-                                            <span class="input-label text-[10px]">Legend title <help-tip :id="`help-circular-depth-legend-title-${track.index}`" text="Legend label shown for this depth coverage track."></help-tip></span>
+                                            <span class="input-label text-[10px]">Legend title <help-tip :id="`help-circular-depth-legend-title-${track.index}`" text="Name of this Depth series in the legend. The legend label field of every Depth row that draws this series edits the same name. Leave blank for the default name: Depth, or Depth N when there are several series."></help-tip></span>
                                             <input
                                                 type="text"
                                                 :value="getDepthTrackLabel(track.index)"
@@ -1626,7 +1626,7 @@
                                                 class="form-input form-input-compact"
                                                 :aria-label="track.index === 0 ? 'Depth legend title' : `Depth ${track.index + 1} legend title`"
                                                 :aria-describedby="`help-circular-depth-legend-title-${track.index}`"
-                                                :placeholder="track.index === 0 ? 'Depth' : `Depth ${track.index + 1}`"
+                                                :placeholder="track.index === 0 && circularDepthTrackRows.length === 1 ? 'Depth' : `Depth ${track.index + 1}`"
                                                 :disabled="!semanticMutationAvailable"
                                             >
                                         </div>
@@ -2067,7 +2067,7 @@
                                     </div>
                                     <div class="grid grid-cols-[1fr_64px_44px] gap-1.5 items-end">
                                         <div>
-                                            <span class="input-label text-[10px]">Legend title <help-tip :id="`help-linear-depth-legend-title-${track.index}`" text="Legend label shown for this depth coverage track."></help-tip></span>
+                                            <span class="input-label text-[10px]">Legend title <help-tip :id="`help-linear-depth-legend-title-${track.index}`" text="Name of this Depth series in the legend. The legend label field of every Depth row that draws this series edits the same name. Leave blank for the default name: Depth, or Depth N when there are several series."></help-tip></span>
                                             <input
                                                 :aria-label="track.index === 0 ? 'Depth legend title' : `Depth ${track.index + 1} legend title`"
                                                 :aria-describedby="`help-linear-depth-legend-title-${track.index}`"
@@ -2075,7 +2075,7 @@
                                                 :value="getDepthTrackLabel(track.index)"
                                                 @input="setDepthTrackLabel(track.index, $event.target.value)"
                                                 class="form-input form-input-compact"
-                                                :placeholder="track.index === 0 ? 'Depth' : `Depth ${track.index + 1}`"
+                                                :placeholder="track.index === 0 && linearDepthTrackRows().length === 1 ? 'Depth' : `Depth ${track.index + 1}`"
                                                 :disabled="!semanticMutationAvailable"
                                             >
                                         </div>
@@ -3209,7 +3209,7 @@
                                                             </select>
                                                         </div>
                                                         <div class="track-slot-field">
-                                                            <span class="track-slot-field-label">legend label <help-tip :id="`help-linear-slot-depth-legend-label-${entry.index}`" text="Text shown for this enabled Depth slot in custom-stack order. Leave blank to use the selected logical series title; unselected series are omitted."></help-tip></span>
+                                                            <span class="track-slot-field-label">legend label <help-tip :id="`help-linear-slot-depth-legend-label-${entry.index}`" text="Name of the Depth series this row draws. Typing renames the series everywhere: its series card, every row that draws it, and the legend. The legend lists series in custom-stack order and omits series that no enabled row draws. Leave blank for the default name: Depth, or Depth N when there are several series."></help-tip></span>
                                                             <input
                                                                 :aria-label="`Linear track slot ${entry.slot.id} Depth legend label`"
                                                                 :aria-describedby="`help-linear-slot-depth-legend-label-${entry.index}`"
@@ -3595,7 +3595,7 @@
                                                             <input type="number" min="0" step="1" v-model.number="entry.slot.params.track_index" @change="syncDepthTrackSlotLabel(entry.slot)" :aria-label="`Depth track index ${entry.slot.id}`" :aria-describedby="`help-circular-slot-track-index-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" placeholder="0" :disabled="!semanticMutationAvailable">
                                                         </div>
                                                         <div class="track-slot-field">
-                                                            <span class="track-slot-field-label">legend label <help-tip :id="`help-circular-slot-depth-legend-label-${entry.index}`" text="Text shown for this enabled Depth slot. Leave blank to use the selected logical series title."></help-tip></span>
+                                                            <span class="track-slot-field-label">legend label <help-tip :id="`help-circular-slot-depth-legend-label-${entry.index}`" text="Name of the Depth series this row draws. Typing renames the series everywhere: its series card, every row that draws it, and the legend. Leave blank for the default name: Depth, or Depth N when there are several series."></help-tip></span>
                                                             <input
                                                                 :aria-label="`Circular track slot ${entry.slot.id} Depth legend label`"
                                                                 :aria-describedby="`help-circular-slot-depth-legend-label-${entry.index}`"

@@ -191,3 +191,20 @@ for (const [mode, adapter] of Object.entries(MODES)) {
     });
   }
 }
+
+// TK-08: a row's Depth legend label is the series name (setDepthTrackLegendLabelForSlot
+// renames the series), so its help and the series card's say so and give the
+// default a blank produces (Depth, or Depth N with several series, as
+// gbdraw/analysis/depth_tracks.py names them).
+test('Depth legend label help says it renames the series and what a blank gives (TK-08)', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(join(repoRoot, 'gbdraw', 'web', 'index.html'), 'utf8');
+  const tips = [...html.matchAll(/<help-tip :id="`help-(?:circular|linear)-(?:slot-depth-legend-label|depth-legend-title)-\$\{[a-z.]+\}`" text="([^"]*)"/g)]
+    .map((match) => match[1]);
+  assert.equal(tips.length, 4);
+  for (const text of tips) {
+    assert.match(text, /Leave blank for the default name: Depth, or Depth N when there are several series\.$/);
+    assert.doesNotMatch(text, /this enabled Depth slot|logical series title/);
+  }
+  assert.equal(tips.filter((text) => text.includes('renames the series everywhere')).length, 2);
+});
