@@ -204,6 +204,7 @@ export const createFeatureEditor = ({
     setFeatureColorValue: colorActions.setFeatureColorValue,
     updateClickedFeatureColor: colorActions.updateClickedFeatureColor,
     cancelFeatureStyleScope: colorActions.cancelFeatureStyleScope,
+    cancelLegendRename: colorActions.cancelLegendRename,
     handleColorScopeChoice: colorActions.handleColorScopeChoice,
     handleFeatureStyleScopeChoice: colorActions.handleFeatureStyleScopeChoice,
     handleLegendNameCommit: colorActions.handleLegendNameCommit,

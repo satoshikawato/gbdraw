@@ -510,9 +510,8 @@ test('choice dialogs and the feature popup move focus in and back, and drawer ta
         expect((await focusState(page)).inDialog, `${heading}: ${key} stays inside`).toBe(true);
       }
       await page.keyboard.press('Escape');
-      // A Cancel handler commits through History, which may first capture the
-      // intent; the dialog closes when that returns.
-      await expect(dialog, `${heading} closes on Escape`).toHaveCount(0, { timeout: 60_000 });
+      // Cancel settles outside History (OV-161), so the dialog closes at once.
+      await expect(dialog, `${heading} closes on Escape`).toHaveCount(0);
       await expect(featurePopup, `${heading}: Escape keeps the popup`).toBeVisible();
       await expect(opener, `${heading}: focus returns`).toBeFocused();
     }

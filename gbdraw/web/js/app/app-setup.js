@@ -3014,6 +3014,7 @@ export const createAppSetup = () => {
     setFeatureColorValue,
     updateClickedFeatureColor,
     cancelFeatureStyleScope,
+    cancelLegendRename,
     handleColorScopeChoice,
     handleFeatureStyleScopeChoice,
     handleLegendNameCommit,
@@ -3482,10 +3483,13 @@ export const createAppSetup = () => {
   /**
    * @param {() => string} label
    * @param {(choice: string, ...rest: any[]) => any} handler
+   * @param {() => void} [cancel]
    */
-  const scopeChoiceWithHistory = (label, handler) => (/** @type {string} */ choice, /** @type {any[]} */ ...rest) => (
+  const scopeChoiceWithHistory = (label, handler, cancel = cancelFeatureStyleScope) => (
+    /** @type {string} */ choice, /** @type {any[]} */ ...rest
+  ) => (
     choice === 'cancel'
-      ? cancelFeatureStyleScope()
+      ? cancel()
       : history.runUndoable(label(), () => handler(choice, ...rest))
   );
   const handleColorScopeChoiceWithHistory = scopeChoiceWithHistory(() => 'Change feature color', handleColorScopeChoice);
@@ -3494,7 +3498,11 @@ export const createAppSetup = () => {
     handleFeatureStyleScopeChoice
   );
   const handleLegendNameCommitWithHistory = undoableAction('Rename legend item', handleLegendNameCommit);
-  const handleLegendRenameChoiceWithHistory = undoableAction('Rename legend item', handleLegendRenameChoice);
+  const handleLegendRenameChoiceWithHistory = scopeChoiceWithHistory(
+    () => 'Rename legend item',
+    handleLegendRenameChoice,
+    cancelLegendRename
+  );
   const handleResetColorChoiceWithHistory = undoableAction('Reset feature color', handleResetColorChoice);
   const resetClickedFeatureFillColorWithHistory = undoableAction('Reset feature color', resetClickedFeatureFillColor);
   const updateClickedFeatureStrokeWithHistory = undoableAction('Change feature stroke', updateClickedFeatureStroke);
