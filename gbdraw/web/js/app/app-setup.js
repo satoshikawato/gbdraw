@@ -4603,7 +4603,7 @@ export const createAppSetup = () => {
     sessionTitle.value = normalizeSessionTitle(input);
   };
 
-  const exportSessionWithTitle = () => exportSession(null, {
+  const saveSessionWithTitle = () => exportSession(null, {
     availability: sessionSaveLoadAvailability,
     recordDisplayRows: recordDisplayControls.allRows,
     // Save writes every Result: the other mode's slot goes beside the shown one (E1).
@@ -4639,14 +4639,10 @@ export const createAppSetup = () => {
       if (error) throw error;
       return { linearRecordCatalog: catalog };
     },
-    onError: (error) => { errorLog.value = normalizeUserFacingError(error); }
+    onError: (error) => { errorLog.value = normalizeUserFacingError(error); },
+    // UJ-09: a saved download is the History position Load Session compares with.
+    onSaved: () => history.markSavePoint()
   });
-  // UJ-09: a saved download is the History position Load Session compares with.
-  const saveSessionWithTitle = async () => {
-    const result = await exportSessionWithTitle();
-    if (result?.status === 'saved') history.markSavePoint();
-    return result;
-  };
 
   const openFeatureEditorFromList = (feat, event) => {
     return openFeatureEditorForFeature(feat, event);
