@@ -1528,6 +1528,26 @@ export const createRunAnalysis = ({
 
   const formatError = (cause, operation = 'generate', stage = 'request-validation') =>
     normalizeUserFacingError(cause || { code: 'UNKNOWN' }, { operation, stage });
+  // UJ-08: the shown Generate failure about the source inputs, and its mode.
+  /** @type {{ error: any, mode: string } | null} */
+  let sourceInputFailure = null;
+  const SOURCE_INPUT_FAILURES = new Set(['INPUT_REQUIRED', 'FASTA_REQUIRED', 'INPUT_UNREADABLE', 'NO_RECORDS']);
+  /**
+   * Record discovery read every source input of `drawingMode`: a shown
+   * Generate failure about those inputs no longer holds, so it ends here.
+   * @param {string} drawingMode
+   */
+  const releaseSourceInputFailure = (drawingMode) => {
+    if (!sourceInputFailure || sourceInputFailure.mode !== drawingMode
+      || errorLog.value !== sourceInputFailure.error) return;
+    try {
+      assertActiveModeInputs?.(drawingMode, state);
+    } catch (_) {
+      return;
+    }
+    sourceInputFailure = null;
+    errorLog.value = null;
+  };
   /**
    * @param {any} cause
    * @param {{ handle?: Record<string, any> | null, restore?: (() => any) | null, operation?: string, stage?: string,
@@ -1551,6 +1571,8 @@ export const createRunAnalysis = ({
     }
     if (!isCurrent()) return { status: 'stale' };
     errorLog.value = error;
+    sourceInputFailure = operation === 'generate' && SOURCE_INPUT_FAILURES.has(error?.code)
+      ? { error: errorLog.value, mode: mode.value } : null;
     if (generationFailureRecovery) generationFailureRecovery.value = recovery;
     failedGeneratePreservedResult.value = ['preserved', 'restored'].includes(recovery);
     return { status: 'error', error, recovery };
@@ -1992,6 +2014,7 @@ export const createRunAnalysis = ({
         .map(({ selector, record_id, recordKey }) => ({ selector, record_id, recordKey }));
       const nextPositions = mergeCircularRecordPositions(nextRecords, drawing.adv.multi_record_positions);
       drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length, ...nextPositions);
+      if (nextRecords.length > 0) releaseSourceInputFailure('circular');
     } catch (error) {
       if (
         refreshGeneration !== circularRecordRefreshGeneration ||
@@ -5738,6 +5761,7 @@ export const createRunAnalysis = ({
     restoreGeneratedArtifactRuntimeState,
     runLabelReflow,
     refreshCircularRecordOrder,
+    releaseSourceInputFailure,
     downloadCliHelperFiles,
     downloadLosatCache,
     downloadLosatPair,

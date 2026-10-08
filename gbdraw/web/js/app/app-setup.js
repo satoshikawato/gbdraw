@@ -2694,6 +2694,7 @@ export const createAppSetup = () => {
     cancelRunAnalysis,
     runLabelReflow,
     refreshCircularRecordOrder,
+    releaseSourceInputFailure,
     downloadCliHelperFiles,
     downloadLosatCache,
     downloadLosatPair,
@@ -2856,7 +2857,13 @@ export const createAppSetup = () => {
     resultsManager,
     runLabelReflow,
     refreshCircularRecordOrder,
-    refreshLinearRecordSelectors: linearRecordSelector.refresh,
+    // UJ-08: a discovery that reads every Linear source ends a Generate
+    // failure about those inputs, as the Circular discovery does.
+    refreshLinearRecordSelectors: async (/** @type {{ suppress?: boolean } | undefined} */ options) => {
+      const outcome = await linearRecordSelector.refresh(options);
+      if (linearSeqs.every((seq) => linearRecordSelector.statusFor(seq) === 'ready')) releaseSourceInputFailure('linear');
+      return outcome;
+    },
     resetPreviewViewport,
     resetRightDrawer: rightDrawerActions.resetRightDrawer,
     closeLabelTextScopeDialog: featureActions.closeLabelTextScopeDialog,

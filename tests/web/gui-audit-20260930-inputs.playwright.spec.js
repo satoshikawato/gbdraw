@@ -384,3 +384,44 @@ test('Reset Settings clears Linear per-record display text and the alignment pla
   expect(restored.subtitles).toEqual(before);
   expect(restored.alignmentPlan).toBe(planBefore);
 });
+
+// UJ-08: a Generation Error about the source inputs ends when record discovery
+// of the replaced or completed inputs succeeds; an error about anything else stays.
+const generationError = (page) => page.evaluate(() => window.__GBDRAW_APP__.errorLog?.code || null);
+
+test('replacing or completing the Circular input that failed Generate clears that input error', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openFresh(page);
+  const genbank = page.getByLabel('GenBank/DDBJ File', { exact: true });
+  await genbank.setInputFiles({ name: 'notgenbank.gb', mimeType: 'text/plain', buffer: Buffer.from('not a record\n') });
+  await settle(page);
+  await generateAndWaitForResult(page, { expectedStatus: 'error' });
+  expect(await generationError(page)).toBe('NO_RECORDS');
+  await genbank.setInputFiles({ name: 'record.gb', mimeType: 'text/plain', buffer: Buffer.from(FIRST_RECORD_TEXT) });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 }).toBe(1);
+  await settle(page);
+  expect(await generationError(page)).toBe(null);
+  await expect(page.getByRole('alert', { name: 'Generation Error' })).toHaveCount(0);
+
+  await page.getByLabel('GFF3 + FASTA', { exact: true }).check();
+  await page.getByLabel('GFF3 File', { exact: true }).setInputFiles('tests/test_inputs/NC_013668.gff3');
+  await settle(page);
+  await generateAndWaitForResult(page, { expectedStatus: 'error' });
+  expect(await generationError(page)).toBe('FASTA_REQUIRED');
+  await page.getByLabel('FASTA File', { exact: true }).setInputFiles('tests/test_inputs/NC_013668.fasta');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 }).toBe(1);
+  await settle(page);
+  expect(await generationError(page)).toBe(null);
+});
+
+test('completing the Linear input that failed Generate clears that input error', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openLinear(page);
+  await uploadLinear(page, 0, 'first.gb', FIRST_RECORD_TEXT);
+  await page.evaluate(() => window.__GBDRAW_APP__.addLinearSeq());
+  await settle(page);
+  await generateAndWaitForResult(page, { expectedStatus: 'error' });
+  expect(await generationError(page)).toBe('INPUT_REQUIRED');
+  await uploadLinear(page, 1, 'second.gb', SECOND_RECORD_TEXT);
+  await expect.poll(() => generationError(page), { timeout: 60_000 }).toBe(null);
+});
