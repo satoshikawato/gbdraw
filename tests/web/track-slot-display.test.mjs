@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { cp, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -401,32 +402,18 @@ test('disabled rows show their estimate in both editors', () => {
   assert.notEqual(linearEditor.linearTrackSlotGeometryAutoText(linearSlots[2], 2, 'height'), '77 px (auto)');
 });
 
-// GX-18: Python's resolver (HmmtDNA, Axis radius 390 px; ids `ticks` with the
-// preset's 7.8 px width and `scale` with an Auto width) gives these band
-// centres and anchors: [tick_label_layout, side, widthPx, radiusFactor, anchor].
-const TICK_ANCHOR_VECTORS = [
-  ['label_out_tick_in', 'inside', 7.8, 0.9274365651709401, 0.9374365651709402],
-  ['label_out_tick_in', 'outside', 7.8, 1.0199999999999998, 1.03],
-  ['label_in_tick_out', 'inside', 7.8, 0.9800000000000001, 0.9700000000000001],
-  ['label_in_tick_out', 'outside', 7.8, 1.0199999999999998, 1.01],
-  ['tick_only', 'inside', 7.8, 0.9700000000000002, 0.9800000000000001],
-  ['tick_only', 'outside', 7.8, 1.0199999999999998, 1.01],
-  ['label_only', 'inside', 7.8, 0.9800000000000001, 0.9800000000000001],
-  ['label_only', 'outside', 7.8, 1.01, 1.01],
-  ['label_out_tick_in', 'inside', 0.0, 0.9249365651709403, 0.9374365651709402],
-  ['label_out_tick_in', 'outside', 0.0, 1.0225, 1.035],
-  ['label_in_tick_out', 'inside', 0.0, 0.9775, 0.9650000000000001],
-  ['label_in_tick_out', 'outside', 0.0, 1.0225, 1.01],
-  ['tick_only', 'inside', 0.0, 0.9775, 0.9900000000000001],
-  ['tick_only', 'outside', 0.0, 1.0225, 1.01],
-  ['label_only', 'inside', 0.0, 0.9900000000000001, 0.9900000000000001],
-  ['label_only', 'outside', 0.0, 1.01, 1.01]
-];
+// GX-18: Python's resolver and geometry serializer give these band centres
+// and anchors (tests/test_circular_tick_anchor_vectors.py keeps them current).
+const TICK_ANCHOR_VECTORS = JSON.parse(
+  readFileSync(new URL('../fixtures/circular_tick_anchor_vectors.json', import.meta.url), 'utf8')
+).cases;
 
 test('a ticks row note converts the band centre to the anchor that r pins (GX-18)', () => {
-  for (const [layout, side, widthPx, radiusFactor, anchor] of TICK_ANCHOR_VECTORS) {
-    const actual = tickAnchorRadiusFactor({ radiusFactor, widthPx, side }, 390, layout);
-    assert.ok(Math.abs(actual - anchor) < 1e-12, `${layout} ${side} ${widthPx}: ${actual} != ${anchor}`);
+  assert.equal(TICK_ANCHOR_VECTORS.length, 32);
+  for (const { tickLabelLayout, axisRadiusPx, geometry, anchorFactor } of TICK_ANCHOR_VECTORS) {
+    const actual = tickAnchorRadiusFactor(geometry, axisRadiusPx, tickLabelLayout);
+    const name = `${tickLabelLayout} ${geometry.side} ${geometry.widthPx} px, R ${axisRadiusPx}`;
+    assert.ok(Math.abs(actual - anchorFactor) < 1e-12, `${name}: ${actual} != ${anchorFactor}`);
   }
   assert.equal(tickAnchorRadiusFactor(null, 390, 'tick_only'), null);
   assert.equal(tickAnchorRadiusFactor({ radiusFactor: 0.9, widthPx: 0 }, 0, 'tick_only'), null);
