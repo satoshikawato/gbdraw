@@ -3072,3 +3072,49 @@ def test_jsdoc_typedef_property_parser_is_strict() -> None:
         "/**\n * @typedef {object} Mixed\n * @property {string} a\n * @property {number} [b]\n */",
         "Mixed",
     ) == {"a", "b"}
+
+
+def test_typed_tree_codec_resolves_type_hints_once_per_class(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import typing
+
+    import gbdraw.session_request_codec as codec_module
+
+    members = tuple(
+        OrthogroupMember(
+            orthogroup_id=f"og_{index}",
+            protein_id=f"p_{index}",
+            record_index=0,
+            feature_index=index,
+            record_id="record",
+            label=f"label {index}",
+            start=index,
+            end=index + 3,
+            strand=1,
+            feature_svg_id=None,
+            source_protein_id=None,
+        )
+        for index in range(200)
+    )
+    hint = tuple[OrthogroupMember, ...]
+    hint_calls = 0
+    real_get_type_hints = typing.get_type_hints
+
+    def count_hints(*args, **kwargs):
+        nonlocal hint_calls
+        hint_calls += 1
+        return real_get_type_hints(*args, **kwargs)
+
+    monkeypatch.setattr(codec_module, "get_type_hints", count_hints)
+
+    encoded = codec_module._encode_typed_tree(members)
+    decoded = codec_module._decode_typed_tree(
+        encoded, hint, path="resource", resource_schema=3
+    )
+    codec_module._validate_dataclass_contract(
+        members[0], path="resource", error="decode"
+    )
+
+    assert decoded == members
+    assert hint_calls <= 1  # One class, however many nodes.
