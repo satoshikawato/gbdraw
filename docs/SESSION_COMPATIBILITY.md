@@ -238,8 +238,9 @@ without a label is now labelled with the table's file name without the last
 extension, as in the web app. CLI and Python Sessions now store
 `conservationLabels` for every precomputed ring, as Web Sessions already did.
 A Session without them was written before this change and drew the full file
-name; its replay, including a Session 27–30 `cliInvocation` replay, draws the
-label it drew before. Web Load of such a Session shows the file name without the
+name, which its replay still draws. A Session 27–30 replay now takes that name
+from the Session's file bindings instead of drawing the temporary copy's name
+(`arg3-<file>`). Web Load of such a Session shows the file name without the
 extension, as before.
 
 ## Unreleased: a scale interval of 0 or less

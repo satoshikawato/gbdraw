@@ -656,9 +656,6 @@ def _get_args(
             parser.error("--conservation_sequence requires --conservation_blast or --losat")
         if args.conservation_sequence and len(args.conservation_sequence) != len(args.conservation_blast):
             parser.error("--conservation_sequence must provide one source per --conservation_blast")
-    if _allow_legacy_track_transport and args.conservation_blast and not args.losat and not args.conservation_labels:
-        # D-03: a Session 27-30 replay keeps the full file name its rings were drawn with.
-        args.conservation_labels = [Path(path).name for path in args.conservation_blast]
     if args.depth_min is not None and args.depth_min < 0:
         parser.error("--depth_min must be >= 0")
     if args.depth_max is not None and args.depth_max < 0:
@@ -768,6 +765,11 @@ def circular_main(cmd_args) -> None:
                 list(run_spec.args),
                 _allow_legacy_track_transport=True,
             )
+            if args.conservation_blast and not args.losat and not args.conservation_labels:
+                # D-03, OV-202: an unlabelled ring keeps the file name its original run
+                # drew, which the Session binds; the replay reads a temporary copy.
+                names = {run_spec.args[binding.argIndex]: binding.name for binding in run_spec.file_bindings}
+                args.conservation_labels = [names.get(path, Path(path).name) for path in args.conservation_blast]
             args.overwrite = session_request.overwrite
             args.save_session = session_request.save_session
             args.session_output = session_request.session_output

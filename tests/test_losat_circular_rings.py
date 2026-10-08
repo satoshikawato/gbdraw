@@ -444,15 +444,15 @@ def test_unresolved_ring_intent_is_never_encoded() -> None:
 PRECOMPUTED_TSV = FROZEN_TSVS[2]
 UNLABELLED_RING_SESSIONS = {
     # main fe6861f0 CLI (Session 44) and release 0.13.0 CLI (Session 30), with the
-    # label each replay drew before D-03 (a Session 30 replay reads the file under
-    # its materialized name); see tests/fixtures/sessions/precomputed-ring.provenance.json.
+    # label their own runs drew (OV-202: not the replay's temporary file name);
+    # see tests/fixtures/sessions/precomputed-ring.provenance.json.
     "main-v44": (
         REPO_ROOT / "tests" / "fixtures" / "sessions" / "precomputed-ring-unlabelled-cli.v44.gbdraw-session.json.gz",
         "caenorhabditis-human.tlosatx.tsv",
     ),
     "release-v30": (
         REPO_ROOT / "tests" / "fixtures" / "sessions" / "precomputed-ring-unlabelled-cli.v30.gbdraw-session.json.gz",
-        "arg3-caenorhabditis-human.tlosatx.tsv",
+        "caenorhabditis-human.tlosatx.tsv",
     ),
 }
 
