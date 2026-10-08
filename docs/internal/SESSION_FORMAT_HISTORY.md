@@ -171,11 +171,14 @@ Feature visibility edit hid every feature with the same hash, such as each copy
 of a duplicated record; it now applies only to the feature that was edited, and
 Load reports how many edits the next Generate draws differently for this.
 Each moved edit goes to the slice of the Session's diagram's mode. The CLI moves the
-edits of a Session 40–44 through its saved catalog in the same way when it
-replays the Session with `--session_output` or `--save_session`, and logs these
-counts. It does not read the sources of an older Session again, so it drops
-that Session's edits; the replayed request's tables keep their effect on the
-diagram. A Feature placement
+edits in the same way when it replays the Session with `--session_output` or
+`--save_session`, as does `upgrade_session_document()`, and logs these counts:
+a Session 40–44 through its saved catalog, a Session 31–39 through its GenBank
+sources read again with the crops and orientations Load uses. When a source
+cannot be read, the CLI uses the saved feature metadata; it does not read the
+features of the saved SVG, which Load tries before the saved metadata, so an
+edit that only those features name is dropped and counted. The replay of a
+Session 27–30 still drops these edits. A Feature placement
 draft of a Session 41–44 reached every request with its record key: a lane
 placement goes to the slice of its side's mode, and a Main placement to both
 slices. The CLI applies the same mapping when it replays such a Session with

@@ -220,6 +220,9 @@ any render, the Session is brought to the current version and validated, so a
 Session that cannot be saved again writes no diagram. A Session 31-39 saved no
 feature catalog, so this drops its saved Results: the command prints a warning
 that names each one, and the re-saved Session holds the Results of this render.
+Its per-feature edits keyed by rendered ID move onto their features through its
+GenBank sources read again, as a Web Load moves them; see
+[Session and request compatibility](session-and-request-compatibility.md).
 A Session 27-30 has one
 drawing without a canonical request, which `gbdraw render` replays as its
 mode's command does.

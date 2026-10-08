@@ -8,12 +8,14 @@ functions migrate the fields around it.
 from __future__ import annotations
 
 import logging
-from typing import Any, Mapping, Sequence, cast
+from pathlib import Path
+from typing import Any, Mapping, NamedTuple, Sequence, cast
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.session_io import (
     CURRENT_AUTHORITY_SESSION_MIN_VERSION,
     MODE_SCOPED_SESSION_MIN_VERSION,
+    RETIRED_RENDERED_ID_FEATURE_FIELDS,
     _project_web_file_binding,
     empty_protein_identity_manifest,
     migrate_legacy_linear_comparison_draft_for_current_writer,
@@ -167,12 +169,153 @@ _SIMILARITY_ALIGNMENT_FLAGS = frozenset(
 )
 
 
+class LegacySourceRead(NamedTuple):
+    """One source read of a Session without a feature catalog, as the Web reads it."""
+
+    resource_id: str
+    region_spec: str | None
+    record_selector: str | None
+    reverse: bool
+
+
+def legacy_source_reads(request: Mapping[str, Any]) -> tuple[LegacySourceRead, ...] | None:
+    """The source reads that name a catalog-less Session's features again.
+
+    Web Load reads each GenBank source with the crop and orientation of its
+    request record (``extractSessionSourceFeatures``): a Circular source whole,
+    a Linear one with ``<start>-<end>[:rc]`` and no reverse flag when it is
+    cropped, otherwise with the record's reverse flag, and with its record
+    selector (``recordId`` value or ``#<index + 1>``). None when a source is
+    not GenBank or a crop has one endpoint, where the Web reads nothing, or a
+    record index is not an integer, which the request decode rejects.
+    """
+
+    records = request.get("records")
+    if not isinstance(records, list) or not records:
+        return None
+    linear = request.get("mode") == "linear"
+    reads: list[LegacySourceRead] = []
+    for record in records if linear else records[:1]:
+        record = record if isinstance(record, Mapping) else {}
+        source = record.get("source")
+        if not isinstance(source, Mapping) or source.get("kind") != "genbank":
+            return None
+        if not linear:
+            reads.append(LegacySourceRead(str(source.get("resourceId")), None, None, False))
+            continue
+        region_value = record.get("region")
+        region: Mapping[str, Any] = region_value if isinstance(region_value, Mapping) else {}
+        presentation = record.get("presentation")
+        presentation = presentation if isinstance(presentation, Mapping) else {}
+        selector = region.get("selector") or record.get("selector")
+        selector = selector if isinstance(selector, Mapping) else {}
+        record_selector = ""
+        if selector.get("kind") == "recordId":
+            record_selector = str(selector.get("value") or "")
+        elif selector.get("kind") == "recordIndex":
+            index = selector.get("index")
+            if isinstance(index, bool) or not isinstance(index, int):
+                return None  # Invalid; the request decode names it.
+            record_selector = f"#{index + 1}"
+        reverse = bool(region.get("reverseComplement") or presentation.get("reverseComplement"))
+        start, end = region.get("start"), region.get("end")
+        if (start is None) != (end is None):
+            return None
+        reads.append(
+            LegacySourceRead(
+                str(source.get("resourceId")),
+                f"{start}-{end}{':rc' if reverse else ''}" if start is not None else None,
+                record_selector or None,
+                reverse and start is None,
+            )
+        )
+    return tuple(reads)
+
+
+def read_legacy_source_features(
+    session: Mapping[str, Any], resource_paths: Mapping[str, Path]
+) -> dict[str, list[dict[str, Any]]] | None:
+    """Read a catalog-less Session's sources again for its rendered-ID edits.
+
+    The twin of Web Load's source read (``extractSessionSourceFeatures``) with
+    the reads of :func:`legacy_source_reads`: ``extractedFeatures`` and
+    ``biologicalFeatures`` of every source, each named by its source hash and,
+    for Linear, its input (``fileIdx``). None when the Session saved a catalog
+    or no rendered-ID edit, or a source cannot be read; the edit migration then
+    uses the saved feature metadata. The Web's last fallback, the features of
+    the saved SVG (its recovery plan), is not read.
+    """
+
+    from gbdraw.web_support.feature_metadata import extract_features_from_genbank_payload
+
+    features = session.get("features")
+    editor_state = session.get("editorState")
+    if not isinstance(features, Mapping) or not any(
+        isinstance(features.get(field), Mapping) and features[field]
+        for field in RETIRED_RENDERED_ID_FEATURE_FIELDS
+    ):
+        return None
+    if isinstance(editor_state, Mapping) and isinstance(editor_state.get("featureCatalog"), Mapping):
+        return None
+    request = session.get("renderRequest")
+    reads = legacy_source_reads(request) if isinstance(request, Mapping) else None
+    if reads is None:
+        return None
+    linear = cast(Mapping[str, Any], request).get("mode") == "linear"
+    read_again: dict[str, list[dict[str, Any]]] = {"extractedFeatures": [], "biologicalFeatures": []}
+    for input_index, read in enumerate(reads):
+        path = resource_paths.get(read.resource_id)
+        if path is None:
+            return None
+        try:
+            payload = extract_features_from_genbank_payload(
+                path,
+                read.region_spec,
+                read.record_selector,
+                read.reverse,
+                include_biological_features=True,
+            )
+        except Exception as exc:  # The Web reads no source that fails.
+            logger.debug("Session source %s could not be read again: %s", read.resource_id, exc)
+            return None
+        listed = payload.get("features")
+        biological = payload.get("biological_features")
+        if not isinstance(listed, list):
+            return None
+        if not isinstance(biological, list) or not (biological or not listed):
+            biological = listed
+        for key, entries in (("extractedFeatures", listed), ("biologicalFeatures", biological)):
+            for entry in entries:
+                feature = dict(entry)
+                stable_id = str(
+                    next(
+                        (
+                            feature[field]
+                            for field in ("stable_feature_id", "stableFeatureId", "stable_svg_id", "svg_id")
+                            if feature.get(field)
+                        ),
+                        "",
+                    )
+                ).strip()
+                if linear:
+                    feature["fileIdx"] = input_index
+                feature.update(svg_id=stable_id, stable_svg_id=stable_id, stable_feature_id=stable_id)
+                read_again[key].append(feature)
+    return read_again
+
+
 def project_session_adjunct_for_current_write(
     session: Mapping[str, Any],
     *,
     source_version: int,
+    source_features: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
-    """Detach non-canonical state and migrate released Web-owned field names."""
+    """Detach non-canonical state and migrate released Web-owned field names.
+
+    ``source_features`` are the Session's sources read again
+    (:func:`read_legacy_source_features`) for the rendered-ID edits of a
+    Session without a feature catalog.
+    """
 
     adjunct = {
         key: value
@@ -189,11 +332,12 @@ def project_session_adjunct_for_current_write(
     }
     if source_version < MODE_SCOPED_SESSION_MIN_VERSION:
         # The older draft migrations, in Web Load's order: the rendered-ID edit
-        # maps become identity drafts through the Session's saved catalog, and
+        # maps become identity drafts through the Session's saved catalog (or
+        # its sources read again, or its saved feature metadata), and
         # a hash= annotation target moves to its source feature where that
         # catalog makes the figure certain (R-7). The request keeps the targets
         # that drew the figure.
-        migration = migrate_session_flat_draft(session)
+        migration = migrate_session_flat_draft(session, source_features=source_features)
         for key in ("config", "features"):
             if key in migration.session:
                 adjunct[key] = migration.session[key]
@@ -430,7 +574,10 @@ def with_current_artifacts(
 
 
 __all__ = [
+    "LegacySourceRead",
+    "legacy_source_reads",
     "project_session_adjunct_for_current_write",
+    "read_legacy_source_features",
     "replace_current_derived_feature_state",
     "with_current_artifacts",
 ]

@@ -1123,7 +1123,10 @@ def upgrade_session_document(
     migrations a CLI re-save applies: its request is decoded, adapted to
     current typed state (comparison frames, similarity alignment, LOSAT
     artifacts) and encoded again with the same resource IDs, and its
-    Web-owned fields are migrated. Results with a feature catalog (Sessions
+    Web-owned fields are migrated; the rendered-ID feature edits of a Session
+    31-39 are named through its GenBank sources read again with their crops
+    and orientations, as Web Load names them, or else through its saved
+    feature metadata. Results with a feature catalog (Sessions
     40-44) are kept. Sessions 31-39 saved no catalog, so their Results are
     dropped and the drawing waits for its next render; each drawing with
     dropped Results gets a warning in :attr:`SessionUpgrade.warnings` that
@@ -1143,23 +1146,31 @@ def upgrade_session_document(
         )
     from gbdraw.session_migration import (
         project_session_adjunct_for_current_write,
+        read_legacy_source_features,
         replace_current_derived_feature_state,
         with_current_artifacts,
     )
 
     source = loaded._data
-    try:
-        state, web_file_inventory = project_session_adjunct_for_current_write(
-            source,
-            source_version=loaded.version,
-        )
-    except SessionError:
-        raise
-    except ValidationError as exc:
-        raise SessionConversionError(str(exc)) from exc
+
+    def project_adjunct(
+        source_features: Mapping[str, Any] | None = None,
+    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
+        try:
+            return project_session_adjunct_for_current_write(
+                source,
+                source_version=loaded.version,
+                source_features=source_features,
+            )
+        except SessionError:
+            raise
+        except ValidationError as exc:
+            raise SessionConversionError(str(exc)) from exc
+
     # A Session before the current version holds one drawing.
     drawing = loaded._drawing_parts()
     if drawing.request is None:
+        state, web_file_inventory = project_adjunct()
         return SessionUpgrade(
             _build_session_document_from_drawings(
                 (_DrawingBuild(mode=drawing.mode, request=None, state=state),),
@@ -1178,6 +1189,11 @@ def upgrade_session_document(
         output_directory=Path("."),
         temporary_directory=temporary_directory,
     ) as materialized:
+        # Rendered-ID edits without a saved catalog are named through the
+        # sources read again, as Web Load reads them.
+        state, web_file_inventory = project_adjunct(
+            read_legacy_source_features(source, materialized.resource_paths)
+        )
         request = _decode_drawing(materialized, drawing)
         try:
             adapted = adapt_session_request(request, drawing.artifacts)

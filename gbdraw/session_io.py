@@ -1977,27 +1977,233 @@ class FeatureEditMigration:
     narrowed_visibility_count: int
 
 
+# An identity of the feature index: the draft key, the hash a rendered ID
+# names, the source feature index, and the one-based record position.
+_IndexedFeature = tuple[str, str, int | None, int]
+_LINEAR_RECORD_SUFFIX = re.compile(r"_record_([1-9][0-9]*)(?=__|\Z)")
+
+
+def _catalog_feature_index(
+    catalog: object, mode: object
+) -> tuple[dict[str, dict[str, None]], list[_IndexedFeature]]:
+    """The rendered IDs and source features of a saved feature catalog (schema 3-5)."""
+
+    rendered_by_id: dict[str, dict[str, None]] = {}
+    biological: list[_IndexedFeature] = []
+    items = catalog.get("items") if isinstance(catalog, Mapping) else None
+    for item in _mapping_list(items):
+        record_keys_value = item.get("recordKeys")
+        record_keys = (
+            [_js_text(record_key) for record_key in record_keys_value]
+            if isinstance(record_keys_value, list)
+            else []
+        )
+        for feature in _mapping_list(item.get("features")):
+            key = _feature_identity_key(
+                mode, _js_text(feature.get("recordKey")), _js_text(feature.get("biologicalFeatureId"))
+            )
+            svg_id = _rendered_id_without_part(feature.get("svgId"))
+            if key and svg_id:
+                rendered_by_id.setdefault(svg_id, {})[key] = None
+        for feature in _mapping_list(item.get("biologicalFeatures")):
+            record_key = _js_text(feature.get("recordKey"))
+            feature_id = _js_text(feature.get("biologicalFeatureId"))
+            key = _feature_identity_key(mode, record_key, feature_id)
+            if key:
+                biological.append(
+                    (
+                        key,
+                        _js_text(feature.get("stableFeatureId")) or feature_id,
+                        _safe_integer(feature.get("sourceFeatureIndex")),
+                        record_keys.index(record_key) + 1 if record_key in record_keys else 0,
+                    )
+                )
+    return rendered_by_id, biological
+
+
+def _nonnegative_integer(value: object) -> int | None:
+    """``Number(value)`` when it is a non-negative safe integer (``null`` and ``''`` are not)."""
+
+    if value is None or value == "":
+        return None
+    number = _js_number(value)
+    if math.isfinite(number) and number.is_integer() and 0 <= number <= _JS_MAX_SAFE_INTEGER:
+        return int(number)
+    return None
+
+
+def _first(feature: Mapping[str, Any], *fields: str) -> object:
+    """The first of ``fields`` that is set (JavaScript ``a ?? b``)."""
+
+    for field in fields:
+        value = feature.get(field)
+        if value is not None:
+            return value
+    return None
+
+
+def _legacy_feature_index(legacy: object, mode: object) -> list[_IndexedFeature]:
+    """The source features of a Session without a feature catalog (31-33, 39).
+
+    Such a Session keyed an edit by the rendered ID ``<drawn hash>[_record_<n>]
+    [__instance_<s>_<digest>]``: the feature's hash in the drawn (cropped,
+    reverse-complemented) record and the record's position in the Result.
+    ``legacy`` holds the request ``records`` and ``features``: the Session's
+    source features read again with its crops and orientations (each with its
+    drawn hash beside its source hash) or else its saved feature metadata,
+    whose drawn hash serves only records drawn untransformed;
+    ``biologicalFeatures`` are every source feature read again. A feature's
+    input is its request record (Linear: ``fileIdx``; Circular: one file) and
+    ``record_idx`` its record in that input. Identities are the renderer's:
+    the record key, ``<recordKey>:<n>`` for each record of an ALL input with
+    several records, and the source hash, ``~<source index>`` when the record
+    has it twice. The twin of ``legacyIndex`` in the Web
+    ``feature-edit-migration.js``.
+    """
+
+    fields = legacy if isinstance(legacy, Mapping) else {}
+    linear = mode == "linear"
+    records_value = fields.get("records")
+    records = (
+        [record if isinstance(record, Mapping) else {} for record in records_value]
+        if isinstance(records_value, list)
+        else []
+    )
+
+    def describe(feature: Mapping[str, Any]) -> tuple[int | None, int | None, int | None, str, str]:
+        ordinal = _LINEAR_RECORD_SUFFIX.search(_js_text(_first(feature, "svg_id", "svgId")))
+        svg_ordinal = int(ordinal.group(1)) if ordinal else None
+        file_index = _nonnegative_integer(feature.get("fileIdx"))
+        if linear:
+            input_index = file_index if file_index is not None else (
+                svg_ordinal - 1 if svg_ordinal else None
+            )
+        else:
+            input_index = 0
+        record_index = (
+            0
+            if linear and file_index is None
+            else _nonnegative_integer(_first(feature, "record_idx", "recordIndex"))
+        )
+        source_index = next(
+            (
+                index
+                for index in (
+                    _nonnegative_integer(feature.get(field))
+                    for field in ("source_feature_index", "sourceFeatureIndex", "feature_index")
+                )
+                if index is not None
+            ),
+            None,
+        )
+        drawn_hashes = (
+            selector.get("hash") if isinstance(selector, Mapping) else None
+            for selector in (feature.get("drawn_selector"), feature.get("drawnSelector"))
+        )
+        return (
+            input_index,
+            record_index,
+            source_index,
+            _js_text(_first(feature, "stable_feature_id", "stableFeatureId", "stable_svg_id")),
+            _js_text(next((value for value in drawn_hashes if value is not None), None)),
+        )
+
+    def described(value: object) -> list[tuple[int, int, int | None, str, str]]:
+        entries: list[tuple[int, int, int | None, str, str]] = []
+        for input_index, record_index, source_index, source_hash, drawn_hash in map(
+            describe, _mapping_list(value)
+        ):
+            if input_index is not None and record_index is not None and source_hash:
+                entries.append((input_index, record_index, source_index, source_hash, drawn_hash))
+        return entries
+
+    listed = described(fields.get("features"))
+    biological_value = fields.get("biologicalFeatures")
+    sources = (
+        described(biological_value)
+        if isinstance(biological_value, list) and biological_value
+        else listed
+    )
+    record_counts: dict[int, int] = {}
+    for input_index, record_index, *_ in (*listed, *sources):
+        record_counts[input_index] = max(record_counts.get(input_index) or 1, record_index + 1)
+
+    def record_of(input_index: int, record_index: int) -> Mapping[str, Any] | None:
+        position = input_index if linear else (record_index if len(records) > 1 else 0)
+        return records[position] if position < len(records) else None
+
+    def record_key_of(input_index: int, record_index: int) -> str:
+        record = record_of(input_index, record_index)
+        record_key = _js_text(record.get("recordKey")) if record is not None else ""
+        if not record_key:
+            return ""
+        assert record is not None
+        if (
+            record.get("cardinality") == "all"
+            and (linear or len(records) == 1)
+            and record_counts.get(input_index, 0) > 1
+        ):
+            return f"{record_key}:{record_index + 1}"
+        return record_key
+
+    offsets: dict[int, int] = {}
+    offset = 0
+    for input_index in range(len(records)):
+        offsets[input_index] = offset
+        offset += record_counts.get(input_index) or 1
+    hash_counts: dict[tuple[str, str], int] = {}
+    for input_index, record_index, _, source_hash, _ in sources:
+        identity = (record_key_of(input_index, record_index), source_hash)
+        hash_counts[identity] = hash_counts.get(identity, 0) + 1
+    biological: list[_IndexedFeature] = []
+    seen: set[tuple[str, str, int]] = set()
+    for input_index, record_index, source_index, source_hash, drawn_hash in listed:
+        record = record_of(input_index, record_index)
+        transformed = record is not None and _drawn_transformed(record)
+        drawn_hash = drawn_hash or ("" if transformed else source_hash)
+        record_key = record_key_of(input_index, record_index)
+        if not drawn_hash or not record_key:
+            continue
+        duplicated = hash_counts.get((record_key, source_hash), 0) > 1
+        if duplicated and source_index is None:
+            continue
+        key = _feature_identity_key(
+            mode, record_key, f"{source_hash}~{source_index}" if duplicated else source_hash
+        )
+        record_ordinal = (
+            offsets.get(input_index, 0) + record_index + 1 if linear else record_index + 1
+        )
+        once = (key, drawn_hash, record_ordinal)
+        if not key or once in seen:
+            continue
+        seen.add(once)
+        biological.append((key, drawn_hash, source_index, record_ordinal))
+    return biological
+
+
 def migrate_session_feature_edits(
-    features: object, *, mode: object, catalog: object
+    features: object, *, mode: object, catalog: object, legacy: object = None
 ) -> FeatureEditMigration:
     """Move the rendered-ID edit maps of a Session 44 or older to draft rows.
 
     Each edit becomes a ``features.featureOverrides`` row keyed by
     ``[mode, recordKey, biologicalFeatureId]`` through the Session's saved
-    feature catalog (schema 3, 4, or 5). Rule 1: a rendered ID of the catalog
+    feature catalog (schema 3, 4, or 5), or, for a Session without one, through
+    ``legacy`` (its request records and source features; see
+    :func:`_legacy_feature_index`). Rule 1: a rendered ID of the catalog
     names every identity drawn with it. Rule 2: otherwise the hash, record
-    position, and source index of its suffixes must name exactly one catalog
-    feature. Any other edit is dropped and counted (a label source text is not
-    an edit of its own). A Feature visibility edit that now names fewer features
-    than its hash did is counted as narrowed. When a label map is migrated the
-    saved label table (``labelOverrideRows``) is cleared, as it was built from
-    those maps.
+    position, and source index of its suffixes must name exactly one indexed
+    feature: the source hash of a catalog feature, the drawn hash of a feature
+    of a Session without a catalog. Any other edit is dropped and counted (a
+    label source text is not an edit of its own). A Feature visibility edit
+    that now names fewer features than its hash did is counted as narrowed.
+    When a label map is migrated the saved label table (``labelOverrideRows``)
+    is cleared, as it was built from those maps.
 
     This is the twin of ``migrateSessionFeatureEdits`` in the Web
-    ``feature-edit-migration.js`` for a Session with a catalog;
-    ``tests/fixtures/feature-edit-migration-vectors.json`` pins both. The Web
-    maps a Session without a catalog through its sources read again, which has
-    no twin here: with ``catalog=None`` every edit is dropped.
+    ``feature-edit-migration.js``;
+    ``tests/fixtures/feature-edit-migration-vectors.json`` pins both. Without
+    a catalog or ``legacy`` every edit is dropped.
     """
 
     source = features if isinstance(features, Mapping) else {}
@@ -2013,36 +2219,11 @@ def migrate_session_feature_edits(
         "labelTextFeatureOverrides"
     )
     if any(non_empty_map(field) for field in RETIRED_RENDERED_ID_FEATURE_FIELDS):
-        rendered_by_id: dict[str, dict[str, None]] = {}
-        biological: list[tuple[str, str, int | None, int]] = []
-        items = catalog.get("items") if isinstance(catalog, Mapping) else None
-        for item in _mapping_list(items):
-            record_keys_value = item.get("recordKeys")
-            record_keys = (
-                [_js_text(record_key) for record_key in record_keys_value]
-                if isinstance(record_keys_value, list)
-                else []
-            )
-            for feature in _mapping_list(item.get("features")):
-                key = _feature_identity_key(
-                    mode, _js_text(feature.get("recordKey")), _js_text(feature.get("biologicalFeatureId"))
-                )
-                svg_id = _rendered_id_without_part(feature.get("svgId"))
-                if key and svg_id:
-                    rendered_by_id.setdefault(svg_id, {})[key] = None
-            for feature in _mapping_list(item.get("biologicalFeatures")):
-                record_key = _js_text(feature.get("recordKey"))
-                feature_id = _js_text(feature.get("biologicalFeatureId"))
-                key = _feature_identity_key(mode, record_key, feature_id)
-                if key:
-                    biological.append(
-                        (
-                            key,
-                            _js_text(feature.get("stableFeatureId")) or feature_id,
-                            _safe_integer(feature.get("sourceFeatureIndex")),
-                            record_keys.index(record_key) + 1 if record_key in record_keys else 0,
-                        )
-                    )
+        rendered_by_id, biological = (
+            _catalog_feature_index(catalog, mode)
+            if _js_truthy(catalog)
+            else ({}, _legacy_feature_index(legacy, mode))
+        )
         by_hash: dict[str, dict[str, None]] | None = None
 
         def resolve(old_key: str) -> list[str]:
@@ -3424,19 +3605,24 @@ class SessionDraftMigration:
     migrated_annotation_count: int = 0
 
 
-def migrate_session_flat_draft(session: Mapping[str, Any]) -> SessionDraftMigration:
+def migrate_session_flat_draft(
+    session: Mapping[str, Any], *, source_features: Mapping[str, Any] | None = None
+) -> SessionDraftMigration:
     """Run the Session 27-44 draft migrations in Web Load's order.
 
     A Session 40 or 41 the CLI wrote first drops its option-derived ``config``
     (``_holds_cli_writer_config``): it holds no Web draft. Then field names
-    and placement rows (``migrate_persisted_web_state_field_names``), the draft's option values, slots and shapes (``migrate_session_draft_values``),
-    then per-feature edits through the saved catalog
-    (``migrate_session_feature_edits``; without a catalog they are dropped),
-    then the ``hash=`` annotation targets of a Session 40-44
-    (``migrate_session_annotation_targets``). A Session 40-44 without a draft
-    takes the annotation sets of its request first, as Web Load builds its
-    draft from the request, and keeps them as its draft only when a target
-    moved.
+    and placement rows (``migrate_persisted_web_state_field_names``), the
+    draft's option values, slots and shapes (``migrate_session_draft_values``),
+    then per-feature edits (``migrate_session_feature_edits``) through the
+    saved catalog or, without one, through the request records and the first
+    non-empty of ``source_features["extractedFeatures"]`` (the sources read
+    again, see :func:`gbdraw.session_migration.read_legacy_source_features`)
+    and the saved feature metadata, then the ``hash=`` annotation targets of a
+    Session 40-44 (``migrate_session_annotation_targets``). A Session 40-44
+    without a draft takes the annotation sets of its request first, as Web
+    Load builds its draft from the request, and keeps them as its draft only
+    when a target moved.
     """
 
     migrated: dict[str, Any] = dict(session)
@@ -3454,16 +3640,35 @@ def migrate_session_flat_draft(session: Mapping[str, Any]) -> SessionDraftMigrat
         migrated["config"] = config
     features = session.get("features")
     dropped = narrowed = 0
-    if isinstance(features, Mapping) and isinstance(catalog, Mapping):
-        edits = migrate_session_feature_edits(features, mode=request.get("mode"), catalog=catalog)
-        migrated["features"] = edits.features
-        dropped, narrowed = edits.dropped_count, edits.narrowed_visibility_count
-    elif isinstance(features, Mapping) and RETIRED_RENDERED_ID_FEATURE_FIELDS & set(features):
-        # Without a saved catalog the Web reads the sources again to move these
-        # edits, and Python does not; the request's tables keep their effect.
-        migrated["features"] = {
-            key: value for key, value in features.items() if key not in RETIRED_RENDERED_ID_FEATURE_FIELDS
+    if isinstance(features, Mapping):
+        has_catalog = isinstance(catalog, Mapping)
+        read_again = source_features if isinstance(source_features, Mapping) else {}
+        legacy = None if has_catalog else {
+            "records": request.get("records"),
+            "features": next(
+                (
+                    candidates
+                    for candidates in (
+                        read_again.get("extractedFeatures"),
+                        features.get("biologicalFeatures"),
+                        features.get("extractedFeatures"),
+                    )
+                    if isinstance(candidates, list) and candidates
+                ),
+                [],
+            ),
+            "biologicalFeatures": read_again.get("biologicalFeatures") or [],
         }
+        edits = migrate_session_feature_edits(
+            features, mode=request.get("mode"), catalog=catalog if has_catalog else None, legacy=legacy
+        )
+        migrated_features = edits.features
+        # The Web split keeps no empty draft that the Session did not save.
+        for key in ("labelOverrideRows",) if has_catalog else ("labelOverrideRows", "featureOverrides"):
+            if key not in features and migrated_features.get(key) in ([], {}):
+                migrated_features.pop(key)
+        migrated["features"] = migrated_features
+        dropped, narrowed = edits.dropped_count, edits.narrowed_visibility_count
     moved = 0
     if CURRENT_AUTHORITY_SESSION_MIN_VERSION <= version < MODE_SCOPED_SESSION_MIN_VERSION:
         mode = _diagram_mode(request.get("mode"))

@@ -49,6 +49,7 @@ from gbdraw.api.session_compat import (
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.session import (
+    SessionConversionError,
     SessionDocument,
     SessionDrawingSpec,
     build_session_document,
@@ -58,6 +59,7 @@ from gbdraw.session import (
     save_session_document,
     session_drawing_artifacts,
     session_to_request,
+    upgrade_session_document,
 )
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
@@ -1533,7 +1535,10 @@ def test_rendered_id_feature_edits_migrate_to_the_vectors_shared_with_the_web_re
     source = json.loads(json.dumps(case["input"]))
 
     migration = migrate_session_feature_edits(
-        source["features"], mode=source["mode"], catalog=source["catalog"]
+        source["features"],
+        mode=source["mode"],
+        catalog=source["catalog"],
+        legacy=source.get("legacy"),
     )
 
     assert {
@@ -1544,7 +1549,14 @@ def test_rendered_id_feature_edits_migrate_to_the_vectors_shared_with_the_web_re
     assert source == case["input"]
 
 
-@pytest.mark.parametrize("fixture", sorted(_MAIN_FEATURE_EDIT_VECTORS))
+@pytest.mark.parametrize(
+    "fixture",
+    sorted(
+        fixture
+        for fixture, case in _MAIN_FEATURE_EDIT_VECTORS.items()
+        if case["input"]["catalog"] is not None
+    ),
+)
 def test_feature_edit_vectors_hold_the_maps_of_the_sessions_saved_by_main(
     fixture: str,
 ) -> None:
@@ -1561,6 +1573,116 @@ def test_feature_edit_vectors_hold_the_maps_of_the_sessions_saved_by_main(
         catalog=session["editorState"]["featureCatalog"],
     )
     assert migration.features == case["expected"]["features"]
+
+
+_LEGACY_FEATURE_FIELDS = ("fileIdx", "record_idx", "feature_index", "stable_feature_id", "svg_id")
+
+
+@pytest.mark.parametrize(
+    "fixture",
+    sorted(
+        fixture
+        for fixture, case in _MAIN_FEATURE_EDIT_VECTORS.items()
+        if case["input"]["catalog"] is None
+    ),
+)
+def test_feature_edit_vectors_hold_the_source_reads_of_sessions_31_39(
+    fixture: str, tmp_path: Path
+) -> None:
+    # A Session 31-39 saved no catalog: the CLI reads its sources again with the
+    # arguments Web Load uses (recorded from a Web Load of the fixture), and the
+    # features read are the vector's legacy input.
+    case = _MAIN_FEATURE_EDIT_VECTORS[fixture]
+    path = Path(__file__).parent / "fixtures" / fixture
+    session = json.loads(gzip.decompress(path.read_bytes()))
+    assert session["version"] == 33
+    source = case["input"]
+    assert source["features"] == {key: session["features"][key] for key in source["features"]}
+    assert source["mode"] == session["renderRequest"]["mode"]
+    assert [record["recordKey"] for record in source["legacy"]["records"]] == [
+        record["recordKey"] for record in session["renderRequest"]["records"]
+    ]
+    assert [
+        read._asdict()
+        for read in session_migration.legacy_source_reads(session["renderRequest"])
+    ] == [
+        {
+            "resource_id": read["resourceId"],
+            "region_spec": read["regionSpec"],
+            "record_selector": read["recordSelector"],
+            "reverse": read["reverse"],
+        }
+        for read in case["sourceReads"]
+    ]
+    with materialize_session(
+        load_session_document(path), output_directory=tmp_path, temporary_directory=tmp_path
+    ) as materialized:
+        read_again = session_migration.read_legacy_source_features(
+            session, materialized.resource_paths
+        )
+    assert read_again is not None
+
+    def projected(features: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [
+            {
+                **{field: feature[field] for field in _LEGACY_FEATURE_FIELDS if field in feature},
+                **(
+                    {"drawn_selector": {"hash": feature["drawn_selector"]["hash"]}}
+                    if "drawn_selector" in feature
+                    else {}
+                ),
+            }
+            for feature in features
+        ]
+
+    assert projected(read_again["extractedFeatures"]) == source["legacy"]["features"]
+    assert projected(read_again["biologicalFeatures"]) == source["legacy"]["biologicalFeatures"]
+
+
+@pytest.mark.parametrize(
+    "case",
+    json.loads(
+        (Path(__file__).parent / "fixtures" / "feature-edit-migration-vectors.json").read_text(encoding="utf-8")
+    )["sourceReadCases"],
+    ids=lambda case: case["name"],
+)
+def test_legacy_source_reads_match_the_reads_web_load_makes(case: dict[str, Any]) -> None:
+    # The same vectors pin the Web's derivation (tests/web/session-request.test.mjs).
+    assert [
+        read._asdict()
+        for read in session_migration.legacy_source_reads({"mode": "linear", "records": case["records"]})
+    ] == [
+        {
+            "resource_id": read["resourceId"],
+            "region_spec": read["regionSpec"],
+            "record_selector": read["recordSelector"],
+            "reverse": read["reverse"],
+        }
+        for read in case["sourceReads"]
+    ]
+
+
+@pytest.mark.parametrize("index", ["x", None, "missing"])
+def test_a_malformed_record_index_fails_the_upgrade_as_without_edits(
+    index: object, tmp_path: Path
+) -> None:
+    # The source reads run before the request decode; a record index that is
+    # not an integer must give the decode's error, edits or not.
+    session = json.loads(gzip.decompress(
+        (Path(__file__).parent / "fixtures" / "sessions" / "feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz")
+        .read_bytes()
+    ))
+    selector: dict[str, Any] = {"kind": "recordIndex"} if index == "missing" else {"kind": "recordIndex", "index": index}
+    session["renderRequest"]["records"][1]["selector"] = selector
+    without_edits = copy.deepcopy(session)
+    without_edits["features"] = {}
+
+    errors = []
+    for document in (session, without_edits):
+        with pytest.raises(SessionConversionError) as error:
+            upgrade_session_document(document, temporary_directory=tmp_path)
+        errors.append(str(error.value))
+    assert errors[0] == errors[1]
 
 
 # Sessions saved by main (feature-edits.provenance.json) with Feature visibility,
@@ -1621,6 +1743,47 @@ def test_session_44_rendered_id_feature_edits_survive_the_cli_sidecar(
         if narrowed
         else []
     )
+
+
+# OV-133: a Session 31-39 saved no catalog; the CLI re-save reads its sources
+# again, as Web Load does, so its rendered-ID edits are kept.
+@pytest.mark.parametrize(
+    ("fixture", "main"),
+    [
+        ("sessions/feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz", linear_main),
+        ("sessions/feature-edits-circular.v33.gbdraw-session.json.gz", circular_main),
+    ],
+)
+def test_session_33_rendered_id_feature_edits_survive_the_cli_sidecar(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, fixture: str, main: Any
+) -> None:
+    case = _MAIN_FEATURE_EDIT_VECTORS[fixture]
+    sidecar = tmp_path / "replay.gbdraw-session.json"
+
+    main(
+        [
+            "--session", str(Path(__file__).parent / "fixtures" / fixture),
+            "--output", str(tmp_path / "replay"),
+            "--format", "svg",
+            "--session_output", str(sidecar),
+        ]
+    )
+
+    saved = load_session_document(sidecar).to_dict()
+    mode = saved["renderRequest"]["mode"]
+    expected = case["expected"]["features"]["featureOverrides"]
+    assert expected and case["expected"]["droppedCount"] == 0
+    assert saved["modes"][mode]["features"]["featureOverrides"] == {
+        json.dumps([row["recordKey"], row["biologicalFeatureId"]], separators=(",", ":")): {
+            field: value for field, value in row.items() if field != "scope"
+        }
+        for row in expected.values()
+    }
+    assert not [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == session_migration.__name__ and "dropped" in record.getMessage()
+    ]
 
 
 _ANNOTATION_TARGET_VECTORS = json.loads(

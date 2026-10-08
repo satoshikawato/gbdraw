@@ -52,6 +52,9 @@ the features they name:
   feature metadata, for records drawn without a crop or reverse complement.
 - If the Web app's diagram runtime cannot start or fails while reading the
   sources, the Load fails and keeps the current Session.
+- A CLI re-save and `upgrade_session_document()` read the sources again the
+  same way. When a source cannot be read, they use the saved feature metadata,
+  without the Web app's fallback to the features of the saved SVG.
 - An edit that names no feature is dropped, and the Web app reports how many.
 - An older Feature visibility edit that hid every feature with its hash (each
   copy of a duplicated record) now applies to the edited feature only; the Web

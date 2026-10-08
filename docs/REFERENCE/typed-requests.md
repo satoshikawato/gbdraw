@@ -218,7 +218,9 @@ fields differ from the first's.
 `document` and its `warnings`. A current document is returned unchanged. A
 Session 31–44 gets the migrations of a CLI re-save without a render: its
 request is decoded, adapted to current typed state, and encoded again with the
-same resource IDs, and its Web-owned fields are migrated. Results with a
+same resource IDs, and its Web-owned fields are migrated. The rendered-ID
+feature edits of a Session 31–39 move onto their features through its GenBank
+sources read again, as a Web Load moves them. Results with a
 feature catalog (Sessions 40–44) are kept; Sessions 31–39 saved none, so their
 Results are dropped until the next render. A drawing whose Results are dropped
 gets one line in `warnings` that names each dropped Result, and the line is

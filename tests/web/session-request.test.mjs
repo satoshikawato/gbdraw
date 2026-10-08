@@ -5668,3 +5668,35 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
   labelled.diagramOptions.conservationLabels = [''];
   assert.deepEqual(ringLabels(labelled), ['caenorhabditis-human.tlosatx']);
 }
+
+// OV-133: the GenBank reads with which Web Load names the rendered-ID edits of
+// a Session 31-39 (request projection, then buildLinearRegionExtractionContext)
+// are the vectors the Python twin (session_migration.legacy_source_reads) reads.
+{
+  const { buildLinearRegionExtractionContext } = await import(
+    pathToFileURL(join(tempRoot, 'js', 'services', 'feature-metadata-extraction.js'))
+  );
+  const vectors = JSON.parse(await readFile(
+    join(repoRoot, 'tests', 'fixtures', 'feature-edit-migration-vectors.json'), 'utf8'
+  ));
+  const fixture = async (name) => JSON.parse(gunzipSync(await readFile(join(repoRoot, 'tests', 'fixtures', name))));
+  const cases = [
+    ...vectors.cases.filter((entry) => entry.sourceReads && entry.input.mode === 'linear'),
+    ...vectors.sourceReadCases
+  ];
+  assert.ok(cases.length >= 2);
+  for (const { name, fixture: fixtureName, records, sourceReads } of cases) {
+    const session = await fixture(fixtureName);
+    const renderRequest = records ? { ...session.renderRequest, records } : session.renderRequest;
+    const { linearSeqs } = projectCanonicalSessionRequest({
+      renderRequest, resources: session.resources, webFiles: {}, storedConfig: null
+    }).files;
+    const context = buildLinearRegionExtractionContext(linearSeqs, 'gb');
+    assert.deepEqual(renderRequest.records.map((record, index) => ({
+      resourceId: record.source.resourceId,
+      regionSpec: context.regionSpecs[index]?.displayFile ?? null,
+      recordSelector: context.recordSelectors[index] || null,
+      reverse: context.reverseFlags[index]
+    })), sourceReads, name);
+  }
+}
