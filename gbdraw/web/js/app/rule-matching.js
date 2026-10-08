@@ -170,8 +170,7 @@ export const createRulePreparation = ({
   ])];
   const snapshot = () => {
     const drawing = state.activeDrawing();
-    return (
-  {
+    return {
       catalog: state.extractedFeatures.value,
       biology: state.biologicalFeatures?.value,
       result: state.svgResultIdentity?.value,
@@ -196,8 +195,7 @@ export const createRulePreparation = ({
         state.files?.c_conservation_blasts, state.files?.c_conservation_blasts_source,
         state.files?.c_conservation_fastas, state.files?.c_conservation_sequence_sources
       ].flatMap(input => Array.isArray(input) ? [input, ...input] : [input])
-    }
-    );
+    };
   };
   const isCurrent = (before) => {
     const after = snapshot();

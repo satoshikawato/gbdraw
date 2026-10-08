@@ -11,9 +11,12 @@ const rename = async (page, text) => {
 
 const labelIntent = state => ({ labels: state.labels, bulk: state.bulkLabels,
   sources: state.labelSources, visibility: state.visibility });
+// Label edits belong to the mode they were made in (PD-OI-086): a mode used
+// for the first time has none.
+const noLabelIntent = { labels: {}, bulk: {}, sources: {}, visibility: {} };
 
 for (const mode of ['circular', 'linear']) {
-  test(`${mode} label intent survives mode Undo/Redo and Save/Load/Generate`, async ({ browser }, testInfo) => {
+  test(`${mode} label intent stays in its mode across mode Undo/Redo and Save/Load/Generate`, async ({ browser }, testInfo) => {
     test.setTimeout(360000);
     const page = await load(browser, seeds[mode]);
     let fresh;
@@ -26,7 +29,7 @@ for (const mode of ['circular', 'linear']) {
       expect(edited.mounted).toContain(text);
       const temporary = mode === 'circular' ? 'linear' : 'circular';
       await switchMode(page, temporary);
-      expect.soft(labelIntent(await snapshot(page))).toEqual(labelIntent(edited));
+      expect.soft(labelIntent(await snapshot(page))).toEqual(noLabelIntent);
       expect((await snapshot(page)).featureCount).toBe(0);
       await switchMode(page, mode);
       const check = async name => {
@@ -41,7 +44,8 @@ for (const mode of ['circular', 'linear']) {
         for (const expectedMode of [temporary, mode]) {
           await page.getByRole('button', { name: action, exact: true }).click();
           await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe(expectedMode);
-          expect.soft(labelIntent(await snapshot(page))).toEqual(labelIntent(edited));
+          expect.soft(labelIntent(await snapshot(page)))
+            .toEqual(expectedMode === mode ? labelIntent(edited) : noLabelIntent);
         }
         await check(action);
       }
@@ -88,7 +92,7 @@ test('label visibility intent survives mode inactivity and regeneration', async 
   } finally { await page.context().close(); }
 });
 
-test('an applicable bulk label override remains dormant across mode navigation', async ({ browser }, testInfo) => {
+test('an applicable bulk label override stays dormant in its mode across mode navigation', async ({ browser }, testInfo) => {
   test.setTimeout(240000);
   const page = await load(browser);
   try {
@@ -108,7 +112,7 @@ test('an applicable bulk label override remains dormant across mode navigation',
     expect(before.bulkLabels).toEqual({ 'tRNA-Phe': 'BULK_RETAINED_LABEL' });
     expect(before.mounted).toContain('BULK_RETAINED_LABEL');
     await switchMode(page, 'linear');
-    expect.soft((await snapshot(page)).bulkLabels).toEqual(before.bulkLabels);
+    expect.soft((await snapshot(page)).bulkLabels).toEqual({});
     await switchMode(page, 'circular');
     expect.soft((await snapshot(page)).bulkLabels).toEqual(before.bulkLabels);
     expect.soft((await snapshot(page)).mounted).toContain('BULK_RETAINED_LABEL');
