@@ -5748,8 +5748,8 @@ export const disposeSessionOperations = () => {
 // applying (R13); `options.recordDisplayRows` are the draft record display
 // rows a Save without a committed request projects;
 // `options.readOtherModeArtifact` returns the other mode's artifact slot that
-// the root keeps (E1), and `options.beforeExport` learns whether Save projects
-// the draft request.
+// the root keeps (E1), `options.beforeExport` learns whether Save projects
+// the draft request, and `options.onSaved` runs once the download is handed off.
 export const exportSession = (titleOverride = null, options = {}) => {
   if (sessionSaveInFlight) {
     recordSessionLifecycleEvent('session-save-joined');
@@ -5816,9 +5816,11 @@ export const exportSession = (titleOverride = null, options = {}) => {
     };
     const prepared = await options.beforeExport?.({ draftRequest: !artifact.committedCanonicalSession });
     if (!isCurrent()) return { status: 'canceled' };
-    return exportSessionDocument(title, {
+    const result = await exportSessionDocument(title, {
       ...options, ...prepared, drawing, modes, savedUi, isCurrent, artifact, otherArtifact
     });
+    if (result?.status === 'saved') options.onSaved?.();
+    return result;
   }).catch((error) => {
     recordSessionLifecycleEvent('session-save-error');
     if (!isCurrent() || (state.errorLog.value !== previousAlert && state.errorLog.value !== null)) {
