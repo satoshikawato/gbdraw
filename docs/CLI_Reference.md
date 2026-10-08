@@ -473,8 +473,8 @@ options:
                         Inner label y-radius offset factor (float; default
                         from config)
   --scale_interval SCALE_INTERVAL
-                        Manual scale interval for circular mode (in bp).
-                        Overrides automatic calculation.
+                        Manual scale interval for circular mode (in bp; must
+                        be > 0). Overrides automatic calculation.
   --hide_scale          Hide the primary genome-coordinate scale while
                         retaining the circular axis.
   --tick_label_font_size TICK_LABEL_FONT_SIZE
@@ -584,9 +584,9 @@ are rejected. Pass an
 explicit `--output` path or prefix for such records.
 Session replay keeps its saved prefix unless an output override is supplied.
 
-Circular BLAST similarity rings use one ring per `--conservation_blast` source and a shared identity gradient legend. The rings display raw HSPs rather than an inferred measure of evolutionary conservation. BLAST tables must be outfmt 6 or 7. Coordinates on the selected reference side are normalized from BLAST 1-based inclusive coordinates to drawing spans; `start > end` marks reverse orientation and is not interpreted as a circular-origin-spanning hit.
+Circular BLAST similarity rings use one ring per `--conservation_blast` source and a shared identity gradient legend. The rings display raw HSPs rather than an inferred measure of evolutionary conservation. Without `--conservation_labels`, a ring is labelled with its table's file name without the last extension (`danio-human.tlosatx.tsv` gives `danio-human.tlosatx`), as in the web app. BLAST tables must be outfmt 6 or 7. Coordinates on the selected reference side are normalized from BLAST 1-based inclusive coordinates to drawing spans; `start > end` marks reverse orientation and is not interpreted as a circular-origin-spanning hit.
 
-To run the searches instead, use `--losat losatn` or `--losat tlosatx` with one `--conservation_sequence` file per ring (`losatp` is not available for rings). Each comparison genome file (FASTA, GenBank, or DDBJ; all records of one file are one genome) is the LOSAT query, and all displayed records are the subject, so every ring uses the reference genome as its E-value database and `--conservation_reference` resolves to `subject` (`query` is rejected). `--conservation_blast` cannot be combined with `--losat`. Ring order, labels, and colors follow `--conservation_sequence`; without `--conservation_labels`, a GenBank or DDBJ ring is labelled with its DEFINITION (or organism) and a FASTA ring with its file name. `--losatn_task` applies to LOSATN. For TLOSATX, `--losat_gencode` sets the reference genetic code and `--conservation_losat_gencode` one code for all rings or one per ring; both default to 1 and are never read from `/transl_table`. `--losat_bin`, `--ncbi_blast_bin`, and `--losat_threads` choose the runtime as in Linear mode. `--losat_output_dir DIR` writes one raw TSV per ring and `conservation.tsv`, which `--conservation_table` accepts unchanged. A saved Session stores the search results, so it replays without LOSAT. Thresholds, ring geometry, and `--circular_track_slot` work as for precomputed rings.
+To run the searches instead, use `--losat losatn` or `--losat tlosatx` with one `--conservation_sequence` file per ring (`losatp` is not available for rings). Each comparison genome file (FASTA, GenBank, or DDBJ; all records of one file are one genome) is the LOSAT query, and all displayed records are the subject, so every ring uses the reference genome as its E-value database and `--conservation_reference` resolves to `subject` (`query` is rejected). `--conservation_blast` cannot be combined with `--losat`. Ring order, labels, and colors follow `--conservation_sequence`; without `--conservation_labels`, a GenBank or DDBJ ring is labelled with its DEFINITION (or organism), and a FASTA ring, or a flat file with neither field, with its file name without the last extension (`genome.v2.fasta` gives `genome.v2`). `--losatn_task` applies to LOSATN. For TLOSATX, `--losat_gencode` sets the reference genetic code and `--conservation_losat_gencode` one code for all rings or one per ring; both default to 1 and are never read from `/transl_table`. `--losat_bin`, `--ncbi_blast_bin`, and `--losat_threads` choose the runtime as in Linear mode. `--losat_output_dir DIR` writes one raw TSV per ring and `conservation.tsv`, which `--conservation_table` accepts unchanged. A saved Session stores the search results and ring labels, so it replays without LOSAT and keeps its labels. Thresholds, ring geometry, and `--circular_track_slot` work as for precomputed rings.
 
 For `interactive_svg`, add one `--conservation_sequence` value (FASTA, GenBank, or DDBJ) per `--conservation_blast` value to enable Reference span, Comparison span, and Both spans FASTA actions in the HSP popup. Without it, the reference span remains available and the comparison action explains that no comparison sequence was supplied. These actions export ungapped genomic spans. A reversed coordinate pair is sliced from the lower to the higher coordinate and reverse-complemented.
 
@@ -1371,8 +1371,9 @@ options:
                         color when --ruler_on_axis is active, otherwise
                         black).
   --scale_interval SCALE_INTERVAL
-                        Manual tick interval for "ruler" scale style (in bp).
-                        Overrides automatic calculation; optional
+                        Manual tick interval for "ruler" scale style (in bp;
+                        must be > 0). Overrides automatic calculation;
+                        optional
   --legend_box_size LEGEND_BOX_SIZE
                         Legend box size (optional; float; default: 24 (pixels,
                         96 dpi) for genomes <= 50 kb, 20 for genomes >= 50

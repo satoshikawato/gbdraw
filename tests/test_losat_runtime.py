@@ -424,7 +424,9 @@ def test_tlosatx_search_runs_in_the_detected_dialect_and_records_the_runtime(
             "kind": "losat",
             "version": "0.1.0",
             "source": "explicit",
-            "path": str(binary),
+            # Only the executable's name: a shared Session must not carry the
+            # user's directories (D-02, 2026-10-08).
+            "path": "losat",
             "program": "tblastx",
             "cli": dialect,
         }
@@ -452,7 +454,7 @@ def test_ncbi_runtime_record_has_version_and_no_losat_dialect(tmp_path: Path) ->
             "kind": "ncbi-blast",
             "version": "2.16.0+",
             "source": "explicit",
-            "path": str(binary),
+            "path": "blastn",
             "program": "blastn",
         }
     ]

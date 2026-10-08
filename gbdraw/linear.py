@@ -247,7 +247,7 @@ def _parse_linear_multi_record_position(value: str) -> str:
     return str(value).strip()
 
 
-def _get_args(args) -> argparse.Namespace:
+def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     """
     Parses command-line arguments for generating linear genome diagrams.
 
@@ -805,7 +805,7 @@ def _get_args(args) -> argparse.Namespace:
         type=str)
     parser.add_argument(
         '--scale_interval',
-        help='Manual tick interval for "ruler" scale style (in bp). Overrides automatic calculation; optional',
+        help='Manual tick interval for "ruler" scale style (in bp; must be > 0). Overrides automatic calculation; optional',
         type=int)
     _add_legend_size_args(parser)
     parser.add_argument(
@@ -950,6 +950,10 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--gc_content_large_tick_interval must be > 0")
     if args.gc_content_small_tick_interval is not None and args.gc_content_small_tick_interval <= 0:
         parser.error("--gc_content_small_tick_interval must be > 0")
+    if args.scale_interval is not None and args.scale_interval <= 0:
+        if not _legacy_session:
+            parser.error("--scale_interval must be > 0")
+        args.scale_interval = None  # D-04: a released legacy Session drew <= 0 as automatic.
     if args.linear_track_order and args.linear_track_slot:
         parser.error("--linear_track_order cannot be combined with --linear_track_slot")
     if args.linear_track_axis_index is not None and not (args.linear_track_order or args.linear_track_slot):
@@ -1046,7 +1050,7 @@ def linear_main(cmd_args) -> None:
                 output_override=session_request.output,
                 format_override=session_request.format,
             )
-            args = _get_args(list(run_spec.args))
+            args = _get_args(list(run_spec.args), _legacy_session=True)
             args.overwrite = session_request.overwrite
             args.save_session = session_request.save_session
             args.session_output = session_request.session_output

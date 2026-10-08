@@ -22,11 +22,18 @@ _STYLE_LEAF_DOMAINS = (
     (("font_size",), "POSITIVE", "font sizes must be finite numbers greater than zero"),
     (("stroke_width", "tick_width"), "NONNEGATIVE", "stroke widths must be finite numbers of zero or greater"),
 )
+# D-04: None keeps the automatic interval. A request (a Session, the Web) that
+# carries <= 0 is read as None before it reaches here (session_request_codec.py).
+_EXACT_LEAF_DOMAINS = {
+    "objects.scale.interval": ("POSITIVE_INTEGER_OR_AUTO", "expected a positive integer or None"),
+}
 
 
 def style_leaf_domain(path: str) -> tuple[str, str] | None:
-    """Return ``(reason, requirement)`` for a font-size or stroke-width leaf."""
+    """Return ``(reason, requirement)`` for a font-size, stroke-width, or scale-interval leaf."""
 
+    if path in _EXACT_LEAF_DOMAINS:
+        return _EXACT_LEAF_DOMAINS[path]
     for suffixes, reason, requirement in _STYLE_LEAF_DOMAINS:
         if any(part.endswith(suffixes) for part in path.split(".")):
             return reason, requirement
@@ -34,14 +41,14 @@ def style_leaf_domain(path: str) -> tuple[str, str] | None:
 
 
 def validate_style_leaf(path: str, value: object, *, prefix: str) -> None:
-    """Reject a numeric font size <= 0 or stroke width < 0 at ``path``."""
+    """Reject a numeric font size or scale interval <= 0 or stroke width < 0 at ``path``."""
 
     domain = style_leaf_domain(path)
     if domain is None or value is None or isinstance(value, bool) or not isinstance(value, Real):
         return
     reason, requirement = domain
     number = float(value)
-    if math.isfinite(number) and (number > 0 if reason == "POSITIVE" else number >= 0):
+    if math.isfinite(number) and (number >= 0 if reason == "NONNEGATIVE" else number > 0):
         return
     raise ValidationError(
         f"{prefix} {path!r}; {requirement}.",

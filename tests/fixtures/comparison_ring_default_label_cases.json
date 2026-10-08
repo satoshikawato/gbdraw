@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "description": "Default label of a Circular similarity ring whose comparison file names no label (FASTA, or a flat file without DEFINITION and organism): the file name without its last extension (D-03). tests/test_comparison_sequences.py runs gbdraw.io.comparison_sequences.read_comparison_sequence_file and tests/web/conservation-series.test.mjs runs the Web defaultConservationSeriesLabel on every case; both must give the expected label.",
+  "cases": [
+    {"fileName": "NC_002333.2.fna", "expected": "NC_002333.2"},
+    {"fileName": "genome.v2.fasta", "expected": "genome.v2"},
+    {"fileName": "contigs.fa", "expected": "contigs"},
+    {"fileName": "x.fna.gz", "expected": "x.fna"},
+    {"fileName": "no_extension", "expected": "no_extension"},
+    {"fileName": "Vibrio harveyi chr1.fasta", "expected": "Vibrio harveyi chr1"}
+  ]
+}

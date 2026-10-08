@@ -230,6 +230,32 @@ an integer, as the definition line interval. This restores the 0.13.0 Web and
 CLI spacing. The rule is applied when the overrides are applied, so the stored
 request is unchanged and replay writes the same overrides back.
 
+## Unreleased: default label of a precomputed similarity ring
+
+Session version 46 and request schema 9 are unchanged. A Circular ring from a
+BLAST table (`--conservation_blast`, Python `ComparisonRingTrackOptions(source=...)`)
+without a label is now labelled with the table's file name without the last
+extension, as in the web app. CLI and Python Sessions now store
+`conservationLabels` for every precomputed ring, as Web Sessions already did.
+A Session without them was written before this change and drew the full file
+name, which its replay still draws. A Session 27–30 replay now takes that name
+from the Session's file bindings instead of drawing the temporary copy's name
+(`arg3-<file>`). Web Load of such a Session also shows the full file name; it
+showed the name without the extension before.
+
+## Unreleased: a scale interval of 0 or less
+
+Session version 46 and request schema 9 are unchanged. `--scale_interval` and
+`objects.scale.interval` in the Python option objects (`config` and
+`config_overrides`) reject a scale interval of 0 or less, and the web app's
+Scale Interval field starts at 1. A render request and a Session read a value
+of 0 or less as the automatic interval, as every earlier writer drew it:
+in `renderRequest.diagramOptions.config`, in `configOverrides` (including the
+flat `scale_interval` that earlier Web Sessions wrote), and in a Session 27–30
+`cliInvocation`. Web Load shows the stored value in the field, **Generate
+Diagram** draws the automatic interval, and the Source recipe omits
+`--scale_interval`. A value of 0 or less typed into the field behaves the same.
+
 ## Unreleased: CLI and Python LOSATN / TLOSATX results
 
 Session version 44 and request schema 8 are unchanged. A Linear run with
@@ -238,7 +264,12 @@ programs) saves what the web app saves: one `nucleotideBlast` resource per
 compared record pair with the raw search-frame rows, and one schema 2
 `losatCache` entry per pair with the web raw key and the non-key `runtime`
 record. Entries that the web app searches carry `runtime` too, as
-`{kind: "losat", source: "wasm", version: null, program}`. The saved request carries the resolved comparisons, not the search
+`{kind: "losat", source: "wasm", version: null, program}`. A CLI or Python
+runtime outside the package records only its executable's name as `path` (for
+example `losat` or `blastn`), so the runtime record carries no local directory;
+the bundled runtime records `gbdraw/bin/<platform>/losat`. A CLI Session's
+`cliInvocation.args` still hold `--losat_bin` and the input and output paths
+as typed. The saved request carries the resolved comparisons, not the search
 intent, so replay needs no LOSAT runtime. A request that still carries the
 search intent cannot be encoded; resolve or render it first.
 

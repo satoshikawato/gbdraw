@@ -3,10 +3,12 @@
 // as read by the Python ring reader; FASTA rows keep the file-name default and a
 // typed label always wins.
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const {
   applyComparisonSequenceRecordLabel,
+  defaultConservationSeriesLabel,
   reconcileConservationSeries
 } = await import('../../gbdraw/web/js/services/conservation-series.js');
 
@@ -47,6 +49,16 @@ test('a FASTA row or a file that names no label keeps the file-name default', ()
     }), false);
   }
   assert.deepEqual(series.map(({ label }) => label), ['comparison-b', 'bare']);
+});
+
+test('the file-name default follows the shared vectors of the Python ring reader', async () => {
+  // D-03: tests/test_comparison_sequences.py runs the same cases.
+  const { cases } = JSON.parse(await readFile(
+    new URL('../fixtures/comparison_ring_default_label_cases.json', import.meta.url), 'utf8'
+  ));
+  for (const { fileName, expected } of cases) {
+    assert.equal(defaultConservationSeriesLabel(file(fileName), 0), expected, fileName);
+  }
 });
 
 test('a typed label wins over the record label', () => {

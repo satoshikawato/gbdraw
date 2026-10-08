@@ -614,3 +614,30 @@ assert.equal(
   'adjacent',
   'the fresh adjacent scope must reach the canonical Collinear request'
 );
+
+{
+  // D-04: a request reads a Scale Interval of 0 or less as the automatic interval
+  // (a loaded Session may hold one; Generate sends the field literally, R7), so the
+  // Source recipe omits it instead of writing a value the CLI rejects.
+  const { applyConfigData, buildConfigData } = await import(
+    pathToFileURL(join(tempDir, 'js', 'services', 'config.js'))
+  );
+  const { buildSourceRecipe } = await import(pathToFileURL(join(tempDir, 'js', 'app', 'run-info.js')));
+  state.mode.value = 'circular';
+  Object.assign(state.activeDrawing().form, createDefaultForm());
+  Object.assign(state.activeDrawing().adv, createDefaultAdv('circular'));
+  state.cInputType.value = 'gb';
+  for (const [stored, flag] of [[-5, null], [0, null], [250, '250']]) {
+    const loaded = structuredClone(buildConfigData(state.activeDrawing()));
+    loaded.adv.scale_interval = stored;
+    applyConfigData(state.activeDrawing(), loaded);
+    const canonical = buildCanonicalRenderRequest({
+      state, drawing: state.activeDrawing(), filesData: { c_gb: genbank, linearSeqs: [] }, comparisonPlanSnapshot: null
+    });
+    assert.equal(canonical.renderRequest.diagramOptions.configOverrides['objects.scale.interval'], stored);
+    const recipe = await buildSourceRecipe(canonical);
+    assert.equal(recipe.available, true, recipe.unavailableReason);
+    const index = recipe.args.indexOf('--scale_interval');
+    assert.equal(index === -1 ? null : recipe.args[index + 1], flag, `stored scale_interval ${stored}`);
+  }
+}

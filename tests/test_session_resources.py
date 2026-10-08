@@ -102,15 +102,16 @@ def test_a_held_name_with_other_bytes_numbers_the_name_and_pins_ring_labels(
 ) -> None:
     ring = _ring(tmp_path)
     alone = encode_canonical_request(_request(ring))
-    assert "conservationLabels" not in alone.payload["diagramOptions"]
+    # D-03: every precomputed ring stores its drawn label (the file stem).
+    assert alone.payload["diagramOptions"]["conservationLabels"] == ["ring"]
     table = SessionResourceTable({"ring-1": _descriptor("ring.tsv", b"other rows\n")})
 
     encoded = encode_canonical_request(_request(ring), table=table)
 
     assert _rings(encoded.payload) == ["conservation-blast-files-1"]
     assert table.descriptors()["conservation-blast-files-1"]["name"] == "ring.2.tsv"
-    # A replay labels the ring with its file name, so the label is stored.
-    assert encoded.payload["diagramOptions"]["conservationLabels"] == ["ring.tsv"]
+    # The stored label keeps the drawn one although the resource is renamed.
+    assert encoded.payload["diagramOptions"]["conservationLabels"] == ["ring"]
 
 
 def test_equal_bytes_under_another_name_pin_ring_labels(tmp_path: Path) -> None:
@@ -120,7 +121,7 @@ def test_equal_bytes_under_another_name_pin_ring_labels(tmp_path: Path) -> None:
     encoded = encode_canonical_request(_request(ring), table=table)
 
     assert _rings(encoded.payload) == ["ring-1"]
-    assert encoded.payload["diagramOptions"]["conservationLabels"] == ["ring.tsv"]
+    assert encoded.payload["diagramOptions"]["conservationLabels"] == ["ring"]
 
 
 def test_inputs_of_one_request_keep_resources_of_their_own(tmp_path: Path) -> None:

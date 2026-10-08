@@ -1123,6 +1123,25 @@ Retired names and their replacements are listed under
   longer closes it (GX-22).
 - Legend Name Scope (web app): **Cancel** closes the dialog at once and records no Undo
   step, also right after a Session load (GX-20).
+- Comparison rings (CLI and Python API): a ring without `--conservation_labels` is labelled with
+  its comparison file name without the last extension, as in the web app (`NC_002333.2.fna`
+  draws `NC_002333.2`). This covers LOSAT rings and precomputed `--conservation_blast` rings.
+  Sessions now store every ring label, and a saved Session keeps the labels it was drawn with.
+  GenBank and DDBJ rings still take the DEFINITION, then the organism.
+- Scale interval (CLI, Python API, web app): the CLI and the Python option objects reject a scale
+  interval of 0 or less with an error that names `--scale_interval` or `objects.scale.interval`,
+  and the web app's Scale Interval field starts at 1. Before, the value was accepted and drew the
+  automatic interval. A Session or web request that holds such a value still draws the automatic
+  interval.
+- Tick labels (CLI, Python API, web app): a manual interval that is not a whole unit prints the
+  decimals it needs. A 500 bp Circular interval read "0 kbp, 1 kbp, 1 kbp, 2 kbp", and a 250 bp
+  Linear interval wrote 2250 as "2.2 kbp". Automatic intervals are unchanged (OV-201).
+- Sessions (CLI and Python API): the LOSAT runtime record of a Session stores only the
+  executable's name for a runtime outside the package (explicit, conda, managed, or PATH), not its
+  absolute path. The command line in `cliInvocation` is still stored as typed.
+- Sessions: replaying a Session 27–30 with an unlabelled precomputed ring labels it with the
+  original file name instead of the temporary `arg<n>-<name>` (OV-202), and the web app loads an
+  older CLI Session without ring labels with the full file name, as the CLI draws it (OV-203).
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 

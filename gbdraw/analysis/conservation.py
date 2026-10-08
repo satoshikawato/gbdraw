@@ -15,6 +15,7 @@ from pandas import DataFrame
 from gbdraw.core.color import normalize_hex_color, tint_color
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.colors import resolve_color_to_hex
+from gbdraw.io.comparison_sequences import comparison_file_stem
 from gbdraw.io.comparisons import (
     COMPARISON_COLUMNS,
     filter_comparison_dataframe,
@@ -125,12 +126,14 @@ def empty_normalized_conservation_hits() -> DataFrame:
 
 
 def _default_label(source_index: int, path: "str | ConservationSearchResult | None") -> str:
+    """The file name without its last extension (D-03), as for a FASTA ring and in the Web."""
+
     if isinstance(path, ConservationSearchResult):
         path = path.name
     if path:
         basename = os.path.basename(str(path))
         if basename:
-            return basename
+            return comparison_file_stem(basename).strip() or basename
     return f"Conservation {int(source_index) + 1}"
 
 

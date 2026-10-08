@@ -5568,3 +5568,22 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
   assert.deepEqual(canonicalLinearRecordLayout({ ...request, mode: 'circular' }),
     { similarityAlignment: null, recordTranslations: [] });
 }
+
+{
+  // D-03 / OV-203: a CLI or Python Session written before D-03 stores no label for a
+  // precomputed ring and drew its full file name, which Load must keep (the Python
+  // decoder reads it the same way). Stored labels, as every Web Session writes them, win.
+  const session = JSON.parse(gunzipSync(await readFile(join(
+    repoRoot, 'tests/fixtures/sessions/precomputed-ring-unlabelled-cli.v44.gbdraw-session.json.gz'
+  ))));
+  assert.equal(Object.hasOwn(session.renderRequest.diagramOptions, 'conservationLabels'), false);
+  const ringLabels = (renderRequest) => projectCanonicalSessionRequest({
+    renderRequest, resources: session.resources
+  }).config.circularConservation.series.map((entry) => entry.label);
+  assert.deepEqual(ringLabels(session.renderRequest), ['caenorhabditis-human.tlosatx.tsv']);
+  const labelled = structuredClone(session.renderRequest);
+  labelled.diagramOptions.conservationLabels = ['Caenorhabditis'];
+  assert.deepEqual(ringLabels(labelled), ['Caenorhabditis']);
+  labelled.diagramOptions.conservationLabels = [''];
+  assert.deepEqual(ringLabels(labelled), ['caenorhabditis-human.tlosatx']);
+}

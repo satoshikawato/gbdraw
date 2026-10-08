@@ -626,7 +626,7 @@ Seq** History step ends when the read answers, so Undo and Redo restore the
 label. Until it answers, Undo, Redo, and Session save and load are unavailable
 and Generate waits; the first read takes longer because it starts the worker.
 A FASTA row, or a flat file with neither field, is labelled with its file name
-without the extension; the CLI keeps the extension. A cleared label
+without the last extension, as in the CLI. A cleared label
 field uses the file name shown as its placeholder. The Source recipe passes the
 Web labels explicitly. **Ring Width** and **Ring Gap** control the ordered
 evidence tracks. **Save Raw LOSAT TSV** exports generated search rows.

@@ -23,8 +23,9 @@ def read_comparison_sequence_json(path: str) -> str:
     ``recordLabel`` is the CLI default ring label when the file names one
     (GenBank / DDBJ: the first record's DEFINITION, else its organism), else
     ``null``: the Worker stages the file under a fixed name, so the Web applies
-    its own file-name rule. Raises ``INPUT_UNREADABLE`` (``SEQUENCE_MISSING``
-    for a file or record without sequence) like the CLI ring search.
+    the file-name rule of ``comparison_file_stem`` itself. Raises
+    ``INPUT_UNREADABLE`` (``SEQUENCE_MISSING`` for a file or record without
+    sequence) like the CLI ring search.
     """
 
     comparison = read_comparison_sequence_file(path)

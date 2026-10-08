@@ -237,7 +237,6 @@ class RequestResources:
         self._table = table
         self._requested: set[str] = set()
         self._taken: set[str] = set()
-        self._renamed: set[str] = set()
         self._added: list[CanonicalRequestResource] = []
 
     def add_path(self, resource_id: str, *, kind: str, value: object) -> str:
@@ -276,11 +275,6 @@ class RequestResources:
             )
         )
 
-    def renamed(self, resource_id: str) -> bool:
-        """Whether the resource's file name is not the input's own file name."""
-
-        return resource_id in self._renamed
-
     def added(self) -> tuple[CanonicalRequestResource, ...]:
         """The new resources of this request, in the order it added them."""
 
@@ -302,14 +296,9 @@ class RequestResources:
             name=name,
             exclude=self._taken,
         )
-        if resource_id is not None:
-            if table._held[resource_id].name != name:
-                self._renamed.add(resource_id)
-        else:
+        if resource_id is None:
             resource_id = table._free_id(resource.resource_id)
             unique_name = unique_filename(resource.name, table._names, key=safe_embedded_filename)
-            if unique_name != resource.name:
-                self._renamed.add(resource_id)
             if (resource_id, unique_name) != (resource.resource_id, resource.name):
                 resource = replace(resource, resource_id=resource_id, name=unique_name)
             table._hold_resource(resource, size=size)

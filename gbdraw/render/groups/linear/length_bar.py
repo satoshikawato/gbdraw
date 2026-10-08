@@ -8,6 +8,7 @@ from svgwrite.shapes import Line
 from svgwrite.text import Text
 
 from ....canvas import LinearCanvasConfigurator
+from ....core.numeric import scaled_tick_text
 from ....core.text import calculate_bbox_dimensions
 from ....config.models import GbdrawConfig
 from ....layout.spatial import Aabb
@@ -63,18 +64,7 @@ def format_linear_tick_label(
 
     if divisor == 1:
         return f"{position:,} bp"
-
-    decimals = 0
-    if tick_interval is not None:
-        interval = abs(int(tick_interval))
-        if interval > 0 and interval < divisor:
-            decimals = min(6, int(math.ceil(math.log10(divisor / float(interval)))))
-
-    value = float(position) / float(divisor)
-    value_text = f"{value:.{decimals}f}" if decimals > 0 else f"{value:.0f}"
-    if decimals > 0:
-        value_text = value_text.rstrip("0").rstrip(".")
-    return f"{value_text} {unit}"
+    return f"{scaled_tick_text(position, divisor, tick_interval)} {unit}"
 
 
 def _label_bounds(x_pos: float, bbox_width: float) -> tuple[float, float]:

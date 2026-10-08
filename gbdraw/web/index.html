@@ -4594,9 +4594,9 @@
                                         </auto-value-field>
                                     </div>
                                     <div v-if="form.scale_style === 'ruler'">
-                                        <span class="input-label text-[10px]">Interval <help-tip id="help-linear-axis-interval" text="Manual tick interval for Ruler scale style in bp. Leave blank to calculate automatically."></help-tip></span>
+                                        <span class="input-label text-[10px]">Interval <help-tip id="help-linear-axis-interval" text="Manual tick interval for Ruler scale style in bp (must be > 0). Leave blank to calculate automatically."></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.scale_interval, 'scaleInterval')" :text="autoValueText('scaleInterval')">
-                                            <input type="number" v-model.number="adv.scale_interval" class="form-input form-input-compact auto-value-input" aria-label="Linear ruler interval" aria-describedby="help-linear-axis-interval" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="1" step="1" v-model.number="adv.scale_interval" class="form-input form-input-compact auto-value-input" aria-label="Linear ruler interval" aria-describedby="help-linear-axis-interval" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                     <div v-if="form.scale_style === 'ruler'">
@@ -4666,9 +4666,9 @@
                                     :class="canUseCircularScaleStyling ? '' : 'opacity-50'"
                                     class="grid grid-cols-2 gap-1.5 min-w-0">
                                     <div>
-                                        <span class="input-label text-[10px]">Scale Interval <help-tip id="help-circular-axis-scale-interval" text="Manual scale interval for circular mode (in bp). Overrides automatic calculation."></help-tip></span>
+                                        <span class="input-label text-[10px]">Scale Interval <help-tip id="help-circular-axis-scale-interval" text="Manual scale interval for circular mode (in bp; must be > 0). Overrides automatic calculation."></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.scale_interval, 'scaleInterval')" :text="autoValueText('scaleInterval')">
-                                            <input type="number" v-model.number="adv.scale_interval" class="form-input form-input-compact auto-value-input" aria-label="Circular scale interval" aria-describedby="help-circular-axis-scale-interval" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="1" step="1" v-model.number="adv.scale_interval" class="form-input form-input-compact auto-value-input" aria-label="Circular scale interval" aria-describedby="help-circular-axis-scale-interval" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                     <div>

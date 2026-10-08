@@ -911,7 +911,7 @@ test('GenBank and DDBJ ring rows added without a label take the CLI default labe
     expect(cli.status, cli.stderr).toBe(0);
     const cliLabels = JSON.parse(cli.stdout);
     expect(cliLabels).toEqual([
-      'synthetic comparison c', 'Synthetic organism c', 'synthetic comparison c', 'ring-fasta.fa'
+      'synthetic comparison c', 'Synthetic organism c', 'synthetic comparison c', 'ring-fasta'
     ]);
 
     const run = await evaluateWithRetainedPromise(page, async (inputs) => {

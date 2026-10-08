@@ -3775,7 +3775,11 @@ const projectCircularConservationConfig = (options, files) => {
     : [];
   const series = sourceFiles.map((file, index) => {
     const fileName = String(file?.name || `comparison-${index + 1}.tsv`);
-    const defaultLabel = fileName.replace(/\.[^.]+$/, '').trim() || `Comparison ${index + 1}`;
+    // A Session without stored labels predates D-03 and drew the full file name,
+    // as the Python decoder reads it; every Web Session stores its labels.
+    const defaultLabel = Array.isArray(options.conservationLabels)
+      ? fileName.replace(/\.[^.]+$/, '').trim() || `Comparison ${index + 1}`
+      : fileName;
     return {
       fileName,
       sourceIndex: index,

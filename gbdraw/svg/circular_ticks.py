@@ -8,6 +8,7 @@ from typing import Literal
 from svgwrite.path import Path
 from svgwrite.text import Text, TextPath
 
+from ..core.numeric import scaled_tick_text
 from ..core.text import calculate_bbox_dimensions
 from .ids import stable_svg_id
 
@@ -55,10 +56,10 @@ def get_circular_tick_intervals(total_len: int, manual_interval: int | None = No
     return 1000000, 200000
 
 
-def _format_tick_label_text(tick: int, total_len: int) -> str:
+def _format_tick_label_text(tick: int, total_len: int, tick_interval: int | None) -> str:
     """Format circular tick label text with existing kbp/Mbp rules."""
     if total_len < 1000000:
-        return f"{int(tick / 1000)} kbp"
+        return f"{scaled_tick_text(tick, 1000, tick_interval)} kbp"
     return f"{tick / 1000000} Mbp"
 
 
@@ -250,7 +251,7 @@ def get_circular_tick_label_radius_bounds(
     min_radius = float("inf")
     max_radius = float("-inf")
     for tick in ticks_large_nonzero:
-        label_text = _format_tick_label_text(tick, total_len)
+        label_text = _format_tick_label_text(tick, total_len, tick_large)
         geometry = resolve_circular_tick_label_geometry(
             center_radius_px=center_radius_px,
             total_len=total_len,
@@ -570,13 +571,14 @@ def generate_circular_tick_labels(
     group_identifier: str | None = None,
     record_identifier: str | None = None,
     record_transform: RecordDisplayTransform | None = None,
+    tick_interval: int | None = None,
 ) -> list[Text]:
     tick_label_paths_list: list[Text] = []
     normalized_side = str(label_side or "legacy").strip().lower()
     if normalized_side in {"none", ""}:
         return []
     for label_index, tick in enumerate(ticks):
-        label_text = _format_tick_label_text(tick, total_len)
+        label_text = _format_tick_label_text(tick, total_len, tick_interval)
         if record_transform is not None and record_transform.start_coordinate is not None:
             tick = record_transform.source_base_to_display_index(tick)
         angle = 360.0 * (tick / total_len)

@@ -506,7 +506,7 @@ def _get_args(
         type=float)
     parser.add_argument(
         '--scale_interval',
-        help='Manual scale interval for circular mode (in bp). Overrides automatic calculation.',
+        help='Manual scale interval for circular mode (in bp; must be > 0). Overrides automatic calculation.',
         type=int)
     parser.add_argument(
         '--hide_scale',
@@ -605,6 +605,10 @@ def _get_args(
         parser.error("--gc_content_large_tick_interval must be > 0")
     if args.gc_content_small_tick_interval is not None and args.gc_content_small_tick_interval <= 0:
         parser.error("--gc_content_small_tick_interval must be > 0")
+    if args.scale_interval is not None and args.scale_interval <= 0:
+        if not _allow_legacy_track_transport:
+            parser.error("--scale_interval must be > 0")
+        args.scale_interval = None  # D-04: a released legacy Session drew <= 0 as automatic.
     if args.gc_skew_width is not None and args.gc_skew_width <= 0:
         parser.error("--gc_skew_width must be > 0")
     if args.gc_skew_radius is not None and args.gc_skew_radius <= 0:
@@ -761,6 +765,11 @@ def circular_main(cmd_args) -> None:
                 list(run_spec.args),
                 _allow_legacy_track_transport=True,
             )
+            if args.conservation_blast and not args.losat and not args.conservation_labels:
+                # D-03, OV-202: an unlabelled ring keeps the file name its original run
+                # drew, which the Session binds; the replay reads a temporary copy.
+                names = {run_spec.args[binding.argIndex]: binding.name for binding in run_spec.file_bindings}
+                args.conservation_labels = [names.get(path, Path(path).name) for path in args.conservation_blast]
             args.overwrite = session_request.overwrite
             args.save_session = session_request.save_session
             args.session_output = session_request.session_output

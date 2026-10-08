@@ -111,7 +111,7 @@ def test_helper_record_label_is_the_cli_ring_default(
     result = json.loads(read_comparison_sequence_json(str(path)))
     assert result["recordLabel"] == expected
     cli_label = read_comparison_sequence_file(path).label
-    assert cli_label == (expected if expected is not None else "ring.gb")
+    assert cli_label == (expected if expected is not None else "ring")
 
 
 def test_helper_record_label_reads_the_first_record(tmp_path: Path) -> None:

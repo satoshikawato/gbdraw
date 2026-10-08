@@ -1725,7 +1725,7 @@ def _encode_diagram_options(
         if _same_default(value, default):
             continue
         result[_option_wire_key(name)] = _encode_option_value(name, value, resources=resources)
-    labels = _ring_labels_of_renamed_files(options, result.get("conservationBlastFiles"), resources)
+    labels = _precomputed_ring_labels(options)
     if labels is not None:
         result["conservationLabels"] = _encode_option_value(
             "conservation_labels", labels, resources=resources
@@ -1738,21 +1738,17 @@ def _encode_diagram_options(
     return result
 
 
-def _ring_labels_of_renamed_files(
+def _precomputed_ring_labels(
     options: CircularDiagramOptions | LinearDiagramOptions,
-    refs: object,
-    resources: RequestResources,
 ) -> tuple[str, ...] | None:
-    """Ring labels to store when a ring file without a label was renamed.
+    """The drawn label of every precomputed ring, stored so a replay never derives one.
 
-    A ring without a label is labelled with its file name, which a replay reads
-    from the resource name; storing the labels keeps the drawn labels.
+    A Session without them predates D-03 and drew the full file name
+    (``_decode_diagram_options``); a renamed resource would also change it.
     """
 
     files = tuple(getattr(options, "conservation_blast_files", None) or ())
-    if not files or not isinstance(refs, list) or not any(
-        resources.renamed(ref["resourceId"]) for ref in refs if isinstance(ref, Mapping)
-    ):
+    if not files:
         return None
     given = getattr(options, "conservation_labels", None)
     count = max(len(files), len(getattr(options, "conservation_dataframes", None) or ()))
@@ -1774,7 +1770,7 @@ def _decode_diagram_options(
     payload = _object(value, path="renderRequest.diagramOptions")
     if schema in {1, 2}:
         payload = _migrate_legacy_feature_visibility_fields(payload)
-    payload = dict(payload)
+    payload = with_automatic_scale_interval(payload)
     placements: tuple[FeaturePlacementOverride, ...] = ()
     if schema >= DISPLAY_PLACEMENT_SCHEMA:
         if not isinstance(payload.get("featurePlacements"), list):
@@ -1821,6 +1817,14 @@ def _decode_diagram_options(
     }
     decoded["feature_placements"] = placements
     decoded["feature_overrides"] = overrides
+    if "conservationBlastFiles" in payload and "conservationLabels" not in payload:
+        # Writers before D-03 stored no label for a precomputed ring and drew its file name.
+        files = decoded.get("conservation_blast_files") or ()
+        count = max(len(files), len(decoded.get("conservation_dataframes") or ()))
+        decoded["conservation_labels"] = tuple(
+            Path(files[index]).name if index < len(files) else f"Conservation {index + 1}"
+            for index in range(count)
+        )
     if decoded.get("config_overrides") is not None:
         decoded["config_overrides"] = _decode_config_overrides(
             decoded["config_overrides"],
@@ -1834,6 +1838,36 @@ def _decode_diagram_options(
     if schema in {1, 2}:
         _restore_legacy_sparse_defaults(decoded, mode=mode)
     return decoded
+
+
+def with_automatic_scale_interval(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Return request ``diagramOptions`` with a scale interval <= 0 read as automatic.
+
+    Every request writer drew it so; the CLI, the option objects, and the Web
+    field refuse such a value as input (D-04), but a request keeps its meaning.
+    The decoder and the Web Load check of the stored configuration use it.
+    """
+
+    def automatic(holder: object, key: str) -> object:
+        if not isinstance(holder, Mapping):
+            return holder
+        value = holder.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or value > 0:
+            return holder
+        return {**holder, key: None}
+
+    result = dict(payload)
+    config = result.get("config")
+    if isinstance(config, Mapping) and isinstance(objects := config.get("objects"), Mapping):
+        scale = automatic(objects.get("scale"), "interval")
+        if scale is not objects.get("scale"):
+            result["config"] = {**config, "objects": {**objects, "scale": scale}}
+    overrides = result.get("configOverrides")
+    for key in ("objects.scale.interval", "scale_interval"):
+        overrides = automatic(overrides, key)
+    if overrides is not result.get("configOverrides"):
+        result["configOverrides"] = overrides
+    return result
 
 
 def _migrate_legacy_feature_visibility_fields(
@@ -4767,4 +4801,5 @@ __all__ = [
     "decode_canonical_request",
     "encode_canonical_typed_resource",
     "encode_canonical_request",
+    "with_automatic_scale_interval",
 ]
