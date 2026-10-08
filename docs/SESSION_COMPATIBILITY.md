@@ -240,8 +240,8 @@ extension, as in the web app. CLI and Python Sessions now store
 A Session without them was written before this change and drew the full file
 name, which its replay still draws. A Session 27–30 replay now takes that name
 from the Session's file bindings instead of drawing the temporary copy's name
-(`arg3-<file>`). Web Load of such a Session shows the file name without the
-extension, as before.
+(`arg3-<file>`). Web Load of such a Session also shows the full file name; it
+showed the name without the extension before.
 
 ## Unreleased: a scale interval of 0 or less
 
