@@ -64,6 +64,7 @@ from gbdraw.analysis.protein_colinearity import (
     OrthogroupMember,
     OrthogroupResult,
     ProteinExtractionResult,
+    ProteinIdentityManifest,
     extract_web_stable_cds_proteins,
     is_protein_losat_cache_entry,
     validate_protein_identity_manifest,
@@ -552,23 +553,24 @@ class CurrentRequestArtifacts:
                     )
                 derived_keys.add(key)
 
+            authority: ProteinIdentityManifest | None = None
             if detached_manifest is not None:
                 _record_request_render_diagnostic_metric(
                     "proteinManifestFullValidationCount"
                 )
-                validate_protein_identity_manifest(detached_manifest)
+                authority = validate_protein_identity_manifest(detached_manifest)
             if protein_entries and detached_manifest is None:
                 raise ValidationError(
                     "Current protein LOSATP artifacts require protein_identity_manifest."
                 )
-            if detached_manifest is not None:
+            if authority is not None:
                 for index, entry in enumerate(protein_entries):
                     _record_request_render_diagnostic_metric(
                         "proteinRawReferenceValidationCount"
                     )
                     if not validate_protein_raw_entry_references(
                         entry,
-                        detached_manifest,
+                        authority,
                     ):
                         raise ValidationError(
                             "Current protein LOSATP artifact does not resolve through "
@@ -580,7 +582,7 @@ class CurrentRequestArtifacts:
                 )
                 validate_current_derived_protein_artifacts(
                     derived_entries,
-                    detached_manifest,
+                    authority,
                 )
             if self.protein_source_mode not in {
                 None,

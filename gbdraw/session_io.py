@@ -1827,7 +1827,7 @@ def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
         try:
             validate_current_derived_protein_artifacts(
                 derived_entries,
-                manifest,
+                validated_manifest,
             )
         except ValidationError as exc:
             raise ValidationError(

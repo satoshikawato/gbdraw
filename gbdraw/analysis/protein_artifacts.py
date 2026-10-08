@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import re
-from typing import Mapping, Sequence, TypeGuard, cast
+from typing import TYPE_CHECKING, Mapping, Sequence, TypeGuard, cast
 
 from gbdraw.exceptions import ValidationError
+
+if TYPE_CHECKING:
+    from .protein_colinearity import ProteinIdentityManifest
 
 CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA = 3
 
@@ -172,7 +175,7 @@ def _is_strict_empty_result(entry: Mapping[str, object]) -> bool:
 
 def validate_current_derived_protein_artifacts(
     entries: Sequence[Mapping[str, object]],
-    manifest: Mapping[str, object] | None,
+    manifest: ProteinIdentityManifest | Mapping[str, object] | None,
 ) -> None:
     """Require current envelopes and resolve every protein reference."""
 
@@ -180,10 +183,17 @@ def validate_current_derived_protein_artifacts(
         raise ValidationError(
             "Current derived protein artifacts require protein_identity_manifest."
         )
-    from .protein_colinearity import validate_protein_identity_manifest
+    from .protein_colinearity import (
+        ProteinIdentityManifest,
+        validate_protein_identity_manifest,
+    )
 
     try:
-        authority = validate_protein_identity_manifest(manifest)
+        authority = (
+            manifest
+            if isinstance(manifest, ProteinIdentityManifest)
+            else validate_protein_identity_manifest(manifest)
+        )
     except (TypeError, ValueError, ValidationError) as exc:
         raise ValidationError(
             "Current derived protein artifacts require a valid "
