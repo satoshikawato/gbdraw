@@ -1,6 +1,11 @@
 // @ts-check
 import { setDpiInPng } from '../utils/png.js';
-import { ensureSvgDefs, stripPreviewFeatureSearchClasses, stripTransientPreviewState } from './svg-serialization.js';
+import {
+  ensureSvgDefs,
+  stripPreviewFeatureSearchClasses,
+  stripResultBaseAttributes,
+  stripTransientPreviewState
+} from './svg-serialization.js';
 import { downloadBlob } from './text-download.js';
 import { preparePdfFonts } from './pdf-fonts.js';
 
@@ -95,6 +100,7 @@ const getCurrentSvgClone = (snapshot) => {
   }
   stripTransientPreviewState(clone);
   stripPreviewFeatureSearchClasses(clone);
+  stripResultBaseAttributes(clone);
   return clone;
 };
 

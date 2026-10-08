@@ -10,7 +10,11 @@ import {
 import { isCurrentWorkerGenerationResponse } from './current-worker-result-source.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { sanitizeSvgContent } from './svg-sanitization.js';
-import { serializeCleanSvg } from './svg-serialization.js';
+import {
+  RESULT_BASE_SELECTOR,
+  resultBaseAttribute,
+  serializeCleanSvg
+} from './svg-serialization.js';
 import { collectRenderedFeatureIdentitiesFromSvgRoot } from './session-feature-metadata.js';
 import { normalizeSvgResultIds } from './svg-result-normalization.js';
 import {
@@ -452,6 +456,78 @@ const removeAttributeIfPresent = (element, name) => {
   return true;
 };
 
+// A paint attribute the executor changes keeps Python's value beside it
+// (`resultBaseAttribute`), recorded on the first change. The index notes
+// each attribute an operation sets, so a reconcile leaves it alone.
+/**
+ * @param {{ painted: Map<Element, Set<string>> }} index
+ * @param {Element} element
+ * @param {string} name
+ * @param {string | number | null} value null removes the attribute.
+ */
+const setPaintAttribute = (index, element, name, value) => {
+  const painted = index.painted.get(element) || new Set();
+  index.painted.set(element, painted.add(name));
+  const current = element.getAttribute(name);
+  const next = value === null ? null : String(value);
+  if (current === next) return false;
+  const base = resultBaseAttribute(name);
+  if (!element.hasAttribute(base)) element.setAttribute(base, current ?? '');
+  if (next === null) element.removeAttribute(name);
+  else element.setAttribute(name, next);
+  return true;
+};
+
+// The paint domains a reconcile returns to Python's values, and the
+// attributes each one owns on feature elements and on Legend swatches. A
+// Legend row stroke also strokes the row's features.
+const PAINT_DOMAIN_ATTRIBUTES = Object.freeze({
+  featureFills: { feature: ['fill'], swatch: [] },
+  featureStrokes: { feature: ['stroke', 'stroke-width'], swatch: [] },
+  featureVisibility: { feature: ['display'], swatch: [] },
+  legendFills: { feature: [], swatch: ['fill'] },
+  legendStrokes: { feature: ['stroke', 'stroke-width'], swatch: ['stroke', 'stroke-width'] }
+});
+const RESULT_PAINT_DOMAINS = Object.freeze(
+  /** @type {Array<keyof typeof PAINT_DOMAIN_ATTRIBUTES>} */ (Object.keys(PAINT_DOMAIN_ATTRIBUTES))
+);
+
+/** @param {Element} element */
+const inLegendRow = (element) => {
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    if (node.hasAttribute('data-legend-key')) return true;
+  }
+  return false;
+};
+
+/**
+ * Return every attribute the executor changed in `domains` and no operation
+ * of this pass set to the value Python drew.
+ * @param {Element} svg
+ * @param {readonly string[]} domains
+ * @param {Map<Element, Set<string>>} painted
+ */
+const restorePaintBases = (svg, domains, painted) => {
+  const owned = { feature: new Set(), swatch: new Set() };
+  domains.forEach((domain) => {
+    const attributes = PAINT_DOMAIN_ATTRIBUTES[/** @type {keyof typeof PAINT_DOMAIN_ATTRIBUTES} */ (domain)];
+    attributes?.feature.forEach((name) => owned.feature.add(name));
+    attributes?.swatch.forEach((name) => owned.swatch.add(name));
+  });
+  if (owned.feature.size === 0 && owned.swatch.size === 0) return;
+  Array.from(svg.querySelectorAll(RESULT_BASE_SELECTOR)).forEach((element) => {
+    (inLegendRow(element) ? owned.swatch : owned.feature).forEach((name) => {
+      if (painted.get(element)?.has(name)) return;
+      const base = resultBaseAttribute(name);
+      const value = element.getAttribute(base);
+      if (value === null) return;
+      if (value === '') element.removeAttribute(name);
+      else element.setAttribute(name, value);
+      element.removeAttribute(base);
+    });
+  });
+};
+
 const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
   /** @type {{ featureElements: Map<string, Element[]> | null, legendEntries: Map<string, Element[]> | null, legendGroups: Element[] | null }} */
   const built = {
@@ -466,6 +542,8 @@ const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
     recordStructuralMetric('svgMutationIndexBuildCount', 1, { phase, resultIndex });
   };
   return {
+    /** @type {Map<Element, Set<string>>} */
+    painted: new Map(),
     features() {
       announce();
       if (built.featureElements) return built.featureElements;
@@ -536,18 +614,17 @@ const applyFeatureOperations = (index, operations) => {
     if (targets.length === 0) {
       throw new Error('Sanitized SVG content is missing a rendered Feature fill target.');
     }
-    targets.forEach((element) => setAttributeIfDifferent(element, 'fill', color));
+    targets.forEach((element) => setPaintAttribute(index, element, 'fill', color));
   });
   operations.featureStrokes.forEach(({ renderedId, strokeColor, strokeWidth }) => {
     requireFeatureElements(index, renderedId).forEach((element) => {
-      if (strokeColor) setAttributeIfDifferent(element, 'stroke', strokeColor);
-      if (strokeWidth !== null) setAttributeIfDifferent(element, 'stroke-width', strokeWidth);
+      if (strokeColor) setPaintAttribute(index, element, 'stroke', strokeColor);
+      if (strokeWidth !== null) setPaintAttribute(index, element, 'stroke-width', strokeWidth);
     });
   });
   operations.featureVisibility.forEach(({ renderedId, mode }) => {
     requireFeatureElements(index, renderedId).forEach((element) => {
-      if (mode === 'off') setAttributeIfDifferent(element, 'display', 'none');
-      else removeAttributeIfPresent(element, 'display');
+      setPaintAttribute(index, element, 'display', mode === 'off' ? 'none' : null);
     });
   });
 };
@@ -572,7 +649,9 @@ const applyLegendOperations = (index, operations, { displayed = false, mayBeAbse
       existingEntries.forEach((entry) => {
         const swatch = legendSwatch(entry);
         if (!swatch) throw new Error('Current SVG has no Legend swatch template.');
+        // The editor row's own color is its drawn fill; Python drew none.
         setAttributeIfDifferent(swatch, 'fill', color);
+        removeAttributeIfPresent(swatch, resultBaseAttribute('fill'));
         entry.setAttribute('data-legend-owner', 'direct-editor');
         moveLegendEntryToAnchor(entry, xPos, yPos);
       });
@@ -585,6 +664,8 @@ const applyLegendOperations = (index, operations, { displayed = false, mayBeAbse
       const template = group.querySelector('g[data-legend-key]');
       const added = template?.cloneNode?.(true) || null;
       if (!added) throw new Error('Current SVG has no Legend entry template.');
+      // The copy is of Python's row as drawn, not of that row's edits (OV-121).
+      restorePaintBases(added, RESULT_PAINT_DOMAINS, new Map());
       updateLegendCaption(added, caption);
       const swatch = legendSwatch(added);
       if (!swatch) throw new Error('Current SVG has no Legend swatch template.');
@@ -600,22 +681,22 @@ const applyLegendOperations = (index, operations, { displayed = false, mayBeAbse
     requireRow(operation).forEach((entry) => {
       const swatch = legendSwatch(entry);
       if (!swatch) throw new Error('Sanitized SVG content is missing a Legend swatch.');
-      setAttributeIfDifferent(swatch, 'fill', color);
+      setPaintAttribute(index, swatch, 'fill', color);
     });
   });
   operations.legendStrokes.forEach((operation) => {
     const { strokeColor, strokeWidth, renderedIds } = operation;
     (Array.isArray(renderedIds) ? renderedIds : []).forEach((renderedId) => {
       requireFeatureElements(index, renderedId).forEach((element) => {
-        if (strokeColor) setAttributeIfDifferent(element, 'stroke', strokeColor);
-        if (strokeWidth !== null) setAttributeIfDifferent(element, 'stroke-width', strokeWidth);
+        if (strokeColor) setPaintAttribute(index, element, 'stroke', strokeColor);
+        if (strokeWidth !== null) setPaintAttribute(index, element, 'stroke-width', strokeWidth);
       });
     });
     requireRow(operation).forEach((entry) => {
       const swatch = legendSwatch(entry);
       if (!swatch) throw new Error('Sanitized SVG content is missing a Legend swatch.');
-      if (strokeColor) setAttributeIfDifferent(swatch, 'stroke', strokeColor);
-      if (strokeWidth !== null) setAttributeIfDifferent(swatch, 'stroke-width', strokeWidth);
+      if (strokeColor) setPaintAttribute(index, swatch, 'stroke', strokeColor);
+      if (strokeWidth !== null) setPaintAttribute(index, swatch, 'stroke-width', strokeWidth);
     });
   });
   // A rename keeps the row in place; the Legend layout then places every row
@@ -635,13 +716,19 @@ const applyLegendOperations = (index, operations, { displayed = false, mayBeAbse
 };
 
 /**
- * Apply one Result's compiled editor operations to its mounted SVG with the
- * executor that Generate admission uses (D-07, PD-OI-062). The preview binder
- * owns label DOM identity, so label operations stay with it. Legend operations
- * are diagram-wide and a batch Result shows only its own categories and
- * features, so an absent caption or feature is skipped.
+ * Reconcile one Result's mounted SVG with its compiled editor operations,
+ * using the executor that Generate admission uses (D-07, PD-OI-062). Every
+ * operation given is applied; then each attribute the executor changed
+ * earlier in one of `domains` that no operation set returns to the value
+ * Python drew. A second call changes nothing.
+ * The preview binder owns label DOM identity, so label operations stay with
+ * it. Legend operations are diagram-wide and a batch Result shows only its own
+ * categories and features, so an absent caption or feature is skipped.
+ * @param {Element} svg
+ * @param {Record<string, any>} operations
+ * @param {{ resultIndex?: number, domains?: readonly string[] }} [options]
  */
-export const applyEditorOperationsToMountedSvg = (svg, operations, { resultIndex = 0 } = {}) => {
+export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domains = RESULT_PAINT_DOMAINS } = {}) => {
   const index = createLazyMutationIndex(svg, { phase: 'result-selection', resultIndex });
   const present = ({ renderedId }) => (index.features().get(renderedId) || []).length > 0;
   applyFeatureOperations(index, {
@@ -649,19 +736,21 @@ export const applyEditorOperationsToMountedSvg = (svg, operations, { resultIndex
     featureStrokes: operations.featureStrokes.filter(present),
     featureVisibility: operations.featureVisibility.filter(present)
   });
-  if (index.legends().groups.length === 0) return;
-  const allowMissing = (operation) => ({ ...operation, allowMissing: true });
-  applyLegendOperations(index, {
-    legendFills: operations.legendFills.map(allowMissing),
-    legendStrokes: operations.legendStrokes.map((operation) => ({
-      ...allowMissing(operation),
-      renderedIds: (operation.renderedIds || []).filter((renderedId) => present({ renderedId }))
-    })),
-    legendRenames: operations.legendRenames.map(allowMissing),
-    legendDeletes: operations.legendDeletes.map(allowMissing),
-    legendAdds: operations.legendAdds,
-    legendOrder: operations.legendOrder
-  }, { displayed: true });
+  if (index.legends().groups.length > 0) {
+    const allowMissing = (operation) => ({ ...operation, allowMissing: true });
+    applyLegendOperations(index, {
+      legendFills: operations.legendFills.map(allowMissing),
+      legendStrokes: operations.legendStrokes.map((operation) => ({
+        ...allowMissing(operation),
+        renderedIds: (operation.renderedIds || []).filter((renderedId) => present({ renderedId }))
+      })),
+      legendRenames: operations.legendRenames.map(allowMissing),
+      legendDeletes: operations.legendDeletes.map(allowMissing),
+      legendAdds: operations.legendAdds,
+      legendOrder: operations.legendOrder
+    }, { displayed: true });
+  }
+  restorePaintBases(svg, domains, index.painted);
 };
 
 const admitCurrentResult = (

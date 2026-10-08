@@ -5,7 +5,7 @@ import {
   normalizeFeatureIdentity
 } from '../services/feature-dom.js';
 import {
-  applyEditorOperationsToMountedSvg,
+  reconcileMountedResult,
   getCommittedSvgResultMetadata,
   getCommittedSvgResultRuntimeIdentity,
   markCommittedSvgResultMounted,
@@ -1124,17 +1124,18 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return true;
   };
 
-  // D-07: show the canonical editor operations on the displayed Result with
-  // the executor that Generate admission uses, then persist the Result once.
+  // D-07: reconcile the displayed Result with the canonical editor operations
+  // through the executor that Generate admission uses, then persist the Result
+  // once. `domains` are the paint domains returned to Python's values first.
   /**
    * @param {Record<string, any> | null | undefined} operations
-   * @param {{ afterApply?: ((svg: SVGSVGElement) => void) | null }} [options]
+   * @param {{ domains?: readonly string[], afterApply?: ((svg: SVGSVGElement) => void) | null }} [options]
    */
-  const applyEditorOperations = (operations, { afterApply = null } = {}) => {
+  const applyEditorOperations = (operations, { domains = [], afterApply = null } = {}) => {
     const runtime = activeRuntime || ensureRuntimeForCurrentSvg();
     if (!runtime?.svg) return false;
     if (operations) {
-      applyEditorOperationsToMountedSvg(runtime.svg, operations, { resultIndex: runtime.resultIndex });
+      reconcileMountedResult(runtime.svg, operations, { resultIndex: runtime.resultIndex, domains });
     }
     afterApply?.(runtime.svg);
     invalidatePreviewIndexes('editor-intent-display');

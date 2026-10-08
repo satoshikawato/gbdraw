@@ -363,8 +363,7 @@ const CASES = [
       }, 'CDS');
       await settleLive(page);
     },
-    run: (page) => showResult(page, 1),
-    knownMismatch: 'OV-144: the displayed batch Result keeps a stroke edit removed since it was last shown'
+    run: (page) => showResult(page, 1)
   },
   {
     kind: 'color rule color',
@@ -712,7 +711,6 @@ for (const { edit, states, setup, run, knownMismatch } of CASES) {
 // with a Result through Save Session and Load, so a stroke edit removed after
 // Load leaves a batch Result that showed it when that Result is shown again.
 test('a stroke removed after Load leaves a batch Result that showed it (circular, two-Result batch)', async ({ page, browser }, testInfo) => {
-  test.fail(true, 'OV-144: the displayed batch Result keeps a stroke edit removed since it was last shown');
   test.setTimeout(240_000);
   await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
   await legendRowStroke(page, 'CDS', '#e63946', 3);

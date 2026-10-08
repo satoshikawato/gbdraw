@@ -15,6 +15,25 @@ const TRANSIENT_PREVIEW_CLASSES = Object.freeze([
   'feature-selection-status'
 ]);
 
+// The Result executor records Python's value of each paint attribute the
+// first time it changes it on an element, in `data-gbdraw-base-<attribute>`
+// (empty: Python drew none), so a later reconcile can return the element to
+// it. The records travel with the Result through History and Sessions;
+// exports strip them.
+const RESULT_BASE_ATTRIBUTES = Object.freeze(['fill', 'stroke', 'stroke-width', 'display']);
+/** @param {string} attribute */
+export const resultBaseAttribute = (attribute) => `data-gbdraw-base-${attribute}`;
+export const RESULT_BASE_SELECTOR = RESULT_BASE_ATTRIBUTES
+  .map((attribute) => `[${resultBaseAttribute(attribute)}]`).join(', ');
+
+/** @param {Element | null | undefined} root */
+export const stripResultBaseAttributes = (root) => {
+  if (!root) return;
+  [root, ...Array.from(root.querySelectorAll(RESULT_BASE_SELECTOR))].forEach((element) => {
+    RESULT_BASE_ATTRIBUTES.forEach((attribute) => element.removeAttribute(resultBaseAttribute(attribute)));
+  });
+};
+
 export const setClassToken = (element, token, enabled) => {
   if (!element) return;
   if (element.classList?.toggle) {

@@ -201,13 +201,13 @@ test('an edited Legend order compiles to one order operation; the default order 
   assert.deepEqual(reordered.legendRenames, [{ from: 'GC content', to: 'GC percent', allowMissing: false }]);
 
   const { installFakeSvgDom } = await import('./fake-svg-dom.mjs');
-  const { applyEditorOperationsToMountedSvg } = await import('../../gbdraw/web/js/services/svg-result-ingestion.js');
+  const { reconcileMountedResult } = await import('../../gbdraw/web/js/services/svg-result-ingestion.js');
   installFakeSvgDom();
   const entry = (caption, y) => `<g data-legend-key="${caption}"><path fill="#123456" transform="translate(0, ${y})"/><text transform="translate(22, ${y})"/></g>`;
   const svg = new DOMParser().parseFromString(
     `<svg viewBox="0 0 100 100"><g id="legend"><g id="feature_legend">${entry('CDS', 7)}${entry('GC content', 31)}${entry('Other', 55)}</g></g></svg>`
   ).documentElement;
-  applyEditorOperationsToMountedSvg(svg, { ...reordered, legendAdds: [] });
+  reconcileMountedResult(svg, { ...reordered, legendAdds: [] });
   const placed = svg.querySelectorAll('g[data-legend-key]').map((group) => [
     group.getAttribute('data-legend-key'), group.querySelector('text').getAttribute('transform')
   ]);
@@ -223,7 +223,7 @@ test('an edited Legend order compiles to one order operation; the default order 
   const renamedInPlace = new DOMParser().parseFromString(
     `<svg viewBox="0 0 100 100"><g id="legend"><g id="feature_legend">${entry('CDS', 7)}${entry('GC content', 31)}${entry('Other', 55)}</g></g></svg>`
   ).documentElement;
-  applyEditorOperationsToMountedSvg(renamedInPlace, { ...defaultOrder, legendAdds: [] });
+  reconcileMountedResult(renamedInPlace, { ...defaultOrder, legendAdds: [] });
   assert.deepEqual(renamedInPlace.querySelectorAll('g[data-legend-key]').map((group) => [
     group.getAttribute('data-legend-key'), group.querySelector('text').getAttribute('transform')
   ]), [

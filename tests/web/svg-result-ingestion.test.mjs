@@ -15,7 +15,6 @@ import {
   admitCurrentGeneratedResults,
   admitCurrentSessionResults,
   admitLegacyImportedResults,
-  applyEditorOperationsToMountedSvg,
   createCurrentSessionResultSource,
   createEmptySvgMutationPlan,
   createLegacyImportResultSource,
@@ -23,8 +22,10 @@ import {
   getCommittedSvgResultMetadata,
   isCommittedSvgResult,
   markCommittedSvgResultMounted,
-  markCommittedSvgResultUnmounted
+  markCommittedSvgResultUnmounted,
+  reconcileMountedResult
 } from '../../gbdraw/web/js/services/svg-result-ingestion.js';
+import { stripResultBaseAttributes } from '../../gbdraw/web/js/services/svg-serialization.js';
 
 class FakeElement {
   constructor(tagName, attributes = {}, children = []) {
@@ -62,7 +63,9 @@ class FakeElement {
     return [this, ...this.children.flatMap((child) => child.walk())];
   }
   matches(selector) {
-    if (selector === '[style]') return this.hasAttribute('style');
+    if (/^\[[\w-]+\](?:,\s*\[[\w-]+\])*$/.test(selector)) {
+      return selector.split(',').some((part) => this.hasAttribute(part.trim().slice(1, -1)));
+    }
     if (selector.startsWith('.')) return false;
     if (selector === 'path') return this.tagName === 'path';
     if (selector === 'text') return this.tagName === 'text';
@@ -507,7 +510,7 @@ test('a fill and stroke on a Legend editor added row style the row the plan adds
     ['Manual row', false]
   ]);
   const swatches = (content) => Object.fromEntries(
-    [...content.matchAll(/<g data-legend-key="([^"]+)"[^>]*><path ([^>]*)>/g)].map(([, caption, path]) => [caption, path])
+    [...withoutBases(content).matchAll(/<g data-legend-key="([^"]+)"[^>]*><path ([^>]*)>/g)].map(([, caption, path]) => [caption, path])
   );
   const expected = {
     CDS: 'fill="#aaaaaa" stroke="#445566" stroke-width="3"',
@@ -523,9 +526,11 @@ test('a fill and stroke on a Legend editor added row style the row the plan adds
   assert.deepEqual(swatches(result.content), expected);
   // A displayed Result receives the same operations through the same executor (D-07).
   const mounted = buildSvgRoot();
-  applyEditorOperationsToMountedSvg(mounted, plan.operationsByResult[0]);
+  reconcileMountedResult(mounted, plan.operationsByResult[0]);
   assert.deepEqual(swatches(serializeNode(mounted)), expected);
 });
+
+const withoutBases = (content) => content.replace(/ data-gbdraw-base-[\w-]+="[^"]*"/g, '');
 
 // D-07 (PD-OI-062): a batch Result shows the editor operations through the
 // executor when it is displayed. Showing them again changes nothing, and an
@@ -541,10 +546,10 @@ test('the mounted executor is idempotent', () => {
   const { admission } = currentFixture();
   const operations = mountedPaint(admission);
   const mounted = buildSvgRoot();
-  applyEditorOperationsToMountedSvg(mounted, operations);
+  reconcileMountedResult(mounted, operations);
   const once = serializeNode(mounted);
   assert.notEqual(once, serializeNode(buildSvgRoot()));
-  applyEditorOperationsToMountedSvg(mounted, operations);
+  reconcileMountedResult(mounted, operations);
   assert.equal(serializeNode(mounted), once);
 });
 
@@ -559,20 +564,94 @@ test('a mounted batch Result skips the features and Legend rows it does not draw
     const mounted = buildSvgRoot({ missingFeature: true });
     mounted.querySelector('g[data-legend-key]').setAttribute('data-legend-key', 'tRNA');
     const drawn = serializeNode(mounted);
-    applyEditorOperationsToMountedSvg(mounted, operations);
+    reconcileMountedResult(mounted, operations);
     assert.equal(serializeNode(mounted), drawn);
   });
 });
 
-test('a mounted Result shown again after its edits were removed returns to what Python drew', {
-  todo: 'OV-144: the mounted executor applies operations but never reverts one'
-}, () => {
+// OV-144: the executor records Python's value of each paint attribute it
+// changes, so a reconcile returns what no operation names to Python's bytes.
+test('a mounted Result shown again after its edits were removed returns to what Python drew', () => {
   const { admission } = currentFixture();
   const mounted = buildSvgRoot();
   const python = serializeNode(mounted);
-  applyEditorOperationsToMountedSvg(mounted, mountedPaint(admission));
-  applyEditorOperationsToMountedSvg(mounted, createEmptySvgMutationPlan(1).operationsByResult[0]);
+  reconcileMountedResult(mounted, mountedPaint(admission));
+  assert.match(serializeNode(mounted), /data-gbdraw-base-stroke="" stroke="#223344"/);
+  reconcileMountedResult(mounted, createEmptySvgMutationPlan(1).operationsByResult[0]);
   assert.equal(serializeNode(mounted), python);
+});
+
+test('a reconcile returns only the listed paint domains to Python and applies every operation', () => {
+  const { admission } = currentFixture();
+  const mounted = buildSvgRoot();
+  reconcileMountedResult(mounted, mountedPaint(admission));
+  const painted = serializeNode(mounted);
+  const strokesOnly = compileDirectEditorMutationPlan({
+    ...planOptions.stroke(admission),
+    legendEntries: [{ caption: 'CDS', originalCaption: 'CDS', color: '#334455' }],
+    originalLegendOrder: ['CDS']
+  }).operationsByResult[0];
+  // Fills, visibility, and the Legend fill keep the paint no operation names.
+  reconcileMountedResult(mounted, strokesOnly, { domains: ['featureStrokes', 'legendStrokes'] });
+  const content = serializeNode(mounted);
+  assert.match(content, /fill="#112233"/);
+  assert.match(content, /stroke="#223344"/);
+  assert.match(content, /display="none"/);
+  assert.match(content, /<path fill="#334455" data-gbdraw-base-fill="#aaaaaa"><\/path>/);
+  // The Legend row stroke is gone; the feature's own stroke is applied again.
+  assert.doesNotMatch(content, /#445566/);
+  reconcileMountedResult(mounted, mountedPaint(admission), { domains: [] });
+  assert.equal(serializeNode(mounted), painted, 'no listed domain: the operations apply as they are');
+});
+
+// Generate admission records Python's values too, so the first display of a
+// Result Generate drew with edits can revert them. Exports strip the records,
+// which leaves the bytes the executor wrote before it kept them.
+test('admission records the paint Python drew once; an export strips the records', () => {
+  const { response, admission } = currentFixture();
+  const [result] = admitCurrentGeneratedResults(response, {
+    catalogAdmission: admission,
+    mutationPlan: compileDirectEditorMutationPlan({
+      ...planOptions.fill(admission),
+      ...planOptions.stroke(admission),
+      ...planOptions.Legend(admission)
+    }),
+    sanitizer: { sanitize: (value) => value },
+    parser: FakeDomParser
+  });
+  assert.match(result.content, /data-gbdraw-base-fill="#aaaaaa" fill="#112233"|fill="#112233"[^>]*data-gbdraw-base-fill="#aaaaaa"/);
+  const mounted = buildSvgRoot();
+  reconcileMountedResult(mounted, mountedPaint(admission));
+  reconcileMountedResult(mounted, mountedPaint(admission));
+  assert.equal((serializeNode(mounted).match(/data-gbdraw-base-fill="#aaaaaa"/g) || []).length, 2,
+    'a second change keeps the value Python drew');
+  stripResultBaseAttributes(mounted);
+  assert.equal(serializeNode(mounted), withoutBases(serializeNode(mounted)));
+  assert.doesNotMatch(serializeNode(mounted), /data-gbdraw-base-/);
+  assert.match(serializeNode(mounted), /<path fill="#334455" stroke="#445566" stroke-width="3"><\/path>/);
+});
+
+// A row the Legend editor adds copies Python's first row as drawn, without the
+// records of that row's edits; its own color is its drawn fill.
+test('an added Legend row carries no record of the row it copies', () => {
+  const { admission } = currentFixture();
+  const compile = (legendEntries) => compileDirectEditorMutationPlan({
+    catalogAdmission: admission,
+    legendEntries,
+    originalLegendOrder: ['CDS'],
+    legendStrokeOverrides: { CDS: { strokeColor: '#445566', strokeWidth: 3 } }
+  }).operationsByResult[0];
+  const cds = { caption: 'CDS', originalCaption: 'CDS', color: '#aaaaaa' };
+  const operations = compile([cds, { caption: 'Manual row', originalCaption: 'Manual row', color: '#7b2cbf' }]);
+  // The first row shows its stroke edit before the row is added.
+  const mounted = buildSvgRoot();
+  reconcileMountedResult(mounted, compile([cds]));
+  reconcileMountedResult(mounted, operations);
+  reconcileMountedResult(mounted, operations);
+  const rows = Object.fromEntries([...serializeNode(mounted).matchAll(/<g data-legend-key="([^"]+)"[^>]*><path ([^>]*)>/g)]
+    .map(([, caption, path]) => [caption, path]));
+  assert.equal(rows['Manual row'], 'fill="#7b2cbf"');
+  assert.match(rows.CDS, /data-gbdraw-base-stroke="" stroke="#445566"/);
 });
 
 test('a requested Legend addition reuses an exact renderer-produced caption', () => {

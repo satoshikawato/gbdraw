@@ -3302,6 +3302,7 @@ export const createAppSetup = () => {
       Object.values(drawing.featureOverrides).map((row) => [row.recordKey, row.biologicalFeatureId, row.featureVisibility]),
       drawing.featureVisibilityManualRules
     ]),
+    strokes: JSON.stringify([drawing.featureStrokeOverrides, drawing.legendStrokeOverrides]),
     labels: JSON.stringify([
       Object.values(drawing.featureOverrides).map((row) => [
         row.recordKey, row.biologicalFeatureId, row.labelVisibility, row.labelText, row.labelSourceText
@@ -3337,8 +3338,6 @@ export const createAppSetup = () => {
   /** @param {DrawingState} drawing */
   const displayedIntentSignature = (drawing) => JSON.stringify([
     currentEditorProjectionState(drawing),
-    drawing.featureStrokeOverrides,
-    drawing.legendStrokeOverrides,
     drawing.deletedLegendEntries.value.map((entry) => entry.originalCaption || entry.caption),
     [...(drawing.addedLegendCaptions.value || [])],
     drawing.legendEntries.value.filter((entry) => entry.caption !== entry.originalCaption)
@@ -3380,6 +3379,11 @@ export const createAppSetup = () => {
     });
     return plan.operationsByResult[resultIndex] || null;
   };
+  // No live projection repaints strokes, so a displayed Result whose strokes
+  // changed since it was last shown returns to Python's strokes before the
+  // stroke operations apply (OV-144). Fills and visibility follow the palette,
+  // rule, and visibility projections.
+  const DISPLAY_RECONCILED_DOMAINS = Object.freeze(['featureStrokes', 'legendStrokes']);
   const DISPLAY_PROJECTED_DOMAINS = Object.freeze([
     'featureFills', 'featureStrokes', 'featureVisibility',
     'legendFills', 'legendStrokes', 'legendRenames', 'legendDeletes', 'legendAdds', 'legendOrder'
@@ -3415,6 +3419,7 @@ export const createAppSetup = () => {
     const previous = projectedEditorStateByResult.get(identity) || current;
     const colors = !sameColors(previous.colors, current.colors);
     const visibility = previous.visibility !== current.visibility;
+    const strokes = previous.strokes !== current.strokes;
     labelProjectionResultIdentity = previous.labels !== current.labels ? identity : '';
     // B20: a Result last shown with another Legend order receives the current
     // order, also the default order, which is its own generated order (OV-47).
@@ -3435,7 +3440,7 @@ export const createAppSetup = () => {
       deletedCaptions: (operations?.legendDeletes || []).map(({ caption }) => caption)
     };
     const restoresLegend = legendActions.hasRetiredResultLegend(legend);
-    const projects = colors || visibility || hasOperations || restoresLegend;
+    const projects = colors || visibility || strokes || hasOperations || restoresLegend;
     recordStructuralMetric('displayedResultEditorProjectionCount', projects ? 1 : 0, {
       phase: context.phase,
       rootGeneration: context.rootGeneration
@@ -3444,7 +3449,8 @@ export const createAppSetup = () => {
     try {
       await projectMountedEditorIntent({ colors, visibility });
       const legendChanged = legendActions.prepareDisplayedResultLegend(context.root, legend);
-      previewRuntime.applyEditorOperations(hasOperations ? operations : null, {
+      previewRuntime.applyEditorOperations(hasOperations || strokes ? operations : null, {
+        domains: strokes ? DISPLAY_RECONCILED_DOMAINS : [],
         afterApply: () => { if (legendChanged) legendActions.onLegendGeometryChanged(); }
       });
       projectedEditorStateByResult.set(identity, current);
