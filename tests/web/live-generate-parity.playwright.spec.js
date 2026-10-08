@@ -10,6 +10,7 @@
 // use in tests/web/helpers/live-generate-parity-steps.cjs.
 const { test, expect } = require('@playwright/test');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { BATCH_FIXTURE, loadSessionFile, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 const { download, load } = require('./helpers/mode-transition.cjs');
 const {
@@ -769,9 +770,10 @@ const STROKE_RESET_CASES = {
     revert: (page) => history(page, 'undo')
   }
 };
-for (const [name, { finding, edit, revert }] of Object.entries(STROKE_RESET_CASES)) {
+// The findings (OV-150, OV-129) are fixed: every stroke edit is shown by the
+// executor, which records Python's stroke (EU U2a).
+for (const [name, { edit, revert }] of Object.entries(STROKE_RESET_CASES)) {
   test(`${name} returns each feature part to Python's stroke (circular, two-Result batch)`, async ({ page }) => {
-    test.fail(true, finding);
     test.setTimeout(120_000);
     await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
     const drawn = await drawnStrokes(page);
@@ -783,3 +785,16 @@ for (const [name, { finding, edit, revert }] of Object.entries(STROKE_RESET_CASE
   });
 }
 
+// A Session 46 Result saved before the executor recorded Python's paint gets
+// the records at Load (EU U2a), so Reset all strokes returns its feature
+// parts and swatches to Python's strokes
+// (tests/fixtures/sessions/forced-label-underlay-strokes.provenance.json).
+test('Reset all strokes after loading a Session 46 Result saved without paint records matches Generate', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openFresh(page);
+  await loadSessionFile(page, 'tests/fixtures/sessions/forced-label-underlay-strokes.v46.gbdraw-session.json.gz');
+  await appAction(page, 'resetAllStrokes');
+  expect((await drawnStrokes(page)).some(([, , stroke]) => ['#2a9d8f', '#e63946'].includes(stroke)), 'no edited stroke is left')
+    .toBe(false);
+  await expectLiveEqualsGenerate(page, { label: 'Reset all strokes after Load' });
+});

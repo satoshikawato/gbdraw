@@ -49,7 +49,7 @@ export const createLegendManager = ({
     orderMountedLegend: entryActions.orderMountedLegend,
     commitActiveResultEdit
   });
-  const strokeActions = createLegendStrokeActions({ state, commitActiveResultEdit });
+  const strokeActions = createLegendStrokeActions({ state });
   /** @param {DrawingState} drawing */
   const rowRulesAt = (drawing, index) => legendRowRules(drawing.legendEntries.value[index]?.caption, {
     rules: drawing.manualSpecificRules,
@@ -68,7 +68,9 @@ export const createLegendManager = ({
     ...entryActions,
     // A row a rule draws, including its N-06 "<caption> [<hex>]" row, edits
     // that rule through the rule owner's port (R13); any other row is a
-    // legend-only edit.
+    // legend-only edit, which the root shows on the Result.
+    /** @param {number} index */
+    legendRowHasRules: (index) => rowRulesAt(state.activeDrawing(), index).length > 0,
     updateLegendEntryColor: (index, color) => {
       const drawing = state.activeDrawing();
       const rowRules = rowRulesAt(drawing, index);

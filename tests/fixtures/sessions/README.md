@@ -68,6 +68,15 @@ Sessions 33 have no feature catalog. They are the positive fixtures for the
 readers that move those edits onto source identities (Session 46). The steps,
 inputs, and hashes are in `feature-edits.provenance.json`.
 
+`forced-label-underlay-strokes.v46.gbdraw-session.json.gz` is a Web **Save
+Session** download, kept unchanged, from commit `7e7dd82d` (Session 46, before
+the Result executor recorded Python's paint). Its Result shows a feature
+stroke, a Legend row stroke, and a Legend row color without
+`data-gbdraw-base-*` records. It is the positive fixture for the Load reader
+that records them from the Session's `originalStroke*`, `originalColors`, and
+catalog fills (`createSavedResultPlan`). The steps, inputs, and hashes are in
+`forced-label-underlay-strokes.provenance.json`.
+
 `whitelist-tab-keyword.v39.gbdraw-session.json.gz` is a Web **Save Session**
 download, kept unchanged, from first-parent `main` commit `17e2c9de`
 (Session 39). Its Label whitelist rule was typed with a tab in the keyword, and

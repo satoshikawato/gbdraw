@@ -110,7 +110,6 @@ import {
   COMPOSITION_SCHEMA_ATTRIBUTE,
   normalizeLegacyComposition
 } from './legend-layout/composition-actions.js';
-import { applyStrokeOverridesToSvg } from './legend/stroke-actions.js';
 import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
 import { createDialogChoice, setupHistoryInputs } from './history-inputs.js';
@@ -306,20 +305,18 @@ export const createSessionImportRollbackState = ({
 const COMPOSITION_ROOT_ATTRIBUTE = new RegExp(`\\s(?:${COMPOSITION_SCHEMA_ATTRIBUTE}|${COMPOSITION_METADATA_ATTRIBUTE})=`);
 // The transform services/config.js applies to each Result of an older Session
 // before it commits (R13 port): a Result without composition metadata gets the
-// legacy composition, and the saved strokes are projected into it. A Session
-// 40+ Result takes it only when `appliesToContent` (OV-273).
+// legacy composition. The saved bytes carry the saved edits. A Session 40+
+// Result takes it only when `appliesToContent` (OV-273).
 /** @type {LegacyResultSvgTransform} */
-export const transformLegacyResultSvg = Object.assign((svg, { composition, strokes }) => {
-  let compositionChanged = false;
+export const transformLegacyResultSvg = Object.assign((svg, { composition }) => {
   if (
     svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) === null
     && svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) === null
   ) {
     normalizeLegacyComposition(svg, composition);
-    compositionChanged = true;
+    return true;
   }
-  const strokeCount = applyStrokeOverridesToSvg({ svg, ...strokes });
-  return compositionChanged || strokeCount > 0;
+  return false;
 }, {
   /** @param {unknown} content */
   appliesToContent: (content) => !COMPOSITION_ROOT_ATTRIBUTE.test(/<svg\b[^>]*>/i.exec(String(content ?? ''))?.[0] || '')
@@ -2725,7 +2722,6 @@ export const createAppSetup = () => {
     initializeStrokeAndCanvas(context) {
       const legendLaidOut = mountedLegendLayouts.delete(context.root);
       if (!context.bindingOptions.trustedRestore && !context.bindingOptions.isIncrementalEdit) {
-        legendActions.captureOriginalStroke();
         // Generate already padded its candidates; another batch Result shows
         // the current canvas padding when it is displayed (D-09).
         if (shouldBindComposition(context)) legendLayout.applyCanvasPadding();
@@ -3085,6 +3081,7 @@ export const createAppSetup = () => {
 
   const {
     addNewLegendEntry,
+    legendRowHasRules,
     updateLegendEntryColor,
     deleteLegendEntry,
     moveLegendEntryUp,
@@ -3101,7 +3098,6 @@ export const createAppSetup = () => {
     updateLegendEntryStrokeColor,
     updateLegendEntryStrokeWidth,
     reconcileLegendEntries,
-    reconcileStrokeOverrides,
     resetLegendEntryStroke,
     resetAllStrokes,
     restoreDeletedLegendEntries
@@ -3189,13 +3185,13 @@ export const createAppSetup = () => {
   // inventory; a newly displayed Result receives the diagram-wide Legend
   // operations Generate applies. A loaded table (`reflow`) also places the
   // labels, as a visibility edit does. The palette and the rules (`colors`)
-  // project through `projectPaletteAndRules`.
+  // project through `projectPaletteAndRules`. Strokes and Legend row colors
+  // show through `showEditorIntent`.
   /**
    * @param {{
    *   colors?: boolean, prepareRules?: boolean, visibility?: boolean, rerender?: boolean,
    *   reflow?: boolean, labels?: boolean,
-   *   legend?: Parameters<typeof reconcileLegendEntries>[0] | null,
-   *   strokes?: Parameters<typeof reconcileStrokeOverrides>[0] | null
+   *   legend?: Parameters<typeof reconcileLegendEntries>[0] | null
    * }} [options]
    */
   const projectMountedEditorIntent = async ({
@@ -3205,13 +3201,11 @@ export const createAppSetup = () => {
     rerender = false,
     reflow = false,
     legend = null,
-    strokes = null,
     labels = false
   } = {}) => {
     if (colors && !await projectPaletteAndRules({ prepareRules })) return false;
     if (visibility) await projectFeatureVisibility({ rerender, reflow });
     if (legend) reconcileLegendEntries(legend);
-    if (strokes) reconcileStrokeOverrides(strokes);
     if (labels) reconcileLabelOverrides();
     return true;
   };
@@ -3266,10 +3260,11 @@ export const createAppSetup = () => {
               : _intent.editorState.legend.entries
           }
         : null,
-      strokes: editorState ? { changes } : null,
       labels: changedDomains.has('features') || editorState
     });
     if (!projected) return;
+    const paintDomains = editorPaintDomains(changes);
+    if (paintDomains.length) showEditorIntent({ domains: paintDomains });
     await nextTick();
     // The restored form decides which track groups the mounted Result shows.
     // The visibility watcher is suppressed while a step restores files (a Depth
@@ -3379,11 +3374,72 @@ export const createAppSetup = () => {
     });
     return plan.operationsByResult[resultIndex] || null;
   };
-  // No live projection repaints strokes, so a displayed Result whose strokes
-  // changed since it was last shown returns to Python's strokes before the
-  // stroke operations apply (OV-144). Fills and visibility follow the palette,
-  // rule, and visibility projections.
-  const DISPLAY_RECONCILED_DOMAINS = Object.freeze(['featureStrokes', 'legendStrokes']);
+  // The port of the editor intent onto the displayed Result (design §5.4):
+  // the operations Generate compiles from the active drawing (`domains` of
+  // them unless given), reconciled by the executor Generate uses, which
+  // returns each attribute of `domains` no operation sets to Python's value;
+  // then one commit of the Result. Live edits, History, and the display of
+  // a batch Result call it.
+  /**
+   * @param {{
+   *   domains: readonly string[],
+   *   operations?: Record<string, any> | null,
+   *   afterApply?: ((svg: SVGSVGElement) => void) | null
+   * }} options
+   */
+  const showEditorIntent = ({ domains, operations = undefined, afterApply = null }) => {
+    let shown = operations;
+    if (shown === undefined) {
+      const resultIndex = previewRuntime.getActiveRuntime()?.resultIndex ?? (Number(selectedResultIndex.value) || 0);
+      try {
+        const compiled = compileDisplayedResultOperations(state.activeDrawing(), resultIndex);
+        shown = compiled && Object.fromEntries(Object.entries(compiled)
+          .map(([domain, entries]) => [domain, domains.includes(domain) ? entries : []]));
+      } catch (error) {
+        console.error('Editor edits could not be compiled for the displayed Result.', normalizeUserFacingError(error));
+        return false;
+      }
+    }
+    return previewRuntime.applyEditorOperations(shown, { domains, afterApply });
+  };
+  // The paint domains each edit kind shows, live and on Undo and Redo: a
+  // Legend row stroke also strokes the row's features. Fills stay out of a
+  // stroke edit, since palette and rule projections still paint fills without
+  // recording Python's (U2b).
+  const STROKE_DOMAINS = Object.freeze(['featureStrokes', 'legendStrokes']);
+  const LEGEND_FILL_DOMAINS = Object.freeze(['legendFills']);
+  /** @type {ReadonlyArray<[string[], readonly string[]]>} */
+  const EDITOR_PAINT_PATHS = Object.freeze([
+    [['editorState', 'featureStrokes'], STROKE_DOMAINS],
+    [['editorState', 'legend', 'strokeOverrides'], STROKE_DOMAINS],
+    [['editorState', 'legend', 'colorOverrides'], LEGEND_FILL_DOMAINS]
+  ]);
+  /** @param {unknown} changes A History step's change list. @returns {string[]} */
+  const editorPaintDomains = (changes) => [...new Set((Array.isArray(changes) ? changes : []).flatMap(({ path } = {}) => (
+    Array.isArray(path)
+      ? EDITOR_PAINT_PATHS.filter(([paintPath]) => paintPath.every((key, index) => index >= path.length || path[index] === key))
+        .flatMap(([, domains]) => domains)
+      : []
+  )))];
+  /**
+   * The one transition of a live edit of the paint intent (design §5.8): the
+   * action writes the active drawing's intent and returns true when it
+   * changed, the displayed Result shows it, and both are one History step (a
+   * control's open step is joined).
+   * @param {string} label
+   * @param {(...args: any[]) => unknown} mutate
+   * @param {{ domains?: readonly string[] }} [options]
+   */
+  const editEditorIntent = (label, mutate, { domains = STROKE_DOMAINS } = {}) => (
+    /** @type {any[]} */ ...args
+  ) => history.runUndoable(label, async () => {
+    const changed = await mutate(...args);
+    if (changed === true) showEditorIntent({ domains });
+    return changed;
+  });
+  // A displayed Result whose strokes changed since it was last shown returns
+  // to Python's strokes before the stroke operations apply (OV-144). Fills and
+  // visibility follow the palette, rule, and visibility projections.
   const DISPLAY_PROJECTED_DOMAINS = Object.freeze([
     'featureFills', 'featureStrokes', 'featureVisibility',
     'legendFills', 'legendStrokes', 'legendRenames', 'legendDeletes', 'legendAdds', 'legendOrder'
@@ -3449,8 +3505,9 @@ export const createAppSetup = () => {
     try {
       await projectMountedEditorIntent({ colors, visibility });
       const legendChanged = legendActions.prepareDisplayedResultLegend(context.root, legend);
-      previewRuntime.applyEditorOperations(hasOperations || strokes ? operations : null, {
-        domains: strokes ? DISPLAY_RECONCILED_DOMAINS : [],
+      showEditorIntent({
+        domains: strokes ? STROKE_DOMAINS : [],
+        operations: hasOperations || strokes ? operations : null,
         afterApply: () => { if (legendChanged) legendActions.onLegendGeometryChanged(); }
       });
       projectedEditorStateByResult.set(identity, current);
@@ -3613,7 +3670,12 @@ export const createAppSetup = () => {
   const requestFeatureColorChangeWithHistory = undoableAction('Change feature color', requestFeatureColorChange);
   const setFeatureColorValueWithHistory = undoableAction('Change feature color', setFeatureColorValue);
   const updateClickedFeatureColorWithHistory = undoableAction('Change feature color', updateClickedFeatureColor);
-  const setLegendEntryStrokeColorValueWithHistory = undoableAction(
+  const editLegendEntryColor = editEditorIntent('Change legend color', updateLegendEntryColor, { domains: LEGEND_FILL_DOMAINS });
+  /** @param {number} index @param {string} color */
+  const updateLegendEntryColorShown = (index, color) => (
+    legendRowHasRules(index) ? updateLegendEntryColor(index, color) : editLegendEntryColor(index, color)
+  );
+  const setLegendEntryStrokeColorValueWithHistory = editEditorIntent(
     'Change legend stroke color',
     setLegendEntryStrokeColorValue
   );
@@ -3628,9 +3690,13 @@ export const createAppSetup = () => {
     dialogChoice.withHistory(label, handler, cancel)
   );
   const handleColorScopeChoiceWithHistory = scopeChoiceWithHistory(() => 'Change feature color', handleColorScopeChoice);
-  const handleFeatureStyleScopeChoiceWithHistory = scopeChoiceWithHistory(
-    () => (featureStyleScopeDialog.kind === 'stroke' ? 'Change feature stroke' : 'Change feature color'),
-    handleFeatureStyleScopeChoice
+  const handleFeatureColorScopeChoiceWithHistory = scopeChoiceWithHistory(() => 'Change feature color', handleFeatureStyleScopeChoice);
+  const handleFeatureStrokeScopeChoiceWithHistory = editEditorIntent('Change feature stroke', handleFeatureStyleScopeChoice);
+  /** @param {string} choice @param {any[]} rest */
+  const handleFeatureStyleScopeChoiceWithHistory = (choice, ...rest) => (
+    featureStyleScopeDialog.kind === 'stroke' && choice !== 'cancel'
+      ? handleFeatureStrokeScopeChoiceWithHistory(choice, ...rest)
+      : handleFeatureColorScopeChoiceWithHistory(choice, ...rest)
   );
   const handleLegendNameCommitWithHistory = undoableAction('Rename legend item', handleLegendNameCommit);
   const handleLegendRenameChoiceWithHistory = scopeChoiceWithHistory(
@@ -3650,16 +3716,16 @@ export const createAppSetup = () => {
     cancelResetColor
   );
   const resetClickedFeatureFillColorWithHistory = undoableAction('Reset feature color', resetClickedFeatureFillColor);
-  const updateClickedFeatureStrokeWithHistory = undoableAction('Change feature stroke', updateClickedFeatureStroke);
-  const setClickedFeatureStrokeColorValueWithHistory = undoableAction(
+  const updateClickedFeatureStrokeWithHistory = editEditorIntent('Change feature stroke', updateClickedFeatureStroke);
+  const setClickedFeatureStrokeColorValueWithHistory = editEditorIntent(
     'Change feature stroke',
     setClickedFeatureStrokeColorValue
   );
-  const setClickedFeatureStrokeWidthValueWithHistory = undoableAction(
+  const setClickedFeatureStrokeWidthValueWithHistory = editEditorIntent(
     'Change feature stroke',
     setClickedFeatureStrokeWidthValue
   );
-  const resetClickedFeatureStrokeWithHistory = undoableAction('Reset feature stroke', resetClickedFeatureStroke);
+  const resetClickedFeatureStrokeWithHistory = editEditorIntent('Reset feature stroke', resetClickedFeatureStroke);
   const setFeatureColorWithHistory = undoableAction('Change feature color', setFeatureColor);
   const selectedFeatureBulkColor = ref('#2563eb');
   const selectedFeatureBulkCaption = ref('Selected features');
@@ -3682,15 +3748,16 @@ export const createAppSetup = () => {
     if (changed) featureSelection.clearFeatureSelection({ clearStatus: true });
     return changed;
   };
-  const applySelectedFeatureStroke = () => history.runUndoable('Change selected feature stroke', async () => {
-    const changed = applyStrokeToSelectedFeatures(
-      selectedFeatures.value,
-      selectedFeatureBulkStrokeColor.value,
-      selectedFeatureBulkStrokeWidth.value
-    );
-    if (changed) featureSelection.syncFeatureSelectionClasses();
+  const editSelectedFeatureStroke = editEditorIntent('Change selected feature stroke', () => applyStrokeToSelectedFeatures(
+    selectedFeatures.value,
+    selectedFeatureBulkStrokeColor.value,
+    selectedFeatureBulkStrokeWidth.value
+  ));
+  const applySelectedFeatureStroke = async () => {
+    const changed = await editSelectedFeatureStroke();
+    if (changed === true) featureSelection.syncFeatureSelectionClasses();
     return changed;
-  });
+  };
   const openFirstSelectedFeature = (event = null) => {
     const first = selectedFeatures.value[0] || null;
     if (!first) return null;
@@ -6106,7 +6173,7 @@ export const createAppSetup = () => {
     legendEntryColor,
     newLegendCaption,
     newLegendColor,
-    updateLegendEntryColor,
+    updateLegendEntryColor: updateLegendEntryColorShown,
     renameLegendEntry,
     // A Legend that gains or loses a row is one checkpoint step, so Undo and
     // Redo return the Legend as it was laid out, canvas included (OV-125).
@@ -6130,10 +6197,10 @@ export const createAppSetup = () => {
     isLegendStrokeOptionsOpen,
     toggleLegendStrokeOptions,
     setLegendEntryStrokeColorValue: setLegendEntryStrokeColorValueWithHistory,
-    updateLegendEntryStrokeColor,
-    updateLegendEntryStrokeWidth: undoableAction('Change legend stroke width', updateLegendEntryStrokeWidth),
-    resetLegendEntryStroke: undoableAction('Reset legend stroke', resetLegendEntryStroke),
-    resetAllStrokes,
+    updateLegendEntryStrokeColor: editEditorIntent('Change legend stroke color', updateLegendEntryStrokeColor),
+    updateLegendEntryStrokeWidth: editEditorIntent('Change legend stroke width', updateLegendEntryStrokeWidth),
+    resetLegendEntryStroke: editEditorIntent('Reset legend stroke', resetLegendEntryStroke),
+    resetAllStrokes: editEditorIntent('Reset all strokes', resetAllStrokes),
     resetAllPositions: undoableAction('Reset positions', resetAllPositions),
     resetLayout: undoableAction('Reset layout', resetLayout),
     canvasPadding: drawingMember('canvasPadding'),

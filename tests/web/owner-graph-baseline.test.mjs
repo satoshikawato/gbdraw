@@ -61,7 +61,7 @@ const PROJECTION_SHAPE_BASELINE = {
   'label-intent': 1,
   'legend-order': 2,
   'palette-rules': 2,
-  'strokes': 2,
+  'strokes': 0,
   'composition': 1
 };
 

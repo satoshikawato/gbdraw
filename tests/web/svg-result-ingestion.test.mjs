@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { gunzipSync } from 'node:zlib';
 
 import { compileDirectEditorMutationPlan } from '../../gbdraw/web/js/app/candidate-render.js';
 import {
@@ -18,6 +20,7 @@ import {
   createCurrentSessionResultSource,
   createEmptySvgMutationPlan,
   createLegacyImportResultSource,
+  createSavedResultPlan,
   getCommittedSvgContent,
   getCommittedSvgResultMetadata,
   isCommittedSvgResult,
@@ -25,7 +28,7 @@ import {
   markCommittedSvgResultUnmounted,
   reconcileMountedResult
 } from '../../gbdraw/web/js/services/svg-result-ingestion.js';
-import { stripResultBaseAttributes } from '../../gbdraw/web/js/services/svg-serialization.js';
+import { stripResultBaseAttributes } from '../../gbdraw/web/js/services/result-paint-bases.js';
 
 class FakeElement {
   constructor(tagName, attributes = {}, children = []) {
@@ -964,4 +967,73 @@ test('current-session and legacy-import remain explicit, incompatible boundaries
   assert.equal(FakeDomParser.calls, 1);
   assert.equal(getCommittedSvgResultMetadata(legacy[0]).sourceClass, 'legacy-import');
   assert.deepEqual(getCommittedSvgResultMetadata(legacy[0]).selectedFeatureTypes, ['CDS']);
+});
+
+// The elements and attributes of an SVG text as FakeElements (the saved
+// Result of a fixture Session).
+const parseSvgText = (content) => {
+  const decode = (value) => value.replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  const root = new FakeElement('#document');
+  let parent = root;
+  const tokens = /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<[?!][^>]*>|<\/([\w:-]+)\s*>|<([\w:-]+)((?:\s+[\w:-]+="[^"]*")*)\s*(\/?)>/g;
+  for (const [token, closing, name, attributes, selfClosing] of content.matchAll(tokens)) {
+    if (closing) { parent = parent.parentElement; continue; }
+    if (!name) continue;
+    const element = parent.appendChild(new FakeElement(name, Object.fromEntries(
+      [...attributes.matchAll(/([\w:-]+)="([^"]*)"/g)].map(([, key, value]) => [key, decode(value)])
+    )));
+    if (!selfClosing && !token.endsWith('/>')) parent = element;
+  }
+  return root.children[0];
+};
+
+// EU U2a: a Session 46 Result saved before the executor recorded Python's
+// paint shows its edits without records. Load records Python's paint from the
+// Session (`originalStroke*`, the Legend's `originalColors`, and the catalog
+// fills), so a reconcile without the edits returns each part and swatch to
+// it (tests/fixtures/sessions/forced-label-underlay-strokes.provenance.json).
+test('Load records Python\'s paint on a Session 46 Result saved without records', () => {
+  const session = JSON.parse(gunzipSync(readFileSync(new URL(
+    '../fixtures/sessions/forced-label-underlay-strokes.v46.gbdraw-session.json.gz', import.meta.url
+  ))).toString('utf8'));
+  const results = normalizeLogicalResults(session.results);
+  const admission = admitFeatureCatalog(session.editorState.featureCatalog, results, { adopt: true, mode: 'circular' });
+  const { editorState, features } = session.modes.circular;
+  const edits = {
+    featureColorOverrides: features.featureColorOverrides || {},
+    featureStrokeOverrides: editorState.featureStrokes.overrides,
+    legendEntries: editorState.legend.entries,
+    legendColorOverrides: editorState.legend.colorOverrides,
+    legendStrokeOverrides: editorState.legend.strokeOverrides,
+    originalLegendColors: session.editorState.legend.originalColors,
+    originalSvgStroke: session.editorState.originalSvgStroke
+  };
+  const svg = parseSvgText(results[0].content);
+  const paint = () => Object.fromEntries([
+    ...svg.querySelectorAll('[data-gbdraw-feature-id]').filter((element) => element.getAttribute('data-gbdraw-feature-part') === 'block')
+      .map((element) => [element.getAttribute('data-gbdraw-rendered-feature-id') || element.id, element]),
+    ...svg.querySelectorAll('g[data-legend-key]').map((row) => [row.getAttribute('data-legend-key'), row.querySelector('path')])
+  ].map(([name, element]) => [name, ['fill', 'stroke', 'stroke-width'].map((attribute) => element.getAttribute(attribute)).join(' ')]));
+  const saved = paint();
+  assert.equal(saved.f38ba7c3f, '#54bcf8 #2a9d8f 2.0');
+  assert.equal(saved.CDS, '#54bcf8 #e63946 3');
+  assert.equal(saved.repeat_region, '#f4a261 gray 2.0');
+
+  const plan = createSavedResultPlan(results, admission, edits);
+  assert.equal(plan.kind, 'MUTATING');
+  plan.operationsByResult[0].callerTransforms.forEach((transform) => transform(svg));
+  assert.deepEqual(paint(), saved, 'the records leave the paint as saved');
+  const recorded = [{ ...results[0], content: serializeNode(svg) }];
+  assert.equal(createSavedResultPlan(recorded, admission, edits).kind, createEmptySvgMutationPlan(1).kind,
+    'a Result with records is admitted as saved');
+  reconcileMountedResult(svg, createEmptySvgMutationPlan(1).operationsByResult[0]);
+  const python = paint();
+  // A width the Session kept as a number returns as that number.
+  assert.equal(python.f38ba7c3f, '#54bcf8 gray 2.0');
+  ['f841fb8a8', 'f2f7a48cf__instance_4_4b227777d4dd1fc6', 'f2f7a48cf__instance_5_ef2d127de37b942b']
+    .forEach((renderedId) => assert.equal(python[renderedId], '#54bcf8 gray 2', renderedId));
+  assert.equal(python.CDS, '#54bcf8 gray 2');
+  assert.equal(python.repeat_region, '#d3d3d3 gray 2.0');
+  assert.equal(python.f9cf91913, saved.f9cf91913, 'an unedited feature keeps its paint');
 });

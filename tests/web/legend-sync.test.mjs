@@ -319,75 +319,35 @@ const mockLegendEntry = (caption, color, x) => {
   assert.equal(actions.updateLegendEntryCaption(0, 'Beta'), false);
   assert.equal(dirtyMarks, noOpDirtyMarks);
 
+  // A Legend row stroke edit writes the intent only, from the stroke Python
+  // drew on the swatch (its base record when the Result has one); the
+  // composition root shows it through the executor (EU U2a).
   state.extractedFeatures = ref([]);
   state.featureStrokeOverrides = {};
-  state.originalSvgStroke = ref({ color: null, width: null });
-  const strokeActions = createLegendStrokeActions({
-    state: withDrawings(state),
-    commitActiveResultEdit: () => {
-      dirtyMarks += 1;
-      return true;
-    }
-  });
-  assert.equal(strokeActions.updateLegendEntryStrokeColor(0, '#222222'), true);
-  const strokeColorDirtyMarks = dirtyMarks;
-  assert.equal(strokeActions.updateLegendEntryStrokeColor(0, '#222222'), false);
-  assert.equal(dirtyMarks, strokeColorDirtyMarks);
-  assert.equal(strokeActions.updateLegendEntryStrokeWidth(0, 2), true);
-  const strokeWidthDirtyMarks = dirtyMarks;
-  assert.equal(strokeActions.updateLegendEntryStrokeWidth(0, 2), false);
-  assert.equal(dirtyMarks, strokeWidthDirtyMarks);
-
+  const strokeActions = createLegendStrokeActions({ state: withDrawings(state) });
   const betaSwatch = featureLegend.children[0].querySelector('path');
-  betaSwatch.setAttribute('fill', '#aabbcc');
-  assert.equal(actions.updateLegendEntryColorByCaption('Beta', '#abc', {commit:false}), false);
-  assert.equal(betaSwatch.getAttribute('fill'), '#aabbcc');
-  betaSwatch.setAttribute('stroke', '#222222');
+  betaSwatch.setAttribute('stroke', '#999999');
+  betaSwatch.setAttribute('data-gbdraw-base-stroke', 'gray');
   betaSwatch.setAttribute('stroke-width', '2');
-  assert.equal(strokeActions.resetLegendEntryStroke(0), true);
-  assert.equal(betaSwatch.getAttribute('stroke'), null);
-  assert.equal(betaSwatch.getAttribute('stroke-width'), null);
-  assert.equal(dirtyMarks, strokeWidthDirtyMarks + 1);
-  const resetDirtyMarks = dirtyMarks;
-  assert.equal(strokeActions.resetLegendEntryStroke(0), false);
-  assert.equal(dirtyMarks, resetDirtyMarks);
-
-  state.legendStrokeOverrides.Beta = { strokeColor: '#222222', strokeWidth: 2 };
+  const strokeDirtyMarks = dirtyMarks;
+  assert.equal(strokeActions.updateLegendEntryStrokeColor(0, '#222222'), true);
+  assert.equal(strokeActions.updateLegendEntryStrokeColor(0, '#222222'), false);
+  assert.equal(strokeActions.updateLegendEntryStrokeWidth(0, 2), true);
+  assert.equal(strokeActions.updateLegendEntryStrokeWidth(0, 2), false);
+  assert.deepEqual(state.legendStrokeOverrides.Beta, {
+    originalStrokeColor: 'gray', originalStrokeWidth: 2, strokeColor: '#222222', strokeWidth: 2
+  });
+  assert.equal(betaSwatch.getAttribute('stroke'), '#999999', 'the action leaves the Result to the executor');
+  assert.equal(dirtyMarks, strokeDirtyMarks);
   assert.equal(strokeActions.resetLegendEntryStroke(0), true);
   assert.deepEqual(state.legendStrokeOverrides, {});
-  assert.equal(
-    dirtyMarks,
-    resetDirtyMarks,
-    'removing a semantic override from an already-default SVG does not dirty the artifact'
-  );
+  assert.equal(strokeActions.resetLegendEntryStroke(0), false);
   assert.equal(strokeActions.resetAllStrokes(), false);
-  assert.equal(dirtyMarks, resetDirtyMarks);
   state.featureStrokeOverrides['record:0:feature:1'] = { strokeColor: '#222222' };
   assert.equal(strokeActions.resetAllStrokes(), true);
   assert.deepEqual(state.featureStrokeOverrides, {});
-  assert.equal(dirtyMarks, resetDirtyMarks);
-
-  betaSwatch.setAttribute('stroke', 'gray');
-  betaSwatch.setAttribute('stroke-width', '3');
-  const appliedOverride = {
-    originalStrokeColor: 'gray',
-    originalStrokeWidth: 2,
-    strokeWidth: 3
-  };
-  const historyReconcileDirtyMarks = dirtyMarks;
-  assert.equal(strokeActions.reconcileStrokeOverrides({
-    changes: [{
-      path: ['editorState', 'legend', 'strokeOverrides', 'Beta'],
-      before: undefined,
-      after: appliedOverride
-    }]
-  }), true);
-  assert.equal(betaSwatch.getAttribute('stroke'), 'gray');
-  assert.equal(betaSwatch.getAttribute('stroke-width'), '2');
-  assert.equal(dirtyMarks, historyReconcileDirtyMarks + 1);
-  assert.equal(strokeActions.reconcileStrokeOverrides({
-    changes: [{ path: ['editorState', 'legend', 'entries', '0', 'caption'] }]
-  }), false);
+  assert.equal(dirtyMarks, strokeDirtyMarks);
+  betaSwatch.removeAttribute('data-gbdraw-base-stroke');
 
   // The generated inventory follows the current diagram, independently of
   // explicitly owned rows and the default order of surviving categories.

@@ -20,6 +20,7 @@ import {
 } from '../../services/specific-color-rules.js';
 import { getFeatureElementIndex, getFeatureFillElements, isAutoFeatureUnderlay } from '../../services/feature-dom.js';
 import { featureOverrideKey } from '../../services/feature-override-identity.js';
+import { pythonDrawnAttribute, stripResultBaseAttributes } from '../../services/result-paint-bases.js';
 
 const normalizedColor = (value) => {
   const resolved = String(resolveColorToHex(String(value || '').trim()) || value || '').trim().toLowerCase();
@@ -79,8 +80,7 @@ export const createLegendEntryActions = ({
     originalLegendOrder,
     originalLegendColors,
     newLegendCaption,
-    newLegendColor,
-    originalSvgStroke
+    newLegendColor
   } = state;
 
   /** @type {((options?: { commit?: boolean }) => unknown) | null} */
@@ -192,48 +192,26 @@ export const createLegendEntryActions = ({
   const onLegendGeometryChanged = (options) => legendGeometryChangedHandler?.(options);
 
   // The stroke Generate gives a row added here: the renderer's first Legend row
-  // as it drew it, before that row's own stroke edit, whose captured original
-  // Reset Stroke restores (OV-121, PD-OI-066). The draft's block stroke applies
-  // on Generate, so it is not read here (R1).
-  /**
-   * @param {DrawingState} drawing
-   * @param {Element} targetGroup
-   * @returns {{ color: string | null, width: string | number | null }}
-   */
-  const templateRowStroke = (drawing, targetGroup) => {
+  // as Python drew it, not that row's stroke edit (OV-121, PD-OI-066). The
+  // draft's block stroke applies on Generate, so it is not read here (R1).
+  /** @param {Element} targetGroup */
+  const templateRowStroke = (targetGroup) => {
     const template = targetGroup.querySelector('g[data-legend-key]');
-    return rendererRowStroke(drawing, template, getLegendEntrySwatch(template)
+    return rendererRowStroke(getLegendEntrySwatch(template)
       || targetGroup.querySelector('path[fill]:not([fill="none"]):not([fill^="url("])'));
   };
 
-  // The stroke the renderer drew on Legend row `row` (its swatch), before the
-  // row's own stroke edit, whose captured original Reset Stroke restores.
+  // The stroke Python drew on a Legend row's swatch, before any edit.
   /**
-   * @param {DrawingState} drawing
-   * @param {Element | null} row
-   * @param {Element | null} [swatch]
-   * @returns {{ color: string | null, width: string | number | null }}
+   * @param {Element | null} swatch
+   * @returns {{ color: string | null, width: string | null }}
    */
-  const rendererRowStroke = (drawing, row, swatch = getLegendEntrySwatch(row)) => {
-    const override = row ? drawing.legendStrokeOverrides[String(row.getAttribute('data-legend-key') || '').trim()] : null;
-    /**
-     * @param {unknown} value The row's own stroke edit, if any.
-     * @param {string} original The override field that holds the drawn value.
-     * @param {string} attribute
-     * @param {() => string | number | null} inherited
-     */
-    const drawn = (value, original, attribute, inherited) => {
-      if (value === undefined || value === null || value === '') return swatch?.getAttribute(attribute) ?? null;
-      return Object.prototype.hasOwnProperty.call(override, original) ? override[original] : inherited();
-    };
-    return {
-      color: drawn(override?.strokeColor, 'originalStrokeColor', 'stroke', () => originalSvgStroke.value.color),
-      width: drawn(override?.strokeWidth, 'originalStrokeWidth', 'stroke-width', () => originalSvgStroke.value.width)
-    };
-  };
+  const rendererRowStroke = (swatch) => ({
+    color: pythonDrawnAttribute(swatch, 'stroke'),
+    width: pythonDrawnAttribute(swatch, 'stroke-width')
+  });
 
   const addLegendEntry = async (caption, color, options = {}) => {
-    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const owner = String(options.owner || '').trim();
@@ -307,7 +285,7 @@ export const createLegendEntryActions = ({
     // Generate copies it (services/svg-result-ingestion.js, OV-86, OV-121),
     // appended last; the layout owner then places every row as Python lays
     // out these rows (zero shift).
-    const templateStroke = templateRowStroke(drawing, targetGroup);
+    const templateStroke = templateRowStroke(targetGroup);
     /** @type {Element[]} */
     const added = [];
     for (const group of allTargetGroups) {
@@ -320,6 +298,8 @@ export const createLegendEntryActions = ({
         if (options.throwOnError) throw new Error('The Legend has no row to copy for a new entry.');
         return false;
       }
+      // The copy shows the editor's row, not the template's records of Python.
+      stripResultBaseAttributes(entryGroup);
       entryGroup.removeAttribute('transform');
       entryGroup.setAttribute('data-legend-key', caption);
       if (owner) entryGroup.setAttribute('data-legend-owner', owner);
@@ -342,43 +322,6 @@ export const createLegendEntryActions = ({
     }
 
     return caption;
-  };
-
-  const updateLegendEntryColorByCaption = (caption, color, { commit = true } = {}) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
-    if (sessionBusy) return sessionBusy;
-    if (!svgContainer.value) return false;
-
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return false;
-
-    const targetGroups = getAllFeatureLegendGroups(svg);
-    if (targetGroups.length === 0) return false;
-
-    let updated = false;
-
-    for (const targetGroup of targetGroups) {
-      const entryGroup = targetGroup.querySelector(`g[data-legend-key="${CSS.escape(caption)}"]`);
-      if (entryGroup) {
-        const paths = entryGroup.querySelectorAll('path');
-        for (const path of paths) {
-          const fill = path.getAttribute('fill');
-          if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-            if (normalizedColor(fill) === normalizedColor(color)) break;
-            path.setAttribute('fill', color);
-            updated = true;
-            break;
-          }
-        }
-      }
-    }
-
-    if (updated) {
-      if (commit) persistLegendReconciliation();
-      console.log(`Updated legend entry color: "${caption}" to ${color}`);
-    }
-
-    return updated;
   };
 
   const legendEntryExists = (caption) => {
@@ -1104,47 +1047,18 @@ export const createLegendEntryActions = ({
     }
   };
 
+  // A Legend row color writes the editor intent only; the composition root
+  // shows it on the Result through the executor (`editEditorIntent`).
+  /** @param {number} idx @param {string} newColor */
   const updateLegendEntryColor = (idx, newColor) => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    if (!svgContainer.value) return false;
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return false;
-
     const entry = drawing.legendEntries.value[idx];
-    if (!entry) return false;
-
-    const caption = entry.caption;
-    if (!caption) return false;
-
-    const targetGroups = getAllFeatureLegendGroups(svg);
-    if (targetGroups.length === 0) return false;
-
-    let changed = false;
-
-    for (const targetGroup of targetGroups) {
-      const entryGroup = targetGroup.querySelector(`g[data-legend-key="${CSS.escape(caption)}"]`);
-      if (entryGroup) {
-        const paths = entryGroup.querySelectorAll('path');
-        for (const path of paths) {
-          const fill = path.getAttribute('fill');
-          if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-            if (normalizedColor(fill) !== normalizedColor(newColor)) {
-              path.setAttribute('fill', newColor);
-              changed = true;
-            }
-            break;
-          }
-        }
-      }
-    }
-
-    const stateChanged = normalizedColor(entry.color) !== normalizedColor(newColor);
-    if (!changed && !stateChanged) return false;
+    if (!entry?.caption) return false;
+    if (normalizedColor(entry.color) === normalizedColor(newColor)) return false;
     entry.color = newColor;
-    drawing.legendColorOverrides[caption] = newColor;
-    if (changed) persistLegendReconciliation();
+    drawing.legendColorOverrides[entry.caption] = newColor;
     return true;
   };
 
@@ -1265,7 +1179,7 @@ export const createLegendEntryActions = ({
       const key = String(entry.getAttribute('data-legend-key') || '').trim();
       return key !== caption && !returning.has(key) && drawsFeatures(key) === featureRow;
     });
-    if (peer) return rendererRowStroke(drawing, peer);
+    if (peer) return rendererRowStroke(getLegendEntrySwatch(peer));
     return featureRow ? featureBlockStroke(drawing, svg, caption) : null;
   };
 
@@ -1378,7 +1292,6 @@ export const createLegendEntryActions = ({
     restoreDeletedLegendEntries,
     setLegendGeometryChangedHandler,
     updateLegendEntryCaption,
-    updateLegendEntryColor,
-    updateLegendEntryColorByCaption
+    updateLegendEntryColor
   };
 };

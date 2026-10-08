@@ -104,7 +104,6 @@ let previewFillApplyCount = 0;
 let previewCommitCount = 0;
 const svgContainer = ref(null);
 const clickedFeature = ref(null);
-const originalSvgStroke = ref({ color: null, width: null });
 const featureStrokeOverrides = {};
 const legendStrokeOverrides = {};
 // The rule commit shows its fills itself (svg-styles); the color action
@@ -149,7 +148,6 @@ const actions = createFeatureColorActions({
     legendColorOverrides,
     originalLegendOrder: ref([]),
     originalLegendColors: ref({}),
-    originalSvgStroke,
     featureStrokeOverrides,
     skipCaptureBaseConfig: ref(false),
     skipExtractOnSvgChange: ref(false),
@@ -671,29 +669,24 @@ clickedFeature.value = {
   originalStrokeColor: '#111111',
   originalStrokeWidth: 1
 };
-originalSvgStroke.value = { color: '#111111', width: 1 };
-
-const sameStrokeCommitCount = previewCommitCount;
-assert.equal(await actions.updateClickedFeatureStroke('#111111', 1), false);
-assert.equal(strokeMutationCount, 0);
-assert.equal(previewCommitCount, sameStrokeCommitCount);
-
-assert.equal(await actions.updateClickedFeatureStroke('#222222', 2), true);
-assert.equal(strokeMutationCount, 2);
-assert.equal(previewCommitCount - sameStrokeCommitCount, 1);
-const changedStrokeCommitCount = previewCommitCount;
-assert.equal(await actions.updateClickedFeatureStroke('#222222', 2), false);
-assert.equal(strokeMutationCount, 2);
-assert.equal(previewCommitCount, changedStrokeCommitCount);
-
-assert.equal(await actions.resetClickedFeatureStroke(), true);
-const resetStrokeMutationCount = strokeMutationCount;
+// A stroke edit writes the intent only, with the stroke Python drew; the
+// composition root shows it through the executor (EU U2a).
+const strokeKey = featureOverrideKey(strokeFeature) || strokeFeature.svg_id;
 const resetStrokeCommitCount = previewCommitCount;
-assert.equal(await actions.resetClickedFeatureStroke(), false);
-assert.equal(strokeMutationCount, resetStrokeMutationCount);
+assert.equal(await actions.updateClickedFeatureStroke('#111111', 1), false);
+assert.equal(await actions.updateClickedFeatureStroke('#222222', 2), true);
+assert.deepEqual(featureStrokeOverrides[strokeKey], {
+  originalStrokeColor: '#111111', originalStrokeWidth: 1, strokeColor: '#222222', strokeWidth: 2
+});
+assert.equal(strokeMutationCount, 0);
 assert.equal(previewCommitCount, resetStrokeCommitCount);
+assert.equal(await actions.resetClickedFeatureStroke(), true);
+assert.equal(featureStrokeOverrides[strokeKey], undefined);
+assert.deepEqual([clickedFeature.value.strokeColor, clickedFeature.value.strokeWidth], ['#111111', 1],
+  'the popup shows the stroke Python drew');
+assert.equal(await actions.resetClickedFeatureStroke(), false);
 assert.equal(await actions.applyStrokeToSelectedFeatures([strokeFeature], '#111111', 1), false);
-const siblingStrokeAttributes = [featureB, hashOnlyFeature].map((feature) => {
+[featureB, hashOnlyFeature].forEach((feature) => {
   const attributes = new Map([
     ['stroke', '#111111'],
     ['stroke-width', '1']
@@ -703,7 +696,6 @@ const siblingStrokeAttributes = [featureB, hashOnlyFeature].map((feature) => {
     setAttribute: (name, value) => attributes.set(name, String(value)),
     removeAttribute: (name) => attributes.delete(name)
   }]);
-  return attributes;
 });
 legendEntries.value = [{
   caption: 'Core',
@@ -740,19 +732,15 @@ clickedFeature.value = {
 };
 assert.equal(await actions.setClickedFeatureStrokeColorValue('#445566'), false);
 assert.equal(await actions.handleFeatureStyleScopeChoice('caption'), true);
-assert.equal(strokeAttributes.get('stroke'), '#445566');
-assert.equal(strokeAttributes.get('stroke-width'), '1');
-siblingStrokeAttributes.forEach((attributes) => {
-  assert.equal(attributes.get('stroke'), '#445566');
-  assert.equal(attributes.get('stroke-width'), '1');
-});
+assert.equal(strokeAttributes.get('stroke'), '#111111');
 assert.deepEqual(legendStrokeOverrides.Core, {
   originalStrokeColor: null,
   originalStrokeWidth: null,
   strokeColor: '#445566',
   strokeWidth: 1
 });
-assert.equal(previewCommitCount, resetStrokeCommitCount + 1);
+assert.equal(strokeMutationCount, 0);
+assert.equal(previewCommitCount, resetStrokeCommitCount);
 
 // Rule scope uses Python's wildcard feature type and inline flags too.
 const wildcardRule = { feat: '*', qual: 'gene_kind', val: '(?i)core', color: '#111111', cap: '' };
@@ -762,8 +750,9 @@ biologicalFeatures.value = [featureB, hashOnlyFeature];
 Object.assign(featureStyleScopeDialog, { show: true, kind: 'stroke', feat: featureB,
   matchingRule: wildcardRule, strokeColor: '#abcdef', strokeWidth: 2 });
 assert.equal(await actions.handleFeatureStyleScopeChoice('rule'), true);
-assert.equal(siblingStrokeAttributes[0].get('stroke'), '#abcdef');
-assert.equal(siblingStrokeAttributes[1].get('stroke'), '#445566');
+assert.deepEqual([featureB, hashOnlyFeature].map((feature) => (
+  featureStrokeOverrides[featureOverrideKey(feature) || feature.svg_id]?.strokeColor ?? null
+)), ['#abcdef', '#445566'], 'the rule scope restrokes only the features its rule matches');
 
 clickedFeature.value = null;
 featureElementsById.clear();
@@ -834,7 +823,6 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
       legendColorOverrides: {},
       originalLegendOrder: ref([]),
       originalLegendColors: ref({}),
-      originalSvgStroke: ref({ color: null, width: null }),
       featureStrokeOverrides: {},
       skipCaptureBaseConfig: ref(false),
       skipExtractOnSvgChange: ref(false),
@@ -908,7 +896,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
         featureColorOverrides: {}, svgContainer: ref({ querySelector: (selector) => selector === 'svg' ? svgRoot : null }),
         clickedFeature: ref(null), featureStyleScopeDialog: {}, resetColorDialog: {}, legendRenameDialog,
         legendEntries: stateLegendEntries, legendStrokeOverrides: {}, legendColorOverrides,
-        originalLegendOrder: originalOrder, originalLegendColors: ref({}), originalSvgStroke: ref({ color: null, width: null }),
+        originalLegendOrder: originalOrder, originalLegendColors: ref({}),
         featureStrokeOverrides: {}, skipCaptureBaseConfig: ref(false), skipExtractOnSvgChange: ref(false),
         addedLegendCaptions: ref(new Set())
       }),

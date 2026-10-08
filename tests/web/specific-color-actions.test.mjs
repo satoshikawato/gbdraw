@@ -299,8 +299,10 @@ test('the Legend editor recolors the rule of a suffixed row, and only that row',
   } });
   assert.equal(legend.updateLegendEntryColor(1, '#00ff00'), true);
   assert.deepEqual(committed, [{ rules: [{ ...rule, color: '#00ff00' }], label: 'Change legend color' }]);
-  assert.equal(legend.updateLegendEntryColor(0, '#123456'), false, 'the generated CDS row is no rule row');
+  assert.deepEqual([legend.legendRowHasRules(0), legend.legendRowHasRules(1)], [false, true]);
+  assert.equal(legend.updateLegendEntryColor(0, '#123456'), true, 'the generated CDS row is no rule row');
   assert.equal(committed.length, 1);
+  assert.deepEqual(state.legendColorOverrides, { CDS: '#123456' }, 'a Legend-only color');
 });
 
 test('a color action prepares the color matches of its rules without the caption evaluation, and a prepared table answers at once', async () => {

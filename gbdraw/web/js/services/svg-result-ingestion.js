@@ -1,20 +1,25 @@
 // @ts-check
 /** @import { FeatureCatalogAdmission } from './feature-catalog.js' */
-import { FEATURE_SELECTOR, filterFeatureFillTargets, getFeatureIdentity } from './feature-dom.js';
+import {
+  AUTO_FEATURE_UNDERLAY_STROKE,
+  FEATURE_SELECTOR,
+  filterFeatureFillTargets,
+  getFeatureIdentity,
+  isAutoFeatureUnderlay
+} from './feature-dom.js';
 import {
   getAllFeatureLegendGroups,
   getLegendEntrySwatch as legendSwatch,
+  legendRowFeatureIds,
   moveLegendEntryToAnchor,
-  orderLegendEntries
+  orderLegendEntries,
+  setsFeatureStroke
 } from './legend-svg.js';
 import { isCurrentWorkerGenerationResponse } from './current-worker-result-source.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { sanitizeSvgContent } from './svg-sanitization.js';
-import {
-  RESULT_BASE_SELECTOR,
-  resultBaseAttribute,
-  serializeCleanSvg
-} from './svg-serialization.js';
+import { RESULT_BASE_SELECTOR, resultBaseAttribute } from './result-paint-bases.js';
+import { serializeCleanSvg } from './svg-serialization.js';
 import { collectRenderedFeatureIdentitiesFromSvgRoot } from './session-feature-metadata.js';
 import { normalizeSvgResultIds } from './svg-result-normalization.js';
 import {
@@ -57,7 +62,7 @@ const text = (value) => String(value ?? '').trim();
  * @property {'EMPTY' | 'MUTATING'} kind
  * @property {readonly SvgMutationOperations[]} operationsByResult One entry per Result.
  * @property {number} [legacyNormalizationCount] The Results whose transform is a
- *   legacy normalization (`createLegacyNormalizationSvgMutationPlan`).
+ *   legacy normalization (`createSavedResultPlan`).
  */
 
 /**
@@ -425,24 +430,6 @@ export const createEmptySvgMutationPlan = (resultCount) => {
   });
 };
 
-/**
- * A Load plan whose only operations are one legacy normalization per Result
- * that needs one (`null` for none, OV-273); without one it is the EMPTY plan.
- * @param {ReadonlyArray<SvgResultTransform | null>} transforms
- * @returns {SvgMutationPlan}
- */
-export const createLegacyNormalizationSvgMutationPlan = (transforms) => {
-  const empty = createEmptySvgMutationPlan(transforms.length);
-  if (!transforms.some(Boolean)) return empty;
-  return Object.freeze({
-    kind: 'MUTATING',
-    legacyNormalizationCount: transforms.filter(Boolean).length,
-    operationsByResult: Object.freeze(empty.operationsByResult.map((operations, index) => (
-      transforms[index] ? Object.freeze({ ...operations, callerTransforms: Object.freeze([transforms[index]]) }) : operations
-    )))
-  });
-};
-
 const setAttributeIfDifferent = (element, name, value) => {
   const normalized = String(value);
   if (element.getAttribute(name) === normalized) return false;
@@ -751,6 +738,169 @@ export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domai
     }, { displayed: true });
   }
   restorePaintBases(svg, domains, index.painted);
+};
+
+/**
+ * The stroke and color edits a saved Result shows, as Load reads them for its
+ * mode, and the values the Session recorded as Python's.
+ * @typedef {object} SavedResultEdits
+ * @property {Record<string, any>} featureColorOverrides
+ * @property {Record<string, any>} featureStrokeOverrides
+ * @property {Record<string, any>[]} legendEntries
+ * @property {Record<string, string>} legendColorOverrides
+ * @property {Record<string, any>} legendStrokeOverrides
+ * @property {Record<string, string>} originalLegendColors
+ * @property {{ color: string | null, width: number | null }} originalSvgStroke
+ */
+
+const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
+/** @param {string} name @param {unknown} left @param {unknown} right */
+const samePaint = (name, left, right) => {
+  const a = text(left).toLowerCase();
+  const b = text(right).toLowerCase();
+  if (name !== 'stroke-width' || !a || !b) return a === b;
+  return Number(a) === Number(b);
+};
+
+// Session 46 (0.14.0) and older current Sessions saved a Result with its
+// stroke and color edits drawn in but without the records of Python's values.
+// Load records them once from the values the Session kept (`originalStroke*`,
+// the Legend's original colors, the catalog fills), on each element that
+// shows its edit, so Reset and Undo return it to Python's value.
+/**
+ * @param {Element} svg
+ * @param {{ resultIndex: number, catalogAdmission: FeatureCatalogAdmission, edits: SavedResultEdits }} saved
+ */
+const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits }) => {
+  const index = createLazyMutationIndex(svg, { phase: 'session-load', resultIndex });
+  /** @param {Element} element @param {string} name @param {unknown} edited @param {unknown} original */
+  const record = (element, name, edited, original) => {
+    const current = element.getAttribute(name);
+    if (edited === null || edited === undefined || edited === '') return;
+    if (samePaint(name, current, original) || !samePaint(name, current, edited)) return;
+    if (!element.hasAttribute(resultBaseAttribute(name))) element.setAttribute(resultBaseAttribute(name), text(original));
+  };
+  /** @param {string} key */
+  const renderedIdsOf = (key) => (catalogAdmission.renderedTargetsByOverrideKey.get(key) || [])
+    .filter((target) => target.resultIndex === resultIndex).map((target) => target.renderedId);
+  const elementsOf = (/** @type {string} */ renderedId) => index.features().get(renderedId) || [];
+  // Python's stroke of a feature part: none on an automatic underlay, else
+  // the one the edit recorded, else the block stroke the Session kept.
+  /** @param {Element} element @param {Record<string, any> | null} edit */
+  const drawnStroke = (element, edit) => {
+    if (isAutoFeatureUnderlay(element)) return AUTO_FEATURE_UNDERLAY_STROKE;
+    return {
+      color: hasOwn(edit, 'originalStrokeColor') ? edit?.originalStrokeColor : edits.originalSvgStroke.color,
+      width: hasOwn(edit, 'originalStrokeWidth') ? edit?.originalStrokeWidth : edits.originalSvgStroke.width
+    };
+  };
+  /** @param {Element} element @param {Record<string, any>} edit @param {Record<string, any> | null} originals */
+  const recordStroke = (element, edit, originals) => {
+    const drawn = drawnStroke(element, originals);
+    record(element, 'stroke', edit.strokeColor, drawn.color);
+    record(element, 'stroke-width', edit.strokeWidth, drawn.width);
+  };
+
+  /** @type {Map<string, string>} */
+  const editedFills = new Map();
+  /** @type {Map<string, string[]>} */
+  const namedIdsByCaption = new Map();
+  /** @type {Map<string, Record<string, any>>} */
+  const renderedFeatures = catalogAdmission.renderedFeaturesByResult?.[resultIndex] || new Map();
+  Object.entries(edits.featureColorOverrides).forEach(([key, edit]) => {
+    const color = text(edit && typeof edit === 'object' ? edit.color : edit);
+    const caption = text(edit?.caption);
+    renderedIdsOf(key).forEach((renderedId) => {
+      if (color) editedFills.set(renderedId, color);
+      if (caption) namedIdsByCaption.set(caption, [...(namedIdsByCaption.get(caption) || []), renderedId]);
+      filterFeatureFillTargets(elementsOf(renderedId)).forEach((element) => (
+        record(element, 'fill', color, renderedFeatures.get(renderedId)?.fill_color)
+      ));
+    });
+  });
+  /** @type {string[]} */
+  const ownStrokeIds = [];
+  Object.entries(edits.featureStrokeOverrides).forEach(([key, edit]) => {
+    if (!setsFeatureStroke(edit)) return;
+    renderedIdsOf(key).forEach((renderedId) => {
+      ownStrokeIds.push(renderedId);
+      elementsOf(renderedId).forEach((element) => recordStroke(element, edit, edit));
+    });
+  });
+
+  const drawnFills = [...renderedFeatures].map(([renderedId, feature]) => (
+    /** @type {[string, string]} */ ([renderedId, editedFills.get(renderedId) ?? text(feature?.fill_color)])
+  ));
+  const rows = index.legends().entries;
+  Object.entries(edits.legendStrokeOverrides).forEach(([caption, edit]) => {
+    if (!setsFeatureStroke(edit)) return;
+    const entry = edits.legendEntries.find((row) => text(row?.caption) === caption);
+    legendRowFeatureIds(entry, { drawnFills, namedIds: namedIdsByCaption.get(caption) || [], ownStrokeIds })
+      .forEach((renderedId) => elementsOf(renderedId).forEach((element) => recordStroke(element, edit, null)));
+    (rows.get(caption) || []).forEach((row) => {
+      const swatch = legendSwatch(row);
+      if (!swatch) return;
+      record(swatch, 'stroke', edit.strokeColor, hasOwn(edit, 'originalStrokeColor') ? edit.originalStrokeColor : edits.originalSvgStroke.color);
+      record(swatch, 'stroke-width', edit.strokeWidth, hasOwn(edit, 'originalStrokeWidth') ? edit.originalStrokeWidth : edits.originalSvgStroke.width);
+    });
+  });
+  Object.entries(edits.legendColorOverrides).forEach(([caption, color]) => {
+    const entry = edits.legendEntries.find((row) => text(row?.caption) === caption);
+    const original = edits.originalLegendColors[text(entry?.originalCaption) || caption];
+    if (original === undefined) return;
+    (rows.get(caption) || []).forEach((row) => {
+      const swatch = legendSwatch(row);
+      if (swatch) record(swatch, 'fill', color, original);
+    });
+  });
+};
+
+/**
+ * A legacy normalization of a Result saved without composition metadata (a
+ * Session 40 Result of main 8228ffab or 7aad9e3e, OV-273): `applies` tells it
+ * from the Result's text.
+ * @typedef {{ transform: SvgResultTransform, applies: (content: unknown) => boolean }} LegacyResultNormalization
+ */
+
+/**
+ * The plan a current Session's Results are admitted with at Load: none, or,
+ * for each Result the legacy normalization applies to, that normalization,
+ * and for each Result saved without records of Python's paint, the records of
+ * the edits it shows (`recordSavedEditBases`).
+ * @param {readonly Record<string, any>[]} results
+ * @param {FeatureCatalogAdmission} catalogAdmission
+ * @param {SavedResultEdits | null} edits
+ * @param {LegacyResultNormalization | null} [legacy]
+ * @returns {SvgMutationPlan}
+ */
+export const createSavedResultPlan = (results, catalogAdmission, edits, legacy = null) => {
+  const editsShown = edits && [
+    edits.featureColorOverrides, edits.featureStrokeOverrides, edits.legendColorOverrides, edits.legendStrokeOverrides
+  ].some((overrides) => Object.keys(overrides || {}).length > 0);
+  const needsRecords = (/** @type {Record<string, any>} */ result) => (
+    Boolean(editsShown) && String(result?.content || '').indexOf('data-gbdraw-base-') < 0
+  );
+  const normalizes = (/** @type {Record<string, any>} */ result) => Boolean(legacy?.applies(result?.content));
+  const legacyNormalizationCount = results.filter(normalizes).length;
+  if (legacyNormalizationCount === 0 && !results.some(needsRecords)) return createEmptySvgMutationPlan(results.length);
+  const savedEdits = /** @type {SavedResultEdits} */ (edits);
+  return Object.freeze({
+    kind: 'MUTATING',
+    legacyNormalizationCount,
+    operationsByResult: Object.freeze(results.map((result, resultIndex) => {
+      // The records find a row by the key the normalized Legend shows, so the
+      // normalization comes first.
+      const transforms = [
+        ...(legacy && normalizes(result) ? [legacy.transform] : []),
+        ...(needsRecords(result)
+          ? [(/** @type {Element} */ svg) => recordSavedEditBases(svg, { resultIndex, catalogAdmission, edits: savedEdits })]
+          : [])
+      ];
+      return transforms.length > 0
+        ? Object.freeze({ ...freezeEmptyOperations(), callerTransforms: Object.freeze(transforms) })
+        : freezeEmptyOperations();
+    }))
+  });
 };
 
 const admitCurrentResult = (

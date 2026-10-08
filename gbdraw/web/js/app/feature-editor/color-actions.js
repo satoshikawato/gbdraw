@@ -5,7 +5,14 @@ import { matchedRuleKeys, ruleKey, ruleMatcher, ruleMatchesFeature } from '../..
 import { appliedFeatureColors, resolveColorToHex } from '../../utils/color-utils.js';
 import { getFeatureCaption, getFeatureColorRuleHash, getFeatureHashCandidates } from '../../services/feature-utils.js';
 import { exactRegexValue } from '../../services/feature-selector.js';
-import { getAllFeatureLegendGroups, mountedLegendRowFeatureIds, setsFeatureStroke } from '../../services/legend-svg.js';
+import {
+  drawnLegendRowStroke,
+  getAllFeatureLegendGroups,
+  mountedLegendRowFeatureIds,
+  setsFeatureStroke
+} from '../../services/legend-svg.js';
+import { isAutoFeatureUnderlay } from '../../services/feature-dom.js';
+import { pythonDrawnAttribute } from '../../services/result-paint-bases.js';
 import {
   featureOverrideKey,
   getFeatureOverride
@@ -86,8 +93,7 @@ export const createFeatureColorActions = ({
     resetColorDialog,
     legendRenameDialog,
     originalLegendOrder,
-    originalLegendColors,
-    originalSvgStroke
+    originalLegendColors
   } = state;
 
   const {
@@ -249,6 +255,17 @@ export const createFeatureColorActions = ({
   const clearFeatureStrokeOverride = (drawing, featureLike, fallbackSvgId = '') => {
     const key = featureStrokeKey(featureLike, fallbackSvgId);
     if (key) delete drawing.featureStrokeOverrides[key];
+  };
+
+  // The stroke Python drew on a feature's block (its first part that is not
+  // an automatic underlay), which a Session 46 stroke edit keeps.
+  /** @param {Element[]} elements */
+  const drawnFeatureStroke = (elements) => {
+    const block = elements.find((element) => !isAutoFeatureUnderlay(element)) || elements[0] || null;
+    return {
+      originalStrokeColor: pythonDrawnAttribute(block, 'stroke'),
+      originalStrokeWidth: pythonDrawnAttribute(block, 'stroke-width')
+    };
   };
 
   // The stroke a Legend row edit gives a feature without a stroke edit of its
@@ -1334,50 +1351,37 @@ export const createFeatureColorActions = ({
     clearFeatureStyleScopeDialog();
   };
 
+  // The stroke edits write the editor intent only. The composition root shows
+  // them on the Result through the executor as one History step
+  // (`editEditorIntent` in app/app-setup.js), which records Python's strokes.
   /** @param {DrawingState} drawing */
   const updateClickedFeatureStroke = (drawing, strokeColor, strokeWidth) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return false;
-    if (!svgContainer.value) return false;
-
-    const svg = svgContainer.value.querySelector('svg');
+    const svg = getCurrentSvg();
     if (!svg) return false;
 
-    const svgId = clickedFeature.value.svg_id;
-    const elements = getFeatureElements(svg, svgId);
+    const elements = getFeatureElements(svg, clickedFeature.value.svg_id);
     if (elements.length === 0) return false;
     const normalizedStrokeColor = strokeColor === null || strokeColor === undefined
       ? null
       : String(strokeColor).trim();
     const normalizedStrokeWidth = normalizeStrokeWidthValue(strokeWidth);
     if (normalizedStrokeColor === null && normalizedStrokeWidth === null) return false;
-    const firstElement = elements[0] || null;
-    let changed = false;
-
-    elements.forEach((element) => {
-      if (normalizedStrokeColor !== null && !strokeColorAttributeMatches(element, normalizedStrokeColor)) {
-        element.setAttribute('stroke', normalizedStrokeColor);
-        changed = true;
-      }
-      if (normalizedStrokeWidth !== null && !strokeWidthAttributeMatches(element, normalizedStrokeWidth)) {
-        element.setAttribute('stroke-width', /** @type {any} */ (normalizedStrokeWidth));
-        changed = true;
-      }
-    });
-
+    const changed = elements.some((element) => (
+      (normalizedStrokeColor !== null && !strokeColorAttributeMatches(element, normalizedStrokeColor))
+      || (normalizedStrokeWidth !== null && !strokeWidthAttributeMatches(element, normalizedStrokeWidth))
+    ));
     if (!changed) return false;
     recordFeatureStrokeOverride(drawing, clickedFeature.value.feat || clickedFeature.value, {
       strokeColor: normalizedStrokeColor,
       strokeWidth: normalizedStrokeWidth,
-      originalStrokeColor: clickedFeature.value.originalStrokeColor ?? null,
-      originalStrokeWidth: clickedFeature.value.originalStrokeWidth ?? firstElement?.getAttribute('stroke-width') ?? null
+      ...drawnFeatureStroke(elements)
     });
 
     if (normalizedStrokeColor !== null) clickedFeature.value.strokeColor = normalizedStrokeColor;
     if (normalizedStrokeWidth !== null) clickedFeature.value.strokeWidth = normalizedStrokeWidth;
-
-    persistCurrentSvg(svg, 'feature-stroke');
     return true;
   };
 
@@ -1415,43 +1419,21 @@ export const createFeatureColorActions = ({
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return false;
-    if (!svgContainer.value) return false;
-
-    const svg = svgContainer.value.querySelector('svg');
+    const svg = getCurrentSvg();
     if (!svg) return false;
 
     const svgId = clickedFeature.value.svg_id;
-    const elements = getFeatureElements(svg, svgId);
-
-    // Without its own stroke edit, the feature shows its Legend row's stroke.
-    const rowStroke = legendRowStrokeOf(drawing, svg, clickedFeature.value.feat || clickedFeature.value, svgId);
-    const originalColor = String(rowStroke?.strokeColor || '').trim() || originalSvgStroke.value.color;
-    const originalWidth = normalizeStrokeWidthValue(rowStroke?.strokeWidth)
-      ?? normalizeStrokeWidthValue(originalSvgStroke.value.width);
-    let changed = false;
-
-    elements.forEach((element) => {
-      if (!strokeColorAttributeMatches(element, originalColor)) {
-        if (originalColor === null) element.removeAttribute('stroke');
-        else element.setAttribute('stroke', originalColor);
-        changed = true;
-      }
-      if (!strokeWidthAttributeMatches(element, originalWidth)) {
-        if (originalWidth === null) element.removeAttribute('stroke-width');
-        else element.setAttribute('stroke-width', /** @type {any} */ (originalWidth));
-        changed = true;
-      }
-    });
-
     const feature = clickedFeature.value.feat || clickedFeature.value;
     const overrideKey = featureStrokeKey(feature, svgId);
-    const hadOverride = Boolean(overrideKey && drawing.featureStrokeOverrides[overrideKey]);
-    if (!changed && !hadOverride) return false;
-    clickedFeature.value.strokeColor = originalColor || '';
-    clickedFeature.value.strokeWidth = originalWidth ?? '';
+    if (!overrideKey || !drawing.featureStrokeOverrides[overrideKey]) return false;
+    // Without its own stroke edit, the feature shows its Legend row's stroke,
+    // else the stroke Python drew.
+    const rowStroke = legendRowStrokeOf(drawing, svg, feature, svgId);
+    const drawn = drawnFeatureStroke(getFeatureElements(svg, svgId));
+    clickedFeature.value.strokeColor = String(rowStroke?.strokeColor || '').trim() || drawn.originalStrokeColor || '';
+    clickedFeature.value.strokeWidth = normalizeStrokeWidthValue(rowStroke?.strokeWidth)
+      ?? normalizeStrokeWidthValue(drawn.originalStrokeWidth) ?? '';
     clearFeatureStrokeOverride(drawing, feature, svgId);
-
-    if (changed) persistCurrentSvg(svg, 'feature-stroke');
     return true;
   };
 
@@ -1468,9 +1450,12 @@ export const createFeatureColorActions = ({
   const setClickedFeatureStrokeColorValue = (drawing, value) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
+    if (!clickedFeature.value) return false;
+    const svg = getCurrentSvg();
+    if (!svg) return false;
+    const feature = clickedFeature.value.feat || clickedFeature.value;
+    const elements = getFeatureElements(svg, clickedFeature.value.svg_id);
     if (value !== null) {
-      if (!clickedFeature.value) return false;
-      const feature = clickedFeature.value.feat || clickedFeature.value;
       const override = getFeatureOverride(drawing.featureStrokeOverrides, feature);
       if (
         !hasOwn(override, 'strokeColor')
@@ -1478,50 +1463,23 @@ export const createFeatureColorActions = ({
       ) {
         const normalizedValue = String(value || '').trim();
         if (updateClickedFeatureStroke(drawing, normalizedValue, null)) return true;
-        const svg = getCurrentSvg();
-        if (!svg) return false;
-        const elements = getFeatureElements(svg, clickedFeature.value.svg_id);
         if (elements.length === 0) return false;
-        recordFeatureStrokeOverride(drawing, feature, {
-          strokeColor: normalizedValue,
-          originalStrokeColor: clickedFeature.value.originalStrokeColor ?? elements[0]?.getAttribute('stroke') ?? null,
-          originalStrokeWidth: clickedFeature.value.originalStrokeWidth ?? elements[0]?.getAttribute('stroke-width') ?? null
-        });
+        recordFeatureStrokeOverride(drawing, feature, { strokeColor: normalizedValue, ...drawnFeatureStroke(elements) });
         return true;
       }
       return requestClickedFeatureStrokeChange(drawing, value, clickedFeature.value.strokeWidth);
     }
-    if (!clickedFeature.value || !svgContainer.value) return false;
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return false;
-    const feature = clickedFeature.value.feat || clickedFeature.value;
     const key = featureStrokeKey(feature, clickedFeature.value.svg_id);
     const override = key ? drawing.featureStrokeOverrides[key] : null;
+    if (!override || !hasOwn(override, 'strokeColor')) return false;
     // Without a stroke edit of its own left, the feature shows its Legend row's stroke.
-    const rowStroke = setsFeatureStroke({ strokeWidth: override?.strokeWidth })
+    const rowStroke = setsFeatureStroke({ strokeWidth: override.strokeWidth })
       ? null
       : legendRowStrokeOf(drawing, svg, feature, clickedFeature.value.svg_id);
-    const inheritedColor = String(rowStroke?.strokeColor || '').trim() || (override && hasOwn(override, 'originalStrokeColor')
-      ? override.originalStrokeColor
-      : (clickedFeature.value.originalStrokeColor ?? originalSvgStroke.value.color));
-    const elements = getFeatureElements(svg, clickedFeature.value.svg_id);
-    const domChanged = elements.some((element) => !strokeColorAttributeMatches(element, inheritedColor));
-    const stateChanged = Boolean(override && hasOwn(override, 'strokeColor'));
-    if (!domChanged && !stateChanged) return false;
-    if (override) {
-      delete override.strokeColor;
-      if (!hasOwn(override, 'strokeWidth')) delete drawing.featureStrokeOverrides[key];
-    }
-    elements.forEach((element) => {
-      if (strokeColorAttributeMatches(element, inheritedColor)) return;
-      if (inheritedColor === null || inheritedColor === '') {
-        element.removeAttribute('stroke');
-      } else {
-        element.setAttribute('stroke', inheritedColor);
-      }
-    });
-    clickedFeature.value.strokeColor = inheritedColor || '';
-    if (domChanged) persistCurrentSvg(svg, 'feature-stroke');
+    delete override.strokeColor;
+    if (!hasOwn(override, 'strokeWidth')) delete drawing.featureStrokeOverrides[key];
+    clickedFeature.value.strokeColor = String(rowStroke?.strokeColor || '').trim()
+      || drawnFeatureStroke(elements).originalStrokeColor || '';
     return true;
   };
 
@@ -1624,9 +1582,8 @@ export const createFeatureColorActions = ({
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const targetFeatures = uniqueFeaturesBySvgId(features);
-    if (targetFeatures.length === 0 || !svgContainer.value) return false;
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return false;
+    const svg = getCurrentSvg();
+    if (targetFeatures.length === 0 || !svg) return false;
 
     const normalizedStrokeColor = String(strokeColor || '').trim();
     const normalizedStrokeWidth = normalizeStrokeWidthValue(strokeWidth);
@@ -1635,40 +1592,22 @@ export const createFeatureColorActions = ({
     let updatedCount = 0;
     targetFeatures.forEach((feature) => {
       const elements = getFeatureElements(svg, feature.svg_id);
-      if (elements.length === 0) return;
       const needsUpdate = elements.some((element) => (
         (normalizedStrokeColor && !strokeColorAttributeMatches(element, normalizedStrokeColor))
         || (normalizedStrokeWidth !== null && !strokeWidthAttributeMatches(element, normalizedStrokeWidth))
       ));
       if (!needsUpdate) return;
-      const firstElement = elements[0] || null;
       recordFeatureStrokeOverride(drawing, feature, {
         strokeColor: normalizedStrokeColor || null,
         strokeWidth: normalizedStrokeWidth,
-        originalStrokeColor: firstElement?.getAttribute('stroke') ?? null,
-        originalStrokeWidth: firstElement?.getAttribute('stroke-width') ?? null
+        ...drawnFeatureStroke(elements)
       });
-      elements.forEach((element) => {
-        let changed = false;
-        if (normalizedStrokeColor && !strokeColorAttributeMatches(element, normalizedStrokeColor)) {
-          element.setAttribute('stroke', normalizedStrokeColor);
-          changed = true;
-        }
-        if (normalizedStrokeWidth !== null && !strokeWidthAttributeMatches(element, normalizedStrokeWidth)) {
-          element.setAttribute('stroke-width', /** @type {any} */ (normalizedStrokeWidth));
-          changed = true;
-        }
-        if (changed) updatedCount += 1;
-      });
+      updatedCount += 1;
       if (clickedFeature.value?.svg_id === feature.svg_id) {
         if (normalizedStrokeColor) clickedFeature.value.strokeColor = normalizedStrokeColor;
         if (normalizedStrokeWidth !== null) clickedFeature.value.strokeWidth = normalizedStrokeWidth;
       }
     });
-
-    if (updatedCount > 0) {
-      persistCurrentSvg(svg, 'feature-stroke');
-    }
     return updatedCount > 0;
   };
 
@@ -1682,38 +1621,6 @@ export const createFeatureColorActions = ({
     const normalizedStrokeWidth = normalizeStrokeWidthValue(strokeWidth);
     if (!normalizedStrokeColor && normalizedStrokeWidth === null) return false;
 
-    let domChanged = false;
-    /** @type {{ color: string | null, width: number | null } | null} */
-    let originalSwatchStroke = null;
-    const escapedCaption = globalThis.CSS?.escape
-      ? globalThis.CSS.escape(targetLegendEntry.caption)
-      : String(targetLegendEntry.caption).replace(/["\\]/g, '\\$&');
-    for (const targetGroup of getAllFeatureLegendGroups(svg)) {
-      const entryGroup = targetGroup.querySelector(
-        `g[data-legend-key="${escapedCaption}"]`
-      );
-      if (!entryGroup) continue;
-      const swatch = Array.from(entryGroup.querySelectorAll('path')).find((path) => {
-        const fill = path.getAttribute('fill');
-        return fill && fill !== 'none' && !fill.startsWith('url(');
-      });
-      if (!swatch) continue;
-      if (!originalSwatchStroke) {
-        originalSwatchStroke = {
-          color: swatch.getAttribute('stroke'),
-          width: normalizeStrokeWidthValue(swatch.getAttribute('stroke-width'))
-        };
-      }
-      if (normalizedStrokeColor && !strokeColorAttributeMatches(swatch, normalizedStrokeColor)) {
-        swatch.setAttribute('stroke', normalizedStrokeColor);
-        domChanged = true;
-      }
-      if (normalizedStrokeWidth !== null && !strokeWidthAttributeMatches(swatch, normalizedStrokeWidth)) {
-        swatch.setAttribute('stroke-width', normalizedStrokeWidth);
-        domChanged = true;
-      }
-    }
-
     const overrideKey = targetLegendEntry.caption;
     const previousOverride = drawing.legendStrokeOverrides[overrideKey] || {};
     const nextOverride = { ...previousOverride };
@@ -1721,8 +1628,7 @@ export const createFeatureColorActions = ({
       !hasOwn(previousOverride, 'strokeColor')
       && !hasOwn(previousOverride, 'strokeWidth')
     ) {
-      nextOverride.originalStrokeColor = originalSwatchStroke?.color ?? null;
-      nextOverride.originalStrokeWidth = originalSwatchStroke?.width ?? null;
+      Object.assign(nextOverride, drawnLegendRowStroke(svg, overrideKey));
     }
     if (normalizedStrokeColor) nextOverride.strokeColor = normalizedStrokeColor;
     if (normalizedStrokeWidth !== null) nextOverride.strokeWidth = normalizedStrokeWidth;
@@ -1731,8 +1637,7 @@ export const createFeatureColorActions = ({
       || normalizeStrokeWidthValue(previousOverride.strokeWidth)
         !== normalizeStrokeWidthValue(nextOverride.strokeWidth);
     if (stateChanged) drawing.legendStrokeOverrides[overrideKey] = nextOverride;
-    if (domChanged) persistCurrentSvg(svg, 'feature-stroke');
-    return domChanged || stateChanged;
+    return stateChanged;
   };
 
   /** @param {DrawingState} drawing */

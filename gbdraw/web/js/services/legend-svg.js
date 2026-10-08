@@ -1,6 +1,7 @@
 // @ts-check
 import { parseTransform } from './svg-transform.js';
 import { getFeatureElementIndex, getFeatureFillElements } from './feature-dom.js';
+import { pythonDrawnAttribute } from './result-paint-bases.js';
 
 export { parseTransform };
 
@@ -113,6 +114,25 @@ export const getLegendEntrySwatch = (entryGroup) => Array.from(
   const fill = path.getAttribute('fill');
   return fill && fill !== 'none' && !fill.startsWith('url(');
 }) || null;
+
+// The stroke Python drew on the swatch of the Legend row `caption`, which a
+// row stroke edit keeps as `originalStroke*`.
+/**
+ * @param {Element | null | undefined} svg
+ * @param {string} caption
+ * @returns {{ originalStrokeColor: string | null, originalStrokeWidth: number | null }}
+ */
+export const drawnLegendRowStroke = (svg, caption) => {
+  const swatch = getAllFeatureLegendGroups(svg)
+    .map((group) => getLegendEntrySwatch(Array.from(group.querySelectorAll('g[data-legend-key]'))
+      .find((entry) => entry.getAttribute('data-legend-key') === caption) || null))
+    .find(Boolean) || null;
+  const width = Number.parseFloat(String(pythonDrawnAttribute(swatch, 'stroke-width') ?? ''));
+  return {
+    originalStrokeColor: pythonDrawnAttribute(swatch, 'stroke'),
+    originalStrokeWidth: Number.isFinite(width) ? width : null
+  };
+};
 
 /** @param {unknown} value */
 const paintKey = (value) => String(value ?? '').trim().toLowerCase();
