@@ -787,7 +787,9 @@ values; select **Nucleotide** or **Amino acid** to search sequences, including
 IUPAC codes. **Location** matches the displayed 1-based INSDC location, such as
 `3901..4000, 1..200 (+)` for an origin-spanning feature. Search may use a
 literal value or **Regex (JavaScript, i)**, and the previous and next controls
-move through rendered matches. Regex search is case-insensitive JavaScript in
+move through rendered matches. The line under the search row names the active
+match's record and the field it matched, such as
+`Record NC_022349.1 · Matched Qualifier gene: dnaA`. Regex search is case-insensitive JavaScript in
 both the app and downloaded Interactive SVG. Python-only syntax such as
 `(?P<name>...)` is rejected here; the message identifies JavaScript regex and
 explains returning to word search by turning Regex off.
@@ -1081,14 +1083,9 @@ Enter a 1-based source coordinate in **Display start**. It becomes the base at
 **Generate Diagram**. **Reset start** restores no additional shift, which differs
 from explicit 1 when reverse complemented.
 
-For a shortcut, select exactly one source-bound feature in the current Result
-and choose **Use selected feature 5′ end** or **Use selected feature midpoint**.
-The midpoint counts covered bases in biological order, excluding introns, and
-uses the earlier central base for an even length. Mixed/unknown strand, multiple
-selection, another record, or a replaced source disables the shortcut. Crop,
-non-circular topology or unknown length disables the start control with a reason.
-Turning **Circular record** off retains the inactive start draft; turning it back
-on restores that value.
+Crop, non-circular topology or unknown length disables the start control with a
+reason. Turning **Circular record** off retains the inactive start draft; turning
+it back on restores that value.
 
 To rotate a record from a feature, open its popup and expand **Rotate record
 using this feature** in the **Layout** group of **Edit**. The section is closed
@@ -1106,7 +1103,9 @@ reason. Under **Put this feature at**, choose:
   the feature's 3′ base at the display start.
 - **Custom position**: **Record starts at** this feature's 5′ end, midpoint, or
   3′ end, or just after the feature, **shifted by** a signed offset in base
-  pairs counted along the feature's strand.
+  pairs counted along the feature's strand. The midpoint counts covered bases
+  in biological order, excluding introns, and uses the earlier central base for
+  an even length.
 
 **Show this feature on the forward strand** reverse-complements the record when
 the feature is on the − strand; left off, the current orientation is kept. One

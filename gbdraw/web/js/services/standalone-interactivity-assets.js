@@ -2850,6 +2850,13 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     return label ? label + ': ' + snippet : snippet;
   }
 
+  function formatSearchMatchLine(feature, details) {
+    var detailText = details && details.length ? formatSearchMatchDetail(details[0]) : '';
+    if (!detailText) return '';
+    var recordId = String(feature && feature.record_id || '');
+    return (recordId ? 'Record ' + recordId + ' · ' : '') + 'Matched ' + detailText;
+  }
+
   function syncSearchControls() {
     if (!searchControls) return;
     var root = searchControls.querySelector('.gfs');
@@ -2901,9 +2908,9 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     if (matchDetailText) {
       var activeId = searchState.activeIndex >= 0 ? searchState.matches[searchState.activeIndex] : '';
       var details = activeId ? searchState.matchDetails[activeId] || [] : [];
-      var detailText = details.length ? formatSearchMatchDetail(details[0]) : '';
-      matchDetailText.textContent = detailText ? 'Matched ' + detailText : '';
-      matchDetailText.setAttribute('title', detailText ? 'Matched ' + detailText : '');
+      var lineText = formatSearchMatchLine(activeId ? featuresById.get(activeId) : null, details);
+      matchDetailText.textContent = lineText;
+      matchDetailText.setAttribute('title', lineText);
     }
   }
 

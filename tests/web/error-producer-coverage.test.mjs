@@ -26,7 +26,7 @@ const UNCLASSIFIED_THROW_BASELINE = {
   'app/legend-layout/decoration-continuity.js': 0,
   'app/linear-track-slots.js': 0,
   'app/preview-runtime.js': 7,
-  'app/record-display-options.js': 10,
+  'app/record-display-options.js': 4,
   'app/run-analysis.js': 17,
   'mode-profiles.js': 2,
   'services/circular-track-slot-model.js': 2,

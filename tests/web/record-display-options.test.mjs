@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {
-  createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED, selectedFeatureDisplayStart
-} from '../../gbdraw/web/js/app/record-display-options.js';
+import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from '../../gbdraw/web/js/app/record-display-options.js';
 import {
   buildRecordDisplayRows, parseRecordDisplayStart, reconcileRecordDisplayDrafts, effectiveRecordReverseComplement, migrateLegacyRecordDisplayDrafts, recordDisplaySurface, requestedRecordTransform, validateAnchorIntent, validateRecordDisplayDrafts
 } from '../../gbdraw/web/js/services/record-display-model.js';
@@ -113,41 +111,6 @@ test('detected topology, nullable reset, crop lock, and RC default stay separate
   assert.equal(recordDisplaySurface(rows[1], { topologyOverride: true }).startEnabled, true);
   assert.equal(recordDisplaySurface(rows[0], {}, { cropped: true }).startEnabled, false);
   assert.equal(recordDisplaySurface(rows[0], {}, { reverse: true }).currentStart, 100);
-});
-
-for (const strand of ['+', '-']) {
-  for (const parts of [[[0, 1]], [[99, 100]], [[10, 14]], [[90, 100], [0, 5]], [[10, 13], [40, 43]]]) {
-    test(`covered-base shortcut oracle ${strand} ${JSON.stringify(parts)}`, () => {
-      const ordered = strand === '-' ? [...parts].reverse() : parts;
-      const bases = ordered.flatMap(([start, end]) => {
-        const sequence = Array.from({ length: end - start }, (_, i) => start + i + 1);
-        return strand === '-' ? sequence.reverse() : sequence;
-      });
-      const feature = { record_key: 'instance', biological_feature_id: 'feature', strand,
-        anchorProfile: { precision: 'exact', operator: parts.length === 1 ? 'single' : 'join',
-          partOrder: 'biological', strand },
-        location_parts: ordered.map(([start, end]) => ({ start, end, strand })) };
-      const args = { row: rows[0], committedRow: { ...rows[0], recordKey: 'instance' }, feature };
-      assert.equal(selectedFeatureDisplayStart({ ...args, shortcut: 'five-prime' }), bases[0]);
-      assert.equal(selectedFeatureDisplayStart({ ...args, shortcut: 'midpoint' }), bases[Math.floor((bases.length - 1) / 2)]);
-    });
-  }
-}
-
-test('shortcuts reject stale, unbound, cross-record, empty, and unknown/mixed-strand selections', () => {
-  const feature = { record_key: 'instance', biological_feature_id: 'feature', strand: '+',
-    anchorProfile: { precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+' },
-    location_parts: [{ start: 5, end: 10, strand: '+' }] };
-  const args = { row: rows[0], committedRow: { ...rows[0], recordKey: 'instance' }, feature, shortcut: 'midpoint' };
-  for (const changed of [
-    { committedRow: null }, { committedRow: { ...args.committedRow, source: {} } },
-    { committedRow: { ...args.committedRow, selector: '#2' } },
-    { feature: null },
-    { feature: { ...feature, record_key: 'other' } },
-    { feature: { ...feature, anchorProfile: { ...feature.anchorProfile, strand: 'mixed' } } },
-    { feature: { ...feature, location_parts: [] } },
-    { feature: { ...feature, location_parts: [{ start: 5, end: 10, strand: '-' }] } }
-  ]) assert.throws(() => selectedFeatureDisplayStart({ ...args, ...changed }));
 });
 
 const descriptor = (name, text) => ({ kind: 'genbank', name, type: 'text/plain',

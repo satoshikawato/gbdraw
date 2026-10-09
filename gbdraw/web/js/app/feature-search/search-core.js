@@ -644,11 +644,25 @@ const searchMatchSnippet = (value, matchText) => {
   return `${start > 0 ? '...' : ''}${text.slice(start, end)}${end < text.length ? '...' : ''}`;
 };
 
-export const formatSearchMatchDetail = (detail) => {
+const formatSearchMatchDetail = (detail) => {
   if (!detail) return '';
   const label = collapseWhitespace(detail.label);
   const snippet = searchMatchSnippet(detail.value, detail.match);
   if (!label && !snippet) return '';
   if (!snippet) return label;
   return label ? `${label}: ${snippet}` : snippet;
+};
+
+// The line under the search row. The record comes first so that a truncated
+// line still says which record the active match is on (OV-211).
+/**
+ * @param {Record<string, any> | null | undefined} feature
+ * @param {Record<string, any>[] | null | undefined} details
+ * @returns {string}
+ */
+export const formatSearchMatchLine = (feature, details) => {
+  const detailText = details?.length ? formatSearchMatchDetail(details[0]) : '';
+  if (!detailText) return '';
+  const recordId = String(feature?.record_id || '');
+  return `${recordId ? `Record ${recordId} · ` : ''}Matched ${detailText}`;
 };

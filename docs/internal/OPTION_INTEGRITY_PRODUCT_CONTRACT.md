@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `33`
+- Contract revision: `34`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -36,8 +36,8 @@ Status: active Product authority
   `PD-OI-066`, `PD-OI-067`, `PD-OI-068`, `PD-OI-069`, `PD-OI-070`,
   `PD-OI-071`, `PD-OI-072`, `PD-OI-073`, `PD-OI-074`, `PD-OI-075`,
   `PD-OI-076`, `PD-OI-077`, `PD-OI-078`, `PD-OI-079`, `PD-OI-080`,
-  `PD-OI-081`, `PD-OI-082`, `PD-OI-083`, `PD-OI-084`, `PD-OI-085`, and
-  `PD-OI-086`
+  `PD-OI-081`, `PD-OI-082`, `PD-OI-083`, `PD-OI-084`, `PD-OI-085`,
+  `PD-OI-086`, and `PD-OI-087`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -340,6 +340,26 @@ Status: active Product authority
     contains no runtime; dependent runtime (the OV-80 and OV-82
     implementation) requires it merged into its base, and the Review is
     `REQUIRED`.
+- Revision 34 changes: `PD-OI-087` is added
+  (`A / POPUP_ONLY_FEATURE_ROTATION`), from the Product Decision Owner
+  `satoshikawato`'s replies of `2026-10-08` for OV-212 (two routes set a
+  record's display start from a feature: the sidebar buttons need a Ctrl/⌘/Shift
+  selection, and their 5′ end splits a − strand feature across both ends of the
+  record).
+  - Reply 1, selecting option A of the OV-212 question: 「A（推奨） 2ボタンを廃止し、遺伝子を起点にした回転はポップアップに一本化する。数値欄と Reset start は残す。にします」
+  - Reply 2, on the proposed Rationale and Accepted residual risk wording
+    recorded below: 「案のとおり」
+  - Must preserve and May retire restate option A. The Owner adopted the
+    Rationale and Accepted residual risk as written.
+  - The receipt retires two controls that earlier receipts preserve as sidebar
+    operations: 「既存 sidebar 操作」 of `PD-OI-033` scenario revision `2`,
+    「sidebar の record display 操作とその意味」 of `PD-OI-085`, and
+    「既存sidebar workflow」 of `PD-OI-032`. It narrows those items by the two
+    buttons only; their other items and the other fields of those records
+    retain their scope.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -4023,6 +4043,53 @@ Decision date: 2026-10-07
   "acceptedResidualRisk": "両方のモードで同じ設定や色にしたいときは、両方のモードで設定する（コピーする操作は v0.15.0 の drawing で入る）。以前の Session から両方のモードに写した値（Depth の最小・最大、window など）が、他方のモードのデータに合わないことがある。開発版で保存した Session 45 は読み込めない。変更が大きく、0.14.0 のリリース前の検証の期間が短くなる。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-07"
+}
+```
+
+### PD-OI-087: Feature-based display start only in the feature popup
+
+- Concern key: `web.record-display.feature-start-shortcuts`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / POPUP_ONLY_FEATURE_ROTATION`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Owner replies of `2026-10-08` quoted verbatim in the
+  Revision 34 entry above. The receipt and JSON below reproduce all nine
+  fields without translation or additional terms. This record does not
+  supersede another decision. It narrows the preserved sidebar operations of
+  `PD-OI-032`, `PD-OI-033` scenario revision `2`, and `PD-OI-085` by the two
+  retired buttons only, as the Revision 34 entry states. The runtime that
+  implements it merges with it (static Product Contract co-change).
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `91529d4e7a6d0729497d13bf8b552be59e4bac39b641e9aabfdcc13f3c06b6c1`.
+- Acceptance contracts: `OIC-021`. These obligations and the complete selected
+  outcome are jointly required.
+
+```text
+PRODUCT_DECISION
+Concern: web.record-display.feature-start-shortcuts
+Scenario revision: 1
+Choice: A / POPUP_ONLY_FEATURE_ROTATION
+Rationale: 遺伝子を起点にした回転の入口を、開いた遺伝子に効き、鎖の向きを正しく扱うポップアップの 1 か所にまとめる。
+Must preserve: sidebar の Display start 数値欄と Reset start。
+May retire: sidebar の「Use selected feature 5′ end」と「Use selected feature midpoint」の 2 ボタン。遺伝子を起点にした回転はポップアップ（Rotate record using this feature）に一本化する。
+Accepted residual risk: Ctrl/Shift で選択した遺伝子から、サイドバーで開始点を決める手段がなくなる。今後は遺伝子を開いて、ポップアップで操作する。
+Owner: satoshikawato
+Decision date: 2026-10-08
+```
+
+```json
+{
+  "concern": "web.record-display.feature-start-shortcuts",
+  "scenarioRevision": 1,
+  "choice": "A / POPUP_ONLY_FEATURE_ROTATION",
+  "rationale": "遺伝子を起点にした回転の入口を、開いた遺伝子に効き、鎖の向きを正しく扱うポップアップの 1 か所にまとめる。",
+  "mustPreserve": "sidebar の Display start 数値欄と Reset start。",
+  "mayRetire": "sidebar の「Use selected feature 5′ end」と「Use selected feature midpoint」の 2 ボタン。遺伝子を起点にした回転はポップアップ（Rotate record using this feature）に一本化する。",
+  "acceptedResidualRisk": "Ctrl/Shift で選択した遺伝子から、サイドバーで開始点を決める手段がなくなる。今後は遺伝子を開いて、ポップアップで操作する。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-08"
 }
 ```
 

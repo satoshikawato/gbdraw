@@ -53,9 +53,9 @@ for (const mode of ['circular', 'linear']) {
     ]);
     await generateAndWaitForResult(page);
     expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBeGreaterThan(0);
-    const shortcuts = page.getByRole('button', { name: 'Use selected feature midpoint', exact: true });
-    await expect(shortcuts).toHaveCount(mode === 'circular' ? 2 : 1);
-    for (const shortcut of await shortcuts.all()) await expect(shortcut).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Reset start', exact: true })).toHaveCount(mode === 'circular' ? 2 : 1);
+    // OV-212 (PD-OI-087): the feature-based start is only in the feature popup.
+    await expect(page.getByRole('button', { name: /^Use selected feature/ })).toHaveCount(0);
     await expect(page.getByRole('spinbutton', { name: 'Display start same #1', exact: true })).toBeEnabled();
     expect(external).toEqual([]);
   });

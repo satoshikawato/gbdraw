@@ -134,6 +134,9 @@ search.applySearch();
 assert.equal(metricTotal('featureSearchIndexBuildCount'), 1);
 assert.equal(metricTotal('featureDomFullScanCount'), 1);
 assert.deepEqual(state.previewFeatureSearchMatches.value, ['feature-1']);
+// OV-211: the active match names its record, so matches on several records
+// differ before they are opened.
+assert.equal(search.previewFeatureSearchActiveDetail.value, 'Record record-1 · Matched Label: kinase');
 
 search.applySearch();
 assert.equal(metricTotal('featureSearchIndexBuildCount'), 1);
