@@ -1,7 +1,7 @@
 // OV-193 (R14-3, counts not timings): with K features and K `hash` rules, a
 // whole-feature pass over the rule matches and the "All features with legend
-// item" commit read each feature and build each rule key a bounded number of
-// times, so their work grows linearly with K.
+// item" commit on the row those rules draw read each feature and build each
+// rule key a bounded number of times, so their work grows linearly with K.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
@@ -102,12 +102,13 @@ test('"All features with legend item" over K features with K hash rules does O(K
       results: ref([]), selectedResultIndex: ref(0), svgContainer: ref(null), clickedFeature: ref(null),
       featureStyleScopeDialog, resetColorDialog: {}, legendRenameDialog: {}, originalLegendOrder: ref([]),
       originalLegendColors: ref({}), originalSvgStroke: ref({ color: null, width: null }), appliedPaletteColors: ref({}),
-      skipCaptureBaseConfig: ref(false), skipExtractOnSvgChange: ref(false)
+      skipCaptureBaseConfig: ref(false), skipExtractOnSvgChange: ref(false), hasPendingPaletteDraft: ref(false)
     });
     const caption = () => 'CDS';
     const actions = createFeatureColorActions({
       state, nextTick: async () => {}, onLegendGeometryChanged: () => {}, extractLegendEntries: () => {},
       getFeatureElements: () => [], getFeatureFillElements: () => [],
+      readUserDefaultColor: () => null, setDefaultColor: () => assert.fail('the row is drawn by rules'),
       ruleActions: {
         runWithRuleMatches: (_, commit) => commit(),
         commitSpecificRules: async (next) => { committed = next; return true; },
@@ -117,7 +118,7 @@ test('"All features with legend item" over K features with K hash rules does O(K
         findMatchingRegexRule: () => null, getDisplayedFeatureLabel: () => '', getIndividualFeatureLabel: () => '',
         getEffectiveLegendCaption: caption, effectiveLegendCaptions: () => caption,
         getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
-        getLabelSpecificRule: () => null, getLegendRowRules: () => []
+        getLabelSpecificRule: () => null, getLegendRowRules: () => rules
       }
     });
     measured.push(await count_.measure(() => actions.handleColorScopeChoice('caption')));

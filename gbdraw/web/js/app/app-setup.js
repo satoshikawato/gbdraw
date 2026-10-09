@@ -1444,6 +1444,9 @@ export const createAppSetup = () => {
   };
   paletteRulePorts.projectPaletteAndRules = projectPaletteAndRules;
   const featureSelection = createFeatureSelection(/** @type {any} */ ({ state, onMounted, onUnmounted }));
+  // The palette owner comes before the feature editor, whose popup sets a
+  // type's default color through it (D-15).
+  const resultsManager = createResultsManager({ state });
   const featureActions = createFeatureEditor({
     state,
     rulePreparation,
@@ -1469,7 +1472,9 @@ export const createAppSetup = () => {
     selectResult,
     previewTransformInteraction,
     projectPaletteAndRules,
-    projectFeatureEdits: () => projectMountedEditorIntent({ visibility: true, rerender: true, reflow: true, labels: true })
+    projectFeatureEdits: () => projectMountedEditorIntent({ visibility: true, rerender: true, reflow: true, labels: true }),
+    readUserDefaultColor: resultsManager.readUserDefaultColor,
+    setDefaultColor: resultsManager.setDefaultColor
   });
   legendRowRulePorts.commitLegendRowRules = featureActions.commitSpecificRules;
   specificRuleRestorePorts.captureSpecificRulePatternDrafts = featureActions.captureSpecificRulePatternDrafts;
@@ -2856,8 +2861,6 @@ export const createAppSetup = () => {
       return restoreGeneratedArtifactRuntimeState(snapshot ?? {}, options);
     }
   });
-  const resultsManager = createResultsManager({ state });
-
   const {
     waitForAuxiliaryFileImport, auxiliaryFileImportPending, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure,
     resetModeTransientUi

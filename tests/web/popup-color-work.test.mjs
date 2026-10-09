@@ -29,7 +29,10 @@ const evaluateRules = async ({ features: payloads, rules, kind }) => {
   return { matches, priorities: matches.map((row) => row.map(() => 0)) };
 };
 
-const setup = ({ siblings, features = featuresOf(['p', 'p', 'p', 'p']), savedRules = [savedRule], commit = async () => true }) => {
+const setup = ({
+  siblings, features = featuresOf(['p', 'p', 'p', 'p']), savedRules = [savedRule], commit = async () => true,
+  userColors = {}, queued = false
+}) => {
   /** @type {string[]} */
   const stages = [];
   /** @type {string[] | null} */
@@ -63,7 +66,8 @@ const setup = ({ siblings, features = featuresOf(['p', 'p', 'p', 'p']), savedRul
     clickedFeature: ref({ feat: features[0], svg_id: features[0].svg_id, legendName: '' }), featureStyleScopeDialog,
     resetColorDialog: dialog(), legendRenameDialog: dialog(), originalLegendOrder: ref([]), originalLegendColors: ref({}),
     originalSvgStroke: ref({ color: null, width: null }), appliedPaletteColors: ref({ CDS: '#cccccc' }),
-    skipCaptureBaseConfig: ref(false), skipExtractOnSvgChange: ref(false)
+    skipCaptureBaseConfig: ref(false), skipExtractOnSvgChange: ref(false),
+    currentColors: ref({ CDS: '#cccccc', ...userColors }), hasPendingPaletteDraft: ref(queued)
   });
   const preparation = createRulePreparation({
     state,
@@ -73,7 +77,10 @@ const setup = ({ siblings, features = featuresOf(['p', 'p', 'p', 'p']), savedRul
     }
   });
   const history = createHistoryManager({
-    buildIntent: () => { stages.push('history:buildIntent'); return { rules: JSON.parse(JSON.stringify(manualSpecificRules)) }; },
+    buildIntent: () => {
+      stages.push('history:buildIntent');
+      return { rules: JSON.parse(JSON.stringify(manualSpecificRules)), colors: { ...state.currentColors.value } };
+    },
     signatureFor: (value) => { stages.push('history:signature'); return JSON.stringify(value); },
     applyIntent: () => {}, buildCheckpoint: () => ({}), applyCheckpoint: () => {}
   });
@@ -83,6 +90,12 @@ const setup = ({ siblings, features = featuresOf(['p', 'p', 'p', 'p']), savedRul
     state, nextTick: async () => {}, onLegendGeometryChanged: () => {}, extractLegendEntries: () => {},
     getFeatureElements: () => [], getFeatureFillElements: () => [],
     closeAfterDialogChoice: dialogChoice.closeAfterChoice,
+    // results.js: the palette owner's user default colors (D-15).
+    readUserDefaultColor: (_drawing, key) => userColors[key] ?? null,
+    setDefaultColor: (drawing, key, color) => {
+      stages.push('setDefaultColor');
+      drawing.currentColors.value = { ...drawing.currentColors.value, [key]: color };
+    },
     ruleActions: {
       runWithRuleMatches: (rules, commit) => runWhenPrepared(state, () => [preparation.prepare(rules)], commit),
       commitSpecificRules: async (rules) => {
@@ -232,5 +245,54 @@ for (const [name, open, dialogOf, choice, savedRules] of [
     assert.equal(setup_.busy(), false);
     assert.equal(setup_.history.getUndoCount(), undoCount);
     assert.notEqual(setup_.state.errorLog.value, null);
+  });
+}
+
+// D-15: "Apply to all" on a Legend row that no Specific color rule draws sets
+// the feature type's default color as one History step; it writes no rule.
+test('Apply to all on a palette row sets the default color as one History step and commits no rule', async () => {
+  const setup_ = setup({ siblings: true, savedRules: [] });
+  setup_.state.legendColorOverrides.CDS = '#999999';
+  assert.equal(await setup_.preparation.prepare([]), true);
+  await setup_.pick('#123456');
+  assert.equal(setup_.featureStyleScopeDialog.defaultColorType, 'CDS');
+  assert.equal(setup_.featureStyleScopeDialog.replacedDefaultColor, null);
+  const undoCount = setup_.history.getUndoCount();
+  setup_.stages.length = 0;
+  await setup_.choices.scope('caption');
+  assert.deepEqual(setup_.stages, [
+    'history:buildIntent', 'history:signature', 'worker:evaluateRules:color:hash+product', 'setDefaultColor',
+    'history:buildIntent', 'history:signature'
+  ]);
+  assert.equal(setup_.state.currentColors.value.CDS, '#123456');
+  assert.deepEqual(setup_.manualSpecificRules, []);
+  assert.equal('CDS' in setup_.state.legendColorOverrides, false);
+  assert.equal(setup_.featureStyleScopeDialog.show, false);
+  assert.equal(setup_.history.getUndoCount(), undoCount + 1);
+});
+
+test('the scope dialog of a palette row names the user default color it replaces', async () => {
+  const setup_ = setup({ siblings: true, savedRules: [], userColors: { CDS: '#aaaaaa' } });
+  assert.equal(await setup_.preparation.prepare([]), true);
+  await setup_.pick('#123456');
+  assert.equal(setup_.featureStyleScopeDialog.defaultColorType, 'CDS');
+  assert.equal(setup_.featureStyleScopeDialog.replacedDefaultColor, '#aaaaaa');
+});
+
+// A rule draws one of the row's features (p3), or a palette is queued (Q1,
+// Owner pending): "Apply to all" writes per-feature rules, as before D-15.
+for (const [name, options] of [
+  ['a row a rule draws a feature of', { savedRules: [savedRule] }],
+  ['a palette row while a palette is queued', { savedRules: [], queued: true }]
+]) {
+  test(`Apply to all on ${name} keeps writing rules`, async () => {
+    const setup_ = setup({ siblings: true, ...options });
+    assert.equal(await setup_.preparation.prepare(options.savedRules), true);
+    await setup_.pick('#123456');
+    assert.equal(setup_.featureStyleScopeDialog.defaultColorType, null);
+    await setup_.choices.scope('caption');
+    assert.equal(setup_.stages.includes('setDefaultColor'), false);
+    assert.equal(setup_.stages.includes('commitSpecificRules'), true);
+    assert.equal(setup_.state.currentColors.value.CDS, '#cccccc');
   });
 }

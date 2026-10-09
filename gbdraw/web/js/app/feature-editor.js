@@ -3,6 +3,7 @@
 /** @import { PreparedFileLegend, RuleActionsPorts } from './feature-editor/rule-actions.js' */
 /** @import { VisibilityActionsPorts } from './feature-editor/visibility-actions.js' */
 /** @import { FeatureSelectionPort, PrepareDrawnFeatureMatchesPort, PreviewTransformInteractionPort } from './feature-editor/svg-actions.js' */
+/** @import { ReadUserDefaultColorPort, SetDefaultColorPort } from './feature-editor/color-actions.js' */
 import { createFeatureColorActions } from './feature-editor/color-actions.js';
 import { createFeatureLabelActions } from './feature-editor/label-actions.js';
 import { createFeatureRuleActions } from './feature-editor/rule-actions.js';
@@ -57,7 +58,8 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  * @property {() => any} projectFeatureEdits
  *   The root's projection of loaded feature edits onto the displayed Result (R3).
  * @property {(payload: Record<string, any>, options?: Record<string, any>) => Promise<Record<string, any>>} evaluateLabelRules
- *   The root's Python evaluation of Label TSV rows against the displayed labels (R7).
+ *   The root's Python evaluation of Label TSV rows against the displayed labels (R7). * @property {ReadUserDefaultColorPort} readUserDefaultColor
+ * @property {SetDefaultColorPort} setDefaultColor
  */
 
 /** @param {FeatureEditorOptions} options */
@@ -86,7 +88,9 @@ export const createFeatureEditor = ({
   previewTransformInteraction = null,
   projectPaletteAndRules,
   projectFeatureEdits,
-  evaluateLabelRules
+  evaluateLabelRules,
+  readUserDefaultColor,
+  setDefaultColor
 }) => {
   const { ref, computed, watch, reactive } = window.Vue;
   // R13: the label owner's reactions, registered once it exists; the owners
@@ -116,7 +120,9 @@ export const createFeatureEditor = ({
     getFeatureElements: featureSvgActions.getFeatureElements,
     getFeatureFillElements: featureSvgActions.getFeatureFillElements,
     commitActiveResultEdit,
-    closeAfterDialogChoice
+    closeAfterDialogChoice,
+    readUserDefaultColor,
+    setDefaultColor
   });
   // The visibility owner comes before the label owner, which receives its
   // transition as a port: Show feature and label (Owner Q2) sets Feature

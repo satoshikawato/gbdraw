@@ -33,6 +33,21 @@ import {
  */
 
 /**
+ * The palette owner's user default color of a key (D-15): its Default colors
+ * value when it differs from the selected palette's color, else null.
+ * @typedef {(drawing: DrawingState, key: string) => string | null} ReadUserDefaultColorPort
+ */
+/**
+ * The palette owner's write of a key's default color, applied as an edit in
+ * the Default colors list is (D-15).
+ * @typedef {(drawing: DrawingState, key: string, color: string) => void} SetDefaultColorPort
+ */
+
+// Q2 (Owner, pending): B gives the scope dialog of a palette row one line
+// also when the type has no user default color yet; A only when it replaces one.
+const DEFAULT_COLOR_LINE_WITHOUT_USER_COLOR = true;
+
+/**
  * @typedef {object} FeatureColorActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
  * @property {(options?: { replaceGeneratedInventory?: boolean }) => any} extractLegendEntries
@@ -46,6 +61,8 @@ import {
  * @property {(close: () => unknown) => void} [closeAfterDialogChoice]
  *   Runs a dialog's close at once, or once the History step of the dialog's
  *   choice in flight ends (D-12, OIC-028).
+ * @property {ReadUserDefaultColorPort} readUserDefaultColor
+ * @property {SetDefaultColorPort} setDefaultColor
  */
 
 /** @param {FeatureColorActionsOptions} options */
@@ -59,7 +76,10 @@ export const createFeatureColorActions = ({
   getFeatureElements,
   getFeatureFillElements,
   commitActiveResultEdit = null,
-  closeAfterDialogChoice = (close) => { close(); }
+  closeAfterDialogChoice = (close) => { close(); },
+  // R13, D-15: the palette owner's user default colors.
+  readUserDefaultColor,
+  setDefaultColor
 }) => {
   const {
     appliedPaletteColors,
@@ -306,6 +326,8 @@ export const createFeatureColorActions = ({
     featureStyleScopeDialog.annotationLabelSiblingCount = 0;
     featureStyleScopeDialog.existingCaptionRule = null;
     featureStyleScopeDialog.existingCaptionColor = null;
+    featureStyleScopeDialog.defaultColorType = null;
+    featureStyleScopeDialog.replacedDefaultColor = null;
   });
 
   /**
@@ -321,7 +343,8 @@ export const createFeatureColorActions = ({
 
     const matchingRule = findMatchingRegexRule(feat);
     const ruleMatchCount = matchingRule ? countFeaturesMatchingRule(matchingRule) : 0;
-    const siblingCount = findFeaturesWithSameLegendItem(feat, legendName).length;
+    const siblings = findFeaturesWithSameLegendItem(feat, legendName);
+    const siblingCount = siblings.length;
     const displayLabel = normalizeCaption(getDisplayedFeatureLabel(feat));
     const displayLabelSiblingCount = displayLabel
       ? findFeaturesWithSameDisplayedLabel(feat, displayLabel).length
@@ -334,6 +357,7 @@ export const createFeatureColorActions = ({
     return {
       requestedCaption,
       legendName,
+      siblings,
       matchingRule,
       ruleMatchCount,
       siblingCount,
@@ -356,6 +380,8 @@ export const createFeatureColorActions = ({
    *   strokeColor?: string | null,
    *   strokeWidth?: number | null,
    *   existingCaption?: { caption: string, color: string, rule: Record<string, any> | null } | null,
+   *   defaultColorType?: string | null,
+   *   replacedDefaultColor?: string | null,
    *   closePopup?: boolean
    * }} options
    */
@@ -367,6 +393,8 @@ export const createFeatureColorActions = ({
     strokeColor = null,
     strokeWidth = null,
     existingCaption = null,
+    defaultColorType = null,
+    replacedDefaultColor = null,
     closePopup = false
   }) => {
     featureStyleScopeDialog.show = true;
@@ -385,6 +413,8 @@ export const createFeatureColorActions = ({
     featureStyleScopeDialog.annotationLabelSiblingCount = scope.annotationLabelSiblingCount;
     featureStyleScopeDialog.existingCaptionRule = existingCaption?.rule || null;
     featureStyleScopeDialog.existingCaptionColor = existingCaption?.color || null;
+    featureStyleScopeDialog.defaultColorType = defaultColorType;
+    featureStyleScopeDialog.replacedDefaultColor = replacedDefaultColor;
     if (closePopup) clickedFeature.value = null;
   };
 
@@ -1038,6 +1068,26 @@ export const createFeatureColorActions = ({
     });
   };
 
+  // D-15: a Legend row that names a feature type and that no Specific color
+  // rule or per-feature edit draws is that type's palette row; "Apply to all"
+  // on it sets the type's default color. Null for any other row.
+  /**
+   * @param {DrawingState} drawing
+   * @param {string} caption
+   * @param {Record<string, any>[]} features The row's features.
+   * @returns {string | null}
+   */
+  const paletteRowType = (drawing, caption, features) => {
+    const type = normalizeCaption(caption);
+    if (!features.every((feature) => feature?.type === type) || getLegendRowRules(type).length > 0) return null;
+    // Q1 (Owner, pending): while a palette is queued, "Apply to all" keeps
+    // writing per-feature rules, as before D-15.
+    if (drawing.hasPendingPaletteDraft.value) return null;
+    const matches = ruleMatcher(drawing.manualSpecificRules);
+    return features.every((feature) => matches.matchesAny(feature) === false
+      && !getFeatureOverride(drawing.featureColorOverrides, feature)) ? type : null;
+  };
+
   /** @param {DrawingState} drawing */
   const applyColorToLegendSpecificRules = async (drawing, caption, color) => {
     const rowRules = getLegendRowRules(caption);
@@ -1068,12 +1118,18 @@ export const createFeatureColorActions = ({
     if (!scope) return;
 
     if (scope.needsDialog) {
+      const defaultColorType = scope.siblingCount > 0
+        ? paletteRowType(drawing, scope.legendName, [feat, ...scope.siblings]) : null;
+      const replacedDefaultColor = defaultColorType ? readUserDefaultColor(drawing, defaultColorType) : null;
       openFeatureStyleScopeDialog({
         kind: 'fill',
         feat,
         scope,
         color,
         existingCaption: findExistingCaptionColor(drawing, feat, scope.legendName),
+        // The dialog's line under "Apply to all" (D-15).
+        defaultColorType: replacedDefaultColor || DEFAULT_COLOR_LINE_WITHOUT_USER_COLOR ? defaultColorType : null,
+        replacedDefaultColor,
         closePopup: options.closePopupOnDialog
       });
       return;
@@ -1236,7 +1292,12 @@ export const createFeatureColorActions = ({
       }
       const siblings = findFeaturesWithSameLegendItem(feat, targetLegendName);
       const allFeatures = [feat, ...siblings];
-      if (!(await applyColorToLegendSpecificRules(drawing, targetLegendName, color))) {
+      const defaultColorType = paletteRowType(drawing, targetLegendName, allFeatures);
+      if (defaultColorType) {
+        // The row's swatch follows the default color again (svg-styles.js).
+        delete drawing.legendColorOverrides[defaultColorType];
+        setDefaultColor(drawing, defaultColorType, color);
+      } else if (!(await applyColorToLegendSpecificRules(drawing, targetLegendName, color))) {
         await applyColorToFeatureGroup(drawing, allFeatures, targetLegendName, color);
       }
     } else if (choice === 'displayLabel') {

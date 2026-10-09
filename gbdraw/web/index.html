@@ -6433,6 +6433,16 @@
                                     <i class="ph ph-users-three text-lg" aria-hidden="true"></i>
                                     <span>Apply to all "{{ featureStyleScopeDialog.legendName }}" ({{ featureStyleScopeDialog.siblingCount + 1 }})</span>
                                 </button>
+                                <p v-if="featureStyleScopeDialog.siblingCount > 0 && featureStyleScopeDialog.defaultColorType" data-default-color-scope-line class="-mt-1 px-1 text-xs text-slate-600">
+                                    <template v-if="featureStyleScopeDialog.replacedDefaultColor">
+                                        Replaces your {{ featureStyleScopeDialog.defaultColorType }} default color
+                                        <span class="inline-block w-3 h-3 align-middle rounded border border-slate-300" :style="{ backgroundColor: featureStyleScopeDialog.replacedDefaultColor }"></span>
+                                        <span class="font-mono">{{ featureStyleScopeDialog.replacedDefaultColor }}</span>.
+                                    </template>
+                                    <template v-else>
+                                        Sets the {{ featureStyleScopeDialog.defaultColorType }} default color (all {{ featureStyleScopeDialog.defaultColorType }} features, also hidden ones).
+                                    </template>
+                                </p>
 
                                 <!-- Apply to this feature only -->
                                 <button @click="handleFeatureStyleScopeChoice('single')"
