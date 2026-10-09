@@ -1675,16 +1675,8 @@ def _validate_current_feature_catalog_authority(
         select_feature_catalog_item,
     )
 
-    # A schema 3 catalog is read as promoted, which may infer what the current
-    # rules require (OV-269); its promoted form is the one validated.
-    if catalog_schema == 3:
-        try:
-            catalog = promote_legacy_feature_catalog(catalog)
-        except GbdrawError as exc:
-            raise ValidationError(str(exc)) from exc
-        catalog_schema = CURRENT_FEATURE_CATALOG_SCHEMA
-
-    for result_index, result in enumerate(results):
+    result_names: list[str] = []
+    for result in results:
         if not isinstance(result, Mapping):
             raise ValidationError("Session results must contain objects.")
         raw_result_name = result.get("name")
@@ -1710,15 +1702,22 @@ def _validate_current_feature_catalog_authority(
             raise ValidationError(
                 "Current Session Results must contain plain SVG only."
             )
-        try:
+        result_names.append(result_name)
+    try:
+        # A schema 3 catalog is read as promoted, which may infer what the
+        # current rules require (OV-269); its promoted form is the one validated.
+        if catalog_schema == 3:
+            catalog = promote_legacy_feature_catalog(catalog)
+            catalog_schema = CURRENT_FEATURE_CATALOG_SCHEMA
+        for result_index, result_name in enumerate(result_names):
             select_feature_catalog_item(
                 catalog,
                 result_index=result_index,
                 result_name=result_name,
                 expected_schema=catalog_schema,
             )
-        except GbdrawError as exc:
-            raise ValidationError(str(exc)) from exc
+    except GbdrawError as exc:
+        raise ValidationError(str(exc)) from exc
 
 
 def empty_protein_identity_manifest() -> dict[str, Any]:
