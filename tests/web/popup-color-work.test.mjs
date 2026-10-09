@@ -61,7 +61,7 @@ const setup = ({
   const manualSpecificRules = [...savedRules];
   const state = withDrawings({
     extractedFeatures: ref(features), biologicalFeatures: ref(features), manualSpecificRules,
-    svgResultIdentity: ref('one'), legendEntries: ref([{ caption: 'CDS', color: '#cccccc' }]),
+    svgResultIdentity: ref('one'), legendEntries: ref([{ caption: 'CDS', color: '#cccccc' }]), deletedLegendEntries: ref([]),
     featureColorOverrides: {}, legendColorOverrides: {}, legendStrokeOverrides: {}, featureStrokeOverrides: {},
     addedLegendCaptions: ref(new Set()), results: ref([]), selectedResultIndex: ref(0), svgContainer: ref({ querySelector: () => null }),
     clickedFeature: ref({ feat: features[0], svg_id: features[0].svg_id, legendName: '' }), featureStyleScopeDialog,
@@ -210,7 +210,10 @@ for (const [name, open, dialogOf, choice, savedRules] of [
     gated = true;
     setup_.stages.length = 0;
     const first = setup_.choices[name](choice);
-    while (!setup_.stages.includes('commitSpecificRules')) await new Promise((resolve) => setImmediate(resolve));
+    for (let turn = 0; turn < 1000 && !setup_.stages.includes('commitSpecificRules'); turn += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    assert.ok(setup_.stages.includes('commitSpecificRules'), `the choice commits its rules: ${setup_.stages.join(', ')}`);
     assert.equal(setup_.history.mutationPending(), true);
     const busyDuringChoice = setup_.busy();
     assert.equal(dialogOf(setup_).show, true);

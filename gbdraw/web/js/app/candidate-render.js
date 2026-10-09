@@ -250,6 +250,33 @@ export const draftLegendRows = ({
   return { currentEntries, originalCaptions, deletedCaptions, dormantEntries, styledRow };
 };
 
+// OV-276: the swatch color of each listed Legend panel row that the palette
+// colors, by the row's caption: a row of Python's without a Legend color of
+// its own that no rule draws takes the color the live compile's
+// `legendFills` stage gives its Python key (`draftLegendRowColors`). The
+// other rows keep their listed color. Nothing writes it into the rows, which
+// are inputs of the rule preparation.
+/**
+ * @param {Pick<EditorPlanOptions, 'legendEntries' | 'deletedLegendEntries' | 'dormantLegendEntries' | 'originalLegendOrder'>
+ *   & { legendColorOverrides: Readonly<Record<string, unknown>>, rules: readonly Partial<SpecificColorRule>[],
+ *   pythonRows: ReadonlyMap<PythonLegendKey, PythonLegendRow>, paletteColors: Record<string, string> }} draft
+ * @returns {Map<string, SwatchColor>}
+ */
+export const draftLegendPanelColors = ({ legendColorOverrides, rules, pythonRows, paletteColors, ...legend }) => {
+  const rows = draftLegendRows(legend);
+  const draft = draftLegendRowColors({ rules, pythonRows, originalLegendOrder: [...rows.originalCaptions], paletteColors });
+  const ruleRows = new Set(draft.ruleCaptions);
+  /** @type {Map<string, SwatchColor>} */
+  const colors = new Map();
+  rows.currentEntries.forEach(({ caption }) => {
+    const row = hasOwn(legendColorOverrides, caption) ? null : rows.styledRow(caption);
+    if (!row || !rows.originalCaptions.has(row.targetCaption) || ruleRows.has(row.targetCaption)) return;
+    const color = draft.colorOf(row.targetCaption);
+    if (color) colors.set(caption, color);
+  });
+  return colors;
+};
+
 // Python's fill of a feature type (gbdraw/features/colors.py
 // `default_color_map.get(feature.type, "#d3d3d3")`): the palette has no
 // fallback key.

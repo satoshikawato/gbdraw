@@ -12,7 +12,7 @@
 /** @import { LinearComparisonPlan } from '../services/linear-comparisons.js' */
 /** @typedef {{ opening: Readonly<ArtifactSlot> | null, stashed: Readonly<ArtifactSlot> | null }} LoadedArtifactSlots */
 import { createRulePreparation } from './rule-matching.js';
-import { compileDirectEditorMutationPlan, editorPaintDomains, LIVE_EDIT_DOMAINS } from './candidate-render.js';
+import { compileDirectEditorMutationPlan, draftLegendPanelColors, editorPaintDomains, LIVE_EDIT_DOMAINS } from './candidate-render.js';
 import { createResultPaintRecord } from './result-paint-record.js';
 import {
   countUnresolvedFeatureEdits, featureDrawnContext, removeUnresolvedFeatureEdits, requestFeatureVisibilityRules
@@ -94,7 +94,7 @@ import {
   recordStructuralMetric
 } from '../services/runtime-test-hooks.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
-import { colorValueMode, normalizeOptionalHexColor, toNativeColorInputValue } from '../utils/color-utils.js';
+import { appliedFeatureColors, colorValueMode, normalizeOptionalHexColor, toNativeColorInputValue } from '../utils/color-utils.js';
 import { createFeatureEditor } from './feature-editor.js';
 import { PAIRWISE_MATCH_SELECTOR } from './pairwise-match-popup.js';
 import { createFeatureSelection } from './feature-selection.js';
@@ -1459,9 +1459,18 @@ export const createAppSetup = () => {
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
     projectPaletteAndRules: (...args) => paletteRulePorts.projectPaletteAndRules(...args)
   });
-  // OV-276: a Legend panel row shows the color the palette gives its swatch,
-  // derived here and never written into the rows.
-  const paletteLegendRowColors = computed(() => svgActions.paletteLegendRowColors());
+  // OV-276: a Legend panel row shows the color the palette gives its swatch on
+  // the displayed Result (the live compile's, by Python's rows), derived here
+  // and never written into the rows. A new Result brings new Python rows.
+  const paletteLegendRowColors = computed(() => {
+    const drawing = state.activeDrawing();
+    return svgContent.value ? draftLegendPanelColors({
+      legendEntries: drawing.legendEntries.value, deletedLegendEntries: drawing.deletedLegendEntries.value,
+      dormantLegendEntries: drawing.dormantLegendEntries.value, originalLegendOrder: originalLegendOrder.value,
+      legendColorOverrides: drawing.legendColorOverrides, rules: drawing.manualSpecificRules,
+      pythonRows: pythonLegendRows(svgContainer.value?.querySelector('svg')), paletteColors: appliedFeatureColors(state)
+    }) : new Map();
+  });
   /** @param {{ caption?: string, color?: string } | null | undefined} entry */
   const legendEntryColor = (entry) => paletteLegendRowColors.value.get(entry?.caption || '') || entry?.color;
   // The palette and the specific-color rules on the mounted Result (R3): the
@@ -3415,7 +3424,7 @@ export const createAppSetup = () => {
       replayDefaultLegendOrder,
       livePreview: domains ? {
         domains,
-        paletteColors: toRaw(appliedPaletteColors.value),
+        paletteColors: appliedFeatureColors(state),
         pythonRows: pythonLegendRows(svg),
         drawnContext: domains.includes('featureVisibility')
           ? featureDrawnContext(drawing, { diagramOptions: getCommittedCanonicalRenderRequest()?.diagramOptions })
@@ -3472,11 +3481,17 @@ export const createAppSetup = () => {
    */
   const editEditorIntent = (label, mutate, { domains = STROKE_DOMAINS } = {}) => (
     /** @type {any[]} */ ...args
-  ) => history.runUndoable(label, async () => {
+  ) => history.runUndoable(label, () => showingEditorIntent(mutate, domains)(...args));
+  /**
+   * The action that writes the intent and, when it changed, shows `domains`.
+   * @param {(...args: any[]) => unknown} mutate
+   * @param {readonly string[]} domains
+   */
+  const showingEditorIntent = (mutate, domains) => async (/** @type {any[]} */ ...args) => {
     const changed = await mutate(...args);
     if (changed === true) showEditorIntent({ domains });
     return changed;
-  });
+  };
   // A displayed Result shows the Legend structure edits and the paint domains
   // whose intent changed since it was last shown; each paint domain it shows
   // returns to Python's values where no operation sets it (OV-144).
@@ -3769,10 +3784,13 @@ export const createAppSetup = () => {
   );
   const handleColorScopeChoiceWithHistory = scopeChoiceWithHistory(() => 'Change feature color', handleColorScopeChoice);
   const handleFeatureColorScopeChoiceWithHistory = scopeChoiceWithHistory(() => 'Change feature color', handleFeatureStyleScopeChoice);
-  const handleFeatureStrokeScopeChoiceWithHistory = editEditorIntent('Change feature stroke', handleFeatureStyleScopeChoice);
+  const handleFeatureStrokeScopeChoiceWithHistory = scopeChoiceWithHistory(
+    () => 'Change feature stroke',
+    showingEditorIntent(handleFeatureStyleScopeChoice, STROKE_DOMAINS)
+  );
   /** @param {string} choice @param {any[]} rest */
   const handleFeatureStyleScopeChoiceWithHistory = (choice, ...rest) => (
-    featureStyleScopeDialog.kind === 'stroke' && choice !== 'cancel'
+    featureStyleScopeDialog.kind === 'stroke'
       ? handleFeatureStrokeScopeChoiceWithHistory(choice, ...rest)
       : handleFeatureColorScopeChoiceWithHistory(choice, ...rest)
   );

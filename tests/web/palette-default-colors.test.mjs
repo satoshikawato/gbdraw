@@ -225,29 +225,22 @@ test('setDefaultColor while a palette is queued writes the queued color and the 
 // OV-262, OV-263: a Result restyle reads the applied colors as a live edit,
 // the Generate commit, Load, and a History restore leave them: an Auto key is
 // empty there. It shows the applied palette's color for the key, as Generate
-// draws it, not the palette's `default` color.
+// draws it, not the palette's `default` color. Edit-unify: the feature fills
+// are the live compile's, given `appliedFeatureColors` (app-setup.js).
 test('a restyle paints an Auto key with the applied palette color', async () => {
-  const { createSvgStyles } = await import('../../gbdraw/web/js/app/svg-styles.js');
-  const { withDrawings } = await import('./helpers/drawing-state.mjs');
+  const { compileDirectEditorMutationPlan } = await import('../../gbdraw/web/js/app/candidate-render.js');
+  const { displayedFeatureAddressing } = await import('../../gbdraw/web/js/services/feature-override-identity.js');
+  const { appliedFeatureColors } = await import('../../gbdraw/web/js/utils/color-utils.js');
   const feature = { id: 'f1', svg_id: 'f1', type: 'CDS' };
-  const attributes = { id: 'f1', 'data-gbdraw-feature-id': 'f1', 'data-gbdraw-feature-part': 'block', fill: '#000000' };
-  const element = { getAttribute: (key) => attributes[key] ?? null, setAttribute: (key, value) => { attributes[key] = value; } };
-  const svg = {
-    querySelectorAll: (selector) => (selector.includes('data-gbdraw-feature-id') ? [element] : []),
-    getElementById: () => null
-  };
-  const state = withDrawings({
-    mode: ref('circular'), svgContent: ref('<svg/>'), svgContainer: ref({ querySelector: () => svg }),
-    extractedFeatures: ref([feature]), featuresBySvgId: ref(new Map([['f1', feature]])), manualSpecificRules: [],
-    featureColorOverrides: {}, legendColorOverrides: {}, pairwiseMatchFactors: ref({}),
+  const paletteColors = appliedFeatureColors({
     paletteDefinitions: ref(PALETTES), appliedPaletteName: ref('default'),
     appliedPaletteColors: ref({ ...paletteOf('default'), CDS: null })
   });
-  const styles = createSvgStyles({
-    state, watch() {}, nextTick: (fn) => fn?.(), commitActiveResultEdit: () => true, projectPaletteAndRules: () => true
+  const plan = compileDirectEditorMutationPlan({
+    catalogAdmission: displayedFeatureAddressing([feature], ['diagram.svg'], 0), manualSpecificRules: [],
+    livePreview: { domains: ['featureFills'], paletteColors, drawnContext: null }
   });
-  styles.applyPaletteToSvg();
-  assert.equal(attributes.fill, '#AABBCC');
+  assert.deepEqual(plan.operationsByResult[0].featureFills, [{ renderedId: 'f1', color: '#AABBCC' }]);
 });
 
 // PD-OI-088, OIC-028: the dialog stays open and busy until its choice's
@@ -266,61 +259,44 @@ test('the palette dialog closes after the History step of its choice', async () 
   assert.equal(pending.value, false);
 });
 
-// OV-276: the Legend panel shows each row the palette colors in the color its
-// repaint gives the swatch (rows with a Legend color keep theirs). The color
-// is derived: the repaint writes nothing into the Legend rows, which are an
-// input of the rule preparation (a write during a Generate made it stale).
-const legendRepaintSetup = async (manualSpecificRules = []) => {
-  const { createSvgStyles } = await import('../../gbdraw/web/js/app/svg-styles.js');
-  const { withDrawings } = await import('./helpers/drawing-state.mjs');
-  const element = (attributes) => ({
-    getAttribute: (key) => attributes[key] ?? null, setAttribute: (key, value) => { attributes[key] = value; }
-  });
-  const row = (caption, fill) => {
-    const swatch = element({ fill });
-    return { ...element({ 'data-legend-key': caption }), querySelectorAll: (selector) => (selector === 'path' ? [swatch] : []) };
-  };
-  const rows = [row('CDS', '#AABBCC'), row('other tRNAs', '#111111'), row('Manual', '#010101'), row('rRNA', '#121212')];
-  const featureLegend = { querySelectorAll: (selector) => (selector === 'g[data-legend-key]' ? rows : []) };
-  const legend = { querySelector: (selector) => (selector === '#feature_legend' ? featureLegend : null) };
-  const svg = { querySelectorAll: () => [], getElementById: (id) => (id === 'legend' ? legend : null) };
-  const feature = { id: 'f1', svg_id: 'f1', type: 'CDS' };
+// OV-276: the Legend panel shows each row the palette colors in the color the
+// live compile gives its swatch (rows with a Legend color keep theirs). The
+// color is derived: nothing writes it into the Legend rows, which are an input
+// of the rule preparation (a write during a Generate made it stale).
+// Edit-unify: the rows a rule draws are Python's (`draftLegendRowColors`).
+const legendPanelSetup = async ({ rules = [], cdsDrawn = '#AABBCC' } = {}) => {
+  const { draftLegendPanelColors, draftLegendRowColors } = await import('../../gbdraw/web/js/app/candidate-render.js');
   const entries = [
     { caption: 'CDS', color: '#AABBCC' }, { caption: 'other tRNAs', color: '#111111' },
     { caption: 'Manual', color: '#010101' }, { caption: 'rRNA', color: '#121212' }
   ];
-  const state = withDrawings({
-    mode: ref('circular'), svgContent: ref('<svg/>'), svgContainer: ref({ querySelector: () => svg }),
-    extractedFeatures: ref([feature]), featuresBySvgId: ref(new Map()), manualSpecificRules,
-    featureColorOverrides: {}, legendColorOverrides: { rRNA: '#121212' }, pairwiseMatchFactors: ref({}),
-    paletteDefinitions: ref(PALETTES), appliedPaletteName: ref('default'),
-    appliedPaletteColors: ref({ ...paletteOf('default'), CDS: '#123456', tRNA: '#333333', rRNA: '#444444' }),
-    results: ref([]), legendEntries: ref(entries), originalLegendOrder: ref([]), originalLegendColors: ref({})
+  const originalLegendOrder = ['CDS', 'other tRNAs', 'rRNA'];
+  const pythonRows = new Map([
+    ['CDS', { key: 'CDS', color: cdsDrawn }], ['other tRNAs', { key: 'other tRNAs', color: '#111111' }],
+    ['rRNA', { key: 'rRNA', color: '#121212' }]
+  ]);
+  const paletteColors = { ...paletteOf('default'), CDS: '#123456', tRNA: '#333333', rRNA: '#444444' };
+  const panel = draftLegendPanelColors({
+    legendEntries: entries, originalLegendOrder, legendColorOverrides: { rRNA: '#121212' }, rules, pythonRows, paletteColors
   });
-  const styles = createSvgStyles({
-    state, watch() {}, nextTick: (fn) => fn?.(), commitActiveResultEdit: () => true, projectPaletteAndRules: () => true
-  });
-  return { styles, state, rows, entries, feature };
+  const compiled = draftLegendRowColors({ rules, pythonRows, originalLegendOrder, paletteColors });
+  return { panel, compiled, entries };
 };
 
-test('the Legend panel shows the palette color of the rows the repaint colors', async () => {
-  const { styles, state, rows, entries } = await legendRepaintSetup();
-  styles.applyPaletteToSvg();
-  assert.equal(rows[0].querySelectorAll('path')[0].getAttribute('fill'), '#123456');
-  assert.deepEqual([...styles.paletteLegendRowColors()], [['CDS', '#123456'], ['other tRNAs', '#333333']]);
-  assert.equal(state.activeDrawing().legendEntries.value, entries, 'the repaint writes no Legend row');
-  assert.deepEqual(entries[0], { caption: 'CDS', color: '#AABBCC' });
+test('the Legend panel shows the palette color of the rows the compile colors', async () => {
+  const { panel, compiled, entries } = await legendPanelSetup();
+  assert.equal(compiled.colorOf('CDS'), '#123456');
+  assert.deepEqual([...panel], [['CDS', '#123456'], ['other tRNAs', '#333333']]);
+  assert.deepEqual(entries[0], { caption: 'CDS', color: '#AABBCC' }, 'the derivation writes no Legend row');
 });
 
 // Review 2: a Legend row that a Specific color rule draws keeps the rule's
-// color, also when its caption names a palette key (a rule captioned CDS):
-// the palette repaint neither paints its swatch nor reports it.
-test('a palette repaint leaves a Legend row that a rule draws', async () => {
-  const { recordRuleMatches, ruleKey } = await import('../../gbdraw/web/js/services/rule-matchers.js');
+// color, also when its caption names a palette key (a rule captioned CDS
+// whose color Python drew in the CDS row): the compile gives it the rule's
+// color, and the panel does not report it.
+test('a palette change leaves a Legend row that a rule draws', async () => {
   const rule = { feat: 'CDS', qual: 'product', val: '.', color: '#00aa00', cap: 'CDS' };
-  const { styles, rows, feature } = await legendRepaintSetup([rule]);
-  recordRuleMatches([feature], [ruleKey(rule)], () => ({ matched: [0], priorities: [0], declined: [] }));
-  styles.applyPaletteToSvg();
-  assert.deepEqual([...styles.paletteLegendRowColors()], [['other tRNAs', '#333333']]);
-  assert.equal(rows[0].querySelectorAll('path')[0].getAttribute('fill'), '#AABBCC');
+  const { panel, compiled } = await legendPanelSetup({ rules: [rule], cdsDrawn: '#00aa00' });
+  assert.deepEqual([...panel], [['other tRNAs', '#333333']]);
+  assert.equal(compiled.colorOf('CDS'), '#00aa00');
 });

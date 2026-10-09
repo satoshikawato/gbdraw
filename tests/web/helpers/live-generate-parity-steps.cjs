@@ -203,8 +203,7 @@ const switchPalette = async (page, name) => {
   await page.evaluate((palette) => {
     const app = window.__GBDRAW_APP__;
     app.paletteInstantPreviewEnabled = true;
-    app.selectedPalette = palette;
-    return app.updatePalette();
+    return app.selectPalette(palette);
   }, name);
   await settleLive(page);
 };

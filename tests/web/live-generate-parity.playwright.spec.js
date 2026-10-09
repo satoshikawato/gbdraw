@@ -1038,8 +1038,7 @@ test('a stroke and a palette change reach a Session 30 Result loaded without a f
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     app.paletteInstantPreviewEnabled = true;
-    app.selectedPalette = app.paletteNames.find((name) => name !== app.selectedPalette);
-    return app.updatePalette();
+    return app.selectPalette(app.paletteNames.find((name) => name !== app.selectedPalette));
   });
   await settleLive(page);
   // A 0.13.0 Result has no part or label records, so it is compared with
@@ -1080,6 +1079,24 @@ const generateEmbeddedOnly = async (page) => {
   expect(embeddedLabelFeatures.length, 'Embedded Only draws two labels of the first record').toBeGreaterThan(1);
 };
 
+// D-15: the popup's Apply to all on the first feature of `type`, a palette row.
+const applyToAllOnPaletteRow = (page, type, color) => evaluateWithRetainedPromise(page, async ({ featureType, value }) => {
+  const app = window.__GBDRAW_APP__;
+  await app.openFeatureEditorFromList(app.filteredFeatures.find((item) => item.type === featureType), null);
+  await window.Vue.nextTick();
+  await app.updateClickedFeatureColor(value);
+  if (app.featureStyleScopeDialog.defaultColorType !== featureType) throw new Error(`${featureType} is no palette row`);
+  await app.handleFeatureStyleScopeChoice('caption');
+  app.clickedFeature = null;
+}, { featureType: type, value: color }).then(() => settleLive(page));
+// D-15: a switch to a palette not in `avoid`, answered with Keep my colors.
+const switchPaletteKeeping = (page, avoid) => evaluateWithRetainedPromise(page, async (names) => {
+  const app = window.__GBDRAW_APP__;
+  app.selectPalette(app.paletteNames.find((name) => !names.includes(name)));
+  if (!app.paletteColorsDialog.show) throw new Error('the palette switch did not ask');
+  await app.handlePaletteColorsChoice('keep');
+}, avoid).then(() => settleLive(page));
+
 // The work guard (allowlist) at the app, on a two-Result batch: each edit kind
 // runs exactly the compile stages of its entry (the compile's structural
 // metric, live compiles only), a Result display or a History step compiles
@@ -1110,6 +1127,20 @@ const WORK_ALLOWLIST = [
   { kind: 'History step (Undo of a Legend row color)', stages: ['legend', 'legendFills'], compiles: 1, requests: [], run: (page) => history(page, 'undo') },
   // The rules' matches are prepared: the palette sends no request.
   { kind: 'palette change', stages: ['fills', 'rules', 'legendFills'], compiles: 1, requests: [], run: (page) => switchPalette(page, 'arctic') },
+  {
+    // D-15: Apply to all on a palette row sets the type's default color and
+    // adds no rule; the palette watcher shows it in one compile. The choice
+    // first prepares the matches of the rules that could draw the row
+    // (`withTargetRules`), one rule request.
+    kind: 'Apply to all on a palette row', stages: ['fills', 'rules', 'legendFills'], compiles: 1, requests: ['evaluateRules'],
+    run: (page) => applyToAllOnPaletteRow(page, 'tRNA', '#5e60ce')
+  },
+  {
+    // D-15: a palette switch asks while a user default color exists; Keep is
+    // one History step, which the palette watcher shows in one compile.
+    kind: 'palette switch, Keep my colors', stages: ['fills', 'rules', 'legendFills'], compiles: 1, requests: [],
+    run: (page) => switchPaletteKeeping(page, ['default', 'arctic'])
+  },
   {
     kind: 'Result display after a palette change and a stroke', stages: ['legend', 'fills', 'rules', 'legendFills', 'strokes'],
     compiles: 1, requests: [], run: (page) => showResult(page, 1)
