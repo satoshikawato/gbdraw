@@ -11,9 +11,7 @@ from gbdraw.core.color import (
     COLLINEAR_ORIENTATION_MIN_COLOR_KEYS,
     DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS,
     DEFAULT_COLLINEAR_ORIENTATION_COLORS,
-    normalize_hex_color,
 )
-from gbdraw.exceptions import ValidationError
 
 
 def _default_color(
@@ -27,20 +25,6 @@ def _default_color(
         if not matching_rows.empty:
             return str(matching_rows["color"].values[0])
     return fallback
-
-
-def _gradient_color(color: str, feature_type: str) -> str:
-    """A color the comparison gradients interpolate: #RGB or #RRGGBB, as ``-d`` read it."""
-
-    try:
-        normalize_hex_color(color)
-    except ValueError as exc:
-        raise ValidationError(
-            f"Invalid color {color!r} for feature type {feature_type!r} in the default colors. "
-            "A comparison color used for a gradient is #RGB or #RRGGBB.",
-            diagnostic={"code": "TABLE_INVALID", "field": "color", "reason": "COLOR"},
-        ) from exc
-    return color
 
 
 class BlastMatchConfigurator:
@@ -84,37 +68,29 @@ class BlastMatchConfigurator:
         self.identity: float = identity
         self.alignment_length: int = alignment_length
         self.sequence_length_dict: dict = sequence_length_dict
-        self.min_color: str = _gradient_color(
-            default_colors_df[default_colors_df["feature_type"] == "pairwise_match_min"]["color"].values[0],
-            "pairwise_match_min",
-        )
-        self.max_color: str = _gradient_color(
-            default_colors_df[default_colors_df["feature_type"] == "pairwise_match_max"]["color"].values[0],
-            "pairwise_match_max",
-        )
+        self.min_color: str = default_colors_df[default_colors_df["feature_type"] == "pairwise_match_min"][
+            "color"
+        ].values[0]
+        self.max_color: str = default_colors_df[default_colors_df["feature_type"] == "pairwise_match_max"][
+            "color"
+        ].values[0]
         self.fill_color: str = default_colors_df[default_colors_df["feature_type"] == "pairwise_match"][
             "color"
         ].values[0]
         self.collinearity_orientation_colors: dict[str, str] = {
-            orientation: _gradient_color(
-                _default_color(
-                    default_colors_df,
-                    color_key,
-                    DEFAULT_COLLINEAR_ORIENTATION_COLORS[orientation],
-                    f"{color_key}_max",
-                ),
+            orientation: _default_color(
+                default_colors_df,
                 color_key,
+                DEFAULT_COLLINEAR_ORIENTATION_COLORS[orientation],
+                f"{color_key}_max",
             )
             for orientation, color_key in COLLINEAR_ORIENTATION_COLOR_KEYS.items()
         }
         self.collinearity_orientation_min_colors: dict[str, str] = {
-            orientation: _gradient_color(
-                _default_color(
-                    default_colors_df,
-                    color_key,
-                    DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS[orientation],
-                ),
+            orientation: _default_color(
+                default_colors_df,
                 color_key,
+                DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS[orientation],
             )
             for orientation, color_key in COLLINEAR_ORIENTATION_MIN_COLOR_KEYS.items()
         }

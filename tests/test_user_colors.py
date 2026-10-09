@@ -329,31 +329,63 @@ def test_accepted_feature_colors_log_no_error(color: str, caplog: pytest.LogCapt
     assert [record.message for record in caplog.records if record.levelname == "ERROR"] == []
 
 
-@pytest.mark.parametrize(
-    "key",
-    ["pairwise_match_min", "pairwise_match_max", "collinear_block_plus", "collinear_block_minus_min"],
-)
-def test_comparison_gradient_colors_with_alpha_are_a_table_error(key: str) -> None:
-    # OV-254: -d with -b passed #RRGGBBAA through to interpolate_color, which
-    # raised a raw ValueError at render. The gradient colors are #RGB/#RRGGBB.
-    from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
-    from gbdraw.config.toml import load_config_toml
-    from gbdraw.configurators.blast import BlastMatchConfigurator
+def _linear_with_default_colors(tmp_path: Path, row: str, *, blast: bool) -> Path:
+    args = ["linear", "--gbk", str(EXAMPLES / "LvMJNV.gb")]
+    if blast:
+        args += [str(EXAMPLES / "MeenMJNV.gb"), "-b", str(EXAMPLES / "LvMJNV.TrcuMJNV.tblastx.out")]
+    _run_cli(*args, "-d", _tsv(tmp_path, "colors.tsv", f"{row}\n"), "-o", str(tmp_path / "out"), "-f", "svg")
+    return tmp_path / "out.svg"
 
-    defaults = DataFrame(
-        [("pairwise_match_min", "#ffffff"), ("pairwise_match_max", "#000000"), ("pairwise_match", "#cccccc")],
-        columns=["feature_type", "color"],
+
+@pytest.mark.parametrize(
+    ("row", "blast"),
+    [
+        ("pairwise_match_min\tred", False),
+        ("collinear_block_plus\tRed", False),
+        ("pairwise_match_min\t#11223344", False),
+        ("collinear_block_plus\t#11223344", True),
+    ],
+)
+def test_comparison_gradient_colors_that_are_never_interpolated_still_render(
+    row: str, blast: bool, tmp_path: Path
+) -> None:
+    # P1: origin/dev renders these (the key is unused, or the name is read later);
+    # the OV-254 error belongs to the interpolation, not to building the configurator.
+    assert _linear_with_default_colors(tmp_path, row, blast=blast).exists()
+
+
+def test_circular_conservation_ignores_the_linear_comparison_colors(tmp_path: Path) -> None:
+    _run_cli(
+        "circular", "--gbk", str(EXAMPLES / "LvMJNV.gb"),
+        "--conservation_blast", str(EXAMPLES / "LvMJNV.TrcuMJNV.tblastx.out"),
+        "-d", _tsv(tmp_path, "colors.tsv", "pairwise_match_min\tred\n"),
+        "-o", str(tmp_path / "out"), "-f", "svg",
     )
-    defaults = defaults[defaults["feature_type"] != key]
-    defaults.loc[len(defaults)] = (key, "#11223344")
-    with pytest.raises(ValidationError, match=re.escape(f"'#11223344' for feature type {key!r}")) as raised:
-        BlastMatchConfigurator(
-            evalue=1e-5,
-            bitscore=50,
-            identity=0,
-            alignment_length=0,
-            sequence_length_dict={},
-            profile=LinearRenderProfile(GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))),
-            default_colors_df=defaults,
-        )
+    assert (tmp_path / "out.svg").exists()
+
+
+def test_comparison_gradient_color_with_alpha_is_a_table_error_where_it_is_interpolated(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # OV-254: origin/dev raised a raw ValueError from interpolate_color at render.
+    with pytest.raises(SystemExit) as stopped:
+        _linear_with_default_colors(tmp_path, "pairwise_match_min\t#11223344", blast=True)
+    assert stopped.value.code == 1
+    assert "ERROR: Invalid color '#11223344' for feature type 'pairwise_match_min'" in capsys.readouterr().err
+
+
+def test_orientation_identity_gradient_names_the_collinear_color_key() -> None:
+    from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
+
+    group = PairWiseMatchGroup.__new__(PairWiseMatchGroup)
+    group.match_min_color = "#ffffff"
+    group.collinearity_orientation_colors = {"plus": "#112233", "minus": "#445566"}
+    group.collinearity_orientation_min_colors = {"plus": "#11223344", "minus": "#ffeeee"}
+    row = SimpleNamespace(
+        collinearity_block_id="b1",
+        collinearity_color_mode="orientation_identity",
+        collinearity_orientation="plus",
+    )
+    with pytest.raises(ValidationError, match=re.escape("'#11223344' for feature type 'collinear_block_plus_min'")) as raised:
+        group.resolve_match_fill_color(row, 0.5, "#000000")
     assert raised.value.diagnostic == {"code": "TABLE_INVALID", "field": "color", "reason": "COLOR"}
