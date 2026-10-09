@@ -151,9 +151,8 @@ test.describe('active Result Feature fill transaction', () => {
         ))),
         legendOverride: String(state.activeDrawing().legendColorOverrides[caption] || '').toLowerCase(),
         defaultColor: String(state.activeDrawing().currentColors.value[caption] || '').toLowerCase(),
-        // OV-276: the color the Legend panel row shows.
         legendEntryColor: String(
-          app.legendEntryColor(app.legendEntries.find((entry) => entry.caption === caption)) || ''
+          app.legendEntries.find((entry) => entry.caption === caption)?.color || ''
         ).toLowerCase()
       },
       history: {

@@ -1287,6 +1287,10 @@ export const createFeatureColorActions = ({
         // The row's swatch follows the default color again (svg-styles.js).
         delete drawing.legendColorOverrides[defaultColorType];
         setDefaultColor(drawing, defaultColorType, color);
+        // OV-264: the Legend row takes the color in the same step, as a rule
+        // commit's Legend change does; its color feeds the rule captions.
+        drawing.legendEntries.value = drawing.legendEntries.value.map((entry) => (
+          captionsMatch(entry.caption, defaultColorType) ? { ...entry, color } : entry));
       } else if (!(await applyColorToLegendSpecificRules(drawing, targetLegendName, color))) {
         const siblings = findFeaturesWithSameLegendItem(feat, targetLegendName);
         await applyColorToFeatureGroup(drawing, [feat, ...siblings], targetLegendName, color);
