@@ -195,6 +195,41 @@ for (const entry of cases) {
   });
 }
 
+// OV-269, OV-273: a Session 40 the CLI of main 8228ffab wrote (no composition
+// metadata in its Result) loads with its tables, and Generate draws the
+// case's current CLI figure.
+test('Session 40 early CLI linear tables survives Web Generate', async ({ browser }, testInfo) => {
+  test.setTimeout(1_800_000);
+  const entry = cases.find(item => item.name === 'linear tables');
+  const prefix = testInfo.outputPath('cli');
+  await promisify(execFile)('python', ['-m', 'gbdraw.cli', entry.mode, ...entry.args, '-o', prefix, '-f', 'svg'], {
+    cwd: testInfo.outputDir, env: { ...process.env, PYTHONPATH: root }, timeout: 1_800_000, maxBuffer: 1_000_000
+  });
+  const file = testInfo.outputPath('v40-early.gbdraw-session.json');
+  await fs.writeFile(file, gunzipSync(await fs.readFile(
+    path.join(root, 'tests/fixtures/sessions/cli-linear-tables.v40-early.gbdraw-session.json.gz'))));
+  const run = await load(browser, file, { width: 1600, height: 1000 });
+  try {
+    const tables = () => run.page.evaluate(async () => {
+      const drawing = (await import('./js/state.js')).state.activeDrawing();
+      return [drawing.manualSpecificRules.length, drawing.currentColors.value.CDS, drawing.featureVisibilityRules.value.length,
+        drawing.canonicalLabelOverrideRows.value.length, drawing.filterMode.value, drawing.manualWhitelist.length,
+        drawing.manualPriorityRules.length];
+    });
+    // The rows of colors.tsv, default_colors.tsv, visibility.tsv, labels.tsv, whitelist.tsv, priority.tsv.
+    const loaded = [2, '#123456', 2, 2, 'Whitelist', 3, 1];
+    expect(await tables()).toEqual(loaded);
+    await generateAndWaitForResult(run.page);
+    expect(await tables()).toEqual(loaded);
+    const generated = (await snapshot(run.page)).selected;
+    expect(await run.page.evaluate(svgSemantics, generated))
+      .toEqual(await run.page.evaluate(svgSemantics, await fs.readFile(`${prefix}.svg`, 'utf8')));
+    expect(run.errors).toEqual([]);
+  } finally {
+    await run.context.close();
+  }
+});
+
 test('Session schema-1 Web binding control still loads', async ({ browser }, testInfo) => {
   const run = await load(browser, path.join(root, 'tests/fixtures/sessions/single.v41-bindings1.json'), { width: 1600, height: 1000 }, false);
   try {

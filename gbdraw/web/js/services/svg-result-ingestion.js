@@ -419,6 +419,23 @@ export const createEmptySvgMutationPlan = (resultCount) => {
   });
 };
 
+/**
+ * A plan whose only operations are one caller transform per Result (`null`
+ * for none); without a transform it is the EMPTY plan.
+ * @param {ReadonlyArray<SvgResultTransform | null>} transforms
+ * @returns {SvgMutationPlan}
+ */
+export const createCallerTransformSvgMutationPlan = (transforms) => {
+  const empty = createEmptySvgMutationPlan(transforms.length);
+  if (!transforms.some(Boolean)) return empty;
+  return Object.freeze({
+    kind: 'MUTATING',
+    operationsByResult: Object.freeze(empty.operationsByResult.map((operations, index) => (
+      transforms[index] ? Object.freeze({ ...operations, callerTransforms: Object.freeze([transforms[index]]) }) : operations
+    )))
+  });
+};
+
 const setAttributeIfDifferent = (element, name, value) => {
   const normalized = String(value);
   if (element.getAttribute(name) === normalized) return false;
