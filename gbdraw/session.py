@@ -89,9 +89,21 @@ class SessionDocument:
     source_path: Path | None = None
 
     def __post_init__(self) -> None:
-        cloned = expand_session_feature_catalog(copy.deepcopy(dict(self._data)))
-        _validate_document(cloned)
-        object.__setattr__(self, "_data", cloned)
+        self._adopt(copy.deepcopy(dict(self._data)))
+
+    @classmethod
+    def _from_parsed(cls, data: dict[str, Any], source_path: Path) -> SessionDocument:
+        """Keep a payload just parsed from ``source_path``: no caller holds it."""
+
+        document = object.__new__(cls)
+        object.__setattr__(document, "source_path", source_path)
+        document._adopt(data)
+        return document
+
+    def _adopt(self, data: dict[str, Any]) -> None:
+        expanded = expand_session_feature_catalog(data)
+        _validate_document(expanded)
+        object.__setattr__(self, "_data", expanded)
         if self.source_path is not None:
             object.__setattr__(self, "source_path", Path(self.source_path))
 
@@ -302,10 +314,10 @@ def load_session_document(
         raise SessionFormatError(f"Could not read session file: {path}") from exc
     except ValidationError as exc:
         raise SessionFormatError(str(exc)) from exc
-    if not isinstance(payload, Mapping):
+    if not isinstance(payload, dict):
         raise SessionFormatError("Session JSON must be an object.")
     try:
-        return SessionDocument(payload, source_path=path)
+        return SessionDocument._from_parsed(payload, path)
     except SessionError:
         raise
     except ValidationError as exc:
@@ -401,7 +413,7 @@ def render_session(
     try:
         return render_session_compatible_request(
             session_to_request(materialized, drawing=drawing),
-            _selected_drawing(materialized.document, drawing).to_dict(),
+            _selected_drawing(materialized.document, drawing),
         )
     except SessionError:
         raise

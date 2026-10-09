@@ -32,6 +32,7 @@ from gbdraw.layout.similarity_alignment import (
     AlignmentResolutionRationale,
     SimilarityAlignmentPlan,
 )
+from gbdraw.session import SessionDocument
 from gbdraw.session_io import (
     classify_raw_losat_cache_entry,
     empty_protein_identity_manifest,
@@ -1340,15 +1341,21 @@ def _build_session_compatible_plan(
 
 def render_session_compatible_request(
     request: DiagramRequest,
-    session_artifacts: Mapping[str, Any],
+    session_artifacts: Mapping[str, Any] | SessionDocument,
     *,
     include_feature_catalog: bool = False,
 ) -> RequestRenderResult | CircularBatchRenderResult:
-    """Render a released session through its sole compatibility adapter."""
+    """Render a released session through its sole compatibility adapter.
 
-    if not isinstance(session_artifacts, Mapping):
+    A ``SessionDocument`` was validated when it was built; it is read in place.
+    """
+
+    if isinstance(session_artifacts, SessionDocument):
+        session_artifacts = session_artifacts._data
+    elif isinstance(session_artifacts, Mapping):
+        validate_session(session_artifacts)
+    else:
         raise ValidationError("Session compatibility input must be an object.")
-    validate_session(session_artifacts)
     plan = plan_request(request)
     batch_outputs_preflighted = isinstance(plan, CircularBatchRequestPlan)
     plan.preflight_outputs()

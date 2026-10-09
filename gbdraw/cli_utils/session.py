@@ -52,6 +52,7 @@ from gbdraw.session_io import (
 if TYPE_CHECKING:
     from gbdraw.api.requests import DiagramRequest
     from gbdraw.render.interactive_svg import InteractiveSvgContext
+    from gbdraw.session import SessionDocument
 
 logger = logging.getLogger(__name__)
 
@@ -460,7 +461,7 @@ def save_session_sidecar_if_requested(
 
 
 def render_canonical_session_if_present(
-    session: Mapping[str, Any],
+    session: SessionDocument | Mapping[str, Any],
     *,
     mode: Literal["circular", "linear"],
     output_override: str | None,
@@ -481,9 +482,9 @@ def render_canonical_session_if_present(
     )
     from gbdraw.session_io import CANONICAL_SESSION_MIN_VERSION
 
-    if int(session.get("version", 0)) < CANONICAL_SESSION_MIN_VERSION:
-        return False
     document = load_session_document(session)
+    if document.version < CANONICAL_SESSION_MIN_VERSION:
+        return False
     if not document.has_canonical_request:
         raise ValidationError("Settings-only Session has no biological render request; load a source in Web before generating.")
     # A Session 46 can hold a Result set of each mode: the subcommand renders its own.
@@ -552,7 +553,7 @@ def render_canonical_session_if_present(
 
         rendered = _render_request(
             request,
-            session_document=document.to_dict(),
+            session_document=document,
             include_feature_catalog=sidecar_path is not None,
         )
         from gbdraw.features.overrides import log_feature_identity_notices
@@ -682,7 +683,7 @@ def render_canonical_session_if_present(
                 sidecar_path,
                 _build_session_document_from_resolved_request(
                     rendered_request,
-                    title=str(document.to_dict().get("title") or replay_prefix),
+                    title=str(source_session.get("title") or replay_prefix),
                     adjunct=adjunct,
                     web_file_inventory=web_file_inventory,
                     resources=source_resources,

@@ -7,12 +7,16 @@ object fails here.
 
 from __future__ import annotations
 
+import base64
+import copy
 import json
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any, Callable
 
 import pytest
+from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
@@ -30,7 +34,7 @@ from gbdraw.api import (
     RenderOutputRequest,
 )
 from gbdraw.session import save_session_document
-from gbdraw.session_io import validate_session, write_session_json
+from gbdraw.session_io import SESSION_FORMAT, validate_session, write_session_json
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 GALLERY_SESSIONS = REPO_ROOT / "gbdraw" / "web" / "gallery" / "sessions"
@@ -56,6 +60,23 @@ def _count_calls(
             if value is function:
                 monkeypatch.setattr(module, name, counted)
     return calls
+
+
+def _count_deepcopy_callers(monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
+    """Count ``copy.deepcopy`` calls made directly by gbdraw functions."""
+
+    original = copy.deepcopy
+    callers: Counter[str] = Counter()
+
+    def counted(value: Any, memo: Any = None, _nil: Any = []) -> Any:
+        frame = sys._getframe(1)
+        module = str(frame.f_globals.get("__name__", ""))
+        if module.startswith("gbdraw"):
+            callers[f"{module}.{frame.f_code.co_name}"] += 1
+        return original(value, memo)
+
+    monkeypatch.setattr(copy, "deepcopy", counted)
+    return callers
 
 
 def _run_cli(*args: str) -> None:
@@ -115,3 +136,92 @@ def test_cli_save_session_validates_the_built_sidecar_once(
     # build_session_json returns; the write validates neither again.
     assert len(validations) == 2
     assert (tmp_path / "saved.gbdraw-session.json").is_file()
+
+
+def test_cli_session_render_validates_and_copies_the_session_once(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    validations = _count_calls(monkeypatch, validate_session)
+    copies = _count_deepcopy_callers(monkeypatch)
+    _run_cli("circular", "--session", str(CIRCULAR_SESSION), "-o", str(tmp_path / "replayed"), "-f", "svg")
+    # The Session is validated once, when it is loaded, and the loaded document
+    # is not copied: the render reads it in place.
+    assert len(validations) == 1
+    assert copies == Counter(
+        {
+            "gbdraw.api.session_compat.canonical_payload_for_session_decode": 1,
+            "gbdraw.api.session_compat._read_session_artifact_source": 1,
+            "gbdraw.api.request_render.__post_init__": 1,
+            "gbdraw.api.record_planning.resolve_record_inputs": 1,
+        }
+    )
+
+    # Writing the Session again validates the loaded and the written document.
+    validations.clear()
+    _run_cli(
+        "circular",
+        "--session",
+        str(CIRCULAR_SESSION),
+        "-o",
+        str(tmp_path / "resaved"),
+        "-f",
+        "svg",
+        "--session_output",
+        str(tmp_path / "resaved.gbdraw-session.json"),
+    )
+    assert len(validations) == 2
+
+
+def _legacy_session(tmp_path: Path, mode: str) -> Path:
+    """A Session 30 with one GenBank file: the CLI replays it as CLI arguments."""
+
+    record = SeqRecord(Seq("ATGC" * 90), id="legacy", annotations={"molecule_type": "DNA"})
+    genbank = tmp_path / "legacy.gb"
+    SeqIO.write([record], genbank, "genbank")
+    content = genbank.read_bytes()
+    embedded = {
+        "name": "legacy.gb",
+        "type": "application/octet-stream",
+        "size": len(content),
+        "lastModified": 0,
+        "data": base64.b64encode(content).decode("ascii"),
+    }
+    session = {
+        "format": SESSION_FORMAT,
+        "version": 30,
+        "createdAt": "2026-06-22T00:00:00Z",
+        "config": {"form": {"prefix": "out"}, "adv": {}},
+        "ui": {"mode": mode, "cInputType": "gb", "lInputType": "gb"},
+        "files": {"c_gb": embedded} if mode == "circular" else {"linearSeqs": [{"gb": embedded}]},
+    }
+    path = tmp_path / "legacy.gbdraw-session.json"
+    path.write_text(json.dumps(session), encoding="utf-8")
+    return path
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_cli_legacy_session_replay_reads_the_loaded_payload(
+    mode: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    session_path = _legacy_session(tmp_path, mode)
+    validations = _count_calls(monkeypatch, validate_session)
+    copies = _count_deepcopy_callers(monkeypatch)
+    _run_cli(mode, "--session", str(session_path), "-o", str(tmp_path / "replayed"), "-f", "svg")
+    assert (tmp_path / "replayed.svg").exists()
+    # Loading validates the Session, and so does the public session_to_cli_args;
+    # the linear run also validates the source Session once more when it renders.
+    assert len(validations) == (2 if mode == "circular" else 3)
+    # The replay reads the loaded payload without copying it.
+    expected = Counter(
+        {
+            f"gbdraw.{mode}.run_{mode}_from_namespace": 1,
+            "gbdraw.api.record_planning.resolve_record_inputs": 1,
+        }
+    )
+    if mode == "linear":
+        # The linear run's CurrentRequestArtifacts detaches the identity manifest.
+        expected["gbdraw.api.request_render.__post_init__"] = 1
+    assert copies == expected
