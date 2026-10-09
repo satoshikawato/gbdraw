@@ -1039,7 +1039,12 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   expect(derivedMutationAfter.derivedKeys).not.toEqual(
     derivedMutationBefore.derivedKeys
   );
-  expect(first.outcome.rawSearchTelemetry).toMatchObject({
+  // The Gallery Session stores its collinear result, so the first Generate
+  // after Load reuses it and runs no protein comparison work (Owner,
+  // 2026-10-09). The derived-only mutation then recomputes from the raw cache.
+  expect(first.outcome.rawSearchTelemetry).toBeNull();
+  const secondTelemetry = second.outcome.rawSearchTelemetry;
+  expect(secondTelemetry).toMatchObject({
     mode: 'collinear',
     candidateLimitRequested: 5,
     candidateLimitEffective: 5,
@@ -1047,57 +1052,28 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     program: 'blastp',
     outfmt: '6',
     cacheMisses: 0,
-    proteinDerivedPayloadCacheHits: 0,
-    proteinDerivedPayloadCacheMisses: 1,
-    helperRequestFileCount: 2
-  });
-  expect(first.outcome.rawSearchTelemetry.totalPairs).toBeGreaterThan(0);
-  expect(first.outcome.rawSearchTelemetry.cacheHits).toBe(
-    first.outcome.rawSearchTelemetry.totalPairs
-  );
-  expect(first.outcome.rawSearchTelemetry.rawTsvEntryCount).toBe(
-    first.outcome.rawSearchTelemetry.totalPairs
-  );
-  // rawJobs describes executed source batches; every raw pair is cached here.
-  expect(first.outcome.rawSearchTelemetry.rawJobs).toEqual([]);
-  expect(first.outcome.rawSearchTelemetry.uniqueJobs).toBe(0);
-  expect(first.outcome.rawSearchTelemetry.workerCalls).toBe(0);
-  expect(first.outcome.rawSearchTelemetry.rawTsvBytes).toBeGreaterThan(0);
-  expect(first.outcome.rawSearchTelemetry.rawTsvLargestEntryBytes).toBeGreaterThan(0);
-  expect(first.outcome.rawSearchTelemetry.helperRequestMetadataBytes).toBeGreaterThan(0);
-  expect(first.outcome.rawSearchTelemetry.helperRequestRawTransferBytes).toBe(
-    first.outcome.rawSearchTelemetry.rawTsvBytes
-  );
-  expect(first.outcome.rawSearchTelemetry.simultaneousParsedTables).toBeGreaterThan(0);
-  expect(second.outcome.rawSearchTelemetry).toMatchObject({
-    mode: 'collinear',
-    candidateLimitRequested: 5,
-    candidateLimitEffective: 5,
-    collinearSearchScope: 'adjacent',
-    cacheHits: first.outcome.rawSearchTelemetry.totalPairs,
-    cacheMisses: 0,
     uniqueJobs: 0,
     workerCalls: 0,
     proteinDerivedPayloadCacheHits: 0,
     proteinDerivedPayloadCacheMisses: 1,
-    rawTsvEntryCount: first.outcome.rawSearchTelemetry.rawTsvEntryCount,
-    rawTsvBytes: first.outcome.rawSearchTelemetry.rawTsvBytes,
     helperRequestFileCount: 2
   });
-  expect(second.outcome.rawSearchTelemetry.rawJobs).toEqual(
-    first.outcome.rawSearchTelemetry.rawJobs
-  );
-  expect(second.outcome.rawSearchTelemetry.simultaneousParsedTables).toBeGreaterThan(0);
-  const expectedRawHelperTransport = {
+  expect(secondTelemetry.totalPairs).toBeGreaterThan(0);
+  expect(secondTelemetry.cacheHits).toBe(secondTelemetry.totalPairs);
+  expect(secondTelemetry.rawTsvEntryCount).toBe(secondTelemetry.totalPairs);
+  // rawJobs describes executed source batches; every raw pair is cached here.
+  expect(secondTelemetry.rawJobs).toEqual([]);
+  expect(secondTelemetry.rawTsvBytes).toBeGreaterThan(0);
+  expect(secondTelemetry.rawTsvLargestEntryBytes).toBeGreaterThan(0);
+  expect(secondTelemetry.helperRequestMetadataBytes).toBeGreaterThan(0);
+  expect(secondTelemetry.helperRequestRawTransferBytes).toBe(secondTelemetry.rawTsvBytes);
+  expect(secondTelemetry.simultaneousParsedTables).toBeGreaterThan(0);
+  expect(rawHelperTransports).toEqual([{
     roles: ['pairs', 'rawTsv'],
-    metadataBytes: first.outcome.rawSearchTelemetry.helperRequestMetadataBytes,
-    rawTsvBytes: first.outcome.rawSearchTelemetry.helperRequestRawTransferBytes,
+    metadataBytes: secondTelemetry.helperRequestMetadataBytes,
+    rawTsvBytes: secondTelemetry.helperRequestRawTransferBytes,
     manifestContainsBlastText: false
-  };
-  expect(rawHelperTransports).toEqual([
-    expectedRawHelperTransport,
-    expectedRawHelperTransport
-  ]);
+  }]);
   const expectedRecordPlacements = [
     [0, 0], [0, 1],
     [1, 0], [1, 1]
@@ -1111,10 +1087,11 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   const loadedComparisonSummary = svgComparisonSummary(loaded.originalPreview);
   const firstComparisonSummary = svgComparisonSummary(firstGeneratedSvg);
   const secondComparisonSummary = svgComparisonSummary(secondGeneratedSvg);
-  // File-level LOSATP databases (PD-OI-018 revision 4) yield 114 blocks.
+  // File-level LOSATP databases (PD-OI-018 revision 4) on chromosomes that
+  // start at their replication initiator yield 116 blocks.
   expect(loadedComparisonSummary).toEqual({
     comparisonGroups: 4,
-    pairwiseMatches: 114,
+    pairwiseMatches: 116,
     comparisonLegends: 2
   });
   expect(firstComparisonSummary).toEqual(loadedComparisonSummary);
@@ -1219,7 +1196,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     artifactReplacementHistoryEntryCount: 1
   };
 
-  for (const [generation, count] of [[first, 1], [second, 2]]) {
+  for (const [generation, count] of [[first, 0], [second, 1]]) {
     const keyBatches = generation.worker.instances.flatMap(({ helpers }) => helpers)
       .filter(({ operation }) => operation === 'buildProteinLosatCacheKeys');
     expect(keyBatches).toHaveLength(count);
@@ -1237,23 +1214,27 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   expect(runs[0].stagedResourceCount).toBe(runs[0].referencedResourceCount);
   expect(runs[0].stagedResourceBytes).toBe(runs[0].referencedDeclaredBytes);
   expect(runs[0].transferredBytes).toBe(runs[0].stagedResourceBytes);
+  // The first run stages the Session's resources, its stored collinear result
+  // among them; the second stages only the result it computed again.
+  // OV-279: the staged count of 1 and newlyStagedResourceBytes below pin the
+  // rebuild; when OV-279 is fixed the second run stages nothing, so update them.
   expect(runs[1]).toMatchObject({
     referencedResourceCount: runs[0].referencedResourceCount,
-    referencedDeclaredBytes: runs[0].referencedDeclaredBytes,
-    stagedResourceCount: 0,
-    stagedResourceBytes: 0,
-    transferredBytes: 0,
+    stagedResourceCount: 1,
     hasBase64ResourceTable: false
   });
+  expect(runs[1].stagedResourceBytes).toBeGreaterThan(0);
+  expect(runs[1].transferredBytes).toBe(runs[1].stagedResourceBytes);
   expect(secondPhaseAttribution).toMatchObject({
     workerInitializationMs: 0,
     workerInitializationReused: true,
-    newlyStagedResourceBytes: 0,
-    losatCacheHits: first.outcome.rawSearchTelemetry.totalPairs,
+    newlyStagedResourceBytes: runs[1].stagedResourceBytes,
+    losatCacheHits: secondTelemetry.totalPairs,
     losatCacheMisses: 0
   });
   expect(firstPhaseAttribution).toMatchObject({
-    losatCacheHits: 12,
+    losatCachePreparationMs: 0,
+    losatCacheHits: 0,
     losatCacheMisses: 0
   });
   const expectedUnchangedHistory = {
@@ -1267,7 +1248,8 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   expect(second.outcome.undoCountAfter).toBe(second.outcome.undoCountBefore);
   expect(second.outcome.redoCountAfter).toBe(second.outcome.redoCountBefore);
   expect(first.outcome.historyStructural).toMatchObject(expectedGeneratedHistory);
-  expect(secondStructural.resourceMaterializationCount).toBe(0);
+  // OV-279: follows runs[1].stagedResourceCount (1 until OV-279 is fixed, then 0).
+  expect(secondStructural.resourceMaterializationCount).toBe(runs[1].stagedResourceCount);
   for (const perGeneration of [firstStructural, secondStructural]) {
     expect(perGeneration).toMatchObject({
       currentLegacyNormalizationCount: 0,
@@ -1298,19 +1280,25 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     );
   expect(firstPhaseAttribution.preparedInputCacheStructural
     .preparedInputCacheRetainedBytes).toBeGreaterThan(0);
+  // The recomputed collinear result differs from the stored one in the last
+  // digits of a few floating-point scores (browser Python versus the CLI), so
+  // the second run decodes it and rebuilds the interactive context once.
+  // OV-279: these second-run counters (decoded resource miss 1, interactive
+  // context build 1, feature traversal 1) pin the rebuild and flip to the
+  // reuse values (hits 1, builds 0) when OV-279 is fixed.
   expect(secondPhaseAttribution.preparedInputCacheStructural).toMatchObject({
-    decodedResourceCacheHitCount: 1,
-    decodedResourceCacheMissCount: 0,
-    decodedResourceBuildCount: 0,
+    decodedResourceCacheHitCount: 0,
+    decodedResourceCacheMissCount: 1,
+    decodedResourceBuildCount: 1,
     parsedSourceCacheMissCount: 0,
     parsedSourceParseCount: 0,
     resolvedRecordCacheHitCount: 1,
     resolvedRecordCacheMissCount: 0,
     resolvedRecordBuildCount: 0,
-    interactiveContextCacheHitCount: 1,
-    interactiveContextCacheMissCount: 0,
-    interactiveContextBuildCount: 0,
-    interactiveFeatureTraversalCount: 0,
+    interactiveContextCacheHitCount: 0,
+    interactiveContextCacheMissCount: 1,
+    interactiveContextBuildCount: 1,
+    interactiveFeatureTraversalCount: 1,
     preparedInputCacheMutationViolationCount: 0
   });
   expect(secondPhaseAttribution.preparedInputCacheStructural
@@ -1345,7 +1333,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     canonicalReplayFullSerializationCount: 0,
     workerBase64ResourceCloneCount: 0,
     workerBase64ResourceJsonStringifyCount: 0,
-    resourceMaterializationCount: runs[0].referencedResourceCount,
+    resourceMaterializationCount: runs[0].referencedResourceCount + runs[1].stagedResourceCount,
     resourceReencodeCount: 0,
     resultBinaryDecodeCount: 2,
     resultMetadataBinaryDecodeCount: 2

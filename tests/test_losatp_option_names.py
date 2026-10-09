@@ -443,8 +443,9 @@ def test_schema_7_protein_marker_round_trips_wire_names(fixture, tmp_path):
 @pytest.mark.parametrize(
     ("session_path", "mode", "threads"),
     (
+        # The Gallery Session stores its collinear result (mode "none").
         (GALLERY_SESSIONS / "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
-         "collinear", 16),
+         "none", 16),
         (GALLERY_SESSIONS / "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
          "none", 32),
     ),

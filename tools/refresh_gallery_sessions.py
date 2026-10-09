@@ -110,6 +110,12 @@ TEST_INPUT_SESSION_FILES = (
 )
 
 
+def _is_test_input_session(session_path: Path) -> bool:
+    """A test input keeps the unresolved pipelines its specs run on Generate."""
+
+    return session_path.name in TEST_INPUT_SESSION_FILES
+
+
 def _public_gallery_session_files() -> tuple[str, ...]:
     from tools.prepare_interactive_gallery_assets import EXAMPLES
 
@@ -742,6 +748,21 @@ def _validate_staged_gallery_session(
             raise ValueError(
                 f"{session_path.name} has a Web Linear draft without linearComparisonPlan"
             )
+    # A Gallery Session stores its protein comparison results, so the first
+    # Generate after Load reuses them (perf-014x D-17 / docs-restructure D-20:
+    # the regenerated Vibrio Session must store the finished protein comparison
+    # results; replaces the empty-derived-cache-only rule of 7aab08f8). A test
+    # input keeps its pipeline, which the Generate-pipeline specs run.
+    if not _is_test_input_session(session_path) and any(
+        isinstance(comparison, Mapping)
+        and comparison.get("kind") == "generatedProteinComparison"
+        and comparison.get("mode") != "none"
+        for comparison in request.get("comparisons") or []
+    ):
+        raise ValueError(
+            f"{session_path.name} must store its resolved protein comparison "
+            "results instead of a pipeline that Generate runs again"
+        )
     if (
         session_path.name == "lambda_basic_linear.gbdraw-session.json"
         and request.get("comparisons")
@@ -803,10 +824,12 @@ def _validate_staged_gallery_session(
             if isinstance(derived_cache, Mapping)
             else []
         )
+        # The stored collinear result replaces derived entries; the raw cache
+        # lets a changed setting recompute without LOSATP.
         if retained_derived_entries:
             raise ValueError(
-                f"{session_path.name} must rebuild its derived LOSATP cache "
-                "from the retained raw cache"
+                f"{session_path.name} stores its collinear result in the request, "
+                "not as derived LOSATP entries"
             )
         protein_entries = [
             entry
@@ -1210,6 +1233,64 @@ def _declared_command_session(
     )
 
 
+def _store_resolved_protein_comparisons(session_path: Path) -> None:
+    """Replace a generated protein pipeline with its stored result.
+
+    A Gallery Session stores its protein comparison results, so the first
+    Generate after Load reuses them instead of computing them again (perf-014x
+    D-17 / docs-restructure D-20: the regenerated Vibrio Session must store the
+    finished protein comparison results; replaces the empty-derived-cache-only
+    rule of 7aab08f8). The Session is rendered once from its raw LOSATP cache, and
+    its comparisons become the codec's encoding of the resolved request: the
+    collinear result and the marker that reuses it, as the Web writes them
+    after a Generate. The replay and ``finalize`` then check that the CLI and
+    the Web rebuild draw and request the same.
+    """
+
+    from gbdraw.api.request_render import _resolved_losat_search
+    from gbdraw.session import materialize_session, render_session, session_to_request
+    from gbdraw.session_request_codec import encode_canonical_request
+    from gbdraw.session_resources import SessionResourceTable
+
+    session = load_session(session_path)
+    request = session["renderRequest"]
+    modes = {
+        comparison.get("mode")
+        for comparison in request.get("comparisons") or []
+        if comparison.get("kind") == "generatedProteinComparison"
+    } - {"none"}
+    if not modes:
+        return
+    if modes != {"collinear"}:
+        raise ValueError(
+            f"{session_path.name}: Gallery publication stores collinear protein "
+            f"comparison results only, not {sorted(modes)}"
+        )
+    with tempfile.TemporaryDirectory(prefix="gbdraw-gallery-resolve-") as output_dir:
+        with materialize_session(session, output_directory=output_dir) as materialized:
+            typed = session_to_request(materialized)
+            metadata = render_session(materialized).linear_metadata
+            if metadata is None or metadata.collinearity_result is None:
+                raise ValueError(f"{session_path.name} computed no collinear result")
+            resolved = dataclasses.replace(
+                typed,
+                options=dataclasses.replace(
+                    typed.options,
+                    losat_search=_resolved_losat_search(typed.options.losat_search),
+                    collinearity_blocks=metadata.collinearity_result,
+                ),
+            )
+            table = SessionResourceTable(session["resources"])
+            comparisons = encode_canonical_request(resolved, table=table).payload[
+                "comparisons"
+            ]
+            descriptors = table.descriptors()
+    request["comparisons"] = comparisons
+    for resource_id in _referenced_resource_ids(comparisons):
+        session["resources"].setdefault(resource_id, dict(descriptors[resource_id]))
+    write_session_json(session_path, session)
+
+
 def _assert_declared_figure(declared_path: Path, published_path: Path) -> None:
     """The published Session draws the figure of its declared command.
 
@@ -1269,6 +1350,8 @@ def _refresh_one_session(
             gallery_id=gallery_id,
             declared_command=declared_command,
         )
+        if not _is_test_input_session(session_path):
+            _store_resolved_protein_comparisons(prepared_path)
         subprocess.run(
             [
                 sys.executable,
