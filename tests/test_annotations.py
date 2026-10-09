@@ -435,3 +435,14 @@ def test_fully_matched_envelope_and_circular_path_are_preserved(mode, envelope, 
     )
     assert result.annotations[0].segments == expected
     assert result.warnings == ()
+
+
+@pytest.mark.parametrize(
+    ("field", "name"),
+    [("fill", "annotation fill"), ("stroke", "annotation stroke"), ("label_color", "label color")],
+)
+def test_malformed_hex_annotation_color_names_its_column(field: str, name: str) -> None:
+    # The hex check of resolve_color_to_hex raises its own ValidationError; the
+    # annotation message keeps the column and the annotation-correct advice.
+    with pytest.raises(ValidationError, match=f"{name} is not a valid color: '#zz'"):
+        RegionAnnotationStyle(**{field: "#zz"})
