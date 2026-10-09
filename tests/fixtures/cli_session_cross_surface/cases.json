@@ -14,7 +14,9 @@
       "legacySessions": {
         "v40-early": "tests/fixtures/sessions/cli-linear-tables.v40-early.gbdraw-session.json.gz",
         "v40": "tests/fixtures/sessions/cli-linear-tables.v40.gbdraw-session.json.gz",
-        "v41": "tests/fixtures/sessions/cli-linear-tables.v41.gbdraw-session.json.gz"
+        "v41": "tests/fixtures/sessions/cli-linear-tables.v41.gbdraw-session.json.gz",
+        "v42": "tests/fixtures/sessions/cli-linear-tables.v42.gbdraw-session.json.gz",
+        "v44": "tests/fixtures/sessions/cli-linear-tables.v44.gbdraw-session.json.gz"
       }
     },
     {
@@ -48,6 +50,13 @@
         "--label_table", "tests/fixtures/cli_session_cross_surface/labels.tsv",
         "--label_whitelist", "tests/fixtures/cli_session_cross_surface/whitelist.tsv",
         "--qualifier_priority", "tests/fixtures/cli_session_cross_surface/priority.tsv"]
+    },
+    {
+      "id": "circular_feature_overrides",
+      "mode": "circular",
+      "args": ["--gbk", "tests/test_inputs/NC_001416.gb", "--labels", "out",
+        "-t", "tests/fixtures/cli_session_cross_surface/colors.tsv",
+        "--feature_override_table", "tests/fixtures/cli_session_cross_surface/feature_overrides.tsv"]
     }
   ]
 }

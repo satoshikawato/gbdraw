@@ -24,7 +24,10 @@ const cases = [
   },
   { name: 'gff fasta', mode: 'circular', args: ['--gff', gff, '--fasta', fasta], sources: [gff, fasta] },
   // D-01, OV-221: the tables of a CLI Session reach the next Web Generate.
-  ...[['linear_tables', [lambda]], ['circular_records_tables', [path.join(root, 'tests/test_inputs/HmmtDNA.gbk')]]]
+  ...[
+    ['linear_tables', [lambda]], ['circular_records_tables', [path.join(root, 'tests/test_inputs/HmmtDNA.gbk')]],
+    ['linear_records_blacklist', [path.join(root, 'tests/test_inputs/HmmtDNA.gbk'), lambda]]
+  ]
     .map(([id, sources]) => {
       const entry = require('../fixtures/cli_session_cross_surface/cases.json').cases.find(item => item.id === id);
       const args = entry.args.map(arg => (arg.startsWith('tests/') ? path.join(root, arg) : arg));

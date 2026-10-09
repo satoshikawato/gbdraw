@@ -1,0 +1,23 @@
+{
+  "sourceCommit": "fe6861f06d0eaaecac0ba4ee6b1c3095019789df",
+  "history": "first-parent main",
+  "writer": "gbdraw/linear.py --session_output (CLI sidecar), run from `git archive fe6861f0 gbdraw` on PYTHONPATH",
+  "command": "PYTHONPATH=<git archive fe6861f0 gbdraw> python -P -m gbdraw.cli linear --gbk tests/test_inputs/NC_001416.gb --show_labels all -t tests/fixtures/cli_session_cross_surface/colors.tsv -d tests/fixtures/cli_session_cross_surface/default_colors.tsv --feature_visibility_table tests/fixtures/cli_session_cross_surface/visibility.tsv --label_table tests/fixtures/cli_session_cross_surface/labels.tsv --label_whitelist tests/fixtures/cli_session_cross_surface/whitelist.tsv --qualifier_priority tests/fixtures/cli_session_cross_surface/priority.tsv -o cli-linear-tables -f svg --session_output cli-linear-tables.v44.gbdraw-session.json",
+  "workingDirectory": "repository root (input paths stay relative in cliInvocation)",
+  "case": "linear_tables in tests/fixtures/cli_session_cross_surface/cases.json",
+  "inputs": {
+    "tests/test_inputs/NC_001416.gb": "4b76b8bacc8026aac3f19a4a915f4ac772ad61e7ec18f0e2cc859229f95a66e7",
+    "tests/fixtures/cli_session_cross_surface/colors.tsv": "4833999aa10b30eb53fdaa124689bb630c00bc233c4d0502f9e7459ab30f342c",
+    "tests/fixtures/cli_session_cross_surface/default_colors.tsv": "59839d0025d0caadcffebda3562d16409fedea08ccb06596ce17f6cc548f29eb",
+    "tests/fixtures/cli_session_cross_surface/visibility.tsv": "e21d0f02afcffb0341884fc43e2313e80cef293f62fbb6ef6ee36716b836e92a",
+    "tests/fixtures/cli_session_cross_surface/labels.tsv": "4c1c85e5d081a0d419b4c50919bba6c79f27cb45b4b4b2fe542664300d55ba62",
+    "tests/fixtures/cli_session_cross_surface/whitelist.tsv": "08e0391a79ae2de260db4c35e110c1dd4f2b6c245b1d790f2236a51bca4188fd",
+    "tests/fixtures/cli_session_cross_surface/priority.tsv": "1d3c787c5768b52191cc7e8a325cd00fdc4b1e9b495d37e580c3a69dec21b87a"
+  },
+  "sha256": "851797242ab93c798da53b95a5e81899badaf57b283ad53a1162facd62018cfd",
+  "compression": "gzip -n -9",
+  "sessionVersion": 44,
+  "requestSchema": 8,
+  "featureCatalogSchema": 4,
+  "config": "absent (the writer stores no top-level `config` from Session 42)"
+}
