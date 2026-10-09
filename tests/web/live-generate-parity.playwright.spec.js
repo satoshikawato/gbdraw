@@ -14,10 +14,10 @@ const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, loadSessionFile, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
-const { download, load } = require('./helpers/mode-transition.cjs');
+const { download, load, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 const {
   open, generate, popupEdit, addVisibilityRule, appAction, addColorRule, history, FL1_OFF,
-  legendRowColor, FL1_ALPHA, renameRow
+  legendRowColor, FL1_ALPHA, renameRow, legendRowStrokeColor, legendRowAdd, switchPalette, deleteLegendRow
 } = require('./helpers/live-generate-parity-steps.cjs');
 
 test.describe.configure({ retries: 0 });
@@ -45,49 +45,9 @@ const legendRowStroke = async (page, caption, color, width) => {
   await settleLive(page);
 };
 
-// The Legend editor's stroke color control, one History step.
-const legendRowStrokeColor = async (page, caption, color) => {
-  await evaluateWithRetainedPromise(page, async ({ row, value }) => {
-    const app = window.__GBDRAW_APP__;
-    await app.setLegendEntryStrokeColorValue(app.legendEntries.findIndex((entry) => entry.caption === row), value);
-  }, { row: caption, value: color });
-  await settleLive(page);
-};
-
-// A row added in the Legend editor.
-const legendRowAdd = async (page, caption, color) => {
-  await evaluateWithRetainedPromise(page, async ({ row, value }) => {
-    const app = window.__GBDRAW_APP__;
-    app.newLegendCaption = row;
-    app.newLegendColor = value;
-    await app.addNewLegendEntry();
-  }, { row: caption, value: color });
-  await settleLive(page);
-};
-
-// A palette change with instant preview (the palette menu).
-const switchPalette = async (page, name) => {
-  await page.evaluate((palette) => {
-    const app = window.__GBDRAW_APP__;
-    app.paletteInstantPreviewEnabled = true;
-    app.selectedPalette = palette;
-    return app.updatePalette();
-  }, name);
-  await settleLive(page);
-};
-
 // A Legend row renamed in the Legend editor (`renameRow`), settled.
 const renameLegendRow = async (page, caption, name) => {
   await renameRow(page, caption, name);
-  await settleLive(page);
-};
-
-// A row deleted in the Legend editor, settled.
-const deleteLegendRow = async (page, caption) => {
-  await evaluateWithRetainedPromise(page, async (row) => {
-    const app = window.__GBDRAW_APP__;
-    await app.deleteLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === row));
-  }, caption);
   await settleLive(page);
 };
 
@@ -716,15 +676,16 @@ const RESET_CASES = [
     edit: (page) => deleteLegendRow(page, 'GC content')
   },
   {
-    // Generate does not draw a row the editor added; the deleted row stays gone.
+    // Reset clears a row the editor added (R15-2: only a Session holds one,
+    // `loadEditorLegendRows`); the deleted row stays gone.
     domain: 'a Legend row added in the editor and deleted',
-    edit: async (page) => { await legendRowAdd(page, 'Manual row', '#118833'); await deleteLegendRow(page, 'Manual row'); },
+    edit: async (page) => { await loadEditorLegendRows(page, [['Manual row', '#118833']]); await deleteLegendRow(page, 'Manual row'); },
     sameDrawing: true
   },
   {
     // The next two: Generate after Reset draws neither the added row nor the new caption.
     domain: 'a Legend row added in the editor',
-    edit: (page) => legendRowAdd(page, 'Manual row', '#118833')
+    edit: (page) => loadEditorLegendRows(page, [['Manual row', '#118833']])
   },
   {
     domain: 'a Legend row renamed',
@@ -1133,7 +1094,8 @@ const WORK_ALLOWLIST = [
   },
   { kind: 'Legend row stroke', stages: ['strokes'], compiles: 1, requests: [], run: (page) => legendRowStrokeColor(page, 'CDS', '#e63946') },
   { kind: 'Legend row color (no rule)', stages: ['legendFills'], compiles: 1, requests: [], run: (page) => legendRowColor(page, 'tRNA', '#7b2cbf') },
-  { kind: 'History step (Undo of a Legend row color)', stages: ['legendFills'], compiles: 1, requests: [], run: (page) => history(page, 'undo') },
+  // The step restores the editor's Legend rows (their colors among them): Legend rows and fills.
+  { kind: 'History step (Undo of a Legend row color)', stages: ['legend', 'legendFills'], compiles: 1, requests: [], run: (page) => history(page, 'undo') },
   // The rules' matches are prepared: the palette sends no request.
   { kind: 'palette change', stages: ['fills', 'rules', 'legendFills'], compiles: 1, requests: [], run: (page) => switchPalette(page, 'arctic') },
   {
@@ -1148,12 +1110,13 @@ const WORK_ALLOWLIST = [
     run: (page) => addVisibilityRule(page, BATCH_0004_OFF)
   },
   {
-    // A rule commit changes a Legend source, so the automatic rerender draws
-    // the Result again (OV-43); its compile is Generate's plan. Requests: the
-    // commit's caption normalization and rule matches, and the rerender's
-    // caption normalization.
-    kind: 'color rule commit', stages: ['fills', 'rules', 'legendFills'], compiles: 1,
-    requests: ['evaluateRules', 'evaluateRules', 'evaluateRules', 'render'],
+    // The rule's caption CDS gets a second color, so Python splits the CDS
+    // row in two and the automatic rerender draws the Result again (OV-43);
+    // its compile is Generate's plan, and the commit's own compile shows the
+    // rows it adds. Requests: the commit's caption normalization and rule
+    // matches; the rerender's rules are Python's captions already (OV-238).
+    kind: 'color rule commit', stages: ['fills', 'rules', 'legendFills', 'legend'], compiles: 1,
+    requests: ['evaluateRules', 'evaluateRules', 'render'],
     run: (page) => addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '_0002$', color: '#2266aa', cap: 'CDS' })
   },
   {
@@ -1186,10 +1149,10 @@ const WORK_ALLOWLIST = [
     // OV-200 (U2BFIX2 review M1): only Python decides whether the label text
     // fits, so the table asks for the rerender; its one label follow places
     // the labels too, so one reflow runs (Auto Reflow on). Requests: the
-    // table, the visibility rule's matches on the catalog Generate drew, and
-    // the rerender's caption normalization (two before: a superseded reflow).
+    // table and the visibility rule's matches on the catalog Generate drew;
+    // the rerender's rules are Python's captions already (OV-238).
     kind: 'Feature Edits TSV load (Embedded Only)', stages: ['visibility'], compiles: 1,
-    requests: ['readFeatureOverrideTable', 'evaluateRules', 'evaluateRules', 'render'],
+    requests: ['readFeatureOverrideTable', 'evaluateRules', 'render'],
     before: async (page) => {
       await generateEmbeddedOnly(page);
       await page.evaluate(() => { window.__GBDRAW_APP__.autoLabelReflowEnabled = true; });
@@ -1207,14 +1170,73 @@ const WORK_ALLOWLIST = [
     run: (page) => loadFeatureEdits(page, [[embeddedLabelFeatures[0], '', 'dup edited'], [embeddedLabelFeatures[1], 'off', '']])
   },
   {
-    // The rerender decides the fit; its caption normalization is the request.
-    kind: 'popup label text (Embedded Only)', stages: [], compiles: 0, requests: ['evaluateRules', 'render'],
+    // The rerender decides the fit; its rules are Python's captions already (OV-238).
+    kind: 'popup label text (Embedded Only)', stages: [], compiles: 0, requests: ['render'],
     run: (page) => popupEdit(page, embeddedLabelFeatures[0], { labelText: 'dup' })
+  },
+  // U3a (R14-8): the Legend edits. A row's edits show live in one compile; a
+  // rule change asks for the automatic rerender only when the displayed
+  // Result cannot show the rows it regroups (a split, or a row another batch
+  // Result draws). Captions with one color each send no caption request. An
+  // edit after a rerender or a History restore first matches the rules on the
+  // features of the Result it drew (one `evaluateRules`).
+  {
+    kind: 'Legend rename, row without features', stages: ['legend', 'legendFills', 'strokes'], compiles: 1, requests: ['evaluateRules'],
+    run: (page) => renameLegendRow(page, 'GC content', 'GC %')
+  },
+  {
+    // The rule takes one feature of the "other proteins" row of Result 1: a split.
+    kind: 'color rule commit that splits a row', stages: ['fills', 'rules', 'legendFills', 'legend'], compiles: 1,
+    requests: ['evaluateRules', 'render'],
+    run: (page) => addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^TESTA_0005$', color: '#2a9d8f', cap: 'Five' })
+  },
+  {
+    kind: 'Legend rename, rule row one Result draws (whole row)', stages: ['fills', 'rules', 'legendFills', 'legend'],
+    compiles: 1, requests: ['evaluateRules'], run: (page) => renameLegendRow(page, 'Five', 'Fifth')
+  },
+  // The rename's History step holds the Result before and after it: Undo and
+  // Redo restore the Result that shows the rows, so neither compiles nor asks.
+  { kind: 'History step (Undo of the rule row rename)', stages: [], compiles: 0, requests: [], run: (page) => history(page, 'undo') },
+  { kind: 'History step (Redo of the rule row rename)', stages: [], compiles: 0, requests: [], run: (page) => history(page, 'redo') },
+  {
+    kind: 'Legend row color, rule row', stages: ['fills', 'rules', 'legendFills'], compiles: 1, requests: ['evaluateRules'],
+    run: (page) => legendRowColor(page, 'Fifth', '#264653')
+  },
+  {
+    kind: 'Rules-panel color of a captioned rule', stages: ['fills', 'rules', 'legendFills'], compiles: 1, requests: [],
+    run: (page) => page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      return app.setSpecificRuleField(app.manualSpecificRules.findIndex((rule) => rule.cap === 'Fifth'), 'color', '#e76f51');
+    }).then(() => settleLive(page))
+  },
+  {
+    // Result 2 draws the row too: Python draws it again there.
+    kind: 'Legend rename, rule row both Results draw', stages: ['fills', 'rules', 'legendFills', 'legend'], compiles: 1,
+    requests: ['render'], run: (page) => renameLegendRow(page, 'CDS [#2266aa]', 'Two')
+  },
+  {
+    // P-1 (not decided): one rule per feature of the row, so their matches are
+    // a request. The two records' tRNAs have one hash, so the rule also
+    // renames Result 2's row, which Python draws again.
+    kind: 'Legend rename, palette row with features', stages: ['fills', 'rules', 'legendFills', 'legend'], compiles: 1,
+    requests: ['evaluateRules', 'evaluateRules', 'render'], run: (page) => renameLegendRow(page, 'tRNA', 'transfer RNA')
+  },
+  { kind: 'Legend add', stages: ['legend'], compiles: 1, requests: [], run: (page) => legendRowAdd(page, 'Added', '#123456') },
+  { kind: 'Legend delete', stages: ['legend'], compiles: 1, requests: [], run: (page) => deleteLegendRow(page, 'GC skew (+)') },
+  { kind: 'History step (Undo of a Legend delete)', stages: ['legend', 'legendFills'], compiles: 1, requests: [], run: (page) => history(page, 'undo') },
+  {
+    kind: 'Legend Restore', stages: ['legend', 'legendFills'], compiles: 1, requests: [],
+    before: (page) => deleteLegendRow(page, 'GC skew (+)'),
+    run: (page) => page.evaluate(() => window.__GBDRAW_APP__.restoreAllDeletedLegendEntries()).then(() => settleLive(page))
+  },
+  {
+    kind: 'Legend sort', stages: ['legend'], compiles: 1, requests: [],
+    run: (page) => page.evaluate(() => window.__GBDRAW_APP__.sortLegendEntries('desc')).then(() => settleLive(page))
   }
 ];
 
 test('each edit kind runs only the compile stages and worker requests of its allowlist', async ({ page }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(420_000);
   await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
   await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '_0001$', color: '#c83366', cap: 'CDS' });
   await generate(page);

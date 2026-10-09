@@ -1,0 +1,46 @@
+{
+  "purpose": "Positive fixture for a Session 46 saved before U3a: its Result has a renamed, a deleted (removed from the bytes) and an added Legend row, without Legend structure records. Load shows the same Legend; a Restore of the deleted row asks for the automatic rerender (U3a O-2).",
+  "writer": "gbdraw/web/js/services/config.js Save Session (Web), bytes kept unchanged",
+  "sourceCommit": "f5a0d69ca3ac009fe6b83f55bc4227614e0ed063",
+  "checkout": "git worktree add --detach <dir> <sourceCommit>; python tools/prepare_browser_wheel.py; Playwright with tests/web/helpers/live-generate-parity-steps.cjs open() (Circular, one Result, Auto Reflow off)",
+  "tools": {
+    "node": "v26.8.2",
+    "playwright": "1.61.1",
+    "python": "3.13.3"
+  },
+  "sessions": {
+    "forced-label-underlay-legend-rows.v46.gbdraw-session.json.gz": {
+      "wheel": "gbdraw-0.14.0-py3-none-any.whl",
+      "sessionVersion": 46,
+      "records": "tests/fixtures/forced_label_underlay.gb (sha256 a9e11770edd5736d727d466fac3131b88ddb991486391db543e6ba091b559ea7), Circular, one Result",
+      "steps": [
+        "Generate",
+        "Legend editor: rename GC content to GC %",
+        "Legend editor: delete repeat_region",
+        "Legend editor: Add legend item Added, #123456",
+        "Save Session"
+      ],
+      "legend": {
+        "entries": [
+          "CDS",
+          "GC %",
+          "GC skew (+)",
+          "GC skew (-)",
+          "Added"
+        ],
+        "deleted": [
+          "repeat_region"
+        ],
+        "shownRows": [
+          "CDS",
+          "GC %",
+          "GC skew (+)",
+          "GC skew (-)",
+          "Added"
+        ]
+      },
+      "sha256": "cf782bd027b024b1c5140e06c72be050893a3d547df9643272a846ed8b82de82",
+      "decompressedSha256": "ee7be8b58f0ee29c4f02ebfef557a6a0f508a81edf7fabcddf11258476d405f9"
+    }
+  }
+}

@@ -77,6 +77,13 @@ export const SPECIFIC_COLOR_FILE_OWNER = 'specific-color-file';
 /** @param {Element | null | undefined} row */
 export const legendRowShown = (row) => Boolean(row) && row?.getAttribute('display') !== 'none';
 
+// The keys of the feature Legend rows a Result shows.
+/** @param {Element | null | undefined} svg @returns {Set<string>} */
+export const shownLegendKeys = (svg) => new Set(getAllFeatureLegendGroups(svg).flatMap((group) => (
+  Array.from(group.querySelectorAll('g[data-legend-key]')).filter(legendRowShown)
+    .map((row) => String(row.getAttribute('data-legend-key') || '').trim())
+)));
+
 // Python's key of a Legend row: the key it drew, which a rename keeps as a
 // record; the row of an editor addition has its own key.
 /** @param {Element} row */

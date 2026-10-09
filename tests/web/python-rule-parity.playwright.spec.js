@@ -109,10 +109,16 @@ test('late Python evaluation cannot replace a newer rule or a loaded Session', a
   await page.evaluate(async () => { window.__RELEASE_RULES__(); await window.__OLD_RULE_EDIT__; });
   expect(await fills(page)).toEqual(newer);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules[0].val)).toBe('(?i)ATP');
-  await page.evaluate(() => {
+  // A caption edit that gives one caption two colors asks Python to
+  // normalize the captions before the matches (U3a 1e); the Load runs while
+  // that request is late. A pending match would make the Load wait instead.
+  await page.evaluate(async () => {
+    const a = window.__GBDRAW_APP__;
+    Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: '(?i)cytochrome', color: '#2266aa', cap: 'Shared' });
+    await a.addSpecificRule();
     window.__RELEASE_RULES__ = null;
     window.__HOLD_RULES__ = true;
-    window.__OLD_RULE_EDIT__ = window.__GBDRAW_APP__.setSpecificRuleField(0, 'val', '(?i)cytochrome');
+    window.__OLD_RULE_EDIT__ = a.setSpecificRuleField(0, 'cap', 'Shared');
   });
   await page.waitForFunction(() => window.__RELEASE_RULES__);
   await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));

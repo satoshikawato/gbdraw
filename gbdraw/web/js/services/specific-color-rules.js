@@ -14,6 +14,26 @@ export const normalizeSpecificRule = (rule, { fromFile = Boolean(rule?.fromFile)
   ...(fromFile ? { fromFile: true } : {})
 });
 
+// Whether Python's caption normalization
+// (gbdraw/features/colors.py::normalize_specific_color_captions) returns these
+// rules as they are: it changes captions only when a non-blank caption has two
+// or more colors, so a table whose every caption has one color string is its
+// own normalization (equal strings normalize equally; one direction only, so
+// `red` and `#ff0000` under one caption still ask Python). R4: the vectors in
+// tests/fixtures/specific_color_caption_fixpoints.json hold both answers.
+/** @param {Record<string, any>[]} rules */
+export const ruleCaptionsAreNormalized = (rules) => {
+  /** @type {Map<string, string>} */
+  const colorOf = new Map();
+  return rules.every((rule) => {
+    const caption = String(rule?.cap ?? '');
+    if (!caption.trim()) return true;
+    const color = String(rule?.color ?? '').trim();
+    if (!colorOf.has(caption)) colorOf.set(caption, color);
+    return colorOf.get(caption) === color;
+  });
+};
+
 export const specificRuleIdentity = (rule) => {
   const normalized = normalizeSpecificRule(rule);
   return [

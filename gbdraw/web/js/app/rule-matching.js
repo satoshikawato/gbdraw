@@ -1,5 +1,5 @@
 // @ts-check
-import { normalizeSpecificRule } from '../services/specific-color-rules.js';
+import { normalizeSpecificRule, ruleCaptionsAreNormalized } from '../services/specific-color-rules.js';
 import { normalizeFeatureSelectorMetadata } from '../services/feature-selector.js';
 import { getFeatureColorRuleHash } from '../services/feature-utils.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
@@ -309,9 +309,12 @@ export const createRulePreparation = ({
         ? { rules, changes: [], snapshot: before } : null;
     }
     const source = rules.map(rule => normalizeSpecificRule(rule));
-    const response = await evaluate({ features: [], rules: source, kind: 'color-captions' }, options);
+    // Rules whose every caption has one color are Python's normalization
+    // already (`ruleCaptionsAreNormalized`), so they send no request (OV-238).
+    const normalized = ruleCaptionsAreNormalized(source)
+      ? source
+      : (await evaluate({ features: [], rules: source, kind: 'color-captions' }, options)).rules;
     if (!isCurrent(before)) return null;
-    const normalized = response.rules;
     if (!await prepare(normalized, options) || !isCurrent(before)) return null;
     const changes = normalized.flatMap((rule, index) => rule.cap !== source[index].cap
       ? [{ index, before: source[index].cap, after: rule.cap }] : []);

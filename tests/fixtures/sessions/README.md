@@ -78,6 +78,15 @@ stroke a Session 46 keeps (`originalSvgStroke`), `originalColors`, and catalog
 fills (`createSavedResultPlan`). The steps, inputs, and hashes are in
 `forced-label-underlay-strokes.provenance.json`.
 
+`forced-label-underlay-legend-rows.v46.gbdraw-session.json.gz` is a Web **Save
+Session** download, kept unchanged, from branch commit `f5a0d69c` (Session 46,
+before the Result executor kept deleted Legend rows hidden). Its Result shows a
+renamed, an added and no deleted Legend row, without Legend structure records:
+the deleted row is not in its bytes. It is the positive fixture for loading such
+a Result with the same Legend, and for the Restore that asks Python to draw a
+row the bytes lack (U3a O-2). The steps, inputs, and hashes are in
+`forced-label-underlay-legend-rows.provenance.json`.
+
 `whitelist-tab-keyword.v39.gbdraw-session.json.gz` is a Web **Save Session**
 download, kept unchanged, from first-parent `main` commit `17e2c9de`
 (Session 39). Its Label whitelist rule was typed with a tab in the keyword, and

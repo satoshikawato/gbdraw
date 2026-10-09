@@ -181,6 +181,46 @@ const renameRow = (page, from, to) => evaluateWithRetainedPromise(page, async ({
   await app.renameLegendEntry(index, to);
 }, { from, to });
 
+// The Legend editor's stroke color control, one History step.
+const legendRowStrokeColor = async (page, caption, color) => {
+  await evaluateWithRetainedPromise(page, async ({ row, value }) => {
+    const app = window.__GBDRAW_APP__;
+    await app.setLegendEntryStrokeColorValue(app.legendEntries.findIndex((entry) => entry.caption === row), value);
+  }, { row: caption, value: color });
+  await settleLive(page);
+};
+
+// A row added in the Legend editor.
+const legendRowAdd = async (page, caption, color) => {
+  await evaluateWithRetainedPromise(page, async ({ row, value }) => {
+    const app = window.__GBDRAW_APP__;
+    app.newLegendCaption = row;
+    app.newLegendColor = value;
+    await app.addNewLegendEntry();
+  }, { row: caption, value: color });
+  await settleLive(page);
+};
+
+// A palette change with instant preview (the palette menu).
+const switchPalette = async (page, name) => {
+  await page.evaluate((palette) => {
+    const app = window.__GBDRAW_APP__;
+    app.paletteInstantPreviewEnabled = true;
+    app.selectedPalette = palette;
+    return app.updatePalette();
+  }, name);
+  await settleLive(page);
+};
+
+// A row deleted in the Legend editor, settled.
+const deleteLegendRow = async (page, caption) => {
+  await evaluateWithRetainedPromise(page, async (row) => {
+    const app = window.__GBDRAW_APP__;
+    await app.deleteLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === row));
+  }, caption);
+  await settleLive(page);
+};
+
 module.exports = {
   SINGLE_FIXTURE,
   open,
@@ -196,5 +236,9 @@ module.exports = {
   DEPTH_TSV,
   colorLegendRow,
   openCanvas,
-  renameRow
+  renameRow,
+  legendRowStrokeColor,
+  legendRowAdd,
+  switchPalette,
+  deleteLegendRow
 };

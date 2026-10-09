@@ -1,0 +1,50 @@
+{
+  "description": "Specific color rules as the Web app sends them for caption normalization (trimmed captions, lower-case hex colors). `fixpoint` is the Web app's answer (services/specific-color-rules.js::ruleCaptionsAreNormalized): true when every non-blank caption has one color string, so it skips the request. `captions` is Python's answer (gbdraw/features/colors.py::normalize_specific_color_captions). A fixpoint must leave every caption as it is.",
+  "cases": [
+    { "name": "one captioned rule", "fixpoint": true,
+      "rules": [{ "feat": "CDS", "qual": "product", "val": "NADH", "color": "#112233", "cap": "NADH" }],
+      "captions": ["NADH"] },
+    { "name": "one caption, one color, two rules", "fixpoint": true,
+      "rules": [
+        { "feat": "CDS", "qual": "product", "val": "NADH", "color": "#112233", "cap": "Shared" },
+        { "feat": "tRNA", "qual": "product", "val": "tRNA", "color": "#112233", "cap": "Shared" }
+      ],
+      "captions": ["Shared", "Shared"] },
+    { "name": "blank captions in several colors", "fixpoint": true,
+      "rules": [
+        { "feat": "CDS", "qual": "product", "val": "a", "color": "#112233", "cap": "" },
+        { "feat": "CDS", "qual": "product", "val": "b", "color": "#445566", "cap": "" }
+      ],
+      "captions": ["", ""] },
+    { "name": "captions Python suffixed before (a rerender of a commit)", "fixpoint": true,
+      "rules": [
+        { "feat": "CDS", "qual": "locus_tag", "val": "_0001$", "color": "#c83366", "cap": "CDS [#c83366]" },
+        { "feat": "CDS", "qual": "locus_tag", "val": "_0002$", "color": "#2266aa", "cap": "CDS [#2266aa]" }
+      ],
+      "captions": ["CDS [#c83366]", "CDS [#2266aa]"] },
+    { "name": "captions that differ only in case", "fixpoint": true,
+      "rules": [
+        { "feat": "CDS", "qual": "product", "val": "a", "color": "#112233", "cap": "Alpha" },
+        { "feat": "CDS", "qual": "product", "val": "b", "color": "#445566", "cap": "alpha" }
+      ],
+      "captions": ["Alpha", "alpha"] },
+    { "name": "one caption in two colors", "fixpoint": false,
+      "rules": [
+        { "feat": "CDS", "qual": "product", "val": "NADH", "color": "#112233", "cap": "Shared" },
+        { "feat": "CDS", "qual": "product", "val": "other", "color": "#445566", "cap": "Shared" }
+      ],
+      "captions": ["Shared [#112233]", "Shared [#445566]"] },
+    { "name": "one caption, a color and none", "fixpoint": false,
+      "rules": [
+        { "feat": "CDS", "qual": "product", "val": "a", "color": "#112233", "cap": "Shared" },
+        { "feat": "CDS", "qual": "product", "val": "b", "color": "none", "cap": "Shared" }
+      ],
+      "captions": ["Shared [#112233]", "Shared [none]"] },
+    { "name": "one caption, a named color and its hex (Python finds one color)", "fixpoint": false,
+      "rules": [
+        { "feat": "CDS", "qual": "product", "val": "a", "color": "red", "cap": "Shared" },
+        { "feat": "CDS", "qual": "product", "val": "b", "color": "#ff0000", "cap": "Shared" }
+      ],
+      "captions": ["Shared", "Shared"] }
+  ]
+}

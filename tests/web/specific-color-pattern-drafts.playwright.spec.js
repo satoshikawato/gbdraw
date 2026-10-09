@@ -78,7 +78,9 @@ for (const mode of ['circular', 'linear']) for (const width of [1600, 390]) {
     expect(await snapshot(page)).toEqual(before);
     const afterRetry = await getDiagramWorkerActivity(page);
     expect(afterRetry.constructions).toBe(activity.constructions);
-    expect(afterRetry.helpers - activity.helpers).toBe(4); // captions + one Python syntax/match operation per attempt
+    // One Python syntax/match operation per attempt; rules whose captions have
+    // one color each send no caption request (U3a 1e, OV-238).
+    expect(afterRetry.helpers - activity.helpers).toBe(2);
     await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.openRightDrawerTab('features'); a.closeRightDrawer(); a.openRightDrawerTab('features'); });
     await expect(field).toHaveValue('😀[PRIVATE_PATTERN_SENTINEL');
     await page.evaluate(() => window.__GBDRAW_APP__.closeRightDrawer());
@@ -245,7 +247,13 @@ test('real History, failed Session rollback, fresh Save/Load, Export and Generat
   expect(exported).not.toContain('PRIVATE_');
   expect(exported).toContain('#f01234');
   const exportXml = await page.evaluate(text => new XMLSerializer().serializeToString(new DOMParser().parseFromString(text, 'image/svg+xml')), exported);
-  expect(exportXml).toBe((await snapshot(page)).result[0].content);
+  // An export strips the paint records the Result keeps (result-paint-bases.js).
+  expect(exportXml).toBe(await page.evaluate(async (content) => {
+    const { stripResultBaseAttributes } = await import('/gbdraw/web/js/services/result-paint-bases.js');
+    const root = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
+    stripResultBaseAttributes(root);
+    return new XMLSerializer().serializeToString(root);
+  }, (await snapshot(page)).result[0].content));
   expect((await draft(page)).text).toBe('[PRIVATE_DRAFT_SENTINEL');
   await generateAndWaitForResult(page);
   expect((await draft(page)).text).toBe('(?i)NADH');
@@ -305,10 +313,17 @@ for (const boundary of ['drawer', 'mode cycle', 'remove', 'reorder', 'Session', 
     const current = await snapshot(page);
     if (boundary === 'mode cycle') writeFileSync(test.info().outputPath('mode-boundary.json'), JSON.stringify({ before, current }));
     await page.evaluate(async () => { window.__releasePattern(); await window.__pendingPattern; });
-    expect(await snapshot(page)).toEqual(current);
+    if (boundary === 'Session') {
+      // Load waits for an edit whose match is pending ("Applying an edit");
+      // no caption request runs before the match any more (U3a 1e), so the
+      // held edit lands and the refused Load changed nothing.
+      expect(current).toEqual(before);
+      expect((await snapshot(page)).canonical).toContain('(?P<enzyme>NADH)');
+      expect((await draft(page)).draft).toBe(null);
+    } else expect(await snapshot(page)).toEqual(current);
     if (['drawer', 'mode cycle'].includes(boundary)) { expect((await draft(page)).text).toBe('(?P<enzyme>NADH)'); expect(await snapshot(page)).toEqual(before); }
     if (boundary === 'reorder') expect(await page.evaluate(() => { const a = window.__GBDRAW_APP__; return a.specificRulePattern(a.manualSpecificRules[1]); })).toBe('(?P<enzyme>NADH)');
-    if (['remove', 'Session'].includes(boundary)) expect(await draft(page)).toBe(null);
+    if (boundary === 'remove') expect(await draft(page)).toBe(null);
     if (boundary === 'Worker cancellation') { expect((await draft(page)).draft.error).toBe(null); expect(await snapshot(page)).toEqual(before); }
     if (boundary === 'new keystroke') expect((await draft(page)).text).toBe('[new');
   });

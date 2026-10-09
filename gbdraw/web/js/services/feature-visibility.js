@@ -500,6 +500,42 @@ export const listFeatureRows = (catalogFeatures, context) => {
   return { rows, drawn, rendered };
 };
 
+// The features a Result draws, in catalog order, each with the color rule
+// that wins it when its type has a captioned rule (`undefined` for a type
+// without one: Python keeps its default row whatever its rules match, so no
+// match is read). Null while a match it needs is unknown. A Result is read
+// from its catalog features: `asRendered` reads the features Python drew at
+// the last render, else `featureDrawnInResult` answers.
+/** @typedef {NonNullable<ReturnType<typeof resultCatalogFeatures>>} LegendCatalogFeatures */
+/** @typedef {ReturnType<typeof featureDrawnContext>} LegendRuleContext */
+/**
+ * @param {LegendCatalogFeatures} catalogFeatures
+ * @param {LegendRuleContext} context
+ * @param {{ asRendered: boolean }} options
+ */
+const drawnLegendFeatures = (catalogFeatures, context, { asRendered }) => {
+  const rules = context.colorRules;
+  const ruleMatches = colorRuleMatcher(context);
+  const captionedTypes = new Set(rules.filter((rule) => legendRuleCaption(rule)).map((rule) => rule.feat));
+  const drawn = [];
+  for (const feature of catalogFeatures.biological) {
+    const shown = catalogFeatures.renderedByIdentity.get(stableKeyOf(feature));
+    const row = shown || feature;
+    if (!(asRendered ? shown : featureDrawnInResult(row, context, catalogFeatures))) continue;
+    const type = String(feature.type ?? '');
+    if (!captionedTypes.has(type) && !captionedTypes.has('*')) {
+      drawn.push({ feature, type, winner: undefined });
+      continue;
+    }
+    const winner = ruleMatches.firstIfKnown(row);
+    if (winner === undefined) return null;
+    drawn.push({ feature, type, winner });
+  }
+  return drawn;
+};
+/** @param {Record<string, any> | null | undefined} rule */
+const legendRuleCaption = (rule) => String(rule?.cap ?? '').trim();
+
 // What Python derives the feature rows of a Result's Legend from
 // (gbdraw/legend/table.py::prepare_legend_table): per record, the types of
 // the drawn features in first-drawn order; for a type with a captioned rule,
@@ -511,40 +547,30 @@ export const listFeatureRows = (catalogFeatures, context) => {
 // color, recolor as a whole: that row keeps its caption and the Legend follows
 // the color live. This is the input of the rows, not the rows: Python stays
 // their only derivation (Owner decision 2026-10-06, option A), and an edit
-// that changes a Result's source asks for the automatic rerender (OV-42,
-// OV-43). The color of a rule is in it only for a batch: with one Result the
+// that changes a Result's source asks for the automatic rerender (OV-42).
+// The color of a rule is in it only for a batch: with one Result the
 // rows keep their captions and the Legend follows the color live
 // (`ruleLegendCaptions` gives the caption of a rule whose caption names another
 // row), while another batch Result shows the row it was drawn with until
-// Python draws it again (OV-44). A Result is read from its catalog features:
-// `asRendered` reads the features Python drew at the last render, else
-// `featureDrawnInResult` answers. A source is null while a rule match it needs
+// Python draws it again (OV-44). A source is null while a rule match it needs
 // is unknown; null equals no source (`sameLegendSources`).
 const legendSourceOf = (catalogFeatures, context, { asRendered, withColors }) => {
-  const caption = (rule) => String(rule?.cap ?? '').trim();
+  const caption = legendRuleCaption;
   const colorOf = (rule) => String(rule?.color ?? '').trim().toLowerCase();
   const color = (rule) => (withColors ? colorOf(rule) : '');
   const usage = (rule) => JSON.stringify([caption(rule), color(rule)]);
   const rules = context.colorRules;
-  const ruleMatches = colorRuleMatcher(context);
-  const captionedTypes = new Set(rules.filter((rule) => caption(rule)).map((rule) => rule.feat));
+  const drawn = drawnLegendFeatures(catalogFeatures, context, { asRendered });
+  if (!drawn) return null;
   const typesByRecord = new Map();
   const winnersByType = new Map();
-  for (const feature of catalogFeatures.biological) {
-    const shown = catalogFeatures.renderedByIdentity.get(stableKeyOf(feature));
-    const row = shown || feature;
-    if (!(asRendered ? shown : featureDrawnInResult(row, context, catalogFeatures))) continue;
-    const type = String(feature.type ?? '');
+  for (const { feature, type, winner } of drawn) {
     const record = String(feature.recordKey ?? '');
     if (!typesByRecord.has(record)) typesByRecord.set(record, []);
     if (!typesByRecord.get(record).includes(type)) typesByRecord.get(record).push(type);
     const winners = winnersByType.get(type) || [];
     winnersByType.set(type, winners);
-    // A type without a captioned rule needs no match.
-    if (!captionedTypes.has(type) && !captionedTypes.has('*')) continue;
-    const winner = ruleMatches.firstIfKnown(row);
-    if (winner === undefined) return null;
-    winners.push(winner);
+    if (winner !== undefined) winners.push(winner);
   }
   const used = new Set();
   const defaultTypes = new Set();
@@ -588,6 +614,86 @@ export const resultLegendSources = (state, context, { asRendered = false } = {})
 
 export const sameLegendSources = (left, right) => left.length === right.length
   && left.every((source, index) => source !== null && source === right[index]);
+
+// U3a 1d (R14-8): the Legend row of each feature a Result draws, as Python
+// keys it (prepare_legend_table): the caption of the captioned rule that wins
+// it; else the "other <type>s" row of a type whose drawn features use a
+// captioned rule, or no row when an uncaptioned rule colors it; else its
+// type's row. This tells which rows a rule change regroups; Python still
+// derives the rows and their order. Null while a match is unknown, when a
+// wildcard rule has a caption, or when a used caption names a row Python
+// generates (it suffixes the caption by color, PD-OI-042).
+/** @param {LegendCatalogFeatures} catalogFeatures @param {LegendRuleContext} context */
+const legendRowKeysOf = (catalogFeatures, context) => {
+  const drawn = drawnLegendFeatures(catalogFeatures, context, { asRendered: false });
+  if (!drawn || context.colorRules.some((rule) => rule?.feat === '*' && legendRuleCaption(rule))) return null;
+  const ruleTypes = new Set(drawn.filter(({ winner }) => legendRuleCaption(winner)).map(({ type }) => type));
+  /** @type {Map<string, string | null>} */
+  const keys = new Map();
+  const generated = new Set();
+  for (const { feature, type, winner } of drawn) {
+    const caption = legendRuleCaption(winner);
+    let key = caption || null;
+    if (!caption && !ruleTypes.has(type)) key = type;
+    else if (!caption && !winner) key = type === 'CDS' ? 'other proteins' : `other ${type}s`;
+    if (key && !caption) generated.add(key);
+    keys.set(stableKeyOf(feature), key);
+  }
+  return drawn.some(({ winner }) => generated.has(legendRuleCaption(winner))) ? null : keys;
+};
+
+// The row keys of every committed Result, in Result order (an empty map for
+// a Result without a catalog).
+/** @param {Record<string, any>} state @param {LegendRuleContext} context */
+export const resultLegendRowKeys = (state, context) => {
+  const results = Array.isArray(state?.results?.value) ? state.results.value : [];
+  return results.map((_, index) => {
+    const catalogFeatures = resultCatalogFeatures(state, index);
+    return catalogFeatures ? legendRowKeysOf(catalogFeatures, context) : new Map();
+  });
+};
+
+// Whether the displayed Result shows the Legend rows a change of the row keys
+// regroups, so Python need not draw them (R14-8). Every drawn feature stays
+// drawn and each row keeps its features together: a row relabeled to a new
+// key (`shows` the new key and not the old), merged into a row it joins
+// (`shows` the joined row and not the merged one), or unchanged (a recolor).
+// Another batch Result shows only its committed rows, so its keys must not
+// change. `shows(key)`: whether the displayed Result shows a row of the key
+// once the change is shown; `placed(key, nextKey)`: whether the row of a new
+// key takes the place of the row it relabels, as Python keeps it (OV-158).
+/**
+ * @param {(Map<string, string | null> | null)[]} before
+ * @param {(Map<string, string | null> | null)[]} after
+ * @param {{ displayed: number, shows: (key: string) => boolean, placed?: (key: string, nextKey: string) => boolean }} options
+ */
+export const legendRowsShowable = (before, after, { displayed, shows, placed = () => true }) => before.length === after.length
+  && before.every((keys, index) => {
+    const next = after[index];
+    if (!keys || !next || keys.size !== next.size) return false;
+    /** @type {Map<string, string>} */
+    const moved = new Map();
+    /** @type {Map<string, Set<string>>} */
+    const joined = new Map();
+    for (const [feature, key] of keys) {
+      if (!next.has(feature)) return false;
+      const nextKey = next.get(feature) ?? null;
+      if (key === null || nextKey === null) {
+        if (key !== nextKey) return false;
+        continue;
+      }
+      if (moved.has(key) ? moved.get(key) !== nextKey : (index !== displayed && key !== nextKey)) return false;
+      moved.set(key, nextKey);
+      if (!joined.has(nextKey)) joined.set(nextKey, new Set());
+      joined.get(nextKey)?.add(key);
+    }
+    return [...joined].every(([nextKey, keysBefore]) => {
+      if (keysBefore.size === 1 && keysBefore.has(nextKey)) return true;
+      const [first] = keysBefore;
+      const target = keysBefore.size === 1 ? !moved.has(nextKey) && placed(first, nextKey) : moved.get(nextKey) === nextKey;
+      return target && shows(nextKey) && [...keysBefore].every((key) => key === nextKey || !shows(key));
+    });
+  });
 
 const isEditorFeatureRule = (rule) => {
   const normalized = normalizeFeatureVisibilityRule(rule);

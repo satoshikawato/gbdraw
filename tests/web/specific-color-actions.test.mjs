@@ -381,3 +381,80 @@ test('a rule commit that removes a rule row retires the Legend color copied from
   assert.equal(await s.actions.removeSpecificRule(0), true);
   assert.equal(s.rerenders(), before + 1, 'the last rule of the type row asks for the rerender');
 });
+
+// U3a 1d (R14-8): a rule commit asks for the automatic rerender only when the
+// displayed Result cannot show the Legend rows it regroups (OV-43 narrowed): a
+// whole-row rename shows its row at once (the row the commit adds, the old row
+// it retires), a rename of part of a row asks Python. History restores the
+// rows with the rules, so Undo and Redo of the rename ask nothing either.
+test('a whole-row Legend rename asks no rerender, an appended or partial one asks one, Undo and Redo ask none', async () => {
+  const { resultCatalogFeatures } = await import('../../gbdraw/web/js/services/feature-catalog.js');
+  const anchorProfile = { precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+' };
+  const ids = ['A', 'B'];
+  const catalog = { schema: 5, items: [{
+    resultIndex: 0, resultName: 'result-0.svg', recordKeys: ['REC1'],
+    biologicalFeatures: ids.map((id, index) => ({
+      recordKey: 'REC1', biologicalFeatureId: id, record_id: 'REC1', type: 'CDS', start: index * 100, end: index * 100 + 30,
+      strand: 1, anchorProfile, qualifiers: { locus_tag: [id] }
+    })),
+    features: ids.map((id) => ({ svgId: `svg-${id}`, recordKey: 'REC1', biologicalFeatureId: id, fillColor: '#000000',
+      drawnSelector: { hash: `svg-${id}`, location: null, recordLocation: null } })),
+    orthogroups: [], annotations: [], comparisonMatches: []
+  }] };
+  // The displayed Result's Legend: the keys of the rows it shows.
+  let shownKeys = [];
+  const row = (key) => ({ getAttribute: (name) => (name === 'data-legend-key' ? key : null) });
+  const group = { querySelectorAll: () => shownKeys.map(row) };
+  const svg = { getElementById: (id) => (id === 'legend' ? { querySelector: (selector) => (selector === '#feature_legend' ? group : null) } : null) };
+  const state = {
+    featureCatalog: { value: catalog }, generatedMode: { value: 'circular' }, selectedResultIndex: { value: 0 },
+    results: { value: [{ name: 'result-0.svg', content: '<svg />' }] }, svgContainer: { value: { querySelector: () => svg } },
+    manualSpecificRules: [], featureColorOverrides: {}, featureOverrides: {}, featureVisibilityManualRules: [],
+    svgResultIdentity: { value: 'result' }, fileLegendCaptions: { value: new Set() }, addedLegendCaptions: { value: new Set() },
+    legendEntries: { value: [] }, deletedLegendEntries: { value: [] }, files: { t_color: null }, legendColorOverrides: {},
+    extractedFeatures: { value: [] }
+  };
+  state.extractedFeatures.value = [...resultCatalogFeatures(state).renderedByIdentity.values()];
+  const drawingState = withDrawings(state);
+  let rerenders = 0;
+  const actions = createFeatureRuleActions({
+    ref: value => ({ value }), computed: get => ({ get value() { return get(); } }), state: drawingState,
+    rulePreparation: createRulePreparation({ state: drawingState, evaluate: evaluatePythonRules }),
+    runUndoableCheckpoint: async (_label, commit) => commit(), runUndoable: async (_label, commit) => commit(),
+    prepareFileLegendEntries: async (intents) => {
+      const diff = diffLegendIntents(state.legendEntries.value, intents);
+      return { diff, isCurrent: () => true, apply: () => {
+        state.legendEntries.value = intents;
+        return { add: diff.add.map(({ caption, color }) => ({ caption, color })), retire: diff.remove.map(({ caption }) => caption) };
+      } };
+    },
+    projectPaletteAndRules: () => true, ports: { requestAutomaticRerender: () => { rerenders += 1; return true; } }
+  });
+  const tagRule = (pattern, cap) => ({ feat: 'CDS', qual: 'locus_tag', val: `^(${pattern})$`, color: '#112233', cap });
+  assert.equal(await actions.commitSpecificRules([tagRule('A|B', 'alpha')]), true);
+  shownKeys = ['alpha'];
+  const first = rerenders;
+  const alpha = state.manualSpecificRules.map(rule => ({ ...rule }));
+  // A rename in the Rules panel appends the new row, where Python keeps the
+  // row in the old row's place; the Legend rename places it (OV-158).
+  const rulesPanel = state.manualSpecificRules.map(rule => ({ ...rule }));
+  assert.equal(await actions.commitSpecificRules([tagRule('A|B', 'beta')]), true);
+  assert.equal(rerenders, first + 1, 'an appended relabeled row asks Python');
+  state.manualSpecificRules.splice(0, state.manualSpecificRules.length, ...rulesPanel);
+  state.legendEntries.value = [{ caption: 'alpha', color: '#112233' }];
+  assert.equal(await actions.commitSpecificRules([tagRule('A|B', 'beta')], 'Rename legend item',
+    { legendPlacement: { caption: 'beta', at: 'alpha' } }), true);
+  assert.equal(rerenders, first + 1, 'the renamed row is shown at once in its place');
+  shownKeys = ['beta'];
+  const beta = state.manualSpecificRules.map(rule => ({ ...rule }));
+  // Undo restores the rules and the rows they drew, then Redo.
+  state.manualSpecificRules.splice(0, state.manualSpecificRules.length, ...alpha.map(rule => ({ ...rule })));
+  shownKeys = ['alpha'];
+  actions.followRestoredRules(beta);
+  state.manualSpecificRules.splice(0, state.manualSpecificRules.length, ...beta.map(rule => ({ ...rule })));
+  shownKeys = ['beta'];
+  actions.followRestoredRules(alpha);
+  assert.equal(rerenders, first + 1, 'Undo and Redo of the rename ask no rerender');
+  assert.equal(await actions.commitSpecificRules([tagRule('A', 'gamma'), tagRule('B', 'beta')]), true);
+  assert.equal(rerenders, first + 2, 'a rename of part of the row asks Python');
+});

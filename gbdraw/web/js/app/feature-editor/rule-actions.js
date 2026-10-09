@@ -22,7 +22,8 @@ import {
   normalizeFeatureRendering
 } from '../../utils/feature-rendering.js';
 import { featureOverrideValue } from '../../services/feature-placement.js';
-import { featureDrawnContext, resultLegendSources, sameLegendSources } from '../../services/feature-visibility.js';
+import { featureDrawnContext, legendRowsShowable, resultLegendRowKeys } from '../../services/feature-visibility.js';
+import { shownLegendKeys } from '../../services/legend-svg.js';
 
 // R13: `projectPaletteAndRules` is the composition root's projection of the
 // palette and the specific-color rules (R3); this owner calls it after a rule
@@ -137,25 +138,23 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       removedRuleRows: ruleRows.filter(row => !candidateCaptions.has(row.caption))
     };
   };
-  // OV-43 (Owner decision 2026-10-06, option A): whether a rule table change
-  // changes a Result's Legend source, read with the current Feature
-  // visibility before and after. Python redraws the Legend rows, their order,
-  // and the "other <type>s" rows in the automatic rerender.
+  // OV-43 (Owner decision 2026-10-06, option A), narrowed by R14-8 (U3a 1d):
+  // a rule table change asks for the automatic rerender when the displayed
+  // Result cannot show the Legend rows it regroups (`legendRowsShowable`): a
+  // row that loses part of its features, a row built from parts of others, a
+  // merge into a new row, an unknown match, or a row of another batch Result.
+  // Python then redraws the rows, their order, and the "other <type>s" rows.
+  // The rows are read with the current Feature visibility before and after.
   /** @param {DrawingState} drawing */
   const legendSourceContext = (drawing, rules) => ({
     ...featureDrawnContext(drawing, { diagramOptions: getCommittedRequest()?.diagramOptions }),
     colorRules: rules
   });
-  /** @param {DrawingState} drawing */
-  const changesLegendSource = (drawing, before, after) => !sameLegendSources(
-    resultLegendSources(state, legendSourceContext(drawing, before)),
-    resultLegendSources(state, legendSourceContext(drawing, after))
-  );
   // OV-152: rules that recolor a whole type keep its caption, so their Legend
-  // source is that of the type's default row and the live Legend follows them
-  // (`legendSourceOf`). A change that removes the last such rule of a type
-  // makes Python draw the default row again, which the live removal of the
-  // rule row does not; the automatic rerender draws it.
+  // row is that of the type's default row and the live Legend follows them.
+  // A change that removes the last such rule of a type makes Python draw the
+  // default row again, which the live removal of the rule row does not; the
+  // automatic rerender draws it.
   /** @param {Record<string, any>[]} rules */
   const typeRowCaptions = (rules) => new Set(rules
     .filter(rule => String(rule?.cap ?? '').trim() && rule.cap === rule.feat)
@@ -164,21 +163,38 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
    * @param {DrawingState} drawing
    * @param {Record<string, any>[]} before
    * @param {Record<string, any>[]} after
-   * @param {(caption: string) => boolean} [shown] Whether the Legend already shows
-   *   the default row of a type (a History restore returns the rows it held).
+   * @param {{ rows?: import('../candidate-render.js').RuleLegendRows | null, placement?: LegendPlacement | null, holdsRow?: (caption: string) => boolean }} [options]
+   *   `rows`: the rows the commit's own show adds and retires on the displayed
+   *   Result (else the Result shows what History restored); `placement`: the
+   *   commit's Legend placement; `holdsRow`: whether the Legend already holds
+   *   the default row of a type.
    */
-  const redrawsLegendFor = (drawing, before, after, shown = () => false) => {
+  const redrawsLegendFor = (drawing, before, after, { rows = null, placement = null, holdsRow = () => false } = {}) => {
     const kept = typeRowCaptions(after);
-    return changesLegendSource(drawing, before, after)
-      || [...typeRowCaptions(before)].some(caption => !kept.has(caption) && !shown(caption));
+    const drawnKeys = shownLegendKeys(state.svgContainer?.value?.querySelector?.('svg'));
+    const added = new Set((rows?.add || []).map(({ caption }) => caption));
+    const retired = new Set(rows?.retire || []);
+    const shows = (/** @type {string} */ key) => added.has(key) || (!retired.has(key) && drawnKeys.has(key));
+    // The commit's show appends a new row unless it takes the place of the row
+    // it relabels (OV-158), where Python keeps it; a restore shows the order
+    // History kept.
+    const placed = rows
+      ? (/** @type {string} */ key, /** @type {string} */ nextKey) => placement?.caption === nextKey && placement.at === key
+      : undefined;
+    return !legendRowsShowable(
+      resultLegendRowKeys(state, legendSourceContext(drawing, before)),
+      resultLegendRowKeys(state, legendSourceContext(drawing, after)),
+      { displayed: Number(state.selectedResultIndex?.value) || 0, shows, placed }
+    ) || [...typeRowCaptions(before)].some(caption => !kept.has(caption) && !holdsRow(caption));
   };
   // The Legend rows a History restore returned, shown or deleted in the editor.
   /** @param {DrawingState} drawing @param {string} caption */
   const legendHoldsRow = (drawing, caption) => [
     ...(drawing.legendEntries.value || []), ...(drawing.deletedLegendEntries.value || [])
   ].some((entry) => captionMatches(entry?.caption, caption) || captionMatches(entry?.originalCaption, caption));
-  // Undo and Redo of a rule edit restore the rules; the composition root
-  // passes the rules they replaced, and a changed Legend source asks for the
+  // Undo and Redo of a rule edit restore the rules and, for a step that changed
+  // Legend rows, the Result the step left; the composition root passes the
+  // rules they replaced, and rows the restored Result cannot show ask for the
   // rerender, as the edit did. A removed whole-type rule asks for it only
   // when the restored Legend lacks the type's default row (OV-169): Undo of
   // an Apply to all returns the row it recolored, so it needs no Python run.
@@ -187,7 +203,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     return (
       JSON.stringify(previousRules) !== JSON.stringify(drawing.manualSpecificRules)
       && redrawsLegendFor(drawing, previousRules, drawing.manualSpecificRules,
-        (caption) => legendHoldsRow(drawing, caption))
+        { holdsRow: (caption) => legendHoldsRow(drawing, caption) })
       && ports.requestAutomaticRerender()
     );
   };
@@ -306,7 +322,10 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       placement: legendPlacement
     });
     if (!legend) return false;
-    const redrawsLegend = redrawsLegendFor(drawing, [...drawing.manualSpecificRules], candidate.rules);
+    const redrawsLegend = redrawsLegendFor(drawing, [...drawing.manualSpecificRules], candidate.rules, {
+      rows: { add: legend.diff.add, retire: legend.diff.remove.map(({ caption }) => caption) },
+      placement: legendPlacement
+    });
     let applied = false;
     // One History step: the rule transition first, then the legend rows it
     // draws (R13); a checkpoint when the legend gains or loses a row.

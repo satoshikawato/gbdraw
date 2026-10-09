@@ -7,11 +7,13 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const {
-  expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult
+  diffSemanticSnapshots, expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult
 } = require('./helpers/live-generate-parity.cjs');
+const { loadSessionFile, openFresh } = require('./helpers/audit-browser.cjs');
 const {
   SINGLE_FIXTURE, open, generate, popupEdit, addVisibilityRule, appAction, addColorRule, history,
-  FL1_OFF, legendRowColor, FL1_ALPHA, DEPTH_TSV, colorLegendRow, openCanvas, renameRow
+  FL1_OFF, legendRowColor, FL1_ALPHA, DEPTH_TSV, colorLegendRow, openCanvas, renameRow,
+  legendRowStrokeColor, legendRowAdd, switchPalette, deleteLegendRow
 } = require('./helpers/live-generate-parity-steps.cjs');
 
 test.describe.configure({ retries: 0 });
@@ -580,4 +582,150 @@ test('a Legend rename of a rule row onto another rule row of one feature type eq
   expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'a rule-owned caption does not ask').toBe(false);
   await settleLive(page);
   await expectLiveEqualsGenerate(page, { label: 'same-type rule row renamed onto a rule row' });
+});
+
+// U3a (R14-8): Legend edits the Result executor shows live, without the
+// automatic rerender, combined with the edits of other domains. Each case
+// ends with live = Generate, in both modes, with Auto Reflow on and off.
+const ALPHA_ROW = { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#e63946', cap: 'alpha' };
+const renameAndSettle = async (page, caption, name) => { await renameRow(page, caption, name); await settleLive(page); };
+const ruleIndex = (page, caption) => page.evaluate(
+  (cap) => window.__GBDRAW_APP__.manualSpecificRules.findIndex((rule) => rule.cap === cap), caption
+);
+const U3A_PARITY = [
+  {
+    // Linear draws no GC rows here: its featureless row is an added one.
+    name: '(1) rename a row without features, then color it',
+    run: async (page, mode) => {
+      const [from, to] = mode === 'circular' ? ['GC content', 'GC %'] : ['Note', 'Note row'];
+      if (mode !== 'circular') await legendRowAdd(page, from, '#123456');
+      await renameAndSettle(page, from, to);
+      await colorLegendRow(page, to, '#264653');
+    }
+  },
+  {
+    name: '(2) rename a palette row with features, then stroke it',
+    run: async (page) => { await renameAndSettle(page, 'repeat_region', 'Repeats'); await legendRowStrokeColor(page, 'Repeats', '#e63946'); }
+  },
+  {
+    name: '(3) add a row and color it, add a row and change the palette',
+    run: async (page) => {
+      await legendRowAdd(page, 'Added', '#123456');
+      await colorLegendRow(page, 'Added', '#abcdef');
+      await legendRowAdd(page, 'Second', '#654321');
+      await switchPalette(page, 'arctic');
+    }
+  },
+  {
+    // The row returns with the current palette fill and Python's stroke.
+    name: '(4) delete a row, change the palette, Undo the delete',
+    run: async (page) => {
+      await deleteLegendRow(page, 'repeat_region');
+      await switchPalette(page, 'arctic');
+      await history(page, 'undo');
+    }
+  },
+  {
+    name: '(5) rename a rule row, then color its rule in the Rules panel',
+    setup: (page) => addColorRule(page, ALPHA_ROW),
+    run: async (page) => {
+      await renameAndSettle(page, 'alpha', 'Alpha row');
+      await appAction(page, 'setSpecificRuleField', await ruleIndex(page, 'Alpha row'), 'color', '#2a9d8f');
+    }
+  },
+  {
+    name: '(6) sort, rename a rule row, delete the renamed row',
+    setup: (page) => addColorRule(page, ALPHA_ROW),
+    run: async (page, mode) => {
+      await page.evaluate(() => window.__GBDRAW_APP__.sortLegendEntries('desc'));
+      await settleLive(page);
+      await renameAndSettle(page, 'alpha', 'Alpha row');
+      if (mode === 'circular') await renameAndSettle(page, 'GC content', 'GC %');
+      await deleteLegendRow(page, 'Alpha row');
+    }
+  },
+  {
+    // Two rows of one feature type and one color: the rename merges them.
+    name: '(7) merge a rule row into another row of its type',
+    setup: async (page) => {
+      await addColorRule(page, ALPHA_ROW);
+      await addColorRule(page, { ...ALPHA_ROW, val: '^FL2$', cap: 'beta' });
+    },
+    run: async (page) => {
+      await renameAndSettle(page, 'beta', 'alpha');
+      expect(await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.filter((entry) => entry.caption === 'alpha').length),
+        'one alpha row').toBe(1);
+    }
+  }
+];
+for (const mode of ['circular', 'linear']) {
+  for (const reflow of ['off', 'on']) {
+    for (const { name, setup = null, run } of U3A_PARITY) {
+      test(`U3a Legend parity ${name} (${mode}, Auto Reflow ${reflow})`, async ({ page }) => {
+        test.setTimeout(180_000);
+        await open(page, { mode, results: 'single', reflow });
+        if (setup) {
+          await setup(page);
+          await generate(page);
+        }
+        await run(page, mode);
+        await expectLiveEqualsGenerate(page, { label: name });
+      });
+    }
+  }
+  if (mode === 'circular') {
+    for (const reflow of ['off', 'on']) {
+      // A batch Result that never drew the delete is not laid out again; the
+      // Restore on it and the display of Result 1 show what Generate draws.
+      test(`U3a Legend parity (8) delete on Result 1, Restore on Result 2 (circular batch, Auto Reflow ${reflow})`, async ({ page }) => {
+        test.setTimeout(180_000);
+        await open(page, { mode, results: 'batch', reflow });
+        await deleteLegendRow(page, 'tRNA');
+        await showResult(page, 1);
+        await evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.restoreAllDeletedLegendEntries(); });
+        await settleLive(page);
+        await showResult(page, 0);
+        await expectLiveEqualsGenerate(page, { label: 'Result 1 after the Restore on Result 2' });
+      });
+    }
+  }
+}
+
+// U3a compat: a Session 46 saved before U3a, whose Result has a renamed, a
+// deleted, and an added Legend row
+// (tests/fixtures/sessions/forced-label-underlay-legend-rows.provenance.json).
+// Load shows the Legend it saved, Undo of a new edit returns that Result, the
+// Restore of the deleted row asks for the automatic rerender (O-2), and live
+// equals Generate.
+const LEGEND_ROWS_SESSION = 'tests/fixtures/sessions/forced-label-underlay-legend-rows.v46.gbdraw-session.json.gz';
+const LEGEND_ROWS_SAVED = JSON.parse(readFileSync('tests/fixtures/sessions/forced-label-underlay-legend-rows.provenance.json', 'utf8'))
+  .sessions['forced-label-underlay-legend-rows.v46.gbdraw-session.json.gz'].legend;
+const shownLegendRows = async (page) => (await semanticSnapshot(page)).legend.map((row) => row.caption);
+const loadLegendRowsSession = async (page) => {
+  await openFresh(page);
+  await loadSessionFile(page, LEGEND_ROWS_SESSION);
+  await settleLive(page);
+  expect(await legendCaptions(page), 'the saved Legend entries').toEqual(LEGEND_ROWS_SAVED.entries);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.deletedLegendEntries.map((entry) => entry.caption)), 'the deleted rows')
+    .toEqual(LEGEND_ROWS_SAVED.deleted);
+  expect(await shownLegendRows(page), 'the rows the saved Result shows').toEqual(LEGEND_ROWS_SAVED.shownRows);
+};
+test('U3a compat: a Session 46 saved before U3a loads its Legend rows, and live equals Generate', async ({ page }) => {
+  test.setTimeout(240_000);
+  await loadLegendRowsSession(page);
+  await expectLiveEqualsGenerate(page, { label: 'Session 46 with Legend row edits, after Load' });
+});
+test('U3a compat: Undo of a new edit and the Restore of a deleted row on a Session 46 saved before U3a', async ({ page }) => {
+  test.setTimeout(240_000);
+  await loadLegendRowsSession(page);
+  const loaded = await semanticSnapshot(page);
+  await colorLegendRow(page, 'CDS', '#264653');
+  await history(page, 'undo');
+  expect(diffSemanticSnapshots(loaded, await semanticSnapshot(page)), 'Undo returns the loaded Result').toEqual([]);
+  const renders = await countRenders(page);
+  await evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.restoreAllDeletedLegendEntries(); });
+  await settleLive(page);
+  expect(await renders(), 'the Restore asks for the automatic rerender (O-2)').toBe(1);
+  expect(await shownLegendRows(page), 'the restored row is shown').toContain('repeat_region');
+  await expectLiveEqualsGenerate(page, { label: 'Restore after Load' });
 });

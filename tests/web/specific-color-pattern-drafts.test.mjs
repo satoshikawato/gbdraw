@@ -75,7 +75,7 @@ for (const features of [[], [{ type: 'tRNA', svg_id: 'other', qualifiers: { prod
     assert.equal(s.actions.specificRulePattern(s.row), 'NADH');
     assert.equal(s.actions.specificRulePatternDraft(s.row), null);
     assert.deepEqual(s.stable(), before);
-    assert.deepEqual(s.calls, ['color-captions', 'color', 'color-captions', 'color']);
+    assert.deepEqual(s.calls, ['color', 'color'], 'uncaptioned rules send no caption request (OV-238)');
   });
 }
 
@@ -101,7 +101,7 @@ for (const failure of [
     assert.equal(s.actions.specificRulePatternDraft(s.state.manualSpecificRules[0]), null);
     assert.notEqual(s.stable().result, before.result);
     assert.equal(s.history.length, 1);
-    assert.deepEqual(s.calls, ['color-captions', 'color-captions', 'color-captions', 'color']);
+    assert.deepEqual(s.calls, ['color', 'color', 'color']);
   });
 }
 
@@ -215,14 +215,14 @@ test('25,000 features use the existing single matching evaluation, cached retry 
   const start = performance.now();
   await s.actions.setSpecificRuleField(0, 'val', '(?P<enzyme>NADH)');
   assert.equal(s.history.length, 1);
-  assert.deepEqual(s.calls, ['color-captions', 'color']);
+  assert.deepEqual(s.calls, ['color']);
   assert.equal(features.filter(f => ruleMatchesFeature(f, s.state.manualSpecificRules[0])).length, 12500);
   assert.equal(s.preparation.prepare(), true);
   const row = s.state.manualSpecificRules[0];
   s.actions.editSpecificRulePattern(row, '[never evaluated');
   s.actions.revertSpecificRulePattern(row);
-  assert.deepEqual(s.calls, ['color-captions', 'color']);
-  console.log(JSON.stringify({ featureCount: features.length, preparationMs: performance.now() - start, matchingCalls: 1, captionCalls: 1, history: s.history.length }));
+  assert.deepEqual(s.calls, ['color']);
+  console.log(JSON.stringify({ featureCount: features.length, preparationMs: performance.now() - start, matchingCalls: 1, captionCalls: 0, history: s.history.length }));
 });
 
 

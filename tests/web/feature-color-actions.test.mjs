@@ -103,7 +103,6 @@ const shownIntents = [];
 const previewFillColors = new Map();
 const featureElementsById = new Map();
 let previewFillApplyCount = 0;
-let previewCommitCount = 0;
 const svgContainer = ref(null);
 const clickedFeature = ref(null);
 const featureStrokeOverrides = {};
@@ -114,10 +113,6 @@ const applyRulePreviewFill = (featureId, color) => {
   if (previewFillColors.get(featureId) === color) return;
   previewFillColors.set(featureId, color);
   previewFillApplyCount += 1;
-};
-const commitActiveResultEdit = () => {
-  previewCommitCount += 1;
-  return true;
 };
 
 const { featureOverrideKey } = await import(pathToFileURL(join(tempDir, 'services', 'feature-override-identity.js')));
@@ -209,8 +204,7 @@ const actions = createFeatureColorActions({
     }
   },
   getFeatureElements: (_svg, featureId) => featureElementsById.get(featureId) || [],
-  getFeatureFillElements: (_svg, featureId) => featureElementsById.get(featureId) || [],
-  commitActiveResultEdit
+  getFeatureFillElements: (_svg, featureId) => featureElementsById.get(featureId) || []
 });
 
 await actions.handleColorScopeChoice('caption');
@@ -430,16 +424,12 @@ assert.equal(getFeatureColorRuleHash(labelFeatureA), 'f11111111');
 
 legendEntries.value = [{ caption: 'single feature', color: '#123456', featureIds: ['f11111111_record_1'] }];
 const noOpFillCount = previewFillApplyCount;
-const noOpCommitCount = previewCommitCount;
 assert.equal(await actions.setFeatureColor(labelFeatureA, '#123456', 'single feature'), false);
 assert.equal(previewFillApplyCount, noOpFillCount);
-assert.equal(previewCommitCount, noOpCommitCount);
 
-const compoundCommitCount = previewCommitCount;
 const compoundFillCount = previewFillApplyCount;
 assert.equal(await actions.setFeatureColor(labelFeatureA, '#654321', 'renamed feature'), true);
 assert.ok(previewFillApplyCount > compoundFillCount);
-assert.equal(previewCommitCount, compoundCommitCount);
 assert.equal(manualSpecificRules[0].cap, 'renamed feature');
 assert.equal(legendEntries.value[0].caption, 'renamed feature');
 legendEntries.value = [];
@@ -672,14 +662,12 @@ clickedFeature.value = {
 // A stroke edit writes the intent only, with the stroke Python drew; the
 // composition root shows it through the executor (EU U2a).
 const strokeKey = featureOverrideKey(strokeFeature) || strokeFeature.svg_id;
-const resetStrokeCommitCount = previewCommitCount;
 assert.equal(await actions.updateClickedFeatureStroke('#111111', 1), false);
 assert.equal(await actions.updateClickedFeatureStroke('#222222', 2), true);
 assert.deepEqual(featureStrokeOverrides[strokeKey], {
   originalStrokeColor: '#111111', originalStrokeWidth: 1, strokeColor: '#222222', strokeWidth: 2
 });
 assert.equal(strokeMutationCount, 0);
-assert.equal(previewCommitCount, resetStrokeCommitCount);
 assert.equal(await actions.resetClickedFeatureStroke(), true);
 assert.equal(featureStrokeOverrides[strokeKey], undefined);
 assert.deepEqual([clickedFeature.value.strokeColor, clickedFeature.value.strokeWidth], ['#111111', 1],
@@ -716,7 +704,6 @@ assert.equal(featureStyleScopeDialog.strokeWidth, 2.5);
 assert.equal(clickedFeature.value, null);
 assert.equal(strokeAttributes.get('stroke'), '#111111');
 assert.equal(strokeAttributes.get('stroke-width'), '1');
-assert.equal(previewCommitCount, resetStrokeCommitCount);
 assert.equal(await actions.handleFeatureStyleScopeChoice('cancel'), false);
 assert.equal(featureStyleScopeDialog.show, false);
 
@@ -738,7 +725,6 @@ assert.deepEqual(legendStrokeOverrides.Core, {
   strokeWidth: 1
 });
 assert.equal(strokeMutationCount, 0);
-assert.equal(previewCommitCount, resetStrokeCommitCount);
 
 // Rule scope uses Python's wildcard feature type and inline flags too.
 const wildcardRule = { feat: '*', qual: 'gene_kind', val: '(?i)core', color: '#111111', cap: '' };

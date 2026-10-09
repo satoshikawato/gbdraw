@@ -1264,13 +1264,24 @@ test('a feature fill reconcile keeps the shown palette paint while a rule match 
 // not listed fails, and a stroke edit reads no specific-color rule match. The
 // domains are the ones app/app-setup.js shows for each edit kind
 // (`LIVE_EDIT_DOMAINS`, and `editorPaintDomains` for a History step's changes).
-const { strokes: STROKES, fills: FILLS, legendFills: LEGEND_FILLS, visibility: VISIBILITY, legendStructure: LEGEND_STRUCTURE } = LIVE_EDIT_DOMAINS;
+const {
+  strokes: STROKES, fills: FILLS, legendFills: LEGEND_FILLS, visibility: VISIBILITY, legendStructure: LEGEND_STRUCTURE,
+  legendRows: LEGEND_ROWS
+} = LIVE_EDIT_DOMAINS;
 const EDIT_KIND_STAGES = [
   ['feature stroke (popup)', STROKES, ['strokes']],
   ['Legend row stroke', STROKES, ['strokes']],
   ['Legend row color (no rule)', LEGEND_FILLS, ['legendFills']],
   ['palette change', FILLS, ['fills', 'rules', 'legendFills']],
   ['color rule commit', FILLS, ['fills', 'rules', 'legendFills']],
+  // A rule commit that adds or retires Legend rows shows them in its compile.
+  ['color rule commit with Legend rows', [...FILLS, ...LEGEND_STRUCTURE], ['fills', 'rules', 'legendFills', 'legend']],
+  ['Legend add, delete or sort', LEGEND_STRUCTURE, ['legend']],
+  ['Legend rename of a row without rules or features', [...LEGEND_STRUCTURE, ...LEGEND_FILLS, ...STROKES],
+    ['legend', 'legendFills', 'strokes']],
+  ['Legend Restore', LEGEND_ROWS, ['legend', 'legendFills']],
+  ['History step of a Legend row edit', editorPaintDomains([{ path: ['editorState', 'legend', 'entries'] }]),
+    ['legend', 'legendFills']],
   ['Feature visibility edit', VISIBILITY, ['visibility']],
   ['History step of a Legend row stroke and color', editorPaintDomains([
     { path: ['editorState', 'legend', 'strokeOverrides', 'Proteins'] },
