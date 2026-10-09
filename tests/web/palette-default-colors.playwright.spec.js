@@ -1,4 +1,4 @@
-// D-15 (Owner 2026-10-09): the palette is the base layer and the user default
+// PD-OI-089, OIC-029 (Owner 2026-10-09): the palette is the base layer and the user default
 // colors (Default colors values that differ from the selected palette's color)
 // win over it, as `-d` over `-p`. A palette switch or Default colors Reset asks
 // before it drops them; a dialog choice is one History step and Cancel records

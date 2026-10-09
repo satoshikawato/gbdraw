@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `35`
+- Contract revision: `36`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -37,7 +37,7 @@ Status: active Product authority
   `PD-OI-071`, `PD-OI-072`, `PD-OI-073`, `PD-OI-074`, `PD-OI-075`,
   `PD-OI-076`, `PD-OI-077`, `PD-OI-078`, `PD-OI-079`, `PD-OI-080`,
   `PD-OI-081`, `PD-OI-082`, `PD-OI-083`, `PD-OI-084`, `PD-OI-085`,
-  `PD-OI-086`, `PD-OI-087`, and `PD-OI-088`
+  `PD-OI-086`, `PD-OI-087`, `PD-OI-088`, and `PD-OI-089`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -379,6 +379,50 @@ Status: active Product authority
   - The receipt narrows no earlier record. It realizes, for these three
     dialogs, the 「live edit適用中/失敗の通知」 that `PD-OI-037` scenario
     revision `2` preserves.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 36 changes: `PD-OI-089` is added
+  (`A / USER_DEFAULT_COLORS_OVER_PALETTE`), with the acceptance contract
+  `OIC-029`, from the Product Decision Owner `satoshikawato`'s replies of
+  `2026-10-09` on palette changes and edited Default colors (a palette switch
+  or the Default colors Reset discarded the colors a user had edited without
+  asking, and popup Apply to all on a Legend row that no Specific color rule
+  draws wrote one hash rule per feature, so a feature that joined the row
+  later kept the palette color and formed a second row).
+  - Reply 1, the proposal (a palette change adds `-d` entries, and Apply to
+    all or a palette color that would overwrite an existing `-d` entry asks in
+    a dialog): 「-pを変えるというのは、-dにエントリを追加するという挙動として再定義するのがいいんじゃないかな？そのうえで、Apply to all CDSでもパレットから直接色を変えるのでも、それが既存の-dのエントリを上書きするものであれば、「設定上書き/消えちゃうけどどうしますか？」っていう選択肢のダイアログのポップアップを出すのがいいんじゃないかな？」
+  - Reply 2, accepting the refined direction (a user default color is a
+    Default colors value that differs from the selected palette's color;
+    Apply to all on such a row sets the default color; a palette switch and
+    the Default colors Reset ask before they discard user colors), in v0.14.0
+    as a separate pull request: 「OK、その方向で行きましょう。v0.14.0に入れる。別のPRにする。」
+  - Reply 3, on the open outcomes Q1-Q6, the complete proposed receipt
+    recorded below, and F4 (recorded in the Revision 35 entry):
+    「Q1=B Q2=B Q3=B Q4=A Q5=A Q6=A」「受領書: これでいい」「F4: A」
+  - Reply 4, withdrawing Q3 because its premise did not hold, and on the
+    Q2 line wording: 「Q3: A'」「Q2 文言: 推奨どおり」
+  - Q1=B: Apply to all on a palette row while a palette is queued sets the
+    type's color in the queued palette's colors and in the shown Result's
+    colors, so the Result shows it now.
+  - Q2=B: the scope dialog always shows one line under Apply to all on a
+    palette row: "Sets the <type> default color (<type> features without
+    their own color or rule, also hidden ones)." or, when the type has a user
+    default color, "Replaces your <type> default color ■ #hex." (Reply 4
+    replaced the approved "all <type> features", which overstated).
+  - Q3 is withdrawn: it assumed a Legend-tab fill color control for a palette
+    row, and the GUI has none, so nothing is built and `OIC-029` has no Q3
+    term; the receipt is recorded exactly as approved.
+  - Q4=A: Specific color rule rows that older Sessions saved for Apply to all
+    stay rule rows; nothing migrates them.
+  - Q5=A: switching back to the applied palette while another is queued asks
+    like any switch when user colors exist; the queued palette is dropped and
+    the kept colors apply now.
+  - Q6=A: dialog bodies name up to three keys.
+  - The receipt retires no item of an earlier record. The records its Must
+    preserve cites (`PD-OI-037`, `PD-OI-066`, `PD-OI-069`, `PD-OI-070`,
+    `PD-OI-086`, and `PD-OI-088`) retain their scope.
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
@@ -4160,6 +4204,51 @@ Decision date: 2026-10-09
 }
 ```
 
+### PD-OI-089: Default colors a user edits win over the palette
+
+- Concern key: `web.default-colors-over-palette`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / USER_DEFAULT_COLORS_OVER_PALETTE`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Owner replies of `2026-10-09` quoted verbatim in the
+  Revision 36 entry above. The receipt and JSON below reproduce all nine
+  fields without translation or additional terms. This record does not
+  supersede or narrow another decision. The runtime that implements it merges
+  with it (static Product Contract co-change).
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `131d1bb0cacdcdc031387e6bff6c35672c4cb468a64220dba04dc70460e0ef78`.
+- Acceptance contracts: `OIC-029`. These obligations and the complete selected
+  outcome are jointly required.
+
+```text
+PRODUCT_DECISION
+Concern: web.default-colors-over-palette
+Scenario revision: 1
+Choice: A / USER_DEFAULT_COLORS_OVER_PALETTE
+Rationale: パレットは土台で、利用者が変えた既定の色（パレットの色と違う色）がその上に勝つ。CLI の -p と -d と同じ関係にし、パレットの切り替えや Reset で利用者の色が黙って消えたり、Apply to all で一部の feature だけが新しい色になって行が二つに分かれたりしないようにする。
+Must preserve: Default colors の一覧での直接の編集は確認なしに反映されること、Palette instant preview とキューの表示の正確さ（PD-OI-037、OIC-024）、即時の編集と次の Generate の一致（PD-OI-066）、Specific color rule が描く行の編集は rule を変えること、「This feature only」と label・source label の範囲は rule を書くこと（PD-OI-069）、ダイアログの選択は History の 1 ステップで Cancel は記録せず適用中は busy（PD-OI-088）、Circular と Linear で別々の palette と色（PD-OI-086）、Session の形式、Generate と Run Info の CLI recipe が -p とパレットと違う色だけの -d を書くこと、Reset Settings（PD-OI-070）。
+May retire: パレットを切り替えると利用者が変えた既定の色が確認なしに消える動作（キューから適用中のパレットに戻すと適用中の色に戻る動作を含む）。Default colors の Reset が確認なしに利用者の色を消す動作。Specific color rule が描かない Legend 行で Apply to all を選ぶと feature ごとの hash rule を書き、後から行に加わる feature がパレットの色のまま別の行になる動作。
+Accepted residual risk: 利用者の色は保存せず導出するので、新しいパレットの色と同じになった色はそれ以降パレットに従う。パレットの定義が版で変わると、以前の既定値と同じ色も利用者の色として数える。Specific color rule と既定の色の feature が同じ色で一つの行にあるときと、その型の feature が一つだけのとき（Apply to all が出ない）は、今までどおり rule を書く。Apply to all は画面にない（非表示や他の record・Result の）その型の feature の色も変える。
+Owner: satoshikawato
+Decision date: 2026-10-09
+```
+
+```json
+{
+  "concern": "web.default-colors-over-palette",
+  "scenarioRevision": 1,
+  "choice": "A / USER_DEFAULT_COLORS_OVER_PALETTE",
+  "rationale": "パレットは土台で、利用者が変えた既定の色（パレットの色と違う色）がその上に勝つ。CLI の -p と -d と同じ関係にし、パレットの切り替えや Reset で利用者の色が黙って消えたり、Apply to all で一部の feature だけが新しい色になって行が二つに分かれたりしないようにする。",
+  "mustPreserve": "Default colors の一覧での直接の編集は確認なしに反映されること、Palette instant preview とキューの表示の正確さ（PD-OI-037、OIC-024）、即時の編集と次の Generate の一致（PD-OI-066）、Specific color rule が描く行の編集は rule を変えること、「This feature only」と label・source label の範囲は rule を書くこと（PD-OI-069）、ダイアログの選択は History の 1 ステップで Cancel は記録せず適用中は busy（PD-OI-088）、Circular と Linear で別々の palette と色（PD-OI-086）、Session の形式、Generate と Run Info の CLI recipe が -p とパレットと違う色だけの -d を書くこと、Reset Settings（PD-OI-070）。",
+  "mayRetire": "パレットを切り替えると利用者が変えた既定の色が確認なしに消える動作（キューから適用中のパレットに戻すと適用中の色に戻る動作を含む）。Default colors の Reset が確認なしに利用者の色を消す動作。Specific color rule が描かない Legend 行で Apply to all を選ぶと feature ごとの hash rule を書き、後から行に加わる feature がパレットの色のまま別の行になる動作。",
+  "acceptedResidualRisk": "利用者の色は保存せず導出するので、新しいパレットの色と同じになった色はそれ以降パレットに従う。パレットの定義が版で変わると、以前の既定値と同じ色も利用者の色として数える。Specific color rule と既定の色の feature が同じ色で一つの行にあるときと、その型の feature が一つだけのとき（Apply to all が出ない）は、今までどおり rule を書く。Apply to all は画面にない（非表示や他の record・Result の）その型の feature の色も変える。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-09"
+}
+```
+
 ## Acceptance contract catalog
 
 | Contract | Required meaning |
@@ -4192,6 +4281,7 @@ Decision date: 2026-10-09
 | `OIC-026` | `PD-OI-035` and `PD-OI-039`: identity, keyboard Select/Skip, non-rendered candidates, no position-only selection, desktop canvas, focus and transient overlay exclusion remain required with all PD-OI-031/034 outcomes. Compact review retains visible, operable canvas at full available width and at least 200 px height at 390×844/740, scrollable candidates and reachable Apply/Cancel, local no-Worker draft edits, atomic batch validation, failure/error/retry and artifact/orientation/History recovery. Narrow review closes Editor through its owner while retaining tab, disables reopening with a reason until review ends, then permits explicit reopen; wide drag remains. Browser verification must show presentation changes leave draft and Result unchanged. |
 | `OIC-027` | `PD-OI-066`: a live-edited Result agrees with a Result freshly generated from the same draft in the meaning (position, color, text, and visibility) of every edited element, including after Session load and export. Settings shown as Applies on Generate do not change the Result before Generate. A live edit that the Generate compiler cannot reproduce is shown as Applies on Generate instead. |
 | `OIC-028` | `PD-OI-088`: the color scope, Legend name, and Reset fill color dialogs, whether opened from the feature popup's fill color, the Features drawer color input, a popup stroke edit, or a Legend panel rename (Merge/Suffix), open from the saved rules before the rules a choice may add are prepared. A choice is one History step and Cancel records none. From a choice until its step ends, the dialog stays open, its choices and Cancel are disabled, it states that the edit is applying, and no second choice, Cancel, Escape, or backdrop click starts or closes anything; the dialog closes when the step ends. |
+| `OIC-029` | `PD-OI-089`: a user default color is a Default colors value that differs from the selected palette's color (case, named colors, and `#rgb` compared as one color; Auto is none). A palette switch with user colors opens one dialog that names both palettes: Keep my N colors (the new palette plus the user colors), Use the palette's colors, or Cancel (no change, no History step, the select shows the old palette); without user colors it switches as one step. Switching back to the applied palette while another is queued asks the same when user colors exist; the queued palette is dropped, the kept colors apply now, and the dialog says so. Default colors Reset with user colors asks first. Dialog bodies name up to three keys. Apply to all on a Legend row that no Specific color rule draws sets that feature type's default color as one History step and writes no Specific color rule; the scope dialog shows under it "Sets the <type> default color (<type> features without their own color or rule, also hidden ones)." or, when the type has a user color, "Replaces your <type> default color ■ #hex." While a palette is queued, that choice sets the color in the queued palette's colors and in the shown Result now, and the line says so. Generate and the Source recipe write `-p` and only the user colors as `-d`. |
 
 These new acceptance entries are obligations for dependent runtime work, not
 claims of completed runtime or browser verification by this authority amendment.
