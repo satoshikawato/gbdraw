@@ -264,6 +264,11 @@ def test_svg_keywords_and_css_colors_are_accepted(path: str, value: str) -> None
     ("path", "value"),
     [
         ("objects.scale.font_weight", "Bold"),
+        ("objects.scale.font_weight", "700.0"),
+        ("objects.scale.font_weight", " 700"),
+        ("objects.scale.font_weight", "7e2"),
+        ("objects.scale.font_weight", "0"),
+        ("objects.scale.font_weight", "1001"),
         ("objects.legends.text_anchor", "MIDDLE"),
         ("objects.legends.text_anchor", " middle"),
         ("objects.legends.dominant_baseline", "Central"),

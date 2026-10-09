@@ -43,11 +43,8 @@ _DOMINANT_BASELINE_KEYWORDS = frozenset(
 def _is_font_weight(text: str) -> bool:
     if text in _FONT_WEIGHT_KEYWORDS:
         return True
-    try:
-        number = float(text)
-    except ValueError:
-        return False
-    return math.isfinite(number) and 1 <= number <= 1000
+    # Digits only, the form CairoSVG reads; "700.0" and "7e2" errored under svgwrite.
+    return text.isascii() and text.isdigit() and 1 <= int(text) <= 1000
 
 
 _KEYWORD_LEAF_DOMAINS: dict[str, tuple[str, Callable[[str], bool]]] = {
