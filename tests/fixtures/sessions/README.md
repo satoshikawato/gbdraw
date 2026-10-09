@@ -164,5 +164,7 @@ option-derived `config`), `4ea96685` (Session 40, `config: {"adv": {}}`), and
 `4e8c9380` (Session 41, the same) from the repository root. The first one's
 schema 3 catalog stores no source feature index. They are the positive fixtures
 for reading a CLI-written Session 40-41 `config` as no draft and for inferring
-the index (OV-269). Commands, inputs, and hashes are in each
-`.provenance.json`.
+the index (OV-269). The v40-early file is also the only positive fixture for a
+Session 40+ Result without composition metadata, which Load gives the legacy
+composition (OV-273); as a CLI Session it holds no manual positions (no
+`ui` offsets). Commands, inputs, and hashes are in each `.provenance.json`.

@@ -10,6 +10,7 @@ const {
   createDefaultForm,
   createDefaultLosat,
   createDefaultLosatExecution,
+  holdsCliWriterConfig,
   validateCurrentWriterActiveConfig,
   validateImportedCircularTrackSlots
 } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
@@ -221,3 +222,13 @@ for (const [enabled, slots, field, slotIndex] of [
 assert.equal(obsoleteSlotFailure({
   ...createDefaultAdv('circular'), circular_track_slots: [featureSlot, ticksSlot]
 }), null);
+
+// OV-269: shared with tests/test_draft_value_migrations.py.
+// A CLI-written Session 40-41 config holds no Web draft.
+const { readFile } = await import('node:fs/promises');
+const cliWriterConfigVectors = JSON.parse(await readFile(
+  new URL('../fixtures/cli-writer-config-vectors.json', import.meta.url), 'utf8'
+)).cases;
+for (const { name, session, holdsCliWriterConfig: expected } of cliWriterConfigVectors) {
+  assert.equal(holdsCliWriterConfig(session), expected, name);
+}

@@ -122,7 +122,7 @@ import {
   admitCurrentSessionResults,
   admitLegacyImportedResults,
   createCurrentSessionResultSource,
-  createCallerTransformSvgMutationPlan,
+  createLegacyNormalizationSvgMutationPlan,
   createLegacyImportResultSource,
   isCommittedSvgResult
 } from './svg-result-ingestion.js';
@@ -382,7 +382,10 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
  * The composition root's transform of an older Session's Result (R13 port):
  * it gives a Result without composition metadata the legacy composition and
  * projects the saved strokes. Returns whether the SVG changed.
- * @typedef {(svg: Element, data: LegacyResultSvgData) => boolean} LegacyResultSvgTransform
+ * `appliesToContent` tells from a Result's text whether it lacks composition
+ * metadata, so a Session 40+ Result is parsed only when it does (OV-273).
+ * @typedef {((svg: Element, data: LegacyResultSvgData) => boolean)
+ *   & { appliesToContent: (content: unknown) => boolean }} LegacyResultSvgTransform
  */
 export const SESSION_VERSION = 46;
 const CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40;
@@ -2229,28 +2232,23 @@ const restoreLoadedSetSequenceSources = async ({
 
 // E1: the Results of one saved Result set of a current Session (the top-level
 // set or `otherModeResult`), admitted with that set's catalog in its mode.
-// A Result whose root has no composition metadata: a Session 40 Result of
-// main 8228ffab or 7aad9e3e, written before the metadata existed (OV-273).
-/** @param {unknown} content */
-const lacksCompositionMetadata = (content) => !/\sdata-gbdraw-composition(?:-schema)?=/
-  .test(/<svg\b[^>]*>/i.exec(String(content || ''))?.[0] || '');
 /**
- * Such a Result takes `legacyTransform`, the transform of a pre-40 Result
- * (legend entry groups, the legacy composition, saved strokes); every other
- * Result is admitted as written.
+ * A Result that `legacy.applies` to (no composition metadata: a Session 40
+ * Result of main 8228ffab or 7aad9e3e, OV-273) takes `legacy.transform`, the
+ * transform of a pre-40 Result; every other Result is admitted as written.
  * @param {Record<string, any>[]} logicalResults
  * @param {{ featureCatalog: FeatureCatalog, mode: 'circular' | 'linear', selectedFeatureTypes: readonly string[] | null | undefined,
- *   legacyTransform?: ((svg: Element) => unknown) | null }} set
+ *   legacy?: { transform: (svg: Element) => unknown, applies?: (content: unknown) => boolean } | null }} set
  */
-const admitLoadedSetResults = (logicalResults, { featureCatalog, mode, selectedFeatureTypes, legacyTransform = null }) => (
+const admitLoadedSetResults = (logicalResults, { featureCatalog, mode, selectedFeatureTypes, legacy = null }) => (
   admitCurrentSessionResults(
     createCurrentSessionResultSource(
       logicalResults,
       admitFeatureCatalog(featureCatalog, logicalResults, { adopt: true, mode })
     ),
     {
-      mutationPlan: createCallerTransformSvgMutationPlan(logicalResults.map((result) => (
-        legacyTransform && lacksCompositionMetadata(result?.content) ? legacyTransform : null
+      mutationPlan: createLegacyNormalizationSvgMutationPlan(logicalResults.map((result) => (
+        legacy?.applies?.(result?.content) ? legacy.transform : null
       ))),
       selectedFeatureTypes
     }
@@ -5169,7 +5167,7 @@ const importSessionDocument = async (e, options = {}) => {
     const committedImportedResults = currentSchemaSession && validatedSessionCatalog
       ? admitLoadedSetResults(logicalImportedResults, {
           featureCatalog: validatedSessionCatalog, mode: committedMode, selectedFeatureTypes,
-          legacyTransform: transformRestoredSessionSvg
+          legacy: { transform: transformRestoredSessionSvg, applies: transformLegacyResultSvg?.appliesToContent }
         })
       : admitLegacyImportedResults(
           createLegacyImportResultSource(logicalImportedResults),

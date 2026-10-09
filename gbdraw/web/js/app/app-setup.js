@@ -300,11 +300,14 @@ export const createSessionImportRollbackState = ({
   }
 });
 
+// A Result's root tag names the composition metadata attributes.
+const COMPOSITION_ROOT_ATTRIBUTE = new RegExp(`\\s(?:${COMPOSITION_SCHEMA_ATTRIBUTE}|${COMPOSITION_METADATA_ATTRIBUTE})=`);
 // The transform services/config.js applies to each Result of an older Session
 // before it commits (R13 port): a Result without composition metadata gets the
-// legacy composition, and the saved strokes are projected into it.
+// legacy composition, and the saved strokes are projected into it. A Session
+// 40+ Result takes it only when `appliesToContent` (OV-273).
 /** @type {LegacyResultSvgTransform} */
-export const transformLegacyResultSvg = (svg, { composition, strokes }) => {
+export const transformLegacyResultSvg = Object.assign((svg, { composition, strokes }) => {
   let compositionChanged = false;
   if (
     svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) === null
@@ -315,7 +318,10 @@ export const transformLegacyResultSvg = (svg, { composition, strokes }) => {
   }
   const strokeCount = applyStrokeOverridesToSvg({ svg, ...strokes });
   return compositionChanged || strokeCount > 0;
-};
+}, {
+  /** @param {unknown} content */
+  appliesToContent: (content) => !COMPOSITION_ROOT_ATTRIBUTE.test(/<svg\b[^>]*>/i.exec(String(content ?? ''))?.[0] || '')
+});
 
 const HISTORY_RESTORE_BUSY = Object.freeze({ status: 'busy', reason: 'Undo or Redo in progress. Retry after it finishes.' });
 // E1: a History step that switches the diagram mode; its changes name `ui.mode`.
