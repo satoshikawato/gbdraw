@@ -67,6 +67,10 @@ export const getAllFeatureLegendGroups = (svg) => {
   return featureLegendGroup ? [featureLegendGroup] : [legendGroup];
 };
 
+// The owner mark of a Legend row a rule commit shows before Python draws it
+// (the executor's `ifAbsent` addition); the rules own it, not the editor.
+export const SPECIFIC_COLOR_FILE_OWNER = 'specific-color-file';
+
 // The one absence predicate of a Legend row: a row is absent when the Result
 // lacks it or a Legend delete hid it (the executor keeps a deleted row of
 // Python's, hidden, so a reconcile without the delete shows it again).
@@ -77,6 +81,14 @@ export const legendRowShown = (row) => Boolean(row) && row?.getAttribute('displa
 // record; the row of an editor addition has its own key.
 /** @param {Element} row */
 export const pythonLegendKey = (row) => String(pythonDrawnAttribute(row, 'data-legend-key') ?? '').trim();
+
+// Whether a Result's bytes hold Python's row of a Legend key (shown or hidden):
+// a Session saved before the executor kept deleted rows lacks it (O-2).
+/** @param {Element | null | undefined} svg @param {string} key */
+export const drawsPythonLegendRow = (svg, key) => getAllFeatureLegendGroups(svg).some((group) => (
+  Array.from(group.querySelectorAll('g[data-legend-key]'))
+    .some((row) => row.getAttribute('data-legend-owner') !== 'direct-editor' && pythonLegendKey(row) === key)
+));
 
 // Python's order of a Result's feature Legend rows as their Python keys: the
 // order recorded when the rows were first reordered, else null.

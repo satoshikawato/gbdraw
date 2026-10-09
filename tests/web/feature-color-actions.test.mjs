@@ -13,6 +13,7 @@ await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await cp(sourceDir, tempDir, { recursive: true });
 const colorActionsSource = await readFile(join(sourceDir, 'app', 'feature-editor', 'color-actions.js'), 'utf8');
 
+const { LIVE_EDIT_DOMAINS } = await import(pathToFileURL(join(tempDir, 'app', 'candidate-render.js')));
 const { createFeatureColorActions } = await import(
   pathToFileURL(join(tempDir, 'app', 'feature-editor', 'color-actions.js'))
 );
@@ -97,7 +98,8 @@ const featureStyleScopeDialog = {
 };
 
 let applySpecificRulesCount = 0;
-let legendGeometryChangedCount = 0;
+/** @type {Array<{ domains: readonly string[] }>} */
+const shownIntents = [];
 const previewFillColors = new Map();
 const featureElementsById = new Map();
 let previewFillApplyCount = 0;
@@ -154,10 +156,7 @@ const actions = createFeatureColorActions({
     addedLegendCaptions: ref(new Set())
   }),
   nextTick: async () => {},
-  onLegendGeometryChanged: () => {
-    legendGeometryChangedCount += 1;
-  },
-  extractLegendEntries: () => {},
+  showEditorIntent: (options) => { shownIntents.push(options); },
   ruleActions: {
     runWithRuleMatches: (rules, commit) => {
       preparedRuleSets.push(rules.map((rule) => `${rule.feat}|${rule.qual}|${rule.val}`));
@@ -780,9 +779,16 @@ biologicalFeatures.value = [];
 
 await actions.renameLegendEntry(0, 'Oxidative phosphorylation');
 
-assert.equal(legendGeometryChangedCount, 1);
-assert.equal(legendText.textContent, 'Oxidative phosphorylation');
-assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation');
+// U3a A2a (gap 3): the rename of an editor row writes the intent, its caption
+// and identity, and the port shows the row with its styles in one compile.
+assert.deepEqual(legendEntries.value[0], {
+  caption: 'Oxidative phosphorylation', originalCaption: 'Oxidative phosphorylation', color: '#123456', featureIds: []
+});
+assert.deepEqual(shownIntents.map(({ domains }) => [...domains]), [[
+  ...LIVE_EDIT_DOMAINS.legendStructure, ...LIVE_EDIT_DOMAINS.legendFills, ...LIVE_EDIT_DOMAINS.strokes
+]]);
+assert.equal(legendText.textContent, 'Short caption', 'the executor renames the row');
+assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
 
 // FE-10: Reset fill uses the palette default of the feature being reset. A
 // canceled or completed Reset dialog of another feature type must not leave a
@@ -845,8 +851,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
       getLabelSpecificRule: () => null
     },
     getFeatureElements: () => [],
-    getFeatureFillElements: () => [],
-    commitActiveResultEdit: null
+    getFeatureFillElements: () => []
   });
   for (const choice of ['cancel', 'this']) {
     committed.length = 0;
@@ -900,7 +905,6 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
         addedLegendCaptions: ref(new Set())
       }),
       nextTick: async () => {},
-      onLegendGeometryChanged: () => {}, extractLegendEntries: () => {},
       ruleActions: {
         runWithRuleMatches: runWithRuleMatchesOf(createRulePreparation({ state: withDrawings(renameState), evaluate: evaluatePythonRules }), renameState),
         commitSpecificRules: async (nextRules) => { committed.push(nextRules.map((rule) => ({ ...rule }))); return true; },
@@ -914,8 +918,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
         getIndividualFeatureLabel: (feature) => feature.product, getLabelSpecificRule: () => null
       },
       getFeatureElements: () => [],
-      getFeatureFillElements: () => [],
-      commitActiveResultEdit: null
+      getFeatureFillElements: () => []
     });
     return { renameActions, committed, legendRenameDialog, stateLegendEntries, originalOrder, legendColorOverrides };
   };

@@ -42,9 +42,6 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  * @property {(callback?: () => void) => Promise<void>} nextTick Vue `nextTick`
  * @property {(intents: Record<string, any>[], options?: { previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
  *   The Legend owner's preparation of the rows the rules draw.
- * @property {(options?: { replaceGeneratedInventory?: boolean }) => any} extractLegendEntries
- *   The Legend owner's reading of the mounted Legend rows.
- * @property {() => void} onLegendGeometryChanged The Legend owner's reaction to a change of Legend geometry.
  * @property {FeatureSelectionPort | null} [featureSelection]
  * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
  *   The preview owner's commit of an edit to the displayed Result (R1, R13).
@@ -53,7 +50,7 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  * @property {(index: number) => any} selectResult The preview owner's selection of a Result.
  * @property {() => boolean} [isPatternEditAvailable] False while a Session import is pending.
  * @property {PreviewTransformInteractionPort | null} [previewTransformInteraction]
- * @property {(options?: { recolor?: Record<string, any>, prepareRules?: boolean }) => boolean | Promise<boolean>} projectPaletteAndRules
+ * @property {(options?: { recolor?: Record<string, any>, prepareRules?: boolean, legendRows?: import('./candidate-render.js').RuleLegendRows | null }) => boolean | Promise<boolean>} projectPaletteAndRules
  *   The root's projection of the palette and the rules (R3).
  * @property {() => any} projectFeatureEdits
  *   The root's projection of loaded feature edits onto the displayed Result (R3).
@@ -79,8 +76,6 @@ export const createFeatureEditor = ({
   isCurrentFeature,
   nextTick,
   prepareFileLegendEntries,
-  extractLegendEntries,
-  onLegendGeometryChanged,
   featureSelection = null,
   commitActiveResultEdit = null,
   showEditorIntent,
@@ -114,12 +109,10 @@ export const createFeatureEditor = ({
   });
   const colorActions = createFeatureColorActions({
     state,
-    extractLegendEntries,
-    onLegendGeometryChanged,
+    showEditorIntent,
     ruleActions,
     getFeatureElements: featureSvgActions.getFeatureElements,
     getFeatureFillElements: featureSvgActions.getFeatureFillElements,
-    commitActiveResultEdit,
     closeAfterDialogChoice,
     readUserDefaultColor,
     setDefaultColor
@@ -158,6 +151,9 @@ export const createFeatureEditor = ({
   };
 
   return {
+    // O-2: the root asks Python for a Legend row a restore returns that the
+    // displayed Result's bytes lack.
+    requestAutomaticRerender: labelActions.requestAutomaticRerender,
     specificRulePattern: ruleActions.specificRulePattern,
     specificRulePatternDraft: ruleActions.specificRulePatternDraft,
     specificRulePatternFieldId: ruleActions.specificRulePatternFieldId,

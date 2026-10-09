@@ -17,7 +17,7 @@ import { createResultPaintRecord } from './result-paint-record.js';
 import {
   countUnresolvedFeatureEdits, featureDrawnContext, removeUnresolvedFeatureEdits, requestFeatureVisibilityRules
 } from '../services/feature-visibility.js';
-import { drawnBlockStroke, isLegendOrderEdited, legendStructureEdited } from '../services/legend-svg.js';
+import { drawnBlockStroke, drawsPythonLegendRow, isLegendOrderEdited, legendStructureEdited } from '../services/legend-svg.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing, drawnFeatureFills } from '../services/feature-override-identity.js';
@@ -1446,7 +1446,8 @@ export const createAppSetup = () => {
     beginHistoryTransaction: history.begin,
     commitHistoryTransaction: history.commit,
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
-    readActiveResultIdentity: () => previewRuntime.getActiveRuntime()?.resultIdentity
+    readActiveResultIdentity: () => previewRuntime.getActiveRuntime()?.resultIdentity,
+    showLegendStructure: () => showEditorIntent({ domains: LIVE_EDIT_DOMAINS.legendStructure })
   });
   // History captures register once their owner exists (R13).
   historySnapshots.registerCapture('legend', legendActions.captureLegendEntryOwners);
@@ -1477,14 +1478,25 @@ export const createAppSetup = () => {
   // show through the port, compiled with Generate's precedence, unless the
   // caller shows them in its own compile (`show: false`). The Save that shows
   // what a display declined because of it (`saving`) does not count itself.
+  // A rule commit's Legend rows (`legendRows`) show in the same compile.
   /** @param {boolean} saving */
   const sessionBlocks = (saving) => Boolean(sessionOperationAvailability()) && !(saving && sessionSavePending.value);
-  const projectPaletteAndRules = ({ recolor = {}, prepareRules = true, show = true, saving = false } = {}) => {
+  /**
+   * @param {{
+   *   recolor?: Record<string, any>, prepareRules?: boolean, show?: boolean, saving?: boolean,
+   *   legendRows?: import('./candidate-render.js').RuleLegendRows | null
+   * }} [options]
+   */
+  const projectPaletteAndRules = ({ recolor = {}, prepareRules = true, show = true, saving = false, legendRows = null } = {}) => {
     const blocked = () => sessionBlocks(saving);
     const project = () => {
       if (blocked()) return false;
       svgActions.applyPaletteToSvg(recolor);
-      if (show) showEditorIntent({ domains: FILL_DOMAINS });
+      if (show) {
+        showEditorIntent(legendRows
+          ? { domains: [...FILL_DOMAINS, ...LIVE_EDIT_DOMAINS.legendStructure], ruleRows: legendRows }
+          : { domains: FILL_DOMAINS });
+      }
       return true;
     };
     return prepareRules
@@ -1513,8 +1525,6 @@ export const createAppSetup = () => {
     isPatternEditAvailable: () => !sessionImportPending.value,
     nextTick,
     prepareFileLegendEntries: /** @type {any} */ (legendActions.prepareFileLegendEntries),
-    extractLegendEntries: legendActions.extractLegendEntries,
-    onLegendGeometryChanged: legendActions.onLegendGeometryChanged,
     featureSelection,
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
     showEditorIntent: (options) => showEditorIntent(options),
@@ -1658,7 +1668,7 @@ export const createAppSetup = () => {
       legendStrokeOverrides: drawing.legendStrokeOverrides,
       legendEntries: drawing.legendEntries,
       dormantLegendEntries: drawing.dormantLegendEntries,
-      projectLegendEntries: () => { void projectMountedEditorIntent({ legend: {} }); },
+      projectLegendEntries: () => { showEditorIntent({ domains: [...LIVE_EDIT_DOMAINS.legendRows, ...LIVE_EDIT_DOMAINS.strokes] }); },
       namedCaptions: () => trackDataLegendCaptions({
         annotationSets: drawing.annotationSets,
         depthTracks: drawing.adv.depth_tracks,
@@ -3115,7 +3125,6 @@ export const createAppSetup = () => {
     setLegendEntryStrokeColorValue,
     updateLegendEntryStrokeColor,
     updateLegendEntryStrokeWidth,
-    reconcileLegendEntries,
     resetLegendEntryStroke,
     resetAllStrokes,
     restoreDeletedLegendEntries
@@ -3199,9 +3208,9 @@ export const createAppSetup = () => {
 
   // One projection of the canonical editor intent onto the mounted Result,
   // shared by History apply, the display of another batch Result, and Load
-  // Feature Edits TSV (D-07, R3). History restores the mounted Legend
-  // inventory; a newly displayed Result receives the diagram-wide Legend
-  // operations Generate applies. A loaded table (`reflow`) also places the
+  // Feature Edits TSV (D-07, R3). A History step of the Legend rows and a newly
+  // displayed Result show the Legend operations Generate applies (`domains`).
+  // A loaded table (`reflow`) also places the
   // labels, as a visibility edit does. The palette and the rules (`colors`)
   // and the visibility prepare their matches through their projections; the
   // fills, the visibility, and the other paint `domains` of the step then show
@@ -3211,8 +3220,7 @@ export const createAppSetup = () => {
   /**
    * @param {{
    *   colors?: boolean, prepareRules?: boolean, visibility?: boolean, rerender?: boolean,
-   *   reflow?: boolean, labels?: boolean, domains?: readonly string[], show?: boolean, saving?: boolean,
-   *   legend?: Parameters<typeof reconcileLegendEntries>[0] | null
+   *   reflow?: boolean, labels?: boolean, domains?: readonly string[], show?: boolean, saving?: boolean
    * }} [options]
    * @returns {Promise<string[] | false>}
    */
@@ -3222,7 +3230,6 @@ export const createAppSetup = () => {
     visibility = false,
     rerender = false,
     reflow = false,
-    legend = null,
     labels = false,
     domains = [],
     show = true,
@@ -3232,21 +3239,26 @@ export const createAppSetup = () => {
     // The visibility projection follows with the labels, so one edit queues
     // one label request.
     if (visibility) await projectFeatureVisibility({ rerender, reflow, labels, show: false });
-    if (legend) reconcileLegendEntries(legend);
     if (labels && !visibility) reconcileLabelOverrides();
     const shown = [...new Set([...(colors ? FILL_DOMAINS : []), ...(visibility ? VISIBILITY_DOMAINS : []), ...domains])];
     if (show && shown.length > 0) showEditorIntent({ domains: shown });
     return shown;
   };
 
+  // OV-154: a Restore is one History step of the Legend intent, shown with the
+  // rows' fills through the port. O-2 (D-15-6 (5)): a Result saved before the
+  // executor kept a deleted row lacks Python's row, so Python draws it again.
   /**
    * @param {string} label
    * @param {number[] | null} indexes
    */
-  const restoreLegendItems = (label, indexes) => history.runUndoableCheckpoint(label, async () => {
-    const restored = await restoreDeletedLegendEntries(indexes);
-    if (restored === true) await projectMountedEditorIntent({ colors: true, prepareRules: false });
-    return restored;
+  const restoreLegendItems = (label, indexes) => history.runUndoable(label, () => {
+    const restored = restoreDeletedLegendEntries(indexes);
+    if (!Array.isArray(restored)) return restored;
+    showEditorIntent({ domains: LIVE_EDIT_DOMAINS.legendRows });
+    const svg = svgContainer.value?.querySelector?.('svg');
+    if (restored.some((key) => !drawsPythonLegendRow(svg, key))) featureActions.requestAutomaticRerender();
+    return true;
   });
 
   historySnapshots.setAfterApplyHistoryIntent(async (_intent, /** @type {{ domains?: Set<string>, changes?: Record<string, any>, direction?: string }} */ { domains, changes, direction } = {}) => {
@@ -3270,25 +3282,18 @@ export const createAppSetup = () => {
       change?.path?.[0] === 'config' && change.path[1] === 'rules'
     ));
     const editorState = changedDomains.has('editorState');
-    // The Legend side of this step: the restored entry owners and `from`, the
-    // list the step leaves (the restored list when the step kept it). The
-    // Legend owner decides what it describes (B19).
+    // The Legend side of this step: `from`, the list the step leaves. A step
+    // made on another batch Result restores that Result's list, so the Legend
+    // owner writes the displayed Result's list before it shows (B19).
     const legendChange = (Array.isArray(changes) ? changes : []).find(({ path } = {}) => (
       path?.length === 3 && path[0] === 'editorState' && path[1] === 'legend' && path[2] === 'entries'
     ));
+    if (legendChange) legendActions.adoptRestoredLegend({ from: legendChange[direction === 'undo' ? 'after' : 'before'] });
     const projected = await projectMountedEditorIntent({
       colors,
       prepareRules: changedDomains.has('features') || rulesChanged || !rulePreparation.isPrepared(),
       visibility: changedDomains.has('features'),
       rerender: true,
-      legend: editorState
-        ? {
-            entryOwners: _intent.editorState.legend.entryOwners,
-            from: legendChange
-              ? legendChange[direction === 'undo' ? 'after' : 'before']
-              : _intent.editorState.legend.entries
-          }
-        : null,
       labels: changedDomains.has('features') || editorState,
       domains: editorPaintDomains(changes)
     });
@@ -3373,11 +3378,14 @@ export const createAppSetup = () => {
   /**
    * @param {DrawingState} drawing
    * @param {number} resultIndex
-   * @param {{ replayDefaultLegendOrder?: string[] | null, domains?: readonly string[] | null }} [options]
+   * @param {{
+   *   replayDefaultLegendOrder?: string[] | null, domains?: readonly string[] | null,
+   *   ruleRows?: import('./candidate-render.js').RuleLegendRows | null
+   * }} [options]
    *   The operation domains the displayed Result shows, previewed live and compiled alone; null
-   *   compiles the edits Python does not draw, as Generate does.
+   *   compiles the edits Python does not draw, as Generate does. `ruleRows`: a rule commit's rows.
    */
-  const compileDisplayedResultOperations = (drawing, resultIndex, { replayDefaultLegendOrder = null, domains = null } = {}) => {
+  const compileDisplayedResultOperations = (drawing, resultIndex, { replayDefaultLegendOrder = null, domains = null, ruleRows = null } = {}) => {
     const catalog = toRaw(state.featureCatalog.value);
     const svg = svgContainer.value?.querySelector?.('svg') || null;
     // A Result without a catalog (a Session older than 40) is reached through
@@ -3406,7 +3414,8 @@ export const createAppSetup = () => {
         drawnContext: domains.includes('featureVisibility')
           ? featureDrawnContext(drawing, { diagramOptions: getCommittedCanonicalRenderRequest()?.diagramOptions })
           : null,
-        shownFills: () => drawnFeatureFills(svg)
+        shownFills: () => drawnFeatureFills(svg),
+        ruleRows
       } : null
     });
     return plan.operationsByResult[resultIndex] || null;
@@ -3417,21 +3426,20 @@ export const createAppSetup = () => {
   // the executor Generate uses, which returns each attribute of `domains` no
   // operation sets to Python's value; then one commit of the Result. Live
   // edits, History, and the display of a batch Result call it. The Legend is
-  // laid out once when its rows changed (zero shift): in the reconcile, or
-  // before it (`legendChanged`).
+  // laid out once when the reconcile changed its rows (zero shift).
   /**
    * @param {{
    *   domains: readonly string[],
    *   operations?: Record<string, any> | null,
-   *   legendChanged?: boolean
+   *   ruleRows?: import('./candidate-render.js').RuleLegendRows | null
    * }} options
    */
-  const showEditorIntent = ({ domains, operations = undefined, legendChanged = false }) => {
+  const showEditorIntent = ({ domains, operations = undefined, ruleRows = null }) => {
     let shown = operations;
     if (shown === undefined) {
       const resultIndex = previewRuntime.getActiveRuntime()?.resultIndex ?? (Number(selectedResultIndex.value) || 0);
       try {
-        shown = compileDisplayedResultOperations(state.activeDrawing(), resultIndex, { domains });
+        shown = compileDisplayedResultOperations(state.activeDrawing(), resultIndex, { domains, ruleRows });
       } catch (error) {
         console.error('Editor edits could not be compiled for the displayed Result.', normalizeUserFacingError(error));
         return false;
@@ -3439,7 +3447,9 @@ export const createAppSetup = () => {
     }
     return previewRuntime.applyEditorOperations(shown, {
       domains,
-      afterApply: (_svg, reconciled) => { if (legendChanged || reconciled) legendActions.onLegendGeometryChanged(); }
+      // The Legend is laid out without its own commit: the display commits
+      // the Result once (S4).
+      afterApply: (_svg, reconciled) => { if (reconciled) legendActions.onLegendGeometryChanged({ commit: false }); }
     });
   };
   // The paint domains each edit kind shows, live and on Undo and Redo.
@@ -3522,13 +3532,9 @@ export const createAppSetup = () => {
       console.error('Editor edits could not be compiled for the displayed Result.', normalizeUserFacingError(error));
     }
     const hasOperations = Boolean(operations) && domains.some((domain) => operations[domain].length > 0);
-    const legend = {
-      resultIdentity: identity,
-      liveResultIdentities: liveResultIdentities(),
-      deletedCaptions: (operations?.legendDeletes || []).map(({ caption }) => caption)
-    };
-    const restoresLegend = legendActions.hasRetiredResultLegend(legend);
-    const projects = colors || visibility || strokes || hasOperations || restoresLegend;
+    // A Result that shows a Legend structure edit no operation keeps returns
+    // to Python's rows (the reconcile's reverse).
+    const projects = colors || visibility || strokes || hasOperations || legendStructureEdited(context.root);
     recordStructuralMetric('displayedResultEditorProjectionCount', projects ? 1 : 0, {
       phase: context.phase,
       rootGeneration: context.rootGeneration
@@ -3536,8 +3542,7 @@ export const createAppSetup = () => {
     if (!projects && !failed) return;
     if (projects) {
       try {
-        const legendChanged = legendActions.prepareDisplayedResultLegend(context.root, legend);
-        showEditorIntent({ domains, operations, legendChanged });
+        showEditorIntent({ domains, operations });
       } catch (error) {
         failed = true;
         console.error('Editor edits could not be shown on the displayed Result.', normalizeUserFacingError(error));
@@ -6248,13 +6253,11 @@ export const createAppSetup = () => {
     newLegendColor,
     updateLegendEntryColor: updateLegendEntryColorShown,
     renameLegendEntry,
-    // A Legend that gains or loses a row is one checkpoint step, so Undo and
-    // Redo return the Legend as it was laid out, canvas included (OV-125).
-    deleteLegendEntry: /** @param {number} index */ (index) => history.runUndoableCheckpoint(
-      'Delete legend item',
-      () => deleteLegendEntry(index)
-    ),
-    addNewLegendEntry: () => history.runUndoableCheckpoint('Add legend item', addNewLegendEntry),
+    // A Legend that gains or loses a row is one History step of the intent,
+    // which Undo and Redo show through the port and lay out as Python does,
+    // canvas included (OV-125).
+    deleteLegendEntry: editEditorIntent('Delete legend item', deleteLegendEntry, { domains: LEGEND_STRUCTURE_DOMAINS }),
+    addNewLegendEntry: editEditorIntent('Add legend item', addNewLegendEntry, { domains: LEGEND_STRUCTURE_DOMAINS }),
     // OV-154: a Restore returns deleted rows in one checkpoint step, as a delete
     // removes them; the palette then reaches the returned rows.
     deletedLegendEntries: drawingMember('deletedLegendEntries'),

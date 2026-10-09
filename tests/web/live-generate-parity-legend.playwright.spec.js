@@ -66,6 +66,47 @@ test('an edit that changes a Legend source rerenders once', async ({ page }) => 
   await expectLiveEqualsGenerate(page, { label: 'edits that change a Legend source' });
 });
 
+// S4 (perf 0.14.x, counts not timings) at the edit port: a color rule that
+// adds a Legend row shows it in the rule commit's one show (`showEditorIntent`),
+// which lays the Legend out and serializes the Result once; so does Add legend
+// item. Counted: the Result serializations of the preview owner's commit
+// (`flushActiveResult`) until the automatic rerender responds.
+const countResultSerializations = async (page) => {
+  await page.evaluate(() => {
+    window.__resultSerializations = 0;
+    window.__countResultSerializations = true;
+    if (window.__resultSerializationProbe) return;
+    window.__resultSerializationProbe = true;
+    const serialize = XMLSerializer.prototype.serializeToString;
+    XMLSerializer.prototype.serializeToString = function (node) {
+      if (window.__countResultSerializations && /flushActiveResult/.test(new Error().stack || '')) {
+        window.__resultSerializations += 1;
+      }
+      return serialize.call(this, node);
+    };
+    const hooks = window.__GBDRAW_TEST_HOOKS__ || {};
+    const render = hooks.beforeDiagramGenerationResponse;
+    window.__GBDRAW_TEST_HOOKS__ = {
+      ...hooks,
+      beforeDiagramGenerationResponse: (...args) => { window.__countResultSerializations = false; return render?.(...args); }
+    };
+  });
+  return () => page.evaluate(() => window.__resultSerializations);
+};
+
+test('a color rule or Add legend item that adds a Legend row serializes the Result once', async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  let serializations = await countResultSerializations(page);
+  await addColorRule(page, FL1_ALPHA);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption))).toContain('alpha');
+  expect(await serializations(), 'color rule commit that adds a Legend row').toBe(1);
+  serializations = await countResultSerializations(page);
+  await legendRowAdd(page, 'Added', '#123456');
+  expect(await serializations(), 'Add legend item').toBe(1);
+  await expectLiveEqualsGenerate(page, { label: 'Legend rows added by a rule and by Add legend item' });
+});
+
 // OV-60: renaming a generated Legend row (GC content) onto the caption of a
 // color rule that draws no row is an explicit rename; Generate draws it too.
 test('a Legend rename onto the caption of a color rule without a drawn row equals Generate', async ({ page }) => {

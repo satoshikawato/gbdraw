@@ -2,8 +2,6 @@
 import { resolveColorToHex } from '../utils/color-utils.js';
 import { parseSpecificRules } from './file-imports.js';
 
-export const SPECIFIC_COLOR_FILE_OWNER = 'specific-color-file';
-
 const normalizeText = (value) => String(value ?? '').trim();
 const normalizeColor = (value) => String(resolveColorToHex(normalizeText(value)) || '').toLowerCase();
 

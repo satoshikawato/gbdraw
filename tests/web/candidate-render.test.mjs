@@ -509,3 +509,45 @@ test('a feature fill override is read with the Default colors domain (D-41, OV-3
     assert.throws(() => fill(color), { message: 'Invalid feature fill override in the committed editor state.' }, color);
   }
 });
+
+// U3a A2a: a live fill or stroke of a renamed row addresses Python's key,
+// which the executor's Legend index keeps for the row (A1); no shown caption
+// rides along.
+test('a live Legend fill and stroke of a renamed row address Python\'s key only', () => {
+  const operations = compileDirectEditorMutationPlan({
+    catalogAdmission: admission(),
+    legendEntries: [{ caption: 'Proteins', originalCaption: 'CDS', color: '#aaaaaa' }],
+    originalLegendOrder: ['CDS', 'tRNA'],
+    legendColorOverrides: { Proteins: '#ff0000' },
+    legendStrokeOverrides: { Proteins: { strokeColor: '#00ff00' } },
+    livePreview: { domains: ['legendFills', 'featureStrokes', 'legendStrokes'], paletteColors: { tRNA: '#0000ff' } }
+  }).operationsByResult[0];
+  assert.deepEqual(operations.legendFills.map(({ caption, color }) => [caption, color]), [['CDS', '#ff0000'], ['tRNA', '#0000ff']]);
+  assert.deepEqual(operations.legendStrokes.map(({ caption }) => caption), ['CDS']);
+  assert.doesNotMatch(JSON.stringify(operations), /renamedCaption/);
+});
+
+// U3a A2a (gaps 1 and 2): a rule commit shows its new row where the displayed
+// Result lacks it and retires the row of a removed rule at once; Python draws
+// both at the next Generate, which compiles neither.
+test('a rule commit\'s Legend rows show once on the displayed Result and never at Generate', () => {
+  const intent = {
+    catalogAdmission: admission(),
+    legendEntries: [
+      { caption: 'CDS', originalCaption: 'CDS', color: '#aaaaaa' },
+      { caption: 'Rule', originalCaption: 'Rule', color: '#123456' }
+    ],
+    originalLegendOrder: ['CDS', 'Old'],
+    manualSpecificRules: [{ feat: 'CDS', qual: 'gene', val: 'a', cap: 'Rule', color: '#123456' }],
+    addedLegendCaptions: new Set(['Rule'])
+  };
+  const ruleRows = { add: [{ caption: 'Rule', color: '#123456', before: 'Old' }], retire: ['Old'] };
+  const live = compileDirectEditorMutationPlan({
+    ...intent,
+    livePreview: { domains: ['legendRenames', 'legendDeletes', 'legendAdds', 'legendOrder'], ruleRows }
+  }).operationsByResult[0];
+  assert.deepEqual(live.legendAdds, [{ caption: 'Rule', color: '#123456', xPos: null, yPos: null, ifAbsent: true, before: 'Old' }]);
+  assert.deepEqual(live.legendDeletes, [{ caption: 'Old', allowMissing: true, retire: true }]);
+  const generated = compileDirectEditorMutationPlan(intent).operationsByResult[0];
+  assert.deepEqual([generated.legendAdds, generated.legendDeletes], [[], []]);
+});

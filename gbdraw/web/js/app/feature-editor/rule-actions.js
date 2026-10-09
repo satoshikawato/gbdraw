@@ -46,7 +46,8 @@ import { featureDrawnContext, resultLegendSources, sameLegendSources } from '../
  * @typedef {object} PreparedFileLegend
  * @property {{ add: any[], update: any[], remove: any[], unchanged: any[] }} diff
  * @property {() => boolean} isCurrent
- * @property {() => void} apply
+ * @property {() => import('../candidate-render.js').RuleLegendRows | null} apply Writes the rows into the
+ *   intent; returns the rows the displayed Result shows at once.
  */
 
 /**
@@ -58,7 +59,7 @@ import { featureDrawnContext, resultLegendSources, sameLegendSources } from '../
  * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoable History's undoable step.
  * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoableCheckpoint
  *   History's undoable step that stores a checkpoint of the Result.
- * @property {(options?: { recolor?: Record<string, any>, prepareRules?: boolean }) => boolean | Promise<boolean>} projectPaletteAndRules
+ * @property {(options?: { recolor?: Record<string, any>, prepareRules?: boolean, legendRows?: import('../candidate-render.js').RuleLegendRows | null }) => boolean | Promise<boolean>} projectPaletteAndRules
  *   The root's projection of the palette and the rules (R3).
  * @property {RuleActionsPorts} ports
  * @property {() => ({ diagramOptions?: Record<string, any> } | null)} [getCommittedRequest]
@@ -330,11 +331,11 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       retireSupersededLegendColors(drawing, intents, removedRuleRows);
       afterCommit(intents);
       applied = true;
-      legend.apply();
-      // The step shows its fills once its rules, feature fills, and Legend
-      // colors are written and its rows drawn: every feature and row fill is
-      // an operation of the one compile (OV-146).
-      projectPaletteAndRules({ prepareRules: false });
+      const legendRows = legend.apply();
+      // The step shows its fills and Legend rows once its rules, feature
+      // fills, Legend colors, and rows are written: every feature and row fill
+      // is an operation of the one compile (OV-146).
+      projectPaletteAndRules({ prepareRules: false, legendRows });
       return legend.diff;
     });
     if (applied) rulePreparation.notifyChanges(candidate);

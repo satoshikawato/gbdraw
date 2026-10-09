@@ -1,46 +1,32 @@
 // @ts-check
 /** @import { DrawingState } from '../../state.js' */
-// Sort and Move compute the requested caption order; the Legend entry owner
-// orders the mounted Legend through the `orderMountedLegend` port (R3, R13).
+// Sort and Move compute the requested caption order, write it into the
+// drawing's Legend intent, and show it through the root's port once (R1, R3,
+// R13): the executor orders the displayed Result's rows.
 /**
  * @typedef {object} LegendSortActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
- * @property {(options?: { replaceGeneratedInventory?: boolean }) => void} extractLegendEntries
- *   The Legend entry owner's re-read of the mounted Legend.
- * @property {(captionOrder: string[], options?: { keepFollowed?: boolean }) => (boolean | null)} orderMountedLegend
- *   The Legend entry owner's one ordering of the mounted Legend; null when no Legend is mounted.
- * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
- *   The preview owner's commit of an edit to the displayed Result (R1, R13).
+ * @property {() => unknown} showLegendStructure The root's show of the Legend structure intent.
  */
 
 /** @param {LegendSortActionsOptions} options */
-export const createLegendSortActions = ({ state, extractLegendEntries, orderMountedLegend, commitActiveResultEdit = null }) => {
+export const createLegendSortActions = ({ state, showLegendStructure }) => {
   const { originalLegendOrder } = state;
 
-  const persistLegendOrder = () => {
-    commitActiveResultEdit?.('legend-order');
-    extractLegendEntries();
-  };
-
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {string[]} captionOrder */
   const applyLegendEntryOrder = (drawing, captionOrder) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const changed = orderMountedLegend(captionOrder);
-    if (changed === null) return;
-
-    if (!changed) {
-      const currentOrder = drawing.legendEntries.value.map((entry) => entry.caption);
-      const normalizedRequested = captionOrder.filter(Boolean);
-      if (
-        currentOrder.length === normalizedRequested.length &&
-        currentOrder.every((caption, idx) => caption === normalizedRequested[idx])
-      ) {
-        return;
-      }
-    }
-
-    persistLegendOrder();
+    /** @type {Record<string, any>[]} */
+    const entries = drawing.legendEntries.value || [];
+    const listed = new Set(captionOrder);
+    const ordered = [
+      ...[...listed].flatMap((caption) => entries.filter((entry) => entry.caption === caption)),
+      ...entries.filter((entry) => !listed.has(entry.caption))
+    ];
+    if (ordered.every((entry, index) => entry === entries[index])) return;
+    drawing.legendEntries.value = ordered;
+    showLegendStructure();
   };
 
   /** @param {DrawingState} drawing */

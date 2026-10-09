@@ -16,7 +16,8 @@ import {
   moveLegendEntryToAnchor,
   orderLegendEntries,
   pythonLegendKey,
-  setsFeatureStroke
+  setsFeatureStroke,
+  SPECIFIC_COLOR_FILE_OWNER
 } from './legend-svg.js';
 import { isCurrentWorkerGenerationResponse } from './current-worker-result-source.js';
 import { diagnosticError } from '../utils/error-normalization.js';
@@ -670,9 +671,20 @@ const applyLegendOperations = (index, operations, { displayed = false, mayBeAbse
   // Python never draws a row the Legend editor added, so the row is added first and
   // a fill or stroke on it then finds it like a generated row (OV-86). An added row
   // copies Python's first row as Python drew it, before this pass styles that row.
-  operations.legendAdds.forEach(({ caption, color, xPos, yPos }) => {
+  // A rule commit's row (`ifAbsent`) is added only where the Result lacks it,
+  // before the row it replaces, and owned by the rules; a row of that caption
+  // the Result has stays as it is, shown again if a commit retired it.
+  // An editor row goes before the rows of the later additions, as Generate
+  // appends them in order, so a renamed editor row keeps its place among them.
+  operations.legendAdds.forEach(({ caption, color, xPos, yPos, ifAbsent = false, before = '' }, addIndex) => {
     const { entries, groups } = index.legends();
     const existingEntries = entries.get(caption) || [];
+    if (ifAbsent && existingEntries.length > 0) {
+      existingEntries.forEach((entry) => {
+        if (!entry.hasAttribute(resultBaseAttribute('display'))) changed = removeAttributeIfPresent(entry, 'display') || changed;
+      });
+      return;
+    }
     if (existingEntries.length > 0) {
       existingEntries.forEach((entry) => {
         const swatch = legendSwatch(entry);
@@ -689,19 +701,27 @@ const applyLegendOperations = (index, operations, { displayed = false, mayBeAbse
       throw new Error('Current SVG cannot admit the requested Legend addition.');
     }
     entries.set(caption, groups.map((group) => {
-      const template = Array.from(group.querySelectorAll('g[data-legend-key]')).find((entry) => !isEditorRow(entry));
-      const added = /** @type {Element | null} */ (template?.cloneNode?.(true) || null);
-      if (!added) throw new Error('Current SVG has no Legend entry template.');
-      // The copy is of Python's row as drawn, not of that row's edits (OV-121).
-      restorePaintBases(added, RESULT_PAINT_DOMAINS, new Map());
-      updateLegendCaption(added, caption);
-      const swatch = legendSwatch(added);
+      const rows = Array.from(group.querySelectorAll('g[data-legend-key]'));
+      const template = rows.find((entry) => !isEditorRow(entry));
+      const row = /** @type {Element | null} */ (template?.cloneNode?.(true) || null);
+      if (!row) throw new Error('Current SVG has no Legend entry template.');
+      // The copy is of Python's row as drawn, not of that row's edits (OV-121);
+      // Python draws no hidden row.
+      restorePaintBases(row, RESULT_PAINT_DOMAINS, new Map());
+      row.removeAttribute('display');
+      updateLegendCaption(row, caption);
+      const swatch = legendSwatch(row);
       if (!swatch) throw new Error('Current SVG has no Legend swatch template.');
       swatch.setAttribute('fill', color);
-      added.setAttribute('data-legend-owner', 'direct-editor');
-      moveLegendEntryToAnchor(added, xPos, yPos);
-      group.appendChild(added);
-      return added;
+      row.setAttribute('data-legend-owner', ifAbsent ? SPECIFIC_COLOR_FILE_OWNER : 'direct-editor');
+      moveLegendEntryToAnchor(row, xPos, yPos);
+      const later = new Set(operations.legendAdds.slice(addIndex + 1).map((add) => add.caption));
+      const next = rows.find((entry) => (before
+        ? text(entry.getAttribute('data-legend-key')) === before
+        : !ifAbsent && isEditorRow(entry) && later.has(text(entry.getAttribute('data-legend-key')))));
+      if (next?.parentElement) next.parentElement.insertBefore(row, next);
+      else group.appendChild(row);
+      return row;
     }));
     changed = true;
   });
@@ -739,9 +759,12 @@ const applyLegendOperations = (index, operations, { displayed = false, mayBeAbse
   });
   // A delete hides the row and keeps it with Python's key, so a reconcile
   // without the delete shows it in its place.
-  operations.legendDeletes.forEach(({ caption, allowMissing }) => {
+  // A rule commit's retired row (`retire`) stays hidden, with no record, until
+  // Python draws the Legend again.
+  operations.legendDeletes.forEach(({ caption, allowMissing, retire = false }) => {
     requireLegendEntries(index, caption, { allowMissing }).forEach((entry) => {
-      changed = setPaintAttribute(index, entry, 'display', 'none') || changed;
+      changed = (retire ? setAttributeIfDifferent(entry, 'display', 'none') : setPaintAttribute(index, entry, 'display', 'none'))
+        || changed;
     });
   });
   // The edited Legend order is replayed last, over the renderer's slots (D-08).
@@ -831,20 +854,13 @@ export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domai
   });
   let legendChanged = false;
   if (index.legends().groups.length > 0) {
-    // A row the Legend editor renamed on the mounted Result without the
-    // executor shows its new key and keeps no record of Python's, so a row the
-    // operations name by Python's caption is found under its new one
-    // (`renamedCaption`) when Python's is absent.
+    // Every row operation addresses Python's key (the index keeps it for a
+    // renamed row), or an editor row's own key, and may miss its row here.
     const allowMissing = (operation) => ({ ...operation, allowMissing: true });
-    const onShownRow = ({ renamedCaption = '', ...operation }) => ({
-      ...operation,
-      caption: renamedCaption && !index.legends().entries.has(operation.caption) ? renamedCaption : operation.caption,
-      allowMissing: true
-    });
     legendChanged = applyLegendOperations(index, {
-      legendFills: operations.legendFills.map(onShownRow),
+      legendFills: operations.legendFills.map(allowMissing),
       legendStrokes: operations.legendStrokes.map((operation) => ({
-        ...onShownRow(operation),
+        ...allowMissing(operation),
         renderedIds: (operation.renderedIds || []).filter((renderedId) => present({ renderedId }))
       })),
       legendRenames: operations.legendRenames.map(allowMissing),

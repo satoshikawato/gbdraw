@@ -680,11 +680,13 @@ const newFeatureToAdd = ref(defaultEditorDraftState.newFeatureToAdd);
 // content (an editor edit, R1) keeps both, so it does not list the features
 // again. The rule matches the drawn state reads are recorded while
 // `ruleMatchingPending` holds, so the list follows its fall.
-const listedResults = computed((previous) => {
+/** @typedef {{ list: Record<string, any>[], names: unknown[], metadata: Record<string, any> | null }} ListedResults */
+const listedResults = computed((/** @type {ListedResults | undefined} */ previous) => {
+  /** @type {Record<string, any>[]} */
   const list = results.value;
   const names = list.map((result) => result?.name);
   const metadata = getCommittedSvgResultMetadata(toRaw(list[selectedResultIndex.value]));
-  return previous?.metadata === metadata && previous.names.length === names.length
+  return previous !== undefined && previous.metadata === metadata && previous.names.length === names.length
     && previous.names.every((name, index) => name === names[index])
     ? previous : { list, names, metadata };
 });

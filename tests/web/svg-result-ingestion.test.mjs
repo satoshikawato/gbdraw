@@ -58,6 +58,13 @@ class FakeElement {
   removeAttribute(name) { this.attributes.delete(name); }
   hasAttribute(name) { return this.attributes.has(name); }
   appendChild(child) { child.remove?.(); child.parentElement = this; this.children.push(child); return child; }
+  insertBefore(child, reference) {
+    child.remove?.();
+    child.parentElement = this;
+    const at = this.children.indexOf(reference);
+    this.children.splice(at < 0 ? this.children.length : at, 0, child);
+    return child;
+  }
   remove() {
     if (!this.parentElement) return;
     this.parentElement.children = this.parentElement.children.filter((child) => child !== this);
@@ -1211,15 +1218,20 @@ test('a Legend fill reconcile shows the rule or palette color of a row whose own
   assert.equal(featureFill(mounted), '#aaaaaa');
 });
 
-// Review U2b #1: a live rename rewrites the shown row's key, so a palette or
-// rule reconcile finds the row under its new key and keeps its Legend color or
-// shows the new palette color, as Generate draws the renamed row.
+// Review U2b #1, U3a A2a: a live rename is the executor's, which keeps
+// Python's key for the row, so a palette or rule reconcile addressing that key
+// keeps the row's Legend color or shows the new palette color, as Generate
+// draws the renamed row.
 const RENAMED_ROW = { legendEntries: [{ caption: 'Proteins', originalCaption: 'CDS', color: '#aaaaaa' }] };
+const RENAME_DOMAINS = ['legendRenames', 'legendDeletes', 'legendAdds', 'legendOrder'];
 test('a palette reconcile keeps the Legend color of a row renamed live', () => {
   const { admission } = currentFixture();
   const mounted = buildSvgRoot();
   reconcileMountedResult(mounted, previewPlan(admission, { legendColorOverrides: { CDS: '#ff0000' } }), { domains: ['legendFills'] });
-  mounted.querySelector('g[data-legend-key]').setAttribute('data-legend-key', 'Proteins');
+  reconcileMountedResult(mounted, previewPlan(admission, {
+    ...RENAMED_ROW, legendColorOverrides: { Proteins: '#ff0000' }, domains: RENAME_DOMAINS
+  }), { domains: RENAME_DOMAINS });
+  assert.equal(mounted.querySelector('g[data-legend-key]').getAttribute('data-legend-key'), 'Proteins');
   reconcileMountedResult(mounted, previewPlan(admission, {
     ...RENAMED_ROW, legendColorOverrides: { Proteins: '#ff0000' }, paletteColors: { CDS: '#00ff00' }
   }), { domains: ['featureFills', 'legendFills'] });
@@ -1229,7 +1241,7 @@ test('a palette reconcile shows the current palette color on a row renamed live'
   const { admission } = currentFixture();
   const palette = buildSvgRoot();
   reconcileMountedResult(palette, previewPlan(admission, { paletteColors: { CDS: '#00ff00' } }), { domains: ['legendFills'] });
-  palette.querySelector('g[data-legend-key]').setAttribute('data-legend-key', 'Proteins');
+  reconcileMountedResult(palette, previewPlan(admission, { ...RENAMED_ROW, domains: RENAME_DOMAINS }), { domains: RENAME_DOMAINS });
   reconcileMountedResult(palette, previewPlan(admission, { ...RENAMED_ROW, paletteColors: { CDS: '#0000ff' } }), { domains: ['legendFills'] });
   assert.equal(swatchFill(palette), '#0000ff', 'the renamed row shows the current palette color');
 });
@@ -1488,4 +1500,39 @@ test('an export strips the Legend structure records and the rows a delete hid', 
   stripResultBaseAttributes(svg);
   assert.doesNotMatch(serializeNode(svg), /data-gbdraw-base-|display="none"/);
   assert.deepEqual(legendRows(svg), [['tRNA', 'tRNA', null], ['Genes', 'Genes', null]]);
+});
+
+// U3a A2a (gaps 1 and 2): a rule commit's row is added once where the Result
+// lacks it, before the row it replaces, and owned by the rules; a retired row
+// stays hidden without a record. A later reconcile keeps both until Python
+// draws the rows again; a Result that draws the rule's row keeps Python's.
+test('a rule commit\'s row is added where the Result lacks it and a retired row stays hidden', () => {
+  const svg = legendSvg();
+  const operations = legendOperations({
+    legendAdds: [{ caption: 'Rule', color: '#123456', xPos: null, yPos: null, ifAbsent: true, before: 'tRNA' }],
+    legendDeletes: [{ caption: 'tRNA', allowMissing: true, retire: true }]
+  });
+  assert.equal(reconcileMountedResult(svg, operations, { domains: LEGEND_STRUCTURE }), true);
+  const shown = [['CDS', 'CDS', null], ['Rule', 'Rule', null], ['tRNA', 'tRNA', 'none'], ['rRNA', 'rRNA', null]];
+  assert.deepEqual(legendRows(svg), shown);
+  const rule = svg.querySelectorAll('g[data-legend-key]')[1];
+  assert.equal(rule.getAttribute('data-legend-owner'), 'specific-color-file');
+  assert.equal(legendSwatch(rule).getAttribute('fill'), '#123456');
+  assert.equal(reconcileMountedResult(svg, operations, { domains: LEGEND_STRUCTURE }), false);
+  assert.equal(reconcileMountedResult(svg, legendOperations(), { domains: LEGEND_STRUCTURE }), false);
+  assert.deepEqual(legendRows(svg), shown);
+  const drawn = legendSvg([legendRow('CDS', 7), legendRow('Rule', 31)]);
+  const bytes = serializeNode(drawn);
+  assert.equal(reconcileMountedResult(drawn, operations, { domains: LEGEND_STRUCTURE }), false);
+  assert.equal(serializeNode(drawn), bytes);
+});
+
+// U3a A2a (gap 3): editor rows follow the order of their adds, as Generate
+// appends them, so a renamed editor row keeps its place among them.
+test('editor rows follow the order of their additions', () => {
+  const svg = legendSvg();
+  const add = (caption) => ({ caption, color: '#556677', xPos: null, yPos: null });
+  reconcileMountedResult(svg, legendOperations({ legendAdds: [add('A'), add('B')] }), { domains: LEGEND_STRUCTURE });
+  assert.equal(reconcileMountedResult(svg, legendOperations({ legendAdds: [add('A2'), add('B')] }), { domains: LEGEND_STRUCTURE }), true);
+  assert.deepEqual(legendRows(svg).map(([key]) => key), ['CDS', 'tRNA', 'rRNA', 'A2', 'B']);
 });

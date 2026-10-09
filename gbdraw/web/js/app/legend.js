@@ -25,6 +25,7 @@ import { legendRowRules } from '../services/specific-color-rules.js';
  *   The preview owner's commit of an edit to the displayed Result (R1, R13).
  * @property {(() => string | undefined) | null} [readActiveResultIdentity]
  *   The preview owner's runtime identity of the mounted Result.
+ * @property {() => unknown} showLegendStructure The root's show of the Legend structure intent (R1).
  */
 
 /** @param {LegendManagerOptions} options */
@@ -35,20 +36,12 @@ export const createLegendManager = ({
   commitHistoryTransaction = null,
   // R13: the preview owner's ports; the Legend owners never hold it.
   commitActiveResultEdit = null,
-  readActiveResultIdentity = null
+  readActiveResultIdentity = null,
+  showLegendStructure
 }) => {
   const layoutActions = createLegendLayoutActions();
-  const entryActions = createLegendEntryActions({
-    state,
-    commitActiveResultEdit,
-    readActiveResultIdentity
-  });
-  const sortActions = createLegendSortActions({
-    state,
-    extractLegendEntries: entryActions.extractLegendEntries,
-    orderMountedLegend: entryActions.orderMountedLegend,
-    commitActiveResultEdit
-  });
+  const entryActions = createLegendEntryActions({ state, readActiveResultIdentity });
+  const sortActions = createLegendSortActions({ state, showLegendStructure });
   const strokeActions = createLegendStrokeActions({ state });
   /** @param {DrawingState} drawing */
   const rowRulesAt = (drawing, index) => legendRowRules(drawing.legendEntries.value[index]?.caption, {
@@ -78,14 +71,6 @@ export const createLegendManager = ({
         return commitLegendRowRules(drawing.manualSpecificRules.map(rule => rowRules.includes(rule) ? { ...rule, color } : { ...rule }), 'Change legend color');
       }
       return entryActions.updateLegendEntryColor(index, color);
-    },
-    updateLegendEntryCaption: (index, caption) => {
-      const drawing = state.activeDrawing();
-      const rowRules = rowRulesAt(drawing, index);
-      if (rowRules.length) {
-        return commitLegendRowRules(drawing.manualSpecificRules.map(rule => rowRules.includes(rule) ? { ...rule, cap: caption } : { ...rule }), 'Rename legend item');
-      }
-      return entryActions.updateLegendEntryCaption(index, caption);
     },
     ...layoutActions,
     ...sortActions,

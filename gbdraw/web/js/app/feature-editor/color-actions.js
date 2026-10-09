@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { DrawingState } from '../../state.js' */
+import { LIVE_EDIT_DOMAINS } from '../candidate-render.js';
 import { reportRuleRunFailure } from '../rule-matching.js';
 import { matchedRuleKeys, ruleKey, ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { appliedFeatureColors, resolveColorToHex } from '../../utils/color-utils.js';
@@ -7,7 +8,6 @@ import { getFeatureCaption, getFeatureColorRuleHash, getFeatureHashCandidates } 
 import { exactRegexValue } from '../../services/feature-selector.js';
 import {
   drawnLegendRowStroke,
-  getAllFeatureLegendGroups,
   mountedLegendRowFeatureIds,
   setsFeatureStroke
 } from '../../services/legend-svg.js';
@@ -53,14 +53,11 @@ import {
 /**
  * @typedef {object} FeatureColorActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
- * @property {(options?: { replaceGeneratedInventory?: boolean }) => any} extractLegendEntries
- *   The Legend owner's reading of the mounted Legend rows.
- * @property {() => void} onLegendGeometryChanged The Legend owner's reaction to a change of Legend geometry.
+ * @property {((options: { domains: readonly string[] }) => unknown) | null} [showEditorIntent]
+ *   The root's port of the editor intent onto the displayed Result (R1).
  * @property {ColorActionsRuleActions} ruleActions The rule owner's lookups and commit of specific-color rules.
  * @property {(svg: Element, featureId: string) => Element[]} getFeatureElements The mounted elements of a feature.
  * @property {(svg: Element, featureId: string) => Element[]} getFeatureFillElements The mounted fill elements of a feature.
- * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
- *   The preview owner's commit of an edit to the displayed Result (R1, R13).
  * @property {(close: () => unknown) => void} [closeAfterDialogChoice]
  *   Runs a dialog's close at once, or once the History step of the dialog's
  *   choice in flight ends (D-12, OIC-028).
@@ -71,14 +68,11 @@ import {
 /** @param {FeatureColorActionsOptions} options */
 export const createFeatureColorActions = ({
   state,
-  extractLegendEntries,
-  onLegendGeometryChanged,
+  showEditorIntent = null,
   ruleActions,
-  // R13: the mounted feature element lookups and the preview owner's commit
-  // of an edit to the displayed Result.
+  // R13: the mounted feature element lookups.
   getFeatureElements,
   getFeatureFillElements,
-  commitActiveResultEdit = null,
   closeAfterDialogChoice = (close) => { close(); },
   // R13, D-15: the palette owner's user default colors.
   readUserDefaultColor,
@@ -119,24 +113,9 @@ export const createFeatureColorActions = ({
   const colorsMatch = (left, right) => normalizeColor(left) === normalizeColor(right);
   const isHashSpecificRule = (rule) => String(rule?.qual || '').toLowerCase() === 'hash';
   const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
-  // The DOM edits of one color action reach the Result in one commit, when the
-  // last running color action settles.
-  let colorActionDepth = 0;
-  let pendingCommitReason = '';
-
-  const runColorAction = async (action) => {
-    colorActionDepth += 1;
-    try {
-      return await action();
-    } finally {
-      colorActionDepth -= 1;
-      if (colorActionDepth === 0 && pendingCommitReason) {
-        const reason = pendingCommitReason;
-        pendingCommitReason = '';
-        commitActiveResultEdit?.(reason);
-      }
-    }
-  };
+  // The domains a Legend row rename shows: the row's structure, and the fill
+  // and stroke an editor row takes under its new caption.
+  const RENAMED_ROW_DOMAINS = [...LIVE_EDIT_DOMAINS.legendStructure, ...LIVE_EDIT_DOMAINS.legendFills, ...LIVE_EDIT_DOMAINS.strokes];
 
   // Runs `run` once the rules a color edit may add for the features in `args`,
   // the clicked feature and the scope dialog's feature (their hash and label
@@ -170,7 +149,7 @@ export const createFeatureColorActions = ({
   // not to open their dialog, which reads the saved rules only (OV-225).
   const colorAction = (action, { targetRules = true } = {}) => (...args) => {
     const drawing = state.activeDrawing();
-    const run = () => runColorAction(() => action(drawing, ...args));
+    const run = async () => action(drawing, ...args);
     const prepareTargets = () => (targetRules ? withTargetRules(drawing, args, run) : run());
     return reportRuleRunFailure(state, 'evaluateRules', () => runWithRuleMatches(drawing.manualSpecificRules, prepareTargets));
   };
@@ -431,11 +410,6 @@ export const createFeatureColorActions = ({
   };
 
   const getCurrentSvg = () => svgContainer.value?.querySelector('svg') || null;
-
-  const persistCurrentSvg = (svg = getCurrentSvg(), reason = 'feature-color') => {
-    if (!svg) return;
-    pendingCommitReason ||= reason;
-  };
 
   /** @param {DrawingState} drawing */
   const exactHashRulesForFeature = (drawing, feature) => drawing.manualSpecificRules.filter(
@@ -780,42 +754,16 @@ export const createFeatureColorActions = ({
     return hasPrecedenceConflict ? null : first;
   };
 
-  /** @param {DrawingState} drawing */
-  const renameLegendEntryInSvg = (drawing, oldCaption, newCaption, color = null) => {
-    const svg = getCurrentSvg();
-    if (!svg) return false;
-
-    const targetGroups = getAllFeatureLegendGroups(svg);
-    if (targetGroups.length === 0) return false;
-
-    let updated = false;
-
-    for (const targetGroup of targetGroups) {
-      const entryGroup = targetGroup.querySelector(`g[data-legend-key="${CSS.escape(oldCaption)}"]`);
-      if (!entryGroup) continue;
-
-      entryGroup.setAttribute('data-legend-key', newCaption);
-      const textEl = entryGroup.querySelector('text');
-      if (textEl) {
-        textEl.textContent = newCaption;
-      }
-
-      if (color) {
-        const paths = entryGroup.querySelectorAll('path');
-        for (const path of paths) {
-          const fill = path.getAttribute('fill');
-          if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-            path.setAttribute('fill', color);
-            break;
-          }
-        }
-      }
-
-      updated = true;
-    }
-
-    if (!updated) return false;
-
+  // The rename of a Legend row without rules or features writes the intent
+  // (U3a gap 3): the row's styles move to the new caption, a row of Python's
+  // keeps its generated caption, so Generate and the port rename it
+  // (`legendRenames`, PV-02), and an editor row is identified by its caption,
+  // so the port removes the old row and adds the new one with its styles, in
+  // its place in the order. The text control's open step holds the edit.
+  /** @param {DrawingState} drawing @param {string} oldCaption @param {string} newCaption */
+  const renameLegendRow = (drawing, oldCaption, newCaption) => {
+    const legendEntry = drawing.legendEntries.value.find((entry) => captionsMatch(entry?.caption, oldCaption));
+    if (!legendEntry) return false;
     // The renamed row takes the caption: a style that an earlier row left under
     // that caption does not follow it, as Generate would otherwise apply it (OV-60).
     if (!findLegendEntryByCaption(drawing, newCaption)) {
@@ -827,27 +775,15 @@ export const createFeatureColorActions = ({
     moveCaptionStateKey(drawing.legendColorOverrides, oldCaption, newCaption);
     moveCaptionStateKey(drawing.legendStrokeOverrides, oldCaption, newCaption);
     moveAddedLegendCaption(drawing, oldCaption, newCaption);
-
-    // A renderer-generated row keeps its generated caption as its identity, so
-    // Generate replays the rename onto the regenerated row (PV-02). Rows the
-    // editor added are identified by their current caption.
-    const legendEntry = drawing.legendEntries.value.find((entry) => captionsMatch(entry?.caption, oldCaption));
-    const generatedRow = Boolean(legendEntry) && originalLegendOrder.value.some(
+    const generatedRow = originalLegendOrder.value.some(
       (caption) => captionsMatch(caption, legendEntry.originalCaption || legendEntry.caption)
     );
-    if (!generatedRow) syncOriginalLegendMetadataRename(oldCaption, newCaption, color);
-    if (legendEntry) {
-      legendEntry.caption = newCaption;
-      if (!generatedRow) legendEntry.originalCaption = newCaption;
-      if (color) {
-        legendEntry.color = color;
-      }
+    if (!generatedRow) {
+      syncOriginalLegendMetadataRename(oldCaption, newCaption);
+      legendEntry.originalCaption = newCaption;
     }
-
-    // The layout owner lays the Legend out as Python would with the renamed
-    // row (zero shift; OV-127) and docks it.
-    onLegendGeometryChanged();
-    persistCurrentSvg(svg);
+    legendEntry.caption = newCaption;
+    showEditorIntent?.({ domains: RENAMED_ROW_DOMAINS });
     return true;
   };
 
@@ -891,10 +827,7 @@ export const createFeatureColorActions = ({
         }
       });
     }
-    // Unrelated manual legend rows retain their existing editor semantics.
-    renameLegendEntryInSvg(drawing, oldCaption, caption, color);
-    extractLegendEntries();
-    return true;
+    return renameLegendRow(drawing, oldCaption, caption);
   };
 
   const openLegendRenameScopeDialog = (request, siblingCount) => {

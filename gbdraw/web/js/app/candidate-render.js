@@ -54,6 +54,13 @@ import {
  * @property {(() => Map<string, string>) | null} [shownFills] The fill each rendered feature of the
  *   displayed Result shows: what a Legend row stroke reaches by color when the compile does not
  *   preview the feature fills.
+ * @property {RuleLegendRows | null} [ruleRows] The Legend rows a rule commit shows at once.
+ */
+
+/**
+ * The Legend rows of a rule commit until Python draws them (`prepareFileLegendEntries`):
+ * the rows its rules add, each before the row it replaces, and the rows they retire.
+ * @typedef {{ add: Array<{ caption: string, color: string, before?: string }>, retire: string[] }} RuleLegendRows
  */
 
 /**
@@ -194,21 +201,27 @@ const COMPILE_STAGES = Object.freeze({
 // The operation domains each kind of live edit shows on the displayed Result
 // (app-setup): a Legend row stroke also strokes the row's features; the
 // palette and the rules fill features and Legend rows; a Result display shows
-// the Legend structure and the paint domains whose intent changed.
+// the Legend structure and the paint domains whose intent changed. An edit
+// that returns Legend rows (Restore, a History step of the rows) shows their
+// structure and fills: a returning row of Python's shows the color Generate
+// gives it.
 export const LIVE_EDIT_DOMAINS = Object.freeze({
   strokes: COMPILE_STAGES.strokes,
   legendFills: COMPILE_STAGES.legendFills,
   fills: Object.freeze(['featureFills', 'legendFills']),
   visibility: COMPILE_STAGES.visibility,
-  legendStructure: COMPILE_STAGES.legend
+  legendStructure: COMPILE_STAGES.legend,
+  legendRows: Object.freeze([...COMPILE_STAGES.legend, ...COMPILE_STAGES.legendFills])
 });
 /** @type {ReadonlyArray<[string[], readonly string[]]>} */
 const EDITOR_PAINT_PATHS = Object.freeze([
   [['editorState', 'featureStrokes'], LIVE_EDIT_DOMAINS.strokes],
   [['editorState', 'legend', 'strokeOverrides'], LIVE_EDIT_DOMAINS.strokes],
-  [['editorState', 'legend', 'colorOverrides'], LIVE_EDIT_DOMAINS.legendFills]
+  [['editorState', 'legend', 'colorOverrides'], LIVE_EDIT_DOMAINS.legendFills],
+  ...['entries', 'deletedEntries', 'dormantEntries', 'addedCaptions']
+    .map((/** @type {string} */ key) => /** @type {[string[], readonly string[]]} */ ([['editorState', 'legend', key], LIVE_EDIT_DOMAINS.legendRows]))
 ]);
-// The paint domains an Undo or Redo shows, by the paths of the step's changes.
+// The domains an Undo or Redo shows, by the paths of the step's changes.
 /** @param {unknown} changes A History step's change list. @returns {string[]} */
 export const editorPaintDomains = (changes) => [...new Set((Array.isArray(changes) ? changes : []).flatMap(({ path } = {}) => (
   Array.isArray(path)
@@ -482,6 +495,20 @@ const compilePlanBundle = ({
       // subsequent Generate calls after a source replacement.
       addToResults(operationsByResult, allResultIndexes, 'legendDeletes', { caption, allowMissing: true });
     });
+    // The rows of a rule commit, shown at once on the displayed Result until
+    // Python draws them (gaps 1 and 2): the rule's row where the Result lacks
+    // it, before the row it replaces, and the retired row of a removed or
+    // renamed rule. Generate compiles neither: Python draws the rules' rows.
+    const ruleRows = livePreview?.ruleRows;
+    (ruleRows?.add || []).forEach(({ caption, color, before = '' }) => {
+      const paint = normalizePaint(color, 'rule legend color');
+      if (caption && paint) addToResults(operationsByResult, allResultIndexes, 'legendAdds', {
+        caption, color: paint, xPos: null, yPos: null, ifAbsent: true, before
+      });
+    });
+    (ruleRows?.retire || []).forEach((caption) => {
+      addToResults(operationsByResult, allResultIndexes, 'legendDeletes', { caption, allowMissing: true, retire: true });
+    });
   });
 
   // Category style preferences outlive the current generated entry projection.
@@ -497,12 +524,6 @@ const compilePlanBundle = ({
     });
     renderedIdsByDirectCaption.set(caption, renderedIds);
   });
-  // Live, a row renamed in the Legend editor shows under its new key on the
-  // displayed Result, which the executor tries when Python's key is absent.
-  /** @param {string} targetCaption @param {string | undefined} caption */
-  const shownRow = (targetCaption, caption) => (
-    livePreview && caption && caption !== targetCaption ? { renamedCaption: caption } : {}
-  );
   // The row a styled caption addresses in Python's output, and where a Result
   // may lack it; null for a deleted category.
   /** @param {string} caption */
@@ -527,7 +548,7 @@ const compilePlanBundle = ({
     const allowMissingIn = (resultIndex) => allowMissing
       || (legendRenderedIds.length > 0
         && legendRenderedIds.every((id) => !renderedResultIndexes(catalogAdmission, id).has(resultIndex)));
-    return { entry, targetCaption, namedIds, allowMissingIn, shown: shownRow(targetCaption, entry?.caption) };
+    return { entry, targetCaption, namedIds, allowMissingIn };
   };
   const styledCaptions = new Set([...Object.keys(legendColorOverrides), ...Object.keys(legendStrokeOverrides)]);
 
@@ -542,7 +563,7 @@ const compilePlanBundle = ({
       if (!color) return;
       filledCaptions.add(row.targetCaption);
       operationsByResult.forEach((operations, resultIndex) => {
-        operations.legendFills.push({ caption: row.targetCaption, ...row.shown, color, allowMissing: row.allowMissingIn(resultIndex) });
+        operations.legendFills.push({ caption: row.targetCaption, color, allowMissing: row.allowMissingIn(resultIndex) });
       });
     });
     // A row without a Legend color of its own shows its rule's color, else its
@@ -556,15 +577,12 @@ const compilePlanBundle = ({
       const caption = text(rule?.cap);
       if (caption && !ruleColors.has(caption)) ruleColors.set(caption, text(rule.color));
     });
-    const renamedFrom = new Map([...dormantEntries, ...currentEntries].map((entry) => [entry.originalCaption, entry.caption]));
     new Set([...originalCaptions, ...ruleColors.keys()]).forEach((caption) => {
       if (filledCaptions.has(caption) || deletedCaptions.has(caption)) return;
       const color = normalizePaint(
         ruleColors.get(caption) || paletteLegendColor(caption, livePreview.paletteColors || {}), 'legend color'
       );
-      if (color) addToResults(operationsByResult, allResultIndexes, 'legendFills', {
-        caption, ...shownRow(caption, renamedFrom.get(caption)), color, allowMissing: true
-      });
+      if (color) addToResults(operationsByResult, allResultIndexes, 'legendFills', { caption, color, allowMissing: true });
     });
   });
 
@@ -635,7 +653,7 @@ const compilePlanBundle = ({
       const strokeWidth = hasOwn(stroke, 'strokeWidth') ? normalizeStrokeWidth(stroke.strokeWidth) : null;
       if (strokeColor || strokeWidth !== null) operationsByResult.forEach((operations, resultIndex) => {
         operations.legendStrokes.push({
-          caption: row.targetCaption, ...row.shown, strokeColor, strokeWidth, allowMissing: row.allowMissingIn(resultIndex),
+          caption: row.targetCaption, strokeColor, strokeWidth, allowMissing: row.allowMissingIn(resultIndex),
           renderedIds: legendRowFeatureIds(row.entry, { ...drawnFeaturesIn(resultIndex), namedIds: row.namedIds })
         });
       });
