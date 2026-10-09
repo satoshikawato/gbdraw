@@ -292,3 +292,20 @@ test('Apply to all on a row a rule draws a feature of keeps writing rules', asyn
   assert.equal(setup_.stages.includes('commitSpecificRules'), true);
   assert.equal(setup_.state.currentColors.value.CDS, '#cccccc');
 });
+
+// Review 1: the choice does what the dialog showed. A rule draws one of the
+// row's features when the dialog opens, so it shows no default-color line;
+// when the saved rules change before the choice (here the rule goes away),
+// "Apply to all" still writes rules instead of a default color.
+test('Apply to all follows the dialog: no default-color line at open keeps the rule path', async () => {
+  const setup_ = setup({ siblings: true, savedRules: [savedRule] });
+  await setup_.pick('#123456');
+  assert.equal(setup_.featureStyleScopeDialog.show, true);
+  assert.equal(setup_.featureStyleScopeDialog.defaultColorType, null);
+  setup_.manualSpecificRules.splice(0);
+  setup_.stages.length = 0;
+  await setup_.choices.scope('caption');
+  assert.equal(setup_.stages.includes('setDefaultColor'), false);
+  assert.equal(setup_.stages.includes('commitSpecificRules'), true);
+  assert.equal(setup_.state.currentColors.value.CDS, '#cccccc');
+});

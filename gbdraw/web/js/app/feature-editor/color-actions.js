@@ -1268,7 +1268,7 @@ export const createFeatureColorActions = ({
   const handleColorScopeChoice = async (drawing, choice) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const { feat, color, matchingRule, legendName, existingCaptionColor } = featureStyleScopeDialog;
+    const { feat, color, matchingRule, legendName, existingCaptionColor, defaultColorType } = featureStyleScopeDialog;
     if (choice === 'cancel' || !feat || !color) {
       clearFeatureStyleScopeDialog();
       return;
@@ -1283,15 +1283,14 @@ export const createFeatureColorActions = ({
         clearFeatureStyleScopeDialog();
         return;
       }
-      const siblings = findFeaturesWithSameLegendItem(feat, targetLegendName);
-      const allFeatures = [feat, ...siblings];
-      const defaultColorType = paletteRowType(drawing, targetLegendName, allFeatures);
+      // The choice does what the dialog showed: its default-color line, or rules.
       if (defaultColorType) {
         // The row's swatch follows the default color again (svg-styles.js).
         delete drawing.legendColorOverrides[defaultColorType];
         setDefaultColor(drawing, defaultColorType, color);
       } else if (!(await applyColorToLegendSpecificRules(drawing, targetLegendName, color))) {
-        await applyColorToFeatureGroup(drawing, allFeatures, targetLegendName, color);
+        const siblings = findFeaturesWithSameLegendItem(feat, targetLegendName);
+        await applyColorToFeatureGroup(drawing, [feat, ...siblings], targetLegendName, color);
       }
     } else if (choice === 'displayLabel') {
       const displayLabel =
