@@ -1021,14 +1021,18 @@ colors.
   colors** (the new palette plus your colors), **Use the palette's colors**, or
   **Cancel**, which changes nothing. Without your colors the palette changes at
   once. Switching back to the applied palette while another is queued asks the
-  same way.
+  same way; either choice drops the queued palette and applies at once.
 - **Reset** in **Default colors** asks before it discards your colors. Editing
   a color in the list asks nothing.
-- In the popup's color scope dialog, **Apply to all "<type>"** on a Legend row
-  that no specific color rule draws sets that feature type's default color, so
-  hidden features and features shown later take it too. The dialog says so and
-  names your earlier color when it replaces one. While a palette is queued
-  (**Instant Preview** off), the Result shows the new color at once.
+- In the popup's color scope dialog, **Apply to all "<type>"** sets that
+  feature type's default color when the Legend row's caption is the feature
+  type and no specific color rule or per-feature color draws a feature of the
+  row. Every feature of that type without its own color or rule takes it, also
+  hidden features and features shown later. The dialog says so and names your
+  earlier color when it replaces one. While a palette is queued (**Instant
+  Preview** off), the Result shows the new color at once, and the dialog says
+  so. On any other row, **Apply to all** changes the row's rules or writes
+  one rule per feature.
 - Each choice in these dialogs is one History step, and **Cancel** records none.
 
 ## Accessibility
