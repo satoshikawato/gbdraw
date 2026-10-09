@@ -5523,6 +5523,8 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
     summary: 'The table is invalid. Session table: Label whitelist. Line 1. Check the required fields. Required columns: 3.',
     actions: ['select-input']
   });
+  const COLOR_GUIDANCE = 'Use none, a supported named color, or a hex color with 3 or 6 digits. '
+    + 'Default colors and configuration colors also accept transparent, rgb(), and hsl().';
   // A Specific colors row with an invalid color still fails Load, naming the table.
   const specificColors = structuredClone(session);
   const text = 'CDS\tproduct\tkinase\tnot-a-color\n';
@@ -5538,7 +5540,23 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
   assert.equal(specificFailure?.code, 'TABLE_INVALID');
   assert.deepEqual(specificFailure.context, { sessionTable: 'specific-colors', field: 'color', reason: 'COLOR', row: 1 });
   assert.equal(specificFailure.summary, 'The table is invalid. Session table: Specific colors. Line 1. Field: color. '
-    + 'Use none, a supported named color, or a hex color with 3 or 6 digits.');
+    + COLOR_GUIDANCE);
+  // OV-272: so does a Default colors row whose color only a document or a
+  // browser decides; the guidance names the forms that table also takes.
+  const defaultColors = structuredClone(session);
+  const defaultText = 'tRNA\trgb(1,2,3)\nCDS\tcurrentColor\n';
+  defaultColors.resources['colors-default-colors-file'] = {
+    kind: 'colors-default-colors-file', name: 'colors-default-colors-file-default-colors.tsv',
+    type: 'text/tab-separated-values', size: Buffer.byteLength(defaultText), lastModified: 0,
+    encoding: 'base64', data: Buffer.from(defaultText).toString('base64')
+  };
+  defaultColors.renderRequest.diagramOptions.colors.defaultColorsFile = {
+    resourceId: 'colors-default-colors-file', representation: 'file'
+  };
+  const defaultFailure = sessionTableFailure(defaultColors, false);
+  assert.deepEqual(defaultFailure?.context, { sessionTable: 'default-colors', field: 'color', reason: 'COLOR', row: 2 });
+  assert.equal(defaultFailure.summary, 'The table is invalid. Session table: Default colors. Line 2. Field: color. '
+    + COLOR_GUIDANCE);
 }
 
 // E1 (REVIEW-2 P-b): Session Load admits the alignment plan and record

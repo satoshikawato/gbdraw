@@ -232,7 +232,11 @@ values, not blanks.
 A Default colors `color`, a Specific-colors `color` without captions, and a
 color in a configuration override also accept `transparent`, `#RGBA`,
 `#RRGGBBAA`, and `rgb()`, `rgba()`, `hsl()`, and `hsla()`, which browsers read.
-PNG, PDF, EPS, and PS export (CairoSVG) cannot draw some of them: it draws
+Other values, including `currentColor`, `inherit`, and names that only a
+browser knows, such as system colors, are rejected: the Web app names the line
+of the Default colors table, and the CLI and Python API name the feature type.
+The Web app converts a Default colors color name to hex when it reads the
+table. PNG, PDF, EPS, and PS export (CairoSVG) cannot draw some of them: it draws
 `hsl()` and `hsla()` black, drops the alpha of `#RGBA` and `#RRGGBBAA`, and
 fails on the space syntax `rgb(1 2 3 / 50%)`. Use an SVG color name,
 `#RRGGBB`, or comma-separated `rgb()` or `rgba()` for those formats.

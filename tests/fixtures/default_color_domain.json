@@ -1,0 +1,37 @@
+{
+  "description": "Default colors (-d) color domain shared by the Web Override File (-d) import and Python's user-color check (OV-272, OV-302). The Web stores a color name as the hex of the table Python uses, with or without a browser, `none` and `transparent` in lower case, and every other valid value as written; it rejects the rest at its line. Python keeps svgwrite paint values outside the documented domain (`svg_paint_only`); the Web rejects them.",
+  "valid": [
+    { "value": "none", "normalized": "none" },
+    { "value": "NONE", "normalized": "none" },
+    { "value": "transparent", "normalized": "transparent" },
+    { "value": "Red", "normalized": "#FF0000" },
+    { "value": "red", "normalized": "#FF0000" },
+    { "value": "DarkGrey", "normalized": "#A9A9A9" },
+    { "value": "#abc", "normalized": "#abc" },
+    { "value": "#abcd", "normalized": "#abcd" },
+    { "value": "#A1B2C3", "normalized": "#A1B2C3" },
+    { "value": "#11223344", "normalized": "#11223344" },
+    { "value": "rgb(1,2,3)", "normalized": "rgb(1,2,3)" },
+    { "value": "rgb(1, 2, 3)", "normalized": "rgb(1, 2, 3)" },
+    { "value": "rgba(1,2,3,0.5)", "normalized": "rgba(1,2,3,0.5)" },
+    { "value": "rgb(10% 20% 30% / 50%)", "normalized": "rgb(10% 20% 30% / 50%)" },
+    { "value": "hsl(120deg 50% 50%)", "normalized": "hsl(120deg 50% 50%)" },
+    { "value": "hsla(120,50%,50%,0.3)", "normalized": "hsla(120,50%,50%,0.3)" }
+  ],
+  "invalid": [
+    { "value": "currentColor" },
+    { "value": "currentcolor" },
+    { "value": "inherit" },
+    { "value": "ButtonFace" },
+    { "value": "Canvas" },
+    { "value": "#12345" },
+    { "value": "rgb(1,2)" },
+    { "value": "rgb(1,2,3,4,5)" },
+    { "value": "hsl(a,b,c)" },
+    { "value": "notacolor" }
+  ],
+  "svg_paint_only": [
+    { "value": "url(#g)" },
+    { "value": "" }
+  ]
+}
