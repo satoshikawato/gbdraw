@@ -43,7 +43,9 @@ export const nonnegativeIntegerAliasStatus = (source, keys) => {
   let value = null;
   for (const key of keys) {
     const raw = source?.[key];
-    if (raw === null || raw === undefined || raw === '') continue;
+    // A blank or whitespace-only value is not supplied, as in textAliasStatus
+    // and Python's _consistent_nonnegative_integer_alias (OV-274).
+    if (raw === null || raw === undefined || (typeof raw === 'string' && raw.trim() === '')) continue;
     supplied = true;
     const normalized = typeof raw === 'number'
       ? raw

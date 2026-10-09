@@ -12,6 +12,17 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Sessions (web app): a Linear Session that the Python API saved from a CLI LOSATP
+  comparison loads with the comparison plan the CLI drew, so the next **Generate
+  Diagram** draws the same comparison. Before, the web app took the file bindings
+  and the comparison plan of a Session without a Web draft from the request only
+  when the CLI had written it, so the Python API's copy generated without its
+  comparison (OV-296).
+- Sessions (web app): after **Generate Diagram** on a Linear Session whose record rows
+  come from one input file (a GenBank file with several records), every row still
+  reads its file. Before, every such row but the last read as empty once Generate had
+  handed the shared file to the renderer, so later steps that read those rows' file
+  saw no content (OV-304).
 - Gallery tooling: `tools/publish_gallery_session.mjs prepare` accepts the Session that
   `gbdraw circular` writes, a `gbdraw linear -b` Session (its read-only comparison is
   inherited, as **Generate Diagram** does after **Inherit**), and CLI Sessions with `-d`

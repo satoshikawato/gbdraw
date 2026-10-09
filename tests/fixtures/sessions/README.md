@@ -156,15 +156,19 @@ became the file name without the extension (D-03,
 `precomputed-ring.provenance.json`.
 
 `cli-linear-tables.v40-early.gbdraw-session.json.gz`,
-`cli-linear-tables.v40.gbdraw-session.json.gz`, and
-`cli-linear-tables.v41.gbdraw-session.json.gz` are CLI Sessions of the
+`cli-linear-tables.v40.gbdraw-session.json.gz`,
+`cli-linear-tables.v41.gbdraw-session.json.gz`,
+`cli-linear-tables.v42.gbdraw-session.json.gz`, and
+`cli-linear-tables.v44.gbdraw-session.json.gz` are CLI Sessions of the
 `linear_tables` case of `tests/fixtures/cli_session_cross_surface/cases.json`,
 written by first-parent `main` commits `8228ffab` (Session 40 with a full
 option-derived `config`), `4ea96685` (Session 40, `config: {"adv": {}}`), and
-`4e8c9380` (Session 41, the same) from the repository root. The first one's
+`4e8c9380` (Session 41, the same), `3fd50841` (Session 42, request schema 7, no top-level
+`config`), and `fe6861f0` (Session 44, request schema 8, feature catalog schema 4)
+from the repository root. The first one's
 schema 3 catalog stores no source feature index. They are the positive fixtures
-for reading a CLI-written Session 40-41 `config` as no draft and for inferring
-the index (OV-269). The v40-early file is also the only positive fixture for a
+for reading a CLI-written Session 40 or 41 `config` as no draft, for loading the
+request-only Session 42 and 44 files, and for inferring the index (OV-269). The v40-early file is also the only positive fixture for a
 Session 40+ Result without composition metadata, which Load gives the legacy
 composition (OV-273); as a CLI Session it holds no manual positions (no
 `ui` offsets). Commands, inputs, and hashes are in each `.provenance.json`.

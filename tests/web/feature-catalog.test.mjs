@@ -135,6 +135,18 @@ test('schema-3 migration reads the source index of a disambiguated biological ID
     [136, undefined, undefined, undefined, undefined]);
 });
 
+// OV-274: shared with tests/test_web_feature_catalog.py. A blank or
+// whitespace-only stored index is not supplied, so the suffix supplies it.
+test('schema-3 migration reads the stored source index alias as Python does', async () => {
+  const { cases } = JSON.parse(await readFile(
+    new URL('../fixtures/source-feature-index-alias-vectors.json', import.meta.url), 'utf8'
+  ));
+  for (const { name, feature, promotedSourceFeatureIndex } of cases) {
+    const promoted = migrateLegacyFeatureCatalog({ schema: 3, items: [{ features: [], biologicalFeatures: [structuredClone(feature)] }] });
+    assert.deepEqual(promoted.items[0].biologicalFeatures[0].sourceFeatureIndex, promotedSourceFeatureIndex, name);
+  }
+});
+
 test('schema-3 migration proves only exact single-part anchors and disables ambiguous compounds', () => {
   const legacy = structuredClone(catalog);
   legacy.schema = 3;

@@ -24,7 +24,11 @@ const cases = [
   },
   { name: 'gff fasta', mode: 'circular', args: ['--gff', gff, '--fasta', fasta], sources: [gff, fasta] },
   // D-01, OV-221: the tables of a CLI Session reach the next Web Generate.
-  ...[['linear_tables', [lambda]], ['circular_records_tables', [path.join(root, 'tests/test_inputs/HmmtDNA.gbk')]]]
+  ...[
+    ['linear_tables', [lambda]], ['circular_records_tables', [path.join(root, 'tests/test_inputs/HmmtDNA.gbk')]],
+    ['linear_records_blacklist', [path.join(root, 'tests/test_inputs/HmmtDNA.gbk'), lambda]],
+    ['linear_blast', [path.join(root, 'tests/fixtures/web_comparison_shared_block.gb')]]
+  ]
     .map(([id, sources]) => {
       const entry = require('../fixtures/cli_session_cross_surface/cases.json').cases.find(item => item.id === id);
       const args = entry.args.map(arg => (arg.startsWith('tests/') ? path.join(root, arg) : arg));
@@ -137,7 +141,15 @@ for (const entry of cases) {
         const before = await snapshot(run.page);
         expect(before.mode).toBe(entry.mode);
         expect(before.request).toEqual(session.renderRequest);
-        expect(before.files.flatMap(file => file.parts.map(part => part.sha256))).toEqual(sourceHashes);
+        // A CLI Session binds each input file once; the Web shows one row per
+        // drawn record, so a two-record file (linear blast) fills two rows bound
+        // to the same resource, and a Session the Web saved lists both rows. The
+        // checks below read each resource once on either side.
+        const resourceKey = parts => parts.map(part => part.resourceId).join('+');
+        const distinct = (items, parts) => [...new Map(items.map(item => [resourceKey(parts(item)), item])).values()];
+        const distinctFiles = files => distinct(files, file => file.parts);
+        const distinctBindings = items => distinct(items, binding => binding.components || [binding]);
+        expect(distinctFiles(before.files).flatMap(file => file.parts.map(part => part.sha256))).toEqual(sourceHashes);
         expect(before.files.every(file => !file.isArray)).toBe(true);
         // A records table binds its input through the request record, not the
         // Web inventory; the file bytes above identify it.
@@ -146,14 +158,25 @@ for (const entry of cases) {
           const bindings = entry.mode === 'linear' ? inventory.linearSeqs.map(seq => seq.gb)
             : entry.name === 'gff fasta' ? [inventory.c_gff, inventory.c_fasta] : [inventory.c_gb];
           const metadata = file => ({ name: file.name, type: file.type, lastModified: file.lastModified });
-          expect(before.files.map(metadata)).toEqual(bindings.map(metadata));
-          expect(before.files.flatMap(file => file.parts.map(part => ({ resourceId: part.resourceId, ...metadata(part) }))))
-            .toEqual(bindings.flatMap(binding => (binding.components || [binding]).map(part => ({ resourceId: part.resourceId, ...metadata(part) }))));
+          expect(distinctFiles(before.files).map(metadata)).toEqual(distinctBindings(bindings).map(metadata));
+          expect(distinctFiles(before.files).flatMap(file => file.parts.map(part => ({ resourceId: part.resourceId, ...metadata(part) }))))
+            .toEqual(distinctBindings(bindings).flatMap(binding => (binding.components || [binding]).map(part => ({ resourceId: part.resourceId, ...metadata(part) }))));
+          // Every row that shares a resource shows the same file.
+          for (const file of before.files) {
+            expect(metadata(file)).toEqual(metadata(before.files.find(other => resourceKey(other.parts) === resourceKey(file.parts))));
+          }
         }
         for (const part of before.files.flatMap(file => file.parts)) expect(before.resourceIds).toContain(part.resourceId);
         const expectedSvg = await run.page.evaluate(svgSemantics, before.selected);
         expect(expectedSvg.records.length).toBe(session.renderRequest.records.length);
         expect(await run.page.evaluate(svgSemantics, before.mounted)).toEqual(expectedSvg);
+        // A read-only imported comparison (-b) is reused through Inherit (D-04):
+        // the user picks it in the comparison resolution panel before Generate.
+        if (entry.args.includes('-b')) {
+          const resolution = run.page.locator('[data-imported-comparison-resolution]');
+          await resolution.getByRole('button', { name: 'Inherit saved comparison' }).click();
+          await expect(resolution).toContainText('Selected action: INHERIT');
+        }
         await generateAndWaitForResult(run.page);
         const after = await snapshot(run.page);
         const generatedSvg = await run.page.evaluate(svgSemantics, after.selected);
@@ -165,7 +188,7 @@ for (const entry of cases) {
           Boolean(record.region?.reverseComplement || record.presentation.reverseComplement)];
         expect(after.request.records.map(transform)).toEqual(session.renderRequest.records.map(transform));
         expect(after.files).toEqual(before.files);
-        expect(after.files.flatMap(file => file.parts.map(part => part.sha256))).toEqual(sourceHashes);
+        expect(distinctFiles(after.files).flatMap(file => file.parts.map(part => part.sha256))).toEqual(sourceHashes);
         expect(await run.page.evaluate(svgSemantics, after.mounted)).toEqual(generatedSvg);
         const download = run.page.waitForEvent('download');
         await run.page.getByRole('button', { name: 'SVG', exact: true }).click();
