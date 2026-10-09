@@ -1,0 +1,48 @@
+{
+  "description": "CLI Sessions that every load surface must draw as the CLI did (D-01, OV-221). Paths are relative to the repository root; the tables cover the lambda (NC_001416) and human mitochondrial (HmmtDNA) records.",
+  "cases": [
+    {
+      "id": "linear_tables",
+      "mode": "linear",
+      "args": ["--gbk", "tests/test_inputs/NC_001416.gb", "--show_labels", "all",
+        "-t", "tests/fixtures/cli_session_cross_surface/colors.tsv",
+        "-d", "tests/fixtures/cli_session_cross_surface/default_colors.tsv",
+        "--feature_visibility_table", "tests/fixtures/cli_session_cross_surface/visibility.tsv",
+        "--label_table", "tests/fixtures/cli_session_cross_surface/labels.tsv",
+        "--label_whitelist", "tests/fixtures/cli_session_cross_surface/whitelist.tsv",
+        "--qualifier_priority", "tests/fixtures/cli_session_cross_surface/priority.tsv"]
+    },
+    {
+      "id": "linear_records_blacklist",
+      "mode": "linear",
+      "args": ["--records_table", "tests/fixtures/cli_session_cross_surface/records_linear.tsv",
+        "--show_labels", "all",
+        "-t", "tests/fixtures/cli_session_cross_surface/colors.tsv",
+        "-d", "tests/fixtures/cli_session_cross_surface/default_colors.tsv",
+        "--feature_visibility_table", "tests/fixtures/cli_session_cross_surface/visibility.tsv",
+        "--label_table", "tests/fixtures/cli_session_cross_surface/labels.tsv",
+        "--label_blacklist", "hypothetical,putative",
+        "--feature_override_table", "tests/fixtures/cli_session_cross_surface/feature_overrides.tsv"]
+    },
+    {
+      "id": "linear_blast",
+      "mode": "linear",
+      "args": ["--gbk", "tests/fixtures/web_comparison_shared_block.gb",
+        "-b", "tests/fixtures/cli_session_cross_surface/blast.tsv", "--show_labels", "all",
+        "-t", "tests/fixtures/cli_session_cross_surface/colors.tsv",
+        "-d", "tests/fixtures/cli_session_cross_surface/default_colors.tsv"]
+    },
+    {
+      "id": "circular_records_tables",
+      "mode": "circular",
+      "args": ["--records_table", "tests/fixtures/cli_session_cross_surface/records_circular.tsv",
+        "--labels", "out",
+        "-t", "tests/fixtures/cli_session_cross_surface/colors.tsv",
+        "-d", "tests/fixtures/cli_session_cross_surface/default_colors.tsv",
+        "--feature_visibility_table", "tests/fixtures/cli_session_cross_surface/visibility.tsv",
+        "--label_table", "tests/fixtures/cli_session_cross_surface/labels.tsv",
+        "--label_whitelist", "tests/fixtures/cli_session_cross_surface/whitelist.tsv",
+        "--qualifier_priority", "tests/fixtures/cli_session_cross_surface/priority.tsv"]
+    }
+  ]
+}

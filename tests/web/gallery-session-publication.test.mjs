@@ -194,6 +194,18 @@ assert.equal((await compareCanonicalRenderRequests({
   actualResources: lambdaPrepared.session.resources
 })).equivalent, true);
 
+// Without -b or a protein mode the CLI writes its protein settings as a
+// disabled pipeline with no pairs; it draws no comparison (OV-224).
+assert.deepEqual(lambdaPrepared.session.renderRequest.comparisons, []);
+const lambdaWithCliProteinSettings = structuredClone(lambdaPrepared.session.renderRequest);
+lambdaWithCliProteinSettings.comparisons = [{"kind": "generatedProteinComparison", "mode": "none", "pairs": [], "settings": {"collinearityParams": {"kind": "lossless", "parameters": {"minAnchors": 1, "maxUnitGap": 0, "maxDiagonalDrift": 0, "maxConflicts": 1, "mergeOrientation": "either"}}, "collinearityUnitMode": "auto", "collinearityAnchorMode": "rbh", "collinearitySearchScope": "adjacent", "collinearityColorMode": "orientation", "losatpBin": "losat", "ncbiBlastpBin": null, "losatpThreads": null, "proteinBlastpMaxHits": 5, "proteinBlastpCandidateLimit": null, "orthogroupMembershipMode": "anchor_core_v1", "orthogroupMemberMaxHits": null, "collinearInferOrthogroups": true, "collinearMaxParalogLinksPerOrthogroup": 2}}];
+assert.equal((await compareCanonicalRenderRequests({
+  expectedRequest: lambdaWithCliProteinSettings,
+  expectedResources: lambdaPrepared.session.resources,
+  actualRequest: lambdaPrepared.session.renderRequest,
+  actualResources: lambdaPrepared.session.resources
+})).equivalent, true);
+
 const lambdaWithDefaultColorFileAlias = structuredClone(lambdaPrepared.session.renderRequest);
 lambdaWithDefaultColorFileAlias.diagramOptions.colors.defaultColorsFile =
   lambdaWithDefaultColorFileAlias.diagramOptions.colors.defaultColors;

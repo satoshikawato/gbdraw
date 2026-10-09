@@ -2000,7 +2000,9 @@ const preflightSessionImport = async (sessionData) => {
         repairInvalidComparisonHeight: sourceSessionVersion >= 31 && sourceSessionVersion <= 33,
         repairLegacyTableRows: sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION,
         sessionResourceTable: currentResourceTable,
-        deferResourceContent: currentSession,
+        // A Session without a Web draft (CLI, Python) holds its tables only
+        // in the request, so Load reads them; a draft holds them already.
+        deferResourceContent: currentSession && hasStoredDraft,
         adoptCanonicalPayloads: currentSession
       })
     : null;

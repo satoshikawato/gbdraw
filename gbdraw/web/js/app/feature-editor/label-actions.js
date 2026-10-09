@@ -13,6 +13,7 @@ import {
 import { resultCatalogFeatures, resultRenderedFeatures } from '../../services/feature-catalog.js';
 import { FEATURE_SELECTOR, getFeatureIdentity } from './svg-actions.js';
 import { downloadTextFile } from '../../services/text-download.js';
+import { editorTableRef } from '../../services/file-imports.js';
 import { defaultFeatureRendering } from '../../utils/feature-rendering.js';
 import { readFileText } from '../../services/file-content-cache.js';
 import { normalizeTsvCell } from '../../utils/tsv-cell.js';
@@ -129,7 +130,7 @@ const labelScopeFilterReason = (feature, diagramOptions) => {
   // Python picks the selected features (orthogroup_label_eligibility); the Web
   // names the setting and does not repeat that rule.
   if (scope === 'orthogroup_top') return 'scope_orthogroup_top';
-  if (diagramOptions?.labelWhitelistFile) return 'whitelist';
+  if (editorTableRef(diagramOptions, 'whitelist')) return 'whitelist';
   const blacklist = overrides['labels.filtering.blacklist_keywords'];
   return Array.isArray(blacklist) && blacklist.length > 0 ? 'blacklist' : '';
 };

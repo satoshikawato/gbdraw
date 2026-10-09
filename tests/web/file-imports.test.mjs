@@ -100,6 +100,11 @@ assert.deepEqual(
   parseColorTable('feature_type\tcolor\nCDS\t#54bcf8\n').colors,
   { CDS: '#54bcf8' }
 );
+// The CLI and Python store the label whitelist with a header row.
+assert.deepEqual(
+  parseWhitelistRules('feature_type\tqualifier\tkeyword\nCDS\tproduct\tterminase\n').rules,
+  [{ feat: 'CDS', qual: 'product', key: 'terminase' }]
+);
 
 assert.throws(
   () => parseSpecificRules('CDS\tgene\talpha\n'),
