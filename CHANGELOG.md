@@ -16,7 +16,9 @@ write-up of a release.
   `main` build of the CLI wrote opens from `--session`, the Python API, and the web app
   with its tables, and the next **Generate Diagram** draws the CLI figure. Before, the
   web app rejected these files or dropped their tables, and the earliest Session 40 files
-  also failed in the CLI and the Python API (OV-269, OV-273).
+  also failed in the CLI and the Python API (OV-269, OV-273). Session 40 files that the
+  web app of those builds saved also open; they did not record moved legend, title, or
+  scale positions, so the next **Generate Diagram** lays those out automatically.
 - Sessions (web app): a Session that the CLI or the Python API writes keeps its
   color, feature visibility, label, whitelist, qualifier priority, and feature
   override tables when the web app loads it, so the next **Generate Diagram**
