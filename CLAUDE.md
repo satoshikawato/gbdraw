@@ -344,6 +344,8 @@ normal test runs do not write to `tests/reference_outputs/`.
 - Main docs: `docs/DOCS.md`
 - Canonical tutorial index: `docs/TUTORIALS/README.md`
 - Current documentation plan:
+  `docs/internal/DOCUMENTATION_RESTRUCTURE_PLAN_2026-10-09.md`, which keeps
+  the routes and evidence architecture of
   `docs/internal/DOCUMENTATION_SIMPLIFICATION_IMPLEMENTATION_PLAN_2026-08-09.md`
 - CLI Reference: `docs/CLI_Reference.md`
 - **Web app development:** See `gbdraw/web/CLAUDE.md` for web-specific guidance
