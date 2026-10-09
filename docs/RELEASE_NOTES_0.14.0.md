@@ -20,8 +20,8 @@ published packages, and [Installation](./INSTALL.md) explains each install route
 - Save a Session and pick up where you stopped, with its comparison results.
   **Run Info** gives you a command that rebuilds the figure from your original
   files, or the files to replay it exactly.
-- Watch each stage of **Generate Diagram** as it runs, and drag large previews
-  smoothly.
+- Watch each stage of **Generate Diagram** as it runs, and drag a large
+  preview over blank space and comparison ribbons alike.
 - Draw from Python with `draw_circular()` and `draw_linear()`, which return a
   `Diagram` you can save in any format.
 - Install from a wheel or source package that includes the local web app's
@@ -126,7 +126,7 @@ through Generate and **Save Session**.
 
 In Linear mode, **Arrange in rows** puts every record selected from a source
 file on that file's row, in file and record order. Row spacing follows the
-features, labels, and tracks actually drawn. In a Depth track, a record with no
+features, labels, and tracks drawn. In a Depth track, a record with no
 value draws no coverage; it is not drawn as zero. Each Linear record gets its own
 definition from its `/organism` and `/strain`. Circular grids, docked legends,
 and titles are sized to the visible diagram, so less canvas is left empty.
@@ -156,12 +156,13 @@ file do not change. A record whose anchor is unknown, skipped, missing, or
 unusable keeps its direction, and the palette says why.
 
 Choices in the palette run no search. **Apply** checks the plan once. If the
-records changed in the meantime, the preview refreshes and you apply again. If
-Apply fails, your choices and the previous Result stay.
+final directions or reference position differ from the preview, the preview
+refreshes and you apply again. If Apply fails, your choices and the previous
+Result stay.
 
 The alignment is saved with every anchor and **Skip** choice. A record's
-direction is its **Reverse** setting. Generate, reordering records, and a
-manual **Reverse** keep the alignment. **Reset alignment…** moves records back
+direction is its **Reverse complement** setting. Generate, reordering
+records, and a manual **Reverse complement** keep the alignment. **Reset alignment…** moves records back
 to where they were just before the latest Align, and can also undo the
 direction changes that Align made; its preview lists later manual edits that
 this reset replaces. Each Align can be reset once: to try the other kind of
@@ -249,8 +250,9 @@ web app:
   searched and uploaded comparisons, and `--losat_output_dir`, which writes the
   raw TSVs and a reusable `comparisons.tsv`.
 
-Linear comparison tables (`-b`, `--comparisons_table`, and web uploads) are
-now read in the frame of the search: the selected, cropped record on its source
+On the command line and in Python, Linear comparison tables (`-b`,
+`--comparisons_table`, and `linear_comparisons`) are now read in the frame of
+the search: the selected, cropped record on its source
 strand. A forward BLAST table therefore draws the right region on a
 reverse-complemented record. If you wrote a table for the reversed display,
 convert that record's coordinates with `L + 1 - x`. A row outside its cropped
@@ -259,8 +261,8 @@ columns (`-outfmt "6 std qlen slen"`) work, and a `#` inside an ID no longer
 cuts the row short. A malformed table is reported with its line number. In the
 web app, Circular comparison rings also accept GenBank and DDBJ files.
 
-The command line, Python, and the web app share one search cache, so a saved
-Session replays without running LOSAT again. LOSATP now treats each input file
+The command line, Python, and the web app compute the same raw cache keys, so
+a saved Session replays its saved searches without running LOSAT again. LOSATP now treats each input file
 as one genome, as the web app does: a record is not searched against itself
 unless you ask for it. E-values change only for records from a file that holds
 several records. A Session saved from the command line records which LOSAT it
@@ -293,7 +295,8 @@ your platform.
 
 ## Renamed and removed options
 
-New commands and Python code no longer accept the earlier names. A Session
+New commands, Python code, and configuration files no longer accept the
+earlier names. A Session
 saved by an earlier release still opens: gbdraw rewrites the old names when it
 reads the file.
 
@@ -364,10 +367,14 @@ Some command-line input that 0.13 accepted now stops the run with a message:
 - `-n`/`--nt` takes two letters from A, C, G, T, and U (U counts as T).
 - A missing, unreadable, or malformed `-b` file, or more `-b` files than
   adjacent record pairs, is an error.
-- In every table you supply, a `#` after other text and a `"` are part of the
-  cell value; there is no CSV quoting, so remove quotes your files relied on. A
-  line that starts with `#` is a comment, and a row with extra columns is an
-  error that names the file and line.
+- The styling tables (Default colors, Specific colors, Qualifier priority,
+  Label whitelist or blacklist, Label overrides, and Feature visibility) and
+  the annotation table are no longer read with CSV quoting: a `"` is part of
+  the cell value, so remove quotes your files relied on. In these tables a line
+  that starts with `#` is a comment, and a `#` after other text is part of the
+  value. In the styling tables, a row with more columns than the table has is
+  an error that names the file and line. The feature override and feature
+  placement tables are unchanged.
 
 Some older figures can change:
 
@@ -383,8 +390,10 @@ Some older figures can change:
 - Depth TSV positions follow crops and reverse complement. Before,
   `--region chr:601-800` drew the rows of positions 1-200, and a
   reverse-complemented record drew its coverage mirrored.
-- The GFF3 CDS phase sets the reading frame. A CDS without `/translation` now
-  starts with `M` when its first codon is a start codon of its `transl_table`.
+- The GFF3 CDS phase sets the reading frame. A non-pseudo CDS without
+  `/translation` now starts with `M` when its 5' end is complete, its reading
+  frame starts at the first base, and its first codon is a start codon of its
+  `transl_table`, as in INSDC `/translation`.
   This changes **Copy aa FASTA**, interactive SVG metadata, and LOSATP input.
 - On the command line and in Python, the color name `seashell` is `#FFF5EE`; it
   was drawn as seagreen.

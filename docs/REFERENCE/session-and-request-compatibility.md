@@ -111,7 +111,7 @@ when it has one, and the other mode's in `otherModeResult`. **Load Session**
 restores saved values instead of applying fresh browser defaults, and shows the
 saved mode when that mode has a Result, otherwise the mode that has one. Generate before you save when the Result should reflect changed controls.
 Saving before Generate keeps the newer draft alongside the earlier Result.
-Loading and regenerating should preserve biological identities, labels, record
+Loading and regenerating keep biological identities, labels, record
 placement, comparison artifacts, and supported editor state. SVG bytes or text
 metrics can still differ across gbdraw versions.
 
@@ -298,14 +298,17 @@ mode. Output prefix, format, session-output, and overwrite options may replace
 their saved counterparts. Other diagram options are
 rejected because they would combine persisted and new settings ambiguously.
 
-With `--save_session` or `--session_output`, CLI replay writes the
+When you replay a Session 31 or later with `--save_session` or
+`--session_output`, the CLI writes the
 regenerated Result set at the top level, keeps the other mode's set in
 `otherModeResult` and the saved `ui.mode`, and preserves the editable draft's
 component bytes, order and File metadata. The Web writer instead puts the shown
 mode's set at the top level. The re-save also replaces what both sets share:
 `losatCache` holds the entries the new render returns, `losatDerivedCache` is
 emptied, and `proteinIdentityManifest` and `legacyArtifacts` come from the new
-render. A resource whose bytes are unchanged
+render. If the render migrates older protein IDs, gbdraw rewrites the protein
+references throughout the Session, including `otherModeResult`. A resource
+whose bytes are unchanged
 keeps its ID and file name; a resource whose bytes changed is stored under a new
 ID, and resources that nothing names any more are dropped. Explicit Web
 bindings, including null and empty lists, take precedence over historical
@@ -320,7 +323,7 @@ artifacts; use `render_session()` when those artifacts belong in the result.
 
 `render_request()` accepts current typed requests, not historical session
 envelopes. Public typed session conversion accepts full versions 31–33, 39–42, 44, and 46;
-versions 27–30 have no canonical request: the CLI replays them, and the Web app
+versions 27–30 have no `renderRequest`: the CLI replays them, and the Web app
 loads them from their saved settings. Request schema 9 keeps schema 7's
 display values and schema 6's input cardinality, including selectorless `all`
 inputs. Resolve a typed request
@@ -509,7 +512,7 @@ requested persistence fields.
 
 Supported older requests have unset display, empty placements and tolerance 0.
 Saving a schema-5/6 Web session promotes it without requiring Generate. Versions
-27–30 still load without a canonical request (CLI replay and Web Load), and
+27–30 still load without a `renderRequest` (CLI replay and Web Load), and
 unknown or development-only versions remain rejected.
 
 Editable Web rotation and placement drafts are saved in config, separately from

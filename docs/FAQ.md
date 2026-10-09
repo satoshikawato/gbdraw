@@ -67,12 +67,11 @@ lists interface availability, filters, direction, and scientific limits.
 
 ### Is my data uploaded, and can I work offline?
 
-Your genome files stay in your browser. The hosted page loads from
-`gbdraw.app`, but genome parsing, LOSAT searches, rendering, Session save and
-load, and export all run in the browser, and no file goes to a gbdraw server.
-The hosted site may collect aggregate page-use analytics; genome files and
-generated diagrams are never sent with them. To work offline, install gbdraw
-and run `gbdraw gui`.
+Your genome files are not uploaded. The hosted page loads from `gbdraw.app`,
+but genome parsing, LOSAT searches, rendering, Session save and load, and
+export all run in your browser. The hosted site may collect aggregate page-use
+analytics; genome files and generated diagrams are never sent with them. To
+work offline, install gbdraw and run `gbdraw gui`.
 
 A saved Session embeds your input files, so protect it like the source data.
 [Execution, privacy, and offline
@@ -170,13 +169,13 @@ reuse them later. See the [web
 comparison controls](./REFERENCE/web-app.md#comparison-surfaces) and
 [selected Linear edges](./REFERENCE/comparison-programs-thresholds-and-results.md#selected-linear-edges).
 
-### Why did gbdraw rerun LOSATP after I loaded a session?
+### Why did gbdraw rerun LOSATP after I loaded a Session?
 
 gbdraw reuses a saved search only when its sequences, direction, program, and
 search settings that affect the result still match; otherwise it searches again. See [saved comparison results and
 cache reuse](./REFERENCE/session-and-request-compatibility.md#saved-comparison-results-and-cache-reuse).
 
-### Why does a loaded Circular session say Records not inspected?
+### Why does a loaded Circular Session say Records not inspected?
 
 **Load Session** shows the saved Result without reading the embedded source
 again. Select **Inspect source records**, or **Generate Diagram**, to list the
@@ -184,7 +183,7 @@ records and show their rotation rows. A newly uploaded file is inspected at
 once. See [Save and Load Sessions](./REFERENCE/web-app.md#save-and-load-sessions)
 and [Circular source records](./REFERENCE/web-app.md#circular-source-records-and-one-record-settings).
 
-### Why are controls unavailable while a session saves or loads?
+### Why are controls unavailable while a Session saves or loads?
 
 Save and Load need the Session to stay unchanged, so edits, **Generate Diagram**,
 and the other Session button wait until **Saving session…** or **Loading

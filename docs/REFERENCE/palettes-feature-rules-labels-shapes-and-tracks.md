@@ -31,7 +31,7 @@ where the renderer supports it. Slot order controls placement. It does not
 change which depth series, annotation set, or comparison results a renderer
 uses.
 
-Coordinate rulers belong to the genome axis. Numeric tracks own their own axes
+Coordinate rulers belong to the genome axis. Numeric tracks draw their own axes
 and ticks. Hiding the coordinate scale therefore leaves the record axis and
 quantitative axes available. Plot titles, record definitions, and legends are
 placed against visible diagram bounds after record-local layout; moving a

@@ -248,7 +248,7 @@ changing a record's presentation. Collinear alignment controls, anchor TSV,
 scored inference, support-count ranking, and multi-hop automatic selection are
 unsupported.
 
-This executable in-memory example renders no public showcase file.
+This example runs in memory and writes no file.
 In an integration, use actual group membership, current crop/display centers,
 displayed strands, and direct ortholog links; the two synthetic candidates here only
 show how the typed request and resolver fit together. Source feature identities

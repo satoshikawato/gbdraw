@@ -332,8 +332,6 @@ write-up of a release.
   data". **Behavior change for CLI files:** a user table that wrapped a field
   in CSV quotes now keeps those quotes in the value, so remove them from such
   files. The Feature override and Feature placement tables are unchanged.
-  files. The Feature override, Feature placement, and Annotation tables are
-  unchanged.
 - Label whitelist, Qualifier priority, and Default colors file imports (web
   app): a row with too many or too few tab-separated columns is now rejected
   with a table error that names the row and the required column count. The
@@ -347,7 +345,6 @@ write-up of a release.
   column was read shifted: `CDS`, `product`, `two`, `words` became feature type
   `product`, qualifier `two`, keyword `words`, and no error was raised. Remove
   the extra cells, or the tab inside a value, from such files.
-  files. The Feature override and Feature placement tables are unchanged.
 - Default colors, Specific colors, Qualifier priority, and Annotation tables:
   a line whose first non-blank character is `#` is now a comment and is
   skipped, as in the Label whitelist, Label overrides, and Feature visibility

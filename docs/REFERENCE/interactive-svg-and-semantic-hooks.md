@@ -12,7 +12,8 @@ releases even when the figure shows the same features.
 
 Interactive SVG embeds controls, searchable feature metadata, feature and match
 popups, group inspection, and the supported sequence downloads. Static SVG keeps
-the same `data-gbdraw-*` attributes without the embedded application.
+the record, track, feature, match, and annotation attributes below; it has no
+`data-gbdraw-interactive-*` markers and no embedded application.
 
 Search in an interactive SVG uses the same fields as
 [Feature Search in the Web app](web-app.md#preview-search-and-editor): **All**
@@ -24,7 +25,8 @@ get the current search and popup behavior.
 
 gbdraw escapes text that comes from your input files. Input text never becomes
 an executable `<script>` element or an `on*` event-handler attribute. Species
-text accepts the documented limited markup for display, not arbitrary HTML.
+text accepts `<i>` for italics, as in `<i>Escherichia coli</i>`; it is never
+run as HTML.
 
 ## SVG IDs
 
@@ -51,7 +53,7 @@ output, the outer group of each complete record carries both attributes.
 | Record definition | `data-gbdraw-role="record-definition"` or `"record-definition-row"`, `data-gbdraw-definition-part`, record ID/index | Main record text or a row-level definition. A row has `record-definition-row` only when some text describes the whole row, so do not assume one per row |
 | Plot title | `data-gbdraw-role="plot-title"` | Shared Circular title |
 | Comparison legend | `data-gbdraw-role="comparison-legend"`, `data-gbdraw-orientation` | Identity legend; orientation is `h`, `v`, or `circular` |
-| Track group | `data-gbdraw-slot-id`, `data-gbdraw-slot-renderer` | Track slot ID as written in your settings, and the renderer drawn in that slot |
+| Track group | `data-gbdraw-slot-id`, `data-gbdraw-slot-renderer` | Slot ID (yours in a custom stack, gbdraw's default ID otherwise) and the renderer drawn in that slot |
 
 Typical selectors:
 
@@ -75,7 +77,7 @@ documented track renderers use their renderer name.
 | Interactive match | `data-gbdraw-interactive-match="true"` | The element has match metadata in an interactive SVG |
 | Annotation mark | `data-gbdraw-annotation-id`, `data-gbdraw-annotation-set-id`, `data-gbdraw-annotation-track-id`, record index | Annotation, annotation set, track slot, and the record it belongs to |
 
-A feature with a split location, or one shown on a reverse-complemented record,
+A feature with a split (joined) location, such as exons separated by introns,
 can be drawn as several parts. Use `data-gbdraw-stable-feature-id` for the
 biological feature, and `data-gbdraw-feature-id` with `data-gbdraw-feature-part`
 for one drawn part. A comparison match carries both its query and subject ends;

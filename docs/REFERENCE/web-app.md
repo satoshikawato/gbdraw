@@ -126,10 +126,11 @@ review is a local selection, not an applied Result or a generation-setting chang
 **Generate Diagram** recalculates placement and resets zoom. Supported color,
 label, visibility, legend text and order, canvas padding, and record-layout
 edits are carried forward. Generate places legend entries in the edited order
-on its new layout; an entry that appears later follows them. Generate may not draw a legend row, such as GC content while it is off or a
-Depth row while **Show Depth** is off. If you rename such a row, the new name
-waits with the colors. It applies when a later Generate draws the row. Removing
-the row's data removes the row. Canvas padding
+on its new layout; an entry that appears later follows them. Generate may not
+draw a legend row, such as GC content while it is off or a Depth row while
+**Show Depth** is off. If you rename such a row, the new name waits with the
+colors and applies when a later Generate draws the row. Removing the row's data
+also discards the waiting name and colors. Canvas padding
 applies once to every Result, including each Result of a batch. For the same
 diagram, a manually moved legend, plot title, or Linear scale keeps its offset
 from the newly calculated position. The absolute position can change when
@@ -579,14 +580,13 @@ An older Session that did not save the field keeps its former Ribbon appearance.
 A Curve or Ribbon saved explicitly stays as saved.
 
 Similarity groups always runs an all-vs-all protein search across
-the loaded records and has no scope selector. Collinear blocks uses
+the loaded records and has no **Evidence scope** selector. Collinear blocks uses
 **Evidence scope**. Fresh pages and **Reset Settings** default that control to
 **Adjacent pairs**. A session that explicitly saved **All records** restores
 that value. **Evidence scope** controls how far the search expands, not which record
 pairs get displayed links.
 
-**Advanced comparison and layout** is closed by default and appears below
-**Generate Diagram** in keyboard order. It holds **Record Layout**, cache controls,
+**Advanced comparison and layout** is closed by default. It holds **Record Layout**, cache controls,
 and advanced Collinear search details. Its **Raw LOSAT results** section
 groups each pair's filename, whether its raw result is kept, and its **Save Raw LOSAT
 TSV** action. LOSAT **Execution** and thread allocation are in **Settings**
@@ -725,7 +725,7 @@ A successful Apply commits directions, positions and the plan together as one
 History action. Alignment uses the last committed diagram: pending form edits
 and unrelated settings stay pending. Ordinary **Generate Diagram** after
 style, label or canvas changes and stable record reorder keep the plan and
-the saved positions that Reset needs. Manual **Reverse complement** keeps the plan; the next
+the saved positions and directions that Reset needs. Manual **Reverse complement** keeps the plan; the next
 Generate aligns the same anchors in the new direction. Source replacement,
 crop, selector changes and manual record drag clear it with a visible reason.
 A stale reference requires **Reselect** or **Clear**; a stale target requires
@@ -1131,7 +1131,8 @@ start and orientation.
 keeping the feature popup open. Cancel, a failed render, or a stale/replaced
 source keeps the previous Result and record transform. Undo and Redo restore the
 Result and record transform together; Save Session and a fresh Load preserve
-the last successful absolute transform and the feature placement that produced it.
+the last successful absolute transform and the feature and **Put this feature at**
+choice it was rotated to.
 Operation-specific messages explain unavailable actions for non-circular,
 cropped, fuzzy, unordered, mixed-strand, or otherwise unsafe targets. A reason
 that leaves no placement available, such as a non-circular record or fuzzy

@@ -56,8 +56,8 @@ The string `losat` remains the automatic-selection token for compatibility.
 Pass an absolute path such as `--losat_bin /absolute/path/LOSAT` to force a
 specific executable. A corrupt managed cache still stops with its directory and
 cause when fallback reaches it. To repair it, remove that version/target
-directory and rerun setup. A concurrent installer fails clearly and can be
-retried.
+directory and rerun setup. When another installer is running at the same time, setup stops with a
+message; run it again afterwards.
 gbdraw never treats an interrupted temporary download as an installation.
 Later setup runs and searches reuse a valid cache offline. `INSTALL.json` records the URL,
 version, target, source commit, archive hash and binary hash.
