@@ -113,30 +113,40 @@ export const createFeatureColorActions = ({
     }
   };
 
-  // A color action also prepares the rules it may add for the clicked feature
-  // (its hash and label rules); a stroke action reads only the saved rules
-  // (OV-198), so it prepares nothing else.
+  // Runs `run` once the rules a color edit may add for the features in `args`,
+  // the clicked feature and the scope dialog's feature (their hash and label
+  // rules) are prepared with the saved ones.
+  /**
+   * @param {DrawingState} drawing
+   * @param {any[]} args
+   * @param {() => any} run
+   */
+  const withTargetRules = (drawing, args, run) => {
+    const targets = new Set();
+    const add = (feature) => { if (feature?.type && feature?.svg_id) targets.add(feature); };
+    args.forEach((arg) => Array.isArray(arg) ? arg.forEach(add) : add(arg));
+    add(clickedFeature.value?.feat);
+    add(featureStyleScopeDialog.feat);
+    const candidates = [...drawing.manualSpecificRules];
+    targets.forEach((feature) => {
+      const hash = getFeatureQualifier(feature);
+      if (hash) candidates.push({ feat: feature.type, ...hash });
+      for (const label of [getDisplayedFeatureLabel(feature), getIndividualFeatureLabel(feature)]) {
+        const rule = getLabelSpecificRule(feature, label);
+        if (rule) candidates.push(rule);
+      }
+    });
+    return runWithRuleMatches(candidates, run);
+  };
+
+  // A color action also prepares the rules it may add (`withTargetRules`); a
+  // stroke action reads only the saved rules (OV-198), and a color request
+  // prepares its rules only when it commits, not to open the scope dialog,
+  // which reads the saved rules only (OV-225).
   const colorAction = (action, { targetRules = true } = {}) => (...args) => {
     const drawing = state.activeDrawing();
     const run = () => runColorAction(() => action(drawing, ...args));
-    const prepareTargets = () => {
-      if (!targetRules) return run();
-      const targets = new Set();
-      const add = (feature) => { if (feature?.type && feature?.svg_id) targets.add(feature); };
-      args.forEach((arg) => Array.isArray(arg) ? arg.forEach(add) : add(arg));
-      add(clickedFeature.value?.feat);
-      add(featureStyleScopeDialog.feat);
-      const candidates = [...drawing.manualSpecificRules];
-      targets.forEach((feature) => {
-        const hash = getFeatureQualifier(feature);
-        if (hash) candidates.push({ feat: feature.type, ...hash });
-        for (const label of [getDisplayedFeatureLabel(feature), getIndividualFeatureLabel(feature)]) {
-          const rule = getLabelSpecificRule(feature, label);
-          if (rule) candidates.push(rule);
-        }
-      });
-      return runWithRuleMatches(candidates, run);
-    };
+    const prepareTargets = () => (targetRules ? withTargetRules(drawing, args, run) : run());
     return reportRuleRunFailure(state, 'evaluateRules', () => runWithRuleMatches(drawing.manualSpecificRules, prepareTargets));
   };
   const strokeAction = (action) => colorAction(action, { targetRules: false });
@@ -1060,13 +1070,15 @@ export const createFeatureColorActions = ({
       return;
     }
 
-    if (clickedFeature.value && clickedFeature.value.svg_id === feat.svg_id) {
-      clickedFeature.value.color = color;
-      if (scope.requestedCaption) {
-        clickedFeature.value.legendName = scope.requestedCaption;
+    return withTargetRules(drawing, [feat], async () => {
+      if (clickedFeature.value && clickedFeature.value.svg_id === feat.svg_id) {
+        clickedFeature.value.color = color;
+        if (scope.requestedCaption) {
+          clickedFeature.value.legendName = scope.requestedCaption;
+        }
       }
-    }
-    await setFeatureColor(drawing, feat, color, scope.legendName);
+      await setFeatureColor(drawing, feat, color, scope.legendName);
+    });
   };
 
   /** @param {DrawingState} drawing */
@@ -1743,7 +1755,7 @@ export const createFeatureColorActions = ({
     handleLegendNameCommit: colorAction(handleLegendNameCommit),
     handleLegendRenameChoice: colorAction(handleLegendRenameChoice),
     renameLegendEntry: colorAction(renameLegendEntry),
-    requestFeatureColorChange: colorAction(requestFeatureColorChange),
+    requestFeatureColorChange: colorAction(requestFeatureColorChange, { targetRules: false }),
     selectLegendNameOption: colorAction(selectLegendNameOption),
     handleResetColorChoice: colorAction(handleResetColorChoice),
     applyColorToSelectedFeatures: colorAction(applyColorToSelectedFeatures),
@@ -1755,7 +1767,7 @@ export const createFeatureColorActions = ({
     setClickedFeatureStrokeWidthValue: strokeAction(setClickedFeatureStrokeWidthValue),
     setFeatureColor: colorAction(setFeatureColor),
     setFeatureColorValue: colorAction(setFeatureColorValue),
-    updateClickedFeatureColor: colorAction(updateClickedFeatureColor),
+    updateClickedFeatureColor: colorAction(updateClickedFeatureColor, { targetRules: false }),
     updateClickedFeatureStroke: strokeAction(updateClickedFeatureStroke)
   };
 };
