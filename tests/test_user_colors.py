@@ -371,6 +371,18 @@ def test_comparison_gradient_colors_that_are_never_interpolated_still_render(
     assert _linear_with_default_colors(tmp_path, row, blast=blast).exists()
 
 
+@pytest.mark.parametrize(
+    ("option", "row"), [("-t", "CDS\tproduct\tportal\tDarkGrey\tX"), ("-d", "CDS\tDarkGrey")]
+)
+def test_color_tables_draw_a_mixed_case_color_name(option: str, row: str, tmp_path: Path) -> None:
+    # OV-270: the color check reads a name in any case, and so does drawing.
+    _run_cli(
+        "linear", "--gbk", str(REPO / "tests" / "test_inputs" / "NC_001416.gb"),
+        option, _tsv(tmp_path, "colors.tsv", f"{row}\n"), "-o", str(tmp_path / "out"), "-f", "svg",
+    )
+    assert 'fill="DarkGrey"' in (tmp_path / "out.svg").read_text(encoding="utf-8")
+
+
 def test_circular_conservation_ignores_the_linear_comparison_colors(tmp_path: Path) -> None:
     _run_cli(
         "circular", "--gbk", str(EXAMPLES / "LvMJNV.gb"),

@@ -1,17 +1,21 @@
 {
-  "description": "Specific-color table color domain shared by the Web parser and the Python table reader. The browser resolves a color name to hex and rejects unknown names; DOM-free JavaScript leaves a single-word name ('word') for Python to validate.",
+  "description": "Specific-color table color domain shared by the Web parser and the Python table reader. The Web resolves a color name to hex with the table Python uses, with or without a browser, and rejects the names that table lacks, including names only a browser knows (currentColor, system colors).",
   "valid": [
     { "value": "none", "normalized": "none" },
     { "value": "NONE", "normalized": "none" },
     { "value": "None", "normalized": "none" },
     { "value": "#abc", "normalized": "#abc" },
     { "value": "#A1B2C3", "normalized": "#a1b2c3" },
-    { "value": "red", "word": true, "browser": "#ff0000" },
-    { "value": "Grey", "word": true, "browser": "#808080" }
+    { "value": "red", "normalized": "#ff0000" },
+    { "value": "Grey", "normalized": "#808080" },
+    { "value": "DarkGrey", "normalized": "#a9a9a9" }
   ],
   "invalid": [
-    { "value": "notacolor", "word": true },
-    { "value": "transparent", "word": true },
+    { "value": "notacolor" },
+    { "value": "transparent" },
+    { "value": "currentColor" },
+    { "value": "ButtonFace" },
+    { "value": "Canvas" },
     { "value": "#f008" },
     { "value": "#ff000080" },
     { "value": "#abcd" },

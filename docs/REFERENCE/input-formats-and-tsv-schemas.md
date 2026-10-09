@@ -222,9 +222,10 @@ value. The [feature override
 table](#feature-override-table) is different: it quotes a `label_text` that
 contains `"`.
 
-A Specific-colors `color` is `none` (no fill, any case), an SVG color name,
-`#RGB`, or `#RRGGBB`. Other values, including hex colors with alpha, are
-rejected with their line number. The Web app converts a color name to hex when
+A Specific-colors `color` is `none` (no fill), an SVG color name, both in any
+letter case, `#RGB`, or `#RRGGBB`. Other values, including hex colors with
+alpha and names that only a browser knows, such as `currentColor` and system
+colors, are rejected with their line number. The Web app converts a color name to hex when
 it reads the table. In this table, cells such as `None`, `NA`, and `null` are
 values, not blanks.
 

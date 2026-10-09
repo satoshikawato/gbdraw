@@ -24,6 +24,12 @@ write-up of a release.
   **Label Mode** (Circular) is **None**. They were hidden there although the On
   labels use them. Label filtering keeps its condition: an On label ignores the
   whitelist and blacklist (OV-222).
+- Specific colors (web app): a Specific-colors table imported in the web app accepts the
+  color names that `gbdraw -t` accepts, in any letter case, and rejects the others with
+  the line number. Before, the browser also read `currentColor` and system colors such
+  as `ButtonFace` and imported them as a browser-chosen hex color (OV-271). In the CLI,
+  a mixed-case name such as `DarkGrey` in `-t` or `-d` no longer stops drawing with an
+  svgwrite `TypeError` (OV-270).
 - Custom Track Slots (web app): stepping a Depth row's track index past the loaded
   Depth series (for example ArrowUp then ArrowDown) no longer adds a series that made
   Generate and **Save Session** fail with "Depth series 3"; a label edit on a row whose

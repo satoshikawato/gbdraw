@@ -137,14 +137,12 @@ export const resolveColorToHex = (colorValue) => {
 };
 
 // Specific-color table domain, shared with Python's read_color_table:
-// `none`, #RGB, #RRGGBB, or a color name. The browser resolves a name to hex;
-// without a DOM the name is left for Python to validate.
+// `none`, #RGB, #RRGGBB, or a color name of the table Python uses, resolved
+// to hex. Names only a browser knows are rejected as in Python (OV-271).
 export const normalizeSpecificRuleColor = (colorValue) => {
   const color = String(colorValue ?? '').trim().toLowerCase();
   if (color === 'none' || /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/.test(color)) return color;
-  if (!/^[a-z]+$/.test(color)) return null;
-  if (!globalThis.document?.createElement) return color;
-  return resolveBrowserNamedColor(color)?.toLowerCase() || null;
+  return namedColorHex(color)?.toLowerCase() || null;
 };
 
 export const colorValueMode = (colorValue) => {
