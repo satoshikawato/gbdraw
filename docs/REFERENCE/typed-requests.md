@@ -158,7 +158,7 @@ perform that resolution automatically.
 
 ## Related
 
-- [Python Tutorials](../TUTORIALS/PYTHON/README.md)
+- [Tutorials](../TUTORIALS/README.md)
 - [Python API reference](python-api.md)
 - [Session and request compatibility](session-and-request-compatibility.md)
 - [Input formats and TSV schemas](input-formats-and-tsv-schemas.md)

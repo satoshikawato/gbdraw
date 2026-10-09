@@ -32,8 +32,8 @@ reverse-complement states do not become Circular settings.
 
 The [diagram-layout contract](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#diagram-layout)
 defines the two layouts. Start with the [first Circular
-Tutorial](./TUTORIALS/GUI/first-circular-genome-diagram.md) or [first Linear
-Tutorial](./TUTORIALS/GUI/first-linear-genome-diagram.md).
+Tutorial](./TUTORIALS/first-circular-genome-diagram.md) or [first Linear
+Tutorial](./TUTORIALS/first-linear-genome-diagram.md).
 
 ### Which comparison method should I use?
 

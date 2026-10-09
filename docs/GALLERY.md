@@ -13,7 +13,7 @@ For zooming, feature popups, match inspection, and downloadable sessions, open t
     <td width="50%" valign="top">
       <a href="../examples/NC_001879_regions.svg"><img src="../examples/NC_001879_regions.svg" alt="Circular Nicotiana tabacum chloroplast map with LSC, SSC, IRa, and IRb region brackets" width="100%"></a><br>
       <strong><em>Nicotiana tabacum</em> chloroplast</strong><br>
-      Feature labels, a GC-content track, and LSC, SSC, IRa, and IRb region brackets. Follow the <a href="./TUTORIALS/GUI/build-an-annotated-chloroplast-map.md">annotated chloroplast Tutorial</a> or open the <a href="https://gbdraw.app/gallery/#tobacco-chloroplast">interactive example</a>.
+      Feature labels, a GC-content track, and LSC, SSC, IRa, and IRb region brackets. Follow the <a href="./TUTORIALS/build-an-annotated-chloroplast-map.md">annotated chloroplast Tutorial</a> or open the <a href="https://gbdraw.app/gallery/#tobacco-chloroplast">interactive example</a>.
     </td>
     <td width="50%" valign="top">
       <a href="../examples/HmmtDNA_qualifier_priority_soft_pastels.svg"><img src="../examples/HmmtDNA_qualifier_priority_soft_pastels.svg" alt="Circular human mitochondrial genome with labels placed inside and outside the feature ring" width="100%"></a><br>
@@ -87,14 +87,14 @@ For zooming, feature popups, match inspection, and downloadable sessions, open t
     <td width="50%" valign="top">
       <a href="../examples/tutorial-6-depth-circular.svg"><img src="../examples/tutorial-6-depth-circular.svg" alt="Circular bacterial genome with a blue read-depth track and quantitative tick labels" width="100%"></a><br>
       <strong>Read-depth track</strong><br>
-      A circular depth profile with a quantitative axis and evenly spaced tick labels. Follow the <a href="./TUTORIALS/GUI/build-a-quantitative-genome-map.md">quantitative genome map Tutorial</a>.
+      A circular depth profile with a quantitative axis and evenly spaced tick labels. Follow the <a href="./TUTORIALS/build-a-quantitative-genome-map.md">quantitative genome map Tutorial</a>.
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
       <a href="../examples/tutorial-9-feature-shapes.svg"><img src="../examples/tutorial-9-feature-shapes.svg" alt="Human mitochondrial genome with rectangular CDS, rRNA, and tRNA features" width="100%"></a><br>
       <strong>Feature-shape overrides</strong><br>
-      CDS, rRNA, and tRNA features rendered as rectangles instead of directional arrows. Follow the <a href="./TUTORIALS/GUI/highlight-mitochondrial-features.md">mitochondrial feature Tutorial</a>.
+      CDS, rRNA, and tRNA features rendered as rectangles instead of directional arrows. Follow the <a href="./TUTORIALS/highlight-mitochondrial-features.md">mitochondrial feature Tutorial</a>.
     </td>
     <td width="50%" valign="top">
       <a href="https://gbdraw.app/gallery/palettes/"><img src="../examples/AP027078_tuckin_separate_strands_default.svg" alt="Circular genome map in the default gbdraw color palette" width="100%"></a><br>

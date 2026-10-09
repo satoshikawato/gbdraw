@@ -31,6 +31,7 @@ if __package__:
         assert_exact_workdir_files,
         checkout_subprocess_environment,
         copy_declared_inputs,
+        executable_source,
         extract_executable_block,
         inspect_standard_svg,
         validate_joint_chloroplast,
@@ -48,6 +49,7 @@ else:
         assert_exact_workdir_files,
         checkout_subprocess_environment,
         copy_declared_inputs,
+        executable_source,
         extract_executable_block,
         inspect_standard_svg,
         validate_joint_chloroplast,
@@ -1497,8 +1499,7 @@ def _assert_generated_tables_are_recorded(
     tables = _GENERATED_TABLES.get(scenario_id, {})
     if not tables:
         return
-    execution = chapter["execution"]
-    relative_source = execution.get("source", chapter.get("destination"))
+    relative_source = executable_source(chapter)
     source_path = Path(__file__).resolve().parents[2] / str(relative_source)
     source = source_path.read_text(encoding="utf-8")
     for table_source in tables.values():

@@ -11,6 +11,7 @@ import pytest
 
 from docs.recipes._scenario_support import (
     PUBLISHED_IMAGE_ROOT,
+    destination_page,
     extract_executable_block,
     load_chapter,
 )
@@ -28,31 +29,37 @@ RUNNER_BY_KIND = {
 }
 
 
+def _manifest() -> dict[str, object]:
+    return json.loads(SCENARIO_MANIFEST.read_text(encoding="utf-8"))
+
+
 def _chapters() -> dict[str, dict[str, object]]:
-    manifest = json.loads(SCENARIO_MANIFEST.read_text(encoding="utf-8"))
     return {
         chapter["id"]: chapter
-        for chapter in manifest["scenarios"]
+        for chapter in _manifest()["scenarios"]
         if chapter["id"] in SCENARIO_IDS
     }
 
 
 def test_onboarding_pages_match_their_approved_manifest_entries() -> None:
     chapters = _chapters()
+    projects = _manifest()["tutorial_projects"]
 
     assert set(chapters) == set(SCENARIO_IDS)
     for scenario_id, chapter in chapters.items():
-        destination = REPO_ROOT / str(chapter["destination"])
+        destination = REPO_ROOT / str(destination_page(chapter))
         source = destination.read_text(encoding="utf-8")
+        interface = _interface_section(source, str(chapter["destination"]))
         execution = chapter["execution"]
         output_name = execution["expected_outputs"][0]
+        project = projects[chapter["project_id"]]
 
-        assert source.startswith("[Home]")
-        assert f"# {chapter['title']}" in source
-        assert "## What you'll need" in source
-        assert "## Step 2:" in source
+        assert source.startswith("[Documentation home](../DOCS.md)")
+        assert f"# {project['title']}" in source
+        assert "## Before you start" in source
+        assert "### Step 2:" in interface
         assert "## What you built" not in source
-        assert output_name in _section(source, "Step 2")
+        assert output_name in _section(interface, "Step 2")
         assert "tests/test_inputs" not in source
         assert "http://" not in source
         assert (PUBLISHED_IMAGE_ROOT / scenario_id.lower() / output_name).is_file()
@@ -108,7 +115,7 @@ def test_recipe_runners_extract_the_literal_documented_blocks() -> None:
         runner_path=RUNNER_BY_KIND["python-recipe"],
     )
     python_recipe = extract_executable_block(python_chapter, language="python")
-    compile(python_recipe, python_chapter["destination"], "exec")
+    compile(python_recipe, str(destination_page(python_chapter)), "exec")
     assert "diagram = draw_circular(record, options=options)" in python_recipe
     assert "saved_path = diagram.save(output_path)" in python_recipe
 
@@ -150,9 +157,18 @@ def test_onboarding_recipes_regenerate_from_an_external_clean_context(
     assert list(tmp_path.iterdir()) == []
 
 
+def _interface_section(source: str, destination: str) -> str:
+    anchor = destination.partition("#")[2]
+    for section in re.split(r"^(?=## )", source, flags=re.MULTILINE):
+        heading = section.split("\n", 1)[0].removeprefix("## ")
+        if heading.lower().replace(" ", "-") == anchor:
+            return section
+    raise AssertionError(f"missing interface section: {destination}")
+
+
 def _section(source: str, step: str) -> str:
     match = re.search(
-        rf"^## {re.escape(step)}:[^\n]*\n(?P<body>.*?)(?=^## |\Z)",
+        rf"^### {re.escape(step)}:[^\n]*\n(?P<body>.*?)(?=^##+ |\Z)",
         source,
         re.MULTILINE | re.DOTALL,
     )

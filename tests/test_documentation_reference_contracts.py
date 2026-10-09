@@ -52,7 +52,6 @@ DOCUMENTATION_PAGES = (
     REPO_ROOT / "docs" / "RELEASE_NOTES_0.14.0.md",
     REPO_ROOT / "docs" / "FAQ.md",
     REPO_ROOT / "docs" / "GALLERY.md",
-    REPO_ROOT / "docs" / "PALETTE_EXPLORER.md",
 )
 MARKDOWN_LINK_RE = re.compile(r"(?<!!)\[[^\]\n]+\]\(([^)\n]+)\)")
 

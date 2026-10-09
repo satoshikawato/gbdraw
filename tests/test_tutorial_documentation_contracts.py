@@ -7,6 +7,8 @@ from urllib.parse import urlsplit
 
 import pytest
 
+from docs.recipes._scenario_support import destination_page
+
 
 pytestmark = pytest.mark.recipe
 
@@ -23,6 +25,7 @@ FIRST_H1_RE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 RETIRED_PUBLIC_DIRS = {"HOW" + "_TO", "EXPLANA" + "TION"}
 ACTIVE_INTERNAL_DOCS = (
     DOCS_ROOT / "internal" / "DOCUMENTATION_SIMPLIFICATION_IMPLEMENTATION_PLAN_2026-08-09.md",
+    DOCS_ROOT / "internal" / "DOCUMENTATION_RESTRUCTURE_PLAN_2026-10-09.md",
     DOCS_ROOT / "internal" / "SCENARIO_EVIDENCE.md",
 )
 
@@ -91,44 +94,34 @@ def test_url_host_matching_requires_exact_hostname() -> None:
         assert not _has_url_host(url, "raw.githubusercontent.com")
 
 
-def test_surface_indexes_list_each_canonical_tutorial_once_with_its_h1() -> None:
-    manifest = _tutorial_manifest()
-    chapters = [
-        chapter for chapter in manifest["scenarios"] if chapter["role"] == "tutorial"
+def test_tutorial_index_lists_each_project_page_once_with_its_h1() -> None:
+    projects = list(_tutorial_manifest()["tutorial_projects"].values())
+    pages = {REPO_ROOT / str(project["page"]) for project in projects}
+    table = TUTORIAL_INDEX.read_text(encoding="utf-8").split("## Choose a tutorial", 1)[1]
+    links = [
+        (label, target)
+        for label, raw_target in MARKDOWN_LINK_RE.findall(table)
+        if (target := _local_target(TUTORIAL_INDEX, raw_target)) in pages
     ]
-    chapter_by_id = {chapter["id"]: chapter for chapter in chapters}
-    indexed: list[Path] = []
-    expected_all: list[Path] = []
 
-    for surface in ("GUI", "CLI", "PYTHON"):
-        index = TUTORIAL_ROOT / surface / "README.md"
-        surface_chapters = [
-            chapter_by_id[project["variants"][surface.casefold()]]
-            for project in manifest["tutorial_projects"].values()
-            if surface.casefold() in project["variants"]
-        ]
-        links = [
-            (label, target)
-            for label, raw_target in _markdown_links(index)
-            if (target := _local_target(index, raw_target))
-            in {REPO_ROOT / str(chapter["destination"]) for chapter in surface_chapters}
-        ]
-        assert [target for _, target in links] == [
-            REPO_ROOT / str(chapter["destination"]) for chapter in surface_chapters
-        ]
-        for (label, target), chapter in zip(links, surface_chapters, strict=True):
-            heading = FIRST_H1_RE.search(target.read_text(encoding="utf-8"))
-            assert heading is not None
-            assert label == heading.group(1) == chapter["title"]
-        indexed.extend(target for _, target in links)
-        expected_all.extend(
-            REPO_ROOT / str(chapter["destination"]) for chapter in surface_chapters
-        )
+    assert [target for _, target in links] == [
+        REPO_ROOT / str(project["page"]) for project in projects
+    ]
+    for (label, target), project in zip(links, projects, strict=True):
+        heading = FIRST_H1_RE.search(target.read_text(encoding="utf-8"))
+        assert heading is not None
+        assert label == heading.group(1) == project["title"]
 
-    assert indexed == expected_all
-    assert set(indexed) == {
-        REPO_ROOT / str(chapter["destination"]) for chapter in chapters
-    }
+    start_here = TUTORIAL_INDEX.read_text(encoding="utf-8").split("## Start here", 1)[1]
+    start_here = start_here.split("\n## ", 1)[0]
+    assert [
+        _local_target(TUTORIAL_INDEX, raw_target)
+        for _, raw_target in MARKDOWN_LINK_RE.findall(start_here)
+        if raw_target.endswith("-genome-diagram.md")
+    ] == [
+        TUTORIAL_ROOT / "first-circular-genome-diagram.md",
+        TUTORIAL_ROOT / "first-linear-genome-diagram.md",
+    ]
 
 
 def test_procedural_docs_acquire_sequences_from_authoritative_sources() -> None:
@@ -141,7 +134,7 @@ def test_procedural_docs_acquire_sequences_from_authoritative_sources() -> None:
 
     for chapter in _tutorial_chapters():
         scenario_id = str(chapter["id"])
-        destination = REPO_ROOT / str(chapter["destination"])
+        destination = REPO_ROOT / str(destination_page(chapter))
         source = destination.read_text(encoding="utf-8")
         scenario_sequences = [
             file for file in sequence_files if scenario_id in file.get("scenarioIds", [])
@@ -188,7 +181,7 @@ def test_procedural_docs_do_not_link_prebuilt_sessions() -> None:
     failures: list[str] = []
 
     for chapter in _tutorial_chapters():
-        destination = REPO_ROOT / str(chapter["destination"])
+        destination = REPO_ROOT / str(destination_page(chapter))
         source = destination.read_text(encoding="utf-8")
         if "gbdraw/web/gallery/sessions/" in source:
             failures.append(f"{chapter['id']}: prebuilt Gallery session path")
@@ -197,20 +190,6 @@ def test_procedural_docs_do_not_link_prebuilt_sessions() -> None:
                 failures.append(f"{chapter['id']}: {label} -> {target}")
 
     assert failures == []
-
-
-def test_tutorial_root_routes_by_surface() -> None:
-    surface_targets = [
-        TUTORIAL_ROOT / "GUI" / "README.md",
-        TUTORIAL_ROOT / "CLI" / "README.md",
-        TUTORIAL_ROOT / "PYTHON" / "README.md",
-    ]
-    links = _markdown_links(TUTORIAL_INDEX)
-    resolved = [_local_target(TUTORIAL_INDEX, target) for _, target in links]
-
-    assert [target.resolve() for target in surface_targets] == [
-        target for target in resolved if target in {path.resolve() for path in surface_targets}
-    ]
 
 
 def test_documentation_landing_pages_state_distinct_information_roles() -> None:
@@ -287,8 +266,15 @@ def test_public_tutorial_labels_route_to_the_canonical_index() -> None:
     assert incorrect == []
 
 
-def test_tutorial_root_contains_only_the_index() -> None:
-    assert {path.resolve() for path in TUTORIAL_ROOT.glob("*.md")} == {TUTORIAL_INDEX.resolve()}
+def test_tutorial_root_contains_only_the_index_and_project_pages() -> None:
+    pages = {
+        (REPO_ROOT / str(project["page"])).resolve()
+        for project in _tutorial_manifest()["tutorial_projects"].values()
+    }
+    assert {path.resolve() for path in TUTORIAL_ROOT.iterdir()} == {
+        TUTORIAL_INDEX.resolve(),
+        *pages,
+    }
 
 
 def test_public_docs_do_not_expose_the_example_maintenance_script() -> None:

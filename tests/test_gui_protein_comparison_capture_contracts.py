@@ -162,15 +162,9 @@ PINNED_NCBI_REVISION_URLS = {
 }
 PINNED_NCBI_REVISIONS_ASSERTION = "source_record_revisions=ncbi-pinned-all-five"
 PAGES = {
-    "T-GUI-04": (
-        REPO_ROOT / "docs" / "TUTORIALS" / "GUI" / "compare-proteins-losatp.md"
-    ),
+    "T-GUI-04": REPO_ROOT / "docs" / "TUTORIALS" / "compare-proteins-losatp.md",
     "T-GUI-08": (
-        REPO_ROOT
-        / "docs"
-        / "TUTORIALS"
-        / "GUI"
-        / "compare-proteins-losatp-collinear.md"
+        REPO_ROOT / "docs" / "TUTORIALS" / "compare-proteins-losatp-collinear.md"
     ),
 }
 SCREENSHOT_NAMES = {
@@ -661,7 +655,9 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
         else:
             page_path = PAGES[scenario_id]
             page = page_path.read_text(encoding="utf-8")
-            assert chapter["destination"] == str(page_path.relative_to(REPO_ROOT))
+            assert chapter["destination"] == (
+                f"{page_path.relative_to(REPO_ROOT).as_posix()}#in-the-web-app"
+            )
             for record_id in EXPECTED_RECORD_IDS:
                 assert record_id in page
             for value in (

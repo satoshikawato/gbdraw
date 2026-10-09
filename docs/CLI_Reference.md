@@ -1486,10 +1486,10 @@ comparisons, but its hit set is not guaranteed to be identical to LOSAT.
 
 - [Quickstart](./QUICKSTART.md)
 - [Recipes](./RECIPES.md)
-- [Command-line Tutorials](./TUTORIALS/CLI/README.md)
+- [Tutorials](./TUTORIALS/README.md)
 - [LOSATP modes and comparison semantics](./REFERENCE/comparison-programs-thresholds-and-results.md)
-- [Similarity group Tutorial](./TUTORIALS/CLI/compare-proteins-losatp.md)
-- [Collinear block Tutorial](./TUTORIALS/CLI/compare-proteins-losatp-collinear.md)
+- [Similarity group Tutorial](./TUTORIALS/compare-proteins-losatp.md#on-the-command-line)
+- [Collinear block Tutorial](./TUTORIALS/compare-proteins-losatp-collinear.md#on-the-command-line)
 - [Input formats and TSV schemas](./REFERENCE/input-formats-and-tsv-schemas.md)
 
 [Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Technical documentation](./REFERENCE/README.md) | **CLI Reference (generated)** | [FAQ](./FAQ.md) | [Gallery](./GALLERY.md) | [About](./ABOUT.md)

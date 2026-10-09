@@ -83,7 +83,7 @@ Record rotation and manual feature placement are included in the shared format.
 - `Diagram.save(path)` writes exactly the requested path. It does not create an
   additional base SVG when saving another format.
 
-See the [Python API guide](./PYTHON_API.md) for executable examples.
+See the [Python API guide](./REFERENCE/python-api.md) for executable examples.
 
 ## Architecture/API Phase 0–2 and beta cleanup
 
