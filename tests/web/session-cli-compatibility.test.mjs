@@ -16,7 +16,11 @@ globalThis.window = {
   },
   DOMPurify: { sanitize: value => value }
 };
-globalThis.document = {};
+// Save Session downloads its file through a link.
+globalThis.document = {
+  body: { appendChild: () => {} },
+  createElement: () => ({ addEventListener: () => {}, click: () => {}, remove: () => {}, parentNode: null })
+};
 installFakeSvgDom();
 globalThis.File = class File extends Blob {
   constructor(parts, name, options = {}) {
@@ -30,16 +34,19 @@ globalThis.alert = () => {};
 installSessionImportWorker();
 
 const {
-  SESSION_VERSION, importSession, getCommittedCanonicalRenderRequest, getCommittedCanonicalSession,
+  SESSION_VERSION, exportSession, importSession, getCommittedCanonicalRenderRequest, getCommittedCanonicalSession,
   serializeActiveRenderFiles, setUnmanagedConfigOverrideValidator
 } = await import('../../gbdraw/web/js/services/config.js');
-const { CANONICAL_REQUEST_SCHEMA, buildCanonicalRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
+const {
+  CANONICAL_REQUEST_SCHEMA, buildCanonicalRenderRequest, projectCommittedEditorIntent
+} = await import('../../gbdraw/web/js/services/session-request.js');
 const { inheritCommittedComparisonIntent } = await import('../../gbdraw/web/js/services/imported-comparison-intent.js');
 const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
 // The composition root's transform of an older Session's Results (R13 port).
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { getSessionResourceSource, readFileBytes } = await import('../../gbdraw/web/js/services/file-content-cache.js');
+const { getResourcePayloadOwner } = await import('../../gbdraw/web/js/services/resource-payload-owner.js');
 const root = process.cwd();
 // Exercise the Worker's actual typed helper without starting a browser runtime.
 setUnmanagedConfigOverrideValidator(payload => ({ result: JSON.parse(execFileSync('python', ['-c', `
@@ -416,34 +423,93 @@ with materialize_session(document, output_directory=directory / 'out') as materi
   }
 });
 
-// OV-220: a CLI Session holds its per-feature edits only in its request. Load
-// gives them to the committed mode's drawing, so the next Generate keeps them.
-await test('a CLI Session with a feature edit table keeps the edits in the drawing it loads', async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-web-'));
-  try {
-    const table = path.join(directory, 'labels.tsv');
-    await writeFile(table, 'record\tfeature_selector\tlabel_visibility\tlabel_text\n'
-      + 'NC_001416.1\tprotein_id=NP_040580.1\ton\tFirst\n');
-    const file = path.join(directory, 'labels.gbdraw-session.json.gz');
-    execFileSync('python', ['-m', 'gbdraw.cli', 'linear', '--gbk', lambda, '--feature_override_table', table,
-      '-o', path.join(directory, 'labels'), '--session_output', file], {
-      cwd: directory, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe', timeout: 1_800_000
-    });
-    const session = JSON.parse(gunzipSync(await readFile(file)));
-    const [row] = session.renderRequest.diagramOptions.featureOverrides;
-    assert.equal(row.labelText, 'First');
-    const result = await load(JSON.stringify(session));
-    assert.equal(result.status, 'ok', result.error?.stack);
-    const drawing = state.activeDrawing();
-    assert.deepEqual(Object.values(drawing.featureOverrides).map(({ labelVisibility, labelText }) => [labelVisibility, labelText]),
-      [['on', 'First']]);
-    const filesData = await serializeActiveRenderFiles('linear', state, drawing);
-    const comparisonPlanSnapshot = resolveLinearComparisonPlan({
+// D-01, OV-221: a Session the CLI writes draws the CLI's figure when the Web app
+// loads it. Load gives the drawing every table the request holds, so the next
+// Generate, a label reflow, and a Web re-save keep them; the Sessions a CLI
+// replay and Python save again (no Web draft either) load the same way. The
+// CLI and Python cells of the matrix are tests/test_cli_session_cross_surface.py.
+const crossSurface = (...args) => JSON.parse(execFileSync('python', [
+  path.join(root, 'tests/web/helpers/cli-session-cross-surface.py'), ...args
+], { cwd: root, encoding: 'utf8', timeout: 1_800_000, maxBuffer: 16 * 1024 * 1024 }));
+// The drawing state each table option of the CLI fills at Load.
+const LOADED_TABLES = {
+  '-t': drawing => drawing.manualSpecificRules.length > 0,
+  '-d': drawing => drawing.currentColors.value.CDS === '#123456',
+  '--feature_visibility_table': drawing => drawing.featureVisibilityRules.value.length > 0,
+  '--label_table': drawing => drawing.canonicalLabelOverrideRows.value.length > 0,
+  '--label_whitelist': drawing => drawing.filterMode.value === 'Whitelist' && drawing.manualWhitelist.length > 0,
+  '--label_blacklist': drawing => drawing.filterMode.value === 'Blacklist' && drawing.manualBlacklist.value !== '',
+  '--qualifier_priority': drawing => drawing.manualPriorityRules.length > 0,
+  '--feature_override_table': drawing => Object.keys(drawing.featureOverrides).length > 0
+};
+// A Session of the request and resources the Web renders.
+const renderedSession = async ({ renderRequest, resources }) => JSON.stringify({
+  format: 'gbdraw-session', version: SESSION_VERSION, createdAt: '2026-10-09T00:00:00.000Z', renderRequest,
+  resources: Object.fromEntries(await Promise.all(Object.entries(resources).map(async ([id, descriptor]) => {
+    if (typeof descriptor.data === 'string') return [id, descriptor];
+    const bytes = await readFileBytes(getResourcePayloadOwner(descriptor));
+    return [id, { kind: descriptor.kind || 'web-file', name: descriptor.name, type: descriptor.type || 'application/octet-stream',
+      size: bytes.byteLength, lastModified: 0, encoding: 'base64', data: Buffer.from(bytes).toString('base64') }];
+  }))),
+  results: [], editorState: { featureCatalog: null }
+});
+// The request the next Generate builds (run-analysis.js), inheriting a
+// read-only CLI comparison (-b) as Inherit saved comparison does.
+const nextGenerate = async () => {
+  const drawing = state.activeDrawing();
+  const filesData = await serializeActiveRenderFiles(state.mode.value, state, drawing);
+  const inherit = drawing.importedComparisonIntent.disposition === 'PRESERVED_READ_ONLY';
+  const candidate = buildCanonicalRenderRequest({ state, drawing,
+    filesData: inherit ? { ...filesData, linearCanonicalComparisons: [] } : filesData,
+    comparisonPlanSnapshot: state.mode.value === 'linear' ? resolveLinearComparisonPlan({
       plan: drawing.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
       losatProgram: drawing.losatProgram.value, blastpMode: drawing.losat.blastp.mode
-    });
-    const candidate = buildCanonicalRenderRequest({ state, drawing, filesData, comparisonPlanSnapshot });
-    assert.deepEqual(candidate.renderRequest.diagramOptions.featureOverrides, [row]);
+    }) : null });
+  if (inherit) inheritCommittedComparisonIntent({ candidate, committed: getCommittedCanonicalSession() });
+  return candidate;
+};
+
+await test('every load and re-save of a CLI Session in Web draws the CLI figure', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-cross-'));
+  try {
+    const checks = [];
+    for (const entry of crossSurface('prepare', directory)) {
+      const first = checks.length;
+      const sources = { 'CLI Session': entry.cli_session, 'CLI re-save': entry.cli_resave, 'Python re-save': entry.python_resave };
+      for (const [source, file] of Object.entries(sources)) {
+        const result = await load(await readFile(file));
+        assert.equal(result.status, 'ok', `${entry.id}, ${source}: ${result.error?.stack}`);
+        const drawing = state.activeDrawing();
+        for (const [option, loaded] of Object.entries(LOADED_TABLES)) {
+          if (entry.args.includes(option)) assert.ok(loaded(drawing), `${entry.id}, ${source}: ${option}`);
+        }
+        const generated = path.join(directory, entry.id, `${source} Generate.json`);
+        await writeFile(generated, await renderedSession(await nextGenerate()));
+        checks.push({ label: `${entry.id}: ${source}, Generate`, session: generated, via: 'python' });
+        if (source !== 'CLI Session') continue;
+        // A label reflow renders the committed request with the drawing's tables.
+        const reflow = path.join(directory, entry.id, 'reflow.json');
+        await writeFile(reflow, await renderedSession(projectCommittedEditorIntent({
+          committed: getCommittedCanonicalSession(), state, drawing })));
+        checks.push({ label: `${entry.id}: label reflow`, session: reflow, via: 'python' });
+        // Save before Generate keeps the CLI request and the tables in the draft.
+        const saved = await exportSession(entry.id);
+        assert.equal(saved.status, 'saved', saved.error?.message);
+        const webSave = path.join(directory, entry.id, 'web-save.json');
+        await writeFile(webSave, gunzipSync(Buffer.from(await saved.blob.arrayBuffer())));
+        checks.push({ label: `${entry.id}: Web save, CLI`, session: webSave, via: 'cli' },
+          { label: `${entry.id}: Web save, Python`, session: webSave, via: 'python' });
+        assert.equal((await load(await readFile(webSave))).status, 'ok');
+        const resaved = path.join(directory, entry.id, 'web-save Generate.json');
+        await writeFile(resaved, await renderedSession(await nextGenerate()));
+        checks.push({ label: `${entry.id}: Web save, Web Generate`, session: resaved, via: 'python' });
+      }
+      checks.slice(first).forEach(item => Object.assign(item, { mode: entry.mode, expected: entry.svg }));
+    }
+    const checksFile = path.join(directory, 'checks.json');
+    await writeFile(checksFile, JSON.stringify(checks));
+    const failed = crossSurface('check', checksFile).filter(item => !item.equal);
+    assert.deepEqual(failed, []);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

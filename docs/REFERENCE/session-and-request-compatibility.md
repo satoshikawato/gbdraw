@@ -112,9 +112,13 @@ settings. Preview search placement and Layout edit hints are not saved. Keep
 the Session when browser positioning must be reproduced; a raw Python render
 request alone does not contain those manual positions.
 
-Fresh CLI sessions omit `config` because they have no independent Web draft.
-Web initializes their settings from `renderRequest` and restores original input
-files from their bindings. When the request draws every record of an input file,
+Fresh CLI sessions, and sessions that the Python API saves, omit `config`
+because they have no independent Web draft. Web initializes their settings from
+`renderRequest`, including the tables it records (`-t`, `-d`,
+`--feature_visibility_table`, `--label_table`, `--label_whitelist`,
+`--qualifier_priority`, and `--feature_override_table`), so the next
+**Generate Diagram** keeps them. Web restores original input files from their
+bindings. When the request draws every record of an input file,
 its record source names that file's resource, so feature-popup record rotation
 works right after Load. A Linear request, or a single Circular request, that
 draws only some records of a multi-record file (for example with `--record_id`

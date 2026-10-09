@@ -22,7 +22,14 @@ const cases = [
     name: 'linear crop and reverse', mode: 'linear', sources: [mito, lambda],
     args: ['--gbk', mito, lambda, '--region', '#1:1000-8000', '--reverse_complement', '0', '--reverse_complement', '1']
   },
-  { name: 'gff fasta', mode: 'circular', args: ['--gff', gff, '--fasta', fasta], sources: [gff, fasta] }
+  { name: 'gff fasta', mode: 'circular', args: ['--gff', gff, '--fasta', fasta], sources: [gff, fasta] },
+  // D-01, OV-221: the tables of a CLI Session reach the next Web Generate.
+  ...[['linear_tables', [lambda]], ['circular_records_tables', [path.join(root, 'tests/test_inputs/HmmtDNA.gbk')]]]
+    .map(([id, sources]) => {
+      const entry = require('../fixtures/cli_session_cross_surface/cases.json').cases.find(item => item.id === id);
+      const args = entry.args.map(arg => (arg.startsWith('tests/') ? path.join(root, arg) : arg));
+      return { name: id.replace(/_/g, ' '), mode: entry.mode, args, sources };
+    })
 ];
 
 const cli = async (mode, args, testInfo, label) => {
@@ -41,10 +48,14 @@ const svgSemantics = content => {
   const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
   const records = new Map([...svg.querySelectorAll('[data-gbdraw-record-index]')]
     .map(element => [Number(element.getAttribute('data-gbdraw-record-index')), element.getAttribute('data-gbdraw-record-id')]));
+  // The CLI's Python and Pyodide differ in the last digits of path numbers;
+  // compare them at the 4 decimals of tests/utils/svg_compare.py.
+  const path = d => d && d.replace(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi, number => String(Math.round(Number(number) * 1e4) / 1e4));
   return {
     records: [...records.entries()].sort((a, b) => a[0] - b[0]),
     features: [...svg.querySelectorAll('[data-gbdraw-feature-id]')].map(element =>
-      ['data-gbdraw-feature-id', 'data-gbdraw-record-id', 'd', 'fill', 'stroke', 'display', 'visibility'].map(key => element.getAttribute(key))),
+      ['data-gbdraw-feature-id', 'data-gbdraw-record-id', 'd', 'fill', 'stroke', 'display', 'visibility']
+        .map(key => key === 'd' ? path(element.getAttribute(key)) : element.getAttribute(key))),
     text: [...svg.querySelectorAll('text')].map(element => element.textContent)
   };
 };
@@ -128,13 +139,17 @@ for (const entry of cases) {
         expect(before.request).toEqual(session.renderRequest);
         expect(before.files.flatMap(file => file.parts.map(part => part.sha256))).toEqual(sourceHashes);
         expect(before.files.every(file => !file.isArray)).toBe(true);
-        const inventory = session.webFiles.bindings;
-        const bindings = entry.mode === 'linear' ? inventory.linearSeqs.map(seq => seq.gb)
-          : entry.name === 'gff fasta' ? [inventory.c_gff, inventory.c_fasta] : [inventory.c_gb];
-        const metadata = file => ({ name: file.name, type: file.type, lastModified: file.lastModified });
-        expect(before.files.map(metadata)).toEqual(bindings.map(metadata));
-        expect(before.files.flatMap(file => file.parts.map(part => ({ resourceId: part.resourceId, ...metadata(part) }))))
-          .toEqual(bindings.flatMap(binding => (binding.components || [binding]).map(part => ({ resourceId: part.resourceId, ...metadata(part) }))));
+        // A records table binds its input through the request record, not the
+        // Web inventory; the file bytes above identify it.
+        if (!entry.args.includes('--records_table')) {
+          const inventory = session.webFiles.bindings;
+          const bindings = entry.mode === 'linear' ? inventory.linearSeqs.map(seq => seq.gb)
+            : entry.name === 'gff fasta' ? [inventory.c_gff, inventory.c_fasta] : [inventory.c_gb];
+          const metadata = file => ({ name: file.name, type: file.type, lastModified: file.lastModified });
+          expect(before.files.map(metadata)).toEqual(bindings.map(metadata));
+          expect(before.files.flatMap(file => file.parts.map(part => ({ resourceId: part.resourceId, ...metadata(part) }))))
+            .toEqual(bindings.flatMap(binding => (binding.components || [binding]).map(part => ({ resourceId: part.resourceId, ...metadata(part) }))));
+        }
         for (const part of before.files.flatMap(file => file.parts)) expect(before.resourceIds).toContain(part.resourceId);
         const expectedSvg = await run.page.evaluate(svgSemantics, before.selected);
         expect(expectedSvg.records.length).toBe(session.renderRequest.records.length);
@@ -142,7 +157,8 @@ for (const entry of cases) {
         await generateAndWaitForResult(run.page);
         const after = await snapshot(run.page);
         const generatedSvg = await run.page.evaluate(svgSemantics, after.selected);
-        expect(generatedSvg.records).toEqual(expectedSvg.records);
+        // Generate draws the figure of the loaded Session (D-01).
+        expect(generatedSvg).toEqual(expectedSvg);
         expect(after.request.records).toHaveLength(session.renderRequest.records.length);
         // Generate keeps each record's crop and orientation.
         const transform = record => [record.region?.start ?? null, record.region?.end ?? null,

@@ -1408,6 +1408,34 @@ const buildConfigOverrides = (
   };
 };
 
+/**
+ * Whether request `comparisons` are only the protein settings that the CLI
+ * writes without -b or a protein mode: disabled pipelines (mode `none`) with
+ * no pairs, which draw no comparison.
+ * @param {any[]} comparisons
+ */
+const drawsNoComparison = (comparisons) => comparisons.length > 0
+  && comparisons.every((comparison) => comparison?.kind === 'generatedProteinComparison'
+    && comparison.mode === 'none' && !comparison.pairs?.length);
+
+// The request fields of each editor table: the Web writes the `File` form, and
+// the CLI and the Python API write the canonical `Table` form. Python reads the
+// `Table` form first.
+const EDITOR_TABLE_OPTIONS = Object.freeze({
+  visibility: ['featureVisibilityTable', 'featureVisibilityTableFile'],
+  whitelist: ['labelWhitelistTable', 'labelWhitelistFile'],
+  priority: ['qualifierPriorityTable', 'qualifierPriorityFile'],
+  labelOverrides: ['labelOverrideTable', 'labelOverrideFile']
+});
+/**
+ * The resource reference of one editor table in request `diagramOptions`.
+ * @param {Record<string, any> | null | undefined} options
+ * @param {keyof typeof EDITOR_TABLE_OPTIONS} table
+ * @returns {{ resourceId: string, representation?: string } | null}
+ */
+const editorTableRef = (options, table) => EDITOR_TABLE_OPTIONS[table]
+  .map((key) => options?.[key]).find((ref) => ref?.resourceId) || null;
+
 /** @type {Readonly<Record<string, boolean>>} */
 const ALL_GENERATED_TABLES = Object.freeze({
   colors: true, visibility: true, whitelist: true, priority: true, labelOverrides: true
@@ -2998,10 +3026,8 @@ const legacyResourceOriginalNames = ({ renderRequest, legacyFiles, fileBindings 
   const namedOptionResources = {
     d_color: referencedResourceId(options.colors?.defaultColorsFile || options.colors?.defaultColors),
     t_color: referencedResourceId(options.colors?.colorTableFile || options.colors?.colorTable),
-    whitelist: referencedResourceId(options.labelWhitelistFile),
-    qualifier_priority: referencedResourceId(
-      options.qualifierPriorityFile || options.qualifierPriorityTable
-    )
+    whitelist: referencedResourceId(editorTableRef(options, 'whitelist')),
+    qualifier_priority: referencedResourceId(editorTableRef(options, 'priority'))
   };
   Object.entries(namedOptionResources).forEach(([slot, resourceId]) => {
     addResourceOriginalNameHint(hints, resourceId, files?.[slot]?.name);
@@ -4269,11 +4295,7 @@ export const projectCanonicalSessionRequest = ({
   const committedComparisons = renderRequest.comparisons || [];
   const cliLinearSidecar = initializeCliInputs && storedConfig == null
     && renderRequest.mode === 'linear';
-  const cliDraftWithoutComparison = cliLinearSidecar && committedComparisons.length > 0
-    && committedComparisons.every((comparison) => (
-      comparison?.kind === 'generatedProteinComparison' && comparison.mode === 'none'
-      && !comparison.pairs?.length
-    ));
+  const cliDraftWithoutComparison = cliLinearSidecar && drawsNoComparison(committedComparisons);
   const cliProteinPlan = cliLinearSidecar && projectedProteinPipeline && !cliDraftWithoutComparison
     ? { linearComparisonPlan: normalizeLinearComparisonPlan({ mode: 'adjacent' }) }
     : {};
@@ -4577,20 +4599,21 @@ export const projectCanonicalSessionRequest = ({
   let projectedWhitelist = deferResourceContent && Array.isArray(storedConfig?.whitelist)
     ? storedConfig.whitelist
     : [];
-  if (options.labelWhitelistFile?.resourceId) {
+  const whitelistRef = editorTableRef(options, 'whitelist');
+  if (whitelistRef) {
     files.whitelist = resolveResourceFile
-      ? resolveResourceFile(options.labelWhitelistFile.resourceId)
-      : resourceAsLegacyFile(resources, options.labelWhitelistFile.resourceId);
+      ? resolveResourceFile(whitelistRef.resourceId)
+      : resourceAsLegacyFile(resources, whitelistRef.resourceId);
     if (!deferResourceContent) {
-      projectedWhitelist = readLegacyTable('label-whitelist', options.labelWhitelistFile, parseWhitelistRules).rules;
+      projectedWhitelist = readLegacyTable('label-whitelist', whitelistRef, parseWhitelistRules).rules;
     }
   }
-  const qualifierPriorityRef = options.qualifierPriorityFile || options.qualifierPriorityTable;
+  const qualifierPriorityRef = editorTableRef(options, 'priority');
   let projectedPriorityRules = deferResourceContent
     && Array.isArray(storedConfig?.qualifierPriorityRules)
     ? storedConfig.qualifierPriorityRules
     : [];
-  if (qualifierPriorityRef?.resourceId) {
+  if (qualifierPriorityRef) {
     files.qualifier_priority = resolveResourceFile
       ? resolveResourceFile(qualifierPriorityRef.resourceId)
       : resourceAsLegacyFile(resources, qualifierPriorityRef.resourceId);
@@ -4598,16 +4621,16 @@ export const projectCanonicalSessionRequest = ({
       projectedPriorityRules = readLegacyTable('qualifier-priority', qualifierPriorityRef, parsePriorityRules).rules;
     }
   }
-  const projectedFeatureVisibilityRules = !deferResourceContent
-    && options.featureVisibilityTableFile?.resourceId
+  const visibilityRef = editorTableRef(options, 'visibility');
+  const projectedFeatureVisibilityRules = !deferResourceContent && visibilityRef
     ? readSessionTable('feature-visibility', () => parseFeatureVisibilityRules(
-        resourceTextFromRef(resources, options.featureVisibilityTableFile)
+        resourceTextFromRef(resources, visibilityRef)
       )).rules
     : [];
-  const projectedLabelOverrideRows = !deferResourceContent
-    && options.labelOverrideFile?.resourceId
+  const labelOverrideRef = editorTableRef(options, 'labelOverrides');
+  const projectedLabelOverrideRows = !deferResourceContent && labelOverrideRef
     ? readSessionTable('label-overrides', () => parseLabelOverrideTsv(
-      resourceTextFromRef(resources, options.labelOverrideFile)
+      resourceTextFromRef(resources, labelOverrideRef)
     )).map((row) => ({
         recordId: row.recordId,
         featureType: row.featureType,
@@ -5515,9 +5538,7 @@ export const projectCommittedRecordTransform = ({ committed: source, target, tra
 
 const COMMITTED_EDITOR_TABLE_OPTIONS = Object.freeze({
   colors: ['colors'],
-  visibility: ['featureVisibilityTableFile'],
-  whitelist: ['labelWhitelistFile'],
-  labelOverrides: ['labelOverrideFile']
+  ...EDITOR_TABLE_OPTIONS
 });
 
 const referencedResourceIds = (value, ids = new Set()) => {
@@ -5626,6 +5647,7 @@ const normalizePublicationRequestAliases = (request) => {
       );
     }
   }
+  if (drawsNoComparison(normalized.comparisons || [])) normalized.comparisons = [];
   const colors = normalized.diagramOptions?.colors;
   if (colors) {
     colors.defaultColors = colors.defaultColors || colors.defaultColorsFile || null;
