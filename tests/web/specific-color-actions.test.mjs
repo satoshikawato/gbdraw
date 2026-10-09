@@ -49,6 +49,18 @@ const setup = (evaluate = evaluatePythonRules) => {
   }, projectPaletteAndRules:()=>true, ports:{requestAutomaticRerender:()=>{rerenders+=1;return true;}}, nextTick:async()=>{}});
   return {state,actions,preparation,notices,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents, rerenders:()=>rerenders};
 };
+// Review 3 (OV-262 in the Features drawer): with the type's default color
+// Auto, the drawer's color input shows the applied palette's color, as
+// Generate draws it.
+test('getFeatureColor reads the applied palette color for a type set to Auto', () => {
+  const s = setup();
+  Object.assign(s.state, {
+    paletteDefinitions: { value: { default: { CDS: '#5b8fd1' } } },
+    appliedPaletteName: { value: 'default' }, appliedPaletteColors: { value: { CDS: null } }
+  });
+  assert.equal(s.actions.getFeatureColor(s.state.extractedFeatures.value[0]), '#5b8fd1');
+});
+
 const rules = [
   {feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:'Shared',fromFile:true},
   {feat:'CDS',qual:'gene',val:'b',color:'#445566',cap:'Shared'}

@@ -328,6 +328,18 @@ test('Apply to all follows the dialog: no default-color line at open keeps the r
 });
 
 // Review 3 (OV-262 in the popup): with the type's default color Auto, the
+// popup's current color for a feature is the applied palette's color, as
+// Generate draws it (a Legend rename carries it into its dialog).
+test('with the default color Auto, the popup reads the applied palette color', async () => {
+  const setup_ = setup({ siblings: true, savedRules: [], appliedColors: { CDS: null } });
+  setup_.state.paletteDefinitions.value.default.CDS = '#5b8fd1';
+  setup_.state.currentColors.value = { CDS: null };
+  await setup_.rename('Renamed');
+  assert.equal(setup_.legendRenameDialog.show, true);
+  assert.equal(setup_.legendRenameDialog.currentColor, '#5b8fd1');
+});
+
+// Review 3 (OV-262 in the popup): with the type's default color Auto, the
 // popup's Reset fill color resets to the applied palette's color, as Generate
 // draws it.
 test('the popup Reset fill color after Auto resets to the applied palette color', async () => {
