@@ -56,7 +56,7 @@ from .request_render import (
     PreparedDiagramRequest,
     RequestRenderResult,
     _extract_linear_request_proteins,
-    build_request_plan_diagram,
+    _build_request_plan_diagram,
     plan_request,
     render_prepared_request,
 )
@@ -1158,7 +1158,10 @@ def _main_display_frame_rows_to_search_frame(
 def _adapt_session_plan(
     plan: DiagramRequestPlan,
     session_artifacts: Mapping[str, Any],
-) -> AdaptedSessionRequest:
+) -> tuple[AdaptedSessionRequest, ProteinExtractionResult | None]:
+    """Adapt ``plan``'s request and artifacts; also return the protein extraction
+    of ``plan`` when the adaptation ran one, so its build reuses it."""
+
     source = _read_session_artifact_source(session_artifacts)
     request = promote_legacy_session_similarity_alignment_request(
         plan.request,
@@ -1172,6 +1175,7 @@ def _adapt_session_plan(
     manifest = source.protein_identity_manifest
     unresolved = source.legacy_candidates
     id_map: dict[str, str] = {}
+    extraction: ProteinExtractionResult | None = None
 
     if isinstance(plan, LinearRequestPlan):
         assert isinstance(request, LinearDiagramRequest)
@@ -1269,7 +1273,7 @@ def _adapt_session_plan(
             protein_id_map=id_map,
             warnings=warnings,
         ),
-    )
+    ), extraction
 
 
 def adapt_session_request(
@@ -1281,7 +1285,7 @@ def adapt_session_request(
     if not isinstance(session_artifacts, Mapping):
         raise ValidationError("Session compatibility input must be an object.")
     validate_session(session_artifacts)
-    return _adapt_session_plan(plan_request(request), session_artifacts)
+    return _adapt_session_plan(plan_request(request), session_artifacts)[0]
 
 
 def _adjust_migration_report(
@@ -1326,12 +1330,15 @@ def _build_session_compatible_plan(
 ]:
     """Adapt and build one already-resolved session request plan."""
 
-    adapted = _adapt_session_plan(plan, session_artifacts)
+    adapted, extraction = _adapt_session_plan(plan, session_artifacts)
     if adapted.request is not plan.request:
+        # The replacement keeps the records, their inputs and the record keys
+        # that the extraction read.
         plan = _replace_plan_request(plan, adapted.request)
-    prepared = build_request_plan_diagram(
+    prepared = _build_request_plan_diagram(
         plan,
         artifacts=adapted.artifacts,
+        protein_extraction=extraction,
     )
     return prepared, _adjust_migration_report(
         prepared,

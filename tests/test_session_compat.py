@@ -689,7 +689,7 @@ def test_unresolved_session_batch_preflights_all_resolved_outputs(
     second_output = tmp_path / "diagram_2.svg"
     second_output.write_text("occupied", encoding="utf-8")
     monkeypatch.setattr(
-        "gbdraw.api.session_compat.build_request_plan_diagram",
+        "gbdraw.api.session_compat._build_request_plan_diagram",
         lambda _plan, **_kwargs: pytest.fail(
             "resolved session batch outputs must be preflighted before building"
         ),

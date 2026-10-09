@@ -27,6 +27,7 @@ import gbdraw.cli_utils.session  # noqa: F401
 import gbdraw.linear  # noqa: F401
 import gbdraw.session  # noqa: F401
 from gbdraw import cli
+from gbdraw.api.request_render import _extract_linear_request_proteins
 from gbdraw.api import (
     CircularDiagramRequest,
     InMemoryRecordSource,
@@ -39,6 +40,8 @@ from gbdraw.session_io import SESSION_FORMAT, validate_session, write_session_js
 REPO_ROOT = Path(__file__).resolve().parents[1]
 GALLERY_SESSIONS = REPO_ROOT / "gbdraw" / "web" / "gallery" / "sessions"
 CIRCULAR_SESSION = GALLERY_SESSIONS / "HmmtDNA_basic_circular.gbdraw-session.json"
+# Five records with current LOSATP raw entries and a protein identity manifest.
+PROTEIN_SESSION = GALLERY_SESSIONS / "BGC0000708-BGC0000713.gbdraw-session.json"
 
 
 def _count_calls(
@@ -225,3 +228,14 @@ def test_cli_legacy_session_replay_reads_the_loaded_payload(
         # The linear run's CurrentRequestArtifacts detaches the identity manifest.
         expected["gbdraw.api.request_render.__post_init__"] = 1
     assert copies == expected
+
+
+def test_cli_linear_session_extracts_its_proteins_once(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    extractions = _count_calls(monkeypatch, _extract_linear_request_proteins)
+    _run_cli("linear", "--session", str(PROTEIN_SESSION), "-o", str(tmp_path / "replayed"), "-f", "svg")
+    # The Session adapter extracts the proteins to check the saved LOSATP
+    # entries; the build of the same plan reuses that extraction.
+    assert len(extractions) == 1
