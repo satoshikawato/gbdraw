@@ -2449,8 +2449,9 @@ const canonicalRecordSelector = (record) => {
   return null;
 };
 // A Gallery Session's request inputs: the project inputs, mode and artifacts
-// as `state`, the settings and edits as the drawing the request reads.
-/** @returns {{ state: Record<string, any>, drawing: RequestDrawing }} */
+// as `state`, the settings and edits as the drawing the request reads, and the
+// per-feature edits of that drawing as the draft stores them (`features`).
+/** @returns {{ state: Record<string, any>, drawing: RequestDrawing, features: Record<string, unknown> }} */
 export const buildCanonicalRequestState = ({ session, projection, config,
   filesData = projection.files }) => {
   const canonicalPublicationFiles = { ...filesData };
@@ -2511,7 +2512,7 @@ export const buildCanonicalRequestState = ({ session, projection, config,
   const savedLosat = config?.losat && typeof config.losat === 'object' ? config.losat : {};
   const losatExecution = Object.fromEntries(Object.entries(createDefaultLosatExecution())
     .map(([field, value]) => [field, Object.hasOwn(savedLosat, field) ? savedLosat[field] : value]));
-  return { state: { ...refsOf(stateRefs), canonicalPublicationFiles, losatExecution }, drawing: {
+  return { features, state: { ...refsOf(stateRefs), canonicalPublicationFiles, losatExecution }, drawing: {
     ...refsOf(drawingRefs),
     form: config.form || {}, adv: config.adv || {},
     manualSpecificRules: publicationClone(config.rules || []), manualWhitelist: publicationClone(config.whitelist || []), manualPriorityRules: publicationClone(config.qualifierPriorityRules || []),
@@ -5168,19 +5169,27 @@ const publicationBytes = async (resource, id) => {
   throw new Error(`Canonical request resource '${id}' has no decodable payload.`);
 };
 const TSV_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+// The tables a CLI Session stores with a header; the file the CLI read, which
+// the rebuild uses, may have none (OV-266). Each compares by kind and rows
+// without the header; default colors compare as a set, the others keep their
+// rule order.
+const PUBLICATION_TABLES = Object.freeze({
+  '$.diagramOptions.colors.defaultColors': ['default-colors', 'feature_type\tcolor'],
+  '$.diagramOptions.colors.colorTable': ['color-table', 'feature_type\tqualifier_key\tvalue\tcolor\tcaption'],
+  '$.diagramOptions.featureVisibilityTable': ['feature-visibility-table', 'record_id\tfeature_type\tqualifier\tvalue\taction'],
+  '$.diagramOptions.labelWhitelistTable': ['label-whitelist-table', 'feature_type\tqualifier\tkeyword'],
+  '$.diagramOptions.qualifierPriorityTable': ['qualifier-priority-table', 'feature_type\tpriorities'],
+  '$.diagramOptions.labelOverrideTable': ['label-override-table', 'record_id\tfeature_type\tqualifier\tvalue\tlabel_text']
+});
+const publicationTable = (path) => PUBLICATION_TABLES[path.replace(/\.resourceId$/, '')] || null;
 const normalizedPublicationBytes = async (resource, id, normalize, path) => {
   const bytes = await publicationBytes(resource, id);
-  if (path.includes('.diagramOptions.colors.defaultColors')) {
-    const rows = bytesToText(bytes).split(/\r?\n/).map((row) => row.trim()).filter(
-      (row) => row && row !== 'feature_type\tcolor').sort();
-    return textToBytes(`${rows.join('\n')}\n`);
-  }
-  // A CLI Session stores its specific-color table with a header; the file the
-  // CLI read, which the rebuild uses, may have none. Rule order is kept.
-  if (path.includes('.diagramOptions.colors.colorTable')) {
-    const rows = bytesToText(bytes).split(/\r?\n/).filter((row) => row.trim()
-      && row !== 'feature_type\tqualifier_key\tvalue\tcolor\tcaption');
-    return textToBytes(`${rows.join('\n')}\n`);
+  const table = publicationTable(path);
+  if (table) {
+    const [kind, header] = table, sorted = kind === 'default-colors';
+    const rows = bytesToText(bytes).split(/\r?\n/).map((row) => (sorted ? row.trim() : row))
+      .filter((row) => row.trim() && row !== header);
+    return textToBytes(`${(sorted ? rows.sort() : rows).join('\n')}\n`);
   }
   if (!normalize) return bytes;
   if (!path.startsWith('$.comparisons') || resource.kind !== 'canonical-tsv') return bytes;
@@ -5195,9 +5204,9 @@ const normalizedPublicationBytes = async (resource, id, normalize, path) => {
 const publicationResourceIdentity = async (resources, id, normalize, path, cache) => {
   const resourceId = String(id || '').trim();
   if (!resourceId) throw new Error('Canonical request contains an empty resourceId.');
-  const resource = resources?.[resourceId], key = resource?.encoding === 'base64' && !path.includes('.diagramOptions.colors.') && (!normalize || !path.startsWith('$.comparisons') || resource.kind !== 'canonical-tsv') ? resource.data : null;
-  const kind = path.includes('.diagramOptions.colors.defaultColors') ? 'default-colors'
-    : (path.includes('.diagramOptions.colors.colorTable') ? 'color-table' : String(resource.kind || ''));
+  const table = publicationTable(path);
+  const resource = resources?.[resourceId], key = resource?.encoding === 'base64' && !table && (!normalize || !path.startsWith('$.comparisons') || resource.kind !== 'canonical-tsv') ? resource.data : null;
+  const kind = table ? table[0] : String(resource.kind || '');
   let digest = key ? cache.get(key) : null;
   if (!digest) { digest = normalizedPublicationBytes(resource, resourceId, normalize, path).then((bytes) => sha256Hex(bytes)); if (key) cache.set(key, digest); }
   return { kind, decodedPayloadSha256: await digest };
@@ -5639,6 +5648,11 @@ const normalizePublicationRequestAliases = (request) => {
     delete colors.defaultColorsFile;
     delete colors.colorTableFile;
   }
+  const options = normalized.diagramOptions;
+  if (options) Object.entries(EDITOR_TABLE_OPTIONS).forEach(([table, [key, fileKey]]) => {
+    options[key] = editorTableRef(options, /** @type {keyof typeof EDITOR_TABLE_OPTIONS} */ (table));
+    delete options[fileKey];
+  });
   return normalized;
 };
 const publicationRequestIdentity = async (request, resources, normalize, resourceIdentities) => {

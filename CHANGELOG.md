@@ -12,6 +12,11 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Gallery tooling: `tools/publish_gallery_session.mjs prepare` accepts the Session that
+  `gbdraw circular` writes, a `gbdraw linear -b` Session (its read-only comparison is
+  inherited, as **Generate Diagram** does after **Inherit**), and CLI Sessions with `-d`
+  or the visibility, label, whitelist, and qualifier priority tables. The published
+  Session keeps those tables when the web app loads it (OV-266, OV-267, OV-268, OV-299).
 - Sessions (CLI, Python API, and web app): a Session 40 or 41 file that an unreleased
   `main` build of the CLI wrote opens from `--session`, the Python API, and the web app
   with its tables, and the next **Generate Diagram** draws the CLI figure. Before, the
