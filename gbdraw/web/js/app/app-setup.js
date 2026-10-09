@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DrawingState } from '../state.js' */
+/** @import { DrawingState, LegendEntry } from '../state.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { EditorPaintState } from './result-paint-record.js' */
 /** @import { FeatureEditorOptions } from './feature-editor.js' */
@@ -3246,11 +3246,8 @@ export const createAppSetup = () => {
   // executor kept a deleted row lacks Python's row, so Python draws it again.
   // A Result Python drew in this session lacks only a row Python did not draw
   // there (its Legend row facts; U3a review M2); a loaded Result has no facts.
-  /**
-   * @param {string} label
-   * @param {() => unknown} restore Returns the Python keys of the restored rows, as `restoreDeletedLegendEntries` does.
-   */
-  const restoreLegendItems = (label, restore) => history.runUndoable(label, () => {
+  /** @param {() => unknown} restore Returns the Python keys of the restored rows, as `restoreDeletedLegendEntries` does. */
+  const restoreLegendRows = (restore) => {
     const restored = restore();
     if (!Array.isArray(restored)) return restored;
     showEditorIntent({ domains: LIVE_EDIT_DOMAINS.legendRows });
@@ -3260,7 +3257,9 @@ export const createAppSetup = () => {
       featureActions.requestAutomaticRerender();
     }
     return true;
-  });
+  };
+  /** @param {string} label @param {() => unknown} restore */
+  const restoreLegendItems = (label, restore) => history.runUndoable(label, () => restoreLegendRows(restore));
 
   historySnapshots.setAfterApplyHistoryIntent(async (_intent, /** @type {{ domains?: Set<string>, changes?: Record<string, any>, direction?: string }} */ { domains, changes, direction } = {}) => {
     if (!svgContainer.value?.querySelector?.('svg')) return;
@@ -3772,9 +3771,23 @@ export const createAppSetup = () => {
       : handleFeatureColorScopeChoiceWithHistory(choice, ...rest)
   );
   const handleLegendNameCommitWithHistory = undoableAction('Rename legend item', handleLegendNameCommit);
+  // R15-3 (OV-285): the Merge of a rename onto a deleted row's caption is the
+  // Restore of that row (by its Python key), then the merge, in one History
+  // checkpoint: the merge's rule commit joins it, so one Undo returns both.
+  /** @param {string} choice */
+  const chooseLegendRename = (choice) => {
+    const key = legendRenameDialog.deletedTargetKey;
+    if (choice !== 'merge' || !key) return handleLegendRenameChoice(choice);
+    return history.runUndoableCheckpoint('Rename legend item', async () => {
+      const deleted = state.activeDrawing().deletedLegendEntries.value;
+      const index = deleted.findIndex((/** @type {LegendEntry} */ entry) => (entry.originalCaption || entry.caption) === key);
+      if (index >= 0) restoreLegendRows(() => restoreDeletedLegendEntries([index]));
+      return handleLegendRenameChoice(choice);
+    });
+  };
   const handleLegendRenameChoiceWithHistory = scopeChoiceWithHistory(
     () => 'Rename legend item',
-    handleLegendRenameChoice,
+    chooseLegendRename,
     cancelLegendRename
   );
   // D-15: the palette dialog's choice is one History step too.

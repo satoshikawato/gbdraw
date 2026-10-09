@@ -500,6 +500,9 @@ const legendRenameDialog = reactive({
   currentColor: '',
   siblingCount: 0,
   mergeAvailable: true, // false unless both rows draw features of one same type
+  // R15-3 (OV-285): the Python key of the deleted row the new caption names;
+  // '' when the target is listed. Its Merge restores that row first.
+  deletedTargetKey: /** @type {PythonLegendKey | ''} */ (''),
   pendingRequest: null
 });
 

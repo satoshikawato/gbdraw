@@ -1280,6 +1280,23 @@ const WORK_ALLOWLIST = [
     }
   },
   {
+    // R15-3 (OV-285): a rename onto a deleted row's caption asks; its Merge is
+    // the Restore (which shows the row) and then the merge's rule commit, in
+    // one History checkpoint. Each shows once: two compiles. The merge's
+    // rule commit prepares its candidate rules (one request); the rows stay
+    // on the displayed Result, so no rerender. It runs after the Load, so it
+    // leaves the rule preparation of the rows above as they were (OV-286).
+    kind: 'Legend rename onto a deleted row (Restore and merge)', stages: ['fills', 'legend', 'legendFills', 'rules'],
+    compiles: 2, requests: ['evaluateRules'],
+    before: (page) => deleteLegendRow(page, 'Two'),
+    run: async (page) => {
+      await renameRow(page, 'Fifth', 'Two');
+      expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.deletedTargetKey), 'the rename asks').not.toBe('');
+      await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.handleLegendRenameChoice('merge'));
+      await settleLive(page);
+    }
+  },
+  {
     // Reset Settings as it is today (both drawings, one History checkpoint;
     // the drawing-scoped Reset of W3 replaces it). It shows the strokes, the
     // Legend rows and colors (OV-287) and the feature visibility (OV-290) it

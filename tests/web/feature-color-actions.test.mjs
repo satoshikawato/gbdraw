@@ -141,6 +141,7 @@ const actions = createFeatureColorActions({
     resetColorDialog: {},
     legendRenameDialog: {},
     legendEntries,
+    deletedLegendEntries: ref([]),
     legendStrokeOverrides,
     legendColorOverrides,
     originalLegendOrder: ref([]),
@@ -867,7 +868,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       querySelectorAll: () => []
     };
   };
-  const build = ({ entries, order, rules = [], features = [], legendColorOverrides = {} }) => {
+  const build = ({ entries, order, rules = [], features = [], legendColorOverrides = {}, deleted = [] }) => {
     const groupEntries = new Map(entries.map((entry) => [entry.caption, fakeEntry(entry.caption)]));
     const legendGroup = {
       querySelector: (selector) => [...groupEntries].find(([caption]) => selector.includes(`"${caption}"`))?.[1] || null
@@ -885,7 +886,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
         manualSpecificRules: rules, extractedFeatures: featureList, biologicalFeatures: featureList,
         featureColorOverrides: {}, svgContainer: ref({ querySelector: (selector) => selector === 'svg' ? svgRoot : null }),
         clickedFeature: ref(null), featureStyleScopeDialog: {}, resetColorDialog: {}, legendRenameDialog,
-        legendEntries: stateLegendEntries, legendStrokeOverrides: {}, legendColorOverrides,
+        legendEntries: stateLegendEntries, deletedLegendEntries: ref(deleted), legendStrokeOverrides: {}, legendColorOverrides,
         originalLegendOrder: originalOrder, originalLegendColors: ref({}),
         featureStrokeOverrides: {}, skipCaptureBaseConfig: ref(false), skipExtractOnSvgChange: ref(false),
         addedLegendCaptions: ref(new Set())
@@ -906,7 +907,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       getFeatureElements: () => [],
       getFeatureFillElements: () => []
     });
-    return { renameActions, committed, legendRenameDialog, stateLegendEntries, originalOrder, legendColorOverrides };
+    return { renameActions, committed, legendRenameDialog, stateLegendEntries, originalOrder, legendColorOverrides, deleted };
   };
 
   // PV-02: a renamed renderer-generated row keeps its generated identity, so
@@ -1054,4 +1055,78 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   await ruleOwned.renameActions.renameLegendEntry(0, 'Special');
   assert.notEqual(ruleOwned.legendRenameDialog.show, true);
   assert.equal(ruleOwned.committed.length, 1);
+
+  // R15-3 (OV-285): a rename onto a deleted row's caption asks as onto a
+  // listed row. The dialog names the deleted row by its Python key; the merge
+  // goes into that row once the composition root restored it, so this owner
+  // alone refuses it like a Merge it does not offer.
+  const ontoDeleted = (deletedColor) => build({
+    entries: [{ caption: 'Leu A', color: '#e8b441', featureIds: ['t1'] }],
+    deleted: [{ caption: 'Leu B', originalCaption: 'tRNA', color: deletedColor, featureIds: ['t2'] }],
+    order: ['tRNA'],
+    features: [{ ...trna, legendCaption: 'Leu A' }, { ...trna, id: 't2', svg_id: 't2', legendCaption: 'Leu B' }]
+  });
+  for (const deletedColor of ['#71ee7d', '#e8b441']) {
+    const asked = ontoDeleted(deletedColor);
+    await asked.renameActions.renameLegendEntry(0, 'Leu B');
+    assert.equal(asked.legendRenameDialog.show, true, `a deleted caption asks (${deletedColor})`);
+    assert.equal(asked.legendRenameDialog.mode, 'target');
+    assert.equal(asked.legendRenameDialog.mergeAvailable, true, 'one feature type: Restore and merge is offered');
+    assert.equal(asked.legendRenameDialog.deletedTargetKey, 'tRNA', 'the deleted row is named by its Python key');
+    assert.equal(asked.committed.length, 0);
+    await asked.renameActions.handleLegendRenameChoice('merge');
+    assert.equal(asked.legendRenameDialog.show, false, 'a merge into a row still deleted is refused');
+    assert.equal(asked.committed.length, 0);
+    assert.deepEqual(asked.stateLegendEntries.value.map((entry) => entry.caption), ['Leu A']);
+  }
+  const restored = ontoDeleted('#71ee7d');
+  await restored.renameActions.renameLegendEntry(0, 'Leu B');
+  // The composition root's Restore returns the row to the list before the merge.
+  restored.stateLegendEntries.value = [...restored.stateLegendEntries.value, ...restored.deleted.splice(0)];
+  await restored.renameActions.handleLegendRenameChoice('merge');
+  assert.deepEqual(restored.committed.at(-1).map(({ cap, color }) => [cap, color]), [['Leu B', '#71ee7d']]);
+  // A rule-owned deleted row: the merge adopts its color too (no PD-OI-042
+  // caption disambiguation once the Restore listed it).
+  const ruleOwnedDeleted = build({
+    entries: [{ caption: 'tRNA', color: '#e8b441', featureIds: ['t1'] }],
+    deleted: [{ caption: 'Special', originalCaption: 'Special', color: '#ff0000', featureIds: ['t2'] }],
+    order: ['tRNA', 'Special'],
+    rules: [{ feat: 'tRNA', qual: 'product', val: '^NOMATCH$', color: '#ff0000', cap: 'Special' }],
+    features: [{ ...trna, legendCaption: 'tRNA' }, { ...trna, id: 't2', svg_id: 't2', legendCaption: 'Special' }]
+  });
+  await ruleOwnedDeleted.renameActions.renameLegendEntry(0, 'Special');
+  assert.equal(ruleOwnedDeleted.legendRenameDialog.show, true, 'a rule-owned deleted caption asks');
+  assert.equal(ruleOwnedDeleted.legendRenameDialog.deletedTargetKey, 'Special');
+  ruleOwnedDeleted.stateLegendEntries.value = [...ruleOwnedDeleted.stateLegendEntries.value, ...ruleOwnedDeleted.deleted.splice(0)];
+  await ruleOwnedDeleted.renameActions.handleLegendRenameChoice('merge');
+  assert.deepEqual(ruleOwnedDeleted.committed.at(-1).filter(({ val }) => val === 't1').map(({ cap, color }) => [cap, color]),
+    [['Special', '#ff0000']]);
+  const suffixedOntoDeleted = ontoDeleted('#71ee7d');
+  await suffixedOntoDeleted.renameActions.renameLegendEntry(0, 'Leu B');
+  await suffixedOntoDeleted.renameActions.handleLegendRenameChoice('suffix');
+  assert.deepEqual(suffixedOntoDeleted.committed.at(-1).map(({ cap, color }) => [cap, color]), [['Leu B (1)', '#e8b441']]);
+  const cancelledOntoDeleted = ontoDeleted('#71ee7d');
+  await cancelledOntoDeleted.renameActions.renameLegendEntry(0, 'Leu B');
+  await cancelledOntoDeleted.renameActions.handleLegendRenameChoice('cancel');
+  assert.equal(cancelledOntoDeleted.committed.length, 0);
+  assert.equal(cancelledOntoDeleted.legendRenameDialog.show, false);
+  assert.equal(cancelledOntoDeleted.legendRenameDialog.deletedTargetKey, '');
+  assert.deepEqual(cancelledOntoDeleted.deleted.map((entry) => entry.caption), ['Leu B']);
+  // A row without features (GC skew) onto a deleted GC skew row: Suffix or
+  // Cancel only; Suffix steps over the deleted caption.
+  const gcOntoDeleted = () => build({
+    entries: [{ caption: 'CDS', color: '#54bcf8', featureIds: ['t1'] }, { caption: 'GC skew (+)', color: '#6dded3' }],
+    deleted: [{ caption: 'GC skew (-)', originalCaption: 'GC skew (-)', color: '#ad72e3' }],
+    order: ['CDS', 'GC skew (+)', 'GC skew (-)'],
+    features: [{ ...trna, type: 'CDS', legendCaption: 'CDS' }]
+  });
+  const gcAsked = gcOntoDeleted();
+  await gcAsked.renameActions.renameLegendEntry(1, 'GC skew (-)');
+  assert.equal(gcAsked.legendRenameDialog.show, true, 'a featureless rename onto a deleted caption asks');
+  assert.equal(gcAsked.legendRenameDialog.mergeAvailable, false);
+  assert.equal(gcAsked.legendRenameDialog.deletedTargetKey, 'GC skew (-)');
+  assert.deepEqual(gcAsked.stateLegendEntries.value.map((entry) => entry.caption), ['CDS', 'GC skew (+)']);
+  await gcAsked.renameActions.handleLegendRenameChoice('suffix');
+  assert.deepEqual(gcAsked.stateLegendEntries.value.map((entry) => entry.caption), ['CDS', 'GC skew (-) (1)']);
+  assert.equal(gcAsked.committed.length, 0);
 }

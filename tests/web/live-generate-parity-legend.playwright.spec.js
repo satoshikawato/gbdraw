@@ -549,11 +549,86 @@ test('a Legend rename of GC content onto CDS offers no Merge, and Suffix equals 
   await expectLiveEqualsGenerate(page, { label: 'GC content renamed onto CDS with Suffix' });
 });
 
+// R15-3 (OV-285): a rename onto a deleted row's caption asks as onto a listed
+// row. Rows that cannot merge (GC rows have no features) offer Suffix and
+// Cancel only; rows of one feature type offer Restore and merge, which is one
+// History step.
+const legendState = (page) => page.evaluate(() => {
+  const app = window.__GBDRAW_APP__;
+  return { listed: app.legendEntries.map((entry) => entry.caption), deleted: app.deletedLegendEntries.map((entry) => entry.caption) };
+});
+const restoreMergeButton = (page) => page.getByRole('button', { name: /Restore the deleted row and merge/ });
+const conflictAsked = async (page) => {
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'the rename asks').toBe(true);
+  await expect(page.getByRole('heading', { name: 'Legend Name Conflict' })).toBeVisible();
+};
+
+test('a Legend rename onto a deleted GC skew row asks with Suffix and Cancel only (OV-285)', async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  await deleteLegendRow(page, 'GC skew (-)');
+  const before = await legendState(page);
+  const shown = await semanticSnapshot(page);
+  await renameRow(page, 'GC skew (+)', 'GC skew (-)');
+  await conflictAsked(page);
+  await expect(restoreMergeButton(page), 'Restore and merge is not offered').toHaveCount(0);
+  await expect(mergeButton(page), 'Merge is not offered').toHaveCount(0);
+  await expect(suffixButton(page), 'Suffix is offered').toHaveCount(1);
+  await choose(page, 'cancel');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'Cancel closes the dialog').toBe(false);
+  expect(await legendState(page), 'Cancel changes no row').toEqual(before);
+  expect(diffSemanticSnapshots(shown, await semanticSnapshot(page)), 'Cancel leaves the Result as it was').toEqual([]);
+  await renameRow(page, 'GC skew (+)', 'GC skew (-)');
+  await conflictAsked(page);
+  await choose(page, 'suffix');
+  expect(await legendState(page), 'Suffix steps over the deleted caption').toEqual({
+    listed: before.listed.map((caption) => (caption === 'GC skew (+)' ? 'GC skew (-) (1)' : caption)),
+    deleted: before.deleted
+  });
+  await expectLiveEqualsGenerate(page, { label: 'GC skew (+) renamed onto the deleted GC skew (-) with Suffix' });
+});
+
 const RULE_ROWS = [
   { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#e63946', cap: 'alpha' },
   { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2a9d8f', cap: 'beta' },
   { feat: 'repeat_region', qual: 'note', val: '^RPT_ONE$', color: '#7b2cbf', cap: 'rep' }
 ];
+
+// Two color-rule rows of CDS: a rule-owned listed target keeps PD-OI-042
+// without asking (below), a deleted one asks and its merge adopts its color.
+test('a Legend rename onto a deleted row of one feature type restores and merges it in one History step (OV-285)', async ({ page }) => {
+  test.setTimeout(180_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  for (const rule of RULE_ROWS.slice(0, 2)) await addColorRule(page, rule);
+  await deleteLegendRow(page, 'beta');
+  const before = await legendState(page);
+  const shown = await semanticSnapshot(page);
+  await renameRow(page, 'alpha', 'beta');
+  await conflictAsked(page);
+  await expect(restoreMergeButton(page), 'Restore and merge is offered').toHaveCount(1);
+  await expect(mergeButton(page), 'the listed-row Merge label is not shown').toHaveCount(0);
+  await expect(suffixButton(page), 'Suffix is offered').toHaveCount(1);
+  await choose(page, 'merge');
+  const merged = await legendState(page);
+  expect(merged.listed.filter((caption) => caption === 'beta'), 'the restored row is listed once').toHaveLength(1);
+  expect(merged.listed, 'alpha joined beta').not.toContain('alpha');
+  expect(merged.deleted, 'beta left the deleted list').not.toContain('beta');
+  expect(await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return {
+      rules: app.manualSpecificRules.map(({ val, cap, color }) => [val, cap, color]),
+      row: app.legendEntries.find((entry) => entry.caption === 'beta').color
+    };
+  }), 'the row returns in its own color, which the merged feature adopts').toEqual({
+    rules: [['^FL1$', 'beta', '#2a9d8f'], ['^FL2$', 'beta', '#2a9d8f']], row: '#2a9d8f'
+  });
+  await history(page, 'undo');
+  expect(await legendState(page), 'one Undo returns the rows before the rename').toEqual(before);
+  expect(diffSemanticSnapshots(shown, await semanticSnapshot(page)), 'one Undo shows the Result before the rename').toEqual([]);
+  await history(page, 'redo');
+  expect(await legendState(page), 'Redo restores and merges again').toEqual(merged);
+  await expectLiveEqualsGenerate(page, { label: 'alpha renamed onto the deleted beta row with Restore and merge' });
+});
 
 test('a Legend rename between rows of different feature types offers no Merge', async ({ page }) => {
   test.setTimeout(120_000);

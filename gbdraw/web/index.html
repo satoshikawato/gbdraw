@@ -6512,11 +6512,11 @@
                                 <br>Apply the rename to "<span class="font-bold text-emerald-600">{{ legendRenameDialog.newCaption }}</span>" for this feature only, or for all current uses?
                             </p>
                             <p v-else-if="!legendRenameDialog.mergeAvailable" id="legend-rename-description" class="text-sm text-slate-600 mb-4">
-                                "<span class="font-bold text-blue-600">{{ legendRenameDialog.newCaption }}</span>" already exists, and "{{ legendRenameDialog.oldCaption }}" is not the same type of item, so the two cannot be merged.
+                                "<span class="font-bold text-blue-600">{{ legendRenameDialog.newCaption }}</span>" {{ legendRenameDialog.deletedTargetKey ? 'is a deleted Legend item' : 'already exists' }}, and "{{ legendRenameDialog.oldCaption }}" is not the same type of item, so the two cannot be merged.
                                 <br>Keep "{{ legendRenameDialog.oldCaption }}" as its own Legend item with a suffix, or cancel.
                             </p>
                             <p v-else id="legend-rename-description" class="text-sm text-slate-600 mb-4">
-                                "<span class="font-bold text-blue-600">{{ legendRenameDialog.newCaption }}</span>" already exists with a different color.
+                                "<span class="font-bold text-blue-600">{{ legendRenameDialog.newCaption }}</span>" {{ legendRenameDialog.deletedTargetKey ? 'is a deleted Legend item.' : 'already exists with a different color.' }}
                                 <br>Existing color:
                                 <span class="inline-flex items-center gap-2 font-mono text-slate-700">
                                     <span class="w-4 h-4 rounded border border-slate-300 inline-block"
@@ -6552,7 +6552,8 @@
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-arrows-merge text-lg" aria-hidden="true"></i>
-                                    <span>Merge into existing "{{ legendRenameDialog.targetCaption }}" and adopt its color</span>
+                                    <span v-if="legendRenameDialog.deletedTargetKey">Restore the deleted row and merge into it (adopt its color)</span>
+                                    <span v-else>Merge into existing "{{ legendRenameDialog.targetCaption }}" and adopt its color</span>
                                 </button>
                                 <button @click="handleLegendRenameChoice('suffix')"
                                         data-history-managed

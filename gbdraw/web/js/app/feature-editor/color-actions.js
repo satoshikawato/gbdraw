@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DrawingState } from '../../state.js' */
+/** @import { DrawingState, LegendEntry } from '../../state.js' */
 /** @import { LegendRowReach, PythonLegendKey, RenderedFeatureId } from '../../services/legend-svg.js' */
 import { draftLegendRowColors, LIVE_EDIT_DOMAINS } from '../candidate-render.js';
 import { reportRuleRunFailure } from '../rule-matching.js';
@@ -284,17 +284,21 @@ export const createFeatureColorActions = ({
     })?.[1] || null;
   };
 
-  /** @param {DrawingState} drawing */
-  const findLegendEntryByCaption = (drawing, caption) => {
+  /** @param {LegendEntry[]} entries @param {string} caption @returns {LegendEntry | null} */
+  const entryByCaption = (entries, caption) => {
     const normalizedCaption = normalizeCaptionKey(caption);
     if (!normalizedCaption) return null;
-
-    return (
-      drawing.legendEntries.value.find(
-        (entry) => normalizeCaptionKey(entry?.caption) === normalizedCaption
-      ) || null
-    );
+    return entries.find((entry) => normalizeCaptionKey(entry?.caption) === normalizedCaption) || null;
   };
+  /** @param {DrawingState} drawing @param {string} caption */
+  const findLegendEntryByCaption = (drawing, caption) => entryByCaption(drawing.legendEntries.value, caption);
+  // R15-3 (OV-285): the deleted row a rename's caption names. The caption only
+  // detects the conflict; the row is its Python key (an editor row's own
+  // caption), which the composition root's Restore acts on.
+  /** @param {DrawingState} drawing @param {string} caption */
+  const findDeletedLegendEntryByCaption = (drawing, caption) => entryByCaption(drawing.deletedLegendEntries.value, caption);
+  /** @param {LegendEntry} entry @returns {PythonLegendKey} */
+  const deletedEntryKey = (entry) => /** @type {PythonLegendKey} */ (entry.originalCaption || entry.caption);
 
   /** @param {DrawingState} drawing */
   const findExistingCaptionColor = (drawing, feat, caption) => {
@@ -572,6 +576,7 @@ export const createFeatureColorActions = ({
     legendRenameDialog.currentColor = '';
     legendRenameDialog.siblingCount = 0;
     legendRenameDialog.mergeAvailable = true;
+    legendRenameDialog.deletedTargetKey = '';
     legendRenameDialog.pendingRequest = null;
   });
 
@@ -620,7 +625,8 @@ export const createFeatureColorActions = ({
     );
 
     const existingKeys = new Set();
-    drawing.legendEntries.value.forEach((entry) => {
+    // A deleted row keeps its caption for Restore (R15-3).
+    [...drawing.legendEntries.value, ...drawing.deletedLegendEntries.value].forEach((entry) => {
       const key = normalizeCaptionKey(entry?.caption);
       if (key) existingKeys.add(key);
     });
@@ -859,10 +865,17 @@ export const createFeatureColorActions = ({
     legendRenameDialog.targetColor = '';
     legendRenameDialog.currentColor = request.currentColor || '';
     legendRenameDialog.siblingCount = Math.max(0, siblingCount);
+    legendRenameDialog.deletedTargetKey = '';
     legendRenameDialog.pendingRequest = request;
   };
 
-  const openLegendRenameTargetDialog = (request, targetEntry, mergeAvailable) => {
+  /**
+   * @param {{ oldCaption: string, newCaption: string, currentColor?: string, siblingCount?: number, [field: string]: unknown }} request
+   * @param {LegendEntry} targetEntry
+   * @param {boolean | null} mergeAvailable
+   * @param {PythonLegendKey | ''} deletedTargetKey The key of a deleted target row, else ''.
+   */
+  const openLegendRenameTargetDialog = (request, targetEntry, mergeAvailable, deletedTargetKey) => {
     legendRenameDialog.show = true;
     legendRenameDialog.mode = 'target';
     legendRenameDialog.oldCaption = request.oldCaption;
@@ -872,6 +885,7 @@ export const createFeatureColorActions = ({
     legendRenameDialog.currentColor = request.currentColor || '';
     legendRenameDialog.siblingCount = request.siblingCount || 0;
     legendRenameDialog.mergeAvailable = mergeAvailable;
+    legendRenameDialog.deletedTargetKey = deletedTargetKey;
     legendRenameDialog.pendingRequest = request;
   };
 
@@ -922,7 +936,11 @@ export const createFeatureColorActions = ({
     // D-06 (PD-OI-061): a rename onto another entry of a different color asks
     // Merge, Suffix, or Cancel, with or without features. A target owned by a
     // specific-color rule keeps the PD-OI-042 caption disambiguation instead.
-    const targetEntry = findLegendEntryByCaption(drawing, newCaption);
+    // R15-3 (OV-285): a rename onto a deleted row's caption always asks, as onto
+    // a listed row; its Merge is a Restore of that row, then the merge.
+    const listedTarget = findLegendEntryByCaption(drawing, newCaption);
+    const deletedTarget = listedTarget ? null : findDeletedLegendEntryByCaption(drawing, newCaption);
+    const targetEntry = listedTarget || deletedTarget;
     const isDistinctTargetEntry = targetEntry && !captionsMatch(targetEntry.caption, oldCaption);
     const ruleOwnedTarget = isDistinctTargetEntry && getLegendRowRules(targetEntry.caption).length > 0;
     const featureOrRuleRename = features.length > 0 || getLegendRowRules(oldCaption).length > 0;
@@ -939,15 +957,17 @@ export const createFeatureColorActions = ({
     const mergeAllowed = isDistinctTargetEntry && sourceTypes.size === 1 && targetTypes.size === 1
       && [...sourceTypes][0] === [...targetTypes][0];
 
-    if (featureOrRuleRename && (!isDistinctTargetEntry
-      || (mergeAllowed && (ruleOwnedTarget || colorsMatch(targetEntry.color, currentColor))))) {
+    // A chosen Merge adopts the target's color, also once a Restore made a
+    // rule-owned deleted target a listed one.
+    if (featureOrRuleRename && request.targetResolution !== 'merge' && (!isDistinctTargetEntry
+      || (!deletedTarget && mergeAllowed && (ruleOwnedTarget || colorsMatch(targetEntry.color, currentColor))))) {
       await applyLegendRenameRequest(drawing, { ...request, currentColor, features,
         finalCaption: newCaption, finalColor: currentColor });
       clearLegendRenameDialog(drawing);
       return;
     }
 
-    if (isDistinctTargetEntry && (!mergeAllowed || !colorsMatch(targetEntry.color, currentColor))) {
+    if (isDistinctTargetEntry && (deletedTarget || !mergeAllowed || !colorsMatch(targetEntry.color, currentColor))) {
       if (!request.targetResolution) {
         openLegendRenameTargetDialog(
           {
@@ -956,12 +976,14 @@ export const createFeatureColorActions = ({
             features
           },
           targetEntry,
-          mergeAllowed
+          mergeAllowed,
+          deletedTarget ? deletedEntryKey(deletedTarget) : ''
         );
         return;
       }
 
-      if (request.targetResolution === 'merge' && !mergeAllowed) {
+      // A deleted row takes the merge only once the Restore returned it.
+      if (request.targetResolution === 'merge' && (!mergeAllowed || deletedTarget)) {
         clearLegendRenameDialog(drawing, { restoreInput: true });
         return;
       }
