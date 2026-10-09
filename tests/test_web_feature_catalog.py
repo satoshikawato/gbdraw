@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import xml.etree.ElementTree as ET
 
 import pytest
@@ -72,6 +73,23 @@ def test_schema_three_promotion_reads_the_source_index_of_a_disambiguated_id() -
     promoted = promote_legacy_feature_catalog(legacy)["items"][0]["biologicalFeatures"]
 
     assert [feature.get("sourceFeatureIndex") for feature in promoted] == [136, None, None, None, None]
+
+
+SOURCE_INDEX_ALIAS_VECTORS = json.loads(
+    (Path(__file__).resolve().parent / "fixtures" / "source-feature-index-alias-vectors.json")
+    .read_text(encoding="utf-8")
+)["cases"]
+
+
+@pytest.mark.parametrize(
+    "case", SOURCE_INDEX_ALIAS_VECTORS, ids=[case["name"] for case in SOURCE_INDEX_ALIAS_VECTORS]
+)
+def test_schema_three_promotion_source_index_alias_vectors(case: dict) -> None:
+    """OV-274: shared with tests/web/feature-catalog.test.mjs."""
+
+    legacy = {"schema": 3, "items": [{"biologicalFeatures": [dict(case["feature"])]}]}
+    promoted = promote_legacy_feature_catalog(legacy)["items"][0]["biologicalFeatures"][0]
+    assert promoted.get("sourceFeatureIndex") == case["promotedSourceFeatureIndex"]
 
 
 def _combined_catalog_fixture() -> tuple[str, InteractiveSvgContext]:
