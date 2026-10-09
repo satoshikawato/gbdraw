@@ -2,13 +2,9 @@
 /** @import { PaletteColorsDialog } from '../state.js' */
 import { buildPaletteColorOverrideRows, normalizePaletteColors } from '../utils/color-utils.js';
 
-// Q6 (Owner, pending): A names up to three keys in the palette dialog body; B
-// gives the count only.
-const PALETTE_DIALOG_NAMES_KEYS = true;
-
+// The palette dialog body names up to three keys (Q6 A, Owner 2026-10-09).
 /** @param {string[]} keys */
 const describeKeys = (keys) => {
-  if (!PALETTE_DIALOG_NAMES_KEYS) return '';
   const rest = keys.length - 3;
   const parts = rest > 0 ? [...keys.slice(0, 3), `${rest} more`] : keys;
   if (parts.length <= 2) return parts.join(' and ');
@@ -147,16 +143,6 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const paletteName = String(name || '').trim() || 'default';
-
-    // Q5 (Owner, pending): switching back to the applied palette while another
-    // is queued restores the applied colors without a dialog, as before D-15.
-    if (!paletteInstantPreviewEnabled.value && paletteName === appliedPaletteName.value) {
-      drawing.selectedPalette.value = paletteName;
-      drawing.currentColors.value = cloneColors(appliedPaletteColors.value);
-      clearPendingPaletteDraft(drawing);
-      return undefined;
-    }
-
     const rows = userDefaultColorRows(drawing);
     if (!choice && rows.length > 0) {
       openPaletteColorsDialog('switch', drawing, rows, paletteName);
@@ -166,7 +152,9 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
     if (choice === 'keep') rows.forEach(([key, color]) => { colors[key] = color; });
     drawing.selectedPalette.value = paletteName;
     drawing.currentColors.value = colors;
-    if (paletteInstantPreviewEnabled.value) {
+    // The applied palette queues nothing: switching back to it while another
+    // is queued applies its colors live (Q5 A, Owner 2026-10-09).
+    if (paletteInstantPreviewEnabled.value || paletteName === appliedPaletteName.value) {
       applyPaletteDraftToPreview();
       return undefined;
     }
@@ -222,7 +210,9 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
   };
 
   // D-15: the popup's "Apply to all" on a palette row sets the type's default
-  // color, as an edit in the Default colors list does.
+  // color, as an edit in the Default colors list does. While a palette is
+  // queued, the shown Result takes the color now too: a user color wins over
+  // any palette, so the next Generate draws it (Q1 B, Owner 2026-10-09).
   /**
    * @param {ResultsManagerDrawing} drawing
    * @param {string} key
@@ -230,7 +220,11 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
    */
   const setDefaultColor = (drawing, key, color) => {
     drawing.currentColors.value = { ...drawing.currentColors.value, [key]: color };
-    if (drawing === state.activeDrawing()) syncPaletteDraftState();
+    if (drawing !== state.activeDrawing()) return;
+    syncPaletteDraftState();
+    if (String(drawing.pendingPaletteName.value || '').trim() !== '') {
+      appliedPaletteColors.value = { ...appliedPaletteColors.value, [key]: color };
+    }
   };
 
   return {

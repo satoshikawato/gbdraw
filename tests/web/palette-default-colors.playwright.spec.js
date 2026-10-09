@@ -6,7 +6,7 @@
 const { test, expect } = require('@playwright/test');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { expectLiveEqualsGenerate, settleLive } = require('./helpers/live-generate-parity.cjs');
-const { open } = require('./helpers/live-generate-parity-steps.cjs');
+const { open, popupEdit } = require('./helpers/live-generate-parity-steps.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -120,4 +120,49 @@ test('Default colors Reset asks before it discards a user default color', async 
   await settleLive(page);
   await expect(dialog).toHaveCount(0);
   expect((await facts(page)).colors.CDS).toBe(paletteCds);
+});
+
+// Q1 B and Q5 A (Owner 2026-10-09). While a palette is queued (Instant Preview
+// off), Apply to all on a palette row also shows its color on the Result now;
+// switching back to the applied palette asks like any switch and then applies
+// live.
+test('while a palette is queued, Apply to all shows its color now and switching back asks', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await page.evaluate(async () => {
+    (await import('/gbdraw/web/js/state.js')).state.paletteInstantPreviewEnabled.value = false;
+  });
+  const colors = page.locator('summary[aria-label="Colors"]');
+  if ((await colors.locator('..').getAttribute('open')) === null) await colors.click();
+  const select = page.getByRole('combobox', { name: 'Palette', exact: true });
+  const applied = await page.evaluate(() => window.__GBDRAW_APP__.selectedPalette);
+  const next = await page.evaluate(() => window.__GBDRAW_APP__.paletteNames.find((name) => (
+    name !== window.__GBDRAW_APP__.selectedPalette
+  )));
+  await select.selectOption(next);
+  await expect(select).toHaveValue(next);
+  const queued = () => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return {
+      pending: app.pendingPaletteName,
+      applied: String(app.appliedPaletteColors.CDS || '').toLowerCase(),
+      queuedCds: String(app.pendingPaletteColors.CDS || '').toLowerCase(),
+      cds: String(app.currentColors.CDS || '').toLowerCase(),
+      rules: app.manualSpecificRules.length
+    };
+  });
+  expect((await queued()).pending).toBe(next);
+
+  await popupEdit(page, 'FL1', { fill: USER_CDS, scope: 'caption' });
+  expect(await queued()).toEqual({ pending: next, applied: USER_CDS, queuedCds: USER_CDS, cds: USER_CDS, rules: 0 });
+  await expect.poll(() => legendRowColor(page, 'CDS')).toBe(USER_CDS);
+
+  const dialog = page.getByRole('dialog', { name: 'Change palette' });
+  await select.selectOption(applied);
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Keep my 1 color', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(select).toHaveValue(applied);
+  expect(await queued()).toMatchObject({ pending: '', applied: USER_CDS, cds: USER_CDS });
+  await expectLiveEqualsGenerate(page, { label: 'switch back to the applied palette, keeping the CDS color' });
 });

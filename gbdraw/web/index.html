@@ -6576,11 +6576,11 @@
                             </h3>
                             <p id="palette-colors-description" class="text-sm text-slate-600 mb-4">
                                 <template v-if="paletteColorsDialog.kind === 'reset'">
-                                    This discards your {{ paletteColorsDialog.count }} default {{ paletteColorsDialog.count === 1 ? 'color' : 'colors' }}<template v-if="paletteColorsDialog.keysText"> ({{ paletteColorsDialog.keysText }})</template>
+                                    This discards your {{ paletteColorsDialog.count }} default {{ paletteColorsDialog.count === 1 ? 'color' : 'colors' }} ({{ paletteColorsDialog.keysText }})
                                     and uses the "<span class="font-bold text-blue-600">{{ paletteColorsDialog.toPalette }}</span>" palette's colors.
                                 </template>
                                 <template v-else>
-                                    You changed {{ paletteColorsDialog.count }} default {{ paletteColorsDialog.count === 1 ? 'color' : 'colors' }} from the "<span class="font-bold text-blue-600">{{ paletteColorsDialog.fromPalette }}</span>" palette<template v-if="paletteColorsDialog.keysText"> ({{ paletteColorsDialog.keysText }})</template>.
+                                    You changed {{ paletteColorsDialog.count }} default {{ paletteColorsDialog.count === 1 ? 'color' : 'colors' }} from the "<span class="font-bold text-blue-600">{{ paletteColorsDialog.fromPalette }}</span>" palette ({{ paletteColorsDialog.keysText }}).
                                 </template>
                             </p>
 

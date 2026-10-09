@@ -250,8 +250,9 @@ for (const [name, open, dialogOf, choice, savedRules] of [
 
 // D-15: "Apply to all" on a Legend row that no Specific color rule draws sets
 // the feature type's default color as one History step; it writes no rule.
-test('Apply to all on a palette row sets the default color as one History step and commits no rule', async () => {
-  const setup_ = setup({ siblings: true, savedRules: [] });
+// Q1 B (Owner 2026-10-09): also while a palette is queued.
+for (const queued of [false, true]) test(`Apply to all on a palette row sets the default color as one History step and commits no rule${queued ? ' (palette queued)' : ''}`, async () => {
+  const setup_ = setup({ siblings: true, savedRules: [], queued });
   setup_.state.legendColorOverrides.CDS = '#999999';
   assert.equal(await setup_.preparation.prepare([]), true);
   await setup_.pick('#123456');
@@ -279,20 +280,15 @@ test('the scope dialog of a palette row names the user default color it replaces
   assert.equal(setup_.featureStyleScopeDialog.replacedDefaultColor, '#aaaaaa');
 });
 
-// A rule draws one of the row's features (p3), or a palette is queued (Q1,
-// Owner pending): "Apply to all" writes per-feature rules, as before D-15.
-for (const [name, options] of [
-  ['a row a rule draws a feature of', { savedRules: [savedRule] }],
-  ['a palette row while a palette is queued', { savedRules: [], queued: true }]
-]) {
-  test(`Apply to all on ${name} keeps writing rules`, async () => {
-    const setup_ = setup({ siblings: true, ...options });
-    assert.equal(await setup_.preparation.prepare(options.savedRules), true);
-    await setup_.pick('#123456');
-    assert.equal(setup_.featureStyleScopeDialog.defaultColorType, null);
-    await setup_.choices.scope('caption');
-    assert.equal(setup_.stages.includes('setDefaultColor'), false);
-    assert.equal(setup_.stages.includes('commitSpecificRules'), true);
-    assert.equal(setup_.state.currentColors.value.CDS, '#cccccc');
-  });
-}
+// A rule draws one of the row's features (p3): "Apply to all" writes
+// per-feature rules, as before D-15.
+test('Apply to all on a row a rule draws a feature of keeps writing rules', async () => {
+  const setup_ = setup({ siblings: true, savedRules: [savedRule] });
+  assert.equal(await setup_.preparation.prepare([savedRule]), true);
+  await setup_.pick('#123456');
+  assert.equal(setup_.featureStyleScopeDialog.defaultColorType, null);
+  await setup_.choices.scope('caption');
+  assert.equal(setup_.stages.includes('setDefaultColor'), false);
+  assert.equal(setup_.stages.includes('commitSpecificRules'), true);
+  assert.equal(setup_.state.currentColors.value.CDS, '#cccccc');
+});

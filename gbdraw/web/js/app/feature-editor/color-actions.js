@@ -43,10 +43,6 @@ import {
  * @typedef {(drawing: DrawingState, key: string, color: string) => void} SetDefaultColorPort
  */
 
-// Q2 (Owner, pending): B gives the scope dialog of a palette row one line
-// also when the type has no user default color yet; A only when it replaces one.
-const DEFAULT_COLOR_LINE_WITHOUT_USER_COLOR = true;
-
 /**
  * @typedef {object} FeatureColorActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
@@ -1080,9 +1076,6 @@ export const createFeatureColorActions = ({
   const paletteRowType = (drawing, caption, features) => {
     const type = normalizeCaption(caption);
     if (!features.every((feature) => feature?.type === type) || getLegendRowRules(type).length > 0) return null;
-    // Q1 (Owner, pending): while a palette is queued, "Apply to all" keeps
-    // writing per-feature rules, as before D-15.
-    if (drawing.hasPendingPaletteDraft.value) return null;
     const matches = ruleMatcher(drawing.manualSpecificRules);
     return features.every((feature) => matches.matchesAny(feature) === false
       && !getFeatureOverride(drawing.featureColorOverrides, feature)) ? type : null;
@@ -1127,8 +1120,8 @@ export const createFeatureColorActions = ({
         scope,
         color,
         existingCaption: findExistingCaptionColor(drawing, feat, scope.legendName),
-        // The dialog's line under "Apply to all" (D-15).
-        defaultColorType: replacedDefaultColor || DEFAULT_COLOR_LINE_WITHOUT_USER_COLOR ? defaultColorType : null,
+        // The dialog's line under "Apply to all" (D-15, Q2 B).
+        defaultColorType,
         replacedDefaultColor,
         closePopup: options.closePopupOnDialog
       });

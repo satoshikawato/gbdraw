@@ -128,19 +128,39 @@ test('a queued switch (Instant Preview off) keeps the applied palette and queues
   assert.equal(JSON.stringify(state.appliedPaletteColors.value), applied);
 });
 
-// Q5 (Owner, pending): switching back to the applied palette while another is
-// queued restores the applied colors without a dialog, as before D-15.
-test('switching back to the applied palette while one is queued restores the applied colors', async () => {
-  const { drawing, state, manager, choose, paletteColorsDialog } = setup({ instant: false });
-  const applied = { ...state.appliedPaletteColors.value };
+// Q5 A (Owner 2026-10-09): switching back to the applied palette while
+// another is queued asks like any switch when user colors exist; the queue then
+// clears and the colors apply live.
+test('switching back to the applied palette while one is queued asks like any switch, then applies live', async () => {
+  const { drawing, state, manager, choose, paletteColorsDialog, history } = setup({ instant: false });
   manager.selectPalette('forest');
   await choose('palette');
   drawing.currentColors.value = { ...drawing.currentColors.value, tRNA: '#555555' };
+  const steps = history.getUndoCount();
+  manager.selectPalette('default');
+  assert.deepEqual({ ...paletteColorsDialog }, {
+    show: true, kind: 'switch', fromPalette: 'forest', toPalette: 'default', count: 1, keysText: 'tRNA'
+  });
+  assert.equal(drawing.selectedPalette.value, 'forest');
+  await choose('keep');
+  const expected = { ...paletteOf('default'), tRNA: '#555555' };
+  assert.equal(drawing.selectedPalette.value, 'default');
+  assert.deepEqual(drawing.currentColors.value, expected);
+  assert.equal(drawing.pendingPaletteName.value, '');
+  assert.equal(state.appliedPaletteName.value, 'default');
+  assert.deepEqual(state.appliedPaletteColors.value, expected);
+  assert.equal(history.getUndoCount(), steps + 1);
+});
+
+test('switching back to the applied palette without user colors applies its colors at once', async () => {
+  const { drawing, state, manager, choose, paletteColorsDialog } = setup({ instant: false });
+  manager.selectPalette('forest');
+  await choose('palette');
   manager.selectPalette('default');
   assert.equal(paletteColorsDialog.show, false);
-  assert.equal(drawing.selectedPalette.value, 'default');
-  assert.deepEqual(drawing.currentColors.value, applied);
+  assert.deepEqual(drawing.currentColors.value, paletteOf('default'));
   assert.equal(drawing.pendingPaletteName.value, '');
+  assert.deepEqual(state.appliedPaletteColors.value, paletteOf('default'));
 });
 
 test('Default colors Reset with user colors asks first; Reset discards them as one History step', async () => {
@@ -168,7 +188,7 @@ test('Default colors Reset without user colors resets at once (Auto returns to t
   assert.deepEqual(drawing.currentColors.value, paletteOf('default'));
 });
 
-test('the dialog names three keys and counts the rest (Q6 A)', () => {
+test('the dialog names three keys and counts the rest', () => {
   const { manager, paletteColorsDialog } = setup({ colors: { ...editedColors(), CDS: '#000000', rRNA: '#010101' } });
   manager.selectPalette('forest');
   assert.equal(paletteColorsDialog.count, 5);
@@ -181,6 +201,22 @@ test('setDefaultColor writes the default color and applies it to the Result', ()
   assert.equal(drawing.currentColors.value.CDS, '#123456');
   assert.equal(state.appliedPaletteColors.value.CDS, '#123456');
   assert.equal(manager.readUserDefaultColor(drawing, 'CDS'), '#123456');
+});
+
+// Q1 B (Owner 2026-10-09): while a palette is queued, the color also
+// reaches the shown Result now; a user color wins over any palette, so the next
+// Generate draws the same color for the key.
+test('setDefaultColor while a palette is queued writes the queued color and the shown Result color', async () => {
+  const { drawing, state, manager, choose } = setup({ instant: false });
+  manager.selectPalette('forest');
+  await choose('palette');
+  const applied = { ...state.appliedPaletteColors.value };
+  manager.setDefaultColor(drawing, 'CDS', '#123456');
+  assert.equal(drawing.pendingPaletteName.value, 'forest');
+  assert.equal(drawing.pendingPaletteColors.value.CDS, '#123456');
+  assert.equal(drawing.pendingPaletteColors.value.tRNA, '#222222');
+  assert.equal(state.appliedPaletteName.value, 'default');
+  assert.deepEqual(state.appliedPaletteColors.value, { ...applied, CDS: '#123456' });
 });
 
 // OV-262, OV-263: a Result restyle reads the applied colors as a live edit,
