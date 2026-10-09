@@ -310,6 +310,11 @@ def load_default_colors(
                     engine="c",
                 ).set_index("feature_type")
             )
+            # A `feature_type<TAB>color` header row (the Web writes one) names the columns.
+            header = (user_df.index.astype(str).str.strip().str.lower() == "feature_type") & (
+                user_df["color"].astype(str).str.strip().str.lower() == "color"
+            )
+            user_df = user_df[~header]
             # Drop rows with missing colour cells
             missing = user_df["color"].isna()
             if missing.any():

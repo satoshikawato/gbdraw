@@ -86,6 +86,18 @@ def test_invalid_default_color_is_a_gbdraw_error(
     assert not (tmp_path / "out.svg").exists()
 
 
+@pytest.mark.parametrize("header", ["feature_type\tcolor", "Feature_Type\tColor"])
+def test_default_colors_header_row_is_not_an_override(header: str, tmp_path: Path) -> None:
+    # The Web writes `feature_type<TAB>color` above its -d rows (Run Info recipe, Generate request).
+    for load_comparison in (False, True):
+        colors = load_default_colors(
+            _tsv(tmp_path, "colors.tsv", f"{header}\nCDS\t#ff0000\n"), load_comparison=load_comparison
+        )
+        assert "feature_type" not in set(colors["feature_type"].str.lower())
+        assert colors.set_index("feature_type").at["CDS", "color"] == "#ff0000"
+        resolve_feature_inputs(color_table=None, default_colors=colors, feature_visibility_table=None)
+
+
 def test_invalid_specific_table_color_stays_a_gbdraw_error(tmp_path: Path) -> None:
     table = _tsv(tmp_path, "table.tsv", "CDS\tproduct\tkinase\tnotacolor\n")
     with pytest.raises(ValidationError, match="Invalid color 'notacolor'"):
