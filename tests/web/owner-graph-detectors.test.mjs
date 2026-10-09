@@ -109,7 +109,8 @@ test('every detector exposes the evidence contract and a stable id list', () => 
     'projection.call-shape.v1',
     'heavy-derived.trigger-site.v1',
     'heavy-derived.trigger-site.v2',
-    'layer.import-direction.v1'
+    'layer.import-direction.v1',
+    'owner-graph.identity-from-display.v1'
   ]);
   WEB_OWNER_GRAPH_DETECTOR_IDS.forEach((id) => {
     const detector = WEB_OWNER_GRAPH_DETECTORS[id];
@@ -561,4 +562,156 @@ test('the detectors read text only: a module that would throw when imported is s
   sources.set('gbdraw/web/js/app/app-setup.js', `throw new Error('never run');\n${ROOT}`);
   const results = detectWebOwnerGraph(sources, REGISTRY);
   assert.equal(results['owner-graph.forward-closure.v1'].subjects.length, 2);
+});
+
+// Identity read from a display value: one module per join form, the three
+// known instances (OV-243, OV-288, review M1), and the comparisons that are
+// not joins.
+const IDENTITY_FROM_DISPLAY = 'owner-graph.identity-from-display.v1';
+const IDENTITY_SOURCES = new Map([
+  // OV-243: a mounted Legend row matched to an intent entry by the caption
+  // and color the Result shows.
+  ['gbdraw/web/js/app/legend/entry-actions.js', [
+    'export const readMountedLegend = (svg, previousEntries) => {',
+    '  const rows = [];',
+    "  svg.querySelectorAll('g[data-legend-key]').forEach((entryGroup) => {",
+    "    const caption = entryGroup.getAttribute('data-legend-key');",
+    "    const color = entryGroup.querySelector('path').getAttribute('fill');",
+    '    const existingEntry = previousEntries.find((entry) => (',
+    '      entry.caption === caption',
+    '      && normalizedColor(entry.color) === normalizedColor(color)',
+    '    ));',
+    '    rows.push(existingEntry);',
+    '  });',
+    '  return rows;',
+    '};',
+    // Review M1: a caption fallback that names a row by its shown key.
+    'export const createEntryActions = ({ entries, dormant }) => {',
+    '  const intentEntry = (test) => entries.find(test) || dormant.find(test);',
+    '  const namedBy = (row) => intentEntry((each) => legendCaption(each) === row.shownKey);',
+    '  const untypedNamedBy = (row) => intentEntry((each) => legendCaption(each) === row.key);',
+    '  return { namedBy, untypedNamedBy };',
+    '};',
+    ''
+  ].join('\n')],
+  // OV-288: stroke membership read from the Legend row color.
+  ['gbdraw/web/js/services/legend-svg.js', [
+    'export const legendRowFeatureIds = (entry, drawnFills) => {',
+    '  const color = paintKey(entry?.color);',
+    '  const reached = new Set();',
+    '  for (const [id, fill] of drawnFills) {',
+    "    if (color && color !== 'none' && paintKey(fill) === color) reached.add(id);",
+    '  }',
+    '  return [...reached];',
+    '};',
+    ''
+  ].join('\n')],
+  // Lookup keys.
+  ['gbdraw/web/js/app/legend/stroke-actions.js', [
+    'export const strokeOf = (entry, strokesByColor) => strokesByColor.get(entry.color);',
+    'export const rowsByColor = (rows) => new Map(rows.map((row) => [row.color, row]));',
+    'export const overrideOfShownRow = (overrides, row) => overrides[row.textContent];',
+    "export const rowOf = (svg, caption) => svg.querySelector(`[data-legend-key=\"${caption}\"]`);",
+    'export const groupCaptions = (entries) => groupBy(entries, legendCaption);',
+    ''
+  ].join('\n')],
+  // Not joins: literals, typeof, an identity in the same conjunction,
+  // change detection of one field in a loop, caption dedupe, and a
+  // comparison in straight-line code.
+  ['gbdraw/web/js/app/legend/layout-actions.js', [
+    "export const unpainted = (entries) => entries.filter((entry) => entry.color === 'none');",
+    "export const typed = (entries) => entries.filter((entry) => typeof entry.color === 'string');",
+    'export const sameRow = (entries, key, color) => entries.find((entry) => entry.originalCaption === key && entry.color === color);',
+    'export const changed = (entries, previous) => {',
+    '  let count = 0;',
+    '  entries.forEach((entry, index) => { if (entry.color !== previous[index].color) count += 1; });',
+    '  return count;',
+    '};',
+    'export const uniqueCaptions = (entries) => {',
+    '  const seen = new Set();',
+    '  return entries.filter((entry) => !seen.has(entry.caption) && seen.add(entry.caption));',
+    '};',
+    'export const recolor = (entry, nextColor) => {',
+    '  if (entry.color !== nextColor) entry.color = nextColor;',
+    '  return entry;',
+    '};',
+    ''
+  ].join('\n')],
+  // Outside the registered modules.
+  ['gbdraw/web/js/app/track-slots.js', 'export const slotOf = (slots, color) => slots.find((slot) => slot.color === color);\n']
+]);
+
+test('identity from display reports paint and shown joins per function and inventories caption keys', () => {
+  const result = WEB_OWNER_GRAPH_DETECTORS[IDENTITY_FROM_DISPLAY].detect(IDENTITY_SOURCES);
+  assert.deepEqual(result.countsBySubject, {
+    'app/legend/entry-actions.js|namedBy|shown-join': 1,
+    'app/legend/entry-actions.js|readMountedLegend|shown-join': 2,
+    'app/legend/stroke-actions.js|overrideOfShownRow|shown-join': 1,
+    'app/legend/stroke-actions.js|rowsByColor|paint-join': 1,
+    'app/legend/stroke-actions.js|strokeOf|paint-join': 1,
+    'services/legend-svg.js|legendRowFeatureIds|paint-join': 1
+  });
+  assert.deepEqual(result.subjects, Object.keys(result.countsBySubject));
+  assert.equal(result.siteCount, 7);
+  const site = (path, fn) => result.observedSites
+    .filter((record) => record.path === path && record.function === fn)
+    .map((record) => `${record.class} ${record.form}:${record.field}`);
+  // Search callbacks; the mounted row's caption and color are locals bound
+  // from what the Result shows.
+  assert.deepEqual(site('app/legend/entry-actions.js', 'readMountedLegend'), [
+    'shown-join search:caption',
+    'shown-join search:color'
+  ]);
+  // A predicate passed to another function; `row.key` is an untyped name,
+  // so only the shown field makes the M1 form a subject.
+  assert.deepEqual(site('app/legend/entry-actions.js', 'namedBy'), ['shown-join predicate:legendCaption()']);
+  assert.deepEqual(site('app/legend/entry-actions.js', 'untypedNamedBy'), ['caption-key predicate:legendCaption()']);
+  // A loop that joins two different paint fields.
+  assert.deepEqual(site('services/legend-svg.js', 'legendRowFeatureIds'), ['paint-join loop-join:fill']);
+  assert.deepEqual(result.observedSites.filter((record) => record.path === 'app/legend/stroke-actions.js')
+    .map((record) => `${record.function} ${record.class} ${record.form}`), [
+    'strokeOf paint-join key-get',
+    'rowsByColor paint-join key-entries',
+    'overrideOfShownRow shown-join key-index',
+    'rowOf caption-key key-selector',
+    'groupCaptions caption-key key-function'
+  ]);
+  // The non-joins: literals, typeof, and straight-line code are no site; the
+  // identity-qualified comparison, same-field change detection, and caption
+  // dedupe are inventory only.
+  assert.deepEqual(result.observedSites.filter((record) => record.path === 'app/legend/layout-actions.js')
+    .map((record) => `${record.function} ${record.class} ${record.form}`), [
+    'sameRow id-qualified search',
+    'changed paint-compare loop-join',
+    'uniqueCaptions caption-key key-has',
+    'uniqueCaptions caption-key key-add'
+  ]);
+  assert.deepEqual(result.inventory, {
+    'caption-key|app/legend/entry-actions.js': 1,
+    'caption-key|app/legend/stroke-actions.js': 2,
+    'caption-key|app/legend/layout-actions.js': 2,
+    'id-qualified|app/legend/layout-actions.js': 1,
+    'paint-compare|app/legend/layout-actions.js': 1
+  });
+  assert.equal(result.observedSites.some((record) => record.path === 'app/track-slots.js'), false);
+  // Subjects encode as path|function|class.
+  const record = result.observedSites.find((each) => each.function === 'legendRowFeatureIds');
+  assert.equal(WEB_OWNER_GRAPH_DETECTORS[IDENTITY_FROM_DISPLAY].encodeSubject(record), 'services/legend-svg.js|legendRowFeatureIds|paint-join');
+});
+
+test('identity from display scopes a shown local to the function that binds it and reads its modules from the registry', () => {
+  const sources = new Map([
+    ['gbdraw/web/js/app/legend/entry-actions.js', [
+      "export const shownCaption = (group) => { const caption = group.getAttribute('data-legend-key'); return caption; };",
+      'export const intentOf = (entries, caption) => entries.find((entry) => entry.caption === caption);',
+      ''
+    ].join('\n')]
+  ]);
+  const detect = (registry) => WEB_OWNER_GRAPH_DETECTORS[IDENTITY_FROM_DISPLAY].detect(sources, registry);
+  // `caption` in intentOf is its own parameter, not the shown local.
+  assert.deepEqual(detect().observedSites.map((record) => `${record.function} ${record.class}`), ['intentOf caption-key']);
+  assert.deepEqual(detect().subjects, []);
+  const outside = { identityFromDisplay: { ...WEB_OWNER_GRAPH_DEFAULTS.identityFromDisplay, modules: ['services/'] } };
+  assert.deepEqual(detect(outside).observedSites, []);
+  assert.ok(Object.isFrozen(WEB_OWNER_GRAPH_DEFAULTS.identityFromDisplay));
 });

@@ -108,7 +108,36 @@ export const WEB_OWNER_GRAPH_DEFAULTS = Object.freeze({
       // (`runDrawn` runs the drawn-feature preparation like `run`).
       v2Methods: Object.freeze(['runDrawn'])
     })
-  ])
+  ]),
+  // `owner-graph.identity-from-display.v1`: modules on the identity paths of
+  // Legend rows and drawn features, the display values another owner writes
+  // (caption, paint, shown text, position), and the identities that qualify a
+  // comparison of them.
+  identityFromDisplay: Object.freeze({
+    modules: Object.freeze([
+      'app/legend/', 'app/legend.js', 'app/candidate-render.js', 'app/feature-editor/', 'app/feature-editor.js',
+      'app/rule-matching.js', 'app/svg-styles.js', 'app/result-paint-record.js',
+      'services/legend-svg.js', 'services/svg-result-ingestion.js', 'services/specific-color-rules.js',
+      'services/result-paint-bases.js', 'services/feature-identity.js', 'services/feature-override-identity.js',
+      'services/feature-placement.js', 'services/label-override-table.js', 'services/feature-dom.js'
+    ]),
+    // A member (`x.caption`) or a bare local (`caption`).
+    captionFields: Object.freeze(['caption', 'labelText']),
+    paintFields: Object.freeze(['color', 'fill', 'stroke', 'strokeColor', 'fillColor', 'swatchColor']),
+    // A member only.
+    positionFields: Object.freeze(['xPos', 'yPos']),
+    paintAttributes: Object.freeze(['fill', 'stroke']),
+    // What a Result shows: these attributes, members, and accessor results.
+    shownAttributes: Object.freeze(['fill', 'stroke', 'data-legend-key', 'transform']),
+    shownFields: Object.freeze(['textContent', 'innerText', 'shownKey', 'shownCaption']),
+    displayAccessors: Object.freeze(['legendCaption']),
+    identityFields: Object.freeze([
+      'originalCaption', 'recordedKey', 'biologicalFeatureId', 'recordKey', 'featureId', 'renderedId', 'sourceKey',
+      'identityKey', 'slotId', 'id'
+    ]),
+    identityAccessors: Object.freeze(['generatedCaption', 'resultBaseAttribute']),
+    identityAttributePattern: 'data-(?!legend-key)[a-z-]*(?:-id|-key)'
+  })
 });
 
 const resolveRegistry = (registry) => ({ ...WEB_OWNER_GRAPH_DEFAULTS, ...(registry || {}) });
@@ -900,6 +929,311 @@ const detectLayerImportDirectionV1 = (sources, registryInput) => {
   });
 };
 
+// --- identity from display -------------------------------------------------------
+
+// A Legend row's or drawn feature's identity, or a membership decision, joined
+// on a display value (caption, paint, shown text, position) instead of an
+// identity. Sites are equality comparisons in a join position and lookup keys:
+// - `search`: in a find/findIndex/findLast*/filter/some/every callback;
+// - `predicate`: in any other expression-bodied callback;
+// - `loop-join`: in a for/while body or a forEach/map/flatMap/reduce callback,
+//   with display values on both sides (paint of the same field on both sides is
+//   change detection, `paint-compare`);
+// - `key-*`: a display value as a Map/Set key, computed member, `[key, value]`
+//   pair of a Map, key function, or `[data-legend-key="${...}"]` selector.
+// A literal or `typeof` operand excludes a comparison, and one conjoined (&&)
+// with an identity comparison is a tie-break (`id-qualified`). Each site gets a
+// class: `shown-join` (an operand reads what a Result shows, or a local the
+// same function binds from it), `paint-join`, or else `caption-key`.
+// `shown-join` and `paint-join` are subjects; the rest is a report-only
+// inventory per module.
+const IDENTITY_FROM_DISPLAY_SUBJECT_CLASSES = new Set(['paint-join', 'shown-join']);
+const IDENTITY_SEARCH_CALLEE = /(?:^|\.)(?:find|findIndex|findLast|findLastIndex|filter|some|every)$/;
+const IDENTITY_ITERATE_CALLEE = /(?:^|\.)(?:forEach|map|flatMap|reduce)$/;
+const DISPLAY_LITERAL_OPERAND = /^\s*!*\s*(?:'[^']*'|"[^"]*"|`[^`$]*`|-?\d[\d._]*|null|undefined|true|false|NaN|\[\s*\]|\{\s*\})\s*$/;
+const OPERAND_STOP_BEFORE = /(?:&&|\|\||\?\?|[,;:{}]|(?<![=!<>])=(?!=)|=>|\breturn|\bcase|\?(?!\.))$/;
+
+// The start of the operand that ends at `index`, and the end of the operand
+// that starts at `index`, at bracket depth 0.
+const operandStartBefore = (code, index) => {
+  let depth = 0;
+  let cursor = index - 1;
+  for (; cursor >= 0; cursor -= 1) {
+    const character = code[cursor];
+    if (character === ')' || character === ']' || character === '}') {
+      depth += 1;
+      continue;
+    }
+    if (character === '(' || character === '[' || character === '{') {
+      if (depth === 0) break;
+      depth -= 1;
+      continue;
+    }
+    if (depth === 0 && OPERAND_STOP_BEFORE.test(code.slice(Math.max(0, cursor - 6), cursor + 1))) break;
+  }
+  return cursor + 1;
+};
+const operandEndAfter = (code, index) => {
+  let depth = 0;
+  let cursor = index;
+  for (; cursor < code.length; cursor += 1) {
+    const character = code[cursor];
+    if (character === '(' || character === '[' || character === '{') {
+      depth += 1;
+      continue;
+    }
+    if (character === ')' || character === ']' || character === '}') {
+      if (depth === 0) break;
+      depth -= 1;
+      continue;
+    }
+    if (depth === 0) {
+      const two = code.slice(cursor, cursor + 2);
+      if (two === '&&' || two === '||' || two === '??' || character === ',' || character === ';' || character === ':'
+        || (character === '?' && code[cursor + 1] !== '.')) break;
+      if (/^(?:===|!==|==|!=)/.test(code.slice(cursor))) break;
+    }
+  }
+  return cursor;
+};
+
+// Operand classifiers built from the registry.
+const identityFromDisplayPatterns = (config) => {
+  const members = [...config.captionFields, ...config.paintFields, ...config.positionFields, ...config.shownFields];
+  const names = [...config.captionFields, ...config.paintFields, ...config.shownFields];
+  const display = new RegExp([
+    `(?:\\.|\\?\\.)(?:${identifierPattern(members)})\\b`,
+    `getAttribute\\(\\s*['"](?:${identifierPattern(config.shownAttributes)})['"]`,
+    `\\b(?:${identifierPattern(config.displayAccessors)})\\s*\\(`,
+    `(?<![\\w$.])(?:${identifierPattern(names)})(?![\\w$])(?!\\s*:)`
+  ].join('|'));
+  const identity = new RegExp([
+    `(?:\\.|\\?\\.)(?:${identifierPattern(config.identityFields)})\\b`,
+    `\\b(?:${identifierPattern(config.identityAccessors)})\\s*\\(`,
+    `getAttribute\\(\\s*['"]${config.identityAttributePattern}['"]\\)`
+  ].join('|'));
+  const paint = new RegExp([
+    `(?:\\.|\\?\\.)(?:${identifierPattern(config.paintFields)})\\b`,
+    `getAttribute\\(\\s*['"](?:${identifierPattern(config.paintAttributes)})['"]`,
+    `(?<![\\w$.])(?:${identifierPattern(config.paintFields)})(?![\\w$])(?!\\s*:)`
+  ].join('|'));
+  const paintRead = new RegExp(
+    `(?:\\.|\\?\\.|(?<![\\w$.]))(${identifierPattern(config.paintFields)})\\b|getAttribute\\(\\s*['"](${identifierPattern(config.paintAttributes)})['"]`,
+    'g'
+  );
+  const shown = new RegExp(
+    `getAttribute\\(\\s*['"](?:${identifierPattern(config.shownAttributes)})['"]|\\.(?:${identifierPattern(config.shownFields)})\\b`
+  );
+  const attribute = /getAttribute\(\s*['"]([\w-]+)['"]/;
+  const member = new RegExp(`(?:\\.|\\?\\.)(${identifierPattern(members)})\\b`);
+  const accessor = new RegExp(`\\b(${identifierPattern(config.displayAccessors)})\\s*\\(`);
+  const name = new RegExp(`(?<![\\w$.])(${identifierPattern(names)})(?![\\w$])`);
+  return {
+    shown,
+    paint,
+    accessorArgument: new RegExp(`[(,]\\s*(${identifierPattern(config.displayAccessors)})\\s*(?=[,)])`, 'g'),
+    paintReads: (text) => [...text.matchAll(paintRead)].map((match) => match[1] || `@${match[2]}`),
+    // An operand whose own value is a display value; an identity read that
+    // wraps it (`ids.get(x.caption)`) does not make it one.
+    isDisplay: (text) => display.test(text) && !(identity.test(text) && !display.test(text.replace(identity, ''))),
+    isIdentity: (text) => identity.test(text),
+    displayField: (text) => {
+      const read = attribute.exec(text);
+      if (read && config.shownAttributes.includes(read[1])) return `@${read[1]}`;
+      const field = member.exec(text);
+      if (field) return field[1];
+      const call = accessor.exec(text);
+      if (call) return `${call[1]}()`;
+      return name.exec(text)?.[1] || null;
+    }
+  };
+};
+
+const identityFromDisplaySites = (path, source, patterns) => {
+  const code = maskJavaScript(source);
+  const text = maskJavaScript(source, { strings: false });
+  const maps = bracketMaps(code);
+  const regions = functionRegions(code, maps);
+  const records = [];
+  // The innermost named function that is not a callback, else the innermost
+  // named one.
+  const namedScope = (index) => [...regionChain(regions, index)].reverse().find((region) => region.name && !region.callee) || null;
+  const subjectFunction = (index) => namedScope(index)?.name
+    || regionChain(regions, index).find((region) => region.name)?.name || '(module)';
+  const scopeSpan = (index) => {
+    const scope = namedScope(index);
+    return scope ? [scope.bodyStart, scope.bodyEnd] : [0, code.length];
+  };
+  // Locals bound to a shown read, scoped to the named function that binds them.
+  const tainted = [];
+  for (const match of text.matchAll(/(?:const|let)\s+([\w$]+)\s*=\s*([^;\n]*)/g)) {
+    if (patterns.shown.test(match[2])) tainted.push([match[1], ...scopeSpan(match.index)]);
+  }
+  for (const match of text.matchAll(/(?:^|[;{}\n])\s*([\w$]+)\s*=(?!=)\s*([^;\n]*)/g)) {
+    const [from, to] = scopeSpan(match.index);
+    if (patterns.shown.test(match[2]) || tainted.some(([name, start, end]) => name === match[2].trim() && start <= match.index && match.index <= end)) {
+      tainted.push([match[1], from, to]);
+    }
+  }
+  const readsShown = (index, operand) => patterns.shown.test(operand) || tainted.some(([name, start, end]) => (
+    start <= index && index <= end && new RegExp(`(?<![\\w$.])${escapeRegExp(name)}(?![\\w$])`).test(operand)
+  ));
+  const classify = (index, form, [left, right = '']) => {
+    if (form.startsWith('key-')) {
+      if (readsShown(index, left)) return 'shown-join';
+      return patterns.paint.test(left) ? 'paint-join' : 'caption-key';
+    }
+    if (readsShown(index, left) || readsShown(index, right)) return 'shown-join';
+    const leftPaint = patterns.paint.test(left);
+    const rightPaint = patterns.paint.test(right);
+    if (form === 'loop-join') {
+      if (!leftPaint || !rightPaint) return 'caption-key';
+      return patterns.paintReads(left).join() !== patterns.paintReads(right).join() ? 'paint-join' : 'paint-compare';
+    }
+    return leftPaint || rightPaint ? 'paint-join' : 'caption-key';
+  };
+  const add = (index, form, field, snippet, qualified, operands = [snippet]) => records.push({
+    path,
+    line: lineNumberAt(source, index),
+    function: subjectFunction(index),
+    class: qualified ? 'id-qualified' : classify(index, form, operands),
+    form,
+    field,
+    snippet: snippet.replace(/\s+/g, ' ').trim().slice(0, 140)
+  });
+  const loopBodies = [];
+  for (const match of code.matchAll(/\b(?:for|while)\s*\(/g)) {
+    const close = maps.closeOf.get(match.index + match[0].length - 1);
+    if (close === undefined) continue;
+    const bodyStart = skipWhitespace(code, close + 1);
+    loopBodies.push([bodyStart, code[bodyStart] === '{' ? maps.closeOf.get(bodyStart) : code.indexOf(';', bodyStart)]);
+  }
+  const inLoop = (index) => loopBodies.some(([start, end]) => start <= index && index <= end);
+
+  // Equality in a join position with a display operand.
+  for (const match of code.matchAll(/(?<![=!<>])(?:===|!==|==|!=)(?!=)/g)) {
+    const operatorEnd = match.index + match[0].length;
+    const left = text.slice(operandStartBefore(code, match.index), match.index).trim();
+    const right = text.slice(operatorEnd, operandEndAfter(code, operatorEnd)).trim();
+    if (DISPLAY_LITERAL_OPERAND.test(left) || DISPLAY_LITERAL_OPERAND.test(right) || /^typeof\b/.test(left)) continue;
+    const leftDisplay = patterns.isDisplay(left);
+    const rightDisplay = patterns.isDisplay(right);
+    if (!leftDisplay && !rightDisplay) continue;
+    const innermost = regionChain(regions, match.index).at(-1);
+    const expression = Boolean(innermost) && code[innermost.bodyStart] !== '{';
+    let form = null;
+    if (innermost?.callee && IDENTITY_SEARCH_CALLEE.test(innermost.callee)) form = 'search';
+    else if (innermost?.callee && !IDENTITY_ITERATE_CALLEE.test(innermost.callee) && expression) form = 'predicate';
+    else if (leftDisplay && rightDisplay && ((innermost?.callee && IDENTITY_ITERATE_CALLEE.test(innermost.callee))
+      || (innermost && inLoop(match.index) && inLoop(innermost.bodyStart))
+      || (!innermost?.callee && inLoop(match.index) && (!innermost || !inLoop(innermost.bodyStart))))) form = 'loop-join';
+    if (!form) continue;
+    // The `&&` conjunction around the comparison, inside its function.
+    const scopeStart = innermost ? innermost.bodyStart : 0;
+    const scopeEnd = innermost ? innermost.bodyEnd : code.length;
+    let start = match.index;
+    let depth = 0;
+    for (; start > scopeStart; start -= 1) {
+      const character = code[start];
+      if (character === ')' || character === ']' || character === '}') depth += 1;
+      else if (character === '(' || character === '[' || character === '{') {
+        if (depth === 0) break;
+        depth -= 1;
+      } else if (depth === 0 && (character === ';' || code.slice(start - 1, start + 1) === '||')) break;
+    }
+    let end = match.index;
+    depth = 0;
+    for (; end < scopeEnd; end += 1) {
+      const character = code[end];
+      if (character === '(' || character === '[' || character === '{') depth += 1;
+      else if (character === ')' || character === ']' || character === '}') {
+        if (depth === 0) break;
+        depth -= 1;
+      } else if (depth === 0 && (character === ';' || character === ',' || code.slice(end, end + 2) === '||' || character === '?')) break;
+    }
+    const conjunction = text.slice(start + 1, end);
+    const qualified = /&&/.test(conjunction) && [...conjunction.matchAll(/(?<![=!<>])(?:===|==)(?!=)/g)].some((comparison) => {
+      const at = start + 1 + comparison.index;
+      const after = at + comparison[0].length;
+      return patterns.isIdentity(text.slice(operandStartBefore(code, at), at))
+        || patterns.isIdentity(text.slice(after, operandEndAfter(code, after)));
+    });
+    add(match.index, form, patterns.displayField(leftDisplay ? left : right) || patterns.displayField(right),
+      `${left} ${match[0]} ${right}`, qualified, [left, right]);
+  }
+
+  // A display value as a Map/Set key (DOM setters, classList, searchParams,
+  // and style are not keyed stores).
+  for (const match of code.matchAll(/\.(get|has|set|delete|add)\s*\(/g)) {
+    const open = match.index + match[0].length - 1;
+    if (maps.closeOf.get(open) === undefined) continue;
+    const argument = text.slice(open + 1, operandEndAfter(code, open + 1)).trim();
+    if (!patterns.isDisplay(argument) || DISPLAY_LITERAL_OPERAND.test(argument)) continue;
+    const receiver = /([\w$.?\])]+)\s*$/.exec(code.slice(Math.max(0, match.index - 80), match.index))?.[1] || '';
+    if (/classList$|searchParams$|style$/.test(receiver)) continue;
+    add(match.index, `key-${match[1]}`, patterns.displayField(argument), `${receiver}.${match[1]}(${argument})`, false, [argument]);
+  }
+  // A computed member.
+  for (const match of code.matchAll(/(?<=[\w$\])])\s*\[/g)) {
+    const open = match.index + match[0].length - 1;
+    const close = maps.closeOf.get(open);
+    if (close === undefined) continue;
+    const inner = text.slice(open + 1, close).trim();
+    if (!patterns.isDisplay(inner) || DISPLAY_LITERAL_OPERAND.test(inner) || /^\d+$/.test(inner)) continue;
+    const receiver = /([\w$.?]+)\s*$/.exec(code.slice(Math.max(0, match.index - 80), match.index + 1))?.[1] || '';
+    if (/^(?:return|const|let|var|case|in|of|typeof|await|yield|else)$/.test(receiver)) continue;
+    add(open, 'key-index', patterns.displayField(inner), `${receiver}[${inner}]`, false, [inner]);
+  }
+  // The key of a `[key, value]` pair a Map or Object.fromEntries is built from.
+  for (const match of code.matchAll(/=>\s*\[/g)) {
+    const open = match.index + match[0].length - 1;
+    if (maps.closeOf.get(open) === undefined) continue;
+    const first = text.slice(open + 1, operandEndAfter(code, open + 1)).trim();
+    if (!patterns.isDisplay(first) || DISPLAY_LITERAL_OPERAND.test(first)) continue;
+    if (!/new\s+Map\s*\(|fromEntries\s*\(/.test(code.slice(Math.max(0, match.index - 200), match.index))) continue;
+    add(match.index, 'key-entries', patterns.displayField(first), `[${first}, ...]`, false, [first]);
+  }
+  // A display accessor handed over as a key function.
+  for (const match of code.matchAll(patterns.accessorArgument)) {
+    add(match.index, 'key-function', `${match[1]}()`, match[0], false);
+  }
+  // A selector built from a display value.
+  for (const match of text.matchAll(/\[data-legend-key(?:[~|^$*]?=)["']?\$\{([^}]*)\}/g)) {
+    add(match.index, 'key-selector', '@data-legend-key', match[0], false, ['${caption}']);
+  }
+  return records;
+};
+
+const detectIdentityFromDisplayV1 = (sources, registryInput) => {
+  const config = resolveRegistry(registryInput).identityFromDisplay;
+  const inScope = (path) => config.modules.some((prefix) => (prefix.endsWith('/') ? path.startsWith(prefix) : path === prefix));
+  const patterns = identityFromDisplayPatterns(config);
+  const records = sourceEntries(sources)
+    .filter(([path]) => inScope(path))
+    .flatMap(([path, source]) => identityFromDisplaySites(path, source, patterns))
+    .sort((left, right) => left.path.localeCompare(right.path) || left.line - right.line);
+  const countsBySubject = {};
+  const inventory = {};
+  records.forEach((record) => {
+    if (IDENTITY_FROM_DISPLAY_SUBJECT_CLASSES.has(record.class)) {
+      const subject = `${record.path}|${record.function}|${record.class}`;
+      countsBySubject[subject] = (countsBySubject[subject] || 0) + 1;
+    } else {
+      const key = `${record.class}|${record.path}`;
+      inventory[key] = (inventory[key] || 0) + 1;
+    }
+  });
+  const sortedCounts = (counts) => Object.freeze(Object.fromEntries(Object.entries(counts).sort(([left], [right]) => left.localeCompare(right))));
+  const subjectSites = records.filter((record) => IDENTITY_FROM_DISPLAY_SUBJECT_CLASSES.has(record.class));
+  return Object.freeze({
+    observedSites: Object.freeze(records.map((record) => Object.freeze({ ...record }))),
+    countsBySubject: sortedCounts(countsBySubject),
+    siteCount: subjectSites.length,
+    subjects: Object.freeze(unique(Object.keys(countsBySubject))),
+    inventory: sortedCounts(inventory)
+  });
+};
+
 const encodeNamedSubject = (keys) => (record) => keys.map((key) => record[key]).join('|');
 
 export const WEB_OWNER_GRAPH_DETECTORS = Object.freeze({
@@ -947,6 +1281,11 @@ export const WEB_OWNER_GRAPH_DETECTORS = Object.freeze({
     subjectCategory: 'layer-import',
     encodeSubject: (record) => `${normalizeModulePath(record.path)}->${record.target}`,
     detect: detectLayerImportDirectionV1
+  }),
+  'owner-graph.identity-from-display.v1': Object.freeze({
+    subjectCategory: 'identity-from-display',
+    encodeSubject: (record) => `${normalizeModulePath(record.path)}|${record.function}|${record.class}`,
+    detect: detectIdentityFromDisplayV1
   })
 });
 
