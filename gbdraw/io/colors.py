@@ -2,6 +2,7 @@
 # coding: utf-8
 
 import logging
+import re
 import sys
 
 # tomllib is available in Python 3.11+; use tomli as fallback for 3.10
@@ -11,10 +12,11 @@ else:
     import tomli as tomllib
 
 from importlib import resources
-from typing import Optional
+from typing import Mapping, Optional
 
 import pandas as pd
 from pandas import DataFrame
+from svgwrite.data.typechecker import Full11TypeChecker
 
 from ..core.color import normalize_hex_color
 from ..exceptions import InputFileError, ParseError, ValidationError
@@ -180,12 +182,86 @@ def named_color_hex(color_name: str) -> str | None:
     return _COLOR_NAME_MAP.get(color_name.lower())
 
 
+_HEX_COLOR = re.compile(r"#(?:[0-9A-Fa-f]{3,4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})")
+_COLOR_FUNCTION = re.compile(r"(rgba?|hsla?)\((.*)\)", re.IGNORECASE | re.DOTALL)
+_CSS_NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
+_CSS_NUMBER_OR_PERCENT = re.compile(rf"{_CSS_NUMBER}%?")
+_CSS_HUE = re.compile(rf"{_CSS_NUMBER}(?:deg|grad|rad|turn)?", re.IGNORECASE)
+_PAINT_KEYWORDS = frozenset({"none", "currentcolor", "inherit", "transparent"})
+_SVG_TYPES = Full11TypeChecker()
+USER_COLOR_FORMS = "none, an SVG color name, #RGB, #RRGGBB, rgb(), or hsl()"
+
+
+def _is_css_color_function(text: str) -> bool:
+    match = _COLOR_FUNCTION.fullmatch(text)
+    if match is None:
+        return False
+    arguments = match.group(2).strip()
+    if "," in arguments:
+        parts = [part.strip() for part in arguments.split(",")]
+        if "/" in arguments or len(parts) not in (3, 4):
+            return False
+        channels, alpha = parts[:3], parts[3:]
+    else:
+        channel_text, _slash, alpha_text = arguments.partition("/")
+        channels = channel_text.split()
+        alpha = alpha_text.split() if _slash else []
+        if len(channels) != 3 or (_slash and len(alpha) != 1):
+            return False
+    first = _CSS_HUE if match.group(1).lower().startswith("hsl") else _CSS_NUMBER_OR_PERCENT
+    return bool(first.fullmatch(channels[0])) and all(
+        _CSS_NUMBER_OR_PERCENT.fullmatch(part) for part in (*channels[1:], *alpha)
+    )
+
+
+def is_user_color(value: object) -> bool:
+    """Whether an SVG or CSS renderer reads ``value`` as a fill or stroke color.
+
+    The union of svgwrite's ``paint`` type and the CSS color forms browsers
+    read: keywords and color names in any letter case, ``transparent``,
+    #RGB/#RGBA/#RRGGBB/#RRGGBBAA, and rgb()/rgba()/hsl()/hsla(). svgwrite's
+    ``paint`` also takes an empty value (no paint), so it stays accepted.
+    """
+
+    if not isinstance(value, str):
+        return False
+    text = value.strip()
+    lowered = text.lower()
+    return (
+        lowered in _PAINT_KEYWORDS
+        or lowered in _COLOR_NAME_MAP
+        or _HEX_COLOR.fullmatch(text) is not None
+        or _is_css_color_function(text)
+        or bool(_SVG_TYPES.is_paint(text))
+    )
+
+
+def check_user_color(
+    value: object,
+    *,
+    where: str,
+    diagnostic: Mapping[str, object],
+) -> None:
+    """Raise ``ValidationError`` unless a renderer reads ``value`` as a color."""
+
+    if not is_user_color(value):
+        raise ValidationError(
+            f"Invalid color {value!r} {where}. Use {USER_COLOR_FORMS}.",
+            diagnostic=diagnostic,
+        )
+
+
 def resolve_color_to_hex(color_str: str) -> str:
     if not isinstance(color_str, str):
         logger.error(f"Invalid color value (not a string): {color_str}.")
         raise ValidationError(f"Invalid color value (not a string): {color_str}.")
 
     if color_str.startswith("#"):
+        check_user_color(
+            color_str,
+            where="(hex colors have 3, 4, 6, or 8 digits)",
+            diagnostic={"code": "INPUT_INVALID", "reason": "COLOR"},
+        )
         return color_str
 
     hex_code = named_color_hex(color_str)
@@ -344,6 +420,9 @@ def read_color_table(color_table_file: str) -> Optional[DataFrame]:
 
 
 __all__ = [
+    "USER_COLOR_FORMS",
+    "check_user_color",
+    "is_user_color",
     "load_default_colors",
     "named_color_hex",
     "read_color_table",
