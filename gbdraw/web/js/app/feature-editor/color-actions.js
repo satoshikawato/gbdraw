@@ -2,7 +2,7 @@
 /** @import { DrawingState } from '../../state.js' */
 import { reportRuleRunFailure } from '../rule-matching.js';
 import { matchedRuleKeys, ruleKey, ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
-import { resolveColorToHex } from '../../utils/color-utils.js';
+import { appliedFeatureColors, resolveColorToHex } from '../../utils/color-utils.js';
 import { getFeatureCaption, getFeatureColorRuleHash, getFeatureHashCandidates } from '../../services/feature-utils.js';
 import { exactRegexValue } from '../../services/feature-selector.js';
 import { getAllFeatureLegendGroups, mountedLegendRowFeatureIds, setsFeatureStroke } from '../../services/legend-svg.js';
@@ -78,7 +78,6 @@ export const createFeatureColorActions = ({
   setDefaultColor
 }) => {
   const {
-    appliedPaletteColors,
     extractedFeatures,
     biologicalFeatures,
     svgContainer,
@@ -587,7 +586,7 @@ export const createFeatureColorActions = ({
       return resolveColorToHex(overrideColor) || overrideColor;
     }
 
-    const fallbackColor = appliedPaletteColors.value[feat.type] || '#cccccc';
+    const fallbackColor = appliedFeatureColors(state)[feat.type] || '#cccccc';
     return resolveColorToHex(fallbackColor) || fallbackColor;
   };
 
@@ -1543,7 +1542,7 @@ export const createFeatureColorActions = ({
     const feat = clickedFeature.value.feat;
     if (!feat) return;
 
-    const defaultColor = appliedPaletteColors.value[feat.type];
+    const defaultColor = appliedFeatureColors(state)[feat.type];
     if (!defaultColor) {
       console.warn('No default color found for feature type:', feat.type);
       return;
@@ -1580,7 +1579,7 @@ export const createFeatureColorActions = ({
     if (!feature || choice === 'cancel') return false;
     const caption = getEffectiveLegendCaption(feature);
     // The reset color is the palette default of the feature being reset.
-    const color = appliedPaletteColors.value[feature.type];
+    const color = appliedFeatureColors(state)[feature.type];
     if (choice === 'this_with_legend') return setFeatureColor(drawing, feature, color, caption);
     let rules = drawing.manualSpecificRules.filter(rule => choice === 'all'
       ? rule.cap !== caption : !hashRuleTargetsFeatureExactly(rule, feature));

@@ -4,7 +4,7 @@ import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { runWhenPrepared } from '../rule-matching.js';
 import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
-import { resolveColorToHex } from '../../utils/color-utils.js';
+import { appliedFeatureColors, resolveColorToHex } from '../../utils/color-utils.js';
 import { parseSpecificRules, serializeSpecificRules } from '../../services/file-imports.js';
 import { formatFeatureRange, getFeatureColorRuleHash } from '../../services/feature-utils.js';
 import {
@@ -73,7 +73,6 @@ import { featureDrawnContext, resultLegendSources, sameLegendSources } from '../
 /** @param {FeatureRuleActionsOptions} options */
 export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true }) => {
   const {
-    appliedPaletteColors,
     newColorFeat,
     newColorVal,
     newSpecRule,
@@ -701,7 +700,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     if (override) {
       return resolveColorToHex(override.color || override);
     }
-    return resolveColorToHex(appliedPaletteColors.value[feat.type]) || '#cccccc';
+    return resolveColorToHex(appliedFeatureColors(state)[feat.type]) || '#cccccc';
   };
 
   const getFeatureColorValue = (feat) => {

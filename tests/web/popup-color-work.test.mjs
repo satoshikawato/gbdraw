@@ -31,7 +31,7 @@ const evaluateRules = async ({ features: payloads, rules, kind }) => {
 
 const setup = ({
   siblings, features = featuresOf(['p', 'p', 'p', 'p']), savedRules = [savedRule], commit = async () => true,
-  userColors = {}, queued = false
+  userColors = {}, queued = false, appliedColors = { CDS: '#cccccc' }
 }) => {
   /** @type {string[]} */
   const stages = [];
@@ -65,9 +65,16 @@ const setup = ({
     addedLegendCaptions: ref(new Set()), results: ref([]), selectedResultIndex: ref(0), svgContainer: ref({ querySelector: () => null }),
     clickedFeature: ref({ feat: features[0], svg_id: features[0].svg_id, legendName: '' }), featureStyleScopeDialog,
     resetColorDialog: dialog(), legendRenameDialog: dialog(), originalLegendOrder: ref([]), originalLegendColors: ref({}),
-    originalSvgStroke: ref({ color: null, width: null }), appliedPaletteColors: ref({ CDS: '#cccccc' }),
+    originalSvgStroke: ref({ color: null, width: null }), appliedPaletteColors: ref({ ...appliedColors }),
     skipCaptureBaseConfig: ref(false), skipExtractOnSvgChange: ref(false),
-    currentColors: ref({ CDS: '#cccccc', ...userColors }), hasPendingPaletteDraft: ref(queued)
+    // The palette members results.js reads: "default" is applied; "forest" is
+    // queued while Instant Preview is off.
+    paletteDefinitions: ref({ default: { CDS: '#cccccc' }, forest: { CDS: '#228b22' } }),
+    paletteInstantPreviewEnabled: ref(false), appliedPaletteName: ref('default'),
+    paletteColorsDialog: { show: false, kind: 'switch', fromPalette: '', toPalette: '', count: 0, keysText: '' },
+    selectedPalette: ref(queued ? 'forest' : 'default'), pendingPaletteName: ref(queued ? 'forest' : ''),
+    pendingPaletteColors: ref(queued ? { CDS: '#228b22' } : {}),
+    currentColors: ref({ CDS: queued ? '#228b22' : '#cccccc', ...userColors }), hasPendingPaletteDraft: ref(queued)
   });
   const preparation = createRulePreparation({
     state,
@@ -308,4 +315,22 @@ test('Apply to all follows the dialog: no default-color line at open keeps the r
   assert.equal(setup_.stages.includes('setDefaultColor'), false);
   assert.equal(setup_.stages.includes('commitSpecificRules'), true);
   assert.equal(setup_.state.currentColors.value.CDS, '#cccccc');
+});
+
+// Review 3 (OV-262 in the popup): with the type's default color Auto, the
+// popup's Reset fill color resets to the applied palette's color, as Generate
+// draws it.
+test('the popup Reset fill color after Auto resets to the applied palette color', async () => {
+  const clickedRule = { feat: 'CDS', qual: 'hash', val: 'f0', color: '#222222', cap: 'p0' };
+  const setup_ = setup({ siblings: true, savedRules: [clickedRule], appliedColors: { CDS: null } });
+  setup_.state.currentColors.value = { CDS: null };
+  setup_.state.svgContainer.value = { querySelector: () => null };
+  assert.equal(await setup_.preparation.prepare([clickedRule]), true);
+  await setup_.reset();
+  assert.equal(setup_.resetColorDialog.show, true);
+  setup_.stages.length = 0;
+  await setup_.choices.reset('this_with_legend');
+  assert.equal(setup_.stages.includes('commitSpecificRules'), true);
+  assert.ok(setup_.manualSpecificRules.some((rule) => rule.qual === 'hash' && rule.val === 'f0' && rule.color === '#cccccc'),
+    JSON.stringify(setup_.manualSpecificRules));
 });

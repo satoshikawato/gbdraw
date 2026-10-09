@@ -201,6 +201,28 @@ export const normalizePaletteDefinitions = (palettes = {}) => {
   return normalized;
 };
 
+// OV-262, OV-263: the colors the shown Result draws, for every reader of a
+// feature or Legend color: the applied palette's colors under the non-empty
+// applied colors. A key that is Auto (empty), as a live edit, the Generate
+// commit, Load, and a History restore leave it, shows the applied palette's
+// color, as Generate draws a key without a `-d` row.
+/**
+ * @param {{
+ *   paletteDefinitions?: { value: Record<string, Record<string, string>> | null },
+ *   appliedPaletteName?: { value: string },
+ *   appliedPaletteColors?: { value: Record<string, string | null> | null }
+ * }} state
+ * @returns {Record<string, string>}
+ */
+export const appliedFeatureColors = ({ paletteDefinitions, appliedPaletteName, appliedPaletteColors }) => {
+  /** @type {Record<string, string>} */
+  const colors = { ...(paletteDefinitions?.value?.[appliedPaletteName?.value ?? ''] || {}) };
+  Object.entries(appliedPaletteColors?.value || {}).forEach(([key, color]) => {
+    if (color && String(color).trim() !== '') colors[key] = color;
+  });
+  return colors;
+};
+
 // One color, compared: case, a color name, and `#rgb` against `#rrggbb` (D-15).
 const normalizeComparableColor = (colorValue) => {
   const color = String(resolveColorToHex(String(colorValue || '').trim()) || '').trim().toLowerCase();
