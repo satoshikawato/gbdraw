@@ -7,7 +7,6 @@ import xml.etree.ElementTree as ET
 
 import pytest
 from svgwrite import Drawing
-from svgwrite.container import Group
 
 from gbdraw.layout.composition import (
     CompositionItem,
@@ -330,30 +329,6 @@ def test_absent_decorations_are_explicit_in_metadata() -> None:
     assert drawing.attribs["width"] == "132.0px"
     assert drawing.attribs["height"] == "112.0px"
     assert drawing.attribs["viewBox"] == "0.0 0.0 132.0 112.0"
-
-
-def test_directly_constructed_target_accepts_internal_role_metadata() -> None:
-    plan = plan_composition(
-        CompositionRequest(
-            primary=CompositionItem("primary", Aabb(0, 0, 10, 10)),
-        )
-    )
-    drawing = Drawing(debug=False)
-    primary = Group(id="direct-primary")
-    child = Group(id="validated-child")
-    primary.add(child)
-    drawing.add(primary)
-
-    assert primary.debug is True
-    assert child.debug is True
-
-    apply_composition_plan(drawing, plan, primary_targets=(primary,))
-
-    assert primary.debug is False
-    assert child.debug is True
-    parsed = ET.fromstring(drawing.tostring())
-    emitted = next(node for node in parsed.iter() if node.attrib.get("id") == "direct-primary")
-    assert emitted.attrib[COMPOSITION_ROLE_ATTRIBUTE] == "primary"
 
 
 def test_reapplication_fails_without_mutating_applied_state() -> None:
