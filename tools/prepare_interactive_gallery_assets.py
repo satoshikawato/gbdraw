@@ -202,9 +202,7 @@ VNIG_COMMAND = (
 
 VIBRIO_HARVEYI_GROUP_COMMAND = (
     "gbdraw linear --records_table examples/vibrio-harveyi-group-linear-records.tsv "
-    "-t examples/vibrio-harveyi-group-initiator-colors.tsv "
-    "--feature_override_table examples/vibrio-harveyi-group-initiator-labels.tsv "
-    "--label_font_size 14 --linear_record_gap 48 --track_layout above --scale_style ruler --ruler_on_axis "
+    "--linear_record_gap 48 --track_layout above --scale_style ruler --ruler_on_axis "
     "--scale_interval 750000 --separate_strands --hide_accession --hide_length "
     "--definition_font_size 16 --definition_line_style 'name:size=18,weight=bold' "
     "--definition_line_style 'subtitle:size=16' --keep_definition_left_aligned "
@@ -353,8 +351,8 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         display_order=65,
         command_kind="runnable",
         command_note=(
-            "Run from a source checkout: the records, color, and label tables are under "
-            "examples/, and the records table reads the two GBFF files under tests/test_inputs/."
+            "Run from a source checkout: the records table is under "
+            "examples/ and reads the two GBFF files under tests/test_inputs/."
         ),
         command=VIBRIO_HARVEYI_GROUP_COMMAND,
         session_from_command=True,

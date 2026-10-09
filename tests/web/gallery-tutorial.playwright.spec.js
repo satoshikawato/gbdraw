@@ -279,24 +279,18 @@ test('Gallery renders the two-species Vibrio multi-record tutorial and media', a
   await expect(tutorialPanel.getByRole('row', { name: 'Definition line: Organism / strain 18; Bold' })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Definition line: Subtitle / title 16; Normal' })).toBeVisible();
   await expect(
-    tutorialPanel.getByRole('row', { name: /NC_004603\.1 gene dnaA WP_005488867\.1 7,680 DnaA/ })
-  ).toBeVisible();
-  await expect(
-    tutorialPanel.getByRole('row', { name: /NC_022359\.1 product RctB WP_005374502\.1 430,232 RctB/ })
-  ).toBeVisible();
-  await expect(
-    tutorialPanel.getByRole('row', { name: /CDS product RctB #b15928 RctB \(chromosome II replication initiator\)/ })
+    tutorialPanel.getByRole('row', { name: /NC_022359\.1 product RctB WP_005374502\.1 430,232/ })
   ).toBeVisible();
   await expect(tutorialPanel.getByText('Few blocks cross from chromosome I')).toBeVisible();
   await expect(tutorialPanel.getByText("Check Display start in each record's Record options in its File card.")).toBeVisible();
 
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(18);
+  await expect(mediaImages).toHaveCount(15);
   await expect(tutorialPanel.locator('img[src$="manual-02-01-record-row.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-03-01-record-layout.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-04-03-adjacent-pairs.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-05-01-rectangle-features.webp"]')).toHaveCount(1);
-  for (const name of ['search-dnaa', 'rotate-start', 'label-dnaa', 'search-rctb', 'label-font-size', 'initiator-color-rules']) {
+  for (const name of ['search-dnaa', 'rotate-start', 'search-rctb']) {
     await expect(tutorialPanel.locator(`img[src*="manual-03-1"][src$="${name}.webp"]`)).toHaveCount(1);
   }
   await expect(tutorialPanel.locator('img[src$="manual-08-01-collinear-overview.webp"]')).toHaveCount(1);

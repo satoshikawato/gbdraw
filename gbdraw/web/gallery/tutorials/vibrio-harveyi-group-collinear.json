@@ -315,8 +315,7 @@
           "Qualifier key",
           "Query",
           "Protein",
-          "Display start",
-          "Label"
+          "Display start"
         ],
         "rows": [
           [
@@ -324,32 +323,28 @@
             "gene",
             "dnaA",
             "WP_005488867.1",
-            "7,680",
-            "DnaA"
+            "7,680"
           ],
           [
             "NC_022349.1",
             "gene",
             "dnaA",
             "WP_005378835.1",
-            "2,367,125",
-            "DnaA"
+            "2,367,125"
           ],
           [
             "NC_004605.1",
             "product",
             "RctB",
             "WP_005477480.1",
-            "1,150",
-            "RctB"
+            "1,150"
           ],
           [
             "NC_022359.1",
             "product",
             "RctB",
             "WP_005374502.1",
-            "430,232",
-            "RctB"
+            "430,232"
           ]
         ]
       },
@@ -466,109 +461,8 @@
       ]
     },
     {
-      "title": "Label both dnaA features",
-      "body": "In each dnaA popup, set Label visibility to On, type DnaA, and click Apply Label.",
-      "operations": [
-        {
-          "dataDependent": true,
-          "title": "Show the label",
-          "media": {
-            "src": "./media/vibrio-harveyi-group-collinear/manual-03-12-label-dnaa.webp",
-            "alt": "Label section of the same feature popup with Label visibility set to On (always show) and DnaA as the label text.",
-            "caption": "In the same popup, set Label visibility to On, type DnaA, and click Apply Label."
-          },
-          "capture": {
-            "source": "webapp",
-            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
-            "viewport": {
-              "width": 1600,
-              "height": 1000
-            },
-            "actions": [
-              {
-                "type": "evaluate",
-                "script": "document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview';"
-              },
-              {
-                "type": "select",
-                "selector": "select[aria-label='Search field']",
-                "value": "qualifier-value"
-              },
-              {
-                "type": "fill",
-                "selector": "input[aria-label='Qualifier key']",
-                "value": "gene"
-              },
-              {
-                "type": "fill",
-                "selector": "input[aria-label='Search features']",
-                "value": "dnaA"
-              },
-              {
-                "type": "click",
-                "selector": "button.gfs-button--search"
-              },
-              {
-                "type": "waitForFunction",
-                "script": "() => document.querySelector(\"[aria-label='Feature search status']\")?.textContent?.trim() === '1 / 2 features'"
-              },
-              {
-                "type": "click",
-                "selector": "button[aria-label='Open active feature']"
-              },
-              {
-                "type": "waitForSelector",
-                "selector": ".feature-popup"
-              },
-              {
-                "type": "waitForFunction",
-                "script": "() => window.__GBDRAW_APP__?.clickedFeature?.feat?.record_id === 'NC_004603.1'"
-              },
-              {
-                "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; if (app?.featurePopupSize) app.featurePopupSize.width = 460; if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 640; app.clickedFeaturePos.y = 24; }"
-              },
-              {
-                "type": "wait",
-                "ms": 250
-              },
-              {
-                "type": "evaluate",
-                "script": "const popup = document.querySelector('.feature-popup'); const heading = Array.from(popup?.querySelectorAll('label') || []).find((node) => node.textContent?.trim() === 'Label text'); const section = heading?.parentElement?.parentElement; if (!popup || !section) throw new Error('Feature popup label section not found.'); const body = popup.querySelector('.feature-popup-body'); if (body) body.scrollTop += section.getBoundingClientRect().top - body.getBoundingClientRect().top - 8; popup.children[0]?.setAttribute('data-capture', 'vibrio-popup-header'); section.setAttribute('data-capture', 'vibrio-popup-label');"
-              },
-              {
-                "type": "wait",
-                "ms": 200
-              }
-            ],
-            "clipSelectors": [
-              "[data-capture='vibrio-popup-header']",
-              "[data-capture='vibrio-popup-label']"
-            ],
-            "cropPadding": 8,
-            "assertAppState": {
-              "mode": "linear",
-              "clickedFeature.feat.record_id": "NC_004603.1",
-              "clickedFeature.labelVisibility": "on",
-              "clickedFeature.labelText": "DnaA"
-            },
-            "visibleText": [
-              "Label text",
-              "Label visibility"
-            ],
-            "visibleControls": [
-              {
-                "selector": ".feature-popup input[placeholder='Edit label text']",
-                "value": "DnaA"
-              }
-            ]
-          }
-        }
-      ]
-    },
-    {
       "title": "Start chromosome II at rctB",
-      "body": "Search Qualifier key product for RctB. For each of the two matches, click Open, rotate the record to start at the feature, and label it RctB.",
+      "body": "Search Qualifier key product for RctB. For each of the two matches, click Open and rotate the record to start at the feature.",
       "note": "RctB CDSs have no gene qualifier, so search their product.",
       "operations": [
         {
@@ -639,150 +533,6 @@
               {
                 "selector": "input[aria-label='Search features']",
                 "value": "RctB"
-              }
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "title": "Enlarge the labels",
-      "body": "In Labels, set Label Font Size to 14. Show Labels stays None: the label text settings show while a feature's Label visibility is On, and the size makes the four labels readable at full-figure size.",
-      "operations": [
-        {
-          "dataDependent": true,
-          "title": "Set Label Font Size",
-          "media": {
-            "src": "./media/vibrio-harveyi-group-collinear/manual-03-14-label-font-size.webp",
-            "alt": "Labels panel with Label Font Size set to 14.",
-            "caption": "Label Font Size shows while a feature's Label visibility is On; set it to 14."
-          },
-          "capture": {
-            "source": "webapp",
-            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
-            "viewport": {
-              "width": 1600,
-              "height": 1100
-            },
-            "openDetails": [
-              "Labels"
-            ],
-            "actions": [
-              {
-                "type": "waitForSelector",
-                "selector": "input[aria-label='Label Font Size']"
-              },
-              {
-                "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 480; const input = document.querySelector(\"input[aria-label='Label Font Size']\"); const box = input?.closest('.grid'); if (!box) throw new Error('Label Font Size control not found.'); box.setAttribute('data-capture', 'vibrio-label-font-size'); box.scrollIntoView({ block: 'center' });"
-              },
-              {
-                "type": "wait",
-                "ms": 200
-              }
-            ],
-            "clipSelectors": [
-              "[data-capture='vibrio-label-font-size']"
-            ],
-            "cropPadding": 12,
-            "assertAppState": {
-              "mode": "linear",
-              "adv.label_font_size": 14
-            },
-            "visibleText": [
-              "Label Font Size"
-            ],
-            "visibleControls": [
-              {
-                "selector": "input[aria-label='Label Font Size']",
-                "value": "14"
-              }
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "title": "Color the four initiators",
-      "body": "In Colors, add two rows to SPECIFIC RULES (-t).",
-      "table": {
-        "columns": [
-          "Feature",
-          "Qualifier",
-          "Value pattern",
-          "Color",
-          "Legend caption"
-        ],
-        "rows": [
-          [
-            "CDS",
-            "gene",
-            "^dnaA$",
-            "#6a3d9a",
-            "DnaA (chromosome I replication initiator)"
-          ],
-          [
-            "CDS",
-            "product",
-            "RctB",
-            "#b15928",
-            "RctB (chromosome II replication initiator)"
-          ]
-        ]
-      },
-      "note": "^dnaA$ matches the gene name exactly; RctB matches inside the longer product name.",
-      "operations": [
-        {
-          "dataDependent": true,
-          "media": {
-            "src": "./media/vibrio-harveyi-group-collinear/manual-03-15-initiator-color-rules.webp",
-            "alt": "SPECIFIC RULES (-t) controls with two CDS rules: gene ^dnaA$ in purple captioned DnaA (chromosome I replication initiator), and product RctB in brown captioned RctB (chromosome II replication initiator).",
-            "caption": "Enter both rows in SPECIFIC RULES (-t) under Colors."
-          },
-          "capture": {
-            "source": "webapp",
-            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
-            "viewport": {
-              "width": 1600,
-              "height": 1100
-            },
-            "openDetails": [
-              "Colors"
-            ],
-            "actions": [
-              {
-                "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 480; const heading = Array.from(document.querySelectorAll('h4')).find((node) => node.textContent?.includes('SPECIFIC RULES')); const header = heading?.parentElement; const rows = document.querySelector('[data-color-rule-row]')?.parentElement; if (!header || !rows) throw new Error('Vibrio specific-rule rows not found.'); header.setAttribute('data-capture', 'vibrio-specific-rules-header'); rows.setAttribute('data-capture', 'vibrio-specific-rules-rows'); rows.scrollIntoView({ block: 'center' });"
-              }
-            ],
-            "clipSelectors": [
-              "[data-capture='vibrio-specific-rules-header']",
-              "[data-capture='vibrio-specific-rules-rows']"
-            ],
-            "cropPadding": 12,
-            "assertAppState": {
-              "mode": "linear",
-              "manualSpecificRules.length": 2
-            },
-            "visibleText": [
-              "SPECIFIC RULES (-t)"
-            ],
-            "visibleControls": [
-              {
-                "selector": "input[aria-label='Color rule 1 pattern']",
-                "value": "^dnaA$"
-              },
-              {
-                "selector": "input[aria-label='Color rule 1 legend caption']",
-                "value": "DnaA (chromosome I replication initiator)"
-              },
-              {
-                "selector": "input[aria-label='Color rule 2 pattern']",
-                "value": "RctB"
-              },
-              {
-                "selector": "input[aria-label='Color rule 2 legend caption']",
-                "value": "RctB (chromosome II replication initiator)"
               }
             ]
           }
@@ -1341,13 +1091,13 @@
     },
     {
       "title": "Generate once and inspect",
-      "body": "Click Generate Diagram. The rotations, labels, colors, and comparison all apply in this one run. Check the result:",
+      "body": "Click Generate Diagram. The rotations and the comparison apply in this one run. Check the result:",
       "operations": [
         {
           "dataDependent": true,
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-08-01-collinear-overview.webp",
-            "alt": "Two-row Vibrio diagram: each chromosome starts at a labelled DnaA or RctB, gray collinear and red inverted blocks join the rows, and the legend at the bottom lists both initiator colors.",
+            "alt": "Two-row Vibrio diagram: each chromosome is rotated to start at its replication initiator, gray collinear and red inverted blocks join the rows, and the legend at the bottom lists the collinear and inverted block colors.",
             "caption": "Every row starts at its initiator; inversions stay within chromosome I or chromosome II."
           },
           "capture": {
@@ -1392,8 +1142,6 @@
             "visibleText": [
               "Vibrio parahaemolyticus",
               "Vibrio alginolyticus",
-              "DnaA (chromosome I replication initiator)",
-              "RctB (chromosome II replication initiator)",
               "Collinear",
               "Inverted"
             ]
@@ -1401,7 +1149,7 @@
         }
       ],
       "items": [
-        "Each row starts at its labelled initiator: DnaA at the left end of chromosome I, RctB at the left end of chromosome II.",
+        "Each row starts at its replication initiator, so the ruler counts from dnaA at the left end of chromosome I and from rctB at the left end of chromosome II.",
         "Red (inverted) blocks join regions within chromosome I or within chromosome II.",
         "Few blocks cross from chromosome I of one species to chromosome II of the other."
       ]
@@ -1429,10 +1177,6 @@
     {
       "title": "A record does not start at its initiator",
       "body": "Apply on Generate waits for the next Generate Diagram. Check Display start in each record's Record options in its File card."
-    },
-    {
-      "title": "A label is missing",
-      "body": "Set Label visibility to On in the feature's popup; Show Labels can stay None."
     },
     {
       "title": "Species names repeat above every chromosome",

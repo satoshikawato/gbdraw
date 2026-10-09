@@ -1044,7 +1044,8 @@ def test_declared_command_refresh_keeps_one_file_as_one_resource(
         "right.gbk\tBGC0000711\t\t\t2\nright.gbk\tBGC0000712\t\t\t2\n",
         encoding="utf-8",
     )
-    # A headerless colour table and a label table, as the Vibrio command has.
+    # A headerless colour table and a label table, which the Vibrio command no
+    # longer declares but the Session builder must still read as one resource each.
     colors = tmp_path / "colors.tsv"
     colors.write_text("CDS\tprotein_id\tCAG38690\t#6a3d9a\tFirst CDS\n", encoding="utf-8")
     labels = tmp_path / "labels.tsv"
@@ -1062,13 +1063,21 @@ def test_declared_command_refresh_keeps_one_file_as_one_resource(
     argv = shlex.split(VIBRIO_HARVEYI_GROUP_COMMAND)
     for flag, value in (
         ("--records_table", str(table)),
-        ("-t", str(colors)),
-        ("--feature_override_table", str(labels)),
         ("--losat_threads", "1"),
         ("-o", "declared"),
     ):
         argv[argv.index(flag) + 1] = value
-    command = shlex.join([*argv, "--losat_bin", losat])
+    command = shlex.join(
+        [
+            *argv,
+            "-t",
+            str(colors),
+            "--feature_override_table",
+            str(labels),
+            "--losat_bin",
+            losat,
+        ]
+    )
     declared = tmp_path / "stage" / "declared.gbdraw-session.json"
     declared.parent.mkdir()
     destination = tmp_path / "published.gbdraw-session.json"
