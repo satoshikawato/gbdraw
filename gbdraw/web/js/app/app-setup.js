@@ -4402,29 +4402,17 @@ export const createAppSetup = () => {
     if (!proceed) return false;
 
     // OV-287, OV-289, OV-290 (PD-OI-066): the displayed Result shows the
-    // reset draft as the next Generate draws it. The Legend editor's Restore
-    // all and Reset all strokes show the deleted rows and the strokes before
-    // the reset clears what they read; the editor projection then shows the
-    // fills, Legend colors, visibility and labels, the rule owner follows the
-    // removed rules (a changed Legend source asks for the rerender, as their
-    // Undo does), and the Legend list follows the Result.
+    // reset draft as the next Generate draws it. One projection of the editor
+    // intent shows the fills, Legend colors, visibility and labels, and the
+    // executor shows the strokes and the Legend rows the reset intent leaves
+    // (a deleted row Python drew returns; a row added in the editor and
+    // deleted stays gone); the rule owner follows the removed rules (a
+    // changed Legend source asks for the rerender, as their Undo does), and
+    // the Legend list follows the Result. The reset itself runs at once, so a
+    // caller reads the reset settings right after resetSettings().
     return history.runUndoableCheckpoint('Reset settings', () => followRuleEdits(state.activeDrawing(), async () => {
       featureActions.clearSpecificRulePatternDrafts();
       const shown = Boolean(svgContainer.value?.querySelector?.('svg'));
-      // Each Legend owner runs only when there is an edit to undo, so a Reset
-      // without one rewrites no Result and resets the draft at once.
-      const active = state.activeDrawing();
-      // Generate draws again the rows it drew (a row added in the editor and
-      // deleted stays gone).
-      const generated = new Set(originalLegendOrder.value);
-      const deleted = active.deletedLegendEntries.value.flatMap(
-        (/** @type {{ caption?: string, originalCaption?: string }} */ entry, /** @type {number} */ index) => (
-          generated.has(entry.originalCaption || entry.caption) ? [index] : [])
-      );
-      if (shown && deleted.length > 0) await restoreDeletedLegendEntries(deleted);
-      if (shown && Object.keys({ ...active.legendStrokeOverrides, ...active.featureStrokeOverrides }).length > 0) {
-        resetAllStrokes();
-      }
       const palette = { ...appliedPaletteColors.value };
       resetSettingsState(state);
       // Linear records return to their File defaults and inferred definitions;
@@ -4451,7 +4439,8 @@ export const createAppSetup = () => {
           colors: paletteColorsEqual(appliedPaletteColors.value, palette),
           visibility: true,
           rerender: true,
-          labels: true
+          labels: true,
+          domains: [...STROKE_DOMAINS, ...LIVE_EDIT_DOMAINS.legendRows]
         });
         legendActions.extractLegendEntries();
       }

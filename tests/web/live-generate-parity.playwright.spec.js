@@ -958,6 +958,32 @@ test('Reset all strokes after loading a Session 46 Result saved without paint re
     .toBe(false);
   await expectLiveEqualsGenerate(page, { label: 'Reset all strokes after Load' });
 });
+
+// OV-287: Reset Settings clears the stroke and Legend edits, and the displayed
+// Result shows the reset draft: each feature part and swatch returns to
+// Python's stroke, and the Legend shows Python's colors and its deleted row,
+// which the Legend list shows again (OV-289).
+// The draft starts at the default settings, so the second Reset changes no
+// setting that only Generate draws.
+test('Reset Settings after Legend and popup strokes, a Legend row color and a Legend delete shows what Generate draws', async ({ page }) => {
+  test.setTimeout(180_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await resetSettings(page);
+  await generate(page);
+  const drawn = await drawnStrokes(page);
+  await legendRowStrokeColor(page, 'CDS', '#e63946');
+  await legendRowColor(page, 'CDS', '#7b2cbf');
+  await popupEdit(page, 'FL2', { stroke: '#2a9d8f' });
+  await deleteLegendRow(page, 'GC content');
+  expect(await drawnStrokes(page), 'the edits change strokes').not.toEqual(drawn);
+  await resetSettings(page);
+  expect(await drawnStrokes(page), 'every part is back at the stroke Python drew').toEqual(drawn);
+  const listed = () => page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption));
+  const listedLive = await listed();
+  await expectLiveEqualsGenerate(page, { label: 'Reset Settings' });
+  // OV-289: the deleted row is listed again, as Generate lists it.
+  expect(listedLive, 'the Legend list after Reset').toEqual(await listed());
+});
 // U2a review #3 (OV-195): Load reads the stroke Python drew on a connector
 // from the connectors no stroke edit reached (Linear draws every record in one
 // size class), not from the feature edit or the Session's block stroke, so
@@ -1237,15 +1263,6 @@ const WORK_ALLOWLIST = [
     run: (page) => switchMode(page, 'circular').then(() => settleLive(page))
   },
   {
-    // Reset Settings as it is today (both drawings, one History checkpoint;
-    // the drawing-scoped Reset of W3 replaces it): it shows the default
-    // palette's fills; the strokes and Legend edits it clears stay on the
-    // Result until Generate (OV-287, for W3).
-    kind: 'Reset Settings', stages: ['fills', 'legendFills'], compiles: 1, requests: [],
-    run: (page) => evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.resetSettings(); })
-      .then(() => settleLive(page))
-  },
-  {
     // A Session this page saved, loaded into it: its Results already show
     // their drawing's intent, so the Load compiles nothing and asks nothing.
     kind: 'Session Load', stages: [], compiles: 0, requests: [],
@@ -1261,6 +1278,16 @@ const WORK_ALLOWLIST = [
       await expect.poll(async () => { const now = await shown(); return now !== null && now !== before; }, { timeout: 180_000 }).toBe(true);
       await settleLive(page);
     }
+  },
+  {
+    // Reset Settings as it is today (both drawings, one History checkpoint;
+    // the drawing-scoped Reset of W3 replaces it). It shows the strokes, the
+    // Legend rows and colors (OV-287) and the feature visibility (OV-290) it
+    // clears in one compile; the palette watcher shows the default palette's
+    // fills in a compile of its own, so a Reset that changes the palette
+    // compiles twice. With nothing to reflow it sends no request.
+    kind: 'Reset Settings', stages: ['fills', 'legend', 'legendFills', 'strokes', 'visibility'], compiles: 2, requests: [],
+    run: resetSettings
   }
 ];
 
