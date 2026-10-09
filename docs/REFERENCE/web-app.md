@@ -1008,6 +1008,29 @@ The export actions and session handoff rules are documented in [Output formats
 and export](output-formats-and-export.md) and [Session and request
 compatibility](session-and-request-compatibility.md).
 
+### Default colors and palettes
+
+The selected palette supplies every default color you have not changed. A
+**Default colors** value that differs from the palette's color is your color and
+wins over the palette, as `-d` does over `-p` in the CLI; Generate and the Run
+Info Source recipe write `-p` and only your colors as `-d`. Colors are compared
+ignoring case, with `#abc` equal to `#aabbcc`, and **Auto** is not one of your
+colors.
+
+- Choosing another palette while you have your own colors asks **Keep my N
+  colors** (the new palette plus your colors), **Use the palette's colors**, or
+  **Cancel**, which changes nothing. Without your colors the palette changes at
+  once. Switching back to the applied palette while another is queued asks the
+  same way.
+- **Reset** in **Default colors** asks before it discards your colors. Editing
+  a color in the list asks nothing.
+- In the popup's color scope dialog, **Apply to all "<type>"** on a Legend row
+  that no specific color rule draws sets that feature type's default color, so
+  hidden features and features shown later take it too. The dialog says so and
+  names your earlier color when it replaces one. While a palette is queued
+  (**Instant Preview** off), the Result shows the new color at once.
+- Each choice in these dialogs is one History step, and **Cancel** records none.
+
 ## Accessibility
 
 Primary controls have stable accessible names: **Circular**, **Linear**,
