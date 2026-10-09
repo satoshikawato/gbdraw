@@ -111,7 +111,7 @@ import {
 import { applyStrokeOverridesToSvg } from './legend/stroke-actions.js';
 import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
-import { dialogChoiceWithHistory, setupHistoryInputs } from './history-inputs.js';
+import { createDialogChoice, setupHistoryInputs } from './history-inputs.js';
 import { setupHistoryShortcuts } from './history-shortcuts.js';
 import { createPreviewRuntime } from './preview-runtime.js';
 import {
@@ -1310,6 +1310,8 @@ export const createAppSetup = () => {
       historyStepSwitchesMode(changes) ? diagramModeOperationBusy() : null
     )
   }));
+  // The choice in flight of a popup choice dialog: its busy state and its close (D-12).
+  const dialogChoice = createDialogChoice({ mutationPending: history.mutationPending, runUndoable: history.runUndoable, ref });
   const recordDisplayControls = createRecordDisplayControls({ state, computed, watch,
     linearRecordsFor: linearRecordSelector.recordsFor,
     linearRecordStatusFor: linearRecordSelector.statusFor,
@@ -1446,6 +1448,7 @@ export const createAppSetup = () => {
     evaluateLabelRules: evaluateRules,
     runUndoable: history.runUndoable,
     runUndoableCheckpoint: history.runUndoableCheckpoint,
+    closeAfterDialogChoice: dialogChoice.closeAfterChoice,
     getCommittedRequest: getCommittedCanonicalRenderRequest,
     getCommittedSession: getCommittedCanonicalSession,
     readResourceRecordCount: readCommittedResourceRecordCount,
@@ -2896,8 +2899,7 @@ export const createAppSetup = () => {
     sessionOperationAvailability(operation, sessionPreparationBusyReason)
   );
   const semanticMutationAvailable = computed(() => !sessionOperationAvailability());
-  // A popup dialog shows its choice applying until the choice's History step ends (D-12).
-  const dialogChoicePending = computed(() => history.mutationPending());
+  const dialogChoicePending = dialogChoice.pending;
   const sessionSaveAvailable = computed(() => !sessionSaveLoadAvailability('save'));
   const sessionLoadAvailable = computed(() => !sessionSaveLoadAvailability('load'));
   const sessionBusyReason = computed(() => sessionSaveLoadAvailability('save')?.reason || '');
@@ -3565,14 +3567,14 @@ export const createAppSetup = () => {
     setLegendEntryStrokeColorValue
   );
   // OV-161, D-12: a dialog choice is one History step, Cancel records none, and
-  // neither starts while a choice is still applying (`dialogChoiceWithHistory`).
+  // neither starts while History's step is open (`createDialogChoice`).
   /**
    * @param {() => string} label
    * @param {(choice: string, ...rest: any[]) => any} handler
    * @param {() => void} [cancel]
    */
   const scopeChoiceWithHistory = (label, handler, cancel = cancelFeatureStyleScope) => (
-    dialogChoiceWithHistory(history, label, handler, cancel)
+    dialogChoice.withHistory(label, handler, cancel)
   );
   const handleColorScopeChoiceWithHistory = scopeChoiceWithHistory(() => 'Change feature color', handleColorScopeChoice);
   const handleFeatureStyleScopeChoiceWithHistory = scopeChoiceWithHistory(

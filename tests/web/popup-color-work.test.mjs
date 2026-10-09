@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import { createRulePreparation, runWhenPrepared } from '../../gbdraw/web/js/app/rule-matching.js';
 import { createFeatureColorActions } from '../../gbdraw/web/js/app/feature-editor/color-actions.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
-import { dialogChoiceWithHistory } from '../../gbdraw/web/js/app/history-inputs.js';
+import { createDialogChoice } from '../../gbdraw/web/js/app/history-inputs.js';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
 const ref = (value) => ({ value });
@@ -34,12 +34,24 @@ const setup = ({ siblings, features = featuresOf(['p', 'p', 'p', 'p']), savedRul
   const stages = [];
   /** @type {string[] | null} */
   let atDialog = null;
-  // A dialog records the stages run before it opened.
+  /** @type {{ busy: boolean, pending: boolean }[]} */
+  const opened = [];
+  /** @type {{ pending: boolean }[]} */
+  const closed = [];
+  // A dialog records the stages run before it opened, whether it showed busy
+  // when it opened, and whether History's step was still open when it closed.
   const dialog = (fields = {}) => ({
     ...fields,
     _show: false,
     get show() { return this._show; },
-    set show(value) { if (value && !this._show) atDialog = [...stages]; this._show = value; }
+    set show(value) {
+      if (value && !this._show) {
+        atDialog = [...stages];
+        opened.push({ busy: busy(), pending: history.mutationPending() });
+      }
+      if (!value && this._show) closed.push({ pending: history.mutationPending() });
+      this._show = value;
+    }
   });
   const featureStyleScopeDialog = dialog();
   const manualSpecificRules = [...savedRules];
@@ -65,9 +77,12 @@ const setup = ({ siblings, features = featuresOf(['p', 'p', 'p', 'p']), savedRul
     signatureFor: (value) => { stages.push('history:signature'); return JSON.stringify(value); },
     applyIntent: () => {}, buildCheckpoint: () => ({}), applyCheckpoint: () => {}
   });
+  // app-setup.js: `createDialogChoice(...)`.
+  const dialogChoice = createDialogChoice({ mutationPending: history.mutationPending, runUndoable: history.runUndoable, ref });
   const actions = createFeatureColorActions({
     state, nextTick: async () => {}, onLegendGeometryChanged: () => {}, extractLegendEntries: () => {},
     getFeatureElements: () => [], getFeatureFillElements: () => [],
+    closeAfterDialogChoice: dialogChoice.closeAfterChoice,
     ruleActions: {
       runWithRuleMatches: (rules, commit) => runWhenPrepared(state, () => [preparation.prepare(rules)], commit),
       commitSpecificRules: async (rules) => {
@@ -95,7 +110,9 @@ const setup = ({ siblings, features = featuresOf(['p', 'p', 'p', 'p']), savedRul
   };
   const reset = () => history.runUndoable('Reset feature color', () => actions.resetClickedFeatureFillColor());
   // app-setup.js: `scopeChoiceWithHistory(label, choice, cancel)`.
-  const choose = (label, handler, cancel) => dialogChoiceWithHistory(history, () => label, handler, cancel);
+  const choose = (label, handler, cancel) => dialogChoice.withHistory(() => label, handler, cancel);
+  // app-setup.js: `dialogChoicePending`, what a dialog's `busy` reads.
+  const busy = () => dialogChoice.pending.value;
   const choices = {
     scope: choose('Change feature color', actions.handleFeatureStyleScopeChoice, actions.cancelFeatureStyleScope),
     rename: choose('Rename legend item', actions.handleLegendRenameChoice, actions.cancelLegendRename),
@@ -103,6 +120,7 @@ const setup = ({ siblings, features = featuresOf(['p', 'p', 'p', 'p']), savedRul
   };
   return {
     stages, preparation, pick, rename, reset, choices, history, manualSpecificRules, dialogStages: () => atDialog,
+    opened, closed, busy, state,
     featureStyleScopeDialog, legendRenameDialog: state.legendRenameDialog, resetColorDialog: state.resetColorDialog
   };
 };
@@ -144,9 +162,10 @@ for (const [name, run, dialogOf] of [
   });
 }
 
-// PD-OI-088 (OIC-028, D-12): from a choice until its History step ends, the
-// dialog stays open and History is busy (its buttons read that); another choice
-// or Cancel does nothing.
+// PD-OI-088 (OIC-028, D-12): a dialog opens with its choices ready, although
+// it opens inside the step of the edit that asked for it. From a choice until
+// its History step ends, the dialog stays open and busy; another choice or
+// Cancel does nothing; the dialog closes once the step has ended.
 const clickedHashRule = { feat: 'CDS', qual: 'hash', val: 'f0', color: '#222222', cap: 'p' };
 for (const [name, open, dialogOf, choice, savedRules] of [
   ['scope', (setup_) => setup_.pick('#123456'), (setup_) => setup_.featureStyleScopeDialog, 'single', [savedRule]],
@@ -164,12 +183,14 @@ for (const [name, open, dialogOf, choice, savedRules] of [
     assert.equal(await setup_.preparation.prepare(savedRules), true);
     await open(setup_);
     assert.equal(dialogOf(setup_).show, true);
+    const busyAtOpen = setup_.opened.map(({ busy }) => busy);
     const undoCount = setup_.history.getUndoCount();
     gated = true;
     setup_.stages.length = 0;
     const first = setup_.choices[name](choice);
     while (!setup_.stages.includes('commitSpecificRules')) await new Promise((resolve) => setImmediate(resolve));
     assert.equal(setup_.history.mutationPending(), true);
+    const busyDuringChoice = setup_.busy();
     assert.equal(dialogOf(setup_).show, true);
     assert.equal(setup_.choices[name](choice), undefined);
     assert.equal(setup_.choices[name]('cancel'), undefined);
@@ -177,8 +198,39 @@ for (const [name, open, dialogOf, choice, savedRules] of [
     release(true);
     await first;
     assert.equal(dialogOf(setup_).show, false);
+    assert.deepEqual(
+      { busyAtOpen, busyDuringChoice, busyAfter: setup_.busy(), stepOpenAtClose: setup_.closed.map(({ pending }) => pending) },
+      { busyAtOpen: [false], busyDuringChoice: true, busyAfter: false, stepOpenAtClose: [false] }
+    );
     assert.equal(setup_.history.mutationPending(), false);
     assert.equal(setup_.stages.filter((stage) => stage === 'commitSpecificRules').length, 1);
     assert.equal(setup_.history.getUndoCount(), undoCount + 1);
+  });
+}
+
+// A choice whose commit fails leaves its dialog open and ready, so the user
+// can choose again or cancel; it records no History step.
+for (const [name, open, dialogOf, choice, savedRules] of [
+  ['scope', (setup_) => setup_.pick('#123456'), (setup_) => setup_.featureStyleScopeDialog, 'single', [savedRule]],
+  ['rename', (setup_) => setup_.rename('Renamed'), (setup_) => setup_.legendRenameDialog, 'single', [savedRule]],
+  ['reset', (setup_) => setup_.reset(), (setup_) => setup_.resetColorDialog, 'this', [savedRule, clickedHashRule]]
+]) {
+  test(`a popup ${name} dialog stays open and ready when its choice fails`, async () => {
+    let fail = false;
+    const setup_ = setup({
+      siblings: true, savedRules,
+      commit: () => (fail ? Promise.reject(new Error('commit failed')) : Promise.resolve(true))
+    });
+    setup_.state.errorLog = { value: null };
+    assert.equal(await setup_.preparation.prepare(savedRules), true);
+    await open(setup_);
+    const undoCount = setup_.history.getUndoCount();
+    fail = true;
+    await setup_.choices[name](choice);
+    assert.equal(dialogOf(setup_).show, true);
+    assert.deepEqual(setup_.closed, []);
+    assert.equal(setup_.busy(), false);
+    assert.equal(setup_.history.getUndoCount(), undoCount);
+    assert.notEqual(setup_.state.errorLog.value, null);
   });
 }

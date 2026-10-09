@@ -43,6 +43,9 @@ import {
  * @property {(svg: Element, featureId: string) => Element[]} getFeatureFillElements The mounted fill elements of a feature.
  * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
  *   The preview owner's commit of an edit to the displayed Result (R1, R13).
+ * @property {(close: () => unknown) => void} [closeAfterDialogChoice]
+ *   Runs a dialog's close at once, or once the History step of the dialog's
+ *   choice in flight ends (D-12, OIC-028).
  */
 
 /** @param {FeatureColorActionsOptions} options */
@@ -55,7 +58,8 @@ export const createFeatureColorActions = ({
   // of an edit to the displayed Result.
   getFeatureElements,
   getFeatureFillElements,
-  commitActiveResultEdit = null
+  commitActiveResultEdit = null,
+  closeAfterDialogChoice = (close) => { close(); }
 }) => {
   const {
     appliedPaletteColors,
@@ -284,7 +288,8 @@ export const createFeatureColorActions = ({
     return null;
   };
 
-  const clearFeatureStyleScopeDialog = () => {
+  // A dialog's choice closes it once the choice's History step ends.
+  const clearFeatureStyleScopeDialog = () => closeAfterDialogChoice(() => {
     featureStyleScopeDialog.show = false;
     featureStyleScopeDialog.kind = 'fill';
     featureStyleScopeDialog.feat = null;
@@ -301,7 +306,7 @@ export const createFeatureColorActions = ({
     featureStyleScopeDialog.annotationLabelSiblingCount = 0;
     featureStyleScopeDialog.existingCaptionRule = null;
     featureStyleScopeDialog.existingCaptionColor = null;
-  };
+  });
 
   /**
    * @param {Record<string, any>} feat
@@ -502,7 +507,7 @@ export const createFeatureColorActions = ({
   };
 
   /** @param {DrawingState} drawing */
-  const clearLegendRenameDialog = (drawing, { restoreInput = false } = {}) => {
+  const clearLegendRenameDialog = (drawing, { restoreInput = false } = {}) => closeAfterDialogChoice(() => {
     const pendingRequest = legendRenameDialog.pendingRequest;
 
     if (restoreInput) {
@@ -532,7 +537,7 @@ export const createFeatureColorActions = ({
     legendRenameDialog.siblingCount = 0;
     legendRenameDialog.mergeAvailable = true;
     legendRenameDialog.pendingRequest = null;
-  };
+  });
 
   /** @param {DrawingState} drawing */
   const getCurrentFeatureFillColor = (drawing, feat) => {
@@ -1506,12 +1511,14 @@ export const createFeatureColorActions = ({
     return withTargetRules(drawing, [], () => doResetFillColor(drawing, 'this'));
   };
 
+  const closeResetColorDialog = () => closeAfterDialogChoice(() => { resetColorDialog.show = false; });
+
   /** @param {DrawingState} drawing */
   const handleResetColorChoice = async (drawing, choice) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     await doResetFillColor(drawing, choice);
-    resetColorDialog.show = false;
+    closeResetColorDialog();
   };
 
   /** @param {DrawingState} drawing */
@@ -1754,7 +1761,7 @@ export const createFeatureColorActions = ({
     // History step (app-setup.js answers Cancel outside `runUndoable`).
     cancelFeatureStyleScope: clearFeatureStyleScopeDialog,
     cancelLegendRename: () => clearLegendRenameDialog(state.activeDrawing(), { restoreInput: true }),
-    cancelResetColor: () => { resetColorDialog.show = false; },
+    cancelResetColor: closeResetColorDialog,
     handleColorScopeChoice: colorScopeChoice,
     handleFeatureStyleScopeChoice: (...args) => (featureStyleScopeDialog.kind === 'stroke' ? strokeScopeChoice : colorScopeChoice)(...args),
     handleLegendNameCommit: colorAction(handleLegendNameCommit, { targetRules: false }),
