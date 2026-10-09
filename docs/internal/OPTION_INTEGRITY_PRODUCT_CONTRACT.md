@@ -372,6 +372,10 @@ Status: active Product authority
     change): 「OV-225 のダイアログの順序: 推奨:どおり」
   - Reply 2, on the complete proposed receipt recorded below:
     「OV-225: これでいいです」
+  - Reply 3 (`2026-10-09`), to the question whether the receipt covers the
+    same dialogs opened from the Features drawer color input, popup stroke
+    edits, and the Legend panel rename: 「F4: A」. The receipt and its SHA-256
+    are unchanged; `OIC-028` names these entrances.
   - The receipt narrows no earlier record. It realizes, for these three
     dialogs, the 「live edit適用中/失敗の通知」 that `PD-OI-037` scenario
     revision `2` preserves.
@@ -4187,7 +4191,7 @@ Decision date: 2026-10-09
 | `OIC-025` | `PD-OI-038`: one SVG and Editor retain live commit/rerender, all tabs, availability, History/Session/Export, camera, keyboard, visibility-only Close/Escape, selected tab and Result recovery. At 390×844/740 the canvas uses the available full width and at least 200 px height; content scroll, reachable header/Close/toolbar, short-viewport/soft-keyboard access, and wide side drawer remain required. Pointer/keyboard/browser verification is required; duplicated Preview/SVG/editor is not accepted. |
 | `OIC-026` | `PD-OI-035` and `PD-OI-039`: identity, keyboard Select/Skip, non-rendered candidates, no position-only selection, desktop canvas, focus and transient overlay exclusion remain required with all PD-OI-031/034 outcomes. Compact review retains visible, operable canvas at full available width and at least 200 px height at 390×844/740, scrollable candidates and reachable Apply/Cancel, local no-Worker draft edits, atomic batch validation, failure/error/retry and artifact/orientation/History recovery. Narrow review closes Editor through its owner while retaining tab, disables reopening with a reason until review ends, then permits explicit reopen; wide drag remains. Browser verification must show presentation changes leave draft and Result unchanged. |
 | `OIC-027` | `PD-OI-066`: a live-edited Result agrees with a Result freshly generated from the same draft in the meaning (position, color, text, and visibility) of every edited element, including after Session load and export. Settings shown as Applies on Generate do not change the Result before Generate. A live edit that the Generate compiler cannot reproduce is shown as Applies on Generate instead. |
-| `OIC-028` | `PD-OI-088`: the popup fill-color scope, Legend name, and Reset fill color dialogs open from the saved rules before the rules a choice may add are prepared. A choice is one History step and Cancel records none. From a choice until its step ends, the dialog stays open, its choices and Cancel are disabled, it states that the edit is applying, and no second choice, Cancel, Escape, or backdrop click starts or closes anything; the dialog closes when the step ends. |
+| `OIC-028` | `PD-OI-088`: the color scope, Legend name, and Reset fill color dialogs, whether opened from the feature popup's fill color, the Features drawer color input, a popup stroke edit, or a Legend panel rename (Merge/Suffix), open from the saved rules before the rules a choice may add are prepared. A choice is one History step and Cancel records none. From a choice until its step ends, the dialog stays open, its choices and Cancel are disabled, it states that the edit is applying, and no second choice, Cancel, Escape, or backdrop click starts or closes anything; the dialog closes when the step ends. |
 
 These new acceptance entries are obligations for dependent runtime work, not
 claims of completed runtime or browser verification by this authority amendment.

@@ -822,9 +822,10 @@ stroke edits. Use the visible **Apply** action to make an edit part of the
 editor state. Renaming a legend entry, with or without features, to the caption of another
 entry of a different color asks you to choose **Merge**, **Suffix**, or
 **Cancel**. If a specific color rule already uses the caption, the entries are
-told apart as that rule describes instead. In the popup's color scope, legend
-name, and **Reset fill color** dialogs, each choice is one History step and
-**Cancel** records none. After a choice the dialog stays open with its buttons
+told apart as that rule describes instead. In the color scope, legend name, and
+**Reset fill color** dialogs, whether a fill color in the popup or the Features
+list, a popup stroke edit, or a legend rename opens them, each choice is one
+History step and **Cancel** records none. After a choice the dialog stays open with its buttons
 disabled and shows **Applying an edit…** until the edit is applied. The first
 choice after a page or Session load can wait several seconds while the Python
 runtime starts. A legend row that a rule draws with a hex suffix, such as
