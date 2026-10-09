@@ -150,7 +150,8 @@ const standaloneConsistentTextAlias = (payload, keys) => {
 const standaloneIntegerAlias = (candidates) => {
   const indexes = new Set();
   for (const candidate of candidates) {
-    if (candidate === null || candidate === undefined || candidate === '') continue;
+    // A blank or whitespace-only index is not supplied (OV-274).
+    if (candidate === null || candidate === undefined || (typeof candidate === 'string' && candidate.trim() === '')) continue;
     const text = String(candidate).trim();
     if (typeof candidate === 'boolean' || !/^\d+$/.test(text)) {
       return { valid: false, value: null };

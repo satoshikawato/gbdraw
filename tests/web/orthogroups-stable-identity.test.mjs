@@ -1139,6 +1139,18 @@ assert.equal(
   }, directContext)?.orthogroupId,
   'og_direct'
 );
+// A whitespace-only feature index is not supplied, as in the catalog readers
+// and Python (OV-274).
+assert.equal(
+  getStandaloneFeatureOrthogroupEntry({
+    fileIdx: 1,
+    featureIndex: ' ',
+    stable_svg_id: 'shared-stable',
+    orthogroupId: 'og_direct',
+    orthogroupMember: { ...directGroupMember }
+  }, directContext)?.orthogroupId,
+  'og_direct'
+);
 assert.equal(
   getStandaloneFeatureOrthogroupEntry({
     fileIdx: 1,

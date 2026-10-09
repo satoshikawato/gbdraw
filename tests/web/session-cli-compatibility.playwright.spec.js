@@ -145,7 +145,8 @@ for (const entry of cases) {
         // drawn record, so a two-record file (linear blast) fills two rows bound
         // to the same resource, and a Session the Web saved lists both rows. The
         // checks below read each resource once on either side.
-        const distinct = (items, parts) => [...new Map(items.map(item => [parts(item).map(part => part.resourceId).join('+'), item])).values()];
+        const resourceKey = parts => parts.map(part => part.resourceId).join('+');
+        const distinct = (items, parts) => [...new Map(items.map(item => [resourceKey(parts(item)), item])).values()];
         const distinctFiles = files => distinct(files, file => file.parts);
         const distinctBindings = items => distinct(items, binding => binding.components || [binding]);
         expect(distinctFiles(before.files).flatMap(file => file.parts.map(part => part.sha256))).toEqual(sourceHashes);
@@ -160,6 +161,10 @@ for (const entry of cases) {
           expect(distinctFiles(before.files).map(metadata)).toEqual(distinctBindings(bindings).map(metadata));
           expect(distinctFiles(before.files).flatMap(file => file.parts.map(part => ({ resourceId: part.resourceId, ...metadata(part) }))))
             .toEqual(distinctBindings(bindings).flatMap(binding => (binding.components || [binding]).map(part => ({ resourceId: part.resourceId, ...metadata(part) }))));
+          // Every row that shares a resource shows the same file.
+          for (const file of before.files) {
+            expect(metadata(file)).toEqual(metadata(before.files.find(other => resourceKey(other.parts) === resourceKey(file.parts))));
+          }
         }
         for (const part of before.files.flatMap(file => file.parts)) expect(before.resourceIds).toContain(part.resourceId);
         const expectedSvg = await run.page.evaluate(svgSemantics, before.selected);

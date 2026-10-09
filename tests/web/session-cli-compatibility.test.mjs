@@ -304,6 +304,52 @@ resave_python(Path(${JSON.stringify(path.join(directory, 'protein.gbdraw-session
 // draft. The legacy migrator states the adjacent LOSATP comparison its CLI drew,
 // so Generate rebuilds it; without --protein_blastp_mode the same sidecar has
 // no Web comparison draft (No comparison).
+// OV-296: a Session the Python API saved with listed LOSATP pairs (no Web
+// draft, no cliInvocation) stays a read-only comparison, as before this fix:
+// Load states no plan, and Inherit saved comparison keeps the listed pairs
+// rather than every adjacent pair.
+await test('a Python API Linear Session with listed LOSATP pairs keeps them through Inherit', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-web-'));
+  try {
+    const file = path.join(directory, 'pairs.gbdraw-session.json');
+    const inputs = [mito, lambda, path.join(root, 'tests/fixtures/b_collide.gb')];
+    execFileSync('python', ['-c', `
+from pathlib import Path
+from gbdraw.api import LinearDiagramOptions, LinearDiagramRequest, RecordInput, save_session_document
+from gbdraw.api.options import LosatSearchOptions
+from gbdraw.api.requests import GenBankInputSource
+request = LinearDiagramRequest(
+    records=tuple(RecordInput(source=GenBankInputSource(p)) for p in ${JSON.stringify(inputs)}),
+    options=LinearDiagramOptions(losat_search=LosatSearchOptions(program='losatp', losatp_mode='pairwise', pairs=((0, 1),))),
+)
+save_session_document(Path(${JSON.stringify(file)}), request)
+`], { cwd: root, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe', timeout: 1_800_000 });
+    const session = JSON.parse(await readFile(file, 'utf8'));
+    assert.equal(session.cliInvocation, undefined);
+    const pairs = [{ queryRecordIndex: 0, subjectRecordIndex: 1 }];
+    assert.deepEqual(session.renderRequest.comparisons.map(item => [item.kind, item.mode, item.pairs]),
+      [['generatedProteinComparison', 'pairwise', pairs]]);
+    const result = await load(await readFile(file));
+    assert.equal(result.status, 'ok', result.error?.stack);
+    const drawing = state.activeDrawing();
+    assert.equal(drawing.importedComparisonIntent.disposition, 'PRESERVED_READ_ONLY');
+    assert.deepEqual(drawing.linearComparisonPlan, DEFAULT_PLAN);
+    const filesData = await serializeActiveRenderFiles('linear', state, drawing);
+    assert.equal(filesData.linearSeqs.length, 3);
+    const candidate = buildCanonicalRenderRequest({ state, drawing,
+      filesData: { ...filesData, linearCanonicalComparisons: [] },
+      comparisonPlanSnapshot: resolveLinearComparisonPlan({
+        plan: drawing.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
+        losatProgram: drawing.losatProgram.value, blastpMode: drawing.losat.blastp.mode
+      }) });
+    inheritCommittedComparisonIntent({ candidate, committed: getCommittedCanonicalSession() });
+    assert.deepEqual(candidate.renderRequest.comparisons.map(item => [item.kind, item.mode, item.pairs]),
+      [['generatedProteinComparison', 'pairwise', pairs]]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 await test('a 0.13.0 CLI Linear protein sidecar keeps the adjacent LOSATP plan it drew', async () => {
   const bytes = gunzipSync(await readFile(path.join(
     root, 'tests/fixtures/sessions/cli-linear-protein.v30.gbdraw-session.json.gz'
@@ -443,7 +489,7 @@ with materialize_session(document, output_directory=directory / 'out') as materi
 // loads it. Load gives the drawing every table the request holds, so the next
 // Generate, a label reflow, and a Web re-save keep them; the Sessions a CLI
 // replay and Python save again (no Web draft either) load the same way, and so
-// do a case's Sessions 40 and 41 from older CLI writers (`legacySessions`,
+// do a case's Sessions 40 to 44 from older CLI writers (`legacySessions`,
 // OV-269). The CLI and Python cells of the matrix are
 // tests/test_cli_session_cross_surface.py.
 const crossSurface = (...args) => JSON.parse(execFileSync('python', [
