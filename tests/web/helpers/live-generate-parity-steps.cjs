@@ -7,6 +7,7 @@ const { readFileSync } = require('node:fs');
 const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./app-lifecycle.cjs');
 const { BATCH_FIXTURE, openFresh, openWithGenBank } = require('./audit-browser.cjs');
 const { settleLive } = require('./live-generate-parity.cjs');
+const { loadEditorLegendRows } = require('./mode-transition.cjs');
 
 const SINGLE_FIXTURE = 'tests/fixtures/forced_label_underlay.gb';
 
@@ -190,14 +191,10 @@ const legendRowStrokeColor = async (page, caption, color) => {
   await settleLive(page);
 };
 
-// A row added in the Legend editor.
-const legendRowAdd = async (page, caption, color) => {
-  await evaluateWithRetainedPromise(page, async ({ row, value }) => {
-    const app = window.__GBDRAW_APP__;
-    app.newLegendCaption = row;
-    app.newLegendColor = value;
-    await app.addNewLegendEntry();
-  }, { row: caption, value: color });
+// Legend editor rows ([caption, color]) from a Session that holds them
+// (R15-2 retired Add legend item), loaded and generated.
+const editorLegendRows = async (page, rows) => {
+  await loadEditorLegendRows(page, rows);
   await settleLive(page);
 };
 
@@ -238,7 +235,7 @@ module.exports = {
   openCanvas,
   renameRow,
   legendRowStrokeColor,
-  legendRowAdd,
+  editorLegendRows,
   switchPalette,
   deleteLegendRow
 };

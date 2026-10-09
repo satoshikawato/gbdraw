@@ -72,7 +72,7 @@ const blockedActions = [
   ['addAnnotationSet', []], ['importAnnotationTableFile', []],
   ['addCustomColor', []], ['addFeature', []], ['setSpecificRuleField', [0, 'val', 'changed']],
   ['setFeatureVisibility', [null, 'hide']], ['resetAllLabelTextOverrides', []],
-  ['addNewLegendEntry', []], ['sortLegendEntries', []], ['resetAllStrokes', []],
+  ['deleteLegendEntry', [0]], ['sortLegendEntries', []], ['resetAllStrokes', []],
   ['resetCanvasPadding', []], ['editSessionTitle', []]
 ];
 

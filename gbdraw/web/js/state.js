@@ -239,9 +239,7 @@ export const createDefaultEditorDraftState = () => ({
   featurePanelTab: 'colors',
   newColorFeat: 'gene',
   newColorVal: '#d3d3d3',
-  newFeatureToAdd: 'mobile_element',
-  newLegendCaption: '',
-  newLegendColor: '#808080'
+  newFeatureToAdd: 'mobile_element'
 });
 
 const defaultEditorDraftState = createDefaultEditorDraftState();
@@ -505,14 +503,6 @@ const legendRenameDialog = reactive({
   pendingRequest: null
 });
 
-// OV-239 (Owner decision R15-1): Add legend item of the caption of a deleted
-// row asks first: Restore that row, add under the suffixed caption, or Cancel.
-const legendAddConflictDialog = reactive({
-  show: false,
-  caption: '',
-  suffixedCaption: ''
-});
-
 // Label text scope dialog state
 const labelTextScopeDialog = reactive({
   show: false,
@@ -554,8 +544,6 @@ const isResizing = ref(false);
 // Legend Editor state
 const originalLegendOrder = ref([]); // Store original order from generation
 const originalLegendColors = ref({}); // Store original colors: { caption: color }
-const newLegendCaption = ref(defaultEditorDraftState.newLegendCaption);
-const newLegendColor = ref(defaultEditorDraftState.newLegendColor);
 
 // The Legend editor rows whose stroke options are shown, by caption: app-level
 // view state, which History and the Session do not hold (OV-157).
@@ -1107,7 +1095,6 @@ export const state = {
   paletteColorsDialog,
   resetColorDialog,
   legendRenameDialog,
-  legendAddConflictDialog,
   labelTextScopeDialog,
   featureVisibilityScopeDialog,
   hiddenLabelTextDialog,
@@ -1116,8 +1103,6 @@ export const state = {
   isResizing,
   originalLegendOrder,
   originalLegendColors,
-  newLegendCaption,
-  newLegendColor,
   legendStrokeOptionsOpen,
   originalSvgStroke,
   legendDragging,

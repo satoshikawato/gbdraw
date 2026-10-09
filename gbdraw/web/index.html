@@ -6617,37 +6617,6 @@
                             </button>
                     </choice-dialog>
 
-                    <!-- Legend Add Conflict Dialog: OV-239, Owner decision R15-1 (2026-10-09) -->
-                    <choice-dialog v-if="legendAddConflictDialog.show" labelledby="legend-add-conflict-title" describedby="legend-add-conflict-description"
-                         @cancel="handleLegendAddConflictChoice('cancel')" @keydown.tab="trapDialogFocus"
-                         class="fixed inset-0 bg-black/50 z-[65] flex items-center justify-center">
-                            <h3 id="legend-add-conflict-title" class="text-lg font-bold text-slate-800 mb-2">
-                                A deleted Legend item named “{{ legendAddConflictDialog.caption }}” exists
-                            </h3>
-                            <p id="legend-add-conflict-description" class="text-sm text-slate-600 mb-4">
-                                Restore the deleted item with its own color, or add the new item under another name.
-                            </p>
-                            <div class="flex flex-col gap-2">
-                                <button @click="handleLegendAddConflictChoice('restore')"
-                                        data-history-managed
-                                        class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-arrow-counter-clockwise text-lg" aria-hidden="true"></i>
-                                    <span>Restore</span>
-                                </button>
-                                <button @click="handleLegendAddConflictChoice('suffix')"
-                                        data-history-managed
-                                        class="w-full px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-text-t text-lg" aria-hidden="true"></i>
-                                    <span>Add as “{{ legendAddConflictDialog.suffixedCaption }}”</span>
-                                </button>
-                            </div>
-                            <button @click="handleLegendAddConflictChoice('cancel')"
-                                    data-history-managed
-                                    class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium" :disabled="!semanticMutationAvailable">
-                                Cancel
-                            </button>
-                    </choice-dialog>
-
                     <!-- Reset Color Dialog -->
                     <choice-dialog v-if="resetColorDialog.show" :busy="dialogChoicePending" labelledby="reset-color-title" describedby="reset-color-description"
                          @cancel="handleResetColorChoice('cancel')" @keydown.tab="trapDialogFocus"

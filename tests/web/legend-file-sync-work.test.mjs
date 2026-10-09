@@ -97,7 +97,7 @@ const setup = () => {
   const state = withDrawings({
     results: ref([{ content: '<svg/>' }]), svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? svg : null) }),
     originalLegendOrder: ref(['CDS', 'Rule A']), originalLegendColors: ref({ CDS: '#111111' }),
-    newLegendCaption: ref(''), newLegendColor: ref('#000000'), originalSvgStroke: ref({ color: null, width: null }),
+    originalSvgStroke: ref({ color: null, width: null }),
     legendEntries: ref([
       { caption: 'CDS', originalCaption: 'CDS', color: '#111111', featureIds: [] },
       { caption: 'Rule A', originalCaption: 'Rule A', color: '#222222', featureIds: [] }

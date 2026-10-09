@@ -4003,8 +4003,6 @@ const captureSessionImportTransientState = () => ({
   newColorFeat: state.newColorFeat.value,
   newColorVal: state.newColorVal.value,
   newFeatureToAdd: state.newFeatureToAdd.value,
-  newLegendCaption: state.newLegendCaption.value,
-  newLegendColor: state.newLegendColor.value,
   featureSearch: state.featureSearch.value,
   labelSearch: state.labelSearch.value,
   selectedFeatureIds: Array.from(state.selectedFeatureIds.value || []),
@@ -4060,8 +4058,6 @@ const restoreSessionImportTransientState = (snapshot) => {
   state.newColorFeat.value = snapshot.newColorFeat;
   state.newColorVal.value = snapshot.newColorVal;
   state.newFeatureToAdd.value = snapshot.newFeatureToAdd;
-  state.newLegendCaption.value = snapshot.newLegendCaption;
-  state.newLegendColor.value = snapshot.newLegendColor;
   state.featureSearch.value = snapshot.featureSearch;
   state.labelSearch.value = snapshot.labelSearch;
   state.selectedFeatureIds.value = new Set(snapshot.selectedFeatureIds);

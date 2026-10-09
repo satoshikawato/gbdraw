@@ -456,15 +456,12 @@ export const createAppSetup = () => {
     featureVisibilityScopeDialog,
     legendRenameDialog,
     paletteColorsDialog,
-    legendAddConflictDialog,
     resetColorDialog,
     labelTextScopeDialog,
     hiddenLabelTextDialog,
     labelOnDialog,
     sidebarWidth,
     originalLegendOrder,
-    newLegendCaption,
-    newLegendColor,
     showCanvasControls,
     skipCaptureBaseConfig,
     featureKeys,
@@ -3109,7 +3106,6 @@ export const createAppSetup = () => {
   };
 
   const {
-    addNewLegendEntry,
     legendRowHasRules,
     updateLegendEntryColor,
     deleteLegendEntry,
@@ -3128,8 +3124,7 @@ export const createAppSetup = () => {
     updateLegendEntryStrokeWidth,
     resetLegendEntryStroke,
     resetAllStrokes,
-    restoreDeletedLegendEntries,
-    answerLegendAddConflict
+    restoreDeletedLegendEntries
   } = legendActions;
 
   const {
@@ -6256,15 +6251,12 @@ export const createAppSetup = () => {
     openFeatureEditorFromList,
     legendEntries: drawingMember('legendEntries'),
     legendEntryColor,
-    newLegendCaption,
-    newLegendColor,
     updateLegendEntryColor: updateLegendEntryColorShown,
     renameLegendEntry,
-    // A Legend that gains or loses a row is one History step of the intent,
-    // which Undo and Redo show through the port and lay out as Python does,
-    // canvas included (OV-125).
+    // A Legend row delete is one History step of the intent, which Undo and
+    // Redo show through the port and lay out as Python does, canvas included
+    // (OV-125).
     deleteLegendEntry: editEditorIntent('Delete legend item', deleteLegendEntry, { domains: LEGEND_STRUCTURE_DOMAINS }),
-    addNewLegendEntry: editEditorIntent('Add legend item', addNewLegendEntry, { domains: LEGEND_STRUCTURE_DOMAINS }),
     // OV-154: a Restore returns deleted rows in one checkpoint step, as a delete
     // removes them; the palette then reaches the returned rows.
     deletedLegendEntries: drawingMember('deletedLegendEntries'),
@@ -6272,12 +6264,6 @@ export const createAppSetup = () => {
       'Restore legend item', () => restoreDeletedLegendEntries([index])
     ),
     restoreAllDeletedLegendEntries: () => restoreLegendItems('Restore legend items', () => restoreDeletedLegendEntries(null)),
-    // OV-239 (R15-1): each choice is one History step, as a Restore or an Add;
-    // Cancel records none.
-    legendAddConflictDialog,
-    handleLegendAddConflictChoice: /** @param {string} choice */ (choice) => (choice === 'restore'
-      ? restoreLegendItems('Restore legend item', () => answerLegendAddConflict(choice))
-      : editEditorIntent('Add legend item', answerLegendAddConflict, { domains: LEGEND_STRUCTURE_DOMAINS })(choice)),
     moveLegendEntryUp,
     moveLegendEntryDown,
     sortLegendEntries,

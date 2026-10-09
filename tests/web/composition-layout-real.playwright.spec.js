@@ -3,6 +3,7 @@ const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
+const { loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const genbankPath = join(repoRoot, 'tests', 'test_inputs', 'HmmtDNA.gbk');
@@ -10,10 +11,9 @@ const renamedLegendCaption = [
   'WP5 renamed browser composition legend entry with deliberately wide text',
   'that forces the live legend to be measured and reflowed'
 ].join(' ');
-const postDragLegendCaption = [
-  'WP5 post-drag legend entry that forces another measured reflow',
-  'without discarding the manual composition deltas'
-].join(' ');
+// A generated row deleted after the drags: another measured reflow that keeps
+// the manual composition deltas.
+const postDragDeletedCaption = 'rRNA';
 const legendColor = '#336699';
 
 const blockExternalHttpRequests = async (page, baseURL) => {
@@ -317,32 +317,25 @@ const inspectLiveComposition = async (page, caption = renamedLegendCaption) => (
   }, caption)
 );
 
-const addPostDragLegendEntry = async (page) => {
-  await page.evaluate(async ({ caption, color }) => {
+const deletePostDragLegendEntry = async (page) => {
+  await evaluateWithRetainedPromise(page, async (caption) => {
     const app = window.__GBDRAW_APP__;
-    app.newLegendCaption = caption;
-    app.newLegendColor = color;
-    await app.addNewLegendEntry();
-  }, { caption: postDragLegendCaption, color: '#884422' });
+    await app.deleteLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === caption));
+  }, postDragDeletedCaption);
   await page.waitForFunction((caption) => {
     const app = window.__GBDRAW_APP__;
     const svg = document.querySelector('svg[data-gbdraw-composition-schema="1"]');
-    const resultText = String(app.results?.[app.selectedResultIndex]?.content || '');
-    return app.legendEntries.some((entry) => entry.caption === caption) &&
+    return !app.legendEntries.some((entry) => entry.caption === caption) &&
       Array.from(svg?.querySelectorAll('g[data-legend-key]') || [])
-        .some((entry) => entry.getAttribute('data-legend-key') === caption) &&
-      resultText.includes(caption);
-  }, postDragLegendCaption, { timeout: 180000 });
+        .filter((entry) => entry.getAttribute('data-legend-key') === caption)
+        .every((entry) => entry.getAttribute('display') === 'none');
+  }, postDragDeletedCaption, { timeout: 180000 });
 };
 
-const addAndRenameLegendEntry = async (page) => {
+const loadAndRenameLegendEntry = async (page) => {
   const addedCaption = 'WP5 legend entry';
-  await page.evaluate(async ({ caption, color }) => {
-    const app = window.__GBDRAW_APP__;
-    app.newLegendCaption = caption;
-    app.newLegendColor = color;
-    await app.addNewLegendEntry();
-  }, { caption: addedCaption, color: legendColor });
+  // An editor row from a Session (R15-2 retired Add legend item).
+  await loadEditorLegendRows(page, [[addedCaption, legendColor]]);
   await page.waitForFunction((caption) => (
     window.__GBDRAW_APP__.legendEntries.some((entry) => entry.caption === caption) &&
     Array.from(document.querySelectorAll('g[data-legend-key]'))
@@ -674,7 +667,7 @@ for (const mode of ['circular', 'linear']) {
     expectZeroDeltas(fresh.deltas);
     const baselineDeltas = fresh.deltas;
 
-    const { renamed } = await addAndRenameLegendEntry(page);
+    const { renamed } = await loadAndRenameLegendEntry(page);
     expectValidComposition(renamed);
 
     await dragCompositionRole(page, 'legend', 8, -7);
@@ -720,7 +713,7 @@ for (const mode of ['circular', 'linear']) {
     expectDeltasClose(redone.deltas, moved.deltas);
     expectRenamedEntry(redone);
 
-    await addPostDragLegendEntry(page);
+    await deletePostDragLegendEntry(page);
     const reflowedAfterDrag = await inspectLiveComposition(page);
     expectValidComposition(reflowedAfterDrag);
     expectDeltasClose(reflowedAfterDrag.deltas, moved.deltas);

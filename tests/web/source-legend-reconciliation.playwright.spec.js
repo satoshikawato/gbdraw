@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
-const { load, generate, switchMode, download } = require('./helpers/mode-transition.cjs');
+const { load, generate, switchMode, download, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { openBatch, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
@@ -94,14 +94,7 @@ for (const mode of ['linear', 'circular']) {
         : page.getByLabel('GenBank/DDBJ File', { exact: true });
       await input.setInputFiles('tests/fixtures/forced_label_underlay.gb');
       await generate(page);
-      await page.evaluate(async () => {
-        const app = window.__GBDRAW_APP__;
-        app.newLegendCaption = 'Manual row';
-        app.newLegendColor = '#118833';
-        await app.addNewLegendEntry();
-      });
-      await expect.poll(() => page.evaluate(legendIndex, 'Manual row')).toBeGreaterThanOrEqual(0);
-      await generate(page);
+      await addLegendRow(page, 'Manual row', '#118833');
       // Linear styles the fill first and Circular the stroke; each alone failed.
       const edits = {
         fill: () => page.evaluate(caption => {
@@ -160,13 +153,10 @@ const loadGenerated = async (browser, mode) => {
   await generate(page);
   return page;
 };
+// A Legend row the editor added, from a Session that holds it (R15-2 retired
+// Add legend item): the page's Session saved with the row, loaded, generated.
 const addLegendRow = async (page, caption, color) => {
-  await evaluateWithRetainedPromise(page, async row => {
-    const app = window.__GBDRAW_APP__;
-    app.newLegendCaption = row.caption;
-    app.newLegendColor = row.color;
-    await app.addNewLegendEntry();
-  }, { caption, color });
+  await loadEditorLegendRows(page, [[caption, color]]);
   await expect.poll(() => page.evaluate(legendIndex, caption)).toBeGreaterThanOrEqual(0);
 };
 // The swatch stroke of row `caption` (color normalized, width as a number) in each
@@ -259,28 +249,6 @@ const expectSameBoxes = (actual, expected) => {
   expect(moved).toEqual([]);
 };
 
-// OV-122 (PD-OI-066, OIC-027): Generate draws a row added in the Legend editor,
-// and the Legend around it, where the live add placed them, inside the canvas.
-for (const mode of ['linear', 'circular']) {
-  test(`M3 ${mode}: a Legend editor added row stays where the live add placed it, inside the canvas`, async ({ browser }) => {
-    test.setTimeout(600_000);
-    const page = await loadGenerated(browser, mode);
-    try {
-      await addLegendRow(page, 'Manual row', '#118833');
-      const live = await legendCaptionBoxes(page);
-      expect(Object.keys(live.rows)).toContain('Manual row');
-      expectInsideCanvas(live);
-      await generate(page);
-      const generated = await legendCaptionBoxes(page);
-      expectInsideCanvas(generated);
-      expectSameBoxes(generated, live);
-      expect(page.externalRequests).toEqual([]);
-    } finally {
-      await page.context().close();
-    }
-  });
-}
-
 const deleteLegendRow = async (page, caption) => {
   await page.evaluate(row => {
     const app = window.__GBDRAW_APP__;
@@ -335,7 +303,8 @@ test('M6 circular batch: a Result displayed after a Legend row delete is laid ou
   }
 });
 
-// OV-124 with OV-122: rows added and deleted in the Legend editor, in either order.
+// OV-124 with OV-122: a generated row and an editor-added row deleted in the
+// Legend editor.
 for (const mode of ['linear', 'circular']) {
   test(`M5 ${mode}: Legend rows added and deleted in the editor are laid out live and at Generate alike`, async ({ browser }) => {
     test.setTimeout(600_000);
@@ -343,11 +312,9 @@ for (const mode of ['linear', 'circular']) {
     try {
       await addLegendRow(page, 'Manual row', '#118833');
       await deleteLegendRow(page, 'repeat_region');
-      await expectGenerateKeepsLegend(page, 'add a row, then delete a generated row');
+      await expectGenerateKeepsLegend(page, 'an added row, then delete a generated row');
       await deleteLegendRow(page, 'Manual row');
       await expectGenerateKeepsLegend(page, 'delete the added row');
-      await addLegendRow(page, 'Second row', '#7b2cbf');
-      await expectGenerateKeepsLegend(page, 'add a row after the deletions');
       expect(page.externalRequests).toEqual([]);
     } finally {
       await page.context().close();
@@ -456,6 +423,8 @@ for (const mode of ['linear', 'circular']) {
     // the renderer draws with that stroke.
     const stroked = mode === 'linear' ? 'CDS' : 'repeat_region';
     try {
+      // An editor-added row, from a Session that holds it (R15-2).
+      await addLegendRow(page, 'Second row', '#7b2cbf');
       await page.locator('.drawer-toggle').click();
       await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('legend'));
       await expectSteps('stroke width', [strokeWidth(stroked, 3)]);
@@ -464,10 +433,8 @@ for (const mode of ['linear', 'circular']) {
         await app.resetLegendEntryStroke(app.legendEntries.findIndex(e => e.caption === caption));
       }, stroked)]);
       await expectSteps('delete a row', [() => deleteLegendRow(page, 'repeat_region')]);
-      await expectSteps('add a row', [() => addLegendRow(page, 'Manual row', '#118833')]);
       // The second delete uses the editor's Remove control of the row.
-      await expectSteps('add a row, then delete it', [
-        () => addLegendRow(page, 'Second row', '#7b2cbf'),
+      await expectSteps('delete the added row', [
         async () => {
           await page.locator('.right-drawer').getByRole('button', { name: 'Remove Second row', exact: true }).click();
           await expect.poll(() => page.evaluate(legendIndex, 'Second row')).toBe(-1);
@@ -1060,13 +1027,7 @@ test('G1-G3 rejected candidates preserve A and dormant category intent and manua
   try {
     await upload(page, 'tobacco', false);
     await generate(page);
-    await page.evaluate(async () => {
-      const app = window.__GBDRAW_APP__;
-      app.newLegendCaption = 'Retained annotation';
-      app.newLegendColor = '#884422';
-      await app.addNewLegendEntry();
-    });
-    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.legendEntries.some(e => e.caption === 'Retained annotation'))).toBe(true);
+    await addLegendRow(page, 'Retained annotation', '#884422');
     await page.evaluate(async () => {
       const app = window.__GBDRAW_APP__;
       app.updateLegendEntryColor(app.legendEntries.findIndex(e => e.caption === 'repeat_region'), '#224466');

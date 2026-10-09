@@ -28,11 +28,6 @@ const {
 } = await import(
   pathToFileURL(join(tempRoot, 'services', 'legend-svg.js'))
 );
-const {
-  COMPOSITION_METADATA_ATTRIBUTE,
-  COMPOSITION_SCHEMA_ATTRIBUTE,
-  COMPOSITION_SCHEMA_VERSION
-} = await import(pathToFileURL(join(tempRoot, 'app', 'legend-layout', 'composition-actions.js')));
 const { createLegendEntryActions } = await import(
   pathToFileURL(join(tempRoot, 'app', 'legend', 'entry-actions.js'))
 );
@@ -90,7 +85,6 @@ assert.match(entryActionsSource, /setLegendGeometryChangedHandler/);
     `${name} writes no Legend row`
   ));
 assert.match(appSetupSource, /deleteLegendEntry: editEditorIntent\('Delete legend item', deleteLegendEntry, \{ domains: LEGEND_STRUCTURE_DOMAINS \}\)/);
-assert.match(appSetupSource, /addNewLegendEntry: editEditorIntent\('Add legend item', addNewLegendEntry, \{ domains: LEGEND_STRUCTURE_DOMAINS \}\)/);
 assert.match(appSetupSource, /const restoreLegendItems = \(label, restore\) => history\.runUndoable\(label,/);
 assert.doesNotMatch(appSetupSource, /reconcileLegendEntries|prepareDisplayedResultLegend|hasRetiredResultLegend|legendChanged/);
 assert.match(
@@ -202,27 +196,6 @@ class MockElement {
   getElementById(id) { return this.id === id ? this : this.querySelector(`#${id}`); }
 }
 
-// Composition metadata with the Legend reflow inputs a Legend edit requires.
-const compositionTarget = (role, boundsKey, bounds) => ({
-  automaticTranslation: [0, 0], [boundsKey]: bounds, role, selector: `[data-gbdraw-composition-role="${role}"]`
-});
-const compositionMetadata = {
-  legend: compositionTarget('legend', 'localBounds', { x: 0, y: 0, width: 200, height: 14 }),
-  legendReflow: { colorRectSize: 14, lineHeight: 24, textXOffset: 22 },
-  legendSide: 'top',
-  overlayObstacles: [],
-  overlayPolicy: {
-    candidateScoreOrder: ['totalAnchorDistance', 'xAnchorDistance', 'yAnchorDistance', 'nearEdgeX', 'nearEdgeY'],
-    canvasGrowthCandidateOrder: ['horizontal', 'vertical'],
-    canvasGrowthScoreOrder: ['addedArea', 'addedExtent', 'candidateOrder'],
-    quadrantBoundaryRatio: 0.5
-  },
-  primary: compositionTarget('primary', 'finalBounds', { x: 0, y: 0, width: 200, height: 100 }),
-  spacing: { dockGapPx: 24, edgePaddingPx: 16, overlayClearancePx: 8, stackGapPx: 20, titleGapPx: 20 },
-  title: null,
-  titleSide: 'none'
-};
-
 const mockLegendEntry = (caption, color, x) => {
   const group = new MockElement('g', { 'data-legend-key': caption });
   group.appendChild(new MockElement('path', { fill: color, transform: `translate(${x},7)` }));
@@ -255,8 +228,6 @@ const mockLegendEntry = (caption, color, x) => {
     dormantLegendEntries: ref([]),
     originalLegendOrder: ref(['Alpha', 'Beta']),
     originalLegendColors: ref({ Alpha: '#112233', Beta: '#445566' }),
-    newLegendCaption: ref(''),
-    newLegendColor: ref('#808080'),
     legendStrokeOverrides: {},
     legendColorOverrides: {},
     manualSpecificRules: [],
@@ -272,26 +243,20 @@ const mockLegendEntry = (caption, color, x) => {
   // The layout owner lays the Legend out after a restore (zero shift).
   actions.setLegendGeometryChangedHandler(() => { layoutRefreshes += 1; });
 
-  // U3a A2a: Add, Delete, and Restore write the drawing's intent only; the
+  // U3a A2a: Delete and Restore write the drawing's intent only; the
   // composition root shows it on the Result through the port in one compile.
+  // Gamma and Gamma (1) are editor rows a Session keeps from the retired Add
+  // legend item (R15-2): no generated row has their captions.
   const shownRows = () => JSON.stringify(featureLegend.children.map((entry) => [
     [...entry.attributes], entry.children.map((child) => [[...child.attributes], child.textContent])
   ]));
   const drawnRows = shownRows();
-  svg.setAttribute(COMPOSITION_SCHEMA_ATTRIBUTE, String(COMPOSITION_SCHEMA_VERSION));
-  svg.setAttribute(COMPOSITION_METADATA_ATTRIBUTE, JSON.stringify(compositionMetadata));
   const listedRows = () => state.legendEntries.value.map((entry) => entry.caption);
-  state.newLegendCaption.value = 'Gamma';
-  state.newLegendColor.value = '#778899';
-  assert.equal(await actions.addNewLegendEntry(), true);
-  assert.deepEqual(state.legendEntries.value.at(-1), { caption: 'Gamma', originalCaption: 'Gamma', color: '#778899', featureIds: [] });
-  assert.equal(state.newLegendCaption.value, '');
-  state.newLegendCaption.value = 'Gamma';
-  state.newLegendColor.value = '#778899';
-  assert.equal(await actions.addNewLegendEntry(), false, 'a listed row of the same color is no new row');
-  state.newLegendCaption.value = 'Gamma';
-  state.newLegendColor.value = '#000000';
-  assert.equal(await actions.addNewLegendEntry(), true);
+  state.legendEntries.value = [
+    ...state.legendEntries.value,
+    { caption: 'Gamma', originalCaption: 'Gamma', color: '#778899', featureIds: [] },
+    { caption: 'Gamma (1)', originalCaption: 'Gamma (1)', color: '#000000', featureIds: [] }
+  ];
   assert.deepEqual(listedRows(), ['Alpha', 'Beta', 'Gamma', 'Gamma (1)']);
   assert.equal(actions.deleteLegendEntry(3), true);
   assert.equal(actions.deleteLegendEntry(0), true);
@@ -446,8 +411,6 @@ const mockLegendEntry = (caption, color, x) => {
     dormantLegendEntries: ref([]),
     originalLegendOrder: ref([]),
     originalLegendColors: ref({}),
-    newLegendCaption: ref(''),
-    newLegendColor: ref('#808080'),
     legendStrokeOverrides: {},
     legendColorOverrides: {},
     manualSpecificRules: [],
@@ -523,8 +486,6 @@ const mockLegendEntry = (caption, color, x) => {
     dormantLegendEntries: ref([]),
     originalLegendOrder: ref(['Alpha', 'Beta']),
     originalLegendColors: ref({}),
-    newLegendCaption: ref(''),
-    newLegendColor: ref('#808080'),
     legendStrokeOverrides: {},
     legendColorOverrides: {},
     manualSpecificRules: [],
@@ -633,8 +594,6 @@ const mockLegendEntry = (caption, color, x) => {
     dormantLegendEntries: ref([]),
     originalLegendOrder: ref([]),
     originalLegendColors: ref({}),
-    newLegendCaption: ref(''),
-    newLegendColor: ref('#808080'),
     legendStrokeOverrides: {},
     legendColorOverrides: {},
     manualSpecificRules: [],
@@ -705,8 +664,6 @@ const mockLegendEntry = (caption, color, x) => {
     dormantLegendEntries: ref([]),
     originalLegendOrder: ref(['CDS', 'tRNA', 'GC']),
     originalLegendColors: ref({}),
-    newLegendCaption: ref(''),
-    newLegendColor: ref('#808080'),
     legendStrokeOverrides: {},
     legendColorOverrides: {},
     manualSpecificRules: [],
@@ -752,8 +709,6 @@ const mockLegendEntry = (caption, color, x) => {
     dormantLegendEntries: ref([]),
     originalLegendOrder: ref(['CDS', 'Old', 'tRNA']),
     originalLegendColors: ref({}),
-    newLegendCaption: ref(''),
-    newLegendColor: ref('#808080'),
     legendStrokeOverrides: {},
     legendColorOverrides: {},
     manualSpecificRules: [],

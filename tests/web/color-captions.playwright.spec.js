@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { execFileSync } = require('node:child_process');
-const { load, generate, download } = require('./helpers/mode-transition.cjs');
+const { load, generate, download, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 const { getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
 
 // A rule edit that changes the Legend asks for the automatic rerender (OV-42,
@@ -176,11 +176,8 @@ test('generated-caption collisions roll back and old Session drafts normalize on
   let fresh;
   try {
     await generate(page);
-    await page.evaluate(async()=>{
-      const a=window.__GBDRAW_APP__;
-      a.newLegendCaption='Conflict [#112233]';a.newLegendColor='#abcdef';
-      await a.addNewLegendEntry();
-    });
+    // An editor row a Session holds (R15-2 retired Add legend item).
+    await loadEditorLegendRows(page,[['Conflict [#112233]','#abcdef']]);
     await expect.poll(()=>page.evaluate(()=>window.__GBDRAW_APP__.legendEntries.some(e=>e.caption==='Conflict [#112233]'))).toBe(true);
     const ids=await page.evaluate(async()=>{
       const a=window.__GBDRAW_APP__,{getFeatureColorRuleHash}=await import('./js/services/feature-utils.js');

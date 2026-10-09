@@ -11,6 +11,7 @@ const { resolve } = require('node:path');
 const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
 const { openWithGenBank, openFresh } = require('./helpers/audit-browser.cjs');
 const { settleLive } = require('./helpers/live-generate-parity.cjs');
+const { loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -173,13 +174,10 @@ for (const mode of ['linear', 'circular']) {
     else await openWithGenBank(page, FIXTURE, () => { window.__GBDRAW_APP__.form.labels_mode = 'out'; });
     await generate(page);
     const unedited = await legendGeometry(page);
+    // An editor row from a Session (R15-2 retired Add legend item).
+    await loadEditorLegendRows(page, [['Manual row with a long caption', '#118833']]);
+    await settleLive(page);
     const steps = [
-      ['add a row', async () => evaluateWithRetainedPromise(page, async () => {
-        const app = window.__GBDRAW_APP__;
-        app.newLegendCaption = 'Manual row with a long caption';
-        app.newLegendColor = '#118833';
-        await app.addNewLegendEntry();
-      })],
       ['delete the first row', async () => {
         const index = await rowIndex(page, '.');
         await page.evaluate((i) => window.__GBDRAW_APP__.deleteLegendEntry(i), index);
@@ -375,16 +373,12 @@ test('OV-143 K1: a GC content row renamed in Circular stays in its slot', async 
   expect(row(shown, 'GC%')[1][1], 'K1: the row keeps its y').toBe(row(before, 'GC content')[1][1]);
 });
 
+// The added row is an editor row from a Session (R15-2).
 test('OV-143 K4: an added row and a renamed CDS row in Circular do not overlap', async ({ page }) => {
   test.setTimeout(300_000);
   await openControlCircular(page);
-  await evaluateWithRetainedPromise(page, async () => {
-    const app = window.__GBDRAW_APP__;
-    app.newLegendCaption = 'Extra';
-    app.newLegendColor = '#7b2cbf';
-    await app.addNewLegendEntry();
-  });
-  await page.waitForFunction(() => window.__GBDRAW_APP__.legendEntries.some((entry) => entry.caption === 'Extra'));
+  await loadEditorLegendRows(page, [['Extra', '#7b2cbf']]);
+  await settleLive(page);
   await renameRow(page, 'CDS', 'Coding');
   await expectShownEqualsGenerate(page, 'K4');
 });

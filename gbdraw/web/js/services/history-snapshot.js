@@ -221,9 +221,7 @@ const buildDraftIntentData = (state) => ({
   newPriorityRule: clonePlainObject(state.newPriorityRule),
   newColorFeat: String(getRef(state.newColorFeat, '') || ''),
   newColorVal: String(getRef(state.newColorVal, '') || ''),
-  newFeatureToAdd: String(getRef(state.newFeatureToAdd, '') || ''),
-  newLegendCaption: String(getRef(state.newLegendCaption, '') || ''),
-  newLegendColor: String(getRef(state.newLegendColor, '') || '')
+  newFeatureToAdd: String(getRef(state.newFeatureToAdd, '') || '')
 });
 
 /** @param {HistorySnapshotDrawing} drawing */
@@ -249,8 +247,6 @@ const applyDraftIntentData = (state, drafts = {}) => {
   setRef(state.newColorFeat, String(drafts.newColorFeat || ''));
   setRef(state.newColorVal, String(drafts.newColorVal || ''));
   setRef(state.newFeatureToAdd, String(drafts.newFeatureToAdd || ''));
-  setRef(state.newLegendCaption, String(drafts.newLegendCaption || ''));
-  setRef(state.newLegendColor, String(drafts.newLegendColor || ''));
 };
 
 // The `ui` values that belong to a drawing (Session 46 `modes.<m>.ui`, and

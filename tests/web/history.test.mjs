@@ -1722,8 +1722,6 @@ const createLayoutPreferences = () => ({
     newColorFeat: ref('gene'),
     newColorVal: ref('#123456'),
     newFeatureToAdd: ref('mobile_element'),
-    newLegendCaption: ref('Draft legend'),
-    newLegendColor: ref('#654321'),
     fileLegendCaptions: ref(new Set(['Imported legend'])),
     semanticFileWatchersSuppressed: ref(false)
   };
@@ -1750,8 +1748,6 @@ const createLayoutPreferences = () => ({
     newColorFeat: state.newColorFeat.value,
     newColorVal: state.newColorVal.value,
     newFeatureToAdd: state.newFeatureToAdd.value,
-    newLegendCaption: state.newLegendCaption.value,
-    newLegendColor: state.newLegendColor.value,
     fileLegendCaptions: Array.from(state.fileLegendCaptions.value)
   });
   const before = draftState();
@@ -1765,8 +1761,6 @@ const createLayoutPreferences = () => ({
     state.newColorFeat.value = 'CDS';
     state.newColorVal.value = '#abcdef';
     state.newFeatureToAdd.value = 'repeat_region';
-    state.newLegendCaption.value = 'Edited legend';
-    state.newLegendColor.value = '#fedcba';
     state.fileLegendCaptions.value = new Set(['Edited imported legend']);
   });
   const after = draftState();
@@ -1785,12 +1779,29 @@ const createLayoutPreferences = () => ({
     state.newColorFeat.value = 'gene';
     state.newColorVal.value = '#d3d3d3';
     state.newFeatureToAdd.value = 'mobile_element';
-    state.newLegendCaption.value = '';
-    state.newLegendColor.value = '#808080';
     state.fileLegendCaptions.value = new Set();
   });
   await history.undo();
   assert.deepEqual(draftState(), after);
+
+  // R15-2 retired Add legend item and its form drafts. A History intent or
+  // checkpoint that still carries them restores the other drafts and writes
+  // nothing for them, even where a holder of the old name exists.
+  const retiredDrafts = { newLegendCaption: 'Old draft', newLegendColor: '#123123' };
+  const oldIntent = { ...(await snapshots.buildHistoryIntent()) };
+  oldIntent.drafts = { ...oldIntent.drafts, ...retiredDrafts };
+  const oldCheckpoint = { ...(await snapshots.buildArtifactCheckpoint()) };
+  oldCheckpoint.drafts = { ...oldCheckpoint.drafts, ...retiredDrafts };
+  state.newLegendCaption = ref('');
+  state.newLegendColor = ref('#808080');
+  state.newColorVal.value = '#000001';
+  await snapshots.applyHistoryIntent(oldIntent);
+  assert.deepEqual(draftState(), after);
+  state.newColorVal.value = '#000002';
+  await snapshots.applyArtifactCheckpoint(oldCheckpoint);
+  assert.deepEqual(draftState(), after);
+  assert.deepEqual([state.newLegendCaption.value, state.newLegendColor.value], ['', '#808080']);
+  assert.equal(Object.hasOwn((await snapshots.buildHistoryIntent()).drafts, 'newLegendCaption'), false);
 }
 
 {

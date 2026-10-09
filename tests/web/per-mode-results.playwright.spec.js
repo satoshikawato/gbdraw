@@ -11,7 +11,7 @@ const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
 const { openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { semanticSnapshot, settleLive } = require('./helpers/live-generate-parity.cjs');
-const { popup, closeEditor } = require('./helpers/mode-transition.cjs');
+const { popup, closeEditor, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -229,13 +229,9 @@ const LEGEND_EDITS = [
     byDefault: ['Coding', ...CIRCULAR_ROWS.slice(1)]
   },
   {
+    // An editor-added row comes from a Session (R15-2).
     name: 'an added row',
-    edit: (page) => evaluateWithRetainedPromise(page, async () => {
-      const app = window.__GBDRAW_APP__;
-      app.newLegendCaption = 'Extra';
-      app.newLegendColor = '#7b2cbf';
-      await app.addNewLegendEntry();
-    }),
+    edit: (page) => loadEditorLegendRows(page, [['Extra', '#7b2cbf']]),
     byDefault: [...CIRCULAR_ROWS, 'Extra']
   },
   {
@@ -286,14 +282,9 @@ const bothResults = async (page) => {
   await showMode(page, 'linear');
   await generate(page);
 };
+// An editor-added row comes from a Session (R15-2).
 const addExtraRow = async (page) => {
-  await evaluateWithRetainedPromise(page, async () => {
-    const app = window.__GBDRAW_APP__;
-    app.newLegendCaption = 'Extra';
-    app.newLegendColor = '#7b2cbf';
-    await app.addNewLegendEntry();
-  });
-  await page.waitForFunction(() => window.__GBDRAW_APP__.legendEntries.some((entry) => entry.caption === 'Extra'));
+  await loadEditorLegendRows(page, [['Extra', '#7b2cbf']]);
   await settleLive(page);
 };
 const renameRow = async (page, from, to) => {

@@ -17,7 +17,7 @@ const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = r
 const { download, load, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 const {
   open, generate, popupEdit, addVisibilityRule, appAction, addColorRule, history, FL1_OFF,
-  legendRowColor, FL1_ALPHA, renameRow, legendRowStrokeColor, legendRowAdd, switchPalette, deleteLegendRow
+  legendRowColor, FL1_ALPHA, renameRow, legendRowStrokeColor, editorLegendRows, switchPalette, deleteLegendRow
 } = require('./helpers/live-generate-parity-steps.cjs');
 
 test.describe.configure({ retries: 0 });
@@ -55,7 +55,7 @@ const renameLegendRow = async (page, caption, name) => {
 const KINDS = [
   'visibility rule add', 'visibility rule action', 'visibility rule delete', 'feature Off', 'feature On',
   'label text', 'label Off', 'label On', 'color rule add', 'color rule color', 'color rule delete', 'feature color',
-  'undo', 'redo', 'Result switch', 'legend color', 'legend add', 'legend stroke', 'feature stroke',
+  'undo', 'redo', 'Result switch', 'legend color', 'legend stroke', 'feature stroke',
   'feature legend name', 'feature color reset', 'label Default', 'palette'
 ];
 
@@ -249,22 +249,6 @@ const CASES = [
     states: { mode: 'linear', results: 'single', reflow: 'off', labels: 'unbound' },
     setup: (page) => popupEdit(page, { type: 'repeat_region' }, { fill: '#e63946' }),
     run: (page) => legendRowColor(page, 'repeat_region', '#f4a261')
-  },
-  // OV-121: a row added in the Legend editor takes the first row's stroke as
-  // Generate copies it, not that row's stroke edit.
-  {
-    kind: 'legend add',
-    edit: 'Legend editor row add after a stroke on the first row',
-    states: { mode: 'linear', results: 'single', reflow: 'on', labels: 'bound' },
-    setup: async (page) => { await legendRowStroke(page, 'CDS', '#e63946', 3); await generate(page); },
-    run: (page) => legendRowAdd(page, 'Manual row', '#118833')
-  },
-  {
-    kind: 'legend add',
-    edit: 'Legend editor row add after a stroke on the first row',
-    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
-    setup: async (page) => { await legendRowStroke(page, 'CDS', '#e63946', 3); await generate(page); },
-    run: (page) => legendRowAdd(page, 'Manual row', '#118833')
   },
   // OV-123: a stroke on a generated Legend row reaches the features drawn in
   // the row's color, live and at Generate; a batch Result shows it on display.
@@ -483,9 +467,9 @@ const CASES = [
   },
   {
     kind: 'palette',
-    edit: 'Palette change after a Legend editor row add',
+    edit: 'Palette change with a Legend editor row of a loaded Session',
     states: { mode: 'circular', results: 'batch', reflow: 'on', labels: 'unbound' },
-    setup: (page) => legendRowAdd(page, 'Manual row', '#118833'),
+    setup: (page) => editorLegendRows(page, [['Manual row', '#118833']]),
     run: (page) => switchPalette(page, 'alpine_retreat')
   },
   // Review U2BFIX #5: a Legend row delete (a writer not yet migrated to the
@@ -1070,11 +1054,6 @@ const generateEmbeddedOnly = async (page) => {
   expect(embeddedLabelFeatures.length, 'Embedded Only draws two labels of the first record').toBeGreaterThan(1);
 };
 
-// The choice in the dialog Add legend item opens for a deleted row's caption.
-const answerLegendAddConflict = (page, choice) => evaluateWithRetainedPromise(page, async (answer) => {
-  await window.__GBDRAW_APP__.handleLegendAddConflictChoice(answer);
-}, choice).then(() => settleLive(page));
-
 // The work guard (allowlist) at the app, on a two-Result batch: each edit kind
 // runs exactly the compile stages of its entry (the compile's structural
 // metric, live compiles only), a Result display or a History step compiles
@@ -1226,7 +1205,6 @@ const WORK_ALLOWLIST = [
     kind: 'Legend rename, palette row with features', stages: ['fills', 'rules', 'legendFills', 'legend'], compiles: 1,
     requests: ['evaluateRules', 'evaluateRules', 'render'], run: (page) => renameLegendRow(page, 'tRNA', 'transfer RNA')
   },
-  { kind: 'Legend add', stages: ['legend'], compiles: 1, requests: [], run: (page) => legendRowAdd(page, 'Added', '#123456') },
   { kind: 'Legend delete', stages: ['legend'], compiles: 1, requests: [], run: (page) => deleteLegendRow(page, 'GC skew (+)') },
   { kind: 'History step (Undo of a Legend delete)', stages: ['legend', 'legendFills'], compiles: 1, requests: [], run: (page) => history(page, 'undo') },
   {
@@ -1237,24 +1215,6 @@ const WORK_ALLOWLIST = [
   {
     kind: 'Legend sort', stages: ['legend'], compiles: 1, requests: [],
     run: (page) => page.evaluate(() => window.__GBDRAW_APP__.sortLegendEntries('desc')).then(() => settleLive(page))
-  },
-  // OV-239 (R15-1): Add legend item of a deleted row's caption asks first and
-  // does no work; each choice is one step: the Restore of that row, the Add
-  // under the suffixed caption, or nothing.
-  {
-    kind: 'Legend add of a deleted caption, Restore', stages: ['legend', 'legendFills'], compiles: 1, requests: [],
-    before: async (page) => { await deleteLegendRow(page, 'GC skew (+)'); await legendRowAdd(page, 'GC skew (+)', '#123456'); },
-    run: (page) => answerLegendAddConflict(page, 'restore')
-  },
-  {
-    kind: 'Legend add of a deleted caption, Add as', stages: ['legend'], compiles: 1, requests: [],
-    before: async (page) => { await deleteLegendRow(page, 'GC skew (+)'); await legendRowAdd(page, 'GC skew (+)', '#123456'); },
-    run: (page) => answerLegendAddConflict(page, 'suffix')
-  },
-  {
-    kind: 'Legend add of a deleted caption, Cancel', stages: [], compiles: 0, requests: [],
-    before: (page) => legendRowAdd(page, 'GC skew (+)', '#123456'),
-    run: (page) => answerLegendAddConflict(page, 'cancel')
   }
 ];
 

@@ -115,8 +115,6 @@ const resetEditorDraftState = (state, drawing) => {
   clearReactiveObject(drawing.legendStrokeOverrides);
   drawing.deletedLegendEntries.value = [];
   drawing.dormantLegendEntries.value = [];
-  state.newLegendCaption.value = editorDefaults.newLegendCaption;
-  state.newLegendColor.value = editorDefaults.newLegendColor;
   drawing.addedLegendCaptions.value = new Set();
   drawing.fileLegendCaptions.value = new Set();
 

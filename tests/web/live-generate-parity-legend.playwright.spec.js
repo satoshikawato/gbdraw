@@ -13,7 +13,7 @@ const { loadSessionFile, openFresh } = require('./helpers/audit-browser.cjs');
 const {
   SINGLE_FIXTURE, open, generate, popupEdit, addVisibilityRule, appAction, addColorRule, history,
   FL1_OFF, legendRowColor, FL1_ALPHA, DEPTH_TSV, colorLegendRow, openCanvas, renameRow,
-  legendRowStrokeColor, legendRowAdd, switchPalette, deleteLegendRow
+  legendRowStrokeColor, editorLegendRows, switchPalette, deleteLegendRow
 } = require('./helpers/live-generate-parity-steps.cjs');
 
 test.describe.configure({ retries: 0 });
@@ -96,17 +96,14 @@ const countResultSerializations = async (page) => {
   return () => page.evaluate(() => window.__resultSerializations);
 };
 
-test('a color rule or Add legend item that adds a Legend row serializes the Result once', async ({ page }) => {
+test('a color rule that adds a Legend row serializes the Result once', async ({ page }) => {
   test.setTimeout(120_000);
   await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
-  let serializations = await countResultSerializations(page);
+  const serializations = await countResultSerializations(page);
   await addColorRule(page, FL1_ALPHA);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption))).toContain('alpha');
   expect(await serializations(), 'color rule commit that adds a Legend row').toBe(1);
-  serializations = await countResultSerializations(page);
-  await legendRowAdd(page, 'Added', '#123456');
-  expect(await serializations(), 'Add legend item').toBe(1);
-  await expectLiveEqualsGenerate(page, { label: 'Legend rows added by a rule and by Add legend item' });
+  await expectLiveEqualsGenerate(page, { label: 'Legend row added by a rule' });
 });
 
 // OV-60: renaming a generated Legend row (GC content) onto the caption of a
@@ -594,11 +591,12 @@ const ruleIndex = (page, caption) => page.evaluate(
 );
 const U3A_PARITY = [
   {
-    // Linear draws no GC rows here: its featureless row is an added one.
+    // Linear draws no GC rows here: its featureless row is an editor row,
+    // which comes from a Session (R15-2).
     name: '(1) rename a row without features, then color it',
     run: async (page, mode) => {
       const [from, to] = mode === 'circular' ? ['GC content', 'GC %'] : ['Note', 'Note row'];
-      if (mode !== 'circular') await legendRowAdd(page, from, '#123456');
+      if (mode !== 'circular') await editorLegendRows(page, [[from, '#123456']]);
       await renameAndSettle(page, from, to);
       await colorLegendRow(page, to, '#264653');
     }
@@ -608,11 +606,11 @@ const U3A_PARITY = [
     run: async (page) => { await renameAndSettle(page, 'repeat_region', 'Repeats'); await legendRowStrokeColor(page, 'Repeats', '#e63946'); }
   },
   {
-    name: '(3) add a row and color it, add a row and change the palette',
+    // Editor rows come from a Session (R15-2).
+    name: '(3) color an editor row, then change the palette',
     run: async (page) => {
-      await legendRowAdd(page, 'Added', '#123456');
+      await editorLegendRows(page, [['Added', '#123456'], ['Second', '#654321']]);
       await colorLegendRow(page, 'Added', '#abcdef');
-      await legendRowAdd(page, 'Second', '#654321');
       await switchPalette(page, 'arctic');
     }
   },
@@ -812,61 +810,32 @@ test('U3a compat: Undo of a new edit and the Restore of a deleted row on a Sessi
   await expectLiveEqualsGenerate(page, { label: 'Restore after Load' });
 });
 
-// OV-239 (Owner decision R15-1): Add legend item of the caption of a deleted
-// row asks before anything changes. Restore is that row's Restore (it returns
-// with its own color, not the entered one); Add as gives the new row the
-// suffixed caption; Cancel changes nothing. Each choice is one History step,
-// Cancel none, and live equals Generate.
-const addConflictDialog = (page) => page.locator('div.fixed', {
-  has: page.getByRole('heading', { name: 'A deleted Legend item named “repeat_region” exists' })
-});
-const undoCount = (page) => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
-const requestDeletedCaptionAdd = async (page) => {
-  await deleteLegendRow(page, 'repeat_region');
-  const before = { steps: await undoCount(page), legend: await semanticSnapshot(page) };
-  await legendRowAdd(page, 'repeat_region', '#123456');
-  await expect(addConflictDialog(page)).toBeVisible();
-  await expect(addConflictDialog(page).getByRole('button')).toHaveText(['Restore', 'Add as “repeat_region (1)”', 'Cancel']);
-  expect(await undoCount(page), 'the request records no step').toBe(before.steps);
-  expect(diffSemanticSnapshots(before.legend, await semanticSnapshot(page)), 'the request changes nothing').toEqual([]);
-  return before;
-};
-const deletedCaptions = (page) => page.evaluate(() => window.__GBDRAW_APP__.deletedLegendEntries.map((entry) => entry.caption));
-const ADD_CONFLICT_CHOICES = [
-  {
-    choice: 'Restore',
-    check: async (page) => {
-      expect(await deletedCaptions(page)).toEqual([]);
-      expect(await legendCaptions(page)).toContain('repeat_region');
-      expect(await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.find((entry) => entry.caption === 'repeat_region').color),
-        'the row returns with its own color').not.toBe('#123456');
-    }
-  },
-  {
-    choice: 'Add as “repeat_region (1)”',
-    check: async (page) => {
-      expect(await deletedCaptions(page)).toEqual(['repeat_region']);
-      expect(await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.find((entry) => entry.caption === 'repeat_region (1)')?.color))
-        .toBe('#123456');
-    }
-  },
-  { choice: 'Cancel', check: async (page) => { expect(await deletedCaptions(page)).toEqual(['repeat_region']); } }
-];
-for (const { choice, check } of ADD_CONFLICT_CHOICES) {
-  test(`OV-239: Add legend item of a deleted row's caption, ${choice} (circular)`, async ({ page }) => {
-    test.setTimeout(180_000);
-    await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
-    const before = await requestDeletedCaptionAdd(page);
-    await addConflictDialog(page).getByRole('button', { name: choice, exact: true }).click();
-    await expect(addConflictDialog(page)).toHaveCount(0);
-    await settleLive(page);
-    await check(page);
-    if (choice === 'Cancel') {
-      expect(await undoCount(page), 'Cancel records no step').toBe(before.steps);
-      expect(diffSemanticSnapshots(before.legend, await semanticSnapshot(page)), 'Cancel changes nothing').toEqual([]);
-    } else {
-      expect(await undoCount(page), 'the choice is one History step').toBe(before.steps + 1);
-    }
-    await expectLiveEqualsGenerate(page, { label: `Add of a deleted row's caption, ${choice}` });
+// R15-2 (OV-241 decision B) retired Add legend item. A Session main saved with
+// a Legend row the editor added (MANUAL_ROW, no features, in its Linear Result;
+// tests/fixtures/sessions/two-mode-project.provenance.json) loads and shows the
+// row, and Generate keeps it.
+test('R15-2: a Legend row the editor added in a Session main saved loads, shows, and survives Generate (linear)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openFresh(page);
+  await page.locator('input[accept^=".json,"]').setInputFiles('tests/fixtures/sessions/two-mode-project.v44.gbdraw-session.json.gz');
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
+  if (await page.evaluate(() => window.__GBDRAW_APP__.mode) !== 'linear') {
+    await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  }
+  await settleLive(page);
+  const manualRow = () => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const entry = app.legendEntries.find((item) => item.caption === 'MANUAL_ROW');
+    const shown = [...app.svgContainer.querySelectorAll('g[data-legend-key="MANUAL_ROW"]')]
+      .filter((row) => !row.closest('[display="none"]'));
+    return {
+      entry: entry ? { color: entry.color, featureIds: entry.featureIds } : null,
+      fills: shown.map((row) => row.querySelector('path, rect')?.getAttribute('fill'))
+    };
   });
-}
+  expect(await manualRow(), 'Load lists and shows the row').toEqual({ entry: { color: '#445566', featureIds: [] }, fills: ['#445566'] });
+  await generate(page);
+  expect(await manualRow(), 'Generate keeps the row').toEqual({ entry: { color: '#445566', featureIds: [] }, fills: ['#445566'] });
+});
+
