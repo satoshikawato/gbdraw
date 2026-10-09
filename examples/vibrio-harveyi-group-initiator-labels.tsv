@@ -1,0 +1,5 @@
+record	feature_selector	label_visibility	label_text
+NC_004603.1	protein_id=WP_005488867.1	on	DnaA
+NC_004605.1	protein_id=WP_005477480.1	on	RctB
+NC_022349.1	protein_id=WP_005378835.1	on	DnaA
+NC_022359.1	protein_id=WP_005374502.1	on	RctB

@@ -182,7 +182,7 @@
   },
   {
     "id": "vibrio-harveyi-group-collinear",
-    "title": "<i>Vibrio parahaemolyticus</i> and <i>V. alginolyticus</i> collinearity",
+    "title": "Collinearity analysis of multi-replicon bacterial genomes (<i>Vibrio</i> spp.)",
     "tags": [
       "Linear",
       "Multi-record",
@@ -202,12 +202,12 @@
       "GCF_000196095.1_ASM19609v1_genomic.gbff",
       "GCF_000354175.2_ASM35417v2_genomic.gbff"
     ],
-    "fileSizeLabel": "14.2 MB",
-    "command": "gbdraw linear --records_table examples/vibrio-harveyi-group-linear-records.tsv --linear_record_gap 48 --track_layout above --scale_style ruler --ruler_on_axis --scale_interval 750000 --separate_strands --hide_accession --hide_length --definition_font_size 16 --definition_line_style 'name:size=18,weight=bold' --definition_line_style 'subtitle:size=16' --keep_definition_left_aligned --losat losatp --losatp_mode collinear --collinear_search_scope adjacent --losatp_max_target_seqs 5 --collinear_min_anchors 3 --collinear_max_unit_gap 2 --collinear_max_diagonal_drift 2 --collinear_color_mode orientation_identity --pairwise_match_style curve --losat_threads 16 --feature_shape CDS=rectangle --feature_shape rRNA=rectangle --feature_shape tRNA=rectangle --feature_shape tmRNA=rectangle --feature_shape ncRNA=rectangle --feature_shape misc_RNA=rectangle --feature_shape repeat_region=rectangle --block_stroke_width 0 --axis_stroke_width 2 --line_stroke_width 1 --legend bottom -o vibrio-harveyi-group-collinear -f interactive_svg",
+    "fileSizeLabel": "14.3 MB",
+    "command": "gbdraw linear --records_table examples/vibrio-harveyi-group-linear-records.tsv -t examples/vibrio-harveyi-group-initiator-colors.tsv --feature_override_table examples/vibrio-harveyi-group-initiator-labels.tsv --label_font_size 14 --linear_record_gap 48 --track_layout above --scale_style ruler --ruler_on_axis --scale_interval 750000 --separate_strands --hide_accession --hide_length --definition_font_size 16 --definition_line_style 'name:size=18,weight=bold' --definition_line_style 'subtitle:size=16' --keep_definition_left_aligned --losat losatp --losatp_mode collinear --collinear_search_scope adjacent --losatp_max_target_seqs 5 --collinear_min_anchors 3 --collinear_max_unit_gap 2 --collinear_max_diagonal_drift 2 --collinear_color_mode orientation_identity --pairwise_match_style curve --losat_threads 16 --feature_shape CDS=rectangle --feature_shape rRNA=rectangle --feature_shape tRNA=rectangle --feature_shape tmRNA=rectangle --feature_shape ncRNA=rectangle --feature_shape misc_RNA=rectangle --feature_shape repeat_region=rectangle --block_stroke_width 0 --axis_stroke_width 2 --line_stroke_width 1 --legend bottom -o vibrio-harveyi-group-collinear -f interactive_svg",
     "commandKind": "runnable",
-    "commandNote": "Run from a source checkout so the records table can read the two GBFF files under tests/test_inputs/.",
-    "description": "Compare both chromosomes from two Harveyi-clade Vibrio assemblies as two multi-record rows.",
-    "workflow": "Multi-record LOSATP collinear blocks",
+    "commandNote": "Run from a source checkout: the records, color, and label tables are under examples/, and the records table reads the two GBFF files under tests/test_inputs/.",
+    "description": "Two <i>Vibrio</i> genomes, each with two chromosomes. Each chromosome is rotated in gbdraw to start at its replication initiator gene — <i>dnaA</i> on chromosome I and <i>rctB</i> on chromosome II — so records that NCBI starts at unrelated positions line up. Inversions occur within each chromosome, but collinear blocks rarely connect chromosome I to chromosome II.",
+    "workflow": "Align replicons at their replication origin",
     "inputSummary": "2 multi-record GenBank files; 4 chromosomes",
     "displayOrder": 65,
     "tutorial": "./tutorials/vibrio-harveyi-group-collinear.json",

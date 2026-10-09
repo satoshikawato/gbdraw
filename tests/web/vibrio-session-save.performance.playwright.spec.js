@@ -123,7 +123,7 @@ const compatibilityCatalog = catalog ? {
 } : catalog;
 const losatEntries = document.losatCache?.entries || [];
 const request = document.renderRequest;
-// Schema 9 adds only diagramOptions.featureOverrides (empty for this Session).
+// Schema 9 adds only diagramOptions.featureOverrides.
 const legacyRequest = request?.schema >= 8
   ? {
       ...request,

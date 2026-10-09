@@ -202,7 +202,9 @@ VNIG_COMMAND = (
 
 VIBRIO_HARVEYI_GROUP_COMMAND = (
     "gbdraw linear --records_table examples/vibrio-harveyi-group-linear-records.tsv "
-    "--linear_record_gap 48 --track_layout above --scale_style ruler --ruler_on_axis "
+    "-t examples/vibrio-harveyi-group-initiator-colors.tsv "
+    "--feature_override_table examples/vibrio-harveyi-group-initiator-labels.tsv "
+    "--label_font_size 14 --linear_record_gap 48 --track_layout above --scale_style ruler --ruler_on_axis "
     "--scale_interval 750000 --separate_strands --hide_accession --hide_length "
     "--definition_font_size 16 --definition_line_style 'name:size=18,weight=bold' "
     "--definition_line_style 'subtitle:size=16' --keep_definition_left_aligned "
@@ -298,14 +300,23 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     ),
     GallerySessionExample(
         id="vibrio-harveyi-group-collinear",
-        title="<i>Vibrio parahaemolyticus</i> and <i>V. alginolyticus</i> collinearity",
+        title="Collinearity analysis of multi-replicon bacterial genomes (<i>Vibrio</i> spp.)",
         tags=("Linear", "Multi-record", "Collinear groups", "LOSAT", "Interactive SVG"),
-        description="Compare both chromosomes from two Harveyi-clade Vibrio assemblies as two multi-record rows.",
-        workflow="Multi-record LOSATP collinear blocks",
+        description=(
+            "Two <i>Vibrio</i> genomes, each with two chromosomes. Each chromosome is rotated "
+            "in gbdraw to start at its replication initiator gene \u2014 <i>dnaA</i> on "
+            "chromosome I and <i>rctB</i> on chromosome II \u2014 so records that NCBI starts "
+            "at unrelated positions line up. Inversions occur within each chromosome, but "
+            "collinear blocks rarely connect chromosome I to chromosome II."
+        ),
+        workflow="Align replicons at their replication origin",
         input_summary="2 multi-record GenBank files; 4 chromosomes",
         display_order=65,
         command_kind="runnable",
-        command_note="Run from a source checkout so the records table can read the two GBFF files under tests/test_inputs/.",
+        command_note=(
+            "Run from a source checkout: the records, color, and label tables are under "
+            "examples/, and the records table reads the two GBFF files under tests/test_inputs/."
+        ),
         command=VIBRIO_HARVEYI_GROUP_COMMAND,
         session_from_command=True,
         feature_sources=(

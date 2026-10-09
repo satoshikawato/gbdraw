@@ -2484,7 +2484,8 @@ export const buildCanonicalRequestState = ({ session, projection, config,
     ...refsOf(drawingRefs),
     form: config.form || {}, adv: config.adv || {},
     manualSpecificRules: publicationClone(config.rules || []), manualWhitelist: publicationClone(config.whitelist || []), manualPriorityRules: publicationClone(config.qualifierPriorityRules || []),
-    featureOverrides: publicationClone(features.featureOverrides || {}),
+    featureOverrides: publicationClone(features.featureOverrides
+      || projection.semanticFeatureState?.featureOverrides || {}),
     labelTextBulkOverrides: publicationClone(features.labelTextBulkOverrides || {}),
     circularConservation: conservation, losat: publicationClone(config.losat || { blastp: {} }),
     linearRecordRows: publicationClone(layout.rows || []), linearComparisonPlan: normalizeLinearComparisonPlan(config.linearComparisonPlan),
@@ -5149,6 +5150,13 @@ const normalizedPublicationBytes = async (resource, id, normalize, path) => {
       (row) => row && row !== 'feature_type\tcolor').sort();
     return textToBytes(`${rows.join('\n')}\n`);
   }
+  // A CLI Session stores its specific-color table with a header; the file the
+  // CLI read, which the rebuild uses, may have none. Rule order is kept.
+  if (path.includes('.diagramOptions.colors.colorTable')) {
+    const rows = bytesToText(bytes).split(/\r?\n/).filter((row) => row.trim()
+      && row !== 'feature_type\tqualifier_key\tvalue\tcolor\tcaption');
+    return textToBytes(`${rows.join('\n')}\n`);
+  }
   if (!normalize) return bytes;
   if (!path.startsWith('$.comparisons') || resource.kind !== 'canonical-tsv') return bytes;
   const rows = bytesToText(bytes).trimEnd().split(/\r?\n/).map((row, index) => index === 0
@@ -5162,7 +5170,7 @@ const normalizedPublicationBytes = async (resource, id, normalize, path) => {
 const publicationResourceIdentity = async (resources, id, normalize, path, cache) => {
   const resourceId = String(id || '').trim();
   if (!resourceId) throw new Error('Canonical request contains an empty resourceId.');
-  const resource = resources?.[resourceId], key = resource?.encoding === 'base64' && !path.includes('.diagramOptions.colors.defaultColors') && (!normalize || !path.startsWith('$.comparisons') || resource.kind !== 'canonical-tsv') ? resource.data : null;
+  const resource = resources?.[resourceId], key = resource?.encoding === 'base64' && !path.includes('.diagramOptions.colors.') && (!normalize || !path.startsWith('$.comparisons') || resource.kind !== 'canonical-tsv') ? resource.data : null;
   const kind = path.includes('.diagramOptions.colors.defaultColors') ? 'default-colors'
     : (path.includes('.diagramOptions.colors.colorTable') ? 'color-table' : String(resource.kind || ''));
   let digest = key ? cache.get(key) : null;

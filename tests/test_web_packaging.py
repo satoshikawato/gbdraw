@@ -511,7 +511,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
         "<i>Nicotiana tabacum</i> chloroplast genome regions",
         "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",
         "Hepatoplasmataceae collinear protein-match blocks",
-        "<i>Vibrio parahaemolyticus</i> and <i>V. alginolyticus</i> collinearity",
+        "Collinearity analysis of multi-replicon bacterial genomes (<i>Vibrio</i> spp.)",
         "Hepatoplasmataceae CDS protein-similarity links",
         "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
         "Majanivirus CDS protein-similarity links",
