@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `34`
+- Contract revision: `35`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -37,7 +37,7 @@ Status: active Product authority
   `PD-OI-071`, `PD-OI-072`, `PD-OI-073`, `PD-OI-074`, `PD-OI-075`,
   `PD-OI-076`, `PD-OI-077`, `PD-OI-078`, `PD-OI-079`, `PD-OI-080`,
   `PD-OI-081`, `PD-OI-082`, `PD-OI-083`, `PD-OI-084`, `PD-OI-085`,
-  `PD-OI-086`, and `PD-OI-087`
+  `PD-OI-086`, `PD-OI-087`, and `PD-OI-088`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -357,6 +357,24 @@ Status: active Product authority
     「既存sidebar workflow」 of `PD-OI-032`. It narrows those items by the two
     buttons only; their other items and the other fields of those records
     retain their scope.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 35 changes: `PD-OI-088` is added
+  (`B / DIALOG_FIRST_BUSY_CHOICE`), with the acceptance contract `OIC-028`,
+  from the Product Decision Owner `satoshikawato`'s replies of `2026-10-09`
+  for OV-225 (on a Session just loaded, a popup color pick waited about 6 s
+  for the Python runtime before its scope dialog opened, with no visible
+  status).
+  - Reply 1, selecting the recommended outcome of the OV-225 question (keep
+    the current order in the 0.14.0 performance pull request, and option (b),
+    dialog first with the dialog busy until its choice commits, as its own
+    change): 「OV-225 のダイアログの順序: 推奨:どおり」
+  - Reply 2, on the complete proposed receipt recorded below:
+    「OV-225: これでいいです」
+  - The receipt narrows no earlier record. It realizes, for these three
+    dialogs, the 「live edit適用中/失敗の通知」 that `PD-OI-037` scenario
+    revision `2` preserves.
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
@@ -4093,6 +4111,51 @@ Decision date: 2026-10-08
 }
 ```
 
+### PD-OI-088: Popup dialog busy until its choice commits
+
+- Concern key: `web.popup-dialog-choice-application`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `B / DIALOG_FIRST_BUSY_CHOICE`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Owner replies of `2026-10-09` quoted verbatim in the
+  Revision 35 entry above. The receipt and JSON below reproduce all nine
+  fields without translation or additional terms. This record does not
+  supersede or narrow another decision. The runtime that implements it merges
+  with it (static Product Contract co-change).
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `b856d6da3f8f3c9b079284e6f542fde09b39d4ce19740aada5912053092264d3`.
+- Acceptance contracts: `OIC-028`. These obligations and the complete selected
+  outcome are jointly required.
+
+```text
+PRODUCT_DECISION
+Concern: web.popup-dialog-choice-application
+Scenario revision: 1
+Choice: B / DIALOG_FIRST_BUSY_CHOICE
+Rationale: 待ち時間を利用者が操作した場所（ダイアログ）に示し、適用中のもう一度のクリックが別の選択を始める競合をなくす。
+Must preserve: ポップアップの色・Legend 名・Reset fill color の各ダイアログの選択肢と結果、1 回の選択が History の 1 ステップであること、Cancel は History に記録しないこと、live edit 適用中/失敗の通知（PD-OI-037）。
+May retire: 色を選んでからダイアログが開くまでの待ち（追加する規則の準備は選択の後に行う）。選択の適用中に、そのダイアログの選択肢・Cancel・Escape・背景クリックで操作できること。
+Accepted residual risk: Session 読み込み直後の最初の選択では、ダイアログが数秒（手元で約 5〜6 s）「Applying an edit…」のまま操作できず、その間は取り消せない。
+Owner: satoshikawato
+Decision date: 2026-10-09
+```
+
+```json
+{
+  "concern": "web.popup-dialog-choice-application",
+  "scenarioRevision": 1,
+  "choice": "B / DIALOG_FIRST_BUSY_CHOICE",
+  "rationale": "待ち時間を利用者が操作した場所（ダイアログ）に示し、適用中のもう一度のクリックが別の選択を始める競合をなくす。",
+  "mustPreserve": "ポップアップの色・Legend 名・Reset fill color の各ダイアログの選択肢と結果、1 回の選択が History の 1 ステップであること、Cancel は History に記録しないこと、live edit 適用中/失敗の通知（PD-OI-037）。",
+  "mayRetire": "色を選んでからダイアログが開くまでの待ち（追加する規則の準備は選択の後に行う）。選択の適用中に、そのダイアログの選択肢・Cancel・Escape・背景クリックで操作できること。",
+  "acceptedResidualRisk": "Session 読み込み直後の最初の選択では、ダイアログが数秒（手元で約 5〜6 s）「Applying an edit…」のまま操作できず、その間は取り消せない。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-09"
+}
+```
+
 ## Acceptance contract catalog
 
 | Contract | Required meaning |
@@ -4124,6 +4187,7 @@ Decision date: 2026-10-08
 | `OIC-025` | `PD-OI-038`: one SVG and Editor retain live commit/rerender, all tabs, availability, History/Session/Export, camera, keyboard, visibility-only Close/Escape, selected tab and Result recovery. At 390×844/740 the canvas uses the available full width and at least 200 px height; content scroll, reachable header/Close/toolbar, short-viewport/soft-keyboard access, and wide side drawer remain required. Pointer/keyboard/browser verification is required; duplicated Preview/SVG/editor is not accepted. |
 | `OIC-026` | `PD-OI-035` and `PD-OI-039`: identity, keyboard Select/Skip, non-rendered candidates, no position-only selection, desktop canvas, focus and transient overlay exclusion remain required with all PD-OI-031/034 outcomes. Compact review retains visible, operable canvas at full available width and at least 200 px height at 390×844/740, scrollable candidates and reachable Apply/Cancel, local no-Worker draft edits, atomic batch validation, failure/error/retry and artifact/orientation/History recovery. Narrow review closes Editor through its owner while retaining tab, disables reopening with a reason until review ends, then permits explicit reopen; wide drag remains. Browser verification must show presentation changes leave draft and Result unchanged. |
 | `OIC-027` | `PD-OI-066`: a live-edited Result agrees with a Result freshly generated from the same draft in the meaning (position, color, text, and visibility) of every edited element, including after Session load and export. Settings shown as Applies on Generate do not change the Result before Generate. A live edit that the Generate compiler cannot reproduce is shown as Applies on Generate instead. |
+| `OIC-028` | `PD-OI-088`: the popup fill-color scope, Legend name, and Reset fill color dialogs open from the saved rules before the rules a choice may add are prepared. A choice is one History step and Cancel records none. From a choice until its step ends, the dialog stays open, its choices and Cancel are disabled, it states that the edit is applying, and no second choice, Cancel, Escape, or backdrop click starts or closes anything; the dialog closes when the step ends. |
 
 These new acceptance entries are obligations for dependent runtime work, not
 claims of completed runtime or browser verification by this authority amendment.

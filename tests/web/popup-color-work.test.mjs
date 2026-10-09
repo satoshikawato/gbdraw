@@ -144,8 +144,9 @@ for (const [name, run, dialogOf] of [
   });
 }
 
-// D-12: from a choice until its History step ends, the dialog stays open and
-// History is busy (its buttons read that); another choice or Cancel does nothing.
+// PD-OI-088 (OIC-028, D-12): from a choice until its History step ends, the
+// dialog stays open and History is busy (its buttons read that); another choice
+// or Cancel does nothing.
 const clickedHashRule = { feat: 'CDS', qual: 'hash', val: 'f0', color: '#222222', cap: 'p' };
 for (const [name, open, dialogOf, choice, savedRules] of [
   ['scope', (setup_) => setup_.pick('#123456'), (setup_) => setup_.featureStyleScopeDialog, 'single', [savedRule]],
