@@ -221,15 +221,32 @@ def test_invalid_svg_keywords_stay_errors(path: str, value: str) -> None:
 @pytest.mark.parametrize(
     ("path", "value"),
     [
-        ("objects.scale.font_weight", "Bold"),
         ("objects.scale.font_weight", "650"),
-        ("objects.legends.text_anchor", "MIDDLE"),
-        ("objects.legends.dominant_baseline", "Central"),
+        ("objects.legends.text_anchor", "middle"),
+        ("objects.legends.dominant_baseline", "central"),
         ("objects.definition.linear.line_styles.name.fill", "rgba(0,0,0,0.5)"),
     ],
 )
-def test_svg_keywords_in_any_case_are_accepted(path: str, value: str) -> None:
+def test_svg_keywords_and_css_colors_are_accepted(path: str, value: str) -> None:
     validate_config_overrides({path: value})
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        ("objects.scale.font_weight", "Bold"),
+        ("objects.legends.text_anchor", "MIDDLE"),
+        ("objects.legends.text_anchor", " middle"),
+        ("objects.legends.dominant_baseline", "Central"),
+    ],
+)
+def test_svg_keywords_keep_svgwrites_case_sensitive_check(path: str, value: str) -> None:
+    # D-20: CairoSVG (PNG/PDF/EPS/PS) compares these keywords case-sensitively
+    # and falls back to start/baseline for "MIDDLE", so a case variant stays an
+    # error, as it was under svgwrite; a color keeps any letter case.
+    with pytest.raises(ValidationError, match=f"{path!r}: {value!r}") as raised:
+        validate_config_overrides({path: value})
+    assert raised.value.diagnostic["configPath"] == path
 
 
 def test_cli_color_option_error(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

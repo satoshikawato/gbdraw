@@ -29,8 +29,9 @@ _EXACT_LEAF_DOMAINS = {
     "objects.scale.interval": ("POSITIVE_INTEGER_OR_AUTO", "expected a positive integer or None"),
 }
 # P10c (D-13, D-14): text leaves written into SVG attributes. A color leaf is a
-# ``fill``, ``stroke`` or ``*_color`` field (``is_user_color``); the keyword
-# leaves below match their SVG/CSS keywords in any letter case.
+# ``fill``, ``stroke`` or ``*_color`` field (``is_user_color``, any letter case);
+# the keyword leaves below match their SVG keywords exactly, as svgwrite did,
+# because CairoSVG compares them case-sensitively.
 _FONT_WEIGHT_KEYWORDS = frozenset({"normal", "bold", "bolder", "lighter", "inherit"})
 _TEXT_ANCHOR_KEYWORDS = frozenset({"start", "middle", "end", "inherit"})
 _DOMINANT_BASELINE_KEYWORDS = frozenset(
@@ -56,7 +57,7 @@ _KEYWORD_LEAF_DOMAINS: dict[str, tuple[str, Callable[[str], bool]]] = {
         "expected an SVG dominant-baseline keyword such as auto, central, middle, or hanging",
         _DOMINANT_BASELINE_KEYWORDS.__contains__,
     ),
-    "font_family": ("expected a non-empty font family list", bool),
+    "font_family": ("expected a non-empty font family list", lambda text: bool(text.strip())),
 }
 
 
@@ -92,7 +93,7 @@ def validate_style_leaf(path: str, value: object, *, prefix: str) -> None:
         if isinstance(value, str) and (
             is_user_color(value)
             if reason == "COLOR"
-            else _KEYWORD_LEAF_DOMAINS[path.rsplit(".", 1)[-1]][1](value.strip().lower())
+            else _KEYWORD_LEAF_DOMAINS[path.rsplit(".", 1)[-1]][1](value)
         ):
             return
         # COLOR is in the Web's reason vocabulary; a keyword error names its path only.
