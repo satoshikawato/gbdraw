@@ -38,7 +38,7 @@ options, schemas, APIs, compatibility rules, formats, and SVG hooks. Common entr
 - [Session and request compatibility](./REFERENCE/session-and-request-compatibility.md)
 - [Output formats and export](./REFERENCE/output-formats-and-export.md)
 - [Recipes](./RECIPES.md)
-- [SVG semantic hooks](./SVG_SEMANTIC_HOOKS.md)
+- [Interactive SVG and semantic hooks](./REFERENCE/interactive-svg-and-semantic-hooks.md)
 
 For Linear Similarity Group alignment, see the [Web controls](./REFERENCE/web-app.md#similarity-group-alignment-in-linear-view),
 [strict CLI behavior](./REFERENCE/command-line.md#strict-similarity-group-alignment),

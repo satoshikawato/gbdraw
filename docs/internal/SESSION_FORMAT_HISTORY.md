@@ -1,12 +1,13 @@
-[Home](./DOCS.md) | [Current compatibility reference](./REFERENCE/session-and-request-compatibility.md) | [CLI inventory](./CLI_Reference.md) | [Python API](./REFERENCE/python-api.md) | [Typed API](./REFERENCE/typed-requests.md) | **Compatibility history**
+# Session format history
 
-# Session and request compatibility history
-
-This page retains the detailed version-by-version migration history for gbdraw
-session files, canonical render requests, and saved LOSAT results. The concise
-[session and request compatibility reference](./REFERENCE/session-and-request-compatibility.md)
-documents current support. Tutorials and the FAQ describe what a user should
-do; release notes record when a format changed.
+Maintainer record of how gbdraw session files, canonical render requests, and
+saved LOSAT results changed, version by version. Until 0.14.0 this file was
+`docs/SESSION_COMPATIBILITY.md`; older plans and pull requests cite it by that
+path and its line numbers. The public
+[session and request compatibility reference](../REFERENCE/session-and-request-compatibility.md)
+documents current support and what a user does with an older file, including
+the [retired inputs](../REFERENCE/session-and-request-compatibility.md#retired-inputs).
+Release notes record when a format changed.
 
 ## Unreleased: Session 46 keeps the settings and the Result of each diagram mode
 
@@ -188,7 +189,7 @@ Session version 44 is unchanged. Canonical request schema 9 adds the required
 target. Each override row names one original-source feature by `recordKey` and
 `biologicalFeatureId` and sets its Feature visibility, Label visibility, or
 label text (see
-[Feature identity overrides](./REFERENCE/typed-requests.md#feature-identity-overrides)).
+[Feature identity overrides](../REFERENCE/typed-requests.md#feature-identity-overrides)).
 Schema-8 requests are read as requests without overrides, and current saves
 write schema 9. The Web app writes an empty array and cannot yet load a request
 whose array is not empty or that has a `featureIdentity` target; it reports
@@ -479,50 +480,8 @@ LOSATP comparison its CLI drew. The accepted session versions remain 27–33,
 
 ## Retired inputs
 
-Fresh CLI and Python requests reject these retired names or values. Supported
-older sessions and canonical request schemas 1–2 migrate them before replay.
-Retired CLI flags exit with status 2 and name their replacement. Retired Python
-fields raise `TypeError`; no alias is accepted. Persisted Session names do not
-change.
-
-| Retired input | Current input |
-|---|---|
-| Circular `--multi_record_size_mode sqrt` | `--multi_record_size_mode auto` |
-| Linear `--label_placement on_feature` | `--label_placement above_feature` |
-| Linear `--track_layout spreadout` / `tuckin` | `--track_layout above` / `below` |
-| `--depth_tick_interval` | `--depth_large_tick_interval` |
-| `--feature_table` | `--feature_visibility_table` |
-| `--collinear_max_gene_gap` | `--collinear_max_unit_gap` |
-| Circular slot `spacing` | `inner_gap_px` and `outer_gap_px` |
-| Circular slot `strict`, `compress`, or `reserve` | No direct replacement; geometry and reservation are derived from `side` |
-| Linear `--protein_blastp_mode pairwise` / `orthogroup` / `collinear` | `--losat losatp --losatp_mode pairwise` / `similarity_groups` / `collinear` |
-| Linear `--protein_blastp_mode none` | Omit it; without `--losat` no protein comparison runs |
-| Linear `--losatp_bin` (`--losatp-bin`) | `--losat_bin` |
-| Linear `--ncbi_blastp_bin` (`--ncbi-blastp-bin`) | `--ncbi_blast_bin` |
-| Linear `--losatp_threads` (`--losatp-threads`) | `--losat_threads` |
-| Linear `--protein_blastp_max_hits` | `--losatp_max_hits` |
-| Linear `--protein_blastp_candidate_limit` | `--losatp_max_target_seqs` |
-| Linear `--align_orthogroup_feature` | `--similarity_alignment_feature` |
-| Linear `--protein_blastp_output FILE` | `--losat_output_dir DIR`, which writes `DIR/losatp.raw.tsv` |
-| `LinearComparisonOptions(protein_mode=...)` | `losat="losatp"` with `losatp_mode="similarity_groups"` / `"collinear"` / `"pairwise"`; `"none"` becomes `losat=None` |
-| `LinearComparisonOptions(blastp_executable=...)` | `ncbi_blast_executable` |
-| `LinearComparisonOptions(candidate_limit=...)` | `max_target_seqs` |
-| `LinearComparisonOptions(orthogroup_member_max_hits=...)` | `member_max_hits` |
-| `LinearComparisonOptions(losat_executable="losat")` | `losat_executable=None` (the new default) |
-| `LinearDiagramOptions(protein_blastp_mode=...)` | `losat_search=LosatSearchOptions(program="losatp", losatp_mode=...)`; `"orthogroup"` becomes `"similarity_groups"` |
-| `LinearDiagramOptions(protein_comparison_pairs=...)` | `LosatSearchOptions(pairs=...)` |
-| `LinearDiagramOptions(losatp_bin=...)` / `ncbi_blastp_bin` / `losatp_threads` | `LosatSearchOptions(runtime=LosatRuntimeOptions(losat_executable=..., ncbi_blast_executable=..., threads=...))` |
-| `LinearDiagramOptions(protein_blastp_max_hits=...)` | `LosatSearchOptions(losatp_max_hits=...)` |
-| `LinearDiagramOptions(protein_blastp_candidate_limit=...)` | `LosatSearchOptions(losatp_max_target_seqs=...)` |
-| `LinearDiagramOptions(orthogroup_member_max_hits=...)` | `LosatSearchOptions(losatp_member_max_hits=...)` |
-| Circular `--conservation_fasta` | `--conservation_sequence` (FASTA, GenBank, or DDBJ); recorded invocations are rewritten |
-| Circular `--conservation_table` column `comparison_fasta` | `comparison_sequence`; Sessions store the resolved table, so they need no rewrite |
-| `CircularDiagramOptions(conservation_fasta_files=...)` | `conservation_sequence_files`; the Session field stays `conservationFastaFiles` |
-
-Current multiword long options use underscore spelling except for the documented
-active aliases. `--annotation-table` remains an alias for
-`--annotation_table`, and `--gc_content_tick_interval` remains an alias for
-`--gc_content_large_tick_interval`.
+The current table of retired CLI, Python, and table names is in the public
+[reference](../REFERENCE/session-and-request-compatibility.md#retired-inputs).
 
 The private `__gbdraw_legacy_spacing` key is read only from canonical request
 schemas 1–2 and is never written by schemas 5–6. Pixel spacing migrates to
@@ -599,15 +558,13 @@ Do not retain a decoded resource path after the `with` block ends. Use
 `with_request_output()` inside the same context when replay needs a different
 prefix, output directory, format, or overwrite policy.
 
-[Home](./DOCS.md) | [Current compatibility reference](./REFERENCE/session-and-request-compatibility.md) | [CLI inventory](./CLI_Reference.md) | [Python API](./REFERENCE/python-api.md) | [Typed API](./REFERENCE/typed-requests.md) | **Compatibility history**
-
 ## Session 41 and request schema 7
 
 The joint format adds requested record rotation, exact non-Auto feature placement,
 and canvas overlap tolerance. Web config retains editable drafts separately from
 the successful request and Result. Session 40 keeps its authority rules; schema 6
 keeps cardinality and row inheritance. See the [current field and migration
-contract](./REFERENCE/session-and-request-compatibility.md#record-rotation-and-feature-placement).
+contract](../REFERENCE/session-and-request-compatibility.md#record-rotation-and-feature-placement).
 
 ## Web binding schema 2
 

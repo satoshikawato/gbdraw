@@ -264,7 +264,7 @@ The internal `gbdraw.render.export.save_figure` compatibility function emits
    exits with status 2 and names its replacement, and a retired Python field
    raises `TypeError` (no alias). Recorded 0.12/0.13 Session arguments are
    rewritten on replay; the complete list is under
-   [Retired inputs](./SESSION_COMPATIBILITY.md#retired-inputs).
+   [Retired inputs](./REFERENCE/session-and-request-compatibility.md#retired-inputs).
 
 | Earlier input | Replacement |
 | --- | --- |

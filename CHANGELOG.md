@@ -961,7 +961,7 @@ and share the Web app's raw search keys. The design and the approved decisions
 are in
 [`docs/internal/LOSAT_CLI_API_DESIGN_PROPOSAL_2026-10-03.md`](./docs/internal/LOSAT_CLI_API_DESIGN_PROPOSAL_2026-10-03.md).
 Retired names and their replacements are listed under
-[Retired inputs](./docs/SESSION_COMPATIBILITY.md#retired-inputs).
+[Retired inputs](./docs/REFERENCE/session-and-request-compatibility.md#retired-inputs).
 
 - **Breaking:** LOSATP CLI flags and Python fields were renamed. Use
   `--losat losatp` with `--losatp_mode similarity_groups|collinear|pairwise`

@@ -1,4 +1,4 @@
-[Documentation home](../DOCS.md) | [Tutorials](../TUTORIALS/README.md) | [Technical documentation](README.md) | [Compatibility history](../SESSION_COMPATIBILITY.md) | [FAQ](../FAQ.md)
+[Documentation home](../DOCS.md) | [Tutorials](../TUTORIALS/README.md) | [Technical documentation](README.md) | [FAQ](../FAQ.md)
 
 # Session and request compatibility
 
@@ -280,8 +280,10 @@ With `--save_session` or `--session_output`, canonical CLI replay writes the
 regenerated Result set at the top level, keeps the other mode's set in
 `otherModeResult` and the saved `ui.mode`, and preserves the editable draft's
 component bytes, order and File metadata. The Web writer instead puts the shown
-mode's set at the top level. The re-save also replaces the shared protein
-artifacts, as the [compatibility history](../SESSION_COMPATIBILITY.md) lists. A resource whose bytes are unchanged
+mode's set at the top level. The re-save also replaces what both sets share:
+`losatCache` holds the entries the new render returns, `losatDerivedCache` is
+emptied, and `proteinIdentityManifest` and `legacyArtifacts` come from the new
+render. A resource whose bytes are unchanged
 keeps its ID and file name; a resource whose bytes changed is stored under a new
 ID, and resources that nothing names any more are dropped. Explicit Web
 bindings, including null and empty lists, take precedence over historical
@@ -410,9 +412,58 @@ uses its historical inference behavior (ON); new Web state defaults to OFF.
 aliases. Uploaded comparison TSV is never rewritten. Export raw results for a
 durable evidence record; the cache exists to avoid repeated work.
 
-For the version-by-version record of retired input names and saved-result
-formats, see the [compatibility history](../SESSION_COMPATIBILITY.md). Release
-notes record when support changed; this page documents current support.
+Release notes record when support changed;
+this page documents current support.
+
+## Retired inputs
+
+New commands and Python calls reject the names and values below. A Session or
+a canonical request schema 1–2 saved by an earlier release may still use them:
+gbdraw rewrites them before it draws. A retired CLI flag exits with status 2
+and names its replacement. A retired Python field raises `TypeError`; there is
+no alias. Field names stored inside a Session file do not change.
+
+| Retired input | Current input |
+|---|---|
+| Circular `--multi_record_size_mode sqrt` | `--multi_record_size_mode auto` |
+| Linear `--label_placement on_feature` | `--label_placement above_feature` |
+| Linear `--track_layout spreadout` / `tuckin` | `--track_layout above` / `below` |
+| `--depth_tick_interval` | `--depth_large_tick_interval` |
+| `--feature_table` | `--feature_visibility_table` |
+| `--collinear_max_gene_gap` | `--collinear_max_unit_gap` |
+| Circular slot `spacing` | `inner_gap_px` and `outer_gap_px` |
+| Circular slot `strict`, `compress`, or `reserve` | No direct replacement; geometry and reservation are derived from `side` |
+| Linear `--protein_blastp_mode pairwise` / `orthogroup` / `collinear` | `--losat losatp --losatp_mode pairwise` / `similarity_groups` / `collinear` |
+| Linear `--protein_blastp_mode none` | Omit it; without `--losat` no protein comparison runs |
+| Linear `--losatp_bin` (`--losatp-bin`) | `--losat_bin` |
+| Linear `--ncbi_blastp_bin` (`--ncbi-blastp-bin`) | `--ncbi_blast_bin` |
+| Linear `--losatp_threads` (`--losatp-threads`) | `--losat_threads` |
+| Linear `--protein_blastp_max_hits` | `--losatp_max_hits` |
+| Linear `--protein_blastp_candidate_limit` | `--losatp_max_target_seqs` |
+| Linear `--align_orthogroup_feature` | `--similarity_alignment_feature` |
+| Linear `--protein_blastp_output FILE` | `--losat_output_dir DIR`, which writes `DIR/losatp.raw.tsv` |
+| `LinearComparisonOptions(protein_mode=...)` | `losat="losatp"` with `losatp_mode="similarity_groups"` / `"collinear"` / `"pairwise"`; `"none"` becomes `losat=None` |
+| `LinearComparisonOptions(blastp_executable=...)` | `ncbi_blast_executable` |
+| `LinearComparisonOptions(candidate_limit=...)` | `max_target_seqs` |
+| `LinearComparisonOptions(orthogroup_member_max_hits=...)` | `member_max_hits` |
+| `LinearComparisonOptions(losat_executable="losat")` | `losat_executable=None` (the new default) |
+| `LinearDiagramOptions(protein_blastp_mode=...)` | `losat_search=LosatSearchOptions(program="losatp", losatp_mode=...)`; `"orthogroup"` becomes `"similarity_groups"` |
+| `LinearDiagramOptions(protein_comparison_pairs=...)` | `LosatSearchOptions(pairs=...)` |
+| `LinearDiagramOptions(losatp_bin=...)` / `ncbi_blastp_bin` / `losatp_threads` | `LosatSearchOptions(runtime=LosatRuntimeOptions(losat_executable=..., ncbi_blast_executable=..., threads=...))` |
+| `LinearDiagramOptions(protein_blastp_max_hits=...)` | `LosatSearchOptions(losatp_max_hits=...)` |
+| `LinearDiagramOptions(protein_blastp_candidate_limit=...)` | `LosatSearchOptions(losatp_max_target_seqs=...)` |
+| `LinearDiagramOptions(orthogroup_member_max_hits=...)` | `LosatSearchOptions(losatp_member_max_hits=...)` |
+| Circular `--conservation_fasta` | `--conservation_sequence` (FASTA, GenBank, or DDBJ); recorded invocations are rewritten |
+| Circular `--conservation_table` column `comparison_fasta` | `comparison_sequence`; Sessions store the resolved table, so they need no rewrite |
+| `CircularDiagramOptions(conservation_fasta_files=...)` | `conservation_sequence_files`; the Session field stays `conservationFastaFiles` |
+
+Long options of more than one word use underscores, with two aliases that still
+work: `--annotation-table` for `--annotation_table`, and
+`--gc_content_tick_interval` for `--gc_content_large_tick_interval`.
+
+A Circular slot whose spacing an earlier release stored as a factor still draws.
+Set explicit pixel gaps (`inner_gap_px`, `outer_gap_px`) before you save it in
+the current format; a factor cannot be saved without loss.
 
 ## Record rotation and feature placement
 

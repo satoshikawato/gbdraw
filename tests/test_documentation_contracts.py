@@ -22,7 +22,7 @@ BETA_NOTES = REPO_ROOT / "docs" / "RELEASE_NOTES_0.14.0b0.md"
 SESSION_COMPATIBILITY = (
     REPO_ROOT / "docs" / "REFERENCE" / "session-and-request-compatibility.md"
 )
-COMPATIBILITY_HISTORY = REPO_ROOT / "docs" / "SESSION_COMPATIBILITY.md"
+COMPATIBILITY_HISTORY = REPO_ROOT / "docs" / "internal" / "SESSION_FORMAT_HISTORY.md"
 BROWSER_ACCEPTANCE = REPO_ROOT / "tests" / "run_losat_cache_browser_acceptance.py"
 CURRENT_TASK_DOCS = (
     "docs/CLI_Reference.md",
@@ -137,10 +137,7 @@ def test_current_task_docs_delegate_persisted_format_details_to_one_authority() 
 
     for relative_path in CURRENT_TASK_DOCS:
         text = (REPO_ROOT / relative_path).read_text(encoding="utf-8")
-        assert (
-            "SESSION_COMPATIBILITY.md" in text
-            or "session-and-request-compatibility.md" in text
-        )
+        assert "session-and-request-compatibility.md" in text
         for detail in forbidden_details:
             assert detail not in text, f"{relative_path} repeats {detail}"
 
@@ -154,7 +151,7 @@ def test_current_compatibility_reference_and_history_have_distinct_roles() -> No
     history = COMPATIBILITY_HISTORY.read_text(encoding="utf-8")
 
     assert "this page documents current support" in current
-    assert "# Session and request compatibility history" in history
+    assert "# Session format history" in history
     assert "documents current support" in history
     assert "This page is the current compatibility reference" not in history
 
