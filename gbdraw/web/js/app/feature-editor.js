@@ -58,7 +58,8 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  * @property {() => any} projectFeatureEdits
  *   The root's projection of loaded feature edits onto the displayed Result (R3).
  * @property {(payload: Record<string, any>, options?: Record<string, any>) => Promise<Record<string, any>>} evaluateLabelRules
- *   The root's Python evaluation of Label TSV rows against the displayed labels (R7). * @property {ReadUserDefaultColorPort} readUserDefaultColor
+ *   The root's Python evaluation of Label TSV rows against the displayed labels (R7).
+ * @property {ReadUserDefaultColorPort} readUserDefaultColor
  * @property {SetDefaultColorPort} setDefaultColor
  */
 

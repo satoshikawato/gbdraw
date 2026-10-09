@@ -10,6 +10,7 @@ import { createRulePreparation, runWhenPrepared } from '../../gbdraw/web/js/app/
 import { createFeatureColorActions } from '../../gbdraw/web/js/app/feature-editor/color-actions.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { createDialogChoice } from '../../gbdraw/web/js/app/history-inputs.js';
+import { createResultsManager } from '../../gbdraw/web/js/app/results.js';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
 const ref = (value) => ({ value });
@@ -93,15 +94,16 @@ const setup = ({
   });
   // app-setup.js: `createDialogChoice(...)`.
   const dialogChoice = createDialogChoice({ mutationPending: history.mutationPending, runUndoable: history.runUndoable, ref });
+  // app-setup.js: the palette owner's ports (D-15).
+  const palette = createResultsManager({ state, closeAfterDialogChoice: dialogChoice.closeAfterChoice });
   const actions = createFeatureColorActions({
     state, nextTick: async () => {}, onLegendGeometryChanged: () => {}, extractLegendEntries: () => {},
     getFeatureElements: () => [], getFeatureFillElements: () => [],
     closeAfterDialogChoice: dialogChoice.closeAfterChoice,
-    // results.js: the palette owner's user default colors (D-15).
-    readUserDefaultColor: (_drawing, key) => userColors[key] ?? null,
+    readUserDefaultColor: palette.readUserDefaultColor,
     setDefaultColor: (drawing, key, color) => {
       stages.push('setDefaultColor');
-      drawing.currentColors.value = { ...drawing.currentColors.value, [key]: color };
+      palette.setDefaultColor(drawing, key, color);
     },
     ruleActions: {
       runWithRuleMatches: (rules, commit) => runWhenPrepared(state, () => [preparation.prepare(rules)], commit),
@@ -273,6 +275,14 @@ for (const queued of [false, true]) test(`Apply to all on a palette row sets the
     'history:buildIntent', 'history:signature'
   ]);
   assert.equal(setup_.state.currentColors.value.CDS, '#123456');
+  // The shown Result takes the color now; with a queued palette, the queued
+  // colors take it too and the applied palette stays (Q1 B).
+  assert.equal(setup_.state.appliedPaletteColors.value.CDS, '#123456');
+  assert.equal(setup_.state.appliedPaletteName.value, 'default');
+  assert.deepEqual(
+    { pending: setup_.state.pendingPaletteName.value, queuedCDS: setup_.state.pendingPaletteColors.value.CDS },
+    queued ? { pending: 'forest', queuedCDS: '#123456' } : { pending: '', queuedCDS: undefined }
+  );
   assert.deepEqual(setup_.manualSpecificRules, []);
   assert.equal('CDS' in setup_.state.legendColorOverrides, false);
   assert.equal(setup_.featureStyleScopeDialog.show, false);

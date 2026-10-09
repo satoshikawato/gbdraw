@@ -1,7 +1,7 @@
 // OV-193 (R14-3, counts not timings): with K features and K `hash` rules, a
 // whole-feature pass over the rule matches and the "All features with legend
-// item" commit on the row those rules draw read each feature and build each
-// rule key a bounded number of times, so their work grows linearly with K.
+// item" commit read each feature and build each rule key a bounded number of
+// times, so their work grows linearly with K.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
@@ -98,7 +98,10 @@ test('"All features with legend item" over K features with K hash rules does O(K
     const preparation = createRulePreparation({ state, evaluate: evaluateHashRules });
     assert.equal(await preparation.prepare(rules), true);
     let committed = null;
-    const featureStyleScopeDialog = { show: true, feat: features[0], color: '#abcdef', legendName: 'CDS' };
+    // Not a palette row (D-15): the choice writes one rule per feature.
+    const featureStyleScopeDialog = {
+      show: true, feat: features[0], color: '#abcdef', legendName: 'CDS', defaultColorType: null
+    };
     Object.assign(state, {
       results: ref([]), selectedResultIndex: ref(0), svgContainer: ref(null), clickedFeature: ref(null),
       featureStyleScopeDialog, resetColorDialog: {}, legendRenameDialog: {}, originalLegendOrder: ref([]),
@@ -119,7 +122,7 @@ test('"All features with legend item" over K features with K hash rules does O(K
         findMatchingRegexRule: () => null, getDisplayedFeatureLabel: () => '', getIndividualFeatureLabel: () => '',
         getEffectiveLegendCaption: caption, effectiveLegendCaptions: () => caption,
         getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
-        getLabelSpecificRule: () => null, getLegendRowRules: () => rules
+        getLabelSpecificRule: () => null, getLegendRowRules: () => []
       }
     });
     measured.push(await count_.measure(() => actions.handleColorScopeChoice('caption')));
