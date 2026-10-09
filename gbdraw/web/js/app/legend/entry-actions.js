@@ -4,26 +4,15 @@ import { normalizeOptionalHexColor, resolveColorToHex, toNativeColorInputValue }
 import {
   defaultLegendCaptionOrder,
   getAllFeatureLegendGroups,
-  getVisibleFeatureLegendGroup,
   isLegendOrderEdited,
-  legendRowShown,
   recordedLegendOrder,
-  parseTransformXY
+  resultLegendRows
 } from '../../services/legend-svg.js';
 import { diffLegendIntents, legendRowRules } from '../../services/specific-color-rules.js';
 
 const normalizedColor = (value) => {
   const resolved = String(resolveColorToHex(String(value || '').trim()) || value || '').trim().toLowerCase();
   return resolved.startsWith('#') ? toNativeColorInputValue(resolved) : resolved;
-};
-
-const directLegendEntryGroups = (targetGroup) => {
-  const direct = Array.from(targetGroup?.children || []).filter(
-    (child) => child.tagName?.toLowerCase() === 'g' && child.hasAttribute?.('data-legend-key')
-  );
-  return direct.length > 0
-    ? direct
-    : Array.from(targetGroup?.querySelectorAll?.('g[data-legend-key]') || []);
 };
 
 const legendCaption = (entry) => String(entry?.caption || '').trim();
@@ -76,10 +65,6 @@ export const createLegendEntryActions = ({
   /** @type {((options?: { commit?: boolean }) => unknown) | null} */
   let legendGeometryChangedHandler = null;
 
-  const targetGroupKey = (targetGroup, index) => (
-    String(targetGroup?.id || targetGroup?.parentElement?.id || `legend-target-${index}`)
-  );
-
   // The generated inventory of Legend captions in Python's order, per Result
   // (OV-47): each Result has its own order, so the displayed Result's order is
   // `originalLegendOrder`, and the others wait here under their runtime
@@ -98,17 +83,6 @@ export const createLegendEntryActions = ({
   /** @param {{ commit?: boolean }} [options] */
   const onLegendGeometryChanged = (options) => legendGeometryChangedHandler?.(options);
 
-  const captureLegendEntryOwners = () => {
-    const svg = svgContainer.value?.querySelector?.('svg');
-    return svg ? getAllFeatureLegendGroups(svg).map((group, index) => ({
-      target: targetGroupKey(group, index),
-      entries: directLegendEntryGroups(group).map(entry => ({
-        caption: String(entry.getAttribute('data-legend-key') || '').trim(),
-        owner: String(entry.getAttribute('data-legend-owner') || '')
-      }))
-    })) : [];
-  };
-
   // B19 (D-07, D-08): a History step made on another batch Result. Its
   // restored list describes that Result, so the displayed Result's list is
   // written from the rows it shows and the step's shared Legend intent, from
@@ -124,7 +98,7 @@ export const createLegendEntryActions = ({
     const svg = svgContainer.value?.querySelector?.('svg');
     const restored = drawing.legendEntries.value || [];
     if (!svg || results.value.length < 2 || !Array.isArray(from)) return false;
-    const mounted = readMountedLegend(svg, restored, drawing.dormantLegendEntries.value || []);
+    const mounted = listLegendRows(svg, { entries: restored, dormant: drawing.dormantLegendEntries.value || [], asShown: true });
     if (!mounted) return false;
     const fromCaptions = new Set(from.map(legendCaption));
     if (mounted.entries.length === fromCaptions.size && mounted.entries.every((entry) => fromCaptions.has(entry.caption))) {
@@ -258,84 +232,74 @@ export const createLegendEntryActions = ({
     };
   };
 
+  // The drawing's Legend intent that names a Result's rows.
+  /** @param {DrawingState} drawing */
+  const legendIntentOf = (drawing) => ({
+    entries: drawing.legendEntries.value || [],
+    dormant: drawing.dormantLegendEntries.value || [],
+    deleted: drawing.deletedLegendEntries.value || [],
+    inventory: originalLegendOrder.value || []
+  });
+
   /**
-   * Read the Legend of a mounted Result: its entries in visual order and the
-   * captions the renderer generated (not the editor's direct entries). The one
-   * reader of a mounted Legend; `previousEntries` keep stroke, feature ids,
-   * and the generated caption of a renamed entry; a renamed row an earlier
-   * Generate hid (`dormantEntries`, OV-120) keeps its generated caption too.
+   * The drawing's Legend list on the rows of a Result (U3b: one direction,
+   * intent to shown rows). A row of Python's is Python's key: the record a
+   * rename keeps, else the key of the intent entry that names the row (a
+   * Result saved before U3a has no record). It is listed unless the intent
+   * deletes that key, named by the intent's rename of it (else a dormant one,
+   * OV-120), and keeps that entry's feature ids. An editor row is listed when
+   * the intent lists it. The Result gives the rows' order and the paint the
+   * executor showed from the intent. `asShown` lists the rows the Result shows
+   * under the keys they show (B19 reads the list a Result showed). Also the
+   * generated captions: the keys of the listed rows of Python's.
    * @param {SVGSVGElement} svg
-   * @param {Record<string, any>[]} previousEntries
-   * @param {Record<string, any>[]} [dormantEntries]
+   * @param {{ entries: Record<string, any>[], dormant?: Record<string, any>[], deleted?: Record<string, any>[],
+   *   inventory?: string[], asShown?: boolean }} intent
    */
-  const readMountedLegend = (svg, previousEntries, dormantEntries = []) => {
-    const targetGroup = getVisibleFeatureLegendGroup(svg);
-    if (!targetGroup) return null;
-
-    const entries = [];
+  const listLegendRows = (svg, { entries, dormant = [], deleted = [], inventory = [], asShown = false }) => {
+    const rows = resultLegendRows(svg);
+    if (!rows) return null;
+    const known = new Set(inventory);
+    const deletedKeys = new Set(deleted.map(generatedCaption).filter((key) => known.has(key)));
+    /** @param {(entry: Record<string, any>) => boolean} test */
+    const intentEntry = (test) => entries.find(test) || dormant.find(test);
+    // The compile renames a key the inventory lists (else the entry is an
+    // editor row), and a dormant row wherever it is drawn again.
+    /** @param {string} key */
+    const renameOf = (key) => entries.find((entry) => (
+      known.has(key) && generatedCaption(entry) === key && legendCaption(entry) !== key
+    )) || dormant.find((entry) => generatedCaption(entry) === key);
+    /** @type {Record<string, any>[]} */
+    const listed = [];
+    /** @type {Set<string>} */
     const generatedCaptions = new Set();
-
-    const entryGroups = targetGroup.querySelectorAll('g[data-legend-key]');
-    entryGroups.forEach((entryGroup) => {
-      const caption = entryGroup.getAttribute('data-legend-key');
-      if (!caption || !legendRowShown(entryGroup)) return;
-
-      let color = '#cccccc';
-      const paths = entryGroup.querySelectorAll('path');
-      for (const path of paths) {
-        const fill = path.getAttribute('fill');
-        if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-          color = fill;
-          break;
-        }
+    rows.forEach((row) => {
+      if (asShown ? !row.shown : !row.pythonShown) return;
+      const named = row.recordedKey === null ? intentEntry((entry) => legendCaption(entry) === row.key) : null;
+      if (row.editor) {
+        if (!named && !asShown) return;
+      } else {
+        const key = row.recordedKey ?? (named ? generatedCaption(named) : row.key);
+        if (!asShown && deletedKeys.has(key)) return;
+        const caption = asShown ? row.key : (legendCaption(renameOf(key)) || legendCaption(named) || key);
+        const entry = intentEntry((each) => generatedCaption(each) === key && legendCaption(each) === caption)
+          || intentEntry((each) => generatedCaption(each) === key);
+        generatedCaptions.add(key);
+        listed.push({
+          caption, originalCaption: key, color: row.color, xPos: row.xPos, yPos: row.yPos, featureIds: entry?.featureIds || []
+        });
+        return;
       }
-
-      let xPos = 0,
-        yPos = 0;
-      const groupTransform = parseTransformXY(entryGroup.getAttribute('transform'));
-      const textEl = entryGroup.querySelector('text');
-      if (textEl) {
-        const textTransform = parseTransformXY(textEl.getAttribute('transform'));
-        xPos = groupTransform.x + textTransform.x;
-        yPos = groupTransform.y + textTransform.y;
-      } else if (groupTransform.x !== 0 || groupTransform.y !== 0) {
-        xPos = groupTransform.x;
-        yPos = groupTransform.y;
-      }
-
-      const existingEntry = previousEntries.find((entry) => (
-        entry.caption === caption
-        && normalizedColor(entry.color) === normalizedColor(color)
-      )) || dormantEntries.find((entry) => entry.caption === caption);
-      const existingFeatureIds = existingEntry?.featureIds || [];
-      const originalCaption = existingEntry?.originalCaption || caption;
-      if (entryGroup.getAttribute('data-legend-owner') !== 'direct-editor') {
-        generatedCaptions.add(originalCaption);
-      }
-
-      entries.push({
-        caption,
-        originalCaption,
-        color,
-        xPos,
-        yPos,
-        featureIds: existingFeatureIds
+      listed.push({
+        caption: row.key,
+        originalCaption: named ? generatedCaption(named) : row.key,
+        color: row.color,
+        xPos: row.xPos,
+        yPos: row.yPos,
+        featureIds: named?.featureIds || []
       });
     });
-
-    const visuallySortedEntries = [...entries].sort((a, b) => {
-      const yDelta = a.yPos - b.yPos;
-      if (Math.abs(yDelta) < 1) {
-        const xDelta = a.xPos - b.xPos;
-        if (Math.abs(xDelta) < 1) {
-          return a.caption.localeCompare(b.caption, undefined, { sensitivity: 'base' });
-        }
-        return xDelta;
-      }
-      return yDelta;
-    });
-
-    return { entries: visuallySortedEntries, generatedCaptions };
+    return { entries: listed, generatedCaptions };
   };
 
   // The inventory after a draw: while an edited order is replayed, the
@@ -400,8 +364,8 @@ export const createLegendEntryActions = ({
     });
   };
 
-  // A Result about to be displayed has no inventory yet: read it from the
-  // mounted Legend as the renderer drew it. The stored SVG of a Result changes
+  // A Result about to be displayed has no inventory yet: the Python keys of
+  // the rows the drawing lists on it, as the renderer drew them. The stored SVG of a Result changes
   // only through edits made while it is displayed, so this runs before the
   // editor intent is projected onto it. The displayed Result keeps its own
   // inventory in `originalLegendOrder` until `adoptResultInventory`.
@@ -415,7 +379,7 @@ export const createLegendEntryActions = ({
     pruneResultInventories(liveResultIdentities);
     const stored = inventoryByResult.get(identity);
     if (!identity || stored) return stored || [];
-    const mounted = readMountedLegend(svg, drawing.legendEntries.value || [], drawing.dormantLegendEntries.value || []);
+    const mounted = listLegendRows(svg, legendIntentOf(drawing));
     // A Result whose rows were reordered keeps Python's order as a record (L1).
     const recorded = recordedLegendOrder(svg);
     const inventory = mounted
@@ -453,6 +417,8 @@ export const createLegendEntryActions = ({
     else inventoryByResult.set(identity, [...originalLegendOrder.value]);
   };
 
+  // The drawing's Legend list on the displayed Result (`listLegendRows`), and
+  // after a draw the inventory and the dormant renames it leaves.
   /** @param {{ replaceGeneratedInventory?: boolean, liveResultIdentities?: string[] }} [options] */
   const extractLegendEntries = ({ replaceGeneratedInventory = false, liveResultIdentities = [] } = {}) => {
     const drawing = state.activeDrawing();
@@ -469,7 +435,7 @@ export const createLegendEntryActions = ({
 
     const previousEntries = drawing.legendEntries.value || [];
     const previousDormant = drawing.dormantLegendEntries.value || [];
-    const mounted = readMountedLegend(svg, previousEntries, previousDormant);
+    const mounted = listLegendRows(svg, legendIntentOf(drawing));
     if (!mounted) {
       drawing.legendEntries.value = [];
       return;
@@ -605,7 +571,6 @@ export const createLegendEntryActions = ({
   return {
     adoptRestoredLegend,
     adoptResultInventory,
-    captureLegendEntryOwners,
     captureResultInventory,
     deleteLegendEntry,
     extractLegendEntries,

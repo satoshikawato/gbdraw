@@ -156,7 +156,7 @@ const dragFixture = () => {
 
   try {
     const { legend, state, svg } = dragFixture();
-    const actions = createLegendDragActions({ state, extractLegendEntries: () => {} });
+    const actions = createLegendDragActions({ state });
     actions.refreshLegendDragAffordances();
     assert.equal(legend.style.cursor, 'grab');
     assert.equal(legend.getAttribute('class'), 'gbdraw-preview-layout-target');

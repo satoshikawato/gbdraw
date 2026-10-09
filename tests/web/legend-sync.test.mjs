@@ -309,17 +309,13 @@ const mockLegendEntry = (caption, color, x) => {
       {
         caption: 'Gamma',
         color: '#778899',
-        featureIds: []
+        featureIds: ['feature-unsafe']
       }
     ],
-    'the sanitized mounted legend remains visual authority and mismatched metadata is ignored'
+    'the paint is the sanitized Result\'s, and each row keeps the feature ids of its key (U3b)'
   );
   assert.equal(state.legendEntries.value.some((entry) => Object.hasOwn(entry, 'showStroke')), false,
     'the Stroke options disclosure is view state, not a Legend entry field (OV-157)');
-  // U3b removes the owner capture; History no longer reads it.
-  assert.deepEqual(actions.captureLegendEntryOwners(), [{
-    target: 'feature_legend', entries: [{ caption: 'Beta', owner: '' }, { caption: 'Gamma', owner: '' }]
-  }]);
 
   const noOpDirtyMarks = dirtyMarks;
   assert.equal(actions.updateLegendEntryColor(0, '#abcdef'), false);
@@ -357,7 +353,8 @@ const mockLegendEntry = (caption, color, x) => {
 
   // The generated inventory follows the current diagram, independently of
   // explicitly owned rows and the default order of surviving categories.
-  state.legendEntries.value = [];
+  // The intent lists the editor row.
+  state.legendEntries.value = [{ caption: 'Manual', originalCaption: 'Manual', color: '#884422', featureIds: [] }];
   state.originalLegendOrder.value = ['Alpha', 'Beta'];
   state.deletedLegendEntries.value = [{ caption: 'Deleted', originalCaption: 'Deleted' }];
   state.originalLegendOrder.value.push('Deleted');
@@ -676,6 +673,79 @@ const mockLegendEntry = (caption, color, x) => {
   featureLegend.children[0].setAttribute('display', 'none');
   actions.extractLegendEntries();
   assert.deepEqual(state.legendEntries.value.map((entry) => entry.caption), ['CDS', 'GC']);
+}
+
+{
+  // U3b B2: the Legend list is the intent's view of the Result's rows (one
+  // direction). A row is Python's key (its record), listed unless the intent
+  // deletes that key and named by the intent's rename of it; the Result gives
+  // the rows' order and the paint the executor showed.
+  const ref = (value) => ({ value });
+  const svg = new MockElement('svg');
+  const legend = new MockElement('g', { id: 'legend' });
+  const featureLegend = new MockElement('g', { id: 'feature_legend' });
+  legend.appendChild(featureLegend);
+  svg.appendChild(legend);
+  const row = (caption, color, index, attributes = {}) => {
+    const entry = mockLegendEntry(caption, color, index * 70);
+    Object.entries(attributes).forEach(([name, value]) => entry.setAttribute(name, value));
+    featureLegend.appendChild(entry);
+    return entry;
+  };
+  const state = {
+    results: ref([{ name: 'r1.svg', content: 'unchanged' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: () => svg }),
+    adv: {},
+    legendEntries: ref([
+      { caption: 'CDS', originalCaption: 'CDS', color: '#111111', featureIds: ['cds-1'] },
+      { caption: 'Skew+', originalCaption: 'GC skew (+)', color: '#6dded3', featureIds: [] }
+    ]),
+    deletedLegendEntries: ref([]),
+    dormantLegendEntries: ref([]),
+    originalLegendOrder: ref(['CDS', 'GC skew (+)']),
+    originalLegendColors: ref({}),
+    legendStrokeOverrides: {},
+    legendColorOverrides: {},
+    manualSpecificRules: [],
+    skipCaptureBaseConfig: ref(false)
+  };
+  const actions = createLegendEntryActions({
+    state: withDrawings(state), commitActiveResultEdit: () => true, readActiveResultIdentity: () => 'result-1'
+  });
+  const listed = () => state.legendEntries.value.map(({ caption, originalCaption, color, featureIds }) => (
+    [caption, originalCaption, color, featureIds]
+  ));
+  // OV-243: a palette change gives the renamed GC skew row another color at
+  // Generate; the row stays the rename of Python's "GC skew (+)", so the next
+  // Generate renames it again.
+  row('CDS', '#222222', 0);
+  row('Skew+', '#80b1d3', 1, { 'data-gbdraw-base-data-legend-key': 'GC skew (+)' });
+  actions.extractLegendEntries({ replaceGeneratedInventory: true });
+  assert.deepEqual(listed(), [['CDS', 'CDS', '#222222', ['cds-1']], ['Skew+', 'GC skew (+)', '#80b1d3', []]]);
+  assert.deepEqual(state.originalLegendOrder.value, ['CDS', 'GC skew (+)']);
+
+  // A Result that differs from the intent only in its DOM leaves the list to
+  // the intent: a row renamed without the intent keeps its name, a row hidden
+  // without a delete is listed, a row the intent deletes is not, nor an
+  // editor row the intent does not list, nor a row a rule commit retired.
+  featureLegend.children.forEach((entry) => { entry.parentElement = null; });
+  featureLegend.children = [];
+  state.legendEntries.value = [
+    { caption: 'Alpha', originalCaption: 'Alpha', color: '#112233', featureIds: [] },
+    { caption: 'Beta', originalCaption: 'Beta', color: '#445566', featureIds: [] },
+    { caption: 'Gamma', originalCaption: 'Gamma', color: '#778899', featureIds: [] }
+  ];
+  state.deletedLegendEntries.value = [{ caption: 'Gamma', originalCaption: 'Gamma', color: '#778899' }];
+  state.originalLegendOrder.value = ['Alpha', 'Beta', 'Gamma', 'Retired'];
+  row('Stale', '#112233', 0, { 'data-gbdraw-base-data-legend-key': 'Alpha' });
+  row('Beta', '#445566', 1, { display: 'none', 'data-gbdraw-base-display': '' });
+  row('Gamma', '#778899', 2);
+  row('Manual', '#884422', 3, { 'data-legend-owner': 'direct-editor' });
+  row('Retired', '#aa0000', 4, { display: 'none' });
+  state.legendEntries.value = [...state.legendEntries.value];
+  actions.extractLegendEntries();
+  assert.deepEqual(listed().map(([caption, originalCaption]) => [caption, originalCaption]), [['Alpha', 'Alpha'], ['Beta', 'Beta']]);
 }
 
 {

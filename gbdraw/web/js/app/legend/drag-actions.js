@@ -11,8 +11,6 @@ import { replaceLeadingTranslate } from '../../services/svg-transform.js';
 /**
  * @typedef {object} LegendDragActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
- * @property {(options?: { replaceGeneratedInventory?: boolean }) => void} extractLegendEntries
- *   The Legend entry owner's re-read of the mounted Legend.
  * @property {((label?: string, options?: { source?: string, owner?: unknown }) => Promise<any>) | null} [beginHistoryTransaction]
  *   History's begin of one step (R11); resolves to the transaction, or null when History is busy.
  * @property {((transaction: any, options?: Record<string, any>) => Promise<any>) | null} [commitHistoryTransaction]
@@ -24,7 +22,6 @@ import { replaceLeadingTranslate } from '../../services/svg-transform.js';
 /** @param {LegendDragActionsOptions} options */
 export const createLegendDragActions = ({
   state,
-  extractLegendEntries,
   beginHistoryTransaction = null,
   commitHistoryTransaction = null,
   commitActiveResultEdit = null
@@ -171,9 +168,9 @@ export const createLegendDragActions = ({
     setElementCursor(legendGroup, legendDragging.value ? 'grabbing' : isLayoutRepositionModeEnabled() ? 'grab' : 'help');
   };
 
-  const resetLegendPositionOnly = () => {
-    const sessionBusy = state.sessionOperationAvailability?.();
-    if (sessionBusy) return sessionBusy;
+  // Moving the Legend group leaves its rows, so the Legend list stays (U3b).
+  const resetLegendPosition = () => {
+    if (state.sessionOperationAvailability?.()) return;
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
@@ -192,11 +189,6 @@ export const createLegendDragActions = ({
     legendCurrentOffset.y = 0;
 
     commitActiveResultEdit?.('legend-position-reset');
-  };
-
-  const resetLegendPosition = () => {
-    resetLegendPositionOnly();
-    extractLegendEntries();
   };
 
   const setupLegendDrag = () => {
@@ -228,7 +220,6 @@ export const createLegendDragActions = ({
     onLegendDrag,
     refreshLegendDragAffordances,
     resetLegendPosition,
-    resetLegendPositionOnly,
     setupLegendDrag,
     startLegendDrag
   };

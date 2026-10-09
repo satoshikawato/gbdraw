@@ -839,3 +839,25 @@ test('R15-2: a Legend row the editor added in a Session main saved loads, shows,
   expect(await manualRow(), 'Generate keeps the row').toEqual({ entry: { color: '#445566', featureIds: [] }, fills: ['#445566'] });
 });
 
+
+// OV-243 (U3b B2): the Legend list keys a row by Python's key, not by its
+// caption and color, so a renamed row whose color a Generate changes stays the
+// rename of Python's row (R2: no Generate prunes the rename), and a later
+// Legend edit of the row reaches it.
+test('OV-243: a renamed GC skew row keeps its key through a palette change and Generate, and its delete hides it (circular)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await renameRow(page, 'GC skew (+)', 'Skew+');
+  await settleLive(page);
+  await switchPalette(page, 'arctic');
+  const shownRows = async () => (await semanticSnapshot(page)).legend.map((row) => row.caption);
+  for (const run of ['first', 'second']) {
+    await generate(page);
+    expect(await shownRows(), `the ${run} Generate draws the rename`).toContain('Skew+');
+  }
+  await deleteLegendRow(page, 'Skew+');
+  expect(await shownRows(), 'the delete hides the row live').not.toContain('Skew+');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.deletedLegendEntries.map((entry) => [entry.caption, entry.originalCaption])),
+    'the deleted row is the rename of Python\'s row').toEqual([['Skew+', 'GC skew (+)']]);
+  await expectLiveEqualsGenerate(page, { label: 'delete of the renamed GC skew row' });
+});

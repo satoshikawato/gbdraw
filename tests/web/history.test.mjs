@@ -1496,7 +1496,6 @@ const createLayoutPreferences = () => ({
   };
   state.legendEntries = Object.create({ value: [{ caption: 'tRNA', color: '#e8b441' }] });
   state.deletedLegendEntries = Object.create({ value: [] });
-  const entryOwners = [{ target: 'feature_legend', entries: [{ caption: 'tRNA', owner: '' }] }];
   const snapshots = createHistorySnapshotService({
     state: withDrawings(state),
     fileStore,
@@ -1518,14 +1517,14 @@ const createLayoutPreferences = () => ({
       throw new Error('Results must not be serialized for intent');
     }
   });
-  // R13: the Legend and composition owners are created after the snapshot
-  // service and register their captures once they exist. Until then the
-  // intent holds neither capture, as a service without those owners.
+  // R13: the composition owner is created after the snapshot service and
+  // registers its capture once it exists. Until then the intent holds no
+  // capture, as a service without that owner. U3b: the Legend list is intent,
+  // so History captures no Legend row owners.
   const unregisteredIntent = await snapshots.buildHistoryIntent();
-  assert.equal(Object.hasOwn(unregisteredIntent.modes.circular.editorState.legend, 'entryOwners'), false);
   assert.equal(Object.hasOwn(unregisteredIntent.ui, 'compositionUserDeltas'), false);
   assert.throws(() => snapshots.registerCapture('legendOrder', () => []), /Unknown History intent capture: legendOrder/);
-  snapshots.registerCapture('legend', () => entryOwners);
+  assert.throws(() => snapshots.registerCapture('legend', () => []), /Unknown History intent capture: legend/);
   const compositionRecord = { 'result-2': { primary: [[4, 5]] } };
   snapshots.registerCapture('composition', () => compositionRecord);
   const intent = await snapshots.buildHistoryIntent();
@@ -1538,9 +1537,7 @@ const createLayoutPreferences = () => ({
   state.legendEntries.value = [{ caption: 'tRNA', color: '#c026d3' }];
   await snapshots.applyHistoryIntent(intent, { changes: [{ path: ['modes', 'circular', 'editorState'] }] });
   assert.deepEqual(state.legendEntries.value, [{ caption: 'tRNA', color: '#e8b441' }]);
-  entryOwners[0].entries[0].owner = 'specific-color-file';
-  assert.equal(intent.modes.circular.editorState.legend.entryOwners[0].entries[0].owner, '');
-  assert.equal(state.legendEntries.value.some(entry => Object.hasOwn(entry, 'entryOwners')), false);
+  assert.equal(Object.hasOwn(intent.modes.circular.editorState.legend, 'entryOwners'), false);
   assert.equal(forbiddenArtifactBuilds, 0);
   assert.equal(Object.prototype.hasOwnProperty.call(intent, 'results'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(intent, 'runState'), false);

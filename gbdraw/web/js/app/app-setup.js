@@ -1447,8 +1447,6 @@ export const createAppSetup = () => {
     readActiveResultIdentity: () => previewRuntime.getActiveRuntime()?.resultIdentity,
     showLegendStructure: () => showEditorIntent({ domains: LIVE_EDIT_DOMAINS.legendStructure })
   });
-  // History captures register once their owner exists (R13).
-  historySnapshots.registerCapture('legend', legendActions.captureLegendEntryOwners);
   // R13: the palette watcher reacts through the root's palette and rules
   // projection, registered once the style owner it applies through exists.
   /** @type {{ projectPaletteAndRules: FeatureEditorOptions['projectPaletteAndRules'] }} */
@@ -2604,6 +2602,7 @@ export const createAppSetup = () => {
     }
   });
   legendActions.setLegendGeometryChangedHandler(legendLayout.refreshLegendGeometry);
+  // History's capture registers once its owner exists (R13).
   historySnapshots.registerCapture('composition', legendLayout.captureCompositionIntent);
   /** @param {DrawingState} drawing */
   const shouldSyncMountedLabelEditor = (drawing) => (

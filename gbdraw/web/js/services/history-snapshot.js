@@ -42,7 +42,6 @@ const buildFeatureIntentData = (features = {}) => ({
 const buildEditorIntentData = (editorState = {}) => ({
   legend: {
     entries: cloneJsonData(editorState?.legend?.entries) || [],
-    ...(editorState?.legend?.entryOwners ? { entryOwners: cloneJsonData(editorState.legend.entryOwners) } : {}),
     deletedEntries: cloneJsonData(editorState?.legend?.deletedEntries) || [],
     dormantEntries: cloneJsonData(editorState?.legend?.dormantEntries) || [],
     colorOverrides: clonePlainObject(editorState?.legend?.colorOverrides),
@@ -768,8 +767,8 @@ export const createHistorySnapshotService = ({
   // Intent captures of owners created after this service (R13): the
   // composition root registers each once its owner exists. An unregistered
   // capture adds nothing to the intent, as for a service without that owner.
-  /** @type {{ legend: (() => unknown) | null, composition: (() => unknown) | null }} */
-  const captures = { legend: null, composition: null };
+  /** @type {{ composition: (() => unknown) | null }} */
+  const captures = { composition: null };
   const registerCapture = (name, capture) => {
     if (!Object.hasOwn(captures, name)) throw new Error(`Unknown History intent capture: ${name}`);
     captures[name] = typeof capture === 'function' ? capture : null;
@@ -1504,13 +1503,9 @@ export const createHistorySnapshotService = ({
 
   // A History intent holds both drawings (PD-OI-086): an edit changes the
   // shown mode's drawing only, while Reset Settings and Session Load change
-  // both, so Undo restores each drawing as captured. The Legend entry owners
-  // belong to the mounted Result, so only the shown drawing records them.
-  /**
-   * @param {'circular' | 'linear'} drawingMode
-   * @param {boolean} shown
-   */
-  const buildModeIntent = (drawingMode, shown) => {
+  // both, so Undo restores each drawing as captured.
+  /** @param {'circular' | 'linear'} drawingMode */
+  const buildModeIntent = (drawingMode) => {
     const drawing = drawingOfMode(state, drawingMode);
     const config = typeof buildConfigData === 'function'
       ? buildConfigData(drawing)
@@ -1534,7 +1529,6 @@ export const createHistorySnapshotService = ({
       editorState: buildEditorIntentData({
         legend: {
           entries: getRef(drawing.legendEntries, []),
-          ...(shown && captures.legend ? { entryOwners: captures.legend() } : {}),
           deletedEntries: getRef(drawing.deletedLegendEntries, []),
           dormantEntries: getRef(drawing.dormantLegendEntries, []),
           colorOverrides: drawing.legendColorOverrides,
@@ -1561,8 +1555,8 @@ export const createHistorySnapshotService = ({
 
     return cloneJsonData({
       modes: {
-        circular: buildModeIntent('circular', shownMode === 'circular'),
-        linear: buildModeIntent('linear', shownMode === 'linear')
+        circular: buildModeIntent('circular'),
+        linear: buildModeIntent('linear')
       },
       files: buildIntentFilesData(state, drawingOfMode(state, 'linear'), fileStore),
       alignmentState: captureAlignmentState(),
@@ -1762,7 +1756,7 @@ export const createHistorySnapshotService = ({
       alignmentState: captureAlignmentState(),
       drafts: buildDraftIntentData(state),
       fileLegendCaptions: buildFileLegendCaptionData(drawing),
-      otherMode: { mode: otherMode, drawing: buildModeIntent(otherMode, false) },
+      otherMode: { mode: otherMode, drawing: buildModeIntent(otherMode) },
       ...generated,
       editorState
     });

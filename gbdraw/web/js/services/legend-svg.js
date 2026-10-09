@@ -327,6 +327,48 @@ export const legendEntryAnchor = (entryGroup) => {
   return { x: groupOffset.x + targetOffset.x, y: groupOffset.y + targetOffset.y };
 };
 
+/**
+ * A row of a Result's shown feature Legend group, as the Result holds it.
+ * @typedef {object} ResultLegendRow
+ * @property {string} key The key the row shows.
+ * @property {string | null} recordedKey Python's key that a rename keeps as a record; null without one.
+ * @property {boolean} editor A row the Legend editor added.
+ * @property {boolean} pythonShown Python drew it shown: a row a rule commit retired is not.
+ * @property {boolean} shown The row shows.
+ * @property {string} color The fill its swatch shows.
+ * @property {number} xPos
+ * @property {number} yPos
+ */
+
+// The rows of a Result's shown feature Legend group in their visual order
+// (row-major anchors); null without a Legend. The Legend entry owner lists
+// and names them from the drawing's intent.
+/** @param {Element | null | undefined} svg @returns {ResultLegendRow[] | null} */
+export const resultLegendRows = (svg) => {
+  const group = getVisibleFeatureLegendGroup(svg);
+  if (!group) return null;
+  return Array.from(group.querySelectorAll('g[data-legend-key]')).flatMap((row) => {
+    const key = String(row.getAttribute('data-legend-key') || '');
+    if (!key) return [];
+    const anchor = legendEntryAnchor(row);
+    return [{
+      key,
+      recordedKey: row.getAttribute(resultBaseAttribute('data-legend-key')),
+      editor: row.getAttribute('data-legend-owner') === 'direct-editor',
+      pythonShown: pythonDrawnAttribute(row, 'display') !== 'none',
+      shown: legendRowShown(row),
+      color: getLegendEntrySwatch(row)?.getAttribute('fill') || '#cccccc',
+      xPos: anchor.x,
+      yPos: anchor.y
+    }];
+  }).sort((a, b) => {
+    const yDelta = a.yPos - b.yPos;
+    if (Math.abs(yDelta) >= 1) return yDelta;
+    const xDelta = a.xPos - b.xPos;
+    return Math.abs(xDelta) >= 1 ? xDelta : a.key.localeCompare(b.key, undefined, { sensitivity: 'base' });
+  });
+};
+
 export const moveLegendEntryToAnchor = (entryGroup, xPos, yPos) => {
   if (!Number.isFinite(xPos) || !Number.isFinite(yPos)) return false;
   const current = legendEntryAnchor(entryGroup);

@@ -51,7 +51,6 @@ export const createLegendManager = ({
   });
   const dragActions = createLegendDragActions({
     state,
-    extractLegendEntries: entryActions.extractLegendEntries,
     beginHistoryTransaction,
     commitHistoryTransaction,
     commitActiveResultEdit
