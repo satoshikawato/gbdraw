@@ -155,7 +155,14 @@ def conservation_track_gradient_colors(
 ) -> tuple[str, str]:
     normalized_track_color = normalize_conservation_color(track_color)
     if normalized_track_color is None:
-        return normalize_hex_color(default_min_color), normalize_hex_color(default_max_color)
+        min_color = normalize_conservation_color(default_min_color)
+        max_color = normalize_conservation_color(default_max_color)
+        if min_color is None or max_color is None:
+            raise ValidationError(
+                "objects.conservation.min_color and max_color must be colors.",
+                diagnostic={"code": "INPUT_INVALID", "reason": "COLOR"},
+            )
+        return min_color, max_color
     return tint_color(normalized_track_color), normalized_track_color
 
 

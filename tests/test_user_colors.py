@@ -18,6 +18,7 @@ from svgwrite.data.colors import colornames as SVGWRITE_COLOR_NAMES
 from svgwrite.data.typechecker import Full11TypeChecker
 
 from gbdraw import cli
+from gbdraw.analysis.conservation import conservation_track_gradient_colors
 from gbdraw.analysis.depth_tracks import clone_depth_config
 from gbdraw.api.prepared import resolve_feature_inputs
 from gbdraw.api.request_render import _prepare_diagram_inputs
@@ -142,6 +143,17 @@ def test_captioned_color_table_with_alpha_hex_is_a_gbdraw_error(color: str) -> N
     with pytest.raises(ValidationError, match=rf"{color!r} in the color table \(row 2\)") as raised:
         resolve_feature_inputs(color_table=table, default_colors=load_default_colors(""), feature_visibility_table=None)
     assert raised.value.diagnostic == {"code": "TABLE_INVALID", "field": "color", "reason": "COLOR", "row": 2}
+
+
+def test_conservation_default_colors_take_names() -> None:
+    # OV-261: origin/dev raised a raw ValueError for a color name in
+    # objects.conservation.min_color/max_color.
+    assert conservation_track_gradient_colors(
+        None, default_min_color="Red", default_max_color="#8B9CC1"
+    ) == ("#ff0000", "#8b9cc1")
+    for bad in ("rgba(1,2,3,0.5)", ""):
+        with pytest.raises(ValidationError):
+            conservation_track_gradient_colors(None, default_min_color=bad, default_max_color="#8b9cc1")
 
 
 @pytest.mark.parametrize("value", REJECTED)
