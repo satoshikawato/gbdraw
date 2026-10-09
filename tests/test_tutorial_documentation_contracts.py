@@ -112,6 +112,17 @@ def test_tutorial_index_lists_each_project_page_once_with_its_h1() -> None:
         assert heading is not None
         assert label == heading.group(1) == project["title"]
 
+    start_here = TUTORIAL_INDEX.read_text(encoding="utf-8").split("## Start here", 1)[1]
+    start_here = start_here.split("\n## ", 1)[0]
+    assert [
+        _local_target(TUTORIAL_INDEX, raw_target)
+        for _, raw_target in MARKDOWN_LINK_RE.findall(start_here)
+        if raw_target.endswith("-genome-diagram.md")
+    ] == [
+        TUTORIAL_ROOT / "first-circular-genome-diagram.md",
+        TUTORIAL_ROOT / "first-linear-genome-diagram.md",
+    ]
+
 
 def test_procedural_docs_acquire_sequences_from_authoritative_sources() -> None:
     sequence_files = [

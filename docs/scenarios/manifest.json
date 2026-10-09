@@ -66,7 +66,7 @@
     },
     "hepatoplasmataceae-collinear": {
       "page": "docs/TUTORIALS/compare-proteins-losatp-collinear.md",
-      "title": "Find conserved gene order across five Hepatoplasmataceae genomes",
+      "title": "Show where neighboring Hepatoplasmataceae genomes keep the same gene order",
       "figure": "Five complete Hepatoplasmataceae genomes with adjacent LOSATP Collinear blocks",
       "variants": {"gui": "T-GUI-08", "cli": "T-CLI-10", "python": "T-PY-07"},
       "parity": "verified"

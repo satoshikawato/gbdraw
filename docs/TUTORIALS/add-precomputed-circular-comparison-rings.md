@@ -132,7 +132,7 @@ displayed human record is the TLOSATX subject.
 
 The 106-HSP check in Step 4 applies only to the precomputed tables. See
 [filters and direction](../REFERENCE/comparison-programs-thresholds-and-results.md#filters-and-direction)
-for the live search contract.
+for how a search run in gbdraw filters its matches.
 
 ## On the command line
 

@@ -25,8 +25,7 @@ another project from [all Tutorials](./TUTORIALS/README.md).
 ## Technical documentation
 
 Use [Technical documentation](./REFERENCE/README.md) for exact controls, CLI
-options, schemas, APIs, compatibility rules, formats, SVG hooks, and source
-provenance. Common entry points include:
+options, schemas, APIs, compatibility rules, formats, and SVG hooks. Common entry points include:
 
 - [Web app](./REFERENCE/web-app.md)
 - [Command line](./REFERENCE/command-line.md)

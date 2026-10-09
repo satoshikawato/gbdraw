@@ -1,6 +1,6 @@
 [Documentation home](../DOCS.md) | [Tutorials](README.md) | [Get the tutorial inputs](../GETTING_TUTORIAL_DATA.md) | [Technical documentation](../REFERENCE/README.md)
 
-# Find conserved gene order across five Hepatoplasmataceae genomes
+# Show where neighboring Hepatoplasmataceae genomes keep the same gene order
 
 You will run an adjacent LOSATP search across five complete Hepatoplasmataceae
 genomes and draw the Collinear blocks that join neighboring records. Look for
@@ -10,6 +10,10 @@ colored blue or red by orientation, with intensity showing average identity.
 ![Five Hepatoplasmataceae genomes with adjacent Collinear blocks](../images/t-cli-10/losatp_collinear.svg)
 
 *The figure has 2,994 displayed features and 500 Collinear match elements.*
+
+Each block joins protein matches that stay in the same order between two
+adjacent genomes. It shows shared local gene order, not a whole-genome synteny
+or orthology call.
 
 ## Before you start
 

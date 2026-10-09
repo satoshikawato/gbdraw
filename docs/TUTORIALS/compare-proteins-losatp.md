@@ -49,24 +49,16 @@ and start in an empty working directory.
 Starting state: open a fresh gbdraw web app page with no session loaded and no
 files selected.
 
-Use LOSATP **Similarity groups** to compare the five aminoglycoside biosynthetic
-gene-cluster records.
-
-Upload all five GenBank files as whole records. Keep the table order and leave all optional Region fields blank.
-Keep the first four records in their source orientation; turn on
-**Reverse complement** only for `BGC0000713` to reproduce the Gallery layout.
-
-![Five-record BGC comparison aligned to similarity group og_1](../images/t-gui-04/05-comparison-result.png)
-
 ### Step 1: Load the five Linear records
 
 Select **Linear** and **GenBank**. Confirm that **No comparison** is pressed in
 the **Comparison** command group. Upload `BGC0000708.gbk`, then use **Add sequence** in the **Input
 Genomes** header four times and upload the remaining files in the table order.
+Keep each record whole: leave all optional Region fields blank.
 
-For the fifth row, `BGC0000713`, open **Record options** and turn on **Reverse
-complement**. This changes only its display orientation; it does not crop,
-split, or alter the source record.
+In the fifth row, open **Record options** and turn on
+**Reverse complement** only for `BGC0000713`. This changes only its display
+orientation; it does not crop, split, or alter the source record.
 
 ![Five annotated BGC records selected for protein comparison](../images/t-gui-04/01-input-ready.png)
 
@@ -195,14 +187,6 @@ Combined Reset also replaces subsequent manual direction edits on the listed
 records. See the [Web alignment reference](../REFERENCE/web-app.md#similarity-group-alignment-in-linear-view)
 for Custom, exclusions, missing old results and retry details.
 
-The documentation's automated checks of this web app procedure verify these choices, both Reset scopes and Undo
-from the original five inputs. They capture the Keep figure and group popup
-before those optional steps, then restore Keep before downloading the SVG.
-Regenerate the captures with
-`python docs/capture/run_all.py --scenario T-GUI-04 --tier extended`;
-environment and source-verification details are in the
-[capture README](../capture/README.md).
-
 ## On the command line
 
 This recipe compares the five aminoglycoside biosynthetic gene clusters,
@@ -319,9 +303,7 @@ Expected output: the bundled LOSAT runtime performs four adjacent searches and
 writes `bgc_losatp_groups.svg` in the working directory.
 
 Open `bgc_losatp_groups.svg` and compare its record order and link layout with
-the figure at the top of this page.
-
-Your SVG should match the figure at the top of this page. Verify 232 raw rows, 23 Similarity
+the figure at the top of this page. Verify 232 raw rows, 23 Similarity
 groups, and 77 adjacent links. The fifth record should remain reversed, matching
 the web app's alignment.
 
@@ -538,3 +520,6 @@ record aligned on `og_1`.
 - The command and the Python program on this page run in gbdraw's automated
   documentation checks. The checks confirm 232 raw rows, 23 Similarity groups,
   77 adjacent links, and the record order with the fifth record reversed.
+- The web app screenshots are captured automatically from the five inputs,
+  including both Reset scopes and Undo; the
+  [capture README](../capture/README.md) explains how to regenerate them.

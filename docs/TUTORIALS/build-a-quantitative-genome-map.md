@@ -150,7 +150,7 @@ are meaningful even without a separate tick axis.
 
 #### Place the track stack explicitly
 
-The slot declarations establish one owner for the feature axis, then put depth,
+The slot declarations place the features on one axis, then put depth,
 GC content, and GC skew inside it in that order. The feature slot deliberately
 keeps gbdraw's default width; only the three quantitative series need explicit
 widths.
