@@ -166,9 +166,23 @@ def test_conservation_default_colors_take_names() -> None:
     assert conservation_track_gradient_colors(
         None, default_min_color="Red", default_max_color="#8B9CC1"
     ) == ("#ff0000", "#8b9cc1")
-    for bad in ("rgba(1,2,3,0.5)", ""):
-        with pytest.raises(ValidationError):
-            conservation_track_gradient_colors(None, default_min_color=bad, default_max_color="#8b9cc1")
+
+
+@pytest.mark.parametrize("bad", ["none", "transparent", "rgba(1,2,3,0.5)", ""])
+@pytest.mark.parametrize("leaf", ["min_color", "max_color"])
+def test_conservation_default_color_error_names_its_config_path(leaf: str, bad: str) -> None:
+    # F7: a COLOR leaf the config accepts (none, transparent, rgba()) but the
+    # ring's hex domain rejects stops with a classified error naming the leaf.
+    from gbdraw.web_support.error_adapter import serialize_web_error
+
+    defaults = {"default_min_color": "#d6e2f0", "default_max_color": "#8b9cc1", f"default_{leaf}": bad}
+    with pytest.raises(ValidationError) as raised:
+        conservation_track_gradient_colors(None, **defaults)
+    path = f"objects.conservation.{leaf}"
+    assert raised.value.diagnostic == {"code": "INPUT_INVALID", "reason": "COLOR", "configPath": path}
+    payload = serialize_web_error(raised.value, operation="generate", stage="render")
+    assert payload["code"] == "INPUT_INVALID"
+    assert payload["context"]["configPath"] == path
 
 
 @pytest.mark.parametrize("value", REJECTED)

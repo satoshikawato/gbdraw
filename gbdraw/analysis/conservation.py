@@ -147,6 +147,25 @@ def normalize_conservation_color(value: object | None) -> str | None:
         raise ValidationError(f"Invalid conservation color {text!r}. Use an SVG color name or #RRGGBB.") from exc
 
 
+def _default_conservation_color(value: object | None, leaf: str) -> str:
+    """A configured default ring color: a config-accepted value this domain rejects names its leaf."""
+
+    path = f"objects.conservation.{leaf}"
+    try:
+        color = normalize_conservation_color(value)
+    except ValidationError as exc:
+        raise ValidationError(
+            f"{path} {str(value).strip()!r} cannot color a conservation ring. Use an SVG color name or #RRGGBB.",
+            diagnostic={"code": "INPUT_INVALID", "reason": "COLOR", "configPath": path},
+        ) from exc
+    if color is None:
+        raise ValidationError(
+            f"{path} must be a color.",
+            diagnostic={"code": "INPUT_INVALID", "reason": "COLOR", "configPath": path},
+        )
+    return color
+
+
 def conservation_track_gradient_colors(
     track_color: object | None,
     *,
@@ -155,14 +174,10 @@ def conservation_track_gradient_colors(
 ) -> tuple[str, str]:
     normalized_track_color = normalize_conservation_color(track_color)
     if normalized_track_color is None:
-        min_color = normalize_conservation_color(default_min_color)
-        max_color = normalize_conservation_color(default_max_color)
-        if min_color is None or max_color is None:
-            raise ValidationError(
-                "objects.conservation.min_color and max_color must be colors.",
-                diagnostic={"code": "INPUT_INVALID", "reason": "COLOR"},
-            )
-        return min_color, max_color
+        return (
+            _default_conservation_color(default_min_color, "min_color"),
+            _default_conservation_color(default_max_color, "max_color"),
+        )
     return tint_color(normalized_track_color), normalized_track_color
 
 
