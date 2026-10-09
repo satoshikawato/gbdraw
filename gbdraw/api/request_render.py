@@ -2187,6 +2187,8 @@ def _prepare_linear_artifacts(
     records: tuple[SeqRecord, ...],
     artifacts: CurrentRequestArtifacts,
     inputs: PreparedDiagramInputs,
+    *,
+    extraction: ProteinExtractionResult | None,
 ) -> _PreparedLinearArtifacts:
     current_protein = tuple(
         entry
@@ -2218,7 +2220,8 @@ def _prepare_linear_artifacts(
             source_mode="none",
         )
 
-    extraction = _extract_linear_request_proteins(request, records, inputs)
+    if extraction is None:
+        extraction = _extract_linear_request_proteins(request, records, inputs)
     manifest = extraction.identity_manifest
     assert manifest is not None
     reusable_current = tuple(
@@ -2603,6 +2606,17 @@ def build_request_plan_diagram(
 ) -> PreparedDiagramRequest | PreparedCircularBatchRequest:
     """Build a previously resolved plan without loading or planning it again."""
 
+    return _build_request_plan_diagram(plan, artifacts=artifacts)
+
+
+def _build_request_plan_diagram(
+    plan: DiagramRequestPlan,
+    *,
+    artifacts: CurrentRequestArtifacts | None,
+    protein_extraction: ProteinExtractionResult | None = None,
+) -> PreparedDiagramRequest | PreparedCircularBatchRequest:
+    """Build ``plan``; ``protein_extraction`` is one its caller already ran on it."""
+
     if not isinstance(
         plan,
         (CircularRequestPlan, CircularBatchRequestPlan, LinearRequestPlan),
@@ -2664,6 +2678,7 @@ def build_request_plan_diagram(
                 records,
                 current_artifacts,
                 plan.inputs,
+                extraction=protein_extraction,
             )
         with _request_render_diagnostic_phase("drawing"):
             linear_build = plan.build(

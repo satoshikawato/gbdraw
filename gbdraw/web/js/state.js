@@ -319,6 +319,9 @@ const downloadDpi = ref(defaultEditorDraftState.downloadDpi);
 const extractedFeatures = ref([]); // Features from last generation
 const biologicalFeatures = ref([]); // Complete source catalog, including non-rendered features
 const featureCatalog = ref(null); // Validated schema-4 metadata for committed Results
+// Whether the rule preparation (app/rule-matching.js) is matching rules; it
+// records the matches, which live on the feature objects, before this falls back.
+const ruleMatchingPending = ref(false);
 const specificRuleQualifierSuggestions = computed(() =>
   collectSpecificColorQualifierSuggestions(extractedFeatures.value, activeDrawing().manualSpecificRules)
 );
@@ -647,18 +650,30 @@ const newFeatureToAdd = ref(defaultEditorDraftState.newFeatureToAdd);
 // without a catalog lists the features it renders. A batch Result shows one
 // record, so the record picker appears only when the displayed Result shows
 // several records (FE-03).
+// The list reads of the Results only their names (the catalog admission matches
+// them) and the displayed Result's committed metadata. A write of a Result's
+// content (an editor edit, R1) keeps both, so it does not list the features
+// again. The rule matches the drawn state reads are recorded while
+// `ruleMatchingPending` holds, so the list follows its fall.
+const listedResults = computed((previous) => {
+  const list = results.value;
+  const names = list.map((result) => result?.name);
+  const metadata = getCommittedSvgResultMetadata(toRaw(list[selectedResultIndex.value]));
+  return previous?.metadata === metadata && previous.names.length === names.length
+    && previous.names.every((name, index) => name === names[index])
+    ? previous : { list, names, metadata };
+});
 const featureList = computed(() => {
-  const catalogFeatures = resultCatalogFeatures(state);
+  void ruleMatchingPending.value;
+  const { list, names, metadata } = listedResults.value;
+  const catalogFeatures = resultCatalogFeatures(state, selectedResultIndex.value, list);
   if (catalogFeatures) {
-    const metadata = getCommittedSvgResultMetadata(toRaw(results.value[selectedResultIndex.value]));
     return listFeatureRows(catalogFeatures, featureDrawnContext(activeDrawing(), {
       diagramOptions: { selectedFeaturesSet: metadata?.selectedFeatureTypes }
     }));
   }
   const features = extractedFeatures.value;
-  const renderedIds = results.value.length < 2 ? null
-    : getCommittedSvgResultMetadata(toRaw(results.value[selectedResultIndex.value]))
-      ?.renderedFeatureIdentities?.renderedIds;
+  const renderedIds = names.length < 2 ? null : metadata?.renderedFeatureIdentities?.renderedIds;
   return {
     rows: renderedIds instanceof Set ? features.filter((feature) => renderedIds.has(feature.svg_id)) : features,
     drawn: null,
@@ -990,6 +1005,7 @@ export const state = {
   extractedFeatures,
   biologicalFeatures,
   featureCatalog,
+  ruleMatchingPending,
   featuresBySvgId,
   selectedFeatureIds,
   selectedFeatureAnchorId,

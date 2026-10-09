@@ -775,3 +775,21 @@ def test_biological_feature_catalog_keeps_a_source_feature_with_its_own_visibili
     )
     assert [feature["type"] for feature in payload["features"]] == ["CDS"]
     assert [feature["type"] for feature in payload["biological_features"]] == ["source", "CDS"]
+
+
+def test_web_feature_qualifiers_merge_case_variant_keys_like_the_selector() -> None:
+    # OV-249: keys that differ only in case or surrounding space keep every value,
+    # in key order, as rule matching (`selector.qualifiers`) sees them.
+    feature = SeqFeature(
+        FeatureLocation(0, 9, strand=1),
+        type="gene",
+        qualifiers={"Note": ["first"], "note": ["second"], " note ": ["third"], "gene": ["abc"], " ": ["blank"]},
+    )
+    record = SeqRecord(Seq("ATGAAATAA"), id="NC_000249", features=[feature])
+
+    [extracted] = extract_features_from_records_payload([record], selected_features=["gene"])["features"]
+
+    assert extracted["qualifiers"] == {"note": ["first", "second", "third"], "gene": ["abc"]}
+    assert list(extracted["qualifiers"]) == ["note", "gene"]
+    assert extracted["qualifiers"] == extracted["selector"]["qualifiers"]
+    assert extracted["qualifiers"] is not extracted["selector"]["qualifiers"]

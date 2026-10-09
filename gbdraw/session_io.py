@@ -4866,8 +4866,24 @@ def write_session_json(
 
     expanded_payload = expand_session_feature_catalog(payload)
     validate_session(expanded_payload)
-    serialized_payload = compact_session_feature_catalog(expanded_payload)
+    _write_validated_session_json(path, expanded_payload, overwrite=overwrite)
 
+
+def _write_validated_session_json(
+    path: str | Path,
+    expanded_payload: Mapping[str, Any],
+    *,
+    overwrite: bool,
+) -> None:
+    """Write a session that ``validate_session`` already accepted.
+
+    Only writers whose payload cannot have changed since its validation call
+    this: ``write_session_json`` after validating, a ``SessionDocument`` (validated
+    when it was built), and the CLI sidecar, which writes what
+    ``build_session_json`` returned.
+    """
+
+    serialized_payload = compact_session_feature_catalog(expanded_payload)
     output_path = Path(path)
     temp_path: Path | None = None
     temp_fd: int | None = None
@@ -4891,6 +4907,7 @@ def write_session_json(
                     compresslevel=6,
                     mtime=0,
                 ) as compressed_file:
+                    # Streamed: the gzip bytes depend on the write chunks.
                     with io.TextIOWrapper(compressed_file, encoding="utf-8") as text_file:
                         json.dump(
                             serialized_payload,
@@ -4904,11 +4921,13 @@ def write_session_json(
             text_file = os.fdopen(temp_fd, "w", encoding="utf-8")
             temp_fd = None
             with text_file:
-                json.dump(
-                    serialized_payload,
-                    text_file,
-                    ensure_ascii=False,
-                    separators=(",", ":"),
+                # json.dumps encodes in C at once; json.dump encodes in Python.
+                text_file.write(
+                    json.dumps(
+                        serialized_payload,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
                 )
                 text_file.flush()
                 os.fsync(text_file.fileno())

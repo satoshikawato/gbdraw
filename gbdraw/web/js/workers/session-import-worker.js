@@ -28,7 +28,7 @@ self.addEventListener('message', async ({ data: { operationId, file, ack } }) =>
     const parseCompleted = performance.now();
     stage = 'reply';
     const replyStarted = performance.now();
-    await sendBoundedJson(data, (part, transfers) => sendPart(operationId, part, transfers), [], { consume: true });
+    await sendBoundedJson(data, (part, transfers) => sendPart(operationId, part, transfers), { consume: true });
     self.postMessage({
       operationId, status: 'ok', characters: text.length,
       timings: { readMs: readCompleted - started, parseMs: parseCompleted - readCompleted,

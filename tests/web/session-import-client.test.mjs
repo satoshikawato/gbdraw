@@ -133,3 +133,34 @@ test('bounded assembly preserves empty containers, batches, Unicode code units a
   clean(worker);
   delete globalThis.Worker;
 });
+
+// Load of a Session whose maps are keyed per feature (protein identity runtime IDs, catalog rows):
+// the Worker's messages and the main thread's acknowledgements follow the payload size, not the keys.
+test('Session Load sends bounded messages by size, not one message and ACK per feature', async () => {
+  const { NodeSessionImportWorker } = await import('./helpers/session-import-node.mjs');
+  const counts = { inbound: {}, outbound: {} };
+  const bump = (side, key) => { counts[side][key] = (counts[side][key] || 0) + 1; };
+  globalThis.Worker = class extends NodeSessionImportWorker {
+    constructor(url, options) {
+      super(url, options);
+      this.addEventListener('message', ({ data }) => bump('inbound', data.status));
+    }
+    postMessage(message) {
+      bump('outbound', message.ack ? 'ack' : 'file');
+      super.postMessage(message);
+    }
+  };
+  const ids = Array.from({ length: 4000 }, (_, index) => `f_${String(index).padStart(64, '0')}`);
+  const session = {
+    format: 'gbdraw-session',
+    proteinIdentityManifest: { recordInstances: { 'record-1': {
+      runtimeIds: Object.fromEntries(ids.map((id, index) => [id, `p_${index}`]))
+    } } },
+    editorState: { featureCatalog: { items: ids.map((id, index) => ({ id, start: index, end: index + 9 })) } }
+  };
+  try {
+    const { data } = await importSessionFile(new Blob([JSON.stringify(session)]));
+    assert.deepEqual(data, session);
+    assert.deepEqual(counts, { inbound: { part: 47, ok: 1 }, outbound: { file: 1, ack: 47 } });
+  } finally { delete globalThis.Worker; }
+});

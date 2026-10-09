@@ -1086,13 +1086,14 @@ const rawValue = (value) => globalThis.window?.Vue?.toRaw ? globalThis.window.Vu
 // The catalog features of one committed Result (the displayed Result by
 // default) from the admitted catalog, or null without a catalog: `biological`
 // in source order, `rendered` by rendered ID, and `renderedByIdentity`, the
-// rendered feature of each source identity the Result draws.
-export const resultCatalogFeatures = (state, resultIndex = state?.selectedResultIndex?.value) => {
+// rendered feature of each source identity the Result draws. `results` is the
+// Result list the admission matches by name (the state's by default).
+export const resultCatalogFeatures = (state, resultIndex = state?.selectedResultIndex?.value, results = state?.results?.value) => {
   const catalog = rawValue(state?.featureCatalog?.value);
   if (!catalog) return null;
   const index = Number(resultIndex) || 0;
   try {
-    const admission = admitFeatureCatalog(catalog, rawValue(state.results?.value) || [], {
+    const admission = admitFeatureCatalog(catalog, rawValue(results) || [], {
       mode: state.generatedMode?.value || ''
     });
     const rendered = admission.renderedFeaturesByResult[index];

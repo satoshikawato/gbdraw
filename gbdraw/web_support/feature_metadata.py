@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import Counter
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import TYPE_CHECKING, Any, Sequence, cast
 
 from Bio import SeqIO
 
@@ -391,12 +391,14 @@ def extract_features_from_records_payload(
 
             selector, stable_svg_id, rendered_stable_svg_id, drawn_selector = selector_values
 
-            qualifiers = {}
-            for q_key, q_vals in feat.qualifiers.items():
-                q_list = _normalize_qualifier_values(q_vals)
-                if not q_list:
-                    continue
-                qualifiers[q_key.lower()] = q_list
+            # The same qualifier map rule matching reads: keys stripped and
+            # lowercased, case variants merged in key order (OV-249).
+            qualifiers = {
+                key: list(values)
+                for key, values in cast(
+                    "dict[str, list[str]]", selector["qualifiers"]
+                ).items()
+            }
 
             feature_payload = {
                 "id": f"f{biological_idx}",

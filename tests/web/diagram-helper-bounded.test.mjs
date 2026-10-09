@@ -7,7 +7,7 @@ globalThis.location = { href: 'https://example.test/gbdraw/web/' };
 class ReplyWorker {
   static instances = [];
   static malformed = false;
-  constructor() { this.listeners = new Map(); this.acks = 0; ReplyWorker.instances.push(this); }
+  constructor() { this.listeners = new Map(); this.acks = 0; this.parts = 0; ReplyWorker.instances.push(this); }
   addEventListener(type, listener) {
     if (!this.listeners.has(type)) this.listeners.set(type, new Set());
     this.listeners.get(type).add(listener);
@@ -32,6 +32,7 @@ class ReplyWorker {
         this.emit({ ...envelope, requestId: message.requestId + 1, status: 'part', kind: 'value', path: [], value: 'stale' });
         await sendBoundedJson(message.payload.expected, (part, transfer = []) => new Promise((resolve) => {
           this.ack = resolve;
+          this.parts++;
           this.emit(structuredClone({ ...envelope, status: 'part', ...part }, { transfer }));
         }));
         this.emit({ ...envelope, ok: true });
@@ -63,4 +64,20 @@ test('a malformed helper part rejects without admitting a partial result or ackn
     assert.equal(worker.terminated, true, 'release the sender waiting for a part acknowledgement');
     for (const listeners of worker.listeners.values()) assert.equal(listeners.size, 0);
   } finally { ReplyWorker.malformed = false; disposeDiagramGenerationWorker(); }
+});
+
+// A Generate helper reply keyed per feature (protein maps, identity manifests): its part messages
+// and acknowledgements follow the reply size, not the number of keys.
+test('helper replies send bounded messages by size, not one message and ACK per feature', async () => {
+  const ids = Array.from({ length: 4000 }, (_, index) => `f_${String(index).padStart(64, '0')}`);
+  const expected = {
+    protein_map: Object.fromEntries(ids.map((id, index) => [id, `p_${index}`])),
+    identity_manifest: { features: ids.map((id, index) => ({ id, start: index, end: index + 9 })) }
+  };
+  try {
+    const response = await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EXTRACT_FIRST_FASTA, { expected });
+    assert.deepEqual(response.result, expected);
+    const worker = ReplyWorker.instances.at(-1);
+    assert.deepEqual({ parts: worker.parts, acks: worker.acks }, { parts: 38, acks: 38 });
+  } finally { disposeDiagramGenerationWorker(); }
 });

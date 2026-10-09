@@ -17,7 +17,7 @@ test('bounded JSON transfers preserve every value, code unit and own unsafe key'
       assert.equal(buffers.length, 1);
       assert.ok(buffers[0].byteLength <= 256 * 1024);
       transfers++;
-    } else assert.ok(Buffer.byteLength(JSON.stringify(part)) < 129 * 1024);
+    } else assert.ok(Buffer.byteLength(JSON.stringify(part)) <= 128 * 1024);
     const reply = structuredClone(part, { transfer: buffers });
     for (const buffer of buffers) assert.equal(buffer.byteLength, 0);
     receiver.receivePart(reply);
@@ -59,15 +59,17 @@ test('owned Worker results release acknowledged branches while preserving the fu
   const expected = structuredClone(source);
   const receiver = createBoundedJsonReceiver();
   let acknowledgedRows = 0;
-  await sendBoundedJson(source, async (part, buffers = []) => {
-    if (part.kind === 'batch' && part.path[0] === 'rows') {
-      assert.ok(source.rows.slice(0, acknowledgedRows).every(item => item === null));
+  await sendBoundedJson(source, async (message, buffers = []) => {
+    // Rows of earlier, acknowledged messages are released (then the whole branch); rows of this message are not yet.
+    assert.ok((source.rows || []).slice(0, acknowledgedRows).every(item => item === null));
+    for (const part of message.kind === 'parts' ? message.parts : [message]) {
+      if (part.kind !== 'batch' || part.path[0] !== 'rows') continue;
       assert.deepEqual(source.rows.slice(part.index, part.index + part.value.length), part.value);
       acknowledgedRows = part.index + part.value.length;
     }
-    receiver.receivePart(structuredClone(part, { transfer: buffers }));
+    receiver.receivePart(structuredClone(message, { transfer: buffers }));
     await new Promise(resolve => setImmediate(resolve));
-  }, [], { consume: true });
+  }, { consume: true });
   assert.ok(acknowledgedRows > 0);
   assert.deepEqual(receiver.getValue(), expected);
   assert.deepEqual(source, {});
@@ -76,9 +78,9 @@ test('owned Worker results release acknowledged branches while preserving the fu
 test('an unacknowledged owned result branch remains available when transport fails', async () => {
   const source = { rows: Array.from({ length: 4000 }, (_, index) => ({ index, text: 'x'.repeat(200) })) };
   const pending = source.rows[0];
-  await assert.rejects(sendBoundedJson(source, async part => {
-    if (part.kind === 'batch') throw new Error('ACK failed');
-  }, [], { consume: true }), /ACK failed/);
+  await assert.rejects(sendBoundedJson(source, async message => {
+    if ((message.parts || [message]).some(part => part.kind === 'batch')) throw new Error('ACK failed');
+  }, { consume: true }), /ACK failed/);
   assert.equal(source.rows[0], pending);
 });
 
@@ -87,14 +89,15 @@ test('bounded Worker byte replies transfer exact canonical bytes in ordered chun
   const source = { canonicalResource: { kind: 'collinearity-result', bytes } };
   const receiver = createBoundedJsonReceiver();
   let transferred = 0;
-  await sendBoundedJson(source, async (part, buffers = []) => {
-    if (part.kind === 'bytes-chunk') {
-      assert.equal(buffers.length, 1);
-      assert.ok(buffers[0].byteLength <= 256 * 1024);
-      transferred += buffers[0].byteLength;
+  await sendBoundedJson(source, async (message, buffers = []) => {
+    const chunks = (message.parts || [message]).filter(part => part.kind === 'bytes-chunk');
+    assert.equal(buffers.length, chunks.length);
+    for (const buffer of buffers) {
+      assert.ok(buffer.byteLength <= 256 * 1024);
+      transferred += buffer.byteLength;
     }
-    receiver.receivePart(structuredClone(part, { transfer: buffers }));
-  }, [], { consume: true });
+    receiver.receivePart(structuredClone(message, { transfer: buffers }));
+  }, { consume: true });
   assert.equal(transferred, bytes.byteLength);
   assert.deepEqual(receiver.getValue().canonicalResource.bytes, bytes);
   assert.deepEqual(source, {});

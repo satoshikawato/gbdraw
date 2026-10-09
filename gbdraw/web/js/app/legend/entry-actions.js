@@ -718,9 +718,11 @@ export const createLegendEntryActions = ({
   };
 
   // The legend rows the specific-color rules draw, prepared on a disposable copy
-  // of the mounted legend (R13). The rule owner runs its transition and then
-  // `apply` in one History step, while `isCurrent` holds; no rule mutation runs
-  // here. Resolves to false when the Result or the caller became stale.
+  // of the mounted legend (R13): the root (its composition metadata) and the
+  // `#legend` group only, the one part this reads and replaces. The rule owner
+  // runs its transition and then `apply` in one History step, while `isCurrent`
+  // holds; no rule mutation runs here. Resolves to false when the Result or the
+  // caller became stale.
   /**
    * @param {Record<string, any>[]} intents
    * @param {{ drawing?: DrawingState, previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean, placement?: { caption: string, at: string } | null }} [options]
@@ -729,9 +731,11 @@ export const createLegendEntryActions = ({
     drawing = state.activeDrawing(), previousFileIntents = [], isCurrent = () => true, placement = null
   } = {}) => {
     const mountedSvg = svgContainer.value?.querySelector('svg');
-    const svg = mountedSvg?.cloneNode(true);
+    const mountedLegendGroup = mountedSvg?.getElementById('legend');
+    const svg = mountedSvg && mountedLegendGroup ? /** @type {SVGSVGElement} */ (mountedSvg.cloneNode(false)) : null;
+    if (svg && mountedLegendGroup) svg.appendChild(mountedLegendGroup.cloneNode(true));
     const targetGroups = svg ? getAllFeatureLegendGroups(svg) : [];
-    if (targetGroups.length === 0) {
+    if (!svg || targetGroups.length === 0) {
       return { diff: { add: [], update: [], remove: [], unchanged: [] }, isCurrent: () => true, apply: () => {} };
     }
 
@@ -825,12 +829,16 @@ export const createLegendEntryActions = ({
       diff,
       isCurrent: () => svgContainer.value.querySelector('svg') === mountedSvg,
       // Mounted geometry and the Result commit synchronously inside History.
+      // An unchanged Legend (an empty diff) is neither laid out nor committed
+      // again; a changed one is laid out and committed once.
       apply: () => {
         const mountedLegend = mountedSvg.getElementById('legend');
         const candidateLegend = svg.getElementById('legend');
-        if (mountedLegend && candidateLegend) mountedLegend.replaceWith(candidateLegend);
-        onLegendGeometryChanged();
-        commitActiveResultEdit?.('legend-file-sync');
+        if (!mountedLegend || !candidateLegend || !mountedLegend.isEqualNode(candidateLegend)) {
+          if (mountedLegend && candidateLegend) mountedLegend.replaceWith(candidateLegend);
+          onLegendGeometryChanged({ commit: false });
+          commitActiveResultEdit?.('legend-file-sync');
+        }
         extractLegendEntries();
       }
     };

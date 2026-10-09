@@ -2,6 +2,7 @@
 const CLONE_LIMIT = 128 * 1024;
 const STRING_UNITS = 128 * 1024;
 const BYTE_CHUNK = 256 * 1024;
+const PART_OVERHEAD = 64;
 const cloneUpperBound = (value, remaining) => {
   if (value instanceof Uint8Array) return remaining + 1;
   if (value === null) return 4;
@@ -19,53 +20,90 @@ const cloneUpperBound = (value, remaining) => {
 
 // Workers may relinquish an exclusively owned parsed result after each ACK.
 // Borrowed values remain unchanged; the receiver always gets the complete graph.
-export const sendBoundedJson = async (value, sendPart, path = [], { consume = false } = {}) => {
-  if (value instanceof Uint8Array) {
-    await sendPart({ kind: 'bytes-start', path, length: value.byteLength });
-    for (let offset = 0; offset < value.byteLength; offset += BYTE_CHUNK) {
-      const bytes = value.slice(offset, offset + BYTE_CHUNK);
-      await sendPart({ kind: 'bytes-chunk', offset, bytes }, [bytes.buffer]);
+// Consecutive parts share one message up to CLONE_LIMIT (a full byte or string chunk travels
+// alone), so messages and ACKs follow the payload size, not its number of keys.
+export const sendBoundedJson = async (value, sendPart, { consume = false } = {}) => {
+  /** @type {any[]} */
+  let parts = [];
+  /** @type {Transferable[]} */
+  let transfers = [];
+  /** @type {(() => void)[]} */
+  const releases = [];
+  let bytes = 0;
+  const flush = async () => {
+    if (parts.length) {
+      const message = parts.length === 1 ? parts[0] : { kind: 'parts', parts };
+      const buffers = transfers;
+      parts = [];
+      transfers = [];
+      bytes = 0;
+      await sendPart(message, buffers);
     }
-    await sendPart({ kind: 'bytes-end' });
-  } else if (cloneUpperBound(value, CLONE_LIMIT) <= CLONE_LIMIT) {
-    await sendPart({ kind: 'value', path, value, whole: path.length === 0 });
-  } else if (typeof value === 'string') {
-    await sendPart({ kind: 'string-start', path });
-    for (let start = 0; start < value.length; start += STRING_UNITS) {
-      const units = new Uint16Array(Math.min(STRING_UNITS, value.length - start));
-      for (let index = 0; index < units.length; index++) units[index] = value.charCodeAt(start + index);
-      await sendPart({ kind: 'string-chunk', units }, [units.buffer]);
-    }
-    await sendPart({ kind: 'string-end' });
-  } else if (Array.isArray(value)) {
-    await sendPart({ kind: 'value', path, value: [] });
-    for (let index = 0; index < value.length;) {
-      const batch = [];
-      let bytes = 2;
-      while (index + batch.length < value.length && batch.length < 64) {
-        const item = value[index + batch.length];
-        const size = cloneUpperBound(item, CLONE_LIMIT - bytes);
-        if (bytes + size > CLONE_LIMIT) break;
-        batch.push(item);
-        bytes += size + 1;
+    // Every queued release belongs to a part acknowledged by now.
+    releases.splice(0).forEach((release) => release());
+  };
+  const emit = async (part, size, buffers = []) => {
+    if (parts.length && bytes + size > CLONE_LIMIT) await flush();
+    parts.push(part);
+    transfers.push(...buffers);
+    bytes += size;
+  };
+  const walk = async (current, path) => {
+    const pathBytes = PART_OVERHEAD + cloneUpperBound(path, CLONE_LIMIT);
+    if (current instanceof Uint8Array) {
+      await emit({ kind: 'bytes-start', path, length: current.byteLength }, pathBytes);
+      for (let offset = 0; offset < current.byteLength; offset += BYTE_CHUNK) {
+        const chunk = current.slice(offset, offset + BYTE_CHUNK);
+        await emit({ kind: 'bytes-chunk', offset, bytes: chunk }, PART_OVERHEAD + chunk.byteLength, [chunk.buffer]);
       }
-      if (batch.length) {
-        await sendPart({ kind: 'batch', path, index, value: batch });
-        if (consume) value.fill(null, index, index + batch.length);
-        index += batch.length;
-      } else {
-        await sendBoundedJson(value[index], sendPart, [...path, index], { consume });
-        if (consume) value[index] = null;
-        index++;
+      await emit({ kind: 'bytes-end' }, PART_OVERHEAD);
+      return;
+    }
+    const size = cloneUpperBound(current, CLONE_LIMIT);
+    if (size <= CLONE_LIMIT) {
+      await emit({ kind: 'value', path, value: current, whole: path.length === 0 }, pathBytes + size);
+    } else if (typeof current === 'string') {
+      await emit({ kind: 'string-start', path }, pathBytes);
+      for (let start = 0; start < current.length; start += STRING_UNITS) {
+        const units = new Uint16Array(Math.min(STRING_UNITS, current.length - start));
+        for (let index = 0; index < units.length; index++) units[index] = current.charCodeAt(start + index);
+        await emit({ kind: 'string-chunk', units }, PART_OVERHEAD + units.byteLength, [units.buffer]);
+      }
+      await emit({ kind: 'string-end' }, PART_OVERHEAD);
+    } else if (Array.isArray(current)) {
+      await emit({ kind: 'value', path, value: [] }, pathBytes);
+      for (let index = 0; index < current.length;) {
+        const batch = [];
+        let batchBytes = 2;
+        while (index + batch.length < current.length && batch.length < 64) {
+          const item = current[index + batch.length];
+          const itemBytes = cloneUpperBound(item, CLONE_LIMIT - batchBytes);
+          if (batchBytes + itemBytes > CLONE_LIMIT) break;
+          batch.push(item);
+          batchBytes += itemBytes + 1;
+        }
+        if (batch.length) {
+          const start = index;
+          await emit({ kind: 'batch', path, index, value: batch }, pathBytes + batchBytes);
+          if (consume) releases.push(() => current.fill(null, start, start + batch.length));
+          index += batch.length;
+        } else {
+          const at = index;
+          await walk(current[at], [...path, at]);
+          if (consume) releases.push(() => { current[at] = null; });
+          index++;
+        }
+      }
+    } else {
+      await emit({ kind: 'value', path, value: {} }, pathBytes);
+      for (const key of Object.keys(current)) {
+        await walk(current[key], [...path, key]);
+        if (consume) releases.push(() => { delete current[key]; });
       }
     }
-  } else {
-    await sendPart({ kind: 'value', path, value: {} });
-    for (const key of Object.keys(value)) {
-      await sendBoundedJson(value[key], sendPart, [...path, key], { consume });
-      if (consume) delete value[key];
-    }
-  }
+  };
+  await walk(value, []);
+  await flush();
 };
 
 export const createBoundedJsonReceiver = () => {
@@ -90,7 +128,7 @@ export const createBoundedJsonReceiver = () => {
     // Preserve own unsafe keys for the admission validator without invoking prototype setters.
     Object.defineProperty(parent, path.at(-1), { value, enumerable: true, writable: true, configurable: true });
   };
-  const receivePart = (part) => {
+  const receiveOne = (part) => {
     if (part.kind === 'value') assignValue(part.path, part.value);
     else if (part.kind === 'bytes-start') {
       if (pendingBytes || !Number.isSafeInteger(part.length) || part.length < 0) throw new Error('Invalid bounded bytes.');
@@ -130,6 +168,11 @@ export const createBoundedJsonReceiver = () => {
       assignValue(pendingString.path, pendingString.chunks.join(''));
       pendingString = null;
     } else throw new Error('Invalid bounded JSON transport part.');
+  };
+  // One message carries one part or a `parts` list of them, never a nested list.
+  const receivePart = (part) => {
+    if (part.kind === 'parts' && Array.isArray(part.parts)) part.parts.forEach(receiveOne);
+    else receiveOne(part);
   };
   return { receivePart, getValue: () => {
     if (candidate === undefined || pendingString || pendingBytes) throw new Error('Incomplete bounded JSON transport.');

@@ -4393,10 +4393,13 @@ export const applyResultsData = (resultsData = [], ui = {}) => {
   }
 };
 
+// The catalog features and groups are read from their raw arrays: the copy
+// (Session, History checkpoint, import rollback) holds the same values, without
+// a reactive read of each of their 10k-40k nested properties.
 /** @param {DrawingState} drawing */
 export const buildFeatureStateData = (drawing) => ({
-  extractedFeatures: sanitizeExtractedFeaturesForSession(state.extractedFeatures.value),
-  biologicalFeatures: sanitizeExtractedFeaturesForSession(state.biologicalFeatures?.value),
+  extractedFeatures: sanitizeExtractedFeaturesForSession(rawReactiveValue(state.extractedFeatures.value)),
+  biologicalFeatures: sanitizeExtractedFeaturesForSession(rawReactiveValue(state.biologicalFeatures?.value)),
   featureRecordIds: cloneJsonData(state.featureRecordIds.value),
   selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
   featureColorOverrides: cloneJsonData(drawing.featureColorOverrides),
@@ -4449,7 +4452,7 @@ const applyDrawingFeatureData = (drawing, features = {}) => {
 
 /** @param {DrawingState} drawing */
 export const buildOrthogroupStateData = (drawing) => ({
-  groups: Array.isArray(state.orthogroups.value) ? cloneJsonData(state.orthogroups.value) : [],
+  groups: Array.isArray(state.orthogroups.value) ? cloneJsonData(rawReactiveValue(state.orthogroups.value)) : [],
   selectedOrthogroupId: String(state.selectedOrthogroupId.value || ''),
   orthogroupNameOverrides: cloneStringMap(drawing.orthogroupNameOverrides),
   orthogroupDescriptionOverrides: cloneStringMap(drawing.orthogroupDescriptionOverrides),

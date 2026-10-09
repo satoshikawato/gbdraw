@@ -114,7 +114,8 @@ from .render.track_slot_metadata import (
     collect_track_slot_geometry_records,
 )
 from .render.output_paths import preflight_output_paths
-from .session_io import load_session, session_to_cli_args
+from .session import load_session_document
+from .session_io import session_to_cli_args
 from .cli_utils.losat_output import (
     parse_positive_int as _parse_positive_int,
     write_losat_output_files,
@@ -1032,9 +1033,9 @@ def linear_main(cmd_args) -> None:
     session_request = parse_session_pre_args(cmd_args, mode="linear")
     if session_request is not None:
         with TemporaryDirectory(prefix="gbdraw-session-") as temp_dir:
-            session = load_session(session_request.session_path)
+            document = load_session_document(session_request.session_path)
             if render_canonical_session_if_present(
-                session,
+                document,
                 mode="linear",
                 output_override=session_request.output,
                 format_override=session_request.format,
@@ -1043,6 +1044,8 @@ def linear_main(cmd_args) -> None:
                 session_output=session_request.session_output,
             ):
                 return
+            # This local document is the only holder of the parsed payload.
+            session = document._data
             run_spec = session_to_cli_args(
                 session,
                 mode="linear",

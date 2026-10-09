@@ -170,35 +170,45 @@ export const createRulePreparation = ({
   const features = () => [...new Set([
     ...(state.extractedFeatures.value || []), ...(state.biologicalFeatures?.value || [])
   ])];
-  const snapshot = () => {
-    const drawing = state.activeDrawing();
-    return {
-      catalog: state.extractedFeatures.value,
-      biology: state.biologicalFeatures?.value,
-      result: state.svgResultIdentity?.value,
-      mode: state.mode?.value,
-      inputKinds: JSON.stringify([state.cInputType?.value, state.lInputType?.value]),
-      rules: JSON.stringify(drawing.manualSpecificRules),
-      file: state.files?.t_color,
-      linearFiles: [...(state.linearSeqs || [])].flatMap(sequence => [sequence.gb, sequence.gff, sequence.fasta]),
-      resultNames: JSON.stringify((state.results?.value || []).map(result => result.name)),
-      selectedResult: state.selectedResultIndex?.value,
-      legend: JSON.stringify(drawing.legendEntries?.value || []),
-      legendColors: JSON.stringify(drawing.legendColorOverrides || {}),
-      legendStrokes: JSON.stringify(drawing.legendStrokeOverrides || {}),
-      featureColors: JSON.stringify(drawing.featureColorOverrides || {}),
-      featureVisibility: JSON.stringify(Object.values(drawing.featureOverrides || {})
-        .map((row) => [row.recordKey, row.biologicalFeatureId, row.featureVisibility])),
-      // Physical source, palette, and selector inputs retain their identity while
-      // request-owned comparison artifacts are published independently.
-      inputFiles: [
-        state.files?.c_gb, state.files?.c_gff, state.files?.c_fasta, state.files?.c_depth,
-        state.files?.d_color, state.files?.blacklist, state.files?.whitelist, state.files?.qualifier_priority,
-        state.files?.c_conservation_blasts, state.files?.c_conservation_blasts_source,
-        state.files?.c_conservation_fastas, state.files?.c_conservation_sequence_sources
-      ].flatMap(input => Array.isArray(input) ? [input, ...input] : [input])
-    };
+  // The drawing inputs the matches depend on, as JSON. Each is a computed of
+  // the active drawing: it is stringified again only after one of the reactive
+  // values it read changed, not on each currency check (a rule commit runs
+  // about ten), so the N-sized feature color overrides are stringified at most
+  // once per change.
+  const computed = globalThis.window?.Vue?.computed ?? ((getter) => ({ get value() { return getter(); } }));
+  /** @type {Record<string, (drawing: Record<string, any>) => any>} */
+  const drawingInputReaders = {
+    rules: (drawing) => drawing.manualSpecificRules,
+    legend: (drawing) => drawing.legendEntries?.value || [],
+    legendColors: (drawing) => drawing.legendColorOverrides || {},
+    legendStrokes: (drawing) => drawing.legendStrokeOverrides || {},
+    featureColors: (drawing) => drawing.featureColorOverrides || {},
+    featureVisibility: (drawing) => Object.values(drawing.featureOverrides || {})
+      .map((row) => [row.recordKey, row.biologicalFeatureId, row.featureVisibility])
   };
+  const drawingInputs = Object.entries(drawingInputReaders).map(([key, read]) => (
+    /** @type {[string, { value: string }]} */ ([key, computed(() => JSON.stringify(read(state.activeDrawing())))])
+  ));
+  const snapshot = () => ({
+    catalog: state.extractedFeatures.value,
+    biology: state.biologicalFeatures?.value,
+    result: state.svgResultIdentity?.value,
+    mode: state.mode?.value,
+    inputKinds: JSON.stringify([state.cInputType?.value, state.lInputType?.value]),
+    file: state.files?.t_color,
+    linearFiles: [...(state.linearSeqs || [])].flatMap(sequence => [sequence.gb, sequence.gff, sequence.fasta]),
+    resultNames: JSON.stringify((state.results?.value || []).map(result => result.name)),
+    selectedResult: state.selectedResultIndex?.value,
+    ...Object.fromEntries(drawingInputs.map(([key, input]) => [key, input.value])),
+    // Physical source, palette, and selector inputs retain their identity while
+    // request-owned comparison artifacts are published independently.
+    inputFiles: [
+      state.files?.c_gb, state.files?.c_gff, state.files?.c_fasta, state.files?.c_depth,
+      state.files?.d_color, state.files?.blacklist, state.files?.whitelist, state.files?.qualifier_priority,
+      state.files?.c_conservation_blasts, state.files?.c_conservation_blasts_source,
+      state.files?.c_conservation_fastas, state.files?.c_conservation_sequence_sources
+    ].flatMap(input => Array.isArray(input) ? [input, ...input] : [input])
+  });
   const isCurrent = (before) => {
     const after = snapshot();
     return Object.keys(before).every((key) => key === 'linearFiles' || key === 'inputFiles'
