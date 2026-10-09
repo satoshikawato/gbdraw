@@ -140,9 +140,9 @@ export const createFeatureColorActions = ({
   };
 
   // A color action also prepares the rules it may add (`withTargetRules`); a
-  // stroke action reads only the saved rules (OV-198), and a color request
-  // prepares its rules only when it commits, not to open the scope dialog,
-  // which reads the saved rules only (OV-225).
+  // stroke action reads only the saved rules (OV-198). A color request, a
+  // popup Legend rename, and a fill reset prepare them only when they commit,
+  // not to open their dialog, which reads the saved rules only (OV-225).
   const colorAction = (action, { targetRules = true } = {}) => (...args) => {
     const drawing = state.activeDrawing();
     const run = () => runColorAction(() => action(drawing, ...args));
@@ -804,8 +804,12 @@ export const createFeatureColorActions = ({
     return true;
   };
 
+  // A rename commits once the rules it may add are prepared; its dialogs read
+  // only the saved rules (OV-225).
   /** @param {DrawingState} drawing */
-  const applyLegendRenameRequest = async (drawing, request) => {
+  const applyLegendRenameRequest = (drawing, request) => withTargetRules(drawing, [], () => applyPreparedLegendRename(drawing, request));
+  /** @param {DrawingState} drawing */
+  const applyPreparedLegendRename = async (drawing, request) => {
     const oldCaption = normalizeCaption(request.oldCaption);
     const caption = normalizeCaption(request.finalCaption || request.newCaption);
     const color = resolveColorToHex(request.finalColor || request.currentColor) || '#cccccc';
@@ -1497,9 +1501,9 @@ export const createFeatureColorActions = ({
       resetColorDialog.show = true;
       resetColorDialog.caption = caption;
       resetColorDialog.siblingCount = siblings.length;
-    } else {
-      return doResetFillColor(drawing, 'this');
+      return;
     }
+    return withTargetRules(drawing, [], () => doResetFillColor(drawing, 'this'));
   };
 
   /** @param {DrawingState} drawing */
@@ -1752,15 +1756,15 @@ export const createFeatureColorActions = ({
     cancelLegendRename: () => clearLegendRenameDialog(state.activeDrawing(), { restoreInput: true }),
     handleColorScopeChoice: colorScopeChoice,
     handleFeatureStyleScopeChoice: (...args) => (featureStyleScopeDialog.kind === 'stroke' ? strokeScopeChoice : colorScopeChoice)(...args),
-    handleLegendNameCommit: colorAction(handleLegendNameCommit),
+    handleLegendNameCommit: colorAction(handleLegendNameCommit, { targetRules: false }),
     handleLegendRenameChoice: colorAction(handleLegendRenameChoice),
     renameLegendEntry: colorAction(renameLegendEntry),
     requestFeatureColorChange: colorAction(requestFeatureColorChange, { targetRules: false }),
-    selectLegendNameOption: colorAction(selectLegendNameOption),
+    selectLegendNameOption: colorAction(selectLegendNameOption, { targetRules: false }),
     handleResetColorChoice: colorAction(handleResetColorChoice),
     applyColorToSelectedFeatures: colorAction(applyColorToSelectedFeatures),
     applyStrokeToSelectedFeatures: strokeAction(applyStrokeToSelectedFeatures),
-    resetClickedFeatureFillColor: colorAction(resetClickedFeatureFillColor),
+    resetClickedFeatureFillColor: colorAction(resetClickedFeatureFillColor, { targetRules: false }),
     resetClickedFeatureStroke: strokeAction(resetClickedFeatureStroke),
     getFeatureStrokeColorValue,
     setClickedFeatureStrokeColorValue: strokeAction(setClickedFeatureStrokeColorValue),
