@@ -296,3 +296,18 @@ def test_every_gallery_session_passes(session_path: Path) -> None:
     document = load_session_document(session_path)
     with tempfile.TemporaryDirectory() as output, materialize_session(document, output_directory=output) as live:
         _prepare_diagram_inputs(session_to_request(live))
+
+
+@pytest.mark.parametrize(
+    "color", ["transparent", "rgba(1,2,3,0.5)", "hsl(120,50%,50%)", "#11223344", "rgb(1 2 3 / 50%)", "Red"]
+)
+def test_accepted_feature_colors_log_no_error(color: str, caplog: pytest.LogCaptureFixture) -> None:
+    # The legend compares rows by color identity; a color the check accepts but
+    # the identity cannot resolve to #RRGGBB falls back to its text quietly.
+    from gbdraw.legend.table import _legend_fill_identity
+
+    with caplog.at_level("DEBUG"):
+        assert _legend_fill_identity(color) == (
+            "#ff0000" if color == "Red" else color.lower()
+        )
+    assert [record.message for record in caplog.records if record.levelname == "ERROR"] == []

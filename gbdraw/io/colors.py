@@ -253,7 +253,6 @@ def check_user_color(
 
 def resolve_color_to_hex(color_str: str) -> str:
     if not isinstance(color_str, str):
-        logger.error(f"Invalid color value (not a string): {color_str}.")
         raise ValidationError(f"Invalid color value (not a string): {color_str}.")
 
     if color_str.startswith("#"):
@@ -269,9 +268,6 @@ def resolve_color_to_hex(color_str: str) -> str:
     if hex_code:
         return hex_code
 
-    logger.error(
-        f"Unknown color name: {color_str}. Please use a valid SVG color name or hex code."
-    )
     raise ValidationError(
         f"Unknown color name: {color_str}. Please use a valid SVG color name or hex code."
     )
