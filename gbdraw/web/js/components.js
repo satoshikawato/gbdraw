@@ -50,7 +50,9 @@ export const dialogFocus = {
 // described by the text that `labelledby` and `describedby` name. Escape and a
 // backdrop click emit `cancel`, which a use binds to its Cancel handler; a use
 // binds Tab to `trapDialogFocus`. While `busy` (a choice still applying), its
-// controls are disabled and it says so (D-12).
+// controls are disabled and it says so (D-12). Focus stays in it: the panel
+// takes focus before the controls are disabled, so Escape still reaches the
+// dialog, and the first enabled control gets it back if the dialog stays open.
 export const ChoiceDialog = {
   template: '#choice-dialog-template',
   props: {
@@ -58,7 +60,26 @@ export const ChoiceDialog = {
     describedby: { type: String, default: null },
     busy: { type: Boolean, default: false }
   },
-  emits: ['cancel']
+  emits: ['cancel'],
+  /** @param {{ busy: boolean }} props */
+  setup(props) {
+    /** @type {{ value: HTMLElement | null }} */
+    const panel = ref(null);
+    const focusLost = () => !document.activeElement || document.activeElement === document.body;
+    watch(() => props.busy, async (busy) => {
+      const element = panel.value;
+      if (!element) return;
+      if (busy) {
+        if (focusLost() || element.contains(document.activeElement)) element.focus({ preventScroll: true });
+        return;
+      }
+      await nextTick();
+      if (element.isConnected && (focusLost() || document.activeElement === element)) {
+        /** @type {HTMLElement | null} */ (element.querySelector('button:not(:disabled)'))?.focus({ preventScroll: true });
+      }
+    });
+    return { panel };
+  }
 };
 
 /** @param {Node} node @returns {string} */

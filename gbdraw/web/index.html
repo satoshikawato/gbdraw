@@ -7724,7 +7724,7 @@
 
 <script type="text/x-template" id="choice-dialog-template">
     <div v-dialog-focus data-modal-overlay @click.self="$emit('cancel')" @keydown.esc.prevent.stop="$emit('cancel')">
-        <div role="dialog" aria-modal="true" :aria-labelledby="labelledby" :aria-describedby="describedby" tabindex="-1"
+        <div ref="panel" role="dialog" aria-modal="true" :aria-labelledby="labelledby" :aria-describedby="describedby" tabindex="-1"
              :aria-busy="busy ? 'true' : null" class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
             <fieldset :disabled="busy" class="contents [&_button:disabled]:opacity-60 [&_button:disabled]:cursor-wait"><slot></slot></fieldset>
             <p v-if="busy" role="status" class="mt-3 text-xs text-slate-500">Applying an edit…</p>
