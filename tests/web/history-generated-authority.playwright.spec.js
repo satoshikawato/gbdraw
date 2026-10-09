@@ -160,7 +160,19 @@ test('Live palette and its History keep the scale draft out of the committed req
     await expect(paletteHelp).toContainText('Applies on Generate');
     const applied=await page.evaluate(()=>window.__GBDRAW_APP__.results[0].content);
     const next=await page.evaluate(()=>window.__GBDRAW_APP__.paletteNames.find(name=>name!==window.__GBDRAW_APP__.selectedPalette));
-    await page.getByRole('combobox',{name:'Palette',exact:true}).selectOption(next);
+    const paletteSelect=page.getByRole('combobox',{name:'Palette',exact:true});
+    const previous=await paletteSelect.inputValue();
+    const undoCount=await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount());
+    await paletteSelect.selectOption(next);
+    // D-15: CDS #123456 is a user default color, so the switch asks first; the
+    // select keeps the palette until a choice, and the choice is one step.
+    const paletteDialog=page.getByRole('dialog',{name:'Change palette'});
+    await expect(paletteDialog).toContainText('You changed 1 default color');
+    await expect(paletteSelect).toHaveValue(previous);
+    await paletteDialog.getByRole('button',{name:"Use the palette's colors"}).click();
+    await expect(paletteDialog).toHaveCount(0);
+    await expect(paletteSelect).toHaveValue(next);
+    expect(await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoCount+1);
     await expect(page.locator('[data-default-color-application-help]')).toContainText('Applies on Generate');
     await noDerivedStatus(page);
     expect(await page.evaluate(()=>window.__GBDRAW_APP__.results[0].content)).toBe(applied);

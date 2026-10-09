@@ -447,6 +447,7 @@ export const createAppSetup = () => {
     featureStyleScopeDialog,
     featureVisibilityScopeDialog,
     legendRenameDialog,
+    paletteColorsDialog,
     resetColorDialog,
     labelTextScopeDialog,
     hiddenLabelTextDialog,
@@ -3513,7 +3514,7 @@ export const createAppSetup = () => {
     rememberShownResultInventory(opening);
   };
 
-  const { updatePalette, resetColors } = resultsManager;
+  const { requestPaletteChange, selectPalette, requestResetColors } = resultsManager;
   const undoableAction = (label, fn) => (...args) => history.runUndoable(label, () => fn(...args));
   // Python's report of the per-feature edits the Results do not draw (design
   // Q4 3.4): dormant edits outside the crop or display, edits whose feature
@@ -3587,6 +3588,12 @@ export const createAppSetup = () => {
     () => 'Rename legend item',
     handleLegendRenameChoice,
     cancelLegendRename
+  );
+  // D-15: the palette dialog's choice is one History step too.
+  const handlePaletteColorsChoiceWithHistory = scopeChoiceWithHistory(
+    () => 'Change setting',
+    resultsManager.handlePaletteColorsChoice,
+    resultsManager.cancelPaletteColorsDialog
   );
   const handleResetColorChoiceWithHistory = scopeChoiceWithHistory(
     () => 'Reset feature color',
@@ -5757,8 +5764,9 @@ export const createAppSetup = () => {
     pendingPaletteName: drawingMember('pendingPaletteName'),
     pendingPaletteColors: drawingMember('pendingPaletteColors'),
     hasPendingPaletteDraft: drawingMember('hasPendingPaletteDraft'),
-    updatePalette,
-    resetColors,
+    requestPaletteChange,
+    selectPalette,
+    requestResetColors,
     downloadLosatCache,
     downloadLosatPair,
     setLosatPairFilename,
@@ -5944,6 +5952,8 @@ export const createAppSetup = () => {
     handleFeatureStyleScopeChoice: handleFeatureStyleScopeChoiceWithHistory,
     legendRenameDialog,
     handleLegendRenameChoice: handleLegendRenameChoiceWithHistory,
+    paletteColorsDialog,
+    handlePaletteColorsChoice: handlePaletteColorsChoiceWithHistory,
     resetColorDialog,
     handleResetColorChoice: handleResetColorChoiceWithHistory,
     labelTextScopeDialog,

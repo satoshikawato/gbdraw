@@ -39,8 +39,8 @@ const CIRCULAR_PROBES = [
   ['label_spacing_offsets', 'a.form.labels_mode="both"; a.adv.circular_label_spacing=8; a.adv.outer_label_x_offset=1.1; a.adv.inner_label_y_offset=0.9;'],
   ['tick_font', 'a.adv.tick_label_font_size=20;'],
   ['hide_scale', 'a.form.show_scale=false;'],
-  // The Palette select runs updatePalette on change; the v-model alone does not recolor.
-  ['palette_forest', 'a.selectedPalette="forest"; a.updatePalette();'],
+  // The Palette select runs selectPalette on change (D-15: Use the palette's colors).
+  ['palette_forest', 'a.selectPalette("forest", "palette");'],
   // The reservation moves tracks only when it exceeds the free center (HmmtDNA: 100 px moves
   // nothing, 250 px leaves no room for the feature track).
   ['center_radius', 'a.adv.center_reserved_radius=150;'],

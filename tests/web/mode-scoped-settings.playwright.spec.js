@@ -595,9 +595,7 @@ const SAMPLE_RULES = {
 const editSamples = async (page, { values, palette, rule, annotationSet }) => {
   await editStep(page, 'Sample settings', values);
   await page.evaluate((name) => {
-    const app = window.__GBDRAW_APP__;
-    app.selectedPalette = name;
-    app.updatePalette();
+    window.__GBDRAW_APP__.selectPalette(name);
   }, palette);
   await settleLive(page);
   await evaluateWithRetainedPromise(page, async (fields) => {
