@@ -35,6 +35,7 @@ from gbdraw.session_io import (
     SessionBuildContext,
     SessionFileBinding,
     _project_web_file_binding,
+    _write_validated_session_json,
     build_session_json,
     get_session_slot,
     migrate_legacy_linear_comparison_draft_for_current_writer,
@@ -46,7 +47,6 @@ from gbdraw.session_io import (
     session_mode,
     split_draft_into_modes,
     validate_current_mode_slices,
-    write_session_json,
 )
 
 if TYPE_CHECKING:
@@ -454,8 +454,8 @@ def save_session_sidecar_if_requested(
         canonical_request=run_result.canonical_request,
         _canonical_request_is_resolved=True,
     )
-    payload.pop("files", None)
-    write_session_json(sidecar_path, payload, overwrite=overwrite)
+    # build_session_json validated the payload it returned (without "files").
+    _write_validated_session_json(sidecar_path, payload, overwrite=overwrite)
     return sidecar_path
 
 

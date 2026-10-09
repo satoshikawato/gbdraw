@@ -28,13 +28,13 @@ from gbdraw.session_io import (
     _attach_current_web_file_bindings,
     _embedded_resource_bytes,
     _reject_duplicate_json_keys,
+    _write_validated_session_json,
     expand_session_feature_catalog,
     materialize_embedded_file,
     normalize_current_session_artifacts,
     safe_embedded_filename,
     session_with_other_mode_result_at_top,
     validate_session,
-    write_session_json,
 )
 
 if TYPE_CHECKING:
@@ -565,7 +565,8 @@ def _write_session_document(
                 f"Session output already exists: {output_path}. "
                 "Pass overwrite=True to replace it."
             )
-        write_session_json(path, document._data, overwrite=overwrite)
+        # The document was validated when it was built.
+        _write_validated_session_json(path, document._data, overwrite=overwrite)
     except ValidationError as exc:
         raise SessionFormatError(str(exc)) from exc
     return document
