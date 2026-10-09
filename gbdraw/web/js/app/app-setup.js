@@ -1468,7 +1468,8 @@ export const createAppSetup = () => {
       legendEntries: drawing.legendEntries.value, deletedLegendEntries: drawing.deletedLegendEntries.value,
       dormantLegendEntries: drawing.dormantLegendEntries.value, originalLegendOrder: originalLegendOrder.value,
       legendColorOverrides: drawing.legendColorOverrides, rules: drawing.manualSpecificRules,
-      pythonRows: pythonLegendRows(svgContainer.value?.querySelector('svg')), paletteColors: appliedFeatureColors(state)
+      pythonRows: pythonLegendRows(svgContainer.value?.querySelector('svg')), features: extractedFeatures.value || [],
+      paletteColors: appliedFeatureColors(state)
     }) : new Map();
   });
   /** @param {{ caption?: string, color?: string } | null | undefined} entry */

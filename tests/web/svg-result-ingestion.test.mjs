@@ -1258,6 +1258,21 @@ test('a Legend fill reconcile shows the rule or palette color of a row whose own
   assert.equal(featureFill(mounted), '#aaaaaa');
 });
 
+// OV-306: Python draws no row under a feature type's name once a captioned
+// rule of that type colors a feature (`_generated_legend_fills`), so a rule
+// captioned with its type's name that colors a feature draws that row in its
+// color, whatever color Python drew the row in before the rule.
+test('a rule captioned with its type that colors a feature draws the type row', () => {
+  const { admission } = currentFixture();
+  const mounted = buildSvgRoot();
+  const rule = { feat: 'CDS', qual: 'gene', val: 'y', cap: 'CDS', color: '#ff0000' };
+  recordRuleMatches([previewFeature(admission)], [ruleKey(rule)], () => ({ matched: [0], priorities: [0], declined: [] }));
+  reconcileMountedResult(mounted, previewPlan(admission, { manualSpecificRules: [rule] }), { domains: ['legendFills'] });
+  assert.equal(swatchFill(mounted), '#ff0000');
+  reconcileMountedResult(mounted, previewPlan(admission, { manualSpecificRules: [rule], domains: ['legendFills'] }), { domains: ['legendFills'] });
+  assert.equal(swatchFill(mounted), '#ff0000', 'also when the compile shows only the Legend fills');
+});
+
 // Review U2b #1, U3a A2a: a live rename is the executor's, which keeps
 // Python's key for the row, so a palette or rule reconcile addressing that key
 // keeps the row's Legend color or shows the new palette color, as Generate

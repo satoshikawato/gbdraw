@@ -272,7 +272,8 @@ export const createFeatureColorActions = ({
       dormantLegendEntries: drawing.dormantLegendEntries.value, originalLegendOrder: originalOrder
     });
     const draft = draftLegendRowColors({
-      rules: drawing.manualSpecificRules, pythonRows, originalLegendOrder: originalOrder, paletteColors: appliedFeatureColors(state)
+      rules: drawing.manualSpecificRules, pythonRows, features: state.extractedFeatures.value || [],
+      originalLegendOrder: originalOrder, paletteColors: appliedFeatureColors(state)
     });
     return Object.entries(drawing.legendStrokeOverrides).find(([caption]) => {
       const row = rows.styledRow(caption);

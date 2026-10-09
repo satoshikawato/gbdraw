@@ -189,11 +189,12 @@ const paletteLegendColor = (caption, palette) => {
 // it the same way.
 /**
  * @param {{ rules: readonly Partial<SpecificColorRule>[], pythonRows?: ReadonlyMap<PythonLegendKey, PythonLegendRow>,
- *   originalLegendOrder: readonly string[], paletteColors: Record<string, string> }} draft
+ *   features?: Iterable<object>, originalLegendOrder: readonly string[], paletteColors: Record<string, string> }} draft
+ *   `features`: the displayed Result's features, whose rule matches decide the rows Python leaves out (OV-306).
  * @returns {{ ruleCaptions: PythonLegendKey[], colorOf: (key: PythonLegendKey) => SwatchColor | null }}
  */
-export const draftLegendRowColors = ({ rules, pythonRows = new Map(), originalLegendOrder, paletteColors }) => {
-  const rowOf = ruleLegendCaptions({ rules: [...rules], pythonRows, originalLegendOrder: [...originalLegendOrder] });
+export const draftLegendRowColors = ({ rules, pythonRows = new Map(), features = [], originalLegendOrder, paletteColors }) => {
+  const rowOf = ruleLegendCaptions({ rules: [...rules], pythonRows, features, originalLegendOrder: [...originalLegendOrder] });
   /** @type {Map<PythonLegendKey, string>} */
   const ruleColors = new Map();
   rules.forEach((rule) => {
@@ -259,12 +260,12 @@ export const draftLegendRows = ({
 /**
  * @param {Pick<EditorPlanOptions, 'legendEntries' | 'deletedLegendEntries' | 'dormantLegendEntries' | 'originalLegendOrder'>
  *   & { legendColorOverrides: Readonly<Record<string, unknown>>, rules: readonly Partial<SpecificColorRule>[],
- *   pythonRows: ReadonlyMap<PythonLegendKey, PythonLegendRow>, paletteColors: Record<string, string> }} draft
+ *   pythonRows: ReadonlyMap<PythonLegendKey, PythonLegendRow>, features?: Iterable<object>, paletteColors: Record<string, string> }} draft
  * @returns {Map<string, SwatchColor>}
  */
-export const draftLegendPanelColors = ({ legendColorOverrides, rules, pythonRows, paletteColors, ...legend }) => {
+export const draftLegendPanelColors = ({ legendColorOverrides, rules, pythonRows, features, paletteColors, ...legend }) => {
   const rows = draftLegendRows(legend);
-  const draft = draftLegendRowColors({ rules, pythonRows, originalLegendOrder: [...rows.originalCaptions], paletteColors });
+  const draft = draftLegendRowColors({ rules, pythonRows, features, originalLegendOrder: [...rows.originalCaptions], paletteColors });
   const ruleRows = new Set(draft.ruleCaptions);
   /** @type {Map<string, SwatchColor>} */
   const colors = new Map();
@@ -640,7 +641,11 @@ const compilePlanBundle = ({
   const styledCaptions = new Set([...Object.keys(legendColorOverrides), ...Object.keys(legendStrokeOverrides)]);
   // Live only: at Generate Python's row has the color (OV-288).
   const draftRowColors = livePreview && draftLegendRowColors({
-    rules, pythonRows: livePreview.pythonRows, originalLegendOrder: [...originalCaptions], paletteColors: livePreview.paletteColors
+    rules,
+    pythonRows: livePreview.pythonRows,
+    features: { * [Symbol.iterator]() { for (const rendered of catalogAdmission.renderedFeaturesByResult || []) yield* rendered.values(); } },
+    originalLegendOrder: [...originalCaptions],
+    paletteColors: livePreview.paletteColors
   });
   /** @param {PythonLegendKey} key */
   const draftRowColor = (key) => (draftRowColors ? draftRowColors.colorOf(key) : null);

@@ -1,6 +1,7 @@
 // @ts-check
 import { resolveColorToHex } from '../utils/color-utils.js';
 import { parseSpecificRules } from './file-imports.js';
+import { ruleMatcher } from './rule-matchers.js';
 /** @import { PythonLegendKey, PythonLegendRow } from './legend-svg.js' */
 
 const normalizeText = (value) => String(value ?? '').trim();
@@ -91,20 +92,52 @@ const drawsRow = (row, rule) => row.color === fillIdentity(rule.color)
  * @property {ReadonlyMap<PythonLegendKey, PythonLegendRow>} [pythonRows] Python's rows of the displayed
  *   Result. Given, a rule is compared with each row's key and the fill Python drew for it, as Python
  *   allocates (`generated_fills`, R15-4); without it, with the listed rows' captions and swatches.
+ * @property {Iterable<object>} [features] The features of the displayed Result, with their known rule
+ *   matches; read with `pythonRows` (`typesRulesTake`).
  */
 
+// OV-306: Python draws no row under a feature type's name once a captioned
+// rule of that type colors a feature (`_generated_legend_fills`: the type has
+// a rule whose caption and color a feature took). A match not known yet colors
+// no feature. Read only when a Python row has the name of a captioned rule's
+// type.
+/**
+ * @param {LegendRowContext} context
+ * @returns {Set<string>}
+ */
+const typesRulesTake = ({ rules = [], pythonRows, features = [] }) => {
+  const captioned = rules.map((rule) => normalizeSpecificRule(rule))
+    .filter((rule) => rule.cap && pythonRows?.has(/** @type {PythonLegendKey} */ (rule.feat)));
+  if (captioned.length === 0) return new Set();
+  const winnerOf = ruleMatcher(rules).firstIfKnown;
+  /** @param {Partial<SpecificColorRule>} rule */
+  const pair = (rule) => JSON.stringify([normalizeText(rule.cap), normalizeColor(rule.color)]);
+  const taken = new Set();
+  for (const feature of features) {
+    const rule = winnerOf(feature);
+    if (rule && normalizeText(rule.cap)) taken.add(pair(rule));
+  }
+  return new Set(captioned.filter((rule) => taken.has(pair(rule))).map((rule) => rule.feat));
+};
+
 // The rows N-06 compares a rule with: Python's (key and drawn fill) when the
-// caller gives them, else the listed entries (caption and swatch).
+// caller gives them, less the rows Python leaves out, else the listed entries
+// (caption and swatch).
 /** @param {LegendRowContext} context */
-const comparedRows = ({ legendEntries = [], pythonRows }) => (pythonRows
-  ? [...pythonRows.values()].flatMap((row) => (row.color
+const comparedRows = (context) => {
+  const { legendEntries = [], pythonRows } = context;
+  if (!pythonRows) {
+    return (legendEntries || []).map((entry) => ({
+      caption: normalizeText(entry?.caption),
+      origin: normalizeText(entry?.originalCaption || entry?.caption),
+      color: fillIdentity(entry?.color)
+    }));
+  }
+  const taken = typesRulesTake(context);
+  return [...pythonRows.values()].flatMap((row) => (row.color && !taken.has(String(row.key))
     ? [{ caption: String(row.key), origin: String(row.key), color: fillIdentity(row.color) }]
-    : []))
-  : (legendEntries || []).map((entry) => ({
-    caption: normalizeText(entry?.caption),
-    origin: normalizeText(entry?.originalCaption || entry?.caption),
-    color: fillIdentity(entry?.color)
-  })));
+    : []));
+};
 
 /**
  * @param {ReturnType<typeof comparedRows>} rows
