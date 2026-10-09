@@ -1216,6 +1216,8 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   expect(runs[0].transferredBytes).toBe(runs[0].stagedResourceBytes);
   // The first run stages the Session's resources, its stored collinear result
   // among them; the second stages only the result it computed again.
+  // OV-279: the staged count of 1 and newlyStagedResourceBytes below pin the
+  // rebuild; when OV-279 is fixed the second run stages nothing, so update them.
   expect(runs[1]).toMatchObject({
     referencedResourceCount: runs[0].referencedResourceCount,
     stagedResourceCount: 1,
@@ -1246,6 +1248,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   expect(second.outcome.undoCountAfter).toBe(second.outcome.undoCountBefore);
   expect(second.outcome.redoCountAfter).toBe(second.outcome.redoCountBefore);
   expect(first.outcome.historyStructural).toMatchObject(expectedGeneratedHistory);
+  // OV-279: follows runs[1].stagedResourceCount (1 until OV-279 is fixed, then 0).
   expect(secondStructural.resourceMaterializationCount).toBe(runs[1].stagedResourceCount);
   for (const perGeneration of [firstStructural, secondStructural]) {
     expect(perGeneration).toMatchObject({
@@ -1280,6 +1283,9 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   // The recomputed collinear result differs from the stored one in the last
   // digits of a few floating-point scores (browser Python versus the CLI), so
   // the second run decodes it and rebuilds the interactive context once.
+  // OV-279: these second-run counters (decoded resource miss 1, interactive
+  // context build 1, feature traversal 1) pin the rebuild and flip to the
+  // reuse values (hits 1, builds 0) when OV-279 is fixed.
   expect(secondPhaseAttribution.preparedInputCacheStructural).toMatchObject({
     decodedResourceCacheHitCount: 0,
     decodedResourceCacheMissCount: 1,

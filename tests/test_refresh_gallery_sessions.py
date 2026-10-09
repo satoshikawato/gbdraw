@@ -45,6 +45,7 @@ from tools.prepare_interactive_gallery_assets import (
 )
 from tools.refresh_gallery_sessions import (
     TEST_INPUT_SESSION_FILES,
+    TEST_INPUT_SESSION_ROOT,
     VIBRIO_EXPANDED_HARD_LIMIT,
     VIBRIO_EXPANDED_REGRESSION_CEILING,
     VIBRIO_EXPECTED_RAW_PAIRS,
@@ -912,6 +913,29 @@ def test_staged_gallery_validator_allows_custom_extra_spacing(
         )
 
 
+def test_refresh_leaves_a_test_input_pipeline_unresolved(tmp_path: Path) -> None:
+    # The Generate-pipeline specs load this input, so its orthogroup pipeline
+    # stays; only public Gallery Sessions store resolved comparisons.
+    name = TEST_INPUT_SESSION_FILES[0]
+    source = tmp_path / name
+    destination = tmp_path / "refreshed" / name
+    destination.parent.mkdir()
+    source.write_bytes((TEST_INPUT_SESSION_ROOT / name).read_bytes())
+
+    def pipelines(path: Path) -> list[tuple[str, object]]:
+        return [
+            (item["kind"], item.get("mode"))
+            for item in load_session(path)["renderRequest"]["comparisons"]
+        ]
+
+    before = pipelines(source)
+    assert ("generatedProteinComparison", "orthogroup") in before
+
+    _refresh_one_session(source, destination_path=destination)
+
+    assert pipelines(destination) == before
+
+
 def test_refresh_records_resolved_track_geometry(
     tmp_path: Path,
 ) -> None:
@@ -1277,7 +1301,8 @@ def test_staged_gallery_validator_accepts_current_artifact_schemas(
     _validate_staged_gallery_session(session_path, session)
 
     # A Gallery Session stores its protein comparison results; a pipeline that
-    # the first Generate would run again is rejected (Owner, 2026-10-09).
+    # the first Generate would run again is rejected (perf-014x D-17 /
+    # docs-restructure D-20). A test input keeps its pipeline.
     def with_protein_mode(mode: str) -> dict[str, object]:
         request = dict(
             session["renderRequest"],
@@ -1295,6 +1320,9 @@ def test_staged_gallery_validator_accepts_current_artifact_schemas(
     _validate_staged_gallery_session(session_path, with_protein_mode("none"))
     with pytest.raises(ValueError, match="resolved protein comparison results"):
         _validate_staged_gallery_session(session_path, with_protein_mode("collinear"))
+    _validate_staged_gallery_session(
+        tmp_path / TEST_INPUT_SESSION_FILES[0], with_protein_mode("orthogroup")
+    )
 
     stale_version = dict(session, version=33)
     with pytest.raises(ValueError, match=f"expected {CURRENT_SESSION_VERSION}"):

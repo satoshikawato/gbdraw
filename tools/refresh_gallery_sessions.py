@@ -110,6 +110,12 @@ TEST_INPUT_SESSION_FILES = (
 )
 
 
+def _is_test_input_session(session_path: Path) -> bool:
+    """A test input keeps the unresolved pipelines its specs run on Generate."""
+
+    return session_path.name in TEST_INPUT_SESSION_FILES
+
+
 def _public_gallery_session_files() -> tuple[str, ...]:
     from tools.prepare_interactive_gallery_assets import EXAMPLES
 
@@ -743,8 +749,11 @@ def _validate_staged_gallery_session(
                 f"{session_path.name} has a Web Linear draft without linearComparisonPlan"
             )
     # A Gallery Session stores its protein comparison results, so the first
-    # Generate after Load reuses them (Owner, 2026-10-09).
-    if any(
+    # Generate after Load reuses them (perf-014x D-17 / docs-restructure D-20:
+    # the regenerated Vibrio Session must store the finished protein comparison
+    # results; replaces the empty-derived-cache-only rule of 7aab08f8). A test
+    # input keeps its pipeline, which the Generate-pipeline specs run.
+    if not _is_test_input_session(session_path) and any(
         isinstance(comparison, Mapping)
         and comparison.get("kind") == "generatedProteinComparison"
         and comparison.get("mode") != "none"
@@ -1228,8 +1237,10 @@ def _store_resolved_protein_comparisons(session_path: Path) -> None:
     """Replace a generated protein pipeline with its stored result.
 
     A Gallery Session stores its protein comparison results, so the first
-    Generate after Load reuses them instead of computing them again (Owner,
-    2026-10-09). The Session is rendered once from its raw LOSATP cache, and
+    Generate after Load reuses them instead of computing them again (perf-014x
+    D-17 / docs-restructure D-20: the regenerated Vibrio Session must store the
+    finished protein comparison results; replaces the empty-derived-cache-only
+    rule of 7aab08f8). The Session is rendered once from its raw LOSATP cache, and
     its comparisons become the codec's encoding of the resolved request: the
     collinear result and the marker that reuses it, as the Web writes them
     after a Generate. The replay and ``finalize`` then check that the CLI and
@@ -1339,7 +1350,8 @@ def _refresh_one_session(
             gallery_id=gallery_id,
             declared_command=declared_command,
         )
-        _store_resolved_protein_comparisons(prepared_path)
+        if not _is_test_input_session(session_path):
+            _store_resolved_protein_comparisons(prepared_path)
         subprocess.run(
             [
                 sys.executable,
