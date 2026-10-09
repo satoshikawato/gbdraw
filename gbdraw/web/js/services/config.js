@@ -5422,9 +5422,15 @@ const importSessionDocument = async (e, options = {}) => {
     // drawing's Canvas padding follows once its Result is mounted. A Session 46
     // slice without its mode's request projection is stored settings: its track
     // stacks install as saved, unset axis indexes included (R11).
+    // A slice without feature edits (a CLI, Python, or published Gallery
+    // Session) takes its committed request's edits (OV-220).
+    const projectedFeatures = canonicalSession && !settingsOnly
+      ? projectionResult.renderState.semanticFeatureState : null;
     for (const mode of SLICE_MODES) {
       const storedSlice = modeScopedSession && !(mode === committedDraftMode && committedSliceProjected);
-      applyModeSliceData(state.drawings[mode], mode, { ...modeSlices[mode], config: modeConfigs[mode] }, {
+      const features = mode === committedDraftMode && projectedFeatures && !isPlainObject(modeSlices[mode].features)
+        ? { features: projectedFeatures } : {};
+      applyModeSliceData(state.drawings[mode], mode, { ...modeSlices[mode], ...features, config: modeConfigs[mode] }, {
         resolveTrackPlacements: !settingsOnly && !storedSlice,
         applyCanvasPadding: mode !== displayMode
       });
