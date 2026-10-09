@@ -9,7 +9,7 @@ from functools import lru_cache
 from typing import Callable, Dict, List, Literal, Optional, Sequence, cast
 
 from Bio.SeqRecord import SeqRecord
-from svgwrite.container import Group
+from gbdraw.svg.elements import Group
 
 from ....analysis.gc import calculate_gc_percent
 from ....canvas import CircularCanvasConfigurator
@@ -229,7 +229,7 @@ class DefinitionGroup:
                 record_count=self.record_count,
             )
         )
-        self.definition_group: Group = Group(id=self.definition_group_id, debug=False)
+        self.definition_group: Group = Group(id=self.definition_group_id)
         if self.definition_profile == "shared_common" or self.definition_group_id == "plot_title":
             self.definition_group.attribs["data-gbdraw-role"] = "plot-title"
         else:

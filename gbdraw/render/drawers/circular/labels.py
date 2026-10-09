@@ -4,8 +4,7 @@
 import math
 from typing import Literal, Tuple
 
-from svgwrite.path import Path
-from svgwrite.text import Text, TextPath
+from gbdraw.svg.elements import Path, Text, TextPath
 
 from ....config.models import CircularRenderProfile
 from ....core.sequence import determine_length_parameter

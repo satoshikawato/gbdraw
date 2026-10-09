@@ -6,8 +6,7 @@ import re
 from typing import Any
 
 from pandas import DataFrame
-from svgwrite.container import Group
-from svgwrite.path import Path
+from gbdraw.svg.elements import Group, Path
 
 from ....core.color import interpolate_color
 from ....svg.circular_conservation import generate_annular_hsp_path_desc
@@ -139,7 +138,7 @@ class ConservationDrawer:
                         full_reference=(end - start == total_length if projected else bool(getattr(row, "full_reference", False))),
                     ),
                     fill=self._fill_color(identity), fill_opacity=self.fill_opacity,
-                    stroke=self.stroke_color, stroke_width=self.stroke_width, debug=False,
+                    stroke=self.stroke_color, stroke_width=self.stroke_width,
                 )
                 for attribute, value in metadata.items():
                     path.attribs[attribute] = str(value)

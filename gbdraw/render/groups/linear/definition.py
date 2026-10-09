@@ -8,8 +8,7 @@ from dataclasses import dataclass
 from typing import cast
 
 from Bio.SeqRecord import SeqRecord
-from svgwrite.container import Group
-from svgwrite.text import Text, TSpan
+from gbdraw.svg.elements import Group, TSpan, Text
 
 from ....canvas import LinearCanvasConfigurator
 from ....config.models import GbdrawConfig
@@ -116,7 +115,7 @@ class DefinitionGroup:
             ]
         self.calculate_start_coordinates()
         self.local_bounds = self._calculate_local_bounds()
-        self.definition_group = Group(id=self.definition_group_id, debug=False)
+        self.definition_group = Group(id=self.definition_group_id)
         self.definition_group.attribs["data-gbdraw-role"] = (
             "record-definition"
             if self.definition_part == "main"
@@ -422,7 +421,6 @@ class DefinitionGroup:
             font_family=style.font_family,
             text_anchor=self.linear_text_anchor,
             dominant_baseline=self.linear_dominant_baseline,
-            debug=False,
         )
         text_el.attribs["data-definition-line-kind"] = line.kind
         for part in line.parts or []:

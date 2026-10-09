@@ -3,7 +3,7 @@
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
-from svgwrite.container import Group
+from gbdraw.svg.elements import Group
 
 from ....config.models import GbdrawConfig
 from ....configurators import DepthConfigurator
@@ -32,7 +32,7 @@ class DepthGroup:
         record_transform: RecordDisplayTransform | None = None,
     ) -> None:
         self.record_transform = record_transform
-        self.depth_group = Group(id=group_id or "depth", debug=False)
+        self.depth_group = Group(id=group_id or "depth")
         self.radius = float(radius)
         self.depth_config = depth_config
         self.gb_record = gb_record

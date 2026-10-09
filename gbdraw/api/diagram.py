@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Any, Optional, Sequence, Mapping, Literal, cas
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 from svgwrite import Drawing
-from svgwrite.container import Group
+from gbdraw.svg.elements import Group
 
 from gbdraw.analysis.depth import depth_df as build_depth_df
 from gbdraw.analysis.gc import circular_dinucleotide_content_df
@@ -3199,7 +3199,7 @@ def assemble_circular_diagram_from_records(
     grid_overlay_obstacles: list[Aabb] = []
 
     for record_index, result in enumerate(record_results):
-        record_group = Group(id=f"record_{record_index}", debug=False)
+        record_group = Group(id=f"record_{record_index}")
         record_group.attribs["data-gbdraw-record-id"] = str(records[record_index].id)
         record_group.attribs["data-gbdraw-record-index"] = str(record_index)
         record_dx, record_dy = grid_layout.translations[record_index]

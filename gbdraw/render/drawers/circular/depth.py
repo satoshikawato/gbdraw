@@ -4,10 +4,7 @@
 import math
 
 from pandas import DataFrame
-from svgwrite.container import Group
-from svgwrite.path import Path
-from svgwrite.shapes import Circle, Line
-from svgwrite.text import Text
+from gbdraw.svg.elements import Circle, Group, Line, Path, Text
 
 from ....configurators import DepthConfigurator
 from ....layout.circular_depth_axis import (

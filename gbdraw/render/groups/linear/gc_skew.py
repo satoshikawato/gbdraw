@@ -3,7 +3,7 @@
 
 from pandas import DataFrame
 from Bio.SeqRecord import SeqRecord
-from svgwrite.container import Group
+from gbdraw.svg.elements import Group
 
 from ....analysis.skew import skew_df
 from ....config.models import GbdrawConfig
@@ -39,7 +39,7 @@ class GcSkewGroup:
         Initializes the GcSkewGroup with the given parameters and configurations.
         """
         self.record_transform = record_transform
-        self.skew_group: Group = Group(id=group_id, debug=False)
+        self.skew_group: Group = Group(id=group_id)
         self.start_x: float = start_x
         self.start_y: float = start_y
         self.longest_record_len: int = longest_record_len

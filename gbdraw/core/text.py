@@ -13,7 +13,7 @@ from importlib import resources
 from typing import Dict, List, Mapping, Optional, Union
 
 from fontTools.ttLib import TTFont
-from svgwrite.text import Text
+from gbdraw.svg.elements import Text
 
 logger = logging.getLogger(__name__)
 
@@ -822,7 +822,6 @@ def create_text_element(
         font_family=font_family,
         text_anchor=text_anchor,
         dominant_baseline=dominant_baseline,
-        debug=False if extra_attrs else True,
     )
     for key, value in (extra_attrs or {}).items():
         text_el.attribs[str(key)] = str(value)

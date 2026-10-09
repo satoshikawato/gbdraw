@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from svgwrite.text import Text, TSpan
+from gbdraw.svg.elements import Text, TSpan
 
 
 def generate_name_path(

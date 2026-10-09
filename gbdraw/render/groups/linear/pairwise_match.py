@@ -7,8 +7,7 @@ import math
 from typing import Dict, Sequence, cast
 
 from pandas import DataFrame
-from svgwrite.container import Group
-from svgwrite.path import Path
+from gbdraw.svg.elements import Group, Path
 
 from ....canvas import LinearCanvasConfigurator
 from ....layout.linear_coords import normalize_position_linear
@@ -184,7 +183,7 @@ class PairWiseMatchGroup:
         self.track_id: str = "comparison" + str(self.comparison_count)
         self._pairwise_match_counter = 0
         self.calculate_query_subject_offsets()
-        self.match_group = Group(id=self.track_id, debug=False)
+        self.match_group = Group(id=self.track_id)
         if self.query_placement is not None:
             self.match_group.attribs["data-query-record-index"] = self.query_record_index
             self.match_group.attribs["data-subject-record-index"] = self.subject_record_index
@@ -407,7 +406,6 @@ class PairWiseMatchGroup:
             fill_opacity=self.match_fill_opacity,
             stroke=self.match_stroke_color,
             stroke_width=self.match_stroke_width,
-            debug=False,
         )
         path.attribs["data-pairwise-match-style"] = match_style
         path.attribs["data-identity-factor"] = f"{factor:.6g}"

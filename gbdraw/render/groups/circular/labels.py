@@ -8,8 +8,7 @@ from __future__ import annotations
 from typing import Literal, Optional
 
 from Bio.SeqRecord import SeqRecord
-from svgwrite.container import Group
-from svgwrite.shapes import Line
+from gbdraw.svg.elements import Group, Line
 
 from ....canvas import CircularCanvasConfigurator
 from ....features.factory import FeatureBuildResult

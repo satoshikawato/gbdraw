@@ -5,8 +5,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional, Union, List, Dict
 
-from svgwrite.container import Group
-from svgwrite.path import Path
+from gbdraw.svg.elements import Group, Path
 
 from ....features.objects import FeatureObject
 from ....features.ids import compute_feature_object_hash
@@ -93,7 +92,6 @@ class FeatureDrawer:
             stroke_linejoin="round",
             stroke_linecap=stroke_linecap,
             stroke_miterlimit=4,
-            debug=False,
         )
         if feature_data_id:
             path.attribs["data-gbdraw-feature-id"] = feature_data_id
@@ -110,7 +108,7 @@ class FeatureDrawer:
                 path.attribs["data-gbdraw-feature-part"] = feature_part
         if stroke_path is not None:
             path.attribs["stroke"] = "none"
-            outline = Path(d=stroke_path, debug=False)
+            outline = Path(d=stroke_path)
             outline.attribs.update({key: value for key, value in path.attribs.items() if key != "d"})
             outline.attribs.update(fill="none", stroke=stroke_color, **{"stroke-linecap": "butt"})
             if "id" in outline.attribs:

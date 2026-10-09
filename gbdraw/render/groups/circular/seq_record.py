@@ -5,7 +5,7 @@ from collections import Counter
 from typing import Optional, Dict
 
 from Bio.SeqRecord import SeqRecord
-from svgwrite.container import Group
+from gbdraw.svg.elements import Group
 
 from ....canvas import CircularCanvasConfigurator
 from ....core.sequence import determine_length_parameter
@@ -153,7 +153,7 @@ class SeqRecordGroup:
 
     def setup_record_group(self) -> Group:
         feature_dict = self.feature_layers.foreground_features
-        record_group = Group(id=self.record_group_id, debug=False)
+        record_group = Group(id=self.record_group_id)
         record_group.attribs["data-gbdraw-record-id"] = str(self.gb_record.id)
         record_group.attribs["data-gbdraw-record-index"] = str(self.record_index)
         if self.slot_id:

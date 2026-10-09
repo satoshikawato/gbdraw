@@ -4,10 +4,7 @@
 import math
 
 from pandas import DataFrame
-from svgwrite.container import Group
-from svgwrite.path import Path
-from svgwrite.shapes import Line
-from svgwrite.text import Text
+from gbdraw.svg.elements import Group, Line, Path, Text
 
 from ....configurators import DepthConfigurator
 from ....layout.linear_coords import normalize_position_to_linear_track
