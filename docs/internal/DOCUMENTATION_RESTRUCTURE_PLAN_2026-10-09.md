@@ -103,7 +103,7 @@ the page that receives the content. Paths are under `docs/` unless shown.
 | `PALETTE_EXPLORER.md` | How do I compare palettes? | merge: entry in `GALLERY.md`, colour-accessibility note in `REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md` |
 | `EXPORT.md`, `GFF3_FASTA.md`, `PYTHON_API.md`, `TYPED_API.md`, `WORKFLOW_GUIDE.md` | none (link routers) | delete; never in a release tag, targets already exist |
 | `RELEASE_NOTES_0.14.0.md` | What changed for me in 0.14.0? | keep; rewrite in user language (PR-P) |
-| `RELEASE_NOTES_0.14.0b0.md` | What changed in the beta? | keep as a record; linked from the 0.14.0 notes only |
+| `RELEASE_NOTES_0.14.0b0.md` | What changed in the beta? | keep as a record; not rewritten |
 | `examples/color_palette_examples.md` (generated) | Which colours does each palette use? | keep |
 | Web Gallery entries (`gbdraw/web/gallery/`, 10) | Show me a finished figure I can open and reproduce | keep; titles and descriptions per the writing rules (PR-V) |
 
@@ -142,7 +142,18 @@ Page layout:
 Scenario IDs (`T-GUI-01` and so on), capture flows, recipe runners, and
 artifact paths under `docs/images/` stay. Manifest `destination` values point
 to the merged page plus its interface anchor (`#in-the-web-app`,
-`#on-the-command-line`, `#in-python`).
+`#on-the-command-line`, `#in-python`); the executable markers
+(`<!-- executable:<ID>:start -->`) are keyed by scenario ID, so three of them
+can share one page. The manifest changes with the pages:
+
+- `tutorial_projects.<project>` gains the page path and its H1; the page H1
+  equals that project title, not the per-scenario `title`.
+- `tutorial_project_policy.navigation` describes the interface sections instead
+  of the "Choose how to build this figure" table.
+- `destination` stays unique per scenario through its anchor; tests compare
+  the file part with the page and check the anchor exists.
+- `sources` entries that name a deleted page name the page that received its
+  content.
 
 ### Gallery and Tutorials overlap
 
@@ -212,9 +223,16 @@ PR-T and PR-V both touch `GALLERY.md` links; the second to merge rebases.
 ## Verification
 
 - Every PR: `tests/test_tutorial_documentation_contracts.py`,
-  `tests/test_documentation_*`, the recipe and capture contract modules that
-  read the manifest, and
-  `tests/test_reproduce_examples.py::test_public_markdown_local_targets_exist`.
+  `tests/test_documentation_*`, `tests/test_documented_recipes.py`,
+  `tests/test_onboarding_recipe_contracts.py`,
+  `tests/test_gui_protein_comparison_capture_contracts.py`,
+  `tests/test_python_tutorial_recipe_contracts.py`,
+  `tests/test_web_packaging.py::test_gallery_tutorial_links_resolve`, and
+  `tests/test_reproduce_examples.py::test_public_markdown_local_targets_exist`
+  plus `test_public_figures_have_reproduction_inventory_coverage`. CI runs only
+  the recipes job on a docs-only PR, so run the last three locally.
+  `GALLERY.md` links written as HTML `<a href>` are not link-checked; check
+  them by hand.
 - PR-T: the CLI and Python recipe runners for the moved blocks; no
   screenshot or figure regeneration (rule 7).
 - PR-V: Gallery JSON and capture checks from the
