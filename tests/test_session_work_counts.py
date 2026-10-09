@@ -154,7 +154,7 @@ def test_cli_session_render_validates_and_copies_the_session_once(
     assert copies == Counter(
         {
             "gbdraw.api.session_compat.canonical_payload_for_session_decode": 1,
-            "gbdraw.api.session_compat._read_session_artifact_source": 1,
+            # CurrentRequestArtifacts detaches the Session's identity manifest.
             "gbdraw.api.request_render.__post_init__": 1,
         }
     )

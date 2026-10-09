@@ -306,14 +306,9 @@ def _read_session_artifact_source(
                 f"losatDerivedCache.entries[{index}]."
             )
 
-    source_manifest = artifacts.get("proteinIdentityManifest")
-    if source_manifest is not None and not isinstance(source_manifest, Mapping):
+    manifest = artifacts.get("proteinIdentityManifest")
+    if manifest is not None and not isinstance(manifest, Mapping):
         raise ValidationError("Session proteinIdentityManifest must be an object.")
-    manifest = (
-        copy.deepcopy(dict(source_manifest))
-        if isinstance(source_manifest, Mapping)
-        else None
-    )
     return _SessionArtifactSource(
         current_raw_entries=tuple(current_raw),
         current_derived_entries=tuple(current_derived),
