@@ -1104,23 +1104,6 @@ export const createLegendEntryActions = ({
     }
   };
 
-  // OV-276: the Legend panel rows the palette colors take the color the
-  // palette repaint gave their swatches. True when a row changed.
-  /** @param {unknown} colorsByCaption */
-  const setPaletteLegendEntryColors = (colorsByCaption) => {
-    if (!(colorsByCaption instanceof Map) || colorsByCaption.size === 0) return false;
-    const drawing = state.activeDrawing();
-    let changed = false;
-    const entries = (drawing.legendEntries.value || []).map((entry) => {
-      const color = colorsByCaption.get(entry?.caption);
-      if (!color || normalizedColor(color) === normalizedColor(entry.color)) return entry;
-      changed = true;
-      return { ...entry, color };
-    });
-    if (changed) drawing.legendEntries.value = entries;
-    return changed;
-  };
-
   const updateLegendEntryColor = (idx, newColor) => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -1394,7 +1377,6 @@ export const createLegendEntryActions = ({
     reconcileLegendEntries,
     restoreDeletedLegendEntries,
     setLegendGeometryChangedHandler,
-    setPaletteLegendEntryColors,
     updateLegendEntryCaption,
     updateLegendEntryColor,
     updateLegendEntryColorByCaption

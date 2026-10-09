@@ -26,9 +26,10 @@ const openWithUserColor = async (page) => {
   if ((await colors.locator('..').getAttribute('open')) === null) await colors.click();
 };
 // OV-276: the Legend panel row shows the color of the repainted swatch.
-const legendRowColor = (page, caption) => page.evaluate((row) => String(
-  window.__GBDRAW_APP__.legendEntries.find((entry) => entry.caption === row)?.color || ''
-).toLowerCase(), caption);
+const legendRowColor = (page, caption) => page.evaluate((row) => {
+  const app = window.__GBDRAW_APP__;
+  return String(app.legendEntryColor(app.legendEntries.find((entry) => entry.caption === row)) || '').toLowerCase();
+}, caption);
 const facts = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
   return {
@@ -80,7 +81,9 @@ test('a palette switch keeps a user default color after asking; Cancel changes n
     const app = window.__GBDRAW_APP__;
     const palette = app.paletteDefinitions[name];
     const rows = app.legendEntries.filter((entry) => entry.caption !== 'CDS' && palette[entry.caption]);
-    return rows.length > 0 && rows.every((entry) => entry.color.toLowerCase() === palette[entry.caption].toLowerCase());
+    return rows.length > 0 && rows.every((entry) => (
+      String(app.legendEntryColor(entry)).toLowerCase() === palette[entry.caption].toLowerCase()
+    ));
   }, next)).toBe(true);
   await expect.poll(() => legendRowColor(page, 'CDS')).toBe(USER_CDS);
 

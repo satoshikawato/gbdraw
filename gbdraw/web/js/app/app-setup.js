@@ -1427,6 +1427,11 @@ export const createAppSetup = () => {
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
     projectPaletteAndRules: (...args) => paletteRulePorts.projectPaletteAndRules(...args)
   });
+  // OV-276: a Legend panel row shows the color the palette gives its swatch,
+  // derived here and never written into the rows.
+  const paletteLegendRowColors = computed(() => svgActions.paletteLegendRowColors());
+  /** @param {{ caption?: string, color?: string } | null | undefined} entry */
+  const legendEntryColor = (entry) => paletteLegendRowColors.value.get(entry?.caption || '') || entry?.color;
   // The palette and the specific-color rules on the mounted Result (R3): the
   // one call of their projection, shared by `projectMountedEditorIntent`, the
   // palette watcher, and a rule commit. It prepares the rule matches first
@@ -1434,10 +1439,8 @@ export const createAppSetup = () => {
   // once), and resolves to false when the rules changed meanwhile.
   const projectPaletteAndRules = ({ recolor = {}, prepareRules = true } = {}) => {
     const project = () => {
-      const legendRowColors = svgActions.applyPaletteToSvg(recolor);
+      svgActions.applyPaletteToSvg(recolor);
       svgActions.applySpecificRulesToSvg();
-      // OV-276: the Legend panel rows show the palette's repainted swatches.
-      legendActions.setPaletteLegendEntryColors(legendRowColors);
       return true;
     };
     return prepareRules
@@ -5981,6 +5984,7 @@ export const createAppSetup = () => {
     syncLabelEditor,
     openFeatureEditorFromList,
     legendEntries: drawingMember('legendEntries'),
+    legendEntryColor,
     newLegendCaption,
     newLegendColor,
     updateLegendEntryColor,

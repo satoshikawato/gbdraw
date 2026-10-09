@@ -266,12 +266,12 @@ test('the palette dialog closes after the History step of its choice', async () 
   assert.equal(pending.value, false);
 });
 
-// OV-276: a palette repaint gives the composition root the color of each
-// Legend row the palette colors (rows with a Legend color keep theirs), and
-// the Legend owner shows those colors in the Legend panel rows.
+// OV-276: the Legend panel shows each row the palette colors in the color its
+// repaint gives the swatch (rows with a Legend color keep theirs). The color
+// is derived: the repaint writes nothing into the Legend rows, which are an
+// input of the rule preparation (a write during a Generate made it stale).
 const legendRepaintSetup = async (manualSpecificRules = []) => {
   const { createSvgStyles } = await import('../../gbdraw/web/js/app/svg-styles.js');
-  const { createLegendEntryActions } = await import('../../gbdraw/web/js/app/legend/entry-actions.js');
   const { withDrawings } = await import('./helpers/drawing-state.mjs');
   const element = (attributes) => ({
     getAttribute: (key) => attributes[key] ?? null, setAttribute: (key, value) => { attributes[key] = value; }
@@ -300,21 +300,16 @@ const legendRepaintSetup = async (manualSpecificRules = []) => {
   const styles = createSvgStyles({
     state, watch() {}, nextTick: (fn) => fn?.(), commitActiveResultEdit: () => true, projectPaletteAndRules: () => true
   });
-  return { styles, state, rows, entries, feature, createLegendEntryActions };
+  return { styles, state, rows, entries, feature };
 };
 
-test('a palette repaint reports its Legend row colors and the Legend panel rows take them', async () => {
-  const { styles, state, entries, createLegendEntryActions } = await legendRepaintSetup();
-  const legendRowColors = styles.applyPaletteToSvg();
-  assert.deepEqual([...legendRowColors], [['CDS', '#123456'], ['other tRNAs', '#333333']]);
-  const actions = createLegendEntryActions({ state });
-  assert.equal(actions.setPaletteLegendEntryColors(legendRowColors), true);
-  assert.deepEqual(state.activeDrawing().legendEntries.value, [
-    { caption: 'CDS', color: '#123456' }, { caption: 'other tRNAs', color: '#333333' }, entries[2], entries[3]
-  ]);
-  assert.equal(state.activeDrawing().legendEntries.value[2], entries[2], 'an unchanged row keeps its object');
-  assert.equal(actions.setPaletteLegendEntryColors(legendRowColors), false);
-  assert.equal(actions.setPaletteLegendEntryColors(undefined), false);
+test('the Legend panel shows the palette color of the rows the repaint colors', async () => {
+  const { styles, state, rows, entries } = await legendRepaintSetup();
+  styles.applyPaletteToSvg();
+  assert.equal(rows[0].querySelectorAll('path')[0].getAttribute('fill'), '#123456');
+  assert.deepEqual([...styles.paletteLegendRowColors()], [['CDS', '#123456'], ['other tRNAs', '#333333']]);
+  assert.equal(state.activeDrawing().legendEntries.value, entries, 'the repaint writes no Legend row');
+  assert.deepEqual(entries[0], { caption: 'CDS', color: '#AABBCC' });
 });
 
 // Review 2: a Legend row that a Specific color rule draws keeps the rule's
@@ -325,7 +320,7 @@ test('a palette repaint leaves a Legend row that a rule draws', async () => {
   const rule = { feat: 'CDS', qual: 'product', val: '.', color: '#00aa00', cap: 'CDS' };
   const { styles, rows, feature } = await legendRepaintSetup([rule]);
   recordRuleMatches([feature], [ruleKey(rule)], () => ({ matched: [0], priorities: [0], declined: [] }));
-  const legendRowColors = styles.applyPaletteToSvg();
-  assert.deepEqual([...legendRowColors], [['other tRNAs', '#333333']]);
+  styles.applyPaletteToSvg();
+  assert.deepEqual([...styles.paletteLegendRowColors()], [['other tRNAs', '#333333']]);
   assert.equal(rows[0].querySelectorAll('path')[0].getAttribute('fill'), '#AABBCC');
 });

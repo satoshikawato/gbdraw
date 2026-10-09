@@ -6840,7 +6840,7 @@
                                             <i class="ph ph-caret-down text-xs" aria-hidden="true"></i>
                                         </button>
                                     </div>
-                                    <div class="w-6 h-6 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: entry.color }" :title="entry.color"></div>
+                                    <div class="w-6 h-6 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: legendEntryColor(entry) }" :title="legendEntryColor(entry)"></div>
                                     <input type="text" :value="entry.caption" :aria-label="`Legend entry ${entry.caption} name`" @change="renameLegendEntry(idx, $event.target.value)" class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0" :disabled="!semanticMutationAvailable">
                                     <button :aria-label="`Stroke options for ${entry.caption}`" data-history-ignore :aria-expanded="isLegendStrokeOptionsOpen(entry.caption) ? 'true' : 'false'" @click="toggleLegendStrokeOptions(entry.caption)" class="text-slate-400 hover:text-slate-600 shrink-0 p-0.5" :title="isLegendStrokeOptionsOpen(entry.caption) ? 'Hide stroke options' : 'Show stroke options'">
                                         <i class="ph text-xs" :class="isLegendStrokeOptionsOpen(entry.caption) ? 'ph-caret-up' : 'ph-sliders-horizontal'" aria-hidden="true"></i>
