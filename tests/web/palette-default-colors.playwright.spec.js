@@ -25,6 +25,10 @@ const openWithUserColor = async (page) => {
   const colors = page.locator('summary[aria-label="Colors"]');
   if ((await colors.locator('..').getAttribute('open')) === null) await colors.click();
 };
+// OV-276: the Legend panel row shows the color of the repainted swatch.
+const legendRowColor = (page, caption) => page.evaluate((row) => String(
+  window.__GBDRAW_APP__.legendEntries.find((entry) => entry.caption === row)?.color || ''
+).toLowerCase(), caption);
 const facts = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
   return {
@@ -43,6 +47,8 @@ test('a palette switch keeps a user default color after asking; Cancel changes n
   });
   const select = page.getByRole('combobox', { name: 'Palette', exact: true });
   const before = await facts(page);
+  // OV-276: a Default colors edit shows in the Legend panel row.
+  await expect.poll(() => legendRowColor(page, 'CDS')).toBe(USER_CDS);
   const next = await page.evaluate(() => window.__GBDRAW_APP__.paletteNames.find((name) => (
     name !== window.__GBDRAW_APP__.selectedPalette
   )));
@@ -66,6 +72,14 @@ test('a palette switch keeps a user default color after asking; Cancel changes n
   expect(kept.undo).toBe(before.undo + 1);
   const paletteTrna = await page.evaluate((name) => window.__GBDRAW_APP__.paletteDefinitions[name].tRNA, next);
   expect(kept.colors.tRNA).toBe(paletteTrna);
+  // OV-276: so does a palette switch, on every row of a palette key.
+  await expect.poll(() => page.evaluate((name) => {
+    const app = window.__GBDRAW_APP__;
+    const palette = app.paletteDefinitions[name];
+    const rows = app.legendEntries.filter((entry) => entry.caption !== 'CDS' && palette[entry.caption]);
+    return rows.length > 0 && rows.every((entry) => entry.color.toLowerCase() === palette[entry.caption].toLowerCase());
+  }, next)).toBe(true);
+  await expect.poll(() => legendRowColor(page, 'CDS')).toBe(USER_CDS);
 
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settleLive(page);

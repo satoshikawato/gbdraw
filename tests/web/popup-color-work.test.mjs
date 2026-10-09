@@ -267,8 +267,6 @@ test('Apply to all on a palette row sets the default color as one History step a
   assert.equal(setup_.state.currentColors.value.CDS, '#123456');
   assert.deepEqual(setup_.manualSpecificRules, []);
   assert.equal('CDS' in setup_.state.legendColorOverrides, false);
-  // OV-264: the Legend panel row shows the new color in the same step.
-  assert.deepEqual(setup_.state.legendEntries.value, [{ caption: 'CDS', color: '#123456' }]);
   assert.equal(setup_.featureStyleScopeDialog.show, false);
   assert.equal(setup_.history.getUndoCount(), undoCount + 1);
 });

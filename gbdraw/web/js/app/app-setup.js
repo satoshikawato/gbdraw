@@ -1434,8 +1434,10 @@ export const createAppSetup = () => {
   // once), and resolves to false when the rules changed meanwhile.
   const projectPaletteAndRules = ({ recolor = {}, prepareRules = true } = {}) => {
     const project = () => {
-      svgActions.applyPaletteToSvg(recolor);
+      const legendRowColors = svgActions.applyPaletteToSvg(recolor);
       svgActions.applySpecificRulesToSvg();
+      // OV-276: the Legend panel rows show the palette's repainted swatches.
+      legendActions.setPaletteLegendEntryColors(legendRowColors);
       return true;
     };
     return prepareRules

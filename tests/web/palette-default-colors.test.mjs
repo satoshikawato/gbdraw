@@ -226,3 +226,49 @@ test('the palette dialog closes after the History step of its choice', async () 
   assert.equal(paletteColorsDialog.show, false);
   assert.equal(pending.value, false);
 });
+
+// OV-276: a palette repaint gives the composition root the color of each
+// Legend row the palette colors (rows with a Legend color keep theirs), and
+// the Legend owner shows those colors in the Legend panel rows.
+test('a palette repaint reports its Legend row colors and the Legend panel rows take them', async () => {
+  const { createSvgStyles } = await import('../../gbdraw/web/js/app/svg-styles.js');
+  const { createLegendEntryActions } = await import('../../gbdraw/web/js/app/legend/entry-actions.js');
+  const { withDrawings } = await import('./helpers/drawing-state.mjs');
+  const element = (attributes) => ({
+    getAttribute: (key) => attributes[key] ?? null, setAttribute: (key, value) => { attributes[key] = value; }
+  });
+  const row = (caption, fill) => ({
+    ...element({ 'data-legend-key': caption }),
+    querySelectorAll: (selector) => (selector === 'path' ? [element({ fill })] : [])
+  });
+  const rows = [row('CDS', '#AABBCC'), row('other tRNAs', '#111111'), row('Manual', '#010101'), row('rRNA', '#121212')];
+  const featureLegend = { querySelectorAll: (selector) => (selector === 'g[data-legend-key]' ? rows : []) };
+  const legend = { querySelector: (selector) => (selector === '#feature_legend' ? featureLegend : null) };
+  const svg = { querySelectorAll: () => [], getElementById: (id) => (id === 'legend' ? legend : null) };
+  const feature = { id: 'f1', svg_id: 'f1', type: 'CDS' };
+  const entries = [
+    { caption: 'CDS', color: '#AABBCC' }, { caption: 'other tRNAs', color: '#111111' },
+    { caption: 'Manual', color: '#010101' }, { caption: 'rRNA', color: '#121212' }
+  ];
+  const state = withDrawings({
+    mode: ref('circular'), svgContent: ref('<svg/>'), svgContainer: ref({ querySelector: () => svg }),
+    extractedFeatures: ref([feature]), featuresBySvgId: ref(new Map()), manualSpecificRules: [],
+    featureColorOverrides: {}, legendColorOverrides: { rRNA: '#121212' }, pairwiseMatchFactors: ref({}),
+    paletteDefinitions: ref(PALETTES), appliedPaletteName: ref('default'),
+    appliedPaletteColors: ref({ ...paletteOf('default'), CDS: '#123456', tRNA: '#333333', rRNA: '#444444' }),
+    results: ref([]), legendEntries: ref(entries), originalLegendOrder: ref([]), originalLegendColors: ref({})
+  });
+  const styles = createSvgStyles({
+    state, watch() {}, nextTick: (fn) => fn?.(), commitActiveResultEdit: () => true, projectPaletteAndRules: () => true
+  });
+  const legendRowColors = styles.applyPaletteToSvg();
+  assert.deepEqual([...legendRowColors], [['CDS', '#123456'], ['other tRNAs', '#333333']]);
+  const actions = createLegendEntryActions({ state });
+  assert.equal(actions.setPaletteLegendEntryColors(legendRowColors), true);
+  assert.deepEqual(state.activeDrawing().legendEntries.value, [
+    { caption: 'CDS', color: '#123456' }, { caption: 'other tRNAs', color: '#333333' }, entries[2], entries[3]
+  ]);
+  assert.equal(state.activeDrawing().legendEntries.value[2], entries[2], 'an unchanged row keeps its object');
+  assert.equal(actions.setPaletteLegendEntryColors(legendRowColors), false);
+  assert.equal(actions.setPaletteLegendEntryColors(undefined), false);
+});

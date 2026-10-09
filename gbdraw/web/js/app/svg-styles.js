@@ -107,6 +107,7 @@ export const createSvgStyles = ({
 
   // The palette styles the displayed Result with the settings of the drawing
   // of that Result's mode: its rules, edits and skew slot colors (OV-108).
+  // Returns the color of each Legend row the palette colors, by caption.
   const applyPaletteToSvg = ({
     recolorPairwise = false,
     recolorCollinear = false
@@ -281,6 +282,8 @@ export const createSvgStyles = ({
     }
 
     const featureLegendGroups = getAllFeatureLegendGroups(svg);
+    /** @type {Map<string, string>} */
+    const legendRowColors = new Map();
     const keyToColorKey = {
       CDS: 'CDS',
       'D-loop': 'D-loop',
@@ -326,6 +329,7 @@ export const createSvgStyles = ({
 
           const newColor = resolveLegendColor(legendKey, colors);
           if (!newColor) return;
+          legendRowColors.set(legendKey, newColor);
 
           const paths = entryGroup.querySelectorAll('path');
           for (const path of paths) {
@@ -346,6 +350,7 @@ export const createSvgStyles = ({
 
           const newColor = resolveLegendColor(textContent, colors);
           if (!newColor) return;
+          legendRowColors.set(textContent, newColor);
 
           const textPos = parseTransformXY(textEl.getAttribute('transform'));
           let bestPath = null;
@@ -381,6 +386,7 @@ export const createSvgStyles = ({
     }
 
     if (updatedCount > 0) commitActiveResultEdit?.('palette');
+    return legendRowColors;
   };
 
   const applySpecificRulesToSvg = () => {
