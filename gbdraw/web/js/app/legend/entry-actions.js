@@ -1,5 +1,10 @@
 // @ts-check
 /** @import { DrawingState } from '../../state.js' */
+/**
+ * A Legend row record as the editor lists, restores, and compares it.
+ * @typedef {{ caption?: string, originalCaption?: string, color?: string, featureIds?: unknown[], xPos?: number, yPos?: number }} EntryRecord
+ */
+/** @typedef {EntryRecord & { caption: string, originalCaption: string }} ListedEntry A row a Result lists, under its caption and its key. */
 import { normalizeOptionalHexColor, resolveColorToHex, toNativeColorInputValue } from '../../utils/color-utils.js';
 import {
   defaultLegendCaptionOrder,
@@ -22,7 +27,7 @@ const generatedCaption = (entry) => String(entry?.originalCaption || entry?.capt
 // their order; with `keepFollowed`, entries whose listed ones already follow
 // the order keep it (B18), as `orderLegendEntries` orders a Legend group.
 /**
- * @param {Record<string, any>[]} entries
+ * @param {EntryRecord[]} entries
  * @param {string[]} captions
  * @param {{ keepFollowed?: boolean }} [options]
  */
@@ -32,7 +37,7 @@ const entriesInOrder = (entries, captions, { keepFollowed = false } = {}) => {
   captions.forEach((caption) => { if (caption && !rank.has(caption)) rank.set(caption, rank.size); });
   const listed = entries.map((entry) => rank.get(legendCaption(entry))).filter((value) => value !== undefined);
   if (keepFollowed && listed.every((value, index) => index === 0 || listed[index - 1] < value)) return entries;
-  /** @param {Record<string, any>} entry */
+  /** @param {EntryRecord} entry */
   const at = (entry) => rank.get(legendCaption(entry)) ?? Infinity;
   return entries.map((entry, index) => ({ entry, index }))
     .sort((left, right) => (at(left.entry) - at(right.entry)) || (left.index - right.index))
@@ -92,7 +97,7 @@ export const createLegendEntryActions = ({
   // the list. Outside a batch, or when `from` lists the rows this Result shows,
   // the restored list describes this Result and stays. Returns whether the
   // list was rewritten.
-  /** @param {{ from?: Record<string, any>[] | null }} [options] */
+  /** @param {{ from?: EntryRecord[] | null }} [options] */
   const adoptRestoredLegend = ({ from = null } = {}) => {
     const drawing = state.activeDrawing();
     const svg = svgContainer.value?.querySelector?.('svg');
@@ -104,13 +109,13 @@ export const createLegendEntryActions = ({
     if (mounted.entries.length === fromCaptions.size && mounted.entries.every((entry) => fromCaptions.has(entry.caption))) {
       return false;
     }
-    /** @param {Record<string, any>[]} list @param {(entry: Record<string, any>) => string} key */
+    /** @param {EntryRecord[]} list @param {(entry: EntryRecord) => string} key */
     const captionMap = (list, key) => new Map(list.filter(legendCaption).map((entry) => [key(entry), entry]));
     const before = captionMap(from, legendCaption);
     const beforeByGenerated = captionMap(from, generatedCaption);
     const after = captionMap(restored, legendCaption);
     const afterByGenerated = captionMap(restored, generatedCaption);
-    /** @type {Map<string, Record<string, any>>} */
+    /** @type {Map<string, EntryRecord>} */
     const renames = new Map();
     before.forEach((entry, caption) => {
       const next = afterByGenerated.get(generatedCaption(entry));
@@ -120,17 +125,18 @@ export const createLegendEntryActions = ({
     // A row no Result's inventory lists is an editor row; a returning row is
     // this Result's own or an editor row.
     const inventories = [...inventoryByResult.values(), originalLegendOrder.value];
-    /** @param {Record<string, any>} entry */
+    /** @param {EntryRecord} entry */
     const editorRow = (entry) => !inventories.some((inventory) => inventory.includes(generatedCaption(entry)));
     const returning = [...after.values()].filter((entry) => (
       !before.has(legendCaption(entry)) && !renamed.has(legendCaption(entry))
       && (originalLegendOrder.value.includes(generatedCaption(entry)) || editorRow(entry))
     ));
-    /** @param {Record<string, any>} entry @param {Record<string, any>} next */
+    /** @param {EntryRecord} entry @param {EntryRecord} next */
     const stepColor = (entry, next) => {
       const previous = before.get(legendCaption(next)) || beforeByGenerated.get(generatedCaption(next));
       return !previous || normalizedColor(previous.color) !== normalizedColor(next.color) ? next.color : entry.color;
     };
+    /** @type {EntryRecord[]} */
     let entries = mounted.entries.flatMap((entry) => {
       const next = renames.get(entry.caption) || after.get(entry.caption);
       if (!next) return before.has(entry.caption) ? [] : [entry];
@@ -168,8 +174,8 @@ export const createLegendEntryActions = ({
   // once until Python draws them (gaps 1 and 2; null when the rows only change
   // color). Resolves to false when the Result or the caller became stale.
   /**
-   * @param {Record<string, any>[]} intents
-   * @param {{ drawing?: DrawingState, previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean, placement?: { caption: string, at: string } | null }} [options]
+   * @param {EntryRecord[]} intents
+   * @param {{ drawing?: DrawingState, previousFileIntents?: EntryRecord[], isCurrent?: () => boolean, placement?: { caption: string, at: string } | null }} [options]
    */
   const prepareFileLegendEntries = async (intents, {
     drawing = state.activeDrawing(), previousFileIntents = [], isCurrent = () => true, placement = null
@@ -186,7 +192,7 @@ export const createLegendEntryActions = ({
       provenance.get(caption)?.add(normalizedColor(entry?.color));
     }
     const listed = (drawing.legendEntries.value || [])
-      .map((/** @type {Record<string, any>} */ entry) => ({ caption: legendCaption(entry), color: normalizedColor(entry.color) }));
+      .map((/** @type {EntryRecord} */ entry) => ({ caption: legendCaption(entry), color: normalizedColor(entry.color) }));
     const owned = listed.filter((entry) => provenance.get(entry.caption)?.has(entry.color));
     const desiredByCaption = new Map(intents.map((intent) => [intent.caption, normalizedColor(intent.color)]));
     for (const intent of intents) {
@@ -205,8 +211,8 @@ export const createLegendEntryActions = ({
         const removed = new Set(diff.remove.map(({ caption }) => caption));
         const colors = new Map(diff.update.map(({ caption, color }) => [caption, color]));
         const added = new Map(diff.add.map(({ caption, color }) => [caption, { caption, originalCaption: caption, color, featureIds: [] }]));
-        /** @type {Record<string, any>[]} */
-        let entries = (drawing.legendEntries.value || []).map((/** @type {Record<string, any>} */ entry) => (
+        /** @type {EntryRecord[]} */
+        let entries = (drawing.legendEntries.value || []).map((/** @type {EntryRecord} */ entry) => (
           colors.has(legendCaption(entry)) ? { ...entry, color: colors.get(legendCaption(entry)) } : entry
         ));
         // OV-158 (Owner decision 2026-10-07): the row a rename draws takes the
@@ -253,7 +259,7 @@ export const createLegendEntryActions = ({
    * under the keys they show (B19 reads the list a Result showed). Also the
    * generated captions: the keys of the listed rows of Python's.
    * @param {SVGSVGElement} svg
-   * @param {{ entries: Record<string, any>[], dormant?: Record<string, any>[], deleted?: Record<string, any>[],
+   * @param {{ entries: EntryRecord[], dormant?: EntryRecord[], deleted?: EntryRecord[],
    *   inventory?: string[], asShown?: boolean }} intent
    */
   const listLegendRows = (svg, { entries, dormant = [], deleted = [], inventory = [], asShown = false }) => {
@@ -261,7 +267,7 @@ export const createLegendEntryActions = ({
     if (!rows) return null;
     const known = new Set(inventory);
     const deletedKeys = new Set(deleted.map(generatedCaption).filter((key) => known.has(key)));
-    /** @param {(entry: Record<string, any>) => boolean} test */
+    /** @param {(entry: EntryRecord) => boolean} test */
     const intentEntry = (test) => entries.find(test) || dormant.find(test);
     // The compile renames a key the inventory lists (else the entry is an
     // editor row), and a dormant row wherever it is drawn again unless a
@@ -272,7 +278,7 @@ export const createLegendEntryActions = ({
       if (keyed.length === 0) return dormant.find((entry) => generatedCaption(entry) === key);
       return known.has(key) ? keyed.find((entry) => legendCaption(entry) !== key) : undefined;
     };
-    /** @type {Record<string, any>[]} */
+    /** @type {ListedEntry[]} */
     const listed = [];
     /** @type {Set<string>} */
     const generatedCaptions = new Set();
@@ -348,8 +354,8 @@ export const createLegendEntryActions = ({
    * The renamed rows a draw leaves out (OV-120): each keeps its generated
    * caption and its rename, unless the row is deleted.
    * @param {DrawingState} drawing
-   * @param {{ previous: Record<string, any>[], drawn: Record<string, any>[] }} rows
-   * @returns {Record<string, any>[]}
+   * @param {{ previous: EntryRecord[], drawn: EntryRecord[] }} rows
+   * @returns {EntryRecord[]}
    */
   const dormantAfterDraw = (drawing, { previous, drawn }) => {
     const drawnOriginals = new Set(drawn.map((entry) => String(entry?.originalCaption || entry?.caption || '').trim()));
@@ -535,12 +541,12 @@ export const createLegendEntryActions = ({
   // ranked entry; an entry the inventory does not rank goes last, as the
   // default order puts the editor's own rows (`defaultLegendEntryOrder`).
   /**
-   * @param {Record<string, any>[]} entries
-   * @param {Record<string, any>} entry
+   * @param {EntryRecord[]} entries
+   * @param {EntryRecord} entry
    * @param {string[]} inventory
    */
   const withEntryAtDefaultPlace = (entries, entry, inventory) => {
-    /** @param {Record<string, any>} item */
+    /** @param {EntryRecord} item */
     const rank = (item) => inventory.indexOf(generatedCaption(item));
     const own = rank(entry);
     if (own < 0) return [...entries, entry];

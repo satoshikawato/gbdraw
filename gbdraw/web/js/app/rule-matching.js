@@ -231,7 +231,7 @@ export const createRulePreparation = ({
   const retain = (rules = []) => { retained = rules; };
   const prepare = (rules = state.activeDrawing().manualSpecificRules, {
     blocked = () => Boolean(state.sessionOperationAvailability?.()), ...options
-  } = /** @type {Record<string, any>} */ ({})) => {
+  } = /** @type {{ blocked?: () => boolean } & Record<string, unknown>} */ ({})) => {
     const targets = features();
     const draft = [...new Map([...rules, ...retained].map((rule) => [ruleKey(rule), { feat: rule.feat, qual: rule.qual, val: rule.val }])).values()];
     // Empty catalogs still require syntax validation at input boundaries.

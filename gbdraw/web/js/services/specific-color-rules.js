@@ -23,7 +23,7 @@ export const normalizeSpecificRule = (rule, { fromFile = Boolean(rule?.fromFile)
 // own normalization (equal strings normalize equally; one direction only, so
 // `red` and `#ff0000` under one caption still ask Python). R4: the vectors in
 // tests/fixtures/specific_color_caption_fixpoints.json hold both answers.
-/** @param {Record<string, any>[]} rules */
+/** @param {readonly { cap?: unknown, color?: unknown }[]} rules */
 export const ruleCaptionsAreNormalized = (rules) => {
   /** @type {Map<string, string>} */
   const colorOf = new Map();

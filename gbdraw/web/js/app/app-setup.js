@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
 /** @import { DrawingState, LegendEntry } from '../state.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { EditorPaintState } from './result-paint-record.js' */
@@ -1489,7 +1490,7 @@ export const createAppSetup = () => {
   const sessionBlocks = (saving) => Boolean(sessionOperationAvailability()) && !(saving && sessionSavePending.value);
   /**
    * @param {{
-   *   recolor?: Record<string, any>, prepareRules?: boolean, show?: boolean, saving?: boolean,
+   *   recolor?: { recolorPairwise?: boolean, recolorCollinear?: boolean }, prepareRules?: boolean, show?: boolean, saving?: boolean,
    *   legendRows?: import('./candidate-render.js').RuleLegendRows | null
    * }} [options]
    */
@@ -3399,6 +3400,7 @@ export const createAppSetup = () => {
    * }} [options]
    *   The operation domains the displayed Result shows, previewed live and compiled alone; null
    *   compiles the edits Python does not draw, as Generate does. `ruleRows`: a rule commit's rows.
+   * @returns {SvgMutationOperations | null}
    */
   const compileDisplayedResultOperations = (drawing, resultIndex, { replayDefaultLegendOrder = null, domains = null, ruleRows = null } = {}) => {
     const catalog = toRaw(state.featureCatalog.value);
@@ -3445,7 +3447,7 @@ export const createAppSetup = () => {
   /**
    * @param {{
    *   domains: readonly string[],
-   *   operations?: Record<string, any> | null,
+   *   operations?: SvgMutationOperations | null,
    *   ruleRows?: import('./candidate-render.js').RuleLegendRows | null
    * }} options
    */
@@ -3476,19 +3478,23 @@ export const createAppSetup = () => {
    * action writes the active drawing's intent and returns true when it
    * changed, the displayed Result shows it, and both are one History step (a
    * control's open step is joined).
+   * @template {unknown[]} A
    * @param {string} label
-   * @param {(...args: any[]) => unknown} mutate
+   * @param {(...args: A) => unknown} mutate
    * @param {{ domains?: readonly string[] }} [options]
+   * @returns {(...args: A) => Promise<unknown>}
    */
   const editEditorIntent = (label, mutate, { domains = STROKE_DOMAINS } = {}) => (
-    /** @type {any[]} */ ...args
+    ...args
   ) => history.runUndoable(label, () => showingEditorIntent(mutate, domains)(...args));
   /**
    * The action that writes the intent and, when it changed, shows `domains`.
-   * @param {(...args: any[]) => unknown} mutate
+   * @template {unknown[]} A
+   * @param {(...args: A) => unknown} mutate
    * @param {readonly string[]} domains
+   * @returns {(...args: A) => Promise<unknown>}
    */
-  const showingEditorIntent = (mutate, domains) => async (/** @type {any[]} */ ...args) => {
+  const showingEditorIntent = (mutate, domains) => async (...args) => {
     const changed = await mutate(...args);
     if (changed === true) showEditorIntent({ domains });
     return changed;
@@ -3552,7 +3558,9 @@ export const createAppSetup = () => {
       failed = true;
       console.error('Editor edits could not be compiled for the displayed Result.', normalizeUserFacingError(error));
     }
-    const hasOperations = Boolean(operations) && domains.some((domain) => operations[domain].length > 0);
+    const shown = operations;
+    const hasOperations = shown !== null
+      && domains.some((domain) => shown[/** @type {keyof SvgMutationOperations} */ (domain)].length > 0);
     // A Result that shows a Legend structure edit no operation keeps returns
     // to Python's rows (the reconcile's reverse).
     const projects = colors || visibility || strokes || hasOperations || legendStructureEdited(context.root);
@@ -3789,7 +3797,7 @@ export const createAppSetup = () => {
     () => 'Change feature stroke',
     showingEditorIntent(handleFeatureStyleScopeChoice, STROKE_DOMAINS)
   );
-  /** @param {string} choice @param {any[]} rest */
+  /** @param {string} choice @param {unknown[]} rest */
   const handleFeatureStyleScopeChoiceWithHistory = (choice, ...rest) => (
     featureStyleScopeDialog.kind === 'stroke'
       ? handleFeatureStrokeScopeChoiceWithHistory(choice, ...rest)

@@ -836,7 +836,7 @@ const orderLegendGroup = (group, captions, keepFollowed) => {
 // Returns whether a row was removed or moved.
 /**
  * @param {{ legends: () => { groups: Element[] } }} index
- * @param {Record<string, any>} operations
+ * @param {SvgMutationOperations} operations
  * @param {readonly string[]} domains
  */
 const restoreLegendStructure = (index, operations, domains) => {
@@ -883,13 +883,15 @@ const restoreLegendStructure = (index, operations, domains) => {
  * categories and features, so an absent caption or feature is skipped.
  * Returns whether the Legend's rows changed, so the caller lays it out once.
  * @param {Element} svg
- * @param {Record<string, any>} operations
+ * @param {SvgMutationOperations} operations
  * @param {{ resultIndex?: number, domains?: readonly string[] }} [options]
  * @returns {boolean}
  */
 export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domains = RESULT_PAINT_DOMAINS } = {}) => {
   const index = createLazyMutationIndex(svg, { phase: 'result-selection', resultIndex });
-  const present = ({ renderedId }) => (index.features().get(renderedId) || []).length > 0;
+  const present = (/** @type {Readonly<Record<string, unknown>>} */ operation) => (
+    index.features().get(String(operation.renderedId)) || []
+  ).length > 0;
   applyFeatureOperations(index, {
     featureFills: operations.featureFills.filter(present),
     featureStrokes: operations.featureStrokes.filter(present),
@@ -914,14 +916,28 @@ export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domai
 };
 
 /**
+ * A saved feature color edit: a color, or a color with the Legend caption it
+ * names (older Sessions wrote the color alone).
+ * @typedef {string | { color?: unknown, caption?: unknown } | null} SavedFeatureColorEdit
+ */
+/**
+ * A saved stroke edit of a feature or a Legend row.
+ * @typedef {{ strokeColor?: unknown, strokeWidth?: unknown }} SavedStrokeEdit
+ */
+/**
+ * A saved Legend row as Load reads it: its caption, Python's key, and the
+ * features older Sessions listed.
+ * @typedef {{ caption?: unknown, originalCaption?: unknown, featureIds?: unknown }} SavedLegendEntry
+ */
+/**
  * The stroke and color edits a saved Result shows, as Load reads them for its
  * mode, and the values the Session recorded as Python's.
  * @typedef {object} SavedResultEdits
- * @property {Record<string, any>} featureColorOverrides
- * @property {Record<string, any>} featureStrokeOverrides
- * @property {Record<string, any>[]} legendEntries
+ * @property {Record<string, SavedFeatureColorEdit>} featureColorOverrides
+ * @property {Record<string, SavedStrokeEdit>} featureStrokeOverrides
+ * @property {SavedLegendEntry[]} legendEntries
  * @property {Record<string, string>} legendColorOverrides
- * @property {Record<string, any>} legendStrokeOverrides
+ * @property {Record<string, SavedStrokeEdit>} legendStrokeOverrides
  * @property {Record<string, string>} originalLegendColors
  * @property {string[]} originalLegendOrder The captions of the rows Python drew (the Legend inventory).
  * @property {'circular' | 'linear'} mode
@@ -989,11 +1005,11 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits, block
   const editedFills = new Map();
   /** @type {Map<string, RenderedFeatureId[]>} */
   const namedIdsByCaption = new Map();
-  /** @type {Map<string, Record<string, any>>} */
+  /** @type {Map<string, { fill_color?: unknown }>} */
   const renderedFeatures = catalogAdmission.renderedFeaturesByResult?.[resultIndex] || new Map();
   Object.entries(edits.featureColorOverrides).forEach(([key, edit]) => {
     const color = text(edit && typeof edit === 'object' ? edit.color : edit);
-    const caption = text(edit?.caption);
+    const caption = text(edit && typeof edit === 'object' ? edit.caption : '');
     renderedIdsOf(key).forEach((renderedId) => {
       if (color) editedFills.set(renderedId, color);
       if (caption) namedIdsByCaption.set(caption, [...(namedIdsByCaption.get(caption) || []), /** @type {RenderedFeatureId} */ (renderedId)]);
@@ -1002,7 +1018,7 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits, block
       ));
     });
   });
-  /** @type {Array<[string, Record<string, any>]>} The rendered features each stroke edit reaches. */
+  /** @type {Array<[string, SavedStrokeEdit]>} The rendered features each stroke edit reaches. */
   const stroked = [];
   Object.entries(edits.featureStrokeOverrides).forEach(([key, edit]) => {
     if (setsFeatureStroke(edit)) renderedIdsOf(key).forEach((renderedId) => stroked.push([renderedId, edit]));
@@ -1023,7 +1039,7 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits, block
       if (swatch) record(swatch, 'fill', color, original);
     });
   });
-  /** @type {Array<[string, Record<string, any>]>} */
+  /** @type {Array<[string, SavedStrokeEdit]>} */
   const strokedRows = Object.entries(edits.legendStrokeOverrides).filter(([, edit]) => setsFeatureStroke(edit));
   strokedRows.forEach(([caption, edit]) => {
     const entry = edits.legendEntries.find((row) => text(row?.caption) === caption);
@@ -1059,7 +1075,7 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits, block
   const firstPart = [...index.features().values()].flat().find((element) => !isAutoFeatureUnderlay(element));
   const firstBlocks = `${perRecord ? text(firstPart?.getAttribute('data-gbdraw-record-index')) : ''}|block`;
   if (blockStroke && !drawnStrokes.has(firstBlocks)) drawnStrokes.set(firstBlocks, blockStroke);
-  /** @param {Element} element @param {{ color: unknown, width: unknown } | null | undefined} drawn @param {Record<string, any>} edit */
+  /** @param {Element} element @param {{ color: unknown, width: unknown } | null | undefined} drawn @param {SavedStrokeEdit} edit */
   const recordStroke = (element, drawn, edit) => {
     if (!drawn) return;
     record(element, 'stroke', edit.strokeColor, drawn.color);
@@ -1137,7 +1153,7 @@ const recordSavedLegendKeys = (svg, renames) => {
  * for each Result saved without records of Python's paint, the records of the
  * edits it shows (`recordSavedEditBases`); and for each Result the records of
  * Python's key on the rows a Session renamed without one (`recordSavedLegendKeys`).
- * @param {readonly Record<string, any>[]} results
+ * @param {readonly { content?: unknown }[]} results
  * @param {FeatureCatalogAdmission} catalogAdmission
  * @param {SavedResultEdits | null} edits
  * @param {LegacyResultNormalization | null} [legacy]
@@ -1147,10 +1163,10 @@ export const createSavedResultPlan = (results, catalogAdmission, edits, legacy =
   const editsShown = edits && [
     edits.featureColorOverrides, edits.featureStrokeOverrides, edits.legendColorOverrides, edits.legendStrokeOverrides
   ].some((overrides) => Object.keys(overrides || {}).length > 0);
-  const needsRecords = (/** @type {Record<string, any>} */ result) => (
+  const needsRecords = (/** @type {{ content?: unknown }} */ result) => (
     Boolean(editsShown) && String(result?.content || '').indexOf('data-gbdraw-base-') < 0
   );
-  const normalizes = (/** @type {Record<string, any>} */ result) => Boolean(legacy?.applies(result?.content));
+  const normalizes = (/** @type {{ content?: unknown }} */ result) => Boolean(legacy?.applies(result?.content));
   const legacyNormalizationCount = results.filter(normalizes).length;
   const renames = edits ? savedLegendRenames(edits) : new Map();
   if (legacyNormalizationCount === 0 && renames.size === 0 && !results.some(needsRecords)) {

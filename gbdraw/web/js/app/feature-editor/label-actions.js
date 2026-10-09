@@ -92,7 +92,7 @@ export const requireUniqueEditableLabelBindings = (
 
 // Whether a label is drawn only when it fits inside its feature, which only
 // Python measures: a label edit then asks for the label rerender.
-/** @param {Record<string, any> | null | undefined} diagramOptions */
+/** @param {{ configOverrides?: Readonly<Record<string, unknown>> } | null | undefined} diagramOptions */
 const labelsEmbeddedOnly = (diagramOptions) => diagramOptions?.configOverrides?.['labels.rendering'] === 'embedded_only';
 
 // A feature drawn as underlay has no label (gbdraw/features/factory.py), and

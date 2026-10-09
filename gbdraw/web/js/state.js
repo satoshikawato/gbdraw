@@ -682,9 +682,13 @@ const displayedResultMetadata = () => getCommittedSvgResultMetadata(toRaw(result
 // content (an editor edit, R1) keeps both, so it does not list the features
 // again. The rule matches the drawn state reads are recorded while
 // `ruleMatchingPending` holds, so the list follows its fall.
-/** @typedef {{ list: Record<string, any>[], names: unknown[], metadata: Record<string, any> | null }} ListedResults */
+/**
+ * What the list reads of the displayed Result's committed metadata.
+ * @typedef {{ selectedFeatureTypes?: string[] | null, renderedFeatureIdentities?: { renderedIds?: unknown } | null }} ListedResultMetadata
+ */
+/** @typedef {{ list: readonly { name?: unknown }[], names: unknown[], metadata: ListedResultMetadata | null }} ListedResults */
 const listedResults = computed((/** @type {ListedResults | undefined} */ previous) => {
-  /** @type {Record<string, any>[]} */
+  /** @type {readonly { name?: unknown }[]} */
   const list = results.value;
   const names = list.map((result) => result?.name);
   const metadata = displayedResultMetadata();

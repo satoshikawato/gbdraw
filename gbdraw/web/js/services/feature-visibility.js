@@ -533,7 +533,7 @@ const drawnLegendFeatures = (catalogFeatures, context, { asRendered }) => {
   }
   return drawn;
 };
-/** @param {Record<string, any> | null | undefined} rule */
+/** @param {{ cap?: unknown } | null | undefined} rule */
 const legendRuleCaption = (rule) => String(rule?.cap ?? '').trim();
 
 // What Python derives the feature rows of a Result's Legend from
@@ -644,7 +644,7 @@ const legendRowKeysOf = (catalogFeatures, context) => {
 
 // The row keys of every committed Result, in Result order (an empty map for
 // a Result without a catalog).
-/** @param {Record<string, any>} state @param {LegendRuleContext} context */
+/** @param {{ results?: { value?: unknown } }} state @param {LegendRuleContext} context */
 export const resultLegendRowKeys = (state, context) => {
   const results = Array.isArray(state?.results?.value) ? state.results.value : [];
   return results.map((_, index) => {
@@ -656,7 +656,7 @@ export const resultLegendRowKeys = (state, context) => {
 // The place of each rule row in Python's Legend: the index of the first rule
 // of its caption in the rule table (prepare_legend_table walks the rules in
 // table order and skips a caption it has drawn); -1 for a row no rule names.
-/** @param {Record<string, any>[]} rules @returns {(key: string) => number} */
+/** @param {readonly { cap?: unknown }[]} rules @returns {(key: string) => number} */
 export const legendRuleOrder = (rules) => (key) => rules.findIndex((rule) => legendRuleCaption(rule) === key);
 
 // Whether the displayed Result shows the Legend rows a change of the row keys

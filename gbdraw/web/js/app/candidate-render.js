@@ -3,6 +3,7 @@
 /** @import { LegendStrokeOperation, SvgAdmissionRuntime, SvgResultTransform } from '../services/svg-result-ingestion.js' */
 /** @import { PythonLegendKey, PythonLegendRow, RenderedFeatureId, SwatchColor } from '../services/legend-svg.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
+/** @import { AddressedFeature } from '../services/feature-override-identity.js' */
 import { normalizeDefaultColor, resolveColorToHex } from '../utils/color-utils.js';
 import { defaultLegendCaptionOrder, isLegendOrderEdited } from '../services/legend-svg.js';
 import { cloneJsonValue } from '../services/json-clone.js';
@@ -395,7 +396,7 @@ const compilePlanBundle = ({
   const drawnFillById = 'fillByRenderedId' in catalogAdmission ? catalogAdmission.fillByRenderedId : null;
   // The fill Python drew a rendered feature with: its catalog row's, else the
   // displayed Result's (a Result without a catalog).
-  /** @param {string} renderedId @param {Record<string, any> | undefined} feature */
+  /** @param {string} renderedId @param {AddressedFeature | undefined} feature */
   const pythonFill = (renderedId, feature) => text(feature?.fill_color) || text(drawnFillById?.get(renderedId));
   const shownDomains = new Set(livePreview?.domains || []);
   /** @param {string} domain */
@@ -445,7 +446,7 @@ const compilePlanBundle = ({
     const winnerOf = rules.length > 0 ? ruleMatcher(rules).firstIfKnown : null;
     operationsByResult.forEach((operations, resultIndex) => {
       const edited = new Set(operations.featureFills.map(({ renderedId }) => renderedId));
-      /** @type {Map<string, Record<string, any>>} */
+      /** @type {Map<string, AddressedFeature>} */
       const rendered = catalogAdmission.renderedFeaturesByResult?.[resultIndex] || new Map();
       const unedited = [...rendered].filter(([renderedId]) => !edited.has(renderedId));
       const winners = winnerOf
@@ -472,7 +473,7 @@ const compilePlanBundle = ({
       const { drawnContext } = livePreview;
       if (!drawnContext) return;
       operationsByResult.forEach((operations, resultIndex) => {
-        /** @type {Map<string, Record<string, any>>} */
+        /** @type {Map<string, AddressedFeature>} */
         const rendered = catalogAdmission.renderedFeaturesByResult?.[resultIndex] || new Map();
         rendered.forEach((feature, renderedId) => {
           if (resolveFeatureDrawn(feature, drawnContext) === false) operations.featureVisibility.push({ renderedId, mode: 'off' });

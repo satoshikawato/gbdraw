@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
   reconcileMountedResult,
@@ -1068,7 +1069,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
   // once. `domains` are the domains returned to Python's values first;
   // `afterApply` learns whether the reconcile changed the Legend's rows.
   /**
-   * @param {Record<string, any> | null | undefined} operations
+   * @param {SvgMutationOperations | null | undefined} operations
    * @param {{ domains?: readonly string[], afterApply?: ((svg: SVGSVGElement, legendChanged: boolean) => void) | null }} [options]
    */
   const applyEditorOperations = (operations, { domains = [], afterApply = null } = {}) => {

@@ -227,12 +227,19 @@ const pythonFeatureFills = (svg) => {
   return fills;
 };
 
+/**
+ * A feature the editor compile reaches: a catalog row, or a feature read from
+ * the displayed Result. The rule matcher and the visibility resolver read its
+ * other fields.
+ * @typedef {Readonly<Record<string, unknown>> & { svg_id?: unknown, svgId?: unknown, type?: string, fill_color?: unknown }} AddressedFeature
+ */
+
 // What a feature catalog's admission gives the editor compile, for a Result
 // without a catalog (a Session older than 40): each feature read from the
 // displayed Result is reached by its override key, and its fill is the one
 // the mounted Result records as Python's (a catalog row's `fill_color`).
 /**
- * @param {readonly Record<string, any>[]} features
+ * @param {readonly AddressedFeature[]} features
  * @param {readonly string[]} resultNames
  * @param {number} resultIndex The displayed Result.
  * @param {Element | null} [svg] The displayed Result.
@@ -241,7 +248,7 @@ export const displayedFeatureAddressing = (features, resultNames, resultIndex, s
   const fillByRenderedId = pythonFeatureFills(svg);
   /** @type {Map<string, { resultIndex: number, renderedId: string }[]>} */
   const renderedTargetsByOverrideKey = new Map();
-  /** @type {Map<string, Record<string, any>>} */
+  /** @type {Map<string, AddressedFeature>} */
   const rendered = new Map();
   features.forEach((feature) => {
     const renderedId = text(feature?.svg_id ?? feature?.svgId);

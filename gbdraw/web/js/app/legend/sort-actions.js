@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DrawingState } from '../../state.js' */
+/** @import { DrawingState, LegendEntry } from '../../state.js' */
 // Sort and Move compute the requested caption order, write it into the
 // drawing's Legend intent, and show it through the root's port once (R1, R3,
 // R13): the executor orders the displayed Result's rows.
@@ -17,7 +17,7 @@ export const createLegendSortActions = ({ state, showLegendStructure }) => {
   const applyLegendEntryOrder = (drawing, captionOrder) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    /** @type {Record<string, any>[]} */
+    /** @type {LegendEntry[]} */
     const entries = drawing.legendEntries.value || [];
     const listed = new Set(captionOrder);
     const ordered = [
