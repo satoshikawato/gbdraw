@@ -182,12 +182,11 @@ assert.deepEqual(buildLegendIntents(canonicalRules).intents, [
     { code: 'TABLE_INVALID', context: { row: 1, field: 'color', reason: 'COLOR' } },
     value
   );
-  // DOM-free JavaScript cannot resolve a color name; Python validates it.
-  [...domain.valid, ...domain.invalid].forEach((entry) => {
-    if (entry.word) assert.equal(parseColor(entry.value), entry.value.toLowerCase(), entry.value);
-    else if (entry.normalized) assert.equal(parseColor(entry.value), entry.normalized, entry.value);
-    else rejects(entry.value);
-  });
+  const parsesTheDomain = () => {
+    domain.valid.forEach((entry) => assert.equal(parseColor(entry.value), entry.normalized, entry.value));
+    domain.invalid.forEach((entry) => rejects(entry.value));
+  };
+  parsesTheDomain();
   const noneRule = { feat: 'CDS', qual: 'hash', val: 'fx', color: 'none', cap: 'hollow' };
   assert.deepEqual(
     parseSpecificRules(serializeSpecificRules([noneRule])).rules
@@ -195,9 +194,12 @@ assert.deepEqual(buildLegendIntents(canonicalRules).intents, [
     [noneRule]
   );
 
-  const browserColors = new Map(domain.valid
-    .filter((entry) => entry.browser)
-    .map((entry) => [entry.value.toLowerCase(), entry.browser]));
+  // OV-271: a browser canvas, which also reads currentColor and system colors
+  // as Chromium does, does not widen the domain.
+  const browserColors = new Map([
+    ['red', '#ff0000'], ['grey', '#808080'], ['darkgrey', '#a9a9a9'],
+    ['currentcolor', '#000000'], ['buttonface', '#efefef'], ['canvas', '#ffffff']
+  ]);
   let fillStyle = '#000000';
   const context = {
     get fillStyle() { return fillStyle; },
@@ -209,10 +211,7 @@ assert.deepEqual(buildLegendIntents(canonicalRules).intents, [
   };
   globalThis.document = { createElement: () => ({ getContext: () => context }) };
   try {
-    domain.valid.forEach((entry) => {
-      assert.equal(parseColor(entry.value), entry.browser || entry.normalized, entry.value);
-    });
-    domain.invalid.forEach((entry) => rejects(entry.value));
+    parsesTheDomain();
   } finally {
     delete globalThis.document;
   }
