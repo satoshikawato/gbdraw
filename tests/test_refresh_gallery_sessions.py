@@ -402,13 +402,34 @@ def test_current_session_catalog_structure_accepts_drawn_selector(
     _validate_current_session_catalog_structure(session_path, session)
 
 
-def test_vibrio_gallery_session_retains_complete_compact_cache(
+def test_vibrio_gallery_session_stores_resolved_comparisons_and_raw_cache(
     load_cached_gallery_session: Callable[[Path], dict[str, object]],
 ) -> None:
+    """Load and the first Generate reuse the stored result (Owner, 2026-10-09).
+
+    The request carries the collinear result and the marker that reuses it, so
+    the first Generate after Load does not compute the comparisons again. The
+    raw LOSATP cache stays, so a changed setting recomputes without LOSATP.
+    """
+
     path = _session_path("vibrio-harveyi-group-collinear")
     session = load_cached_gallery_session(path)
 
-    assert session["renderRequest"]["schema"] in BUNDLED_REQUEST_SCHEMAS
+    request = session["renderRequest"]
+    assert request["schema"] in BUNDLED_REQUEST_SCHEMAS
+    comparisons = request["comparisons"]
+    assert [comparison["kind"] for comparison in comparisons] == [
+        "collinearityResult",
+        "generatedProteinComparison",
+    ]
+    assert comparisons[1]["mode"] == "none"
+    assert session["resources"][comparisons[0]["resourceId"]]["kind"] == (
+        "collinearity-result"
+    )
+    assert session["modes"]["linear"]["config"]["losat"]["blastp"]["mode"] == (
+        "collinear"
+    )
+    assert session["losatDerivedCache"]["entries"] == []
 
     protein_entries = [
         entry
@@ -1093,6 +1114,13 @@ def test_declared_command_refresh_keeps_one_file_as_one_resource(
     session = load_session(destination)
     assert session["cliInvocation"]["args"] == shlex.split(command)[2:]
     assert _stored_output_prefixes(session) == ("declared", "declared")
+    # The Session stores the collinear result its command computed, with the
+    # marker that reuses it, as the Web writes it after a Generate.
+    comparisons = session["renderRequest"]["comparisons"]
+    assert [(item["kind"], item.get("mode")) for item in comparisons] == [
+        ("collinearityResult", None),
+        ("generatedProteinComparison", "none"),
+    ]
     # The Web's configuration overrides, so Session Load needs no Worker.
     options = session["renderRequest"]["diagramOptions"]
     assert options.get("config") is None
@@ -1247,6 +1275,26 @@ def test_staged_gallery_validator_accepts_current_artifact_schemas(
     }
 
     _validate_staged_gallery_session(session_path, session)
+
+    # A Gallery Session stores its protein comparison results; a pipeline that
+    # the first Generate would run again is rejected (Owner, 2026-10-09).
+    def with_protein_mode(mode: str) -> dict[str, object]:
+        request = dict(
+            session["renderRequest"],
+            comparisons=[
+                {
+                    "kind": "generatedProteinComparison",
+                    "mode": mode,
+                    "pairs": [],
+                    "settings": {},
+                }
+            ],
+        )
+        return dict(session, renderRequest=request)
+
+    _validate_staged_gallery_session(session_path, with_protein_mode("none"))
+    with pytest.raises(ValueError, match="resolved protein comparison results"):
+        _validate_staged_gallery_session(session_path, with_protein_mode("collinear"))
 
     stale_version = dict(session, version=33)
     with pytest.raises(ValueError, match=f"expected {CURRENT_SESSION_VERSION}"):

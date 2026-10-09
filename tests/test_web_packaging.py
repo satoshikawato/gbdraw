@@ -1095,9 +1095,13 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(
         "gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz"
         not in remote_assets
     )
+    # The Vibrio Session stores its collinear result and exceeds the 25 MiB
+    # Pages asset limit, so the Worker serves it from the pinned commit.
     assert (
-        "gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
-        not in remote_assets
+        remote_assets[
+            "gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
+        ]
+        == f"{remote_base}gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
     )
     assert "gallery/examples/vibrio-harveyi-group-collinear.svg" not in remote_assets
     assert all("/main/" not in url for url in remote_assets.values())
@@ -1113,7 +1117,7 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(
         / "sessions"
         / "Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz"
     ).exists()
-    assert (
+    assert not (
         bundle_path
         / "gallery"
         / "sessions"

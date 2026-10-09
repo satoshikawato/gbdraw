@@ -53,8 +53,8 @@
       "sha256": "d692bb61971f4aab70db55bdbfa86f491d9c13c70bc1211a4f1a6fd46cec3191"
     },
     "gallery/examples/vibrio-harveyi-group-collinear.svg": {
-      "bytes": 14959322,
-      "sha256": "9bbfcdd99211484c3a21b315c61a5703e735f23c313841ec1c4785fff3697bc6"
+      "bytes": 14959466,
+      "sha256": "3ea9b6689139b6bf209fcdf70dc7883e8355f4d78cceefb9247e1f9fbebe4ad6"
     },
     "gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json": {
       "bytes": 2904452,
@@ -93,8 +93,8 @@
       "sha256": "6472f92b2cfc7a28bfabb0b2c62dea913ba70804c6c2596473b309f64cd5b82c"
     },
     "gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz": {
-      "bytes": 22317783,
-      "sha256": "c77497ca37645278bb96869eb15e0334457a19d8af81c1198cd772bc6e49d9ff"
+      "bytes": 27702856,
+      "sha256": "b52083e4a662e1d9ec16d3e14555d4cca90c7c417235153a0783b1fcf101522e"
     },
     "gallery/sources/BGC0000708-BGC0000713.svg": {
       "bytes": 245739,
