@@ -181,6 +181,7 @@
       "id": "R14",
       "heading": "R14: Typed boundaries",
       "guards": [
+        "tests/web/explicit-any-ratchet.test.mjs",
         "tests/web/no-implicit-any-ratchet.test.mjs",
         "tests/web/typed-boundaries.test.mjs"
       ],
@@ -194,6 +195,11 @@
           "path": "tests/web/no-implicit-any-ratchet.test.mjs",
           "symbol": "NO_IMPLICIT_ANY_BASELINE",
           "kind": "count"
+        },
+        {
+          "path": "tests/web/explicit-any-ratchet.test.mjs",
+          "symbol": "EXPLICIT_ANY_BASELINE",
+          "kind": "count-map"
         }
       ]
     },
