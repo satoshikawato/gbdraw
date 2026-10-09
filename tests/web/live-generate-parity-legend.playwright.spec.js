@@ -993,3 +993,57 @@ test('OV-291: a palette change and a stroke on a row a rule\'s caption names, li
   const { generated } = await expectLiveEqualsGenerate(page, { label: 'palette change, then a stroke on the row a rule caption names' });
   expect(rowStrokedFeatures(generated), 'Generate strokes the same feature').toEqual(stroked);
 });
+
+// Review H1 of OV-288 (R15-4): N-06 allocates a rule's row by the colors
+// Python gives its rows, not by their swatches. A Legend color equal to the
+// rule's color on the row the rule's caption names leaves the rule in its own
+// row, so that row's stroke still reaches the features drawn in it, live as
+// at Generate.
+test('OV-288: a Legend color equal to a rule\'s color on the row its caption names keeps the row\'s stroke reach, live = Generate (circular)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2266aa', cap: 'repeat_region' });
+  await generate(page);
+  await legendRowColor(page, 'repeat_region', '#2266aa');
+  await legendRowStrokeColor(page, 'repeat_region', ROW_STROKE);
+  const stroked = rowStrokedFeatures(await semanticSnapshot(page));
+  expect(stroked, 'the repeat_region feature and the feature named into the caption (OV-292)')
+    .toEqual(['f841fb8a8', 'f9cf91913']);
+  const { generated } = await expectLiveEqualsGenerate(page, { label: 'a Legend color equal to the rule color, then a stroke' });
+  expect(rowStrokedFeatures(generated), 'Generate strokes the same features').toEqual(stroked);
+});
+
+// OV-293 (PD-OI-066): Generate draws no stroke for a deleted Legend row, so
+// its delete takes the stroke off its features live; Undo, Redo and Restore
+// show the stroke as Generate draws it. A batch Result displayed after the
+// delete shows it too.
+test('OV-293: deleting a stroked Legend row takes its stroke off live, and Undo, Redo and Restore follow, live = Generate (circular)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await legendRowStrokeColor(page, 'CDS', ROW_STROKE);
+  const stroked = rowStrokedFeatures(await semanticSnapshot(page));
+  expect(stroked.length, 'the stroke reaches the CDS features live').toBeGreaterThan(0);
+  await deleteLegendRow(page, 'CDS');
+  expect(rowStrokedFeatures(await semanticSnapshot(page)), 'the delete takes the stroke off').toEqual([]);
+  await history(page, 'undo');
+  expect(rowStrokedFeatures(await semanticSnapshot(page)), 'Undo of the delete').toEqual(stroked);
+  await history(page, 'redo');
+  expect(rowStrokedFeatures(await semanticSnapshot(page)), 'Redo of the delete').toEqual([]);
+  await expectLiveEqualsGenerate(page, { label: 'delete of a stroked row' });
+  await appAction(page, 'restoreAllDeletedLegendEntries');
+  expect(rowStrokedFeatures(await semanticSnapshot(page)), 'Restore returns the stroke').toEqual(stroked);
+  await expectLiveEqualsGenerate(page, { label: 'Restore of a stroked row' });
+});
+
+test('OV-293: a batch Result displayed after a stroked Legend row is deleted shows no stroke, live = Generate (circular, two-Result batch)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+  await legendRowStrokeColor(page, 'CDS', ROW_STROKE);
+  await showResult(page, 1);
+  expect(rowStrokedFeatures(await semanticSnapshot(page)).length, 'Result 2 shows the stroke').toBeGreaterThan(0);
+  await showResult(page, 0);
+  await deleteLegendRow(page, 'CDS');
+  await showResult(page, 1);
+  expect(rowStrokedFeatures(await semanticSnapshot(page)), 'Result 2 shows the delete').toEqual([]);
+  await expectLiveEqualsGenerate(page, { label: 'a batch Result displayed after the delete of a stroked row' });
+});

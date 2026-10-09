@@ -1,6 +1,7 @@
 // @ts-check
 import { resolveColorToHex } from '../utils/color-utils.js';
 import { parseSpecificRules } from './file-imports.js';
+/** @import { PythonLegendKey, PythonLegendRow } from './legend-svg.js' */
 
 const normalizeText = (value) => String(value ?? '').trim();
 const normalizeColor = (value) => String(resolveColorToHex(normalizeText(value)) || '').toLowerCase();
@@ -87,22 +88,40 @@ const drawsRow = (row, rule) => row.color === fillIdentity(rule.color)
  * @property {Record<string, any>[]} [legendEntries]
  * @property {string[]} [originalLegendOrder]
  * @property {Partial<SpecificColorRule>[]} [rules]
+ * @property {ReadonlyMap<PythonLegendKey, PythonLegendRow>} [pythonRows] Python's rows of the displayed
+ *   Result. Given, a rule is compared with each row's key and the fill Python drew for it, as Python
+ *   allocates (`generated_fills`, R15-4); without it, with the listed rows' captions and swatches.
  */
 
-/** @param {LegendRowContext} [context] */
-export const rendererLegendRows = ({ legendEntries = [], originalLegendOrder = [], rules = [] } = {}) => {
+// The rows N-06 compares a rule with: Python's (key and drawn fill) when the
+// caller gives them, else the listed entries (caption and swatch).
+/** @param {LegendRowContext} context */
+const comparedRows = ({ legendEntries = [], pythonRows }) => (pythonRows
+  ? [...pythonRows.values()].flatMap((row) => (row.color
+    ? [{ caption: String(row.key), origin: String(row.key), color: fillIdentity(row.color) }]
+    : []))
+  : (legendEntries || []).map((entry) => ({
+    caption: normalizeText(entry?.caption),
+    origin: normalizeText(entry?.originalCaption || entry?.caption),
+    color: fillIdentity(entry?.color)
+  })));
+
+/**
+ * @param {ReturnType<typeof comparedRows>} rows
+ * @param {LegendRowContext} context
+ * @returns {RendererLegendRow[]}
+ */
+const rendererRowsOf = (rows, { originalLegendOrder = [], rules = [] }) => {
   const generated = new Set((originalLegendOrder || []).map(normalizeText).filter(Boolean));
   const normalizedRules = (rules || []).map((rule) => normalizeSpecificRule(rule)).filter((rule) => rule.cap);
-  return (legendEntries || [])
-    .map((entry) => ({
-      caption: normalizeText(entry?.caption),
-      origin: normalizeText(entry?.originalCaption || entry?.caption),
-      color: fillIdentity(entry?.color)
-    }))
+  return rows
     .filter((row) => row.caption && generated.has(row.origin)
       && !normalizedRules.some((rule) => drawsRow(row, rule)))
     .map(({ caption, color }) => ({ caption, color }));
 };
+
+/** @param {LegendRowContext} [context] */
+export const rendererLegendRows = (context = {}) => rendererRowsOf(comparedRows(context), context);
 
 const uniqueLegendKey = (reserved, preferred) => {
   if (!reserved.has(preferred)) return preferred;
@@ -157,8 +176,9 @@ export const createRuleLegendCaptions = (rules = [], rendererRows = []) => {
 };
 
 // Only a caption that names a current row of another color can be allocated.
-const mayBeAllocated = (rule, legendEntries) => Boolean(rule.cap) && (legendEntries || []).some((entry) => (
-  normalizeText(entry?.caption) === rule.cap && fillIdentity(entry?.color) !== fillIdentity(rule.color)
+/** @param {ReturnType<typeof normalizeSpecificRule>} rule @param {ReturnType<typeof comparedRows>} rows */
+const mayBeAllocated = (rule, rows) => Boolean(rule.cap) && rows.some((row) => (
+  row.caption === rule.cap && row.color !== fillIdentity(rule.color)
 ));
 
 // The legend caption Generate draws for a rule of `context.rules`, read for
@@ -167,13 +187,14 @@ const mayBeAllocated = (rule, legendEntries) => Boolean(rule.cap) && (legendEntr
  * @param {LegendRowContext} [context]
  * @returns {(rule: Partial<SpecificColorRule> | null | undefined) => string}
  */
-export const ruleLegendCaptions = ({ rules = [], legendEntries = [], originalLegendOrder = [] } = {}) => {
+export const ruleLegendCaptions = (context = {}) => {
+  const rows = comparedRows(context);
   /** @type {((rule: Partial<SpecificColorRule> | null | undefined) => string) | null} */
   let allocated = null;
   return (rule) => {
     const normalized = normalizeSpecificRule(rule);
-    if (!mayBeAllocated(normalized, legendEntries)) return normalized.cap;
-    allocated ||= createRuleLegendCaptions(rules, rendererLegendRows({ legendEntries, originalLegendOrder, rules }));
+    if (!mayBeAllocated(normalized, rows)) return normalized.cap;
+    allocated ||= createRuleLegendCaptions(context.rules, rendererRowsOf(rows, context));
     return allocated(normalized);
   };
 };
@@ -197,13 +218,11 @@ export const buildLegendIntents = (rules, rendererRows = []) => {
  * @param {string} caption
  * @param {LegendRowContext} [context]
  */
-export const legendRowRules = (caption, { rules = [], legendEntries = [], originalLegendOrder = [] } = {}) => {
+export const legendRowRules = (caption, context = {}) => {
   const target = normalizeText(caption);
   if (!target) return [];
-  const legendCaption = createRuleLegendCaptions(
-    rules, rendererLegendRows({ legendEntries, originalLegendOrder, rules })
-  );
-  return (rules || []).filter((rule) => legendCaption(rule) === target);
+  const legendCaption = createRuleLegendCaptions(context.rules, rendererLegendRows(context));
+  return (context.rules || []).filter((rule) => legendCaption(rule) === target);
 };
 
 export const diffLegendIntents = (currentEntries, desiredIntents) => {

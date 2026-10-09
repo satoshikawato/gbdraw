@@ -1187,12 +1187,17 @@ test('Load records Python\'s paint on a Session 44 Result', () => {
 // feature and Legend row fill the displayed Result shows is an operation.
 const previewFeature = (admission) => admission.renderedFeaturesByResult[0].get('f0001');
 const PREVIEW_DOMAINS = ['featureFills', 'featureVisibility', 'legendFills'];
-const previewPlan = (admission, { paletteColors = { CDS: '#aaaaaa' }, drawnContext = null, domains = PREVIEW_DOMAINS, ...options } = {}) => (
+// Python's rows of the displayed Result (`pythonLegendRows`): the CDS row as
+// `buildSvgRoot` draws it.
+const pythonRowsOf = (color) => new Map([['CDS', { key: 'CDS', color }]]);
+const previewPlan = (admission, {
+  paletteColors = { CDS: '#aaaaaa' }, drawnContext = null, domains = PREVIEW_DOMAINS, pythonRows = pythonRowsOf('#aaaaaa'), ...options
+} = {}) => (
   compileDirectEditorMutationPlan({
     catalogAdmission: admission,
     legendEntries: [{ caption: 'CDS', originalCaption: 'CDS', color: '#aaaaaa' }],
     originalLegendOrder: ['CDS'],
-    livePreview: { domains, paletteColors, drawnContext },
+    livePreview: { domains, paletteColors, drawnContext, pythonRows },
     ...options
   }).operationsByResult[0]
 );
@@ -1233,14 +1238,19 @@ test('a Legend fill reconcile shows the rule or palette color of a row whose own
   const mounted = buildSvgRoot();
   reconcileMountedResult(mounted, previewPlan(admission, { legendColorOverrides: { CDS: '#334455' } }), { domains: ['legendFills'] });
   assert.equal(swatchFill(mounted), '#334455');
-  // The rule draws the CDS row (the listed row is in its color); a rule whose
-  // caption names a row of another color draws its own row (N-06, OV-291).
+  // The rule draws the CDS row (Python drew the row in its color); a rule
+  // whose caption names a row Python drew in another color draws its own row
+  // (N-06, OV-291), whatever color the row's swatch shows (review H1).
   const rule = { feat: 'CDS', qual: 'gene', val: 'x', cap: 'CDS', color: '#ff0000' };
   const ruleRow = [{ caption: 'CDS', originalCaption: 'CDS', color: '#ff0000' }];
-  reconcileMountedResult(mounted, previewPlan(admission, { manualSpecificRules: [rule], legendEntries: ruleRow }), { domains: ['legendFills'] });
+  reconcileMountedResult(mounted, previewPlan(admission, {
+    manualSpecificRules: [rule], legendEntries: ruleRow, pythonRows: pythonRowsOf('#ff0000')
+  }), { domains: ['legendFills'] });
   assert.equal(swatchFill(mounted), '#ff0000');
   reconcileMountedResult(mounted, previewPlan(admission, { manualSpecificRules: [rule] }), { domains: ['legendFills'] });
   assert.equal(swatchFill(mounted), '#aaaaaa', 'the row the caption names keeps its palette color');
+  reconcileMountedResult(mounted, previewPlan(admission, { manualSpecificRules: [rule], legendEntries: ruleRow }), { domains: ['legendFills'] });
+  assert.equal(swatchFill(mounted), '#aaaaaa', 'a swatch in the rule\'s color leaves the rule in its own row (review H1)');
   reconcileMountedResult(mounted, previewPlan(admission, { paletteColors: { CDS: '#00ff00' } }), { domains: ['legendFills'] });
   assert.equal(swatchFill(mounted), '#00ff00');
   reconcileMountedResult(mounted, previewPlan(admission), { domains: ['featureFills', 'legendFills'] });
@@ -1296,7 +1306,7 @@ test('a feature fill reconcile keeps the shown palette paint while a rule match 
 // (`LIVE_EDIT_DOMAINS`, and `editorPaintDomains` for a History step's changes).
 const {
   strokes: STROKES, fills: FILLS, legendFills: LEGEND_FILLS, visibility: VISIBILITY, legendStructure: LEGEND_STRUCTURE,
-  legendRows: LEGEND_ROWS
+  deletedRows: DELETED_ROWS
 } = LIVE_EDIT_DOMAINS;
 const EDIT_KIND_STAGES = [
   ['feature stroke (popup)', STROKES, ['strokes']],
@@ -1306,10 +1316,14 @@ const EDIT_KIND_STAGES = [
   ['color rule commit', FILLS, ['fills', 'rules', 'legendFills']],
   // A rule commit that adds or retires Legend rows shows them in its compile.
   ['color rule commit with Legend rows', [...FILLS, ...LEGEND_STRUCTURE], ['fills', 'rules', 'legendFills', 'legend']],
-  ['Legend add, delete or sort', LEGEND_STRUCTURE, ['legend']],
+  ['Legend add or sort', LEGEND_STRUCTURE, ['legend']],
+  // A deleted row's stroke leaves its features; a Restore returns it (OV-293).
+  ['Legend delete', [...LEGEND_STRUCTURE, ...STROKES], ['legend', 'strokes']],
   ['Legend rename of a row without rules or features', [...LEGEND_STRUCTURE, ...LEGEND_FILLS, ...STROKES],
     ['legend', 'legendFills', 'strokes']],
-  ['Legend Restore', LEGEND_ROWS, ['legend', 'legendFills']],
+  ['Legend Restore', DELETED_ROWS, ['legend', 'legendFills', 'strokes']],
+  ['History step of a Legend delete or Restore', editorPaintDomains([{ path: ['editorState', 'legend', 'deletedEntries'] }]),
+    ['legend', 'legendFills', 'strokes']],
   ['History step of a Legend row edit', editorPaintDomains([{ path: ['editorState', 'legend', 'entries'] }]),
     ['legend', 'legendFills']],
   ['Feature visibility edit', VISIBILITY, ['visibility']],
@@ -1352,7 +1366,7 @@ test('each edit kind runs exactly the compile stages of its allowlist', () => {
         legendColorOverrides: { Proteins: '#334455' },
         legendStrokeOverrides: { Proteins: { strokeColor: '#e63946' } },
         manualSpecificRules: [rule],
-        livePreview: domains && { domains, paletteColors: { CDS: '#00ff00' }, drawnContext: context, shownFills: () => new Map() }
+        livePreview: domains && { domains, paletteColors: { CDS: '#00ff00' }, drawnContext: context }
       });
       assert.equal(ruleReads > 0, allowed.includes('rules'), `${kind}: a specific-color rule match is read only by the rules stage`);
       const compiles = metrics.filter(({ name }) => name === 'editorPlanCompile');
@@ -1427,6 +1441,52 @@ test('a Legend row stroke reaches the features in Python\'s row color, not in th
   assert.equal(feature.getAttribute('stroke'), null, 'a feature this pass draws in another color');
   reconcileMountedResult(mounted, operations({ draftColor: '#123456', featureFills: [{ renderedId: 'f0001', color: '#123456' }] }), { domains });
   assert.equal(feature.getAttribute('stroke'), '#e63946', 'the draft recolors the row and its feature alike');
+});
+
+// Review L3 of OV-288: one compile gives every Result of a batch the row's
+// stroke, and the executor reaches in each Result the features drawn in the
+// color Python gave the row there. Result 2 draws the row in another color
+// (a rule's row of that caption): the same fills are reached in one Result
+// and not in the other; a feature with its own stroke keeps it.
+test('a Legend row stroke reaches in each Result of a batch the features of Python\'s row there', () => {
+  const resultRoot = (rowColor, features) => {
+    const root = new FakeElement('svg', { xmlns: 'http://www.w3.org/2000/svg' });
+    features.forEach(([id, fill]) => root.appendChild(new FakeElement('path', {
+      id, 'data-gbdraw-feature-id': id, 'data-gbdraw-feature-part': 'block', fill
+    })));
+    const legend = new FakeElement('g', { id: 'legend' });
+    const featureLegend = new FakeElement('g', { id: 'feature_legend' });
+    const row = new FakeElement('g', { 'data-legend-key': 'CDS' });
+    row.appendChild(new FakeElement('path', { fill: rowColor }));
+    featureLegend.appendChild(row);
+    legend.appendChild(featureLegend);
+    root.appendChild(legend);
+    return root;
+  };
+  const roots = [
+    resultRoot('#54bcf8', [['f0001', '#54bcf8'], ['f0003', '#54bcf8'], ['f0004', '#d3d3d3']]),
+    resultRoot('#d3d3d3', [['f0002', '#d3d3d3'], ['f0005', '#54bcf8']])
+  ];
+  const plan = compileDirectEditorMutationPlan({
+    catalogAdmission: {
+      resultNames: ['record-a.svg', 'record-b.svg'],
+      renderedTargetsByOverrideKey: new Map([['stable-a', [{ resultIndex: 0, renderedId: 'f0001' }]]]),
+      resultIndexesByRenderedId: new Map([['f0001', new Set([0])]])
+    },
+    featureStrokeOverrides: { 'stable-a': { strokeColor: '#2a9d8f' } },
+    legendEntries: [{ caption: 'CDS', originalCaption: 'CDS', color: '#7b2cbf' }],
+    originalLegendOrder: ['CDS'],
+    legendStrokeOverrides: { CDS: { strokeColor: '#e63946', strokeWidth: 3 } }
+  });
+  const domains = ['featureStrokes', 'legendStrokes'];
+  const stroked = roots.map((root, index) => {
+    reconcileMountedResult(root, plan.operationsByResult[index], { domains });
+    return root.querySelectorAll('[data-gbdraw-feature-id]').map((feature) => [feature.getAttribute('id'), feature.getAttribute('stroke')]);
+  });
+  assert.deepEqual(stroked, [
+    [['f0001', '#2a9d8f'], ['f0003', '#e63946'], ['f0004', null]],
+    [['f0002', '#e63946'], ['f0005', null]]
+  ]);
 });
 
 // A catalog row that does not say which fill Python drew gives no record, so

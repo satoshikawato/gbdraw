@@ -17,7 +17,7 @@ import { createResultPaintRecord } from './result-paint-record.js';
 import {
   countUnresolvedFeatureEdits, featureDrawnContext, removeUnresolvedFeatureEdits, requestFeatureVisibilityRules
 } from '../services/feature-visibility.js';
-import { drawnBlockStroke, drawsPythonLegendRow, isLegendOrderEdited, legendStructureEdited } from '../services/legend-svg.js';
+import { drawnBlockStroke, drawsPythonLegendRow, isLegendOrderEdited, legendStructureEdited, pythonLegendRows } from '../services/legend-svg.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
@@ -3242,15 +3242,16 @@ export const createAppSetup = () => {
   };
 
   // OV-154: a Restore is one History step of the Legend intent, shown with the
-  // rows' fills through the port. O-2 (D-15-6 (5)): a Result saved before the
-  // executor kept a deleted row lacks Python's row, so Python draws it again.
+  // rows' fills and strokes (OV-293) through the port. O-2 (D-15-6 (5)): a
+  // Result saved before the executor kept a deleted row lacks Python's row, so
+  // Python draws it again.
   // A Result Python drew in this session lacks only a row Python did not draw
   // there (its Legend row facts; U3a review M2); a loaded Result has no facts.
   /** @param {() => unknown} restore Returns the Python keys of the restored rows, as `restoreDeletedLegendEntries` does. */
   const restoreLegendRows = (restore) => {
     const restored = restore();
     if (!Array.isArray(restored)) return restored;
-    showEditorIntent({ domains: LIVE_EDIT_DOMAINS.legendRows });
+    showEditorIntent({ domains: LIVE_EDIT_DOMAINS.deletedRows });
     const svg = svgContainer.value?.querySelector?.('svg');
     const drawn = state.displayedResultMetadata()?.drawnLegendKeys;
     if (restored.some((key) => (!drawn || drawn.has(key)) && !drawsPythonLegendRow(svg, key))) {
@@ -3327,7 +3328,11 @@ export const createAppSetup = () => {
       Object.values(drawing.featureOverrides).map((row) => [row.recordKey, row.biologicalFeatureId, row.featureVisibility]),
       drawing.featureVisibilityManualRules
     ]),
-    strokes: JSON.stringify([drawing.featureStrokeOverrides, drawing.legendStrokeOverrides]),
+    // A deleted row strokes no feature (OV-293).
+    strokes: JSON.stringify([
+      drawing.featureStrokeOverrides, drawing.legendStrokeOverrides,
+      drawing.deletedLegendEntries.value.map((entry) => entry.originalCaption || entry.caption)
+    ]),
     labels: JSON.stringify([
       Object.values(drawing.featureOverrides).map((row) => [
         row.recordKey, row.biologicalFeatureId, row.labelVisibility, row.labelText, row.labelSourceText
@@ -3411,6 +3416,7 @@ export const createAppSetup = () => {
       livePreview: domains ? {
         domains,
         paletteColors: toRaw(appliedPaletteColors.value),
+        pythonRows: pythonLegendRows(svg),
         drawnContext: domains.includes('featureVisibility')
           ? featureDrawnContext(drawing, { diagramOptions: getCommittedCanonicalRenderRequest()?.diagramOptions })
           : null,
@@ -6255,8 +6261,8 @@ export const createAppSetup = () => {
     renameLegendEntry,
     // A Legend row delete is one History step of the intent, which Undo and
     // Redo show through the port and lay out as Python does, canvas included
-    // (OV-125).
-    deleteLegendEntry: editEditorIntent('Delete legend item', deleteLegendEntry, { domains: LEGEND_STRUCTURE_DOMAINS }),
+    // (OV-125). The deleted row's stroke leaves its features (OV-293).
+    deleteLegendEntry: editEditorIntent('Delete legend item', deleteLegendEntry, { domains: [...LEGEND_STRUCTURE_DOMAINS, ...STROKE_DOMAINS] }),
     // OV-154: a Restore returns deleted rows in one checkpoint step, as a delete
     // removes them; the palette then reaches the returned rows.
     deletedLegendEntries: drawingMember('deletedLegendEntries'),

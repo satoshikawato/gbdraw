@@ -1233,10 +1233,15 @@ const WORK_ALLOWLIST = [
     kind: 'Legend rename, palette row with features', stages: ['fills', 'rules', 'legendFills', 'legend'], compiles: 1,
     requests: ['evaluateRules', 'evaluateRules', 'render'], run: (page) => renameLegendRow(page, 'tRNA', 'transfer RNA')
   },
-  { kind: 'Legend delete', stages: ['legend'], compiles: 1, requests: [], run: (page) => deleteLegendRow(page, 'GC skew (+)') },
-  { kind: 'History step (Undo of a Legend delete)', stages: ['legend', 'legendFills'], compiles: 1, requests: [], run: (page) => history(page, 'undo') },
+  // A delete, its Undo and a Restore also show the strokes: a deleted row's
+  // stroke leaves its features (OV-293).
+  { kind: 'Legend delete', stages: ['legend', 'strokes'], compiles: 1, requests: [], run: (page) => deleteLegendRow(page, 'GC skew (+)') },
   {
-    kind: 'Legend Restore', stages: ['legend', 'legendFills'], compiles: 1, requests: [],
+    kind: 'History step (Undo of a Legend delete)', stages: ['legend', 'legendFills', 'strokes'], compiles: 1, requests: [],
+    run: (page) => history(page, 'undo')
+  },
+  {
+    kind: 'Legend Restore', stages: ['legend', 'legendFills', 'strokes'], compiles: 1, requests: [],
     before: (page) => deleteLegendRow(page, 'GC skew (+)'),
     run: (page) => page.evaluate(() => window.__GBDRAW_APP__.restoreAllDeletedLegendEntries()).then(() => settleLive(page))
   },
@@ -1286,7 +1291,7 @@ const WORK_ALLOWLIST = [
     // rule commit prepares its candidate rules (one request); the rows stay
     // on the displayed Result, so no rerender. It runs after the Load, so it
     // leaves the rule preparation of the rows above as they were (OV-286).
-    kind: 'Legend rename onto a deleted row (Restore and merge)', stages: ['fills', 'legend', 'legendFills', 'rules'],
+    kind: 'Legend rename onto a deleted row (Restore and merge)', stages: ['fills', 'legend', 'legendFills', 'rules', 'strokes'],
     compiles: 2, requests: ['evaluateRules'],
     before: (page) => deleteLegendRow(page, 'Two'),
     run: async (page) => {

@@ -142,6 +142,7 @@ const actions = createFeatureColorActions({
     legendRenameDialog: {},
     legendEntries,
     deletedLegendEntries: ref([]),
+    dormantLegendEntries: ref([]),
     legendStrokeOverrides,
     legendColorOverrides,
     originalLegendOrder: ref([]),
@@ -886,7 +887,8 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
         manualSpecificRules: rules, extractedFeatures: featureList, biologicalFeatures: featureList,
         featureColorOverrides: {}, svgContainer: ref({ querySelector: (selector) => selector === 'svg' ? svgRoot : null }),
         clickedFeature: ref(null), featureStyleScopeDialog: {}, resetColorDialog: {}, legendRenameDialog,
-        legendEntries: stateLegendEntries, deletedLegendEntries: ref(deleted), legendStrokeOverrides: {}, legendColorOverrides,
+        legendEntries: stateLegendEntries, deletedLegendEntries: ref(deleted), dormantLegendEntries: ref([]),
+        legendStrokeOverrides: {}, legendColorOverrides,
         originalLegendOrder: originalOrder, originalLegendColors: ref({}),
         featureStrokeOverrides: {}, skipCaptureBaseConfig: ref(false), skipExtractOnSvgChange: ref(false),
         addedLegendCaptions: ref(new Set())
@@ -1129,4 +1131,66 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   await gcAsked.renameActions.handleLegendRenameChoice('suffix');
   assert.deepEqual(gcAsked.stateLegendEntries.value.map((entry) => entry.caption), ['CDS', 'GC skew (-) (1)']);
   assert.equal(gcAsked.committed.length, 0);
+}
+
+// Review M1 of OV-288: the popup finds the stroked Legend row a feature shows
+// through the rule the compile reads (`draftLegendRows`), so a deleted row's
+// stroke does not reach it. CDS is stroked and deleted; FL1 is given a stroke
+// of its own and then Reset: it shows the stroke Python drew, and a later
+// width edit saves that color, not the deleted row's.
+{
+  const fl1 = { id: 'fl1', svg_id: 'fl1-svg', type: 'CDS', product: 'FL1', start: 1, end: 10 };
+  const fl1Attributes = new Map([['fill', '#cccccc'], ['stroke', '#000000'], ['stroke-width', '1']]);
+  const fl1Element = {
+    getAttribute: (name) => fl1Attributes.get(name) ?? null, setAttribute: () => {}, removeAttribute: () => {}
+  };
+  const fl1Svg = legendSvg();
+  const fl1StrokeOverrides = {};
+  const fl1Clicked = ref(null);
+  const fl1Features = ref([fl1]);
+  const fl1Rules = [];
+  const fl1State = { extractedFeatures: fl1Features, biologicalFeatures: fl1Features, manualSpecificRules: fl1Rules };
+  const fl1Actions = createFeatureColorActions({
+    state: withDrawings({
+      results: ref([]), selectedResultIndex: ref(0), appliedPaletteColors: ref({ CDS: '#cccccc' }),
+      manualSpecificRules: fl1Rules, extractedFeatures: fl1Features, biologicalFeatures: fl1Features,
+      featureColorOverrides: {}, svgContainer: ref({ querySelector: (selector) => selector === 'svg' ? fl1Svg : null }),
+      clickedFeature: fl1Clicked, featureStyleScopeDialog: {}, resetColorDialog: {}, legendRenameDialog: {},
+      legendEntries: ref([{ caption: 'GC content', originalCaption: 'GC content', color: '#a1a1a1', featureIds: [] }]),
+      deletedLegendEntries: ref([{ caption: 'CDS', originalCaption: 'CDS', color: '#cccccc', featureIds: [] }]),
+      dormantLegendEntries: ref([]),
+      legendStrokeOverrides: { CDS: { strokeColor: '#e63946', strokeWidth: 3 } }, legendColorOverrides: {},
+      originalLegendOrder: ref(['CDS', 'GC content']), originalLegendColors: ref({}),
+      featureStrokeOverrides: fl1StrokeOverrides, skipCaptureBaseConfig: ref(false), skipExtractOnSvgChange: ref(false),
+      addedLegendCaptions: ref(new Set())
+    }),
+    nextTick: async () => {},
+    showEditorIntent: () => {},
+    ruleActions: {
+      runWithRuleMatches: runWithRuleMatchesOf(createRulePreparation({ state: withDrawings(fl1State), evaluate: evaluatePythonRules }), fl1State),
+      commitSpecificRules: async () => true,
+      countFeaturesMatchingRule: () => 0,
+      effectiveLegendCaptions: () => () => 'CDS',
+      getLegendRowRules: () => [],
+      getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
+      findMatchingRegexRule: () => null,
+      findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],
+      findFeaturesWithSameIndividualLabel: () => [], getDisplayedFeatureLabel: () => '',
+      getIndividualFeatureLabel: () => '', getLabelSpecificRule: () => null
+    },
+    getFeatureElements: () => [fl1Element],
+    getFeatureFillElements: () => [fl1Element]
+  });
+  const fl1Key = featureOverrideKey(fl1) || fl1.svg_id;
+  fl1Clicked.value = { svg_id: fl1.svg_id, feat: fl1, color: '#cccccc', strokeColor: '#000000', strokeWidth: 1 };
+  assert.equal(await fl1Actions.updateClickedFeatureStroke('#2a9d8f', 1), true);
+  assert.equal(fl1StrokeOverrides[fl1Key]?.strokeColor, '#2a9d8f');
+  assert.equal(await fl1Actions.resetClickedFeatureStroke(), true);
+  assert.equal(fl1StrokeOverrides[fl1Key], undefined);
+  assert.equal(fl1Clicked.value.strokeColor, '#000000', 'Reset shows the stroke Python drew, not the deleted row\'s');
+  await fl1Actions.setClickedFeatureStrokeWidthValue(4);
+  assert.deepEqual(
+    [fl1StrokeOverrides[fl1Key]?.strokeColor, fl1StrokeOverrides[fl1Key]?.strokeWidth], ['#000000', 4],
+    'the width edit saves the stroke Python drew, not the deleted row\'s'
+  );
 }
