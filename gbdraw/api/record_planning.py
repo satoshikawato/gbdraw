@@ -746,7 +746,8 @@ def _load_source_records(
                 source_feature_catalogs=gff_catalogs,
             )
         elif isinstance(source, InMemoryRecordSource):
-            records = [source.record]
+            # The caller keeps its record: a plan must not change with it.
+            records = [copy.deepcopy(source.record)]
         else:  # pragma: no cover - RecordInput validates this union.
             raise ValidationError("Unsupported record input source.")
         if not records:
@@ -947,6 +948,23 @@ def _apply_collection_options(
     return records
 
 
+def _detached_record(record: SeqRecord) -> SeqRecord:
+    """Return a record whose own fields can be written without changing ``record``.
+
+    Planning writes the annotations of each resolved record; parsed sources are
+    shared by every record resolved from them. The sequence and the feature
+    objects stay shared: no later step writes them (reverse complement and
+    region crops build new features). A caller's in-memory record is copied
+    whole when its source loads.
+    """
+
+    detached = copy.copy(record)
+    detached.annotations = dict(record.annotations)
+    detached.features = list(record.features)
+    detached.dbxrefs = list(record.dbxrefs)
+    return detached
+
+
 def resolve_record_inputs(
     record_inputs: Sequence[RecordInput],
     *,
@@ -998,7 +1016,7 @@ def resolve_record_inputs(
                     source_record, gff_types, source_indexes=_feature_source_index_map(source_record.features),
                 )
             source_cropped = bool(source_record.annotations.get("gbdraw_region_applied"))
-            record = copy.deepcopy(source_record)
+            record = _detached_record(source_record)
             record = reverse_records(
                 (record,),
                 record_input.presentation.reverse_complement,

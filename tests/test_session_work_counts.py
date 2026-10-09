@@ -156,7 +156,6 @@ def test_cli_session_render_validates_and_copies_the_session_once(
             "gbdraw.api.session_compat.canonical_payload_for_session_decode": 1,
             "gbdraw.api.session_compat._read_session_artifact_source": 1,
             "gbdraw.api.request_render.__post_init__": 1,
-            "gbdraw.api.record_planning.resolve_record_inputs": 1,
         }
     )
 
@@ -217,13 +216,8 @@ def test_cli_legacy_session_replay_reads_the_loaded_payload(
     # Loading validates the Session, and so does the public session_to_cli_args;
     # the linear run also validates the source Session once more when it renders.
     assert len(validations) == (2 if mode == "circular" else 3)
-    # The replay reads the loaded payload without copying it.
-    expected = Counter(
-        {
-            f"gbdraw.{mode}.run_{mode}_from_namespace": 1,
-            "gbdraw.api.record_planning.resolve_record_inputs": 1,
-        }
-    )
+    # The replay reads the loaded payload; only the run copies its own input.
+    expected = Counter({f"gbdraw.{mode}.run_{mode}_from_namespace": 1})
     if mode == "linear":
         # The linear run's CurrentRequestArtifacts detaches the identity manifest.
         expected["gbdraw.api.request_render.__post_init__"] = 1
