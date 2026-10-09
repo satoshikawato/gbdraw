@@ -12,7 +12,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync, writeFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
-const { BATCH_FIXTURE, loadSessionFile, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
+const { BATCH_FIXTURE, loadSessionFile, openFresh } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 const { download, load, loadEditorLegendRows, switchMode } = require('./helpers/mode-transition.cjs');
 const {
@@ -1059,7 +1059,9 @@ const generateEmbeddedOnly = async (page) => {
 // metric, live compiles only), a Result display or a History step compiles
 // once, and an edit sends exactly the worker requests of its entry, each as
 // often as listed (`render` is the automatic rerender). Stages are
-// `COMPILE_STAGES` in app/candidate-render.js.
+// `COMPILE_STAGES` in app/candidate-render.js. Every path that shows edits
+// on a Result has rows here: live edits, Undo, Redo, Result display, mode
+// switch, Reset Settings, Session Load, and the rerender (`render`).
 const WORK_ALLOWLIST = [
   {
     // A stroke action prepares only the saved rules (OV-198), whose matches
@@ -1233,6 +1235,32 @@ const WORK_ALLOWLIST = [
       await generate(page);
     },
     run: (page) => switchMode(page, 'circular').then(() => settleLive(page))
+  },
+  {
+    // Reset Settings as it is today (both drawings, one History checkpoint;
+    // the drawing-scoped Reset of W3 replaces it): it shows the default
+    // palette's fills; the strokes and Legend edits it clears stay on the
+    // Result until Generate (OV-287, for W3).
+    kind: 'Reset Settings', stages: ['fills', 'legendFills'], compiles: 1, requests: [],
+    run: (page) => evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.resetSettings(); })
+      .then(() => settleLive(page))
+  },
+  {
+    // A Session this page saved, loaded into it: its Results already show
+    // their drawing's intent, so the Load compiles nothing and asks nothing.
+    kind: 'Session Load', stages: [], compiles: 0, requests: [],
+    before: (page) => download(page, 'Save Session', test.info().outputPath('work-allowlist.gbdraw-session.json')),
+    run: async (page) => {
+      const shown = () => page.evaluate(async () => {
+        const { getCommittedSvgResultRuntimeIdentity } = await import('/gbdraw/web/js/services/svg-result-ingestion.js');
+        const app = window.__GBDRAW_APP__;
+        return app.sessionImportPending ? null : getCommittedSvgResultRuntimeIdentity(app.results[app.selectedResultIndex]);
+      });
+      const before = await shown();
+      await page.locator('input[accept^=".json,"]').setInputFiles(test.info().outputPath('work-allowlist.gbdraw-session.json'));
+      await expect.poll(async () => { const now = await shown(); return now !== null && now !== before; }, { timeout: 180_000 }).toBe(true);
+      await settleLive(page);
+    }
   }
 ];
 

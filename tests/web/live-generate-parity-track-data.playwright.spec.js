@@ -161,9 +161,11 @@ const NO_STYLE = { color: null, stroke: null };
 const COLORED = '#7b2cbf';
 
 // Each case runs a data change that removes a caption's rows as one History
-// step. The style is retired in that step: Generate succeeds and draws no row
-// of the data; Undo brings back the data and the style, and the live Result
-// equals Generate.
+// step. The style is retired in that step; Undo brings back the data and the
+// style, and the live Result equals Generate. The same change made again on
+// the restored data retires the style again, and Generate succeeds and draws
+// no row of the data. (One case per row: the open and setup dominate a case's
+// time, and the second change starts from the data the setup made.)
 const RETIRING_CASES = [
   {
     name: 'removing an annotation set',
@@ -315,36 +317,33 @@ test.describe('OV-65 Legend styles follow the captions of track data', () => {
   test.beforeEach(() => { test.setTimeout(180_000); });
 
   for (const { name, mode = 'circular', caption, renamedFrom = null, setup, change, restored, drawn = [] } of RETIRING_CASES) {
-    test(`${name} retires the styles of its rows, and Generate succeeds`, async ({ page }) => {
+    test(`${name} retires the styles of its rows, Undo restores them as Generate draws, and Generate succeeds`, async ({ page }) => {
       await openCanvas(page, mode, null);
       await setup(page);
       const row = await caption(page);
       expect(row, 'row caption').toBeTruthy();
-      await change(page);
-      await settleLive(page);
-      expect(await legendStyleOf(page, row)).toEqual(NO_STYLE);
-      if (renamedFrom) {
-        expect(await legendStyleOf(page, renamedFrom)).toEqual(NO_STYLE);
-        expect(await legendNames(page), 'the rename is retired').not.toContain(`${renamedFrom}=>${row}`);
-      }
-      await generate(page);
-      const captions = await drawnLegendCaptions(page);
-      expect(captions).not.toContain(row);
-      if (renamedFrom) expect(captions).not.toContain(renamedFrom);
-      for (const kept of drawn) expect(captions).toContain(kept);
-    });
-
-    test(`${name}: Undo restores the data and the style, and live equals Generate`, async ({ page }) => {
-      await openCanvas(page, mode, null);
-      await setup(page);
-      const row = await caption(page);
-      await change(page);
-      await settleLive(page);
+      const changeRetires = async () => {
+        await change(page);
+        await settleLive(page);
+        expect(await legendStyleOf(page, row)).toEqual(NO_STYLE);
+        if (renamedFrom) {
+          expect(await legendStyleOf(page, renamedFrom)).toEqual(NO_STYLE);
+          expect(await legendNames(page), 'the rename is retired').not.toContain(`${renamedFrom}=>${row}`);
+        }
+      };
+      await changeRetires();
       await undo(page);
       expect(await restored(page), 'data restored').toBe(true);
       expect((await legendStyleOf(page, row)).color).toBe(COLORED);
       if (renamedFrom) expect(await legendNames(page), 'the rename is restored').toContain(`${renamedFrom}=>${row}`);
       await expectLiveEqualsGenerate(page, { label: `${name}, Undo` });
+
+      await changeRetires();
+      await generate(page);
+      const captions = await drawnLegendCaptions(page);
+      expect(captions).not.toContain(row);
+      if (renamedFrom) expect(captions).not.toContain(renamedFrom);
+      for (const kept of drawn) expect(captions).toContain(kept);
     });
   }
 

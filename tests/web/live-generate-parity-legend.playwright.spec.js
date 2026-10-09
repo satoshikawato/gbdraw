@@ -70,8 +70,7 @@ test('an edit that changes a Legend source rerenders once', async ({ page }) => 
 
 // S4 (perf 0.14.x, counts not timings) at the edit port: a color rule that
 // adds a Legend row shows it in the rule commit's one show (`showEditorIntent`),
-// which lays the Legend out and serializes the Result once; so does Add legend
-// item. Counted: the Result serializations of the preview owner's commit
+// which lays the Legend out and serializes the Result once. Counted: the Result serializations of the preview owner's commit
 // (`flushActiveResult`) until the automatic rerender responds.
 const countResultSerializations = async (page) => {
   await page.evaluate(() => {
@@ -583,7 +582,13 @@ test('a Legend rename of a rule row onto another rule row of one feature type eq
 
 // U3a (R14-8): Legend edits the Result executor shows live, without the
 // automatic rerender, combined with the edits of other domains. Each case
-// ends with live = Generate, in both modes, with Auto Reflow on and off.
+// ends with live = Generate, in both modes. Auto Reflow decides only whether
+// a label or feature visibility edit queues the label reflow
+// (`queueLabelReflow` without force); these steps queue none or a forced
+// one, and no request carries the setting, so a case runs the same code with
+// Auto Reflow on and off. Each runs with it off; the cases with `reflowOn`
+// also run with it on in that mode, so a Legend path that starts reading the
+// setting is seen.
 const ALPHA_ROW = { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#e63946', cap: 'alpha' };
 const renameAndSettle = async (page, caption, name) => { await renameRow(page, caption, name); await settleLive(page); };
 const ruleIndex = (page, caption) => page.evaluate(
@@ -617,6 +622,7 @@ const U3A_PARITY = [
   {
     // The row returns with the current palette fill and Python's stroke.
     name: '(4) delete a row, change the palette, Undo the delete',
+    reflowOn: 'circular',
     run: async (page) => {
       await deleteLegendRow(page, 'repeat_region');
       await switchPalette(page, 'arctic');
@@ -671,6 +677,7 @@ const U3A_PARITY = [
     // rerender; Redo restores the Result the commit left before it, whose
     // new row is appended, so Redo asks for it too.
     name: '(10) Undo and Redo of a Rules-panel caption change of a whole row',
+    reflowOn: 'linear',
     setup: (page) => addColorRule(page, ALPHA_ROW),
     run: async (page) => {
       await appAction(page, 'setSpecificRuleField', await ruleIndex(page, 'alpha'), 'cap', 'Alpha row');
@@ -696,8 +703,8 @@ const U3A_PARITY = [
   }
 ];
 for (const mode of ['circular', 'linear']) {
-  for (const reflow of ['off', 'on']) {
-    for (const { name, setup = null, run } of U3A_PARITY) {
+  for (const { name, setup = null, run, reflowOn = null } of U3A_PARITY) {
+    for (const reflow of reflowOn === mode ? ['off', 'on'] : ['off']) {
       test(`U3a Legend parity ${name} (${mode}, Auto Reflow ${reflow})`, async ({ page }) => {
         test.setTimeout(180_000);
         await open(page, { mode, results: 'single', reflow });
@@ -711,36 +718,34 @@ for (const mode of ['circular', 'linear']) {
     }
   }
   if (mode === 'circular') {
-    for (const reflow of ['off', 'on']) {
-      // A batch Result that never drew the delete is not laid out again; the
-      // Restore on it and the display of Result 1 show what Generate draws.
-      test(`U3a Legend parity (8) delete on Result 1, Restore on Result 2 (circular batch, Auto Reflow ${reflow})`, async ({ page }) => {
-        test.setTimeout(180_000);
-        await open(page, { mode, results: 'batch', reflow });
-        await deleteLegendRow(page, 'tRNA');
-        await showResult(page, 1);
-        await evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.restoreAllDeletedLegendEntries(); });
-        await settleLive(page);
-        await showResult(page, 0);
-        await expectLiveEqualsGenerate(page, { label: 'Result 1 after the Restore on Result 2' });
-      });
-    }
-  }
-    // U3a review M2: after the deleted type's features are hidden and
-    // Generate runs, Python draws no row of it; its row facts say so, and the
-    // Restore asks for no rerender.
-    test(`U3a Legend parity (12) Restore of a row the Result never drew (${mode}, Auto Reflow off)`, async ({ page }) => {
+    // A batch Result that never drew the delete is not laid out again; the
+    // Restore on it and the display of Result 1 show what Generate draws.
+    test('U3a Legend parity (8) delete on Result 1, Restore on Result 2 (circular batch, Auto Reflow off)', async ({ page }) => {
       test.setTimeout(180_000);
-      await open(page, { mode, results: 'single', reflow: 'off' });
-      await deleteLegendRow(page, 'repeat_region');
-      await addVisibilityRule(page, { recordId: 'FORCEDLBL', featureType: 'repeat_region', qualifier: 'note', value: '^RPT_ONE$', action: 'off' });
-      await generate(page);
-      const renders = await countRenders(page);
+      await open(page, { mode, results: 'batch', reflow: 'off' });
+      await deleteLegendRow(page, 'tRNA');
+      await showResult(page, 1);
       await evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.restoreAllDeletedLegendEntries(); });
       await settleLive(page);
-      expect(await renders(), 'the Restore asks for no rerender').toBe(0);
-      await expectLiveEqualsGenerate(page, { label: 'Restore of a row the Result never drew' });
+      await showResult(page, 0);
+      await expectLiveEqualsGenerate(page, { label: 'Result 1 after the Restore on Result 2' });
     });
+  }
+  // U3a review M2: after the deleted type's features are hidden and
+  // Generate runs, Python draws no row of it; its row facts say so, and the
+  // Restore asks for no rerender.
+  test(`U3a Legend parity (12) Restore of a row the Result never drew (${mode}, Auto Reflow off)`, async ({ page }) => {
+    test.setTimeout(180_000);
+    await open(page, { mode, results: 'single', reflow: 'off' });
+    await deleteLegendRow(page, 'repeat_region');
+    await addVisibilityRule(page, { recordId: 'FORCEDLBL', featureType: 'repeat_region', qualifier: 'note', value: '^RPT_ONE$', action: 'off' });
+    await generate(page);
+    const renders = await countRenders(page);
+    await evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.restoreAllDeletedLegendEntries(); });
+    await settleLive(page);
+    expect(await renders(), 'the Restore asks for no rerender').toBe(0);
+    await expectLiveEqualsGenerate(page, { label: 'Restore of a row the Result never drew' });
+  });
 }
 
 // U3a compat: a Session 46 saved before U3a, whose Result has a renamed, a
