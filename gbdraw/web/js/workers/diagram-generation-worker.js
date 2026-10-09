@@ -20,7 +20,7 @@ const sendAuxiliaryResult = async (type, requestId, result) => {
         auxiliaryAcknowledgement = { requestId, resolve };
         self.postMessage({ type, requestId, status: 'part', ...part }, transfers);
       });
-    }, [], { consume: true });
+    }, { consume: true });
     if (!wholeReply) self.postMessage({ type, requestId, ok: true });
   } finally {
     auxiliaryAcknowledgement = null;
