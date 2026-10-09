@@ -307,8 +307,8 @@
       ]
     },
     {
-      "title": "Start each chromosome at its replication initiator",
-      "body": "Click Open to open the first match. In its popup, rotate the record to start at the feature and show its label, as below. Click > for the second match, Open it, and repeat. Then search Qualifier key product for RctB and repeat for both matches with the label RctB. Finally, in Labels, set Label Font Size to 14.",
+      "title": "Start chromosome I at dnaA",
+      "body": "Click Open for the first match. In its popup, open Rotate record using this feature, choose Start of the record, and click Apply on Generate. Click > for the second match and do the same.",
       "table": {
         "columns": [
           "Record",
@@ -353,7 +353,7 @@
           ]
         ]
       },
-      "note": "RctB CDSs have no gene qualifier, so search their product. All four initiators are on the + strand, so each record keeps its orientation. The new starts apply at the next Generate.",
+      "note": "All four initiators are on the + strand, so each record keeps its orientation. The new starts apply at the next Generate.",
       "operations": [
         {
           "dataDependent": true,
@@ -462,14 +462,20 @@
               }
             ]
           }
-        },
+        }
+      ]
+    },
+    {
+      "title": "Label both dnaA features",
+      "body": "In each dnaA popup, set Label visibility to On, type DnaA, and click Apply Label.",
+      "operations": [
         {
           "dataDependent": true,
           "title": "Show the label",
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-03-12-label-dnaa.webp",
             "alt": "Label section of the same feature popup with Label visibility set to On (always show) and DnaA as the label text.",
-            "caption": "In the same popup, set Label visibility to On, type DnaA, and press Enter."
+            "caption": "In the same popup, set Label visibility to On, type DnaA, and click Apply Label."
           },
           "capture": {
             "source": "webapp",
@@ -561,6 +567,147 @@
       ]
     },
     {
+      "title": "Start chromosome II at rctB",
+      "body": "Search Qualifier key product for RctB. For each of the two matches, click Open, rotate the record to start at the feature, and label it RctB.",
+      "note": "RctB CDSs have no gene qualifier, so search their product.",
+      "operations": [
+        {
+          "dataDependent": true,
+          "title": "Search the RctB product",
+          "media": {
+            "src": "./media/vibrio-harveyi-group-collinear/manual-03-13-search-rctb.webp",
+            "alt": "Feature search bar with Search field set to Qualifier value, product as the qualifier key, RctB as the query, 1 / 2 features found, and the first match named as NC_004605.1.",
+            "caption": "Search Qualifier key product for RctB; it finds the RctB CDS of both species."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "viewport": {
+              "width": 1600,
+              "height": 1000
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview';"
+              },
+              {
+                "type": "select",
+                "selector": "select[aria-label='Search field']",
+                "value": "qualifier-value"
+              },
+              {
+                "type": "fill",
+                "selector": "input[aria-label='Qualifier key']",
+                "value": "product"
+              },
+              {
+                "type": "fill",
+                "selector": "input[aria-label='Search features']",
+                "value": "RctB"
+              },
+              {
+                "type": "click",
+                "selector": "button.gfs-button--search"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => document.querySelector(\"[aria-label='Feature search status']\")?.textContent?.trim() === '1 / 2 features'"
+              }
+            ],
+            "selector": ".preview-feature-search",
+            "cropPadding": 8,
+            "assertAppState": {
+              "mode": "linear",
+              "previewFeatureSearchField": "qualifier-value",
+              "previewFeatureSearchQualifierKey": "product",
+              "previewFeatureSearchInput": "RctB"
+            },
+            "visibleText": [
+              "1 / 2 features",
+              "Record NC_004605.1"
+            ],
+            "visibleControls": [
+              {
+                "selector": "select[aria-label='Search field']",
+                "value": "Qualifier value"
+              },
+              {
+                "selector": "input[aria-label='Qualifier key']",
+                "value": "product"
+              },
+              {
+                "selector": "input[aria-label='Search features']",
+                "value": "RctB"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "title": "Enlarge the labels",
+      "body": "In Labels, set Show Labels to All Records to reveal the label text settings, set Label Font Size to 14, and set Show Labels back to None. The four labels you turned On stay; the size makes them readable at full-figure size.",
+      "operations": [
+        {
+          "dataDependent": true,
+          "title": "Set Label Font Size",
+          "media": {
+            "src": "./media/vibrio-harveyi-group-collinear/manual-03-14-label-font-size.webp",
+            "alt": "Labels panel with Label Font Size set to 14.",
+            "caption": "Label Font Size appears while Show Labels is not None; set it to 14."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
+            "openDetails": [
+              "Labels"
+            ],
+            "actions": [
+              {
+                "type": "select",
+                "selector": "#linear-show-labels",
+                "value": "all"
+              },
+              {
+                "type": "waitForSelector",
+                "selector": "input[aria-label='Label Font Size']"
+              },
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 480; const input = document.querySelector(\"input[aria-label='Label Font Size']\"); const box = input?.closest('.grid'); if (!box) throw new Error('Label Font Size control not found.'); box.setAttribute('data-capture', 'vibrio-label-font-size'); box.scrollIntoView({ block: 'center' });"
+              },
+              {
+                "type": "wait",
+                "ms": 200
+              }
+            ],
+            "clipSelectors": [
+              "[data-capture='vibrio-label-font-size']"
+            ],
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "linear",
+              "adv.label_font_size": 14
+            },
+            "visibleText": [
+              "Label Font Size"
+            ],
+            "visibleControls": [
+              {
+                "selector": "input[aria-label='Label Font Size']",
+                "value": "14"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "title": "Color the four initiators",
       "body": "In Colors, add two rows to SPECIFIC RULES (-t).",
       "table": {
@@ -593,7 +740,7 @@
         {
           "dataDependent": true,
           "media": {
-            "src": "./media/vibrio-harveyi-group-collinear/manual-03-13-initiator-color-rules.webp",
+            "src": "./media/vibrio-harveyi-group-collinear/manual-03-15-initiator-color-rules.webp",
             "alt": "SPECIFIC RULES (-t) controls with two CDS rules: gene ^dnaA$ in purple captioned DnaA (chromosome I replication initiator), and product RctB in brown captioned RctB (chromosome II replication initiator).",
             "caption": "Enter both rows in SPECIFIC RULES (-t) under Colors."
           },
@@ -1267,16 +1414,16 @@
   ],
   "losatTips": [
     {
-      "title": "Load the session to skip the search",
-      "body": "The Gallery session holds the finished figure and every setting. Load it to inspect the result at once; changing a setting and generating again starts a new search."
+      "title": "Load the session to skip the LOSATP search",
+      "body": "The Gallery session holds the finished figure and every setting. Load it to inspect the result at once; changing a setting and generating again starts a new LOSATP search."
     },
     {
       "title": "Expect a long first run",
       "body": "LOSATP compares four chromosome pairs of about 1.7 to 3.3 Mbp. The Gallery figure was made on the command line with 16 threads. In the browser, Safe leaves CPU cores free for the rest of the page."
     },
     {
-      "title": "Style changes reuse the search",
-      "body": "After the first run, color and layout changes regenerate quickly from the browser cache. Changing a chromosome, file, input order, or LOSAT threshold runs that pair's search again."
+      "title": "Style changes reuse the LOSATP search",
+      "body": "After the first run, color and layout changes regenerate quickly from the browser cache. Changing a chromosome, file, input order, or LOSAT threshold runs that pair's LOSATP search again."
     }
   ],
   "troubleshooting": [
@@ -1286,7 +1433,7 @@
     },
     {
       "title": "A record does not start at its initiator",
-      "body": "Apply on Generate waits for the next Generate Diagram. Check Display start for each record under Advanced comparison and layout."
+      "body": "Apply on Generate waits for the next Generate Diagram. Check Display start in each record's Record options in its File card."
     },
     {
       "title": "A label is missing",
@@ -1298,7 +1445,7 @@
     },
     {
       "title": "The browser becomes unresponsive",
-      "body": "Load the bundled session, switch LOSAT execution to Serial, or lower the thread budget before the full search."
+      "body": "Load the bundled session, switch LOSAT execution to Serial, or lower the thread budget before the full LOSATP search."
     }
   ],
   "related": [
