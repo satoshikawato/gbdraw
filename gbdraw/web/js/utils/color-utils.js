@@ -201,9 +201,11 @@ export const normalizePaletteDefinitions = (palettes = {}) => {
   return normalized;
 };
 
-const normalizeComparableColor = (colorValue) => String(resolveColorToHex(String(colorValue || '').trim()) || '')
-  .trim()
-  .toLowerCase();
+// One color, compared: case, a color name, and `#rgb` against `#rrggbb` (D-15).
+const normalizeComparableColor = (colorValue) => {
+  const color = String(resolveColorToHex(String(colorValue || '').trim()) || '').trim().toLowerCase();
+  return /^#[0-9a-f]{3}$/.test(color) ? color.replace(/[0-9a-f]/g, '$&$&') : color;
+};
 
 export const buildPaletteColorOverrideRows = ({
   colors = {},
