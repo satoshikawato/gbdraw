@@ -1,7 +1,7 @@
 {
   "id": "hepatoplasmataceae_collinear",
   "version": 1,
-  "title": "Plot collinear protein-match blocks across five Hepatoplasmataceae genomes",
+  "title": "Show where neighboring Hepatoplasmataceae genomes keep the same gene order",
   "summary": "Run LOSATP in the browser and combine compatible protein-match anchors into collinear blocks across five Hepatoplasmataceae genomes.",
   "appMode": "Linear",
   "primaryWorkflow": "LOSATP collinear blocks",
@@ -649,6 +649,10 @@
     }
   ],
   "related": [
+    {
+      "label": "Tutorial: Show where neighboring Hepatoplasmataceae genomes keep the same gene order",
+      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/compare-proteins-losatp-collinear.md"
+    },
     {
       "label": "Open this Gallery entry",
       "href": "./#hepatoplasmataceae_collinear"

@@ -286,14 +286,26 @@ def test_public_markdown_local_targets_exist() -> None:
     assert missing == []
 
 
+def _web_gallery_artifacts() -> set[str]:
+    """SVGs and thumbnails that tools/prepare_interactive_gallery_assets.py writes."""
+    gallery_root = PROJECT_ROOT / "gbdraw" / "web" / "gallery"
+    examples = json.loads((gallery_root / "examples.json").read_text(encoding="utf-8"))
+    return {
+        (gallery_root / example[key].removeprefix("./")).relative_to(PROJECT_ROOT).as_posix()
+        for example in examples
+        for key in ("svg", "thumbnail")
+    }
+
+
 def test_public_figures_have_reproduction_inventory_coverage() -> None:
     references = _local_image_references()
     manifest_paths = {spec.output_path for spec in _figure_specs().values()}
     scenario_paths = _documentation_scenario_artifacts()
+    gallery_paths = _web_gallery_artifacts()
     manual_paths = set(MANUALLY_MANAGED_FIGURES)
     retained_unreferenced = set(UNREFERENCED_FIGURE_RETENTION)
 
-    assert references - manifest_paths - scenario_paths - manual_paths == set()
+    assert references - manifest_paths - scenario_paths - gallery_paths - manual_paths == set()
     assert retained_unreferenced <= manifest_paths - references
     assert all(reason.strip() for reason in MANUALLY_MANAGED_FIGURES.values())
     assert all(reason.strip() for reason in UNREFERENCED_FIGURE_RETENTION.values())

@@ -212,11 +212,11 @@ test('Gallery renders the Hepatoplasmataceae tutorial and files panels', async (
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto(`${baseUrl}/gallery/#hepatoplasmataceae_collinear`, { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('#selected-title')).toHaveText('Hepatoplasmataceae collinear protein-match blocks');
+  await expect(page.locator('#selected-title')).toHaveText('Shared gene order between neighboring genomes (Hepatoplasmataceae)');
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Plot collinear protein-match blocks across five Hepatoplasmataceae genomes' })
+    page.getByRole('heading', { name: 'Show where neighboring Hepatoplasmataceae genomes keep the same gene order' })
   ).toBeVisible();
   await expect(page.getByText('Reproduce the figure')).toBeVisible();
   await expect(page.getByText('Use browser LOSAT')).toBeVisible();
@@ -353,11 +353,11 @@ test('Gallery renders the Hepatoplasmataceae orthogroup tutorial and media', asy
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto(`${baseUrl}/gallery/#hepatoplasmataceae_orthogroup`, { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('#selected-title')).toHaveText('Hepatoplasmataceae CDS protein-similarity links');
+  await expect(page.locator('#selected-title')).toHaveText('Protein similarity groups across five genomes (Hepatoplasmataceae)');
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Plot CDS protein-similarity links across five Hepatoplasmataceae genomes' })
+    page.getByRole('heading', { name: 'Group similar proteins across five Hepatoplasmataceae genomes' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(tutorialPanel.getByRole('row', { name: 'LOSATP mode Similarity groups' })).toBeVisible();
@@ -490,7 +490,7 @@ test('Gallery restores the tobacco chloroplast region-annotation example', async
 
   await page.goto(`${baseUrl}/gallery/#tobacco-chloroplast`, { waitUntil: 'domcontentloaded' });
   await expect(
-    page.getByRole('heading', { name: /Nicotiana tabacum chloroplast genome regions/i })
+    page.getByRole('heading', { name: /Quadripartite structure of a chloroplast genome/i })
   ).toBeVisible();
   const preview = page.frameLocator('#demo-frame');
   await expect(preview.locator('[data-gbdraw-annotation-id="lsc"]')).toHaveCount(1);
@@ -542,11 +542,11 @@ test('Gallery renders the human mitochondrial AT skew tutorial and media', async
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto(`${baseUrl}/gallery/#HmmtDNA_ATskew`, { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('#selected-title')).toHaveText('Human mitochondrial genome (AT skew)');
+  await expect(page.locator('#selected-title')).toHaveText('Strand composition of the human mitochondrial genome (AT skew)');
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Human mitochondrial genome with an AT skew track' })
+    page.getByRole('heading', { name: 'Add an AT skew ring to the human mitochondrial genome map' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(tutorialPanel.getByText('Open Custom Track Slots', { exact: true })).toBeVisible();
@@ -604,11 +604,11 @@ test('Gallery renders the majanivirus orthogroup tutorial and media', async ({ p
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto(`${baseUrl}/gallery/#majanivirus_orthogroup`, { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('#selected-title')).toHaveText('Majanivirus CDS protein-similarity links');
+  await expect(page.locator('#selected-title')).toHaveText('Protein similarity across nine majanivirus genomes');
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Plot CDS protein-similarity links across nine majanivirus genomes' })
+    page.getByRole('heading', { name: 'Link similar proteins across nine majanivirus genomes' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(
@@ -759,7 +759,7 @@ test('Gallery shows an inline fallback when tutorial media fails to load', async
   await page.goto(`${baseUrl}/gallery/#hepatoplasmataceae_collinear`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Plot collinear protein-match blocks across five Hepatoplasmataceae genomes' })
+    page.getByRole('heading', { name: 'Show where neighboring Hepatoplasmataceae genomes keep the same gene order' })
   ).toBeVisible();
   await page.locator('#tutorial-panel .tutorial-media').first().scrollIntoViewIfNeeded();
   await expect(
@@ -878,8 +878,8 @@ test('Gallery uses workflow tags and runnable commands', async ({ page }) => {
   await expect(cards.nth(0)).not.toContainText('Beginner');
   await expect(cards.nth(0)).not.toContainText('Under 5 min');
   await expect(cards.nth(0).locator('.tag')).toHaveText(['Circular', 'Interactive SVG']);
-  await expect(cards.nth(0)).toContainText('Circular basics');
-  await expect(cards.nth(1)).toContainText('Linear basics');
+  await expect(cards.nth(0)).toContainText('Make a first circular map');
+  await expect(cards.nth(1)).toContainText('Make a first linear map');
 
   const tagFilters = page.getByRole('group', { name: 'Filter by tag' });
   await tagFilters.getByRole('button', { name: 'Linear', exact: true }).click();
@@ -1080,7 +1080,7 @@ test('Gallery ignores stale tutorial fetch results after sample changes', async 
   ).toBeVisible();
   await expect(
     tutorialPanel.getByRole('heading', {
-      name: 'Plot collinear protein-match blocks across five Hepatoplasmataceae genomes'
+      name: 'Show where neighboring Hepatoplasmataceae genomes keep the same gene order'
     })
   ).toHaveCount(0);
 });

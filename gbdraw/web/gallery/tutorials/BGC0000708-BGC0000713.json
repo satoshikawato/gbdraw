@@ -992,6 +992,10 @@
   ],
   "related": [
     {
+      "label": "Tutorial: Find shared proteins across five aminoglycoside gene clusters",
+      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/compare-proteins-losatp.md"
+    },
+    {
       "label": "Open this Gallery entry",
       "href": "./#BGC0000708-BGC0000713"
     },

@@ -399,6 +399,7 @@ orientation and identity.
 
 ## Next steps
 
+- [Open the matching Gallery entry](https://gbdraw.app/gallery/#hepatoplasmataceae_collinear) for its interactive figure, Session, and step-by-step web app guide
 - [Review LOSATP comparison modes](../REFERENCE/comparison-programs-thresholds-and-results.md)
 - [Create protein Similarity groups](compare-proteins-losatp.md)
 - [Choose a genome-comparison method](../FAQ.md#which-comparison-method-should-i-use)
