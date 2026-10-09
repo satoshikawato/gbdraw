@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { DrawingState } from '../state.js' */
 import { ruleMatcher } from '../services/rule-matchers.js';
+import { ruleLegendCaptions } from '../services/specific-color-rules.js';
 import {
   estimateColorFactor,
   interpolateColor,
@@ -284,6 +285,15 @@ export const createSvgStyles = ({
     const featureLegendGroups = getAllFeatureLegendGroups(svg);
     /** @type {Map<string, string>} */
     const legendRowColors = new Map();
+    // A row with a Legend color, or one a Specific color rule draws (also a
+    // rule captioned like a palette key), keeps its color.
+    const legendCaption = ruleLegendCaptions({
+      rules: drawing.manualSpecificRules, legendEntries: drawing.legendEntries?.value || [],
+      originalLegendOrder: state.originalLegendOrder?.value || []
+    });
+    const ruleRows = new Set(drawing.manualSpecificRules.map(legendCaption));
+    /** @param {string} caption */
+    const keepsColor = (caption) => Boolean(drawing.legendColorOverrides[caption]) || ruleRows.has(caption);
     const keyToColorKey = {
       CDS: 'CDS',
       'D-loop': 'D-loop',
@@ -324,8 +334,7 @@ export const createSvgStyles = ({
       if (entryGroups.length > 0) {
         entryGroups.forEach((entryGroup) => {
           const legendKey = entryGroup.getAttribute('data-legend-key');
-          if (!legendKey) return;
-          if (drawing.legendColorOverrides[legendKey]) return;
+          if (!legendKey || keepsColor(legendKey)) return;
 
           const newColor = resolveLegendColor(legendKey, colors);
           if (!newColor) return;
@@ -345,8 +354,7 @@ export const createSvgStyles = ({
         const allPaths = featureLegendGroup.querySelectorAll('path');
         texts.forEach((textEl) => {
           const textContent = textEl.textContent?.trim();
-          if (!textContent) return;
-          if (drawing.legendColorOverrides[textContent]) return;
+          if (!textContent || keepsColor(textContent)) return;
 
           const newColor = resolveLegendColor(textContent, colors);
           if (!newColor) return;
