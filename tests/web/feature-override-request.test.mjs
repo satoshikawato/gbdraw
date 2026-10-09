@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { buildBulkLabelProjection } from '../../gbdraw/web/js/services/label-override-table.js';
 import {
   canonicalFeatureOverrides,
+  labelTextSettingsVisible,
   requestFeatureOverrides,
   updateFeatureOverride
 } from '../../gbdraw/web/js/services/feature-placement.js';
@@ -72,4 +73,16 @@ test('request rows are one non-blank line and at least one edit', () => {
       labelVisibility: null, labelText: null, labelSourceText: null
     }
   }));
+});
+
+test('the label text settings show while the label scope is not None or a feature label is On (OV-222)', () => {
+  const labelRow = (labelVisibility) => ({
+    recordKey: 'r1', biologicalFeatureId: 'f1', featureVisibility: null, labelVisibility, labelText: null, labelSourceText: null
+  });
+  assert.equal(labelTextSettingsVisible('none', {}), false);
+  assert.equal(labelTextSettingsVisible('none', { [key('r1', 'f1')]: labelRow('off') }), false);
+  assert.equal(labelTextSettingsVisible('none', { [key('r1', 'f1')]: labelRow('on') }), true);
+  for (const scope of ['all', 'first', 'orthogroup_top', 'out', 'both']) {
+    assert.equal(labelTextSettingsVisible(scope, {}), true, scope);
+  }
 });

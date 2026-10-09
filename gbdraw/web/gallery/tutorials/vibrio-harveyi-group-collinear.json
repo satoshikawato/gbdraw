@@ -647,7 +647,7 @@
     },
     {
       "title": "Enlarge the labels",
-      "body": "In Labels, set Show Labels to All Records to reveal the label text settings, set Label Font Size to 14, and set Show Labels back to None. The four labels you turned On stay; the size makes them readable at full-figure size.",
+      "body": "In Labels, set Label Font Size to 14. Show Labels stays None: the label text settings show while a feature's Label visibility is On, and the size makes the four labels readable at full-figure size.",
       "operations": [
         {
           "dataDependent": true,
@@ -655,7 +655,7 @@
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-03-14-label-font-size.webp",
             "alt": "Labels panel with Label Font Size set to 14.",
-            "caption": "Label Font Size appears while Show Labels is not None; set it to 14."
+            "caption": "Label Font Size shows while a feature's Label visibility is On; set it to 14."
           },
           "capture": {
             "source": "webapp",
@@ -668,11 +668,6 @@
               "Labels"
             ],
             "actions": [
-              {
-                "type": "select",
-                "selector": "#linear-show-labels",
-                "value": "all"
-              },
               {
                 "type": "waitForSelector",
                 "selector": "input[aria-label='Label Font Size']"

@@ -4272,10 +4272,8 @@
                                 </select>
                             </div>
 
-                            <div
-                                v-if="(mode === 'linear' && form.show_labels_linear !== 'none') || (mode === 'circular' && form.labels_mode !== 'none')"
-                                class="space-y-3"
-                            >
+                            <div v-if="labelTextSettingsShown" class="space-y-3">
+                                <template v-if="(mode === 'linear' ? form.show_labels_linear : form.labels_mode) !== 'none'">
                                 <div>
                                     <h4 class="group-heading mb-2" aria-label="LABEL FILTERING">LABEL FILTERING <help-tip text="Control which feature labels are displayed using Blacklist or Whitelist. Whitelist patterns use case-insensitive Python regex search, matching the -t color table semantics."></help-tip></h4>
                                     <div class="flex gap-2 mb-2">
@@ -4328,6 +4326,7 @@
                                     <div class="ui-hint text-center mb-1">- OR UPLOAD FILE -</div>
                                     <file-uploader label="Priority File (TSV)" v-model="files.qualifier_priority" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                 </div>
+                                </template>
 
                                 <div class="pt-3 border-t border-slate-100">
                                     <div class="grid grid-cols-2 gap-1.5">
@@ -4434,7 +4433,7 @@
                                     </div>
                                 </div>
 
-                                <div v-if="mode === 'circular' && adv.circular_label_placement !== 'radial'" class="pt-3 border-t border-slate-100">
+                                <div v-if="mode === 'circular' && form.labels_mode !== 'none' && adv.circular_label_placement !== 'radial'" class="pt-3 border-t border-slate-100">
                                     <h4 class="group-heading mb-2" aria-label="LABEL GEOMETRY">LABEL GEOMETRY <help-tip text="Adjust radius offset factors for circular labels."></help-tip></h4>
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>
@@ -4467,8 +4466,8 @@
                                 </div>
                             </div>
 
-                            <p v-else class="ui-hint bg-slate-50 border border-slate-200 rounded p-2">
-                                Enable labels to configure filtering, qualifier priority, text settings, and circular label geometry.
+                            <p v-if="(mode === 'linear' ? form.show_labels_linear : form.labels_mode) === 'none'" class="ui-hint bg-slate-50 border border-slate-200 rounded p-2">
+                                Enable labels to configure filtering, qualifier priority, text settings, and circular label geometry. Text settings also show while a feature's Label visibility is On.
                             </p>
                         </div>
                     </details>

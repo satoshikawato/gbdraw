@@ -290,6 +290,18 @@ export const requestFeatureOverrides = (overrides, records = [], { bulkLabelText
   ).map(({ labelSourceText: _source, ...row }) => row);
 };
 
+// Whether the Labels panel shows its label text settings (font size, rendering,
+// placement, rotation, spacing): while Show Labels (Linear) or Label Mode
+// (Circular), `scope`, is not None, or while a feature of the drawing has Label
+// visibility On (Owner decision 2026-10-09).
+/**
+ * @param {string} scope
+ * @param {FeatureOverrideDraft | null | undefined} overrides
+ */
+export const labelTextSettingsVisible = (scope, overrides) => (
+  scope !== 'none' || Object.values(overrides || {}).some((row) => row?.labelVisibility === 'on')
+);
+
 /** @param {FeatureIdentity} identity */
 const emptyOverrideRow = ({ recordKey, biologicalFeatureId }) => ({
   recordKey,

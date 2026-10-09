@@ -16,6 +16,7 @@ import {
 } from '../services/feature-visibility.js';
 import { isLegendOrderEdited } from '../services/legend-svg.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
+import { labelTextSettingsVisible } from '../services/feature-placement.js';
 import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
 import { createRecordDisplayControls } from './record-display-options.js';
 import { isCurrentFeature } from '../services/feature-identity.js';
@@ -5256,6 +5257,12 @@ export const createAppSetup = () => {
     });
   };
 
+  const labelTextSettingsShown = computed(() => {
+    const drawing = state.activeDrawing();
+    const scope = mode.value === 'linear' ? drawing.form.show_labels_linear : drawing.form.labels_mode;
+    return labelTextSettingsVisible(scope, drawing.featureOverrides);
+  });
+
   // The template's names for the members of the shown mode's drawing: a ref
   // member reads and writes its value, any other member is the object itself.
   /** @param {keyof DrawingState} key */
@@ -5861,6 +5868,7 @@ export const createAppSetup = () => {
     featureVisibilityManualRules: drawingMember('featureVisibilityManualRules'),
     featureVisibilityRules: drawingMember('featureVisibilityRules'),
     featureOverrides: drawingMember('featureOverrides'),
+    labelTextSettingsShown,
     featureStrokeOverrides: drawingMember('featureStrokeOverrides'),
     addFeatureVisibilityRule: addFeatureVisibilityRuleWithHistory,
     downloadFeatureVisibilityRulesTsv,
