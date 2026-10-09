@@ -190,6 +190,11 @@ are saved as a resolved plan with each record's X/Y offset in bases. The
 [Session and request compatibility reference](./REFERENCE/session-and-request-compatibility.md)
 lists every version that opens and what happens to older files.
 
+A Session that the command line or the Python API saves opens in the web app
+with the tables it records (`-t`, `-d`, `--feature_visibility_table`,
+`--label_table`, `--label_whitelist`, `--qualifier_priority`, and
+`--feature_override_table`), and the next **Generate Diagram** keeps them.
+
 **Save Session** stores what the last Result needs, including its comparison
 results, together with your pending edits. If you save after editing but
 before Generate, the Session keeps both the newer edits and the earlier

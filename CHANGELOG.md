@@ -12,6 +12,11 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Sessions (web app): a Session that the CLI or the Python API writes keeps its
+  color, feature visibility, label, whitelist, qualifier priority, and feature
+  override tables when the web app loads it, so the next **Generate Diagram**
+  draws the figure the Session was saved with. Before, Load dropped those
+  tables and Generate drew a different figure (OV-221).
 - Labels (web app): the Labels panel shows the label text settings (**Label Font
   Size**, **Label Rendering**, placement, rotation, and spacing), **QUALIFIER
   PRIORITY**, and the Circular **LABEL GEOMETRY** while any feature of the shown
