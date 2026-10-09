@@ -36,8 +36,14 @@ const describeKeys = (keys) => {
  * @property {{ value: Record<string, string> }} pendingPaletteColors
  */
 
-/** @param {{ state: ResultsManagerState }} options */
-export const createResultsManager = ({ state }) => {
+/**
+ * @param {{
+ *   state: ResultsManagerState,
+ *   closeAfterDialogChoice?: (close: () => unknown) => void
+ * }} options `closeAfterDialogChoice` runs the palette dialog's close at once,
+ *   or once the History step of its choice in flight ends (D-12, OIC-028).
+ */
+export const createResultsManager = ({ state, closeAfterDialogChoice = (close) => { close(); } }) => {
   const {
     paletteDefinitions,
     paletteInstantPreviewEnabled,
@@ -124,11 +130,11 @@ export const createResultsManager = ({ state }) => {
       keysText: describeKeys(rows.map(([key]) => key))
     });
   };
-  const closePaletteColorsDialog = () => {
+  const closePaletteColorsDialog = () => closeAfterDialogChoice(() => {
     Object.assign(paletteColorsDialog, {
       show: false, kind: 'switch', fromPalette: '', toPalette: '', count: 0, keysText: ''
     });
-  };
+  });
 
   // D-15: a palette switch keeps the user default colors (`keep`) or takes the
   // palette's colors (`palette`); without a choice it asks while any exist.

@@ -1446,7 +1446,7 @@ export const createAppSetup = () => {
   const featureSelection = createFeatureSelection(/** @type {any} */ ({ state, onMounted, onUnmounted }));
   // The palette owner comes before the feature editor, whose popup sets a
   // type's default color through it (D-15).
-  const resultsManager = createResultsManager({ state });
+  const resultsManager = createResultsManager({ state, closeAfterDialogChoice: dialogChoice.closeAfterChoice });
   const featureActions = createFeatureEditor({
     state,
     rulePreparation,

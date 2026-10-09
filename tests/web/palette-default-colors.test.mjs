@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createResultsManager } from '../../gbdraw/web/js/app/results.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
-import { dialogChoiceWithHistory } from '../../gbdraw/web/js/app/history-inputs.js';
+import { createDialogChoice } from '../../gbdraw/web/js/app/history-inputs.js';
 import { normalizePaletteColors } from '../../gbdraw/web/js/utils/color-utils.js';
 
 const ref = (value) => ({ value });
@@ -31,9 +31,10 @@ const setup = ({ colors = editedColors(), instant = true } = {}) => {
     paletteDefinitions: ref(PALETTES), paletteInstantPreviewEnabled: ref(instant), appliedPaletteName: ref('default'),
     appliedPaletteColors: ref({ ...colors }), activeDrawing: () => drawing, paletteColorsDialog
   };
-  const manager = createResultsManager({ state });
+  /** Whether the dialog was open at each History capture. */
+  const openAtCapture = [];
   const history = createHistoryManager({
-    buildIntent: () => ({
+    buildIntent: () => (openAtCapture.push(paletteColorsDialog.show), {
       palette: drawing.selectedPalette.value, colors: { ...drawing.currentColors.value },
       applied: { ...state.appliedPaletteColors.value }, pending: drawing.pendingPaletteName.value
     }),
@@ -41,10 +42,12 @@ const setup = ({ colors = editedColors(), instant = true } = {}) => {
     applyIntent: () => {}, buildCheckpoint: () => ({}), applyCheckpoint: () => {}
   });
   // app-setup.js wires the dialog's choices the same way.
-  const choose = dialogChoiceWithHistory(
-    history, () => 'Change setting', manager.handlePaletteColorsChoice, manager.cancelPaletteColorsDialog
+  const dialogChoice = createDialogChoice({ mutationPending: history.mutationPending, runUndoable: history.runUndoable, ref });
+  const manager = createResultsManager({ state, closeAfterDialogChoice: dialogChoice.closeAfterChoice });
+  const choose = dialogChoice.withHistory(
+    () => 'Change setting', manager.handlePaletteColorsChoice, manager.cancelPaletteColorsDialog
   );
-  return { drawing, state, manager, history, choose, paletteColorsDialog };
+  return { drawing, state, manager, history, choose, paletteColorsDialog, pending: dialogChoice.pending, openAtCapture };
 };
 
 test('a user default color differs from the selected palette (#rgb = #rrggbb); Auto is none', () => {
@@ -206,4 +209,20 @@ test('a restyle paints an Auto key with the applied palette color', async () => 
   });
   styles.applyPaletteToSvg();
   assert.equal(attributes.fill, '#AABBCC');
+});
+
+// PD-OI-088, OIC-028: the dialog stays open and busy until its choice's
+// History step ends, as the popup choice dialogs do (`createDialogChoice`).
+test('the palette dialog closes after the History step of its choice', async () => {
+  const { manager, choose, paletteColorsDialog, pending, openAtCapture } = setup();
+  manager.selectPalette('forest');
+  assert.equal(paletteColorsDialog.show, true);
+  const choice = choose('keep');
+  assert.equal(pending.value, true);
+  openAtCapture.length = 0;
+  await choice;
+  assert.ok(openAtCapture.length > 0);
+  assert.ok(openAtCapture.every(Boolean), 'open while the step records');
+  assert.equal(paletteColorsDialog.show, false);
+  assert.equal(pending.value, false);
 });
