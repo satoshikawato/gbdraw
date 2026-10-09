@@ -3934,7 +3934,7 @@
                                         <span class="text-[9px] text-slate-500 truncate block mb-0.5" :title="feat">{{ feat }}</span>
                                         <color-value-control
                                             v-model="currentColors[feat]"
-                                            :fallback="appliedPaletteColors[feat] || '#cccccc'"
+                                            :fallback="paletteDefinitions?.[selectedPalette]?.[feat] || '#cccccc'"
                                             :aria-label="`${feat} feature color`">
                                         </color-value-control>
                                     </div>

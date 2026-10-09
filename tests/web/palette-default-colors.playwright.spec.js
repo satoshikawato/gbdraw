@@ -125,6 +125,36 @@ test('Default colors Reset asks before it discards a user default color', async 
   expect((await facts(page)).colors.CDS).toBe(paletteCds);
 });
 
+// OV-281: a Default colors key set to Auto shows the selected palette's color,
+// as Generate draws it, and going back to Color starts from that color, so the
+// key does not become a user default color.
+test('a Default colors key set to Auto shows the palette color, and Color starts from it', async ({ page }) => {
+  test.setTimeout(180_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  const colors = page.locator('summary[aria-label="Colors"]');
+  if ((await colors.locator('..').getAttribute('open')) === null) await colors.click();
+  const panel = page.locator('h4[aria-label="DEFAULT COLORS"]').locator('../..');
+  const paletteCds = await page.evaluate(() => String(
+    window.__GBDRAW_APP__.paletteDefinitions[window.__GBDRAW_APP__.selectedPalette].CDS
+  ).toLowerCase());
+  const mode = panel.getByRole('combobox', { name: 'CDS feature color mode', exact: true });
+
+  await mode.selectOption('auto');
+  await settleLive(page);
+  await expect(panel.locator('input[type="color"][aria-label="CDS feature color"]')).toHaveValue(paletteCds);
+  await mode.selectOption('color');
+  await settleLive(page);
+  expect(String((await facts(page)).colors.CDS).toLowerCase()).toBe(paletteCds);
+
+  // Not a user default color: a palette switch asks nothing.
+  const next = await page.evaluate(() => window.__GBDRAW_APP__.paletteNames.find((name) => (
+    name !== window.__GBDRAW_APP__.selectedPalette
+  )));
+  await page.getByRole('combobox', { name: 'Palette', exact: true }).selectOption(next);
+  await expect.poll(async () => (await facts(page)).palette).toBe(next);
+  await expect(page.getByRole('dialog', { name: `Change palette to "${next}"`, exact: true })).toHaveCount(0);
+});
+
 // Q1 B and Q5 A (Owner 2026-10-09). While a palette is queued (Instant Preview
 // off), Apply to all on a palette row also shows its color on the Result now;
 // switching back to the applied palette asks like any switch and then applies
