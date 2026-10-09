@@ -503,6 +503,7 @@ record aligned on `og_1`.
 
 ## Next steps
 
+- [Open the matching Gallery entry](https://gbdraw.app/gallery/#BGC0000708-BGC0000713) for its interactive figure, Session, and step-by-step web app guide
 - [Review LOSATP comparison modes](../REFERENCE/comparison-programs-thresholds-and-results.md)
 - [Draw Collinear protein-match blocks](compare-proteins-losatp-collinear.md)
 - [Choose a genome-comparison method](../FAQ.md#which-comparison-method-should-i-use)

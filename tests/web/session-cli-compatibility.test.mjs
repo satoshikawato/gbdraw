@@ -415,3 +415,36 @@ with materialize_session(document, output_directory=directory / 'out') as materi
     }
   }
 });
+
+// OV-220: a CLI Session holds its per-feature edits only in its request. Load
+// gives them to the committed mode's drawing, so the next Generate keeps them.
+await test('a CLI Session with a feature edit table keeps the edits in the drawing it loads', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-web-'));
+  try {
+    const table = path.join(directory, 'labels.tsv');
+    await writeFile(table, 'record\tfeature_selector\tlabel_visibility\tlabel_text\n'
+      + 'NC_001416.1\tprotein_id=NP_040580.1\ton\tFirst\n');
+    const file = path.join(directory, 'labels.gbdraw-session.json.gz');
+    execFileSync('python', ['-m', 'gbdraw.cli', 'linear', '--gbk', lambda, '--feature_override_table', table,
+      '-o', path.join(directory, 'labels'), '--session_output', file], {
+      cwd: directory, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe', timeout: 1_800_000
+    });
+    const session = JSON.parse(gunzipSync(await readFile(file)));
+    const [row] = session.renderRequest.diagramOptions.featureOverrides;
+    assert.equal(row.labelText, 'First');
+    const result = await load(JSON.stringify(session));
+    assert.equal(result.status, 'ok', result.error?.stack);
+    const drawing = state.activeDrawing();
+    assert.deepEqual(Object.values(drawing.featureOverrides).map(({ labelVisibility, labelText }) => [labelVisibility, labelText]),
+      [['on', 'First']]);
+    const filesData = await serializeActiveRenderFiles('linear', state, drawing);
+    const comparisonPlanSnapshot = resolveLinearComparisonPlan({
+      plan: drawing.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
+      losatProgram: drawing.losatProgram.value, blastpMode: drawing.losat.blastp.mode
+    });
+    const candidate = buildCanonicalRenderRequest({ state, drawing, filesData, comparisonPlanSnapshot });
+    assert.deepEqual(candidate.renderRequest.diagramOptions.featureOverrides, [row]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

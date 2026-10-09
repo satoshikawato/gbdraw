@@ -2,9 +2,11 @@
 // `featureOverrides`, design Q4 3.2, 6.1); the label table carries rules only.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
 import { buildBulkLabelProjection } from '../../gbdraw/web/js/services/label-override-table.js';
 import {
   canonicalFeatureOverrides,
+  labelSettingsVisible,
   requestFeatureOverrides,
   updateFeatureOverride
 } from '../../gbdraw/web/js/services/feature-placement.js';
@@ -72,4 +74,33 @@ test('request rows are one non-blank line and at least one edit', () => {
       labelVisibility: null, labelText: null, labelSourceText: null
     }
   }));
+});
+
+test('the label text settings show while the label scope is not None or a feature label is On (OV-222)', () => {
+  const labelRow = (labelVisibility) => ({
+    recordKey: 'r1', biologicalFeatureId: 'f1', featureVisibility: null, labelVisibility, labelText: null, labelSourceText: null
+  });
+  assert.equal(labelSettingsVisible('none', {}), false);
+  assert.equal(labelSettingsVisible('none', { [key('r1', 'f1')]: labelRow('off') }), false);
+  assert.equal(labelSettingsVisible('none', { [key('r1', 'f1')]: labelRow('on') }), true);
+  for (const scope of ['all', 'first', 'orthogroup_top', 'out', 'both']) {
+    assert.equal(labelSettingsVisible(scope, {}), true, scope);
+  }
+});
+
+test('the Labels panel shows priority, text settings, and geometry by that rule, and filtering by the scope alone (OV-222)', () => {
+  const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const start = html.indexOf('<div v-if="labelSettingsShown"');
+  assert.ok(start > 0, 'the label settings block is shown by labelSettingsShown');
+  const block = html.slice(start, html.indexOf('</details>', start));
+  const scope = "(mode === 'linear' ? form.show_labels_linear : form.labels_mode)";
+  const sectionTag = (heading) => {
+    const at = block.indexOf(`aria-label="${heading}"`);
+    assert.ok(at > 0, heading);
+    return block.slice(block.lastIndexOf('<div', at), block.indexOf('>', block.lastIndexOf('<div', at)) + 1);
+  };
+  assert.ok(sectionTag('LABEL FILTERING').includes(`v-if="${scope} !== 'none'"`));
+  assert.ok(!sectionTag('QUALIFIER PRIORITY').includes('v-if'));
+  assert.ok(!sectionTag('LABEL GEOMETRY').includes('labels_mode'));
+  assert.ok(!/<template v-if="[^"]*(show_labels_linear|labels_mode)/.test(block.slice(0, block.indexOf('LABEL GEOMETRY'))));
 });

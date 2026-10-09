@@ -296,6 +296,7 @@ document multi-record drawing.
 
 ## Next steps
 
+- [Open the matching Gallery entry](https://gbdraw.app/gallery/#HmmtDNA_basic_circular) for its interactive figure, Session, and step-by-step web app guide
 - [Draw a Linear genome map](first-linear-genome-diagram.md)
 - [Review feature-presentation rules](../REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#feature-presentation)
 - [Compare genomes](compare-genomes-losatn.md)

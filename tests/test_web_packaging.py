@@ -505,16 +505,17 @@ def test_interactive_gallery_examples_are_wired() -> None:
         entry["displayOrder"] for entry in examples
     )
     assert [entry["title"] for entry in examples] == [
-        "Human mitochondrial genome: first circular figure",
-        "Lambda phage: first linear figure",
-        "Human mitochondrial genome (AT skew)",
-        "<i>Nicotiana tabacum</i> chloroplast genome regions",
-        "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",
-        "Hepatoplasmataceae collinear protein-match blocks",
-        "<i>Vibrio parahaemolyticus</i> and <i>V. alginolyticus</i> collinearity",
-        "Hepatoplasmataceae CDS protein-similarity links",
-        "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
-        "Majanivirus CDS protein-similarity links",
+        "A first circular genome map (human mitochondrial genome)",
+        "A first linear genome map (phage lambda)",
+        "Strand composition of the human mitochondrial genome (AT skew)",
+        "Quadripartite structure of a chloroplast genome (<i>Nicotiana tabacum</i>)",
+        "Every replicon of a multi-replicon bacterial genome on one canvas "
+        "(<i>Vibrio nigripulchritudo</i>)",
+        "Shared gene order between neighboring genomes (Hepatoplasmataceae)",
+        "Collinearity analysis of multi-replicon bacterial genomes (<i>Vibrio</i> spp.)",
+        "Protein similarity groups across five genomes (Hepatoplasmataceae)",
+        "Protein similarity among aminoglycoside biosynthetic gene clusters (<i>Streptomyces</i> spp.)",
+        "Protein similarity across nine majanivirus genomes",
     ]
     for entry in examples:
         assert entry["title"]

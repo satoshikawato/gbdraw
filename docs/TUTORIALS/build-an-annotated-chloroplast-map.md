@@ -391,6 +391,7 @@ feature colors, label placement, region brackets, track order, and legend.
 
 ## Next steps
 
+- [Open the matching Gallery entry](https://gbdraw.app/gallery/#tobacco-chloroplast) for its interactive figure, Session, and step-by-step web app guide
 - [Make your first Circular diagram in Python](first-circular-genome-diagram.md)
 - [Review tracks, axes, and annotations](../REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#tracks-axes-and-annotations)
 - [Annotation table fields](../REFERENCE/input-formats-and-tsv-schemas.md#annotation-table-fields)

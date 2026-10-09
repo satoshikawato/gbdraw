@@ -1039,9 +1039,19 @@ def test_declared_command_refresh_keeps_one_file_as_one_resource(
         )
     table = tmp_path / "records.tsv"
     table.write_text(
-        "gbk\trecord_id\trow\n"
-        "left.gbk\tBGC0000708\t1\nleft.gbk\tBGC0000709\t1\n"
-        "right.gbk\tBGC0000711\t2\nright.gbk\tBGC0000712\t2\n",
+        "gbk\trecord_id\ttopology\tdisplay_start\trow\n"
+        "left.gbk\tBGC0000708\tcircular\t1001\t1\nleft.gbk\tBGC0000709\t\t\t1\n"
+        "right.gbk\tBGC0000711\t\t\t2\nright.gbk\tBGC0000712\t\t\t2\n",
+        encoding="utf-8",
+    )
+    # A headerless colour table and a label table, which the Vibrio command no
+    # longer declares but the Session builder must still read as one resource each.
+    colors = tmp_path / "colors.tsv"
+    colors.write_text("CDS\tprotein_id\tCAG38690\t#6a3d9a\tFirst CDS\n", encoding="utf-8")
+    labels = tmp_path / "labels.tsv"
+    labels.write_text(
+        "record\tfeature_selector\tlabel_visibility\tlabel_text\n"
+        "BGC0000708\tprotein_id=CAG38690.1\ton\tFirst\n",
         encoding="utf-8",
     )
     from tools.prepare_interactive_gallery_assets import (
@@ -1057,7 +1067,17 @@ def test_declared_command_refresh_keeps_one_file_as_one_resource(
         ("-o", "declared"),
     ):
         argv[argv.index(flag) + 1] = value
-    command = shlex.join([*argv, "--losat_bin", losat])
+    command = shlex.join(
+        [
+            *argv,
+            "-t",
+            str(colors),
+            "--feature_override_table",
+            str(labels),
+            "--losat_bin",
+            losat,
+        ]
+    )
     declared = tmp_path / "stage" / "declared.gbdraw-session.json"
     declared.parent.mkdir()
     destination = tmp_path / "published.gbdraw-session.json"
@@ -1077,7 +1097,17 @@ def test_declared_command_refresh_keeps_one_file_as_one_resource(
     options = session["renderRequest"]["diagramOptions"]
     assert options.get("config") is None
     assert options["configOverrides"]["objects.scale.interval"] == 750000
+    # The tables publish as the declared command wrote them (OV-215, OV-216).
+    assert [
+        (row["recordKey"], row["labelVisibility"], row["labelText"])
+        for row in options["featureOverrides"]
+    ] == [("record-1", "on", "First")]
+    color_table = options["colors"]["colorTable"] or options["colors"]["colorTableFile"]
+    assert "CAG38690\t#6a3d9a\tFirst CDS" in base64.b64decode(
+        session["resources"][color_table["resourceId"]]["data"]
+    ).decode("utf-8")
     records = session["renderRequest"]["records"]
+    assert records[0]["display"] == {"isCircular": True, "startCoordinate": 1001}
     assert [
         (
             record["source"]["resourceId"],

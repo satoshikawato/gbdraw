@@ -33,9 +33,6 @@ MANUALLY_MANAGED_FIGURES: dict[str, str] = {
     "gbdraw/web/assets/gbdraw-logo-title.png": (
         "Brand asset derived from the adjacent SVG; update and verify both logo files together."
     ),
-    "gbdraw/web/gallery/examples/vibrio-harveyi-group-collinear.svg": (
-        "Interactive Web Gallery output with compressed metadata; refresh it together with its source figure and compressed session."
-    ),
 }
 
 UNREFERENCED_FIGURE_RETENTION: dict[str, str] = {

@@ -212,11 +212,11 @@ test('Gallery renders the Hepatoplasmataceae tutorial and files panels', async (
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto(`${baseUrl}/gallery/#hepatoplasmataceae_collinear`, { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('#selected-title')).toHaveText('Hepatoplasmataceae collinear protein-match blocks');
+  await expect(page.locator('#selected-title')).toHaveText('Shared gene order between neighboring genomes (Hepatoplasmataceae)');
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Plot collinear protein-match blocks across five Hepatoplasmataceae genomes' })
+    page.getByRole('heading', { name: 'Show where neighboring Hepatoplasmataceae genomes keep the same gene order' })
   ).toBeVisible();
   await expect(page.getByText('Reproduce the figure')).toBeVisible();
   await expect(page.getByText('Use browser LOSAT')).toBeVisible();
@@ -256,13 +256,21 @@ test('Gallery renders the two-species Vibrio multi-record tutorial and media', a
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto(`${baseUrl}/gallery/#vibrio-harveyi-group-collinear`, { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('#selected-title')).toHaveText('Vibrio parahaemolyticus and V. alginolyticus collinearity');
+  await expect(page.locator('#selected-title')).toHaveText(
+    'Collinearity analysis of multi-replicon bacterial genomes (Vibrio spp.)'
+  );
+  // Taxon names in the description are italic, not literal markup.
+  await expect(page.locator('#selected-description i').first()).toHaveText('Vibrio');
+  await expect(page.locator('#selected-description')).not.toContainText('<i>');
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(
-    tutorialPanel.getByRole('heading', { name: 'Compare both chromosomes from two Vibrio assemblies' })
+    tutorialPanel.getByRole('heading', {
+      name: 'Collinearity analysis of multi-replicon bacterial genomes (Vibrio spp.)'
+    })
   ).toBeVisible();
+  await expect(tutorialPanel.locator('.tutorial-summary i').first()).toHaveText('Vibrio');
   await expect(tutorialPanel.getByRole('row', { name: /1.*NC_004603\.1.*1.*1/ })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: /4.*NC_022359\.1.*2.*2/ })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'CDS Rectangle' })).toBeVisible();
@@ -270,17 +278,21 @@ test('Gallery renders the two-species Vibrio multi-record tutorial and media', a
   await expect(tutorialPanel.getByRole('row', { name: 'Plot Title Blank' })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Definition line: Organism / strain 18; Bold' })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Definition line: Subtitle / title 16; Normal' })).toBeVisible();
-  await expect(tutorialPanel.getByText('Both assemblies contain two chromosomes')).toBeVisible();
   await expect(
-    tutorialPanel.getByText('A narrow white gap separates each record from the blocks')
+    tutorialPanel.getByRole('row', { name: /NC_022359\.1 product RctB WP_005374502\.1 430,232/ })
   ).toBeVisible();
+  await expect(tutorialPanel.getByText('Few blocks cross from chromosome I')).toBeVisible();
+  await expect(tutorialPanel.getByText("Check Display start in each record's Record options in its File card.")).toBeVisible();
 
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(12);
+  await expect(mediaImages).toHaveCount(15);
   await expect(tutorialPanel.locator('img[src$="manual-02-01-record-row.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-03-01-record-layout.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-04-03-adjacent-pairs.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-05-01-rectangle-features.webp"]')).toHaveCount(1);
+  for (const name of ['search-dnaa', 'rotate-start', 'search-rctb']) {
+    await expect(tutorialPanel.locator(`img[src*="manual-03-1"][src$="${name}.webp"]`)).toHaveCount(1);
+  }
   await expect(tutorialPanel.locator('img[src$="manual-08-01-collinear-overview.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-07-01-bottom-title.webp"]')).toHaveCount(0);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
@@ -335,11 +347,11 @@ test('Gallery renders the Hepatoplasmataceae orthogroup tutorial and media', asy
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto(`${baseUrl}/gallery/#hepatoplasmataceae_orthogroup`, { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('#selected-title')).toHaveText('Hepatoplasmataceae CDS protein-similarity links');
+  await expect(page.locator('#selected-title')).toHaveText('Protein similarity groups across five genomes (Hepatoplasmataceae)');
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Plot CDS protein-similarity links across five Hepatoplasmataceae genomes' })
+    page.getByRole('heading', { name: 'Group similar proteins across five Hepatoplasmataceae genomes' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(tutorialPanel.getByRole('row', { name: 'LOSATP mode Similarity groups' })).toBeVisible();
@@ -472,7 +484,7 @@ test('Gallery restores the tobacco chloroplast region-annotation example', async
 
   await page.goto(`${baseUrl}/gallery/#tobacco-chloroplast`, { waitUntil: 'domcontentloaded' });
   await expect(
-    page.getByRole('heading', { name: /Nicotiana tabacum chloroplast genome regions/i })
+    page.getByRole('heading', { name: /Quadripartite structure of a chloroplast genome/i })
   ).toBeVisible();
   const preview = page.frameLocator('#demo-frame');
   await expect(preview.locator('[data-gbdraw-annotation-id="lsc"]')).toHaveCount(1);
@@ -524,11 +536,11 @@ test('Gallery renders the human mitochondrial AT skew tutorial and media', async
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto(`${baseUrl}/gallery/#HmmtDNA_ATskew`, { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('#selected-title')).toHaveText('Human mitochondrial genome (AT skew)');
+  await expect(page.locator('#selected-title')).toHaveText('Strand composition of the human mitochondrial genome (AT skew)');
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Human mitochondrial genome with an AT skew track' })
+    page.getByRole('heading', { name: 'Add an AT skew ring to the human mitochondrial genome map' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(tutorialPanel.getByText('Open Custom Track Slots', { exact: true })).toBeVisible();
@@ -586,11 +598,11 @@ test('Gallery renders the majanivirus orthogroup tutorial and media', async ({ p
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto(`${baseUrl}/gallery/#majanivirus_orthogroup`, { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('#selected-title')).toHaveText('Majanivirus CDS protein-similarity links');
+  await expect(page.locator('#selected-title')).toHaveText('Protein similarity across nine majanivirus genomes');
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Plot CDS protein-similarity links across nine majanivirus genomes' })
+    page.getByRole('heading', { name: 'Link similar proteins across nine majanivirus genomes' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(
@@ -741,7 +753,7 @@ test('Gallery shows an inline fallback when tutorial media fails to load', async
   await page.goto(`${baseUrl}/gallery/#hepatoplasmataceae_collinear`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Plot collinear protein-match blocks across five Hepatoplasmataceae genomes' })
+    page.getByRole('heading', { name: 'Show where neighboring Hepatoplasmataceae genomes keep the same gene order' })
   ).toBeVisible();
   await page.locator('#tutorial-panel .tutorial-media').first().scrollIntoViewIfNeeded();
   await expect(
@@ -860,8 +872,8 @@ test('Gallery uses workflow tags and runnable commands', async ({ page }) => {
   await expect(cards.nth(0)).not.toContainText('Beginner');
   await expect(cards.nth(0)).not.toContainText('Under 5 min');
   await expect(cards.nth(0).locator('.tag')).toHaveText(['Circular', 'Interactive SVG']);
-  await expect(cards.nth(0)).toContainText('Circular basics');
-  await expect(cards.nth(1)).toContainText('Linear basics');
+  await expect(cards.nth(0)).toContainText('Make a first circular map');
+  await expect(cards.nth(1)).toContainText('Make a first linear map');
 
   const tagFilters = page.getByRole('group', { name: 'Filter by tag' });
   await tagFilters.getByRole('button', { name: 'Linear', exact: true }).click();
@@ -1062,7 +1074,7 @@ test('Gallery ignores stale tutorial fetch results after sample changes', async 
   ).toBeVisible();
   await expect(
     tutorialPanel.getByRole('heading', {
-      name: 'Plot collinear protein-match blocks across five Hepatoplasmataceae genomes'
+      name: 'Show where neighboring Hepatoplasmataceae genomes keep the same gene order'
     })
   ).toHaveCount(0);
 });

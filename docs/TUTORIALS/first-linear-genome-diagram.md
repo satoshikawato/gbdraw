@@ -242,6 +242,7 @@ strands, and left legend.
 
 ## Next steps
 
+- [Open the matching Gallery entry](https://gbdraw.app/gallery/#lambda_basic_linear) for its interactive figure, Session, and step-by-step web app guide
 - [Review record selection and layout](../REFERENCE/web-app.md#record-selection-and-layout)
 - [Review feature-presentation rules](../REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#feature-presentation)
 - [Compare genomes](compare-genomes-losatn.md)

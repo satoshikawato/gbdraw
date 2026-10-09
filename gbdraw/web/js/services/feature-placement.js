@@ -290,6 +290,20 @@ export const requestFeatureOverrides = (overrides, records = [], { bulkLabelText
   ).map(({ labelSourceText: _source, ...row }) => row);
 };
 
+// Whether the Labels panel shows the label settings that a label set On in a
+// feature popup uses (qualifier priority, text settings, circular label
+// geometry): while Show Labels (Linear) or Label Mode (Circular), `scope`, is
+// not None, or while a feature of the drawing has Label visibility On (Owner
+// decisions 2026-10-09). Label filtering keeps the scope alone: an On label
+// ignores the filters (gbdraw/labels/filtering.py `get_label_text`).
+/**
+ * @param {string} scope
+ * @param {FeatureOverrideDraft | null | undefined} overrides
+ */
+export const labelSettingsVisible = (scope, overrides) => (
+  scope !== 'none' || Object.values(overrides || {}).some((row) => row?.labelVisibility === 'on')
+);
+
 /** @param {FeatureIdentity} identity */
 const emptyOverrideRow = ({ recordKey, biologicalFeatureId }) => ({
   recordKey,

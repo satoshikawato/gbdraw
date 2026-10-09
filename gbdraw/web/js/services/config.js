@@ -89,6 +89,7 @@ import {
   CANONICAL_REQUEST_SCHEMA,
   buildCanonicalRenderRequest,
   canonicalLinearRecordLayout,
+  featureEditsOverProjection,
   legacyTableRowsNotice,
   linearDefinitionVisibilityOf,
   managedConfigOverridePathsForMode,
@@ -5070,11 +5071,8 @@ const importSessionDocument = async (e, options = {}) => {
       ].forEach((field) => delete artifactFeatureState[field]);
     }
     let features = splitLegacyFeatureVisibilityRules(canonicalSession
-      ? {
-          ...projectionResult.renderState.semanticFeatureState,
-          ...(currentCatalogFeatureState || {}),
-          ...artifactFeatureState
-        }
+      ? featureEditsOverProjection({ ...(currentCatalogFeatureState || {}), ...artifactFeatureState },
+        projectionResult.renderState)
       : (data.features || {}));
     const catalogSequenceSources = currentSchemaSession
       ? (currentCatalogFeatureState?.sequenceSources || [])
@@ -5427,7 +5425,11 @@ const importSessionDocument = async (e, options = {}) => {
     // stacks install as saved, unset axis indexes included (R11).
     for (const mode of SLICE_MODES) {
       const storedSlice = modeScopedSession && !(mode === committedDraftMode && committedSliceProjected);
-      applyModeSliceData(state.drawings[mode], mode, { ...modeSlices[mode], config: modeConfigs[mode] }, {
+      // The committed mode's slice takes its request's per-feature edits where
+      // it has none (OV-220).
+      const features = mode === committedDraftMode && canonicalSession && !settingsOnly
+        ? { features: featureEditsOverProjection(modeSlices[mode].features, projectionResult.renderState) } : {};
+      applyModeSliceData(state.drawings[mode], mode, { ...modeSlices[mode], ...features, config: modeConfigs[mode] }, {
         resolveTrackPlacements: !settingsOnly && !storedSlice,
         applyCanvasPadding: mode !== displayMode
       });

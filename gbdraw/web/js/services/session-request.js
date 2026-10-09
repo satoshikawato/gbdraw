@@ -2408,6 +2408,26 @@ const buildLayout = (state, drawing, records = []) => {
   };
 };
 
+// A draft without a per-feature edit field (a Session written by the CLI, the
+// Python API, or the Gallery publication) takes the request projection's
+// value for it. Gallery publication and Session Load both read edits this way
+// (OV-216, OV-220).
+const PROJECTED_FEATURE_EDIT_FIELDS = ['featureOverrides', 'featureVisibilityManualRules', 'labelOverrideRows'];
+/**
+ * @param {Record<string, any> | null | undefined} draft
+ * @param {{ semanticFeatureState?: Record<string, any> } | null | undefined} projection
+ * @returns {Record<string, any>}
+ */
+export const featureEditsOverProjection = (draft, projection) => {
+  const saved = draft && typeof draft === 'object' ? draft : {};
+  const projected = projection?.semanticFeatureState || {};
+  return {
+    ...saved,
+    ...Object.fromEntries(PROJECTED_FEATURE_EDIT_FIELDS.filter((field) => !Object.hasOwn(saved, field)
+      && projected[field] !== undefined).map((field) => [field, projected[field]]))
+  };
+};
+
 const publicationClone = (value) => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 const publicationRef = (value) => ({ value });
 const canonicalRecordSelector = (record) => {
@@ -2428,7 +2448,7 @@ export const buildCanonicalRequestState = ({ session, projection, config,
   const colorOverridesChanged = config?.colorsAreOverrides === true
     && JSON.stringify(activeColors) !== JSON.stringify(pythonColors(projection.config?.colors));
   if (colorOverridesChanged) delete canonicalPublicationFiles.d_color;
-  const features = session?.features || {}, layout = config?.linearRecordLayout || {};
+  const features = featureEditsOverProjection(session?.features, projection), layout = config?.linearRecordLayout || {};
   const canonicalLayout = projection.config?.linearRecordLayout || {};
   const legacyAlignment = projection.pipelineState?.legacySimilarityAlignment;
   const materializedLegacyPlan = legacyAlignment
@@ -2465,8 +2485,7 @@ export const buildCanonicalRequestState = ({ session, projection, config,
   };
   const drawingRefs = {
     currentColors: colorOverridesChanged ? activeColors : config.colors || {},
-    selectedPalette: palette, featureVisibilityRules: publicationClone(features.featureVisibilityManualRules
-      || projection.semanticFeatureState?.featureVisibilityManualRules || []),
+    selectedPalette: palette, featureVisibilityRules: publicationClone(features.featureVisibilityManualRules || []),
     filterMode: config.filterMode || 'None', manualBlacklist: String(config.blacklistText || ''),
     canonicalLabelOverrideRows: publicationClone(features.labelOverrideRows || []),
     losatProgram: config.losatProgram || 'blastn',
@@ -5149,6 +5168,13 @@ const normalizedPublicationBytes = async (resource, id, normalize, path) => {
       (row) => row && row !== 'feature_type\tcolor').sort();
     return textToBytes(`${rows.join('\n')}\n`);
   }
+  // A CLI Session stores its specific-color table with a header; the file the
+  // CLI read, which the rebuild uses, may have none. Rule order is kept.
+  if (path.includes('.diagramOptions.colors.colorTable')) {
+    const rows = bytesToText(bytes).split(/\r?\n/).filter((row) => row.trim()
+      && row !== 'feature_type\tqualifier_key\tvalue\tcolor\tcaption');
+    return textToBytes(`${rows.join('\n')}\n`);
+  }
   if (!normalize) return bytes;
   if (!path.startsWith('$.comparisons') || resource.kind !== 'canonical-tsv') return bytes;
   const rows = bytesToText(bytes).trimEnd().split(/\r?\n/).map((row, index) => index === 0
@@ -5162,7 +5188,7 @@ const normalizedPublicationBytes = async (resource, id, normalize, path) => {
 const publicationResourceIdentity = async (resources, id, normalize, path, cache) => {
   const resourceId = String(id || '').trim();
   if (!resourceId) throw new Error('Canonical request contains an empty resourceId.');
-  const resource = resources?.[resourceId], key = resource?.encoding === 'base64' && !path.includes('.diagramOptions.colors.defaultColors') && (!normalize || !path.startsWith('$.comparisons') || resource.kind !== 'canonical-tsv') ? resource.data : null;
+  const resource = resources?.[resourceId], key = resource?.encoding === 'base64' && !path.includes('.diagramOptions.colors.') && (!normalize || !path.startsWith('$.comparisons') || resource.kind !== 'canonical-tsv') ? resource.data : null;
   const kind = path.includes('.diagramOptions.colors.defaultColors') ? 'default-colors'
     : (path.includes('.diagramOptions.colors.colorTable') ? 'color-table' : String(resource.kind || ''));
   let digest = key ? cache.get(key) : null;

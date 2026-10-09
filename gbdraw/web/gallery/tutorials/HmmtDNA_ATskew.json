@@ -1,7 +1,7 @@
 {
   "id": "HmmtDNA_ATskew",
   "version": 1,
-  "title": "Human mitochondrial genome with an AT skew track",
+  "title": "Add an AT skew ring to the human mitochondrial genome map",
   "summary": "Add GC content, GC skew, and AT skew tracks to a circular human mitochondrial genome diagram, then configure its ticks, feature labels, and legend.",
   "appMode": "Circular",
   "primaryWorkflow": "Circular custom track slots with AT skew",

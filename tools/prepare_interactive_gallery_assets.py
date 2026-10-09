@@ -221,10 +221,16 @@ VIBRIO_HARVEYI_GROUP_COMMAND = (
 EXAMPLES: tuple[GallerySessionExample, ...] = (
     GallerySessionExample(
         id="HmmtDNA_basic_circular",
-        title="Human mitochondrial genome: first circular figure",
+        title="A first circular genome map (human mitochondrial genome)",
         tags=("Circular", "Interactive SVG"),
-        description="Create a first circular genome figure from one small GenBank record without running a sequence search.",
-        workflow="Circular basics",
+        description=(
+            "The 16,569-bp human mitochondrial genome from one GenBank record, with labeled "
+            "genes and rings for GC content and GC skew. With separate strands, forward-strand "
+            "genes sit on the outer lane and reverse-strand genes on the inner lane, and product "
+            "names are placed outside the circle or inside the longest arrows. Find NADH dehydrogenase subunit 6 and eight "
+            "tRNA genes on the inner lane: they are the genes on the reverse strand."
+        ),
+        workflow="Make a first circular map",
         input_summary="1 GenBank file",
         display_order=10,
         command_kind="runnable",
@@ -233,10 +239,16 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     ),
     GallerySessionExample(
         id="lambda_basic_linear",
-        title="Lambda phage: first linear figure",
+        title="A first linear genome map (phage lambda)",
         tags=("Linear", "Interactive SVG"),
-        description="Create a labeled linear genome figure and learn strand separation, the ruler, and SVG export.",
-        workflow="Linear basics",
+        description=(
+            "The 48,502-bp phage lambda genome as one linear track, with every CDS labeled by "
+            "its product. With separate strands, forward-strand genes sit above the axis and "
+            "reverse-strand genes below it, and a ruler marks positions in kbp. The head and "
+            "tail genes in the first 22 kbp are on the forward strand, while most genes between "
+            "22 and 38 kbp are on the reverse strand."
+        ),
+        workflow="Make a first linear map",
         input_summary="1 GenBank file",
         display_order=20,
         command_kind="runnable",
@@ -245,10 +257,17 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     ),
     GallerySessionExample(
         id="HmmtDNA_ATskew",
-        title="Human mitochondrial genome (AT skew)",
+        title="Strand composition of the human mitochondrial genome (AT skew)",
         tags=("Circular", "Interactive SVG"),
-        description="Add an AT skew ring and qualifier-based labels to a compact circular mitochondrial diagram.",
-        workflow="Circular quantitative tracks",
+        description=(
+            "The human mitochondrial genome with GC content, GC skew, and AT skew rings inside "
+            "the gene ring, each computed in 500-bp windows moved in 50-bp steps. The AT skew "
+            "ring is an extra track that compares A with T, and a qualifier priority table labels "
+            "genes by gene name (ND1, COX1) instead of product. Compare the two skew rings window "
+            "by window; each is drawn around its genome-wide average, so its colors mark windows "
+            "above or below that average."
+        ),
+        workflow="Add an AT skew track",
         input_summary="1 GenBank + 1 qualifier TSV",
         display_order=30,
         command_kind="runnable",
@@ -257,10 +276,17 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     ),
     GallerySessionExample(
         id="tobacco-chloroplast",
-        title="<i>Nicotiana tabacum</i> chloroplast genome regions",
+        title="Quadripartite structure of a chloroplast genome (<i>Nicotiana tabacum</i>)",
         tags=("Circular", "Interactive SVG"),
-        description="Mark LSC, SSC, IRa, and IRb as bracket annotations inside a color-coded chloroplast gene map.",
-        workflow="Circular region annotations",
+        description=(
+            "The 155,943-bp tobacco chloroplast genome with brackets for the large single-copy "
+            "region (LSC), the small single-copy region (SSC), and the two inverted repeats "
+            "(IRa and IRb). An annotation table supplies the four region boundaries, and a color "
+            "table groups genes by function, such as photosystem I, RNA polymerase, and NADH "
+            "dehydrogenase. Genes in the inverted repeats, such as <i>ycf2</i>, <i>ndhB</i>, and "
+            "the rRNA genes, appear twice: once in IRa and once in IRb."
+        ),
+        workflow="Mark genome regions",
         input_summary="1 GenBank + 3 TSV files",
         display_order=40,
         command_kind="runnable",
@@ -269,10 +295,17 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     ),
     GallerySessionExample(
         id="Vnig_TUMSAT-TG-2018",
-        title="<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",
+        title="Every replicon of a multi-replicon bacterial genome on one canvas (<i>Vibrio nigripulchritudo</i>)",
         tags=("Circular", "Multi-record", "Interactive SVG"),
-        description="Arrange two chromosomes and four plasmids from one multi-record GenBank file on a shared circular canvas.",
-        workflow="Circular multi-record canvas",
+        description=(
+            "The complete genome of <i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018 from one "
+            "RefSeq GenBank file: two chromosomes and four plasmids, each drawn as its own circle "
+            "with GC content and GC skew. Automatic sizing gives longer replicons larger circles "
+            "while keeping the small plasmids readable, with the chromosomes in the first row and "
+            "the plasmids in the second. Compare chromosome 1 (4,072,236 bp) with the smallest "
+            "plasmid, pVNTG4 (37,131 bp)."
+        ),
+        workflow="Draw every replicon on one canvas",
         input_summary="1 multi-record GenBank file",
         display_order=50,
         command_kind="runnable",
@@ -285,10 +318,16 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     ),
     GallerySessionExample(
         id="hepatoplasmataceae_collinear",
-        title="Hepatoplasmataceae collinear protein-match blocks",
+        title="Shared gene order between neighboring genomes (Hepatoplasmataceae)",
         tags=("Linear", "Collinear groups", "LOSAT", "Interactive SVG"),
-        description="Combine compatible protein-match anchors into collinear blocks across five related genomes.",
-        workflow="LOSATP collinear blocks",
+        description=(
+            "Five Hepatoplasmataceae genomes, one per row. LOSATP collinear blocks join protein "
+            "matches that keep the same local order between neighboring rows: blue for the same "
+            "orientation, red for inverted, darker for higher identity. Long blue blocks join the "
+            "last three genomes, while blocks between the first three rows are short, cross each "
+            "other, and are often inverted."
+        ),
+        workflow="Compare gene order",
         input_summary="5 GenBank files",
         display_order=60,
         command_kind="runnable",
@@ -298,14 +337,23 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     ),
     GallerySessionExample(
         id="vibrio-harveyi-group-collinear",
-        title="<i>Vibrio parahaemolyticus</i> and <i>V. alginolyticus</i> collinearity",
+        title="Collinearity analysis of multi-replicon bacterial genomes (<i>Vibrio</i> spp.)",
         tags=("Linear", "Multi-record", "Collinear groups", "LOSAT", "Interactive SVG"),
-        description="Compare both chromosomes from two Harveyi-clade Vibrio assemblies as two multi-record rows.",
-        workflow="Multi-record LOSATP collinear blocks",
+        description=(
+            "Two <i>Vibrio</i> genomes, each with two chromosomes. Each chromosome is rotated "
+            "in gbdraw to start at its replication initiator gene \u2014 <i>dnaA</i> on "
+            "chromosome I and <i>rctB</i> on chromosome II \u2014 so records that NCBI starts "
+            "at unrelated positions line up. Inversions occur within each chromosome, but "
+            "collinear blocks rarely connect chromosome I to chromosome II."
+        ),
+        workflow="Align replicons at their replication origin",
         input_summary="2 multi-record GenBank files; 4 chromosomes",
         display_order=65,
         command_kind="runnable",
-        command_note="Run from a source checkout so the records table can read the two GBFF files under tests/test_inputs/.",
+        command_note=(
+            "Run from a source checkout: the records table is under "
+            "examples/ and reads the two GBFF files under tests/test_inputs/."
+        ),
         command=VIBRIO_HARVEYI_GROUP_COMMAND,
         session_from_command=True,
         feature_sources=(
@@ -321,10 +369,17 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     ),
     GallerySessionExample(
         id="hepatoplasmataceae_orthogroup",
-        title="Hepatoplasmataceae CDS protein-similarity links",
+        title="Protein similarity groups across five genomes (Hepatoplasmataceae)",
         tags=("Linear", "Similarity groups", "LOSAT", "Interactive SVG"),
-        description="Compare the same five genomes with similarity-group links instead of collinear blocks.",
-        workflow="LOSATP similarity groups",
+        description=(
+            "The five Hepatoplasmataceae genomes of the collinear example, linked by LOSATP "
+            "similarity groups instead of collinear blocks. Similarity groups searches every pair "
+            "of genomes and groups proteins that match; links join group members in neighboring "
+            "rows, darker for higher identity. Compare the parallel links between the last three "
+            "genomes with the crossing links between the first three; the links show protein "
+            "similarity, not orthology."
+        ),
+        workflow="Group similar proteins",
         input_summary="5 GenBank files",
         display_order=70,
         command_kind="runnable",
@@ -334,10 +389,18 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     ),
     GallerySessionExample(
         id="BGC0000708-BGC0000713",
-        title="Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
+        title="Protein similarity among aminoglycoside biosynthetic gene clusters (<i>Streptomyces</i> spp.)",
         tags=("Linear", "Similarity groups", "LOSAT", "Interactive SVG"),
-        description="Compare five biosynthetic gene clusters while preserving antiSMASH categories and concise gene labels.",
-        workflow="LOSATP similarity groups and color rules",
+        description=(
+            "Five aminoglycoside biosynthetic gene clusters from MIBiG (lividomycin, two neomycin, "
+            "paromomycin, and ribostamycin), colored by antiSMASH gene kind and linked by LOSATP "
+            "similarity groups at 30% identity or more. The records are aligned on the group of "
+            "<i>livE</i> from the lividomycin cluster, which is also the only record with gene "
+            "labels. A run of core biosynthetic genes links through all five clusters, while "
+            "regulatory genes appear only in the two neomycin clusters; the links show protein "
+            "similarity, not phylogenetic orthology."
+        ),
+        workflow="Compare gene clusters by protein similarity",
         input_summary="5 GenBank + 3 color/label TSV files",
         display_order=80,
         command_kind="runnable",
@@ -349,10 +412,16 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     ),
     GallerySessionExample(
         id="majanivirus_orthogroup",
-        title="Majanivirus CDS protein-similarity links",
+        title="Protein similarity across nine majanivirus genomes",
         tags=("Linear", "Similarity groups", "LOSAT", "Interactive SVG"),
-        description="Inspect dense protein-similarity links and product-based feature colors across nine viral genomes.",
-        workflow="LOSATP similarity groups",
+        description=(
+            "Nine majanivirus genomes from penaeid shrimp, one per row, linked by LOSATP similarity "
+            "groups at 20% identity or more. A color table marks WSSV-like proteins, BIRP, and "
+            "tyrosine recombinase by product name. The first five genomes share dense, "
+            "high-identity links, while links further down are paler and sparser; the links show "
+            "protein similarity, not orthology."
+        ),
+        workflow="Compare many genomes by protein similarity",
         input_summary="9 GenBank + 2 color TSV files",
         display_order=90,
         command_kind="runnable",
