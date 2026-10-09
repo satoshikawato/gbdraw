@@ -9,11 +9,15 @@ import { migrateLegacyRecordDisplayDrafts } from './record-display-model.js';
 import { FEATURE_CATALOG_SCHEMA, migrateLegacyFeatureCatalog } from './feature-catalog.js';
 import { migrateSessionFeatureEdits, migrateSessionFeaturePlacements } from './feature-edit-migration.js';
 import { adoptCurrentSessionResources } from './session-resource-backing.js';
+import {
+  IMPORTED_COMPARISON_DISPOSITIONS, classifyImportedComparisonIntent, inheritCommittedComparisonIntent
+} from './imported-comparison-intent.js';
 import { defaultFeatureRendering } from '../utils/feature-rendering.js';
 const CURRENT_VERSION = 46, CURRENT_REQUEST_SCHEMA = 9, ACCEPTED_REQUEST_SCHEMAS = new Set([CURRENT_REQUEST_SCHEMA]), HISTORICAL_VERSIONS = new Set([31, 32, 33, 39]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
 const ARTIFACT_FIELDS = ['results', 'editorState', 'orthogroupState', 'runMetadata', 'losatCache', 'losatDerivedCache', 'proteinIdentityManifest'];
 // The top-level homes of the flat draft that Session 46 moved into `modes`.
 const RETIRED_DRAFT_FIELDS = ['config', 'features'];
+const noComparisonPlan = () => ({ mode: 'none', defaultSource: 'losat', edges: [] });
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const clone = (value) => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 const has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
@@ -50,6 +54,10 @@ const modeSlice = (session) => {
   const slice = isObject(session?.modes) ? session.modes[session.renderRequest?.mode] : null;
   return isObject(slice) ? slice : null;
 };
+const outputEntries = (output) => {
+  const entries = Array.isArray(output) ? output : [output];
+  return entries.every(isObject) ? entries : null;
+};
 const draftConfig = (session) => (has(session, 'modes') ? modeSlice(session)?.config || {} : session?.config);
 const draftFeatures = (session) => (has(session, 'modes') ? modeSlice(session)?.features : session?.features);
 const validateEnvelope = (session) => {
@@ -83,8 +91,7 @@ const publicationConfig = (session, projection) => {
       blastn: { ...losat.blastn, ...projected.losat?.blastn, ...stored.losat?.blastn },
       blastp: { ...losat.blastp, ...projected.losat?.blastp, ...stored.losat?.blastp } },
     circularConservation: { ...createDefaultCircularConservation(), ...projected.circularConservation, ...clone(stored.circularConservation) },
-    linearComparisonPlan: clone(stored.linearComparisonPlan || projected.linearComparisonPlan
-      || { mode: 'none', defaultSource: 'losat', edges: [] })
+    linearComparisonPlan: clone(stored.linearComparisonPlan || projected.linearComparisonPlan || noComparisonPlan())
   };
   for (const key of ['palette', 'annotationSets', 'recordDisplayDrafts', 'featurePlacementOverrides', 'linearRecordLayout', 'losatProgram'])
     if (has(stored, key)) config[key] = clone(stored[key]);
@@ -119,7 +126,7 @@ const publicationLayout = (session, config, projection) => {
 // that mode's defaults. An older Session's flat draft is split by the registry
 // (plan 4.2); a Session 46 keeps the rest of its slice. The layout has one
 // home, so the older `ui` layout fields go.
-const publishedSession = (session, config, layout, projection) => {
+const publishedSession = (session, config, layout, projection, features) => {
   const mode = projection.mode;
   const flat = !has(session, 'modes');
   // Display drafts that carry no scope (those projected from a CLI request and
@@ -127,7 +134,10 @@ const publishedSession = (session, config, layout, projection) => {
   // keeps them there (OV-217).
   const scoped = Array.isArray(config.recordDisplayDrafts) ? { ...config, recordDisplayDrafts: config.recordDisplayDrafts
     .map((entry) => (isObject(entry) && !has(entry, 'scope') ? { ...entry, scope: mode } : entry)) } : config;
-  const draft = flat ? { ...session, config: scoped, ui: { ...(isObject(session.ui) ? session.ui : {}), mode } } : { config: scoped, ui: { mode } };
+  // A flat draft takes the per-feature edits the request was rebuilt from: a
+  // CLI Session holds its visibility and label tables only in the request, and
+  // Load reads a stored draft's edits from the draft.
+  const draft = flat ? { ...session, features, config: scoped, ui: { ...(isObject(session.ui) ? session.ui : {}), mode } } : { config: scoped, ui: { mode } };
   // Override colors merge into the committed request's colors.
   const split = splitDraftIntoModes(draft, { committedMode: mode, modeProfiles: null, paletteColors: projection.config?.colors || null });
   const slice = flat ? split.modes[mode] : { ...modeSlice(session), config: split.modes[mode].config };
@@ -156,24 +166,38 @@ const rebuildIntent = async (session, owners) => {
       legacyOrthogroupState: session.orthogroupState || null
     }
   );
-  const projection = owners.projectRequest({ renderRequest,
+  // A read-only comparison (one the Web controls cannot represent) is rebuilt
+  // as Generate's Inherit builds it (D-04, OV-268): Load projects the request
+  // without it, the request draws no comparison of its own, and the committed
+  // comparisons are inherited.
+  const inherit = classifyImportedComparisonIntent({ renderRequest, resources: session.resources })
+    .disposition === IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY;
+  const projection = owners.projectRequest({ renderRequest: inherit ? { ...renderRequest, comparisons: [] } : renderRequest,
     resources: session.resources, webFiles: session.webFiles || {}, legacyFiles: session.files, storedConfig: draftConfig(session),
     initializeCliInputs: isCliWritten(session),
     fileBindings: session.cliInvocation?.fileBindings, sessionResourceTable: adoptCurrentSessionResources(session.resources),
     deferResourceContent: false, adoptCanonicalPayloads: true });
   const config = publicationConfig(session, projection); validateCurrentWriterActiveConfig({ mode: projection.mode, storedConfig: config });
   const layout = publicationLayout(session, config, projection);
-  const filesData = projection.files;
+  // The CLI writes the resolved palette (its -d rows over the named palette)
+  // beside the -d file it read; the rebuild writes the resolved colors, so both
+  // requests name the same table (OV-266).
+  const filesData = isCliWritten(session) ? { ...projection.files, d_color: null } : projection.files;
   if (projection.mode === 'linear') filesData.linearSeqs.forEach((sequence, index) => {
     sequence.cardinality = renderRequest.records[index]?.cardinality;
   });
-  const { state, drawing } = owners.buildRequestState({ session: { ...session, features: draftFeatures(session) }, projection, config, filesData });
-  const plan = projection.mode === 'linear' ? owners.resolveComparisonPlan({ plan: drawing.linearComparisonPlan, sequences: filesData.linearSeqs,
+  const { state, drawing, features } = owners.buildRequestState({ session: { ...session, features: draftFeatures(session) }, projection, config, filesData });
+  const plan = projection.mode === 'linear' ? owners.resolveComparisonPlan({
+    plan: inherit ? noComparisonPlan() : drawing.linearComparisonPlan, sequences: filesData.linearSeqs,
     layout: drawing.linearRecordLayoutEnabled.value ? drawing.linearRecordRows : [],
     losatProgram: drawing.losatProgram.value, blastpMode: drawing.losat?.blastp?.mode }) : null;
-  const rebuilt = owners.buildRequest({ state, drawing, filesData, comparisonPlanSnapshot: plan });
-  if (!isObject(rebuilt.renderRequest.output) || !isObject(session.renderRequest.output)) throw new Error('Gallery publication cannot preserve committed output metadata policy.');
-  rebuilt.renderRequest.output.interactiveMetadataPolicy = session.renderRequest.output.interactiveMetadataPolicy;
+  const rebuilt = owners.buildRequest({ state, drawing, filesData: inherit ? { ...filesData, linearCanonicalComparisons: [] } : filesData,
+    comparisonPlanSnapshot: plan });
+  if (inherit) inheritCommittedComparisonIntent({ candidate: rebuilt, committed: { renderRequest, resources: session.resources } });
+  // A batch request holds one output per record (OV-267); each keeps its committed policy.
+  const committedOutputs = outputEntries(session.renderRequest.output), rebuiltOutputs = outputEntries(rebuilt.renderRequest.output);
+  if (!committedOutputs || !rebuiltOutputs || committedOutputs.length !== rebuiltOutputs.length) throw new Error('Gallery publication cannot preserve committed output metadata policy.');
+  rebuiltOutputs.forEach((output, index) => { output.interactiveMetadataPolicy = committedOutputs[index].interactiveMetadataPolicy; });
   // A CLI-written request carries the resolved configuration; publication
   // writes the Web's own configOverrides, so Session Load needs no Worker. The
   // refresh tool checks that the replayed figure equals the declared figure.
@@ -193,7 +217,7 @@ const rebuildIntent = async (session, owners) => {
     else delete diagramOptions.featureShapes;
     return { ...request, diagramOptions };
   };
-  return { config, layout, projection, rebuilt, equivalence: await owners.assertRequestsEquivalent({ expectedRequest: comparable(renderRequest),
+  return { config, features, layout, projection, rebuilt, equivalence: await owners.assertRequestsEquivalent({ expectedRequest: comparable(renderRequest),
     expectedResources: session.resources, actualRequest: comparable(rebuilt.renderRequest), actualResources: rebuilt.resources }) };
 };
 const mergeReplayResources = (prepared, replayed) => {
@@ -224,8 +248,9 @@ const mergeReplayResources = (prepared, replayed) => {
  *   Promotes a historical Session to the current version.
  * @property {(input: Record<string, any>) => Promise<Record<string, any>>} assertRequestsEquivalent
  * @property {(input: Record<string, any>) => Record<string, any>} buildRequest
- * @property {(input: Record<string, any>) => { state: Record<string, any>, drawing: Record<string, any> }} buildRequestState
- *   The request inputs of a Session: project inputs and artifacts (`state`) and settings and edits (`drawing`).
+ * @property {(input: Record<string, any>) => { state: Record<string, any>, drawing: Record<string, any>, features: Record<string, unknown> }} buildRequestState
+ *   The request inputs of a Session: project inputs and artifacts (`state`), settings and edits (`drawing`),
+ *   and the drawing's per-feature edits as the draft stores them (`features`).
  * @property {(request: Record<string, any>, promotion?: Record<string, any>) => Record<string, any>} promoteRequest
  * @property {(input: Record<string, any>) => Record<string, any>} projectRequest
  * @property {(input: Record<string, any>) => any} resolveComparisonPlan
@@ -289,9 +314,9 @@ export const createGallerySessionPublication = (owners) => {
   };
   const rebuild = (session) => rebuildIntent(session, owners);
   const prepare = async (source) => {
-    const admitted = admit(source), { config, layout, projection, rebuilt, equivalence } = await rebuild(admitted);
+    const admitted = admit(source), { config, features, layout, projection, rebuilt, equivalence } = await rebuild(admitted);
     const session = {
-      ...publishedSession(admitted, config, layout, projection),
+      ...publishedSession(admitted, config, layout, projection, features),
       renderRequest: rebuilt.renderRequest,
       resources: rebuilt.resources,
       webFiles: rebuilt.webFiles,

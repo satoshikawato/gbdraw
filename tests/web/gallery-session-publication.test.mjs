@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
@@ -413,4 +416,47 @@ assert.rejects(
   assert.deepEqual(kept.map(({ scope, ...draft }) => draft), source);
   assert.ok(kept.every((draft) => draft.scope === undefined || draft.scope === mode));
   assert.equal(kept.length, source.length);
+}
+
+// A Session the CLI writes publishes as the Gallery entry of its command: a
+// Circular batch request with one output per record (OV-267), the resolved
+// default colors and the editor tables the CLI stores beside the files it read
+// (OV-266), and a read-only `-b` comparison, which the rebuild inherits as
+// Generate's Inherit does (D-04, OV-268). The published slice holds the CLI's
+// visibility and label rows, which Web Load reads from it (OV-299). Circular
+// uses the output format of the Gallery commands (interactive_svg).
+{
+  const { cases } = JSON.parse(await readFile('tests/fixtures/cli_session_cross_surface/cases.json', 'utf8'));
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-gallery-cli-'));
+  try {
+    for (const id of ['circular_records_tables', 'linear_tables', 'linear_blast']) {
+      const { mode, args } = cases.find((entry) => entry.id === id);
+      const file = path.join(directory, `${id}.gbdraw-session.json`);
+      execFileSync('python', ['-m', 'gbdraw.cli', mode, ...args, '-o', path.join(directory, id),
+        '-f', mode === 'circular' ? 'interactive_svg' : 'svg',
+        '--session_output', file], { env: { ...process.env, PYTHONPATH: process.cwd() }, stdio: 'pipe', timeout: 1_800_000 });
+      const source = JSON.parse(await readFile(file, 'utf8'));
+      const { session, equivalence } = await prepareGallerySessionForPublication(source);
+      assert.deepEqual(equivalence.differences, [], id);
+      assert.equal((await validateGalleryPublicationReadiness(session)).equivalence.equivalent, true, id);
+      // Load reads a stored draft's per-feature edits from the draft, so the
+      // published slice holds the CLI's visibility and label rows (OV-299).
+      const rows = async (option) => (args.includes(option) ? (await readFile(args[args.indexOf(option) + 1], 'utf8'))
+        .split(/\r?\n/).filter((line) => line.trim()).length : 0);
+      const { features } = session.modes[mode];
+      assert.equal(features.featureVisibilityManualRules.length, await rows('--feature_visibility_table'), id);
+      assert.equal(features.labelOverrideRows.length, await rows('--label_table'), id);
+      if (mode === 'circular') {
+        assert.deepEqual([source.renderRequest.grouping, Array.isArray(session.renderRequest.output)], ['batch', true], id);
+        assert.deepEqual(session.renderRequest.output.map((output) => output.interactiveMetadataPolicy),
+          source.renderRequest.output.map((output) => output.interactiveMetadataPolicy), id);
+      }
+      if (id === 'linear_blast') {
+        assert.deepEqual(session.renderRequest.comparisons, source.renderRequest.comparisons, id);
+        assert.deepEqual(session.modes.linear.config.linearComparisonPlan, { mode: 'none', defaultSource: 'losat', edges: [] }, id);
+      }
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 }
