@@ -178,9 +178,9 @@ and [typed Python alignment](./REFERENCE/python-api.md#typed-linear-similarity-g
 
 ## Sessions, Run Info, and reproducing a figure
 
-gbdraw 0.14.0 saves Sessions as session version 46, with canonical
-`renderRequest` schema 9. These format numbers are separate from the gbdraw
-version. A Session now keeps
+gbdraw 0.14.0 saves Sessions as session version 46, with
+canonical `renderRequest` schema 9. These format numbers are separate from
+the gbdraw version. A Session now keeps
 the settings and edits of Circular and Linear mode separately, and **Save
 Session** works before you load any source file. Sessions saved by earlier
 supported versions, and settings JSON files, still open; a Session that holds
