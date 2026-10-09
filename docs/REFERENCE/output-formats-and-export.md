@@ -15,7 +15,7 @@
 
 SVG is the base render. Static SVG uses `<prefix>.svg`; Interactive SVG uses
 `<prefix>.interactive.svg`. A session uses `.gbdraw-session.json` or
-`.gbdraw-session.json.gz`. Command-line protein evidence is written to
+`.gbdraw-session.json.gz`. The command line writes raw protein-search rows to
 `losatp.raw.tsv` inside the directory supplied to `--losat_output_dir`.
 
 Command-line `-f` or `--format` and Python format arguments use `svg`,
@@ -72,8 +72,8 @@ CairoSVG ignores `dominant-baseline` on curved text, such as circular tick
 labels, and places `hanging` and `middle` text on other baselines than
 browsers. It also centers or right-aligns each italic or roman part of a
 mixed-style caption on that part's own width, so the parts overlap. Before
-conversion, gbdraw gives that text the browser baseline offset and each
-caption part its browser start, computed from the packaged font metrics, so
+conversion, gbdraw computes the browser baseline offset for that text and the
+browser start for each caption part from the packaged font metrics. As a result,
 command-line and Python PNG, PDF, EPS, and PS text sits where browsers draw
 the SVG. The SVG file is not changed.
 
@@ -84,7 +84,7 @@ that formatting must remain exact.
 See [Interactive SVG and semantic
 hooks](interactive-svg-and-semantic-hooks.md) for stable integration tokens.
 
-## Evidence and FASTA downloads
+## Raw results and FASTA downloads
 
 Raw LOSAT and LOSATP exports contain the search rows before display filtering
 or grouping. Generated protein exports use stable readable aliases instead of
@@ -115,8 +115,8 @@ A reproducible handoff should contain:
 
 - immutable input accessions or checksums;
 - gbdraw and comparison-runtime versions;
-- the search program, arguments, thresholds, input order, and retained raw
-  comparison evidence;
+- the search program, arguments, thresholds, input order, and the raw
+  comparison results;
 - the command, Python script, or current session used to render the figure;
 - the original SVG and the exact submitted derivative; and
 - a note describing any manual edits.

@@ -43,7 +43,7 @@ options, schemas, APIs, compatibility rules, formats, and SVG hooks. Common entr
 For Linear Similarity Group alignment, see the [Web controls](./REFERENCE/web-app.md#similarity-group-alignment-in-linear-view),
 [strict CLI behavior](./REFERENCE/command-line.md#strict-similarity-group-alignment),
 [typed Python example](./REFERENCE/python-api.md#typed-linear-similarity-group-alignment),
-and [Session compatibility](./REFERENCE/session-and-request-compatibility.md#similarity-alignment-request-ownership).
+and [Session compatibility](./REFERENCE/session-and-request-compatibility.md#similarity-alignment-in-requests-and-sessions).
 
 ## FAQ
 

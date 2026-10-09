@@ -74,11 +74,11 @@ In `config` and `config_overrides`, font sizes must be greater than zero, stroke
 
 `LinearLayout` defaults to `record_gap=24.0` and automatic positions. Position strings identify a displayed record and its grid row, for example `#1@1`.
 
-`CircularTrackOptions` and `LinearTrackOptions` accept an ordered `slots` sequence and a zero-based `axis_index`. Circular tracks also accept `center_reserved_radius`. An explicit slot sequence is authoritative; the axis index must agree with the selected mode and slot types.
+`CircularTrackOptions` and `LinearTrackOptions` accept an ordered `slots` sequence and a zero-based `axis_index`. Circular tracks also accept `center_reserved_radius`. An explicit slot sequence is used as given; the axis index must agree with the selected mode and slot types.
 
 Package-root `CircularTrackOptions.slots` contains
 `gbdraw.api.CircularTrackSlot` values. This cross-namespace type is part of the
-public track contract.
+public track API.
 
 Each `DepthTrackOptions` represents one logical series. `source` is one path or `DataFrame` for one displayed record, or one path, `DataFrame`, or `None` per record. `label`, `color`, tick intervals, and tick font size default to `None`. `height` is supported only by Linear diagrams; Circular options reject it.
 
@@ -90,7 +90,7 @@ Each `DepthTrackOptions` represents one logical series. `source` is one path or 
 
 `ComparisonRingOptions(losat="losatn" | "tlosatx")` runs the ring searches: each track leaves `source` unset and names its comparison genome file with `comparison_sequence_source`, which is the query; the displayed records are the subject, and `reference` must stay `auto` or `subject`. `losatn_task` (default `megablast`) applies to LOSATN; `reference_gencode` and each track's `losat_gencode` (default 1) apply to TLOSATX. A track without `label` is labelled like the CLI ring: a GenBank or DDBJ file's DEFINITION (or organism), otherwise the file name without the last extension. `losat_executable`, `ncbi_blast_executable`, and `threads` choose the runtime. The typed equivalent is `CircularDiagramOptions.losat_search` (`LosatSearchOptions` with `program` `losatn` or `tlosatx`; `losatp`, `pairs`, and the LOSATP fields are rejected), `conservation_sequence_files`, and `conservation_losat_gencodes`; the planner replaces them with `conservation_search_results` (`ConservationSearchResult` name and raw rows), which a Session stores as `conservationBlastFiles`.
 
-`CircularOptions.comparison_rings` is the canonical field. The `conservation` constructor and attribute alias remains available for compatible code, but passing both names is an error.
+`CircularOptions.comparison_rings` is the current field name. The `conservation` constructor and attribute alias remains available for compatible code, but passing both names is an error.
 
 ## Linear options
 
@@ -125,12 +125,12 @@ the Similarity group of that exact protein ID or feature SVG ID, like the CLI
 accepted. See [Typed Linear Similarity Group
 alignment](#typed-linear-similarity-group-alignment).
 
-`LinearComparisonOptions(blast_files=...)` consumes prepared comparison TSV
+`LinearComparisonOptions(blast_files=...)` reads prepared comparison TSV
 files. Supplying those files does not start a nucleotide or protein search.
 
-## Canonical label overrides
+## Label override paths
 
-`config_overrides` uses canonical dotted leaf paths:
+`config_overrides` uses dotted leaf paths:
 
 | Path | Accepted values |
 |---|---|
@@ -242,15 +242,15 @@ unique representative, or candidate 1 in stable identity order. A recommendation
 is a convenience heuristic, not biological proof; callers still submit an
 explicit Select or Skip. Selection never uses score, support count, viewport
 position, or multi-hop paths. A plan stores anchors and Select/Skip rationale.
-Record presentation or region state owns orientation. Callers can inspect each
+Orientation comes from record presentation or region settings. Callers can inspect each
 review candidate's `strand_relation` (`same`, `opposite`, or `unknown`) before
 changing a record's presentation. Collinear alignment controls, anchor TSV,
 scored inference, support-count ranking, and multi-hop automatic selection are
 unsupported.
 
-This executable, in-memory contract example renders no public showcase file.
+This executable in-memory example renders no public showcase file.
 In an integration, use actual group membership, current crop/display centers,
-displayed strands, and direct evidence; the two synthetic candidates here only
+displayed strands, and direct ortholog links; the two synthetic candidates here only
 show how the typed request and resolver fit together. Source feature identities
 come from the planned records, so they remain stable across record reorder.
 Save the block as `typed_similarity_alignment.py` and run
@@ -327,9 +327,9 @@ print(plan.records[1].rationale.value, relation.value,
 Current Session round trips preserve the exact plan and rationale, record
 orientation, and base translations. An active plan survives ordinary
 regeneration; Web **Reset alignment…** uses the immediate pre-align base and
-offers optional restoration of the directions actually changed by that Align.
-Supported old Sessions enter an isolated reader-only compatibility path and save only the
-current typed representation. See [Session and request compatibility](session-and-request-compatibility.md#similarity-alignment-request-ownership).
+can also restore the directions actually changed by that Align.
+Supported old Sessions are only read, and they save only the current typed
+representation. See [Session and request compatibility](session-and-request-compatibility.md#similarity-alignment-in-requests-and-sessions).
 
 ## Combined rotation and placement example
 

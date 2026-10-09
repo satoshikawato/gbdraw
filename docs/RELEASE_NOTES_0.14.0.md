@@ -2,213 +2,300 @@
 
 # gbdraw 0.14.0 release notes
 
-These notes describe version `0.14.0` and migration from 0.13. Check
-[GitHub Releases](https://github.com/satoshikawato/gbdraw/releases) for publication
-dates and [PyPI](https://pypi.org/project/gbdraw/) for available packages.
-See [Installation](./INSTALL.md) for distribution and source-install routes.
+gbdraw `0.14.0` lets you rotate a circular record to start at any base, place
+individual features on a chosen lane, line up Similarity Groups across Linear
+records, and run LOSAT comparisons from the command line and Python. If you
+are upgrading from 0.13, read [Renamed and removed options](#renamed-and-removed-options)
+and [Upgrading from 0.13](#upgrading-from-013) first: several options were
+renamed. [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases)
+gives the publication date, [PyPI](https://pypi.org/project/gbdraw/) lists the
+published packages, and [Installation](./INSTALL.md) explains each install route.
 
 ## Highlights
 
-- Rotate the display start of a complete circular record in Circular or Linear
-  diagrams without changing its sequence or source coordinates.
-- Place a whole feature on Main or an available secondary lane, with its labels
-  and comparison endpoints following the placement.
-- Resume work with preserved session resources, and use **Run Info** to obtain
-  a Source recipe or an Exact replay of the successful Result.
-- Pan large previews reliably and see actual processing stages during Generate.
-- Use the package-root Python drawing API introduced during the beta, with
-  `Diagram` results and mode-specific options.
-- Install self-contained wheel or sdist packages with the local GUI's palette
-  data and browser runtime assets included.
+- Start a complete circular record at any base, in Circular or Linear
+  diagrams. The sequence and its coordinates do not change.
+- Place a whole feature on the main lane or an available secondary lane. Its
+  labels and comparison links follow it.
+- Save a Session and pick up where you stopped, with its comparison results.
+  **Run Info** gives you a command that rebuilds the figure from your original
+  files, or the files to replay it exactly.
+- Watch each stage of **Generate Diagram** as it runs, and drag large previews
+  smoothly.
+- Draw from Python with `draw_circular()` and `draw_linear()`, which return a
+  `Diagram` you can save in any format.
+- Install from a wheel or source package that includes the local web app's
+  palettes and browser files.
 
-## Web app improvements
+## In the web app
 
-**Generate Diagram** reports runtime and input preparation, comparison work,
-rendering, and finalization as those stages occur. Comparison status reflects
-the work being performed, including eligible cache reuse. It is stage feedback,
-not a predicted percentage or completion time. A cancelled or failed run leaves
-the previous successful Result available.
+**Generate Diagram** shows each stage as it runs: preparing the runtime and
+inputs, comparing, rendering, and finishing. When a comparison reuses a cached
+search, the status says so. The status shows stages, not a percentage or a
+time estimate. If you cancel, or the run fails, the previous Result stays.
 
-Preview dragging now follows pointer movement over both blank space and
-comparison ribbons, including large diagrams. Pan, zoom, Fit, and Reset change
-the view without regenerating the biological diagram.
+Circular and Linear mode now keep their own settings, edits, and Result.
+**Generate Diagram** replaces only the Result of the mode you are in, and
+switching modes changes no setting; a mode without a Result says **No Circular
+Result yet** or **No Linear Result yet**. Input files, LOSAT run settings, and
+the rich feature popup are shared by both modes. **Reset Settings** resets both
+modes, and one **Undo** restores both.
 
-**Region Annotations → Download TSV** saves the current editor draft as
-`annotations.tsv`, including changes made since the last Generate. The file
-works with Web **Import TSV** and the existing Python/CLI annotation-table
-readers. Download works offline and preserves effective row targets and styles,
-including explicit no-fill. Empty drafts cannot be downloaded. See the
+**Load Session** asks **Replace the current work?** before it replaces unsaved
+changes. On gbdraw.app, **Load an example** opens any Gallery example; `gbdraw
+gui` has no Gallery and no such button.
+
+Each change of a checkbox, radio button, or button is one **Undo** step. Undo
+and Redo are unavailable while Generate runs, and the header says why. Error
+messages name the field, track row, Depth series, table line, or setting
+involved. A value gbdraw cannot use, such as a GC window of 0, is reported
+instead of being replaced by a default without notice. Every visible control
+has an accessible name, every **?** tip is a **Help** button that opens on
+hover, focus, click, or tap, and **Escape** closes only the top layer.
+
+Dragging the preview now follows the pointer over blank space and over
+comparison ribbons, also in large diagrams. Pan, zoom, **Fit**, and **Reset**
+change only the view; they do not redraw the diagram.
+
+**Region Annotations → Download TSV** saves the annotations you are editing as
+`annotations.tsv`, including changes made since the last Generate. Load the
+file again with **Import TSV** in the web app, or pass it to the command line
+or Python. Download works offline and keeps each row's target and style,
+including an explicit no-fill. An empty editor has nothing to download. The
 [annotation-table reference](./REFERENCE/input-formats-and-tsv-schemas.md#annotation-table-fields)
-for the TSV round-trip limits.
+lists what a round trip keeps.
 
-The hosted app at [gbdraw.app](https://gbdraw.app/) and local `gbdraw gui` share
-the browser interface. Only hosted gbdraw.app uses Google Analytics 4 for
-aggregate page-usage metrics; gbdraw does not send uploaded genome files or
-generated diagrams to Google Analytics. Local Web assets and the browser wheel
-have no hosted analytics injection. See [Installation](./INSTALL.md#1-hosted-web-app)
-for the local/offline and hosted Gallery boundaries.
+The hosted app at [gbdraw.app](https://gbdraw.app/) and `gbdraw gui` share one
+browser interface. Only hosted gbdraw.app uses Google Analytics 4, for
+aggregate page-use counts; gbdraw never sends your genome files or diagrams to
+it. The local web app and the browser wheel contain no analytics. See
+[Installation](./INSTALL.md#1-hosted-web-app) for what works offline and what
+only the hosted Gallery provides.
 
-## Circular / Linear layout and editing
+## Layout and editing
 
-**Display start** accepts a 1-based source coordinate on a complete circular
-record. That base appears at 12 o'clock in Circular mode or the left edge of
-the wrapped record in Linear mode. An unset start differs from explicit 1 after
-reverse complementation. Rotation can split a displayed feature or match into
-multiple fragments; it does not create additional biological features or alter
-source coordinates. Cropping and an explicit display start cannot be combined.
+**Display start** sets which base of a complete circular record comes first:
+it appears at 12 o'clock in Circular mode and at the left edge of the record in
+Linear mode. Enter a 1-based coordinate of the source record. Leaving it unset
+is not the same as entering 1 when the record is reverse-complemented. A
+feature or match that crosses the new start is drawn in pieces; gbdraw adds no
+features and changes no source coordinates. You cannot crop a record and set
+its display start at the same time.
 
-**Feature placement** applies to an entire feature, including multipart
-features. Auto removes the manual override. Main fixes it on its nominal lane;
-directional lane 1 is available only in compatible layouts. Fixed placements
-work with the overlap resolver on or off. The base-pair overlap tolerance
-defaults to 0, and conflicting fixed placements fail with an explanation.
-See the [placement reference](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#manual-feature-placement)
-for lane availability, conflict rules, and dormant placements.
+**Feature placement** moves a whole feature, including every part of a
+multipart feature. **Auto** removes your placement. **Main** keeps the feature
+on its usual lane. A directional lane 1 is offered only in layouts that have
+one. Placements work whether overlap resolution is on or off. **Feature overlap
+tolerance (bp)** defaults to 0. When two fixed placements conflict, Generate
+fails and says which features conflict. The
+[placement reference](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#manual-feature-placement)
+lists which lanes are available and how conflicts are resolved.
 
-Rotation and placement changes remain editable drafts until Generate succeeds.
-Undo/Redo and Save/Load preserve those drafts separately from the last successful
-Result. Feature labels, leaders, and feature-associated comparison ribbons
-follow the final placement.
+Rotation and placement changes take effect when you Generate. Until then they
+are pending edits: **Undo**, **Redo**, **Save Session**, and **Load Session**
+keep them apart from the last Result. Feature labels, leader lines, and the
+comparison ribbons of a feature follow its final placement.
 
-Linear **Arrange in rows** applies a source card's row to all records selected
-from that source, preserving card and source order. Measured feature, label,
-and track occupancy determines row spacing. Sparse Depth inputs keep their
-logical series: a missing cell draws no coverage and is not treated as zero.
-Circular grids, docked legends, and titles use visible diagram bounds to reduce
-unused canvas space.
+In the feature popup, **Edit** groups its controls by when they apply:
+**Appearance** changes update the current Result, and **Layout** changes
+(feature placement and record rotation) apply on Generate. To start a record at
+a feature, open **Rotate record using this feature** and choose **Put this
+feature at**: **Start of the record** (the default), **End of the record**, or
+**Custom position**. **Apply on Generate** collects the rotations of several
+records for one **Generate Diagram**; **Apply and regenerate** redraws that
+record at once.
 
-Arrow head length and shaft width can be controlled independently. New
-configurations draw `repeat_region` as an underlay behind foreground features;
-use `repeat_region=rectangle` to request the earlier appearance. Supported older
-sessions retain their previous effective repeat shape.
+The Features list and **Search features** keep hidden features, each with a
+**Visibility** checkbox, so you can find a hidden feature and show it again.
+Hiding a feature also hides its label. When you set **Label visibility** to
+**On** for a feature whose label cannot be drawn, for example because the
+feature is hidden, a dialog says why and lets you choose. The label text
+settings, **QUALIFIER PRIORITY**, and the Circular **LABEL GEOMETRY** stay
+visible while any feature's **Label visibility** is **On**, even when **Show
+Labels** or **Label Mode** is **None**. Per-feature visibility and label edits
+follow their feature through cropping, reverse complement, record reordering,
+and copies. **Export Feature Edits TSV** and **Load Feature Edits TSV**
+exchange them with the command line's `--feature_override_table`.
 
-## Linear Similarity Group alignment
+In **Search features**, **All** no longer searches nucleotide or amino-acid
+sequences or `/translation` values. Locations are shown and searched as
+1-based INSDC locations, with every part of a split location. In the Legend
+editor, removed rows are listed under **Deleted items** with **Restore** and
+**Restore all**, and added, renamed, and reordered rows keep their place
+through Generate and **Save Session**.
 
-The Web feature popup and Similarity Groups drawer each provide one **Align…**
-action for an exact reference feature. Resolved plans apply automatically with
-record directions preserved; ambiguity or **Review alignment options…** opens
-the review palette. Python preselects usable anchors with visible
-reasons; ambiguous recommendations use a unique representative or stable
-candidate 1 as a convenience heuristic. Each target can replace its anchor
-or choose **Skip**. Exclusive **Keep current directions**, **All selected arrows
-right →**, **All selected arrows left ←**, and **Custom** choices include the
-exact reference and selected known-direction anchors. Whole records reverse;
-source +/− strands remain unchanged. Unknown, skipped, missing and unusable
-anchors keep their directions with reasons. Local choices start no Worker job;
-Apply validates once per attempt. Changed final facts refresh the preview and
-require another Apply. Failures retain editable choices and the previous artifact.
+In Linear mode, **Arrange in rows** puts every record selected from a source
+file on that file's row, in file and record order. Row spacing follows the
+features, labels, and tracks actually drawn. In a Depth track, a record with no
+value draws no coverage; it is not drawn as zero. Each Linear record gets its own
+definition from its `/organism` and `/strain`. Circular grids, docked legends,
+and titles are sized to the visible diagram, so less canvas is left empty.
 
-A successful Apply stores a fully resolved schema-2 plan containing anchors and
-Skip decisions. Record Reverse settings own orientation. Ordinary Generate,
-stable reorder, and manual Reverse preserve the plan. **Reset alignment…**
-restores immediate pre-Align positions and optionally the directions actually
-changed by the latest Align. Its preview identifies later manual edits that
-combined Reset replaces. Both scopes consume restoration evidence; Undo is
-needed before trying the other scope. Save/fresh Load preserves valid evidence;
-missing old evidence and an empty current change list have distinct reasons.
-Undo/Redo restores the complete artifact. The typed Python request accepts a
-resolved plan, while the CLI accepts an exact reference only when target choices are
-unambiguous. See [Web alignment](./REFERENCE/web-app.md#similarity-group-alignment-in-linear-view),
-[CLI behavior](./REFERENCE/command-line.md#strict-similarity-group-alignment),
-and [typed Python usage](./REFERENCE/python-api.md#typed-linear-similarity-group-alignment).
-Collinear alignment controls, anchor TSV, scored inference, support-count
-ranking, and multi-hop automatic selection are unsupported.
+Arrow head length and shaft width can now be set separately. A
+`repeat_region` is drawn behind the other features in new figures; set
+`repeat_region=rectangle` to get the earlier look. An older Session keeps the
+repeat shape it was saved with.
 
-## Session / replay / save compatibility
+## Line up Similarity Groups in Linear view
 
-Current writers emit session version 46 and canonical `renderRequest` schema 9.
-Session 46 keeps the settings and edits of the Circular and Linear modes
-separately. Save Session also preserves settings before the first source is loaded. Supported
-older Sessions and legacy settings JSON remain readable; settings-only Sessions
-need a biological source before rendering.
-Schema 8 stores Linear Similarity alignment as an exact nested schema-2 plan
-and finite per-record X/Y base translations. The Session version and request
-schema did not change for this nested plan update. The old protein-setting
-string remains a reader-only compatibility input and is not written by current
-Sessions.
-These persisted-format numbers are separate from the package version. The
-[session and request compatibility reference](./REFERENCE/session-and-request-compatibility.md)
-owns the accepted-reader table and migration details.
+To line up records on one reference feature, choose **Align…** in the feature
+popup or in the Similarity Groups drawer. When each record has one clear
+anchor, gbdraw applies the alignment at once and keeps each record's
+direction. When the choice is ambiguous, or when you choose **Review alignment
+options…**, a review palette opens:
 
-**Save Session** preserves the resources needed by the committed Result along
-with editable state, including saved comparison data. Saving after edits but
-before Generate retains both the newer draft and earlier Result; loading does
-not silently treat that draft as an already generated result.
+- Each target record shows its suggested anchor and the reason. Replace it, or
+  choose **Skip**.
+- Choose the directions: **Keep current directions**, **All selected arrows
+  right →**, **All selected arrows left ←**, or **Custom**.
 
-**Run Info** separates a Source recipe using original inputs and public CLI
-settings from an Exact replay using the committed canonical session and analysis
-artifacts. Its downloadable helpers remain tied to the successful generation
-through supported history operations. Keep the original files for a Source
-recipe; **Download reproducibility files** supplies the listed generated helpers
-and Exact replay session. Neither command represents ungenerated control edits.
-See [Replay boundaries](./REFERENCE/session-and-request-compatibility.md#replay-boundaries)
-for the target Result and saved-editor limits.
+When several anchors fit equally, gbdraw suggests a unique representative or
+the first stable candidate. This is a convenience, not a biological judgement.
+Reversing a record reverses the whole record; the +/− strands in your source
+file do not change. A record whose anchor is unknown, skipped, missing, or
+unusable keeps its direction, and the palette says why.
 
-## Python API / CLI changes
+Choices in the palette run no search. **Apply** checks the plan once. If the
+records changed in the meantime, the preview refreshes and you apply again. If
+Apply fails, your choices and the previous Result stay.
 
-The package-root interface, already available in the beta, exports
-`read_genbank()`, `read_gff()`, `draw_circular()`, and `draw_linear()`.
-`CircularOptions` and `LinearOptions` keep mode-specific settings separate.
-One Circular function accepts a single record or a collection; `CircularLayout`
-selects a grid. A `Diagram` provides `to_svg()`, `to_bytes()`, and `save(path)`.
-Saving a non-SVG format writes the requested file without an extra base SVG.
+The alignment is saved with every anchor and **Skip** choice. A record's
+direction is its **Reverse** setting. Generate, reordering records, and a
+manual **Reverse** keep the alignment. **Reset alignment…** moves records back
+to where they were just before the latest Align, and can also undo the
+direction changes that Align made; its preview lists later manual edits that
+this reset replaces. Each Align can be reset once: to try the other kind of
+reset, use **Undo** first. Saving and loading a Session keeps what Reset needs.
+When an older Session lacks it, or when Align changed no direction, the dialog
+says which. **Undo** and **Redo** restore the whole Result.
 
-Integrations that need typed requests, tables, resource materialization, or
-session replay continue to use `gbdraw.api`. See the [Python API](./REFERENCE/python-api.md)
-and [typed request reference](./REFERENCE/typed-requests.md) for the supported
-entry points.
+In Python, pass the resolved plan in a typed request. On the command line,
+`--similarity_alignment_feature` takes an exact reference feature only when
+each target record has one unambiguous anchor. See
+[Web alignment](./REFERENCE/web-app.md#similarity-group-alignment-in-linear-view),
+[command-line alignment](./REFERENCE/command-line.md#strict-similarity-group-alignment),
+and [typed Python alignment](./REFERENCE/python-api.md#typed-linear-similarity-group-alignment).
 
-The CLI adds record display and placement controls through
-`--record_topology`, `--display_start_coordinate`, `--feature_placement_table`,
-and `--feature_overlap_tolerance_bp`. `--feature_override_table` sets the
-Feature visibility, Label visibility, and label text of individual features. Use a records table for multiple display
-targets. The [command-line reference](./REFERENCE/command-line.md) includes a
-reproducible rotation/placement example and links to the generated option inventory.
+## Sessions, Run Info, and reproducing a figure
 
-The CLI and Python API run LOSAT directly. `gbdraw linear --losat
-losatn|tlosatx|losatp` and `gbdraw circular --losat losatn|tlosatx` search
-nucleotide, translated, and protein comparisons without BLAST+ or the Web app.
-Python uses `LosatSearchOptions` (`LinearComparisonOptions(losat=...)`,
-`LinearDiagramOptions.losat_search`) for Linear and `ComparisonRingOptions(losat=...)`
-with `CircularDiagramOptions.losat_search` for Circular rings. New controls are
-`--losatn_task`, `--losat_gencode` (and the records-table `losat_gencode`
-column), the comparisons-table `source` column that mixes searched and uploaded
-edges, and `--losat_output_dir` for raw TSVs and a reusable `comparisons.tsv`.
-Circular comparison genomes may be FASTA, GenBank, or DDBJ
-(`--conservation_sequence`). CLI, Python, and Web searches share raw cache keys,
-so a saved Session replays without LOSAT. LOSATP now uses the Web source-file
-database scope: one file is one genome, and a record never searches itself
-unless requested; E-values change only for records from a multi-record file.
-CLI Sessions record the native runtime (kind, version, source, path, program,
-CLI dialect), and Run Info lists the search runtime of each displayed result.
-See the [command-line reference](./REFERENCE/command-line.md) for the options.
+gbdraw 0.14.0 saves Sessions as session version 46, with canonical
+`renderRequest` schema 9. These format numbers are separate from the gbdraw
+version. A Session now keeps
+the settings and edits of Circular and Linear mode separately, and **Save
+Session** works before you load any source file. Sessions saved by earlier
+supported versions, and settings JSON files, still open; a Session that holds
+only settings needs a source file before you Generate. Similarity alignments
+are saved as a resolved plan with each record's X/Y offset in bases. The
+[Session and request compatibility reference](./REFERENCE/session-and-request-compatibility.md)
+lists every version that opens and what happens to older files.
 
-Explicit output prefixes retain dots; Circular batch output uses numbered
-suffixes for multiple records. Output targets are checked before rendering,
-and existing files require explicit overwrite permission. Python export failures
-raise `ValidationError` or `ExportError` (both `GbdrawError` subclasses);
-`save_figure_to()` returns only files actually written. Multi-format exports
-remain sequential: earlier completed files survive a later conversion failure.
+**Save Session** stores what the last Result needs, including its comparison
+results, together with your pending edits. If you save after editing but
+before Generate, the Session keeps both the newer edits and the earlier
+Result; loading it does not present those edits as already generated.
 
-## Packaging / installation
+**Run Info** describes the last successful Result and offers two ways to
+reproduce it:
 
-Bioconda remains the recommended local installation route. Each package index
-provides the versions published there; the source version alone does not establish
-package availability. [Installation](./INSTALL.md) explains how to check the
-distribution and install a checkout when the desired version is unavailable.
+- **Source recipe**: a command that uses your original input files and the
+  public CLI options. Keep your original files for it.
+- **Exact replay**: the saved Session and comparison results. **Download
+  reproducibility files** gives you the Session and the generated helper files
+  it lists.
 
-Wheel and sdist installation has been verified in isolated Linux environments
-on Python 3.10, 3.11, and 3.12, including CLI, Python API, session replay, and
-non-SVG exports. Installed wheel contents exclude development tests, private artifacts,
-and hosted Gallery examples while retaining the GUI palette data and required
-local browser assets. The local GUI was also verified from an installed package.
-SVG needs only the base package; other formats need the `export` extra and
-platform-appropriate Cairo libraries.
+Neither includes control edits you have not generated. See
+[Replay boundaries](./REFERENCE/session-and-request-compatibility.md#replay-boundaries)
+for which Result each one reproduces.
 
-## Breaking or renamed interfaces
+## Command line and Python
 
-Fresh CLI commands and Python/configuration inputs reject retired spellings.
-Supported saved documents use the dedicated compatibility readers instead.
+From Python, `read_genbank()`, `read_gff()`, `draw_circular()`, and
+`draw_linear()` are available from the `gbdraw` package itself (they first
+appeared in the beta). `CircularOptions` and `LinearOptions` hold the settings
+of each mode. `draw_circular()` takes one record or several; `CircularLayout`
+arranges several in a grid. The returned `Diagram` has `to_svg()`,
+`to_bytes()`, and `save(path)`. Saving to PNG, PDF, or another non-SVG format
+writes only that file, with no extra SVG.
+
+`CircularDiagramOptions` and `LinearDiagramOptions` take
+`feature_override_table`, the Python form of `--feature_override_table`.
+`read_gff()` without `features` now returns CDS and other features linked by
+`Parent` at the record level. For typed requests, tables, saved resources, or
+Session replay, use `gbdraw.api`. See the [Python API](./REFERENCE/python-api.md) and the
+[typed request reference](./REFERENCE/typed-requests.md).
+
+New command-line options set record display and feature placement:
+`--record_topology`, `--display_start_coordinate`,
+`--feature_placement_table`, and `--feature_overlap_tolerance_bp`.
+`--feature_override_table` sets Feature visibility, Label visibility, and
+label text for individual features. To set the display of several records, use
+a records table. The [command-line reference](./REFERENCE/command-line.md)
+has a rotation and placement example you can run, and links to the full
+option list.
+
+The command line and Python now run LOSAT themselves, without BLAST+ or the
+web app:
+
+- `gbdraw linear --losat losatn|tlosatx|losatp` runs nucleotide, translated, or
+  protein comparisons between Linear records.
+- `gbdraw circular --losat losatn|tlosatx` runs the comparison rings. A
+  comparison genome can be FASTA, GenBank, or DDBJ (`--conservation_sequence`).
+- In Python, use `LosatSearchOptions`: `LinearComparisonOptions(losat=...)` or
+  `LinearDiagramOptions.losat_search` for Linear, and
+  `ComparisonRingOptions(losat=...)` with `CircularDiagramOptions.losat_search`
+  for Circular rings.
+- New options: `--losatn_task`, `--losat_gencode` (also a records-table column,
+  `losat_gencode`), a `source` column in the comparisons table that mixes
+  searched and uploaded comparisons, and `--losat_output_dir`, which writes the
+  raw TSVs and a reusable `comparisons.tsv`.
+
+Linear comparison tables (`-b`, `--comparisons_table`, and web uploads) are
+now read in the frame of the search: the selected, cropped record on its source
+strand. A forward BLAST table therefore draws the right region on a
+reverse-complemented record. If you wrote a table for the reversed display,
+convert that record's coordinates with `L + 1 - x`. A row outside its cropped
+record stops the run. gbdraw reads the first 12 columns by position, so extra
+columns (`-outfmt "6 std qlen slen"`) work, and a `#` inside an ID no longer
+cuts the row short. A malformed table is reported with its line number. In the
+web app, Circular comparison rings also accept GenBank and DDBJ files.
+
+The command line, Python, and the web app share one search cache, so a saved
+Session replays without running LOSAT again. LOSATP now treats each input file
+as one genome, as the web app does: a record is not searched against itself
+unless you ask for it. E-values change only for records from a file that holds
+several records. A Session saved from the command line records which LOSAT it
+used: its kind, version, source, program, and command-line dialect, and for a
+LOSAT outside the package only the executable's name, not its full path.
+**Run Info** lists the search runtime of each displayed result.
+
+An explicit output prefix keeps its dots. A Circular batch numbers the output
+of each record. gbdraw checks every output file before it draws, and an
+existing file is replaced only when you allow it (`--overwrite`). In Python,
+an export failure raises `ValidationError` or `ExportError` (both subclasses of
+`GbdrawError`), and `save_figure_to()` returns only the files it wrote. Formats
+are written one after another: when a later conversion fails, the files
+already written stay.
+
+## Installation
+
+Bioconda remains the recommended way to install gbdraw locally. Each package
+index lists the versions published there; a version in the source code does
+not mean a package exists yet. [Installation](./INSTALL.md) shows how to check
+and how to install from a checkout when your version is not published.
+
+Wheel and source packages were tested in clean Linux environments on Python
+3.10, 3.11, and 3.12: the CLI, the Python API, Session replay, and non-SVG
+export. The local web app was also tested from an installed package. An
+installed wheel includes the web app's palettes and browser files, but not the
+development tests or the hosted Gallery examples. SVG output needs only the
+base package; other formats need the `export` extra and the Cairo libraries for
+your platform.
+
+## Renamed and removed options
+
+New commands and Python code no longer accept the earlier names. A Session
+saved by an earlier release still opens: gbdraw rewrites the old names when it
+reads the file.
 
 | Earlier interface | Current replacement |
 | --- | --- |
@@ -237,84 +324,109 @@ Supported saved documents use the dedicated compatibility readers instead.
 | `--conservation_table` column `comparison_fasta` | `comparison_sequence` |
 | `CircularDiagramOptions(conservation_fasta_files=...)` | `conservation_sequence_files` |
 
-The thin `gbdraw.api.canvas`, `gbdraw.api.configurators`, and
-`gbdraw.circular_diagram_components` modules are removed. Undocumented SVG ID
-spellings are not an integration contract; use the documented
-[semantic hooks](./REFERENCE/interactive-svg-and-semantic-hooks.md).
-The internal `gbdraw.render.export.save_figure` compatibility function emits
+The modules `gbdraw.api.canvas`, `gbdraw.api.configurators`, and
+`gbdraw.circular_diagram_components` are removed. SVG `id` spellings can
+change between releases; to select elements, use the documented
+[semantic hooks](./REFERENCE/interactive-svg-and-semantic-hooks.md). The
+internal function `gbdraw.render.export.save_figure` now warns with
 `DeprecationWarning`; use `save_figure_to()` or `render_to_bytes()`.
 
-## Migration notes
+## Upgrading from 0.13
 
-1. For 0.13 scripts, update retired names using the table above and check the
-   installed CLI help or Python reference. `ComparisonRingOptions` and
-   `comparison_rings` are the preferred Circular names; the older
-   `Conservation*` names and `conservation` option remain compatibility aliases.
-2. Review rendering defaults when comparing a new figure: Circular shows GC
-   content/skew by default, Linear hides them, and new repeat regions use
-   underlays. Explicitly select settings when a prior appearance matters.
-3. Keep the original session before opening and saving it in the new version.
-   Let the reader migrate supported formats; never edit version numbers or
-   resource identities by hand. Legacy factor-based Circular slot spacing can
-   replay but needs explicit pixel gaps before lossless saving to the current format.
-4. Use Exact replay for a successful generation with its saved analysis artifacts,
-   and Save Session to resume editable work. Keep the same gbdraw version when
-   comparing output; SVG bytes and text metrics can differ across versions.
-5. For LOSAT, rename the flags and fields in the table above; a retired CLI flag
-   exits with status 2 and names its replacement, and a retired Python field
-   raises `TypeError` (no alias). Recorded 0.12/0.13 Session arguments are
-   rewritten on replay; the complete list is under
-   [Retired inputs](./REFERENCE/session-and-request-compatibility.md#retired-inputs).
+1. Update your 0.13 scripts with the table above, and check the installed CLI
+   help or the [Python reference](./REFERENCE/python-api.md). For Circular
+   comparison rings, `ComparisonRingOptions` and `comparison_rings` are the
+   preferred names; the older `Conservation*` names and the `conservation`
+   option still work.
+2. A retired CLI flag exits with status 2 and names its replacement. A retired
+   Python field raises `TypeError`; there is no alias. Command lines recorded
+   in a 0.12 or 0.13 Session are rewritten when the Session is replayed.
+   [Retired inputs](./REFERENCE/session-and-request-compatibility.md#retired-inputs)
+   lists every rewritten name.
+3. Check the defaults when you compare a new figure with an old one: Circular
+   shows GC content and GC skew by default, Linear hides them, and new repeat
+   regions are drawn behind other features. Set these explicitly when the
+   earlier look matters.
+4. Keep a copy of an old Session before you open it and save it again in
+   0.14.0. Let gbdraw update the file; do not edit version numbers or resource
+   IDs by hand. A Circular slot whose spacing an earlier release stored as a
+   factor still draws, but set explicit pixel gaps before you save it, or the
+   spacing cannot be kept exactly.
+5. To reproduce a finished figure, use **Exact replay** from **Run Info**; to
+   keep editing, use **Save Session**. Compare output only between runs of the
+   same gbdraw version: SVG bytes and text measurements can differ between
+   versions.
 
-| Earlier input | Replacement |
-| --- | --- |
-| `--protein_blastp_mode orthogroup` | `--losat losatp --losatp_mode similarity_groups` |
-| `--protein_blastp_mode collinear` / `pairwise` | `--losat losatp --losatp_mode collinear` / `pairwise` |
-| `--losatp_bin X` | `--losat_bin X` |
-| `--ncbi_blastp_bin X` | `--ncbi_blast_bin X` |
-| `--losatp_threads N` | `--losat_threads N` |
-| `--protein_blastp_max_hits N` | `--losatp_max_hits N` |
-| `--protein_blastp_candidate_limit N` | `--losatp_max_target_seqs N` |
-| `--align_orthogroup_feature ID` | `--similarity_alignment_feature ID` |
-| `--protein_blastp_output FILE` | `--losat_output_dir DIR` |
-| `--conservation_fasta` | `--conservation_sequence` |
-| `comparison_fasta` column | `comparison_sequence` |
-| `conservation_fasta_files` | `conservation_sequence_files` |
+Some command-line input that 0.13 accepted now stops the run with a message:
 
-Two layout/identity corrections can affect older results: overlapping
-undefined- and negative-strand Auto features share the negative pool when
-separate strands and overlap resolution are enabled, and colliding GFF feature
-IDs are disambiguated using the complete original source order. Also, an
-explicit non-default `collinearity_anchor_mode` is now honored; set `rbh` if
-you relied on the previously forced default.
+- `--window`, `--step`, `--depth_window`, and `--depth_step` must be positive,
+  and `--scale_interval` must be greater than 0.
+- `-n`/`--nt` takes two letters from A, C, G, T, and U (U counts as T).
+- A missing, unreadable, or malformed `-b` file, or more `-b` files than
+  adjacent record pairs, is an error.
+- In every table you supply, a `#` after other text and a `"` are part of the
+  cell value; there is no CSV quoting, so remove quotes your files relied on. A
+  line that starts with `#` is a comment, and a row with extra columns is an
+  error that names the file and line.
 
-## Compatibility
+Some older figures can change:
 
-The supported Python versions for this release are 3.10, 3.11, and 3.12. Linux
-isolated-install evidence does not establish Windows/macOS or later-Python
-validation. Hosted Web and the packaged local GUI are supported entry points;
-saved interactive SVG files remain a separate, self-contained output.
+- Every Circular figure drawn with the web app's default **Multi-Record
+  Canvas** changes: it no longer reserves an empty depth slot, and its legend
+  now lists custom slot labels, skew slots, annotations, and Depth labels.
+- Label, Legend, and title widths use the font's kerning, so text measures as
+  browsers draw it. PNG, PDF, EPS, and PS export place circular tick labels and
+  mixed italic and roman captions where browsers do. Web PDF pages are 75% of
+  their former size.
+- A manual tick interval that is not a whole unit prints the decimals it needs:
+  a 500 bp interval no longer reads "1 kbp, 1 kbp".
+- Depth TSV positions follow crops and reverse complement. Before,
+  `--region chr:601-800` drew the rows of positions 1-200, and a
+  reverse-complemented record drew its coverage mirrored.
+- The GFF3 CDS phase sets the reading frame. A CDS without `/translation` now
+  starts with `M` when its first codon is a start codon of its `transl_table`.
+  This changes **Copy aa FASTA**, interactive SVG metadata, and LOSATP input.
+- On the command line and in Python, the color name `seashell` is `#FFF5EE`; it
+  was drawn as seagreen.
+- With separate strands and overlap resolution on, an Auto feature with no
+  strand that overlaps a negative-strand feature now shares the negative-strand
+  lanes.
+- Colliding GFF feature IDs are now told apart using the full original order of
+  the source file.
+- An explicit, non-default `collinearity_anchor_mode` is now used; before, the
+  default was always forced. Set `rbh` if you relied on it.
+
+## Supported platforms
+
+gbdraw 0.14.0 supports Python 3.10, 3.11, and 3.12. The clean-install tests
+ran on Linux; Windows, macOS, and later Python versions were not tested for
+this release. The hosted web app and the web app in the installed package are
+both supported. An interactive SVG you saved is a separate, self-contained
+file.
 
 See [Session and request compatibility](./REFERENCE/session-and-request-compatibility.md)
-for supported legacy readers, save/load behavior, and replay limits, and
-[Output formats and export](./REFERENCE/output-formats-and-export.md) for export
-requirements.
+for which older files open and how replay works, and
+[Output formats and export](./REFERENCE/output-formats-and-export.md) for what
+each export format needs.
 
-## Known limitations / deferred work
+## Known limitations
 
-- Manual feature placement is limited to Main and supported lane 1 directions;
-  higher lanes, arbitrary pixel dragging, and per-exon placement are not offered.
-- Rotation requires a complete circular record with known length. Gapped
-  comparison fragments use endpoint interpolation, not reconstructed alignments.
-- Source recipe is unavailable when the committed semantics cannot be expressed
-  losslessly as a CLI recipe; Run Info explains the reason.
-- Generate remains explicit for rotation and placement drafts. A new automatic
-  redraw scheduler and new zoom-to-selection navigation are not release features.
-- Very dense Circular external-label layouts can require a long computation
-  until completion or cancellation. There is no completion-time guarantee.
-  Existing label selections and controls remain available; cancellation keeps
-  the previous successful Result.
-- The hosted Gallery is not bundled with local installs. Windows/macOS installed
-  package verification remains outstanding.
+- Feature placement offers only the main lane and lane 1 in each available
+  direction. Higher lanes, dragging to an arbitrary position, and placing
+  single exons are not available.
+- Rotation needs a complete circular record of known length. Where a
+  comparison fragment has gaps, its ends are interpolated; the alignment is not
+  rebuilt.
+- **Source recipe** is unavailable when the command line cannot express the
+  Result exactly; **Run Info** gives the reason.
+- Rotation and placement edits still need **Generate**: there is no automatic
+  redraw and no zoom to the selection.
+- A very dense Circular figure with external labels can take a long time to
+  lay out, with no upper bound. You can keep using the label controls while it
+  runs; **Cancel** keeps the previous Result.
+- Similarity Group alignment has no Collinear-mode controls, no anchor TSV
+  input, no scored inference or ranking by support count, and no automatic
+  selection across several steps.
+- The hosted Gallery is not included in local installs.
 
 [Documentation home](./DOCS.md) | [Beta history](./RELEASE_NOTES_0.14.0b0.md)

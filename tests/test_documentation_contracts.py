@@ -74,7 +74,7 @@ def test_release_session_history_and_acceptance_use_current_authority() -> None:
     acceptance_source = BROWSER_ACCEPTANCE.read_text(encoding="utf-8")
 
     assert re.search(
-        rf"Current writers emit session version {CURRENT_SESSION_VERSION} and\s+"
+        rf"saves Sessions as session version {CURRENT_SESSION_VERSION}, with\s+"
         rf"canonical `renderRequest`\s+schema {CANONICAL_REQUEST_SCHEMA}",
         release_notes,
     )

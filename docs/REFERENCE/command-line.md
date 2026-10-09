@@ -21,16 +21,16 @@ This page documents current command semantics.
 `gbdraw setup-losat` explicitly downloads the pinned official LOSAT v0.1.0
 archive for Linux x64, Windows x64, macOS arm64, or macOS x64. A 64-bit Python
 is required; Intel Python running under Rosetta selects the x64 asset.
-Linux requires glibc 2.34 or newer;
-Linux/Windows ARM64 and musl/Alpine are outside this distribution. Final minimum
-OS versions require the release's platform evidence. Signing/notarization is
-not claimed.
+Linux requires glibc 2.34 or newer.
+Linux/Windows ARM64 and musl/Alpine are not supported. The minimum OS versions
+are not final until the release has been tested on each platform. gbdraw does
+not claim signing or notarization.
 
-The shipped lock pins the published v0.1.0 source commit and per-target archive
-and binary hashes. Setup verifies the archive SHA-256 before reading its
+gbdraw ships a lock file that pins the published v0.1.0 source commit and the
+archive and binary hashes for each target. Setup verifies the archive SHA-256 before reading its
 members, accepts only the expected release contents, verifies the binary hash
-and `--version`, then atomically installs it. It preserves `LOSAT`
-(`LOSAT.exe` on Windows). Cache locations are:
+and `--version`, then atomically installs it. It keeps the executable named `LOSAT`
+(`LOSAT.exe` on Windows). The cache locations are:
 
 - Linux: `$XDG_CACHE_HOME/gbdraw/losat/0.1.0/<target>` (default `~/.cache`).
 - macOS: `~/Library/Caches/gbdraw/losat/0.1.0/<target>`.
@@ -45,29 +45,31 @@ Searches never download. Automatic native selection uses this order:
 5. `losat` on `PATH`;
 6. NCBI `blastp` on `PATH`.
 
-A conda prefix is recognized only when `Path(sys.prefix) / "conda-meta"` is a
-directory. The resolver does not use `CONDA_PREFIX`, `PATH`, or
+gbdraw recognizes a conda prefix only when `Path(sys.prefix) / "conda-meta"` is a
+directory. It does not use `CONDA_PREFIX`, `PATH`, or
 `sys.base_prefix` to identify that environment, and it does not call the conda
 CLI. A present conda candidate that is a broken link, not a regular file, or
 not executable fails with its path; gbdraw does not modify it or silently use a
 different backend. If the candidate is absent, normal fallback continues.
 
 The string `losat` remains the automatic-selection token for compatibility.
-Use an absolute path such as `--losat_bin /absolute/path/LOSAT` to force a
+Pass an absolute path such as `--losat_bin /absolute/path/LOSAT` to force a
 specific executable. A corrupt managed cache still stops with its directory and
-cause when fallback reaches it; remove that version/target directory and rerun
-setup to repair it. A concurrent installer fails clearly and can be retried.
-Interrupted temporary downloads are never treated as installations. Subsequent
-setup/searches reuse a valid cache offline. `INSTALL.json` records the URL,
+cause when fallback reaches it. To repair it, remove that version/target
+directory and rerun setup. A concurrent installer fails clearly and can be
+retried.
+gbdraw never treats an interrupted temporary download as an installation.
+Later setup runs and searches reuse a valid cache offline. `INSTALL.json` records the URL,
 version, target, source commit, archive hash and binary hash.
 
 Explicit native LOSAT executables must support CLI v2 (`-max_hsps`,
 `-max_target_seqs`, and `-num_threads`).
 
 Native executables are excluded from the platform-independent wheel and sdist.
-Conda packaging owns executables under its environment's `bin` directory;
-gbdraw's PyPI metadata has no native LOSAT dependency. Existing source-checkout
-bundled discovery is retained. Web Wasm execution and its assets are unchanged.
+Conda installs executables under its environment's `bin` directory;
+gbdraw's PyPI metadata has no native LOSAT dependency. A binary bundled in a
+source checkout is still found. The web app's Wasm execution and assets are
+unchanged.
 
 
 ## Shared input rules
@@ -103,7 +105,7 @@ per displayed record to assign rows. Input order is the left-to-right order
 within each row. Every record must be assigned exactly once.
 
 Linear mode also accepts one `--multi_record_position SELECTOR@ROW` per
-displayed record. Records in one row share a bp-per-pixel scale and retain input
+displayed record. Records in one row share a bp-per-pixel scale and keep input
 order. `--linear_record_gap` sets the gap within that row.
 `--record_label` and `--record_subtitle` follow displayed-record order.
 Multi-record rows cannot be combined with `--normalize_length`.
@@ -112,12 +114,12 @@ On-axis ruler coordinates depend on the canvas topology. If any Linear row
 contains multiple records, every ruler on that canvas uses record-local
 distance and ascends from left to right, including rulers for
 reverse-complemented records. When every row contains only one record, rulers
-retain source-coordinate mapping, so a reverse-complemented region descends
+keep source-coordinate mapping, so a reverse-complemented region descends
 from left to right.
 
 `--track_layout above|below` with `--scale_style ruler` allows
 `--ruler_on_axis`; other layout combinations ignore the on-axis ruler with a
-warning. `--hide_scale` hides genome-coordinate ticks and labels but retains
+warning. `--hide_scale` hides genome-coordinate ticks and labels but keeps
 the record axes. Quantitative axes remain independent, and `--hide_length`
 separately controls Linear definition text.
 
@@ -125,8 +127,8 @@ separately controls Linear definition text.
 
 Simple track flags build the default stack. Repeat `--circular_track_slot` or
 `--linear_track_slot` for an explicit ordered stack. Circular mode also accepts
-`--circular_track_table`. An explicit stack is authoritative: its axis boundary,
-renderer order, and source bindings replace simple placement decisions.
+`--circular_track_table`. An explicit stack overrides the simple flags: its axis boundary,
+renderer order, and source assignments replace the simple placement decisions.
 
 Repeat `--depth_track` once per logical series. Give one path to reuse a series
 for all records, or one path per displayed record. A quoted empty argument is
@@ -147,7 +149,7 @@ by exact selectors; its rows decide before the visibility and label tables (see
 `--losat losatp` with `--losatp_mode` (`similarity_groups`, `collinear`, or
 `pairwise`; default `similarity_groups`) runs Pairwise, Similarity-group, or
 Collinear protein comparisons through LOSATP or a compatible BLASTP runtime. LOSATN and TLOSATX are not command-line search
-modes. Read their prepared evidence with `--blast`, `--comparisons_table`, or
+modes. Read their prepared results with `--blast`, `--comparisons_table`, or
 `--conservation_blast`. Each `--blast` file belongs to one adjacent pair, so a
 missing, unreadable, or malformed file stops the run instead of being skipped.
 The table rules are in [Comparison and numeric

@@ -12,6 +12,13 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Labels (web app): the Labels panel shows the label text settings (**Label Font
+  Size**, **Label Rendering**, placement, rotation, and spacing), **QUALIFIER
+  PRIORITY**, and the Circular **LABEL GEOMETRY** while any feature of the shown
+  drawing has **Label visibility** **On**, also when **Show Labels** (Linear) or
+  **Label Mode** (Circular) is **None**. They were hidden there although the On
+  labels use them. Label filtering keeps its condition: an On label ignores the
+  whitelist and blacklist (OV-222).
 - Custom Track Slots (web app): stepping a Depth row's track index past the loaded
   Depth series (for example ArrowUp then ArrowDown) no longer adds a series that made
   Generate and **Save Session** fail with "Depth series 3"; a label edit on a row whose
