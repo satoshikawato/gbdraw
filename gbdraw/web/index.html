@@ -6440,7 +6440,7 @@
                                         <span class="font-mono">{{ featureStyleScopeDialog.replacedDefaultColor }}</span>.
                                     </template>
                                     <template v-else>
-                                        Sets the {{ featureStyleScopeDialog.defaultColorType }} default color (all {{ featureStyleScopeDialog.defaultColorType }} features, also hidden ones).
+                                        Sets the {{ featureStyleScopeDialog.defaultColorType }} default color ({{ featureStyleScopeDialog.defaultColorType }} features without their own color or rule, also hidden ones).
                                     </template>
                                     <template v-if="hasPendingPaletteDraft">Applies now, also over the queued palette.</template>
                                 </p>
