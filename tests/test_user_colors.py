@@ -132,6 +132,18 @@ def test_captioned_color_tables_keep_their_hex_domain() -> None:
         resolve_feature_inputs(color_table=table, default_colors=load_default_colors(""), feature_visibility_table=None)
 
 
+@pytest.mark.parametrize("color", ["#11223344", "#abcd"])
+def test_captioned_color_table_with_alpha_hex_is_a_gbdraw_error(color: str) -> None:
+    # OV-260: origin/dev raised a raw ValueError from normalize_hex_color.
+    table = DataFrame(
+        [["CDS", "product", "kinase", "red", "Kinase"], ["CDS", "product", "ligase", color, "Ligase"]],
+        columns=["feature_type", "qualifier_key", "value", "color", "caption"],
+    )
+    with pytest.raises(ValidationError, match=rf"{color!r} in the color table \(row 2\)") as raised:
+        resolve_feature_inputs(color_table=table, default_colors=load_default_colors(""), feature_visibility_table=None)
+    assert raised.value.diagnostic == {"code": "TABLE_INVALID", "field": "color", "reason": "COLOR", "row": 2}
+
+
 @pytest.mark.parametrize("value", REJECTED)
 def test_rejected_colors_fail_every_entry_point(value: str) -> None:
     assert not is_user_color(value)
