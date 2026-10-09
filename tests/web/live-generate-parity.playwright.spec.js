@@ -1070,6 +1070,11 @@ const generateEmbeddedOnly = async (page) => {
   expect(embeddedLabelFeatures.length, 'Embedded Only draws two labels of the first record').toBeGreaterThan(1);
 };
 
+// The choice in the dialog Add legend item opens for a deleted row's caption.
+const answerLegendAddConflict = (page, choice) => evaluateWithRetainedPromise(page, async (answer) => {
+  await window.__GBDRAW_APP__.handleLegendAddConflictChoice(answer);
+}, choice).then(() => settleLive(page));
+
 // The work guard (allowlist) at the app, on a two-Result batch: each edit kind
 // runs exactly the compile stages of its entry (the compile's structural
 // metric, live compiles only), a Result display or a History step compiles
@@ -1232,6 +1237,24 @@ const WORK_ALLOWLIST = [
   {
     kind: 'Legend sort', stages: ['legend'], compiles: 1, requests: [],
     run: (page) => page.evaluate(() => window.__GBDRAW_APP__.sortLegendEntries('desc')).then(() => settleLive(page))
+  },
+  // OV-239 (R15-1): Add legend item of a deleted row's caption asks first and
+  // does no work; each choice is one step: the Restore of that row, the Add
+  // under the suffixed caption, or nothing.
+  {
+    kind: 'Legend add of a deleted caption, Restore', stages: ['legend', 'legendFills'], compiles: 1, requests: [],
+    before: async (page) => { await deleteLegendRow(page, 'GC skew (+)'); await legendRowAdd(page, 'GC skew (+)', '#123456'); },
+    run: (page) => answerLegendAddConflict(page, 'restore')
+  },
+  {
+    kind: 'Legend add of a deleted caption, Add as', stages: ['legend'], compiles: 1, requests: [],
+    before: async (page) => { await deleteLegendRow(page, 'GC skew (+)'); await legendRowAdd(page, 'GC skew (+)', '#123456'); },
+    run: (page) => answerLegendAddConflict(page, 'suffix')
+  },
+  {
+    kind: 'Legend add of a deleted caption, Cancel', stages: [], compiles: 0, requests: [],
+    before: (page) => legendRowAdd(page, 'GC skew (+)', '#123456'),
+    run: (page) => answerLegendAddConflict(page, 'cancel')
   }
 ];
 

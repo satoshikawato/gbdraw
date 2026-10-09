@@ -28,8 +28,10 @@ import {
   markCommittedSvgResultUnmounted,
   reconcileMountedResult
 } from '../../gbdraw/web/js/services/svg-result-ingestion.js';
-import { stripResultBaseAttributes } from '../../gbdraw/web/js/services/result-paint-bases.js';
-import { getLegendEntrySwatch as legendSwatch } from '../../gbdraw/web/js/services/legend-svg.js';
+import { LEGEND_ORDER_RECORD, stripResultBaseAttributes } from '../../gbdraw/web/js/services/result-paint-bases.js';
+import {
+  getLegendEntrySwatch as legendSwatch, legendRowTakesPlace, shownPythonLegendRow
+} from '../../gbdraw/web/js/services/legend-svg.js';
 import { recordRuleMatches, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
 import { displayedFeatureAddressing, featureOverrideKey } from '../../gbdraw/web/js/services/feature-override-identity.js';
 
@@ -1381,7 +1383,7 @@ test('the Load normalizer records no fill Python is not known to have drawn', ()
   const plan = createSavedResultPlan(response.results, admission, {
     featureColorOverrides: { [biologicalFeatureKey('record-a', 'feature-a')]: '#112233' },
     featureStrokeOverrides: {}, legendEntries: [], legendColorOverrides: {}, legendStrokeOverrides: {},
-    originalLegendColors: {}, blockStroke: null
+    originalLegendColors: {}, originalLegendOrder: [], blockStroke: null
   });
   plan.operationsByResult[0].callerTransforms.forEach((transform) => transform(svg));
   assert.doesNotMatch(serializeNode(svg), /data-gbdraw-base-fill/);
@@ -1412,6 +1414,67 @@ const legendOperations = (operations = {}) => ({ ...createEmptySvgMutationPlan(1
 const legendRows = (svg) => svg.querySelectorAll('g[data-legend-key]').map((row) => [
   row.getAttribute('data-legend-key'), row.querySelector('text').textContent, row.getAttribute('display')
 ]);
+
+// U3a H1: main's writer renamed a generated row (GC content to "GC %") by
+// rewriting its key without a record; Load records Python's key on that row
+// once, so a live fill addressed by Python's key reaches it and a reconcile
+// without the rename returns Python's row
+// (tests/fixtures/sessions/forced-label-underlay-legend-rows.provenance.json).
+test('Load records Python\'s key on a row a Session saved before U3a renamed', () => {
+  const session = sessionFixture('forced-label-underlay-legend-rows.v46.gbdraw-session.json.gz');
+  const keyRecord = 'data-gbdraw-base-data-legend-key';
+  const recordsOf = (svg) => svg.querySelectorAll('g[data-legend-key]')
+    .map((row) => [row.getAttribute('data-legend-key'), row.getAttribute(keyRecord)]);
+  const [svg] = loadSavedResults(session);
+  assert.deepEqual(recordsOf(svg), [
+    ['CDS', null], ['GC %', 'GC content'], ['GC skew (+)', null], ['GC skew (-)', null], ['Added', null]
+  ]);
+  const fill = { caption: 'GC content', color: '#123456', allowMissing: true };
+  reconcileMountedResult(svg, legendOperations({ legendRenames: [{ from: 'GC content', to: 'GC %' }], legendFills: [fill] }), {
+    domains: [...LEGEND_STRUCTURE, 'legendFills']
+  });
+  const row = svg.querySelectorAll('g[data-legend-key]')[1];
+  assert.equal(legendSwatch(row).getAttribute('fill'), '#123456', 'a fill addressed by Python\'s key reaches the row');
+  reconcileMountedResult(svg, legendOperations({ legendAdds: [{ caption: 'Added', color: '#123456' }] }), { domains: LEGEND_STRUCTURE });
+  assert.deepEqual(legendRows(svg)[1], ['GC content', 'GC content', null], 'without the rename the row is Python\'s');
+
+  // Not provably a renamed row of Python's: an editor row, a second row of the
+  // caption, or a Result that still has Python's row.
+  const unmarked = (patch) => recordsOf(loadSavedResults(session, { patch })[0]).every(([, record]) => record === null);
+  assert.ok(unmarked((saved) => saved.querySelectorAll('g[data-legend-key]')[1].setAttribute('data-legend-owner', 'direct-editor')));
+  assert.ok(unmarked((saved) => {
+    const rows = saved.querySelectorAll('g[data-legend-key]');
+    rows[0].parentElement.appendChild(legendRow('GC %', 300));
+  }));
+  assert.ok(unmarked((saved) => {
+    const rows = saved.querySelectorAll('g[data-legend-key]');
+    rows[0].parentElement.appendChild(legendRow('GC content', 300));
+  }));
+});
+
+// U3a review M1, L1: what a History restore reads of the restored Result.
+test('a restored Result shows a relabeled row in place only where Python\'s order puts it', () => {
+  const ruleRow = (caption, y) => legendRow(caption, y, { 'data-legend-owner': 'specific-color-file' });
+  const placed = legendSvg([ruleRow('Alpha row', 7), legendRow('alpha', 7, { display: 'none' }), legendRow('tRNA', 31)]);
+  assert.equal(legendRowTakesPlace(placed, 'alpha', 'Alpha row'), true, 'the commit\'s placement');
+  const appended = legendSvg([legendRow('alpha', 7, { display: 'none' }), legendRow('tRNA', 31), ruleRow('Alpha row', 55)]);
+  assert.equal(legendRowTakesPlace(appended, 'alpha', 'Alpha row'), false, 'appended before the rerender');
+  // The Legend order the editor replays moves the hidden row last and records Python's order first.
+  const reordered = (rows) => {
+    const svg = legendSvg(rows);
+    svg.querySelector('#feature_legend').setAttribute(LEGEND_ORDER_RECORD, JSON.stringify(['alpha', 'tRNA']));
+    return svg;
+  };
+  assert.equal(legendRowTakesPlace(reordered([ruleRow('Alpha row', 7), legendRow('tRNA', 31), legendRow('alpha', 55, { display: 'none' })]),
+    'alpha', 'Alpha row'), true, 'placed, the hidden row moved last');
+  assert.equal(legendRowTakesPlace(reordered([legendRow('tRNA', 7), ruleRow('Alpha row', 31), legendRow('alpha', 55, { display: 'none' })]),
+    'alpha', 'Alpha row'), false, 'appended, the hidden row moved last');
+  assert.equal(legendRowTakesPlace(legendSvg([legendRow('Alpha row', 7), legendRow('tRNA', 31)]), 'alpha', 'Alpha row'), true,
+    'Python drew the row');
+  assert.equal(shownPythonLegendRow(placed, 'Alpha row'), false, 'a row a commit showed before Python drew it');
+  assert.equal(shownPythonLegendRow(placed, 'alpha'), false, 'a hidden row');
+  assert.equal(shownPythonLegendRow(placed, 'tRNA'), true);
+});
 
 test('a deleted Legend row is hidden with Python\'s key and a reconcile without the delete shows it in its slot', () => {
   const svg = legendSvg();

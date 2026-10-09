@@ -83,7 +83,7 @@ export const TRANSIENT_KEYS = Object.freeze([
   'clickedFeature', 'clickedFeaturePos', 'clickedPairwiseMatch', 'clickedPairwiseMatchPos',
   'pairwiseMatchPopupRef', 'pairwiseMatchPopupDrag', 'pairwiseMatchPopupSize', 'pairwiseMatchPopupResize',
   'featurePopupRef', 'featurePopupDrag', 'featurePopupSize', 'featurePopupResize', 'clickedLabel',
-  'clickedLabelPos', 'featureStyleScopeDialog', 'paletteColorsDialog', 'resetColorDialog', 'legendRenameDialog',
+  'clickedLabelPos', 'featureStyleScopeDialog', 'paletteColorsDialog', 'resetColorDialog', 'legendRenameDialog', 'legendAddConflictDialog',
   'labelTextScopeDialog', 'featureVisibilityScopeDialog', 'hiddenLabelTextDialog', 'labelOnDialog',
   'sidebarWidth', 'isResizing', 'newLegendCaption', 'newLegendColor', 'legendStrokeOptionsOpen', 'legendDragging', 'legendDragStart',
   'legendOriginalTransform', 'legendInitialTransform', 'diagramDragging', 'diagramDragStart',
@@ -91,7 +91,7 @@ export const TRANSIENT_KEYS = Object.freeze([
   'lengthBarOriginalTransform', 'plotTitleElement', 'plotTitleDragging', 'plotTitleDragStart',
   'plotTitleAutoTransform', 'showCanvasControls', 'shouldDeferCircularPreviewUpdates', 'skipCaptureBaseConfig',
   'skipExtractOnSvgChange', 'trustedArtifactRestoreInProgress', 'newColorFeat', 'newColorVal',
-  'newPriorityRule', 'newFeatureToAdd', 'featureList', 'featureListState', 'filteredFeatures',
+  'newPriorityRule', 'newFeatureToAdd', 'displayedResultMetadata', 'featureList', 'featureListState', 'filteredFeatures',
   'filteredEditableLabels', 'ruleMatchingPending'
 ]);
 

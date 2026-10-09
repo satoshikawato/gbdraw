@@ -2248,6 +2248,7 @@ export const savedResultEdits = (data, mode, setEditorState, modeScoped) => {
     legendColorOverrides: edits.legend.colorOverrides,
     legendStrokeOverrides: edits.legend.strokeOverrides,
     originalLegendColors: kept.legend.originalColors,
+    originalLegendOrder: kept.legend.originalOrder,
     mode,
     blockStroke: modeScoped ? kept.originalSvgStroke : null
   };

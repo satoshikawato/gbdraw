@@ -84,6 +84,50 @@ export const shownLegendKeys = (svg) => new Set(getAllFeatureLegendGroups(svg).f
     .map((row) => String(row.getAttribute('data-legend-key') || '').trim())
 )));
 
+// The order a feature Legend group recorded as Python's, else null.
+/** @param {Element} group @returns {string[] | null} */
+const recordedGroupOrder = (group) => {
+  const recorded = group.getAttribute(LEGEND_ORDER_RECORD);
+  if (!recorded) return null;
+  try {
+    const order = JSON.parse(recorded);
+    return Array.isArray(order) ? order.map(String) : null;
+  } catch {
+    return null;
+  }
+};
+
+// The rows of a key each feature Legend group of a Result holds, shown or hidden.
+/** @param {Element} group @param {string} key */
+const rowsOfKey = (group, key) => Array.from(group.querySelectorAll('g[data-legend-key]'))
+  .filter((row) => String(row.getAttribute('data-legend-key') || '').trim() === key);
+
+// Whether a Result shows Python's own row of a key: neither an editor row nor
+// a row a rule commit showed before Python drew it.
+/** @param {Element | null | undefined} svg @param {string} key */
+export const shownPythonLegendRow = (svg, key) => getAllFeatureLegendGroups(svg).some((group) => (
+  rowsOfKey(group, key).some((row) => legendRowShown(row) && !row.getAttribute('data-legend-owner'))
+));
+
+// Whether a Result shows the row of `nextKey` where Python's row of `key`
+// was, as Python keeps a relabeled row in its place: the Result has no row of
+// Python's `key` (Python drew the change), or its shown rows follow Python's
+// order (recorded when the rows were first reordered, else the drawn order)
+// with `nextKey` in the place of `key`. A commit's row appended before the
+// rerender does not (U3a review M1).
+/** @param {Element | null | undefined} svg @param {string} key @param {string} nextKey */
+export const legendRowTakesPlace = (svg, key, nextKey) => getAllFeatureLegendGroups(svg).every((group) => {
+  const rows = Array.from(group.querySelectorAll('g[data-legend-key]'))
+    .filter((row) => row.getAttribute('data-legend-owner') !== 'direct-editor');
+  const drawn = rows.map(pythonLegendKey);
+  if (!drawn.includes(key)) return true;
+  const relabeled = (/** @type {string[]} */ keys) => [...new Set(keys.map((each) => (each === key ? nextKey : each)))];
+  const python = relabeled(recordedGroupOrder(group) ?? drawn);
+  const shown = relabeled(rows.filter(legendRowShown).map(pythonLegendKey));
+  const inOrder = python.filter((each) => shown.includes(each));
+  return shown.filter((each) => python.includes(each)).every((each, at) => each === inOrder[at]);
+});
+
 // Python's key of a Legend row: the key it drew, which a rename keeps as a
 // record; the row of an editor addition has its own key.
 /** @param {Element} row */
@@ -101,14 +145,8 @@ export const drawsPythonLegendRow = (svg, key) => getAllFeatureLegendGroups(svg)
 // order recorded when the rows were first reordered, else null.
 /** @param {Element | null | undefined} svg @returns {string[] | null} */
 export const recordedLegendOrder = (svg) => {
-  const recorded = getAllFeatureLegendGroups(svg).map((group) => group.getAttribute(LEGEND_ORDER_RECORD)).find(Boolean);
-  if (!recorded) return null;
-  try {
-    const order = JSON.parse(recorded);
-    return Array.isArray(order) ? order.map(String) : null;
-  } catch {
-    return null;
-  }
+  const group = getAllFeatureLegendGroups(svg).find((each) => each.getAttribute(LEGEND_ORDER_RECORD));
+  return group ? recordedGroupOrder(group) : null;
 };
 
 // Whether a Result shows Legend structure edits (a renamed, deleted, or added

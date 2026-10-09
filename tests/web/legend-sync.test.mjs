@@ -91,7 +91,7 @@ assert.match(entryActionsSource, /setLegendGeometryChangedHandler/);
   ));
 assert.match(appSetupSource, /deleteLegendEntry: editEditorIntent\('Delete legend item', deleteLegendEntry, \{ domains: LEGEND_STRUCTURE_DOMAINS \}\)/);
 assert.match(appSetupSource, /addNewLegendEntry: editEditorIntent\('Add legend item', addNewLegendEntry, \{ domains: LEGEND_STRUCTURE_DOMAINS \}\)/);
-assert.match(appSetupSource, /const restoreLegendItems = \(label, indexes\) => history\.runUndoable\(label,/);
+assert.match(appSetupSource, /const restoreLegendItems = \(label, restore\) => history\.runUndoable\(label,/);
 assert.doesNotMatch(appSetupSource, /reconcileLegendEntries|prepareDisplayedResultLegend|hasRetiredResultLegend|legendChanged/);
 assert.match(
   appSetupSource,

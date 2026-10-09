@@ -1,5 +1,5 @@
 {
-  "description": "Specific color rules as the Web app sends them for caption normalization (trimmed captions, lower-case hex colors). `fixpoint` is the Web app's answer (services/specific-color-rules.js::ruleCaptionsAreNormalized): true when every non-blank caption has one color string, so it skips the request. `captions` is Python's answer (gbdraw/features/colors.py::normalize_specific_color_captions). A fixpoint must leave every caption as it is.",
+  "description": "Specific color rules as the Web app sends them for caption normalization (trimmed captions, lower-case hex colors), and two with padded captions or colors, on which both answers must agree too. `fixpoint` is the Web app's answer (services/specific-color-rules.js::ruleCaptionsAreNormalized): true when every non-blank caption has one color string, so it skips the request. `captions` is Python's answer (gbdraw/features/colors.py::normalize_specific_color_captions). A fixpoint must leave every caption as it is.",
   "cases": [
     { "name": "one captioned rule", "fixpoint": true,
       "rules": [{ "feat": "CDS", "qual": "product", "val": "NADH", "color": "#112233", "cap": "NADH" }],
@@ -28,6 +28,18 @@
         { "feat": "CDS", "qual": "product", "val": "b", "color": "#445566", "cap": "alpha" }
       ],
       "captions": ["Alpha", "alpha"] },
+    { "name": "one caption, a color and the same color padded", "fixpoint": true,
+      "rules": [
+        { "feat": "CDS", "qual": "product", "val": "a", "color": "#112233", "cap": "Shared" },
+        { "feat": "CDS", "qual": "product", "val": "b", "color": " #112233 ", "cap": "Shared" }
+      ],
+      "captions": ["Shared", "Shared"] },
+    { "name": "a padded caption and the trimmed caption in two colors", "fixpoint": true,
+      "rules": [
+        { "feat": "CDS", "qual": "product", "val": "a", "color": "#112233", "cap": "Shared" },
+        { "feat": "CDS", "qual": "product", "val": "b", "color": "#445566", "cap": " Shared " }
+      ],
+      "captions": ["Shared", " Shared "] },
     { "name": "one caption in two colors", "fixpoint": false,
       "rules": [
         { "feat": "CDS", "qual": "product", "val": "NADH", "color": "#112233", "cap": "Shared" },

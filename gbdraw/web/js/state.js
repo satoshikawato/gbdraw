@@ -505,6 +505,14 @@ const legendRenameDialog = reactive({
   pendingRequest: null
 });
 
+// OV-239 (Owner decision R15-1): Add legend item of the caption of a deleted
+// row asks first: Restore that row, add under the suffixed caption, or Cancel.
+const legendAddConflictDialog = reactive({
+  show: false,
+  caption: '',
+  suffixedCaption: ''
+});
+
 // Label text scope dialog state
 const labelTextScopeDialog = reactive({
   show: false,
@@ -668,6 +676,9 @@ const newPriorityRule = reactive(createDefaultPriorityRule());
 
 const newFeatureToAdd = ref(defaultEditorDraftState.newFeatureToAdd);
 
+// The committed metadata of the displayed Result (svg-result-ingestion.js).
+const displayedResultMetadata = () => getCommittedSvgResultMetadata(toRaw(results.value[selectedResultIndex.value]));
+
 // The Features drawer and Search features list the displayed Result's catalog
 // features (`listFeatureRows`, R-5): a hidden feature stays listed so it can be
 // shown again. The selected feature types are those of the request that drew
@@ -685,7 +696,7 @@ const listedResults = computed((/** @type {ListedResults | undefined} */ previou
   /** @type {Record<string, any>[]} */
   const list = results.value;
   const names = list.map((result) => result?.name);
-  const metadata = getCommittedSvgResultMetadata(toRaw(list[selectedResultIndex.value]));
+  const metadata = displayedResultMetadata();
   return previous !== undefined && previous.metadata === metadata && previous.names.length === names.length
     && previous.names.every((name, index) => name === names[index])
     ? previous : { list, names, metadata };
@@ -965,6 +976,7 @@ export const state = {
   sessionImportRollbackInProgress,
   results,
   selectedResultIndex,
+  displayedResultMetadata,
   failedGeneratePreservedResult,
   generationFailureRecovery,
   resultPanelTab,
@@ -1095,6 +1107,7 @@ export const state = {
   paletteColorsDialog,
   resetColorDialog,
   legendRenameDialog,
+  legendAddConflictDialog,
   labelTextScopeDialog,
   featureVisibilityScopeDialog,
   hiddenLabelTextDialog,

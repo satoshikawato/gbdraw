@@ -653,36 +653,54 @@ export const resultLegendRowKeys = (state, context) => {
   });
 };
 
+// The place of each rule row in Python's Legend: the index of the first rule
+// of its caption in the rule table (prepare_legend_table walks the rules in
+// table order and skips a caption it has drawn); -1 for a row no rule names.
+/** @param {Record<string, any>[]} rules @returns {(key: string) => number} */
+export const legendRuleOrder = (rules) => (key) => rules.findIndex((rule) => legendRuleCaption(rule) === key);
+
 // Whether the displayed Result shows the Legend rows a change of the row keys
 // regroups, so Python need not draw them (R14-8). Every drawn feature stays
 // drawn and each row keeps its features together: a row relabeled to a new
 // key (`shows` the new key and not the old), merged into a row it joins
 // (`shows` the joined row and not the merged one), or unchanged (a recolor).
+// A merge keeps the joined row in its place, so a row merged in from a rule
+// before the joined row's first rule (`firstRule`, the rules before the
+// change) moves it in Python's Legend; an "other <type>s" row has no rule.
 // Another batch Result shows only its committed rows, so its keys must not
 // change. `shows(key)`: whether the displayed Result shows a row of the key
 // once the change is shown; `placed(key, nextKey)`: whether the row of a new
 // key takes the place of the row it relabels, as Python keeps it (OV-158).
+// `restored(key)` (a History restore): whether the restored Result shows
+// Python's own row of the key, so the rows a restore splits are exact when it
+// shows Python's rows of every key after the change and no row of the keys
+// that leave.
 /**
  * @param {(Map<string, string | null> | null)[]} before
  * @param {(Map<string, string | null> | null)[]} after
- * @param {{ displayed: number, shows: (key: string) => boolean, placed?: (key: string, nextKey: string) => boolean }} options
+ * @param {{ displayed: number, shows: (key: string) => boolean, firstRule: (key: string) => number,
+ *   placed?: (key: string, nextKey: string) => boolean, restored?: ((key: string) => boolean) | null }} options
  */
-export const legendRowsShowable = (before, after, { displayed, shows, placed = () => true }) => before.length === after.length
+export const legendRowsShowable = (before, after, { displayed, shows, firstRule, placed = () => true, restored = null }) => (
+  before.length === after.length
   && before.every((keys, index) => {
     const next = after[index];
     if (!keys || !next || keys.size !== next.size) return false;
+    if (![...keys.keys()].every((feature) => next.has(feature))) return false;
+    const nextKeys = new Set([...next.values()].filter((key) => key !== null));
+    const exact = Boolean(restored) && index === displayed && [...nextKeys].every((key) => restored?.(key))
+      && [...keys.values()].every((key) => key === null || nextKeys.has(key) || !shows(key));
     /** @type {Map<string, string>} */
     const moved = new Map();
     /** @type {Map<string, Set<string>>} */
     const joined = new Map();
     for (const [feature, key] of keys) {
-      if (!next.has(feature)) return false;
       const nextKey = next.get(feature) ?? null;
       if (key === null || nextKey === null) {
-        if (key !== nextKey) return false;
+        if (key !== nextKey) return exact;
         continue;
       }
-      if (moved.has(key) ? moved.get(key) !== nextKey : (index !== displayed && key !== nextKey)) return false;
+      if (moved.has(key) ? moved.get(key) !== nextKey : (index !== displayed && key !== nextKey)) return exact;
       moved.set(key, nextKey);
       if (!joined.has(nextKey)) joined.set(nextKey, new Set());
       joined.get(nextKey)?.add(key);
@@ -690,10 +708,14 @@ export const legendRowsShowable = (before, after, { displayed, shows, placed = (
     return [...joined].every(([nextKey, keysBefore]) => {
       if (keysBefore.size === 1 && keysBefore.has(nextKey)) return true;
       const [first] = keysBefore;
-      const target = keysBefore.size === 1 ? !moved.has(nextKey) && placed(first, nextKey) : moved.get(nextKey) === nextKey;
+      const place = firstRule(nextKey);
+      const target = keysBefore.size === 1
+        ? !moved.has(nextKey) && placed(first, nextKey)
+        : moved.get(nextKey) === nextKey && [...keysBefore].every((key) => key === nextKey || place < 0 || firstRule(key) < 0 || firstRule(key) > place);
       return target && shows(nextKey) && [...keysBefore].every((key) => key === nextKey || !shows(key));
     });
-  });
+  })
+);
 
 const isEditorFeatureRule = (rule) => {
   const normalized = normalizeFeatureVisibilityRule(rule);

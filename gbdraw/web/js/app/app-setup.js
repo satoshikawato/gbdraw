@@ -456,6 +456,7 @@ export const createAppSetup = () => {
     featureVisibilityScopeDialog,
     legendRenameDialog,
     paletteColorsDialog,
+    legendAddConflictDialog,
     resetColorDialog,
     labelTextScopeDialog,
     hiddenLabelTextDialog,
@@ -3127,7 +3128,8 @@ export const createAppSetup = () => {
     updateLegendEntryStrokeWidth,
     resetLegendEntryStroke,
     resetAllStrokes,
-    restoreDeletedLegendEntries
+    restoreDeletedLegendEntries,
+    answerLegendAddConflict
   } = legendActions;
 
   const {
@@ -3248,16 +3250,21 @@ export const createAppSetup = () => {
   // OV-154: a Restore is one History step of the Legend intent, shown with the
   // rows' fills through the port. O-2 (D-15-6 (5)): a Result saved before the
   // executor kept a deleted row lacks Python's row, so Python draws it again.
+  // A Result Python drew in this session lacks only a row Python did not draw
+  // there (its Legend row facts; U3a review M2); a loaded Result has no facts.
   /**
    * @param {string} label
-   * @param {number[] | null} indexes
+   * @param {() => unknown} restore Returns the Python keys of the restored rows, as `restoreDeletedLegendEntries` does.
    */
-  const restoreLegendItems = (label, indexes) => history.runUndoable(label, () => {
-    const restored = restoreDeletedLegendEntries(indexes);
+  const restoreLegendItems = (label, restore) => history.runUndoable(label, () => {
+    const restored = restore();
     if (!Array.isArray(restored)) return restored;
     showEditorIntent({ domains: LIVE_EDIT_DOMAINS.legendRows });
     const svg = svgContainer.value?.querySelector?.('svg');
-    if (restored.some((key) => !drawsPythonLegendRow(svg, key))) featureActions.requestAutomaticRerender();
+    const drawn = state.displayedResultMetadata()?.drawnLegendKeys;
+    if (restored.some((key) => (!drawn || drawn.has(key)) && !drawsPythonLegendRow(svg, key))) {
+      featureActions.requestAutomaticRerender();
+    }
     return true;
   });
 
@@ -6261,8 +6268,16 @@ export const createAppSetup = () => {
     // OV-154: a Restore returns deleted rows in one checkpoint step, as a delete
     // removes them; the palette then reaches the returned rows.
     deletedLegendEntries: drawingMember('deletedLegendEntries'),
-    restoreDeletedLegendEntry: /** @param {number} index */ (index) => restoreLegendItems('Restore legend item', [index]),
-    restoreAllDeletedLegendEntries: () => restoreLegendItems('Restore legend items', null),
+    restoreDeletedLegendEntry: /** @param {number} index */ (index) => restoreLegendItems(
+      'Restore legend item', () => restoreDeletedLegendEntries([index])
+    ),
+    restoreAllDeletedLegendEntries: () => restoreLegendItems('Restore legend items', () => restoreDeletedLegendEntries(null)),
+    // OV-239 (R15-1): each choice is one History step, as a Restore or an Add;
+    // Cancel records none.
+    legendAddConflictDialog,
+    handleLegendAddConflictChoice: /** @param {string} choice */ (choice) => (choice === 'restore'
+      ? restoreLegendItems('Restore legend item', () => answerLegendAddConflict(choice))
+      : editEditorIntent('Add legend item', answerLegendAddConflict, { domains: LEGEND_STRUCTURE_DOMAINS })(choice)),
     moveLegendEntryUp,
     moveLegendEntryDown,
     sortLegendEntries,

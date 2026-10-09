@@ -656,6 +656,45 @@ const U3A_PARITY = [
       expect(await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.filter((entry) => entry.caption === 'alpha').length),
         'one alpha row').toBe(1);
     }
+  },
+  {
+    // U3a review H2: Python places the merged row at the first rule of its
+    // caption (rule 1 here), before gamma, so the rename asks for the rerender.
+    name: '(9) merge a rule row into a later row of its type',
+    setup: async (page) => {
+      await addColorRule(page, ALPHA_ROW);
+      await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^dup alpha$', color: '#2a9d8f', cap: 'gamma' });
+      await addColorRule(page, { ...ALPHA_ROW, val: '^FL2$', cap: 'beta' });
+    },
+    run: async (page) => { await renameAndSettle(page, 'alpha', 'beta'); }
+  },
+  {
+    // U3a review M1: the Rules panel relabels the whole row and asks for the
+    // rerender; Redo restores the Result the commit left before it, whose
+    // new row is appended, so Redo asks for it too.
+    name: '(10) Undo and Redo of a Rules-panel caption change of a whole row',
+    setup: (page) => addColorRule(page, ALPHA_ROW),
+    run: async (page) => {
+      await appAction(page, 'setSpecificRuleField', await ruleIndex(page, 'alpha'), 'cap', 'Alpha row');
+      await history(page, 'undo');
+      await history(page, 'redo');
+    }
+  },
+  {
+    // U3a review L1 (PLAN section 4): Undo and Redo of the case (7) merge
+    // restore Results that show the rows exactly, so neither asks Python.
+    name: '(11) Undo and Redo of a merge within one type',
+    setup: async (page) => {
+      await addColorRule(page, ALPHA_ROW);
+      await addColorRule(page, { ...ALPHA_ROW, val: '^FL2$', cap: 'beta' });
+    },
+    run: async (page) => {
+      await renameAndSettle(page, 'beta', 'alpha');
+      const renders = await countRenders(page);
+      await history(page, 'undo');
+      await history(page, 'redo');
+      expect(await renders(), 'Undo and Redo of the merge ask for no rerender').toBe(0);
+    }
   }
 ];
 for (const mode of ['circular', 'linear']) {
@@ -689,6 +728,21 @@ for (const mode of ['circular', 'linear']) {
       });
     }
   }
+    // U3a review M2: after the deleted type's features are hidden and
+    // Generate runs, Python draws no row of it; its row facts say so, and the
+    // Restore asks for no rerender.
+    test(`U3a Legend parity (12) Restore of a row the Result never drew (${mode}, Auto Reflow off)`, async ({ page }) => {
+      test.setTimeout(180_000);
+      await open(page, { mode, results: 'single', reflow: 'off' });
+      await deleteLegendRow(page, 'repeat_region');
+      await addVisibilityRule(page, { recordId: 'FORCEDLBL', featureType: 'repeat_region', qualifier: 'note', value: '^RPT_ONE$', action: 'off' });
+      await generate(page);
+      const renders = await countRenders(page);
+      await evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.restoreAllDeletedLegendEntries(); });
+      await settleLive(page);
+      expect(await renders(), 'the Restore asks for no rerender').toBe(0);
+      await expectLiveEqualsGenerate(page, { label: 'Restore of a row the Result never drew' });
+    });
 }
 
 // U3a compat: a Session 46 saved before U3a, whose Result has a renamed, a
@@ -701,8 +755,8 @@ const LEGEND_ROWS_SESSION = 'tests/fixtures/sessions/forced-label-underlay-legen
 const LEGEND_ROWS_SAVED = JSON.parse(readFileSync('tests/fixtures/sessions/forced-label-underlay-legend-rows.provenance.json', 'utf8'))
   .sessions['forced-label-underlay-legend-rows.v46.gbdraw-session.json.gz'].legend;
 const shownLegendRows = async (page) => (await semanticSnapshot(page)).legend.map((row) => row.caption);
-const loadLegendRowsSession = async (page) => {
-  await openFresh(page);
+const loadLegendRowsSession = async (page, { fresh = true } = {}) => {
+  if (fresh) await openFresh(page);
   await loadSessionFile(page, LEGEND_ROWS_SESSION);
   await settleLive(page);
   expect(await legendCaptions(page), 'the saved Legend entries').toEqual(LEGEND_ROWS_SAVED.entries);
@@ -714,6 +768,34 @@ test('U3a compat: a Session 46 saved before U3a loads its Legend rows, and live 
   test.setTimeout(240_000);
   await loadLegendRowsSession(page);
   await expectLiveEqualsGenerate(page, { label: 'Session 46 with Legend row edits, after Load' });
+});
+// U3a review H1: the saved Result renamed GC content to "GC %" without a
+// record of Python's key; Load records it, so each live edit of the row
+// reaches it. A Generate after each step would replace the loaded Result, so
+// the color, stroke and rename are checked on the live row and then together
+// against Generate; the delete starts from a fresh Load.
+test('U3a compat: the row a Session 46 saved before U3a renamed takes color, stroke, rename and delete live', async ({ page }) => {
+  test.setTimeout(300_000);
+  await loadLegendRowsSession(page);
+  const liveRow = (caption) => page.evaluate((key) => {
+    const row = [...window.__GBDRAW_APP__.svgContainer.querySelectorAll('g[data-legend-key]')]
+      .find((element) => element.getAttribute('data-legend-key') === key && element.getAttribute('display') !== 'none');
+    const swatch = row?.querySelector('path, rect');
+    return row ? { text: row.querySelector('text')?.textContent?.trim(), fill: swatch?.getAttribute('fill'), stroke: swatch?.getAttribute('stroke') } : null;
+  }, caption);
+  await colorLegendRow(page, 'GC %', '#264653');
+  expect((await liveRow('GC %'))?.fill, 'the color reaches the row').toBe('#264653');
+  await legendRowStrokeColor(page, 'GC %', '#e63946');
+  expect((await liveRow('GC %'))?.stroke, 'the stroke reaches the row').toBe('#e63946');
+  await renameAndSettle(page, 'GC %', 'GC ratio');
+  expect(await liveRow('GC %'), 'the old caption is gone').toBe(null);
+  expect((await liveRow('GC ratio'))?.text, 'the rename reaches the row').toBe('GC ratio');
+  await expectLiveEqualsGenerate(page, { label: 'color, stroke and rename of the renamed row after Load' });
+
+  await loadLegendRowsSession(page, { fresh: false });
+  await deleteLegendRow(page, 'GC %');
+  expect(await liveRow('GC %'), 'the delete hides the row').toBe(null);
+  await expectLiveEqualsGenerate(page, { label: 'delete of the renamed row after Load' });
 });
 test('U3a compat: Undo of a new edit and the Restore of a deleted row on a Session 46 saved before U3a', async ({ page }) => {
   test.setTimeout(240_000);
@@ -729,3 +811,62 @@ test('U3a compat: Undo of a new edit and the Restore of a deleted row on a Sessi
   expect(await shownLegendRows(page), 'the restored row is shown').toContain('repeat_region');
   await expectLiveEqualsGenerate(page, { label: 'Restore after Load' });
 });
+
+// OV-239 (Owner decision R15-1): Add legend item of the caption of a deleted
+// row asks before anything changes. Restore is that row's Restore (it returns
+// with its own color, not the entered one); Add as gives the new row the
+// suffixed caption; Cancel changes nothing. Each choice is one History step,
+// Cancel none, and live equals Generate.
+const addConflictDialog = (page) => page.locator('div.fixed', {
+  has: page.getByRole('heading', { name: 'A deleted Legend item named “repeat_region” exists' })
+});
+const undoCount = (page) => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+const requestDeletedCaptionAdd = async (page) => {
+  await deleteLegendRow(page, 'repeat_region');
+  const before = { steps: await undoCount(page), legend: await semanticSnapshot(page) };
+  await legendRowAdd(page, 'repeat_region', '#123456');
+  await expect(addConflictDialog(page)).toBeVisible();
+  await expect(addConflictDialog(page).getByRole('button')).toHaveText(['Restore', 'Add as “repeat_region (1)”', 'Cancel']);
+  expect(await undoCount(page), 'the request records no step').toBe(before.steps);
+  expect(diffSemanticSnapshots(before.legend, await semanticSnapshot(page)), 'the request changes nothing').toEqual([]);
+  return before;
+};
+const deletedCaptions = (page) => page.evaluate(() => window.__GBDRAW_APP__.deletedLegendEntries.map((entry) => entry.caption));
+const ADD_CONFLICT_CHOICES = [
+  {
+    choice: 'Restore',
+    check: async (page) => {
+      expect(await deletedCaptions(page)).toEqual([]);
+      expect(await legendCaptions(page)).toContain('repeat_region');
+      expect(await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.find((entry) => entry.caption === 'repeat_region').color),
+        'the row returns with its own color').not.toBe('#123456');
+    }
+  },
+  {
+    choice: 'Add as “repeat_region (1)”',
+    check: async (page) => {
+      expect(await deletedCaptions(page)).toEqual(['repeat_region']);
+      expect(await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.find((entry) => entry.caption === 'repeat_region (1)')?.color))
+        .toBe('#123456');
+    }
+  },
+  { choice: 'Cancel', check: async (page) => { expect(await deletedCaptions(page)).toEqual(['repeat_region']); } }
+];
+for (const { choice, check } of ADD_CONFLICT_CHOICES) {
+  test(`OV-239: Add legend item of a deleted row's caption, ${choice} (circular)`, async ({ page }) => {
+    test.setTimeout(180_000);
+    await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+    const before = await requestDeletedCaptionAdd(page);
+    await addConflictDialog(page).getByRole('button', { name: choice, exact: true }).click();
+    await expect(addConflictDialog(page)).toHaveCount(0);
+    await settleLive(page);
+    await check(page);
+    if (choice === 'Cancel') {
+      expect(await undoCount(page), 'Cancel records no step').toBe(before.steps);
+      expect(diffSemanticSnapshots(before.legend, await semanticSnapshot(page)), 'Cancel changes nothing').toEqual([]);
+    } else {
+      expect(await undoCount(page), 'the choice is one History step').toBe(before.steps + 1);
+    }
+    await expectLiveEqualsGenerate(page, { label: `Add of a deleted row's caption, ${choice}` });
+  });
+}

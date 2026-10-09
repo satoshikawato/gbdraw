@@ -73,7 +73,8 @@ export const createLegendEntryActions = ({
     originalLegendOrder,
     originalLegendColors,
     newLegendCaption,
-    newLegendColor
+    newLegendColor,
+    legendAddConflictDialog
   } = state;
 
   /** @type {((options?: { commit?: boolean }) => unknown) | null} */
@@ -540,10 +541,17 @@ export const createLegendEntryActions = ({
     return true;
   };
 
+  const clearAddForm = () => {
+    newLegendCaption.value = '';
+    newLegendColor.value = '#808080';
+  };
+
   // Add a Legend row of the editor's own: listed last, under a caption no
   // listed, deleted, or generated row has (a ` (n)` suffix), so Generate adds
   // it (OV-86). A listed row of the same caption and color is no new row.
-  const addNewLegendEntry = () => {
+  // OV-239 (R15-1): the caption of a deleted row first asks Restore, Add as
+  // the suffixed caption (`suffixed`), or Cancel, and changes nothing.
+  const addNewLegendEntry = ({ suffixed = false } = {}) => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -556,21 +564,46 @@ export const createLegendEntryActions = ({
     }
     const color = newLegendColor.value;
     const entries = drawing.legendEntries.value || [];
-    newLegendCaption.value = '';
-    newLegendColor.value = '#808080';
+    const deleted = drawing.deletedLegendEntries.value || [];
     if (entries.some((/** @type {Record<string, any>} */ entry) => (
       legendCaption(entry) === caption && normalizedColor(entry.color) === normalizedColor(color)
-    ))) return false;
+    ))) {
+      clearAddForm();
+      return false;
+    }
     const taken = new Set([
-      ...[...entries, ...(drawing.deletedLegendEntries.value || []), ...(drawing.dormantLegendEntries.value || [])]
+      ...[...entries, ...deleted, ...(drawing.dormantLegendEntries.value || [])]
         .flatMap((/** @type {Record<string, any>} */ entry) => [legendCaption(entry), generatedCaption(entry)]),
       ...originalLegendOrder.value
     ]);
     const base = caption.replace(/\s*\(\d+\)$/, '');
     let finalCaption = caption;
     for (let counter = 1; taken.has(finalCaption); counter += 1) finalCaption = `${base} (${counter})`;
+    if (!suffixed && deleted.some((/** @type {Record<string, any>} */ entry) => legendCaption(entry) === caption)) {
+      Object.assign(legendAddConflictDialog, { show: true, caption, suffixedCaption: finalCaption });
+      return false;
+    }
+    clearAddForm();
     drawing.legendEntries.value = [...entries, { caption: finalCaption, originalCaption: finalCaption, color, featureIds: [] }];
     return true;
+  };
+
+  // The choice in the dialog of OV-239: 'restore' is the Restore of the deleted
+  // row (it returns with its own color; the entered color is not applied) and
+  // returns as that Restore does; 'suffix' adds the entered row under the
+  // suffixed caption; any other choice changes nothing.
+  /** @param {string} choice */
+  const answerLegendAddConflict = (choice) => {
+    legendAddConflictDialog.show = false;
+    if (choice === 'suffix') return addNewLegendEntry({ suffixed: true });
+    const index = choice === 'restore'
+      ? (state.activeDrawing().deletedLegendEntries.value || [])
+        .findIndex((/** @type {Record<string, any>} */ entry) => legendCaption(entry) === legendAddConflictDialog.caption)
+      : -1;
+    if (index < 0) return false;
+    const restored = restoreDeletedLegendEntries([index]);
+    if (Array.isArray(restored)) clearAddForm();
+    return restored;
   };
 
   // Delete a Legend row: the deleted list keeps it for Restore and Generate.
@@ -642,6 +675,7 @@ export const createLegendEntryActions = ({
     adoptRestoredLegend,
     adoptResultInventory,
     addNewLegendEntry,
+    answerLegendAddConflict,
     captureLegendEntryOwners,
     captureResultInventory,
     deleteLegendEntry,

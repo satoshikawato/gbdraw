@@ -287,21 +287,34 @@ for (const boundary of ['drawer', 'mode cycle', 'remove', 'reorder', 'Session', 
       await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.setDiagramMode('linear'); a.setDiagramMode('circular'); });
       await snapshot(page);
     }
-    await page.evaluate(() => {
+    // Session: the held request is the caption normalization a caption edit
+    // asks for when it gives rule 1's caption to rule 0 in another color (a
+    // Load waits for a pending match, U3a 1e), so the Load takes over while
+    // the edit is late.
+    await page.evaluate(async (captionEdit) => {
+      const a = window.__GBDRAW_APP__;
+      if (captionEdit) {
+        Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: '(?i)cytochrome', color: '#2266aa', cap: 'Shared' });
+        await a.addSpecificRule();
+      }
       const send = Worker.prototype.postMessage;
       Worker.prototype.postMessage = function (message, ...args) {
         if (message.operation === 'evaluateRules') {
           Worker.prototype.postMessage = send;
+          window.__heldKind = message.payload?.kind;
           window.__releasePattern = () => send.call(this, message, ...args);
           return;
         }
         return send.call(this, message, ...args);
       };
-      window.__pendingPattern = window.__GBDRAW_APP__.setSpecificRuleField(0, 'val', '(?P<enzyme>NADH)');
-    });
+      window.__pendingPattern = captionEdit
+        ? a.setSpecificRuleField(0, 'cap', 'Shared')
+        : a.setSpecificRuleField(0, 'val', '(?P<enzyme>NADH)');
+    }, boundary === 'Session');
     await page.waitForFunction(() => window.__releasePattern);
     const before = await snapshot(page);
-    expect((await draft(page)).draft.pending).toBe(true);
+    if (boundary === 'Session') expect(await page.evaluate(() => window.__heldKind)).toBe('color-captions');
+    else expect((await draft(page)).draft.pending).toBe(true);
     if (boundary === 'drawer') await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.openRightDrawerTab('features'); a.closeRightDrawer(); a.openRightDrawerTab('features'); });
     if (boundary === 'mode cycle') await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.setDiagramMode('linear'); a.setDiagramMode('circular'); });
     if (boundary === 'remove') await page.evaluate(() => window.__GBDRAW_APP__.removeSpecificRule(0));
@@ -313,17 +326,10 @@ for (const boundary of ['drawer', 'mode cycle', 'remove', 'reorder', 'Session', 
     const current = await snapshot(page);
     if (boundary === 'mode cycle') writeFileSync(test.info().outputPath('mode-boundary.json'), JSON.stringify({ before, current }));
     await page.evaluate(async () => { window.__releasePattern(); await window.__pendingPattern; });
-    if (boundary === 'Session') {
-      // Load waits for an edit whose match is pending ("Applying an edit");
-      // no caption request runs before the match any more (U3a 1e), so the
-      // held edit lands and the refused Load changed nothing.
-      expect(current).toEqual(before);
-      expect((await snapshot(page)).canonical).toContain('(?P<enzyme>NADH)');
-      expect((await draft(page)).draft).toBe(null);
-    } else expect(await snapshot(page)).toEqual(current);
+    expect(await snapshot(page)).toEqual(current);
     if (['drawer', 'mode cycle'].includes(boundary)) { expect((await draft(page)).text).toBe('(?P<enzyme>NADH)'); expect(await snapshot(page)).toEqual(before); }
     if (boundary === 'reorder') expect(await page.evaluate(() => { const a = window.__GBDRAW_APP__; return a.specificRulePattern(a.manualSpecificRules[1]); })).toBe('(?P<enzyme>NADH)');
-    if (boundary === 'remove') expect(await draft(page)).toBe(null);
+    if (['remove', 'Session'].includes(boundary)) expect(await draft(page)).toBe(null);
     if (boundary === 'Worker cancellation') { expect((await draft(page)).draft.error).toBe(null); expect(await snapshot(page)).toEqual(before); }
     if (boundary === 'new keystroke') expect((await draft(page)).text).toBe('[new');
   });

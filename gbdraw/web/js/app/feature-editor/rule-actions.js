@@ -22,8 +22,8 @@ import {
   normalizeFeatureRendering
 } from '../../utils/feature-rendering.js';
 import { featureOverrideValue } from '../../services/feature-placement.js';
-import { featureDrawnContext, legendRowsShowable, resultLegendRowKeys } from '../../services/feature-visibility.js';
-import { shownLegendKeys } from '../../services/legend-svg.js';
+import { featureDrawnContext, legendRowsShowable, legendRuleOrder, resultLegendRowKeys } from '../../services/feature-visibility.js';
+import { legendRowTakesPlace, shownLegendKeys, shownPythonLegendRow } from '../../services/legend-svg.js';
 
 // R13: `projectPaletteAndRules` is the composition root's projection of the
 // palette and the specific-color rules (R3); this owner calls it after a rule
@@ -171,20 +171,29 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
    */
   const redrawsLegendFor = (drawing, before, after, { rows = null, placement = null, holdsRow = () => false } = {}) => {
     const kept = typeRowCaptions(after);
-    const drawnKeys = shownLegendKeys(state.svgContainer?.value?.querySelector?.('svg'));
+    const svg = state.svgContainer?.value?.querySelector?.('svg');
+    const drawnKeys = shownLegendKeys(svg);
     const added = new Set((rows?.add || []).map(({ caption }) => caption));
     const retired = new Set(rows?.retire || []);
     const shows = (/** @type {string} */ key) => added.has(key) || (!retired.has(key) && drawnKeys.has(key));
     // The commit's show appends a new row unless it takes the place of the row
-    // it relabels (OV-158), where Python keeps it; a restore shows the order
-    // History kept.
+    // it relabels (OV-158), where Python keeps it. A restore shows the bytes
+    // History kept, which may be a commit's before its rerender (M1): its new
+    // row takes the old row's place only as the commit's placement left it.
+    // The rows a restore splits are exact when they are Python's (L1).
     const placed = rows
       ? (/** @type {string} */ key, /** @type {string} */ nextKey) => placement?.caption === nextKey && placement.at === key
-      : undefined;
+      : (/** @type {string} */ key, /** @type {string} */ nextKey) => legendRowTakesPlace(svg, key, nextKey);
     return !legendRowsShowable(
       resultLegendRowKeys(state, legendSourceContext(drawing, before)),
       resultLegendRowKeys(state, legendSourceContext(drawing, after)),
-      { displayed: Number(state.selectedResultIndex?.value) || 0, shows, placed }
+      {
+        displayed: Number(state.selectedResultIndex?.value) || 0,
+        shows,
+        placed,
+        firstRule: legendRuleOrder(before),
+        restored: rows ? null : (/** @type {string} */ key) => shownPythonLegendRow(svg, key)
+      }
     ) || [...typeRowCaptions(before)].some(caption => !kept.has(caption) && !holdsRow(caption));
   };
   // The Legend rows a History restore returned, shown or deleted in the editor.

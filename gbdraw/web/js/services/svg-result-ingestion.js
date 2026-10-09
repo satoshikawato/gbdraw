@@ -306,12 +306,21 @@ const resultFeatureTypes = (selectedFeatureTypes) => (
   Array.isArray(selectedFeatureTypes) ? Object.freeze(selectedFeatureTypes.map(String)) : null
 );
 
-const metadataFromCatalogAdmission = (catalogAdmission, resultIndex, sourceClass, selectedFeatureTypes) => {
+// `drawnLegendKeys`: the Legend rows Python drew in the Result (its row facts),
+// kept in memory with the committed Result; null for a Result Load admitted.
+/**
+ * @param {FeatureCatalogAdmission} catalogAdmission @param {number} resultIndex @param {string} sourceClass
+ * @param {readonly string[] | null} selectedFeatureTypes
+ * @param {readonly SvgLegendRowFacts[] | null} [legendRows]
+ */
+const metadataFromCatalogAdmission = (catalogAdmission, resultIndex, sourceClass, selectedFeatureTypes, legendRows = null) => {
   const renderedFeatureIdentities = catalogAdmission.renderedIdentitiesByResult[resultIndex];
   if (!renderedFeatureIdentities) {
     throw new Error('The admitted feature catalog is missing Result identity metadata.');
   }
-  return Object.freeze({ renderedFeatureIdentities, sourceClass, selectedFeatureTypes });
+  return Object.freeze({
+    renderedFeatureIdentities, sourceClass, selectedFeatureTypes, drawnLegendKeys: legendRows?.[resultIndex]?.drawn ?? null
+  });
 };
 
 export const isCommittedSvgResult = (result) => Boolean(committedState(result));
@@ -883,6 +892,7 @@ export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domai
  * @property {Record<string, string>} legendColorOverrides
  * @property {Record<string, any>} legendStrokeOverrides
  * @property {Record<string, string>} originalLegendColors
+ * @property {string[]} originalLegendOrder The captions of the rows Python drew (the Legend inventory).
  * @property {'circular' | 'linear'} mode
  * @property {{ color: string | null, width: number | null } | null} blockStroke Python's block stroke of
  *   the set's Result as a Session 46 kept it (`originalSvgStroke`); null when the Session's is not known to be.
@@ -1031,6 +1041,48 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits, block
   });
 };
 
+// The renamed generated rows a Session lists, by their caption: main's writer
+// (Sessions 44 to 46) renamed a row of Python's by rewriting its key and kept
+// Python's caption only as the entry's `originalCaption`. Only a caption no
+// other listed entry has, that is not itself a generated caption (Python may
+// draw a row of it), names one such row.
+/** @param {SavedResultEdits} edits @returns {Map<string, string>} */
+const savedLegendRenames = (edits) => {
+  const generated = new Set(edits.originalLegendOrder.map(text));
+  /** @type {Map<string, number>} */
+  const listed = new Map();
+  edits.legendEntries.forEach((entry) => listed.set(text(entry?.caption), (listed.get(text(entry?.caption)) || 0) + 1));
+  return new Map(edits.legendEntries.flatMap((entry) => {
+    const caption = text(entry?.caption);
+    const original = text(entry?.originalCaption);
+    return caption && original && caption !== original && generated.has(original) && !generated.has(caption)
+      && listed.get(caption) === 1 ? [[caption, original]] : [];
+  }));
+};
+
+// A Result saved before the executor recorded Python's Legend key shows such
+// a rename without the record, so a live edit addressed by Python's key misses
+// the row. Load records it once, on the one row of Python's with the renamed
+// caption, in a Result that has no row of Python's caption (U3a H1).
+/** @param {Element} svg @param {Map<string, string>} renames */
+const recordSavedLegendKeys = (svg, renames) => {
+  const keyRecord = resultBaseAttribute('data-legend-key');
+  const groups = getAllFeatureLegendGroups(svg);
+  const rows = groups.flatMap((group) => Array.from(group.querySelectorAll('g[data-legend-key]')));
+  const drawnKeys = new Set(rows.flatMap((row) => [text(row.getAttribute('data-legend-key')), text(row.getAttribute(keyRecord))]));
+  groups.forEach((group) => {
+    const groupRows = Array.from(group.querySelectorAll('g[data-legend-key]'));
+    renames.forEach((original, caption) => {
+      if (drawnKeys.has(original)) return;
+      const named = groupRows.filter((row) => text(row.getAttribute('data-legend-key')) === caption);
+      const [row] = named;
+      if (named.length === 1 && !row.hasAttribute('data-legend-owner') && !row.hasAttribute(keyRecord)) {
+        row.setAttribute(keyRecord, original);
+      }
+    });
+  });
+};
+
 /**
  * A legacy normalization of a Result saved without composition metadata (a
  * Session 40 Result of main 8228ffab or 7aad9e3e, OV-273): `applies` tells it
@@ -1040,9 +1092,10 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits, block
 
 /**
  * The plan a current Session's Results are admitted with at Load: none, or,
- * for each Result the legacy normalization applies to, that normalization,
- * and for each Result saved without records of Python's paint, the records of
- * the edits it shows (`recordSavedEditBases`).
+ * for each Result the legacy normalization applies to, that normalization;
+ * for each Result saved without records of Python's paint, the records of the
+ * edits it shows (`recordSavedEditBases`); and for each Result the records of
+ * Python's key on the rows a Session renamed without one (`recordSavedLegendKeys`).
  * @param {readonly Record<string, any>[]} results
  * @param {FeatureCatalogAdmission} catalogAdmission
  * @param {SavedResultEdits | null} edits
@@ -1058,7 +1111,10 @@ export const createSavedResultPlan = (results, catalogAdmission, edits, legacy =
   );
   const normalizes = (/** @type {Record<string, any>} */ result) => Boolean(legacy?.applies(result?.content));
   const legacyNormalizationCount = results.filter(normalizes).length;
-  if (legacyNormalizationCount === 0 && !results.some(needsRecords)) return createEmptySvgMutationPlan(results.length);
+  const renames = edits ? savedLegendRenames(edits) : new Map();
+  if (legacyNormalizationCount === 0 && renames.size === 0 && !results.some(needsRecords)) {
+    return createEmptySvgMutationPlan(results.length);
+  }
   const savedEdits = /** @type {SavedResultEdits} */ (edits);
   // The Session's block stroke is that of one Result; a batch's Results may
   // differ in size class.
@@ -1070,12 +1126,14 @@ export const createSavedResultPlan = (results, catalogAdmission, edits, legacy =
     legacyNormalizationCount,
     operationsByResult: Object.freeze(results.map((result, resultIndex) => {
       // The records find a row by the key the normalized Legend shows, so the
-      // normalization comes first.
+      // normalization comes first; the paint records find a renamed row by the
+      // key it shows, so they come before the key records.
       const transforms = [
         ...(legacy && normalizes(result) ? [legacy.transform] : []),
         ...(needsRecords(result)
           ? [(/** @type {Element} */ svg) => recordSavedEditBases(svg, { resultIndex, catalogAdmission, edits: savedEdits, blockStroke })]
-          : [])
+          : []),
+        ...(renames.size > 0 ? [(/** @type {Element} */ svg) => recordSavedLegendKeys(svg, renames)] : [])
       ];
       return transforms.length > 0
         ? Object.freeze({ ...freezeEmptyOperations(), callerTransforms: Object.freeze(transforms) })
@@ -1148,7 +1206,8 @@ const admitCatalogBackedResults = (
   recordStructuralMetric('manualRuleFeatureMatchCount', 0, { phase: sourceClass });
   const admitted = results.map((result, resultIndex) => admitCurrentResult(
     result,
-    metadataFromCatalogAdmission(catalogAdmission, resultIndex, sourceClass, featureTypes),
+    // `requireAlignedCatalogAdmission` above throws for a null admission.
+    metadataFromCatalogAdmission(/** @type {FeatureCatalogAdmission} */ (catalogAdmission), resultIndex, sourceClass, featureTypes, legendRows),
     currentResultOperations(plan, resultIndex),
     { sanitizer, parser, resultIndex, sourceClass, legendRows }
   ));

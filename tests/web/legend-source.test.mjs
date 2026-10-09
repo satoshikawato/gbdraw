@@ -5,6 +5,7 @@ import { resultCatalogFeatures } from '../../gbdraw/web/js/services/feature-cata
 import {
   featureDrawnContext,
   legendRowsShowable,
+  legendRuleOrder,
   resultLegendRowKeys,
   resultLegendSources,
   sameLegendSources,
@@ -155,57 +156,89 @@ const rowKeysOf = (rows, rules, { prepared = true } = {}) => {
 const showing = (shown) => (key) => shown.includes(key);
 const ONE = [[['A', 'CDS'], ['R', 'repeat_region'], ['B', 'CDS']]];
 
+// Whether the displayed Result shows the rows the rules regroup (`before`
+// rules to `after` rules), with Python's rule order of the rules before.
+const showable = (rows, before, after, options) => legendRowsShowable(
+  rowKeysOf(rows, before), rowKeysOf(rows, after), { displayed: 0, firstRule: legendRuleOrder(before), ...options }
+);
+
 test('a whole-row relabel, a merge into a shown row and a recolor are shown live', () => {
-  const alpha = rowKeysOf(ONE, [tagRule('A|B', 'alpha')]);
-  assert.equal(legendRowsShowable(alpha, rowKeysOf(ONE, [tagRule('A|B', 'beta')]),
-    { displayed: 0, shows: showing(['beta', 'repeat_region']) }), true, 'relabel: the old row hidden, the new row shown');
-  assert.equal(legendRowsShowable(alpha, rowKeysOf(ONE, [tagRule('A|B', 'beta')]),
-    { displayed: 0, shows: showing(['alpha', 'beta', 'repeat_region']) }), false, 'relabel while the old row stays shown');
-  assert.equal(legendRowsShowable(alpha, rowKeysOf(ONE, [tagRule('A|B', 'beta')]),
-    { displayed: 0, shows: showing(['repeat_region']) }), false, 'relabel without the new row');
-  assert.equal(legendRowsShowable(alpha, rowKeysOf(ONE, [tagRule('A|B', 'beta')]),
-    { displayed: 0, shows: showing(['beta', 'repeat_region']), placed: (key, next) => key === 'alpha' && next === 'beta' }),
-  true, 'relabel whose new row takes the old row\'s place');
-  assert.equal(legendRowsShowable(alpha, rowKeysOf(ONE, [tagRule('A|B', 'beta')]),
-    { displayed: 0, shows: showing(['beta', 'repeat_region']), placed: () => false }),
-  false, 'relabel whose new row is appended: Python keeps it in the old row\'s place');
-  assert.equal(legendRowsShowable(alpha, rowKeysOf(ONE, [tagRule('A|B', 'alpha', '#00ff00')]),
-    { displayed: 0, shows: showing(['alpha', 'repeat_region']) }), true, 'recolor');
-  const two = rowKeysOf(ONE, [tagRule('A', 'alpha'), tagRule('B', 'beta')]);
-  assert.equal(legendRowsShowable(two, rowKeysOf(ONE, [tagRule('A', 'beta'), tagRule('B', 'beta')]),
-    { displayed: 0, shows: showing(['beta', 'repeat_region']) }), true, 'merge into the shown row beta');
+  const alpha = [tagRule('A|B', 'alpha')];
+  const beta = [tagRule('A|B', 'beta')];
+  assert.equal(showable(ONE, alpha, beta, { shows: showing(['beta', 'repeat_region']) }), true,
+    'relabel: the old row hidden, the new row shown');
+  assert.equal(showable(ONE, alpha, beta, { shows: showing(['alpha', 'beta', 'repeat_region']) }), false,
+    'relabel while the old row stays shown');
+  assert.equal(showable(ONE, alpha, beta, { shows: showing(['repeat_region']) }), false, 'relabel without the new row');
+  assert.equal(showable(ONE, alpha, beta, {
+    shows: showing(['beta', 'repeat_region']), placed: (key, next) => key === 'alpha' && next === 'beta'
+  }), true, 'relabel whose new row takes the old row\'s place');
+  assert.equal(showable(ONE, alpha, beta, { shows: showing(['beta', 'repeat_region']), placed: () => false }),
+    false, 'relabel whose new row is appended: Python keeps it in the old row\'s place');
+  assert.equal(showable(ONE, alpha, [tagRule('A|B', 'alpha', '#00ff00')], { shows: showing(['alpha', 'repeat_region']) }), true,
+    'recolor');
+  assert.equal(showable(ONE, [tagRule('A', 'alpha'), tagRule('B', 'beta')], [tagRule('A', 'alpha'), tagRule('B', 'alpha')],
+    { shows: showing(['alpha', 'repeat_region']) }), true, 'merge into the shown row alpha, whose rule comes first');
   // The palette row of a type with features is renamed by rules of its features (P-1).
-  const plain = rowKeysOf(ONE, []);
-  assert.equal(legendRowsShowable(plain, rowKeysOf(ONE, [tagRule('A|B', 'gamma')]),
-    { displayed: 0, shows: showing(['gamma', 'repeat_region']) }), true, 'the CDS row relabeled');
+  assert.equal(showable(ONE, [], [tagRule('A|B', 'gamma')], { shows: showing(['gamma', 'repeat_region']) }), true,
+    'the CDS row relabeled');
+});
+
+// U3a review H2: Python places a merged row at the first rule of its caption,
+// so a merge into a row whose rule comes later moves that row.
+test('a merge into a row whose rule comes later asks Python; a merge into an "other" row does not', () => {
+  const THREE = [[['A', 'CDS'], ['G', 'CDS'], ['B', 'CDS'], ['D', 'CDS']]];
+  const rules = [tagRule('A', 'alpha'), tagRule('G', 'gamma', '#00ff00'), tagRule('B', 'beta')];
+  const shown = showing(['gamma', 'beta', 'other proteins']);
+  assert.equal(showable(THREE, rules, [tagRule('A', 'beta'), rules[1], rules[2]], { shows: shown }), false,
+    'alpha merged into the later row beta');
+  assert.equal(showable(THREE, rules, [rules[0], rules[1], tagRule('B', 'alpha')], { shows: showing(['alpha', 'gamma', 'other proteins']) }),
+    true, 'beta merged into the earlier row alpha');
+  assert.equal(showable(THREE, rules, [rules[1], rules[2]], { shows: shown }), true,
+    'alpha merged into other proteins (its rule removed)');
+});
+
+// U3a review M1, L1: a History restore shows the bytes History kept. A
+// relabel shows only where the new row took the old row's place; the rows a
+// restore splits are exact when the restored Result shows Python's rows.
+test('a History restore accepts a relabel in place and an exact split', () => {
+  const alpha = [tagRule('A|B', 'alpha')];
+  const beta = [tagRule('A|B', 'beta')];
+  assert.equal(showable(ONE, alpha, beta, { shows: showing(['beta', 'repeat_region']), placed: () => false, restored: () => true }),
+    false, 'a relabel whose new row the restored Result appended');
+  const two = [tagRule('A', 'alpha'), tagRule('B', 'beta')];
+  const merged = [tagRule('A', 'alpha'), tagRule('B', 'alpha')];
+  assert.equal(showable(ONE, merged, two, { shows: showing(['alpha', 'beta', 'repeat_region']) }), false,
+    'a split asks Python');
+  assert.equal(showable(ONE, merged, two, { shows: showing(['alpha', 'beta', 'repeat_region']), restored: () => true }), true,
+    'Undo of a merge: the restored Result shows Python\'s rows of both keys');
+  assert.equal(showable(ONE, merged, two, { shows: showing(['alpha', 'beta', 'repeat_region']), restored: (key) => key !== 'beta' }),
+    false, 'a split whose new row a commit showed before Python drew it');
+  assert.equal(showable(ONE, merged, two, { shows: showing(['alpha', 'repeat_region']), restored: showing(['alpha', 'repeat_region']) }),
+    false, 'a split whose new row the restored Result lacks');
 });
 
 test('a split, a merge into a new row, a swap, an unknown match or a generated caption asks Python', () => {
-  const alpha = rowKeysOf(ONE, [tagRule('A|B', 'alpha')]);
+  const alpha = [tagRule('A|B', 'alpha')];
   const all = showing(['alpha', 'beta', 'gamma', 'other proteins', 'repeat_region']);
-  assert.equal(legendRowsShowable(alpha, rowKeysOf(ONE, [tagRule('A', 'alpha')]), { displayed: 0, shows: all }), false,
-    'B leaves the row for other proteins');
-  assert.equal(legendRowsShowable(rowKeysOf(ONE, []), rowKeysOf(ONE, [tagRule('A', 'gamma')]), { displayed: 0, shows: all }), false,
-    'a row built from part of the CDS row');
-  const two = rowKeysOf(ONE, [tagRule('A', 'alpha'), tagRule('B', 'beta')]);
-  assert.equal(legendRowsShowable(two, rowKeysOf(ONE, [tagRule('A', 'gamma'), tagRule('B', 'gamma')]),
-    { displayed: 0, shows: showing(['gamma', 'repeat_region']) }), false, 'a merge into a new row');
-  assert.equal(legendRowsShowable(two, rowKeysOf(ONE, [tagRule('A', 'beta'), tagRule('B', 'alpha')]), { displayed: 0, shows: all }), false,
-    'a swap of two rows');
-  assert.deepEqual(rowKeysOf(ONE, [tagRule('A|B', 'alpha')], { prepared: false }), [null], 'a match not known yet');
-  assert.equal(legendRowsShowable([null], alpha, { displayed: 0, shows: all }), false);
+  assert.equal(showable(ONE, alpha, [tagRule('A', 'alpha')], { shows: all }), false, 'B leaves the row for other proteins');
+  assert.equal(showable(ONE, [], [tagRule('A', 'gamma')], { shows: all }), false, 'a row built from part of the CDS row');
+  const two = [tagRule('A', 'alpha'), tagRule('B', 'beta')];
+  assert.equal(showable(ONE, two, [tagRule('A', 'gamma'), tagRule('B', 'gamma')], { shows: showing(['gamma', 'repeat_region']) }),
+    false, 'a merge into a new row');
+  assert.equal(showable(ONE, two, [tagRule('A', 'beta'), tagRule('B', 'alpha')], { shows: all }), false, 'a swap of two rows');
+  assert.deepEqual(rowKeysOf(ONE, alpha, { prepared: false }), [null], 'a match not known yet');
+  assert.equal(legendRowsShowable([null], rowKeysOf(ONE, alpha), { displayed: 0, firstRule: () => -1, shows: all }), false);
   assert.deepEqual(rowKeysOf(ONE, [tagRule('A', 'repeat_region')]), [null], 'Python suffixes a caption of a generated row');
 });
 
 test('another batch Result changes no row live; its colors may change', () => {
   const BATCH = [...ONE, [['C', 'CDS'], ['D', 'CDS']]];
-  const alpha = rowKeysOf(BATCH, [tagRule('A|B|C|D', 'alpha')]);
   const shows = showing(['beta', 'repeat_region']);
-  assert.equal(legendRowsShowable(alpha, rowKeysOf(BATCH, [tagRule('A|B|C|D', 'beta')]), { displayed: 0, shows }), false,
+  assert.equal(showable(BATCH, [tagRule('A|B|C|D', 'alpha')], [tagRule('A|B|C|D', 'beta')], { shows }), false,
     'Result 2 draws the relabeled row');
-  assert.equal(legendRowsShowable(alpha, rowKeysOf(BATCH, [tagRule('A|B|C|D', 'alpha', '#00ff00')]),
-    { displayed: 0, shows: showing(['alpha', 'repeat_region']) }), true, 'a recolor');
-  const own = rowKeysOf(BATCH, [tagRule('A|B', 'alpha')]);
-  assert.equal(legendRowsShowable(own, rowKeysOf(BATCH, [tagRule('A|B', 'beta')]), { displayed: 0, shows }), true,
+  assert.equal(showable(BATCH, [tagRule('A|B|C|D', 'alpha')], [tagRule('A|B|C|D', 'alpha', '#00ff00')],
+    { shows: showing(['alpha', 'repeat_region']) }), true, 'a recolor');
+  assert.equal(showable(BATCH, [tagRule('A|B', 'alpha')], [tagRule('A|B', 'beta')], { shows }), true,
     'a row only the displayed Result draws');
 });
