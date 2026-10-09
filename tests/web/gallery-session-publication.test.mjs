@@ -422,8 +422,9 @@ assert.rejects(
 // Circular batch request with one output per record (OV-267), the resolved
 // default colors and the editor tables the CLI stores beside the files it read
 // (OV-266), and a read-only `-b` comparison, which the rebuild inherits as
-// Generate's Inherit does (D-04, OV-268). Its Web Load and next Generate draw
-// the CLI figure.
+// Generate's Inherit does (D-04, OV-268). The published slice holds the CLI's
+// visibility and label rows, which Web Load reads from it (OV-299). Circular
+// uses the output format of the Gallery commands (interactive_svg).
 {
   const { cases } = JSON.parse(await readFile('tests/fixtures/cli_session_cross_surface/cases.json', 'utf8'));
   const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-gallery-cli-'));
@@ -431,7 +432,8 @@ assert.rejects(
     for (const id of ['circular_records_tables', 'linear_tables', 'linear_blast']) {
       const { mode, args } = cases.find((entry) => entry.id === id);
       const file = path.join(directory, `${id}.gbdraw-session.json`);
-      execFileSync('python', ['-m', 'gbdraw.cli', mode, ...args, '-o', path.join(directory, id), '-f', 'svg',
+      execFileSync('python', ['-m', 'gbdraw.cli', mode, ...args, '-o', path.join(directory, id),
+        '-f', mode === 'circular' ? 'interactive_svg' : 'svg',
         '--session_output', file], { env: { ...process.env, PYTHONPATH: process.cwd() }, stdio: 'pipe', timeout: 1_800_000 });
       const source = JSON.parse(await readFile(file, 'utf8'));
       const { session, equivalence } = await prepareGallerySessionForPublication(source);
