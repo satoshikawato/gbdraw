@@ -50,7 +50,7 @@ export const AUTO_FEATURE_UNDERLAY_STROKE = Object.freeze({ color: 'none', width
 /** @param {Element | null | undefined} element */
 export const isAutoFeatureUnderlay = (element) => element?.getAttribute?.(AUTO_FEATURE_UNDERLAY_ATTRIBUTE) === 'true';
 
-export const isFeatureFillTarget = (element) => (
+const isFeatureFillTarget = (element) => (
   getFeaturePart(element) === FEATURE_PART_BLOCK
   && !String(element?.getAttribute?.('id') || element?.id || '').endsWith('__outline')
 );

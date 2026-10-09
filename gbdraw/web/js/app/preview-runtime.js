@@ -1027,6 +1027,9 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     bindingOptions
   );
 
+  // The readiness of the Result being bound, while its binding runs.
+  const pendingReadiness = () => activeExpectation?.promise ?? null;
+
   // R1: the one commit for an editor's edit of the displayed Result's SVG.
   // Serializes the mounted root into its Result at once, so no edit waits for
   // a Result switch; unchanged content is not written.
@@ -1094,6 +1097,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     invalidatePreviewIndexes,
     isActiveResultReady,
     mountResultSvg,
+    pendingReadiness,
     presentSelectedResult,
     registerReadinessExpectation,
     restorePreviousSelectedResult,

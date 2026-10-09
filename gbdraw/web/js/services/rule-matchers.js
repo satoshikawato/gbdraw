@@ -143,8 +143,6 @@ export const ruleMatcher = (rules) => {
   return {
     // Every rule of the feature's type has a result (a match, a non-match, or declined).
     ready: (features) => features.every(ready),
-    // Some rule of the list is declined for the feature: it keeps what Generate drew.
-    declined: (feature) => [...(resultsOf(feature)?.declined || [])].some((key) => firstByKey.has(key)),
     // The rule that colors the feature, or null.
     first,
     // `first`, for a reader that must not take an unknown match for a miss:

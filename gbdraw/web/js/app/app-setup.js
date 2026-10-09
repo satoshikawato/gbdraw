@@ -1475,16 +1475,20 @@ export const createAppSetup = () => {
   // operation is in progress (the Result stays as it is, tracks and features
   // alike). The style owner paints the tracks; feature and Legend row fills
   // show through the port, compiled with Generate's precedence, unless the
-  // caller shows them in its own compile (`show: false`).
-  const projectPaletteAndRules = ({ recolor = {}, prepareRules = true, show = true } = {}) => {
+  // caller shows them in its own compile (`show: false`). The Save that shows
+  // what a display declined because of it (`saving`) does not count itself.
+  /** @param {boolean} saving */
+  const sessionBlocks = (saving) => Boolean(sessionOperationAvailability()) && !(saving && sessionSavePending.value);
+  const projectPaletteAndRules = ({ recolor = {}, prepareRules = true, show = true, saving = false } = {}) => {
+    const blocked = () => sessionBlocks(saving);
     const project = () => {
-      if (sessionOperationAvailability()) return false;
+      if (blocked()) return false;
       svgActions.applyPaletteToSvg(recolor);
       if (show) showEditorIntent({ domains: FILL_DOMAINS });
       return true;
     };
     return prepareRules
-      ? Promise.resolve(rulePreparation.prepare()).then((prepared) => (prepared ? project() : false))
+      ? Promise.resolve(rulePreparation.prepare(undefined, { blocked })).then((prepared) => (prepared ? project() : false))
       : project();
   };
   paletteRulePorts.projectPaletteAndRules = projectPaletteAndRules;
@@ -3206,7 +3210,7 @@ export const createAppSetup = () => {
   /**
    * @param {{
    *   colors?: boolean, prepareRules?: boolean, visibility?: boolean, rerender?: boolean,
-   *   reflow?: boolean, labels?: boolean, domains?: readonly string[], show?: boolean,
+   *   reflow?: boolean, labels?: boolean, domains?: readonly string[], show?: boolean, saving?: boolean,
    *   legend?: Parameters<typeof reconcileLegendEntries>[0] | null
    * }} [options]
    * @returns {Promise<string[] | false>}
@@ -3220,9 +3224,10 @@ export const createAppSetup = () => {
     legend = null,
     labels = false,
     domains = [],
-    show = true
+    show = true,
+    saving = false
   } = {}) => {
-    if (colors && !await projectPaletteAndRules({ prepareRules, show: false })) return false;
+    if (colors && !await projectPaletteAndRules({ prepareRules, show: false, saving })) return false;
     // The visibility projection follows with the labels, so one edit queues
     // one label request.
     if (visibility) await projectFeatureVisibility({ rerender, reflow, labels, show: false });
@@ -3499,7 +3504,10 @@ export const createAppSetup = () => {
       // The palette, rules, and visibility prepare their matches when their
       // intent changed (`colors`, `visibility`); then one compile of the
       // domains the Result shows.
-      const prepared = await projectMountedEditorIntent({ colors, visibility, show: false });
+      let prepared = await projectMountedEditorIntent({ colors, visibility, show: false });
+      // Declined with nothing blocking (the rules changed meanwhile): prepared
+      // once more here, so the display still compiles once (R14-3).
+      if (prepared === false && !displayBlocked()) prepared = await projectMountedEditorIntent({ colors, visibility, show: false });
       declined = prepared === false;
       domains = [...domains, ...(prepared || []), ...(strokes ? STROKE_DOMAINS : [])];
       operations = compileDisplayedResultOperations(drawing, context.resultIndex, { replayDefaultLegendOrder, domains });
@@ -3534,21 +3542,25 @@ export const createAppSetup = () => {
       }
     }
     resultPaintRecord.shown(identity, current, previous, { declined, failed });
-    if (declined && !failed) await showDeclinedPaint(identity);
+    if (declined && !failed && displayBlocked()) await showDeclinedPaint(identity);
   };
   // A display that a Session operation or the rule preparation declined shows
   // the fills and visibility once the blocker clears, while its Result stays
-  // displayed, so a Save or the next display reads the Result with them. A
+  // displayed, so the next display reads the Result with them. A Save shows
+  // them before it writes the Result (`saving`: the Save does not block). A
   // projection declined again without a blocker waits for the next display.
-  const displayBlocked = () => Boolean(sessionOperationAvailability()) || ruleMatchingPending.value;
+  const displayBlocked = (saving = false) => sessionBlocks(saving) || ruleMatchingPending.value;
   /** @type {(() => void) | null} */
   let stopDeclinedPaintWait = null;
-  /** @param {string} identity */
-  const showDeclinedPaint = async (identity) => {
+  /**
+   * @param {string} identity
+   * @param {{ saving?: boolean }} [options]
+   */
+  const showDeclinedPaint = async (identity, { saving = false } = {}) => {
     stopDeclinedPaintWait?.();
     stopDeclinedPaintWait = null;
-    if (displayBlocked()) {
-      stopDeclinedPaintWait = watch(displayBlocked, (blocked) => { if (!blocked) void showDeclinedPaint(identity); });
+    if (displayBlocked(saving)) {
+      stopDeclinedPaintWait = watch(() => displayBlocked(), (blocked) => { if (!blocked) void showDeclinedPaint(identity); });
       return;
     }
     const lacking = resultPaintRecord.lacking(identity);
@@ -3557,7 +3569,8 @@ export const createAppSetup = () => {
     try {
       const shown = await projectMountedEditorIntent({
         colors: !sameColors(lacking.colors, current.colors),
-        visibility: lacking.visibility !== current.visibility
+        visibility: lacking.visibility !== current.visibility,
+        saving
       });
       if (shown === false) {
         if (displayBlocked()) void showDeclinedPaint(identity);
@@ -4916,6 +4929,11 @@ export const createAppSetup = () => {
       await nextTick();
       await afterPaint();
       recordSessionLifecycleEvent('session-save-paint-opportunity-completed');
+      // Save writes the displayed Result as Generate draws it: it waits for
+      // the Result being displayed, then shows what its display declined.
+      await previewRuntime.pendingReadiness()?.catch(() => {});
+      const displayed = previewRuntime.getActiveRuntime()?.resultIdentity;
+      if (displayed) await showDeclinedPaint(displayed, { saving: true });
       recordSessionLifecycleEvent('session-save-catalog-preparation-start');
       /** @type {Awaited<ReturnType<typeof prepareLinearRecordCatalog>>['catalog']} */
       let catalog = null;

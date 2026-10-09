@@ -5843,9 +5843,10 @@ export const exportSession = (titleOverride = null, options = {}) => {
     });
     const modes = { circular: sliceOf('circular'), linear: sliceOf('linear') };
     SLICE_MODES.forEach((mode) => validateModeSliceFields(modes[mode]));
-    const { artifact, otherArtifact } = chooseSessionArtifacts(
+    const readArtifacts = () => chooseSessionArtifacts(
       /** @type {{ readOtherModeArtifact?: () => Readonly<ArtifactSlot> | null }} */ (options).readOtherModeArtifact?.() ?? null
     );
+    let { artifact, otherArtifact } = readArtifacts();
     if (!artifact.committedCanonicalSession
       && hasBiologicalSessionInputs({ ...state.files, linearSeqs: state.linearSeqs })) {
       assertActiveModeInputs();
@@ -5873,6 +5874,9 @@ export const exportSession = (titleOverride = null, options = {}) => {
     };
     const prepared = await options.beforeExport?.({ draftRequest: !artifact.committedCanonicalSession });
     if (!isCurrent()) return { status: 'canceled' };
+    // `beforeExport` may show edits on the displayed Result, which commits
+    // its content: the Results are read as they are now.
+    ({ artifact, otherArtifact } = readArtifacts());
     const result = await exportSessionDocument(title, {
       ...options, ...prepared, drawing, modes, savedUi, isCurrent, artifact, otherArtifact
     });

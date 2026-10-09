@@ -142,6 +142,8 @@ export const runWhenPrepared = (state, preparations, commit) => {
  * @typedef {object} RulePreparation
  * @property {(rules?: Record<string, any>[], options?: Record<string, any>) => boolean | Promise<boolean>} prepare
  *   True at once when the matches of `rules` are prepared, else a promise of whether they are now.
+ *   `options.blocked` says whether a Session operation discards the matches (default: any Session operation);
+ *   the other options are the evaluation's.
  * @property {(rules?: Record<string, any>[]) => void} retain
  *   Keeps the rules a History restore replaces, so the next preparation matches them with the restored ones.
  * @property {(options?: { strict?: boolean }) => boolean | Promise<boolean | { error: any }>} prepareDrawn
@@ -227,7 +229,9 @@ export const createRulePreparation = ({
   // read from known matches (`retain`).
   let retained = [];
   const retain = (rules = []) => { retained = rules; };
-  const prepare = (rules = state.activeDrawing().manualSpecificRules, options = {}) => {
+  const prepare = (rules = state.activeDrawing().manualSpecificRules, {
+    blocked = () => Boolean(state.sessionOperationAvailability?.()), ...options
+  } = /** @type {Record<string, any>} */ ({})) => {
     const targets = features();
     const draft = [...new Map([...rules, ...retained].map((rule) => [ruleKey(rule), { feat: rule.feat, qual: rule.qual, val: rule.val }])).values()];
     // Empty catalogs still require syntax validation at input boundaries.
@@ -240,7 +244,7 @@ export const createRulePreparation = ({
     pending.value = ++pendingCount > 0;
     return evaluate({ features: targets.map((feature) => ruleFeaturePayload(feature)), rules: sent, kind: 'color' }, options)
       .then((result) => {
-        if (!isCurrent(before) || state.sessionOperationAvailability?.()) return false;
+        if (!isCurrent(before) || blocked()) return false;
         const keys = sent.map(ruleKey);
         keys.forEach((key) => validated.add(key));
         const declines = liveMatchDeclines(sent);

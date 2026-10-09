@@ -868,27 +868,63 @@ test('a batch Result kept without the paint edits shows them after an Undo of Ge
 // U2BFIX2 review M3: a batch Result whose display a Save started meanwhile
 // declines shows the palette and visibility edits made on another Result once
 // Save ends, while it stays displayed, so a later Save keeps them.
+// The Save is held (its own `beforeExport`) until the Result it raced is mounted.
+const displayWhileSaveHeld = async (page, resultIndex) => {
+  await page.evaluate(async (index) => {
+    const service = await import('/gbdraw/web/js/services/config.js');
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    window.releaseSave = release;
+    window.__GBDRAW_APP__.selectResult(index);
+    window.pendingSave = service.exportSession('declined-display', { beforeExport: () => gate });
+  }, resultIndex);
+  await expect.poll(() => page.evaluate(async (index) => {
+    const { isCommittedSvgResultMounted } = await import('/gbdraw/web/js/services/svg-result-ingestion.js');
+    const app = window.__GBDRAW_APP__;
+    return app.sessionSavePending && app.selectedResultIndex === index && isCommittedSvgResultMounted(app.results[index]);
+  }, resultIndex)).toBe(true);
+  await settleLive(page);
+  await evaluateWithRetainedPromise(page, async () => { window.releaseSave(); await window.pendingSave; });
+  await settleLive(page);
+};
 test('a batch Result displayed while Save runs shows the edits once Save ends (circular, two-Result batch)', async ({ page }) => {
   test.setTimeout(240_000);
   await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
   await legendRowColor(page, 'tRNA', '#7b2cbf');
   await addVisibilityRule(page, BATCH_0004_OFF);
-  await page.evaluate(async () => {
-    const service = await import('/gbdraw/web/js/services/config.js');
-    let release;
-    const gate = new Promise((resolve) => { release = resolve; });
-    window.releaseSave = release;
-    window.__GBDRAW_APP__.selectResult(1);
-    window.pendingSave = service.exportSession('declined-display', { beforeExport: () => gate });
-  });
-  await expect.poll(() => page.evaluate(async () => {
-    const { isCommittedSvgResultMounted } = await import('/gbdraw/web/js/services/svg-result-ingestion.js');
-    const app = window.__GBDRAW_APP__;
-    return app.sessionSavePending && app.selectedResultIndex === 1 && isCommittedSvgResultMounted(app.results[1]);
-  })).toBe(true);
-  await settleLive(page);
-  await evaluateWithRetainedPromise(page, async () => { window.releaseSave(); await window.pendingSave; });
+  await displayWhileSaveHeld(page, 1);
   await expectLiveEqualsGenerate(page, { label: 'a batch Result displayed while Save ran' });
+});
+
+// U2BFIX3 review M-A: Save Session started while a batch Result is being
+// displayed writes that Result with the edits, so Load shows it as Generate
+// draws it. The color rule's rerender draws both Results again and leaves
+// the rule matches to prepare: the Legend row color after it is the edit the
+// displayed Result lacks, and the Save prepares the matches it needs. (The
+// case above holds its Save with its own `beforeExport`, so it never reaches
+// the app's Save.)
+const saveWhileDisplaying = (page, resultIndex) => evaluateWithRetainedPromise(page, async (index) => {
+  const app = window.__GBDRAW_APP__;
+  const saved = app.saveSessionWithTitle();
+  app.selectResult(index);
+  await saved;
+}, resultIndex);
+test('a batch Result displayed while Save runs is saved with the edits (circular, two-Result batch)', async ({ page, browser }, testInfo) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+  await addVisibilityRule(page, BATCH_0004_OFF);
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '_0002$', color: '#2266aa', cap: 'CDS' });
+  await legendRowColor(page, 'tRNA', '#7b2cbf');
+  const [file] = await Promise.all([page.waitForEvent('download'), saveWhileDisplaying(page, 1)]);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex), 'the Save raced the display').toBe(1);
+  const saved = testInfo.outputPath('declined-display.gbdraw-session.json');
+  await file.saveAs(saved);
+  await settleLive(page);
+  await expectLiveEqualsGenerate(page, { label: 'a batch Result displayed while Save ran' });
+  const loaded = await load(browser, saved);
+  expect(await loaded.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex), 'Load shows the saved Result').toBe(1);
+  await expectLiveEqualsGenerate(loaded, { label: 'a batch Result saved while it was displayed, after Load' });
+  await loaded.context().close();
 });
 
 // U2BFIX2 review L1: a label edit removed while another Result was displayed
@@ -1123,6 +1159,28 @@ const WORK_ALLOWLIST = [
   {
     kind: 'Result display, nothing changed', stages: ['legend'], compiles: 1, requests: [],
     before: (page) => showResult(page, 0), run: (page) => showResult(page, 1)
+  },
+  {
+    // U2BFIX3 review L-A: the display a Save declined shows the Legend; the
+    // fills follow in one more compile once the Save ends. The color rule
+    // commit's rerender left the rule matches to prepare: the display's
+    // preparation is discarded while the Save runs, so the repaint prepares
+    // them again.
+    kind: 'Result display declined by Save, shown when Save ends', stages: ['legend', 'fills', 'rules', 'legendFills'],
+    compiles: 2, requests: ['evaluateRules', 'evaluateRules'],
+    before: async (page) => { await showResult(page, 0); await legendRowColor(page, 'tRNA', '#2a9d8f'); },
+    run: (page) => displayWhileSaveHeld(page, 1)
+  },
+  {
+    // U2BFIX3 review M-A: Save shows the fills the declined display left
+    // behind before it writes the Result (the matches are prepared).
+    kind: 'Save while the displayed Result lacks paint', stages: ['legend', 'fills', 'rules', 'legendFills'],
+    compiles: 2, requests: [],
+    before: async (page) => { await showResult(page, 0); await legendRowColor(page, 'tRNA', '#e9c46a'); },
+    run: async (page) => {
+      await Promise.all([page.waitForEvent('download'), saveWhileDisplaying(page, 1)]);
+      await settleLive(page);
+    }
   },
   {
     // OV-200 (U2BFIX2 review M1): only Python decides whether the label text
