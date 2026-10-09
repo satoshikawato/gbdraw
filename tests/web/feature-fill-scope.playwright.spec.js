@@ -417,14 +417,19 @@ test('a popup scope dialog opens ready and keeps focus while its choice applies'
     await scope.getByRole('button').filter({ hasText: 'Apply to all "tRNA"' }).last().click();
     await expect(scope.getByRole('status')).toHaveText('Applying an edit…');
     const whileBusy = await focusIn();
+    // W1: no control is enabled, so Tab and Shift+Tab keep focus on the panel.
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Shift+Tab');
+    const afterTab = await scope.evaluate((element) => document.activeElement === element);
     await page.keyboard.press('Escape');
     const afterEscape = await page.evaluate(() => ({
       selected: window.__GBDRAW_APP__.selectedFeatureIds.size,
       dialogOpen: window.__GBDRAW_APP__.featureStyleScopeDialog.show
     }));
-    expect({ atOpen, whileBusy, afterEscape }).toEqual({
+    expect({ atOpen, whileBusy, afterTab, afterEscape }).toEqual({
       atOpen: { focus: { inDialog: true, firstChoice: true }, status: 0 },
       whileBusy: { inDialog: true, firstChoice: false },
+      afterTab: true,
       afterEscape: { selected, dialogOpen: true }
     });
     await expect(scope).toHaveCount(0, { timeout: 60_000 });

@@ -5052,7 +5052,14 @@ export const createAppSetup = () => {
   const trapDialogFocus = (event) => {
     const dialog = event.currentTarget?.querySelector('[role="dialog"]');
     const controls = Array.from(dialog?.querySelectorAll('button:not(:disabled)') || []);
-    if (!controls.length) return;
+    if (!controls.length) {
+      // A busy choice disables every button: Tab stays on the dialog panel.
+      if (dialog) {
+        event.preventDefault();
+        dialog.focus({ preventScroll: true });
+      }
+      return;
+    }
     const first = controls[0];
     const last = controls.at(-1);
     if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
