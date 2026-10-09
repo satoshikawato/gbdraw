@@ -620,7 +620,7 @@ const IDENTITY_SOURCES = new Map([
   // comparison in straight-line code.
   ['gbdraw/web/js/app/legend/layout-actions.js', [
     "export const unpainted = (entries) => entries.filter((entry) => entry.color === 'none');",
-    "export const typed = (entries) => entries.filter((entry) => typeof entry.color === 'string');",
+    'export const typed = (entries, kind) => entries.filter((entry) => typeof entry.color === kind);',
     'export const sameRow = (entries, key, color) => entries.find((entry) => entry.originalCaption === key && entry.color === color);',
     'export const changed = (entries, previous) => {',
     '  let count = 0;',
@@ -714,4 +714,86 @@ test('identity from display scopes a shown local to the function that binds it a
   const outside = { identityFromDisplay: { ...WEB_OWNER_GRAPH_DEFAULTS.identityFromDisplay, modules: ['services/'] } };
   assert.deepEqual(detect(outside).observedSites, []);
   assert.ok(Object.isFrozen(WEB_OWNER_GRAPH_DEFAULTS.identityFromDisplay));
+});
+
+// Review fixes of v1 before a baseline references it: optional chaining,
+// the reach of a shown local, a comparison that qualified itself, shown
+// locals with any name, write-if-different, ternaries, and one-line bodies.
+const IDENTITY_REVIEW_SOURCE = [
+  // H1: `?.` stays inside the operand on both sides of a comparison.
+  'export const hasShownCaption = (texts, finalCaption) => texts.find((text) => text.textContent?.trim() === finalCaption);',
+  'export const optionalIdentity = (entries, c, k) => entries.find((e) => e.color === c && e?.originalCaption === k);',
+  // M1: a shown local reaches the end of the function that binds it, not a
+  // sibling callback, and a nested parameter of the same name shadows it.
+  'export const siblings = (groups, captions, intents) => {',
+  '  let count = 0;',
+  '  groups.forEach((group) => {',
+  "    const caption = group.getAttribute('data-legend-key');",
+  '    if (intents.some((intent) => intent.caption === caption)) count += 1;',
+  '  });',
+  '  captions.forEach((caption) => {',
+  '    if (intents.some((intent) => intent.caption === caption)) count += 1;',
+  '  });',
+  '  return count;',
+  '};',
+  'export const outerName = (groups, caption, intents) => {',
+  "  groups.forEach((group) => { const caption = group.getAttribute('data-legend-key'); show(caption); });",
+  '  return intents.find((intent) => intent.caption === caption);',
+  '};',
+  'export const shadowed = (group, intents, captions, seen) => {',
+  "  const caption = group.getAttribute('data-legend-key');",
+  '  const hit = intents.find((intent) => intent.caption === caption);',
+  '  return [hit, captions.filter((caption) => seen.has(caption))];',
+  '};',
+  // M2: an identity compared with a shown value is the join itself.
+  "export const ownIdentity = (entries, group) => entries.find((entry) => entry && entry.originalCaption === group.getAttribute('data-legend-key'));",
+  // M3: a local bound from a shown read, whatever its name, as the operand
+  // value; not as an argument of another call.
+  'export const overrideOfKey = (overrides, group) => {',
+  "  const legendKey = group.getAttribute('data-legend-key');",
+  '  return overrides[legendKey];',
+  '};',
+  "const keyOf = (group) => String(group.getAttribute('data-legend-key') || '').trim();",
+  'export const rankOf = (rank, group) => rank.get(keyOf(group));',
+  'export const sameFeatures = (rows, group, featureRow) => {',
+  "  const key = group.getAttribute('data-legend-key');",
+  '  return rows.some((row) => drawsFeatures(row, key) === featureRow);',
+  '};',
+  // L2: write-if-different is change detection.
+  'export const syncStroke = (paths, color) => {',
+  '  for (const path of paths) {',
+  "    if (path.getAttribute('stroke') !== String(color)) path.setAttribute('stroke', String(color));",
+  '  }',
+  '};',
+  'export const syncText = (groups, entries) => groups.forEach((group, index) => {',
+  "  const text = group.querySelector('text');",
+  "  if (text && String(text.textContent || '') !== entries[index].caption) { text.textContent = entries[index].caption; }",
+  '});',
+  // L3: an identity across `?`/`:` does not qualify the other branch.
+  'export const ternary = (entries, k, c) => entries.find((e) => (k && e.id === k ? true : e.color === c));',
+  // L4: a shown local in a one-line body.
+  "export const oneLine = (es, g) => { const caption = g.getAttribute('data-legend-key'); return es.find((e) => e.caption === caption); };",
+  ''
+].join('\n');
+
+test('identity from display keeps optional chains, scopes shown locals, and exempts write-if-different', () => {
+  const result = WEB_OWNER_GRAPH_DETECTORS[IDENTITY_FROM_DISPLAY].detect(new Map([
+    ['gbdraw/web/js/app/legend/sort-actions.js', IDENTITY_REVIEW_SOURCE]
+  ]));
+  assert.deepEqual(result.observedSites.map((record) => `${record.function} ${record.class} ${record.form}:${record.field}`), [
+    'hasShownCaption shown-join search:textContent',
+    'optionalIdentity id-qualified search:color',
+    'siblings shown-join search:caption',
+    'siblings caption-key search:caption',
+    'outerName caption-key search:caption',
+    'shadowed shown-join search:caption',
+    'shadowed caption-key key-has:caption',
+    'ownIdentity shown-join search:@data-legend-key',
+    'overrideOfKey shown-join key-index:legendKey',
+    'rankOf shown-join key-get:keyOf',
+    'syncStroke write-if-different loop-join:@stroke',
+    'syncText write-if-different loop-join:textContent',
+    'ternary paint-join search:color',
+    'oneLine shown-join search:caption'
+  ]);
 });

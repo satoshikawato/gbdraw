@@ -156,7 +156,9 @@ test('trigger sites handed to owners as producer ports are counted by v2 and not
 // to Python's keys: OV-243 (`readMountedLegend` matches a mounted row to an
 // intent entry by its shown caption and color) and OV-288
 // (`legendRowFeatureIds` reads stroke membership from the row color) are
-// subjects. The detector is report-only until a baseline references it.
+// subjects. Write-if-different (`applyStrokeToFeaturesByCaption`) is change
+// detection, not a subject. The detector is report-only until a baseline
+// references it.
 const IDENTITY_FROM_DISPLAY = 'owner-graph.identity-from-display.v1';
 const IDENTITY_FROM_DISPLAY_AT = '2cc12a2e';
 
@@ -164,20 +166,20 @@ test(`${IDENTITY_FROM_DISPLAY} characterization at ${IDENTITY_FROM_DISPLAY_AT}`,
   const result = evaluateWebOwnerGraphAt(IDENTITY_FROM_DISPLAY_AT).results[IDENTITY_FROM_DISPLAY];
   assert.deepEqual(result.countsBySubject, {
     'app/candidate-render.js|matchingRuleDerivedFill|paint-join': 1,
-    'app/legend/entry-actions.js|addLegendEntry|shown-join': 1,
+    'app/legend/entry-actions.js|addLegendEntry|shown-join': 2,
     'app/legend/entry-actions.js|findLegendEntryGroup|shown-join': 1,
     'app/legend/entry-actions.js|prepareFileLegendEntries|paint-join': 2,
-    'app/legend/entry-actions.js|prepareFileLegendEntries|shown-join': 4,
+    'app/legend/entry-actions.js|prepareFileLegendEntries|shown-join': 1,
     'app/legend/entry-actions.js|readMountedLegend|shown-join': 3,
-    'app/legend/entry-actions.js|reconcileLegendEntries|shown-join': 7,
+    'app/legend/entry-actions.js|reconcileLegendEntries|shown-join': 1,
     'app/legend/entry-actions.js|rendererRowStroke|shown-join': 1,
-    'app/legend/entry-actions.js|restoredRowStroke|shown-join': 1,
+    'app/legend/entry-actions.js|restoredRowStroke|shown-join': 2,
     'app/legend/entry-actions.js|updateLegendEntryColorByCaption|shown-join': 1,
     'app/legend/layout-actions.js|placeEntries|shown-join': 1,
-    'app/legend/stroke-actions.js|applyStrokeToFeaturesByCaption|shown-join': 2,
     'app/legend/stroke-actions.js|getLegendSwatches|shown-join': 1,
     'app/rule-matching.js|rebindRuleColorOverrides|paint-join': 1,
-    'app/svg-styles.js|applyPaletteToSvg|shown-join': 1,
+    'app/svg-styles.js|applyPaletteToSvg|shown-join': 2,
+    'services/legend-svg.js|followsOrder|shown-join': 1,
     'services/legend-svg.js|legendRowFeatureIds|paint-join': 1,
     'services/legend-svg.js|mountedLegendRowFeatureIds|shown-join': 1,
     'services/specific-color-rules.js|createRuleLegendCaptions|paint-join': 1,

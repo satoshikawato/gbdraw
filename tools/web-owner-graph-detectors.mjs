@@ -941,17 +941,32 @@ const detectLayerImportDirectionV1 = (sources, registryInput) => {
 //   change detection, `paint-compare`);
 // - `key-*`: a display value as a Map/Set key, computed member, `[key, value]`
 //   pair of a Map, key function, or `[data-legend-key="${...}"]` selector.
-// A literal or `typeof` operand excludes a comparison, and one conjoined (&&)
-// with an identity comparison is a tie-break (`id-qualified`). Each site gets a
-// class: `shown-join` (an operand reads what a Result shows, or a local the
-// same function binds from it), `paint-join`, or else `caption-key`.
+// A literal or `typeof` operand excludes a comparison. One conjoined (&&) with
+// another comparison against an identity is a tie-break (`id-qualified`), and
+// `if (a !== b)` whose consequent writes `a` or `b` is change detection
+// (`write-if-different`). Each other site gets a class: `shown-join` (an
+// operand reads what a Result shows, or is a local bound from such a read in
+// the function that holds the binding), `paint-join`, or else `caption-key`.
 // `shown-join` and `paint-join` are subjects; the rest is a report-only
 // inventory per module.
 const IDENTITY_FROM_DISPLAY_SUBJECT_CLASSES = new Set(['paint-join', 'shown-join']);
 const IDENTITY_SEARCH_CALLEE = /(?:^|\.)(?:find|findIndex|findLast|findLastIndex|filter|some|every)$/;
 const IDENTITY_ITERATE_CALLEE = /(?:^|\.)(?:forEach|map|flatMap|reduce)$/;
 const DISPLAY_LITERAL_OPERAND = /^\s*!*\s*(?:'[^']*'|"[^"]*"|`[^`$]*`|-?\d[\d._]*|null|undefined|true|false|NaN|\[\s*\]|\{\s*\})\s*$/;
-const OPERAND_STOP_BEFORE = /(?:&&|\|\||\?\?|[,;:{}]|(?<![=!<>])=(?!=)|=>|\breturn|\bcase|\?(?!\.))$/;
+const OPERAND_STOP_BEFORE = /(?:&&|\|\||\?\?|[,;:{}]|(?<![=!<>])=(?!=)|=>|\breturn|\bcase|\?)$/;
+const isOptionalChain = (code, index) => code[index] === '?' && code[index + 1] === '.';
+// The value an operand carries through `String(x || '')`, `.trim()`, and case
+// conversion.
+const VALUE_METHOD_SUFFIX = /(?:\s*\??\.\s*(?:trim|toLowerCase|toUpperCase|toString)\s*\(\s*\))+$/;
+const STRING_WRAPPER = /^String\(\s*([\s\S]*?)\s*(?:\|\|\s*(?:''|""|``))?\s*\)$/;
+const carriedValue = (operand) => {
+  let value = operand.trim();
+  for (let previous = ''; previous !== value;) {
+    previous = value;
+    value = value.replace(VALUE_METHOD_SUFFIX, '').replace(STRING_WRAPPER, '$1').trim();
+  }
+  return value;
+};
 
 // The start of the operand that ends at `index`, and the end of the operand
 // that starts at `index`, at bracket depth 0.
@@ -969,7 +984,7 @@ const operandStartBefore = (code, index) => {
       depth -= 1;
       continue;
     }
-    if (depth === 0 && OPERAND_STOP_BEFORE.test(code.slice(Math.max(0, cursor - 6), cursor + 1))) break;
+    if (depth === 0 && !isOptionalChain(code, cursor) && OPERAND_STOP_BEFORE.test(code.slice(Math.max(0, cursor - 6), cursor + 1))) break;
   }
   return cursor + 1;
 };
@@ -1060,24 +1075,50 @@ const identityFromDisplaySites = (path, source, patterns) => {
   const namedScope = (index) => [...regionChain(regions, index)].reverse().find((region) => region.name && !region.callee) || null;
   const subjectFunction = (index) => namedScope(index)?.name
     || regionChain(regions, index).find((region) => region.name)?.name || '(module)';
-  const scopeSpan = (index) => {
-    const scope = namedScope(index);
-    return scope ? [scope.bodyStart, scope.bodyEnd] : [0, code.length];
-  };
-  // Locals bound to a shown read, scoped to the named function that binds them.
+  // Locals bound to a shown read (or functions whose expression body is one),
+  // from the binding to the end of the innermost function that holds it,
+  // unless a nested function declares the same name.
   const tainted = [];
-  for (const match of text.matchAll(/(?:const|let)\s+([\w$]+)\s*=\s*([^;\n]*)/g)) {
-    if (patterns.shown.test(match[2])) tainted.push([match[1], ...scopeSpan(match.index)]);
+  const taintFrom = (name, index) => {
+    const region = regionChain(regions, index).at(-1) || null;
+    tainted.push({ name, region, start: index, end: region ? region.bodyEnd : code.length });
+  };
+  const taintAt = (index, name) => tainted.find((taint) => taint.name === name && taint.start <= index && index <= taint.end
+    && !regionChain(regions, index).some((region) => region !== taint.region
+      && (!taint.region || (region.bodyStart > taint.region.bodyStart && region.bodyEnd <= taint.region.bodyEnd))
+      && declaresName(code, region, name)));
+  const BLOCK_FUNCTION = /^(?:async\s*)?(?:\([^)]*\)|[\w$]+)\s*=>\s*\{|^(?:async\s+)?function\b/;
+  for (const match of text.matchAll(/(?:const|let)\s+([\w$]+)\s*=\s*(?=([^;\n]*))/g)) {
+    if (patterns.shown.test(match[2]) && !BLOCK_FUNCTION.test(match[2])) taintFrom(match[1], match.index);
   }
-  for (const match of text.matchAll(/(?:^|[;{}\n])\s*([\w$]+)\s*=(?!=)\s*([^;\n]*)/g)) {
-    const [from, to] = scopeSpan(match.index);
-    if (patterns.shown.test(match[2]) || tainted.some(([name, start, end]) => name === match[2].trim() && start <= match.index && match.index <= end)) {
-      tainted.push([match[1], from, to]);
-    }
+  for (const match of text.matchAll(/(?:^|[;{}\n])\s*([\w$]+)\s*=(?![=>])\s*(?=([^;\n]*))/g)) {
+    const value = match[2].trim();
+    if ((patterns.shown.test(value) && !BLOCK_FUNCTION.test(value)) || taintAt(match.index, value)) taintFrom(match[1], match.index);
   }
-  const readsShown = (index, operand) => patterns.shown.test(operand) || tainted.some(([name, start, end]) => (
-    start <= index && index <= end && new RegExp(`(?<![\\w$.])${escapeRegExp(name)}(?![\\w$])`).test(operand)
+  const readsShown = (index, operand) => patterns.shown.test(operand) || tainted.some((taint) => (
+    new RegExp(`(?<![\\w$.])${escapeRegExp(taint.name)}(?![\\w$])`).test(operand) && taintAt(index, taint.name) === taint
   ));
+  // The local whose shown value an operand is (`key`, `keyOf(group)`), not one
+  // it merely contains (`drawsFeatures(key)`).
+  const shownLocal = (index, operand) => {
+    const value = carriedValue(operand);
+    const name = /^([\w$]+)(?:\s*\(([\s\S]*)\))?$/.exec(value);
+    if (!name || (name[2] !== undefined && /[()]/.test(name[2]))) return null;
+    return taintAt(index, name[1]) ? name[1] : null;
+  };
+  const isOperand = (index, operand) => patterns.isDisplay(operand) || Boolean(shownLocal(index, operand));
+  const fieldOf = (index, operand) => patterns.displayField(operand) || shownLocal(index, operand);
+  // `if (a !== b) <write b>`: change detection, not a join.
+  const writesCompared = (index, operands) => {
+    const open = maps.enclosing[index];
+    if (open < 0 || code[open] !== '(' || !/\bif\s*$/.test(code.slice(Math.max(0, open - 8), open))) return false;
+    const bodyStart = skipWhitespace(code, maps.closeOf.get(open) + 1);
+    const bodyEnd = code[bodyStart] === '{' ? maps.closeOf.get(bodyStart) : code.indexOf(';', bodyStart);
+    const consequent = text.slice(bodyStart, bodyEnd + 1);
+    return operands.some((operand) => new RegExp(
+      `(?:(?<![=!<>])=(?![=>])|setAttribute\\(\\s*['"][\\w-]+['"]\\s*,)\\s*(?:String\\(\\s*)?${escapeRegExp(carriedValue(operand))}\\s*\\)?\\s*(?:[;,})\\n]|$)`
+    ).test(consequent));
+  };
   const classify = (index, form, [left, right = '']) => {
     if (form.startsWith('key-')) {
       if (readsShown(index, left)) return 'shown-join';
@@ -1092,11 +1133,11 @@ const identityFromDisplaySites = (path, source, patterns) => {
     }
     return leftPaint || rightPaint ? 'paint-join' : 'caption-key';
   };
-  const add = (index, form, field, snippet, qualified, operands = [snippet]) => records.push({
+  const add = (index, form, field, snippet, exemption, operands = [snippet]) => records.push({
     path,
     line: lineNumberAt(source, index),
     function: subjectFunction(index),
-    class: qualified ? 'id-qualified' : classify(index, form, operands),
+    class: exemption || classify(index, form, operands),
     form,
     field,
     snippet: snippet.replace(/\s+/g, ' ').trim().slice(0, 140)
@@ -1116,8 +1157,8 @@ const identityFromDisplaySites = (path, source, patterns) => {
     const left = text.slice(operandStartBefore(code, match.index), match.index).trim();
     const right = text.slice(operatorEnd, operandEndAfter(code, operatorEnd)).trim();
     if (DISPLAY_LITERAL_OPERAND.test(left) || DISPLAY_LITERAL_OPERAND.test(right) || /^typeof\b/.test(left)) continue;
-    const leftDisplay = patterns.isDisplay(left);
-    const rightDisplay = patterns.isDisplay(right);
+    const leftDisplay = isOperand(match.index, left);
+    const rightDisplay = isOperand(match.index, right);
     if (!leftDisplay && !rightDisplay) continue;
     const innermost = regionChain(regions, match.index).at(-1);
     const expression = Boolean(innermost) && code[innermost.bodyStart] !== '{';
@@ -1139,7 +1180,8 @@ const identityFromDisplaySites = (path, source, patterns) => {
       else if (character === '(' || character === '[' || character === '{') {
         if (depth === 0) break;
         depth -= 1;
-      } else if (depth === 0 && (character === ';' || code.slice(start - 1, start + 1) === '||')) break;
+      } else if (depth === 0 && (character === ';' || character === ':' || code.slice(start - 1, start + 1) === '||'
+        || (character === '?' && !isOptionalChain(code, start)))) break;
     }
     let end = match.index;
     depth = 0;
@@ -1149,17 +1191,21 @@ const identityFromDisplaySites = (path, source, patterns) => {
       else if (character === ')' || character === ']' || character === '}') {
         if (depth === 0) break;
         depth -= 1;
-      } else if (depth === 0 && (character === ';' || character === ',' || code.slice(end, end + 2) === '||' || character === '?')) break;
+      } else if (depth === 0 && (character === ';' || character === ',' || character === ':' || code.slice(end, end + 2) === '||'
+        || (character === '?' && !isOptionalChain(code, end)))) break;
     }
     const conjunction = text.slice(start + 1, end);
     const qualified = /&&/.test(conjunction) && [...conjunction.matchAll(/(?<![=!<>])(?:===|==)(?!=)/g)].some((comparison) => {
       const at = start + 1 + comparison.index;
       const after = at + comparison[0].length;
-      return patterns.isIdentity(text.slice(operandStartBefore(code, at), at))
-        || patterns.isIdentity(text.slice(after, operandEndAfter(code, after)));
+      // A comparison does not qualify itself.
+      return at !== match.index && (patterns.isIdentity(text.slice(operandStartBefore(code, at), at))
+        || patterns.isIdentity(text.slice(after, operandEndAfter(code, after))));
     });
-    add(match.index, form, patterns.displayField(leftDisplay ? left : right) || patterns.displayField(right),
-      `${left} ${match[0]} ${right}`, qualified, [left, right]);
+    const exemption = (match[0].startsWith('!') && writesCompared(match.index, [left, right]) && 'write-if-different')
+      || (qualified && 'id-qualified') || null;
+    add(match.index, form, fieldOf(match.index, leftDisplay ? left : right) || fieldOf(match.index, right),
+      `${left} ${match[0]} ${right}`, exemption, [left, right]);
   }
 
   // A display value as a Map/Set key (DOM setters, classList, searchParams,
@@ -1168,10 +1214,10 @@ const identityFromDisplaySites = (path, source, patterns) => {
     const open = match.index + match[0].length - 1;
     if (maps.closeOf.get(open) === undefined) continue;
     const argument = text.slice(open + 1, operandEndAfter(code, open + 1)).trim();
-    if (!patterns.isDisplay(argument) || DISPLAY_LITERAL_OPERAND.test(argument)) continue;
+    if (!isOperand(match.index, argument) || DISPLAY_LITERAL_OPERAND.test(argument)) continue;
     const receiver = /([\w$.?\])]+)\s*$/.exec(code.slice(Math.max(0, match.index - 80), match.index))?.[1] || '';
     if (/classList$|searchParams$|style$/.test(receiver)) continue;
-    add(match.index, `key-${match[1]}`, patterns.displayField(argument), `${receiver}.${match[1]}(${argument})`, false, [argument]);
+    add(match.index, `key-${match[1]}`, fieldOf(match.index, argument), `${receiver}.${match[1]}(${argument})`, null, [argument]);
   }
   // A computed member.
   for (const match of code.matchAll(/(?<=[\w$\])])\s*\[/g)) {
@@ -1179,27 +1225,27 @@ const identityFromDisplaySites = (path, source, patterns) => {
     const close = maps.closeOf.get(open);
     if (close === undefined) continue;
     const inner = text.slice(open + 1, close).trim();
-    if (!patterns.isDisplay(inner) || DISPLAY_LITERAL_OPERAND.test(inner) || /^\d+$/.test(inner)) continue;
+    if (!isOperand(open, inner) || DISPLAY_LITERAL_OPERAND.test(inner) || /^\d+$/.test(inner)) continue;
     const receiver = /([\w$.?]+)\s*$/.exec(code.slice(Math.max(0, match.index - 80), match.index + 1))?.[1] || '';
     if (/^(?:return|const|let|var|case|in|of|typeof|await|yield|else)$/.test(receiver)) continue;
-    add(open, 'key-index', patterns.displayField(inner), `${receiver}[${inner}]`, false, [inner]);
+    add(open, 'key-index', fieldOf(open, inner), `${receiver}[${inner}]`, null, [inner]);
   }
   // The key of a `[key, value]` pair a Map or Object.fromEntries is built from.
   for (const match of code.matchAll(/=>\s*\[/g)) {
     const open = match.index + match[0].length - 1;
     if (maps.closeOf.get(open) === undefined) continue;
     const first = text.slice(open + 1, operandEndAfter(code, open + 1)).trim();
-    if (!patterns.isDisplay(first) || DISPLAY_LITERAL_OPERAND.test(first)) continue;
+    if (!isOperand(match.index, first) || DISPLAY_LITERAL_OPERAND.test(first)) continue;
     if (!/new\s+Map\s*\(|fromEntries\s*\(/.test(code.slice(Math.max(0, match.index - 200), match.index))) continue;
-    add(match.index, 'key-entries', patterns.displayField(first), `[${first}, ...]`, false, [first]);
+    add(match.index, 'key-entries', fieldOf(match.index, first), `[${first}, ...]`, null, [first]);
   }
   // A display accessor handed over as a key function.
   for (const match of code.matchAll(patterns.accessorArgument)) {
-    add(match.index, 'key-function', `${match[1]}()`, match[0], false);
+    add(match.index, 'key-function', `${match[1]}()`, match[0], null);
   }
   // A selector built from a display value.
   for (const match of text.matchAll(/\[data-legend-key(?:[~|^$*]?=)["']?\$\{([^}]*)\}/g)) {
-    add(match.index, 'key-selector', '@data-legend-key', match[0], false, ['${caption}']);
+    add(match.index, 'key-selector', '@data-legend-key', match[0], null, ['${caption}']);
   }
   return records;
 };
