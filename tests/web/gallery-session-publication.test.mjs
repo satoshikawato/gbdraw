@@ -387,3 +387,18 @@ assert.rejects(
   }),
   new RegExp(`resources\\.${collisionId}`)
 );
+
+// OV-217: a Web-authored Session 46 slice may hold a record display draft with
+// no `scope`; the committed mode's slice must still hold it after publication.
+{
+  const scopeless = await loadSession('vibrio-harveyi-group-collinear.gbdraw-session.json.gz');
+  const mode = scopeless.renderRequest.mode;
+  const source = scopeless.modes[mode].config.recordDisplayDrafts;
+  assert.ok(source.length > 0);
+  assert.ok(source.every((draft) => !Object.hasOwn(draft, 'scope')));
+  const republished = await prepareGallerySessionForPublication(scopeless);
+  const kept = republished.session.modes[mode].config.recordDisplayDrafts;
+  assert.deepEqual(kept.map(({ scope, ...draft }) => draft), source);
+  assert.ok(kept.every((draft) => draft.scope === undefined || draft.scope === mode));
+  assert.equal(kept.length, source.length);
+}

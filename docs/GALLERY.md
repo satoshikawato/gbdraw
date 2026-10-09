@@ -10,7 +10,7 @@ Finished figures made with gbdraw. The ten Web Gallery examples come first, in t
 
 <a href="https://gbdraw.app/gallery/#HmmtDNA_basic_circular"><img src="../gbdraw/web/gallery/thumbnails/HmmtDNA_basic_circular.webp" alt="Circular map of the human mitochondrial genome with product labels, GC content, and GC skew" width="640"></a>
 
-The 16,569-bp human mitochondrial genome from one GenBank record, with labeled genes and rings for GC content and GC skew. With separate strands, forward-strand genes sit on the outer lane and reverse-strand genes on the inner lane, and product names are placed outside the circle. Find NADH dehydrogenase subunit 6 and eight tRNA genes on the inner lane: they are the genes on the reverse strand.
+The 16,569-bp human mitochondrial genome from one GenBank record, with labeled genes and rings for GC content and GC skew. With separate strands, forward-strand genes sit on the outer lane and reverse-strand genes on the inner lane, and product names are placed outside the circle or inside the longest arrows. Find NADH dehydrogenase subunit 6 and eight tRNA genes on the inner lane: they are the genes on the reverse strand.
 
 [Open in the interactive Gallery](https://gbdraw.app/gallery/#HmmtDNA_basic_circular) | [Tutorial: Draw a labeled circular map of the human mitochondrial genome](./TUTORIALS/first-circular-genome-diagram.md)
 
@@ -82,7 +82,7 @@ Five aminoglycoside biosynthetic gene clusters from MIBiG (lividomycin, two neom
 
 <a href="https://gbdraw.app/gallery/#majanivirus_orthogroup"><img src="../gbdraw/web/gallery/thumbnails/majanivirus_orthogroup.webp" alt="Nine majanivirus genomes in rows joined by protein-similarity links" width="640"></a>
 
-Nine majanivirus genomes from penaeid shrimp, one per row, linked by LOSATP similarity groups at 20% identity or more. A color table marks WSSV-like proteins, BIRP, and tyrosine recombinase by product name. The first four genomes share dense, high-identity links, while links further down are paler and sparser; the links show protein similarity, not orthology.
+Nine majanivirus genomes from penaeid shrimp, one per row, linked by LOSATP similarity groups at 20% identity or more. A color table marks WSSV-like proteins, BIRP, and tyrosine recombinase by product name. The first five genomes share dense, high-identity links, while links further down are paler and sparser; the links show protein similarity, not orthology.
 
 [Open in the interactive Gallery](https://gbdraw.app/gallery/#majanivirus_orthogroup)
 

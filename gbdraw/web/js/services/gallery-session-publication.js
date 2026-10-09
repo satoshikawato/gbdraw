@@ -122,8 +122,9 @@ const publicationLayout = (session, config, projection) => {
 const publishedSession = (session, config, layout, projection) => {
   const mode = projection.mode;
   const flat = !has(session, 'modes');
-  // A display draft projected from the request names no mode; it is the
-  // committed mode's, so the split keeps it there (OV-217).
+  // Display drafts that carry no scope (those projected from a CLI request and
+  // those of a Session 46 slice) belong to the committed mode, so the split
+  // keeps them there (OV-217).
   const scoped = Array.isArray(config.recordDisplayDrafts) ? { ...config, recordDisplayDrafts: config.recordDisplayDrafts
     .map((entry) => (isObject(entry) && !has(entry, 'scope') ? { ...entry, scope: mode } : entry)) } : config;
   const draft = flat ? { ...session, config: scoped, ui: { ...(isObject(session.ui) ? session.ui : {}), mode } } : { config: scoped, ui: { mode } };

@@ -229,7 +229,7 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
             "The 16,569-bp human mitochondrial genome from one GenBank record, with labeled "
             "genes and rings for GC content and GC skew. With separate strands, forward-strand "
             "genes sit on the outer lane and reverse-strand genes on the inner lane, and product "
-            "names are placed outside the circle. Find NADH dehydrogenase subunit 6 and eight "
+            "names are placed outside the circle or inside the longest arrows. Find NADH dehydrogenase subunit 6 and eight "
             "tRNA genes on the inner lane: they are the genes on the reverse strand."
         ),
         workflow="Make a first circular map",
@@ -419,7 +419,7 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         description=(
             "Nine majanivirus genomes from penaeid shrimp, one per row, linked by LOSATP similarity "
             "groups at 20% identity or more. A color table marks WSSV-like proteins, BIRP, and "
-            "tyrosine recombinase by product name. The first four genomes share dense, "
+            "tyrosine recombinase by product name. The first five genomes share dense, "
             "high-identity links, while links further down are paler and sparser; the links show "
             "protein similarity, not orthology."
         ),

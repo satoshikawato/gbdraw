@@ -288,12 +288,12 @@ def test_public_markdown_local_targets_exist() -> None:
 
 def _web_gallery_artifacts() -> set[str]:
     """SVGs and thumbnails that tools/prepare_interactive_gallery_assets.py writes."""
-    gallery_root = PROJECT_ROOT / "gbdraw" / "web" / "gallery"
-    examples = json.loads((gallery_root / "examples.json").read_text(encoding="utf-8"))
+    from tools.prepare_interactive_gallery_assets import EXAMPLES
+
     return {
-        (gallery_root / example[key].removeprefix("./")).relative_to(PROJECT_ROOT).as_posix()
-        for example in examples
-        for key in ("svg", "thumbnail")
+        path.relative_to(PROJECT_ROOT).as_posix()
+        for example in EXAMPLES
+        for path in (example.gallery_svg_path, example.thumbnail_path)
     }
 
 
