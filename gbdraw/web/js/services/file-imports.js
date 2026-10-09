@@ -5,6 +5,24 @@ import { normalizeTsvCell } from '../utils/tsv-cell.js';
 
 const SPECIFIC_RULE_COLUMNS = Object.freeze(['feature_type', 'qualifier', 'pattern', 'color']);
 
+// The request fields of each editor table: the Web writes the `File` form, and
+// the CLI and the Python API write the canonical `Table` form. Python reads the
+// `Table` form first.
+export const EDITOR_TABLE_OPTIONS = Object.freeze({
+  visibility: ['featureVisibilityTable', 'featureVisibilityTableFile'],
+  whitelist: ['labelWhitelistTable', 'labelWhitelistFile'],
+  priority: ['qualifierPriorityTable', 'qualifierPriorityFile'],
+  labelOverrides: ['labelOverrideTable', 'labelOverrideFile']
+});
+/**
+ * The resource reference of one editor table in request `diagramOptions`.
+ * @param {Record<string, any> | null | undefined} options
+ * @param {keyof typeof EDITOR_TABLE_OPTIONS} table
+ * @returns {{ resourceId: string, representation?: string } | null}
+ */
+export const editorTableRef = (options, table) => EDITOR_TABLE_OPTIONS[table]
+  .map((key) => options?.[key]).find((ref) => ref?.resourceId) || null;
+
 // Python reads these tables with a fixed column count and rejects any other row
 // (gbdraw/io/table_text.py::read_literal_table), so the import does too (R4). The
 // diagnostic is the one the Label override parser uses.
@@ -167,6 +185,9 @@ export const parseWhitelistRules = (text, { legacyRows = false } = {}) => {
     const cells = tableCells(line, 3, index + 1, repairs, ([feat, qual]) => feat && qual);
     if (!cells) continue;
     const [feat, qual, key] = cells;
+    // The CLI and Python store the table with this header.
+    if (feat.toLowerCase() === 'feature_type' && qual.toLowerCase() === 'qualifier'
+      && String(key).toLowerCase() === 'keyword') continue;
     rules.push({ feat, qual, key });
   }
 

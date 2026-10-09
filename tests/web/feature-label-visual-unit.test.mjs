@@ -253,7 +253,9 @@ const absenceCases = [
     ' "Show Labels" is "First Record Only", so labels are drawn only in the first record unless a feature has Label visibility "On".'],
   ['scope_orthogroup_top', { scope: 'orthogroup_top' },
     ' "Show Labels" is "Top Similarity Group Record", so labels are drawn only for the features that setting selects, unless a feature has Label visibility "On".'],
-  ['whitelist', { whitelist: true }, ' A label whitelist is set, and labels are drawn only for the features it lists.'],
+  ['whitelist', { whitelist: 'labelWhitelistFile' }, ' A label whitelist is set, and labels are drawn only for the features it lists.'],
+  // The CLI and Python write the whitelist as `labelWhitelistTable`.
+  ['whitelist', { whitelist: 'labelWhitelistTable' }, ' A label whitelist is set, and labels are drawn only for the features it lists.'],
   ['blacklist', { blacklist: ['putative'] },
     ' A label blacklist is set, and a label whose text contains one of its keywords is not drawn.'],
   ['embedded_only', { rendering: 'embedded_only' },
@@ -269,7 +271,7 @@ const absenceHarness = ({ type = 'CDS', rows, scope = 'all', recordIdx = 0, whit
     ...(blacklist ? { 'labels.filtering.blacklist_keywords': blacklist } : {})
   };
   const harness = buildHarness({
-    diagramOptions: { featureShapes: {}, configOverrides, ...(whitelist ? { labelWhitelistFile: { resourceId: 'w' } } : {}) }
+    diagramOptions: { featureShapes: {}, configOverrides, ...(whitelist ? { [whitelist]: { resourceId: 'w' } } : {}) }
   });
   harness.state.featureVisibilityManualRules = [];
   harness.state.editableLabels.value = [];

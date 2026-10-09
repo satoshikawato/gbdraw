@@ -12,6 +12,8 @@ import { resultRenderedFeatures } from './feature-catalog.js';
 export { canonicalFeaturePlacements } from './feature-placement.js';
 import { buildDefaultColorOverrideTsv, normalizePaletteColors } from '../utils/color-utils.js';
 import {
+  EDITOR_TABLE_OPTIONS,
+  editorTableRef,
   parseColorTable,
   parsePriorityRules,
   parseSpecificRules,
@@ -1417,24 +1419,6 @@ const buildConfigOverrides = (
 const drawsNoComparison = (comparisons) => comparisons.length > 0
   && comparisons.every((comparison) => comparison?.kind === 'generatedProteinComparison'
     && comparison.mode === 'none' && !comparison.pairs?.length);
-
-// The request fields of each editor table: the Web writes the `File` form, and
-// the CLI and the Python API write the canonical `Table` form. Python reads the
-// `Table` form first.
-const EDITOR_TABLE_OPTIONS = Object.freeze({
-  visibility: ['featureVisibilityTable', 'featureVisibilityTableFile'],
-  whitelist: ['labelWhitelistTable', 'labelWhitelistFile'],
-  priority: ['qualifierPriorityTable', 'qualifierPriorityFile'],
-  labelOverrides: ['labelOverrideTable', 'labelOverrideFile']
-});
-/**
- * The resource reference of one editor table in request `diagramOptions`.
- * @param {Record<string, any> | null | undefined} options
- * @param {keyof typeof EDITOR_TABLE_OPTIONS} table
- * @returns {{ resourceId: string, representation?: string } | null}
- */
-const editorTableRef = (options, table) => EDITOR_TABLE_OPTIONS[table]
-  .map((key) => options?.[key]).find((ref) => ref?.resourceId) || null;
 
 /** @type {Readonly<Record<string, boolean>>} */
 const ALL_GENERATED_TABLES = Object.freeze({
@@ -3636,7 +3620,7 @@ export const committedFeatureVisibilityMatches = (committedSession, activeRulesT
   try {
     return normalize(resourceTextFromRef(
       committedSession?.resources,
-      committedSession?.renderRequest?.diagramOptions?.featureVisibilityTableFile
+      editorTableRef(committedSession?.renderRequest?.diagramOptions, 'visibility')
     )) === normalize(activeRulesTsv)
       && featureVisibilityRowsKey(committedSession?.renderRequest?.diagramOptions?.featureOverrides)
         === featureVisibilityRowsKey(activeOverrideRows);

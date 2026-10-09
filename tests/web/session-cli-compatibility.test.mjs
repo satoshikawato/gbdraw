@@ -1,6 +1,7 @@
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -38,7 +39,7 @@ const {
   serializeActiveRenderFiles, setUnmanagedConfigOverrideValidator
 } = await import('../../gbdraw/web/js/services/config.js');
 const {
-  CANONICAL_REQUEST_SCHEMA, buildCanonicalRenderRequest, projectCommittedEditorIntent
+  CANONICAL_REQUEST_SCHEMA, buildCanonicalRenderRequest, committedFeatureVisibilityMatches, projectCommittedEditorIntent
 } = await import('../../gbdraw/web/js/services/session-request.js');
 const { inheritCommittedComparisonIntent } = await import('../../gbdraw/web/js/services/imported-comparison-intent.js');
 const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
@@ -432,14 +433,17 @@ const crossSurface = (...args) => JSON.parse(execFileSync('python', [
   path.join(root, 'tests/web/helpers/cli-session-cross-surface.py'), ...args
 ], { cwd: root, encoding: 'utf8', timeout: 1_800_000, maxBuffer: 16 * 1024 * 1024 }));
 // The drawing state each table option of the CLI fills at Load.
+// A loaded table holds exactly the rows of its fixture file, which has no header.
+const fixtureRows = file => readFileSync(path.join(root, file), 'utf8').split(/\r?\n/).filter(line => line.trim()).length;
 const LOADED_TABLES = {
-  '-t': drawing => drawing.manualSpecificRules.length > 0,
+  '-t': (drawing, file) => drawing.manualSpecificRules.length === fixtureRows(file),
   '-d': drawing => drawing.currentColors.value.CDS === '#123456',
-  '--feature_visibility_table': drawing => drawing.featureVisibilityRules.value.length > 0,
-  '--label_table': drawing => drawing.canonicalLabelOverrideRows.value.length > 0,
-  '--label_whitelist': drawing => drawing.filterMode.value === 'Whitelist' && drawing.manualWhitelist.length > 0,
+  '--feature_visibility_table': (drawing, file) => drawing.featureVisibilityRules.value.length === fixtureRows(file),
+  '--label_table': (drawing, file) => drawing.canonicalLabelOverrideRows.value.length === fixtureRows(file),
+  '--label_whitelist': (drawing, file) => drawing.filterMode.value === 'Whitelist'
+    && drawing.manualWhitelist.length === fixtureRows(file),
   '--label_blacklist': drawing => drawing.filterMode.value === 'Blacklist' && drawing.manualBlacklist.value !== '',
-  '--qualifier_priority': drawing => drawing.manualPriorityRules.length > 0,
+  '--qualifier_priority': (drawing, file) => drawing.manualPriorityRules.length === fixtureRows(file),
   '--feature_override_table': drawing => Object.keys(drawing.featureOverrides).length > 0
 };
 // A Session of the request and resources the Web renders.
@@ -469,6 +473,19 @@ const nextGenerate = async () => {
   return candidate;
 };
 
+// Generate reuses committed LOSATP results only under the visibility rules
+// they were drawn with; the CLI stores its rules as `featureVisibilityTable`.
+await test('a CLI Session keeps its comparisons under its own visibility rules', () => {
+  const rules = '*\tCDS\tproduct\tmajor capsid\toff\n';
+  const committed = {
+    renderRequest: { diagramOptions: { featureVisibilityTable: { resourceId: 'rules', representation: 'canonicalTsv' } } },
+    resources: { rules: { kind: 'canonical-tsv', encoding: 'base64',
+      data: Buffer.from(`record_id\tfeature_type\tqualifier\tvalue\taction\n${rules}`).toString('base64') } }
+  };
+  assert.equal(committedFeatureVisibilityMatches(committed, rules), true);
+  assert.equal(committedFeatureVisibilityMatches(committed, ''), false);
+});
+
 await test('every load and re-save of a CLI Session in Web draws the CLI figure', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-cross-'));
   try {
@@ -481,7 +498,8 @@ await test('every load and re-save of a CLI Session in Web draws the CLI figure'
         assert.equal(result.status, 'ok', `${entry.id}, ${source}: ${result.error?.stack}`);
         const drawing = state.activeDrawing();
         for (const [option, loaded] of Object.entries(LOADED_TABLES)) {
-          if (entry.args.includes(option)) assert.ok(loaded(drawing), `${entry.id}, ${source}: ${option}`);
+          const index = entry.args.indexOf(option);
+          if (index >= 0) assert.ok(loaded(drawing, entry.args[index + 1]), `${entry.id}, ${source}: ${option}`);
         }
         const generated = path.join(directory, entry.id, `${source} Generate.json`);
         await writeFile(generated, await renderedSession(await nextGenerate()));
