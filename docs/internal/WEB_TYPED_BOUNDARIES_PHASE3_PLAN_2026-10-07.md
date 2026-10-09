@@ -408,3 +408,11 @@ None blocks. The Owner may want to override these delegated choices:
   one number, not one per module: a count per module would read each `git mv`
   of the layering pull requests B to D as an expansion (D21). Phase 4 replaces
   the cap with a count per module after layering D.
+- Explicit `any` (Owner decision R15-5 of 2026-10-09): the `noImplicitAny`
+  cap does not count `any` written in JSDoc. The layering moves that D21
+  protected are merged, so `tests/web/explicit-any-ratchet.test.mjs` records
+  it per module in
+  `EXPLICIT_ANY_BASELINE` (R14, `count-map`): 1,325 nodes in 108 modules at
+  dev `ffa5a3ba`. The TypeScript checker of the guard config resolves each
+  JSDoc type node, so an alias of `any` counts at each use. Moving a module
+  with entries renames its key, which the Gate reads as an expansion.

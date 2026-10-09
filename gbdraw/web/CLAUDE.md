@@ -606,10 +606,20 @@ authority-only change. A new module is checked from its first commit.
   cap to the new count: a new parameter or variable declares its type, or the
   collection a callback iterates is typed. Raising the cap is an
   authority-only change.
+- Explicit `any` in JSDoc (`any`, `*`, `Object`, or a type that resolves to
+  `any`, such as an alias of it) is type debt. `EXPLICIT_ANY_BASELINE` in
+  `tests/web/explicit-any-ratchet.test.mjs` records it per module and only
+  goes down: a pull request that removes some lowers the module's entry, and
+  new code declares a type or uses `unknown`. A module without an entry,
+  including a new module, has none. Adding or raising an entry is an
+  authority-only change.
+- Distinct identity values (a Python key, a display caption, a swatch color, a
+  feature id) take distinct named types, not one shared `string` alias.
 
 Guards: `tests/web/typed-boundaries.test.mjs` (the checked set, the compiler
-run, declared factory parameters, no suppression, type-import direction) and
-`tests/web/no-implicit-any-ratchet.test.mjs` (the `noImplicitAny` cap). They
+run, declared factory parameters, no suppression, type-import direction),
+`tests/web/no-implicit-any-ratchet.test.mjs` (the `noImplicitAny` cap), and
+`tests/web/explicit-any-ratchet.test.mjs` (explicit `any` per module). They
 run the `typescript` version pinned in `package.json` and fail until `npm ci`
 has installed it.
 
