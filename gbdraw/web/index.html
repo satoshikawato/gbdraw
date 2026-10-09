@@ -6397,7 +6397,7 @@
                     </choice-dialog>
 
                     <!-- Feature Style Scope Dialog -->
-                    <choice-dialog v-if="featureStyleScopeDialog.show" labelledby="feature-style-scope-title" describedby="feature-style-scope-description"
+                    <choice-dialog v-if="featureStyleScopeDialog.show" :busy="dialogChoicePending" labelledby="feature-style-scope-title" describedby="feature-style-scope-description"
                          @cancel="handleFeatureStyleScopeChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
                             <h3 id="feature-style-scope-title" class="text-lg font-bold text-slate-800 mb-2">
@@ -6491,7 +6491,7 @@
                     </choice-dialog>
 
                     <!-- Legend Rename Dialog -->
-                    <choice-dialog v-if="legendRenameDialog.show" labelledby="legend-rename-title" describedby="legend-rename-description"
+                    <choice-dialog v-if="legendRenameDialog.show" :busy="dialogChoicePending" labelledby="legend-rename-title" describedby="legend-rename-description"
                          @cancel="handleLegendRenameChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[65] flex items-center justify-center">
                             <h3 id="legend-rename-title" class="text-lg font-bold text-slate-800 mb-2">
@@ -6561,8 +6561,8 @@
                     </choice-dialog>
 
                     <!-- Reset Color Dialog -->
-                    <choice-dialog v-if="resetColorDialog.show" labelledby="reset-color-title" describedby="reset-color-description"
-                         @cancel="resetColorDialog.show = false" @keydown.tab="trapDialogFocus"
+                    <choice-dialog v-if="resetColorDialog.show" :busy="dialogChoicePending" labelledby="reset-color-title" describedby="reset-color-description"
+                         @cancel="handleResetColorChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
                             <h3 id="reset-color-title" class="text-lg font-bold text-slate-800 mb-2">Reset Fill Color</h3>
                             <p id="reset-color-description" class="text-sm text-slate-600 mb-4">
@@ -6596,7 +6596,7 @@
                                 </button>
                             </div>
 
-                            <button @click="resetColorDialog.show = false"
+                            <button @click="handleResetColorChoice('cancel')"
                                     class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium" :disabled="!semanticMutationAvailable">
                                 Cancel
                             </button>
@@ -7725,8 +7725,9 @@
 <script type="text/x-template" id="choice-dialog-template">
     <div v-dialog-focus data-modal-overlay @click.self="$emit('cancel')" @keydown.esc.prevent.stop="$emit('cancel')">
         <div role="dialog" aria-modal="true" :aria-labelledby="labelledby" :aria-describedby="describedby" tabindex="-1"
-             class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
-            <slot></slot>
+             :aria-busy="busy ? 'true' : null" class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
+            <fieldset :disabled="busy" class="contents [&_button:disabled]:opacity-60 [&_button:disabled]:cursor-wait"><slot></slot></fieldset>
+            <p v-if="busy" role="status" class="mt-3 text-xs text-slate-500">Applying an edit…</p>
         </div>
     </div>
 </script>

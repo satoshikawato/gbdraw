@@ -176,6 +176,9 @@ test('inherited Feature fill uses the existing scope dialog with atomic Undo and
   const captionScopeButton = scopeDialog.locator('button.bg-green-600');
   await expect(captionScopeButton).toBeVisible();
   await captionScopeButton.click();
+  // The choice prepares the rules it adds; on a Session just loaded that
+  // starts the Worker runtime (OV-225), so wait for the choice to finish.
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.featureStyleScopeDialog.show);
   await expect(scopeDialog).toBeHidden();
 
   await expect.poll(

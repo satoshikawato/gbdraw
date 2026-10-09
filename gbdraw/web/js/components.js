@@ -49,12 +49,14 @@ export const dialogFocus = {
 // UI-02: a modal choice. The panel is the dialog, named by the heading and
 // described by the text that `labelledby` and `describedby` name. Escape and a
 // backdrop click emit `cancel`, which a use binds to its Cancel handler; a use
-// binds Tab to `trapDialogFocus`.
+// binds Tab to `trapDialogFocus`. While `busy` (a choice still applying), its
+// controls are disabled and it says so (D-12).
 export const ChoiceDialog = {
   template: '#choice-dialog-template',
   props: {
     labelledby: { type: String, required: true },
-    describedby: { type: String, default: null }
+    describedby: { type: String, default: null },
+    busy: { type: Boolean, default: false }
   },
   emits: ['cancel']
 };

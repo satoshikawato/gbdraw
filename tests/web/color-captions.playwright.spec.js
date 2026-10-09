@@ -297,6 +297,9 @@ for (const width of [1440, 390]) {
       await fill.fill('#c026d3');
       const scope = page.getByRole('heading', { name: 'Color Change Scope' }).locator('..');
       await scope.getByRole('button').filter({ hasText: 'Apply to all "tRNA"' }).last().click();
+      // The choice prepares the rules it adds; on a Session just loaded that
+      // starts the Worker runtime (OV-225), so wait for the choice to finish.
+      await page.waitForFunction(() => !window.__GBDRAW_APP__.featureStyleScopeDialog.show);
       await expect.poll(async () => (await evidence()).mounted, { timeout: 10000 }).toEqual(['#c026d3']);
       const after = await evidence();
       expect(after.result).toEqual(['#c026d3']);

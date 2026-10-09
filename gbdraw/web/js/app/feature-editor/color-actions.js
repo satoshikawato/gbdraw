@@ -1510,8 +1510,8 @@ export const createFeatureColorActions = ({
   const handleResetColorChoice = async (drawing, choice) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    resetColorDialog.show = false;
     await doResetFillColor(drawing, choice);
+    resetColorDialog.show = false;
   };
 
   /** @param {DrawingState} drawing */
@@ -1754,6 +1754,7 @@ export const createFeatureColorActions = ({
     // History step (app-setup.js answers Cancel outside `runUndoable`).
     cancelFeatureStyleScope: clearFeatureStyleScopeDialog,
     cancelLegendRename: () => clearLegendRenameDialog(state.activeDrawing(), { restoreInput: true }),
+    cancelResetColor: () => { resetColorDialog.show = false; },
     handleColorScopeChoice: colorScopeChoice,
     handleFeatureStyleScopeChoice: (...args) => (featureStyleScopeDialog.kind === 'stroke' ? strokeScopeChoice : colorScopeChoice)(...args),
     handleLegendNameCommit: colorAction(handleLegendNameCommit, { targetRules: false }),

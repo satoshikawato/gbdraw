@@ -59,6 +59,23 @@ const controlLabel = (element) => {
  */
 
 /**
+ * A dialog's choice is one undoable step, and its Cancel only closes the
+ * dialog (OV-161). From a choice until its step ends, the choice owns History's
+ * open intent (`mutationPending()`): the dialog stays open with its buttons
+ * disabled, and another choice or Cancel does nothing (D-12).
+ * @param {{ mutationPending: () => boolean, runUndoable: (label: string, fn: () => unknown) => Promise<unknown> }} history
+ * @param {() => string} label
+ * @param {(choice: string, ...rest: any[]) => unknown} handler
+ * @param {() => unknown} cancel
+ */
+export const dialogChoiceWithHistory = (history, label, handler, cancel) => (
+  /** @type {string} */ choice, /** @type {any[]} */ ...rest
+) => {
+  if (history.mutationPending()) return undefined;
+  return choice === 'cancel' ? cancel() : history.runUndoable(label(), () => handler(choice, ...rest));
+};
+
+/**
  * @param {HistoryInputsOptions} options
  * @returns {() => void} Removes the listeners.
  */

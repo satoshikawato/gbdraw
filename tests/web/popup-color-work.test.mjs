@@ -9,6 +9,7 @@ import { test } from 'node:test';
 import { createRulePreparation, runWhenPrepared } from '../../gbdraw/web/js/app/rule-matching.js';
 import { createFeatureColorActions } from '../../gbdraw/web/js/app/feature-editor/color-actions.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
+import { dialogChoiceWithHistory } from '../../gbdraw/web/js/app/history-inputs.js';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
 const ref = (value) => ({ value });
@@ -93,8 +94,15 @@ const setup = ({ siblings, features = featuresOf(['p', 'p', 'p', 'p']), savedRul
     return history.runUndoable('Rename legend item', () => actions.handleLegendNameCommit());
   };
   const reset = () => history.runUndoable('Reset feature color', () => actions.resetClickedFeatureFillColor());
+  // app-setup.js: `scopeChoiceWithHistory(label, choice, cancel)`.
+  const choose = (label, handler, cancel) => dialogChoiceWithHistory(history, () => label, handler, cancel);
+  const choices = {
+    scope: choose('Change feature color', actions.handleFeatureStyleScopeChoice, actions.cancelFeatureStyleScope),
+    rename: choose('Rename legend item', actions.handleLegendRenameChoice, actions.cancelLegendRename),
+    reset: choose('Reset feature color', actions.handleResetColorChoice, actions.cancelResetColor)
+  };
   return {
-    stages, preparation, pick, rename, reset, history, manualSpecificRules, dialogStages: () => atDialog,
+    stages, preparation, pick, rename, reset, choices, history, manualSpecificRules, dialogStages: () => atDialog,
     featureStyleScopeDialog, legendRenameDialog: state.legendRenameDialog, resetColorDialog: state.resetColorDialog
   };
 };
@@ -133,5 +141,43 @@ for (const [name, run, dialogOf] of [
     await run(setup_);
     assert.equal(dialogOf(setup_).show, true);
     assert.deepEqual(setup_.dialogStages(), ['history:buildIntent', 'history:signature']);
+  });
+}
+
+// D-12: from a choice until its History step ends, the dialog stays open and
+// History is busy (its buttons read that); another choice or Cancel does nothing.
+const clickedHashRule = { feat: 'CDS', qual: 'hash', val: 'f0', color: '#222222', cap: 'p' };
+for (const [name, open, dialogOf, choice, savedRules] of [
+  ['scope', (setup_) => setup_.pick('#123456'), (setup_) => setup_.featureStyleScopeDialog, 'single', [savedRule]],
+  ['rename', (setup_) => setup_.rename('Renamed'), (setup_) => setup_.legendRenameDialog, 'single', [savedRule]],
+  ['reset', (setup_) => setup_.reset(), (setup_) => setup_.resetColorDialog, 'this', [savedRule, clickedHashRule]]
+]) {
+  test(`a popup ${name} dialog ignores a second choice and Cancel until its choice commits`, async () => {
+    /** @type {(value: boolean) => void} */
+    let release = () => {};
+    let gated = false;
+    const setup_ = setup({
+      siblings: true, savedRules,
+      commit: () => (gated ? new Promise((resolve) => { release = resolve; }) : Promise.resolve(true))
+    });
+    assert.equal(await setup_.preparation.prepare(savedRules), true);
+    await open(setup_);
+    assert.equal(dialogOf(setup_).show, true);
+    const undoCount = setup_.history.getUndoCount();
+    gated = true;
+    setup_.stages.length = 0;
+    const first = setup_.choices[name](choice);
+    while (!setup_.stages.includes('commitSpecificRules')) await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(setup_.history.mutationPending(), true);
+    assert.equal(dialogOf(setup_).show, true);
+    assert.equal(setup_.choices[name](choice), undefined);
+    assert.equal(setup_.choices[name]('cancel'), undefined);
+    assert.equal(dialogOf(setup_).show, true);
+    release(true);
+    await first;
+    assert.equal(dialogOf(setup_).show, false);
+    assert.equal(setup_.history.mutationPending(), false);
+    assert.equal(setup_.stages.filter((stage) => stage === 'commitSpecificRules').length, 1);
+    assert.equal(setup_.history.getUndoCount(), undoCount + 1);
   });
 }

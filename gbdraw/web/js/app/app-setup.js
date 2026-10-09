@@ -111,7 +111,7 @@ import {
 import { applyStrokeOverridesToSvg } from './legend/stroke-actions.js';
 import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
-import { setupHistoryInputs } from './history-inputs.js';
+import { dialogChoiceWithHistory, setupHistoryInputs } from './history-inputs.js';
 import { setupHistoryShortcuts } from './history-shortcuts.js';
 import { createPreviewRuntime } from './preview-runtime.js';
 import {
@@ -2896,6 +2896,8 @@ export const createAppSetup = () => {
     sessionOperationAvailability(operation, sessionPreparationBusyReason)
   );
   const semanticMutationAvailable = computed(() => !sessionOperationAvailability());
+  // A popup dialog shows its choice applying until the choice's History step ends (D-12).
+  const dialogChoicePending = computed(() => history.mutationPending());
   const sessionSaveAvailable = computed(() => !sessionSaveLoadAvailability('save'));
   const sessionLoadAvailable = computed(() => !sessionSaveLoadAvailability('load'));
   const sessionBusyReason = computed(() => sessionSaveLoadAvailability('save')?.reason || '');
@@ -3098,6 +3100,7 @@ export const createAppSetup = () => {
     updateClickedFeatureColor,
     cancelFeatureStyleScope,
     cancelLegendRename,
+    cancelResetColor,
     handleColorScopeChoice,
     handleFeatureStyleScopeChoice,
     handleLegendNameCommit,
@@ -3561,21 +3564,15 @@ export const createAppSetup = () => {
     'Change legend stroke color',
     setLegendEntryStrokeColorValue
   );
-  // OV-161: Cancel closes a scope dialog at once and records no History step;
-  // only a real choice is one undoable step, as with askLabelOn and
-  // handleLabelOnChoice. Cancel used to wait for the step's intent capture,
-  // which after a Session load took seconds.
+  // OV-161, D-12: a dialog choice is one History step, Cancel records none, and
+  // neither starts while a choice is still applying (`dialogChoiceWithHistory`).
   /**
    * @param {() => string} label
    * @param {(choice: string, ...rest: any[]) => any} handler
    * @param {() => void} [cancel]
    */
   const scopeChoiceWithHistory = (label, handler, cancel = cancelFeatureStyleScope) => (
-    /** @type {string} */ choice, /** @type {any[]} */ ...rest
-  ) => (
-    choice === 'cancel'
-      ? cancel()
-      : history.runUndoable(label(), () => handler(choice, ...rest))
+    dialogChoiceWithHistory(history, label, handler, cancel)
   );
   const handleColorScopeChoiceWithHistory = scopeChoiceWithHistory(() => 'Change feature color', handleColorScopeChoice);
   const handleFeatureStyleScopeChoiceWithHistory = scopeChoiceWithHistory(
@@ -3588,7 +3585,11 @@ export const createAppSetup = () => {
     handleLegendRenameChoice,
     cancelLegendRename
   );
-  const handleResetColorChoiceWithHistory = undoableAction('Reset feature color', handleResetColorChoice);
+  const handleResetColorChoiceWithHistory = scopeChoiceWithHistory(
+    () => 'Reset feature color',
+    handleResetColorChoice,
+    cancelResetColor
+  );
   const resetClickedFeatureFillColorWithHistory = undoableAction('Reset feature color', resetClickedFeatureFillColor);
   const updateClickedFeatureStrokeWithHistory = undoableAction('Change feature stroke', updateClickedFeatureStroke);
   const setClickedFeatureStrokeColorValueWithHistory = undoableAction(
@@ -5287,6 +5288,7 @@ export const createAppSetup = () => {
     sessionImportPending,
     sessionSavePending,
     semanticMutationAvailable,
+    dialogChoicePending,
     sessionSaveAvailable,
     sessionLoadAvailable,
     sessionBusyReason,
