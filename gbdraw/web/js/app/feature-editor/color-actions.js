@@ -1486,7 +1486,7 @@ export const createFeatureColorActions = ({
       resetColorDialog.caption = caption;
       resetColorDialog.siblingCount = siblings.length;
     } else {
-      doResetFillColor(drawing, 'this');
+      return doResetFillColor(drawing, 'this');
     }
   };
 
