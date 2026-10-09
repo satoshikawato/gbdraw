@@ -4272,9 +4272,8 @@
                                 </select>
                             </div>
 
-                            <div v-if="labelTextSettingsShown" class="space-y-3">
-                                <template v-if="(mode === 'linear' ? form.show_labels_linear : form.labels_mode) !== 'none'">
-                                <div>
+                            <div v-if="labelSettingsShown" class="space-y-3">
+                                <div v-if="(mode === 'linear' ? form.show_labels_linear : form.labels_mode) !== 'none'">
                                     <h4 class="group-heading mb-2" aria-label="LABEL FILTERING">LABEL FILTERING <help-tip text="Control which feature labels are displayed using Blacklist or Whitelist. Whitelist patterns use case-insensitive Python regex search, matching the -t color table semantics."></help-tip></h4>
                                     <div class="flex gap-2 mb-2">
                                         <button v-for="m in ['None', 'Blacklist', 'Whitelist']" @click="setLabelFilterMode(m)" :disabled="!semanticMutationAvailable" :class="filterMode===m ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border'" class="flex-1 py-1 rounded text-xs font-bold transition-colors">{{m}}</button>
@@ -4326,7 +4325,6 @@
                                     <div class="ui-hint text-center mb-1">- OR UPLOAD FILE -</div>
                                     <file-uploader label="Priority File (TSV)" v-model="files.qualifier_priority" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                 </div>
-                                </template>
 
                                 <div class="pt-3 border-t border-slate-100">
                                     <div class="grid grid-cols-2 gap-1.5">
@@ -4433,7 +4431,7 @@
                                     </div>
                                 </div>
 
-                                <div v-if="mode === 'circular' && form.labels_mode !== 'none' && adv.circular_label_placement !== 'radial'" class="pt-3 border-t border-slate-100">
+                                <div v-if="mode === 'circular' && adv.circular_label_placement !== 'radial'" class="pt-3 border-t border-slate-100">
                                     <h4 class="group-heading mb-2" aria-label="LABEL GEOMETRY">LABEL GEOMETRY <help-tip text="Adjust radius offset factors for circular labels."></help-tip></h4>
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>
@@ -4467,7 +4465,7 @@
                             </div>
 
                             <p v-if="(mode === 'linear' ? form.show_labels_linear : form.labels_mode) === 'none'" class="ui-hint bg-slate-50 border border-slate-200 rounded p-2">
-                                Enable labels to configure filtering, qualifier priority, text settings, and circular label geometry. Text settings also show while a feature's Label visibility is On.
+                                Enable labels to configure filtering, qualifier priority, text settings, and circular label geometry. While a feature's Label visibility is On, all of these except filtering show; filters do not apply to that label.
                             </p>
                         </div>
                     </details>
