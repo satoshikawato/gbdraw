@@ -214,9 +214,7 @@ const splitSetting = (row, value, { committed, widths }) => {
     } else if (row.migrate === 'depth' && Array.isArray(value)) {
       split[mode] = cloneJsonData(value.slice(0, Math.max(1, widths[mode])));
     } else if (row.migrate === 'by-scope' && Array.isArray(value)) {
-      // A draft that names no mode (projected from a CLI request) is the committed mode's.
-      split[mode] = value.filter((draft) => isObject(draft)
-        && (Object.hasOwn(draft, 'scope') ? draft.scope === mode : mode === committed)).map((draft) => {
+      split[mode] = value.filter((draft) => isObject(draft) && draft.scope === mode).map((draft) => {
         const { scope: _scope, ...fields } = cloneJsonData(draft);
         return fields;
       });

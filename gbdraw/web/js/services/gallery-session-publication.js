@@ -122,7 +122,11 @@ const publicationLayout = (session, config, projection) => {
 const publishedSession = (session, config, layout, projection) => {
   const mode = projection.mode;
   const flat = !has(session, 'modes');
-  const draft = flat ? { ...session, config, ui: { ...(isObject(session.ui) ? session.ui : {}), mode } } : { config, ui: { mode } };
+  // A display draft projected from the request names no mode; it is the
+  // committed mode's, so the split keeps it there (OV-217).
+  const scoped = Array.isArray(config.recordDisplayDrafts) ? { ...config, recordDisplayDrafts: config.recordDisplayDrafts
+    .map((entry) => (isObject(entry) && !has(entry, 'scope') ? { ...entry, scope: mode } : entry)) } : config;
+  const draft = flat ? { ...session, config: scoped, ui: { ...(isObject(session.ui) ? session.ui : {}), mode } } : { config: scoped, ui: { mode } };
   // Override colors merge into the committed request's colors.
   const split = splitDraftIntoModes(draft, { committedMode: mode, modeProfiles: null, paletteColors: projection.config?.colors || null });
   const slice = flat ? split.modes[mode] : { ...modeSlice(session), config: split.modes[mode].config };

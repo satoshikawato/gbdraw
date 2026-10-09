@@ -2408,6 +2408,26 @@ const buildLayout = (state, drawing, records = []) => {
   };
 };
 
+// A draft without a per-feature edit field (a Session written by the CLI, the
+// Python API, or the Gallery publication) takes the request projection's
+// value for it. Gallery publication and Session Load both read edits this way
+// (OV-216, OV-220).
+const PROJECTED_FEATURE_EDIT_FIELDS = ['featureOverrides', 'featureVisibilityManualRules', 'labelOverrideRows'];
+/**
+ * @param {Record<string, any> | null | undefined} draft
+ * @param {{ semanticFeatureState?: Record<string, any> } | null | undefined} projection
+ * @returns {Record<string, any>}
+ */
+export const featureEditsOverProjection = (draft, projection) => {
+  const saved = draft && typeof draft === 'object' ? draft : {};
+  const projected = projection?.semanticFeatureState || {};
+  return {
+    ...saved,
+    ...Object.fromEntries(PROJECTED_FEATURE_EDIT_FIELDS.filter((field) => !Object.hasOwn(saved, field)
+      && projected[field] !== undefined).map((field) => [field, projected[field]]))
+  };
+};
+
 const publicationClone = (value) => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 const publicationRef = (value) => ({ value });
 const canonicalRecordSelector = (record) => {
@@ -2428,7 +2448,7 @@ export const buildCanonicalRequestState = ({ session, projection, config,
   const colorOverridesChanged = config?.colorsAreOverrides === true
     && JSON.stringify(activeColors) !== JSON.stringify(pythonColors(projection.config?.colors));
   if (colorOverridesChanged) delete canonicalPublicationFiles.d_color;
-  const features = session?.features || {}, layout = config?.linearRecordLayout || {};
+  const features = featureEditsOverProjection(session?.features, projection), layout = config?.linearRecordLayout || {};
   const canonicalLayout = projection.config?.linearRecordLayout || {};
   const legacyAlignment = projection.pipelineState?.legacySimilarityAlignment;
   const materializedLegacyPlan = legacyAlignment
@@ -2465,8 +2485,7 @@ export const buildCanonicalRequestState = ({ session, projection, config,
   };
   const drawingRefs = {
     currentColors: colorOverridesChanged ? activeColors : config.colors || {},
-    selectedPalette: palette, featureVisibilityRules: publicationClone(features.featureVisibilityManualRules
-      || projection.semanticFeatureState?.featureVisibilityManualRules || []),
+    selectedPalette: palette, featureVisibilityRules: publicationClone(features.featureVisibilityManualRules || []),
     filterMode: config.filterMode || 'None', manualBlacklist: String(config.blacklistText || ''),
     canonicalLabelOverrideRows: publicationClone(features.labelOverrideRows || []),
     losatProgram: config.losatProgram || 'blastn',
@@ -2484,8 +2503,7 @@ export const buildCanonicalRequestState = ({ session, projection, config,
     ...refsOf(drawingRefs),
     form: config.form || {}, adv: config.adv || {},
     manualSpecificRules: publicationClone(config.rules || []), manualWhitelist: publicationClone(config.whitelist || []), manualPriorityRules: publicationClone(config.qualifierPriorityRules || []),
-    featureOverrides: publicationClone(features.featureOverrides
-      || projection.semanticFeatureState?.featureOverrides || {}),
+    featureOverrides: publicationClone(features.featureOverrides || {}),
     labelTextBulkOverrides: publicationClone(features.labelTextBulkOverrides || {}),
     circularConservation: conservation, losat: publicationClone(config.losat || { blastp: {} }),
     linearRecordRows: publicationClone(layout.rows || []), linearComparisonPlan: normalizeLinearComparisonPlan(config.linearComparisonPlan),
