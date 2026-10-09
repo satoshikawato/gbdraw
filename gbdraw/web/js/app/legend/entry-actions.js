@@ -282,9 +282,9 @@ export const createLegendEntryActions = ({
     // row hidden under the caption a rename took (review M1).
     /** @param {typeof rows[number]} row */
     const namedBy = (row) => {
-      const entry = intentEntry((each) => legendCaption(each) === row.key);
+      const entry = intentEntry((each) => legendCaption(each) === row.shownKey);
       return entry && (row.editor || !rows.some((other) => (
-        other !== row && (other.recordedKey ?? other.key) === generatedCaption(entry)
+        other !== row && (other.recordedKey ?? other.shownKey) === generatedCaption(entry)
       ))) ? entry : null;
     };
     rows.forEach((row) => {
@@ -293,9 +293,9 @@ export const createLegendEntryActions = ({
       if (row.editor) {
         if (!named && !asShown) return;
       } else {
-        const key = row.recordedKey ?? (named ? generatedCaption(named) : row.key);
+        const key = row.recordedKey ?? (named ? generatedCaption(named) : row.shownKey);
         if (!asShown && deletedKeys.has(key)) return;
-        const caption = asShown ? row.key : (legendCaption(renameOf(key)) || legendCaption(named) || key);
+        const caption = asShown ? row.shownKey : (legendCaption(renameOf(key)) || legendCaption(named) || key);
         const entry = intentEntry((each) => generatedCaption(each) === key && legendCaption(each) === caption)
           || intentEntry((each) => generatedCaption(each) === key);
         generatedCaptions.add(key);
@@ -305,8 +305,8 @@ export const createLegendEntryActions = ({
         return;
       }
       listed.push({
-        caption: row.key,
-        originalCaption: named ? generatedCaption(named) : row.key,
+        caption: row.shownKey,
+        originalCaption: named ? generatedCaption(named) : row.shownKey,
         color: row.color,
         xPos: row.xPos,
         yPos: row.yPos,

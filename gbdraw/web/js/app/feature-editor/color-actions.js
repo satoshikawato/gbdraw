@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { DrawingState } from '../../state.js' */
-import { LIVE_EDIT_DOMAINS } from '../candidate-render.js';
+/** @import { LegendRowReach, PythonLegendKey, RenderedFeatureId } from '../../services/legend-svg.js' */
+import { draftLegendRowColors, LIVE_EDIT_DOMAINS } from '../candidate-render.js';
 import { reportRuleRunFailure } from '../rule-matching.js';
 import { matchedRuleKeys, ruleKey, ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { appliedFeatureColors, resolveColorToHex } from '../../utils/color-utils.js';
@@ -8,7 +9,8 @@ import { getFeatureCaption, getFeatureColorRuleHash, getFeatureHashCandidates } 
 import { exactRegexValue } from '../../services/feature-selector.js';
 import {
   drawnLegendRowStroke,
-  mountedLegendRowFeatureIds,
+  legendRowFeatureIds,
+  pythonLegendRows,
   setsFeatureStroke
 } from '../../services/legend-svg.js';
 import { isAutoFeatureUnderlay } from '../../services/feature-dom.js';
@@ -248,8 +250,9 @@ export const createFeatureColorActions = ({
   };
 
   // The stroke a Legend row edit gives a feature without a stroke edit of its
-  // own, which the feature shows once its own edit is removed, as Generate
-  // draws it (`legendRowFeatureIds`, OV-123). Null when no row's stroke reaches it.
+  // own, which the feature shows once its own edit is removed, as the executor
+  // draws it from Python's row (`legendRowFeatureIds`, OV-123, OV-288). Null
+  // when no row's stroke reaches it.
   /**
    * @param {DrawingState} drawing
    * @param {Element} svg
@@ -258,10 +261,27 @@ export const createFeatureColorActions = ({
    * @returns {Record<string, any> | null}
    */
   const legendRowStrokeOf = (drawing, svg, feature, svgId) => {
+    const id = /** @type {RenderedFeatureId} */ (svgId);
+    const drawnFills = [/** @type {[RenderedFeatureId, string]} */ ([id, getFeatureFillElements(svg, svgId)[0]?.getAttribute('fill') || ''])];
     const namedCaption = normalizeCaption(getFeatureOverride(drawing.featureColorOverrides, feature)?.caption);
-    return Object.entries(drawing.legendStrokeOverrides).find(([caption]) => mountedLegendRowFeatureIds(
-      svg, caption, drawing.legendEntries.value, { namedIds: caption === namedCaption ? [svgId] : [] }
-    ).includes(svgId))?.[1] || null;
+    const pythonRows = pythonLegendRows(svg);
+    const draft = draftLegendRowColors({
+      rules: drawing.manualSpecificRules, legendEntries: drawing.legendEntries.value,
+      originalLegendOrder: originalLegendOrder.value || [], paletteColors: appliedFeatureColors(state)
+    });
+    return Object.entries(drawing.legendStrokeOverrides).find(([caption]) => {
+      const entry = drawing.legendEntries.value.find((/** @type {{ caption?: unknown }} */ each) => each?.caption === caption);
+      const key = normalizeCaption(entry?.originalCaption) || caption;
+      /** @type {LegendRowReach} */
+      const reach = {
+        listedIds: Array.isArray(entry?.featureIds) ? entry.featureIds : [],
+        namedIds: caption === namedCaption ? [id] : [],
+        ownStrokeIds: [],
+        draftColor: draft.colorOf(key)
+      };
+      return legendRowFeatureIds(reach, pythonRows.get(/** @type {PythonLegendKey} */ (key))?.color ?? null, drawnFills)
+        .length > 0;
+    })?.[1] || null;
   };
 
   /** @param {DrawingState} drawing */

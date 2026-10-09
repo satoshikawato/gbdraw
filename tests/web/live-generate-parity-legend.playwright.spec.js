@@ -10,6 +10,7 @@ const {
   diffSemanticSnapshots, expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult
 } = require('./helpers/live-generate-parity.cjs');
 const { loadSessionFile, openFresh } = require('./helpers/audit-browser.cjs');
+const { download, load } = require('./helpers/mode-transition.cjs');
 const {
   SINGLE_FIXTURE, open, generate, popupEdit, addVisibilityRule, appAction, addColorRule, history,
   FL1_OFF, legendRowColor, FL1_ALPHA, DEPTH_TSV, colorLegendRow, openCanvas, renameRow,
@@ -865,4 +866,55 @@ test('OV-243: a renamed GC skew row keeps its key through a palette change and G
   expect(await page.evaluate(() => window.__GBDRAW_APP__.deletedLegendEntries.map((entry) => [entry.caption, entry.originalCaption])),
     'the deleted row is the rename of Python\'s row').toEqual([['Skew+', 'GC skew (+)']]);
   await expectLiveEqualsGenerate(page, { label: 'delete of the renamed GC skew row' });
+});
+
+// OV-288 (R15-4): a Legend row's stroke reaches the features the renderer
+// draws for the row, in Python's row color, whatever color the row's swatch
+// takes. Both edit orders, with Undo and Redo of the second edit, and Save
+// then Load, show what Generate draws: the row's features keep the stroke.
+const ROW_STROKE = '#e63946';
+const rowStrokedFeatures = (snapshot) => Object.entries(snapshot.features)
+  .filter(([, feature]) => feature.stroke.includes(ROW_STROKE)).map(([id]) => id);
+for (const order of ['stroke then color', 'color then stroke']) {
+  test(`OV-288: a Legend row stroke and color on CDS (${order}) stroke the row's features, live = Generate (circular)`, async ({ page, browser }, testInfo) => {
+    test.setTimeout(300_000);
+    await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+    const stroke = () => legendRowStrokeColor(page, 'CDS', ROW_STROKE);
+    const color = () => legendRowColor(page, 'CDS', '#7b2cbf');
+    if (order === 'stroke then color') { await stroke(); await color(); } else { await color(); await stroke(); }
+    const stroked = rowStrokedFeatures(await semanticSnapshot(page));
+    expect(stroked.length, 'the stroke reaches the CDS features live').toBeGreaterThan(0);
+    await history(page, 'undo');
+    await history(page, 'redo');
+    expect(rowStrokedFeatures(await semanticSnapshot(page)), 'Undo and Redo of the second edit').toEqual(stroked);
+    const { generated } = await expectLiveEqualsGenerate(page, { label: `${order}, after Undo and Redo` });
+    expect(rowStrokedFeatures(generated), 'Generate strokes the same features').toEqual(stroked);
+    if (order !== 'stroke then color') return;
+    const saved = testInfo.outputPath('ov288.gbdraw-session.json');
+    await download(page, 'Save Session', saved);
+    const loaded = await load(browser, saved);
+    expect(rowStrokedFeatures(await semanticSnapshot(loaded)), 'Load shows the stroke').toEqual(stroked);
+    await expectLiveEqualsGenerate(loaded, { label: `${order}, after Save and Load` });
+    await loaded.context().close();
+  });
+}
+
+// OV-288, OV-291: a rule whose caption names a row of another color draws its
+// own row "<caption> [<hex>]" (N-06). The draft's color of a row is the color
+// of the rule Python draws that row for, so a palette change shown live keeps
+// the row the caption names in its palette color, and that row's stroke
+// reaches the features drawn in it, live as at Generate. The rule's feature
+// is reached too: the rule commit names it into the caption (OV-292, open).
+test('OV-291: a palette change and a stroke on a row a rule\'s caption names, live = Generate (circular)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2266aa', cap: 'repeat_region' });
+  await generate(page);
+  await switchPalette(page, 'arctic');
+  await legendRowStrokeColor(page, 'repeat_region', ROW_STROKE);
+  const stroked = rowStrokedFeatures(await semanticSnapshot(page));
+  expect(stroked, 'the repeat_region feature and the feature named into the caption (OV-292)')
+    .toEqual(['f841fb8a8', 'f9cf91913']);
+  const { generated } = await expectLiveEqualsGenerate(page, { label: 'palette change, then a stroke on the row a rule caption names' });
+  expect(rowStrokedFeatures(generated), 'Generate strokes the same feature').toEqual(stroked);
 });

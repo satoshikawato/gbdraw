@@ -20,7 +20,7 @@ import {
 import { drawnBlockStroke, drawsPythonLegendRow, isLegendOrderEdited, legendStructureEdited } from '../services/legend-svg.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
-import { displayedFeatureAddressing, drawnFeatureFills } from '../services/feature-override-identity.js';
+import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
 import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
 import { createRecordDisplayControls } from './record-display-options.js';
 import { isCurrentFeature } from '../services/feature-identity.js';
@@ -3415,7 +3415,6 @@ export const createAppSetup = () => {
         drawnContext: domains.includes('featureVisibility')
           ? featureDrawnContext(drawing, { diagramOptions: getCommittedCanonicalRenderRequest()?.diagramOptions })
           : null,
-        shownFills: () => drawnFeatureFills(svg),
         ruleRows
       } : null
     });

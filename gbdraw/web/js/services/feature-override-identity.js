@@ -210,19 +210,18 @@ export const migrateLegacyFeatureOverrides = (
   return result;
 };
 
-// The fill each rendered feature of a mounted Result is drawn with, by
-// rendered ID: as Python drew it (`python`), else as the Result shows it.
+// The fill Python drew each rendered feature of a mounted Result with, by
+// rendered ID.
 /**
  * @param {Element | null | undefined} svg
- * @param {{ python?: boolean }} [options]
  * @returns {Map<string, string>}
  */
-export const drawnFeatureFills = (svg, { python = false } = {}) => {
+const pythonFeatureFills = (svg) => {
   /** @type {Map<string, string>} */
   const fills = new Map();
   Array.from(svg?.querySelectorAll?.('[data-gbdraw-feature-id]') || []).forEach((element) => {
     const id = text(element.getAttribute('data-gbdraw-rendered-feature-id') || element.getAttribute('data-gbdraw-feature-id'));
-    const fill = text(python ? pythonDrawnAttribute(element, 'fill') : element.getAttribute('fill'));
+    const fill = text(pythonDrawnAttribute(element, 'fill'));
     if (id && fill && fill !== 'none' && !fills.has(id)) fills.set(id, fill);
   });
   return fills;
@@ -239,7 +238,7 @@ export const drawnFeatureFills = (svg, { python = false } = {}) => {
  * @param {Element | null} [svg] The displayed Result.
  */
 export const displayedFeatureAddressing = (features, resultNames, resultIndex, svg = null) => {
-  const fillByRenderedId = drawnFeatureFills(svg, { python: true });
+  const fillByRenderedId = pythonFeatureFills(svg);
   /** @type {Map<string, { resultIndex: number, renderedId: string }[]>} */
   const renderedTargetsByOverrideKey = new Map();
   /** @type {Map<string, Record<string, any>>} */

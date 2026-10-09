@@ -827,6 +827,22 @@ export const sessionOperationAvailability = (
 
 /** @typedef {'circular' | 'linear'} DiagramMode */
 
+/** @import { PythonLegendKey, RenderedFeatureId, SwatchColor } from './services/legend-svg.js' */
+/** @typedef {string & { readonly __brand: 'LegendCaption' }} LegendCaption The caption a Legend row shows, which a rename writes. */
+/**
+ * A row of a drawing's Legend list. Its identity is Python's key
+ * (`originalCaption`; an editor row's own caption); the caption and the swatch
+ * color are display values their writers own (rename, Legend color), never a
+ * row's identity or the features it reaches (OV-288).
+ * @typedef {object} LegendEntry
+ * @property {LegendCaption} caption
+ * @property {PythonLegendKey} originalCaption
+ * @property {SwatchColor} color
+ * @property {number} xPos
+ * @property {number} yPos
+ * @property {RenderedFeatureId[]} featureIds The features the row lists (older Sessions); empty: Python's row decides.
+ */
+
 // The drawing of a diagram mode: its settings, its editor edits, and the
 // values derived from them, under their former `state` names and kinds (a ref
 // stays a ref). Only the drawing holds them: a service reads them from the
@@ -904,7 +920,7 @@ const createDrawingState = (drawingMode) => {
     featureVisibilityManualRules,
     labelTextBulkOverrides: reactive({}), // { sourceText: text }
     canonicalLabelOverrideRows: ref([]),
-    legendEntries: ref([]), // [{caption, originalCaption, color, yPos, featureIds}]
+    legendEntries: ref([]), // LegendEntry[]; typed with its writers (OV-288 STATUS)
     deletedLegendEntries: ref([]),
     // OV-120: renamed rows the last Generate did not draw (GC off, Show Depth
     // off); their renames apply again when a Generate draws the row.

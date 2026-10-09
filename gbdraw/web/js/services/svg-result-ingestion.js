@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { FeatureCatalogAdmission } from './feature-catalog.js' */
+/** @import { LegendRowReach, PythonLegendKey, RenderedFeatureId } from './legend-svg.js' */
 import {
   AUTO_FEATURE_UNDERLAY_STROKE,
   FEATURE_PART_CONNECTOR,
@@ -16,13 +17,14 @@ import {
   moveLegendEntryToAnchor,
   orderLegendEntries,
   pythonLegendKey,
+  pythonLegendRow,
   setsFeatureStroke,
   SPECIFIC_COLOR_FILE_OWNER
 } from './legend-svg.js';
 import { isCurrentWorkerGenerationResponse } from './current-worker-result-source.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { sanitizeSvgContent } from './svg-sanitization.js';
-import { LEGEND_ORDER_RECORD, RESULT_BASE_SELECTOR, resultBaseAttribute } from './result-paint-bases.js';
+import { LEGEND_ORDER_RECORD, RESULT_BASE_SELECTOR, pythonDrawnAttribute, resultBaseAttribute } from './result-paint-bases.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { collectRenderedFeatureIdentitiesFromSvgRoot } from './session-feature-metadata.js';
 import { normalizeSvgResultIds } from './svg-result-normalization.js';
@@ -52,14 +54,25 @@ const text = (value) => String(value ?? '').trim();
  */
 
 /**
+ * A stroke on a Legend row: its swatch, and the features the row reaches in
+ * the Result, which the executor reads from Python's row there (OV-288).
+ * @typedef {object} LegendStrokeOperation
+ * @property {PythonLegendKey} caption The row: Python's key, or an editor row's own key.
+ * @property {string} strokeColor Empty: the operation sets no color.
+ * @property {number | null} strokeWidth Null: the operation sets no width.
+ * @property {boolean} [allowMissing]
+ * @property {LegendRowReach} reach
+ */
+
+/**
  * One Result's compiled editor operations. The planner is app/candidate-render.js;
  * this module declares the shape it applies.
  * A live feature fill of `color: null` keeps the fill the Result shows.
  * @typedef {Record<
  *   'featureFills' | 'featureStrokes' | 'featureVisibility' | 'labelText' | 'labelVisibility'
- *   | 'legendFills' | 'legendStrokes' | 'legendRenames' | 'legendDeletes' | 'legendAdds' | 'legendOrder',
+ *   | 'legendFills' | 'legendRenames' | 'legendDeletes' | 'legendAdds' | 'legendOrder',
  *   readonly Record<string, any>[]
- * > & { callerTransforms: readonly SvgResultTransform[] }} SvgMutationOperations
+ * > & { legendStrokes: readonly LegendStrokeOperation[], callerTransforms: readonly SvgResultTransform[] }} SvgMutationOperations
  */
 
 /**
@@ -673,9 +686,28 @@ const applyFeatureOperations = (index, operations) => {
 // be missing from this Result (OV-63). Fills, strokes, renames, and deletes
 // address a row of Python's by Python's key; an addition and its styles address
 // the editor row by its caption; the order addresses the keys the rows show.
+// `restoresFills`: the pass returns the feature fills no operation sets to
+// Python's (a reconcile that shows them).
 // Returns whether a Legend row was added, renamed, hidden, or moved.
-const applyLegendOperations = (index, operations, { displayed = false, mayBeAbsent = /** @type {((caption: string) => boolean) | undefined} */ (undefined) } = {}) => {
+const applyLegendOperations = (index, operations, {
+  displayed = false, restoresFills = false, mayBeAbsent = /** @type {((caption: string) => boolean) | undefined} */ (undefined)
+} = {}) => {
   const requireRow = (operation) => requireLegendEntries(index, operation.caption, operation, mayBeAbsent);
+  // The fill each drawn feature shows once this pass ends, read once per pass
+  // for the Legend row strokes (perf-014x S5).
+  /** @type {Array<[RenderedFeatureId, string]> | null} */
+  let drawnFills = null;
+  const featureFills = () => {
+    drawnFills ??= [...index.features()].flatMap(([renderedId, elements]) => {
+      const element = filterFeatureFillTargets(elements)[0];
+      if (!element) return [];
+      const fill = restoresFills && !index.painted.get(element)?.has('fill')
+        ? pythonDrawnAttribute(element, 'fill')
+        : element.getAttribute('fill');
+      return [/** @type {[RenderedFeatureId, string]} */ ([renderedId, text(fill)])];
+    });
+    return drawnFills;
+  };
   let changed = false;
   // Python never draws a row the Legend editor added, so the row is added first and
   // a fill or stroke on it then finds it like a generated row (OV-86). An added row
@@ -742,15 +774,17 @@ const applyLegendOperations = (index, operations, { displayed = false, mayBeAbse
       setPaintAttribute(index, swatch, 'fill', color);
     });
   });
-  operations.legendStrokes.forEach((operation) => {
-    const { strokeColor, strokeWidth, renderedIds } = operation;
-    (Array.isArray(renderedIds) ? renderedIds : []).forEach((renderedId) => {
+  operations.legendStrokes.forEach((/** @type {LegendStrokeOperation} */ operation) => {
+    const { strokeColor, strokeWidth, reach } = operation;
+    const rows = requireRow(operation);
+    const pythonColor = rows.length > 0 ? pythonLegendRow(rows[0]).color : null;
+    legendRowFeatureIds(reach, pythonColor, featureFills()).forEach((renderedId) => {
       requireFeatureElements(index, renderedId).forEach((element) => {
         if (strokeColor) setPaintAttribute(index, element, 'stroke', strokeColor);
         if (strokeWidth !== null) setPaintAttribute(index, element, 'stroke-width', strokeWidth);
       });
     });
-    requireRow(operation).forEach((entry) => {
+    rows.forEach((entry) => {
       const swatch = legendSwatch(entry);
       if (!swatch) throw new Error('Sanitized SVG content is missing a Legend swatch.');
       if (strokeColor) setPaintAttribute(index, swatch, 'stroke', strokeColor);
@@ -868,15 +902,12 @@ export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domai
     const allowMissing = (operation) => ({ ...operation, allowMissing: true });
     legendChanged = applyLegendOperations(index, {
       legendFills: operations.legendFills.map(allowMissing),
-      legendStrokes: operations.legendStrokes.map((operation) => ({
-        ...allowMissing(operation),
-        renderedIds: (operation.renderedIds || []).filter((renderedId) => present({ renderedId }))
-      })),
+      legendStrokes: operations.legendStrokes.map(allowMissing),
       legendRenames: operations.legendRenames.map(allowMissing),
       legendDeletes: operations.legendDeletes.map(allowMissing),
       legendAdds: operations.legendAdds,
       legendOrder: operations.legendOrder
-    }, { displayed: true });
+    }, { displayed: true, restoresFills: domains.includes('featureFills') });
     legendChanged = restoreLegendStructure(index, operations, domains) || legendChanged;
   }
   return restorePaintBases(svg, domains, index.painted) || legendChanged;
@@ -956,7 +987,7 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits, block
 
   /** @type {Map<string, string>} */
   const editedFills = new Map();
-  /** @type {Map<string, string[]>} */
+  /** @type {Map<string, RenderedFeatureId[]>} */
   const namedIdsByCaption = new Map();
   /** @type {Map<string, Record<string, any>>} */
   const renderedFeatures = catalogAdmission.renderedFeaturesByResult?.[resultIndex] || new Map();
@@ -965,7 +996,7 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits, block
     const caption = text(edit?.caption);
     renderedIdsOf(key).forEach((renderedId) => {
       if (color) editedFills.set(renderedId, color);
-      if (caption) namedIdsByCaption.set(caption, [...(namedIdsByCaption.get(caption) || []), renderedId]);
+      if (caption) namedIdsByCaption.set(caption, [...(namedIdsByCaption.get(caption) || []), /** @type {RenderedFeatureId} */ (renderedId)]);
       filterFeatureFillTargets(elementsOf(renderedId)).forEach((element) => (
         record(element, 'fill', color, renderedFeatures.get(renderedId)?.fill_color)
       ));
@@ -976,15 +1007,35 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits, block
   Object.entries(edits.featureStrokeOverrides).forEach(([key, edit]) => {
     if (setsFeatureStroke(edit)) renderedIdsOf(key).forEach((renderedId) => stroked.push([renderedId, edit]));
   });
-  const ownStrokeIds = stroked.map(([renderedId]) => renderedId);
+  const ownStrokeIds = /** @type {RenderedFeatureId[]} */ (stroked.map(([renderedId]) => renderedId));
   const drawnFills = [...renderedFeatures].map(([renderedId, feature]) => (
-    /** @type {[string, string]} */ ([renderedId, editedFills.get(renderedId) ?? text(feature?.fill_color)])
+    /** @type {[RenderedFeatureId, string]} */ ([renderedId, editedFills.get(renderedId) ?? text(feature?.fill_color)])
   ));
+  const rows = index.legends().entries;
+  // A swatch shows its Legend color; its record keeps Python's, which is the
+  // color the row's stroke reaches by (OV-288), so the records come first.
+  Object.entries(edits.legendColorOverrides).forEach(([caption, color]) => {
+    const entry = edits.legendEntries.find((row) => text(row?.caption) === caption);
+    const original = edits.originalLegendColors[text(entry?.originalCaption) || caption];
+    if (original === undefined) return;
+    (rows.get(caption) || []).forEach((row) => {
+      const swatch = legendSwatch(row);
+      if (swatch) record(swatch, 'fill', color, original);
+    });
+  });
   /** @type {Array<[string, Record<string, any>]>} */
   const strokedRows = Object.entries(edits.legendStrokeOverrides).filter(([, edit]) => setsFeatureStroke(edit));
   strokedRows.forEach(([caption, edit]) => {
     const entry = edits.legendEntries.find((row) => text(row?.caption) === caption);
-    legendRowFeatureIds(entry, { drawnFills, namedIds: namedIdsByCaption.get(caption) || [], ownStrokeIds })
+    const row = rows.get(caption)?.[0];
+    /** @type {LegendRowReach} */
+    const reach = {
+      listedIds: /** @type {RenderedFeatureId[]} */ ((Array.isArray(entry?.featureIds) ? entry.featureIds : []).map(text).filter(Boolean)),
+      namedIds: namedIdsByCaption.get(caption) || [],
+      ownStrokeIds,
+      draftColor: null
+    };
+    legendRowFeatureIds(reach, row ? pythonLegendRow(row).color : null, drawnFills)
       .forEach((renderedId) => stroked.push([renderedId, edit]));
   });
 
@@ -1023,20 +1074,10 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits, block
     ));
   });
 
-  const rows = index.legends().entries;
   strokedRows.forEach(([caption, edit]) => {
     (rows.get(caption) || []).forEach((row) => {
       const swatch = legendSwatch(row);
       if (swatch) recordStroke(swatch, drawnStrokes.get(firstBlocks), edit);
-    });
-  });
-  Object.entries(edits.legendColorOverrides).forEach(([caption, color]) => {
-    const entry = edits.legendEntries.find((row) => text(row?.caption) === caption);
-    const original = edits.originalLegendColors[text(entry?.originalCaption) || caption];
-    if (original === undefined) return;
-    (rows.get(caption) || []).forEach((row) => {
-      const swatch = legendSwatch(row);
-      if (swatch) record(swatch, 'fill', color, original);
     });
   });
 };

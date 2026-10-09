@@ -1,11 +1,13 @@
 // @ts-check
 /** @import { FeatureCatalogAdmission } from '../services/feature-catalog.js' */
-/** @import { SvgAdmissionRuntime, SvgResultTransform } from '../services/svg-result-ingestion.js' */
-import { normalizeDefaultColor } from '../utils/color-utils.js';
-import { defaultLegendCaptionOrder, isLegendOrderEdited, legendRowFeatureIds } from '../services/legend-svg.js';
+/** @import { LegendStrokeOperation, SvgAdmissionRuntime, SvgResultTransform } from '../services/svg-result-ingestion.js' */
+/** @import { PythonLegendKey, RenderedFeatureId, SwatchColor } from '../services/legend-svg.js' */
+import { normalizeDefaultColor, resolveColorToHex } from '../utils/color-utils.js';
+import { defaultLegendCaptionOrder, isLegendOrderEdited } from '../services/legend-svg.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { biologicalFeatureKey } from '../services/feature-catalog.js';
 import { ruleMatcher } from '../services/rule-matchers.js';
+import { ruleLegendCaptions } from '../services/specific-color-rules.js';
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
 import { resolveFeatureDrawn } from '../services/feature-visibility.js';
 import {
@@ -51,9 +53,6 @@ import {
  * @property {Record<string, string>} paletteColors
  * @property {ReturnType<typeof import('../services/feature-visibility.js').featureDrawnContext> | null} drawnContext
  *   `featureDrawnContext` of the drawing; read when `domains` has featureVisibility.
- * @property {(() => Map<string, string>) | null} [shownFills] The fill each rendered feature of the
- *   displayed Result shows: what a Legend row stroke reaches by color when the compile does not
- *   preview the feature fills.
  * @property {RuleLegendRows | null} [ruleRows] The Legend rows a rule commit shows at once.
  */
 
@@ -98,9 +97,9 @@ const normalizeStrokeWidth = (value) => {
  * services/svg-result-ingestion.js declares as `SvgMutationOperations`).
  * @typedef {Record<
  *   'featureFills' | 'featureStrokes' | 'featureVisibility' | 'labelText' | 'labelVisibility'
- *   | 'legendFills' | 'legendStrokes' | 'legendRenames' | 'legendDeletes' | 'legendAdds' | 'legendOrder',
+ *   | 'legendFills' | 'legendRenames' | 'legendDeletes' | 'legendAdds' | 'legendOrder',
  *   Record<string, any>[]
- * > & { callerTransforms: SvgResultTransform[] }} MutableOperations
+ * > & { legendStrokes: LegendStrokeOperation[], callerTransforms: SvgResultTransform[] }} MutableOperations
  */
 
 /** @returns {MutableOperations} */
@@ -174,6 +173,35 @@ const paletteLegendColor = (caption, palette) => {
   if (type.toLowerCase() === 'proteins') return palette.CDS || '';
   if (type.endsWith('s')) type = type.slice(0, -1);
   return palette[type] || '';
+};
+
+// The color the draft gives the features of a Legend row (its Python key)
+// where a displayed Result predates the draft: its first rule's color, else
+// its palette color, as Python draws them. A rule's row is the key Python
+// draws for it (N-06: "<caption> [<hex>]" when the caption names a row of
+// another color), never a row its caption only spells. The live compile shows
+// it on rows without a Legend color of their own, and a row's stroke reaches
+// by it (`LegendRowReach.draftColor`); the feature popup reads it the same way.
+/**
+ * @param {{ rules: readonly Record<string, any>[], legendEntries: readonly Record<string, any>[],
+ *   originalLegendOrder: readonly string[], paletteColors: Record<string, string> }} draft
+ * @returns {{ ruleCaptions: string[], colorOf: (caption: string) => SwatchColor | null }}
+ */
+export const draftLegendRowColors = ({ rules, legendEntries, originalLegendOrder, paletteColors }) => {
+  const rowOf = ruleLegendCaptions({ rules: [...rules], legendEntries: [...legendEntries], originalLegendOrder: [...originalLegendOrder] });
+  /** @type {Map<string, string>} */
+  const ruleColors = new Map();
+  rules.forEach((rule) => {
+    const caption = text(rule?.cap) ? text(rowOf(rule)) : '';
+    if (caption && !ruleColors.has(caption)) ruleColors.set(caption, text(rule.color));
+  });
+  return {
+    ruleCaptions: [...ruleColors.keys()],
+    colorOf: (caption) => {
+      const color = normalizePaint(ruleColors.get(caption) || paletteLegendColor(caption, paletteColors), 'legend color');
+      return color ? /** @type {SwatchColor} */ (color) : null;
+    }
+  };
 };
 
 // Python's fill of a feature type (gbdraw/features/colors.py
@@ -551,6 +579,12 @@ const compilePlanBundle = ({
     return { entry, targetCaption, namedIds, allowMissingIn };
   };
   const styledCaptions = new Set([...Object.keys(legendColorOverrides), ...Object.keys(legendStrokeOverrides)]);
+  // Live only: at Generate Python's row has the color (OV-288).
+  const draftRowColors = draftLegendRowColors({
+    rules, legendEntries: currentEntries, originalLegendOrder: [...originalCaptions], paletteColors: livePreview?.paletteColors || {}
+  });
+  /** @param {string} caption */
+  const draftRowColor = (caption) => (livePreview ? draftRowColors.colorOf(caption) : null);
 
   runStage('legendFills', () => {
     /** @type {Set<string>} */
@@ -566,22 +600,14 @@ const compilePlanBundle = ({
         operations.legendFills.push({ caption: row.targetCaption, color, allowMissing: row.allowMissingIn(resultIndex) });
       });
     });
-    // A row without a Legend color of its own shows its rule's color, else its
-    // palette color, as Python draws them (OV-146: every swatch fill is an
-    // operation, so a reconcile never returns a rule or palette row to an older
-    // fill). A Result may not draw the row.
+    // A row without a Legend color of its own shows the color the draft gives
+    // its features (OV-146: every swatch fill is an operation, so a reconcile
+    // never returns a rule or palette row to an older fill). A Result may not
+    // draw the row.
     if (!livePreview) return;
-    /** @type {Map<string, string>} */
-    const ruleColors = new Map();
-    rules.forEach((rule) => {
-      const caption = text(rule?.cap);
-      if (caption && !ruleColors.has(caption)) ruleColors.set(caption, text(rule.color));
-    });
-    new Set([...originalCaptions, ...ruleColors.keys()]).forEach((caption) => {
+    new Set([...originalCaptions, ...draftRowColors.ruleCaptions]).forEach((caption) => {
       if (filledCaptions.has(caption) || deletedCaptions.has(caption)) return;
-      const color = normalizePaint(
-        ruleColors.get(caption) || paletteLegendColor(caption, livePreview.paletteColors || {}), 'legend color'
-      );
+      const color = draftRowColor(caption);
       if (color) addToResults(operationsByResult, allResultIndexes, 'legendFills', { caption, color, allowMissing: true });
     });
   });
@@ -605,44 +631,18 @@ const compilePlanBundle = ({
         });
       });
     });
-    // The fill each feature of a Result is drawn with and the features with a
-    // stroke edit of their own: what a Legend row's stroke reads to reach the
-    // row's features, as the live stroke does on the mounted Result
-    // (`legendRowFeatureIds`, OV-123). Live, a feature without a fill
-    // operation shows the fill the displayed Result shows, unless this compile
-    // previews the fills (then Python's fill is the one it keeps).
-    const previewsFills = Boolean(livePreview) && shownDomains.has('featureFills');
-    /** @type {Map<string, string> | null} */
-    let shown = null;
-    /** @param {string} renderedId */
-    const shownFill = (renderedId) => {
-      shown ??= livePreview?.shownFills?.() || new Map();
-      return text(shown.get(renderedId));
-    };
-    /** @type {Map<number, { drawnFills: Array<[string, string]>, ownStrokeIds: string[] }>} */
-    const drawnFeaturesByResult = new Map();
+    // A Legend row's stroke reaches the features the executor finds in each
+    // Result from Python's row there (`legendRowFeatureIds`, OV-123, OV-288);
+    // the compile gives what the editor intent says of the row.
+    /** @type {Map<number, RenderedFeatureId[]>} */
+    const ownStrokesByResult = new Map();
     /** @param {number} resultIndex */
-    const drawnFeaturesIn = (resultIndex) => {
-      const known = drawnFeaturesByResult.get(resultIndex);
+    const ownStrokeIdsIn = (resultIndex) => {
+      const known = ownStrokesByResult.get(resultIndex);
       if (known) return known;
-      const operations = operationsByResult[resultIndex];
-      const edited = new Map(operations.featureFills.map(({ renderedId, color }) => [renderedId, color]));
-      /** @type {Map<string, Record<string, any>>} */
-      const rendered = catalogAdmission.renderedFeaturesByResult?.[resultIndex] || new Map();
-      /** @param {string} renderedId @param {Record<string, any>} feature */
-      const drawnFill = (renderedId, feature) => {
-        const own = edited.get(renderedId);
-        if (own) return own;
-        const keeps = livePreview && (own === null || !previewsFills);
-        return (keeps ? shownFill(renderedId) : '') || pythonFill(renderedId, feature);
-      };
-      const drawn = {
-        /** @type {Array<[string, string]>} */
-        drawnFills: [...rendered].map(([renderedId, feature]) => [renderedId, drawnFill(renderedId, feature)]),
-        ownStrokeIds: operations.featureStrokes.map(({ renderedId }) => renderedId)
-      };
-      drawnFeaturesByResult.set(resultIndex, drawn);
-      return drawn;
+      const own = operationsByResult[resultIndex].featureStrokes.map(({ renderedId }) => /** @type {RenderedFeatureId} */ (renderedId));
+      ownStrokesByResult.set(resultIndex, own);
+      return own;
     };
     styledCaptions.forEach((caption) => {
       const stroke = legendStrokeOverrides[caption];
@@ -651,10 +651,15 @@ const compilePlanBundle = ({
       if (!row) return;
       const strokeColor = hasOwn(stroke, 'strokeColor') ? normalizePaint(stroke.strokeColor, 'legend stroke color') : '';
       const strokeWidth = hasOwn(stroke, 'strokeWidth') ? normalizeStrokeWidth(stroke.strokeWidth) : null;
-      if (strokeColor || strokeWidth !== null) operationsByResult.forEach((operations, resultIndex) => {
+      if (!strokeColor && strokeWidth === null) return;
+      const listedIds = /** @type {RenderedFeatureId[]} */ (row.entry ? row.entry.featureIds : []);
+      const namedIds = /** @type {RenderedFeatureId[]} */ (row.namedIds);
+      const draftColor = draftRowColor(row.targetCaption);
+      operationsByResult.forEach((operations, resultIndex) => {
         operations.legendStrokes.push({
-          caption: row.targetCaption, strokeColor, strokeWidth, allowMissing: row.allowMissingIn(resultIndex),
-          renderedIds: legendRowFeatureIds(row.entry, { ...drawnFeaturesIn(resultIndex), namedIds: row.namedIds })
+          caption: /** @type {PythonLegendKey} */ (row.targetCaption), strokeColor, strokeWidth,
+          allowMissing: row.allowMissingIn(resultIndex),
+          reach: { listedIds, namedIds, ownStrokeIds: ownStrokeIdsIn(resultIndex), draftColor }
         });
       });
     });
