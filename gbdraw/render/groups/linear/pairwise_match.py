@@ -7,15 +7,16 @@ import math
 from typing import Dict, Sequence, cast
 
 from pandas import DataFrame
-from svgwrite.container import Group
-from svgwrite.path import Path
+from gbdraw.svg.elements import Group, Path
 
 from ....canvas import LinearCanvasConfigurator
 from ....layout.linear_coords import normalize_position_linear
 from ....core.color import (
+    COLLINEAR_ORIENTATION_COLOR_KEYS,
+    COLLINEAR_ORIENTATION_MIN_COLOR_KEYS,
     DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS,
     DEFAULT_COLLINEAR_ORIENTATION_COLORS,
-    interpolate_color,
+    interpolate_default_colors,
 )
 from ....features.ids import make_linear_rendered_feature_id
 from ....layout.linear_multi_record import LinearRecordPlacement
@@ -184,7 +185,7 @@ class PairWiseMatchGroup:
         self.track_id: str = "comparison" + str(self.comparison_count)
         self._pairwise_match_counter = 0
         self.calculate_query_subject_offsets()
-        self.match_group = Group(id=self.track_id, debug=False)
+        self.match_group = Group(id=self.track_id)
         if self.query_placement is not None:
             self.match_group.attribs["data-query-record-index"] = self.query_record_index
             self.match_group.attribs["data-subject-record-index"] = self.subject_record_index
@@ -357,7 +358,11 @@ class PairWiseMatchGroup:
                 100 - self.min_identity
             )
             factor = max(0.0, min(1.0, factor))
-        default_gradient_color = interpolate_color(self.match_min_color, self.match_max_color, factor)
+        default_gradient_color = interpolate_default_colors(
+            ("pairwise_match_min", self.match_min_color),
+            ("pairwise_match_max", self.match_max_color),
+            factor,
+        )
         dynamic_fill_color = self.resolve_match_fill_color(row, factor, default_gradient_color)
         if endpoints is None:
             query_start, query_end, subject_start, subject_end = self.calculate_offsets(row)
@@ -407,7 +412,6 @@ class PairWiseMatchGroup:
             fill_opacity=self.match_fill_opacity,
             stroke=self.match_stroke_color,
             stroke_width=self.match_stroke_width,
-            debug=False,
         )
         path.attribs["data-pairwise-match-style"] = match_style
         path.attribs["data-identity-factor"] = f"{factor:.6g}"
@@ -487,8 +491,13 @@ class PairWiseMatchGroup:
                 "collinearity_orientation_min_colors",
                 DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS,
             )
+            min_key = COLLINEAR_ORIENTATION_MIN_COLOR_KEYS.get(orientation, "pairwise_match_min")
             min_color = orientation_min_colors.get(orientation, self.match_min_color)
-            return interpolate_color(min_color, orientation_color, factor)
+            return interpolate_default_colors(
+                (min_key, min_color),
+                (COLLINEAR_ORIENTATION_COLOR_KEYS[orientation], orientation_color),
+                factor,
+            )
 
         return default_gradient_color
 

@@ -3,9 +3,7 @@
 
 from typing import Mapping
 
-from svgwrite.container import Group
-from svgwrite.gradients import LinearGradient
-from svgwrite.path import Path
+from gbdraw.svg.elements import Group, LinearGradient, Path
 
 from ....configurators.legend import LegendMeasurement
 from ....legend.circular_layout import CircularGradientLegendLayout
@@ -60,7 +58,7 @@ class LegendGroup:
         )
 
     def _build_gradient_legend(self, layout: CircularGradientLegendLayout) -> Group:
-        group = Group(id="conservation_identity_legend", debug=False)
+        group = Group(id="conservation_identity_legend")
         group.attribs["data-gbdraw-role"] = "comparison-legend"
         group.attribs["data-gbdraw-orientation"] = "circular"
         font = self.font_family
@@ -73,7 +71,7 @@ class LegendGroup:
             for compact_entry in layout.compact_entries:
                 properties = compact_entry.properties
                 gradient_id = self._gradient_id(compact_entry.key, properties)
-                entry_group = Group(debug=False)
+                entry_group = Group()
                 entry_group.attribs["data-legend-key"] = str(compact_entry.key)
 
                 gradient = LinearGradient(start=(0, 0), end=("100%", 0), id=gradient_id)
@@ -137,7 +135,7 @@ class LegendGroup:
         for entry in layout.single_entries:
             properties = entry.properties
             gradient_id = self._gradient_id(entry.key, properties)
-            entry_group = Group(debug=False)
+            entry_group = Group()
             entry_group.attribs["data-legend-key"] = str(entry.key)
 
             gradient = LinearGradient(start=(0, 0), end=("100%", 0), id=gradient_id)
@@ -213,7 +211,7 @@ class LegendGroup:
         font = self.font_family
         feature_group = Group(id="feature_legend") if layout.gradient is not None else self.legend_group
         for entry in layout.solid_entries:
-            entry_group = Group(debug=False)
+            entry_group = Group()
             entry_group.attribs["data-legend-key"] = str(entry.key)
 
             rect_path = Path(

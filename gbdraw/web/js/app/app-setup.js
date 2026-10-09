@@ -112,7 +112,7 @@ import {
 import { applyStrokeOverridesToSvg } from './legend/stroke-actions.js';
 import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
-import { setupHistoryInputs } from './history-inputs.js';
+import { createDialogChoice, setupHistoryInputs } from './history-inputs.js';
 import { setupHistoryShortcuts } from './history-shortcuts.js';
 import { createPreviewRuntime } from './preview-runtime.js';
 import {
@@ -1311,6 +1311,8 @@ export const createAppSetup = () => {
       historyStepSwitchesMode(changes) ? diagramModeOperationBusy() : null
     )
   }));
+  // The choice in flight of a popup choice dialog: its busy state and its close (D-12).
+  const dialogChoice = createDialogChoice({ mutationPending: history.mutationPending, runUndoable: history.runUndoable, ref });
   const recordDisplayControls = createRecordDisplayControls({ state, computed, watch,
     linearRecordsFor: linearRecordSelector.recordsFor,
     linearRecordStatusFor: linearRecordSelector.statusFor,
@@ -1447,6 +1449,7 @@ export const createAppSetup = () => {
     evaluateLabelRules: evaluateRules,
     runUndoable: history.runUndoable,
     runUndoableCheckpoint: history.runUndoableCheckpoint,
+    closeAfterDialogChoice: dialogChoice.closeAfterChoice,
     getCommittedRequest: getCommittedCanonicalRenderRequest,
     getCommittedSession: getCommittedCanonicalSession,
     readResourceRecordCount: readCommittedResourceRecordCount,
@@ -2897,6 +2900,7 @@ export const createAppSetup = () => {
     sessionOperationAvailability(operation, sessionPreparationBusyReason)
   );
   const semanticMutationAvailable = computed(() => !sessionOperationAvailability());
+  const dialogChoicePending = dialogChoice.pending;
   const sessionSaveAvailable = computed(() => !sessionSaveLoadAvailability('save'));
   const sessionLoadAvailable = computed(() => !sessionSaveLoadAvailability('load'));
   const sessionBusyReason = computed(() => sessionSaveLoadAvailability('save')?.reason || '');
@@ -3099,6 +3103,7 @@ export const createAppSetup = () => {
     updateClickedFeatureColor,
     cancelFeatureStyleScope,
     cancelLegendRename,
+    cancelResetColor,
     handleColorScopeChoice,
     handleFeatureStyleScopeChoice,
     handleLegendNameCommit,
@@ -3562,21 +3567,15 @@ export const createAppSetup = () => {
     'Change legend stroke color',
     setLegendEntryStrokeColorValue
   );
-  // OV-161: Cancel closes a scope dialog at once and records no History step;
-  // only a real choice is one undoable step, as with askLabelOn and
-  // handleLabelOnChoice. Cancel used to wait for the step's intent capture,
-  // which after a Session load took seconds.
+  // OV-161, D-12: a dialog choice is one History step, Cancel records none, and
+  // neither starts while History's step is open (`createDialogChoice`).
   /**
    * @param {() => string} label
    * @param {(choice: string, ...rest: any[]) => any} handler
    * @param {() => void} [cancel]
    */
   const scopeChoiceWithHistory = (label, handler, cancel = cancelFeatureStyleScope) => (
-    /** @type {string} */ choice, /** @type {any[]} */ ...rest
-  ) => (
-    choice === 'cancel'
-      ? cancel()
-      : history.runUndoable(label(), () => handler(choice, ...rest))
+    dialogChoice.withHistory(label, handler, cancel)
   );
   const handleColorScopeChoiceWithHistory = scopeChoiceWithHistory(() => 'Change feature color', handleColorScopeChoice);
   const handleFeatureStyleScopeChoiceWithHistory = scopeChoiceWithHistory(
@@ -3589,7 +3588,11 @@ export const createAppSetup = () => {
     handleLegendRenameChoice,
     cancelLegendRename
   );
-  const handleResetColorChoiceWithHistory = undoableAction('Reset feature color', handleResetColorChoice);
+  const handleResetColorChoiceWithHistory = scopeChoiceWithHistory(
+    () => 'Reset feature color',
+    handleResetColorChoice,
+    cancelResetColor
+  );
   const resetClickedFeatureFillColorWithHistory = undoableAction('Reset feature color', resetClickedFeatureFillColor);
   const updateClickedFeatureStrokeWithHistory = undoableAction('Change feature stroke', updateClickedFeatureStroke);
   const setClickedFeatureStrokeColorValueWithHistory = undoableAction(
@@ -5050,7 +5053,14 @@ export const createAppSetup = () => {
   const trapDialogFocus = (event) => {
     const dialog = event.currentTarget?.querySelector('[role="dialog"]');
     const controls = Array.from(dialog?.querySelectorAll('button:not(:disabled)') || []);
-    if (!controls.length) return;
+    if (!controls.length) {
+      // A busy choice disables every button: Tab stays on the dialog panel.
+      if (dialog) {
+        event.preventDefault();
+        dialog.focus({ preventScroll: true });
+      }
+      return;
+    }
     const first = controls[0];
     const last = controls.at(-1);
     if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
@@ -5294,6 +5304,7 @@ export const createAppSetup = () => {
     sessionImportPending,
     sessionSavePending,
     semanticMutationAvailable,
+    dialogChoicePending,
     sessionSaveAvailable,
     sessionLoadAvailable,
     sessionBusyReason,

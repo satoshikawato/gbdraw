@@ -28,6 +28,8 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoable History's undoable step.
  * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoableCheckpoint
  *   History's undoable step that stores a checkpoint of the Result.
+ * @property {(close: () => unknown) => void} [closeAfterDialogChoice]
+ *   Closes a choice dialog once the History step of its choice ends (D-12).
  * @property {() => ({ mode?: string, diagramOptions?: Record<string, any> } | null)} getCommittedRequest
  *   The committed canonical request (Python owns the option fields, R7).
  * @property {() => Record<string, any> | null} [getCommittedSession] The committed canonical Session.
@@ -66,6 +68,7 @@ export const createFeatureEditor = ({
   // projection, and Result selection arrive as ports.
   runUndoable,
   runUndoableCheckpoint,
+  closeAfterDialogChoice,
   getCommittedRequest,
   getCommittedSession = () => null,
   readResourceRecordCount = null,
@@ -112,7 +115,8 @@ export const createFeatureEditor = ({
     ruleActions,
     getFeatureElements: featureSvgActions.getFeatureElements,
     getFeatureFillElements: featureSvgActions.getFeatureFillElements,
-    commitActiveResultEdit
+    commitActiveResultEdit,
+    closeAfterDialogChoice
   });
   // The visibility owner comes before the label owner, which receives its
   // transition as a port: Show feature and label (Owner Q2) sets Feature
@@ -205,6 +209,7 @@ export const createFeatureEditor = ({
     updateClickedFeatureColor: colorActions.updateClickedFeatureColor,
     cancelFeatureStyleScope: colorActions.cancelFeatureStyleScope,
     cancelLegendRename: colorActions.cancelLegendRename,
+    cancelResetColor: colorActions.cancelResetColor,
     handleColorScopeChoice: colorActions.handleColorScopeChoice,
     handleFeatureStyleScopeChoice: colorActions.handleFeatureStyleScopeChoice,
     handleLegendNameCommit: colorActions.handleLegendNameCommit,

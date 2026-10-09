@@ -3,8 +3,7 @@
 
 from __future__ import annotations
 
-from svgwrite.container import Group
-from svgwrite.text import TSpan, Text
+from gbdraw.svg.elements import Group, TSpan, Text
 
 from ....config.models import GbdrawConfig
 from ....core.text import calculate_bbox_dimensions, parse_mixed_content_text

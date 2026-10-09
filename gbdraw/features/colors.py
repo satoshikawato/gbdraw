@@ -7,6 +7,8 @@ from typing import Any, Mapping, Optional, Tuple
 from pandas import DataFrame
 from Bio.SeqFeature import SeqFeature
 
+from gbdraw.exceptions import ValidationError
+
 from .ids import compute_feature_hash as compute_feature_hash
 from .selector_values import ColorRuleList, feature_matches_specific_color_rule, find_specific_color_rule
 
@@ -30,12 +32,19 @@ def normalize_specific_color_captions(
         for value in color_table["caption"].fillna("")
     ]
     colors = [str(value).strip() for value in color_table["color"]]
-    normalized_colors = [
-        "none"
-        if color.lower() == "none"
-        else normalize_hex_color(resolve_color_to_hex(color))
-        for color in colors
-    ]
+    normalized_colors = []
+    for row, color in enumerate(colors, start=1):
+        if color.lower() == "none":
+            normalized_colors.append("none")
+            continue
+        try:
+            normalized_colors.append(normalize_hex_color(resolve_color_to_hex(color)))
+        except (ValueError, ValidationError) as exc:  # a caption groups none, names, #RGB/#RRGGBB colors only
+            raise ValidationError(
+                f"Invalid color {color!r} in the color table (row {row}). "
+                "A color table with captions uses none, an SVG color name, #RGB, or #RRGGBB.",
+                diagnostic={"code": "TABLE_INVALID", "field": "color", "reason": "COLOR", "row": row},
+            ) from exc
     groups: dict[str, set[str]] = {}
     for caption, color in zip(captions, normalized_colors):
         if caption.strip():

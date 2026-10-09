@@ -9,7 +9,6 @@ from typing import Any
 
 from svgwrite.container import Group
 from svgwrite.drawing import Drawing
-from svgwrite.params import Parameter
 
 from gbdraw.layout.composition import (
     CompositionPlacement,
@@ -205,20 +204,6 @@ def _validate_targets(
     return targets
 
 
-def _allow_internal_role_attribute(target: Group) -> None:
-    """Disable SVG 1.1 validation only on a role-marked target group.
-
-    Several existing render groups are constructed directly instead of through
-    the ``Drawing`` factory and therefore retain svgwrite's default strict
-    validator.  SVG 1.1 does not know the internal ``data-gbdraw-*`` role
-    attribute, so those otherwise valid groups must use svgwrite's permissive
-    serialization mode once the renderer marks them.  Child elements keep
-    their own validation parameters.
-    """
-    if target.debug:
-        target.set_parameter(Parameter(debug=False, profile=target.profile))
-
-
 def _ensure_not_applied(drawing: Drawing, targets: Sequence[Group]) -> None:
     root_attributes = drawing.attribs
     if (
@@ -244,7 +229,6 @@ def _apply_target(
     *,
     composition_role: str,
 ) -> None:
-    _allow_internal_role_attribute(target)
     _compose_outer_translation(target, placement)
     target.attribs[COMPOSITION_ROLE_ATTRIBUTE] = composition_role
 

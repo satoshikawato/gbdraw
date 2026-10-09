@@ -1,7 +1,5 @@
 """Internal SVG metadata for complete feature-label visual units."""
 
-from svgwrite.params import Parameter
-
 
 LABEL_FEATURE_ID_ATTRIBUTE = "data-label-feature-id"
 LABEL_BINDING_SCHEMA_ATTRIBUTE = "data-gbdraw-label-binding-schema"
@@ -14,7 +12,6 @@ def bind_label_part(element, feature_id: str, *, complete: bool = False):
     identity = str(feature_id or "").strip()
     if not identity:
         raise ValueError("Rendered label parts require a feature identity.")
-    element.set_parameter(Parameter(debug=False, profile=element.profile))
     element.attribs[LABEL_FEATURE_ID_ATTRIBUTE] = identity
     if complete:
         element.attribs[LABEL_BINDING_SCHEMA_ATTRIBUTE] = LABEL_BINDING_SCHEMA

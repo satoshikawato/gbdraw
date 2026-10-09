@@ -821,7 +821,11 @@ stroke edits. Use the visible **Apply** action to make an edit part of the
 editor state. Renaming a legend entry, with or without features, to the caption
 of another entry of a different color asks **Merge**, **Suffix**, or **Cancel**;
 a caption that a specific color rule already uses is distinguished as that rule
-describes instead. A legend row that a rule draws with a hex suffix, such as
+describes instead. In the popup's color scope, legend name, and **Reset fill color**
+dialogs, each choice is one History step and **Cancel** records none. After a
+choice the dialog stays open, its buttons are disabled, and it shows
+**Applying an edit…** until the edit is applied; the first choice after a page
+or Session load can wait several seconds while the Python runtime starts. A legend row that a rule draws with a hex suffix, such as
 `rRNA [#ff0000]`, belongs to that rule: renaming it or changing its color edits
 the rule, and the generated `rRNA` row stays a legend-only row. **Apply to all label** and **Apply to all source label** become
 one anchored qualifier rule only when the selected features share one feature

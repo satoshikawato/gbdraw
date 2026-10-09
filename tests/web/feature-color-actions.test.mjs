@@ -127,6 +127,7 @@ const firstMatchingRule = (feature, rules) => ruleMatcher(rules).first(feature);
 const runWithRuleMatchesOf = (preparation, state) => (rules, commit) => runWhenPrepared(state, () => [preparation.prepare(rules)], commit);
 const preparationState = { extractedFeatures, biologicalFeatures, manualSpecificRules };
 let legendSiblings = [featureB, hashOnlyFeature];
+let matchingRegexRule = specificRule;
 const preparedRuleSets = [];
 const runWithRuleMatchesForActions = runWithRuleMatchesOf(createRulePreparation({ state: withDrawings(preparationState), evaluate: evaluatePythonRules }), preparationState);
 const actions = createFeatureColorActions({
@@ -193,7 +194,7 @@ const actions = createFeatureColorActions({
     ),
     findFeaturesWithSameIndividualLabel: () => [],
     findFeaturesWithSameLegendItem: () => legendSiblings,
-    findMatchingRegexRule: () => specificRule,
+    findMatchingRegexRule: () => matchingRegexRule,
     getDisplayedFeatureLabel: (feature) => feature.displayLabel || feature.product || '',
     effectiveLegendCaptions: () => () => 'Core',
     getLegendRowRules: (caption) => legendRowRules(caption, { rules: manualSpecificRules, legendEntries: legendEntries.value }),
@@ -273,7 +274,8 @@ assert.equal(legendColorOverrides['Manual row'], undefined);
 
 // Each popup action prepares an allowlisted set of rules (OV-198): a stroke
 // edit reads only the saved rules, a color edit also the clicked feature's hash
-// rule and its label rules.
+// rule and its label rules, once it commits; the scope dialog reads only the
+// saved rules (OV-225).
 {
   const popupFeature = {
     id: 'popup-feature', svg_id: 'hash-popup', type: 'CDS', product: 'popup product',
@@ -301,7 +303,15 @@ assert.equal(legendColorOverrides['Manual row'], undefined);
     ['updateClickedFeatureStroke', () => actions.updateClickedFeatureStroke('#112233', 2), savedKeys],
     ['handleFeatureStyleScopeChoice (stroke)', strokeScope('stroke'), savedKeys],
     ['handleFeatureStyleScopeChoice (fill)', strokeScope('fill'), clickedKeys],
-    ['updateClickedFeatureColor', () => actions.updateClickedFeatureColor('#123456'), clickedKeys]
+    ['updateClickedFeatureColor (scope dialog)', () => actions.updateClickedFeatureColor('#123456'), savedKeys],
+    ['updateClickedFeatureColor (no dialog)', async () => {
+      matchingRegexRule = null;
+      legendSiblings = [];
+      try { await actions.updateClickedFeatureColor('#123456'); } finally {
+        matchingRegexRule = specificRule;
+        legendSiblings = [featureB, hashOnlyFeature];
+      }
+    }, clickedKeys]
   ];
   for (const [name, run, expected] of allowlist) {
     manualSpecificRules.splice(0, manualSpecificRules.length, ...savedRules);

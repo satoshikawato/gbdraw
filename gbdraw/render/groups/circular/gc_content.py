@@ -3,7 +3,7 @@
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
-from svgwrite.container import Group
+from gbdraw.svg.elements import Group
 
 from ....core.sequence import determine_length_parameter
 from ....config.models import GbdrawConfig
@@ -34,7 +34,7 @@ class GcContentGroup:
     ) -> None:
         self.record_transform = record_transform
         self.group_id = group_id or "gc_content"
-        self.gc_group: Group = Group(id=self.group_id, debug=False)
+        self.gc_group: Group = Group(id=self.group_id)
         self.radius: float = radius
         self.gc_config: GcContentConfigurator = gc_config
         self.gb_record: SeqRecord = gb_record

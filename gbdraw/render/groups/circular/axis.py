@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from svgwrite.container import Group
-from svgwrite.shapes import Circle
+from gbdraw.svg.elements import Circle, Group
 
 from ....canvas import CircularCanvasConfigurator
 from ....config.models import GbdrawConfig

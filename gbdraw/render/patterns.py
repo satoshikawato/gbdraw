@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 
 from svgwrite import Drawing
-from svgwrite.shapes import Line
+from gbdraw.svg.elements import Line
 
 from gbdraw.annotations.models import HatchStyle
 

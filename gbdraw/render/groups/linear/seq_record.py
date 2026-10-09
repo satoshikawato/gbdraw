@@ -5,9 +5,7 @@ from collections import Counter
 from typing import Optional
 
 from Bio.SeqRecord import SeqRecord
-from svgwrite.container import Group
-from svgwrite.shapes import Line
-from svgwrite.text import Text
+from gbdraw.svg.elements import Group, Line, Text
 
 from ....canvas import LinearCanvasConfigurator
 from ....core.record_metadata import _read_coord_map
@@ -277,7 +275,7 @@ class SeqRecordGroup:
         feature_group = group
         has_feature_shift = abs(self.feature_offset_y) > 1e-9
         if has_feature_shift:
-            feature_group = Group(id=f"{self.record_group_id}_features", debug=False)
+            feature_group = Group(id=f"{self.record_group_id}_features")
 
         # Process labels if enabled
         if self.show_labels and self.draw_features_enabled:
@@ -381,7 +379,7 @@ class SeqRecordGroup:
         arrow_length: float = self.canvas_config.arrow_length
 
         separate_strands = self.separate_strands
-        record_group: Group = Group(id=self.record_group_id, debug=False)
+        record_group: Group = Group(id=self.record_group_id)
         record_group.attribs["data-gbdraw-record-id"] = str(self.gb_record.id)
         record_group.attribs["data-gbdraw-record-index"] = str(self.record_index)
 

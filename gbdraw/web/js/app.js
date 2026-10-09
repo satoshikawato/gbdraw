@@ -4,6 +4,7 @@ import {
   dialogFocus,
   OperationError,
   RecordDisplayControl,
+  SpecificRuleRows,
   AutoValueField,
   ColorValueControl,
   HelpTip,
@@ -17,7 +18,7 @@ import { formatFeatureLocation } from './services/feature-utils.js';
 const { createApp } = window.Vue;
 
 const app = createApp({
-  components: { ChoiceDialog, OperationError, CircularMeasureInput, DepthTrackIndexInput, RecordDisplayControl, AutoValueField, ColorValueControl, FileUploader, HelpTip },
+  components: { ChoiceDialog, OperationError, SpecificRuleRows, CircularMeasureInput, DepthTrackIndexInput, RecordDisplayControl, AutoValueField, ColorValueControl, FileUploader, HelpTip },
   methods: { formatFeatureLocation },
   setup: createAppSetup
 });

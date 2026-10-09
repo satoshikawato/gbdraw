@@ -6,10 +6,7 @@ import hashlib
 import re
 
 from svgwrite import Drawing
-from svgwrite.container import Group
-from svgwrite.path import Path
-from svgwrite.shapes import Line, Rect
-from svgwrite.text import Text
+from gbdraw.svg.elements import Group, Line, Path, Rect, Text
 
 from gbdraw.annotations import (
     AnnotationTrackParams,
@@ -60,7 +57,7 @@ def draw_linear_annotation_track(
     group_id = dom_group_id or (
         f"gbdraw-annotation-track-{_dom_token(track.slot_id)}-{record_index + 1}"
     )
-    group = Group(id=group_id, debug=False)
+    group = Group(id=group_id)
     if semantic_slot_id:
         group.attribs["data-gbdraw-slot-id"] = str(semantic_slot_id)
         group.attribs["data-gbdraw-slot-renderer"] = "annotations"
@@ -88,7 +85,7 @@ def draw_linear_annotation_track(
             set_id=track.set_id,
             annotation_id=annotation.id,
         )
-        item_group = Group(id=item_id, debug=False)
+        item_group = Group(id=item_id)
         if not auto_feature_underlay:
             item_group.attribs.update(
                 {
@@ -120,7 +117,6 @@ def draw_linear_annotation_track(
                     fill_opacity=style.fill_opacity,
                     stroke="none" if auto_feature_underlay else style.stroke,
                     stroke_width=0 if auto_feature_underlay else style.stroke_width,
-                    debug=False,
                 )
                 if dash:
                     rect.attribs["stroke-dasharray"] = dash

@@ -2,9 +2,7 @@
 # coding: utf-8
 
 from Bio.SeqRecord import SeqRecord
-from svgwrite.container import Group
-from svgwrite.path import Path
-from svgwrite.text import Text
+from gbdraw.svg.elements import Group, Path, Text
 
 from ....canvas import CircularCanvasConfigurator
 from ....config.models import CircularRenderProfile
@@ -42,7 +40,7 @@ class TickGroup:
         self.gb_record: SeqRecord = gb_record
         self.canvas_config: CircularCanvasConfigurator = canvas_config
         self.radius: float = float(radius) if radius is not None else self.canvas_config.radius
-        self.tick_group = Group(id=str(group_id or "tick"), debug=False)
+        self.tick_group = Group(id=str(group_id or "tick"))
         if slot_id:
             self.tick_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
             self.tick_group.attribs["data-gbdraw-slot-renderer"] = "ticks"

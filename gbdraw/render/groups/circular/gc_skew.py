@@ -3,7 +3,7 @@
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
-from svgwrite.container import Group
+from gbdraw.svg.elements import Group
 
 from ....core.sequence import determine_length_parameter
 from ....config.models import GbdrawConfig
@@ -39,7 +39,7 @@ class GcSkewGroup:
         self.track_width: float = track_width
         self.skew_config: GcSkewConfigurator = skew_config
         self.record_len: int = len(self.gb_record.seq)
-        self.skew_group: Group = Group(id=group_id or "skew", debug=False)
+        self.skew_group: Group = Group(id=group_id or "skew")
         self.track_type = cfg.canvas.circular.track_type
         self.length_threshold = cfg.labels.length_threshold.circular
         self.length_param = determine_length_parameter(len(gb_record.seq), self.length_threshold)

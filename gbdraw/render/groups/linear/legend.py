@@ -3,9 +3,7 @@
 
 from collections.abc import Mapping
 
-from svgwrite.container import Group
-from svgwrite.gradients import LinearGradient
-from svgwrite.path import Path
+from gbdraw.svg.elements import Group, LinearGradient, Path
 
 from ....config.models import GbdrawConfig
 from ....configurators.legend import LegendMeasurement
@@ -83,7 +81,7 @@ class LegendGroup:
 
     @staticmethod
     def _pairwise_group(orientation: str) -> Group:
-        group = Group(id=f"pairwise_legend_{orientation}", debug=False)
+        group = Group(id=f"pairwise_legend_{orientation}")
         group.attribs["data-gbdraw-role"] = "comparison-legend"
         group.attribs["data-gbdraw-orientation"] = orientation
         return group
@@ -112,7 +110,7 @@ class LegendGroup:
         group = Group(id=group_id)
         path_desc = self.create_rectangle_path_for_legend()
         for entry in layout.entries:
-            entry_group = Group(debug=False)
+            entry_group = Group()
             entry_group.attribs["data-legend-key"] = str(entry.key)
             rect_path = Path(
                 d=path_desc,
@@ -191,7 +189,7 @@ class LegendGroup:
                 properties,
                 orientation,
             )
-            entry_group = Group(debug=False)
+            entry_group = Group()
             entry_group.attribs["data-legend-key"] = str(entry.key)
 
             gradient = LinearGradient(

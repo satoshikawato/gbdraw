@@ -5,8 +5,7 @@ import math
 from dataclasses import dataclass
 from typing import Literal
 
-from svgwrite.path import Path
-from svgwrite.text import Text, TextPath
+from gbdraw.svg.elements import Path, Text, TextPath
 
 from ..core.numeric import scaled_tick_text
 from ..core.text import calculate_bbox_dimensions

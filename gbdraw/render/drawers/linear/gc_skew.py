@@ -2,9 +2,7 @@
 # coding: utf-8
 
 from pandas import DataFrame
-from svgwrite.container import Group
-from svgwrite.path import Path
-from svgwrite.masking import ClipPath
+from gbdraw.svg.elements import ClipPath, Group, Path
 
 from ....configurators import GcSkewConfigurator
 from ....svg.linear_tracks import calculate_gc_skew_path_desc

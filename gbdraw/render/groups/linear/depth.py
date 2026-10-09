@@ -3,7 +3,7 @@
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
-from svgwrite.container import Group
+from gbdraw.svg.elements import Group
 
 from ....analysis.depth import depth_df as build_depth_df
 from ....config.models import GbdrawConfig
@@ -35,7 +35,7 @@ class DepthGroup:
         record_transform: RecordDisplayTransform | None = None,
     ) -> None:
         self.record_transform = record_transform
-        self.depth_group = Group(id=group_id, debug=False)
+        self.depth_group = Group(id=group_id)
         self.start_x = float(start_x)
         self.start_y = float(start_y)
         self.longest_record_len = int(longest_record_len)

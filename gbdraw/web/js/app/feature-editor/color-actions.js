@@ -43,6 +43,9 @@ import {
  * @property {(svg: Element, featureId: string) => Element[]} getFeatureFillElements The mounted fill elements of a feature.
  * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
  *   The preview owner's commit of an edit to the displayed Result (R1, R13).
+ * @property {(close: () => unknown) => void} [closeAfterDialogChoice]
+ *   Runs a dialog's close at once, or once the History step of the dialog's
+ *   choice in flight ends (D-12, OIC-028).
  */
 
 /** @param {FeatureColorActionsOptions} options */
@@ -55,7 +58,8 @@ export const createFeatureColorActions = ({
   // of an edit to the displayed Result.
   getFeatureElements,
   getFeatureFillElements,
-  commitActiveResultEdit = null
+  commitActiveResultEdit = null,
+  closeAfterDialogChoice = (close) => { close(); }
 }) => {
   const {
     appliedPaletteColors,
@@ -113,30 +117,40 @@ export const createFeatureColorActions = ({
     }
   };
 
-  // A color action also prepares the rules it may add for the clicked feature
-  // (its hash and label rules); a stroke action reads only the saved rules
-  // (OV-198), so it prepares nothing else.
+  // Runs `run` once the rules a color edit may add for the features in `args`,
+  // the clicked feature and the scope dialog's feature (their hash and label
+  // rules) are prepared with the saved ones.
+  /**
+   * @param {DrawingState} drawing
+   * @param {any[]} args
+   * @param {() => any} run
+   */
+  const withTargetRules = (drawing, args, run) => {
+    const targets = new Set();
+    const add = (feature) => { if (feature?.type && feature?.svg_id) targets.add(feature); };
+    args.forEach((arg) => Array.isArray(arg) ? arg.forEach(add) : add(arg));
+    add(clickedFeature.value?.feat);
+    add(featureStyleScopeDialog.feat);
+    const candidates = [...drawing.manualSpecificRules];
+    targets.forEach((feature) => {
+      const hash = getFeatureQualifier(feature);
+      if (hash) candidates.push({ feat: feature.type, ...hash });
+      for (const label of [getDisplayedFeatureLabel(feature), getIndividualFeatureLabel(feature)]) {
+        const rule = getLabelSpecificRule(feature, label);
+        if (rule) candidates.push(rule);
+      }
+    });
+    return runWithRuleMatches(candidates, run);
+  };
+
+  // A color action also prepares the rules it may add (`withTargetRules`); a
+  // stroke action reads only the saved rules (OV-198). A color request, a
+  // popup Legend rename, and a fill reset prepare them only when they commit,
+  // not to open their dialog, which reads the saved rules only (OV-225).
   const colorAction = (action, { targetRules = true } = {}) => (...args) => {
     const drawing = state.activeDrawing();
     const run = () => runColorAction(() => action(drawing, ...args));
-    const prepareTargets = () => {
-      if (!targetRules) return run();
-      const targets = new Set();
-      const add = (feature) => { if (feature?.type && feature?.svg_id) targets.add(feature); };
-      args.forEach((arg) => Array.isArray(arg) ? arg.forEach(add) : add(arg));
-      add(clickedFeature.value?.feat);
-      add(featureStyleScopeDialog.feat);
-      const candidates = [...drawing.manualSpecificRules];
-      targets.forEach((feature) => {
-        const hash = getFeatureQualifier(feature);
-        if (hash) candidates.push({ feat: feature.type, ...hash });
-        for (const label of [getDisplayedFeatureLabel(feature), getIndividualFeatureLabel(feature)]) {
-          const rule = getLabelSpecificRule(feature, label);
-          if (rule) candidates.push(rule);
-        }
-      });
-      return runWithRuleMatches(candidates, run);
-    };
+    const prepareTargets = () => (targetRules ? withTargetRules(drawing, args, run) : run());
     return reportRuleRunFailure(state, 'evaluateRules', () => runWithRuleMatches(drawing.manualSpecificRules, prepareTargets));
   };
   const strokeAction = (action) => colorAction(action, { targetRules: false });
@@ -274,7 +288,8 @@ export const createFeatureColorActions = ({
     return null;
   };
 
-  const clearFeatureStyleScopeDialog = () => {
+  // A dialog's choice closes it once the choice's History step ends.
+  const clearFeatureStyleScopeDialog = () => closeAfterDialogChoice(() => {
     featureStyleScopeDialog.show = false;
     featureStyleScopeDialog.kind = 'fill';
     featureStyleScopeDialog.feat = null;
@@ -291,7 +306,7 @@ export const createFeatureColorActions = ({
     featureStyleScopeDialog.annotationLabelSiblingCount = 0;
     featureStyleScopeDialog.existingCaptionRule = null;
     featureStyleScopeDialog.existingCaptionColor = null;
-  };
+  });
 
   /**
    * @param {Record<string, any>} feat
@@ -492,7 +507,7 @@ export const createFeatureColorActions = ({
   };
 
   /** @param {DrawingState} drawing */
-  const clearLegendRenameDialog = (drawing, { restoreInput = false } = {}) => {
+  const clearLegendRenameDialog = (drawing, { restoreInput = false } = {}) => closeAfterDialogChoice(() => {
     const pendingRequest = legendRenameDialog.pendingRequest;
 
     if (restoreInput) {
@@ -522,7 +537,7 @@ export const createFeatureColorActions = ({
     legendRenameDialog.siblingCount = 0;
     legendRenameDialog.mergeAvailable = true;
     legendRenameDialog.pendingRequest = null;
-  };
+  });
 
   /** @param {DrawingState} drawing */
   const getCurrentFeatureFillColor = (drawing, feat) => {
@@ -794,8 +809,12 @@ export const createFeatureColorActions = ({
     return true;
   };
 
+  // A rename commits once the rules it may add are prepared; its dialogs read
+  // only the saved rules (OV-225).
   /** @param {DrawingState} drawing */
-  const applyLegendRenameRequest = async (drawing, request) => {
+  const applyLegendRenameRequest = (drawing, request) => withTargetRules(drawing, [], () => applyPreparedLegendRename(drawing, request));
+  /** @param {DrawingState} drawing */
+  const applyPreparedLegendRename = async (drawing, request) => {
     const oldCaption = normalizeCaption(request.oldCaption);
     const caption = normalizeCaption(request.finalCaption || request.newCaption);
     const color = resolveColorToHex(request.finalColor || request.currentColor) || '#cccccc';
@@ -1060,13 +1079,15 @@ export const createFeatureColorActions = ({
       return;
     }
 
-    if (clickedFeature.value && clickedFeature.value.svg_id === feat.svg_id) {
-      clickedFeature.value.color = color;
-      if (scope.requestedCaption) {
-        clickedFeature.value.legendName = scope.requestedCaption;
+    return withTargetRules(drawing, [feat], async () => {
+      if (clickedFeature.value && clickedFeature.value.svg_id === feat.svg_id) {
+        clickedFeature.value.color = color;
+        if (scope.requestedCaption) {
+          clickedFeature.value.legendName = scope.requestedCaption;
+        }
       }
-    }
-    await setFeatureColor(drawing, feat, color, scope.legendName);
+      await setFeatureColor(drawing, feat, color, scope.legendName);
+    });
   };
 
   /** @param {DrawingState} drawing */
@@ -1485,17 +1506,19 @@ export const createFeatureColorActions = ({
       resetColorDialog.show = true;
       resetColorDialog.caption = caption;
       resetColorDialog.siblingCount = siblings.length;
-    } else {
-      return doResetFillColor(drawing, 'this');
+      return;
     }
+    return withTargetRules(drawing, [], () => doResetFillColor(drawing, 'this'));
   };
+
+  const closeResetColorDialog = () => closeAfterDialogChoice(() => { resetColorDialog.show = false; });
 
   /** @param {DrawingState} drawing */
   const handleResetColorChoice = async (drawing, choice) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    resetColorDialog.show = false;
     await doResetFillColor(drawing, choice);
+    closeResetColorDialog();
   };
 
   /** @param {DrawingState} drawing */
@@ -1738,24 +1761,25 @@ export const createFeatureColorActions = ({
     // History step (app-setup.js answers Cancel outside `runUndoable`).
     cancelFeatureStyleScope: clearFeatureStyleScopeDialog,
     cancelLegendRename: () => clearLegendRenameDialog(state.activeDrawing(), { restoreInput: true }),
+    cancelResetColor: closeResetColorDialog,
     handleColorScopeChoice: colorScopeChoice,
     handleFeatureStyleScopeChoice: (...args) => (featureStyleScopeDialog.kind === 'stroke' ? strokeScopeChoice : colorScopeChoice)(...args),
-    handleLegendNameCommit: colorAction(handleLegendNameCommit),
+    handleLegendNameCommit: colorAction(handleLegendNameCommit, { targetRules: false }),
     handleLegendRenameChoice: colorAction(handleLegendRenameChoice),
     renameLegendEntry: colorAction(renameLegendEntry),
-    requestFeatureColorChange: colorAction(requestFeatureColorChange),
-    selectLegendNameOption: colorAction(selectLegendNameOption),
+    requestFeatureColorChange: colorAction(requestFeatureColorChange, { targetRules: false }),
+    selectLegendNameOption: colorAction(selectLegendNameOption, { targetRules: false }),
     handleResetColorChoice: colorAction(handleResetColorChoice),
     applyColorToSelectedFeatures: colorAction(applyColorToSelectedFeatures),
     applyStrokeToSelectedFeatures: strokeAction(applyStrokeToSelectedFeatures),
-    resetClickedFeatureFillColor: colorAction(resetClickedFeatureFillColor),
+    resetClickedFeatureFillColor: colorAction(resetClickedFeatureFillColor, { targetRules: false }),
     resetClickedFeatureStroke: strokeAction(resetClickedFeatureStroke),
     getFeatureStrokeColorValue,
     setClickedFeatureStrokeColorValue: strokeAction(setClickedFeatureStrokeColorValue),
     setClickedFeatureStrokeWidthValue: strokeAction(setClickedFeatureStrokeWidthValue),
     setFeatureColor: colorAction(setFeatureColor),
     setFeatureColorValue: colorAction(setFeatureColorValue),
-    updateClickedFeatureColor: colorAction(updateClickedFeatureColor),
+    updateClickedFeatureColor: colorAction(updateClickedFeatureColor, { targetRules: false }),
     updateClickedFeatureStroke: strokeAction(updateClickedFeatureStroke)
   };
 };

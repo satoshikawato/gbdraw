@@ -280,6 +280,9 @@ test.describe('active Result Feature fill transaction', () => {
     await expect(applyScopeButton).toBeVisible();
     expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(0);
     await applyScopeButton.click();
+    // The choice prepares the rules it adds; on a Session just loaded that
+    // starts the Worker runtime (OV-225), so wait for the choice to finish.
+    await page.waitForFunction(() => !window.__GBDRAW_APP__.featureStyleScopeDialog.show);
     await expect.poll(
       () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())
     ).toBe(1);

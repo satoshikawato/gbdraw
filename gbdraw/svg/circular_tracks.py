@@ -4,7 +4,7 @@
 import math
 import numpy as np
 from pandas import DataFrame
-from svgwrite.shapes import Circle
+from gbdraw.svg.elements import Circle
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform

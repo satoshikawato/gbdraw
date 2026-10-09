@@ -42,7 +42,7 @@ def _color(value: object | None, name: str, *, optional: bool = False) -> str | 
         raise ValidationError(f"{name} cannot be empty.")
     try:
         return normalize_hex_color(resolve_color_to_hex(text))
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, ValidationError) as exc:
         raise ValidationError(f"{name} is not a valid color: {text!r}.") from exc
 
 

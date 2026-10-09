@@ -3,6 +3,8 @@
 
 import re
 
+from gbdraw.exceptions import ValidationError
+
 
 _HEX_COLOR_PATTERN = re.compile(r"^#(?P<value>[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$")
 
@@ -72,6 +74,33 @@ def interpolate_color(color_min: str, color_max: str, factor: float) -> str:
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
+def interpolate_default_colors(
+    min_color: tuple[str, str],
+    max_color: tuple[str, str],
+    factor: float,
+) -> str:
+    """Interpolate two default colors, given as ``(feature_type, color)``.
+
+    A color that is not #RGB or #RRGGBB (a ``-d`` value such as ``#11223344``)
+    is reported as a default-colors table error naming its feature type, where
+    it is first interpolated, not where the table is read.
+    """
+
+    try:
+        return interpolate_color(min_color[1], max_color[1], factor)
+    except ValueError as exc:
+        for feature_type, color in (min_color, max_color):
+            try:
+                normalize_hex_color(color)
+            except ValueError:
+                raise ValidationError(
+                    f"Invalid color {color!r} for feature type {feature_type!r} in the default colors. "
+                    "A comparison color used for a gradient is #RGB or #RRGGBB.",
+                    diagnostic={"code": "TABLE_INVALID", "field": "color", "reason": "COLOR"},
+                ) from exc
+        raise
+
+
 __all__ = [
     "COLLINEAR_ORIENTATION_COLOR_KEYS",
     "COLLINEAR_ORIENTATION_MIN_COLOR_KEYS",
@@ -79,6 +108,7 @@ __all__ = [
     "DEFAULT_COLLINEAR_ORIENTATION_COLORS",
     "blend_color",
     "interpolate_color",
+    "interpolate_default_colors",
     "normalize_hex_color",
     "tint_color",
 ]

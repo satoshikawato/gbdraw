@@ -228,6 +228,19 @@ rejected with their line number. The Web app converts a color name to hex when
 it reads the table. In this table, cells such as `None`, `NA`, and `null` are
 values, not blanks.
 
+A Default colors `color`, a Specific-colors `color` without captions, and a
+color in a configuration override also accept `transparent`, `#RGBA`,
+`#RRGGBBAA`, and `rgb()`, `rgba()`, `hsl()`, and `hsla()`, which browsers read.
+PNG, PDF, EPS, and PS export (CairoSVG) cannot draw some of them: it draws
+`hsl()` and `hsla()` black, drops the alpha of `#RGBA` and `#RRGGBBAA`, and
+fails on the space syntax `rgb(1 2 3 / 50%)`. Use an SVG color name,
+`#RRGGBB`, or comma-separated `rgb()` or `rgba()` for those formats.
+
+The comparison colors that gbdraw blends into a gradient (`pairwise_match_min`,
+`pairwise_match_max`, and the `collinear_block_*` colors) must be a color name,
+`#RGB`, or `#RRGGBB` when a comparison is drawn; other forms stop the render
+with an error that names the feature type.
+
 `priorities` is a comma-separated qualifier list. Pattern `value` and `keyword`
 fields use case-insensitive Python regular expressions. Specific-color and
 Label-override patterns accept Python-only syntax such as `(?i)NADH`,

@@ -59,6 +59,48 @@ const controlLabel = (element) => {
  */
 
 /**
+ * The choice in flight of a modal choice dialog (UI-02), the one owner of its
+ * busy state and of when it closes. A choice is one undoable step and Cancel
+ * only closes the dialog (OV-161). While History's step is open, a choice or
+ * Cancel does nothing: the step of the edit that opened the dialog, or the
+ * step of a choice. From a choice until its step ends, `pending` holds (the
+ * dialog is busy), and a close the choice asks for (`closeAfterChoice`) waits
+ * for the step to end; a choice that fails before it asks leaves the dialog
+ * open (D-12, OIC-028).
+ * @param {{
+ *   mutationPending: () => boolean,
+ *   runUndoable: (label: string, fn: () => unknown) => Promise<unknown>,
+ *   ref: (value: boolean) => { value: boolean }
+ * }} options History's open-step predicate and undoable step, and Vue `ref`.
+ */
+export const createDialogChoice = ({ mutationPending, runUndoable, ref }) => {
+  const pending = ref(false);
+  /** @type {(() => unknown)[] | null} */
+  let closes = null;
+  /** @param {() => unknown} close */
+  const closeAfterChoice = (close) => { if (closes) closes.push(close); else close(); };
+  /**
+   * @param {() => string} label
+   * @param {(choice: string, ...rest: any[]) => unknown} handler
+   * @param {() => unknown} cancel
+   */
+  const withHistory = (label, handler, cancel) => (
+    /** @type {string} */ choice, /** @type {any[]} */ ...rest
+  ) => {
+    if (pending.value || mutationPending()) return undefined;
+    if (choice === 'cancel') return cancel();
+    const queued = closes = [];
+    pending.value = true;
+    return runUndoable(label(), () => handler(choice, ...rest)).finally(() => {
+      closes = null;
+      pending.value = false;
+      queued.forEach((close) => close());
+    });
+  };
+  return { pending, closeAfterChoice, withHistory };
+};
+
+/**
  * @param {HistoryInputsOptions} options
  * @returns {() => void} Removes the listeners.
  */

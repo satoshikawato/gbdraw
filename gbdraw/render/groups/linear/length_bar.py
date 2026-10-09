@@ -3,9 +3,7 @@
 
 import math
 
-from svgwrite.container import Group
-from svgwrite.shapes import Line
-from svgwrite.text import Text
+from gbdraw.svg.elements import Group, Line, Text
 
 from ....canvas import LinearCanvasConfigurator
 from ....core.numeric import scaled_tick_text

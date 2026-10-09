@@ -2,10 +2,7 @@
 # coding: utf-8
 
 from pandas import DataFrame
-from svgwrite.container import Group
-from svgwrite.path import Path
-from svgwrite.shapes import Line, Rect
-from svgwrite.text import Text
+from gbdraw.svg.elements import Group, Line, Path, Rect, Text
 
 from ....analysis.gc import gc_content_percent_df
 from ....layout.linear_coords import normalize_position_to_linear_track

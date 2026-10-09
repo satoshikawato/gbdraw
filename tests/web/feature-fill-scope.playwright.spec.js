@@ -176,6 +176,9 @@ test('inherited Feature fill uses the existing scope dialog with atomic Undo and
   const captionScopeButton = scopeDialog.locator('button.bg-green-600');
   await expect(captionScopeButton).toBeVisible();
   await captionScopeButton.click();
+  // The choice prepares the rules it adds; on a Session just loaded that
+  // starts the Worker runtime (OV-225), so wait for the choice to finish.
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.featureStyleScopeDialog.show);
   await expect(scopeDialog).toBeHidden();
 
   await expect.poll(
@@ -377,6 +380,60 @@ test('Cancel closes the Color Change Scope dialog at once after a Session load a
       expect(Date.now() - started, `milliseconds from ${answer} to a closed dialog`).toBeLessThan(1000);
     }
     expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoCount);
+  } finally {
+    await page.context().close();
+  }
+});
+
+// PD-OI-088 (OIC-028): a popup fill pick opens the scope dialog ready, with
+// focus on its first choice and no busy status. A choice keeps focus inside
+// the dialog while it applies (seconds on a Session just loaded, as the choice
+// starts the Worker runtime), so Escape reaches the dialog, which ignores it,
+// and does not clear the feature selection behind it.
+test('a popup scope dialog opens ready and keeps focus while its choice applies', async ({ browser }) => {
+  test.setTimeout(180_000);
+  const page = await load(browser, 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json');
+  try {
+    await page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      app.openFeatureEditorFromList(app.extractedFeatures.find((feature) => feature.type === 'tRNA'), { clientX: 220, clientY: 220 });
+    });
+    const undoCount = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+    await page.getByRole('dialog', { name: /Feature details:/ }).getByLabel('Feature fill color').first().fill('#c026d3');
+    const scope = page.getByRole('dialog', { name: 'Color Change Scope' });
+    await expect(scope).toBeVisible();
+    await page.waitForFunction(() => !window.__GBDRAW_HISTORY__.mutationPending());
+    const focusIn = () => scope.evaluate((element) => ({
+      inDialog: element.contains(document.activeElement),
+      firstChoice: document.activeElement === element.querySelector('button:not(:disabled)')
+    }));
+    const atOpen = { focus: await focusIn(), status: await scope.getByRole('status').count() };
+    const selected = await page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      app.selectedFeatureIds = new Set(app.extractedFeatures.filter((feature) => feature.type === 'CDS').map((feature) => feature.svg_id));
+      return app.selectedFeatureIds.size;
+    });
+    expect(selected).toBeGreaterThan(0);
+    await scope.getByRole('button').filter({ hasText: 'Apply to all "tRNA"' }).last().click();
+    await expect(scope.getByRole('status')).toHaveText('Applying an edit…');
+    const whileBusy = await focusIn();
+    // W1: no control is enabled, so Tab and Shift+Tab keep focus on the panel.
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Shift+Tab');
+    const afterTab = await scope.evaluate((element) => document.activeElement === element);
+    await page.keyboard.press('Escape');
+    const afterEscape = await page.evaluate(() => ({
+      selected: window.__GBDRAW_APP__.selectedFeatureIds.size,
+      dialogOpen: window.__GBDRAW_APP__.featureStyleScopeDialog.show
+    }));
+    expect({ atOpen, whileBusy, afterTab, afterEscape }).toEqual({
+      atOpen: { focus: { inDialog: true, firstChoice: true }, status: 0 },
+      whileBusy: { inDialog: true, firstChoice: false },
+      afterTab: true,
+      afterEscape: { selected, dialogOpen: true }
+    });
+    await expect(scope).toHaveCount(0, { timeout: 60_000 });
+    expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoCount + 1);
   } finally {
     await page.context().close();
   }
