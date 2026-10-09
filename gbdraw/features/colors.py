@@ -39,7 +39,7 @@ def normalize_specific_color_captions(
             continue
         try:
             normalized_colors.append(normalize_hex_color(resolve_color_to_hex(color)))
-        except ValueError as exc:  # renderable, but a caption groups #RGB/#RRGGBB colors only
+        except (ValueError, ValidationError) as exc:  # a caption groups none, names, #RGB/#RRGGBB colors only
             raise ValidationError(
                 f"Invalid color {color!r} in the color table (row {row}). "
                 "A color table with captions uses none, an SVG color name, #RGB, or #RRGGBB.",

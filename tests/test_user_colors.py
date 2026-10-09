@@ -7,6 +7,8 @@ the CSS color forms browsers read) and rejects the rest with a gbdraw
 
 from __future__ import annotations
 
+import json
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -26,6 +28,7 @@ from gbdraw.config.modify import validate_config_overrides
 from gbdraw.exceptions import ValidationError
 from gbdraw.io import colors as color_io
 from gbdraw.io.colors import is_user_color, load_default_colors, resolve_color_to_hex
+from gbdraw.web_support.rule_matching import evaluate_rules_json
 from gbdraw.session import load_session_document, materialize_session, session_to_request
 
 REPO = Path(__file__).resolve().parents[1]
@@ -124,13 +127,25 @@ def test_accepted_colors_pass_every_entry_point(value: str) -> None:
     assert clone_depth_config(SimpleNamespace(fill_color="#000000"), fill_color=value).fill_color == expected
 
 
-def test_captioned_color_tables_keep_their_hex_domain() -> None:
+@pytest.mark.parametrize("color", ["rgb(1,2,3)", "transparent", "hsl(120,50%,50%)", "#junk", "#abcd", "notacolor"])
+def test_captioned_color_tables_keep_their_hex_domain(color: str) -> None:
+    # Every value outside none / name / #RGB / #RRGGBB carries one diagnostic,
+    # also through the Web rule check (evaluate_rules_json).
     table = DataFrame(
-        [["CDS", "product", "kinase", "rgb(1,2,3)", "Kinase"]],
+        [["CDS", "product", "kinase", color, "Kinase"]],
         columns=["feature_type", "qualifier_key", "value", "color", "caption"],
     )
-    with pytest.raises(ValidationError, match="Unknown color name"):
-        resolve_feature_inputs(color_table=table, default_colors=load_default_colors(""), feature_visibility_table=None)
+    expected = {"code": "TABLE_INVALID", "field": "color", "reason": "COLOR", "row": 1}
+    if is_user_color(color):  # the others stop earlier, at the feature color check
+        with pytest.raises(ValidationError, match=re.escape(f"{color!r} in the color table (row 1)")) as raised:
+            resolve_feature_inputs(
+                color_table=table, default_colors=load_default_colors(""), feature_visibility_table=None
+            )
+        assert raised.value.diagnostic == expected
+    rule = {"feat": "CDS", "qual": "product", "val": "kinase", "color": color, "cap": "Kinase"}
+    with pytest.raises(ValidationError) as web:
+        evaluate_rules_json("[]", json.dumps([rule]), "color-captions")
+    assert web.value.diagnostic == expected
 
 
 @pytest.mark.parametrize("color", ["#11223344", "#abcd"])
