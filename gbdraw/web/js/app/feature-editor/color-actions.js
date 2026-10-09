@@ -1297,6 +1297,9 @@ export const createFeatureColorActions = ({
         // The row's swatch follows the default color again (svg-styles.js).
         delete drawing.legendColorOverrides[defaultColorType];
         setDefaultColor(drawing, defaultColorType, color);
+        // OV-264: the Legend panel row shows the new color in the same step.
+        drawing.legendEntries.value = drawing.legendEntries.value.map((entry) => (
+          captionsMatch(entry.caption, defaultColorType) ? { ...entry, color } : entry));
       } else if (!(await applyColorToLegendSpecificRules(drawing, targetLegendName, color))) {
         await applyColorToFeatureGroup(drawing, allFeatures, targetLegendName, color);
       }
