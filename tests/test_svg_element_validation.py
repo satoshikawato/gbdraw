@@ -47,15 +47,30 @@ def _run_cli(*args: str) -> None:
         sys.argv = argv
 
 
+def _depth_table(tmp_path: Path, *genbank_files: str) -> str:
+    """A small depth table for the first record of each GenBank file."""
+
+    rows = []
+    for genbank in genbank_files:
+        record = (EXAMPLES / genbank).read_text(encoding="utf-8").split(maxsplit=2)[1]
+        rows += [f"{record}\t{position}\t{10 + position % 7}" for position in range(1, 3001, 100)]
+    path = tmp_path / "depth.tsv"
+    path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    return str(path)
+
+
 def test_rendering_does_not_run_svgwrite_validation(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    """Circular and linear renders with labels, GC, skew, depth and the definition line."""
+
     calls = _count_validator_calls(monkeypatch)
     _run_cli(
         "circular",
         "--gbk", str(EXAMPLES / "MellatMJNV.gb"),
         "--labels", "both",
+        "--depth_track", _depth_table(tmp_path, "MellatMJNV.gb"),
         "-o", str(tmp_path / "circular"),
         "-f", "svg",
     )
@@ -65,10 +80,13 @@ def test_rendering_does_not_run_svgwrite_validation(
         "-b", str(EXAMPLES / "LvMJNV.TrcuMJNV.tblastx.out"),
         "--show_labels", "all",
         "--gc", "--skew",
+        "--depth_track", _depth_table(tmp_path, "LvMJNV.gb"),
         "-o", str(tmp_path / "linear"),
         "-f", "svg",
     )
 
     assert (tmp_path / "circular.svg").exists()
     assert (tmp_path / "linear.svg").exists()
+    assert 'id="depth"' in (tmp_path / "circular.svg").read_text(encoding="utf-8")
+    assert 'id="depth_record_1"' in (tmp_path / "linear.svg").read_text(encoding="utf-8")
     assert calls == Counter()

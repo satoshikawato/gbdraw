@@ -306,7 +306,9 @@ def test_every_built_in_palette_passes() -> None:
 
 
 @pytest.mark.parametrize("session_path", GALLERY_SESSIONS, ids=lambda path: path.name)
-def test_every_gallery_session_passes(session_path: Path) -> None:
+def test_every_gallery_session_passes_request_preparation(session_path: Path) -> None:
+    # Decode and input preparation only: the render-time checks (depth, skew
+    # slot and conservation default colors) are not reached by this test.
     document = load_session_document(session_path)
     with tempfile.TemporaryDirectory() as output, materialize_session(document, output_directory=output) as live:
         _prepare_diagram_inputs(session_to_request(live))
