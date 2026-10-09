@@ -1,7 +1,7 @@
 // @ts-check
 import { parseTransform } from './svg-transform.js';
 import { getFeatureElementIndex, getFeatureFillElements, isAutoFeatureUnderlay } from './feature-dom.js';
-import { pythonDrawnAttribute } from './result-paint-bases.js';
+import { LEGEND_ORDER_RECORD, pythonDrawnAttribute, resultBaseAttribute } from './result-paint-bases.js';
 
 export { parseTransform };
 
@@ -67,6 +67,44 @@ export const getAllFeatureLegendGroups = (svg) => {
   return featureLegendGroup ? [featureLegendGroup] : [legendGroup];
 };
 
+// The one absence predicate of a Legend row: a row is absent when the Result
+// lacks it or a Legend delete hid it (the executor keeps a deleted row of
+// Python's, hidden, so a reconcile without the delete shows it again).
+/** @param {Element | null | undefined} row */
+export const legendRowShown = (row) => Boolean(row) && row?.getAttribute('display') !== 'none';
+
+// Python's key of a Legend row: the key it drew, which a rename keeps as a
+// record; the row of an editor addition has its own key.
+/** @param {Element} row */
+export const pythonLegendKey = (row) => String(pythonDrawnAttribute(row, 'data-legend-key') ?? '').trim();
+
+// Python's order of a Result's feature Legend rows as their Python keys: the
+// order recorded when the rows were first reordered, else null.
+/** @param {Element | null | undefined} svg @returns {string[] | null} */
+export const recordedLegendOrder = (svg) => {
+  const recorded = getAllFeatureLegendGroups(svg).map((group) => group.getAttribute(LEGEND_ORDER_RECORD)).find(Boolean);
+  if (!recorded) return null;
+  try {
+    const order = JSON.parse(recorded);
+    return Array.isArray(order) ? order.map(String) : null;
+  } catch {
+    return null;
+  }
+};
+
+// Whether a Result shows Legend structure edits (a renamed, deleted, or added
+// row, or another order), read from its records, so a Result the renderer
+// drew is laid out as Python lays the edited rows out.
+/** @param {Element | null | undefined} svg */
+export const legendStructureEdited = (svg) => getAllFeatureLegendGroups(svg).some((group) => (
+  group.hasAttribute(LEGEND_ORDER_RECORD)
+  || Boolean(group.querySelector([
+    'g[data-legend-owner="direct-editor"]',
+    `g[${resultBaseAttribute('data-legend-key')}]`,
+    `g[data-legend-key][${resultBaseAttribute('display')}]`
+  ].join(', ')))
+));
+
 export const getVisibleFeatureLegendGroup = (svg) => {
   if (!svg) return null;
 
@@ -125,7 +163,7 @@ export const getLegendEntrySwatch = (entryGroup) => Array.from(
 export const drawnLegendRowStroke = (svg, caption) => {
   const swatch = getAllFeatureLegendGroups(svg)
     .map((group) => getLegendEntrySwatch(Array.from(group.querySelectorAll('g[data-legend-key]'))
-      .find((entry) => entry.getAttribute('data-legend-key') === caption) || null))
+      .find((entry) => entry.getAttribute('data-legend-key') === caption && legendRowShown(entry)) || null))
     .find(Boolean) || null;
   const width = Number.parseFloat(String(pythonDrawnAttribute(swatch, 'stroke-width') ?? ''));
   return {
@@ -213,7 +251,7 @@ export const legendRowFeatureIds = (entry, { drawnFills, namedIds = [], ownStrok
 export const mountedLegendRowFeatureIds = (svg, caption, legendEntries = [], { namedIds = [], ownStrokeIds = [] } = {}) => {
   const drawnRow = getAllFeatureLegendGroups(svg)
     .map((group) => Array.from(group.querySelectorAll('g[data-legend-key]'))
-      .find((entry) => entry.getAttribute('data-legend-key') === caption))
+      .find((entry) => entry.getAttribute('data-legend-key') === caption && legendRowShown(entry)))
     .find(Boolean);
   const row = legendEntries.find((entry) => entry?.caption === caption)
     || { color: getLegendEntrySwatch(drawnRow)?.getAttribute('fill') };

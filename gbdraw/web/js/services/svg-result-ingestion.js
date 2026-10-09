@@ -15,12 +15,13 @@ import {
   legendRowFeatureIds,
   moveLegendEntryToAnchor,
   orderLegendEntries,
+  pythonLegendKey,
   setsFeatureStroke
 } from './legend-svg.js';
 import { isCurrentWorkerGenerationResponse } from './current-worker-result-source.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { sanitizeSvgContent } from './svg-sanitization.js';
-import { RESULT_BASE_SELECTOR, resultBaseAttribute } from './result-paint-bases.js';
+import { LEGEND_ORDER_RECORD, RESULT_BASE_SELECTOR, resultBaseAttribute } from './result-paint-bases.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { collectRenderedFeatureIdentitiesFromSvgRoot } from './session-feature-metadata.js';
 import { normalizeSvgResultIds } from './svg-result-normalization.js';
@@ -478,54 +479,72 @@ const setPaintAttribute = (index, element, name, value) => {
   return true;
 };
 
-// The paint domains a reconcile returns to Python's values, and the
-// attributes each one owns on feature elements and on Legend swatches. A
-// Legend row stroke also strokes the row's features.
+// The domains a reconcile returns to Python's values, and the attributes
+// each one owns on feature elements, on Legend swatches, and on Legend rows
+// (a rename's key and a delete's hiding). A Legend row stroke also strokes
+// the row's features.
 const PAINT_DOMAIN_ATTRIBUTES = Object.freeze({
-  featureFills: { feature: ['fill'], swatch: [] },
-  featureStrokes: { feature: ['stroke', 'stroke-width'], swatch: [] },
-  featureVisibility: { feature: ['display'], swatch: [] },
-  legendFills: { feature: [], swatch: ['fill'] },
-  legendStrokes: { feature: ['stroke', 'stroke-width'], swatch: ['stroke', 'stroke-width'] }
+  featureFills: { feature: ['fill'], swatch: [], row: [] },
+  featureStrokes: { feature: ['stroke', 'stroke-width'], swatch: [], row: [] },
+  featureVisibility: { feature: ['display'], swatch: [], row: [] },
+  legendFills: { feature: [], swatch: ['fill'], row: [] },
+  legendStrokes: { feature: ['stroke', 'stroke-width'], swatch: ['stroke', 'stroke-width'], row: [] },
+  legendRenames: { feature: [], swatch: [], row: ['data-legend-key'] },
+  legendDeletes: { feature: [], swatch: [], row: ['display'] }
 });
 const RESULT_PAINT_DOMAINS = Object.freeze(
   /** @type {Array<keyof typeof PAINT_DOMAIN_ATTRIBUTES>} */ (Object.keys(PAINT_DOMAIN_ATTRIBUTES))
 );
 
-/** @param {Element} element */
-const inLegendRow = (element) => {
+/** @param {Element} element @returns {'feature' | 'swatch' | 'row'} */
+const paintElementKind = (element) => {
+  if (element.hasAttribute('data-legend-key')) return 'row';
   for (let node = element.parentElement; node; node = node.parentElement) {
-    if (node.hasAttribute('data-legend-key')) return true;
+    if (node.hasAttribute('data-legend-key')) return 'swatch';
   }
-  return false;
+  return 'feature';
+};
+
+/** @param {Element} entry @param {string} caption */
+const updateLegendCaption = (entry, caption) => {
+  entry.setAttribute('data-legend-key', caption);
+  const label = entry.querySelector('text');
+  if (label) label.textContent = caption;
 };
 
 /**
  * Return every attribute the executor changed in `domains` and no operation
- * of this pass set to the value Python drew.
- * @param {Element} svg
+ * of this pass set to the value Python drew (a Legend row's key with its
+ * text). Returns whether a Legend row changed.
+ * @param {Element} root
  * @param {readonly string[]} domains
  * @param {Map<Element, Set<string>>} painted
  */
-const restorePaintBases = (svg, domains, painted) => {
-  const owned = { feature: new Set(), swatch: new Set() };
+const restorePaintBases = (root, domains, painted) => {
+  const owned = { feature: new Set(), swatch: new Set(), row: new Set() };
   domains.forEach((domain) => {
     const attributes = PAINT_DOMAIN_ATTRIBUTES[/** @type {keyof typeof PAINT_DOMAIN_ATTRIBUTES} */ (domain)];
     attributes?.feature.forEach((name) => owned.feature.add(name));
     attributes?.swatch.forEach((name) => owned.swatch.add(name));
+    attributes?.row.forEach((name) => owned.row.add(name));
   });
-  if (owned.feature.size === 0 && owned.swatch.size === 0) return;
-  Array.from(svg.querySelectorAll(RESULT_BASE_SELECTOR)).forEach((element) => {
-    (inLegendRow(element) ? owned.swatch : owned.feature).forEach((name) => {
+  let rowsChanged = false;
+  if (owned.feature.size === 0 && owned.swatch.size === 0 && owned.row.size === 0) return rowsChanged;
+  [root, ...Array.from(root.querySelectorAll(RESULT_BASE_SELECTOR))].forEach((element) => {
+    const kind = paintElementKind(element);
+    owned[kind].forEach((name) => {
       if (painted.get(element)?.has(name)) return;
       const base = resultBaseAttribute(name);
       const value = element.getAttribute(base);
       if (value === null) return;
       if (value === '') element.removeAttribute(name);
+      else if (name === 'data-legend-key') updateLegendCaption(element, value);
       else element.setAttribute(name, value);
       element.removeAttribute(base);
+      if (kind === 'row') rowsChanged = true;
     });
   });
+  return rowsChanged;
 };
 
 const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
@@ -569,14 +588,20 @@ const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
       const legendEntries = new Map();
       built.legendEntries = legendEntries;
       built.legendGroups = getAllFeatureLegendGroups(svg);
+      // A row of Python's is found by Python's key, also once renamed or
+      // hidden; an editor row by its own key, unless a row of Python's has it.
       built.legendGroups.forEach((group) => {
-        const seen = new Set();
-        Array.from(group.querySelectorAll('g[data-legend-key]')).forEach((entry) => {
-          const caption = text(entry.getAttribute('data-legend-key'));
-          if (!caption || seen.has(caption)) {
+        /** @type {Map<string, Element>} */
+        const seen = new Map();
+        const rows = Array.from(group.querySelectorAll('g[data-legend-key]'));
+        [...rows.filter((entry) => !isEditorRow(entry)), ...rows.filter(isEditorRow)].forEach((entry) => {
+          const caption = isEditorRow(entry) ? text(entry.getAttribute('data-legend-key')) : pythonLegendKey(entry);
+          const other = seen.get(caption);
+          if (other && !isEditorRow(other) && isEditorRow(entry)) return;
+          if (!caption || other) {
             throw new Error('Current SVG contains an ambiguous Legend binding.');
           }
-          seen.add(caption);
+          seen.set(caption, entry);
           if (!legendEntries.has(caption)) legendEntries.set(caption, []);
           // `get` holds the array set on the line above.
           /** @type {Element[]} */ (legendEntries.get(caption)).push(entry);
@@ -587,6 +612,9 @@ const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
     }
   };
 };
+
+/** @param {Element} entry */
+const isEditorRow = (entry) => entry.getAttribute('data-legend-owner') === 'direct-editor';
 
 const requireFeatureElements = (index, renderedId) => {
   const elements = index.features().get(renderedId) || [];
@@ -631,19 +659,17 @@ const applyFeatureOperations = (index, operations) => {
   });
 };
 
-const updateLegendCaption = (entry, caption) => {
-  entry.setAttribute('data-legend-key', caption);
-  const label = entry.querySelector('text');
-  if (label) label.textContent = caption;
-};
-
 // `mayBeAbsent(caption)` says whether Python's Legend row facts let a required row
-// be missing from this Result (OV-63).
+// be missing from this Result (OV-63). Fills, strokes, renames, and deletes
+// address a row of Python's by Python's key; an addition and its styles address
+// the editor row by its caption; the order addresses the keys the rows show.
+// Returns whether a Legend row was added, renamed, hidden, or moved.
 const applyLegendOperations = (index, operations, { displayed = false, mayBeAbsent = /** @type {((caption: string) => boolean) | undefined} */ (undefined) } = {}) => {
   const requireRow = (operation) => requireLegendEntries(index, operation.caption, operation, mayBeAbsent);
+  let changed = false;
   // Python never draws a row the Legend editor added, so the row is added first and
   // a fill or stroke on it then finds it like a generated row (OV-86). An added row
-  // copies the first row before this pass styles that row.
+  // copies Python's first row as Python drew it, before this pass styles that row.
   operations.legendAdds.forEach(({ caption, color, xPos, yPos }) => {
     const { entries, groups } = index.legends();
     const existingEntries = entries.get(caption) || [];
@@ -655,7 +681,7 @@ const applyLegendOperations = (index, operations, { displayed = false, mayBeAbse
         setAttributeIfDifferent(swatch, 'fill', color);
         removeAttributeIfPresent(swatch, resultBaseAttribute('fill'));
         entry.setAttribute('data-legend-owner', 'direct-editor');
-        moveLegendEntryToAnchor(entry, xPos, yPos);
+        changed = moveLegendEntryToAnchor(entry, xPos, yPos) || changed;
       });
       return;
     }
@@ -663,8 +689,8 @@ const applyLegendOperations = (index, operations, { displayed = false, mayBeAbse
       throw new Error('Current SVG cannot admit the requested Legend addition.');
     }
     entries.set(caption, groups.map((group) => {
-      const template = group.querySelector('g[data-legend-key]');
-      const added = template?.cloneNode?.(true) || null;
+      const template = Array.from(group.querySelectorAll('g[data-legend-key]')).find((entry) => !isEditorRow(entry));
+      const added = /** @type {Element | null} */ (template?.cloneNode?.(true) || null);
       if (!added) throw new Error('Current SVG has no Legend entry template.');
       // The copy is of Python's row as drawn, not of that row's edits (OV-121).
       restorePaintBases(added, RESULT_PAINT_DOMAINS, new Map());
@@ -677,6 +703,7 @@ const applyLegendOperations = (index, operations, { displayed = false, mayBeAbse
       group.appendChild(added);
       return added;
     }));
+    changed = true;
   });
   operations.legendFills.forEach((operation) => {
     const { color } = operation;
@@ -701,20 +728,79 @@ const applyLegendOperations = (index, operations, { displayed = false, mayBeAbse
       if (strokeWidth !== null) setPaintAttribute(index, swatch, 'stroke-width', strokeWidth);
     });
   });
-  // A rename keeps the row in place; the Legend layout then places every row
-  // in the Legend's order, as Python does (OV-156).
+  // A rename keeps the row in place and Python's key as a record; the Legend
+  // layout then places every row in the Legend's order, as Python does (OV-156).
   operations.legendRenames.forEach(({ from, to, allowMissing }) => {
-    requireLegendEntries(index, from, { allowMissing }, mayBeAbsent).forEach((entry) => updateLegendCaption(entry, to));
+    requireLegendEntries(index, from, { allowMissing }, mayBeAbsent).forEach((entry) => {
+      if (!setPaintAttribute(index, entry, 'data-legend-key', to)) return;
+      updateLegendCaption(entry, to);
+      changed = true;
+    });
   });
+  // A delete hides the row and keeps it with Python's key, so a reconcile
+  // without the delete shows it in its place.
   operations.legendDeletes.forEach(({ caption, allowMissing }) => {
-    requireLegendEntries(index, caption, { allowMissing }).forEach((entry) => entry.remove());
+    requireLegendEntries(index, caption, { allowMissing }).forEach((entry) => {
+      changed = setPaintAttribute(index, entry, 'display', 'none') || changed;
+    });
   });
   // The edited Legend order is replayed last, over the renderer's slots (D-08).
   // A displayed batch Result that already follows it keeps its order, so the
   // entries only that Result draws keep their places (B18).
   operations.legendOrder.forEach(({ captions }) => {
-    index.legends().groups.forEach((group) => orderLegendEntries(group, captions, { keepFollowed: displayed }));
+    index.legends().groups.forEach((group) => { changed = orderLegendGroup(group, captions, displayed) || changed; });
   });
+  return changed;
+};
+
+// The executor's one ordering of a feature Legend group (R3). The first change
+// of a group's order records Python's order of its rows (their Python keys).
+/** @param {Element} group @param {readonly string[]} captions @param {boolean} keepFollowed */
+const orderLegendGroup = (group, captions, keepFollowed) => {
+  const pythonOrder = JSON.stringify(Array.from(group.querySelectorAll('g[data-legend-key]'))
+    .filter((entry) => !isEditorRow(entry)).map(pythonLegendKey));
+  const moved = orderLegendEntries(group, captions, { keepFollowed });
+  if (moved && !group.hasAttribute(LEGEND_ORDER_RECORD)) group.setAttribute(LEGEND_ORDER_RECORD, pythonOrder);
+  return moved;
+};
+
+// The Legend structure a reconcile shows returns to Python's where no
+// operation keeps it: editor rows no addition names are removed, and a group
+// whose order no order operation sets takes Python's recorded order again.
+// Returns whether a row was removed or moved.
+/**
+ * @param {{ legends: () => { groups: Element[] } }} index
+ * @param {Record<string, any>} operations
+ * @param {readonly string[]} domains
+ */
+const restoreLegendStructure = (index, operations, domains) => {
+  let changed = false;
+  const { groups } = index.legends();
+  if (domains.includes('legendAdds')) {
+    const added = new Set(operations.legendAdds.map(({ caption }) => caption));
+    groups.forEach((group) => Array.from(group.querySelectorAll('g[data-legend-key]')).forEach((entry) => {
+      if (!isEditorRow(entry) || added.has(text(entry.getAttribute('data-legend-key')))) return;
+      entry.remove();
+      changed = true;
+    }));
+  }
+  if (domains.includes('legendOrder') && operations.legendOrder.length === 0) {
+    groups.forEach((group) => {
+      const recorded = group.getAttribute(LEGEND_ORDER_RECORD);
+      if (recorded === null) return;
+      /** @type {unknown} */
+      let order = null;
+      try { order = JSON.parse(recorded); } catch { order = null; }
+      const shownKeys = new Map(Array.from(group.querySelectorAll('g[data-legend-key]'))
+        .filter((entry) => !isEditorRow(entry))
+        .map((entry) => [pythonLegendKey(entry), text(entry.getAttribute('data-legend-key'))]));
+      if (Array.isArray(order)) {
+        changed = orderLegendGroup(group, order.map((key) => shownKeys.get(text(key)) || ''), false) || changed;
+      }
+      group.removeAttribute(LEGEND_ORDER_RECORD);
+    });
+  }
+  return changed;
 };
 
 /**
@@ -722,13 +808,18 @@ const applyLegendOperations = (index, operations, { displayed = false, mayBeAbse
  * using the executor that Generate admission uses (D-07, PD-OI-062). Every
  * operation given is applied; then each attribute the executor changed
  * earlier in one of `domains` that no operation set returns to the value
- * Python drew. A second call changes nothing.
+ * Python drew, and the Legend structure of `domains` returns to Python's where
+ * no operation keeps it: a row's key and text (`legendRenames`), a hidden row
+ * (`legendDeletes`), the editor rows (`legendAdds`), and the order
+ * (`legendOrder`). A second call changes nothing.
  * The preview binder owns label DOM identity, so label operations stay with
  * it. Legend operations are diagram-wide and a batch Result shows only its own
  * categories and features, so an absent caption or feature is skipped.
+ * Returns whether the Legend's rows changed, so the caller lays it out once.
  * @param {Element} svg
  * @param {Record<string, any>} operations
  * @param {{ resultIndex?: number, domains?: readonly string[] }} [options]
+ * @returns {boolean}
  */
 export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domains = RESULT_PAINT_DOMAINS } = {}) => {
   const index = createLazyMutationIndex(svg, { phase: 'result-selection', resultIndex });
@@ -738,17 +829,19 @@ export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domai
     featureStrokes: operations.featureStrokes.filter(present),
     featureVisibility: operations.featureVisibility.filter(present)
   });
+  let legendChanged = false;
   if (index.legends().groups.length > 0) {
-    // A live rename rewrites a shown row's key (`data-legend-key`), so a row
-    // the operations name by Python's caption is found under its new one
-    // (`renamedCaption`) when the Result shows it renamed.
+    // A row the Legend editor renamed on the mounted Result without the
+    // executor shows its new key and keeps no record of Python's, so a row the
+    // operations name by Python's caption is found under its new one
+    // (`renamedCaption`) when Python's is absent.
     const allowMissing = (operation) => ({ ...operation, allowMissing: true });
     const onShownRow = ({ renamedCaption = '', ...operation }) => ({
       ...operation,
       caption: renamedCaption && !index.legends().entries.has(operation.caption) ? renamedCaption : operation.caption,
       allowMissing: true
     });
-    applyLegendOperations(index, {
+    legendChanged = applyLegendOperations(index, {
       legendFills: operations.legendFills.map(onShownRow),
       legendStrokes: operations.legendStrokes.map((operation) => ({
         ...onShownRow(operation),
@@ -759,8 +852,9 @@ export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domai
       legendAdds: operations.legendAdds,
       legendOrder: operations.legendOrder
     }, { displayed: true });
+    legendChanged = restoreLegendStructure(index, operations, domains) || legendChanged;
   }
-  restorePaintBases(svg, domains, index.painted);
+  return restorePaintBases(svg, domains, index.painted) || legendChanged;
 };
 
 /**

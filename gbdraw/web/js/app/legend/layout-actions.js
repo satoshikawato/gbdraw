@@ -8,7 +8,7 @@ import {
   loadLegendFontMetrics,
   resolveBundledFontFace
 } from '../../services/legend-layout.js';
-import { getComparisonLegendGroup, getLegendEntrySwatch } from '../../services/legend-svg.js';
+import { getComparisonLegendGroup, getLegendEntrySwatch, legendRowShown } from '../../services/legend-svg.js';
 import { parseCompositionMetadata } from '../legend-layout/composition-actions.js';
 
 // The dpi Python lays the Legend out at unless the Result says otherwise
@@ -46,12 +46,12 @@ const setTranslate = (element, x, y) => {
 
 /**
  * The solid rows of one feature Legend group, in document order (the
- * Legend's order), as Python's legend table holds them.
+ * Legend's order), as Python's legend table holds them: the rows shown.
  * @param {Element} group
  * @returns {{ rows: LegendLayoutRow[], entries: Element[], label: Element | null }}
  */
 const readSolidRows = (group) => {
-  const entries = entryGroupsOf(group);
+  const entries = entryGroupsOf(group).filter(legendRowShown);
   const rows = entries.map((entry) => {
     const swatch = getLegendEntrySwatch(entry);
     return /** @type {LegendLayoutRow} */ ({

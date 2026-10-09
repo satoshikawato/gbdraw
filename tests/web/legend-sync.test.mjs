@@ -626,3 +626,41 @@ const mockLegendEntry = (caption, color, x) => {
     'a Result drawn with a replayed edited order keeps the displayed default order'
   );
 }
+
+{
+  // U3a (L1): a Result whose rows the executor reordered keeps Python's order
+  // as a record, which its inventory reads; a row a Legend delete hid is not
+  // listed.
+  const ref = (value) => ({ value });
+  const svg = new MockElement('svg');
+  const legend = new MockElement('g', { id: 'legend' });
+  const featureLegend = new MockElement('g', { id: 'feature_legend' });
+  legend.appendChild(featureLegend);
+  svg.appendChild(legend);
+  ['tRNA', 'CDS', 'GC'].forEach((caption, index) => featureLegend.appendChild(mockLegendEntry(caption, '#112233', index * 70)));
+  featureLegend.setAttribute('data-gbdraw-base-legend-order', JSON.stringify(['CDS', 'tRNA', 'GC']));
+  const state = {
+    results: ref([{ name: 'r1.svg', content: 'unchanged' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: () => svg }),
+    adv: {},
+    legendEntries: ref([]),
+    deletedLegendEntries: ref([]),
+    dormantLegendEntries: ref([]),
+    originalLegendOrder: ref(['CDS', 'tRNA', 'GC']),
+    originalLegendColors: ref({}),
+    newLegendCaption: ref(''),
+    newLegendColor: ref('#808080'),
+    legendStrokeOverrides: {},
+    legendColorOverrides: {},
+    manualSpecificRules: [],
+    skipCaptureBaseConfig: ref(false)
+  };
+  const actions = createLegendEntryActions({
+    state: withDrawings(state), commitActiveResultEdit: () => true, readActiveResultIdentity: () => 'result-1'
+  });
+  assert.deepEqual(actions.captureResultInventory(svg, { resultIdentity: 'result-1', liveResultIdentities: ['result-1'] }), ['CDS', 'tRNA', 'GC']);
+  featureLegend.children[0].setAttribute('display', 'none');
+  actions.extractLegendEntries();
+  assert.deepEqual(state.legendEntries.value.map((entry) => entry.caption), ['CDS', 'GC']);
+}

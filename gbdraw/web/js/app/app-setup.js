@@ -17,7 +17,7 @@ import { createResultPaintRecord } from './result-paint-record.js';
 import {
   countUnresolvedFeatureEdits, featureDrawnContext, removeUnresolvedFeatureEdits, requestFeatureVisibilityRules
 } from '../services/feature-visibility.js';
-import { drawnBlockStroke, isLegendOrderEdited } from '../services/legend-svg.js';
+import { drawnBlockStroke, isLegendOrderEdited, legendStructureEdited } from '../services/legend-svg.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing, drawnFeatureFills } from '../services/feature-override-identity.js';
@@ -2678,11 +2678,12 @@ export const createAppSetup = () => {
         || Boolean(context.bindingOptions.replaceGeneratedLegend);
       // It shows the Legend editor's edits laid out as Python lays the edited
       // rows out, before its entries are read (zero shift; OV-122, OV-124,
-      // OV-126, OV-127).
+      // OV-126, OV-127): a Result whose records show a Legend structure edit.
       if (
         drawn && context.root.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null
-        && legendActions.layOutMountedLegendEdits(context.root)
+        && legendStructureEdited(context.root)
       ) {
+        legendActions.onLegendGeometryChanged({ commit: false });
         mountedLegendLayouts.add(context.root);
       }
       if (context.bindingOptions.skipLegendExtraction) return;
@@ -3415,15 +3416,17 @@ export const createAppSetup = () => {
   // (the compile runs only the stages they need) unless given, reconciled by
   // the executor Generate uses, which returns each attribute of `domains` no
   // operation sets to Python's value; then one commit of the Result. Live
-  // edits, History, and the display of a batch Result call it.
+  // edits, History, and the display of a batch Result call it. The Legend is
+  // laid out once when its rows changed (zero shift): in the reconcile, or
+  // before it (`legendChanged`).
   /**
    * @param {{
    *   domains: readonly string[],
    *   operations?: Record<string, any> | null,
-   *   afterApply?: ((svg: SVGSVGElement) => void) | null
+   *   legendChanged?: boolean
    * }} options
    */
-  const showEditorIntent = ({ domains, operations = undefined, afterApply = null }) => {
+  const showEditorIntent = ({ domains, operations = undefined, legendChanged = false }) => {
     let shown = operations;
     if (shown === undefined) {
       const resultIndex = previewRuntime.getActiveRuntime()?.resultIndex ?? (Number(selectedResultIndex.value) || 0);
@@ -3434,7 +3437,10 @@ export const createAppSetup = () => {
         return false;
       }
     }
-    return previewRuntime.applyEditorOperations(shown, { domains, afterApply });
+    return previewRuntime.applyEditorOperations(shown, {
+      domains,
+      afterApply: (_svg, reconciled) => { if (legendChanged || reconciled) legendActions.onLegendGeometryChanged(); }
+    });
   };
   // The paint domains each edit kind shows, live and on Undo and Redo.
   const {
@@ -3531,11 +3537,7 @@ export const createAppSetup = () => {
     if (projects) {
       try {
         const legendChanged = legendActions.prepareDisplayedResultLegend(context.root, legend);
-        showEditorIntent({
-          domains,
-          operations,
-          afterApply: () => { if (legendChanged) legendActions.onLegendGeometryChanged(); }
-        });
+        showEditorIntent({ domains, operations, legendChanged });
       } catch (error) {
         failed = true;
         console.error('Editor edits could not be shown on the displayed Result.', normalizeUserFacingError(error));

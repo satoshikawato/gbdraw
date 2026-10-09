@@ -7,8 +7,10 @@ import {
   getLegendEntrySwatch,
   getVisibleFeatureLegendGroup,
   isLegendOrderEdited,
+  legendRowShown,
   mountedLegendRowFeatureIds,
   orderLegendEntries,
+  recordedLegendOrder,
   parseTransformXY,
   setsFeatureStroke
 } from '../../services/legend-svg.js';
@@ -298,7 +300,11 @@ export const createLegendEntryActions = ({
         if (options.throwOnError) throw new Error('The Legend has no row to copy for a new entry.');
         return false;
       }
-      // The copy shows the editor's row, not the template's records of Python.
+      // The copy shows the editor's row, not the template's records of Python
+      // (a row a Legend delete hid is shown).
+      const display = pythonDrawnAttribute(entryGroup, 'display');
+      if (display === null) entryGroup.removeAttribute('display');
+      else entryGroup.setAttribute('display', display);
       stripResultBaseAttributes(entryGroup);
       entryGroup.removeAttribute('transform');
       entryGroup.setAttribute('data-legend-key', caption);
@@ -406,35 +412,11 @@ export const createLegendEntryActions = ({
   const legendCaption = (entry) => String(entry?.caption || '').trim();
   const generatedCaption = (entry) => String(entry?.originalCaption || entry?.caption || '').trim();
 
-  // Whether the Legend editor changed the rows Python drew: an added row, a
-  // deleted row, a renamed row, or another order.
-  /** @param {DrawingState} drawing @param {SVGSVGElement} svg */
-  const hasLegendRowEdits = (drawing, svg) => (
-    drawing.deletedLegendEntries.value.length > 0
-    || getAllFeatureLegendGroups(svg).some((group) => group.querySelector('g[data-legend-owner="direct-editor"]'))
-    || (drawing.legendEntries.value || []).some((entry) => entry?.originalCaption && entry.caption !== entry.originalCaption)
-    || isLegendOrderEdited(drawing.legendEntries.value || [], originalLegendOrder.value || [])
-  );
-
-  // Python lays out only the rows it draws. Generate, a rerender, and the
-  // display of a batch Result apply the rows the editor added, deleted,
-  // renamed, and ordered (services/svg-result-ingestion.js), so a mounted
-  // Result with such edits is laid out by the layout owner as Python lays the
-  // edited rows out, as the live edit was (zero shift; OV-122, OV-124,
-  // OV-126, OV-127, PD-OI-066). Returns whether it was laid out again.
-  /** @param {SVGSVGElement} svg */
-  // The mount binder commits the Result once its later steps have bound it.
-  const layOutMountedLegendEdits = (svg) => {
-    if (getAllFeatureLegendGroups(svg).length === 0 || !hasLegendRowEdits(state.activeDrawing(), svg)) return false;
-    onLegendGeometryChanged({ commit: false });
-    return true;
-  };
-
   // Whether a captured Legend list lists exactly the entries the mounted
   // Result draws, so that it describes this Result.
   const describesMountedLegend = (svg, entries) => {
     const drawn = Array.from(getVisibleFeatureLegendGroup(svg)?.querySelectorAll?.('g[data-legend-key]') || [])
-      .map((group) => String(group.getAttribute('data-legend-key') || '').trim());
+      .filter(legendRowShown).map((group) => String(group.getAttribute('data-legend-key') || '').trim());
     const listed = new Set(entries.map(legendCaption));
     return drawn.length === listed.size && drawn.every((caption) => listed.has(caption));
   };
@@ -807,7 +789,7 @@ export const createLegendEntryActions = ({
     const entryGroups = targetGroup.querySelectorAll('g[data-legend-key]');
     entryGroups.forEach((entryGroup) => {
       const caption = entryGroup.getAttribute('data-legend-key');
-      if (!caption) return;
+      if (!caption || !legendRowShown(entryGroup)) return;
 
       let color = '#cccccc';
       const paths = entryGroup.querySelectorAll('path');
@@ -945,12 +927,14 @@ export const createLegendEntryActions = ({
     const stored = inventoryByResult.get(identity);
     if (!identity || stored) return stored || [];
     const mounted = readMountedLegend(svg, drawing.legendEntries.value || [], drawing.dormantLegendEntries.value || []);
+    // A Result whose rows were reordered keeps Python's order as a record (L1).
+    const recorded = recordedLegendOrder(svg);
     const inventory = mounted
       ? drawnInventory(drawing, {
         inventory: originalLegendOrder.value,
-        orderEdited: replayedInventoryResults.has(identity),
-        generatedCaptions: mounted.generatedCaptions,
-        rendered: renderedCaptions(mounted)
+        orderEdited: !recorded && replayedInventoryResults.has(identity),
+        generatedCaptions: recorded ? new Set(recorded) : mounted.generatedCaptions,
+        rendered: recorded || renderedCaptions(mounted)
       })
       : [];
     inventoryByResult.set(identity, inventory);
@@ -1283,7 +1267,6 @@ export const createLegendEntryActions = ({
     extractLegendEntries,
     legendEntryExists,
     hasRetiredResultLegend,
-    layOutMountedLegendEdits,
     onLegendGeometryChanged,
     orderMountedLegend,
     prepareDisplayedResultLegend,

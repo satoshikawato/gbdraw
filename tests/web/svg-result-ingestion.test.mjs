@@ -29,6 +29,7 @@ import {
   reconcileMountedResult
 } from '../../gbdraw/web/js/services/svg-result-ingestion.js';
 import { stripResultBaseAttributes } from '../../gbdraw/web/js/services/result-paint-bases.js';
+import { getLegendEntrySwatch as legendSwatch } from '../../gbdraw/web/js/services/legend-svg.js';
 import { recordRuleMatches, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
 import { displayedFeatureAddressing, featureOverrideKey } from '../../gbdraw/web/js/services/feature-override-identity.js';
 
@@ -56,7 +57,7 @@ class FakeElement {
   setAttribute(name, value) { this.attributes.set(name, String(value)); }
   removeAttribute(name) { this.attributes.delete(name); }
   hasAttribute(name) { return this.attributes.has(name); }
-  appendChild(child) { child.parentElement = this; this.children.push(child); return child; }
+  appendChild(child) { child.remove?.(); child.parentElement = this; this.children.push(child); return child; }
   remove() {
     if (!this.parentElement) return;
     this.parentElement.children = this.parentElement.children.filter((child) => child !== this);
@@ -84,6 +85,9 @@ class FakeElement {
     if (selector === 'textPath') return this.tagName === 'textPath';
     if (selector === 'g[data-legend-key]') {
       return this.tagName === 'g' && this.hasAttribute('data-legend-key');
+    }
+    if (selector === 'g[data-legend-key][display="none"]') {
+      return this.tagName === 'g' && this.hasAttribute('data-legend-key') && this.getAttribute('display') === 'none';
     }
     if (selector === 'text[data-label-feature-id]') {
       return this.tagName === 'text' && this.hasAttribute('data-label-feature-id');
@@ -468,7 +472,8 @@ test('direct Legend rename, deletion, and addition are applied through catalog-b
         deletedLegendEntries: [{ caption: 'CDS', originalCaption: 'CDS' }],
         originalLegendOrder: ['CDS']
       },
-      assertContent: (content) => assert.doesNotMatch(content, /data-legend-key="CDS"/)
+      // The deleted row stays hidden with Python's key (exports strip it).
+      assertContent: (content) => assert.match(content, /<g data-legend-key="CDS" data-gbdraw-base-display="" display="none">/)
     },
     {
       editor: {
@@ -1357,4 +1362,130 @@ test('the Load normalizer records no fill Python is not known to have drawn', ()
   });
   plan.operationsByResult[0].callerTransforms.forEach((transform) => transform(svg));
   assert.doesNotMatch(serializeNode(svg), /data-gbdraw-base-fill/);
+});
+
+// U3a: the executor reconciles the Legend structure. A row of Python's keeps
+// Python's key when renamed and stays hidden when deleted, so a reconcile
+// without the edit returns the row as Python drew it.
+/** @param {string} caption @param {number} y @param {Record<string, string>} [attributes] */
+const legendRow = (caption, y, attributes = {}) => {
+  const row = new FakeElement('g', { 'data-legend-key': caption, ...attributes });
+  row.appendChild(new FakeElement('path', {
+    fill: '#aaaaaa', stroke: attributes['data-test-stroke'] || '#000000', 'stroke-width': '0.5', transform: `translate(0, ${y})`
+  }));
+  const label = new FakeElement('text', { transform: `translate(22, ${y})` });
+  label.textContent = caption;
+  row.appendChild(label);
+  return row;
+};
+const legendSvg = (rows = [legendRow('CDS', 7), legendRow('tRNA', 31), legendRow('rRNA', 55)]) => {
+  const root = new FakeElement('svg', { xmlns: 'http://www.w3.org/2000/svg' });
+  const legend = root.appendChild(new FakeElement('g', { id: 'legend' }));
+  const featureLegend = legend.appendChild(new FakeElement('g', { id: 'feature_legend' }));
+  rows.forEach((row) => featureLegend.appendChild(row));
+  return root;
+};
+const legendOperations = (operations = {}) => ({ ...createEmptySvgMutationPlan(1).operationsByResult[0], ...operations });
+const legendRows = (svg) => svg.querySelectorAll('g[data-legend-key]').map((row) => [
+  row.getAttribute('data-legend-key'), row.querySelector('text').textContent, row.getAttribute('display')
+]);
+
+test('a deleted Legend row is hidden with Python\'s key and a reconcile without the delete shows it in its slot', () => {
+  const svg = legendSvg();
+  const drawn = serializeNode(svg);
+  assert.equal(reconcileMountedResult(svg, legendOperations({ legendDeletes: [{ caption: 'tRNA' }] }), { domains: LEGEND_STRUCTURE }), true);
+  assert.deepEqual(legendRows(svg), [['CDS', 'CDS', null], ['tRNA', 'tRNA', 'none'], ['rRNA', 'rRNA', null]]);
+  assert.equal(reconcileMountedResult(svg, legendOperations(), { domains: LEGEND_STRUCTURE }), true);
+  assert.equal(serializeNode(svg), drawn);
+});
+
+test('a fill addressed by Python\'s key reaches a renamed row; a reconcile without the rename restores Python\'s text', () => {
+  const svg = legendSvg();
+  const drawn = serializeNode(svg);
+  const fill = { caption: 'CDS', color: '#123456', allowMissing: true };
+  reconcileMountedResult(svg, legendOperations({ legendRenames: [{ from: 'CDS', to: 'Genes' }] }), { domains: LEGEND_STRUCTURE });
+  reconcileMountedResult(svg, legendOperations({ legendRenames: [{ from: 'CDS', to: 'Genes' }], legendFills: [fill] }), {
+    domains: [...LEGEND_STRUCTURE, 'legendFills']
+  });
+  assert.deepEqual(legendRows(svg)[0], ['Genes', 'Genes', null]);
+  assert.equal(legendSwatch(svg.querySelectorAll('g[data-legend-key]')[0]).getAttribute('fill'), '#123456');
+  assert.equal(reconcileMountedResult(svg, legendOperations({ legendFills: [fill] }), {
+    domains: [...LEGEND_STRUCTURE, 'legendFills']
+  }), true);
+  assert.deepEqual(legendRows(svg)[0], ['CDS', 'CDS', null]);
+  assert.equal(legendSwatch(svg.querySelectorAll('g[data-legend-key]')[0]).getAttribute('fill'), '#123456');
+  reconcileMountedResult(svg, legendOperations(), { domains: [...LEGEND_STRUCTURE, 'legendFills'] });
+  assert.equal(serializeNode(svg), drawn);
+});
+
+test('an editor row is cloned from Python\'s first row and removed by a reconcile without its add', () => {
+  const editorRow = legendRow('Mine', 7, { 'data-legend-owner': 'direct-editor', 'data-test-stroke': '#ff00ff' });
+  const svg = legendSvg([editorRow, legendRow('CDS', 31), legendRow('tRNA', 55)]);
+  const add = { caption: 'New', color: '#556677', xPos: null, yPos: null };
+  const mine = { caption: 'Mine', color: '#aaaaaa', xPos: null, yPos: null };
+  // Python's first row, renamed and hidden, is copied as Python drew it.
+  reconcileMountedResult(svg, legendOperations({
+    legendRenames: [{ from: 'CDS', to: 'Genes' }], legendDeletes: [{ caption: 'CDS' }], legendAdds: [mine]
+  }), { domains: LEGEND_STRUCTURE });
+  assert.equal(reconcileMountedResult(svg, legendOperations({
+    legendRenames: [{ from: 'CDS', to: 'Genes' }], legendDeletes: [{ caption: 'CDS' }], legendAdds: [mine, add]
+  }), { domains: LEGEND_STRUCTURE }), true);
+  const added = svg.querySelectorAll('g[data-legend-key]').find((row) => row.getAttribute('data-legend-key') === 'New');
+  assert.equal(serializeNode(added), serializeNode(legendRow('New', 31))
+    .replace('<g data-legend-key="New">', '<g data-legend-key="New" data-legend-owner="direct-editor">')
+    .replace('fill="#aaaaaa"', 'fill="#556677"'));
+  assert.equal(reconcileMountedResult(svg, legendOperations({
+    legendRenames: [{ from: 'CDS', to: 'Genes' }], legendDeletes: [{ caption: 'CDS' }], legendAdds: [mine]
+  }), { domains: LEGEND_STRUCTURE }), true);
+  assert.deepEqual(legendRows(svg).map(([key]) => key), ['Mine', 'Genes', 'tRNA']);
+});
+
+test('a reconcile without an order returns Python\'s order', () => {
+  const svg = legendSvg();
+  const drawn = serializeNode(svg);
+  const order = { captions: ['rRNA', 'Genes', 'tRNA'] };
+  const renames = [{ from: 'CDS', to: 'Genes' }];
+  assert.equal(reconcileMountedResult(svg, legendOperations({ legendRenames: renames, legendOrder: [order] }), { domains: LEGEND_STRUCTURE }), true);
+  assert.deepEqual(legendRows(svg).map(([key]) => key), ['rRNA', 'Genes', 'tRNA']);
+  assert.equal(reconcileMountedResult(svg, legendOperations({ legendRenames: renames }), { domains: LEGEND_STRUCTURE }), true);
+  assert.deepEqual(legendRows(svg).map(([key]) => key), ['Genes', 'tRNA', 'rRNA']);
+  reconcileMountedResult(svg, legendOperations(), { domains: LEGEND_STRUCTURE });
+  assert.equal(serializeNode(svg), drawn);
+});
+
+test('the visibility domain does not un-hide a deleted row', () => {
+  const svg = legendSvg();
+  reconcileMountedResult(svg, legendOperations({ legendDeletes: [{ caption: 'tRNA' }] }), { domains: LEGEND_STRUCTURE });
+  reconcileMountedResult(svg, legendOperations({ legendDeletes: [{ caption: 'tRNA' }] }), { domains: ['featureVisibility'] });
+  reconcileMountedResult(svg, legendOperations(), { domains: ['featureVisibility', 'legendFills', 'legendStrokes'] });
+  assert.deepEqual(legendRows(svg)[1], ['tRNA', 'tRNA', 'none']);
+});
+
+test('a second Legend structure reconcile changes nothing', () => {
+  const svg = legendSvg();
+  const operations = legendOperations({
+    legendRenames: [{ from: 'CDS', to: 'Genes' }],
+    legendDeletes: [{ caption: 'rRNA' }],
+    legendAdds: [{ caption: 'New', color: '#556677', xPos: null, yPos: null }],
+    legendOrder: [{ captions: ['tRNA', 'Genes', 'New'] }],
+    legendFills: [{ caption: 'CDS', color: '#123456' }]
+  });
+  const domains = [...LEGEND_STRUCTURE, 'legendFills'];
+  assert.equal(reconcileMountedResult(svg, operations, { domains }), true);
+  const once = serializeNode(svg);
+  assert.equal(reconcileMountedResult(svg, operations, { domains }), false);
+  assert.equal(serializeNode(svg), once);
+});
+
+test('an export strips the Legend structure records and the rows a delete hid', () => {
+  const svg = legendSvg();
+  reconcileMountedResult(svg, legendOperations({
+    legendRenames: [{ from: 'CDS', to: 'Genes' }],
+    legendDeletes: [{ caption: 'rRNA' }],
+    legendOrder: [{ captions: ['tRNA', 'Genes'] }]
+  }), { domains: LEGEND_STRUCTURE });
+  assert.match(serializeNode(svg), /data-gbdraw-base-legend-order=/);
+  stripResultBaseAttributes(svg);
+  assert.doesNotMatch(serializeNode(svg), /data-gbdraw-base-|display="none"/);
+  assert.deepEqual(legendRows(svg), [['tRNA', 'tRNA', null], ['Genes', 'Genes', null]]);
 });
