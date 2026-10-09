@@ -161,6 +161,7 @@ def test_cli_session_render_validates_and_copies_the_session_once(
 
     # Writing the Session again validates the loaded and the written document.
     validations.clear()
+    copies.clear()
     _run_cli(
         "circular",
         "--session",
@@ -173,6 +174,16 @@ def test_cli_session_render_validates_and_copies_the_session_once(
         str(tmp_path / "resaved.gbdraw-session.json"),
     )
     assert len(validations) == 2
+    assert copies == Counter(
+        {
+            "gbdraw.api.session_compat.canonical_payload_for_session_decode": 1,
+            "gbdraw.api.request_render.__post_init__": 1,
+            # The sidecar's source state, its adjunct, and the written document.
+            "gbdraw.session.to_dict": 1,
+            "gbdraw.session._build_session_document_from_resolved_request": 1,
+            "gbdraw.session.__post_init__": 1,
+        }
+    )
 
 
 def _legacy_session(tmp_path: Path, mode: str) -> Path:

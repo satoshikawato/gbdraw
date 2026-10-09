@@ -482,7 +482,8 @@ def _build_session_document_from_resolved_request(
         _drop_unreferenced_resources(data, resources)
     editor_state = data.get("editorState")
     if isinstance(editor_state, Mapping):
-        normalized_editor_state = copy.deepcopy(dict(editor_state))
+        # Either the literal above or part of the adjunct copy: already detached.
+        normalized_editor_state = dict(editor_state)
         normalized_editor_state.setdefault("featureCatalog", None)
         data["editorState"] = normalized_editor_state
     if title is not None:
