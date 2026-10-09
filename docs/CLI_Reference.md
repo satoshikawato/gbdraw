@@ -22,8 +22,8 @@ The current boolean spelling is symmetric in both modes:
 `--depth_track`. Current multiword long options otherwise use the underscore
 spelling shown below.
 
-For retired options, compatibility aliases, and saved-session migration rules,
-see [Session and request compatibility](./SESSION_COMPATIBILITY.md#retired-inputs).
+For retired options, the two remaining aliases, and how saved Sessions are
+rewritten, see [Retired inputs](./REFERENCE/session-and-request-compatibility.md#retired-inputs).
 
 ## Main command
 

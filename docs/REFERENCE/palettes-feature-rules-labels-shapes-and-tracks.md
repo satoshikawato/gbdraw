@@ -21,17 +21,17 @@ the shown orientation and endpoint mapping but leaves the source record
 unchanged.
 
 Simple controls assemble a track stack from enabled features, coordinate
-ticks, GC content, skew, and depth. An explicit slot list is authoritative.
+ticks, GC content, skew, and depth. An explicit slot list overrides these simple controls.
 Turning a custom stack off preserves it for later use; resetting settings
 rebuilds the simple stack.
 
 Circular slots can sit outside, on, or inside the feature axis. Linear slots
 are ordered around an axis boundary, with above, below, and overlay placement
 where the renderer supports it. Slot order controls placement. It does not
-change which depth series, annotation set, or comparison evidence a renderer
+change which depth series, annotation set, or comparison results a renderer
 uses.
 
-Coordinate rulers belong to the genome axis. Numeric tracks own their own axes
+Coordinate rulers belong to the genome axis. Numeric tracks draw their own axes
 and ticks. Hiding the coordinate scale therefore leaves the record axis and
 quantitative axes available. Plot titles, record definitions, and legends are
 placed against visible diagram bounds after record-local layout; moving a
@@ -44,8 +44,7 @@ title on the same side, and 16 px around the final figure. These distances are
 renderer defaults, not user settings. Titles center on the primary diagram.
 Corner legends remain overlays and use 8 px of obstacle clearance. Current Web
 SVGs store composition metadata as schema 1; the editor reapplies automatic
-placement before a saved drag offset. Supported older SVGs enter the editor
-through one explicit legacy adapter.
+placement before a saved drag offset. The editor converts supported older SVGs when it opens them.
 
 The exact surface controls are listed in the [Web app](web-app.md),
 [command-line](command-line.md), and [Python API](python-api.md) pages.
@@ -54,9 +53,9 @@ The exact surface controls are listed in the [Web app](web-app.md),
 
 | Renderer | Content | Main constraint |
 |---|---|---|
-| `features` | Genomic feature glyphs and labels | Owns the feature axis or overlay anchor. |
+| `features` | Genomic feature glyphs and labels | Provides the feature axis or overlay anchor. |
 | `ticks` | Genome-coordinate ticks and labels | Follows mode and coordinate-scale settings. |
-| `dinucleotide_content` | GC percentage, deviation from the mean, or the configured base-pair content | Can own a percentage axis and ticks. |
+| `dinucleotide_content` | GC percentage, deviation from the mean, or the configured base-pair content | Can draw its own percentage axis and ticks. |
 | `dinucleotide_skew` | Signed skew for the configured base pair | Requires record sequence. |
 | `depth` | One logical numeric depth series | Requires a mapped source for each record that has data. |
 | `annotations` | One named annotation set | Requires `set_id`; an overlay also requires a drawable anchor. |
@@ -77,7 +76,7 @@ rows on one side keep the larger of their facing gaps, the inner row's outer
 gap (`outer_gap_px`) or the outer row's inner gap (`inner_gap_px`); a gap that
 is not set may shrink with compressed rows, to no less than 1 px. See [Circular track Width and Radius](web-app.md#circular-track-width-and-radius)
 for input, History, Session and Generate behavior. Linear slots use order,
-side or overlay ownership, reserved height,
+side or overlay placement, reserved height,
 spacing, and an axis boundary. A feature slot's reserved band and the feature
 glyph height are different settings. Invalid anchor chains, missing logical
 depth indices, and contradictory overlay order are rejected.
@@ -121,7 +120,7 @@ table fields and mark types.
 The default `overflow=error` rejects a track that needs more than its reserved
 extent. For line, bracket, and band slots, it also rejects explicit-lane
 collisions. A highlight-only slot ignores explicit lanes, flattens its marks
-into lane 0, and retains overlaps during lane assignment. `overflow=compress`
+into lane 0, and keeps overlaps during lane assignment. `overflow=compress`
 permits explicit-lane collisions and, only for an overfull multi-lane track,
 reduces the gaps between lanes; it still fails when the fixed lane bands and
 padding cannot fit. `overflow=clip` permits explicit-lane collisions and clips
@@ -150,7 +149,7 @@ down** therefore change the result only between rules with the same qualifier
 key, and the CLI orders the rules the same way.
 
 A partial default-color table changes only the listed feature types. Omitted
-feature types retain their values from the selected palette.
+feature types keep their values from the selected palette.
 
 The generated feature legend reflects which specific color rules actually match
 features in the diagram. Default-colored CDS are captioned `CDS` when no specific
@@ -158,7 +157,7 @@ CDS rule is used. When a specific CDS rule is used and default-colored CDS remai
 the legend contains the specific caption and `other proteins` for the remainder.
 An unused rule does not change `CDS`; removing the used rule and regenerating
 restores it. Other feature types use `other <feature type>s` for the same remainder
-(for example, `other genes`). This contract also applies to Web regeneration after
+(for example, `other genes`). The same rule applies to Web regeneration after
 a **This feature only** color edit creates a specific rule: the default caption
 changes because its category now contains only the remaining members.
 
@@ -176,11 +175,12 @@ unsafe.
 A per-feature override is a label-override row whose qualifier is `hash`. It
 decides one feature's label before the label filters and the label display
 scope (`--show_labels` or `--labels`, `labels.linear.scope`,
-`labels.circular.scope`): non-empty text shows the label, also on a record or
-with a scope that otherwise draws no labels, and empty text hides it. No label
-is drawn for a hidden feature, for a feature drawn as `underlay`, or, with
-`labels.rendering = "embedded_only"`, for a label that does not fit inside its
-feature, so such a row shows a label only once one of these changes. The Web
+`labels.circular.scope`). Non-empty text shows the label, also on a record or
+with a scope that otherwise draws no labels. Empty text hides it. No label
+is drawn in three cases: the feature is hidden, the feature is drawn as
+`underlay`, or, with `labels.rendering = "embedded_only"`, the label does not
+fit inside its feature. Such a row shows a label only once one of these
+changes. The Web
 feature popup writes these rows for **Label visibility** **On** and **Off**. A
 label text edit uses `locus_tag`, `gene`, or `record_location` when one of them
 identifies the feature, and falls back to `hash` only when none does.
@@ -200,7 +200,7 @@ Supported feature renderings include directional `arrow`, nondirectional
 anchor and render behind foreground glyphs. Block strokes, connector strokes,
 fill, width, visibility, and overlap resolution are separate controls.
 Overlap resolution may add drawing lanes but does not crop a feature or change
-comparison evidence. Separate-strand placement and overlap resolution can be enabled together in
+comparison results. Separate-strand placement and overlap resolution can be enabled together in
 both modes. Undefined-strand features share the nominal negative pool with
 negative-strand features during automatic allocation.
 
@@ -267,7 +267,7 @@ In the Web Feature Editor choose **Feature placement**, or use **Selected featur
 placements** for a selection. Auto deletes the override; Undo/Redo restores the
 requested state. Apply rotation, placement or tolerance changes with **Generate
 Diagram**. They are drafts until generation succeeds; the previous Result remains
-available. A source replacement invalidates its old binding. Known invisible
+available. A source replacement breaks its link to the old source. Known invisible
 features can be dormant; an unknown or stale feature cannot. Placements stay
 with the mode in which they were made: a Generate in the other mode ignores
 them, and they apply again after you switch back.

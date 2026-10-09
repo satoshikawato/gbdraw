@@ -122,7 +122,7 @@ the record as stored in the file and then reverse-complements the crop, while
 record. `--region` and `--reverse_complement` follow the same order.
 
 `order`, `row`, and `column` are positive integers. Explicit `order` values
-sort before blank values; equal values retain table order. When placement is
+sort before blank values; equal values keep table order. When placement is
 present, every row needs a `row`. `column` controls left-to-right order, and
 duplicate row/column cells are rejected. Use table placement instead of
 repeated surface-specific position options.
@@ -177,15 +177,15 @@ The file can be loaded with **Import TSV**, Python's `read_annotation_table()`,
 or the CLI's `--annotation_table` option.
 
 The download preserves effective row targets and styles, including explicit
-no-fill, unique record IDs, and one-based `#N` record bindings. The table has
+no-fill, unique record IDs, and one-based `#N` record references. The table has
 no selector for a source feature, so an annotation made from **Selected
 features** is written as the current Result draws it: `record=#<position>` and
 `feature_selector=hash=<drawn hash>`. That row names the same feature only while
 the crop, orientation, and record order stay as drawn, and the download says so.
 If the current Result does not draw the feature, the annotation is not written
 and the download says how many. A blank `fill`
-cell in a styled row means no fill; omitting the column retains the Web import
-default. TSV does not retain empty sets, metadata, or the distinction between
+cell in a styled row means no fill; omitting the column keeps the Web import
+default. TSV does not keep empty sets, metadata, or the distinction between
 an inherited set style and a row override. Tabs and line breaks within cells
 are replaced with spaces.
 
@@ -244,9 +244,9 @@ with an error that names the feature type.
 `priorities` is a comma-separated qualifier list. Pattern `value` and `keyword`
 fields use case-insensitive Python regular expressions. Specific-color and
 Label-override patterns accept Python-only syntax such as `(?i)NADH`,
-`(?P<enzyme>NADH)` and `NADH\Z`; Unicode matching follows Python semantics.
+`(?P<enzyme>NADH)` and `NADH\Z`; Unicode matching follows Python behavior.
 The Web app prepares Color rules and Label TSV patterns with that same Python
-owner before committing live changes. Invalid syntax is rejected even when the
+code before committing live changes. Invalid syntax is rejected even when the
 feature catalog is empty or contains no matches. A table-structure error or
 runtime preparation failure is distinct from invalid regex syntax.
 
@@ -296,7 +296,7 @@ identities use complete original-source order, including features hidden by
 loading or visibility rules. Changing visibility does not renumber them.
 
 Auto removes an override. Source-known cropped-out, hidden or underlay features
-retain dormant intent and reserve no foreground lane; restoring visibility or
+keep their dormant override and reserve no foreground lane; restoring visibility or
 the crop reactivates it. Persist exact record/biological-feature identities,
 never an SVG fragment ID or a transient lane number.
 

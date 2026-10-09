@@ -12,6 +12,18 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Sessions (web app): a Session that the CLI or the Python API writes keeps its
+  color, feature visibility, label, whitelist, qualifier priority, and feature
+  override tables when the web app loads it, so the next **Generate Diagram**
+  draws the figure the Session was saved with. Before, Load dropped those
+  tables and Generate drew a different figure (OV-221).
+- Labels (web app): the Labels panel shows the label text settings (**Label Font
+  Size**, **Label Rendering**, placement, rotation, and spacing), **QUALIFIER
+  PRIORITY**, and the Circular **LABEL GEOMETRY** while any feature of the shown
+  drawing has **Label visibility** **On**, also when **Show Labels** (Linear) or
+  **Label Mode** (Circular) is **None**. They were hidden there although the On
+  labels use them. Label filtering keeps its condition: an On label ignores the
+  whitelist and blacklist (OV-222).
 - Custom Track Slots (web app): stepping a Depth row's track index past the loaded
   Depth series (for example ArrowUp then ArrowDown) no longer adds a series that made
   Generate and **Save Session** fail with "Depth series 3"; a label edit on a row whose
@@ -325,8 +337,6 @@ write-up of a release.
   data". **Behavior change for CLI files:** a user table that wrapped a field
   in CSV quotes now keeps those quotes in the value, so remove them from such
   files. The Feature override and Feature placement tables are unchanged.
-  files. The Feature override, Feature placement, and Annotation tables are
-  unchanged.
 - Label whitelist, Qualifier priority, and Default colors file imports (web
   app): a row with too many or too few tab-separated columns is now rejected
   with a table error that names the row and the required column count. The
@@ -340,7 +350,6 @@ write-up of a release.
   column was read shifted: `CDS`, `product`, `two`, `words` became feature type
   `product`, qualifier `two`, keyword `words`, and no error was raised. Remove
   the extra cells, or the tab inside a value, from such files.
-  files. The Feature override and Feature placement tables are unchanged.
 - Default colors, Specific colors, Qualifier priority, and Annotation tables:
   a line whose first non-blank character is `#` is now a comment and is
   skipped, as in the Label whitelist, Label overrides, and Feature visibility
@@ -961,7 +970,7 @@ and share the Web app's raw search keys. The design and the approved decisions
 are in
 [`docs/internal/LOSAT_CLI_API_DESIGN_PROPOSAL_2026-10-03.md`](./docs/internal/LOSAT_CLI_API_DESIGN_PROPOSAL_2026-10-03.md).
 Retired names and their replacements are listed under
-[Retired inputs](./docs/SESSION_COMPATIBILITY.md#retired-inputs).
+[Retired inputs](./docs/REFERENCE/session-and-request-compatibility.md#retired-inputs).
 
 - **Breaking:** LOSATP CLI flags and Python fields were renamed. Use
   `--losat losatp` with `--losatp_mode similarity_groups|collinear|pairwise`

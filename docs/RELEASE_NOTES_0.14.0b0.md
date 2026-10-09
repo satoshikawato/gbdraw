@@ -11,7 +11,7 @@ re-exports have been removed.
 
 These notes record what changed in this release. For the currently supported
 persisted versions and migration boundaries, see
-[Session and request compatibility](./SESSION_COMPATIBILITY.md).
+[Session and request compatibility](./REFERENCE/session-and-request-compatibility.md).
 
 ## Python/Web session version 44
 

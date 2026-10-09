@@ -1,30 +1,106 @@
-[Documentation home](../DOCS.md) | [Tutorials](../TUTORIALS/README.md) | [Technical documentation](README.md) | [Output formats](output-formats-and-export.md) | [SVG hook inventory](../SVG_SEMANTIC_HOOKS.md)
+[Documentation home](../DOCS.md) | [Tutorials](../TUTORIALS/README.md) | [Technical documentation](README.md) | [Output formats](output-formats-and-export.md) | [FAQ](../FAQ.md)
 
-# Interactive SVG and semantic-hook reference
+# Interactive SVG and semantic hooks
 
-gbdraw SVG groups expose stable semantic identifiers and `data-gbdraw-*` attributes for records, definitions, feature tracks, quantitative tracks, features, comparisons, annotations, ticks, legends, and other rendered roles. Consumers should select by the documented semantic hook, not path order or generated geometry.
+Every gbdraw SVG marks its records, tracks, features, comparison matches,
+annotations, and legends with `data-gbdraw-*` attributes. Use these attributes
+to select elements in a script, a stylesheet, or a post-processing step. Do not
+select by SVG `id`, path order, or path geometry: those can change between
+releases even when the figure shows the same features.
 
-Feature identity binds the biological record and feature, including split locations and reverse-complement display. Comparison hooks bind query and subject endpoints. Annotation hooks bind set, annotation, track, and displayed record. Stable hooks persist across rendering changes when the biological identity is unchanged; layout coordinates are not stable API values.
+## Interactive SVG
 
-Identity fields have separate roles. Analysis runtime handles are valid only within the
-artifact and protein-identity manifest that created them. The canonical cross-render key is
-`(recordKey, biologicalFeatureId)`. During normalization, a source feature may instead be
-identified by `(recordIndex, stableFeatureId)` or `(recordIndex, sourceFeatureIndex)` when that
-source identity is carried explicitly. A rendered feature ID identifies one DOM instance and
-may change after reverse-complement display or another rendering transformation. Public
-`protein_id` and `sourceProteinId` values are display and export metadata, not join keys.
+Interactive SVG embeds controls, searchable feature metadata, feature and match
+popups, group inspection, and the supported sequence downloads. Static SVG keeps
+the record, track, feature, match, and annotation attributes below; it has no
+`data-gbdraw-interactive-*` markers and no embedded application.
 
-Consumers must fail closed when a biological identity is missing, ambiguous, or inconsistent.
-Every identity field supplied for one endpoint, including a rendered ID, stable feature ID, and
-source feature index, must resolve to the same feature in the same record. Do not recover a failed
-identity lookup by matching a public protein label.
+Search in an interactive SVG uses the same fields as
+[Feature Search in the Web app](web-app.md#preview-search-and-editor): **All**
+does not search nucleotide or amino-acid sequences or `/translation` values,
+and **Location** matches the displayed 1-based INSDC location. A feature popup
+shows each part of a split or origin-spanning location and their summed length.
+A file keeps the interactive runtime it was exported with; export it again to
+get the current search and popup behavior.
 
-Interactive SVG adds embedded controls, searchable metadata, feature and match popups, group inspection, and supported sequence downloads. Static SVG may retain semantic groups without embedding the interactive application.
+gbdraw escapes text that comes from your input files. Input text never becomes
+an executable `<script>` element or an `on*` event-handler attribute. Species
+text accepts `<i>` for italics, as in `<i>Escherichia coli</i>`; it is never
+run as HTML.
 
-Interactive SVG search uses the same fields as [Feature Search in the Web app](web-app.md#preview-search-and-editor): **All** does not search nucleotide or amino-acid sequences or `/translation` values, and **Location** matches the displayed 1-based INSDC location. Feature popups show each part of a split or origin-spanning location and the summed length. A file keeps the runtime it was exported with; export it again to get these rules.
+## SVG IDs
 
-Generated interactive output sanitizes input-derived text and markup. Untrusted input must not become executable `<script>` content or `on*` event-handler attributes. Species text accepts the documented limited markup for display, not arbitrary HTML execution.
+For the same gbdraw version, ordered input, and settings, every SVG `id` is the
+same from run to run. IDs are valid XML identifiers and unique within the file,
+including Circular multi-record canvases and copied definitions such as clips
+and hatch patterns. Every local `href`, `xlink:href`, and `url(#...)` reference
+points to one emitted ID.
 
-The [SVG ID and attribute inventory](../SVG_SEMANTIC_HOOKS.md) lists the exact
-integration tokens. This page documents their current meaning; path order and
-exact path bytes are not stable hooks.
+The exact spelling of an ID can change in any release. Use IDs only for
+references inside one file, and select elements by the attributes below.
+
+## Records, tracks, and legends
+
+Record indexes are zero-based and follow the displayed record order. Record IDs
+come from the source record ID (`SeqRecord.id`) and need not be unique, so use
+the index when two records can share an accession. In Circular multi-record
+output, the outer group of each complete record carries both attributes.
+
+| Element | Attributes | Meaning |
+|---|---|---|
+| Record group | `data-gbdraw-record-id`, `data-gbdraw-record-index` | Source record ID and displayed position |
+| Linear record group of a cropped or reverse-complemented record | `data-gbdraw-record-source-start`, `data-gbdraw-record-source-end`, `data-gbdraw-record-source-step` | Input-file span shown by the record (1-based, inclusive) and its direction (`1` or `-1`); record-local base `x` is source `start + x - 1` (step `1`) or `end - x + 1` (step `-1`). Absent when the record shows its input file one to one |
+| Record definition | `data-gbdraw-role="record-definition"` or `"record-definition-row"`, `data-gbdraw-definition-part`, record ID/index | Main record text or a row-level definition. A row has `record-definition-row` only when some text describes the whole row, so do not assume one per row |
+| Plot title | `data-gbdraw-role="plot-title"` | Shared Circular title |
+| Comparison legend | `data-gbdraw-role="comparison-legend"`, `data-gbdraw-orientation` | Identity legend; orientation is `h`, `v`, or `circular` |
+| Track group | `data-gbdraw-slot-id`, `data-gbdraw-slot-renderer` | Slot ID (yours in a custom stack, gbdraw's default ID otherwise) and the renderer drawn in that slot |
+
+Typical selectors:
+
+```css
+g[data-gbdraw-role="record-definition"][data-gbdraw-record-index="0"]
+g[data-gbdraw-slot-renderer="depth"][data-gbdraw-slot-id="coverage"]
+[data-gbdraw-role="comparison-legend"][data-gbdraw-orientation="h"]
+```
+
+Common renderer values are `features`, `ticks`, `dinucleotide_content`,
+`dinucleotide_skew`, `depth`, `annotations`, and `sequence_conservation`. Other
+documented track renderers use their renderer name.
+
+## Features, comparison matches, and annotations
+
+| Element | Attributes | Meaning |
+|---|---|---|
+| Drawn feature part | `data-gbdraw-feature-id`, `data-gbdraw-stable-feature-id`, `data-gbdraw-feature-part`, record ID/index | This drawn element, the biological feature, the kind of part, and the record it belongs to |
+| Interactive feature | `data-gbdraw-interactive-feature="true"` | The element has feature metadata in an interactive SVG |
+| Comparison match | `data-gbdraw-match-id`; Linear files may also carry `data-gbdraw-pairwise-match-id` | Match ID, unique within the file |
+| Interactive match | `data-gbdraw-interactive-match="true"` | The element has match metadata in an interactive SVG |
+| Annotation mark | `data-gbdraw-annotation-id`, `data-gbdraw-annotation-set-id`, `data-gbdraw-annotation-track-id`, record index | Annotation, annotation set, track slot, and the record it belongs to |
+
+A feature with a split (joined) location, such as exons separated by introns,
+can be drawn as several parts. Use `data-gbdraw-stable-feature-id` for the
+biological feature, and `data-gbdraw-feature-id` with `data-gbdraw-feature-part`
+for one drawn part. A comparison match carries both its query and subject ends;
+an annotation mark carries its set, track, and displayed record. Do not infer a
+feature or match from an element's `id` or path geometry.
+
+Other `data-gbdraw-*` attributes support layout, editor state, or the embedded
+interactive runtime. They can change in any release.
+
+## Match a feature between renders
+
+To find the same feature in two renders, use the pair `(recordKey,
+biologicalFeatureId)`. When a source feature carries it explicitly,
+`(recordIndex, stableFeatureId)` or `(recordIndex, sourceFeatureIndex)` also
+identifies it. A rendered feature ID names one drawn element and can change
+after reverse-complement display or another rendering change. Protein handles
+created during a comparison are valid only inside the saved result and protein
+identity manifest that created them. `protein_id` and `sourceProteinId` are for
+display and export; do not join on them.
+
+Stop rather than guess when an identity is missing, ambiguous, or inconsistent.
+Every identity field given for one feature, including a rendered ID, stable
+feature ID, and source feature index, must name the same feature in the same
+record. Do not fall back to matching a protein label.
+
+[Documentation home](../DOCS.md) | [Technical documentation](README.md) | [Output formats and export](output-formats-and-export.md) | [FAQ](../FAQ.md)

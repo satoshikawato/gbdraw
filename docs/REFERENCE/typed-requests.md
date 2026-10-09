@@ -2,11 +2,11 @@
 
 # Typed request reference
 
-The `gbdraw.api` namespace exposes explicit input, planning, rendering, output, analysis-artifact, table, track, and session contracts for pipelines and integrations. Use the package-root [Python API](python-api.md) for ordinary in-memory drawing.
+The `gbdraw.api` namespace exposes explicit input, planning, rendering, output, analysis-artifact, table, track, and session types and functions for pipelines and integrations. Use the package-root [Python API](python-api.md) for ordinary in-memory drawing.
 
 ## Request models
 
-| Type | Ownership |
+| Type | Represents |
 |---|---|
 | `CircularDiagramRequest` | one Circular result in `single` or `grid` grouping |
 | `CircularBatchRequest` | one resolved Circular output per selected record |
@@ -19,7 +19,7 @@ The `gbdraw.api` namespace exposes explicit input, planning, rendering, output, 
 
 ## Input sources and cardinality
 
-`GenBankInputSource` owns one GenBank path. `GffFastaInputSource` owns a matched GFF3 and FASTA pair. `InMemoryRecordSource` owns one or more Biopython `SeqRecord` values.
+`GenBankInputSource` holds one GenBank path. `GffFastaInputSource` holds a matched GFF3 and FASTA pair. `InMemoryRecordSource` holds one or more Biopython `SeqRecord` values.
 
 Every `RecordInput` declares a `RecordCardinality`:
 
@@ -34,7 +34,7 @@ Selectors and selector-qualified regions identify one record and therefore requi
 For Linear Similarity Group alignment, `similarity_alignment` stores the exact
 reference and each record's anchor or Skip decision. It has no orientation
 field. A `SimilarityAlignmentReference` input is replaced by that plan when the
-planner resolves it. Each `RecordInput` owns its orientation through
+planner resolves it. Each `RecordInput` sets its orientation through
 `RecordPresentation.reverse_complement` or its region setting. The planner
 projects anchor centers after resolving those record transforms.
 
@@ -42,7 +42,7 @@ projects anchor centers after resolving those record transforms.
 
 | Function | Result and side effects |
 |---|---|
-| `resolve_request(request)` | canonical materialized request; no drawing or file output |
+| `resolve_request(request)` | materialized request; no drawing or file output |
 | `plan_request(request)` | `CircularRequestPlan`, `CircularBatchRequestPlan`, or `LinearRequestPlan`; no diagram assembly |
 | `build_request_plan_diagram(plan)` | builds an already resolved plan without loading or planning again |
 | `build_request_diagram(request)` | validates and builds a prepared diagram without writing output |
@@ -95,21 +95,21 @@ and a complete `LinearMultiRecordOptions.record_translations` sequence keyed by
 stable `recordKey`, or `similarity_alignment=SimilarityAlignmentReference(...)`,
 which the planner resolves to such a plan after the orthogroup analysis. The schema-2 plan records the exact reference, one
 anchor or Skip decision per record, and rationale. Record presentation or region
-state owns orientation; the plan does not store direction settings. It must be
+state sets the orientation; the plan does not store direction settings. It must be
 fully resolved; a group-ID string, partial record coverage, or schema-1 plan
 is invalid in a current request. See the [executable typed Python
 example](python-api.md#typed-linear-similarity-group-alignment) and the
-[Session reader boundary](session-and-request-compatibility.md#similarity-alignment-request-ownership).
+[Session and request compatibility](session-and-request-compatibility.md#similarity-alignment-in-requests-and-sessions).
 
 ## Depth tracks
 
 One `DepthTrackInput` represents one logical series. `source` accepts a path or `DataFrame` shared by all displayed records, or one path, `DataFrame`, or `None` per record. Linear entries may set `height`.
 
-The legacy `depth_table`, `depth_file`, `depth_tables`, `depth_files`, and `depth_track_*` inputs remain compatibility inputs. Do not combine them with `depth_tracks`; normalization rejects mixed forms. Current request and session writers serialize an accepted form as canonical `depthTracks`.
+The legacy `depth_table`, `depth_file`, `depth_tables`, `depth_files`, and `depth_track_*` inputs remain compatibility inputs. Do not combine them with `depth_tracks`; normalization rejects mixed forms. Current request and session writers serialize an accepted form as `depthTracks`.
 
 ## Current analysis artifacts
 
-Pass `CurrentRequestArtifacts` when an integration already owns current raw comparison results, derived grouping/block results, or the protein identity manifest. The fresh render boundary accepts only the current artifact schemas, and every derived runtime handle must resolve through the supplied manifest.
+Pass `CurrentRequestArtifacts` when an integration already has current raw comparison results, derived grouping/block results, or the protein identity manifest. The fresh render boundary accepts only the current artifact schemas, and every derived runtime handle must resolve through the supplied manifest.
 
 `CurrentRequestArtifacts` does not accept an arbitrary session JSON mapping.
 Use `render_session()` for a supported saved session and
@@ -123,7 +123,7 @@ Use `render_session()` for a supported saved session and
 | `save_session_document()` | build and write the document |
 | `load_session_document()` | parse and validate a saved document |
 | `materialize_session()` | expose embedded resources as temporary paths |
-| `session_to_request()` | convert a canonical materialized session to a typed request |
+| `session_to_request()` | convert a materialized session to a typed request |
 | `with_request_output()` | replace output settings without mutating the request |
 | `render_session()` | migrate supported persisted state and replay the request plus saved analysis artifacts |
 
@@ -146,15 +146,15 @@ top level. Pass `drawing="circular"` or `drawing="linear"` to
 they and `SessionDocument.mode` raise `SessionDrawingSelectionError`. A Session
 with one set works as before.
 
-Canonical request schemas 6 and 7 record each input's runtime cardinality. This lets a
+Request schemas 6 and 7 record each input's runtime cardinality. This lets a
 selectorless source retain `RecordCardinality.ALL` until record planning expands
 it. Deferred table paths, record-derived output naming, and collection-level
 transforms still require `resolve_request()` before encoding. Session writers
 perform that resolution automatically.
 
-## Exported supporting contracts
+## Other exported names
 
-`gbdraw.api` also exports table readers and row models, record and region selectors, annotation and track models, request plans and render results, output-byte helpers, current web-runtime capability constants, and the session exception hierarchy. The authoritative export inventory is `gbdraw.api.__all__`; names outside that list are not part of this public namespace contract.
+`gbdraw.api` also exports table readers and row models, record and region selectors, annotation and track models, request plans and render results, output-byte helpers, current web-runtime capability constants, and the session exception hierarchy. The full list of exports is `gbdraw.api.__all__`; names outside that list are not part of this public namespace.
 
 ## Related
 
@@ -202,7 +202,7 @@ is an annotation target for one such feature. A feature that is not drawn skips
 the annotation with the `feature_selector_unmatched` warning.
 
 The shared planner turns both tables into exact rows when the records load,
-before rendering or canonical encoding, and resolves every identity once. A
+before rendering or encoding, and resolves every identity once. A
 table row must name a feature of the source. A record key outside the request is
 an error.
 An edit whose feature a cropped record does not have (`crop_excluded`: outside
@@ -225,7 +225,7 @@ start_coordinate=None)`. Set it on each selected biological record. The planner
 validates topology, length, and crop constraints after source resolution, then
 passes the same display transform to both diagram modes. An unset start retains
 the existing reverse-complement display; explicit 1 anchors source base 1.
-Resolved plans expose source provenance and transforms without rotating the
+Resolved plans expose where each record came from and its transforms without rotating the
 source `SeqRecord`. Reordering records does not change their exact feature
 placement identities.
 

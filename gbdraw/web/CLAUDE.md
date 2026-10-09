@@ -717,7 +717,9 @@ compatibility inputs, not a second source of truth. Preserve empty positions in
 per-record depth and comparison inputs when those positions carry alignment
 meaning.
 
-See `docs/SESSION_COMPATIBILITY.md` for accepted versions and migration limits.
+See `docs/REFERENCE/session-and-request-compatibility.md` for accepted versions
+and migration limits, and `docs/internal/SESSION_FORMAT_HISTORY.md` for the
+version-by-version history.
 
 ## Modes and output topology
 
@@ -844,6 +846,7 @@ the app reaches a ready state without external network access.
 Related project documentation:
 
 - `CLAUDE.md`
-- `docs/TYPED_API.md`
-- `docs/SESSION_COMPATIBILITY.md`
-- `docs/SVG_SEMANTIC_HOOKS.md`
+- `docs/REFERENCE/typed-requests.md`
+- `docs/REFERENCE/session-and-request-compatibility.md`
+- `docs/internal/SESSION_FORMAT_HISTORY.md`
+- `docs/REFERENCE/interactive-svg-and-semantic-hooks.md`

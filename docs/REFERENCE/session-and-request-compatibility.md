@@ -1,4 +1,4 @@
-[Documentation home](../DOCS.md) | [Tutorials](../TUTORIALS/README.md) | [Technical documentation](README.md) | [Compatibility history](../SESSION_COMPATIBILITY.md) | [FAQ](../FAQ.md)
+[Documentation home](../DOCS.md) | [Tutorials](../TUTORIALS/README.md) | [Technical documentation](README.md) | [FAQ](../FAQ.md)
 
 # Session and request compatibility
 
@@ -18,44 +18,56 @@ and keep the saved preview until the next Generate. Schema 9 adds
 a schema-8 request reads as one without overrides.
 
 Session 46 keeps the Web app's settings and edits of each diagram mode in its
-own slice, `modes.circular` and `modes.linear`: the draft configuration
-(`config`), the per-feature edits (`features`), the Legend edits and
-per-feature strokes (`editorState`), and the mode's layout, padding, and
-pending palette (`ui`). A field missing from a slice reads as that mode's
-default. The top-level `config` and `features` of Sessions 44 and older are
-rejected in a Session 46, and reading an older Session splits its draft into
-the two slices. A Session that the CLI or the Python API writes from a request
-has no slices; a CLI re-save keeps or splits the source's draft. Session 46 stores the
-per-feature edits (Feature visibility, Label visibility, and label text) in
-each slice's `features.featureOverrides`, one row per original-source feature
-named by `recordKey` and `biologicalFeatureId`, as the request does; Feature
-placement drafts and the `featureIdentity` targets of annotations made from
-selected features are kept per mode the same way. Both modes can use the same
-record key, so a request carries only the rows and targets of its own mode. Its feature catalog is schema 5, which records the selector
-values each drawn feature had (`drawnSelector`). Loading a Session 44, or a
-Web Session 31–33, moves its edits keyed by rendered feature ID onto the
-feature they name: a rendered ID in the saved feature catalog names its
-feature; otherwise a copy or record suffix is removed when exactly one feature
-remains. A Session before 40 is matched through its GenBank sources read again
-with its crops and orientations (the drawn hash and record position of each
-rendered ID), or, without readable sources, through its saved feature metadata
-for records drawn without a crop or reverse complement. If the Web app's
-diagram runtime cannot start or fails while reading the sources, the Load fails
-and keeps the current Session. An edit that names no
-feature is dropped, and the Web app reports how many. An older Feature
-visibility edit that hid every feature with its hash (each copy of a duplicated
-record) now applies to the edited feature only; the Web app reports how many.
-Each moved edit goes to the slice of the Session's diagram's mode. A Feature
-placement draft of a Session 41–44 goes to the slice of its lane side's mode; a
-Main placement, which reached requests of both modes, goes to both slices. An annotation target
-`hash=<hash>` of a Session 40–44 moves to a `featureIdentity` target in the
-Session's mode only when its record is drawn without a crop, reverse
-complement, or rotation and the hash names exactly one feature of the saved
-catalog, in that record; the Web app reports how many moved, and every other
-target loads unchanged. A catalog of schema 3 or
-4 reads as schema 5 without selector values until the next Generate; a feature
-whose rendered ID carries its source hash was drawn with its source
-coordinates, so its source values serve until then.
+own slice, `modes.circular` and `modes.linear`:
+
+- `config`: the draft configuration.
+- `features`: the per-feature edits.
+- `editorState`: the Legend edits and per-feature strokes.
+- `ui`: the mode's layout, padding, and pending palette.
+
+A field missing from a slice reads as that mode's default. A Session 46 rejects
+the top-level `config` and `features` of Sessions 44 and older. Reading an
+older Session splits its draft into the two slices. A Session that the CLI or
+the Python API writes from a request has no slices; a CLI re-save keeps or
+splits the source's draft.
+
+Session 46 stores the per-feature edits (Feature visibility, Label visibility,
+and label text) in each slice's `features.featureOverrides`. There is one row
+per original-source feature, named by `recordKey` and `biologicalFeatureId`, as
+in the request. Feature placement drafts and the `featureIdentity` targets of
+annotations made from selected features are kept per mode the same way. Both
+modes can use the same record key, so a request carries only the rows and
+targets of its own mode. The feature catalog is schema 5. It records the
+selector values each drawn feature had (`drawnSelector`).
+
+When you load an older Session, the Web app moves its per-feature edits onto
+the features they name:
+
+- A Session 44, or a Web Session 31–33, keys its edits by rendered feature ID.
+  A rendered ID in the saved feature catalog names its feature. Otherwise a
+  copy or record suffix is removed when exactly one feature remains.
+- A Session before 40 is matched through its GenBank sources, read again with
+  their crops and orientations (the drawn hash and record position of each
+  rendered ID). Without readable sources, it is matched through its saved
+  feature metadata, for records drawn without a crop or reverse complement.
+- If the Web app's diagram runtime cannot start or fails while reading the
+  sources, the Load fails and keeps the current Session.
+- An edit that names no feature is dropped, and the Web app reports how many.
+- An older Feature visibility edit that hid every feature with its hash (each
+  copy of a duplicated record) now applies to the edited feature only; the Web
+  app reports how many.
+- Each moved edit goes to the slice of the mode of the Session's diagram. A
+  Feature placement draft of a Session 41–44 goes to the slice of its lane
+  side's mode. A Main placement, which reached requests of both modes, goes to
+  both slices.
+- An annotation target `hash=<hash>` of a Session 40–44 moves to a
+  `featureIdentity` target in the Session's mode only when its record is drawn
+  without a crop, reverse complement, or rotation and the hash names exactly
+  one feature of the saved catalog, in that record. The Web app reports how
+  many moved, and every other target loads unchanged.
+- A catalog of schema 3 or 4 reads as schema 5 without selector values until
+  the next Generate. A feature whose rendered ID carries its source hash was
+  drawn with its source coordinates, so its source values serve until then.
 
 A Session 46 can also hold `otherModeResult`: the Result set of the diagram
 mode that the top-level set does not draw (Circular or Linear), written when
@@ -97,10 +109,11 @@ The web app keeps one Result for each diagram mode. **Save Session** writes
 every Result and the editable state: the shown mode's Result at the top level
 when it has one, and the other mode's in `otherModeResult`. **Load Session**
 restores saved values instead of applying fresh browser defaults, and shows the
-saved mode when that mode has a Result, otherwise the mode that has one. Generate when you want the Result to reflect changed controls; saving before
-Generate deliberately preserves the newer draft alongside the earlier Result. Loading and regenerating should preserve biological identities, labels,
-record placement, comparison artifacts, and supported editor state; SVG bytes
-or text metrics can still differ across gbdraw versions.
+saved mode when that mode has a Result, otherwise the mode that has one. Generate before you save when the Result should reflect changed controls.
+Saving before Generate keeps the newer draft alongside the earlier Result.
+Loading and regenerating keep biological identities, labels, record
+placement, comparison artifacts, and supported editor state. SVG bytes or text
+metrics can still differ across gbdraw versions.
 
 A Web Session also preserves supported manual legend, plot title, and Linear
 scale positions in its saved Result. After loading, **Generate Diagram** carries
@@ -117,58 +130,67 @@ because they have no independent Web draft. Web initializes their settings from
 `renderRequest`, including the tables it records (`-t`, `-d`,
 `--feature_visibility_table`, `--label_table`, `--label_whitelist`,
 `--qualifier_priority`, and `--feature_override_table`), so the next
-**Generate Diagram** keeps them. Web restores original input files from their
-bindings. When the request draws every record of an input file,
-its record source names that file's resource, so feature-popup record rotation
-works right after Load. A Linear request, or a single Circular request, that
-draws only some records of a multi-record file (for example with `--record_id`
-or a records table) also reads that file and selects each drawn record by
-record ID, or by `#n` when another record of the file has the same ID; the
-file stays one File that draws only those records. A Linear record, or the
-record of a single Circular request, that is drawn cropped or
-reverse-complemented stores its crop in source coordinates as `region` and its
-orientation as `region.reverseComplement` or `presentation.reverseComplement`,
-as Web Save does; a crop taken after
-`--reverse_complement` is written as the same span in source coordinates. Each
-Linear row takes its crop and orientation from the request, so **Generate
-Diagram** draws the record the CLI drew. A cropped or reversed record of a
-Circular batch or grid, the records of a file that a Circular batch or grid
-draws only partly, and every record of an older CLI session keep their own
-drawn copy; rotating such a record needs **Generate Diagram** first. A present
-`config` must contain valid `form` and `adv` objects; a partial draft is
-rejected. CLI replay preserves a supplied Web draft.
+**Generate Diagram** keeps them. Web restores the original input files from
+their bindings. A present `config` must contain valid `form` and `adv` objects;
+a partial draft is rejected. CLI replay preserves a supplied Web draft.
+
+Which records Web draws from a CLI session depends on the request:
+
+- When the request draws every record of an input file, its record source names
+  that file's resource, so feature-popup record rotation works right after
+  Load.
+- A Linear request, or a single Circular request, can draw only some records of
+  a multi-record file (for example with `--record_id` or a records table). It
+  also reads that file and selects each drawn record by record ID, or by `#n`
+  when another record of the file has the same ID. The file stays one File that
+  draws only those records.
+- A Linear record, or the record of a single Circular request, can be drawn
+  cropped or reverse-complemented. The session then stores its crop in source
+  coordinates as `region` and its orientation as `region.reverseComplement` or
+  `presentation.reverseComplement`, as Web Save does. A crop taken after
+  `--reverse_complement` is written as the same span in source coordinates.
+  Each Linear row takes its crop and orientation from the request, so
+  **Generate Diagram** draws the record the CLI drew.
+- A cropped or reversed record of a Circular batch or grid, the records of a
+  file that a Circular batch or grid draws only partly, and every record of an
+  older CLI session keep their own drawn copy. Rotating such a record needs
+  **Generate Diagram** first.
+
 A CLI binding uid such as `cli-seq-1` is only an initial value: each Linear
 file takes the record identity of `renderRequest.records[].recordKey`. A
 multi-record file, whose records are `record-1:1`, `record-1:2`, and so on,
 becomes one Linear row per record with that recordKey and the request's record
 selector (the `#n` of its recordKey when an older CLI session stored no
-selector), so **Inherit saved comparison** finds every record it names. A CLI
-comparison stays read-only in Web; **Inherit saved comparison** reuses it after
-promoting an older committed request, such as a version 42 sidecar, to the
-current schema. A Linear Session without a stored comparison plan loads with
-**No comparison**. A CLI Session written with `-b` therefore offers
+selector), so **Inherit saved comparison** finds every record it names.
+
+A CLI comparison stays read-only in Web. **Inherit saved comparison** reuses it
+after promoting an older committed request, such as a version 42 sidecar, to
+the current schema. A Linear Session without a stored comparison plan loads
+with **No comparison**. A CLI Session written with `-b` therefore offers
 **Replace with current controls** only after a comparison is set up, and starts
-no LOSAT run before that. A CLI Linear Session written without `-b` or
-`--losat` commits only a disabled protein pipeline (mode `none`,
-no pairs). It loads with **No comparison** and without selecting LOSATP, so
-Generate draws no ribbons and starts no LOSAT run. A CLI Session written with
-`--losat losatp` and an editable protein pipeline loads with the
-adjacent LOSATP comparison it drew. Without saved
-`ui.layoutPreferences`, the legend and plot-title positions come from the
-committed `diagramOptions.output` for its mode and grouping, so a CLI
+no LOSAT run before that.
+
+A CLI Linear Session written without `-b` or `--losat` commits only a disabled
+protein pipeline (mode `none`, no pairs). It loads with **No comparison** and
+without selecting LOSATP, so Generate draws no ribbons and starts no LOSAT run.
+A CLI Session written with `--losat losatp` and an editable protein pipeline
+loads with the adjacent LOSATP comparison it drew.
+
+Without saved `ui.layoutPreferences`, the legend and plot-title positions come
+from the committed `diagramOptions.output` for its mode and grouping, so a CLI
 `--legend` survives loading and the first Generate.
 
 The Web file inventory uses binding schema 2. An explicit composite `c_gb`
 restores one editable GenBank File from ordered component resource bindings.
-Each component retains its own filename, MIME type, modification time and exact
-bytes; duplicate payloads can share storage while retaining every occurrence.
-Combining appends LF to each nonempty component that lacks a final LF. Composition
-is independent of the last committed `renderRequest`, which remains the replay
-authority. Python validates and preserves the draft binding without combining
+Each component keeps its own filename, MIME type, modification time and exact
+bytes; duplicate payloads can share storage while every occurrence is kept.
+Combining appends LF to each nonempty component that lacks a final LF.
+Combining does not depend on the last committed `renderRequest`; replay still
+uses that request. Python validates and preserves the draft binding without combining
 its components for rendering.
 
 Schema-1 ordinary bindings and File arrays remain supported. Existing sessions
-without explicit bindings retain their request-derived source initialization;
+without explicit bindings keep their request-derived source initialization;
 original components cannot be recovered if their membership was never saved.
 Schema 2 is accepted with sessions 41–42, 44, and 46. Unknown or malformed bindings reject
 before import replaces the current work. Older schema-1 readers reject new
@@ -276,12 +298,17 @@ mode. Output prefix, format, session-output, and overwrite options may replace
 their saved counterparts. Other diagram options are
 rejected because they would combine persisted and new settings ambiguously.
 
-With `--save_session` or `--session_output`, canonical CLI replay writes the
+When you replay a Session 31 or later with `--save_session` or
+`--session_output`, the CLI writes the
 regenerated Result set at the top level, keeps the other mode's set in
 `otherModeResult` and the saved `ui.mode`, and preserves the editable draft's
 component bytes, order and File metadata. The Web writer instead puts the shown
-mode's set at the top level. The re-save also replaces the shared protein
-artifacts, as the [compatibility history](../SESSION_COMPATIBILITY.md) lists. A resource whose bytes are unchanged
+mode's set at the top level. The re-save also replaces what both sets share:
+`losatCache` holds the entries the new render returns, `losatDerivedCache` is
+emptied, and `proteinIdentityManifest` and `legacyArtifacts` come from the new
+render. If the render migrates older protein IDs, gbdraw rewrites the protein
+references throughout the Session, including `otherModeResult`. A resource
+whose bytes are unchanged
 keeps its ID and file name; a resource whose bytes changed is stored under a new
 ID, and resources that nothing names any more are dropped. Explicit Web
 bindings, including null and empty lists, take precedence over historical
@@ -296,84 +323,90 @@ artifacts; use `render_session()` when those artifacts belong in the result.
 
 `render_request()` accepts current typed requests, not historical session
 envelopes. Public typed session conversion accepts full versions 31–33, 39–42, 44, and 46;
-versions 27–30 have no canonical request: the CLI replays them, and the Web app
-loads them from their saved settings. Canonical schema 9 retains schema 7's
+versions 27–30 have no `renderRequest`: the CLI replays them, and the Web app
+loads them from their saved settings. Request schema 9 keeps schema 7's
 display values and schema 6's input cardinality, including selectorless `all`
 inputs. Resolve a typed request
 before encoding when it still contains deferred paths or collection-level transforms.
 
-## Similarity alignment request ownership
+## Similarity alignment in requests and Sessions
 
-For Linear requests, `renderRequest` schemas 8 and 9 store `recordTranslations` and
-`similarityAlignment` inside `renderRequest.layout`. The nested alignment plan
-is schema 2; this does not change the Session version or request schema. Every
-translation has one stable `recordKey` and finite `x` and `y` values. An active
-plan covers those displayed keys and stores the exact reference, each target's
-Select or Skip outcome and rationale. Record presentation or region state
-owns the orientation used to project each anchor center. Current readers reject
-partial, malformed, mismatched, or unsupported plans. Schema 1 of the nested
-plan was never released and has no reader. There is no Circular form or generic
-transform matrix. A Python `SimilarityAlignmentReference` is not a persisted
-form: writers store the plan it resolves to.
+For Linear requests, `renderRequest` schemas 8 and 9 store `recordTranslations`
+and `similarityAlignment` inside `renderRequest.layout`. The nested alignment
+plan is schema 2; this does not change the Session version or request schema.
+Every translation has one stable `recordKey` and finite `x` and `y` values. An
+active plan covers those displayed keys. It stores the exact reference and each
+target's Select or Skip outcome and rationale. The record's presentation or
+region setting decides the orientation used to project each anchor center.
+Current readers reject partial, malformed, mismatched, or unsupported plans.
+Schema 1 of the nested plan was never released and has no reader. There is no
+Circular form or generic transform matrix. A Python
+`SimilarityAlignmentReference` is not saved: writers store the plan it resolves
+to.
 
-Web **Align…** and **Review alignment options…** take the direct ortholog
-evidence for the selected Similarity Group from the orthogroup result in the
-committed `renderRequest`, not from the feature catalog. An edge counts only
-when both endpoints bind to current members of their own source records;
-missing or unbound evidence leaves the usual Review rules in place instead of
-a guess. A Web LOSATP Generate commits its typed orthogroup or Collinear result
-with the request, so Align, record rotation, and Save and Load use the same
-evidence without running LOSATP again.
+Web **Align…** and **Review alignment options…** read the direct ortholog links
+for the selected Similarity Group from the orthogroup result in the committed
+`renderRequest`, not from the feature catalog. A link counts only when both
+ends bind to current members of their own source records. Missing or unbound
+links leave the usual Review rules in place instead of a guess. A Web LOSATP
+Generate commits its typed orthogroup or Collinear result with the request, so
+Align, record rotation, and Save and Load use the same links without running
+LOSATP again.
 
 Released request schemas 1, 2, 5, 6, and 7 remain readable. Their
-`alignOrthogroupFeature` protein-setting string is confined to a reader-only
-legacy path. Current writers emit neither that field nor the old Session-only
-`orthogroupState.selectedOrthogroupAlignmentFeature` copy. Released legacy
-Sessions with saved feature-catalog and orthogroup identity metadata materialize
-that state to the current schema-2 plan before saving. Malformed or unmappable
-legacy values produce an actionable error without replacing the last successful
+`alignOrthogroupFeature` protein-setting string is read only when loading old
+files. Current writers emit neither that field nor the old Session-only
+`orthogroupState.selectedOrthogroupAlignmentFeature` copy. A released older
+Session with saved feature-catalog and orthogroup identity metadata is
+converted to the current schema-2 plan before saving. Malformed or unmappable
+old values produce an actionable error without replacing the last successful
 Result. Current requests reject group-only input. Loading a saved preview does
 not start LOSATP; [Save and Load Sessions](web-app.md#save-and-load-sessions)
 describes when Load starts the diagram engine.
 
-A current Session round trip retains exact feature and record identities,
-Select/Skip rationale, record orientation, base translations, and the
-immediate pre-align Reset baseline and trustworthy restoration evidence.
-Ordinary Generate renders the saved plan through the canonical typed path without guessing a new anchor. A stable
-reorder resolves by `recordKey` and biological feature identity. Source
-replacement, crop, selector, and record drag clear the plan with a visible reason.
-Manual Reverse keeps the plan and aligns the same anchors on the next Generate.
-**Reset alignment…** offers positions only (preserving current directions) or
+A current Session round trip keeps exact feature and record identities,
+Select/Skip rationale, record orientation, base translations, and the data
+that **Reset alignment…** needs: the immediate pre-align positions and the
+directions that Align changed. Ordinary Generate renders the saved plan without
+guessing a new anchor. A stable reorder resolves by `recordKey` and biological
+feature identity. Source replacement, crop, selector, and record drag clear the
+plan with a visible reason. Manual Reverse keeps the plan and aligns the same
+anchors on the next Generate.
+
+**Reset alignment…** offers positions only (keeping current directions) or
 positions plus the latest Align's actual direction changes. Combined Reset
-restores absolute pre-Align directions only for those records, including a
+restores the absolute pre-Align directions only for those records, including a
 changed reference, and replaces later manual direction edits on those targets.
-Either scope consumes plan and evidence; Undo restores them before another scope
-can be chosen. See [Web Reset](web-app.md#reset-positions-or-directions).
-A stale reference requires Reselect/Clear and a stale target requires Select/Skip; pending or failed repair keeps the last
-successful Result. Undo/Redo restores the complete artifact. Preview-only guides,
+Either scope clears the plan and the saved Reset data; Undo restores them
+before you can choose another scope. See
+[Web Reset](web-app.md#reset-positions-or-directions).
+
+A stale reference requires Reselect/Clear, and a stale target requires
+Select/Skip. While a repair is pending or has failed, the last successful
+Result stays. Undo/Redo restores the whole alignment. Preview-only guides,
 candidate markers, and recommendation badges are never saved.
 
-Restoration evidence is stored in `editorState.alignmentResetReceipt`, separately
+The Reset data is stored in `editorState.alignmentResetReceipt`, separately
 from the direction-independent plan. It binds source bytes, record/selector/crop
-identity and exact anchors, and stores only actual absolute direction deltas
-plus any reference x correction. It never stores a review mode or Custom policy.
-Save and fresh Load retain this binding; style regeneration, stable reorder and
-ordinary Reverse do not rewrite the pre-Align directions. Source/selector/crop
-invalidation and record drag clear evidence with the plan.
+identity and exact anchors. It stores only actual absolute direction deltas
+plus any reference x correction, and never a review mode or Custom policy. Save
+and fresh Load keep it. Style regeneration, stable reorder and ordinary Reverse
+do not rewrite the pre-Align directions. Source/selector/crop invalidation and
+record drag clear it with the plan.
 
-Supported older Sessions without historical direction evidence retain their
-position baseline, with combined Reset disabled for missing evidence. A current
-receipt with an empty direction list instead reports that the latest Align
-changed no directions. Malformed or stale current evidence is rejected before
-replacing the current artifact; it is not silently dropped. Session version 44,
-request schema 8 and plan schema 2 remain unchanged by this restoration data.
+An older Session without saved direction data keeps its position baseline,
+and combined Reset is disabled. When the saved Reset data has an empty
+direction list, the dialog instead says that the latest Align changed no
+directions. Malformed or stale Reset data is rejected before it replaces the
+current alignment; it is not silently dropped. The Reset data needs no format
+change of its own: the plan stays schema 2.
 
 In Web **Run Info**, **Source recipe** uses the original input filenames and
-public CLI settings. Keep those original files and download any listed generated
-helpers with **Download reproducibility files**. That bundle also includes the
-canonical session referenced by **Exact replay**, with its embedded resources
-and saved analysis artifacts. An unavailable Source recipe reports why it cannot
-express the committed semantics losslessly.
+public CLI settings. Keep those original files and download any listed
+generated helpers with **Download reproducibility files**. That bundle also
+includes the session that **Exact replay** refers to, with its embedded
+resources and saved analysis results. An unavailable Source recipe reports why
+it cannot express the committed settings losslessly.
 
 Both commands target the successful generation represented by Run Info, even
 after Undo/Redo or edits to the current controls. Exact replay reconstructs that
@@ -400,37 +433,86 @@ files with one sequence, share one entry named by the first row.
 Pairwise hit limits, Similarity-group member limits, and Collinear block
 settings are derived options. Changing one recomputes the affected derived
 result while retaining eligible raw search rows. Current derived artifacts
-record their upstream raw keys and requested settings. Collinear provenance
-also records the effective `cds` or `locus` unit kinds produced by `auto` and
+record their upstream raw keys and requested settings. Collinear results
+also record the effective `cds` or `locus` unit kinds produced by `auto` and
 whether orthogroup inference was enabled. Sessions preserve each LOSATP mode's
 hit-limit drafts. A saved Collinear pipeline without `collinearInferOrthogroups`
 uses its historical inference behavior (ON); new Web state defaults to OFF.
 
 **Save Raw LOSAT TSV** resolves generated protein handles to stable readable
-aliases. Uploaded comparison TSV is never rewritten. Export raw results for a
-durable evidence record; the cache exists to avoid repeated work.
+aliases. Uploaded comparison TSV is never rewritten. Export raw results to keep
+a lasting record; the cache exists to avoid repeated work.
 
-For the version-by-version record of retired input names and saved-result
-formats, see the [compatibility history](../SESSION_COMPATIBILITY.md). Release
-notes record when support changed; this page documents current support.
+Release notes record when support changed;
+this page documents current support.
+
+## Retired inputs
+
+New commands and Python calls reject the names and values below. A Session or
+a canonical request schema 1–2 saved by an earlier release may still use them:
+gbdraw rewrites them before it draws. A retired CLI flag exits with status 2
+and names its replacement. A retired Python field raises `TypeError`; there is
+no alias. Field names stored inside a Session file do not change.
+
+| Retired input | Current input |
+|---|---|
+| Circular `--multi_record_size_mode sqrt` | `--multi_record_size_mode auto` |
+| Linear `--label_placement on_feature` | `--label_placement above_feature` |
+| Linear `--track_layout spreadout` / `tuckin` | `--track_layout above` / `below` |
+| `--depth_tick_interval` | `--depth_large_tick_interval` |
+| `--feature_table` | `--feature_visibility_table` |
+| `--collinear_max_gene_gap` | `--collinear_max_unit_gap` |
+| Circular slot `spacing` | `inner_gap_px` and `outer_gap_px` |
+| Circular slot `strict`, `compress`, or `reserve` | No direct replacement; geometry and reservation are derived from `side` |
+| Linear `--protein_blastp_mode pairwise` / `orthogroup` / `collinear` | `--losat losatp --losatp_mode pairwise` / `similarity_groups` / `collinear` |
+| Linear `--protein_blastp_mode none` | Omit it; without `--losat` no protein comparison runs |
+| Linear `--losatp_bin` (`--losatp-bin`) | `--losat_bin` |
+| Linear `--ncbi_blastp_bin` (`--ncbi-blastp-bin`) | `--ncbi_blast_bin` |
+| Linear `--losatp_threads` (`--losatp-threads`) | `--losat_threads` |
+| Linear `--protein_blastp_max_hits` | `--losatp_max_hits` |
+| Linear `--protein_blastp_candidate_limit` | `--losatp_max_target_seqs` |
+| Linear `--align_orthogroup_feature` | `--similarity_alignment_feature` |
+| Linear `--protein_blastp_output FILE` | `--losat_output_dir DIR`, which writes `DIR/losatp.raw.tsv` |
+| `LinearComparisonOptions(protein_mode=...)` | `losat="losatp"` with `losatp_mode="similarity_groups"` / `"collinear"` / `"pairwise"`; `"none"` becomes `losat=None` |
+| `LinearComparisonOptions(blastp_executable=...)` | `ncbi_blast_executable` |
+| `LinearComparisonOptions(candidate_limit=...)` | `max_target_seqs` |
+| `LinearComparisonOptions(orthogroup_member_max_hits=...)` | `member_max_hits` |
+| `LinearComparisonOptions(losat_executable="losat")` | `losat_executable=None` (the new default) |
+| `LinearDiagramOptions(protein_blastp_mode=...)` | `losat_search=LosatSearchOptions(program="losatp", losatp_mode=...)`; `"orthogroup"` becomes `"similarity_groups"` |
+| `LinearDiagramOptions(protein_comparison_pairs=...)` | `LosatSearchOptions(pairs=...)` |
+| `LinearDiagramOptions(losatp_bin=...)` / `ncbi_blastp_bin` / `losatp_threads` | `LosatSearchOptions(runtime=LosatRuntimeOptions(losat_executable=..., ncbi_blast_executable=..., threads=...))` |
+| `LinearDiagramOptions(protein_blastp_max_hits=...)` | `LosatSearchOptions(losatp_max_hits=...)` |
+| `LinearDiagramOptions(protein_blastp_candidate_limit=...)` | `LosatSearchOptions(losatp_max_target_seqs=...)` |
+| `LinearDiagramOptions(orthogroup_member_max_hits=...)` | `LosatSearchOptions(losatp_member_max_hits=...)` |
+| Circular `--conservation_fasta` | `--conservation_sequence` (FASTA, GenBank, or DDBJ); recorded invocations are rewritten |
+| Circular `--conservation_table` column `comparison_fasta` | `comparison_sequence`; Sessions store the resolved table, so they need no rewrite |
+| `CircularDiagramOptions(conservation_fasta_files=...)` | `conservation_sequence_files`; the Session field stays `conservationFastaFiles` |
+
+Long options of more than one word use underscores, with two aliases that still
+work: `--annotation-table` for `--annotation_table`, and
+`--gc_content_tick_interval` for `--gc_content_large_tick_interval`.
+
+A Circular slot whose spacing an earlier release stored as a factor still draws.
+Set explicit pixel gaps (`inner_gap_px`, `outer_gap_px`) before you save it in
+the current format; a factor cannot be saved without loss.
 
 ## Record rotation and feature placement
 
 Session 41 and request schema 7 add requested record display and feature placement
 intent together. Schema 6 keeps its original cardinality and row-inheritance
-meaning; session 40 retains its committed-request and editable-config authority.
+meaning; session 40 keeps its committed request and editable config as the sources of replay and draft.
 
 Each schema-7 record has `display: {isCircular, startCoordinate}`. Both values
 are nullable. A null start and an explicit source coordinate 1 remain distinct.
 `diagramOptions.featurePlacements` contains sorted exact record/biological-feature
 identities with a Main or mode-compatible lane-1 target. Auto removes an override.
-Tolerance belongs to `canvas.feature_overlap_tolerance_bp`, a non-negative integer
+The tolerance is `canvas.feature_overlap_tolerance_bp`, a non-negative integer
 with default 0. Resolved lanes, pixel coordinates and display fragments are not
 requested persistence fields.
 
 Supported older requests have unset display, empty placements and tolerance 0.
 Saving a schema-5/6 Web session promotes it without requiring Generate. Versions
-27–30 still load without a canonical request (CLI replay and Web Load), and
+27–30 still load without a `renderRequest` (CLI replay and Web Load), and
 unknown or development-only versions remain rejected.
 
 Editable Web rotation and placement drafts are saved in config, separately from
