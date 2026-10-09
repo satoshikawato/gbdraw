@@ -1384,7 +1384,7 @@ export const createAppSetup = () => {
   const { startResizing } = createSidebarResize(state);
 
   const specificRuleNotice = ref('');
-  const ruleMatchingPending = ref(false);
+  const { ruleMatchingPending } = state;
   // Python's rule evaluation (R7): the rule preparation's, and the Label TSV
   // import's own stateless one (`evaluateLabelRules`).
   const evaluateRules = async (payload, options) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, payload, options)).result;
