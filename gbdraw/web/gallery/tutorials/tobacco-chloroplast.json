@@ -451,7 +451,7 @@
   "related": [
     {
       "label": "Build the annotated chloroplast map",
-      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/GUI/build-an-annotated-chloroplast-map.md"
+      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/build-an-annotated-chloroplast-map.md#in-the-web-app"
     },
     {
       "label": "Region annotation table reference",

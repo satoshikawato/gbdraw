@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from docs.recipes._scenario_support import parse_translate_chain
+from docs.recipes._scenario_support import destination_page, parse_translate_chain
 
 
 pytestmark = pytest.mark.recipe
@@ -22,6 +22,11 @@ ALLOWED_ROLES = {"tutorial", "evidence", "reference", "auxiliary"}
 ALLOWED_SURFACES = {"gui", "cli", "python", "cross-surface", "gallery"}
 ALLOWED_PRIORITIES = {"P0", "P1", "P2"}
 ALLOWED_TIERS = {"core", "extended", "nightly"}
+INTERFACE_SECTIONS = {
+    "gui": "In the web app",
+    "cli": "On the command line",
+    "python": "In Python",
+}
 ALLOWED_EXECUTION_KINDS = {
     "playwright",
     "cli-recipe",
@@ -150,8 +155,13 @@ def test_every_scenario_records_inputs_and_executable_proof() -> None:
                 assert execution["source"] == "docs/internal/SCENARIO_EVIDENCE.md" or execution["source"] in manifest["public_owners"]
                 assert _repo_path(execution["source"]).is_file()
         else:
-            destination = _repo_path(chapter["destination"])
+            destination = _repo_path(destination_page(chapter))
             assert "internal" not in destination.relative_to(REPO_ROOT).parts
+            anchor = chapter["destination"].partition("#")[2]
+            if anchor:
+                assert anchor in _markdown_heading_anchors(
+                    destination.read_text(encoding="utf-8")
+                ), chapter["destination"]
 
         status = chapter["status"]
         assert status["review"] == "approved"
@@ -166,6 +176,12 @@ def test_every_scenario_records_inputs_and_executable_proof() -> None:
             )
 
 
+def _markdown_anchor(heading: str) -> str:
+    heading = re.sub(r"[<>`*_]", "", heading).lower()
+    anchor = re.sub(r"[^a-z0-9 _-]", "", heading)
+    return re.sub(r"[ -]+", "-", anchor).strip("-")
+
+
 def _markdown_heading_anchors(source: str) -> set[str]:
     anchors: set[str] = set()
     counts: Counter[str] = Counter()
@@ -173,9 +189,7 @@ def _markdown_heading_anchors(source: str) -> set[str]:
         match = re.match(r"^#{1,6}\s+(.+?)\s*$", line)
         if match is None:
             continue
-        heading = re.sub(r"[<>`*_]", "", match.group(1)).lower()
-        anchor = re.sub(r"[^a-z0-9 _-]", "", heading)
-        anchor = re.sub(r"[ -]+", "-", anchor).strip("-")
+        anchor = _markdown_anchor(match.group(1))
         suffix = counts[anchor]
         counts[anchor] += 1
         anchors.add(f"{anchor}-{suffix}" if suffix else anchor)
@@ -333,8 +347,24 @@ def test_tutorial_projects_define_one_figure_with_intentional_surface_variants()
             assert chapter["project_id"] == project_id
             assert scenario_id not in owned_variants
             owned_variants[scenario_id] = project_id
-            source = _repo_path(chapter["destination"]).read_text(encoding="utf-8")
-            assert "## Choose how to build this figure" in source
+            page, _, anchor = chapter["destination"].partition("#")
+            assert page == project["page"], scenario_id
+            assert anchor == _markdown_anchor(INTERFACE_SECTIONS[surface]), scenario_id
+
+        source = _repo_path(project["page"]).read_text(encoding="utf-8")
+        assert source.splitlines()[2] == f"# {project['title']}", project_id
+        headings = re.findall(r"^## (.+?)\s*$", source, re.MULTILINE)
+        expected = [
+            "Before you start",
+            *(
+                INTERFACE_SECTIONS[surface]
+                for surface in INTERFACE_SECTIONS
+                if surface in implemented
+            ),
+        ]
+        assert headings[: len(expected)] == expected, project_id
+        assert headings[-2:] == ["Next steps", "About the data"], project_id
+        assert source.index("![") < source.index("## Before you start"), project_id
 
     assert set(owned_variants) == set(tutorials)
 

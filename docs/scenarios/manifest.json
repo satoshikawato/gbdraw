@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "plan_source": "docs/internal/DOCUMENTATION_SIMPLIFICATION_IMPLEMENTATION_PLAN_2026-08-09.md",
+  "plan_source": "docs/internal/DOCUMENTATION_RESTRUCTURE_PLAN_2026-10-09.md",
   "approval": {
     "status": "approved",
     "date": "2026-08-10",
@@ -17,57 +17,77 @@
     "allowed_surfaces": ["gui", "cli", "python"],
     "variant_differences": ["interaction steps", "command syntax", "Python syntax", "surface-specific export mechanics"],
     "shared_contract": ["fixtures", "record order", "biological comparisons", "feature selection", "labels", "colors", "track order and geometry", "finished SVG semantics"],
-    "navigation": "Every implemented variant links to the other variants through a Choose how to build this figure table.",
+    "navigation": "Each project has one page whose interface sections follow the shared inputs in a fixed order: In the web app, On the command line, In Python. Each variant destination names its section anchor.",
     "evidence": "Surface-specific evidence does not require a separate public page.",
     "migration": "Existing verified variants remain; a new project may use any nonempty subset of supported surfaces."
   },
   "tutorial_projects": {
     "first-circular-genome": {
+      "page": "docs/TUTORIALS/first-circular-genome-diagram.md",
+      "title": "Draw a labeled circular map of the human mitochondrial genome",
       "figure": "Complete human mitochondrial circular map with gene labels, GC content, and GC skew",
       "variants": {"gui": "T-GUI-01", "cli": "T-CLI-01", "python": "T-PY-01"},
       "parity": "verified"
     },
     "first-linear-genome": {
+      "page": "docs/TUTORIALS/first-linear-genome-diagram.md",
+      "title": "Draw a labeled linear map of the Lambda phage genome",
       "figure": "Complete Lambda linear genome map with labels and ruler",
       "variants": {"gui": "T-GUI-02", "cli": "T-CLI-02", "python": "T-PY-03"},
       "parity": "verified"
     },
     "lambda-de3-genome-comparison": {
+      "page": "docs/TUTORIALS/compare-genomes-losatn.md",
+      "title": "Show where the Lambda and DE3 phage genomes match",
       "figure": "Complete Lambda and DE3 linear comparison with six LOSATN links",
       "variants": {"gui": "T-GUI-03", "cli": "T-CLI-07", "python": "T-PY-04"},
       "parity": "verified"
     },
     "aminoglycoside-similarity-groups": {
+      "page": "docs/TUTORIALS/compare-proteins-losatp.md",
+      "title": "Find shared proteins across five aminoglycoside gene clusters",
       "figure": "Five complete aminoglycoside BGC records aligned to one LOSATP Similarity group",
       "variants": {"gui": "T-GUI-04", "cli": "T-CLI-08", "python": "T-PY-05"},
       "parity": "verified"
     },
     "gallery-chloroplast-map": {
+      "page": "docs/TUTORIALS/build-an-annotated-chloroplast-map.md",
+      "title": "Make an annotated map of the tobacco chloroplast genome",
       "figure": "Interactive SVG Gallery tobacco plastome with functional colors, radial labels, structural regions, and GC content",
       "variants": {"gui": "T-GUI-05", "cli": "T-CLI-06", "python": "T-PY-02"},
       "parity": "verified"
     },
     "mitochondrial-comparison-rings": {
+      "page": "docs/TUTORIALS/add-precomputed-circular-comparison-rings.md",
+      "title": "Show how three animal mitochondrial genomes match the human reference",
       "figure": "Human mitochondrial reference with three ordered precomputed comparison rings",
       "variants": {"gui": "T-GUI-06", "cli": "T-CLI-09", "python": "T-PY-06"},
       "parity": "verified"
     },
     "hepatoplasmataceae-collinear": {
+      "page": "docs/TUTORIALS/compare-proteins-losatp-collinear.md",
+      "title": "Find conserved gene order across five Hepatoplasmataceae genomes",
       "figure": "Five complete Hepatoplasmataceae genomes with adjacent LOSATP Collinear blocks",
       "variants": {"gui": "T-GUI-08", "cli": "T-CLI-10", "python": "T-PY-07"},
       "parity": "verified"
     },
     "interactive-session-handoff": {
+      "page": "docs/TUTORIALS/create-and-resume-an-interactive-figure.md",
+      "title": "Save an interactive mitochondrial figure and reopen it later",
       "figure": "Interactive human mitochondrial figure reproduced from a saved session",
       "variants": {"gui": "T-GUI-09", "cli": "T-CLI-11", "python": "T-PY-08"},
       "parity": "verified"
     },
     "mitochondrial-feature-presentation": {
+      "page": "docs/TUTORIALS/highlight-mitochondrial-features.md",
+      "title": "Highlight selected features on the human mitochondrial map",
       "figure": "Complete human mitochondrial map with functional colors and D-loop region bracket",
       "variants": {"gui": "T-GUI-10", "cli": "T-CLI-03", "python": "T-PY-09"},
       "parity": "verified"
     },
     "quantitative-hepatoplasma-map": {
+      "page": "docs/TUTORIALS/build-a-quantitative-genome-map.md",
+      "title": "Plot read depth, GC content, and GC skew on a genome map",
       "figure": "Complete AP027133 genome with mean depth, GC content, and GC skew",
       "variants": {"gui": "T-GUI-12", "cli": "T-CLI-05", "python": "T-PY-11"},
       "parity": "verified"
@@ -297,7 +317,7 @@
         {"path": "docs/images/t-gui-01/05-export-svg.png", "reason": "Locate the standard SVG export action.", "alt": "SVG download button below the finished result preview"}
       ],
       "sources": ["docs/QUICKSTART.md", "gbdraw/web/gallery/tutorials/HmmtDNA_basic_circular.json"],
-      "destination": "docs/TUTORIALS/GUI/first-circular-genome-diagram.md",
+      "destination": "docs/TUTORIALS/first-circular-genome-diagram.md#in-the-web-app",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -318,7 +338,7 @@
         {"path": "docs/images/t-gui-02/04-finished-diagram.png", "reason": "Verify the labeled final map before export.", "alt": "Finished linear Lambda genome diagram with labels and ruler"}
       ],
       "sources": ["gbdraw/web/gallery/tutorials/lambda_basic_linear.json"],
-      "destination": "docs/TUTORIALS/GUI/first-linear-genome-diagram.md",
+      "destination": "docs/TUTORIALS/first-linear-genome-diagram.md#in-the-web-app",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -340,7 +360,7 @@
         {"path": "docs/images/t-gui-03/05-match-popup.png", "reason": "Show how to inspect one nucleotide match.", "alt": "LOSATN match details popup in the result preview"}
       ],
       "sources": [],
-      "destination": "docs/TUTORIALS/GUI/compare-genomes-losatn.md",
+      "destination": "docs/TUTORIALS/compare-genomes-losatn.md#in-the-web-app",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -363,7 +383,7 @@
         {"path": "docs/images/t-gui-04/06-match-popup.png", "reason": "Show the evidence available for one protein group.", "alt": "LOSATP similarity-group popup with member details"}
       ],
       "sources": [],
-      "destination": "docs/TUTORIALS/GUI/compare-proteins-losatp.md",
+      "destination": "docs/TUTORIALS/compare-proteins-losatp.md#in-the-web-app",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -385,7 +405,7 @@
         {"path": "docs/images/t-gui-05/05-finished-diagram.png", "reason": "Show the Gallery-equivalent finished figure.", "alt": "Gallery-style tobacco plastome with functional colors, radial labels, structural regions, GC content, and upper-left legend"}
       ],
       "sources": ["gbdraw/web/gallery/examples.json", "gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json"],
-      "destination": "docs/TUTORIALS/GUI/build-an-annotated-chloroplast-map.md",
+      "destination": "docs/TUTORIALS/build-an-annotated-chloroplast-map.md#in-the-web-app",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -407,7 +427,7 @@
         {"path": "docs/images/t-gui-06/05-hsp-popup.png", "reason": "Show one HSP and its span-export actions.", "alt": "Circular comparison HSP popup with reference and comparison span exports"}
       ],
       "sources": [],
-      "destination": "docs/TUTORIALS/GUI/add-precomputed-circular-comparison-rings.md",
+      "destination": "docs/TUTORIALS/add-precomputed-circular-comparison-rings.md#in-the-web-app",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -430,7 +450,7 @@
         {"path": "docs/images/t-gui-08/05-block-popup.png", "reason": "Show the selected ribbon beside the nonoverlapping popup and its Both spans FASTA action.", "alt": "Selected Collinear ribbon beside a nonoverlapping query and subject span popup"}
       ],
       "sources": [],
-      "destination": "docs/TUTORIALS/GUI/compare-proteins-losatp-collinear.md",
+      "destination": "docs/TUTORIALS/compare-proteins-losatp-collinear.md#in-the-web-app",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -453,7 +473,7 @@
         {"path": "docs/images/t-gui-09/06-reloaded-result.png", "reason": "Verify the regenerated result in a fresh context.", "alt": "Restored session regenerated as an equivalent circular diagram"}
       ],
       "sources": [],
-      "destination": "docs/TUTORIALS/GUI/create-and-resume-an-interactive-figure.md",
+      "destination": "docs/TUTORIALS/create-and-resume-an-interactive-figure.md#in-the-web-app",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -471,8 +491,8 @@
         {"path": "docs/images/t-gui-10/presentation-settings.png", "reason": "Record the feature, label, stroke, and D-loop track settings.", "alt": "Web-app settings for highlighted mitochondrial features and the D-loop bracket"},
         {"path": "docs/images/t-gui-10/presentation-result.png", "reason": "Verify the finished feature presentation.", "alt": "Human mitochondrial map with functional colors, selected labels, and a D-loop bracket"}
       ],
-      "sources": ["docs/TUTORIALS/CLI/highlight-mitochondrial-features.md", "docs/REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md"],
-      "destination": "docs/TUTORIALS/GUI/highlight-mitochondrial-features.md",
+      "sources": ["docs/TUTORIALS/highlight-mitochondrial-features.md", "docs/REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md"],
+      "destination": "docs/TUTORIALS/highlight-mitochondrial-features.md#in-the-web-app",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -490,8 +510,8 @@
         {"path": "docs/images/t-gui-12/track-settings.png", "reason": "Record the depth, GC-content, GC-skew, and explicit slot settings.", "alt": "Web-app quantitative-track settings for AP027133.1"},
         {"path": "docs/images/t-gui-12/track-result.png", "reason": "Verify the completed three-track quantitative map.", "alt": "AP027133.1 map with blue depth, GC content, and GC skew rings"}
       ],
-      "sources": ["docs/TUTORIALS/CLI/build-a-quantitative-genome-map.md", "docs/REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md"],
-      "destination": "docs/TUTORIALS/GUI/build-a-quantitative-genome-map.md",
+      "sources": ["docs/TUTORIALS/build-a-quantitative-genome-map.md", "docs/REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md"],
+      "destination": "docs/TUTORIALS/build-a-quantitative-genome-map.md#in-the-web-app",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -507,7 +527,7 @@
       "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "core", "expected_outputs": ["human_mitochondrion.svg"], "assertions": ["first_result_step=2", "exit_code=0", "svg.accession=NC_012920.1", "svg.gc_tracks=2", "svg.cds_gene_labels=13", "svg.cds_product_labels=0", "parity=T-PY-01"]},
       "screenshots": [],
       "sources": ["docs/QUICKSTART.md"],
-      "destination": "docs/TUTORIALS/CLI/first-circular-genome-diagram.md",
+      "destination": "docs/TUTORIALS/first-circular-genome-diagram.md#on-the-command-line",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -523,7 +543,7 @@
       "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "core", "expected_outputs": ["lambda_linear.svg"], "assertions": ["first_result_step=2", "exit_code=0", "svg.accession=NC_001416.1", "svg.ruler=true"]},
       "screenshots": [],
       "sources": [],
-      "destination": "docs/TUTORIALS/CLI/first-linear-genome-diagram.md",
+      "destination": "docs/TUTORIALS/first-linear-genome-diagram.md#on-the-command-line",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -539,7 +559,7 @@
       "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "core", "expected_outputs": ["mitochondrial_features_baseline.svg", "mitochondrial_features_highlighted.svg"], "assertions": ["first_result_step=2", "all_13_cds_visible=true", "labels_and_colors_match=true", "shapes=arrow,rectangle", "d_loop_annotation=origin_spanning_bracket", "broken_references=0", "unexpected_empty_layers=0"]},
       "screenshots": [],
       "sources": [],
-      "destination": "docs/TUTORIALS/CLI/highlight-mitochondrial-features.md",
+      "destination": "docs/TUTORIALS/highlight-mitochondrial-features.md#on-the-command-line",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -555,7 +575,7 @@
       "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "extended", "expected_outputs": ["quantitative_genome_baseline.svg", "quantitative_genome_map.svg"], "assertions": ["first_result_step=2", "depth_rows=607", "depth_coordinate_coverage=true", "window=1000", "step=1000", "track_slots=depth,gc_content,gc_skew", "axes_and_ticks=true"]},
       "screenshots": [],
       "sources": [],
-      "destination": "docs/TUTORIALS/CLI/build-a-quantitative-genome-map.md",
+      "destination": "docs/TUTORIALS/build-a-quantitative-genome-map.md#on-the-command-line",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -570,8 +590,8 @@
       "settings": {"mode": "circular", "working_directory": "empty", "record_id": "NC_001879.2", "feature_types": ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "rep_origin"], "annotation_set": "plastome_regions", "track_order": ["features", "plastome_regions", "gc_content"], "labels": "both-radial", "label_offsets": {"outer_x": 0.9, "outer_y": 0.9, "inner_x": 0.975, "inner_y": 0.975}, "legend": "upper_left"},
       "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "extended", "expected_outputs": ["cli_annotated_chloroplast.svg"], "assertions": ["first_result_step=2", "exit_code=0", "svg.accession=NC_001879.2", "svg.logical_features=147", "svg.annotation_ids=lsc,irb,ssc,ira", "svg.track_types=features,annotations,gc_content", "svg.gc_skew=false", "svg.radial_labels=both", "svg.functional_colors=true", "parity=T-PY-02"]},
       "screenshots": [],
-      "sources": ["gbdraw/web/gallery/examples.json", "docs/TUTORIALS/GUI/build-an-annotated-chloroplast-map.md", "docs/REFERENCE/command-line.md"],
-      "destination": "docs/TUTORIALS/CLI/build-an-annotated-chloroplast-map.md",
+      "sources": ["gbdraw/web/gallery/examples.json", "docs/TUTORIALS/build-an-annotated-chloroplast-map.md", "docs/REFERENCE/command-line.md"],
+      "destination": "docs/TUTORIALS/build-an-annotated-chloroplast-map.md#on-the-command-line",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -586,8 +606,8 @@
       "settings": {"mode": "linear", "working_directory": "empty", "record_order": ["NC_001416.1", "NC_042057.1"], "comparison_rows": 6, "pairwise_match_height": 120},
       "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "core", "expected_outputs": ["lambda-de3-losatn.svg"], "assertions": ["first_result_step=2", "exit_code=0", "svg.records=NC_001416.1,NC_042057.1", "svg.links=6", "pairwise_match_height=120", "parity=T-GUI-03,T-PY-04"]},
       "screenshots": [],
-      "sources": ["docs/TUTORIALS/GUI/compare-genomes-losatn.md"],
-      "destination": "docs/TUTORIALS/CLI/compare-genomes-losatn.md",
+      "sources": ["docs/TUTORIALS/compare-genomes-losatn.md"],
+      "destination": "docs/TUTORIALS/compare-genomes-losatn.md#on-the-command-line",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -602,8 +622,8 @@
       "settings": {"mode": "linear", "working_directory": "empty", "protein_mode": "orthogroup", "threads": 1, "alignment_group": "og_1", "separate_strands": false, "lock_definition_column": true, "definition_name": {"font_size": 20, "font_weight": "bold"}, "definition_other_lines": {"font_size": 20, "font_weight": "normal"}},
       "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "extended", "expected_outputs": ["bgc_losatp_groups.svg"], "assertions": ["first_result_step=2", "exit_code=0", "definition_column=left", "definition_font_size=20", "definition_name_weight=bold", "group_count=23", "svg.group_links=77", "alignment_group=og_1", "parity=T-GUI-04,T-PY-05"]},
       "screenshots": [],
-      "sources": ["docs/TUTORIALS/GUI/compare-proteins-losatp.md"],
-      "destination": "docs/TUTORIALS/CLI/compare-proteins-losatp.md",
+      "sources": ["docs/TUTORIALS/compare-proteins-losatp.md"],
+      "destination": "docs/TUTORIALS/compare-proteins-losatp.md#on-the-command-line",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -618,8 +638,8 @@
       "settings": {"mode": "circular", "working_directory": "empty", "reference": "subject", "ring_order": ["NC_002333.2", "NC_024511.2", "NC_001328.1"], "ring_width": 18, "ring_gap": 4, "track_preset": "middle"},
       "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "extended", "expected_outputs": ["precomputed_circular_rings.svg"], "assertions": ["first_result_step=2", "exit_code=0", "track_preset=middle", "svg.accession=NC_012920.1", "svg.rings=3", "svg.hits=106", "parity=T-GUI-06,T-PY-06"]},
       "screenshots": [],
-      "sources": ["docs/TUTORIALS/GUI/add-precomputed-circular-comparison-rings.md"],
-      "destination": "docs/TUTORIALS/CLI/add-precomputed-circular-comparison-rings.md",
+      "sources": ["docs/TUTORIALS/add-precomputed-circular-comparison-rings.md"],
+      "destination": "docs/TUTORIALS/add-precomputed-circular-comparison-rings.md#on-the-command-line",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -634,8 +654,8 @@
       "settings": {"mode": "linear", "working_directory": "empty", "record_order": ["AP027078.1", "AP027131.1", "AP027133.1", "AP027132.1", "NZ_CP006932.1"], "protein_mode": "collinear", "scope": "adjacent", "threads": 32},
       "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "extended", "expected_outputs": ["losatp_collinear.svg"], "assertions": ["first_result_step=2", "exit_code=0", "record_count=5", "svg.collinear_matches=500", "scope=adjacent", "parity=T-GUI-08,T-PY-07"]},
       "screenshots": [],
-      "sources": ["docs/TUTORIALS/GUI/compare-proteins-losatp-collinear.md"],
-      "destination": "docs/TUTORIALS/CLI/compare-proteins-losatp-collinear.md",
+      "sources": ["docs/TUTORIALS/compare-proteins-losatp-collinear.md"],
+      "destination": "docs/TUTORIALS/compare-proteins-losatp-collinear.md#on-the-command-line",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -650,8 +670,8 @@
       "settings": {"mode": "circular", "working_directory": "empty", "record_id": "NC_012920.1", "track_preset": "middle", "separate_strands": true, "label_mode": "out", "species": "<i>Homo sapiens</i>", "legend_position": "right"},
       "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "extended", "expected_outputs": ["interactive_human_mitochondrion.svg", "interactive_human_mitochondrion.interactive.svg", "interactive_handoff.gbdraw-session.json.gz", "restored_interactive_figure.svg"], "assertions": ["first_result_step=1", "exit_code=0", "interactive_svg.offline_controls=true", "session.gzip=true", "session.current_schema=true", "restored_svg.byte_identical=true", "parity=T-GUI-09,T-PY-08"]},
       "screenshots": [],
-      "sources": ["docs/TUTORIALS/GUI/create-and-resume-an-interactive-figure.md", "docs/REFERENCE/session-and-request-compatibility.md"],
-      "destination": "docs/TUTORIALS/CLI/create-and-resume-an-interactive-figure.md",
+      "sources": ["docs/TUTORIALS/create-and-resume-an-interactive-figure.md", "docs/REFERENCE/session-and-request-compatibility.md"],
+      "destination": "docs/TUTORIALS/create-and-resume-an-interactive-figure.md#on-the-command-line",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -666,8 +686,8 @@
       "settings": {"mode": "circular", "working_directory": "empty", "format": "svg", "track_preset": "middle", "separate_strands": true, "label_mode": "out", "cds_label_qualifier": "gene", "species": "<i>Homo sapiens</i>", "legend_position": "right"},
       "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "core", "expected_outputs": ["python_human_mitochondrion.svg"], "assertions": ["first_result_step=2", "snippet_executes=true", "return_type=Diagram", "svg.accession=NC_012920.1", "parity=T-CLI-01"]},
       "screenshots": [],
-      "sources": ["docs/PYTHON_API.md"],
-      "destination": "docs/TUTORIALS/PYTHON/first-genome-diagram.md",
+      "sources": ["docs/REFERENCE/python-api.md"],
+      "destination": "docs/TUTORIALS/first-circular-genome-diagram.md#in-python",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -682,8 +702,8 @@
       "settings": {"mode": "circular", "working_directory": "empty", "record_id": "NC_001879.2", "feature_types": ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "rep_origin"], "annotation_set": "plastome_regions", "track_order": ["features", "plastome_regions", "gc_content"], "labels": "both-radial", "label_offsets": {"outer_x": 0.9, "outer_y": 0.9, "inner_x": 0.975, "inner_y": 0.975}, "legend": "upper_left"},
       "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["python_annotated_chloroplast.svg"], "assertions": ["first_result_step=2", "snippet_executes=true", "return_type=Diagram", "svg.accession=NC_001879.2", "svg.logical_features=147", "svg.annotation_ids=lsc,irb,ssc,ira", "svg.track_types=features,annotations,gc_content", "svg.gc_skew=false", "svg.radial_labels=both", "svg.functional_colors=true", "parity=gbdraw/web/gallery/sources/tobacco-chloroplast.svg"]},
       "screenshots": [],
-      "sources": ["gbdraw/web/gallery/examples.json", "docs/TUTORIALS/GUI/build-an-annotated-chloroplast-map.md", "docs/REFERENCE/python-api.md"],
-      "destination": "docs/TUTORIALS/PYTHON/build-an-annotated-chloroplast-map.md",
+      "sources": ["gbdraw/web/gallery/examples.json", "docs/TUTORIALS/build-an-annotated-chloroplast-map.md", "docs/REFERENCE/python-api.md"],
+      "destination": "docs/TUTORIALS/build-an-annotated-chloroplast-map.md#in-python",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -698,8 +718,8 @@
       "settings": {"mode": "linear", "working_directory": "empty", "record_id": "NC_001416.1", "track_layout": "middle", "separate_strands": true, "labels": "all", "scale_style": "ruler", "legend": "left"},
       "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "core", "expected_outputs": ["python_lambda_linear.svg"], "assertions": ["first_result_step=2", "snippet_executes=true", "return_type=Diagram", "svg.accession=NC_001416.1", "svg.ruler=true", "parity=T-GUI-02,T-CLI-02"]},
       "screenshots": [],
-      "sources": ["docs/TUTORIALS/GUI/first-linear-genome-diagram.md", "docs/REFERENCE/python-api.md"],
-      "destination": "docs/TUTORIALS/PYTHON/first-linear-genome-diagram.md",
+      "sources": ["docs/TUTORIALS/first-linear-genome-diagram.md", "docs/REFERENCE/python-api.md"],
+      "destination": "docs/TUTORIALS/first-linear-genome-diagram.md#in-python",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -714,8 +734,8 @@
       "settings": {"mode": "linear", "working_directory": "empty", "record_order": ["NC_001416.1", "NC_042057.1"], "comparison_rows": 6, "pairwise_match_height": 120},
       "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "core", "expected_outputs": ["python_lambda_de3_losatn.svg"], "assertions": ["first_result_step=2", "snippet_executes=true", "return_type=Diagram", "svg.records=NC_001416.1,NC_042057.1", "svg.links=6", "parity=T-GUI-03,T-CLI-07"]},
       "screenshots": [],
-      "sources": ["docs/TUTORIALS/GUI/compare-genomes-losatn.md", "docs/REFERENCE/python-api.md"],
-      "destination": "docs/TUTORIALS/PYTHON/compare-genomes-losatn.md",
+      "sources": ["docs/TUTORIALS/compare-genomes-losatn.md", "docs/REFERENCE/python-api.md"],
+      "destination": "docs/TUTORIALS/compare-genomes-losatn.md#in-python",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -730,8 +750,8 @@
       "settings": {"mode": "linear", "working_directory": "empty", "protein_mode": "orthogroup", "threads": 1, "alignment_group": "og_1", "separate_strands": false, "lock_definition_column": true, "definition_name": {"font_size": 20, "font_weight": "bold"}, "definition_other_lines": {"font_size": 20, "font_weight": "normal"}},
       "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["python_bgc_losatp_groups.svg"], "assertions": ["first_result_step=2", "snippet_executes=true", "return_type=Diagram", "definition_column=left", "definition_font_size=20", "definition_name_weight=bold", "group_count=23", "svg.group_links=77", "alignment_group=og_1", "parity=T-GUI-04,T-CLI-08"]},
       "screenshots": [],
-      "sources": ["docs/TUTORIALS/GUI/compare-proteins-losatp.md", "docs/REFERENCE/python-api.md"],
-      "destination": "docs/TUTORIALS/PYTHON/compare-proteins-losatp.md",
+      "sources": ["docs/TUTORIALS/compare-proteins-losatp.md", "docs/REFERENCE/python-api.md"],
+      "destination": "docs/TUTORIALS/compare-proteins-losatp.md#in-python",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -746,8 +766,8 @@
       "settings": {"mode": "circular", "working_directory": "empty", "reference": "subject", "ring_order": ["NC_002333.2", "NC_024511.2", "NC_001328.1"], "ring_width": 18, "ring_gap": 4, "track_preset": "middle"},
       "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["python_precomputed_circular_rings.svg"], "assertions": ["first_result_step=2", "snippet_executes=true", "return_type=Diagram", "track_preset=middle", "svg.accession=NC_012920.1", "svg.rings=3", "svg.hits=106", "parity=T-GUI-06,T-CLI-09"]},
       "screenshots": [],
-      "sources": ["docs/TUTORIALS/GUI/add-precomputed-circular-comparison-rings.md", "docs/REFERENCE/python-api.md"],
-      "destination": "docs/TUTORIALS/PYTHON/add-precomputed-circular-comparison-rings.md",
+      "sources": ["docs/TUTORIALS/add-precomputed-circular-comparison-rings.md", "docs/REFERENCE/python-api.md"],
+      "destination": "docs/TUTORIALS/add-precomputed-circular-comparison-rings.md#in-python",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -762,8 +782,8 @@
       "settings": {"mode": "linear", "working_directory": "empty", "record_order": ["AP027078.1", "AP027131.1", "AP027133.1", "AP027132.1", "NZ_CP006932.1"], "protein_mode": "collinear", "scope": "adjacent", "threads": 32},
       "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["losatp_collinear.svg"], "assertions": ["first_result_step=2", "snippet_executes=true", "return_type=Diagram", "record_count=5", "svg.collinear_matches=500", "parity=T-GUI-08,T-CLI-10"]},
       "screenshots": [],
-      "sources": ["docs/TUTORIALS/GUI/compare-proteins-losatp-collinear.md", "docs/REFERENCE/python-api.md"],
-      "destination": "docs/TUTORIALS/PYTHON/compare-proteins-losatp-collinear.md",
+      "sources": ["docs/TUTORIALS/compare-proteins-losatp-collinear.md", "docs/REFERENCE/python-api.md"],
+      "destination": "docs/TUTORIALS/compare-proteins-losatp-collinear.md#in-python",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -778,8 +798,8 @@
       "settings": {"mode": "circular", "working_directory": "empty", "record_id": "NC_012920.1", "track_preset": "middle", "separate_strands": true, "label_mode": "out", "species": "<i>Homo sapiens</i>", "legend_position": "right"},
       "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["interactive_human_mitochondrion.svg", "interactive_human_mitochondrion.interactive.svg", "interactive_handoff.gbdraw-session.json.gz", "restored_interactive_figure.svg"], "assertions": ["first_result_step=1", "snippet_executes=true", "return_type=RequestRenderResult", "interactive_svg.offline_controls=true", "session.gzip=true", "session.current_schema=true", "restored_svg.byte_identical=true", "parity=T-GUI-09,T-CLI-11"]},
       "screenshots": [],
-      "sources": ["docs/TUTORIALS/GUI/create-and-resume-an-interactive-figure.md", "docs/REFERENCE/session-and-request-compatibility.md"],
-      "destination": "docs/TUTORIALS/PYTHON/create-and-resume-an-interactive-figure.md",
+      "sources": ["docs/TUTORIALS/create-and-resume-an-interactive-figure.md", "docs/REFERENCE/session-and-request-compatibility.md"],
+      "destination": "docs/TUTORIALS/create-and-resume-an-interactive-figure.md#in-python",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -794,8 +814,8 @@
       "settings": {"mode": "circular", "working_directory": "empty", "record_id": "NC_012920.1", "finished_output": "mitochondrial_features_highlighted.svg"},
       "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "core", "expected_outputs": ["mitochondrial_features_highlighted.svg"], "assertions": ["first_result_step=1", "snippet_executes=true", "return_type=Diagram", "all_13_cds_visible=true", "labels_and_colors_match=true", "shapes=arrow,rectangle", "d_loop_annotation=origin_spanning_bracket", "parity=T-GUI-10,T-CLI-03"]},
       "screenshots": [],
-      "sources": ["docs/TUTORIALS/CLI/highlight-mitochondrial-features.md", "docs/REFERENCE/python-api.md"],
-      "destination": "docs/TUTORIALS/PYTHON/highlight-mitochondrial-features.md",
+      "sources": ["docs/TUTORIALS/highlight-mitochondrial-features.md", "docs/REFERENCE/python-api.md"],
+      "destination": "docs/TUTORIALS/highlight-mitochondrial-features.md#in-python",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -810,8 +830,8 @@
       "settings": {"mode": "circular", "working_directory": "empty", "record_id": "AP027133.1", "window": 1000, "step": 1000, "finished_output": "quantitative_genome_map.svg"},
       "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["quantitative_genome_map.svg"], "assertions": ["first_result_step=1", "snippet_executes=true", "return_type=Diagram", "depth_rows=607", "depth_coordinate_coverage=true", "track_slots=depth,gc_content,gc_skew", "axes_and_ticks=true", "parity=T-GUI-12,T-CLI-05"]},
       "screenshots": [],
-      "sources": ["docs/TUTORIALS/CLI/build-a-quantitative-genome-map.md", "docs/REFERENCE/python-api.md"],
-      "destination": "docs/TUTORIALS/PYTHON/build-a-quantitative-genome-map.md",
+      "sources": ["docs/TUTORIALS/build-a-quantitative-genome-map.md", "docs/REFERENCE/python-api.md"],
+      "destination": "docs/TUTORIALS/build-a-quantitative-genome-map.md#in-python",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -829,7 +849,7 @@
         {"path": "docs/images/h-gui-01/gff3-fasta-input.png", "reason": "Show the paired GFF3 and FASTA inputs.", "alt": "Matched Lambda GFF3 and FASTA files selected"},
         {"path": "docs/images/h-gui-01/id-error.png", "reason": "Identify the record-ID mismatch message.", "alt": "GFF3 and FASTA record-ID validation error"}
       ],
-      "sources": ["docs/GFF3_FASTA.md"],
+      "sources": ["docs/REFERENCE/input-formats-and-tsv-schemas.md"],
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -846,7 +866,7 @@
         {"path": "docs/images/h-gui-02/grid-settings.png", "reason": "Record the grid placement choices.", "alt": "Circular multi-record grid settings"},
         {"path": "docs/images/h-gui-02/grid-result.png", "reason": "Verify the labeled, non-overlapping four-record canvas.", "alt": "Four complete mitochondrial genomes with gene labels arranged in a grid"}
       ],
-      "sources": ["docs/WORKFLOW_GUIDE.md"],
+      "sources": ["docs/FAQ.md"],
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -1075,10 +1095,10 @@
         {"path": "docs/images/h-gui-15/export-actions.png", "reason": "Locate the supported GUI export actions.", "alt": "SVG, interactive SVG, PNG, and PDF export buttons"},
         {"path": "docs/images/h-gui-15/exported-result.png", "reason": "Compare the standard and interactive figure choices.", "alt": "Finished diagram ready for static or interactive export"}
       ],
-      "sources": ["docs/EXPORT.md"],
+      "sources": ["docs/REFERENCE/output-formats-and-export.md"],
       "status": {"implementation": "verified", "review": "approved"}
     },
-    {"id": "H-CLI-01", "title": "How to use GenBank, DDBJ, GFF3, and FASTA inputs", "role": "evidence", "surface": "cli", "priority": "P0", "capabilities": ["input.genbank-embl-ddbj", "input.gff3-fasta", "input.multi-record"], "fixtures": ["lambda", "lambda-gff3"], "settings": {"working_directory": "empty"}, "execution": {"source": "docs/internal/SCENARIO_EVIDENCE.md", "kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "core", "expected_outputs": ["lambda_genbank.svg", "lambda_gff3.svg"], "assertions": ["record_ids_match=true", "cds_count_match=true", "failure_messages_match=true"]}, "screenshots": [], "sources": ["docs/GFF3_FASTA.md"], "status": {"implementation": "verified", "review": "approved"}},
+    {"id": "H-CLI-01", "title": "How to use GenBank, DDBJ, GFF3, and FASTA inputs", "role": "evidence", "surface": "cli", "priority": "P0", "capabilities": ["input.genbank-embl-ddbj", "input.gff3-fasta", "input.multi-record"], "fixtures": ["lambda", "lambda-gff3"], "settings": {"working_directory": "empty"}, "execution": {"source": "docs/internal/SCENARIO_EVIDENCE.md", "kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "core", "expected_outputs": ["lambda_genbank.svg", "lambda_gff3.svg"], "assertions": ["record_ids_match=true", "cds_count_match=true", "failure_messages_match=true"]}, "screenshots": [], "sources": ["docs/REFERENCE/input-formats-and-tsv-schemas.md"], "status": {"implementation": "verified", "review": "approved"}},
     {"id": "H-CLI-02", "title": "How to use record, comparison, conservation, annotation, and track tables", "role": "evidence", "surface": "cli", "priority": "P2", "capabilities": ["input.tsv-manifests", "comparison.uploaded-tables", "track.region-annotations", "layout.track-placement"], "fixtures": ["human-mitochondrion", "metazoan-mitochondria-four", "metazoan-mitochondria-comparison", "lambda", "de3", "lambda-de3-comparison", "tobacco-plastome-regions", "depth-1kb"], "settings": {"working_directory": "empty", "path_resolution": "documented", "circular_reference": "NC_012920.1", "circular_reference_side": "subject", "circular_ring_count": 3}, "execution": {"source": "docs/internal/SCENARIO_EVIDENCE.md", "kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "extended", "expected_outputs": ["record_table.svg", "comparison_table.svg", "conservation_table.svg", "annotation_table.svg", "track_table.svg"], "assertions": ["schemas_match=true", "relative_paths_resolve=true", "output_semantics_match=true", "circular_source_topologies=circular", "circular_records_are_complete=true", "circular_ring_count=3", "cds_labels_use_gene=true", "cds_product_labels_absent=true"]}, "screenshots": [], "sources": [], "status": {"implementation": "verified", "review": "approved"}},
     {"id": "H-CLI-03", "title": "How to arrange multiple circular records and tracks", "role": "evidence", "surface": "cli", "priority": "P2", "capabilities": ["layout.circular-multi", "layout.track-placement"], "fixtures": ["human-mitochondrion", "metazoan-mitochondria-four"], "settings": {"working_directory": "empty", "mode": "circular"}, "execution": {"source": "docs/internal/SCENARIO_EVIDENCE.md", "kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "extended", "expected_outputs": ["multi_record_circular_cli.svg"], "assertions": ["record_count=4", "all_source_topologies=circular", "all_records_are_complete=true", "grid_topology_match=true", "axis_index_match=true", "track_order_match=true", "cds_labels_use_gene=true", "cds_product_labels_absent=true"]}, "screenshots": [], "sources": [], "status": {"implementation": "verified", "review": "approved"}},
     {"id": "H-CLI-04", "title": "How to arrange linear records, regions, orientation, labels, and rulers", "role": "evidence", "surface": "cli", "priority": "P0", "capabilities": ["input.record-selection", "input.regions", "input.reverse-complement", "layout.linear-multi-row", "layout.rulers"], "fixtures": ["lambda", "aminoglycoside-bgc-five"], "settings": {"working_directory": "empty", "mode": "linear"}, "execution": {"source": "docs/internal/SCENARIO_EVIDENCE.md", "kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "core", "expected_outputs": ["linear_layout_cli.svg"], "assertions": ["all_blocks_run_in_order=true", "record_order_match=true", "coordinate_ranges_match=true", "orientation_match=true"]}, "screenshots": [], "sources": [], "status": {"implementation": "verified", "review": "approved"}},
@@ -1090,24 +1110,24 @@
     {"id": "H-CLI-10", "title": "How to add region annotations and custom track slots", "role": "evidence", "surface": "cli", "priority": "P2", "capabilities": ["track.region-annotations", "track.custom-circular-slots", "track.custom-linear-slots", "layout.track-placement"], "fixtures": ["tobacco-plastome-regions", "human-mitochondrion"], "settings": {"working_directory": "empty", "explicit_slots": true}, "execution": {"source": "docs/internal/SCENARIO_EVIDENCE.md", "kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "extended", "expected_outputs": ["cli_annotations_slots.svg"], "assertions": ["annotation_lanes_match=true", "slot_order_match=true", "axis_placement_match=true"]}, "screenshots": [], "sources": [], "status": {"implementation": "verified", "review": "approved"}},
     {"id": "H-CLI-11", "title": "How to set colors, labels, visibility, shapes, and strokes", "role": "evidence", "surface": "cli", "priority": "P2", "capabilities": ["presentation.palettes", "presentation.feature-colors", "presentation.qualifier-priority", "presentation.label-filters", "presentation.label-overrides", "presentation.visibility", "presentation.shapes", "presentation.strokes", "presentation.overlaps"], "fixtures": ["human-mitochondrion", "aminoglycoside-bgc-five"], "settings": {"working_directory": "empty", "semantic_comparison": true}, "execution": {"source": "docs/internal/SCENARIO_EVIDENCE.md", "kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "extended", "expected_outputs": ["cli_feature_presentation.svg"], "assertions": ["colors_match=true", "labels_match=true", "shapes_match=true", "overlap_policy_match=true"]}, "screenshots": [], "sources": [], "status": {"implementation": "verified", "review": "approved"}},
     {"id": "H-CLI-12", "title": "How to save and regenerate sessions safely", "role": "evidence", "surface": "cli", "priority": "P2", "capabilities": ["interactive.session-save-load", "output.reproducible-handoff"], "fixtures": ["human-mitochondrion"], "settings": {"working_directory": "empty", "current_schema_only": true}, "execution": {"source": "docs/internal/SCENARIO_EVIDENCE.md", "kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "extended", "expected_outputs": ["cli_session.json", "cli_session.json.gz", "cli_session_roundtrip.svg"], "assertions": ["round_trip_match=true", "incompatible_input_rejected=true", "overwrite_refused=true"]}, "screenshots": [], "sources": [], "status": {"implementation": "verified", "review": "approved"}},
-    {"id": "H-CLI-13", "title": "How to export static and interactive outputs", "role": "evidence", "surface": "cli", "priority": "P1", "capabilities": ["output.static-svg", "output.interactive-svg", "output.png", "output.pdf", "output.eps", "output.ps"], "fixtures": ["human-mitochondrion"], "settings": {"working_directory": "empty"}, "execution": {"source": "docs/internal/SCENARIO_EVIDENCE.md", "kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "core", "expected_outputs": ["cli_export.svg", "cli_export.interactive.svg", "cli_export.png", "cli_export.pdf", "cli_export.eps", "cli_export.ps"], "assertions": ["filenames_match=true", "signatures_match=true", "nonzero_sizes=true", "interactive_controls_present=true"]}, "screenshots": [], "sources": ["docs/EXPORT.md"], "status": {"implementation": "verified", "review": "approved"}},
-    {"id": "H-PY-01", "title": "How to draw Circular and multi-record diagrams from Python", "role": "evidence", "surface": "python", "priority": "P0", "capabilities": ["program.simple-drawing", "layout.circular-single", "layout.circular-multi", "program.bytes"], "fixtures": ["human-mitochondrion", "metazoan-mitochondria-four"], "settings": {"snippet_source": "canonical"}, "execution": {"source": "docs/internal/SCENARIO_EVIDENCE.md", "kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["python_circular.svg", "python_multi_record.svg"], "assertions": ["snippets_execute=true", "records_match=true", "all_source_topologies=circular", "organism_labels_match=true", "labels_all_records=true", "cds_labels_use_gene=true", "cds_product_labels_absent=true", "output_bytes_match_signature=true"]}, "screenshots": [], "sources": ["docs/PYTHON_API.md"], "status": {"implementation": "verified", "review": "approved"}},
-    {"id": "H-PY-02", "title": "How to draw Linear diagrams and comparisons from Python", "role": "evidence", "surface": "python", "priority": "P2", "capabilities": ["program.simple-drawing", "program.comparisons-tracks", "layout.linear-multi-row", "comparison.uploaded-tables"], "fixtures": ["lambda", "de3", "lambda-de3-comparison"], "settings": {"snippet_source": "canonical", "query_record": "NC_001416.1", "subject_record": "NC_042057.1"}, "execution": {"source": "docs/internal/SCENARIO_EVIDENCE.md", "kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["python_linear_comparison.svg"], "assertions": ["snippet_executes=true", "row_topology_match=true", "comparison_links_match=true"]}, "screenshots": [], "sources": ["docs/PYTHON_API.md"], "status": {"implementation": "verified", "review": "approved"}},
-    {"id": "H-PY-03", "title": "How to add tracks, annotations, colors, and labels from Python", "role": "evidence", "surface": "python", "priority": "P2", "capabilities": ["program.comparisons-tracks", "track.depth-numeric", "track.region-annotations", "track.custom-circular-slots", "presentation.feature-colors", "presentation.qualifier-priority", "presentation.label-filters"], "fixtures": ["human-mitochondrion", "depth-1kb", "tobacco-plastome-regions"], "settings": {"snippet_source": "canonical"}, "execution": {"source": "docs/internal/SCENARIO_EVIDENCE.md", "kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["python_tracks_annotations.svg"], "assertions": ["type_validation_passes=true", "track_order_match=true", "labels_match=true"]}, "screenshots": [], "sources": ["docs/PYTHON_API.md"], "status": {"implementation": "verified", "review": "approved"}},
-    {"id": "H-PY-04", "title": "How to use GFF3, in-memory records, and byte output", "role": "evidence", "surface": "python", "priority": "P2", "capabilities": ["input.gff3-fasta", "program.in-memory-records", "program.bytes"], "fixtures": ["lambda-gff3", "human-mitochondrion"], "settings": {"snippet_source": "canonical"}, "execution": {"source": "docs/internal/SCENARIO_EVIDENCE.md", "kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "core", "expected_outputs": ["python_gff3.svg", "python_memory.svg"], "assertions": ["gff3_records_match=true", "seqrecord_input_passes=true", "svg_bytes_signature_match=true"]}, "screenshots": [], "sources": ["docs/PYTHON_API.md", "docs/GFF3_FASTA.md"], "status": {"implementation": "verified", "review": "approved"}},
-    {"id": "H-PY-05", "title": "How to build typed requests and round-trip sessions", "role": "evidence", "surface": "python", "priority": "P2", "capabilities": ["entry.typed-python", "program.typed-requests", "program.session-round-trip"], "fixtures": ["human-mitochondrion"], "settings": {"current_schema_only": true}, "execution": {"source": "docs/internal/SCENARIO_EVIDENCE.md", "kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["typed_request.svg", "typed_request.session.json"], "assertions": ["request_validation_passes=true", "session_round_trip_match=true", "wrong_mode_rejected=true"]}, "screenshots": [], "sources": ["docs/TYPED_API.md", "docs/SESSION_COMPATIBILITY.md"], "status": {"implementation": "verified", "review": "approved"}},
+    {"id": "H-CLI-13", "title": "How to export static and interactive outputs", "role": "evidence", "surface": "cli", "priority": "P1", "capabilities": ["output.static-svg", "output.interactive-svg", "output.png", "output.pdf", "output.eps", "output.ps"], "fixtures": ["human-mitochondrion"], "settings": {"working_directory": "empty"}, "execution": {"source": "docs/internal/SCENARIO_EVIDENCE.md", "kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "core", "expected_outputs": ["cli_export.svg", "cli_export.interactive.svg", "cli_export.png", "cli_export.pdf", "cli_export.eps", "cli_export.ps"], "assertions": ["filenames_match=true", "signatures_match=true", "nonzero_sizes=true", "interactive_controls_present=true"]}, "screenshots": [], "sources": ["docs/REFERENCE/output-formats-and-export.md"], "status": {"implementation": "verified", "review": "approved"}},
+    {"id": "H-PY-01", "title": "How to draw Circular and multi-record diagrams from Python", "role": "evidence", "surface": "python", "priority": "P0", "capabilities": ["program.simple-drawing", "layout.circular-single", "layout.circular-multi", "program.bytes"], "fixtures": ["human-mitochondrion", "metazoan-mitochondria-four"], "settings": {"snippet_source": "canonical"}, "execution": {"source": "docs/internal/SCENARIO_EVIDENCE.md", "kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["python_circular.svg", "python_multi_record.svg"], "assertions": ["snippets_execute=true", "records_match=true", "all_source_topologies=circular", "organism_labels_match=true", "labels_all_records=true", "cds_labels_use_gene=true", "cds_product_labels_absent=true", "output_bytes_match_signature=true"]}, "screenshots": [], "sources": ["docs/REFERENCE/python-api.md"], "status": {"implementation": "verified", "review": "approved"}},
+    {"id": "H-PY-02", "title": "How to draw Linear diagrams and comparisons from Python", "role": "evidence", "surface": "python", "priority": "P2", "capabilities": ["program.simple-drawing", "program.comparisons-tracks", "layout.linear-multi-row", "comparison.uploaded-tables"], "fixtures": ["lambda", "de3", "lambda-de3-comparison"], "settings": {"snippet_source": "canonical", "query_record": "NC_001416.1", "subject_record": "NC_042057.1"}, "execution": {"source": "docs/internal/SCENARIO_EVIDENCE.md", "kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["python_linear_comparison.svg"], "assertions": ["snippet_executes=true", "row_topology_match=true", "comparison_links_match=true"]}, "screenshots": [], "sources": ["docs/REFERENCE/python-api.md"], "status": {"implementation": "verified", "review": "approved"}},
+    {"id": "H-PY-03", "title": "How to add tracks, annotations, colors, and labels from Python", "role": "evidence", "surface": "python", "priority": "P2", "capabilities": ["program.comparisons-tracks", "track.depth-numeric", "track.region-annotations", "track.custom-circular-slots", "presentation.feature-colors", "presentation.qualifier-priority", "presentation.label-filters"], "fixtures": ["human-mitochondrion", "depth-1kb", "tobacco-plastome-regions"], "settings": {"snippet_source": "canonical"}, "execution": {"source": "docs/internal/SCENARIO_EVIDENCE.md", "kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["python_tracks_annotations.svg"], "assertions": ["type_validation_passes=true", "track_order_match=true", "labels_match=true"]}, "screenshots": [], "sources": ["docs/REFERENCE/python-api.md"], "status": {"implementation": "verified", "review": "approved"}},
+    {"id": "H-PY-04", "title": "How to use GFF3, in-memory records, and byte output", "role": "evidence", "surface": "python", "priority": "P2", "capabilities": ["input.gff3-fasta", "program.in-memory-records", "program.bytes"], "fixtures": ["lambda-gff3", "human-mitochondrion"], "settings": {"snippet_source": "canonical"}, "execution": {"source": "docs/internal/SCENARIO_EVIDENCE.md", "kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "core", "expected_outputs": ["python_gff3.svg", "python_memory.svg"], "assertions": ["gff3_records_match=true", "seqrecord_input_passes=true", "svg_bytes_signature_match=true"]}, "screenshots": [], "sources": ["docs/REFERENCE/python-api.md", "docs/REFERENCE/input-formats-and-tsv-schemas.md"], "status": {"implementation": "verified", "review": "approved"}},
+    {"id": "H-PY-05", "title": "How to build typed requests and round-trip sessions", "role": "evidence", "surface": "python", "priority": "P2", "capabilities": ["entry.typed-python", "program.typed-requests", "program.session-round-trip"], "fixtures": ["human-mitochondrion"], "settings": {"current_schema_only": true}, "execution": {"source": "docs/internal/SCENARIO_EVIDENCE.md", "kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["typed_request.svg", "typed_request.session.json"], "assertions": ["request_validation_passes=true", "session_round_trip_match=true", "wrong_mode_rejected=true"]}, "screenshots": [], "sources": ["docs/REFERENCE/typed-requests.md", "docs/SESSION_COMPATIBILITY.md"], "status": {"implementation": "verified", "review": "approved"}},
     {"id": "R-WEB-01", "title": "Web app reference", "role": "reference", "surface": "gui", "priority": "P1", "capabilities": ["entry.hosted-gui", "entry.local-gui"], "fixtures": [], "settings": {"source": "web-controls"}, "execution": {"kind": "contract", "path": "tests/test_documentation_reference_contracts.py", "tier": "core", "expected_outputs": [], "assertions": ["controls_match_implementation=true", "defaults_match=true", "limits_match=true"]}, "screenshots": [], "sources": ["docs/DOCS.md", "gbdraw/web/index.html"], "destination": "docs/REFERENCE/web-app.md", "status": {"implementation": "verified", "review": "approved"}},
     {"id": "R-CLI-01", "title": "Command-line reference", "role": "reference", "surface": "cli", "priority": "P1", "capabilities": ["entry.circular-cli", "entry.linear-cli", "entry.local-gui"], "fixtures": [], "settings": {"source": "generated-help"}, "execution": {"kind": "contract", "path": "tests/test_documentation_reference_contracts.py", "tier": "core", "expected_outputs": [], "assertions": ["circular_help_current=true", "linear_help_current=true", "gui_help_current=true"]}, "screenshots": [], "sources": ["docs/CLI_Reference.md"], "destination": "docs/REFERENCE/command-line.md", "status": {"implementation": "verified", "review": "approved"}},
-    {"id": "R-INPUT-01", "title": "Input formats and TSV schemas", "role": "reference", "surface": "cross-surface", "priority": "P1", "capabilities": ["input.genbank-embl-ddbj", "input.gff3-fasta", "input.tsv-manifests"], "fixtures": ["human-mitochondrion", "lambda", "lambda-gff3"], "settings": {"source": "parsers-and-schemas"}, "execution": {"kind": "contract", "path": "tests/test_documentation_reference_contracts.py", "tier": "core", "expected_outputs": [], "assertions": ["schema_columns_match=true", "identity_rules_match=true", "examples_parse=true"]}, "screenshots": [], "sources": ["docs/GFF3_FASTA.md"], "destination": "docs/REFERENCE/input-formats-and-tsv-schemas.md", "status": {"implementation": "verified", "review": "approved"}},
-    {"id": "R-COMPARISON-01", "title": "Comparison programs, thresholds, and result semantics", "role": "reference", "surface": "cross-surface", "priority": "P1", "capabilities": ["comparison.uploaded-tables", "comparison.browser-losatn", "comparison.browser-tlosatx", "comparison.losatp-pairwise", "comparison.losatp-groups", "comparison.losatp-collinear", "comparison.circular-rings"], "fixtures": ["aminoglycoside-bgc-five", "lambda", "de3", "lambda-de3-comparison"], "settings": {"source": "surface-capability-matrix"}, "execution": {"kind": "contract", "path": "tests/test_documentation_reference_contracts.py", "tier": "extended", "expected_outputs": [], "assertions": ["gui_cli_capabilities_match=true", "threshold_defaults_match=true", "result_semantics_match=true"]}, "screenshots": [], "sources": ["docs/WORKFLOW_GUIDE.md"], "destination": "docs/REFERENCE/comparison-programs-thresholds-and-results.md", "status": {"implementation": "verified", "review": "approved"}},
+    {"id": "R-INPUT-01", "title": "Input formats and TSV schemas", "role": "reference", "surface": "cross-surface", "priority": "P1", "capabilities": ["input.genbank-embl-ddbj", "input.gff3-fasta", "input.tsv-manifests"], "fixtures": ["human-mitochondrion", "lambda", "lambda-gff3"], "settings": {"source": "parsers-and-schemas"}, "execution": {"kind": "contract", "path": "tests/test_documentation_reference_contracts.py", "tier": "core", "expected_outputs": [], "assertions": ["schema_columns_match=true", "identity_rules_match=true", "examples_parse=true"]}, "screenshots": [], "sources": ["docs/REFERENCE/input-formats-and-tsv-schemas.md"], "destination": "docs/REFERENCE/input-formats-and-tsv-schemas.md", "status": {"implementation": "verified", "review": "approved"}},
+    {"id": "R-COMPARISON-01", "title": "Comparison programs, thresholds, and result semantics", "role": "reference", "surface": "cross-surface", "priority": "P1", "capabilities": ["comparison.uploaded-tables", "comparison.browser-losatn", "comparison.browser-tlosatx", "comparison.losatp-pairwise", "comparison.losatp-groups", "comparison.losatp-collinear", "comparison.circular-rings"], "fixtures": ["aminoglycoside-bgc-five", "lambda", "de3", "lambda-de3-comparison"], "settings": {"source": "surface-capability-matrix"}, "execution": {"kind": "contract", "path": "tests/test_documentation_reference_contracts.py", "tier": "extended", "expected_outputs": [], "assertions": ["gui_cli_capabilities_match=true", "threshold_defaults_match=true", "result_semantics_match=true"]}, "screenshots": [], "sources": ["docs/FAQ.md"], "destination": "docs/REFERENCE/comparison-programs-thresholds-and-results.md", "status": {"implementation": "verified", "review": "approved"}},
     {"id": "R-PRESENTATION-01", "title": "Palettes, feature rules, labels, shapes, and track renderers", "role": "reference", "surface": "cross-surface", "priority": "P2", "capabilities": ["presentation.palettes", "presentation.feature-colors", "presentation.qualifier-priority", "presentation.label-filters", "presentation.label-overrides", "presentation.visibility", "presentation.shapes", "presentation.strokes", "presentation.overlaps", "layout.track-placement"], "fixtures": ["human-mitochondrion"], "settings": {"source": "tokens-and-precedence"}, "execution": {"kind": "contract", "path": "tests/test_documentation_reference_contracts.py", "tier": "extended", "expected_outputs": [], "assertions": ["tokens_match=true", "precedence_match=true", "defaults_match=true"]}, "screenshots": [], "sources": [], "destination": "docs/REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md", "status": {"implementation": "verified", "review": "approved"}},
-    {"id": "R-PY-01", "title": "Python API reference", "role": "reference", "surface": "python", "priority": "P1", "capabilities": ["entry.simple-python", "program.simple-drawing", "program.in-memory-records", "program.bytes", "program.comparisons-tracks"], "fixtures": ["human-mitochondrion"], "settings": {"source": "public-python-signatures"}, "execution": {"kind": "contract", "path": "tests/test_documentation_reference_contracts.py", "tier": "core", "expected_outputs": [], "assertions": ["signatures_match=true", "accepted_sources_match=true", "returns_and_errors_match=true"]}, "screenshots": [], "sources": ["docs/PYTHON_API.md"], "destination": "docs/REFERENCE/python-api.md", "status": {"implementation": "verified", "review": "approved"}},
-    {"id": "R-TYPED-01", "title": "Typed request reference", "role": "reference", "surface": "python", "priority": "P2", "capabilities": ["entry.typed-python", "program.typed-requests"], "fixtures": [], "settings": {"source": "typed-request-contracts"}, "execution": {"kind": "contract", "path": "tests/test_documentation_reference_contracts.py", "tier": "extended", "expected_outputs": [], "assertions": ["request_types_match=true", "validation_match=true", "resource_planning_match=true"]}, "screenshots": [], "sources": ["docs/TYPED_API.md"], "destination": "docs/REFERENCE/typed-requests.md", "status": {"implementation": "verified", "review": "approved"}},
+    {"id": "R-PY-01", "title": "Python API reference", "role": "reference", "surface": "python", "priority": "P1", "capabilities": ["entry.simple-python", "program.simple-drawing", "program.in-memory-records", "program.bytes", "program.comparisons-tracks"], "fixtures": ["human-mitochondrion"], "settings": {"source": "public-python-signatures"}, "execution": {"kind": "contract", "path": "tests/test_documentation_reference_contracts.py", "tier": "core", "expected_outputs": [], "assertions": ["signatures_match=true", "accepted_sources_match=true", "returns_and_errors_match=true"]}, "screenshots": [], "sources": ["docs/REFERENCE/python-api.md"], "destination": "docs/REFERENCE/python-api.md", "status": {"implementation": "verified", "review": "approved"}},
+    {"id": "R-TYPED-01", "title": "Typed request reference", "role": "reference", "surface": "python", "priority": "P2", "capabilities": ["entry.typed-python", "program.typed-requests"], "fixtures": [], "settings": {"source": "typed-request-contracts"}, "execution": {"kind": "contract", "path": "tests/test_documentation_reference_contracts.py", "tier": "extended", "expected_outputs": [], "assertions": ["request_types_match=true", "validation_match=true", "resource_planning_match=true"]}, "screenshots": [], "sources": ["docs/REFERENCE/typed-requests.md"], "destination": "docs/REFERENCE/typed-requests.md", "status": {"implementation": "verified", "review": "approved"}},
     {"id": "R-SESSION-01", "title": "Session and request compatibility", "role": "reference", "surface": "cross-surface", "priority": "P0", "capabilities": ["interactive.session-save-load", "program.session-round-trip"], "fixtures": ["human-mitochondrion"], "settings": {"source": "implementation-version-constants"}, "execution": {"kind": "contract", "path": "tests/test_documentation_reference_contracts.py", "tier": "core", "expected_outputs": [], "assertions": ["release_notes_version_match=true", "compatibility_reference_match=true", "browser_acceptance_fixture_match=true"]}, "screenshots": [], "sources": ["docs/SESSION_COMPATIBILITY.md", "docs/RELEASE_NOTES_0.14.0b0.md"], "destination": "docs/REFERENCE/session-and-request-compatibility.md", "status": {"implementation": "verified", "review": "approved"}},
-    {"id": "R-OUTPUT-01", "title": "Output format and export reference", "role": "reference", "surface": "cross-surface", "priority": "P1", "capabilities": ["output.static-svg", "output.interactive-svg", "output.png", "output.pdf", "output.eps", "output.ps"], "fixtures": [], "settings": {"source": "export-capability-matrix"}, "execution": {"kind": "contract", "path": "tests/test_documentation_reference_contracts.py", "tier": "core", "expected_outputs": [], "assertions": ["surface_formats_match=true", "optional_dependencies_match=true", "naming_and_overwrite_match=true"]}, "screenshots": [], "sources": ["docs/EXPORT.md", "docs/CLI_Reference.md"], "destination": "docs/REFERENCE/output-formats-and-export.md", "status": {"implementation": "verified", "review": "approved"}},
+    {"id": "R-OUTPUT-01", "title": "Output format and export reference", "role": "reference", "surface": "cross-surface", "priority": "P1", "capabilities": ["output.static-svg", "output.interactive-svg", "output.png", "output.pdf", "output.eps", "output.ps"], "fixtures": [], "settings": {"source": "export-capability-matrix"}, "execution": {"kind": "contract", "path": "tests/test_documentation_reference_contracts.py", "tier": "core", "expected_outputs": [], "assertions": ["surface_formats_match=true", "optional_dependencies_match=true", "naming_and_overwrite_match=true"]}, "screenshots": [], "sources": ["docs/REFERENCE/output-formats-and-export.md", "docs/CLI_Reference.md"], "destination": "docs/REFERENCE/output-formats-and-export.md", "status": {"implementation": "verified", "review": "approved"}},
     {"id": "R-SVG-01", "title": "Interactive SVG and semantic-hook reference", "role": "reference", "surface": "cross-surface", "priority": "P2", "capabilities": ["interactive.preview-search", "interactive.feature-popup", "interactive.match-popup", "interactive.group-popup", "output.interactive-svg"], "fixtures": [], "settings": {"source": "semantic-hooks"}, "execution": {"kind": "contract", "path": "tests/test_documentation_reference_contracts.py", "tier": "extended", "expected_outputs": [], "assertions": ["stable_ids_match=true", "embedded_controls_match=true", "sanitization_contract_match=true"]}, "screenshots": [], "sources": ["docs/SVG_SEMANTIC_HOOKS.md"], "destination": "docs/REFERENCE/interactive-svg-and-semantic-hooks.md", "status": {"implementation": "verified", "review": "approved"}},
     {"id": "A-GALLERY-01", "title": "Gallery", "role": "auxiliary", "surface": "gallery", "priority": "P2", "capabilities": ["layout.circular-multi", "comparison.losatp-groups", "comparison.losatp-collinear", "comparison.circular-rings"], "fixtures": [], "settings": {"reproducible_label_requires_recipe": true}, "execution": {"kind": "contract", "path": "tests/test_gallery_capture_contracts.py", "tier": "nightly", "expected_outputs": [], "assertions": ["reproducible_entries_have_raw_inputs=true", "reproducible_entries_have_capture=true"]}, "screenshots": [], "sources": ["docs/GALLERY.md", "gbdraw/web/gallery/examples.json"], "destination": "docs/GALLERY.md", "status": {"implementation": "verified", "review": "approved"}},
-    {"id": "A-PALETTE-01", "title": "Palette Explorer", "role": "auxiliary", "surface": "gallery", "priority": "P2", "capabilities": ["presentation.palettes", "presentation.feature-colors"], "fixtures": [], "settings": {"source": "palette-tokens"}, "execution": {"kind": "contract", "path": "tests/test_documentation_scenario_contracts.py", "tier": "extended", "expected_outputs": [], "assertions": ["palette_tokens_link_to_reference=true"]}, "screenshots": [], "sources": ["examples/color_palette_examples.md"], "destination": "docs/PALETTE_EXPLORER.md", "status": {"implementation": "verified", "review": "approved"}},
+    {"id": "A-PALETTE-01", "title": "Palette Explorer", "role": "auxiliary", "surface": "gallery", "priority": "P2", "capabilities": ["presentation.palettes", "presentation.feature-colors"], "fixtures": [], "settings": {"source": "palette-tokens"}, "execution": {"kind": "contract", "path": "tests/test_documentation_scenario_contracts.py", "tier": "extended", "expected_outputs": [], "assertions": ["palette_tokens_link_to_reference=true"]}, "screenshots": [], "sources": ["examples/color_palette_examples.md"], "destination": "docs/REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#feature-presentation", "status": {"implementation": "verified", "review": "approved"}},
     {"id": "H-CLI-14", "title": "Rotate a plastome and place a multipart feature", "role": "evidence", "surface": "cli", "priority": "P1", "capabilities": ["presentation.overlaps", "layout.track-placement"], "fixtures": ["tobacco-plastome-regions"], "settings": {"working_directory": "empty", "mode": "circular"}, "execution": {"source": "docs/REFERENCE/command-line.md", "kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "extended", "expected_outputs": ["rotated_placed_chloroplast.svg"], "assertions": ["source_start=5500", "multipart_rps16=outward_lane_1", "tolerance=1", "source_unchanged=true", "cli_python_parity=true"]}, "screenshots": [], "sources": [], "status": {"implementation": "verified", "review": "approved", "review_basis": "Authorized joint integration/docs scope; literal execution and agent visual review recorded in the joint final evidence."}},
     {"id": "H-PY-06", "title": "Rotate a plastome and place a multipart feature", "role": "evidence", "surface": "python", "priority": "P1", "capabilities": ["presentation.overlaps", "layout.track-placement"], "fixtures": ["tobacco-plastome-regions"], "settings": {"working_directory": "empty", "mode": "circular"}, "execution": {"source": "docs/REFERENCE/python-api.md", "kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["rotated_placed_chloroplast.svg"], "assertions": ["source_start=5500", "multipart_rps16=outward_lane_1", "tolerance=1", "source_unchanged=true", "cli_python_parity=true"]}, "screenshots": [], "sources": [], "status": {"implementation": "verified", "review": "approved", "review_basis": "Authorized joint integration/docs scope; literal execution and agent visual review recorded in the joint final evidence."}},
     {"id": "H-GUI-16", "title": "Rotate and place a multipart plastome feature", "role": "evidence", "surface": "gui", "priority": "P1", "capabilities": ["presentation.overlaps", "layout.track-placement"], "fixtures": ["tobacco-plastome-regions"], "settings": {"mode": "circular", "display_start": 5500, "protein_id": "NP_054479.1", "placement": "outward", "tolerance": 1}, "execution": {"kind": "playwright", "path": "docs/capture/flows/how_to/joint_display_placement.py", "tier": "extended", "expected_outputs": [], "assertions": ["real_start_control=5500", "real_placement_control=outward", "source_bound_multipart=true", "session_download=true"]}, "screenshots": [{"path": "docs/images/h-gui-16/01-record-start.png", "reason": "Identify the record and its source-coordinate start.", "alt": "Set tobacco plastome Display start to 5500."}, {"path": "docs/images/h-gui-16/02-feature-placement.png", "reason": "Identify the selected multipart feature and requested lane.", "alt": "Set rps16 Feature placement to Outward lane 1."}], "sources": [], "status": {"implementation": "verified", "review": "approved", "review_basis": "Authorized joint integration/docs scope; literal execution and agent visual review recorded in the joint final evidence."}}

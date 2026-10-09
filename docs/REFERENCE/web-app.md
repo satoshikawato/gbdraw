@@ -1,4 +1,4 @@
-[Documentation home](../DOCS.md) | [Web app Tutorials](../TUTORIALS/GUI/README.md) | [Technical documentation](README.md) | [FAQ](../FAQ.md) | [Gallery](../GALLERY.md)
+[Documentation home](../DOCS.md) | [Tutorials](../TUTORIALS/README.md) | [Technical documentation](README.md) | [FAQ](../FAQ.md) | [Gallery](../GALLERY.md)
 
 # Web app
 
@@ -768,7 +768,7 @@ direction changes reproject existing comparison endpoints without changing
 source search evidence.
 
 Try the optional direction and Reset steps in the
-[five-BGC Tutorial](../TUTORIALS/GUI/compare-proteins-losatp.md#optional-review-directions-and-reset).
+[five-BGC Tutorial](../TUTORIALS/compare-proteins-losatp.md#optional-review-directions-and-reset).
 See [Session compatibility](session-and-request-compatibility.md#similarity-alignment-request-ownership)
 for persistence details. Collinear alignment controls, anchor TSV, scored
 inference, support-count ranking and multi-hop automatic selection are unsupported.
@@ -1183,7 +1183,7 @@ Rotation may split one logical comparison match into several SVG paths. Popups
 and sequence downloads still refer to one source match. Gapped matches are split
 by endpoint interpolation, not by reconstructing their aligned bases.
 
-The following crops use the [annotated chloroplast Tutorial](../TUTORIALS/GUI/build-an-annotated-chloroplast-map.md)
+The following crops use the [annotated chloroplast Tutorial](../TUTORIALS/build-an-annotated-chloroplast-map.md#in-the-web-app)
 with **Separate Strands** off, **Resolve Overlaps** on, display start `5500`
 and tolerance `1`. In the Feature Editor search for `ribosomal protein S16`,
 choose **Edit**, and set **Outward lane 1**. The multipart rps16 CDS keeps its

@@ -48,6 +48,7 @@ if __package__:
         assert_gallery_bgc_definitions,
         assert_exact_workdir_files,
         copy_declared_inputs,
+        executable_source,
         extract_executable_block,
         inspect_standard_svg,
         validate_joint_chloroplast,
@@ -64,6 +65,7 @@ else:
         assert_gallery_bgc_definitions,
         assert_exact_workdir_files,
         copy_declared_inputs,
+        executable_source,
         extract_executable_block,
         inspect_standard_svg,
         validate_joint_chloroplast,
@@ -110,9 +112,7 @@ def run_scenario(
         try:
             os.chdir(workdir)
             with redirect_stdout(output):
-                source_name = chapter["execution"].get(
-                    "source", chapter.get("destination", scenario_id)
-                )
+                source_name = executable_source(chapter) or scenario_id
                 exec(compile(recipe, source_name, "exec"), namespace)
         finally:
             os.chdir(previous_cwd)

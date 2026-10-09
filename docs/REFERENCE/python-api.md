@@ -167,8 +167,8 @@ Catch `gbdraw.exceptions.GbdrawError` for expected gbdraw failures and `Validati
 
 ## Related
 
-- [Draw and save your first genome diagram from Python](../TUTORIALS/PYTHON/first-genome-diagram.md)
-- [Python Tutorials](../TUTORIALS/PYTHON/README.md)
+- [Draw your first genome diagram from Python](../TUTORIALS/first-circular-genome-diagram.md#in-python)
+- [Tutorials](../TUTORIALS/README.md)
 - [Typed request reference](typed-requests.md)
 - [Session and request compatibility](session-and-request-compatibility.md)
 - [Output format and export reference](output-formats-and-export.md)

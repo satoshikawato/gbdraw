@@ -2,34 +2,24 @@
 
 # Quickstart
 
-Choose the interface you want to use. Each guided Tutorial links the exact,
-versioned files to download, shows the filenames and working folder to create,
-and finishes with a generated image and checks for the expected SVG.
+Make your first figure with one of the two first Tutorials. Each page lists
+the files to download, then gives the steps for the web app, the command line,
+and Python. Follow the section for the interface you use.
 
-If this is your first guide, read [Get the tutorial inputs](./GETTING_TUTORIAL_DATA.md)
+- [Draw a labeled circular map of the human mitochondrial genome](./TUTORIALS/first-circular-genome-diagram.md):
+  [web app](./TUTORIALS/first-circular-genome-diagram.md#in-the-web-app),
+  [command line](./TUTORIALS/first-circular-genome-diagram.md#on-the-command-line),
+  or [Python](./TUTORIALS/first-circular-genome-diagram.md#in-python).
+- [Draw a labeled linear map of the Lambda phage genome](./TUTORIALS/first-linear-genome-diagram.md):
+  [web app](./TUTORIALS/first-linear-genome-diagram.md#in-the-web-app),
+  [command line](./TUTORIALS/first-linear-genome-diagram.md#on-the-command-line),
+  or [Python](./TUTORIALS/first-linear-genome-diagram.md#in-python).
+
+If this is your first Tutorial, read [Get the tutorial inputs](./GETTING_TUTORIAL_DATA.md)
 before downloading the inputs. You do not need a source checkout.
 
-## Web app
-
-Use [Create and export your first circular genome diagram](./TUTORIALS/GUI/first-circular-genome-diagram.md)
-if you want to work in the browser without writing commands. The page links
-both input files, shows every control state, and reaches the first preview in
-Step 2.
-
-## Command line
-
-Use [Create a reproducible circular diagram from the command line](./TUTORIALS/CLI/first-circular-genome-diagram.md)
-for browser and command-line download instructions, an exact working-directory
-layout, a copyable command, and the checked result.
-
-## Python
-
-Use [Draw and save your first genome diagram from Python](./TUTORIALS/PYTHON/first-genome-diagram.md)
-to download the inputs, save a complete Python program under the documented
-filename, run it, and compare its output with the generated reference figure.
-
-After your first diagram, choose another [Tutorial](./TUTORIALS/README.md) for a
-complete figure. Use the [FAQ](./FAQ.md) to choose an approach and [Technical
+After your first diagram, choose another [Tutorial](./TUTORIALS/README.md). Use
+the [FAQ](./FAQ.md) to choose an approach and [Technical
 documentation](./REFERENCE/README.md) for exact controls, options, schemas,
 APIs, and output behavior.
 

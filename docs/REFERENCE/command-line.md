@@ -1,4 +1,4 @@
-[Documentation home](../DOCS.md) | [Command-line Tutorials](../TUTORIALS/CLI/README.md) | [Technical documentation](README.md) | [Generated option inventory](../CLI_Reference.md) | [FAQ](../FAQ.md)
+[Documentation home](../DOCS.md) | [Tutorials](../TUTORIALS/README.md) | [Technical documentation](README.md) | [Generated option inventory](../CLI_Reference.md) | [FAQ](../FAQ.md)
 
 # Command line
 
@@ -225,7 +225,7 @@ drawing an empty or flat track or printing a traceback.
 ## Rotate a plastome and place a multipart feature
 
 This example keeps the colors, radial labels, structural-region brackets and GC
-track of the [annotated chloroplast tutorial](../TUTORIALS/CLI/build-an-annotated-chloroplast-map.md).
+track of the [annotated chloroplast tutorial](../TUTORIALS/build-an-annotated-chloroplast-map.md#on-the-command-line).
 Start in an empty directory. Download the complete GenBank record from
 [NCBI NC_001879.2](https://www.ncbi.nlm.nih.gov/nuccore/NC_001879.2), saving it as
 `NC_001879.gbk` (155,943 bp, circular). Obtain the three support tables listed in

@@ -844,6 +844,6 @@ the app reaches a ready state without external network access.
 Related project documentation:
 
 - `CLAUDE.md`
-- `docs/TYPED_API.md`
+- `docs/REFERENCE/typed-requests.md`
 - `docs/SESSION_COMPATIBILITY.md`
 - `docs/SVG_SEMANTIC_HOOKS.md`

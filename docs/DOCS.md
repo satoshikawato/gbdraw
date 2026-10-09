@@ -8,22 +8,19 @@ gbdraw creates publication-quality Circular and Linear genome diagrams in a host
 
 | I want to... | Go to | What you will find |
 | --- | --- | --- |
-| Learn by building a complete figure | [Tutorials](./TUTORIALS/README.md) | Reproducible Circular and Linear projects for the web app, command line, and Python |
-| Look up exact behavior | [Technical documentation](./REFERENCE/README.md) | Controls, options, schemas, APIs, compatibility rules, and output contracts |
-| Choose an approach or solve a common problem | [FAQ](./FAQ.md) | Short answers about layouts, interfaces, comparison methods, privacy, publication, and troubleshooting |
-| Inspect finished figures | [Gallery](./GALLERY.md) | Curated static and interactive examples linked to reproducible Tutorials |
+| Make my first genome diagram | [Draw a labeled circular map](./TUTORIALS/first-circular-genome-diagram.md) or [a labeled linear map](./TUTORIALS/first-linear-genome-diagram.md) | One figure, built step by step in the web app, on the command line, or in Python |
+| Build a complete figure for a specific task | [Tutorials](./TUTORIALS/README.md) | Ten complete figures, from genome comparisons to quantitative tracks and saved sessions |
+| Look up exactly what a control, option, or API does | [Technical documentation](./REFERENCE/README.md) | Controls, options, schemas, APIs, compatibility rules, and output formats |
+| Choose an approach or fix a problem | [FAQ](./FAQ.md) | Short answers about layouts, interfaces, comparison methods, privacy, publication, and troubleshooting |
+| See what gbdraw figures can look like | [Gallery](./GALLERY.md) | Finished static and interactive figures, with links to the Tutorial or settings behind each one |
 
 ## Tutorials
 
-Tutorials begin with named inputs and end with a figure you can check. Begin
-with a first [Circular](./TUTORIALS/GUI/first-circular-genome-diagram.md)
-or [Linear](./TUTORIALS/GUI/first-linear-genome-diagram.md) project, then choose
-another outcome from the full index:
-
-- [All Tutorials](./TUTORIALS/README.md)
-- [Web app Tutorials](./TUTORIALS/GUI/README.md)
-- [Command-line Tutorials](./TUTORIALS/CLI/README.md)
-- [Python Tutorials](./TUTORIALS/PYTHON/README.md)
+Each Tutorial starts from named inputs and ends with a figure you can check.
+One page covers the web app, the command line, and Python. Begin with a first
+[Circular](./TUTORIALS/first-circular-genome-diagram.md) or
+[Linear](./TUTORIALS/first-linear-genome-diagram.md) figure, then choose
+another project from [all Tutorials](./TUTORIALS/README.md).
 
 ## Technical documentation
 
@@ -64,7 +61,7 @@ back to reproducible Tutorials or the relevant technical documentation.
 
 - [Installation](./INSTALL.md)
 - [Get the tutorial inputs](./GETTING_TUTORIAL_DATA.md)
-- [Palette Explorer](./PALETTE_EXPLORER.md)
+- [Palette Explorer](https://gbdraw.app/gallery/palettes/)
 - [About and citation](./ABOUT.md)
 - [0.14.0 release notes](./RELEASE_NOTES_0.14.0.md)
 - [0.14.0b0 beta history](./RELEASE_NOTES_0.14.0b0.md)

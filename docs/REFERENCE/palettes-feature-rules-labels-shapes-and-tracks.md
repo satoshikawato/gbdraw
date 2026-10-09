@@ -1,4 +1,4 @@
-[Documentation home](../DOCS.md) | [Tutorials](../TUTORIALS/README.md) | [Technical documentation](README.md) | [Palette Explorer](../PALETTE_EXPLORER.md) | [FAQ](../FAQ.md)
+[Documentation home](../DOCS.md) | [Tutorials](../TUTORIALS/README.md) | [Technical documentation](README.md) | [Palette Explorer](https://gbdraw.app/gallery/palettes/) | [FAQ](../FAQ.md)
 
 # Palettes, feature rules, labels, shapes, tracks, and layout
 
@@ -211,8 +211,19 @@ the chosen scope; otherwise they remain feature-specific rules. The full
 editor behavior is in [Preview, search, and
 editor](web-app.md#preview-search-and-editor).
 
-The [Palette Explorer](../PALETTE_EXPLORER.md) shows current palette names and
-swatches. The schemas for default-color, specific-color, qualifier-priority,
+The [Palette Explorer](https://gbdraw.app/gallery/palettes/) applies any
+built-in palette to one fixed Circular diagram, so only the colors change. The
+palette tokens and semantic colors come from
+[`gbdraw/data/color_palettes.toml`](../../gbdraw/data/color_palettes.toml), and
+the generated [color palette reference](../../examples/color_palette_examples.md)
+lists every palette with representative Circular and Linear figures.
+
+Palette names describe appearance, not a guaranteed accessibility grade. Check
+contrast against the final background and at final print size. Do not rely on
+color alone for a biological distinction; combine it with labels, order, track
+position, feature shape, stroke, or another redundant cue.
+
+The schemas for default-color, specific-color, qualifier-priority,
 label-filter, label-override, and visibility tables are in [Input formats and
 TSV schemas](input-formats-and-tsv-schemas.md#styling-tables).
 

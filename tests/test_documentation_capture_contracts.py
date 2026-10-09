@@ -34,13 +34,13 @@ RUNNER_PATH = CAPTURE_ROOT / "run_all.py"
 README_PATH = CAPTURE_ROOT / "README.md"
 MANIFEST_PATH = REPO_ROOT / "docs" / "scenarios" / "manifest.json"
 CIRCULAR_TUTORIAL_PATH = (
-    REPO_ROOT / "docs" / "TUTORIALS" / "GUI" / "first-circular-genome-diagram.md"
+    REPO_ROOT / "docs" / "TUTORIALS" / "first-circular-genome-diagram.md"
 )
 LINEAR_TUTORIAL_PATH = (
-    REPO_ROOT / "docs" / "TUTORIALS" / "GUI" / "first-linear-genome-diagram.md"
+    REPO_ROOT / "docs" / "TUTORIALS" / "first-linear-genome-diagram.md"
 )
 GUI_LOSATN_TUTORIAL_PATH = (
-    REPO_ROOT / "docs" / "TUTORIALS" / "GUI" / "compare-genomes-losatn.md"
+    REPO_ROOT / "docs" / "TUTORIALS" / "compare-genomes-losatn.md"
 )
 CIRCULAR_FIXTURE_PATH = (
     REPO_ROOT
@@ -1004,7 +1004,7 @@ def test_t_gui_01_manifest_owns_the_complete_verified_journey() -> None:
         "cds_product_labels_absent=true",
     } <= set(chapter["execution"]["assertions"])
     assert chapter["destination"] == (
-        "docs/TUTORIALS/GUI/first-circular-genome-diagram.md"
+        "docs/TUTORIALS/first-circular-genome-diagram.md#in-the-web-app"
     )
     assert manifest_screenshots == CIRCULAR_SCREENSHOTS
     assert chapter["status"] == {"implementation": "verified", "review": "approved"}
@@ -1027,7 +1027,7 @@ def test_t_gui_02_manifest_owns_the_complete_verified_journey() -> None:
     )
     assert chapter["execution"]["expected_outputs"] == ["lambda_linear.svg"]
     assert chapter["destination"] == (
-        "docs/TUTORIALS/GUI/first-linear-genome-diagram.md"
+        "docs/TUTORIALS/first-linear-genome-diagram.md#in-the-web-app"
     )
     assert manifest_screenshots == LINEAR_SCREENSHOTS
     assert chapter["status"] == {"implementation": "verified", "review": "approved"}
@@ -1116,7 +1116,7 @@ def test_t_gui_03_manifest_owns_the_complete_verified_journey() -> None:
         "download.endpoints_match=true",
     ]
     assert chapter["destination"] == (
-        "docs/TUTORIALS/GUI/compare-genomes-losatn.md"
+        "docs/TUTORIALS/compare-genomes-losatn.md#in-the-web-app"
     )
     assert manifest_screenshots == GUI_LOSATN_SCREENSHOTS
     assert chapter["status"] == {"implementation": "verified", "review": "approved"}
@@ -1125,20 +1125,20 @@ def test_t_gui_03_manifest_owns_the_complete_verified_journey() -> None:
 def test_circular_tutorial_follows_steps_and_defers_related_links() -> None:
     tutorial = CIRCULAR_TUTORIAL_PATH.read_text(encoding="utf-8")
     headings = [
-        "## What you'll need",
-        "## Step 1: Load the NCBI mitochondrial genome",
-        "## Step 2: Generate the first diagram",
-        "## Step 3: Add a publication label",
-        "## Step 4: Make the feature map easier to read",
-        "## Step 5: Export the SVG",
+        "## Before you start",
+        "### Step 1: Load the NCBI mitochondrial genome",
+        "### Step 2: Generate the first diagram",
+        "### Step 3: Add a publication label",
+        "### Step 4: Make the feature map easier to read",
+        "### Step 5: Export the SVG",
         "## Next steps",
     ]
 
     positions = [tutorial.index(heading) for heading in headings]
     assert positions == sorted(positions)
-    assert tutorial.index("04-finished-diagram.png") < positions[0]
+    assert tutorial.index("](../images/t-cli-01/human_mitochondrion.svg)") < positions[0]
     for name, alt in CIRCULAR_SCREENSHOTS.items():
-        image = f"![{alt}](../../images/t-gui-01/{name})"
+        image = f"![{alt}](../images/t-gui-01/{name})"
         assert image in tutorial
 
     for value in (
@@ -1164,19 +1164,19 @@ def test_circular_tutorial_follows_steps_and_defers_related_links() -> None:
 def test_linear_tutorial_shows_the_step_two_result_and_defers_related_links() -> None:
     tutorial = LINEAR_TUTORIAL_PATH.read_text(encoding="utf-8")
     headings = [
-        "## What you'll need",
-        "## Step 1: Load the NCBI Lambda genome",
-        "## Step 2: Generate the first diagram",
-        "## Step 3: Add concise labels and a ruler",
-        "## Step 4: Regenerate and export the SVG",
+        "## Before you start",
+        "### Step 1: Load the NCBI Lambda genome",
+        "### Step 2: Generate the first diagram",
+        "### Step 3: Add concise labels and a ruler",
+        "### Step 4: Regenerate and export the SVG",
         "## Next steps",
     ]
 
     positions = [tutorial.index(heading) for heading in headings]
     assert positions == sorted(positions)
-    assert tutorial.index("04-finished-diagram.png") < positions[0]
+    assert tutorial.index("](../images/t-cli-02/lambda_linear.svg)") < positions[0]
     for name, alt in LINEAR_SCREENSHOTS.items():
-        image = f"![{alt}](../../images/t-gui-02/{name})"
+        image = f"![{alt}](../images/t-gui-02/{name})"
         assert image in tutorial
 
     for value in (
@@ -1198,7 +1198,7 @@ def test_linear_tutorial_shows_the_step_two_result_and_defers_related_links() ->
     next_steps = tutorial.index("## Next steps")
     for related_target in (
         "compare-genomes-losatn.md",
-        "../../REFERENCE/output-formats-and-export.md",
+        "../REFERENCE/output-formats-and-export.md",
     ):
         assert tutorial.index(related_target) > next_steps
         assert (LINEAR_TUTORIAL_PATH.parent / related_target).resolve().is_file()
@@ -1209,20 +1209,20 @@ def test_linear_tutorial_shows_the_step_two_result_and_defers_related_links() ->
 def test_gui_losatn_tutorial_preserves_the_approved_five_step_journey() -> None:
     tutorial = GUI_LOSATN_TUTORIAL_PATH.read_text(encoding="utf-8")
     headings = [
-        "## What you'll need",
-        "## Step 1: Load both complete genomes",
-        "## Step 2: Generate the map without comparison links",
-        "## Step 3: Configure LOSATN",
-        "## Step 4: Run LOSATN and download the evidence",
-        "## Step 5: Inspect one nucleotide match",
+        "## Before you start",
+        "### Step 1: Load both complete genomes",
+        "### Step 2: Generate the map without comparison links",
+        "### Step 3: Configure LOSATN",
+        "### Step 4: Run LOSATN and download the evidence",
+        "### Step 5: Inspect one nucleotide match",
         "## Next steps",
     ]
     positions = [tutorial.index(heading) for heading in headings]
     assert positions == sorted(positions)
-    assert tutorial.index("04-comparison-result.png") < positions[0]
+    assert tutorial.index("](../images/t-cli-07/lambda-de3-losatn.svg)") < positions[0]
 
     for name, alt in GUI_LOSATN_SCREENSHOTS.items():
-        assert f"![{alt}](../../images/t-gui-03/{name})" in tutorial
+        assert f"![{alt}](../images/t-gui-03/{name})" in tutorial
 
     for value in (
         "`NC_001416.1` (48,502 bp)",
@@ -1245,8 +1245,8 @@ def test_gui_losatn_tutorial_preserves_the_approved_five_step_journey() -> None:
 
     next_steps = tutorial.index("## Next steps")
     for related_target in (
-        "../../REFERENCE/output-formats-and-export.md",
-        "../../REFERENCE/input-formats-and-tsv-schemas.md",
+        "../REFERENCE/output-formats-and-export.md",
+        "../REFERENCE/input-formats-and-tsv-schemas.md",
     ):
         assert tutorial.index(related_target) > next_steps
         assert (GUI_LOSATN_TUTORIAL_PATH.parent / related_target).resolve().is_file()

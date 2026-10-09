@@ -1,4 +1,4 @@
-[Home](./DOCS.md) | [Current compatibility reference](./REFERENCE/session-and-request-compatibility.md) | [CLI inventory](./CLI_Reference.md) | [Python API](./PYTHON_API.md) | [Typed API](./TYPED_API.md) | **Compatibility history**
+[Home](./DOCS.md) | [Current compatibility reference](./REFERENCE/session-and-request-compatibility.md) | [CLI inventory](./CLI_Reference.md) | [Python API](./REFERENCE/python-api.md) | [Typed API](./REFERENCE/typed-requests.md) | **Compatibility history**
 
 # Session and request compatibility history
 
@@ -599,7 +599,7 @@ Do not retain a decoded resource path after the `with` block ends. Use
 `with_request_output()` inside the same context when replay needs a different
 prefix, output directory, format, or overwrite policy.
 
-[Home](./DOCS.md) | [Current compatibility reference](./REFERENCE/session-and-request-compatibility.md) | [CLI inventory](./CLI_Reference.md) | [Python API](./PYTHON_API.md) | [Typed API](./TYPED_API.md) | **Compatibility history**
+[Home](./DOCS.md) | [Current compatibility reference](./REFERENCE/session-and-request-compatibility.md) | [CLI inventory](./CLI_Reference.md) | [Python API](./REFERENCE/python-api.md) | [Typed API](./REFERENCE/typed-requests.md) | **Compatibility history**
 
 ## Session 41 and request schema 7
 

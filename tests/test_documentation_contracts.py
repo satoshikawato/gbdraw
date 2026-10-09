@@ -28,9 +28,7 @@ CURRENT_TASK_DOCS = (
     "docs/CLI_Reference.md",
     "docs/FAQ.md",
     "docs/REFERENCE/web-app.md",
-    "docs/TUTORIALS/GUI/create-and-resume-an-interactive-figure.md",
-    "docs/TUTORIALS/CLI/create-and-resume-an-interactive-figure.md",
-    "docs/TUTORIALS/PYTHON/create-and-resume-an-interactive-figure.md",
+    "docs/TUTORIALS/create-and-resume-an-interactive-figure.md",
 )
 
 
