@@ -267,7 +267,9 @@ test('Linear comparison keeps both legend orientations and their swatches canoni
 
 
 for (const width of [1440, 390]) {
-  test(`loaded default caption recolors its complete group atomically (${width}px)`, async ({ browser }, info) => {
+  // D-15: "Apply to all" on the loaded tRNA palette row sets the tRNA default
+  // color, so the whole row, hidden features included, takes it at once.
+  test(`loaded palette row takes its new default color atomically (${width}px)`, async ({ browser }, info) => {
     test.setTimeout(180000);
     const page = await load(browser, 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', { width, height: 1000 });
     let fresh;
@@ -310,6 +312,8 @@ for (const width of [1440, 390]) {
       await expect(page.locator('[data-generation-application-feedback]')).toHaveCount(0);
       const live = await inspect(page);
       expect(live.result.find(entry => entry.caption === 'tRNA')?.color).toBe('#c026d3');
+      expect(live.rules.filter(rule => rule.feat === 'tRNA')).toEqual([]);
+      expect(await page.evaluate(() => window.__GBDRAW_APP__.currentColors.tRNA)).toBe('#c026d3');
       await history(page, 'Undo');
       expect((await evidence()).mounted).toEqual(before.mounted);
       expect((await evidence()).result).toEqual(before.result);

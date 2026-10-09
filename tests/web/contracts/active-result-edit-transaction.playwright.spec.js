@@ -148,6 +148,7 @@ test.describe('active Result Feature fill transaction', () => {
           rule.feat === caption && String(rule.cap || '') === caption
         ))),
         legendOverride: String(state.activeDrawing().legendColorOverrides[caption] || '').toLowerCase(),
+        defaultColor: String(state.activeDrawing().currentColors.value[caption] || '').toLowerCase(),
         legendEntryColor: String(
           app.legendEntries.find((entry) => entry.caption === caption)?.color || ''
         ).toLowerCase()
@@ -178,20 +179,15 @@ test.describe('active Result Feature fill transaction', () => {
     expect(state.feedback).toBeNull();
   };
 
+  // D-15: "Apply to all" on the tRNA palette row (no Specific color rule draws
+  // it) sets the tRNA default color; it writes no rule and no per-feature edit.
   const expectAcceptedCanonicalState = (state, inventory) => {
     for (const { key } of inventory.targets) {
-      expect(state.canonical.targetOverrides[key]).toEqual({
-        color: AFTER_COLOR,
-        caption: TARGET_CAPTION
-      });
+      expect(state.canonical.targetOverrides[key]).toBeNull();
     }
-    expect(state.canonical.targetRules).toHaveLength(inventory.targets.length);
-    expect(state.canonical.targetRules.every((rule) => (
-      String(rule.qual || '').toLowerCase() === 'hash'
-      && String(rule.color || '').toLowerCase() === AFTER_COLOR
-      && rule.cap === TARGET_CAPTION
-    ))).toBe(true);
-    expect(state.canonical.legendOverride).toBe(AFTER_COLOR);
+    expect(state.canonical.targetRules).toEqual([]);
+    expect(state.canonical.legendOverride).toBe('');
+    expect(state.canonical.defaultColor).toBe(AFTER_COLOR);
   };
 
   const inspectSvgText = (page, svgText, inventory) => page.evaluate(
@@ -253,6 +249,7 @@ test.describe('active Result Feature fill transaction', () => {
     expect(before.canonical.targetRules).toEqual([]);
     expect(Object.values(before.canonical.targetOverrides).every((value) => value === null))
       .toBe(true);
+    expect(before.canonical.defaultColor).toBe(BEFORE_COLOR);
 
     await page.locator('.drawer-toggle').click();
     const drawer = page.locator('.right-drawer');
@@ -311,6 +308,7 @@ test.describe('active Result Feature fill transaction', () => {
     expect(Object.values(undone.canonical.targetOverrides).every((value) => value === null))
       .toBe(true);
     expect(undone.canonical.legendOverride).toBe('');
+    expect(undone.canonical.defaultColor).toBe(BEFORE_COLOR);
 
     await page.getByRole('button', { name: 'Redo', exact: true }).click();
     await expect.poll(
@@ -334,21 +332,13 @@ test.describe('active Result Feature fill transaction', () => {
       version: CURRENT_SESSION_VERSION,
       renderRequest: { schema: CURRENT_REQUEST_SCHEMA }
     });
-    expect(savedSlice).toMatchObject({
-      editorState: {
-        legend: { colorOverrides: { [TARGET_CAPTION]: AFTER_COLOR } }
-      }
-    });
+    expect(String(savedSlice.config.colors[TARGET_CAPTION]).toLowerCase()).toBe(AFTER_COLOR);
+    expect(savedSlice.editorState?.legend?.colorOverrides?.[TARGET_CAPTION]).toBeUndefined();
     for (const { key } of inventory.targets) {
-      expect(savedSlice.features.featureColorOverrides[key]).toEqual({
-        color: AFTER_COLOR,
-        caption: TARGET_CAPTION
-      });
+      expect(savedSlice.features.featureColorOverrides?.[key]).toBeUndefined();
     }
-    const savedRules = savedSlice.config.rules.filter((rule) => (
-      rule.feat === TARGET_CAPTION && rule.cap === TARGET_CAPTION
-    ));
-    expect(savedRules).toHaveLength(inventory.targets.length);
+    const savedRules = savedSlice.config.rules.filter((rule) => rule.feat === TARGET_CAPTION);
+    expect(savedRules).toEqual([]);
     expect(savedSession.results[savedSession.ui.selectedResultIndex].content)
       .toContain(AFTER_COLOR);
     await assertNoUnexpectedErrors(page, initialDiagnostics);
