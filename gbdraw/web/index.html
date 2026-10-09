@@ -7794,10 +7794,6 @@
     <div v-if="error" role="alert" class="text-red-600">{{ error }}</div>
     <div>Current start: {{ draft.startCoordinate != null && surface.startEnabled ? draft.startCoordinate : surface.currentStart }}</div>
     <div v-if="!surface.startEnabled" class="text-slate-500">{{ surface.disabledReason }}</div>
-    <div class="flex flex-wrap gap-1">
-      <button data-history-managed type="button" :disabled="!controlAvailable || !controller.shortcutState(row, 'five-prime').enabled" :title="controller.shortcutState(row, 'five-prime').reason" @click="controller.applyShortcut(row, 'five-prime')" class="text-blue-600 disabled:opacity-40">Use selected feature 5′ end</button>
-      <button data-history-managed type="button" :disabled="!controlAvailable || !controller.shortcutState(row, 'midpoint').enabled" :title="controller.shortcutState(row, 'midpoint').reason" @click="controller.applyShortcut(row, 'midpoint')" class="text-blue-600 disabled:opacity-40">Use selected feature midpoint</button>
-    </div>
     <button data-history-managed type="button" :disabled="!controlAvailable" @click="controller.resetStart(row)" class="text-blue-600">Reset start</button>
   </div>
 </script>

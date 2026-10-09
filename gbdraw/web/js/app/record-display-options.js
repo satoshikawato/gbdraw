@@ -10,7 +10,6 @@ import {
   requireReverseComplementOverride,
   validateAnchorIntent
 } from '../services/record-display-model.js';
-import { resolveFeatureAnchor } from './record-display/feature-anchor.js';
 import { matchesSessionResourceDescriptor } from '../services/session-resource-backing.js';
 import { cloneJsonData } from '../services/json-clone.js';
 import { featureIdentityKey, requestFeaturePlacements } from '../services/feature-placement.js';
@@ -236,20 +235,6 @@ export const createRecordDisplayControls = ({
     });
   };
   watch([() => state.featureCatalog.value, () => state.processing?.value, allRows], refreshCommittedRows, { flush: 'post' });
-  const shortcutState = (row, shortcut) => {
-    refreshCommittedRows();
-    if (!surfaceFor(row).startEnabled) return { enabled: false, reason: surfaceFor(row).disabledReason };
-    try {
-      const selectedFeatures = state.selectedFeatures.value;
-      if (selectedFeatures.length !== 1) {
-        throw new Error('Select one feature bound to the current source record.');
-      }
-      const start = selectedFeatureDisplayStart({ row,
-        committedRow: committedRows.find((entry) => entry.key === row.key && entry.paired === row.paired),
-        feature: selectedFeatures[0], shortcut });
-      return { enabled: true, start, reason: '' };
-    } catch (error) { return { enabled: false, reason: error.message }; }
-  };
   watch(() => sources.value.map(({ scope, sourceUid, source, paired }) => ({ scope, sourceUid, source, paired })),
     (current, previous = []) => {
       if (state.semanticFileWatchersSuppressed?.value || state.sessionImportRollbackInProgress?.value) return;
@@ -404,15 +389,7 @@ export const createRecordDisplayControls = ({
       drawing.recordDisplayDrafts.splice(insertAt, 0, cloneJsonData(checkpoint.draft));
     }
   };
-  return { rows, allRows, draftFor, surfaceFor, shortcutState, hasPendingChanges,
-    applyShortcut: (row, shortcut) => {
-      const drawing = state.activeDrawing();
-      const busy = state.sessionOperationAvailability?.();
-      if (busy) return busy;
-      const result = shortcutState(row, shortcut);
-      if (!result.enabled) throw new Error(result.reason);
-      return edit(drawing, row, { startCoordinate: result.start }, 'Use selected feature for record display start');
-    },
+  return { rows, allRows, draftFor, surfaceFor, hasPendingChanges,
     // The data of isCurrentFeature (services/feature-identity.js), refreshed
     // for the committed request before it is read (R13).
     sourceBinding: () => {
@@ -452,30 +429,4 @@ export const createRecordDisplayControls = ({
     captureTargetDraft,
     restoreTargetDraft,
     targetForFeature };
-};
-
-export const selectedFeatureDisplayStart = ({ row, committedRow, feature, shortcut }) => {
-  if (!committedRow || recordDisplayKey(row) !== recordDisplayKey(committedRow)
-    || !row.source || row.source !== committedRow.source
-    || row.recordLength !== committedRow.recordLength || !committedRow.recordKey) {
-    throw new Error('Select one feature bound to the current source record.');
-  }
-  if (feature?.record_key !== committedRow.recordKey) throw new Error('Selected feature belongs to another record.');
-  const parts = feature.location_parts;
-  if (!['five-prime', 'midpoint'].includes(shortcut)) throw new Error('Unknown feature shortcut.');
-  const result = resolveFeatureAnchor({
-    recordLength: row.recordLength,
-    effectiveCircular: true,
-    cropped: false,
-    currentReverseComplement: false,
-    identity: {
-      recordKey: committedRow.recordKey,
-      biologicalFeatureId: feature.biological_feature_id
-    },
-    parts,
-    profile: feature.anchorProfile,
-    intent: { placement: 'anchor', anchor: shortcut, offsetBp: 0, orientForward: false }
-  });
-  if (!result.eligibility.enabled) throw new Error(result.eligibility.message);
-  return result.startCoordinate;
 };

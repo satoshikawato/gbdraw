@@ -53,6 +53,24 @@ test('plus and minus anchors use covered biological traversal', () => {
   assert.equal(coordinate({ strand: '-', intent: { anchor: 'three-prime' } }), 11);
 });
 
+// The 5' base and the midpoint follow the covered bases in biological order,
+// across gaps and the origin.
+for (const strand of ['+', '-']) {
+  for (const spans of [[[0, 1]], [[99, 100]], [[10, 14]], [[90, 100], [0, 5]], [[10, 13], [40, 43]]]) {
+    test(`covered-base oracle ${strand} ${JSON.stringify(spans)}`, () => {
+      const ordered = strand === '-' ? [...spans].reverse() : spans;
+      const bases = ordered.flatMap(([start, end]) => {
+        const sequence = Array.from({ length: end - start }, (_, i) => start + i + 1);
+        return strand === '-' ? sequence.reverse() : sequence;
+      });
+      const parts = ordered.map(([start, end]) => ({ start, end, strand }));
+      assert.equal(coordinate({ strand, parts }), bases[0]);
+      assert.equal(coordinate({ strand, parts, intent: { anchor: 'midpoint' } }),
+        bases[Math.floor((bases.length - 1) / 2)]);
+    });
+  }
+}
+
 test('signed strand-relative offsets wrap in both directions', () => {
   assert.equal(coordinate({ intent: { offsetBp: 95 } }), 6);
   assert.equal(coordinate({ intent: { offsetBp: -12 } }), 99);

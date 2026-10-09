@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as featureUtils from '../../gbdraw/web/js/services/feature-utils.js';
-import { runFeatureSearch } from '../../gbdraw/web/js/app/feature-search/search-core.js';
+import { formatSearchMatchLine, runFeatureSearch } from '../../gbdraw/web/js/app/feature-search/search-core.js';
 import { buildMatchPopupPayload } from '../../gbdraw/web/js/app/pairwise-match-popup.js';
 import { STANDALONE_INTERACTIVE_SCRIPT } from '../../gbdraw/web/js/services/standalone-interactivity-assets.js';
 import {
@@ -194,6 +194,29 @@ test('Interactive SVG search and location text match the app', () => {
       assert.equal(embedded.locationText(feature), location);
       assert.equal(embedded.featureLengthText(feature), length);
     }
+  }
+});
+
+// OV-211: the active match names its record, in the app and the Interactive SVG.
+test('the match line names the record of the active match', () => {
+  const embeddedLine = new Function(`
+    ${embeddedFunction('collapseWhitespace')}
+    ${embeddedFunction('searchMatchSnippet')}
+    ${embeddedFunction('formatSearchMatchDetail')}
+    ${embeddedFunction('formatSearchMatchLine')}
+    return formatSearchMatchLine;
+  `)();
+  const gene = { label: 'Qualifier gene', value: 'dnaA', match: 'dnaA' };
+  const product = { label: 'Product', value: 'chromosomal replication initiator protein DnaA', match: 'DnaA' };
+  for (const [feature, details, expected] of [
+    [{ record_id: 'NC_022349.1' }, [gene], 'Record NC_022349.1 · Matched Qualifier gene: dnaA'],
+    [{ record_id: 'NC_022349.1' }, [product, gene], 'Record NC_022349.1 · Matched Product: ...ation initiator protein DnaA'],
+    [{ record_id: '' }, [gene], 'Matched Qualifier gene: dnaA'],
+    [null, [gene], 'Matched Qualifier gene: dnaA'],
+    [{ record_id: 'NC_022349.1' }, [], '']
+  ]) {
+    assert.equal(formatSearchMatchLine(feature, details), expected);
+    assert.equal(embeddedLine(feature, details), expected);
   }
 });
 

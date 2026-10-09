@@ -268,7 +268,7 @@ for (const mode of ['circular', 'linear']) {
 }
 
 for (const mode of ['circular', 'linear']) {
-  test(`${mode} real shortcuts topology reset bulk placement and Auto history`, async ({ page }, testInfo) => {
+  test(`${mode} real topology reset bulk placement and Auto history`, async ({ page }, testInfo) => {
     test.setTimeout(180000);
     await openApp(page);
     if (mode === 'linear') await page.getByRole('button', { name: 'Linear', exact: true }).click();
@@ -304,13 +304,8 @@ for (const mode of ['circular', 'linear']) {
     const bodies = features.map((feature) => page.locator(`[data-gbdraw-feature-id="${feature.id}"]`).first());
     await selectPaintedFeature(page, bodies[0]);
     await expect(page.getByLabel('Selected feature count')).toContainText('1 selected');
-    await page.getByRole('button', { name: 'Use selected feature 5′ end', exact: true }).click();
-    await expect(start).toHaveValue('21');
-    await page.getByRole('button', { name: 'Use selected feature midpoint', exact: true }).click();
-    await expect(start).toHaveValue('63');
     await selectPaintedFeature(page, bodies[1]);
     await expect(page.getByLabel('Selected feature count')).toContainText('2 selected');
-    await expect(page.getByRole('button', { name: 'Use selected feature midpoint', exact: true })).toBeDisabled();
     const bulk = page.getByRole('combobox', { name: 'Selected feature placements', exact: true });
     await bulk.selectOption(mode === 'circular' ? 'outward' : 'above');
     await expect.poll(() => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.activeDrawing().featurePlacementOverrides).length)).toBe(2);
@@ -327,7 +322,7 @@ for (const mode of ['circular', 'linear']) {
         `[data-gbdraw-rendered-feature-id="${id}"], [data-gbdraw-feature-id="${id}"]:not([data-gbdraw-rendered-feature-id])`
       ).first()).toBeVisible();
     }
-    await page.screenshot({ path: testInfo.outputPath('shortcuts-bulk.png'), fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath('topology-bulk.png'), fullPage: true });
   });
 }
 

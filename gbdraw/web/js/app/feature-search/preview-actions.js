@@ -2,7 +2,7 @@
 /** @import { DrawingState } from '../../state.js' */
 import {
   buildFeatureSearchIndex,
-  formatSearchMatchDetail,
+  formatSearchMatchLine,
   getFeatureSearchFieldOptions,
   isRichFeatureSearchField,
   normalizeFeatureSearchField,
@@ -169,8 +169,7 @@ export const createPreviewFeatureSearch = ({
   const previewFeatureSearchActiveDetail = computed(() => {
     const activeId = getActiveMatchId();
     const details = activeId ? previewFeatureSearchMatchDetails.value?.[activeId] || [] : [];
-    const detailText = details.length ? formatSearchMatchDetail(details[0]) : '';
-    return detailText ? `Matched ${detailText}` : '';
+    return formatSearchMatchLine(getActiveMatchFeature(), details);
   });
 
   const clearPreviewClasses = () => {
