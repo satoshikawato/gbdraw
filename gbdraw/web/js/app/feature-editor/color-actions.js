@@ -1069,7 +1069,7 @@ export const createFeatureColorActions = ({
   /**
    * @param {DrawingState} drawing
    * @param {string} caption
-   * @param {Record<string, any>[]} features The row's features.
+   * @param {ReadonlyArray<{ type?: unknown }>} features The row's features.
    * @returns {string | null}
    */
   const paletteRowType = (drawing, caption, features) => {
