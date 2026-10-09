@@ -6442,6 +6442,7 @@
                                     <template v-else>
                                         Sets the {{ featureStyleScopeDialog.defaultColorType }} default color (all {{ featureStyleScopeDialog.defaultColorType }} features, also hidden ones).
                                     </template>
+                                    <template v-if="hasPendingPaletteDraft">Applies now, also over the queued palette.</template>
                                 </p>
 
                                 <!-- Apply to this feature only -->
@@ -6572,7 +6573,7 @@
                          @cancel="handlePaletteColorsChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
                             <h3 id="palette-colors-title" class="text-lg font-bold text-slate-800 mb-2">
-                                {{ paletteColorsDialog.kind === 'reset' ? 'Reset default colors' : 'Change palette' }}
+                                {{ paletteColorsDialog.kind === 'reset' ? 'Reset default colors' : `Change palette to "${paletteColorsDialog.toPalette}"` }}
                             </h3>
                             <p id="palette-colors-description" class="text-sm text-slate-600 mb-4">
                                 <template v-if="paletteColorsDialog.kind === 'reset'">
@@ -6581,6 +6582,7 @@
                                 </template>
                                 <template v-else>
                                     You changed {{ paletteColorsDialog.count }} default {{ paletteColorsDialog.count === 1 ? 'color' : 'colors' }} from the "<span class="font-bold text-blue-600">{{ paletteColorsDialog.fromPalette }}</span>" palette ({{ paletteColorsDialog.keysText }}).
+                                    <template v-if="paletteColorsDialog.droppedPalette">The queued "{{ paletteColorsDialog.droppedPalette }}" palette is dropped and the colors apply now.</template>
                                 </template>
                             </p>
 

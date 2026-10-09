@@ -6,7 +6,7 @@
 const { test, expect } = require('@playwright/test');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { expectLiveEqualsGenerate, settleLive } = require('./helpers/live-generate-parity.cjs');
-const { open, popupEdit } = require('./helpers/live-generate-parity-steps.cjs');
+const { open } = require('./helpers/live-generate-parity-steps.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -52,10 +52,13 @@ test('a palette switch keeps a user default color after asking; Cancel changes n
   const next = await page.evaluate(() => window.__GBDRAW_APP__.paletteNames.find((name) => (
     name !== window.__GBDRAW_APP__.selectedPalette
   )));
-  const dialog = page.getByRole('dialog', { name: 'Change palette' });
+  // D-24: the dialog names both palettes.
+  const dialog = page.getByRole('dialog', { name: `Change palette to "${next}"`, exact: true });
 
   await select.selectOption(next);
   await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText(`from the "${before.palette}" palette`);
+  await expect(dialog).not.toContainText('is dropped');
   await expect(select).toHaveValue(before.palette);
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(dialog).toHaveCount(0);
@@ -153,13 +156,30 @@ test('while a palette is queued, Apply to all shows its color now and switching 
   });
   expect((await queued()).pending).toBe(next);
 
-  await popupEdit(page, 'FL1', { fill: USER_CDS, scope: 'caption' });
+  // D-24: the scope dialog's default-color line says the color applies now.
+  await evaluateWithRetainedPromise(page, async (color) => {
+    const app = window.__GBDRAW_APP__;
+    await app.openFeatureEditorFromList(app.filteredFeatures.find((item) => item.locus_tag === 'FL1'), null);
+    await window.Vue.nextTick();
+    await app.updateClickedFeatureColor(color);
+  }, USER_CDS);
+  const line = page.locator('[data-default-color-scope-line]');
+  await expect(line).toContainText('Sets the CDS default color');
+  await expect(line).toContainText('Applies now, also over the queued palette.');
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.handleFeatureStyleScopeChoice('caption');
+    app.clickedFeature = null;
+  });
+  await settleLive(page);
   expect(await queued()).toEqual({ pending: next, applied: USER_CDS, queuedCds: USER_CDS, cds: USER_CDS, rules: 0 });
   await expect.poll(() => legendRowColor(page, 'CDS')).toBe(USER_CDS);
 
-  const dialog = page.getByRole('dialog', { name: 'Change palette' });
+  const dialog = page.getByRole('dialog', { name: `Change palette to "${applied}"`, exact: true });
   await select.selectOption(applied);
   await expect(dialog).toBeVisible();
+  // D-24: switching back drops the queued palette, and the colors apply now.
+  await expect(dialog).toContainText(`The queued "${next}" palette is dropped and the colors apply now.`);
   await dialog.getByRole('button', { name: 'Keep my 1 color', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await expect(select).toHaveValue(applied);

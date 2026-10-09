@@ -470,8 +470,9 @@ const featureStyleScopeDialog = reactive({
  * @property {'switch' | 'reset'} kind
  * @property {string} fromPalette
  * @property {string} toPalette
+ * @property {string} droppedPalette The queued palette a switch back to the applied one drops, or ''.
  * @property {number} count The number of user default colors.
- * @property {string} keysText Their keys, for the dialog body (empty for Q6 B).
+ * @property {string} keysText Their keys, for the dialog body.
  */
 /** @type {PaletteColorsDialog} */
 const paletteColorsDialog = reactive({
@@ -479,6 +480,7 @@ const paletteColorsDialog = reactive({
   kind: 'switch',
   fromPalette: '',
   toPalette: '',
+  droppedPalette: '',
   count: 0,
   keysText: ''
 });

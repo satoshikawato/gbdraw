@@ -26,7 +26,9 @@ const setup = ({ colors = editedColors(), instant = true } = {}) => {
   const drawing = {
     selectedPalette: ref('default'), currentColors: ref(colors), pendingPaletteName: ref(''), pendingPaletteColors: ref({})
   };
-  const paletteColorsDialog = { show: false, kind: 'switch', fromPalette: '', toPalette: '', count: 0, keysText: '' };
+  const paletteColorsDialog = {
+    show: false, kind: 'switch', fromPalette: '', toPalette: '', droppedPalette: '', count: 0, keysText: ''
+  };
   const state = {
     paletteDefinitions: ref(PALETTES), paletteInstantPreviewEnabled: ref(instant), appliedPaletteName: ref('default'),
     appliedPaletteColors: ref({ ...colors }), activeDrawing: () => drawing, paletteColorsDialog
@@ -67,7 +69,7 @@ test('a palette switch with user colors opens the dialog and changes nothing unt
   manager.requestPaletteChange({ target: select });
   assert.equal(select.value, 'default');
   assert.deepEqual({ ...paletteColorsDialog }, {
-    show: true, kind: 'switch', fromPalette: 'default', toPalette: 'forest', count: 3,
+    show: true, kind: 'switch', fromPalette: 'default', toPalette: 'forest', droppedPalette: '', count: 3,
     keysText: 'tRNA, misc_feature, and gc_content'
   });
   assert.equal(drawing.selectedPalette.value, 'default');
@@ -139,7 +141,8 @@ test('switching back to the applied palette while one is queued asks like any sw
   const steps = history.getUndoCount();
   manager.selectPalette('default');
   assert.deepEqual({ ...paletteColorsDialog }, {
-    show: true, kind: 'switch', fromPalette: 'forest', toPalette: 'default', count: 1, keysText: 'tRNA'
+    show: true, kind: 'switch', fromPalette: 'forest', toPalette: 'default', droppedPalette: 'forest', count: 1,
+    keysText: 'tRNA'
   });
   assert.equal(drawing.selectedPalette.value, 'forest');
   await choose('keep');
@@ -167,7 +170,7 @@ test('Default colors Reset with user colors asks first; Reset discards them as o
   const { drawing, manager, history, choose, paletteColorsDialog } = setup();
   manager.requestResetColors();
   assert.deepEqual({ ...paletteColorsDialog }, {
-    show: true, kind: 'reset', fromPalette: 'default', toPalette: 'default', count: 3,
+    show: true, kind: 'reset', fromPalette: 'default', toPalette: 'default', droppedPalette: '', count: 3,
     keysText: 'tRNA, misc_feature, and gc_content'
   });
   assert.equal(drawing.currentColors.value.tRNA, '#333333');

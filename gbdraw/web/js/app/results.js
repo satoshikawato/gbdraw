@@ -121,14 +121,17 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
    * @param {string} toPalette
    */
   const openPaletteColorsDialog = (kind, drawing, rows, toPalette) => {
+    // Switching back to the applied palette drops the queued one (Q5 A, D-24).
+    const queued = String(drawing.pendingPaletteName.value || '').trim();
     Object.assign(paletteColorsDialog, {
-      show: true, kind, fromPalette: paletteNameOf(drawing), toPalette, count: rows.length,
-      keysText: describeKeys(rows.map(([key]) => key))
+      show: true, kind, fromPalette: paletteNameOf(drawing), toPalette,
+      droppedPalette: kind === 'switch' && queued && toPalette === appliedPaletteName.value ? queued : '',
+      count: rows.length, keysText: describeKeys(rows.map(([key]) => key))
     });
   };
   const closePaletteColorsDialog = () => closeAfterDialogChoice(() => {
     Object.assign(paletteColorsDialog, {
-      show: false, kind: 'switch', fromPalette: '', toPalette: '', count: 0, keysText: ''
+      show: false, kind: 'switch', fromPalette: '', toPalette: '', droppedPalette: '', count: 0, keysText: ''
     });
   });
 
