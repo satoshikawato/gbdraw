@@ -104,6 +104,51 @@ for (const mode of ['circular', 'linear']) for (const width of [1600, 390]) {
   });
 }
 
+// OV-251: a root update that leaves the rules unchanged (a dialog opening or
+// closing) renders no rule row; a rule edit renders the rows it changes.
+test('a root update renders no Specific color rule row; a rule edit does', async ({ page }) => {
+  test.setTimeout(180000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await setup(page);
+  await page.evaluate(async () => {
+    const a = window.__GBDRAW_APP__;
+    Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'gene', val: 'ND1', color: '#123456', cap: '' });
+    await a.addSpecificRule();
+  });
+  await expect(page.locator('[data-color-rule-row]')).toHaveCount(2);
+  const count = () => page.evaluate(() => window.__ruleRowRenders);
+  await page.evaluate(() => {
+    // Renders of the root and of the component that renders the rule rows.
+    const counted = (instance, keys) => {
+      const run = instance.effect.fn;
+      instance.effect.fn = function counting(...args) {
+        keys.forEach(key => { window.__ruleRowRenders[key] += 1; });
+        return run.apply(this, args);
+      };
+    };
+    window.__ruleRowRenders = { root: 0, rows: 0 };
+    const root = document.querySelector('#app').__vue_app__._instance;
+    const rows = document.querySelector('[data-color-rule-row]').__vueParentComponent;
+    if (rows === root) counted(root, ['root', 'rows']);
+    else { counted(root, ['root']); counted(rows, ['rows']); }
+  });
+  for (const show of [true, false]) {
+    await page.evaluate(async value => {
+      window.__GBDRAW_APP__.featureStyleScopeDialog.show = value;
+      await window.Vue.nextTick();
+    }, show);
+  }
+  const afterDialog = await count();
+  expect(afterDialog.root).toBeGreaterThan(0);
+  expect(afterDialog).toEqual({ root: afterDialog.root, rows: 0 });
+  await page.getByLabel('Color rule 2 color', { exact: true }).fill('#00ff00');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules[1].color)).toBe('#00ff00');
+  await expect(page.getByLabel('Color rule 2 color', { exact: true })).toHaveValue('#00ff00');
+  expect((await count()).rows).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});
+
 test('native runtime initialization and transport preparation failures retain their field drafts; Retry succeeds atomically', async ({ page }) => {
   test.setTimeout(180000); page.on('dialog', d => d.accept());
   await openApp(page); await load(page, fixture('circular'));

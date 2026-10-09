@@ -3981,36 +3981,10 @@
 
                                 <p role="status" aria-live="polite" aria-atomic="true" class="mb-2 text-[10px] text-slate-600 break-words">{{ specificRuleNotice }}</p>
                                 <p v-if="manualSpecificRules.length > 1" data-specific-rule-order-hint class="mb-2 text-[10px] text-slate-500 break-words">When rules overlap, the first matching row for one qualifier key wins, so Move rule up/down changes the result only between rules with the same qualifier key. Rules with different qualifier keys are tried in the order the keys appear on the feature, whatever the row order.</p>
-                                <div class="space-y-1 mb-3">
-                                    <div v-for="(rule, i) in manualSpecificRules" :key="specificRulePatternFieldId(rule)" data-color-rule-row class="bg-white p-1.5 rounded border border-slate-200 text-[10px] space-y-1">
-                                        <div class="grid grid-cols-12 gap-1 items-center">
-                                            <select :value="rule.feat" @change="setSpecificRuleField(i, 'feat', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} feature type`" class="form-input form-input-compact col-span-4" :disabled="!semanticMutationAvailable">
-                                                <option v-for="k in featureKeys" :value="k">{{ k }}</option>
-                                            </select>
-                                            <input :value="rule.qual" @change="setSpecificRuleField(i, 'qual', $event.target.value, $event.target)" list="specific-rule-qualifier-options" placeholder="Qualifier (choose or type)" aria-label="Qualifier name" class="form-input form-input-compact col-span-4" :disabled="!semanticMutationAvailable">
-                                            <input type="color" :value="rule.color" @change="setSpecificRuleField(i, 'color', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} color`" class="h-6 w-full p-0 border rounded cursor-pointer col-span-1" :disabled="!semanticMutationAvailable">
-                                            <div class="col-span-3 flex items-center justify-end gap-0.5">
-                                                <button aria-label="Move rule up" @click="moveSpecificRuleUp(i)" :disabled="!semanticMutationAvailable || (i === 0)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule up"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
-                                                <button aria-label="Move rule down" @click="moveSpecificRuleDown(i)" :disabled="!semanticMutationAvailable || (i === manualSpecificRules.length - 1)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule down"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
-                                                <button aria-label="Delete rule" @click="removeSpecificRule(i)" class="h-6 w-6 text-red-500 hover:text-red-700" title="Delete rule" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
-                                            </div>
-                                        </div>
-                                        <div class="grid grid-cols-12 gap-1">
-                                            <input :id="specificRulePatternFieldId(rule)" :disabled="!semanticMutationAvailable" :value="specificRulePattern(rule)" @input="editSpecificRulePattern(rule, $event.target.value)" @change="retrySpecificRulePattern(rule)" :aria-label="`Color rule ${i + 1} pattern`" :aria-describedby="specificRulePatternDraft(rule) ? `${specificRulePatternFieldId(rule)}-status` : undefined" :aria-invalid="specificRulePatternDraft(rule)?.error?.code === 'REGEX_SYNTAX' ? 'true' : undefined" :aria-busy="specificRulePatternDraft(rule)?.pending ? 'true' : undefined" placeholder="Python regex" data-history-ignore class="form-input form-input-compact col-span-7 font-mono">
-                                            <input :value="rule.cap" @change="setSpecificRuleField(i, 'cap', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} legend caption`" placeholder="Legend Caption" class="form-input form-input-compact col-span-5" :disabled="!semanticMutationAvailable">
-                                        </div>
-                                        <div v-if="specificRulePatternDraft(rule)" :id="`${specificRulePatternFieldId(rule)}-status`" class="rounded border border-amber-200 bg-amber-50 p-2 text-xs break-words" data-color-rule-pattern-status data-history-ignore>
-                                            <p role="status" aria-live="polite" class="font-semibold">Not applied<span v-if="specificRulePatternDraft(rule).pending"> — Checking color rule…</span></p>
-                                            <p class="mt-1">Save Session and Generate use the last accepted rule. Export uses the current Result. This draft is not saved.</p>
-                                            <operation-error v-if="specificRulePatternDraft(rule).error" :error="specificRulePatternDraft(rule).error" class="mt-2"></operation-error>
-                                            <div class="mt-2 flex flex-wrap gap-2">
-                                                <button type="button" @click="retrySpecificRulePattern(rule)" :disabled="!semanticMutationAvailable || specificRulePatternDraft(rule).pending" class="btn btn-secondary btn-sm">Retry</button>
-                                                <button type="button" :disabled="!semanticMutationAvailable" @pointerdown.prevent @click="revertSpecificRulePattern(rule, $event.currentTarget.closest('[data-color-rule-row]').querySelector('input[data-history-ignore]'))" class="btn btn-secondary btn-sm">Revert</button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div v-if="manualSpecificRules.length === 0" class="ui-hint italic text-center py-2">No rules added</div>
-                                </div>
+                                <specific-rule-rows :rules="manualSpecificRules" :feature-keys="featureKeys" :available="semanticMutationAvailable"
+                                    :pattern-text="specificRulePattern" :pattern-draft="specificRulePatternDraft" :field-id="specificRulePatternFieldId"
+                                    @set-field="setSpecificRuleField" @move-up="moveSpecificRuleUp" @move-down="moveSpecificRuleDown" @remove="removeSpecificRule"
+                                    @edit-pattern="editSpecificRulePattern" @retry-pattern="retrySpecificRulePattern" @revert-pattern="revertSpecificRulePattern"></specific-rule-rows>
 
                                 <div class="bg-slate-50 p-2 rounded border border-slate-200">
                                     <div class="grid grid-cols-2 gap-1 mb-1">
@@ -7782,6 +7756,39 @@
                :aria-invalid="error ? 'true' : 'false'" class="form-input px-1 py-0.5 text-[10px]" placeholder="0" :disabled="disabled">
         <p v-if="error" :id="`${controlId}-error`" class="circular-measure-note text-red-700" role="alert">{{ error }}</p>
     </div>
+</script>
+
+<script type="text/x-template" id="specific-rule-rows-template">
+<div class="space-y-1 mb-3">
+    <div v-for="(rule, i) in rules" :key="fieldId(rule)" data-color-rule-row class="bg-white p-1.5 rounded border border-slate-200 text-[10px] space-y-1">
+        <div class="grid grid-cols-12 gap-1 items-center">
+            <select :value="rule.feat" @change="$emit('set-field', i, 'feat', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} feature type`" class="form-input form-input-compact col-span-4" :disabled="!available">
+                <option v-for="k in featureKeys" :value="k">{{ k }}</option>
+            </select>
+            <input :value="rule.qual" @change="$emit('set-field', i, 'qual', $event.target.value, $event.target)" list="specific-rule-qualifier-options" placeholder="Qualifier (choose or type)" aria-label="Qualifier name" class="form-input form-input-compact col-span-4" :disabled="!available">
+            <input type="color" :value="rule.color" @change="$emit('set-field', i, 'color', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} color`" class="h-6 w-full p-0 border rounded cursor-pointer col-span-1" :disabled="!available">
+            <div class="col-span-3 flex items-center justify-end gap-0.5">
+                <button aria-label="Move rule up" @click="$emit('move-up', i)" :disabled="!available || (i === 0)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule up"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
+                <button aria-label="Move rule down" @click="$emit('move-down', i)" :disabled="!available || (i === rules.length - 1)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule down"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
+                <button aria-label="Delete rule" @click="$emit('remove', i)" class="h-6 w-6 text-red-500 hover:text-red-700" title="Delete rule" :disabled="!available"><i class="ph ph-trash" aria-hidden="true"></i></button>
+            </div>
+        </div>
+        <div class="grid grid-cols-12 gap-1">
+            <input :id="fieldId(rule)" :disabled="!available" :value="patternText(rule)" @input="$emit('edit-pattern', rule, $event.target.value)" @change="$emit('retry-pattern', rule)" :aria-label="`Color rule ${i + 1} pattern`" :aria-describedby="patternDraft(rule) ? `${fieldId(rule)}-status` : undefined" :aria-invalid="patternDraft(rule)?.error?.code === 'REGEX_SYNTAX' ? 'true' : undefined" :aria-busy="patternDraft(rule)?.pending ? 'true' : undefined" placeholder="Python regex" data-history-ignore class="form-input form-input-compact col-span-7 font-mono">
+            <input :value="rule.cap" @change="$emit('set-field', i, 'cap', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} legend caption`" placeholder="Legend Caption" class="form-input form-input-compact col-span-5" :disabled="!available">
+        </div>
+        <div v-if="patternDraft(rule)" :id="`${fieldId(rule)}-status`" class="rounded border border-amber-200 bg-amber-50 p-2 text-xs break-words" data-color-rule-pattern-status data-history-ignore>
+            <p role="status" aria-live="polite" class="font-semibold">Not applied<span v-if="patternDraft(rule).pending"> — Checking color rule…</span></p>
+            <p class="mt-1">Save Session and Generate use the last accepted rule. Export uses the current Result. This draft is not saved.</p>
+            <operation-error v-if="patternDraft(rule).error" :error="patternDraft(rule).error" class="mt-2"></operation-error>
+            <div class="mt-2 flex flex-wrap gap-2">
+                <button type="button" @click="$emit('retry-pattern', rule)" :disabled="!available || patternDraft(rule).pending" class="btn btn-secondary btn-sm">Retry</button>
+                <button type="button" :disabled="!available" @pointerdown.prevent @click="$emit('revert-pattern', rule, $event.currentTarget.closest('[data-color-rule-row]').querySelector('input[data-history-ignore]'))" class="btn btn-secondary btn-sm">Revert</button>
+            </div>
+        </div>
+    </div>
+    <div v-if="rules.length === 0" class="ui-hint italic text-center py-2">No rules added</div>
+</div>
 </script>
 
 <script type="text/x-template" id="record-display-control-template">

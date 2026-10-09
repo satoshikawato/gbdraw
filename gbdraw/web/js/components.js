@@ -349,3 +349,13 @@ export const OperationError = {
       copyDiagnostics, selectDiagnostics };
   }
 };
+
+// The Specific color rules rows: a child of the root, so a root update that
+// leaves the rules unchanged renders no row (OV-251). The root keeps the
+// actions; a row emits them with the arguments it passed before.
+export const SpecificRuleRows = {
+  template: '#specific-rule-rows-template',
+  components: { OperationError },
+  props: ['rules', 'featureKeys', 'available', 'patternText', 'patternDraft', 'fieldId'],
+  emits: ['set-field', 'move-up', 'move-down', 'remove', 'edit-pattern', 'retry-pattern', 'revert-pattern']
+};
