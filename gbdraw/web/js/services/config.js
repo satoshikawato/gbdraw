@@ -216,6 +216,7 @@ import {
   createDefaultLosatpHitLimits,
   LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION,
   reconcileImportedLinearTypographyLink,
+  holdsCliWriterConfig,
   validateCurrentWriterActiveConfig,
   validateImportedCircularTrackSlots,
   validateImportedLinearTrackSlots
@@ -1912,7 +1913,11 @@ const preflightSessionImport = async (sessionData) => {
     recordSessionLifecycleEvent('resource-table-adoption-start');
     currentResourceTable = adoptCurrentSessionResources(rawData.resources);
     recordSessionLifecycleEvent('resource-table-adoption-end');
-    normalizedData = rawData;
+    // A CLI-written Session 40-41 `config` is no Web draft (OV-269), as in
+    // migrate_session_flat_draft.
+    normalizedData = holdsCliWriterConfig(rawData)
+      ? Object.fromEntries(Object.entries(rawData).filter(([key]) => key !== 'config'))
+      : rawData;
   } else {
     validateSessionAuthorityInventory(rawData, sourceSessionVersion);
     normalizedData = normalizeSessionData(rawData);

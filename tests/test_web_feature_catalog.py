@@ -55,6 +55,25 @@ def test_schema_three_promotion_only_restores_exact_single_part_anchors() -> Non
     }
 
 
+def test_schema_three_promotion_reads_the_source_index_of_a_disambiguated_id() -> None:
+    """OV-269: a schema 3 writer named a duplicated stable identity
+    ``<stableFeatureId>~<source feature index>`` without storing the index.
+    Mirrored in tests/web/feature-catalog.test.mjs."""
+
+    features = [
+        {"stableFeatureId": "s", "biologicalFeatureId": "s~136"},
+        {"stableFeatureId": "s", "biologicalFeatureId": "s~137", "featureIndex": 9},
+        {"biologicalFeatureId": "s~138"},
+        {"stableFeatureId": "s", "biologicalFeatureId": "s~139~2"},
+        {"stableFeatureId": "s", "biologicalFeatureId": "t~140"},
+    ]
+    legacy = {"schema": 3, "items": [{"biologicalFeatures": features}]}
+
+    promoted = promote_legacy_feature_catalog(legacy)["items"][0]["biologicalFeatures"]
+
+    assert [feature.get("sourceFeatureIndex") for feature in promoted] == [136, None, None, None, None]
+
+
 def _combined_catalog_fixture() -> tuple[str, InteractiveSvgContext]:
     context = InteractiveSvgContext(
         record_keys=("record-a", "record-b"),

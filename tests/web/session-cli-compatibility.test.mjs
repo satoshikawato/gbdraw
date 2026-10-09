@@ -427,8 +427,10 @@ with materialize_session(document, output_directory=directory / 'out') as materi
 // D-01, OV-221: a Session the CLI writes draws the CLI's figure when the Web app
 // loads it. Load gives the drawing every table the request holds, so the next
 // Generate, a label reflow, and a Web re-save keep them; the Sessions a CLI
-// replay and Python save again (no Web draft either) load the same way. The
-// CLI and Python cells of the matrix are tests/test_cli_session_cross_surface.py.
+// replay and Python save again (no Web draft either) load the same way, and so
+// do a case's Sessions 40 and 41 from older CLI writers (`legacySessions`,
+// OV-269). The CLI and Python cells of the matrix are
+// tests/test_cli_session_cross_surface.py.
 const crossSurface = (...args) => JSON.parse(execFileSync('python', [
   path.join(root, 'tests/web/helpers/cli-session-cross-surface.py'), ...args
 ], { cwd: root, encoding: 'utf8', timeout: 1_800_000, maxBuffer: 16 * 1024 * 1024 }));

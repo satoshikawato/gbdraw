@@ -131,8 +131,11 @@ because they have no independent Web draft. Web initializes their settings from
 `--feature_visibility_table`, `--label_table`, `--label_whitelist`,
 `--qualifier_priority`, and `--feature_override_table`), so the next
 **Generate Diagram** keeps them. Web restores the original input files from
-their bindings. A present `config` must contain valid `form` and `adv` objects;
-a partial draft is rejected. CLI replay preserves a supplied Web draft.
+their bindings. A Session version 40 or 41 that the CLI wrote carries a
+`config` derived from its options; Web and CLI replay read it as no draft, so
+these Sessions load the same way. A Web draft in `config` must contain valid
+`form` and `adv` objects; a partial draft is rejected. CLI replay preserves a
+supplied Web draft.
 
 Which records Web draws from a CLI session depends on the request:
 

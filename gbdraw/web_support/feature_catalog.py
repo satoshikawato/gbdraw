@@ -213,9 +213,12 @@ def promote_legacy_feature_catalog(
 ) -> dict[str, object]:
     """Promote schema 3 or 4 without inventing values.
 
-    Schema 3 gains only safely inferred source-anchor metadata. Rendered
-    features of schema 3 and 4 gain ``drawnSelector: None``: their drawn
-    selector values are unknown until the next Generate.
+    Schema 3 gains only safely inferred source-anchor metadata and source
+    feature indexes: its writer named a duplicated stable identity
+    ``<stableFeatureId>~<source feature index>`` and some writers stored no
+    index (OV-269). Rendered features of schema 3 and 4 gain
+    ``drawnSelector: None``: their drawn selector values are unknown until the
+    next Generate.
     """
 
     source_schema = catalog.get("schema")
@@ -249,6 +252,19 @@ def promote_legacy_feature_catalog(
                 raise GbdrawError(
                     "Feature catalog biologicalFeatures must contain objects."
                 )
+            stable_id = _text(feature.get("stableFeatureId"))
+            biological_id = _text(feature.get("biologicalFeatureId"))
+            suffix = (
+                biological_id[len(stable_id) + 1:]
+                if stable_id and biological_id.startswith(f"{stable_id}~")
+                else ""
+            )
+            if (
+                suffix.isascii()
+                and suffix.isdigit()
+                and _feature_source_index_status(feature) == (None, True)
+            ):
+                feature["sourceFeatureIndex"] = int(suffix)
             raw_parts = feature.get("location_parts", feature.get("locationParts"))
             parts = (
                 raw_parts

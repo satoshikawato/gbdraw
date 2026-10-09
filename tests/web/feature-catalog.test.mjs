@@ -119,6 +119,22 @@ test('schema-4 catalog validates and expands stable biological identities', () =
   assert.equal(state.orthogroups[0].members[0].featureIndex, 4);
 });
 
+// OV-269: a schema 3 writer named a duplicated stable identity
+// `<stableFeatureId>~<source feature index>` without storing the index.
+// Mirrored in tests/test_web_feature_catalog.py.
+test('schema-3 migration reads the source index of a disambiguated biological ID', () => {
+  const features = [
+    { stableFeatureId: 's', biologicalFeatureId: 's~136' },
+    { stableFeatureId: 's', biologicalFeatureId: 's~137', featureIndex: 9 },
+    { biologicalFeatureId: 's~138' },
+    { stableFeatureId: 's', biologicalFeatureId: 's~139~2' },
+    { stableFeatureId: 's', biologicalFeatureId: 't~140' }
+  ];
+  const promoted = migrateLegacyFeatureCatalog({ schema: 3, items: [{ features: [], biologicalFeatures: features }] });
+  assert.deepEqual(promoted.items[0].biologicalFeatures.map((feature) => feature.sourceFeatureIndex),
+    [136, undefined, undefined, undefined, undefined]);
+});
+
 test('schema-3 migration proves only exact single-part anchors and disables ambiguous compounds', () => {
   const legacy = structuredClone(catalog);
   legacy.schema = 3;

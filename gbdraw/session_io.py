@@ -1670,7 +1670,19 @@ def _validate_current_feature_catalog_authority(
             "Session feature catalog must contain one version-compatible item per Result."
         )
 
-    from .web_support.feature_catalog import select_feature_catalog_item
+    from .web_support.feature_catalog import (
+        promote_legacy_feature_catalog,
+        select_feature_catalog_item,
+    )
+
+    # A schema 3 catalog is read as promoted, which may infer what the current
+    # rules require (OV-269); its promoted form is the one validated.
+    if catalog_schema == 3:
+        try:
+            catalog = promote_legacy_feature_catalog(catalog)
+        except GbdrawError as exc:
+            raise ValidationError(str(exc)) from exc
+        catalog_schema = CURRENT_FEATURE_CATALOG_SCHEMA
 
     for result_index, result in enumerate(results):
         if not isinstance(result, Mapping):
@@ -3422,6 +3434,35 @@ def _draft_annotation_sets_of_request(sets: object, mode: DiagramMode) -> list[d
     return result
 
 
+# The ``config`` keys the CLI writer of Sessions 40 and 41 derived from its
+# options (``_cli_web_config`` on main 8228ffab..4e8c9380; later ones wrote
+# ``{"adv": {}}``). The Web writer of those Sessions always added
+# ``annotationSets``, ``linearComparisonPlan`` and ``webEdits``, so its draft
+# never holds only these keys. Mirrored by ``CLI_WRITER_CONFIG_DOMAINS`` in
+# gbdraw/web/js/services/session-active-config-contract.js.
+_CLI_WRITER_CONFIG_DOMAINS = frozenset(
+    {
+        "form", "adv", "losat", "cliOptions", "colors", "palette", "rules",
+        "qualifierPriorityRules", "filterMode", "whitelist", "blacklistText",
+        "losatProgram", "circularConservation",
+    }
+)
+
+
+def _holds_cli_writer_config(session: Mapping[str, Any]) -> bool:
+    """A Session 40 or 41 the CLI wrote: its ``config`` is no Web draft (OV-269)."""
+
+    config = session.get("config")
+    invocation = session.get("cliInvocation")
+    return (
+        session.get("version") in (40, 41)
+        and isinstance(invocation, Mapping)
+        and invocation.get("generatedBy") == "gbdraw"
+        and isinstance(config, Mapping)
+        and set(config) <= _CLI_WRITER_CONFIG_DOMAINS
+    )
+
+
 @dataclass(frozen=True)
 class SessionDraftMigration:
     """A Session 27-44 Web draft after the migrations that Web Load runs.
@@ -3441,8 +3482,9 @@ class SessionDraftMigration:
 def migrate_session_flat_draft(session: Mapping[str, Any]) -> SessionDraftMigration:
     """Run the Session 27-44 draft migrations in Web Load's order.
 
-    Field names and placement rows (``migrate_persisted_web_state_field_names``),
-    the draft's option values, slots and shapes (``migrate_session_draft_values``),
+    A Session 40 or 41 the CLI wrote first drops its option-derived ``config``
+    (``_holds_cli_writer_config``): it holds no Web draft. Then field names
+    and placement rows (``migrate_persisted_web_state_field_names``), the draft's option values, slots and shapes (``migrate_session_draft_values``),
     then per-feature edits through the saved catalog
     (``migrate_session_feature_edits``; without a catalog they are dropped),
     then the ``hash=`` annotation targets of a Session 40-44
@@ -3453,13 +3495,15 @@ def migrate_session_flat_draft(session: Mapping[str, Any]) -> SessionDraftMigrat
     """
 
     migrated: dict[str, Any] = dict(session)
+    if _holds_cli_writer_config(session):
+        del migrated["config"]
     version = session.get("version")
     version = version if isinstance(version, int) else 0
     request_value = session.get("renderRequest")
     request: Mapping[str, Any] = request_value if isinstance(request_value, Mapping) else {}
     editor_state = session.get("editorState")
     catalog = editor_state.get("featureCatalog") if isinstance(editor_state, Mapping) else None
-    config = session.get("config")
+    config = migrated.get("config")
     if isinstance(config, Mapping):
         config = migrate_session_draft_values(migrate_persisted_web_state_field_names(config), version)
         migrated["config"] = config
