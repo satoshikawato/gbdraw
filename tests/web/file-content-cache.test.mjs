@@ -10,6 +10,7 @@ const {
   cloneFileBytesForTransfer,
   readFileBytes,
   readFileText,
+  takeFileBytesForTransfer,
   textToBase64,
   textToBytes
 } = await import('../../gbdraw/web/js/services/file-content-cache.js');
@@ -54,3 +55,26 @@ const separate = makeCountingFile('cached bytes');
 await readFileBytes(separate);
 assert.equal(separate.reads, 1);
 assert.equal(file.reads, 1);
+
+// A one-file two-record Linear Session fills two rows with File views of the
+// same resource; the views share one backing. Transferring the bytes to the
+// worker through one view detaches the shared buffer, and the other view reads
+// the resource again instead of the detached array (OV-304).
+const { adoptCurrentSessionResources, createSessionResourceFileView } = await import(
+  '../../gbdraw/web/js/services/session-resource-backing.js'
+);
+const sharedTable = adoptCurrentSessionResources({
+  'record-1-genbank': {
+    kind: 'genbank', name: 'shared.gb', type: 'text/plain', size: 12, lastModified: 0,
+    encoding: 'base64', data: textToBase64('LOCUS shared')
+  }
+});
+const rowA = createSessionResourceFileView(sharedTable, 'record-1-genbank');
+const rowB = createSessionResourceFileView(sharedTable, 'record-1-genbank');
+assert.equal(bytesToText(await readFileBytes(rowA)), 'LOCUS shared');
+assert.equal(bytesToText(await readFileBytes(rowB)), 'LOCUS shared');
+const transferred = await takeFileBytesForTransfer(rowB);
+structuredClone(transferred, { transfer: [transferred] });
+assert.equal(transferred.byteLength, 0);
+assert.equal(bytesToText(await readFileBytes(rowA)), 'LOCUS shared');
+assert.equal(bytesToText(await readFileBytes(rowB)), 'LOCUS shared');

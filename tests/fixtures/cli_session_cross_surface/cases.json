@@ -57,6 +57,14 @@
       "args": ["--gbk", "tests/test_inputs/NC_001416.gb", "--labels", "out",
         "-t", "tests/fixtures/cli_session_cross_surface/colors.tsv",
         "--feature_override_table", "tests/fixtures/cli_session_cross_surface/feature_overrides.tsv"]
+    },
+    {
+      "id": "linear_losatp",
+      "mode": "linear",
+      "args": ["--gbk", "tests/fixtures/sessions/cli-web-mito.gb", "tests/test_inputs/NC_001416.gb",
+        "--losat", "losatp", "--losatp_mode", "similarity_groups",
+        "-t", "tests/fixtures/cli_session_cross_surface/colors.tsv",
+        "--feature_visibility_table", "tests/fixtures/cli_session_cross_surface/visibility.tsv"]
     }
   ]
 }

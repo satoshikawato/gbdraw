@@ -279,6 +279,21 @@ await test('a CLI Linear protein Session keeps the adjacent LOSATP plan it drew'
     const candidate = buildCanonicalRenderRequest({ state, drawing: state.activeDrawing(), filesData, comparisonPlanSnapshot });
     assert.deepEqual(candidate.renderRequest.comparisons.map(item => [item.kind, item.mode]),
       [['generatedProteinComparison', 'orthogroup']]);
+    // OV-296: the Python API re-save of that Session (same request, no
+    // cliInvocation, no Web draft) loads with the same plan, so Generate
+    // rebuilds the same pipeline.
+    const resaved = path.join(directory, 'protein-python.gbdraw-session.json');
+    await writeFile(path.join(directory, 'protein.gbdraw-session.json'), bytes);
+    execFileSync('python', ['-c', `
+from pathlib import Path
+from tests.utils.cli_session_cross_surface import resave_python
+resave_python(Path(${JSON.stringify(path.join(directory, 'protein.gbdraw-session.json'))}), Path(${JSON.stringify(resaved)}))
+`], { cwd: root, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe', timeout: 1_800_000 });
+    const resavedSession = JSON.parse(await readFile(resaved, 'utf8'));
+    assert.equal(resavedSession.cliInvocation, undefined);
+    assert.equal((await load(await readFile(resaved))).status, 'ok');
+    assert.deepEqual(state.activeDrawing().linearComparisonPlan, { ...DEFAULT_PLAN, mode: 'adjacent' });
+    assert.equal(state.activeDrawing().losatProgram.value, 'blastp');
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

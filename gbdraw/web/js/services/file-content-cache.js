@@ -34,25 +34,24 @@ const asCacheKey = (file) => (
 export const readFileBytes = (file) => {
   try {
     const key = asCacheKey(file);
-    const lazyBytes = key && isSessionResourceFileView(file)
-      ? readSessionResourceBytes(file)
-      : null;
-    if (!key || (!lazyBytes && typeof file.arrayBuffer !== 'function')) {
+    // A Session resource view caches its bytes in the backing it shares with
+    // every other view of the same resource, so a transfer through one view
+    // releases them for all (OV-304); the cache below is for ordinary Files.
+    if (key && isSessionResourceFileView(file)) return readSessionResourceBytes(file);
+    if (!key || typeof file.arrayBuffer !== 'function') {
       return Promise.reject(new TypeError(
         'A File-like object with arrayBuffer() is required.'
       ));
     }
     let pending = fileByteCache.get(key);
     if (!pending) {
-      pending = lazyBytes || Promise.resolve()
+      pending = Promise.resolve()
         .then(() => file.arrayBuffer())
         .then(asBytes);
       fileByteCache.set(key, pending);
-      if (!lazyBytes) {
-        pending.catch(() => {
-          if (fileByteCache.get(key) === pending) fileByteCache.delete(key);
-        });
-      }
+      pending.catch(() => {
+        if (fileByteCache.get(key) === pending) fileByteCache.delete(key);
+      });
     }
     return pending;
   } catch (error) {

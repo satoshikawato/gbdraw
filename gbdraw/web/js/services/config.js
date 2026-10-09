@@ -1999,8 +1999,10 @@ const preflightSessionImport = async (sessionData) => {
         webFiles: data.webFiles,
         legacyFiles: data.files,
         storedConfig: runtimeStoredConfig,
-        initializeCliInputs: !hasStoredDraft
-          && data.cliInvocation?.generatedBy === 'gbdraw',
+        // A Session without a Web draft (written by the CLI or the Python API)
+        // derives its draft from the request (D-02); the comparison plan of a
+        // Python re-save is stated the same way as the CLI's (OV-296).
+        initializeCliInputs: !hasStoredDraft,
         fileBindings: data.cliInvocation?.fileBindings,
         linearTrackSlotSchemaVersion: sourceSessionVersion <= LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION
           ? LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION
