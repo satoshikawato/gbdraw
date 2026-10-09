@@ -269,13 +269,19 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   const prepareRules = (rules, options) => rulePreparation.prepareCandidate(rules, options);
   // Runs `commit` once the color rule matches of `rules` are prepared; a
   // prepared table answers at once, so the commit runs in the caller's tick.
+  // Rules Python must still match wait for the automatic rerender in flight:
+  // it replaces the Result, the catalog, and the Legend rows the preparation
+  // must stay current with, so a preparation that spanned it went stale and
+  // the run did nothing (OV-280).
   /**
    * @param {Record<string, any>[]} rules
    * @param {() => any} commit
    */
-  const runWithRuleMatches = (rules, commit) => runWhenPrepared(
-    state, () => [rulePreparation.isPrepared(rules) || prepareRules(rules, { captions: false })], commit
-  );
+  const runWithRuleMatches = (rules, commit) => runWhenPrepared(state, () => {
+    const prepare = () => prepareRules(rules, { captions: false });
+    return [rulePreparation.isPrepared(rules)
+      || (state.labelReflowProcessing?.value ? rerenderIdle().then(prepare) : prepare())];
+  }, commit);
   /**
    * @param {DrawingState} drawing
    * @param {Record<string, any>[]} rules

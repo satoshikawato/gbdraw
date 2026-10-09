@@ -16,7 +16,14 @@ const setup = (evaluate = evaluatePythonRules) => {
     featureColorOverrides: {}, featureOverrides: {}, results: { value: [{name:'figure',content:'before'}] },
     svgResultIdentity: { value:'before' }, fileLegendCaptions: { value:new Set() }, addedLegendCaptions: { value:new Set() },
     legendEntries: { value:[] }, files: {t_color:null}, legendColorOverrides: {},
-    newSpecRule: {feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:'Shared'}
+    newSpecRule: {feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:'Shared'}, labelReflowProcessing: { value:false }
+  };
+  // The automatic rerender's busy flag, with the Vue `watch` the owner waits on.
+  const watchers = new Set();
+  const watch = (source, callback) => { const entry = {source, callback}; watchers.add(entry); return () => watchers.delete(entry); };
+  const setRerendering = (busy) => {
+    state.labelReflowProcessing.value = busy;
+    [...watchers].filter(entry => entry.source === state.labelReflowProcessing).forEach(entry => entry.callback(busy));
   };
   const notices = [], transactions = [], transactionScopes = [];
   const preparation = createRulePreparation({state: withDrawings(state), evaluate, notify:message=>notices.push(message)});
@@ -46,8 +53,8 @@ const setup = (evaluate = evaluatePythonRules) => {
       state.legendEntries.value=intents;
       state.results.value=[{name:'figure',content:'after'}];
     } };
-  }, projectPaletteAndRules:()=>true, ports:{requestAutomaticRerender:()=>{rerenders+=1;return true;}}, nextTick:async()=>{}});
-  return {state,actions,preparation,notices,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents, rerenders:()=>rerenders};
+  }, projectPaletteAndRules:()=>true, ports:{requestAutomaticRerender:()=>{rerenders+=1;return true;}}, nextTick:async()=>{}, watch});
+  return {state,actions,preparation,notices,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents, rerenders:()=>rerenders, setRerendering};
 };
 // Review 3 (OV-262 in the Features drawer): with the type's default color
 // Auto, the drawer's color input shows the applied palette's color, as
@@ -141,6 +148,30 @@ test('a rule commit whose preparation spans the rerendered Result binding prepar
   assert.deepEqual(s.state.manualSpecificRules.map(r=>r.cap),['Shared [#112233]','Shared [#445566]']);
   assert.equal(s.transactions.length,1);
   assert.notEqual(results,s.state.results.value,'the Legend rows applied');
+});
+
+// OV-280: a run whose rules Python must still match (a color choice's
+// candidate rules) waits for the automatic rerender of an earlier edit. The
+// rerender replaces the Result, and its binding the Legend rows (`other
+// proteins`); a preparation that spanned them went stale and the run did
+// nothing. A run whose rules are prepared still runs in the caller's tick
+// (PD-OI-088: the dialog opens first).
+test('a rule run waits for the automatic rerender in flight before it prepares (OV-280)', async () => {
+  const s=setup();
+  const [saved, candidate]=[{feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:'CDS'},{feat:'CDS',qual:'gene',val:'b',color:'#445566',cap:'CDS'}];
+  assert.equal(await s.preparation.prepare([saved]),true);
+  s.setRerendering(true);
+  assert.equal(s.actions.runWithRuleMatches([saved],()=>'opened'),'opened','prepared rules run at once');
+  let runs=0;
+  const run=s.actions.runWithRuleMatches([saved,candidate],()=>{runs+=1;return 'applied';});
+  // The rerender lands: its Result, the bound Legend rows, then idle.
+  s.state.svgResultIdentity.value='rerendered';
+  s.state.legendEntries.value=[{caption:'CDS',originalCaption:'CDS',color:'#112233'},{caption:'other proteins',originalCaption:'other proteins',color:'#808080'}];
+  assert.equal(runs,0,'not before the rerender is idle');
+  s.setRerendering(false);
+  assert.equal(await run,'applied');
+  assert.equal(runs,1);
+  assert(s.preparation.isPrepared([saved,candidate]));
 });
 
 test('historical caption ownership retains every source color before normalization',async()=>{

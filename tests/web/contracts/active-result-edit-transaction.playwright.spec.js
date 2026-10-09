@@ -495,4 +495,70 @@ test.describe('active Result Feature fill transaction', () => {
     expect(undone.canonical.targetRules).toMatchObject(before.canonical.targetRules);
     await assertNoUnexpectedErrors(page, diagnostics);
   });
+
+  // OV-280: a hash rule captioned tRNA makes Python draw the other tRNAs as
+  // `other tRNAs`, so adding it asks for the automatic rerender. Apply to all
+  // chosen while that rerender runs waits for it and then applies in one
+  // History step; it used to do nothing and leave the dialog open.
+  test('Apply to all chosen while the rerender of a rule add runs applies after it (OV-280)', async ({ page }, testInfo) => {
+    test.setTimeout(300_000);
+    expect(testInfo.retry).toBe(0);
+
+    const diagnostics = await openObservedApp(page);
+    await loadSessionThroughUi(page, sourceSessionPath);
+    const inventory = await collectTargetInventory(page);
+    const nonTargetBaseline = (await inspectState(page, inventory)).mounted.nonTargetFills;
+    await page.locator('.drawer-toggle').click();
+    const drawer = page.locator('.right-drawer');
+    await drawer.getByPlaceholder('Search by feature or annotation...').fill(TARGET_CAPTION);
+
+    // The Worker answers in order: the rerender's run, then what follows it.
+    await page.evaluate(async () => {
+      const { state } = await import('/gbdraw/web/js/state.js');
+      const send = Worker.prototype.postMessage;
+      const held = [];
+      Worker.prototype.postMessage = function (message, ...args) {
+        if (held.length || (message?.type === 'run' && state.labelReflowProcessing.value)) {
+          held.push([this, message, args]);
+        } else send.call(this, message, ...args);
+      };
+      window.__OV280_HELD__ = held;
+      window.__OV280_RELEASE__ = () => {
+        Worker.prototype.postMessage = send;
+        held.splice(0).forEach(([worker, message, args]) => send.call(worker, message, ...args));
+      };
+    });
+    await evaluateWithRetainedPromise(page, async ({ id, caption, color }) => {
+      const app = window.__GBDRAW_APP__;
+      const { getFeatureColorRuleHash } = await import('/gbdraw/web/js/services/feature-utils.js');
+      const feature = app.extractedFeatures.find((item) => String(item.svg_id) === id);
+      Object.assign(app.newSpecRule, { feat: caption, qual: 'hash', val: getFeatureColorRuleHash(feature), color, cap: caption });
+      await app.addSpecificRule();
+    }, { id: inventory.targets[0].id, caption: TARGET_CAPTION, color: BEFORE_COLOR });
+    await page.waitForFunction(() => window.__OV280_HELD__.length > 0);
+    const undoAfterAdd = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+
+    await drawer.locator(`span[title="${inventory.targets[1].location}"]`).locator('..')
+      .getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.getByRole('dialog', { name: /Feature details:/ })
+      .getByLabel('Feature fill color', { exact: true }).first().fill(AFTER_COLOR);
+    const scopeDialog = page.getByRole('heading', { name: 'Color Change Scope' }).locator('..');
+    await expect(scopeDialog).toBeVisible();
+    await scopeDialog.getByRole('button').filter({
+      hasText: `Apply to all "${TARGET_CAPTION}" (${inventory.targets.length})`
+    }).last().click();
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.labelReflowProcessing)).toBe(true);
+    await expect(page.getByRole('dialog', { name: 'Color Change Scope' }).getByRole('status'))
+      .toHaveText('Applying an edit…');
+    await page.evaluate(() => window.__OV280_RELEASE__());
+
+    await page.waitForFunction(() => !window.__GBDRAW_APP__.featureStyleScopeDialog.show, null, { timeout: 60_000 });
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.labelReflowProcessing)).toBe(false);
+    const applied = await inspectState(page, inventory);
+    expect(applied.history.undoCount).toBe(undoAfterAdd + 1);
+    expectFillState(applied, inventory, AFTER_COLOR, nonTargetBaseline);
+    expect(applied.canonical.targetRules).toHaveLength(inventory.targets.length);
+    expect(applied.canonical.targetRules.every((rule) => rule.qual === 'hash' && rule.color === AFTER_COLOR)).toBe(true);
+    await assertNoUnexpectedErrors(page, diagnostics);
+  });
 });
