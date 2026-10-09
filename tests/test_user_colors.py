@@ -325,3 +325,33 @@ def test_accepted_feature_colors_log_no_error(color: str, caplog: pytest.LogCapt
             "#ff0000" if color == "Red" else color.lower()
         )
     assert [record.message for record in caplog.records if record.levelname == "ERROR"] == []
+
+
+@pytest.mark.parametrize(
+    "key",
+    ["pairwise_match_min", "pairwise_match_max", "collinear_block_plus", "collinear_block_minus_min"],
+)
+def test_comparison_gradient_colors_with_alpha_are_a_table_error(key: str) -> None:
+    # OV-254: -d with -b passed #RRGGBBAA through to interpolate_color, which
+    # raised a raw ValueError at render. The gradient colors are #RGB/#RRGGBB.
+    from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
+    from gbdraw.config.toml import load_config_toml
+    from gbdraw.configurators.blast import BlastMatchConfigurator
+
+    defaults = DataFrame(
+        [("pairwise_match_min", "#ffffff"), ("pairwise_match_max", "#000000"), ("pairwise_match", "#cccccc")],
+        columns=["feature_type", "color"],
+    )
+    defaults = defaults[defaults["feature_type"] != key]
+    defaults.loc[len(defaults)] = (key, "#11223344")
+    with pytest.raises(ValidationError, match=re.escape(f"'#11223344' for feature type {key!r}")) as raised:
+        BlastMatchConfigurator(
+            evalue=1e-5,
+            bitscore=50,
+            identity=0,
+            alignment_length=0,
+            sequence_length_dict={},
+            profile=LinearRenderProfile(GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))),
+            default_colors_df=defaults,
+        )
+    assert raised.value.diagnostic == {"code": "TABLE_INVALID", "field": "color", "reason": "COLOR"}
