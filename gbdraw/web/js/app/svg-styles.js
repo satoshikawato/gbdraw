@@ -69,10 +69,24 @@ export const createSvgStyles = ({
     extractedFeatures,
     featuresBySvgId,
     appliedPaletteColors,
+    appliedPaletteName,
+    paletteDefinitions,
     pairwiseMatchFactors,
     svgContainer,
     mode
   } = state;
+
+  // OV-262, OV-263: a key that is Auto (empty) in the applied colors, as a
+  // live edit, the Generate commit, Load, and a History restore leave it, shows
+  // the applied palette's color, as Generate draws a key without a `-d` row.
+  /** @returns {Record<string, string>} */
+  const appliedColors = () => {
+    const colors = { ...(paletteDefinitions.value?.[appliedPaletteName.value] || {}) };
+    Object.entries(appliedPaletteColors.value || {}).forEach(([key, color]) => {
+      if (String(color ?? '').trim() !== '') colors[key] = color;
+    });
+    return colors;
+  };
 
   const updatePairwiseLegendGradientStops = (pairwiseLegend, colors) => {
     let updated = false;
@@ -109,7 +123,7 @@ export const createSvgStyles = ({
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
 
-    const colors = appliedPaletteColors.value;
+    const colors = appliedColors();
     const featurePaths = Array.from(getFeatureElementIndex(svg).values()).flat();
     const featureLookup = featuresBySvgId?.value || new Map();
     let updatedCount = 0;
@@ -383,6 +397,7 @@ export const createSvgStyles = ({
     if (!svg) return;
 
     const featureElementIndex = getFeatureElementIndex(svg);
+    const colors = appliedColors();
     let updatedCount = 0;
 
     extractedFeatures.value.forEach((feat) => {
@@ -396,7 +411,7 @@ export const createSvgStyles = ({
       if (elements.length > 0) {
         const newColor = matchingRule
           ? matchingRule.color
-          : appliedPaletteColors.value[feat.type] || appliedPaletteColors.value.default;
+          : colors[feat.type] || colors.default;
         elements.forEach((el) => {
           if (el.getAttribute('fill') !== newColor) {
             el.setAttribute('fill', newColor);

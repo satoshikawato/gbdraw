@@ -77,15 +77,10 @@ export const createResultsManager = ({ state }) => {
   const readUserDefaultColor = (drawing, key) => (
     userDefaultColorRows(drawing, { [key]: drawing.currentColors.value?.[key] })[0]?.[1] ?? null
   );
-  // OV-262: an Auto default color shows the palette's color, as Generate draws
-  // a key without a `-d` row.
   /** @param {ResultsManagerDrawing} drawing */
   const setAppliedPaletteState = (drawing, paletteName, colors = drawing.currentColors.value) => {
     appliedPaletteName.value = String(paletteName || drawing.selectedPalette.value || 'default');
-    const paletteColors = getPaletteBaseColors(appliedPaletteName.value);
-    appliedPaletteColors.value = Object.fromEntries(Object.entries(colors || {}).map(([key, color]) => [
-      key, String(color ?? '').trim() === '' && paletteColors[key] ? paletteColors[key] : color
-    ]));
+    appliedPaletteColors.value = cloneColors(colors);
   };
   /** @param {ResultsManagerDrawing} drawing */
   const setPendingPaletteState = (drawing, paletteName, colors = drawing.currentColors.value) => {

@@ -172,19 +172,38 @@ test('the dialog names three keys and counts the rest (Q6 A)', () => {
   assert.equal(paletteColorsDialog.keysText, 'CDS, tRNA, rRNA, and 2 more');
 });
 
-// OV-262: Default colors Auto shows the palette's color live, as Generate
-// draws it without a `-d` row, not the palette's `default` color.
-test('an Auto default color shows the palette color on the Result', () => {
-  const { drawing, state, manager } = setup({ colors: paletteOf('default') });
-  drawing.currentColors.value = { ...drawing.currentColors.value, CDS: null };
-  manager.syncPaletteDraftState();
-  assert.equal(state.appliedPaletteColors.value.CDS, '#AABBCC');
-});
-
 test('setDefaultColor writes the default color and applies it to the Result', () => {
   const { drawing, state, manager } = setup();
   manager.setDefaultColor(drawing, 'CDS', '#123456');
   assert.equal(drawing.currentColors.value.CDS, '#123456');
   assert.equal(state.appliedPaletteColors.value.CDS, '#123456');
   assert.equal(manager.readUserDefaultColor(drawing, 'CDS'), '#123456');
+});
+
+// OV-262, OV-263: a Result restyle reads the applied colors as a live edit,
+// the Generate commit, Load, and a History restore leave them: an Auto key is
+// empty there. It shows the applied palette's color for the key, as Generate
+// draws it, not the palette's `default` color.
+test('a restyle paints an Auto key with the applied palette color', async () => {
+  const { createSvgStyles } = await import('../../gbdraw/web/js/app/svg-styles.js');
+  const { withDrawings } = await import('./helpers/drawing-state.mjs');
+  const feature = { id: 'f1', svg_id: 'f1', type: 'CDS' };
+  const attributes = { id: 'f1', 'data-gbdraw-feature-id': 'f1', 'data-gbdraw-feature-part': 'block', fill: '#000000' };
+  const element = { getAttribute: (key) => attributes[key] ?? null, setAttribute: (key, value) => { attributes[key] = value; } };
+  const svg = {
+    querySelectorAll: (selector) => (selector.includes('data-gbdraw-feature-id') ? [element] : []),
+    getElementById: () => null
+  };
+  const state = withDrawings({
+    mode: ref('circular'), svgContent: ref('<svg/>'), svgContainer: ref({ querySelector: () => svg }),
+    extractedFeatures: ref([feature]), featuresBySvgId: ref(new Map([['f1', feature]])), manualSpecificRules: [],
+    featureColorOverrides: {}, legendColorOverrides: {}, pairwiseMatchFactors: ref({}),
+    paletteDefinitions: ref(PALETTES), appliedPaletteName: ref('default'),
+    appliedPaletteColors: ref({ ...paletteOf('default'), CDS: null })
+  });
+  const styles = createSvgStyles({
+    state, watch() {}, nextTick: (fn) => fn?.(), commitActiveResultEdit: () => true, projectPaletteAndRules: () => true
+  });
+  styles.applyPaletteToSvg();
+  assert.equal(attributes.fill, '#AABBCC');
 });

@@ -77,6 +77,7 @@ test('a whole-feature pass over K features and K hash rules does O(K) work', asy
     const svg = { querySelectorAll: (selector) => (selector.includes('data-gbdraw-feature-id') ? elements : []) };
     Object.assign(state, {
       svgContent: ref('<svg/>'), svgContainer: ref({ querySelector: () => svg }), appliedPaletteColors: ref({ CDS: '#cccccc' }),
+      appliedPaletteName: ref('default'), paletteDefinitions: ref({}),
       featuresBySvgId: ref(new Map())
     });
     const styles = createSvgStyles({ state, watch() {}, nextTick: (fn) => fn?.(), commitActiveResultEdit: () => true });
