@@ -14,7 +14,7 @@ const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, loadSessionFile, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
-const { download, load, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
+const { download, load, loadEditorLegendRows, switchMode } = require('./helpers/mode-transition.cjs');
 const {
   open, generate, popupEdit, addVisibilityRule, appAction, addColorRule, history, FL1_OFF,
   legendRowColor, FL1_ALPHA, renameRow, legendRowStrokeColor, editorLegendRows, switchPalette, deleteLegendRow
@@ -1215,6 +1215,24 @@ const WORK_ALLOWLIST = [
   {
     kind: 'Legend sort', stages: ['legend'], compiles: 1, requests: [],
     run: (page) => page.evaluate(() => window.__GBDRAW_APP__.sortLegendEntries('desc')).then(() => settleLive(page))
+  },
+  {
+    // U3b review L2: a mode switch arrives at the Result its mode drew, which
+    // already shows that drawing's intent (it was left unchanged), so the
+    // display compiles nothing. OV-286: the arriving Result was applied with
+    // another palette than the departing one (arctic, default), so the palette
+    // watcher prepares the rules once more (one `evaluateRules`).
+    kind: 'mode switch back to a Result', stages: [], compiles: 0, requests: ['evaluateRules'],
+    before: async (page) => {
+      await switchMode(page, 'linear');
+      await page.evaluate(async (text) => {
+        window.__GBDRAW_APP__.setLinearSeqPrimaryFile(0, 'gb', new File([text], 'batch.gb', { type: 'text/plain', lastModified: 1000 }));
+        await window.Vue.nextTick();
+      }, readFileSync(BATCH_FIXTURE, 'utf8'));
+      await settleLive(page);
+      await generate(page);
+    },
+    run: (page) => switchMode(page, 'circular').then(() => settleLive(page))
   }
 ];
 

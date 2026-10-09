@@ -264,18 +264,32 @@ export const createLegendEntryActions = ({
     /** @param {(entry: Record<string, any>) => boolean} test */
     const intentEntry = (test) => entries.find(test) || dormant.find(test);
     // The compile renames a key the inventory lists (else the entry is an
-    // editor row), and a dormant row wherever it is drawn again.
+    // editor row), and a dormant row wherever it is drawn again unless a
+    // listed entry names that key.
     /** @param {string} key */
-    const renameOf = (key) => entries.find((entry) => (
-      known.has(key) && generatedCaption(entry) === key && legendCaption(entry) !== key
-    )) || dormant.find((entry) => generatedCaption(entry) === key);
+    const renameOf = (key) => {
+      const keyed = entries.filter((entry) => generatedCaption(entry) === key);
+      if (keyed.length === 0) return dormant.find((entry) => generatedCaption(entry) === key);
+      return known.has(key) ? keyed.find((entry) => legendCaption(entry) !== key) : undefined;
+    };
     /** @type {Record<string, any>[]} */
     const listed = [];
     /** @type {Set<string>} */
     const generatedCaptions = new Set();
+    // A row without a key record (a rename saved before U3a) is the intent
+    // entry with its caption, unless another row of the Result is Python's
+    // row of that entry's key: then it is Python's own row, e.g. a deleted
+    // row hidden under the caption a rename took (review M1).
+    /** @param {typeof rows[number]} row */
+    const namedBy = (row) => {
+      const entry = intentEntry((each) => legendCaption(each) === row.key);
+      return entry && (row.editor || !rows.some((other) => (
+        other !== row && (other.recordedKey ?? other.key) === generatedCaption(entry)
+      ))) ? entry : null;
+    };
     rows.forEach((row) => {
       if (asShown ? !row.shown : !row.pythonShown) return;
-      const named = row.recordedKey === null ? intentEntry((entry) => legendCaption(entry) === row.key) : null;
+      const named = row.recordedKey === null ? namedBy(row) : null;
       if (row.editor) {
         if (!named && !asShown) return;
       } else {

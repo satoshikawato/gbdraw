@@ -746,6 +746,43 @@ const mockLegendEntry = (caption, color, x) => {
   state.legendEntries.value = [...state.legendEntries.value];
   actions.extractLegendEntries();
   assert.deepEqual(listed().map(([caption, originalCaption]) => [caption, originalCaption]), [['Alpha', 'Alpha'], ['Beta', 'Beta']]);
+
+  const named = () => listed().map(([caption, originalCaption]) => [caption, originalCaption]);
+  const redraw = (entries, { deleted = [], dormant = [], inventory }, ...shown) => {
+    featureLegend.children.forEach((entry) => { entry.parentElement = null; });
+    featureLegend.children = [];
+    state.legendEntries.value = entries;
+    state.deletedLegendEntries.value = deleted;
+    state.dormantLegendEntries.value = dormant;
+    state.originalLegendOrder.value = inventory;
+    shown.forEach(([caption, color, attributes], index) => row(caption, color, index, attributes));
+  };
+  const cds = { caption: 'CDS', originalCaption: 'CDS', color: '#111111', featureIds: [] };
+  const skewRenamed = { caption: 'GC skew (-)', originalCaption: 'GC skew (+)', color: '#6dded3', featureIds: [] };
+  const skewMinusDeleted = { deleted: [{ caption: 'GC skew (-)', originalCaption: 'GC skew (-)', color: '#aa0000' }], inventory: ['CDS', 'GC skew (+)', 'GC skew (-)'] };
+  // Review M1: Remove "GC skew (-)", rename "GC skew (+)" to "GC skew (-)",
+  // Generate. Python's hidden "GC skew (-)" row has no key record; another
+  // row of the Result is Python's "GC skew (+)", so the hidden row is not
+  // that rename and stays deleted: the row is listed once.
+  redraw([cds, skewRenamed], skewMinusDeleted,
+    ['CDS', '#111111'],
+    ['GC skew (-)', '#6dded3', { 'data-gbdraw-base-data-legend-key': 'GC skew (+)' }],
+    ['GC skew (-)', '#aa0000', { display: 'none', 'data-gbdraw-base-display': '' }]);
+  actions.extractLegendEntries({ replaceGeneratedInventory: true });
+  assert.deepEqual(named(), [['CDS', 'CDS'], ['GC skew (-)', 'GC skew (+)']]);
+  // A Result saved before U3a shows the rename without a record and lacks
+  // the deleted row: the row is the rename of the intent entry that names it.
+  redraw([cds, skewRenamed], skewMinusDeleted, ['CDS', '#111111'], ['GC skew (-)', '#6dded3']);
+  actions.extractLegendEntries();
+  assert.deepEqual(named(), [['CDS', 'CDS'], ['GC skew (-)', 'GC skew (+)']]);
+  // Review L1: a listed entry that names "tRNA" unrenamed outranks a dormant
+  // rename of it, as the compile drops that dormant entry; the list names the
+  // row as Generate draws it.
+  redraw([cds, { caption: 'tRNA', originalCaption: 'tRNA', color: '#222222', featureIds: [] }], {
+    dormant: [{ caption: 'T', originalCaption: 'tRNA', color: '#222222', featureIds: [] }], inventory: ['CDS', 'tRNA']
+  }, ['CDS', '#111111'], ['tRNA', '#222222']);
+  actions.extractLegendEntries();
+  assert.deepEqual(named(), [['CDS', 'CDS'], ['tRNA', 'tRNA']]);
 }
 
 {
