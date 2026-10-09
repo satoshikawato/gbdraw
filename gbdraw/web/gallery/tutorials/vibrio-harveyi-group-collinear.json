@@ -1,10 +1,10 @@
 {
   "id": "vibrio-harveyi-group-collinear",
   "version": 1,
-  "title": "Compare both chromosomes from two Vibrio assemblies",
-  "summary": "Arrange four chromosomes from Vibrio parahaemolyticus and Vibrio alginolyticus as two Linear rows, run LOSATP collinear analysis between the rows, and color the resulting blocks by orientation and identity.",
+  "title": "Collinearity analysis of multi-replicon bacterial genomes (<i>Vibrio</i> spp.)",
+  "summary": "Two <i>Vibrio</i> genomes, each with two chromosomes. Each chromosome is rotated in gbdraw to start at its replication initiator gene — <i>dnaA</i> on chromosome I and <i>rctB</i> on chromosome II — so records that NCBI starts at unrelated positions line up. Inversions occur within each chromosome, but collinear blocks rarely connect chromosome I to chromosome II. This tutorial finds each initiator with a qualifier search, starts its record there, and then runs LOSATP Collinear blocks once.",
   "appMode": "Linear",
-  "primaryWorkflow": "Multi-record LOSATP collinear blocks",
+  "primaryWorkflow": "Align replicons at their replication origin",
   "downloads": [
     {
       "label": "Vibrio parahaemolyticus RIMD 2210633",
@@ -40,17 +40,56 @@
     },
     {
       "title": "Add the two assembly files",
-      "body": "Add each assembly GBFF as its own File: GCF_000196095.1 as File 1 and GCF_000354175.2 as File 2. Each File lists both of its chromosomes as records. Open the first record of each File, enter the species markup in Organism / strain and the strain in Subtitle / title, and leave both fields empty for the second chromosome.",
+      "body": "Add each assembly GBFF as its own File: GCF_000196095.1 as File 1 and GCF_000354175.2 as File 2. Each File lists its two chromosomes as records. In the first record of each File, enter the species in Organism / strain and the strain in Subtitle / title; leave both empty for the second chromosome.",
       "table": {
-        "columns": ["Order", "File", "Species definition", "Strain subtitle", "Record", "Layout row", "Column"],
+        "columns": [
+          "Order",
+          "File",
+          "Species definition",
+          "Strain subtitle",
+          "Record",
+          "Layout row",
+          "Column"
+        ],
         "rows": [
-          ["1", "1", "<i>Vibrio parahaemolyticus</i>", "RIMD 2210633", "NC_004603.1", "1", "1"],
-          ["2", "1", "", "", "NC_004605.1", "1", "2"],
-          ["3", "2", "<i>Vibrio alginolyticus</i>", "NBRC 15630", "NC_022349.1", "2", "1"],
-          ["4", "2", "", "", "NC_022359.1", "2", "2"]
+          [
+            "1",
+            "1",
+            "<i>Vibrio parahaemolyticus</i>",
+            "RIMD 2210633",
+            "NC_004603.1",
+            "1",
+            "1"
+          ],
+          [
+            "2",
+            "1",
+            "",
+            "",
+            "NC_004605.1",
+            "1",
+            "2"
+          ],
+          [
+            "3",
+            "2",
+            "<i>Vibrio alginolyticus</i>",
+            "NBRC 15630",
+            "NC_022349.1",
+            "2",
+            "1"
+          ],
+          [
+            "4",
+            "2",
+            "",
+            "",
+            "NC_022359.1",
+            "2",
+            "2"
+          ]
         ]
       },
-      "note": "Both assemblies contain two chromosomes, and all four chromosomes are included.",
       "operations": [
         {
           "dataDependent": true,
@@ -62,7 +101,10 @@
           "capture": {
             "source": "webapp",
             "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
-            "viewport": {"width": 1280, "height": 1400},
+            "viewport": {
+              "width": 1280,
+              "height": 1400
+            },
             "actions": [
               {
                 "type": "evaluate",
@@ -82,7 +124,12 @@
               }
             ],
             "selector": "[data-capture-tutorial-record-row='true']",
-            "cropPadding": {"top": 0, "right": 8, "bottom": 8, "left": 0},
+            "cropPadding": {
+              "top": 0,
+              "right": 8,
+              "bottom": 8,
+              "left": 0
+            },
             "assertAppState": {
               "mode": "linear",
               "linearSeqs.length": 4,
@@ -90,11 +137,26 @@
               "linearSeqs.0.definition": "<i>Vibrio parahaemolyticus</i>",
               "linearSeqs.0.record_subtitle": "RIMD 2210633"
             },
-            "visibleText": ["File 1", "Number of records: 2", "Organism / strain (optional)", "Subtitle / title (optional)", "Region (optional)"],
+            "visibleText": [
+              "File 1",
+              "Number of records: 2",
+              "Organism / strain (optional)",
+              "Subtitle / title (optional)",
+              "Region (optional)"
+            ],
             "visibleControls": [
-              {"selector": "select[aria-label='Record selector for sequence 1']", "value": "NC_004603.1"},
-              {"selector": "input[aria-label='Definition for sequence 1']", "value": "<i>Vibrio parahaemolyticus</i>"},
-              {"selector": "input[aria-label='Subtitle / title for sequence 1']", "value": "RIMD 2210633"}
+              {
+                "selector": "select[aria-label='Record selector for sequence 1']",
+                "value": "NC_004603.1"
+              },
+              {
+                "selector": "input[aria-label='Definition for sequence 1']",
+                "value": "<i>Vibrio parahaemolyticus</i>"
+              },
+              {
+                "selector": "input[aria-label='Subtitle / title for sequence 1']",
+                "value": "RIMD 2210633"
+              }
             ]
           }
         }
@@ -102,7 +164,7 @@
     },
     {
       "title": "Arrange one species per row",
-      "body": "Turn on Arrange in rows. Assign the row numbers from the replicon table, retain the listed input order for left-to-right columns, and set Record gap to 48 px.",
+      "body": "Open Advanced comparison and layout, turn on Arrange in rows, assign the rows from the table above, and set Record gap to 48 px.",
       "operations": [
         {
           "dataDependent": true,
@@ -114,15 +176,24 @@
           "capture": {
             "source": "webapp",
             "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
-            "viewport": {"width": 1280, "height": 1400},
-            "openDetails": ["Advanced comparison and layout"],
+            "viewport": {
+              "width": 1280,
+              "height": 1400
+            },
+            "openDetails": [
+              "Advanced comparison and layout"
+            ],
             "actions": [
               {
                 "type": "evaluate",
                 "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const inputs = [...document.querySelectorAll('input[aria-label^=\"Linear record row for sequence\"]')]; const expected = '1,1,2,2'; if (inputs.map((node) => node.value).join(',') !== expected) throw new Error('Restored row assignments do not match the tutorial.'); const heading = [...document.querySelectorAll('[data-linear-advanced-comparison] .linear-primary-label')].find((node) => node.textContent?.trim() === 'Record Layout'); const panel = heading?.parentElement; const rows = inputs.map((node) => node.parentElement); if (!heading || !panel || rows.some((row) => !row)) throw new Error('Record Layout controls are unavailable.'); heading.setAttribute('data-capture-record-layout-heading', 'true'); rows.forEach((row, index) => row.setAttribute('data-capture-record-layout-row', String(index + 1))); const gap = [...panel.querySelectorAll('label')].find((node) => node.textContent?.includes('Record gap')); gap?.setAttribute('data-capture-record-layout-gap', 'true'); heading.scrollIntoView({ block: 'center' });"
               }
             ],
-            "clipSelectors": ["[data-capture-record-layout-heading='true']", "[data-capture-record-layout-row]", "[data-capture-record-layout-gap='true']"],
+            "clipSelectors": [
+              "[data-capture-record-layout-heading='true']",
+              "[data-capture-record-layout-row]",
+              "[data-capture-record-layout-gap='true']"
+            ],
             "cropPadding": 12,
             "assertAppState": {
               "mode": "linear",
@@ -130,12 +201,447 @@
               "linearRecordGap": 48,
               "linearRecordRows.length": 4
             },
-            "visibleText": ["Record Layout", "Arrange in rows", "Record gap (px)"],
+            "visibleText": [
+              "Record Layout",
+              "Arrange in rows",
+              "Record gap (px)"
+            ],
             "visibleControls": [
-              {"label": "Arrange in rows", "checked": true},
-              {"selector": "input[aria-label='Linear record row for sequence 1']", "value": 1},
-              {"selector": "input[aria-label='Linear record row for sequence 3']", "value": 2},
-              {"label": "Record gap (px)", "value": 48}
+              {
+                "label": "Arrange in rows",
+                "checked": true
+              },
+              {
+                "selector": "input[aria-label='Linear record row for sequence 1']",
+                "value": 1
+              },
+              {
+                "selector": "input[aria-label='Linear record row for sequence 3']",
+                "value": 2
+              },
+              {
+                "label": "Record gap (px)",
+                "value": 48
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "title": "Generate a first preview and search for dnaA",
+      "body": "Click Generate Diagram before you set up a comparison; without one the preview is ready in seconds. In the search bar above the preview, set the search field to Qualifier value, type gene as the Qualifier key and dnaA as the query, and click Search. It finds the dnaA CDS of both species.",
+      "operations": [
+        {
+          "dataDependent": true,
+          "title": "Search by qualifier value",
+          "media": {
+            "src": "./media/vibrio-harveyi-group-collinear/manual-03-10-search-dnaa.webp",
+            "alt": "Feature search bar with Search field set to Qualifier value, gene as the qualifier key, dnaA as the query, 1 / 2 features found, and the first match named as NC_004603.1.",
+            "caption": "Set the search field to Qualifier value, enter gene and dnaA, and click Search."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "viewport": {
+              "width": 1600,
+              "height": 1000
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview';"
+              },
+              {
+                "type": "select",
+                "selector": "select[aria-label='Search field']",
+                "value": "qualifier-value"
+              },
+              {
+                "type": "fill",
+                "selector": "input[aria-label='Qualifier key']",
+                "value": "gene"
+              },
+              {
+                "type": "fill",
+                "selector": "input[aria-label='Search features']",
+                "value": "dnaA"
+              },
+              {
+                "type": "click",
+                "selector": "button.gfs-button--search"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => document.querySelector(\"[aria-label='Feature search status']\")?.textContent?.trim() === '1 / 2 features'"
+              }
+            ],
+            "selector": ".preview-feature-search",
+            "cropPadding": 8,
+            "assertAppState": {
+              "mode": "linear",
+              "previewFeatureSearchField": "qualifier-value",
+              "previewFeatureSearchQualifierKey": "gene",
+              "previewFeatureSearchInput": "dnaA"
+            },
+            "visibleText": [
+              "1 / 2 features",
+              "Record NC_004603.1 · Matched Qualifier gene: dnaA"
+            ],
+            "visibleControls": [
+              {
+                "selector": "select[aria-label='Search field']",
+                "value": "Qualifier value"
+              },
+              {
+                "selector": "input[aria-label='Qualifier key']",
+                "value": "gene"
+              },
+              {
+                "selector": "input[aria-label='Search features']",
+                "value": "dnaA"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "title": "Start each chromosome at its replication initiator",
+      "body": "Click Open to open the first match. In its popup, rotate the record to start at the feature and show its label, as below. Click > for the second match, Open it, and repeat. Then search Qualifier key product for RctB and repeat for both matches with the label RctB. Finally, in Labels, set Label Font Size to 14.",
+      "table": {
+        "columns": [
+          "Record",
+          "Qualifier key",
+          "Query",
+          "Protein",
+          "Display start",
+          "Label"
+        ],
+        "rows": [
+          [
+            "NC_004603.1",
+            "gene",
+            "dnaA",
+            "WP_005488867.1",
+            "7,680",
+            "DnaA"
+          ],
+          [
+            "NC_022349.1",
+            "gene",
+            "dnaA",
+            "WP_005378835.1",
+            "2,367,125",
+            "DnaA"
+          ],
+          [
+            "NC_004605.1",
+            "product",
+            "RctB",
+            "WP_005477480.1",
+            "1,150",
+            "RctB"
+          ],
+          [
+            "NC_022359.1",
+            "product",
+            "RctB",
+            "WP_005374502.1",
+            "430,232",
+            "RctB"
+          ]
+        ]
+      },
+      "note": "RctB CDSs have no gene qualifier, so search their product. All four initiators are on the + strand, so each record keeps its orientation. The new starts apply at the next Generate.",
+      "operations": [
+        {
+          "dataDependent": true,
+          "title": "Rotate the record",
+          "media": {
+            "src": "./media/vibrio-harveyi-group-collinear/manual-03-11-rotate-start.webp",
+            "alt": "Feature popup for the dnaA CDS of NC_004603.1 with Rotate record using this feature open, Start of the record selected, and the note NC_004603.1 will start at 7,680.",
+            "caption": "Click Open, then under Layout choose Rotate record using this feature, Start of the record, and Apply on Generate."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "viewport": {
+              "width": 1600,
+              "height": 1000
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview';"
+              },
+              {
+                "type": "select",
+                "selector": "select[aria-label='Search field']",
+                "value": "qualifier-value"
+              },
+              {
+                "type": "fill",
+                "selector": "input[aria-label='Qualifier key']",
+                "value": "gene"
+              },
+              {
+                "type": "fill",
+                "selector": "input[aria-label='Search features']",
+                "value": "dnaA"
+              },
+              {
+                "type": "click",
+                "selector": "button.gfs-button--search"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => document.querySelector(\"[aria-label='Feature search status']\")?.textContent?.trim() === '1 / 2 features'"
+              },
+              {
+                "type": "click",
+                "selector": "button[aria-label='Open active feature']"
+              },
+              {
+                "type": "waitForSelector",
+                "selector": ".feature-popup"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => window.__GBDRAW_APP__?.clickedFeature?.feat?.record_id === 'NC_004603.1'"
+              },
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app?.featurePopupSize) app.featurePopupSize.width = 460; if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 640; app.clickedFeaturePos.y = 24; }"
+              },
+              {
+                "type": "wait",
+                "ms": 250
+              },
+              {
+                "type": "click",
+                "selector": "#feature-record-actions-toggle"
+              },
+              {
+                "type": "check",
+                "selector": "input[name='feature-record-rotation-position'][value='start']"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => /NC_004603\\.1 will start at 7,680/.test(document.querySelector('#feature-record-rotation-preview')?.textContent || '')"
+              },
+              {
+                "type": "evaluate",
+                "script": "const popup = document.querySelector('.feature-popup'); const layout = popup?.querySelector('[data-feature-popup-group=\"layout\"]'); if (!popup || !layout) throw new Error('Feature popup Layout section not found.'); const body = popup.querySelector('.feature-popup-body'); if (body) body.scrollTop += layout.getBoundingClientRect().top - body.getBoundingClientRect().top - 8; popup.children[0]?.setAttribute('data-capture', 'vibrio-popup-header'); layout.setAttribute('data-capture', 'vibrio-popup-layout');"
+              },
+              {
+                "type": "wait",
+                "ms": 200
+              }
+            ],
+            "clipSelectors": [
+              "[data-capture='vibrio-popup-header']",
+              "[data-capture='vibrio-popup-layout']"
+            ],
+            "cropPadding": 8,
+            "assertAppState": {
+              "mode": "linear",
+              "clickedFeature.feat.record_id": "NC_004603.1",
+              "clickedFeature.feat.gene": "dnaA"
+            },
+            "visibleText": [
+              "Rotate record using this feature",
+              "Start of the record",
+              "NC_004603.1 will start at 7,680",
+              "Apply on Generate"
+            ],
+            "visibleControls": [
+              {
+                "selector": "input[name='feature-record-rotation-position'][value='start']",
+                "checked": true
+              }
+            ]
+          }
+        },
+        {
+          "dataDependent": true,
+          "title": "Show the label",
+          "media": {
+            "src": "./media/vibrio-harveyi-group-collinear/manual-03-12-label-dnaa.webp",
+            "alt": "Label section of the same feature popup with Label visibility set to On (always show) and DnaA as the label text.",
+            "caption": "In the same popup, set Label visibility to On, type DnaA, and press Enter."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "viewport": {
+              "width": 1600,
+              "height": 1000
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview';"
+              },
+              {
+                "type": "select",
+                "selector": "select[aria-label='Search field']",
+                "value": "qualifier-value"
+              },
+              {
+                "type": "fill",
+                "selector": "input[aria-label='Qualifier key']",
+                "value": "gene"
+              },
+              {
+                "type": "fill",
+                "selector": "input[aria-label='Search features']",
+                "value": "dnaA"
+              },
+              {
+                "type": "click",
+                "selector": "button.gfs-button--search"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => document.querySelector(\"[aria-label='Feature search status']\")?.textContent?.trim() === '1 / 2 features'"
+              },
+              {
+                "type": "click",
+                "selector": "button[aria-label='Open active feature']"
+              },
+              {
+                "type": "waitForSelector",
+                "selector": ".feature-popup"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => window.__GBDRAW_APP__?.clickedFeature?.feat?.record_id === 'NC_004603.1'"
+              },
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app?.featurePopupSize) app.featurePopupSize.width = 460; if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 640; app.clickedFeaturePos.y = 24; }"
+              },
+              {
+                "type": "wait",
+                "ms": 250
+              },
+              {
+                "type": "evaluate",
+                "script": "const popup = document.querySelector('.feature-popup'); const heading = Array.from(popup?.querySelectorAll('label') || []).find((node) => node.textContent?.trim() === 'Label text'); const section = heading?.parentElement?.parentElement; if (!popup || !section) throw new Error('Feature popup label section not found.'); const body = popup.querySelector('.feature-popup-body'); if (body) body.scrollTop += section.getBoundingClientRect().top - body.getBoundingClientRect().top - 8; popup.children[0]?.setAttribute('data-capture', 'vibrio-popup-header'); section.setAttribute('data-capture', 'vibrio-popup-label');"
+              },
+              {
+                "type": "wait",
+                "ms": 200
+              }
+            ],
+            "clipSelectors": [
+              "[data-capture='vibrio-popup-header']",
+              "[data-capture='vibrio-popup-label']"
+            ],
+            "cropPadding": 8,
+            "assertAppState": {
+              "mode": "linear",
+              "clickedFeature.feat.record_id": "NC_004603.1",
+              "clickedFeature.labelVisibility": "on",
+              "clickedFeature.labelText": "DnaA"
+            },
+            "visibleText": [
+              "Label text",
+              "Label visibility"
+            ],
+            "visibleControls": [
+              {
+                "selector": ".feature-popup input[placeholder='Edit label text']",
+                "value": "DnaA"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "title": "Color the four initiators",
+      "body": "In Colors, add two rows to SPECIFIC RULES (-t).",
+      "table": {
+        "columns": [
+          "Feature",
+          "Qualifier",
+          "Value pattern",
+          "Color",
+          "Legend caption"
+        ],
+        "rows": [
+          [
+            "CDS",
+            "gene",
+            "^dnaA$",
+            "#6a3d9a",
+            "DnaA (chromosome I replication initiator)"
+          ],
+          [
+            "CDS",
+            "product",
+            "RctB",
+            "#b15928",
+            "RctB (chromosome II replication initiator)"
+          ]
+        ]
+      },
+      "note": "^dnaA$ matches the gene name exactly; RctB matches inside the longer product name.",
+      "operations": [
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/vibrio-harveyi-group-collinear/manual-03-13-initiator-color-rules.webp",
+            "alt": "SPECIFIC RULES (-t) controls with two CDS rules: gene ^dnaA$ in purple captioned DnaA (chromosome I replication initiator), and product RctB in brown captioned RctB (chromosome II replication initiator).",
+            "caption": "Enter both rows in SPECIFIC RULES (-t) under Colors."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
+            "openDetails": [
+              "Colors"
+            ],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 480; const heading = Array.from(document.querySelectorAll('h4')).find((node) => node.textContent?.includes('SPECIFIC RULES')); const header = heading?.parentElement; const rows = document.querySelector('[data-color-rule-row]')?.parentElement; if (!header || !rows) throw new Error('Vibrio specific-rule rows not found.'); header.setAttribute('data-capture', 'vibrio-specific-rules-header'); rows.setAttribute('data-capture', 'vibrio-specific-rules-rows'); rows.scrollIntoView({ block: 'center' });"
+              }
+            ],
+            "clipSelectors": [
+              "[data-capture='vibrio-specific-rules-header']",
+              "[data-capture='vibrio-specific-rules-rows']"
+            ],
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "linear",
+              "manualSpecificRules.length": 2
+            },
+            "visibleText": [
+              "SPECIFIC RULES (-t)"
+            ],
+            "visibleControls": [
+              {
+                "selector": "input[aria-label='Color rule 1 pattern']",
+                "value": "^dnaA$"
+              },
+              {
+                "selector": "input[aria-label='Color rule 1 legend caption']",
+                "value": "DnaA (chromosome I replication initiator)"
+              },
+              {
+                "selector": "input[aria-label='Color rule 2 pattern']",
+                "value": "RctB"
+              },
+              {
+                "selector": "input[aria-label='Color rule 2 legend caption']",
+                "value": "RctB (chromosome II replication initiator)"
+              }
             ]
           }
         }
@@ -143,23 +649,56 @@
     },
     {
       "title": "Run LOSATP in Collinear blocks mode",
-      "body": "In Comparison, choose Run LOSAT, open Settings, set LOSAT Mode to LOSATP and LOSATP mode to Collinear blocks, then use Adjacent pairs as evidence. Diagonal drift is under Advanced comparison and layout.",
+      "body": "In Comparison, choose Run LOSAT. In Settings, set LOSAT Mode to LOSATP, LOSATP mode to Collinear blocks, Color mode to Orientation + identity, and Evidence scope to Adjacent pairs. Diagonal drift is under Advanced comparison and layout.",
       "table": {
-        "columns": ["Setting", "Value"],
+        "columns": [
+          "Setting",
+          "Value"
+        ],
         "rows": [
-          ["LOSAT Mode", "LOSATP"],
-          ["LOSATP mode", "Collinear blocks"],
-          ["Max unit gap", "2"],
-          ["Min block genes", "3"],
-          ["Evidence scope", "Adjacent pairs"],
-          ["Diagonal drift", "2"],
-          ["Bitscore", "50"],
-          ["E-value", "1e-2"],
-          ["Minimum Identity", "0"],
-          ["Minimum Length", "0"]
+          [
+            "LOSAT Mode",
+            "LOSATP"
+          ],
+          [
+            "LOSATP mode",
+            "Collinear blocks"
+          ],
+          [
+            "Max unit gap",
+            "2"
+          ],
+          [
+            "Min block genes",
+            "3"
+          ],
+          [
+            "Evidence scope",
+            "Adjacent pairs"
+          ],
+          [
+            "Diagonal drift",
+            "2"
+          ],
+          [
+            "Bitscore",
+            "50"
+          ],
+          [
+            "E-value",
+            "1e-2"
+          ],
+          [
+            "Minimum Identity",
+            "0"
+          ],
+          [
+            "Minimum Length",
+            "0"
+          ]
         ]
       },
-      "note": "With multi-record rows, Adjacent pairs searches every cross-record combination between neighboring rows. This layout evaluates four chromosome pairs across one species boundary; same-row pairs are omitted.",
+      "note": "Adjacent pairs compares every chromosome in one row with every chromosome in the next row: four pairs here. Chromosomes in the same row are not compared.",
       "operations": [
         {
           "dataDependent": true,
@@ -172,14 +711,23 @@
           "capture": {
             "source": "webapp",
             "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
-            "viewport": {"width": 1600, "height": 1100},
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
             "actions": [
               {
                 "type": "evaluate",
                 "script": "async () => { const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear'); }"
               },
-              {"type": "wait", "ms": 300},
-              {"type": "evaluate", "script": "() => { const settings = document.querySelector(\"[data-linear-comparison-disclosure='settings']\"); if (settings) settings.open = false; }"}
+              {
+                "type": "wait",
+                "ms": 300
+              },
+              {
+                "type": "evaluate",
+                "script": "() => { const settings = document.querySelector(\"[data-linear-comparison-disclosure='settings']\"); if (settings) settings.open = false; }"
+              }
             ],
             "selector": "[data-linear-comparison-card]",
             "cropPadding": 14,
@@ -190,7 +738,12 @@
               "losatProgram": "blastp",
               "losat.blastp.mode": "collinear"
             },
-            "visibleText": ["Comparison", "Run LOSAT", "Settings", "Selected pairs"]
+            "visibleText": [
+              "Comparison",
+              "Run LOSAT",
+              "Settings",
+              "Selected pairs"
+            ]
           }
         },
         {
@@ -204,23 +757,42 @@
           "capture": {
             "source": "webapp",
             "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
-            "viewport": {"width": 1600, "height": 1100},
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
             "crop": "openSelect",
-            "cropPadding": {"top": 68, "right": 12, "bottom": 20, "left": 140},
-            "clipSelectors": ["[data-linear-comparison-losat-mode]"],
+            "cropPadding": {
+              "top": 68,
+              "right": 12,
+              "bottom": 20,
+              "left": 140
+            },
+            "clipSelectors": [
+              "[data-linear-comparison-losat-mode]"
+            ],
             "openSelect": {
               "selectedLabel": "Collinear blocks",
-              "options": ["Similarity groups", "Collinear blocks", "Pairwise matches"],
+              "options": [
+                "Similarity groups",
+                "Collinear blocks",
+                "Pairwise matches"
+              ],
               "label": "LOSATP mode",
               "hideFollowingSiblings": true
             },
-            "openDetails": ["Settings"],
+            "openDetails": [
+              "Settings"
+            ],
             "actions": [
               {
                 "type": "evaluate",
                 "script": "async () => { const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear'); }"
               },
-              {"type": "wait", "ms": 300}
+              {
+                "type": "wait",
+                "ms": 300
+              }
             ],
             "assertAppState": {
               "mode": "linear",
@@ -230,12 +802,26 @@
               "losat.blastp.mode": "collinear"
             },
             "visibleControls": [
-              {"selector": "[data-linear-comparison-losat-mode-option='blastn']", "pressed": false},
-              {"selector": "[data-linear-comparison-losat-mode-option='blastp']", "pressed": true},
-              {"selector": "[data-linear-comparison-losat-mode-option='tblastx']", "pressed": false},
-              {"label": "LOSATP mode", "value": "Collinear blocks"}
+              {
+                "selector": "[data-linear-comparison-losat-mode-option='blastn']",
+                "pressed": false
+              },
+              {
+                "selector": "[data-linear-comparison-losat-mode-option='blastp']",
+                "pressed": true
+              },
+              {
+                "selector": "[data-linear-comparison-losat-mode-option='tblastx']",
+                "pressed": false
+              },
+              {
+                "label": "LOSATP mode",
+                "value": "Collinear blocks"
+              }
             ],
-            "visibleText": ["LOSAT Mode"]
+            "visibleText": [
+              "LOSAT Mode"
+            ]
           }
         },
         {
@@ -249,15 +835,29 @@
           "capture": {
             "source": "webapp",
             "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
-            "viewport": {"width": 1600, "height": 1100},
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
             "crop": "openSelect",
-            "cropPadding": {"top": 24, "right": 80, "bottom": 20, "left": 80},
+            "cropPadding": {
+              "top": 24,
+              "right": 80,
+              "bottom": 20,
+              "left": 80
+            },
             "openSelect": {
               "selectedLabel": "Orientation + identity",
-              "options": ["Average identity", "Orientation", "Orientation + identity"],
+              "options": [
+                "Average identity",
+                "Orientation",
+                "Orientation + identity"
+              ],
               "label": "Color mode"
             },
-            "openDetails": ["Settings"],
+            "openDetails": [
+              "Settings"
+            ],
             "actions": [
               {
                 "type": "evaluate",
@@ -273,7 +873,10 @@
               "losat.blastp.collinearColorMode": "orientation_identity"
             },
             "visibleControls": [
-              {"label": "Color mode", "value": "Orientation + identity"}
+              {
+                "label": "Color mode",
+                "value": "Orientation + identity"
+              }
             ]
           }
         },
@@ -289,13 +892,23 @@
             "source": "webapp",
             "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
             "crop": "openSelect",
-            "cropPadding": {"top": 20, "right": 80, "bottom": 0, "left": 80},
+            "cropPadding": {
+              "top": 20,
+              "right": 80,
+              "bottom": 0,
+              "left": 80
+            },
             "openSelect": {
               "selectedLabel": "Adjacent pairs",
-              "options": ["Adjacent pairs", "All records"],
+              "options": [
+                "Adjacent pairs",
+                "All records"
+              ],
               "label": "Evidence scope"
             },
-            "openDetails": ["Settings"],
+            "openDetails": [
+              "Settings"
+            ],
             "actions": [
               {
                 "type": "evaluate",
@@ -329,8 +942,13 @@
           "capture": {
             "source": "webapp",
             "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
-            "viewport": {"width": 1600, "height": 1100},
-            "openDetails": ["Advanced comparison and layout"],
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
+            "openDetails": [
+              "Advanced comparison and layout"
+            ],
             "actions": [
               {
                 "type": "evaluate",
@@ -354,9 +972,16 @@
               "losat.blastp.mode": "collinear",
               "losat.blastp.collinearMaxDiagonalDrift": 2
             },
-            "visibleText": ["Advanced collinear search", "Merge conflicts", "Paralog links per group"],
+            "visibleText": [
+              "Advanced collinear search",
+              "Merge conflicts",
+              "Paralog links per group"
+            ],
             "visibleControls": [
-              {"label": "Diagonal drift", "value": 2}
+              {
+                "label": "Diagonal drift",
+                "value": 2
+              }
             ]
           }
         }
@@ -364,17 +989,41 @@
     },
     {
       "title": "Render every feature as a rectangle",
-      "body": "Keep the seven default Linear feature types and set each shape selector to Rectangle.",
+      "body": "In Features, set the shape of all seven Linear feature types to Rectangle.",
       "table": {
-        "columns": ["Feature type", "Shape"],
+        "columns": [
+          "Feature type",
+          "Shape"
+        ],
         "rows": [
-          ["CDS", "Rectangle"],
-          ["rRNA", "Rectangle"],
-          ["tRNA", "Rectangle"],
-          ["tmRNA", "Rectangle"],
-          ["ncRNA", "Rectangle"],
-          ["misc_RNA", "Rectangle"],
-          ["repeat_region", "Rectangle"]
+          [
+            "CDS",
+            "Rectangle"
+          ],
+          [
+            "rRNA",
+            "Rectangle"
+          ],
+          [
+            "tRNA",
+            "Rectangle"
+          ],
+          [
+            "tmRNA",
+            "Rectangle"
+          ],
+          [
+            "ncRNA",
+            "Rectangle"
+          ],
+          [
+            "misc_RNA",
+            "Rectangle"
+          ],
+          [
+            "repeat_region",
+            "Rectangle"
+          ]
         ]
       },
       "operations": [
@@ -387,36 +1036,77 @@
           "capture": {
             "source": "webapp",
             "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
-            "viewport": {"width": 1280, "height": 900},
-            "openDetails": ["Features"],
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "openDetails": [
+              "Features"
+            ],
             "actions": [
               {
                 "type": "evaluate",
-                                "script": "const app = window.__GBDRAW_APP__; const features = ['CDS','rRNA','tRNA','tmRNA','ncRNA','misc_RNA','repeat_region']; if (!features.every((name) => app?.getFeatureShape?.(name) === 'rectangle')) throw new Error('Restored feature shapes are not all rectangles.'); const card = [...document.querySelectorAll('.card')].find((node) => node.querySelector('summary')?.textContent?.replace(/\\s+/g, ' ').trim().startsWith('Features')); const summary = card?.querySelector('summary'); const section = card?.querySelector('details > div > div'); if (!summary || !section) throw new Error('Feature shape controls are unavailable.'); summary.setAttribute('data-capture-feature-summary', 'true'); section.setAttribute('data-capture-feature-shapes', 'true'); section.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; const features = ['CDS','rRNA','tRNA','tmRNA','ncRNA','misc_RNA','repeat_region']; if (!features.every((name) => app?.getFeatureShape?.(name) === 'rectangle')) throw new Error('Restored feature shapes are not all rectangles.'); const card = [...document.querySelectorAll('.card')].find((node) => node.querySelector('summary')?.textContent?.replace(/\\s+/g, ' ').trim().startsWith('Features')); const summary = card?.querySelector('summary'); const section = card?.querySelector('details > div > div'); if (!summary || !section) throw new Error('Feature shape controls are unavailable.'); summary.setAttribute('data-capture-feature-summary', 'true'); section.setAttribute('data-capture-feature-shapes', 'true'); section.scrollIntoView({ block: 'center' });"
               }
             ],
-            "clipSelectors": ["[data-capture-feature-summary='true']", "[data-capture-feature-shapes='true']"],
+            "clipSelectors": [
+              "[data-capture-feature-summary='true']",
+              "[data-capture-feature-shapes='true']"
+            ],
             "cropPadding": 12
           }
         }
       ]
     },
     {
-      "title": "Set the Linear layout and definitions",
-      "body": "Use Above track layout, separate the strands, and turn on Lock Definition Column. Use a ruler with 750,000 bp spacing. In Titles & Record Labels, turn off Replicon and set Accession and Length / Coordinates to Hide so each left definition contains only the species and strain lines. Set the species line to 18 px Bold and the strain line to 16 px Normal. The two-line definition is centered on the feature record itself, independent of the Axis and ruler.",
+      "title": "Set the layout and definitions",
+      "body": "Use the Above track layout, separate the strands, lock the definition column, and draw a 750,000 bp ruler on each axis. In Titles & Record Labels, turn off Replicon and hide Accession and Length / Coordinates so each definition shows only the species and strain.",
       "table": {
-        "columns": ["Setting", "Value"],
+        "columns": [
+          "Setting",
+          "Value"
+        ],
         "rows": [
-          ["Track Layout", "Above"],
-          ["Separate Strands", "On"],
-          ["Lock Definition Column", "On"],
-          ["Scale Style", "Ruler (Ticks)"],
-          ["Ruler on Axis", "On"],
-          ["Scale Interval", "750000"],
-          ["Default font size", "16"],
-          ["Definition line: Organism / strain", "18; Bold"],
-          ["Definition line: Subtitle / title", "16; Normal"],
-          ["Replicon / Accession / Length", "Off / Hide / Hide"]
+          [
+            "Track Layout",
+            "Above"
+          ],
+          [
+            "Separate Strands",
+            "On"
+          ],
+          [
+            "Lock Definition Column",
+            "On"
+          ],
+          [
+            "Scale Style",
+            "Ruler (Ticks)"
+          ],
+          [
+            "Ruler on Axis",
+            "On"
+          ],
+          [
+            "Scale Interval",
+            "750000"
+          ],
+          [
+            "Default font size",
+            "16"
+          ],
+          [
+            "Definition line: Organism / strain",
+            "18; Bold"
+          ],
+          [
+            "Definition line: Subtitle / title",
+            "16; Normal"
+          ],
+          [
+            "Replicon / Accession / Length",
+            "Off / Hide / Hide"
+          ]
         ]
       },
       "operations": [
@@ -429,28 +1119,46 @@
           "capture": {
             "source": "webapp",
             "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
-            "viewport": {"width": 1280, "height": 900},
-            "openDetails": ["Layout"],
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "openDetails": [
+              "Layout"
+            ],
             "actions": [
               {
                 "type": "evaluate",
                 "script": "const app = window.__GBDRAW_APP__; if (app?.form?.linear_track_layout !== 'above' || app?.form?.separate_strands !== true || app?.form?.keep_definition_left_aligned !== true) throw new Error('Restored Linear layout does not match the tutorial.'); const card = [...document.querySelectorAll('.card')].find((node) => node.querySelector('summary')?.textContent?.replace(/\\s+/g, ' ').trim().startsWith('Layout')); const summary = card?.querySelector('summary'); const content = card?.querySelector('details > div'); const track = content?.children?.[0]; const options = content?.children?.[1]; if (!summary || !track || !options) throw new Error('Layout controls are unavailable.'); summary.setAttribute('data-capture-linear-layout-summary', 'true'); track.setAttribute('data-capture-linear-layout-track', 'true'); options.setAttribute('data-capture-linear-layout-options', 'true'); track.scrollIntoView({ block: 'center' });"
               }
             ],
-            "clipSelectors": ["[data-capture-linear-layout-summary='true']", "[data-capture-linear-layout-track='true']", "[data-capture-linear-layout-options='true']"],
+            "clipSelectors": [
+              "[data-capture-linear-layout-summary='true']",
+              "[data-capture-linear-layout-track='true']",
+              "[data-capture-linear-layout-options='true']"
+            ],
             "cropPadding": 12
           }
         }
       ]
     },
     {
-      "title": "Place the legend at the bottom and leave the title blank",
+      "title": "Place the legend at the bottom",
       "body": "Leave Plot Title empty and set Legend position to Bottom.",
       "table": {
-        "columns": ["Setting", "Value"],
+        "columns": [
+          "Setting",
+          "Value"
+        ],
         "rows": [
-          ["Plot Title", "Blank"],
-          ["Legend position", "Bottom"]
+          [
+            "Plot Title",
+            "Blank"
+          ],
+          [
+            "Legend position",
+            "Bottom"
+          ]
         ]
       },
       "operations": [
@@ -464,39 +1172,58 @@
             "source": "webapp",
             "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
             "crop": "openSelect",
-            "cropPadding": {"top": 54, "right": 80, "bottom": 24, "left": 80},
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
             "openSelect": {
               "selector": "#legend-position",
               "selectedLabel": "Bottom",
-              "options": ["Right", "Left", "Top", "Bottom", "None"],
+              "options": [
+                "Right",
+                "Left",
+                "Top",
+                "Bottom",
+                "None"
+              ],
               "label": "Legend position"
             },
-            "openDetails": ["Legend ·"]
+            "openDetails": [
+              "Legend ·"
+            ]
           }
         }
       ]
     },
     {
-      "title": "Generate and inspect the multi-record diagram",
-      "body": "Click Generate Diagram. The bundled Gallery session already contains the completed result for immediate inspection. The preview should show two species rows, four record-local rulers, rectangular features, and orientation-and-identity collinear blocks at their shared boundary. Each left-aligned two-line definition remains centered on the feature record rather than the ruler. A narrow white gap separates each record from the blocks, including when feature labels are hidden. The Gallery preview uses an interactive SVG with internally compressed metadata, so you can click a feature or collinear block to inspect its embedded metadata.",
+      "title": "Generate once and inspect",
+      "body": "Click Generate Diagram. The rotations, labels, colors, and comparison all apply in this one run. Check the result:",
       "operations": [
         {
           "dataDependent": true,
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-08-01-collinear-overview.webp",
-            "alt": "Generated two-row Vibrio diagram with four chromosomes and orientation-and-identity collinear blocks.",
-            "caption": "The completed title-free diagram retains all four chromosomes, centers each 18 px bold species name and 16 px strain name on its feature row, preserves the Axis-sized gap around the collinear block band, and places the legend below the final row."
+            "alt": "Two-row Vibrio diagram: each chromosome starts at a labelled DnaA or RctB, gray collinear and red inverted blocks join the rows, and the legend at the bottom lists both initiator colors.",
+            "caption": "Every row starts at its initiator; inversions stay within chromosome I or chromosome II."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
-            "viewport": {"width": 1800, "height": 1100},
+            "viewport": {
+              "width": 1800,
+              "height": 1100
+            },
             "actions": [
               {
                 "type": "evaluate",
                 "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const rows = Array.isArray(app?.linearRecordRows) ? app.linearRecordRows.map((entry) => Number(entry?.row)) : []; if (JSON.stringify(rows) !== JSON.stringify([1, 1, 2, 2])) throw new Error('Restored Vibrio row placement does not match the tutorial.'); const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg || !content.includes('Vibrio parahaemolyticus') || !content.includes('Vibrio alginolyticus') || !content.includes('Collinear') || !content.includes('Inverted') || svg.getElementById('plot_title')) throw new Error('Restored title-free Vibrio collinear SVG does not match the tutorial.'); app.resultPanelTab = 'preview'; app.zoom = 0.55; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } svg.setAttribute('data-capture-vibrio-overview', 'true');"
               },
-              {"type": "wait", "ms": 100},
+              {
+                "type": "wait",
+                "ms": 100
+              },
               {
                 "type": "waitForFunction",
                 "timeout": 5000,
@@ -523,52 +1250,55 @@
             "visibleText": [
               "Vibrio parahaemolyticus",
               "Vibrio alginolyticus",
+              "DnaA (chromosome I replication initiator)",
+              "RctB (chromosome II replication initiator)",
               "Collinear",
               "Inverted"
             ]
           }
         }
+      ],
+      "items": [
+        "Each row starts at its labelled initiator: DnaA at the left end of chromosome I, RctB at the left end of chromosome II.",
+        "Red (inverted) blocks join regions within chromosome I or within chromosome II.",
+        "Few blocks cross from chromosome I of one species to chromosome II of the other."
       ]
     }
   ],
   "losatTips": [
     {
-      "title": "Load the session for immediate reproduction",
-      "body": "The Gallery session contains the generated SVG and all input and layout settings. Use it when you want to inspect the completed figure immediately; regenerating after a setting change starts a new search."
+      "title": "Load the session to skip the search",
+      "body": "The Gallery session holds the finished figure and every setting. Load it to inspect the result at once; changing a setting and generating again starts a new search."
     },
     {
-      "title": "Use Safe or a fixed thread budget",
-      "body": "The CLI provenance uses 16 LOSATP threads. In the browser, Safe leaves logical CPUs available for the rest of the page."
+      "title": "Expect a long first run",
+      "body": "LOSATP compares four chromosome pairs of about 1.7 to 3.3 Mbp. The Gallery figure was made on the command line with 16 threads. In the browser, Safe leaves CPU cores free for the rest of the page."
     },
     {
-      "title": "Keep all four input rows unchanged",
-      "body": "After you run LOSATP in your browser, changing a selected replicon, file, input order, or LOSAT threshold invalidates the corresponding browser cache entry."
-    },
-    {
-      "title": "Expect an expensive first run",
-      "body": "Adjacent pairs evaluates four cross-record combinations across the one species-row boundary. Styling-only changes are much faster after the cache has been created."
+      "title": "Style changes reuse the search",
+      "body": "After the first run, color and layout changes regenerate quickly from the browser cache. Changing a chromosome, file, input order, or LOSAT threshold runs that pair's search again."
     }
   ],
   "troubleshooting": [
     {
-      "title": "One chromosome is missing",
-      "body": "Compare the four Record selectors with the chromosome table. Each assembly must include both chromosomes."
+      "title": "The search finds no feature",
+      "body": "Set the search field to Qualifier value and type the qualifier key: gene for dnaA, product for RctB."
     },
     {
-      "title": "Species names repeat above every replicon",
-      "body": "Enter the species definition and strain subtitle only on the first replicon in each species row; leave both fields empty for the other replicons."
+      "title": "A record does not start at its initiator",
+      "body": "Apply on Generate waits for the next Generate Diagram. Check Display start for each record under Advanced comparison and layout."
     },
     {
-      "title": "Definitions contain extra lines",
-      "body": "Turn off Replicon, set Accession and Length / Coordinates to Hide, and keep Lock Definition Column on."
+      "title": "A label is missing",
+      "body": "Set Label visibility to On in the feature's popup; Show Labels can stay None."
     },
     {
-      "title": "The block colors do not match the Gallery",
-      "body": "Set LOSAT Mode to LOSATP, LOSATP mode to Collinear blocks, Color mode to Orientation + identity, and Evidence scope to Adjacent pairs."
+      "title": "Species names repeat above every chromosome",
+      "body": "Enter the species and strain only on the first chromosome of each row; leave both fields empty for the second."
     },
     {
       "title": "The browser becomes unresponsive",
-      "body": "Load the bundled session, switch LOSAT execution to Serial, or lower the thread budget before repeating the full search."
+      "body": "Load the bundled session, switch LOSAT execution to Serial, or lower the thread budget before the full search."
     }
   ],
   "related": [

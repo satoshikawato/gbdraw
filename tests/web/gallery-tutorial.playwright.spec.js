@@ -256,13 +256,21 @@ test('Gallery renders the two-species Vibrio multi-record tutorial and media', a
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto(`${baseUrl}/gallery/#vibrio-harveyi-group-collinear`, { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('#selected-title')).toHaveText('Vibrio parahaemolyticus and V. alginolyticus collinearity');
+  await expect(page.locator('#selected-title')).toHaveText(
+    'Collinearity analysis of multi-replicon bacterial genomes (Vibrio spp.)'
+  );
+  // Taxon names in the description are italic, not literal markup.
+  await expect(page.locator('#selected-description i').first()).toHaveText('Vibrio');
+  await expect(page.locator('#selected-description')).not.toContainText('<i>');
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(
-    tutorialPanel.getByRole('heading', { name: 'Compare both chromosomes from two Vibrio assemblies' })
+    tutorialPanel.getByRole('heading', {
+      name: 'Collinearity analysis of multi-replicon bacterial genomes (Vibrio spp.)'
+    })
   ).toBeVisible();
+  await expect(tutorialPanel.locator('.tutorial-summary i').first()).toHaveText('Vibrio');
   await expect(tutorialPanel.getByRole('row', { name: /1.*NC_004603\.1.*1.*1/ })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: /4.*NC_022359\.1.*2.*2/ })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'CDS Rectangle' })).toBeVisible();
@@ -270,17 +278,26 @@ test('Gallery renders the two-species Vibrio multi-record tutorial and media', a
   await expect(tutorialPanel.getByRole('row', { name: 'Plot Title Blank' })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Definition line: Organism / strain 18; Bold' })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Definition line: Subtitle / title 16; Normal' })).toBeVisible();
-  await expect(tutorialPanel.getByText('Both assemblies contain two chromosomes')).toBeVisible();
   await expect(
-    tutorialPanel.getByText('A narrow white gap separates each record from the blocks')
+    tutorialPanel.getByRole('row', { name: /NC_004603\.1 gene dnaA WP_005488867\.1 7,680 DnaA/ })
   ).toBeVisible();
+  await expect(
+    tutorialPanel.getByRole('row', { name: /NC_022359\.1 product RctB WP_005374502\.1 430,232 RctB/ })
+  ).toBeVisible();
+  await expect(
+    tutorialPanel.getByRole('row', { name: /CDS product RctB #b15928 RctB \(chromosome II replication initiator\)/ })
+  ).toBeVisible();
+  await expect(tutorialPanel.getByText('Few blocks cross from chromosome I')).toBeVisible();
 
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(12);
+  await expect(mediaImages).toHaveCount(16);
   await expect(tutorialPanel.locator('img[src$="manual-02-01-record-row.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-03-01-record-layout.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-04-03-adjacent-pairs.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-05-01-rectangle-features.webp"]')).toHaveCount(1);
+  for (const name of ['search-dnaa', 'rotate-start', 'label-dnaa', 'initiator-color-rules']) {
+    await expect(tutorialPanel.locator(`img[src*="manual-03-1"][src$="${name}.webp"]`)).toHaveCount(1);
+  }
   await expect(tutorialPanel.locator('img[src$="manual-08-01-collinear-overview.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-07-01-bottom-title.webp"]')).toHaveCount(0);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
