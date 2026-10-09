@@ -122,7 +122,7 @@ import {
   admitCurrentSessionResults,
   admitLegacyImportedResults,
   createCurrentSessionResultSource,
-  createEmptySvgMutationPlan,
+  createLegacyNormalizationSvgMutationPlan,
   createLegacyImportResultSource,
   isCommittedSvgResult
 } from './svg-result-ingestion.js';
@@ -216,6 +216,7 @@ import {
   createDefaultLosatpHitLimits,
   LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION,
   reconcileImportedLinearTypographyLink,
+  holdsCliWriterConfig,
   validateCurrentWriterActiveConfig,
   validateImportedCircularTrackSlots,
   validateImportedLinearTrackSlots
@@ -381,7 +382,10 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
  * The composition root's transform of an older Session's Result (R13 port):
  * it gives a Result without composition metadata the legacy composition and
  * projects the saved strokes. Returns whether the SVG changed.
- * @typedef {(svg: Element, data: LegacyResultSvgData) => boolean} LegacyResultSvgTransform
+ * `appliesToContent` tells from a Result's text whether it lacks composition
+ * metadata, so a Session 40+ Result is parsed only when it does (OV-273).
+ * @typedef {((svg: Element, data: LegacyResultSvgData) => boolean)
+ *   & { appliesToContent: (content: unknown) => boolean }} LegacyResultSvgTransform
  */
 export const SESSION_VERSION = 46;
 const CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40;
@@ -1912,7 +1916,11 @@ const preflightSessionImport = async (sessionData) => {
     recordSessionLifecycleEvent('resource-table-adoption-start');
     currentResourceTable = adoptCurrentSessionResources(rawData.resources);
     recordSessionLifecycleEvent('resource-table-adoption-end');
-    normalizedData = rawData;
+    // A CLI-written Session 40-41 `config` is no Web draft (OV-269), as in
+    // migrate_session_flat_draft.
+    normalizedData = holdsCliWriterConfig(rawData)
+      ? Object.fromEntries(Object.entries(rawData).filter(([key]) => key !== 'config'))
+      : rawData;
   } else {
     validateSessionAuthorityInventory(rawData, sourceSessionVersion);
     normalizedData = normalizeSessionData(rawData);
@@ -2225,16 +2233,25 @@ const restoreLoadedSetSequenceSources = async ({
 // E1: the Results of one saved Result set of a current Session (the top-level
 // set or `otherModeResult`), admitted with that set's catalog in its mode.
 /**
+ * A Result that `legacy.applies` to (no composition metadata: a Session 40
+ * Result of main 8228ffab or 7aad9e3e, OV-273) takes `legacy.transform`, the
+ * transform of a pre-40 Result; every other Result is admitted as written.
  * @param {Record<string, any>[]} logicalResults
- * @param {{ featureCatalog: FeatureCatalog, mode: 'circular' | 'linear', selectedFeatureTypes: readonly string[] | null | undefined }} set
+ * @param {{ featureCatalog: FeatureCatalog, mode: 'circular' | 'linear', selectedFeatureTypes: readonly string[] | null | undefined,
+ *   legacy?: { transform: (svg: Element) => unknown, applies?: (content: unknown) => boolean } | null }} set
  */
-const admitLoadedSetResults = (logicalResults, { featureCatalog, mode, selectedFeatureTypes }) => (
+const admitLoadedSetResults = (logicalResults, { featureCatalog, mode, selectedFeatureTypes, legacy = null }) => (
   admitCurrentSessionResults(
     createCurrentSessionResultSource(
       logicalResults,
       admitFeatureCatalog(featureCatalog, logicalResults, { adopt: true, mode })
     ),
-    { mutationPlan: createEmptySvgMutationPlan(logicalResults.length), selectedFeatureTypes }
+    {
+      mutationPlan: createLegacyNormalizationSvgMutationPlan(logicalResults.map((result) => (
+        legacy?.applies?.(result?.content) ? legacy.transform : null
+      ))),
+      selectedFeatureTypes
+    }
   )
 );
 
@@ -5149,7 +5166,8 @@ const importSessionDocument = async (e, options = {}) => {
       : null;
     const committedImportedResults = currentSchemaSession && validatedSessionCatalog
       ? admitLoadedSetResults(logicalImportedResults, {
-          featureCatalog: validatedSessionCatalog, mode: committedMode, selectedFeatureTypes
+          featureCatalog: validatedSessionCatalog, mode: committedMode, selectedFeatureTypes,
+          legacy: { transform: transformRestoredSessionSvg, applies: transformLegacyResultSvg?.appliesToContent }
         })
       : admitLegacyImportedResults(
           createLegacyImportResultSource(logicalImportedResults),

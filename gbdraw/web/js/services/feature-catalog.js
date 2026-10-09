@@ -115,9 +115,12 @@ const legacyAnchorProfile = (feature) => {
   };
 };
 
-// Schema 3 gains only safely inferred anchor profiles. Rendered features of
-// schemas 3 and 4 gain `drawnSelector: null`: their drawn values are unknown
-// until the next Generate, so live rule matching declines them.
+// Schema 3 gains only safely inferred anchor profiles and source feature
+// indexes: its writer named a duplicated stable identity
+// `<stableFeatureId>~<source feature index>` and some writers stored no index
+// (OV-269; promote_legacy_feature_catalog). Rendered features of schemas 3 and
+// 4 gain `drawnSelector: null`: their drawn values are unknown until the next
+// Generate, so live rule matching declines them.
 /**
  * @param {Record<string, any>} catalog An unvalidated schema 3 or 4 catalog.
  * @returns {FeatureCatalog}
@@ -138,6 +141,14 @@ export const migrateLegacyFeatureCatalog = (catalog) => {
     if (sourceSchema === ANCHOR_FEATURE_CATALOG_SCHEMA) return;
     requireArray(item?.biologicalFeatures).forEach((feature) => {
       if (!isObject(feature)) throw catalogError();
+      const stableId = text(feature.stableFeatureId);
+      const biologicalId = text(feature.biologicalFeatureId);
+      const suffix = stableId && biologicalId.startsWith(`${stableId}~`)
+        ? biologicalId.slice(stableId.length + 1) : '';
+      if (/^[0-9]+$/.test(suffix)
+        && !nonnegativeIntegerAliasStatus(feature, SOURCE_FEATURE_INDEX_KEYS).supplied) {
+        feature.sourceFeatureIndex = Number(suffix);
+      }
       const profile = legacyAnchorProfile(feature);
       feature.anchorProfile = profile;
       if (profile.precision === 'exact'

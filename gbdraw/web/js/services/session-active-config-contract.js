@@ -107,6 +107,21 @@ export const CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS = Object.freeze([
   'annotationSets', 'recordDisplayDrafts', 'featurePlacementOverrides', 'modeProfiles', 'unmanagedConfigOverrides',
   'linearRecordLayout', 'linearComparisonPlan', 'importedComparisonResolution', 'webEdits'
 ]);
+// The `config` keys the CLI writer of Sessions 40 and 41 derived from its
+// options; a Web draft of those Sessions always has `annotationSets`,
+// `linearComparisonPlan` and `webEdits` too (OV-269, `_CLI_WRITER_CONFIG_DOMAINS`
+// in gbdraw/session_io.py).
+const CLI_WRITER_CONFIG_DOMAINS = new Set(['form', 'adv', 'losat', 'cliOptions', 'colors', 'palette', 'rules',
+  'qualifierPriorityRules', 'filterMode', 'whitelist', 'blacklistText', 'losatProgram', 'circularConservation']);
+/**
+ * A Session 40 or 41 the CLI wrote holds a `config` derived from its options,
+ * no Web draft: Load reads its tables from the request.
+ * @param {Record<string, any>} session
+ * @returns {boolean}
+ */
+export const holdsCliWriterConfig = (session) => [40, 41].includes(session?.version)
+  && session.cliInvocation?.generatedBy === 'gbdraw' && isObject(session.config)
+  && Object.keys(session.config).every((key) => CLI_WRITER_CONFIG_DOMAINS.has(key));
 export const CURRENT_WRITER_FORM_FIELDS = Object.freeze([...Object.keys(createDefaultForm()), 'legend']);
 // `rich_feature_popup` is read from a Session 40-44 draft only: Session 46
 // keeps the app preference in `ui.richFeaturePopup`.

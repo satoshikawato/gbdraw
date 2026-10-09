@@ -18,6 +18,7 @@ import pytest
 from gbdraw.exceptions import ValidationError
 from gbdraw.session import SessionFormatError
 from gbdraw.session_io import (
+    _holds_cli_writer_config,
     _with_legacy_repeat_region_shape,
     _without_legacy_null_circular_slot_spacing,
     migrate_imported_linear_track_slots,
@@ -129,3 +130,17 @@ def test_circular_slot_schema_3_is_refused_not_written(version: int) -> None:
     with pytest.raises(SessionFormatError, match="Circular slot schema 3") as excinfo:
         migrate_session_flat_draft(session)
     assert excinfo.value.diagnostic == FIELDS_INVALID
+
+
+CLI_WRITER_CONFIG_VECTORS = json.loads(
+    (FIXTURES / "cli-writer-config-vectors.json").read_text(encoding="utf-8")
+)["cases"]
+
+
+@pytest.mark.parametrize(
+    "case", CLI_WRITER_CONFIG_VECTORS, ids=[case["name"] for case in CLI_WRITER_CONFIG_VECTORS]
+)
+def test_cli_writer_config_vectors(case: dict[str, Any]) -> None:
+    """OV-269: shared with tests/web/session-active-config-contract.test.mjs."""
+
+    assert _holds_cli_writer_config(case["session"]) is case["holdsCliWriterConfig"]

@@ -2,13 +2,16 @@
 
 A Session that the CLI writes draws the CLI's figure when the CLI, the Python
 API, or the Web app loads it, and when one of them saves it again. The cases
-live in ``tests/fixtures/cli_session_cross_surface/cases.json``; pytest checks
-the CLI and Python surfaces, and ``tests/web/session-cli-compatibility.test.mjs``
+live in ``tests/fixtures/cli_session_cross_surface/cases.json``; a case's
+``legacySessions`` (OV-269) are its Sessions written by older CLI writers on
+``main``, loaded in place of the current CLI Session. pytest checks the CLI and
+Python surfaces, and ``tests/web/session-cli-compatibility.test.mjs``
 the Web app through ``tests/web/helpers/cli-session-cross-surface.py``.
 """
 
 from __future__ import annotations
 
+import gzip
 import json
 import os
 import subprocess
@@ -40,7 +43,14 @@ class CaseFiles:
 
 
 def load_cases() -> list[dict]:
-    return json.loads(CASES_PATH.read_text(encoding="utf-8"))["cases"]
+    """Every case, then each legacy Session of a case as a case of its own."""
+
+    cases = json.loads(CASES_PATH.read_text(encoding="utf-8"))["cases"]
+    return cases + [
+        {**case, "id": f"{case['id']}@{name}", "session": fixture}
+        for case in cases
+        for name, fixture in case.get("legacySessions", {}).items()
+    ]
 
 
 def _absolute(arg: str) -> str:
@@ -78,11 +88,18 @@ def resave_python(session: Path, path: Path) -> Path:
 
 
 def write_case(case: dict, directory: Path) -> CaseFiles:
-    """Draw a case on the CLI and save it again from the CLI and from Python."""
+    """Draw a case on the CLI and save it again from the CLI and from Python.
+
+    A legacy case loads its stored Session instead of the one the CLI writes now.
+    """
 
     directory.mkdir(parents=True, exist_ok=True)
     cli_session = directory / "cli.gbdraw-session.json"
-    svg = run_cli(case["mode"], case["args"], directory / "cli", "--session_output", str(cli_session))
+    legacy = case.get("session")
+    svg = run_cli(case["mode"], case["args"], directory / "cli",
+                  *(() if legacy else ("--session_output", str(cli_session))))
+    if legacy:
+        cli_session.write_bytes(gzip.decompress((ROOT / legacy).read_bytes()))
     cli_resave = directory / "cli-resave.gbdraw-session.json"
     replay_cli(case["mode"], cli_session, directory / "cli-replay", "--session_output", str(cli_resave))
     return CaseFiles(svg, cli_session, cli_resave, resave_python(cli_session, directory / "python-resave.gbdraw-session.json"))

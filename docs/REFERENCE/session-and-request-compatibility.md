@@ -123,7 +123,10 @@ record set, or layout no longer matches a moved item, Generate keeps the saved
 Result and asks for that item's position reset, **Reset Layout**, or matching
 settings. Preview search placement and Layout edit hints are not saved. Keep
 the Session when browser positioning must be reproduced; a raw Python render
-request alone does not contain those manual positions.
+request alone does not contain those manual positions. Session version 40
+files that unreleased builds of early August 2026 saved recorded moved items
+only in the drawing: Load shows them where they were, and Generate lays them
+out automatically.
 
 Fresh CLI sessions, and sessions that the Python API saves, omit `config`
 because they have no independent Web draft. Web initializes their settings from
@@ -131,8 +134,11 @@ because they have no independent Web draft. Web initializes their settings from
 `--feature_visibility_table`, `--label_table`, `--label_whitelist`,
 `--qualifier_priority`, and `--feature_override_table`), so the next
 **Generate Diagram** keeps them. Web restores the original input files from
-their bindings. A present `config` must contain valid `form` and `adv` objects;
-a partial draft is rejected. CLI replay preserves a supplied Web draft.
+their bindings. A Session version 40 or 41 that the CLI wrote carries a
+`config` derived from its options; Web and CLI replay read it as no draft, so
+these Sessions load the same way. A Web draft in `config` must contain valid
+`form` and `adv` objects; a partial draft is rejected. CLI replay preserves a
+supplied Web draft.
 
 Which records Web draws from a CLI session depends on the request:
 

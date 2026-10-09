@@ -833,6 +833,8 @@ def _project_session_adjunct_for_current_write(
         for key in ("config", "features"):
             if key in migration.session:
                 adjunct[key] = migration.session[key]
+            else:
+                adjunct.pop(key, None)
         if migration.dropped_feature_edit_count:
             logger.warning(
                 "WARNING: %d feature edit(s) from Session version %d could not "

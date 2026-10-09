@@ -2,7 +2,9 @@
 
 Each case saves its Session from the CLI, from a CLI replay, and from Python
 (``save_session_document``); the CLI and ``render_session`` draw every one of
-them as the CLI drew the case. The Web app's cells of the same matrix are in
+them as the CLI drew the case. The Sessions older CLI writers on ``main``
+wrote for a case (Sessions 40 and 41, OV-269) draw the case's current figure
+the same way, and a CLI re-save of any of them holds no Web draft. The Web app's cells of the same matrix are in
 ``tests/web/session-cli-compatibility.test.mjs``.
 """
 
@@ -45,6 +47,9 @@ def test_cli_session_draws_the_cli_figure_on_the_cli_and_in_python(case, tmp_pat
             assert ref["resourceId"] in session["resources"], option
     if "-b" in case["args"]:
         assert "nucleotideBlast" in [item["kind"] for item in request["comparisons"]]
+    # A CLI Session has no Web draft, so its CLI re-save writes none (D-02).
+    resaved_modes = json.loads(files.cli_resave.read_text()).get("modes", {})
+    assert [mode for mode, scoped in resaved_modes.items() if "config" in scoped] == []
 
     drawings = {
         "CLI replay": tmp_path / "cli-replay.svg",

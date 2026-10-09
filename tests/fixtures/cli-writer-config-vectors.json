@@ -1,0 +1,190 @@
+{
+  "schemaVersion": 1,
+  "description": "A CLI-written Session 40-41 `config` holds no Web draft (OV-269): `_holds_cli_writer_config` (gbdraw/session_io.py, tests/test_draft_value_migrations.py) and `holdsCliWriterConfig` (services/session-active-config-contract.js, tests/web/session-active-config-contract.test.mjs) read these cases.",
+  "cases": [
+    {
+      "name": "Session 40 with every CLI-writer key (main 8228ffab)",
+      "session": {
+        "version": 40,
+        "cliInvocation": {
+          "generatedBy": "gbdraw"
+        },
+        "config": {
+          "form": {},
+          "adv": {},
+          "losat": {},
+          "cliOptions": {},
+          "colors": {},
+          "palette": "default",
+          "rules": [],
+          "qualifierPriorityRules": [],
+          "filterMode": "None",
+          "whitelist": [],
+          "blacklistText": "",
+          "losatProgram": "blastn",
+          "circularConservation": {}
+        }
+      },
+      "holdsCliWriterConfig": true
+    },
+    {
+      "name": "Session 40 with adv only (main 3bca0e8d..4ea96685)",
+      "session": {
+        "version": 40,
+        "cliInvocation": {
+          "generatedBy": "gbdraw"
+        },
+        "config": {
+          "adv": {}
+        }
+      },
+      "holdsCliWriterConfig": true
+    },
+    {
+      "name": "Session 41 with adv only (main 4e8c9380)",
+      "session": {
+        "version": 41,
+        "cliInvocation": {
+          "generatedBy": "gbdraw"
+        },
+        "config": {
+          "adv": {}
+        }
+      },
+      "holdsCliWriterConfig": true
+    },
+    {
+      "name": "Session 42 with CLI-writer keys only",
+      "session": {
+        "version": 42,
+        "cliInvocation": {
+          "generatedBy": "gbdraw"
+        },
+        "config": {
+          "adv": {}
+        }
+      },
+      "holdsCliWriterConfig": false
+    },
+    {
+      "name": "generatedBy is not gbdraw",
+      "session": {
+        "version": 40,
+        "cliInvocation": {
+          "generatedBy": "web"
+        },
+        "config": {
+          "adv": {}
+        }
+      },
+      "holdsCliWriterConfig": false
+    },
+    {
+      "name": "no cliInvocation",
+      "session": {
+        "version": 40,
+        "config": {
+          "adv": {}
+        }
+      },
+      "holdsCliWriterConfig": false
+    },
+    {
+      "name": "a Web draft key: annotationSets",
+      "session": {
+        "version": 40,
+        "cliInvocation": {
+          "generatedBy": "gbdraw"
+        },
+        "config": {
+          "form": {},
+          "adv": {},
+          "losat": {},
+          "cliOptions": {},
+          "colors": {},
+          "palette": "default",
+          "rules": [],
+          "qualifierPriorityRules": [],
+          "filterMode": "None",
+          "whitelist": [],
+          "blacklistText": "",
+          "losatProgram": "blastn",
+          "circularConservation": {},
+          "annotationSets": []
+        }
+      },
+      "holdsCliWriterConfig": false
+    },
+    {
+      "name": "a Web draft key: linearComparisonPlan",
+      "session": {
+        "version": 41,
+        "cliInvocation": {
+          "generatedBy": "gbdraw"
+        },
+        "config": {
+          "adv": {},
+          "linearComparisonPlan": {}
+        }
+      },
+      "holdsCliWriterConfig": false
+    },
+    {
+      "name": "a Web draft key: webEdits",
+      "session": {
+        "version": 40,
+        "cliInvocation": {
+          "generatedBy": "gbdraw"
+        },
+        "config": {
+          "adv": {},
+          "webEdits": {}
+        }
+      },
+      "holdsCliWriterConfig": false
+    },
+    {
+      "name": "config is an array",
+      "session": {
+        "version": 40,
+        "cliInvocation": {
+          "generatedBy": "gbdraw"
+        },
+        "config": []
+      },
+      "holdsCliWriterConfig": false
+    },
+    {
+      "name": "config is a string",
+      "session": {
+        "version": 40,
+        "cliInvocation": {
+          "generatedBy": "gbdraw"
+        },
+        "config": "adv"
+      },
+      "holdsCliWriterConfig": false
+    },
+    {
+      "name": "config is null",
+      "session": {
+        "version": 40,
+        "cliInvocation": {
+          "generatedBy": "gbdraw"
+        },
+        "config": null
+      },
+      "holdsCliWriterConfig": false
+    },
+    {
+      "name": "no config",
+      "session": {
+        "version": 40,
+        "cliInvocation": {
+          "generatedBy": "gbdraw"
+        }
+      },
+      "holdsCliWriterConfig": false
+    }
+  ]
+}

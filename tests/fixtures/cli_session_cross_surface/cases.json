@@ -1,5 +1,5 @@
 {
-  "description": "CLI Sessions that every load surface must draw as the CLI did (D-01, OV-221). Paths are relative to the repository root; the tables cover the lambda (NC_001416) and human mitochondrial (HmmtDNA) records.",
+  "description": "CLI Sessions that every load surface must draw as the CLI did (D-01, OV-221). Paths are relative to the repository root; the tables cover the lambda (NC_001416) and human mitochondrial (HmmtDNA) records. `legacySessions` are Sessions of the case that older CLI writers on main wrote (OV-269, see each provenance file); every surface must draw the case's current CLI figure from them.",
   "cases": [
     {
       "id": "linear_tables",
@@ -10,7 +10,12 @@
         "--feature_visibility_table", "tests/fixtures/cli_session_cross_surface/visibility.tsv",
         "--label_table", "tests/fixtures/cli_session_cross_surface/labels.tsv",
         "--label_whitelist", "tests/fixtures/cli_session_cross_surface/whitelist.tsv",
-        "--qualifier_priority", "tests/fixtures/cli_session_cross_surface/priority.tsv"]
+        "--qualifier_priority", "tests/fixtures/cli_session_cross_surface/priority.tsv"],
+      "legacySessions": {
+        "v40-early": "tests/fixtures/sessions/cli-linear-tables.v40-early.gbdraw-session.json.gz",
+        "v40": "tests/fixtures/sessions/cli-linear-tables.v40.gbdraw-session.json.gz",
+        "v41": "tests/fixtures/sessions/cli-linear-tables.v41.gbdraw-session.json.gz"
+      }
     },
     {
       "id": "linear_records_blacklist",

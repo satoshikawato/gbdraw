@@ -52,6 +52,8 @@ const text = (value) => String(value ?? '').trim();
  * @typedef {object} SvgMutationPlan
  * @property {'EMPTY' | 'MUTATING'} kind
  * @property {readonly SvgMutationOperations[]} operationsByResult One entry per Result.
+ * @property {number} [legacyNormalizationCount] The Results whose transform is a
+ *   legacy normalization (`createLegacyNormalizationSvgMutationPlan`).
  */
 
 /**
@@ -419,6 +421,24 @@ export const createEmptySvgMutationPlan = (resultCount) => {
   });
 };
 
+/**
+ * A Load plan whose only operations are one legacy normalization per Result
+ * that needs one (`null` for none, OV-273); without one it is the EMPTY plan.
+ * @param {ReadonlyArray<SvgResultTransform | null>} transforms
+ * @returns {SvgMutationPlan}
+ */
+export const createLegacyNormalizationSvgMutationPlan = (transforms) => {
+  const empty = createEmptySvgMutationPlan(transforms.length);
+  if (!transforms.some(Boolean)) return empty;
+  return Object.freeze({
+    kind: 'MUTATING',
+    legacyNormalizationCount: transforms.filter(Boolean).length,
+    operationsByResult: Object.freeze(empty.operationsByResult.map((operations, index) => (
+      transforms[index] ? Object.freeze({ ...operations, callerTransforms: Object.freeze([transforms[index]]) }) : operations
+    )))
+  });
+};
+
 const setAttributeIfDifferent = (element, name, value) => {
   const normalized = String(value);
   if (element.getAttribute(name) === normalized) return false;
@@ -703,7 +723,7 @@ const admitCatalogBackedResults = (
     resultCount: results.length,
     mutationKind: plan.kind
   });
-  recordStructuralMetric('currentLegacyNormalizationCount', 0, { phase: sourceClass });
+  recordStructuralMetric('currentLegacyNormalizationCount', plan.legacyNormalizationCount || 0, { phase: sourceClass });
   recordStructuralMetric('legacyOverrideMigrationCount', 0, { phase: sourceClass });
   recordStructuralMetric('manualRuleFeatureMatchCount', 0, { phase: sourceClass });
   const admitted = results.map((result, resultIndex) => admitCurrentResult(

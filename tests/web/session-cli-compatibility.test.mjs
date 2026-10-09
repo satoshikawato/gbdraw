@@ -427,8 +427,10 @@ with materialize_session(document, output_directory=directory / 'out') as materi
 // D-01, OV-221: a Session the CLI writes draws the CLI's figure when the Web app
 // loads it. Load gives the drawing every table the request holds, so the next
 // Generate, a label reflow, and a Web re-save keep them; the Sessions a CLI
-// replay and Python save again (no Web draft either) load the same way. The
-// CLI and Python cells of the matrix are tests/test_cli_session_cross_surface.py.
+// replay and Python save again (no Web draft either) load the same way, and so
+// do a case's Sessions 40 and 41 from older CLI writers (`legacySessions`,
+// OV-269). The CLI and Python cells of the matrix are
+// tests/test_cli_session_cross_surface.py.
 const crossSurface = (...args) => JSON.parse(execFileSync('python', [
   path.join(root, 'tests/web/helpers/cli-session-cross-surface.py'), ...args
 ], { cwd: root, encoding: 'utf8', timeout: 1_800_000, maxBuffer: 16 * 1024 * 1024 }));
@@ -484,6 +486,45 @@ await test('a CLI Session keeps its comparisons under its own visibility rules',
   };
   assert.equal(committedFeatureVisibilityMatches(committed, rules), true);
   assert.equal(committedFeatureVisibilityMatches(committed, ''), false);
+});
+
+// OV-273: Load parses and normalizes only a Result without composition
+// metadata (the Session 40 writers of main 8228ffab and 7aad9e3e); a current
+// writer's Results take the EMPTY admission plan and no application parse,
+// and `currentLegacyNormalizationCount` counts the normalized Results.
+await test('only a Result without composition metadata takes the legacy composition at Load', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-composition-'));
+  const admission = async (bytes) => {
+    const events = [], metrics = [];
+    globalThis.__GBDRAW_TEST_HOOKS__ = {
+      onSessionLifecycleEvent: event => events.push(event), onStructuralMetric: metric => metrics.push(metric)
+    };
+    try {
+      assert.equal((await load(bytes)).status, 'ok');
+    } finally {
+      delete globalThis.__GBDRAW_TEST_HOOKS__;
+    }
+    const phase = events.find(event => event.name === 'svg.admission-started' && event.mutationKind).phase;
+    const total = name => metrics.filter(metric => metric.name === name && metric.phase === phase)
+      .reduce((sum, metric) => sum + metric.value, 0);
+    return {
+      plan: events.filter(event => event.name === 'svg.admission-started' && event.phase === phase).map(event => event.mutationKind),
+      parses: total('applicationSvgParseCount'), normalized: total('currentLegacyNormalizationCount')
+    };
+  };
+  try {
+    const current = path.join(directory, 'current.gbdraw-session.json');
+    execFileSync('python', ['-m', 'gbdraw.cli', 'linear', '--gbk', lambda, '-o', path.join(directory, 'current'),
+      '-f', 'svg', '--session_output', current], { cwd: directory, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe' });
+    assert.deepEqual(await admission(await readFile(current)), { plan: ['EMPTY'], parses: 0, normalized: 0 });
+    const early = gunzipSync(await readFile('tests/fixtures/sessions/cli-linear-tables.v40-early.gbdraw-session.json.gz'));
+    assert.equal(early.toString().includes('data-gbdraw-composition-schema='), false);
+    // The fake DOM serializes the parsed text unchanged; the Playwright
+    // OV-273 case checks the composition the transform writes.
+    assert.deepEqual(await admission(early), { plan: ['MUTATING'], parses: 1, normalized: 1 });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 await test('every load and re-save of a CLI Session in Web draws the CLI figure', async () => {
