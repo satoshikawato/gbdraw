@@ -87,3 +87,9 @@ assert.equal(buildDefaultColorOverrideTsv({
   colors: { CDS: '#000000', rRNA: '#71ee7d', custom_feature: '#abcdef' },
   paletteColors
 }), 'CDS\t#000000\ncustom_feature\t#abcdef');
+// D-15: one comparator decides the -d rows and the user default colors. `#rgb`
+// and `#rrggbb` name one color; Auto (empty) is no row; `none` is one.
+assert.deepEqual(buildPaletteColorOverrideRows({
+  colors: { CDS: '#ABC', rRNA: ' #71ee7d ', tRNA: null, misc_feature: '', repeat_region: 'none' },
+  paletteColors: { CDS: '#aabbcc', rRNA: '#71EE7D', tRNA: '#123456', misc_feature: '#123456', repeat_region: '#123456' }
+}), [['repeat_region', 'none']]);

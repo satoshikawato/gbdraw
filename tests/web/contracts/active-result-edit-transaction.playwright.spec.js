@@ -2,7 +2,9 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
-const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, openApp } = require('../helpers/app-lifecycle.cjs');
+const {
+  CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, evaluateWithRetainedPromise, openApp
+} = require('../helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const sourceSessionPath = join(
@@ -148,6 +150,7 @@ test.describe('active Result Feature fill transaction', () => {
           rule.feat === caption && String(rule.cap || '') === caption
         ))),
         legendOverride: String(state.activeDrawing().legendColorOverrides[caption] || '').toLowerCase(),
+        defaultColor: String(state.activeDrawing().currentColors.value[caption] || '').toLowerCase(),
         legendEntryColor: String(
           app.legendEntries.find((entry) => entry.caption === caption)?.color || ''
         ).toLowerCase()
@@ -178,20 +181,15 @@ test.describe('active Result Feature fill transaction', () => {
     expect(state.feedback).toBeNull();
   };
 
+  // D-15: "Apply to all" on the tRNA palette row (no Specific color rule draws
+  // it) sets the tRNA default color; it writes no rule and no per-feature edit.
   const expectAcceptedCanonicalState = (state, inventory) => {
     for (const { key } of inventory.targets) {
-      expect(state.canonical.targetOverrides[key]).toEqual({
-        color: AFTER_COLOR,
-        caption: TARGET_CAPTION
-      });
+      expect(state.canonical.targetOverrides[key]).toBeNull();
     }
-    expect(state.canonical.targetRules).toHaveLength(inventory.targets.length);
-    expect(state.canonical.targetRules.every((rule) => (
-      String(rule.qual || '').toLowerCase() === 'hash'
-      && String(rule.color || '').toLowerCase() === AFTER_COLOR
-      && rule.cap === TARGET_CAPTION
-    ))).toBe(true);
-    expect(state.canonical.legendOverride).toBe(AFTER_COLOR);
+    expect(state.canonical.targetRules).toEqual([]);
+    expect(state.canonical.legendOverride).toBe('');
+    expect(state.canonical.defaultColor).toBe(AFTER_COLOR);
   };
 
   const inspectSvgText = (page, svgText, inventory) => page.evaluate(
@@ -253,6 +251,7 @@ test.describe('active Result Feature fill transaction', () => {
     expect(before.canonical.targetRules).toEqual([]);
     expect(Object.values(before.canonical.targetOverrides).every((value) => value === null))
       .toBe(true);
+    expect(before.canonical.defaultColor).toBe(BEFORE_COLOR);
 
     await page.locator('.drawer-toggle').click();
     const drawer = page.locator('.right-drawer');
@@ -311,6 +310,7 @@ test.describe('active Result Feature fill transaction', () => {
     expect(Object.values(undone.canonical.targetOverrides).every((value) => value === null))
       .toBe(true);
     expect(undone.canonical.legendOverride).toBe('');
+    expect(undone.canonical.defaultColor).toBe(BEFORE_COLOR);
 
     await page.getByRole('button', { name: 'Redo', exact: true }).click();
     await expect.poll(
@@ -334,21 +334,13 @@ test.describe('active Result Feature fill transaction', () => {
       version: CURRENT_SESSION_VERSION,
       renderRequest: { schema: CURRENT_REQUEST_SCHEMA }
     });
-    expect(savedSlice).toMatchObject({
-      editorState: {
-        legend: { colorOverrides: { [TARGET_CAPTION]: AFTER_COLOR } }
-      }
-    });
+    expect(String(savedSlice.config.colors[TARGET_CAPTION]).toLowerCase()).toBe(AFTER_COLOR);
+    expect(savedSlice.editorState?.legend?.colorOverrides?.[TARGET_CAPTION]).toBeUndefined();
     for (const { key } of inventory.targets) {
-      expect(savedSlice.features.featureColorOverrides[key]).toEqual({
-        color: AFTER_COLOR,
-        caption: TARGET_CAPTION
-      });
+      expect(savedSlice.features.featureColorOverrides?.[key]).toBeUndefined();
     }
-    const savedRules = savedSlice.config.rules.filter((rule) => (
-      rule.feat === TARGET_CAPTION && rule.cap === TARGET_CAPTION
-    ));
-    expect(savedRules).toHaveLength(inventory.targets.length);
+    const savedRules = savedSlice.config.rules.filter((rule) => rule.feat === TARGET_CAPTION);
+    expect(savedRules).toEqual([]);
     expect(savedSession.results[savedSession.ui.selectedResultIndex].content)
       .toContain(AFTER_COLOR);
     await assertNoUnexpectedErrors(page, initialDiagnostics);
@@ -440,5 +432,67 @@ test.describe('active Result Feature fill transaction', () => {
     } finally {
       await freshContext.close();
     }
+  });
+
+  // A row that a Specific color rule draws is not a palette row (D-15):
+  // "Apply to all" recolors the row's rule, as one History step, and leaves
+  // the tRNA default color.
+  test('Apply to all on a tRNA row a rule draws recolors the rule', async ({ page }, testInfo) => {
+    test.setTimeout(300_000);
+    expect(testInfo.retry).toBe(0);
+
+    const diagnostics = await openObservedApp(page);
+    await loadSessionThroughUi(page, sourceSessionPath);
+    const inventory = await collectTargetInventory(page);
+    const nonTargetBaseline = (await inspectState(page, inventory)).mounted.nonTargetFills;
+    // Every tRNA drawn by one rule with the row's caption and color.
+    await evaluateWithRetainedPromise(page, async ({ caption, color }) => {
+      const app = window.__GBDRAW_APP__;
+      Object.assign(app.newSpecRule, { feat: caption, qual: 'product', val: '.', color, cap: caption });
+      await app.addSpecificRule();
+    }, { caption: TARGET_CAPTION, color: BEFORE_COLOR });
+    await page.waitForFunction(() => !window.__GBDRAW_APP__.ruleMatchingPending);
+    const before = await inspectState(page, inventory);
+    expectFillState(before, inventory, BEFORE_COLOR, nonTargetBaseline);
+    expect(before.canonical.targetRules).toHaveLength(1);
+
+    await page.locator('.drawer-toggle').click();
+    const drawer = page.locator('.right-drawer');
+    await drawer.getByPlaceholder('Search by feature or annotation...').fill(TARGET_CAPTION);
+    await drawer.locator(`span[title="${inventory.targets[1].location}"]`).locator('..')
+      .getByRole('button', { name: 'Edit', exact: true }).click();
+    const fillPicker = page.getByRole('dialog', { name: /Feature details:/ })
+      .getByLabel('Feature fill color', { exact: true }).first();
+    await fillPicker.fill(AFTER_COLOR);
+    await page.waitForFunction(() => !window.__GBDRAW_APP__.ruleMatchingPending);
+    const scopeDialog = page.getByRole('heading', { name: 'Color Change Scope' }).locator('..');
+    await expect(scopeDialog).toBeVisible();
+    await expect(scopeDialog.locator('[data-default-color-scope-line]')).toHaveCount(0);
+    await scopeDialog.getByRole('button').filter({
+      hasText: `Apply to all "${TARGET_CAPTION}" (${inventory.targets.length})`
+    }).last().click();
+    await page.waitForFunction(() => !window.__GBDRAW_APP__.featureStyleScopeDialog.show);
+    await expect.poll(
+      () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())
+    ).toBe(before.history.undoCount + 1);
+
+    const applied = await inspectState(page, inventory);
+    expectFillState(applied, inventory, AFTER_COLOR, nonTargetBaseline);
+    expect(applied.canonical.targetRules).toEqual([
+      { ...before.canonical.targetRules[0], color: AFTER_COLOR }
+    ]);
+    for (const { key } of inventory.targets) {
+      expect(applied.canonical.targetOverrides[key]).toEqual({ color: AFTER_COLOR, caption: TARGET_CAPTION });
+    }
+    expect(applied.canonical.defaultColor).toBe(BEFORE_COLOR);
+
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    await expect.poll(
+      () => page.evaluate(() => window.__GBDRAW_HISTORY__.getRedoCount())
+    ).toBe(1);
+    const undone = await inspectState(page, inventory);
+    expectFillState(undone, inventory, BEFORE_COLOR, nonTargetBaseline);
+    expect(undone.canonical.targetRules).toMatchObject(before.canonical.targetRules);
+    await assertNoUnexpectedErrors(page, diagnostics);
   });
 });

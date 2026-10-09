@@ -77,6 +77,7 @@ test('a whole-feature pass over K features and K hash rules does O(K) work', asy
     const svg = { querySelectorAll: (selector) => (selector.includes('data-gbdraw-feature-id') ? elements : []) };
     Object.assign(state, {
       svgContent: ref('<svg/>'), svgContainer: ref({ querySelector: () => svg }), appliedPaletteColors: ref({ CDS: '#cccccc' }),
+      appliedPaletteName: ref('default'), paletteDefinitions: ref({}),
       featuresBySvgId: ref(new Map())
     });
     const styles = createSvgStyles({ state, watch() {}, nextTick: (fn) => fn?.(), commitActiveResultEdit: () => true });
@@ -97,17 +98,21 @@ test('"All features with legend item" over K features with K hash rules does O(K
     const preparation = createRulePreparation({ state, evaluate: evaluateHashRules });
     assert.equal(await preparation.prepare(rules), true);
     let committed = null;
-    const featureStyleScopeDialog = { show: true, feat: features[0], color: '#abcdef', legendName: 'CDS' };
+    // Not a palette row (D-15): the choice writes one rule per feature.
+    const featureStyleScopeDialog = {
+      show: true, feat: features[0], color: '#abcdef', legendName: 'CDS', defaultColorType: null
+    };
     Object.assign(state, {
       results: ref([]), selectedResultIndex: ref(0), svgContainer: ref(null), clickedFeature: ref(null),
       featureStyleScopeDialog, resetColorDialog: {}, legendRenameDialog: {}, originalLegendOrder: ref([]),
       originalLegendColors: ref({}), originalSvgStroke: ref({ color: null, width: null }), appliedPaletteColors: ref({}),
-      skipCaptureBaseConfig: ref(false), skipExtractOnSvgChange: ref(false)
+      skipCaptureBaseConfig: ref(false), skipExtractOnSvgChange: ref(false), hasPendingPaletteDraft: ref(false)
     });
     const caption = () => 'CDS';
     const actions = createFeatureColorActions({
       state, nextTick: async () => {}, onLegendGeometryChanged: () => {}, extractLegendEntries: () => {},
       getFeatureElements: () => [], getFeatureFillElements: () => [],
+      readUserDefaultColor: () => null, setDefaultColor: () => assert.fail('the row is drawn by rules'),
       ruleActions: {
         runWithRuleMatches: (_, commit) => commit(),
         commitSpecificRules: async (next) => { committed = next; return true; },

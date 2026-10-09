@@ -457,7 +457,32 @@ const featureStyleScopeDialog = reactive({
   annotationLabelSiblingCount: 0, // Number of other features sharing source annotation label
   existingCaptionRule: null, // Existing hash rule for same caption (already colored)
   existingCaptionColor: null, // Color of existing caption rule
+  defaultColorType: null, // D-15: the feature type whose default color "Apply to all" sets
+  replacedDefaultColor: null, // D-15: the user default color of that type it replaces
   resolve: null // Promise resolver
+});
+
+/**
+ * The palette dialog (D-15): a palette switch or Default colors Reset while
+ * user default colors exist. Display values only (`createResultsManager`).
+ * @typedef {object} PaletteColorsDialog
+ * @property {boolean} show
+ * @property {'switch' | 'reset'} kind
+ * @property {string} fromPalette
+ * @property {string} toPalette
+ * @property {string} droppedPalette The queued palette a switch back to the applied one drops, or ''.
+ * @property {number} count The number of user default colors.
+ * @property {string} keysText Their keys, for the dialog body.
+ */
+/** @type {PaletteColorsDialog} */
+const paletteColorsDialog = reactive({
+  show: false,
+  kind: 'switch',
+  fromPalette: '',
+  toPalette: '',
+  droppedPalette: '',
+  count: 0,
+  keysText: ''
 });
 
 // Reset Color Dialog state
@@ -1065,6 +1090,7 @@ export const state = {
   clickedLabel,
   clickedLabelPos,
   featureStyleScopeDialog,
+  paletteColorsDialog,
   resetColorDialog,
   legendRenameDialog,
   labelTextScopeDialog,

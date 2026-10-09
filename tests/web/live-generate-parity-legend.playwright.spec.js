@@ -114,13 +114,14 @@ test('a Legend color on a row only one Result draws survives the next Generate',
 // rules (Clear All, or deleting the last of them) retires the copy in the same
 // History step, so the row takes the palette color its features return to,
 // live and at Generate. Undo brings back the rules and the copy. A Legend color
-// set on a row that no rule draws stays.
+// set on a row that no rule draws stays. "Apply to all" on a palette row writes
+// no rule (D-15), so both cases start from a one-feature row.
 const COPIED_LEGEND_COLOR_CASES = {
-  'Clear All after Apply to all CDS': {
+  'Clear All after a one-feature row edit': {
     states: { mode: 'circular', results: 'single', reflow: 'off' },
-    color: (page) => popupEdit(page, 'FL1', { fill: '#e63946', scope: 'caption' }),
-    caption: 'CDS',
-    direct: 'repeat_region',
+    color: (page) => popupEdit(page, { type: 'repeat_region' }, { fill: '#e63946' }),
+    caption: 'repeat_region',
+    direct: 'CDS',
     remove: (page) => appAction(page, 'clearAllSpecificRules')
   },
   'deleting the rule of a one-feature row': {
@@ -165,6 +166,29 @@ for (const [name, { states, color, caption, direct, remove }] of Object.entries(
     expect(generated.legend.find((row) => row.caption === direct)?.fill).toBe('#7b2cbf');
   });
 }
+
+// D-15: "Apply to all" on a palette row (no Specific color rule draws it) sets
+// the type's default color in one History step. The live Result equals the
+// next Generate with one CDS row, and a CDS feature hidden at the time takes
+// the color when it is shown again, with no second row.
+test('Apply to all on a palette row sets the default color: one row, also for a feature shown later', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await popupEdit(page, 'FL2', { visibility: 'off' });
+  const undoCount = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  await popupEdit(page, 'FL1', { fill: '#e63946', scope: 'caption' });
+  expect(await page.evaluate(() => ({
+    color: window.__GBDRAW_APP__.currentColors.CDS,
+    rules: window.__GBDRAW_APP__.manualSpecificRules.length,
+    undo: window.__GBDRAW_HISTORY__.getUndoCount()
+  }))).toEqual({ color: '#e63946', rules: 0, undo: undoCount + 1 });
+  const cdsRows = (snapshot) => snapshot.legend.filter((row) => /^(CDS|other proteins)$/.test(row.caption));
+  const { generated } = await expectLiveEqualsGenerate(page, { label: 'Apply to all on the CDS palette row' });
+  expect(cdsRows(generated).map((row) => [row.caption, row.fill.toLowerCase()])).toEqual([['CDS', '#e63946']]);
+  await popupEdit(page, 'FL2', { visibility: 'on' });
+  const shown = await expectLiveEqualsGenerate(page, { label: 'the hidden CDS shown again' });
+  expect(cdsRows(shown.generated).map((row) => [row.caption, row.fill.toLowerCase()])).toEqual([['CDS', '#e63946']]);
+});
 
 // OV-63: Python's Legend row facts excuse only a row the draft removed. A Legend
 // style on a key no feature of the records can produce is a stale operation, and

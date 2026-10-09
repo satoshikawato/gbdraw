@@ -453,6 +453,7 @@ export const createAppSetup = () => {
     featureStyleScopeDialog,
     featureVisibilityScopeDialog,
     legendRenameDialog,
+    paletteColorsDialog,
     resetColorDialog,
     labelTextScopeDialog,
     hiddenLabelTextDialog,
@@ -1432,6 +1433,11 @@ export const createAppSetup = () => {
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
     projectPaletteAndRules: (...args) => paletteRulePorts.projectPaletteAndRules(...args)
   });
+  // OV-276: a Legend panel row shows the color the palette gives its swatch,
+  // derived here and never written into the rows.
+  const paletteLegendRowColors = computed(() => svgActions.paletteLegendRowColors());
+  /** @param {{ caption?: string, color?: string } | null | undefined} entry */
+  const legendEntryColor = (entry) => paletteLegendRowColors.value.get(entry?.caption || '') || entry?.color;
   // The palette and the specific-color rules on the mounted Result (R3): the
   // one call of their projection, shared by `projectMountedEditorIntent`, the
   // palette watcher, and a rule commit. It prepares the rule matches first
@@ -1449,6 +1455,9 @@ export const createAppSetup = () => {
   };
   paletteRulePorts.projectPaletteAndRules = projectPaletteAndRules;
   const featureSelection = createFeatureSelection(/** @type {any} */ ({ state, onMounted, onUnmounted }));
+  // The palette owner comes before the feature editor, whose popup sets a
+  // type's default color through it (D-15).
+  const resultsManager = createResultsManager({ state, closeAfterDialogChoice: dialogChoice.closeAfterChoice });
   const featureActions = createFeatureEditor({
     state,
     rulePreparation,
@@ -1474,7 +1483,9 @@ export const createAppSetup = () => {
     selectResult,
     previewTransformInteraction,
     projectPaletteAndRules,
-    projectFeatureEdits: () => projectMountedEditorIntent({ visibility: true, rerender: true, reflow: true, labels: true })
+    projectFeatureEdits: () => projectMountedEditorIntent({ visibility: true, rerender: true, reflow: true, labels: true }),
+    readUserDefaultColor: resultsManager.readUserDefaultColor,
+    setDefaultColor: resultsManager.setDefaultColor
   });
   legendRowRulePorts.commitLegendRowRules = featureActions.commitSpecificRules;
   specificRuleRestorePorts.captureSpecificRulePatternDrafts = featureActions.captureSpecificRulePatternDrafts;
@@ -2861,8 +2872,6 @@ export const createAppSetup = () => {
       return restoreGeneratedArtifactRuntimeState(snapshot ?? {}, options);
     }
   });
-  const resultsManager = createResultsManager({ state });
-
   const {
     waitForAuxiliaryFileImport, auxiliaryFileImportPending, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure,
     resetModeTransientUi
@@ -3519,7 +3528,7 @@ export const createAppSetup = () => {
     rememberShownResultInventory(opening);
   };
 
-  const { updatePalette, resetColors } = resultsManager;
+  const { requestPaletteChange, selectPalette, requestResetColors } = resultsManager;
   const undoableAction = (label, fn) => (...args) => history.runUndoable(label, () => fn(...args));
   // Python's report of the per-feature edits the Results do not draw (design
   // Q4 3.4): dormant edits outside the crop or display, edits whose feature
@@ -3593,6 +3602,12 @@ export const createAppSetup = () => {
     () => 'Rename legend item',
     handleLegendRenameChoice,
     cancelLegendRename
+  );
+  // D-15: the palette dialog's choice is one History step too.
+  const handlePaletteColorsChoiceWithHistory = scopeChoiceWithHistory(
+    () => 'Change setting',
+    resultsManager.handlePaletteColorsChoice,
+    resultsManager.cancelPaletteColorsDialog
   );
   const handleResetColorChoiceWithHistory = scopeChoiceWithHistory(
     () => 'Reset feature color',
@@ -5763,8 +5778,9 @@ export const createAppSetup = () => {
     pendingPaletteName: drawingMember('pendingPaletteName'),
     pendingPaletteColors: drawingMember('pendingPaletteColors'),
     hasPendingPaletteDraft: drawingMember('hasPendingPaletteDraft'),
-    updatePalette,
-    resetColors,
+    requestPaletteChange,
+    selectPalette,
+    requestResetColors,
     downloadLosatCache,
     downloadLosatPair,
     setLosatPairFilename,
@@ -5950,6 +5966,8 @@ export const createAppSetup = () => {
     handleFeatureStyleScopeChoice: handleFeatureStyleScopeChoiceWithHistory,
     legendRenameDialog,
     handleLegendRenameChoice: handleLegendRenameChoiceWithHistory,
+    paletteColorsDialog,
+    handlePaletteColorsChoice: handlePaletteColorsChoiceWithHistory,
     resetColorDialog,
     handleResetColorChoice: handleResetColorChoiceWithHistory,
     labelTextScopeDialog,
@@ -5972,6 +5990,7 @@ export const createAppSetup = () => {
     syncLabelEditor,
     openFeatureEditorFromList,
     legendEntries: drawingMember('legendEntries'),
+    legendEntryColor,
     newLegendCaption,
     newLegendColor,
     updateLegendEntryColor,

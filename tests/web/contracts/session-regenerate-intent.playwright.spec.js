@@ -807,6 +807,9 @@ const captureLoadedPreviewDirectEditState = (page) => page.evaluate(async () => 
     },
     overrides: {
       fill: plain(state.activeDrawing().featureColorOverrides[target.featureOverrideKey]),
+      defaultFill: String(state.activeDrawing().currentColors.value[
+        window.__GBDRAW_LOADED_PREVIEW_DIRECT_EDIT_TARGET__?.feature?.type
+      ] || '').toLowerCase(),
       stroke: plain(state.activeDrawing().featureStrokeOverrides[target.featureOverrideKey]),
       visibility: featureEdit(target.visibilityFeatureIdentity, 'featureVisibility'),
       labelText: featureEdit(target.labelFeatureIdentity, 'labelText'),
@@ -1429,7 +1432,8 @@ test('loaded current preview supports direct edits before the first Generate', a
     expectLabelEdited(snapshot, options);
     expectLegendEdited(snapshot);
     expect(snapshot.overrides).toMatchObject({
-      fill: { color: DIRECT_FILL },
+      fill: null,
+      defaultFill: DIRECT_FILL,
       stroke: {
         strokeColor: DIRECT_STROKE,
         strokeWidth: DIRECT_STROKE_WIDTH
@@ -1577,16 +1581,18 @@ test('loaded current preview supports direct edits before the first Generate', a
   }).last();
   await expect(captionScopeButton).toBeVisible();
   await captionScopeButton.click();
-  await page.waitForFunction(({ overrideKey, color }) => {
+  // D-15: "Apply to all" on the palette row sets the type's default color; it
+  // writes no rule and no per-feature edit.
+  await page.waitForFunction((color) => {
     const app = window.__GBDRAW_APP__;
-    return app.featureColorOverrides?.[overrideKey]?.color === color
+    return app.currentColors?.[window.__GBDRAW_LOADED_PREVIEW_DIRECT_EDIT_TARGET__.feature.type] === color
       && String(app.results?.[app.selectedResultIndex]?.content || '').includes(color);
-  }, { overrideKey: target.featureOverrideKey, color: DIRECT_FILL });
+  }, DIRECT_FILL);
   await settleMountedDom(page);
   const afterFill = await captureLoadedPreviewDirectEditState(page);
   expectDirectEditFlushed(initiallyLoaded, afterFill);
   expectFeatureFill(afterFill, DIRECT_FILL);
-  expect(afterFill.overrides.fill).toMatchObject({ color: DIRECT_FILL });
+  expect(afterFill.overrides).toMatchObject({ fill: null, defaultFill: DIRECT_FILL });
   expect(afterFill.history.undoCount).toBeGreaterThan(initiallyLoaded.history.undoCount);
   await capturePreviewWorkerStage(page, 'after feature fill', previewWorkerStages, true);
 
@@ -1595,7 +1601,7 @@ test('loaded current preview supports direct edits before the first Generate', a
   const afterFillUndo = await captureLoadedPreviewDirectEditState(page);
   expectDirectEditFlushed(afterFill, afterFillUndo);
   expectFeatureFill(afterFillUndo, featureBlocks(initiallyLoaded)[0].fill);
-  expect(afterFillUndo.overrides.fill).toBeNull();
+  expect(afterFillUndo.overrides).toMatchObject({ fill: null, defaultFill: initiallyLoaded.overrides.defaultFill });
   await capturePreviewWorkerStage(page, 'after direct-edit Undo', previewWorkerStages, true);
 
   expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo())).toBe(true);
@@ -1603,7 +1609,7 @@ test('loaded current preview supports direct edits before the first Generate', a
   const afterFillRedo = await captureLoadedPreviewDirectEditState(page);
   expectDirectEditFlushed(afterFillUndo, afterFillRedo);
   expectFeatureFill(afterFillRedo, DIRECT_FILL);
-  expect(afterFillRedo.overrides.fill).toMatchObject({ color: DIRECT_FILL });
+  expect(afterFillRedo.overrides).toMatchObject({ fill: null, defaultFill: DIRECT_FILL });
   await capturePreviewWorkerStage(page, 'after direct-edit Redo', previewWorkerStages, true);
 
   const strokeApplied = await page.evaluate(async ({ color, width }) => {
@@ -1744,10 +1750,10 @@ test('loaded current preview supports direct edits before the first Generate', a
   expect(savedDraft.ui).toMatchObject({
     layoutPreferences: { single: { plotTitlePosition: 'top' } }
   });
+  expect(savedDraft.features.featureColorOverrides?.[target.featureOverrideKey]).toBeUndefined();
+  const fillType = await page.evaluate(() => window.__GBDRAW_LOADED_PREVIEW_DIRECT_EDIT_TARGET__.feature.type);
+  expect(String(savedDraft.config.colors?.[fillType] || '').toLowerCase()).toBe(DIRECT_FILL);
   expect(savedDraft.features).toMatchObject({
-    featureColorOverrides: {
-      [target.featureOverrideKey]: { color: DIRECT_FILL }
-    },
     featureOverrides: {
       [target.visibilityFeatureIdentity]: { featureVisibility: 'off' },
       [target.labelFeatureIdentity]: { labelText: DIRECT_LABEL_TEXT },

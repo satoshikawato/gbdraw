@@ -1007,8 +1007,7 @@ def _run_browser_contract(contract: str) -> None:
               let pendingDraftColor = '';
               for (const paletteName of app.paletteNames || []) {
                 if (paletteName === originalPalette) continue;
-                app.selectedPalette = paletteName;
-                app.updatePalette();
+                app.selectPalette(paletteName, 'palette');
                 const candidateColor = String(app.currentColors?.[chosenFeature.type] || '');
                 if (!candidateColor || candidateColor === originalDraftColor) continue;
                 pendingPalette = paletteName;
@@ -1045,9 +1044,8 @@ def _run_browser_contract(contract: str) -> None:
               let immediateColor = '';
               for (const paletteName of app.paletteNames || []) {
                 if (paletteName === String(app.selectedPalette || '')) continue;
-                app.selectedPalette = paletteName;
                 app.paletteInstantPreviewEnabled = true;
-                app.updatePalette();
+                app.selectPalette(paletteName, 'palette');
                 const candidateColor = String(app.currentColors?.[chosenFeature.type] || '');
                 if (!candidateColor || candidateColor === appliedAfterGenerate) continue;
                 immediatePalette = paletteName;

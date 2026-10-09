@@ -822,9 +822,10 @@ stroke edits. Use the visible **Apply** action to make an edit part of the
 editor state. Renaming a legend entry, with or without features, to the caption of another
 entry of a different color asks you to choose **Merge**, **Suffix**, or
 **Cancel**. If a specific color rule already uses the caption, the entries are
-told apart as that rule describes instead. In the popup's color scope, legend
-name, and **Reset fill color** dialogs, each choice is one History step and
-**Cancel** records none. After a choice the dialog stays open with its buttons
+told apart as that rule describes instead. In the color scope, legend name, and
+**Reset fill color** dialogs, whether a fill color in the popup or the Features
+list, a popup stroke edit, or a legend rename opens them, each choice is one
+History step and **Cancel** records none. After a choice the dialog stays open with its buttons
 disabled and shows **Applying an edit…** until the edit is applied. The first
 choice after a page or Session load can wait several seconds while the Python
 runtime starts. A legend row that a rule draws with a hex suffix, such as
@@ -1006,6 +1007,33 @@ restores them. Generate when the exported figure should include draft settings.
 The export actions and session handoff rules are documented in [Output formats
 and export](output-formats-and-export.md) and [Session and request
 compatibility](session-and-request-compatibility.md).
+
+### Default colors and palettes
+
+The selected palette supplies every default color you have not changed. A
+**Default colors** value that differs from the palette's color is your color and
+wins over the palette, as `-d` does over `-p` in the CLI; Generate and the Run
+Info Source recipe write `-p` and only your colors as `-d`. Colors are compared
+ignoring case, with `#abc` equal to `#aabbcc`, and **Auto** is not one of your
+colors.
+
+- Choosing another palette while you have your own colors asks **Keep my N
+  colors** (the new palette plus your colors), **Use the palette's colors**, or
+  **Cancel**, which changes nothing. Without your colors the palette changes at
+  once. Switching back to the applied palette while another is queued asks the
+  same way; either choice drops the queued palette and applies at once.
+- **Reset** in **Default colors** asks before it discards your colors. Editing
+  a color in the list asks nothing.
+- In the popup's color scope dialog, **Apply to all "<type>"** sets that
+  feature type's default color when the Legend row's caption is the feature
+  type and no specific color rule or per-feature color draws a feature of the
+  row. Every feature of that type without its own color or rule takes it, also
+  hidden features and features shown later. The dialog says so and names your
+  earlier color when it replaces one. While a palette is queued (**Instant
+  Preview** off), the Result shows the new color at once, and the dialog says
+  so. On any other row, **Apply to all** changes the row's rules or writes
+  one rule per feature.
+- Each choice in these dialogs is one History step, and **Cancel** records none.
 
 ## Accessibility
 

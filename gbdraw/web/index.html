@@ -3909,8 +3909,8 @@
 
                             <div>
                                 <div class="flex justify-between items-center mb-2">
-                                    <h4 class="group-heading" aria-label="DEFAULT COLORS">DEFAULT COLORS <help-tip text="Base colors for features, comparison tracks, and collinear blocks. The selected palette supplies unchanged colors; colors you edit override it."></help-tip></h4>
-                                    <button @click="resetColors" class="text-[10px] text-blue-600 hover:underline" :disabled="!semanticMutationAvailable">Reset</button>
+                                    <h4 class="group-heading" aria-label="DEFAULT COLORS">DEFAULT COLORS <help-tip text="Base colors for features, comparison tracks, and collinear blocks. The selected palette supplies unchanged colors; colors you edit override it and stay when you change the palette, after a question."></help-tip></h4>
+                                    <button @click="requestResetColors" class="text-[10px] text-blue-600 hover:underline" :disabled="!semanticMutationAvailable">Reset</button>
                                 </div>
                                 <div class="mb-2 p-2 bg-slate-50 rounded border border-slate-200 space-y-1.5">
                                     <div class="flex items-center gap-2 text-[10px]">
@@ -3925,7 +3925,7 @@
                                     </div>
                                 </div>
                                 <p data-palette-application-help class="ui-hint mb-1">{{ paletteInstantPreviewEnabled ? 'Live edit: palette selection updates the current Result.' : 'Applies on Generate: palette selection updates swatches only; the current Result keeps its applied palette.' }}</p>
-                                <select v-model="selectedPalette" @change="updatePalette" aria-label="Palette" class="form-input form-input-compact mb-2" :disabled="!semanticMutationAvailable">
+                                <select :value="selectedPalette" @change="requestPaletteChange($event)" aria-label="Palette" class="form-input form-input-compact mb-2" :disabled="!semanticMutationAvailable">
                                     <option v-for="p in paletteNames" :value="p">{{ p }}</option>
                                 </select>
                                 <p data-default-color-application-help class="ui-hint mb-1">{{ hasPendingPaletteDraft ? 'Applies on Generate: default color edits update the queued palette swatches.' : 'Live edit: individual default colors update the current Result.' }}</p>
@@ -3934,7 +3934,7 @@
                                         <span class="text-[9px] text-slate-500 truncate block mb-0.5" :title="feat">{{ feat }}</span>
                                         <color-value-control
                                             v-model="currentColors[feat]"
-                                            :fallback="appliedPaletteColors[feat] || '#cccccc'"
+                                            :fallback="paletteDefinitions?.[selectedPalette]?.[feat] || '#cccccc'"
                                             :aria-label="`${feat} feature color`">
                                         </color-value-control>
                                     </div>
@@ -6433,6 +6433,17 @@
                                     <i class="ph ph-users-three text-lg" aria-hidden="true"></i>
                                     <span>Apply to all "{{ featureStyleScopeDialog.legendName }}" ({{ featureStyleScopeDialog.siblingCount + 1 }})</span>
                                 </button>
+                                <p v-if="featureStyleScopeDialog.siblingCount > 0 && featureStyleScopeDialog.defaultColorType" data-default-color-scope-line class="-mt-1 px-1 text-xs text-slate-600">
+                                    <template v-if="featureStyleScopeDialog.replacedDefaultColor">
+                                        Replaces your {{ featureStyleScopeDialog.defaultColorType }} default color
+                                        <span class="inline-block w-3 h-3 align-middle rounded border border-slate-300" :style="{ backgroundColor: featureStyleScopeDialog.replacedDefaultColor }"></span>
+                                        <span class="font-mono">{{ featureStyleScopeDialog.replacedDefaultColor }}</span>.
+                                    </template>
+                                    <template v-else>
+                                        Sets the {{ featureStyleScopeDialog.defaultColorType }} default color ({{ featureStyleScopeDialog.defaultColorType }} features without their own color or rule, also hidden ones).
+                                    </template>
+                                    <template v-if="hasPendingPaletteDraft">Applies now, also over the queued palette.</template>
+                                </p>
 
                                 <!-- Apply to this feature only -->
                                 <button @click="handleFeatureStyleScopeChoice('single')"
@@ -6551,6 +6562,54 @@
                             </div>
 
                             <button @click="handleLegendRenameChoice('cancel')"
+                                    data-history-managed
+                                    class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium" :disabled="!semanticMutationAvailable">
+                                Cancel
+                            </button>
+                    </choice-dialog>
+
+                    <!-- Palette Colors Dialog (D-15) -->
+                    <choice-dialog v-if="paletteColorsDialog.show" :busy="dialogChoicePending" labelledby="palette-colors-title" describedby="palette-colors-description"
+                         @cancel="handlePaletteColorsChoice('cancel')" @keydown.tab="trapDialogFocus"
+                         class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
+                            <h3 id="palette-colors-title" class="text-lg font-bold text-slate-800 mb-2">
+                                {{ paletteColorsDialog.kind === 'reset' ? 'Reset default colors' : `Change palette to "${paletteColorsDialog.toPalette}"` }}
+                            </h3>
+                            <p id="palette-colors-description" class="text-sm text-slate-600 mb-4">
+                                <template v-if="paletteColorsDialog.kind === 'reset'">
+                                    This discards your {{ paletteColorsDialog.count }} default {{ paletteColorsDialog.count === 1 ? 'color' : 'colors' }} ({{ paletteColorsDialog.keysText }})
+                                    and uses the "<span class="font-bold text-blue-600">{{ paletteColorsDialog.toPalette }}</span>" palette's colors.
+                                </template>
+                                <template v-else>
+                                    You changed {{ paletteColorsDialog.count }} default {{ paletteColorsDialog.count === 1 ? 'color' : 'colors' }} from the "<span class="font-bold text-blue-600">{{ paletteColorsDialog.fromPalette }}</span>" palette ({{ paletteColorsDialog.keysText }}).
+                                    <template v-if="paletteColorsDialog.droppedPalette">The queued "{{ paletteColorsDialog.droppedPalette }}" palette is dropped and the colors apply now.</template>
+                                </template>
+                            </p>
+
+                            <div v-if="paletteColorsDialog.kind === 'reset'" class="flex flex-col gap-2">
+                                <button @click="handlePaletteColorsChoice('reset')"
+                                        data-history-managed
+                                        class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
+                                    <i class="ph ph-arrow-counter-clockwise text-lg" aria-hidden="true"></i>
+                                    <span>Reset to the palette's colors</span>
+                                </button>
+                            </div>
+                            <div v-else class="flex flex-col gap-2">
+                                <button @click="handlePaletteColorsChoice('keep')"
+                                        data-history-managed
+                                        class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
+                                    <i class="ph ph-push-pin text-lg" aria-hidden="true"></i>
+                                    <span>Keep my {{ paletteColorsDialog.count }} {{ paletteColorsDialog.count === 1 ? 'color' : 'colors' }}</span>
+                                </button>
+                                <button @click="handlePaletteColorsChoice('palette')"
+                                        data-history-managed
+                                        class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
+                                    <i class="ph ph-palette text-lg" aria-hidden="true"></i>
+                                    <span>Use the palette's colors</span>
+                                </button>
+                            </div>
+
+                            <button @click="handlePaletteColorsChoice('cancel')"
                                     data-history-managed
                                     class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium" :disabled="!semanticMutationAvailable">
                                 Cancel
@@ -6781,7 +6840,7 @@
                                             <i class="ph ph-caret-down text-xs" aria-hidden="true"></i>
                                         </button>
                                     </div>
-                                    <div class="w-6 h-6 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: entry.color }" :title="entry.color"></div>
+                                    <div class="w-6 h-6 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: legendEntryColor(entry) }" :title="legendEntryColor(entry)"></div>
                                     <input type="text" :value="entry.caption" :aria-label="`Legend entry ${entry.caption} name`" @change="renameLegendEntry(idx, $event.target.value)" class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0" :disabled="!semanticMutationAvailable">
                                     <button :aria-label="`Stroke options for ${entry.caption}`" data-history-ignore :aria-expanded="isLegendStrokeOptionsOpen(entry.caption) ? 'true' : 'false'" @click="toggleLegendStrokeOptions(entry.caption)" class="text-slate-400 hover:text-slate-600 shrink-0 p-0.5" :title="isLegendStrokeOptionsOpen(entry.caption) ? 'Hide stroke options' : 'Show stroke options'">
                                         <i class="ph text-xs" :class="isLegendStrokeOptionsOpen(entry.caption) ? 'ph-caret-up' : 'ph-sliders-horizontal'" aria-hidden="true"></i>

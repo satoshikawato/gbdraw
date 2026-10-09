@@ -1,7 +1,9 @@
 // @ts-check
 /** @import { DrawingState } from '../state.js' */
 import { ruleMatcher } from '../services/rule-matchers.js';
+import { ruleLegendCaptions } from '../services/specific-color-rules.js';
 import {
+  appliedFeatureColors,
   estimateColorFactor,
   interpolateColor,
   resolveCollinearMatchColor,
@@ -40,6 +42,51 @@ const paletteColorsEqual = (left, right) => {
 const paletteColorKeysEqual = (left, right, keys) => keys.every(
   (key) => normalizeComparableColor(left?.[key]) === normalizeComparableColor(right?.[key])
 );
+
+// The palette color of a Legend row, by its key (caption).
+/** @type {Record<string, string>} */
+const keyToColorKey = {
+  CDS: 'CDS',
+  'D-loop': 'D-loop',
+  repeat_region: 'repeat_region',
+  tmRNA: 'tmRNA',
+  tRNA: 'tRNA',
+  rRNA: 'rRNA',
+  ncRNA: 'ncRNA',
+  misc_feature: 'misc_feature',
+  mobile_element: 'mobile_element',
+  'GC content': 'gc_content',
+  'GC skew (+)': 'skew_high',
+  'GC skew (-)': 'skew_low'
+};
+/**
+ * @param {string} legendKey
+ * @param {Record<string, string>} palette
+ * @returns {string | null}
+ */
+const resolveOtherLegendColor = (legendKey, palette) => {
+  if (!legendKey) return null;
+  const lowerKey = legendKey.toLowerCase();
+  if (lowerKey === 'other proteins') return palette.CDS || null;
+  if (!lowerKey.startsWith('other ')) return null;
+  let raw = legendKey.slice(6).trim();
+  if (!raw) return null;
+  if (raw.toLowerCase() === 'proteins') return palette.CDS || null;
+  if (raw.endsWith('s')) raw = raw.slice(0, -1);
+  return palette[raw] || null;
+};
+/**
+ * @param {string} legendKey
+ * @param {Record<string, string>} palette
+ * @returns {string | null}
+ */
+const paletteLegendColor = (legendKey, palette) => {
+  if (!legendKey) return null;
+  const colorKey = keyToColorKey[legendKey];
+  if (colorKey && palette[colorKey]) return palette[colorKey];
+  if (palette[legendKey]) return palette[legendKey];
+  return resolveOtherLegendColor(legendKey, palette);
+};
 
 /**
  * @typedef {object} SvgStylesOptions
@@ -91,6 +138,36 @@ export const createSvgStyles = ({
     return updated;
   };
 
+  // A Legend row with a Legend color, or one a Specific color rule draws (also
+  // a rule captioned like a palette key), keeps its color; the palette colors
+  // the others.
+  /** @param {DrawingState} drawing */
+  const legendRowKeepsColor = (drawing) => {
+    const legendCaption = ruleLegendCaptions({
+      rules: drawing.manualSpecificRules, legendEntries: drawing.legendEntries?.value || [],
+      originalLegendOrder: state.originalLegendOrder?.value || []
+    });
+    const ruleRows = new Set(drawing.manualSpecificRules.map(legendCaption));
+    /** @param {string} caption */
+    return (caption) => Boolean(drawing.legendColorOverrides[caption]) || ruleRows.has(caption);
+  };
+  // OV-276: the color the palette gives each Legend panel row of the active
+  // drawing, as its repaint colors the swatch. The panel reads it; nothing
+  // writes it into the rows, which are inputs of the rule preparation.
+  const paletteLegendRowColors = () => {
+    const drawing = state.activeDrawing();
+    const keepsColor = legendRowKeepsColor(drawing);
+    const colors = appliedFeatureColors(state);
+    /** @type {Map<string, string>} */
+    const rowColors = new Map();
+    (drawing.legendEntries?.value || []).forEach((entry) => {
+      const caption = entry?.caption;
+      const color = caption && !keepsColor(caption) ? paletteLegendColor(caption, colors) : null;
+      if (color) rowColors.set(caption, color);
+    });
+    return rowColors;
+  };
+
   // The palette styles the displayed Result with the settings of the drawing
   // of that Result's mode: its rules, edits and skew slot colors (OV-108).
   const applyPaletteToSvg = ({
@@ -109,7 +186,7 @@ export const createSvgStyles = ({
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
 
-    const colors = appliedPaletteColors.value;
+    const colors = appliedFeatureColors(state);
     const featurePaths = Array.from(getFeatureElementIndex(svg).values()).flat();
     const featureLookup = featuresBySvgId?.value || new Map();
     let updatedCount = 0;
@@ -267,38 +344,7 @@ export const createSvgStyles = ({
     }
 
     const featureLegendGroups = getAllFeatureLegendGroups(svg);
-    const keyToColorKey = {
-      CDS: 'CDS',
-      'D-loop': 'D-loop',
-      repeat_region: 'repeat_region',
-      tmRNA: 'tmRNA',
-      tRNA: 'tRNA',
-      rRNA: 'rRNA',
-      ncRNA: 'ncRNA',
-      misc_feature: 'misc_feature',
-      mobile_element: 'mobile_element',
-      'GC content': 'gc_content',
-      'GC skew (+)': 'skew_high',
-      'GC skew (-)': 'skew_low'
-    };
-    const resolveOtherLegendColor = (legendKey, palette) => {
-      if (!legendKey) return null;
-      const lowerKey = legendKey.toLowerCase();
-      if (lowerKey === 'other proteins') return palette.CDS || null;
-      if (!lowerKey.startsWith('other ')) return null;
-      let raw = legendKey.slice(6).trim();
-      if (!raw) return null;
-      if (raw.toLowerCase() === 'proteins') return palette.CDS || null;
-      if (raw.endsWith('s')) raw = raw.slice(0, -1);
-      return palette[raw] || null;
-    };
-    const resolveLegendColor = (legendKey, palette) => {
-      if (!legendKey) return null;
-      const colorKey = keyToColorKey[legendKey];
-      if (colorKey && palette[colorKey]) return palette[colorKey];
-      if (palette[legendKey]) return palette[legendKey];
-      return resolveOtherLegendColor(legendKey, palette);
-    };
+    const keepsColor = legendRowKeepsColor(drawing);
     featureLegendGroups.forEach((featureLegendGroup) => {
       if (!featureLegendGroup) return;
 
@@ -307,10 +353,9 @@ export const createSvgStyles = ({
       if (entryGroups.length > 0) {
         entryGroups.forEach((entryGroup) => {
           const legendKey = entryGroup.getAttribute('data-legend-key');
-          if (!legendKey) return;
-          if (drawing.legendColorOverrides[legendKey]) return;
+          if (!legendKey || keepsColor(legendKey)) return;
 
-          const newColor = resolveLegendColor(legendKey, colors);
+          const newColor = paletteLegendColor(legendKey, colors);
           if (!newColor) return;
 
           const paths = entryGroup.querySelectorAll('path');
@@ -327,10 +372,9 @@ export const createSvgStyles = ({
         const allPaths = featureLegendGroup.querySelectorAll('path');
         texts.forEach((textEl) => {
           const textContent = textEl.textContent?.trim();
-          if (!textContent) return;
-          if (drawing.legendColorOverrides[textContent]) return;
+          if (!textContent || keepsColor(textContent)) return;
 
-          const newColor = resolveLegendColor(textContent, colors);
+          const newColor = paletteLegendColor(textContent, colors);
           if (!newColor) return;
 
           const textPos = parseTransformXY(textEl.getAttribute('transform'));
@@ -383,6 +427,7 @@ export const createSvgStyles = ({
     if (!svg) return;
 
     const featureElementIndex = getFeatureElementIndex(svg);
+    const colors = appliedFeatureColors(state);
     let updatedCount = 0;
 
     extractedFeatures.value.forEach((feat) => {
@@ -396,7 +441,7 @@ export const createSvgStyles = ({
       if (elements.length > 0) {
         const newColor = matchingRule
           ? matchingRule.color
-          : appliedPaletteColors.value[feat.type] || appliedPaletteColors.value.default;
+          : colors[feat.type] || colors.default;
         elements.forEach((el) => {
           if (el.getAttribute('fill') !== newColor) {
             el.setAttribute('fill', newColor);
@@ -522,6 +567,7 @@ export const createSvgStyles = ({
 
   return {
     applyPaletteToSvg,
+    paletteLegendRowColors,
     applySpecificRulesToSvg,
     applyTrackVisibility
   };
