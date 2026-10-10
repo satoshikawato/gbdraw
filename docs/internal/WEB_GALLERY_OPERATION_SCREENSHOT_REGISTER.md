@@ -1,9 +1,19 @@
 # Web Gallery operation screenshot register
 
-Last updated: 2026-09-29
+Last updated: 2026-10-10
 
 This register records task-specific decisions for Gallery operation media.
 Capture metadata remains the executable source of truth in each tutorial JSON.
+
+## BGC record orientation (OV-365)
+
+The BGC Gallery Session has not reverse-complemented BGC0000713 since
+2026-07-15, so the tutorial no longer asks for it.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `BGC0000708-BGC0000713` | `manual-04-02-reverse-bgc0000713.webp` | Delete | None; the step and its table row and column are removed | Deleted |
+| `BGC0000708-BGC0000713` | `manual-04-04-pairwise-style-curve.webp` | Delete | None; no step referenced it | Deleted |
 
 ## Comparison pressed state and Align help-tip (GUI remediation S07)
 
