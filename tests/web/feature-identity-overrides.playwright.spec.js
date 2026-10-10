@@ -157,7 +157,7 @@ test('OV-02: a record_location color rule on a cropped record paints the same fe
   const Y = features.find((feature) => feature.type === 'misc_feature' && feature.start === 2600).svgId;
   // The CLI's record_location is the drawn record's: X at 2401..2500 is drawn
   // at 2201..2300 after the crop that starts at 201.
-  await page.evaluate(() => {
+  await evaluateWithRetainedPromise(page, () => {
     const app = window.__GBDRAW_APP__;
     Object.assign(app.newSpecRule, {
       feat: 'misc_feature', qual: 'record_location', val: '^TESTA:2200\\.\\.2300:\\+$', color: '#00aa00', cap: 'drawn X'
