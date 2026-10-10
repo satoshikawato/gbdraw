@@ -395,9 +395,12 @@ export const importedComparisonExecution = ({ intent, draftResolution }) => {
         || 'Set one complete, valid comparison before generating.'
     };
   }
+  // A reason with its own diagnostic (a missing resource) keeps it; any other
+  // reason reports the pending choice instead of the unclassified fallback (OV-303).
   return {
     ok: false,
-    message: intent?.message || 'Choose how to resolve the saved comparison before generating.'
+    message: intent?.message || 'Choose how to resolve the saved comparison before generating.',
+    fallbackCode: 'COMPARISON_CHOICE_REQUIRED'
   };
 };
 
