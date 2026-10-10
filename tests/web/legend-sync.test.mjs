@@ -639,6 +639,12 @@ const mockLegendEntry = (caption, color, x) => {
     ['A', 'B', 'Own'],
     'a Result drawn with a replayed edited order keeps the displayed default order'
   );
+  // OV-348: a Result arriving from the other diagram mode brings the inventory
+  // it left with (a live Legend rename changed it in place), which replaces
+  // the copy stored when it was last displayed.
+  actions.rememberResultInventory('result-3', ['A', 'Coding', 'Own']);
+  actions.adoptResultInventory('result-3');
+  assert.deepEqual(state.originalLegendOrder.value, ['A', 'Coding', 'Own']);
 }
 
 {

@@ -423,11 +423,14 @@ export const createLegendEntryActions = ({
 
   // E1: a Result of the other diagram mode keeps the inventory it was drawn
   // with while that mode is not shown; a Result loaded from a Session's
-  // `otherModeResult` arrives with its saved one. Kept only for a Result with
-  // no stored inventory; `adoptResultInventory` adopts it when it is displayed.
+  // `otherModeResult` arrives with its saved one. The inventory a Result
+  // arrives with is the one it left with, which followed every live edit made
+  // while it was shown (a Legend rename takes the row's place in it, OV-348),
+  // so it replaces a stored copy; `adoptResultInventory` adopts it when the
+  // Result is displayed.
   /** @param {string | undefined} identity @param {string[]} inventory */
   const rememberResultInventory = (identity, inventory) => {
-    if (!identity || inventoryByResult.has(identity) || !Array.isArray(inventory)) return;
+    if (!identity || !Array.isArray(inventory)) return;
     inventoryByResult.set(identity, [...inventory]);
   };
 
