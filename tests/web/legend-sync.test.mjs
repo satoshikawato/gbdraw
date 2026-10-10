@@ -94,9 +94,9 @@ assert.match(
 );
 assert.doesNotMatch(sessionLegendSyncSource, /initPyodide|addLegendEntry|removeLegendEntry/);
 assert.doesNotMatch(appSetupSource, /restoreLoadedSessionLegendEntries/);
-assert.match(configSource, /const entries = normalizeSessionLegendEntries\(legend\.entries\)/);
+assert.match(configSource, /const entries = normalizeSessionLegendEntries\(legend\.entries, 'entries', droppedLegendColors\)/);
 assert.match(configSource, /entries: entries\.filter\(\(entry\) => entry\.dormant !== true\)/);
-assert.match(configSource, /deletedEntries: normalizeSessionLegendEntries\(legend\.deletedEntries\)/);
+assert.match(configSource, /deletedEntries: normalizeSessionLegendEntries\(legend\.deletedEntries, 'deletedEntries', droppedLegendColors\)/);
 
 const rules = [
   { feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: 'Shared' },

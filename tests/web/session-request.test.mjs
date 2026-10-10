@@ -5479,7 +5479,7 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
 // Sessions 31–39 read that row as the current writer writes it and report it;
 // any other Session table failure names the table and the Session.
 {
-  const { legacyTableRowsNotice } = await import(
+  const { legacyTableRowsNotice, legendColorDropNotice } = await import(
     pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
   );
   const { normalizeUserFacingError } = await import(
@@ -5509,6 +5509,18 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
     + 'Label whitelist: line 2 lacked a required column and was dropped. '
     + 'Default colors: line 4 had a color the table does not accept and was dropped.');
   assert.equal(legacyTableRowsNotice([]), '');
+  // D-43 (OV-300): the Load notice names each Legend entry dropped for its
+  // color once, marks rows outside the shown list, and caps the list.
+  assert.equal(legendColorDropNotice([{ list: 'entries', caption: 'X' }, { list: 'entries', caption: 'X' }]),
+    "Legend: entry 'X' had a color the app does not accept and was dropped.");
+  assert.equal(legendColorDropNotice([
+    ...['A', 'B', 'C', 'D'].map((caption) => ({ list: 'entries', caption })),
+    { list: 'deletedEntries', caption: 'A' }, { list: 'dormantEntries', caption: 'E' },
+    { list: 'entries', caption: 'F' }, { list: 'entries', caption: 'G' }
+  ]), "Legend: entries 'A', 'B', 'C', 'D', 'A' (deleted), and 3 more had a color the app does not accept and were dropped.");
+  assert.equal(legendColorDropNotice([{ list: 'dormantEntries', caption: 'E' }]),
+    "Legend: entry 'E' (not drawn) had a color the app does not accept and was dropped.");
+  assert.equal(legendColorDropNotice([]), '');
   const sessionTableFailure = (document, repairLegacyTableRows) => {
     try {
       project(document, repairLegacyTableRows);

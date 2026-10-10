@@ -1,7 +1,7 @@
 // @ts-check
 /** @import { FeatureCatalogAdmission } from '../services/feature-catalog.js' */
 /** @import { SvgAdmissionRuntime, SvgResultTransform } from '../services/svg-result-ingestion.js' */
-import { resolveColorToHex } from '../utils/color-utils.js';
+import { normalizeDefaultColor } from '../utils/color-utils.js';
 import { defaultLegendCaptionOrder, isLegendOrderEdited, legendRowFeatureIds } from '../services/legend-svg.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { biologicalFeatureKey } from '../services/feature-catalog.js';
@@ -40,18 +40,12 @@ import {
 const text = (value) => String(value ?? '').trim();
 const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
 
+// A committed paint is read with the Default colors domain (D-41).
 const normalizePaint = (value, label) => {
   const raw = text(value);
   if (!raw) return '';
-  const resolved = text(resolveColorToHex(raw));
-  if (
-    /^(?:none|transparent)$/i.test(resolved)
-    || /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(resolved)
-    || /^rgba?\(\s*[-+.\d%]+(?:\s*[,/]\s*|\s+)[-+.\d%]+(?:\s*[,/]\s*|\s+)[-+.\d%]+(?:\s*[,/]\s*[-+.\d%]+)?\s*\)$/i.test(resolved)
-    || /^hsla?\(\s*[-+.\d]+(?:deg|grad|rad|turn)?(?:\s*[,/]\s*|\s+)[-+.\d%]+(?:\s*[,/]\s*|\s+)[-+.\d%]+(?:\s*[,/]\s*[-+.\d%]+)?\s*\)$/i.test(resolved)
-  ) {
-    return resolved;
-  }
+  const color = normalizeDefaultColor(raw);
+  if (color) return color;
   throw new Error(`Invalid ${label} override in the committed editor state.`);
 };
 

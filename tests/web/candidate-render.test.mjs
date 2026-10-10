@@ -490,3 +490,22 @@ test('a renamed row an earlier Generate hid is renamed and styled where a Result
   });
   assert.deepEqual(deleted.legendRenames, []);
 });
+
+// D-41 (OV-300): a feature fill override is read with the Default colors (-d)
+// domain of `normalizeDefaultColor`: a name becomes its table hex, `none` and
+// `transparent` lower-case, hex and rgb()/hsl() stay as written, and anything
+// else fails with the same message as before.
+test('a feature fill override is read with the Default colors domain (D-41, OV-300)', () => {
+  const fill = (color) => compileDirectEditorMutationPlan({
+    catalogAdmission: admission(),
+    featureColorOverrides: { [stableKey]: { color, caption: 'edited' } }
+  }).operationsByResult[0].featureFills.map((operation) => operation.color);
+  assert.deepEqual(fill('Red'), ['#FF0000']);
+  assert.deepEqual(fill('NONE'), ['none']);
+  assert.deepEqual(fill('#AABBCC'), ['#AABBCC']);
+  assert.deepEqual(fill('rgb(1,2,3)'), ['rgb(1,2,3)']);
+  assert.deepEqual(fill('rgb(1e2 0 0)'), ['rgb(1e2 0 0)']);
+  for (const color of ['buttonface', 'rgb(1/2/3)']) {
+    assert.throws(() => fill(color), { message: 'Invalid feature fill override in the committed editor state.' }, color);
+  }
+});
