@@ -1122,19 +1122,18 @@ jobs:
       - name: Set the audit evidence folder
         run: echo "GBDRAW_AUDIT_OUT=$RUNNER_TEMP/promotion-audit" >> "$GITHUB_ENV"
 
-      # The LOSATP recipes need a LOSAT runtime. A failed install leaves the
-      # job running: the LOSATP recipes are then listed to run locally.
-      - name: Install the pinned LOSAT release
-        run: gbdraw setup-losat || echo "::warning::gbdraw setup-losat failed; the LOSATP recipes run locally"
-
-      - name: Check the LOSAT runtime
+      # The LOSATP recipes check the LOSAT runtime bundled in the source
+      # checkout (gbdraw/bin/<platform>/losat). The job installs no managed
+      # runtime: `gbdraw setup-losat` would take precedence over the bundled
+      # one. Without it, the LOSATP recipes are listed to run locally.
+      - name: Check the bundled LOSAT runtime
         run: |
           mkdir -p "$GBDRAW_AUDIT_OUT"
           if found="$(python -c 'import contextlib
           from gbdraw.comparisons.losat_runtime import resolve_losat_runtime
           with contextlib.ExitStack() as stack:
               runtime = resolve_losat_runtime("losatp", stack=stack)
-              print(runtime.source, runtime.executable)' 2>&1)"; then
+              print(runtime.source, runtime.executable)' 2>&1)" && [[ "$found" == "bundled "* ]]; then
             echo "available: $found" > "$GBDRAW_AUDIT_OUT/losat.txt"
           else
             echo "unavailable: $found" > "$GBDRAW_AUDIT_OUT/losat.txt"
@@ -1142,8 +1141,8 @@ jobs:
           cat "$GBDRAW_AUDIT_OUT/losat.txt"
 
       # Every CLI and Python recipe, one at a time, so one failure does not hide
-      # the rest (run_*_scenarios.py --all stops at the first). Without a LOSAT
-      # runtime, the scenarios with a comparison.losatp-* capability in
+      # the rest (run_*_scenarios.py --all stops at the first). Without the
+      # bundled LOSAT runtime, the scenarios with a comparison.losatp-* capability in
       # docs/scenarios/manifest.json are listed as skipped-run-locally.
       - name: Run every recipe check
         env:
