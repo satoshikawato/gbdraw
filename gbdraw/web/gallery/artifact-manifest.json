@@ -46,7 +46,7 @@
     },
     "gallery/examples/majanivirus_orthogroup.svg": {
       "bytes": 7545140,
-      "sha256": "f0997d7578f6edbb4129754b9007605892b6e3936a106655dec5685d3553583a"
+      "sha256": "8044f0de33a1aa953ba46681fc1a84ac4271d7ba28b237e9c193c9dd62f31f53"
     },
     "gallery/examples/tobacco-chloroplast.svg": {
       "bytes": 1447075,
@@ -85,8 +85,8 @@
       "sha256": "40a5f22e2aa09130549a87abd1416465d44e25c7fbaed12d3e266e4134b98422"
     },
     "gallery/sessions/majanivirus_orthogroup.gbdraw-session.json.gz": {
-      "bytes": 6269551,
-      "sha256": "25f8769b6a7aa2a06ad17bf0f723d0ba5b6951d737a3742323a698d41e9673ff"
+      "bytes": 6268952,
+      "sha256": "457a41414ef3b0a553f3704e9bfa56898f0cf2c861f646eacda0678819e8d953"
     },
     "gallery/sessions/tobacco-chloroplast.gbdraw-session.json": {
       "bytes": 1646829,
@@ -126,7 +126,7 @@
     },
     "gallery/sources/majanivirus_orthogroup.svg": {
       "bytes": 1895477,
-      "sha256": "4aeca241ac516ce3fe5ec05eb4f3e24061152bc2bd52ab5e6e7f19c30002fbd1"
+      "sha256": "88aee15e90053852d1ade67552e9d8c48cc1d8a499869178233f825a65c16a3b"
     },
     "gallery/sources/tobacco-chloroplast.svg": {
       "bytes": 278628,
