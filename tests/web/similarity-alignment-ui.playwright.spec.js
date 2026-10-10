@@ -2285,6 +2285,17 @@ test('choosing Upload BLAST TSV without a file keeps a loaded alignment and the 
   });
   const loaded = await plan();
   expect(loaded.groupId).toBeTruthy();
+  // The Session saved another drawer group and the plan's group is not the
+  // first one, so the drawer must select the plan's group itself.
+  const groups = await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return state.orthogroups.value.map(({ id }) => id);
+  });
+  const savedSelection = JSON.parse(readFileSync(
+    'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json', 'utf8'
+  )).orthogroupState.selectedOrthogroupId;
+  expect(groups[0]).not.toBe(loaded.groupId);
+  expect(savedSelection).not.toBe(loaded.groupId);
 
   await page.evaluate(() => document.querySelectorAll('details').forEach((details) => { details.open = true; }));
   const upload = page.getByRole('radio', { name: 'Upload BLAST TSV' }).first();
@@ -2294,6 +2305,10 @@ test('choosing Upload BLAST TSV without a file keeps a loaded alignment and the 
   await expect(page.getByText('Alignment cleared', { exact: false })).toHaveCount(0);
 
   await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('orthogroups'));
+  expect(await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return state.selectedOrthogroupId.value;
+  })).toBe(loaded.groupId);
   const reference = page.locator('#similarity-alignment-reference');
   await expect(reference).toHaveValue(JSON.stringify(loaded.reference));
   await expect(page.locator('#similarity-alignment-drawer-reason'))

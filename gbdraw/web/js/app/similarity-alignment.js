@@ -11,7 +11,7 @@ import {
 import { materializeRecordTranslations } from './legend-layout/composition-actions.js';
 import { isInternalProteinDisplayId } from '../services/feature-utils.js';
 
-const { computed, ref } = window.Vue;
+const { computed, ref, watch } = window.Vue;
 
 const REVIEW_REASONS = new Set([
   'only_usable_candidate', 'unique_direct_rbh',
@@ -1359,6 +1359,14 @@ export const createSimilarityAlignmentActions = ({
       .filter(({ canonicalKey }) => counts.get(canonicalKey) === 1)
       .map(({ canonicalKey: _canonicalKey, ...candidate }) => candidate);
   };
+
+  // OV-381: a new plan (Apply, Session load, Undo) selects its own group in the
+  // drawer, whichever group was selected or saved before, so the drawer can
+  // offer the plan's reference below.
+  watch(() => state.similarityAlignmentPlan.value, (plan) => {
+    const groupId = String(plan?.groupId || '');
+    if (groupId && getOrthogroupById(groupId)) state.selectedOrthogroupId.value = groupId;
+  });
 
   // OV-381: until the user picks, the drawer offers the committed plan's exact
   // reference (from a popup Align or a loaded Session), never a stale one.

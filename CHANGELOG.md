@@ -35,12 +35,12 @@ write-up of a release.
   collinear group scope looked its groups up only among scoped collinear groups
   and showed only the group IDs (OV-370).
 - Similarity alignment (web app): while an alignment is active, including one
-  loaded from a Session, the Similarity Groups drawer preselects its exact
-  reference, so **Align…** and **Review alignment options…** work from the
-  drawer at once. Before, the drawer showed the reference in **Active plan**
+  loaded from a Session, the Similarity Groups drawer selects its group and
+  preselects its exact reference, so **Align…** and **Review alignment
+  options…** work from the drawer at once. Before, the drawer showed the reference in **Active plan**
   but kept both buttons disabled until you chose the same reference again.
   A new alignment, an Undo, or a Session load replaces an earlier drawer
-  choice with the new plan's reference (OV-381).
+  group and reference choice with the new plan's (OV-381).
 - Similarity alignment (web app): an Undo that restores a cleared alignment
   also removes its "Alignment cleared" notice. Before, the notice stayed while
   the alignment was active again (OV-382).

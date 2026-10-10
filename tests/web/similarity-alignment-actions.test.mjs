@@ -2,8 +2,15 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 const ref = (value) => ({ value });
+// The fixture refs are plain objects, so a watcher runs only on `flushWatchers()`.
+const watchers = [];
+const flushWatchers = () => watchers.forEach((entry) => {
+  const value = entry.source();
+  if (value !== entry.last) entry.callback((entry.last = value));
+});
 globalThis.window = {
-  Vue: { ref, computed: (getter) => ({ get value() { return getter(); } }) }
+  Vue: { ref, computed: (getter) => ({ get value() { return getter(); } }),
+    watch: (source, callback) => { watchers.push({ source, callback, last: source() }); } }
 };
 const { createSimilarityAlignmentActions } = await import(
   '../../gbdraw/web/js/app/similarity-alignment.js'
@@ -711,9 +718,18 @@ test('a new committed plan drops the drawer pick (OV-381)', async () => {
   await startReview(sessionLoad);
   await sessionLoad.actions.applyDraft();
   sessionLoad.actions.setDrawerReference('og-1', '');
+  flushWatchers();
+  // The Session saved another drawer group; its plan selects the plan's group.
+  sessionLoad.state.selectedOrthogroupId.value = 'og-saved';
   const loaded = JSON.parse(JSON.stringify(sessionLoad.state.similarityAlignmentPlan.value));
   sessionLoad.state.similarityAlignmentPlan.value = loaded;
+  flushWatchers();
+  assert.equal(sessionLoad.state.selectedOrthogroupId.value, 'og-1');
   assert.equal(sessionLoad.actions.drawerReferenceKey.value, planKey(sessionLoad));
+  // A group picked after that plan stays until the next plan.
+  sessionLoad.state.selectedOrthogroupId.value = 'og-saved';
+  flushWatchers();
+  assert.equal(sessionLoad.state.selectedOrthogroupId.value, 'og-saved');
 
   // The repair route empties the pick; the next committed plan restores the offer.
   const repaired = create();
