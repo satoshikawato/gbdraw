@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { DrawingState } from '../../state.js' */
+/** @import { LegendRowContext } from '../../services/specific-color-rules.js' */
 import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { runWhenPrepared } from '../rule-matching.js';
@@ -8,7 +9,7 @@ import { appliedFeatureColors, resolveColorToHex } from '../../utils/color-utils
 import { parseSpecificRules, serializeSpecificRules } from '../../services/file-imports.js';
 import { formatFeatureRange, getFeatureColorRuleHash } from '../../services/feature-utils.js';
 import {
-  buildLegendIntents, createRuleLegendCaptions, legendRowRules, rendererLegendRows, ruleLegendCaptions
+  buildLegendIntents, createRuleLegendCaptions, legendRowRules, ruleCommitLegendRows, ruleLegendCaptions
 } from '../../services/specific-color-rules.js';
 import { resolveFeatureLabelSelector } from '../../services/feature-selector.js';
 import { downloadTextFile } from '../../services/text-download.js';
@@ -23,7 +24,7 @@ import {
 } from '../../utils/feature-rendering.js';
 import { featureOverrideValue } from '../../services/feature-placement.js';
 import { featureDrawnContext, legendRowsShowable, legendRuleOrder, resultLegendRowKeys } from '../../services/feature-visibility.js';
-import { legendRowTakesPlace, shownLegendKeys, shownPythonLegendRow } from '../../services/legend-svg.js';
+import { legendRowTakesPlace, pythonLegendRows, shownLegendKeys, shownPythonLegendRow } from '../../services/legend-svg.js';
 
 // R13: `projectPaletteAndRules` is the composition root's projection of the
 // palette and the specific-color rules (R3); this owner calls it after a rule
@@ -113,8 +114,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   };
   // The legend rows the candidate rules draw on rendered features, and the rows
   // the commit retires: those the current rules draw (so it retires the row
-  // Generate drew) and `retiredLegendIntents`, rows this commit replaces, which
-  // are no renderer rows for the N-06 caption allocation. `removedRuleRows` are
+  // Generate drew), the rows Python drew that the rules take (`takenRows`),
+  // and `retiredLegendIntents`, rows this commit replaces, which are no
+  // renderer rows for the N-06 caption allocation. `removedRuleRows` are
   // the rows of current rules that no candidate rule names, drawn or not.
   /** @param {DrawingState} drawing */
   const candidateLegendIntents = (drawing, candidateRules, retiredLegendIntents) => {
@@ -122,9 +124,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       featureOverrideValue(drawing.featureOverrides, feature, 'featureVisibility') !== 'off');
     const candidateMatches = ruleMatcher(candidateRules);
     const used = new Set(rendered.map(feature => candidateMatches.first(feature)).filter(Boolean));
-    const rendererRows = rendererLegendRows({
-      legendEntries: drawing.legendEntries?.value,
-      originalLegendOrder: state.originalLegendOrder?.value,
+    const { rendererRows, takenRows } = ruleCommitLegendRows({
+      ...legendRowContext(drawing),
       rules: [...drawing.manualSpecificRules, ...candidateRules,
         ...retiredLegendIntents.map(intent => ({ cap: intent?.caption, color: intent?.color }))]
     });
@@ -134,7 +135,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     const candidateCaptions = new Set(buildLegendIntents(candidateRules, rendererRows).intents.map(intent => intent.caption));
     return {
       intents: buildLegendIntents(candidateRules.filter(rule => used.has(rule)), rendererRows).intents,
-      previousIntents: [...ruleRows, ...retiredLegendIntents],
+      previousIntents: [...ruleRows, ...takenRows, ...retiredLegendIntents],
       removedRuleRows: ruleRows.filter(row => !candidateCaptions.has(row.caption))
     };
   };
@@ -519,10 +520,12 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     return normalizeCaption(getIndividualFeatureLabel(feat));
   };
 
-  /** @param {DrawingState} drawing */
+  // The N-06 allocation reads Python's rows of the displayed Result (OV-294).
+  /** @param {DrawingState} drawing @returns {LegendRowContext} */
   const legendRowContext = (drawing) => ({
     rules: drawing.manualSpecificRules,
-    legendEntries: drawing.legendEntries?.value || [],
+    pythonRows: pythonLegendRows(state.svgContainer?.value?.querySelector?.('svg')),
+    features: extractedFeatures.value || [],
     originalLegendOrder: state.originalLegendOrder?.value || []
   });
   // The rules a legend row draws; editing the row edits them (N-06).

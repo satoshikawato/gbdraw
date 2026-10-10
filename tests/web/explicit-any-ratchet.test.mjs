@@ -130,7 +130,7 @@ const EXPLICIT_ANY_BASELINE = {
   'services/session-file.js': 1,
   'services/session-request.js': 72,
   'services/session-resources.js': 10,
-  'services/specific-color-rules.js': 2,
+  'services/specific-color-rules.js': 1,
   'services/standalone-interactivity.js': 2,
   'services/svg-result-ingestion.js': 10,
   'services/svg-serialization.js': 2,

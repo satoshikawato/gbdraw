@@ -948,6 +948,9 @@ test('OV-243: a renamed GC skew row keeps its key through a palette change and G
 // takes. Both edit orders, with Undo and Redo of the second edit, and Save
 // then Load, show what Generate draws: the row's features keep the stroke.
 const ROW_STROKE = '#e63946';
+// forced_label_underlay.gb: the repeat_region feature and the CDS FL2.
+const REPEAT_REGION = 'f9cf91913';
+const RULE_FEATURE = 'f841fb8a8';
 const rowStrokedFeatures = (snapshot) => Object.entries(snapshot.features)
   .filter(([, feature]) => feature.stroke.includes(ROW_STROKE)).map(([id]) => id);
 for (const order of ['stroke then color', 'color then stroke']) {
@@ -979,7 +982,8 @@ for (const order of ['stroke then color', 'color then stroke']) {
 // of the rule Python draws that row for, so a palette change shown live keeps
 // the row the caption names in its palette color, and that row's stroke
 // reaches the features drawn in it, live as at Generate. The rule's feature
-// is reached too: the rule commit names it into the caption (OV-292, open).
+// is drawn in the rule's own row, which the stroke does not reach (OV-292 A,
+// R15-6).
 test('OV-291: a palette change and a stroke on a row a rule\'s caption names, live = Generate (circular)', async ({ page }) => {
   test.setTimeout(240_000);
   await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
@@ -988,8 +992,7 @@ test('OV-291: a palette change and a stroke on a row a rule\'s caption names, li
   await switchPalette(page, 'arctic');
   await legendRowStrokeColor(page, 'repeat_region', ROW_STROKE);
   const stroked = rowStrokedFeatures(await semanticSnapshot(page));
-  expect(stroked, 'the repeat_region feature and the feature named into the caption (OV-292)')
-    .toEqual(['f841fb8a8', 'f9cf91913']);
+  expect(stroked, 'the repeat_region feature, not the rule\'s feature (OV-292)').toEqual([REPEAT_REGION]);
   const { generated } = await expectLiveEqualsGenerate(page, { label: 'palette change, then a stroke on the row a rule caption names' });
   expect(rowStrokedFeatures(generated), 'Generate strokes the same feature').toEqual(stroked);
 });
@@ -1007,10 +1010,55 @@ test('OV-288: a Legend color equal to a rule\'s color on the row its caption nam
   await legendRowColor(page, 'repeat_region', '#2266aa');
   await legendRowStrokeColor(page, 'repeat_region', ROW_STROKE);
   const stroked = rowStrokedFeatures(await semanticSnapshot(page));
-  expect(stroked, 'the repeat_region feature and the feature named into the caption (OV-292)')
-    .toEqual(['f841fb8a8', 'f9cf91913']);
+  expect(stroked, 'the repeat_region feature, not the rule\'s feature (OV-292)').toEqual([REPEAT_REGION]);
   const { generated } = await expectLiveEqualsGenerate(page, { label: 'a Legend color equal to the rule color, then a stroke' });
   expect(rowStrokedFeatures(generated), 'Generate strokes the same features').toEqual(stroked);
+});
+
+// OV-294 A (R15-6): the Legend editor finds the rules a row draws by Python's
+// rows, never by the row's swatch. A Legend color on the row a rule's caption
+// names, equal to the rule's color, leaves the rule in its own row, so a second
+// Legend color edit of that row recolors the row, not the rule's feature.
+test('OV-294: a second Legend color on the row a rule\'s caption names recolors the row, not the rule, live = Generate (circular)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2266aa', cap: 'repeat_region' });
+  await generate(page);
+  await legendRowColor(page, 'repeat_region', '#2266aa');
+  await legendRowColor(page, 'repeat_region', '#ff8800');
+  const shown = async (snapshot) => ({
+    rules: await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map((rule) => rule.color)),
+    ruleFeature: snapshot.features[RULE_FEATURE].fill,
+    rows: Object.fromEntries(snapshot.legend.filter((row) => row.key.startsWith('repeat_region')).map((row) => [row.key, row.fill]))
+  });
+  const expected = { rules: ['#2266aa'], ruleFeature: ['#2266aa'], rows: { repeat_region: '#ff8800', 'repeat_region [#2266aa]': '#2266aa' } };
+  expect(await shown(await semanticSnapshot(page)), 'the second edit recolors the row').toEqual(expected);
+  const { generated } = await expectLiveEqualsGenerate(page, { label: 'a second Legend color on the row a rule caption names' });
+  expect(await shown(generated), 'Generate draws the same').toEqual(expected);
+});
+
+// OV-307: a row Python drew for a rule keeps the rule's color as Python drew
+// it until Generate, so the rule that a Legend color edit recolored live still
+// draws that row: a second Legend color edit recolors the rule again, and the
+// row's stroke reaches the rule's feature, live as at Generate.
+test('OV-307: two Legend color edits and a stroke on a rule\'s own row recolor and stroke the rule\'s feature, live = Generate (circular)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2266aa', cap: 'Group' });
+  await generate(page);
+  await legendRowColor(page, 'Group', '#ff8800');
+  await legendRowColor(page, 'Group', '#11aa55');
+  await legendRowStrokeColor(page, 'Group', ROW_STROKE);
+  const shown = async (snapshot) => ({
+    rules: await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map((rule) => rule.color)),
+    ruleFeature: snapshot.features[RULE_FEATURE].fill,
+    stroked: rowStrokedFeatures(snapshot),
+    row: snapshot.legend.filter((row) => row.key === 'Group').map((row) => row.fill)
+  });
+  const expected = { rules: ['#11aa55'], ruleFeature: ['#11aa55'], stroked: [RULE_FEATURE], row: ['#11aa55'] };
+  expect(await shown(await semanticSnapshot(page)), 'both edits recolor the rule').toEqual(expected);
+  const { generated } = await expectLiveEqualsGenerate(page, { label: 'two Legend colors and a stroke on a rule row' });
+  expect(await shown(generated), 'Generate draws the same').toEqual(expected);
 });
 
 // OV-293 (PD-OI-066): Generate draws no stroke for a deleted Legend row, so

@@ -8,7 +8,8 @@ import { createLegendStrokeActions } from './legend/stroke-actions.js';
 import {
   getAllFeatureLegendGroups,
   getVisibleFeatureLegendGroup,
-  isCurrentLegendHorizontal
+  isCurrentLegendHorizontal,
+  pythonLegendRows
 } from '../services/legend-svg.js';
 import { legendRowRules } from '../services/specific-color-rules.js';
 
@@ -43,10 +44,12 @@ export const createLegendManager = ({
   const entryActions = createLegendEntryActions({ state, readActiveResultIdentity });
   const sortActions = createLegendSortActions({ state, showLegendStructure });
   const strokeActions = createLegendStrokeActions({ state });
-  /** @param {DrawingState} drawing */
+  // The rules a row draws, by Python's rows of the displayed Result (OV-294).
+  /** @param {DrawingState} drawing @param {number} index */
   const rowRulesAt = (drawing, index) => legendRowRules(drawing.legendEntries.value[index]?.caption, {
     rules: drawing.manualSpecificRules,
-    legendEntries: drawing.legendEntries.value,
+    pythonRows: pythonLegendRows(state.svgContainer?.value?.querySelector?.('svg')),
+    features: state.extractedFeatures?.value || [],
     originalLegendOrder: state.originalLegendOrder?.value || []
   });
   const dragActions = createLegendDragActions({

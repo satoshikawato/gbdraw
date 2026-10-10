@@ -154,6 +154,22 @@ const matchingRuleDerivedFill = (override, manualSpecificRules) => {
   ));
 };
 
+// The Legend row caption a feature color edit names its feature into
+// (`LegendRowReach.namedIds`): the edit's caption when no rule draws the edit.
+// Python draws a rule's feature in the row it draws for the rule (N-06), which
+// a row's stroke reaches by that row's color, never by the rule's caption
+// (OV-292 A, R15-6).
+/**
+ * @param {unknown} override A `featureColorOverrides` value.
+ * @param {readonly Partial<SpecificColorRule>[]} rules
+ * @returns {string}
+ */
+export const namedLegendCaption = (override, rules) => (
+  override && typeof override === 'object' && !matchingRuleDerivedFill(override, rules)
+    ? text(/** @type {{ caption?: unknown }} */ (override).caption)
+    : ''
+);
+
 const samePaint = (left, right) => (
   text(resolveColorToHex(text(left))).toLowerCase() === text(resolveColorToHex(text(right))).toLowerCase()
 );
@@ -606,13 +622,22 @@ const compilePlanBundle = ({
 
   // Category style preferences outlive the current generated entry projection.
   // Apply a returning category's preference without synthesizing a manual row.
+  // A caption's features excuse a Result that draws none of them from drawing
+  // its row; a row's stroke reaches only those an edit no rule draws names
+  // into it (`namedLegendCaption`).
+  /** @type {Map<string, Set<RenderedFeatureId>>} */
   const renderedIdsByDirectCaption = new Map();
+  /** @type {Set<RenderedFeatureId>} */
+  const ruleDrawnIds = new Set();
   Object.entries(featureColorOverrides || {}).forEach(([key, override]) => {
     const caption = text(override?.caption);
     if (!caption) return;
     const renderedIds = renderedIdsByDirectCaption.get(caption) || new Set();
+    const named = namedLegendCaption(override, rules) === caption;
     resolvedStableTargets(catalogAdmission, key).forEach(({ renderedId }) => {
-      if (renderedId) renderedIds.add(renderedId);
+      if (!renderedId) return;
+      renderedIds.add(/** @type {RenderedFeatureId} */ (renderedId));
+      if (!named) ruleDrawnIds.add(/** @type {RenderedFeatureId} */ (renderedId));
     });
     renderedIdsByDirectCaption.set(caption, renderedIds);
   });
@@ -623,8 +648,9 @@ const compilePlanBundle = ({
     const row = legendRows.styledRow(caption);
     if (!row) return null;
     const { entry, dormant, isOriginal, targetCaption } = row;
-    const namedIds = [...(renderedIdsByDirectCaption.get(caption) || [])];
-    const legendRenderedIds = entry && entry.featureIds.length > 0 ? entry.featureIds : namedIds;
+    const captionIds = [...(renderedIdsByDirectCaption.get(caption) || [])];
+    const namedIds = captionIds.filter((id) => !ruleDrawnIds.has(id));
+    const legendRenderedIds = entry && entry.featureIds.length > 0 ? entry.featureIds : captionIds;
     const allowMissing = !entry || (sourceReplaced && isOriginal) || unrequestedDepth.has(targetCaption)
       || dormant || (rendererDerivedCaptions.has(caption)
       && (legendRenderedIds.length === 0 || legendRenderedIds.every(id => hiddenRenderedIds.has(id))));
@@ -718,7 +744,7 @@ const compilePlanBundle = ({
       const strokeWidth = hasOwn(stroke, 'strokeWidth') ? normalizeStrokeWidth(stroke.strokeWidth) : null;
       if (!strokeColor && strokeWidth === null) return;
       const listedIds = /** @type {RenderedFeatureId[]} */ (row.entry ? row.entry.featureIds : []);
-      const namedIds = /** @type {RenderedFeatureId[]} */ (row.namedIds);
+      const { namedIds } = row;
       const draftColor = draftRowColor(row.targetCaption);
       operationsByResult.forEach((operations, resultIndex) => {
         operations.legendStrokes.push({

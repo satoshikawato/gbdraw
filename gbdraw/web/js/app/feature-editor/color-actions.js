@@ -1,7 +1,7 @@
 // @ts-check
 /** @import { DrawingState, LegendEntry } from '../../state.js' */
 /** @import { LegendRowReach, PythonLegendKey, RenderedFeatureId } from '../../services/legend-svg.js' */
-import { draftLegendRowColors, draftLegendRows, LIVE_EDIT_DOMAINS } from '../candidate-render.js';
+import { draftLegendRowColors, draftLegendRows, LIVE_EDIT_DOMAINS, namedLegendCaption } from '../candidate-render.js';
 import { reportRuleRunFailure } from '../rule-matching.js';
 import { matchedRuleKeys, ruleKey, ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { appliedFeatureColors, resolveColorToHex } from '../../utils/color-utils.js';
@@ -264,7 +264,7 @@ export const createFeatureColorActions = ({
   const legendRowStrokeOf = (drawing, svg, feature, svgId) => {
     const id = /** @type {RenderedFeatureId} */ (svgId);
     const drawnFills = [/** @type {[RenderedFeatureId, string]} */ ([id, getFeatureFillElements(svg, svgId)[0]?.getAttribute('fill') || ''])];
-    const namedCaption = normalizeCaption(getFeatureOverride(drawing.featureColorOverrides, feature)?.caption);
+    const namedCaption = normalizeCaption(namedLegendCaption(getFeatureOverride(drawing.featureColorOverrides, feature), drawing.manualSpecificRules));
     const pythonRows = pythonLegendRows(svg);
     const originalOrder = originalLegendOrder.value || [];
     const rows = draftLegendRows({

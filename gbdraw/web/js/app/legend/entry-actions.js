@@ -10,6 +10,7 @@ import {
   defaultLegendCaptionOrder,
   getAllFeatureLegendGroups,
   isLegendOrderEdited,
+  pythonLegendRows,
   recordedLegendOrder,
   resultLegendRows
 } from '../../services/legend-svg.js';
@@ -574,7 +575,8 @@ export const createLegendEntryActions = ({
     const inventory = (originalLegendOrder.value || []).map((/** @type {unknown} */ caption) => String(caption || '').trim());
     const context = {
       rules: drawing.manualSpecificRules,
-      legendEntries: drawing.legendEntries.value || [],
+      pythonRows: pythonLegendRows(svgContainer.value.querySelector('svg')),
+      features: state.extractedFeatures?.value || [],
       originalLegendOrder: inventory
     };
     let entries = [...(drawing.legendEntries.value || [])];

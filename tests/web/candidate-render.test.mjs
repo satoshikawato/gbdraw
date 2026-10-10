@@ -289,7 +289,7 @@ test('an identity row projects onto every Result that draws its feature', () => 
 // no row for it, so its Legend style may find the row absent; the Result that
 // draws them still requires it.
 test('a Legend style may miss its row only in a Result that draws none of its features', () => {
-  const plan = compileDirectEditorMutationPlan({
+  const options = {
     catalogAdmission: { ...admission(), resultNames: ['record-a.svg', 'record-b.svg'] },
     featureColorOverrides: { [stableKey]: { color: '#123456', caption: 'codon start two' } },
     manualSpecificRules: [{ feat: 'CDS', qual: 'hash', val: 'fef810304', color: '#123456', cap: 'codon start two' }],
@@ -297,16 +297,25 @@ test('a Legend style may miss its row only in a Result that draws none of its fe
     originalLegendOrder: ['codon start two', 'CDS'],
     legendColorOverrides: { 'codon start two': '#123456' },
     legendStrokeOverrides: { 'codon start two': { strokeColor: '#445566', strokeWidth: 2 } }
-  });
+  };
+  const plan = compileDirectEditorMutationPlan(options);
   assert.deepEqual(plan.operationsByResult.map(({ legendFills }) => legendFills), [
     [{ caption: 'codon start two', color: '#123456', allowMissing: false }],
     [{ caption: 'codon start two', color: '#123456', allowMissing: true }]
   ]);
+  // A rule draws the feature's color edit, so the stroke reaches the feature
+  // by the color of the row Python draws for the rule, not by its caption
+  // (OV-292); the caption still excuses a Result that draws none of them.
   assert.deepEqual(plan.operationsByResult.map(({ legendStrokes }) => legendStrokes.map(
     ({ allowMissing, reach }) => ({ allowMissing, namedIds: reach.namedIds })
   )), [
-    [{ allowMissing: false, namedIds: ['f0001'] }],
-    [{ allowMissing: true, namedIds: ['f0001'] }]
+    [{ allowMissing: false, namedIds: [] }],
+    [{ allowMissing: true, namedIds: [] }]
+  ]);
+  // A color edit no rule draws names its feature into the row by its caption.
+  const direct = compileDirectEditorMutationPlan({ ...options, manualSpecificRules: [] });
+  assert.deepEqual(direct.operationsByResult.map(({ legendStrokes }) => legendStrokes.map(({ reach }) => reach.namedIds)), [
+    [['f0001']], [['f0001']]
   ]);
 });
 

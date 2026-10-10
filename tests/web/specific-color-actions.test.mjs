@@ -3,7 +3,8 @@ import { test } from 'node:test';
 import { createFeatureRuleActions } from '../../gbdraw/web/js/app/feature-editor/rule-actions.js';
 import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
 import { createLegendManager } from '../../gbdraw/web/js/app/legend.js';
-import { diffLegendIntents } from '../../gbdraw/web/js/services/specific-color-rules.js';
+import { diffLegendIntents, legendRowRules } from '../../gbdraw/web/js/services/specific-color-rules.js';
+import { recordRuleMatches, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
@@ -248,6 +249,52 @@ test('a This feature only rule on a cropped record paints its feature live as Ge
 // N-06 (PD-OI-042): a rule captioned like a generated row of another color is
 // drawn as "<caption> [<hex>]". The live commit adds that row, the row is tied to
 // the rule, and the generated row is not.
+// The mounted Result as `pythonLegendRows` (services/legend-svg.js) reads it:
+// Python's Legend rows, each its key and the fill Python drew its swatch in.
+const resultSvg = (rows) => {
+  const element = (attributes, children = []) => ({
+    getAttribute: (name) => attributes[name] ?? null,
+    querySelector: () => null,
+    querySelectorAll: () => children
+  });
+  const legend = element({}, rows.map(([key, fill]) => element({ 'data-legend-key': key }, [element({ fill })])));
+  return { getElementById: (id) => (id === 'legend' ? legend : null) };
+};
+const mounted = (rows) => ({ value: { querySelector: () => resultSvg(rows) } });
+
+// OV-294 A (R15-6): the rules a Legend row draws are read from Python's rows
+// of the displayed Result, never from the row's swatch. OV-307: a row Python
+// drew for a rule keeps the fill Python drew it in after a live edit of the
+// rule's color, and still is that rule's row, unless its caption names a
+// feature type's row.
+test('the rules a Legend row draws follow Python\'s rows, also after a live recolor of a rule', () => {
+  const rows = (entries) => new Map(entries.map(([key, color]) => [key, { key, color }]));
+  const fl2 = { type: 'CDS', svg_id: 'fl2', fill_color: '#2266aa', qualifiers: {} };
+  const named = { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2266aa', cap: 'repeat_region' };
+  const generated = {
+    rules: [named], features: [fl2], originalLegendOrder: ['CDS', 'repeat_region', 'repeat_region [#2266aa]'],
+    pythonRows: rows([['CDS', '#54bcf8'], ['repeat_region', '#d3d3d3'], ['repeat_region [#2266aa]', '#2266aa']])
+  };
+  recordRuleMatches([fl2], [ruleKey(named)], () => ({ matched: [0], priorities: [0], declined: [] }));
+  assert.deepEqual(legendRowRules('repeat_region', generated), [], 'the row the caption names is no rule row');
+  assert.deepEqual(legendRowRules('repeat_region [#2266aa]', generated), [named]);
+
+  const recolored = { ...named, cap: 'Group', color: '#11aa55' };
+  recordRuleMatches([fl2], [ruleKey(recolored)], () => ({ matched: [0], priorities: [0], declined: [] }));
+  const group = {
+    rules: [recolored], features: [fl2], originalLegendOrder: ['CDS', 'Group'],
+    pythonRows: rows([['CDS', '#54bcf8'], ['Group', '#2266aa']])
+  };
+  assert.deepEqual(legendRowRules('Group', group), [recolored], 'Python drew the row for the rule');
+  // A caption naming a feature type's row is compared with that row, whatever its fill.
+  const other = { ...recolored, cap: 'other proteins' };
+  recordRuleMatches([fl2], [ruleKey(other)], () => ({ matched: [0], priorities: [0], declined: [] }));
+  const otherRows = { ...group, rules: [other], pythonRows: rows([['CDS', '#54bcf8'], ['other proteins', '#2266aa']]),
+    originalLegendOrder: ['CDS', 'other proteins'] };
+  assert.deepEqual(legendRowRules('other proteins', otherRows), []);
+  assert.deepEqual(legendRowRules('other proteins [#11aa55]', otherRows), [other]);
+});
+
 test('a rule captioned like a generated row commits, and is edited through, its suffixed row', async () => {
   const s = setup();
   const trna = { type: 'tRNA', svg_id: 'trna', qualifiers: { product: ['tRNA-Phe'] } };
@@ -257,6 +304,7 @@ test('a rule captioned like a generated row commits, and is edited through, its 
     { caption: 'CDS', originalCaption: 'CDS', color: '#54bcf8' },
     { caption: 'tRNA', originalCaption: 'tRNA', color: '#e8b441' }
   ];
+  s.state.svgContainer = mounted([['CDS', '#54bcf8'], ['tRNA', '#e8b441']]);
   let intents = null;
   s.setLegendPreparation(async (next) => { intents = next; });
   const rule = { feat: 'tRNA', qual: 'product', val: '.*', color: '#ff0000', cap: 'CDS' };
@@ -270,6 +318,7 @@ test('a rule captioned like a generated row commits, and is edited through, its 
     { caption: 'CDS', originalCaption: 'CDS', color: '#54bcf8' },
     { caption: 'CDS [#ff0000]', originalCaption: 'CDS [#ff0000]', color: '#ff0000' }
   ];
+  s.state.svgContainer = mounted([['CDS', '#54bcf8'], ['CDS [#ff0000]', '#ff0000']]);
   assert.equal(s.actions.getEffectiveLegendCaption(trna), 'CDS [#ff0000]');
   assert.deepEqual(s.actions.getLegendRowRules('CDS'), []);
   assert.deepEqual(s.actions.getLegendRowRules('CDS [#ff0000]'), s.state.manualSpecificRules);
@@ -280,11 +329,29 @@ test('a rule captioned like a generated row commits, and is edited through, its 
   assert.deepEqual(intents, [{ caption: 'CDS [#00ff00]', color: '#00ff00' }]);
 });
 
+// OV-308 (OV-306 on the commit path): Python draws no row for a feature type
+// once a rule captioned with that type colors a feature, so the rule draws the
+// row under the type's name in its own color. The commit adds that row, not
+// "<type> [<hex>]", and replaces the type's row Python drew, which it owns.
+test('a rule captioned with its own feature type commits the type\'s row in its color', async () => {
+  const s = setup();
+  s.state.originalLegendOrder = { value: ['CDS'] };
+  s.state.legendEntries.value = [{ caption: 'CDS', originalCaption: 'CDS', color: '#54bcf8' }];
+  s.state.svgContainer = mounted([['CDS', '#54bcf8']]);
+  let intents = null;
+  s.setLegendPreparation(async (next) => { intents = next; });
+  const rule = { feat: 'CDS', qual: 'gene', val: '.', color: '#c83366', cap: 'CDS' };
+  assert.equal(await s.actions.commitSpecificRules([rule]), true);
+  assert.deepEqual(intents, [{ caption: 'CDS', color: '#c83366' }]);
+  assert.deepEqual(s.previousIntents(), [{ caption: 'CDS', color: '#54bcf8' }], 'the commit owns the type\'s row');
+});
+
 test('the Legend editor recolors the rule of a suffixed row, and only that row', () => {
   const ref = (value) => ({ value });
   const rule = { feat: 'tRNA', qual: 'product', val: '.*', color: '#ff0000', cap: 'CDS' };
   const state = {
-    manualSpecificRules: [rule], svgContainer: ref(null), results: ref([]), selectedResultIndex: ref(0),
+    manualSpecificRules: [rule], svgContainer: mounted([['CDS', '#54bcf8'], ['CDS [#ff0000]', '#ff0000']]),
+    results: ref([]), selectedResultIndex: ref(0),
     legendEntries: ref([
       { caption: 'CDS', originalCaption: 'CDS', color: '#54bcf8' },
       { caption: 'CDS [#ff0000]', originalCaption: 'CDS [#ff0000]', color: '#ff0000' }

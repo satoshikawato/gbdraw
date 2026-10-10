@@ -194,7 +194,7 @@ const actions = createFeatureColorActions({
     findMatchingRegexRule: () => matchingRegexRule,
     getDisplayedFeatureLabel: (feature) => feature.displayLabel || feature.product || '',
     effectiveLegendCaptions: () => () => 'Core',
-    getLegendRowRules: (caption) => legendRowRules(caption, { rules: manualSpecificRules, legendEntries: legendEntries.value }),
+    getLegendRowRules: (caption) => legendRowRules(caption, { rules: manualSpecificRules, pythonRows: new Map() }),
     getIndividualFeatureLabel: (feature) => feature.product || '',
     // FE-09 (D-14): "This feature only" always writes the stable hash.
     getFeatureQualifier: (feature) => ({ qual: 'hash', val: getFeatureColorRuleHash(feature) }),
@@ -829,7 +829,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
         return true;
       },
       effectiveLegendCaptions: () => (feature) => feature.type,
-      getLegendRowRules: (caption) => legendRowRules(caption, { rules: resetRules }),
+      getLegendRowRules: (caption) => legendRowRules(caption, { rules: resetRules, pythonRows: new Map() }),
       getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
       findFeaturesWithSameLegendItem: () => [],
       findFeaturesWithSameDisplayedLabel: () => [],
@@ -898,8 +898,11 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
         runWithRuleMatches: runWithRuleMatchesOf(createRulePreparation({ state: withDrawings(renameState), evaluate: evaluatePythonRules }), renameState),
         commitSpecificRules: async (nextRules) => { committed.push(nextRules.map((rule) => ({ ...rule }))); return true; },
         effectiveLegendCaptions: () => (feature) => feature.legendCaption || rules.find((rule) => rule.feat === feature.type)?.cap || feature.type,
+        // Python's rows of the displayed Result: the listed rows as Python drew them.
         getLegendRowRules: (caption) => legendRowRules(caption, {
-          rules, legendEntries: stateLegendEntries.value, originalLegendOrder: originalOrder.value
+          rules, originalLegendOrder: originalOrder.value, pythonRows: new Map(stateLegendEntries.value.map((entry) => [
+            entry.originalCaption, { key: entry.originalCaption, color: entry.color }
+          ]))
         }),
         getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
         findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],
