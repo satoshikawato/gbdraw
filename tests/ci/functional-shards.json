@@ -76,6 +76,7 @@
     "tests/web/preview-navigation.playwright.spec.js": 3,
     "tests/web/python-rule-parity.playwright.spec.js": 8,
     "tests/web/record-display-discovery.playwright.spec.js": 9,
+    "tests/web/record-draw-selection.playwright.spec.js": 5.25,
     "tests/web/right-drawer.playwright.spec.js": 30,
     "tests/web/scale-visibility.playwright.spec.js": 2,
     "tests/web/session-active-mode.playwright.spec.js": 4,
@@ -133,6 +134,7 @@
       "tests/web/live-generate-parity.playwright.spec.js",
       "tests/web/multi-result-edit-matrix.playwright.spec.js",
       "tests/web/palette-default-colors.playwright.spec.js",
+      "tests/web/record-draw-selection.playwright.spec.js",
       "tests/web/session-active-mode.playwright.spec.js",
       "tests/web/specific-color-pattern-drafts.playwright.spec.js"
     ],
