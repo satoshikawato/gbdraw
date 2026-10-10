@@ -5277,7 +5277,10 @@ const importSessionDocument = async (e, options = {}) => {
       const recovered = legacyFeatureRecoveryPlan?.recoveredFeatureState;
       const sessionMode = data.renderRequest?.mode || candidateMode;
       const sourceFeatures = !validatedSessionCatalog && (hasRenderedIdFeatureEdits(features)
-        || hasHashSelectorRules(restoredConfig?.rules, features.featureVisibilityManualRules))
+        || hasHashSelectorRules({
+          rules: restoredConfig?.rules,
+          featureVisibilityManualRules: /** @type {Record<string, unknown>} */ (features).featureVisibilityManualRules
+        }))
         ? await extractSessionSourceFeatures(/** @type {any} */ ({ snapshot: legacyFeatureSnapshot }))
         : null;
       const legacy = validatedSessionCatalog ? null : {
@@ -5299,16 +5302,17 @@ const importSessionDocument = async (e, options = {}) => {
       // request: its Linear cards give the records.
       const ruleRecords = data.renderRequest?.records
         ?? (candidateMode === 'linear' ? legacyLinearRequestRecords(candidateFiles.linearSeqs) : undefined);
+      const savedVisibilityRules = /** @type {Record<string, unknown>} */ (features).featureVisibilityManualRules;
       const hashRules = migrateSessionHashRules({
         rules: restoredConfig?.rules,
-        featureVisibilityManualRules: features.featureVisibilityManualRules,
+        featureVisibilityManualRules: savedVisibilityRules,
         mode: sessionMode,
         catalog: validatedSessionCatalog,
         legacy: legacy && { ...legacy, records: ruleRecords },
         records: ruleRecords
       });
       if (restoredConfig && hashRules.rules !== restoredConfig.rules) restoredConfig.rules = hashRules.rules;
-      if (hashRules.featureVisibilityManualRules !== features.featureVisibilityManualRules) {
+      if (hashRules.featureVisibilityManualRules !== savedVisibilityRules) {
         features = { ...features, featureVisibilityManualRules: hashRules.featureVisibilityManualRules };
       }
       unmappedHashSelectorCount = hashRules.unmappedCount;

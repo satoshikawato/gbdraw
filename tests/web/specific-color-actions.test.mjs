@@ -227,20 +227,20 @@ test('biological safety rows and hidden rendered features do not create unused l
   assert.deepEqual(intents, [{ caption: 'Shared [#112233]', color: '#112233' }]);
 });
 
-// F-2 (D-14, PD-OI-069): Generate matches a hash rule against the drawn
-// feature, whose hash on a cropped or reverse-complemented record differs from
-// the source identity in `selector.hash`. The rule "This feature only" writes
-// matches that feature live too.
+// F-2 (release D-39): a hash rule names the feature's hash in its source
+// record (`selector.hash`), which Generate matches on a cropped or
+// reverse-complemented record too, and which its rendered ID carries. The rule
+// "This feature only" writes matches that feature live too.
 test('a This feature only rule on a cropped record paints its feature live as Generate does', async () => {
   const s = setup();
   const cropped = {
-    type: 'CDS', svg_id: 'fbd3d0b74_record_1', stable_feature_id: 'f3ccacda4', record_id: 'TESTA',
+    type: 'CDS', svg_id: 'f3ccacda4_record_1', stable_feature_id: 'f3ccacda4', record_id: 'TESTA',
     selector: { type: 'CDS', start: 300, end: 600, strand: '+', hash: 'f3ccacda4', qualifiers: { locus_tag: ['TESTA_0001'] } },
     qualifiers: { locus_tag: ['TESTA_0001'] }
   };
   s.state.extractedFeatures.value = [cropped];
   const qualifier = s.actions.getFeatureQualifier(cropped);
-  assert.deepEqual(qualifier, { qual: 'hash', val: 'fbd3d0b74' });
+  assert.deepEqual(qualifier, { qual: 'hash', val: 'f3ccacda4' });
   let intents = null;
   s.setLegendPreparation(async (next) => { intents = next; });
   assert.equal(await s.actions.commitSpecificRules([

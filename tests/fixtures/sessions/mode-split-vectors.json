@@ -4207,8 +4207,8 @@
         "/modes/linear/config/rules/0/cap": "tRNA_RENAMED",
         "/modes/circular/config/rules/1/qual": "hash",
         "/modes/linear/config/rules/1/qual": "hash",
-        "/modes/circular/config/rules/1/val": "f64320c02",
-        "/modes/linear/config/rules/1/val": "f64320c02",
+        "/modes/circular/config/rules/1/val": "f88047061",
+        "/modes/linear/config/rules/1/val": "f88047061",
         "/modes/circular/config/rules/1/cap": "tRNA_RENAMED",
         "/modes/linear/config/rules/1/cap": "tRNA_RENAMED",
         "/modes/circular/config/rules/2/feat": "CDS",
@@ -4675,7 +4675,7 @@
               {
                 "feat": "tRNA",
                 "qual": "hash",
-                "val": "f64320c02",
+                "val": "f88047061",
                 "color": "#e8b441",
                 "cap": "tRNA_RENAMED"
               },
@@ -4984,7 +4984,7 @@
               {
                 "feat": "tRNA",
                 "qual": "hash",
-                "val": "f64320c02",
+                "val": "f88047061",
                 "color": "#e8b441",
                 "cap": "tRNA_RENAMED"
               },

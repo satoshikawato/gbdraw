@@ -208,20 +208,35 @@ const legacyIndex = ({ features = [], biologicalFeatures = [], records = [], mod
   return { renderedById: new Map(), biological };
 };
 
+/**
+ * A feature a saved diagram drew: its identity key, the hash it was drawn with,
+ * its source index, and its one-based record position in its Result.
+ * @typedef {{ key: string, stableId: string, sourceIndex: number | null, recordOrdinal: number }} DrawnFeature
+ */
+
 // Each feature a saved catalog (schema 3-5) drew, by the hash it was drawn
 // with: the hash in its rendered ID (`svgId`), which schema 5 also keeps as
 // `drawnSelector.hash`, and the record position of that ID or of the row in
 // its item's records. The twin of `_catalog_drawn_features` in
 // gbdraw/session_io.py.
+/**
+ * @param {unknown} catalog
+ * @param {string} mode
+ * @returns {DrawnFeature[]}
+ */
 const catalogDrawnFeatures = (catalog, mode) => {
+  /** @type {DrawnFeature[]} */
   const drawn = [];
-  (isObject(catalog) && Array.isArray(catalog.items) ? catalog.items : []).forEach((item) => {
-    const recordKeys = Array.isArray(item?.recordKeys) ? item.recordKeys.map(text) : [];
-    (Array.isArray(item?.features) ? item.features : []).forEach((feature) => {
-      const recordKey = text(feature?.recordKey);
-      const key = scopedIdentityKey(mode, recordKey, text(feature?.biologicalFeatureId));
-      const rendered = parseRenderedId(feature?.svgId);
-      const stableId = text(feature?.drawnSelector?.hash) || rendered.stableId;
+  const items = /** @type {unknown[]} */ (isObject(catalog) && Array.isArray(catalog.items) ? catalog.items : []);
+  items.filter(isObject).forEach((item) => {
+    const recordKeys = Array.isArray(item.recordKeys) ? item.recordKeys.map(text) : [];
+    const features = /** @type {unknown[]} */ (Array.isArray(item.features) ? item.features : []);
+    features.filter(isObject).forEach((feature) => {
+      const recordKey = text(feature.recordKey);
+      const key = scopedIdentityKey(mode, recordKey, text(feature.biologicalFeatureId));
+      const rendered = parseRenderedId(feature.svgId);
+      const selector = feature.drawnSelector;
+      const stableId = text(isObject(selector) ? selector.hash : '') || rendered.stableId;
       if (!key || !stableId) return;
       drawn.push({
         key,
@@ -243,6 +258,12 @@ const catalogDrawnFeatures = (catalog, mode) => {
 // hash, in the same form without the suffixes, and their identity keys; null
 // when it names no drawn feature or features of two source hashes. The twin of
 // `_source_hash_selector_value` in gbdraw/session_io.py.
+/**
+ * @param {unknown} value
+ * @param {DrawnFeature[]} drawn
+ * @param {string} [recordKey]
+ * @returns {{ value: string, keys: string[] } | null}
+ */
 const sourceHashSelectorValue = (value, drawn, recordKey = '') => {
   const saved = text(value);
   const anchored = saved.match(/^\^([\s\S]*)\$$/);
@@ -251,7 +272,7 @@ const sourceHashSelectorValue = (value, drawn, recordKey = '') => {
     && (recordOrdinal === null || feature.recordOrdinal === recordOrdinal)
     && (sourceIndex === null || feature.sourceIndex === sourceIndex)
     && (!recordKey || JSON.parse(feature.key)[1] === recordKey)).map((feature) => feature.key))];
-  const sources = new Set(keys.map((key) => JSON.parse(key)[2].replace(/~\d+$/, '')));
+  const sources = new Set(keys.map((key) => String(JSON.parse(key)[2]).replace(/~\d+$/, '')));
   if (sources.size !== 1) return null;
   const [source] = sources;
   return { value: anchored ? `^${source}$` : source, keys };
@@ -276,12 +297,15 @@ export const legacyLinearRequestRecords = (linearSeqs) => (Array.isArray(linearS
   });
 
 /**
- * Whether color rules (`qual`) or Feature visibility rules (`qualifier`) hold a `hash` rule.
- * @param {...unknown} ruleLists
+ * Whether the color rules (`qual`) or the Feature visibility rules
+ * (`qualifier`) of a draft hold a `hash` rule.
+ * @param {{ rules?: unknown, featureVisibilityManualRules?: unknown }} draft
  */
-export const hasHashSelectorRules = (...ruleLists) => ruleLists.some((rules) => Array.isArray(rules)
-  && rules.some((rule) => text(rule?.qual ?? rule?.qualifier).toLowerCase() === 'hash'));
+export const hasHashSelectorRules = ({ rules, featureVisibilityManualRules: visibilityRules }) => [rules, visibilityRules]
+  .some((list) => Array.isArray(list)
+    && list.some((rule) => text(rule?.qual ?? rule?.qualifier).toLowerCase() === 'hash'));
 
+/** @param {number} count */
 export const HASH_SELECTOR_UNMAPPED_NOTICE = (count) => (
   `${count} hash= rule(s) or annotation target(s) from an older Session could not be matched to a feature of its saved diagram,`
   + ' which crops or reverse-complements a record. hash= now names a feature by its hash in the source record,'
@@ -301,26 +325,31 @@ export const HASH_SELECTOR_UNMAPPED_NOTICE = (count) => (
  *   rules?: unknown,
  *   featureVisibilityManualRules?: unknown,
  *   mode: string,
- *   catalog?: Record<string, any> | null,
- *   legacy?: Record<string, any> | null,
+ *   catalog?: Record<string, unknown> | null,
+ *   legacy?: Record<string, unknown> | null,
  *   records?: unknown
  * }} input
- * @returns {{ rules: any, featureVisibilityManualRules: any, unmappedCount: number }}
+ * @returns {{ rules: unknown, featureVisibilityManualRules: unknown, unmappedCount: number }}
  */
 export const migrateSessionHashRules = ({
-  rules, featureVisibilityManualRules, mode, catalog = null, legacy = null, records = []
+  rules, featureVisibilityManualRules: visibilityRules, mode, catalog = null, legacy = null, records = []
 }) => {
   const transformed = (Array.isArray(records) ? records : []).some((record) => isObject(record) && drawnTransformed(record));
-  /** @type {any[] | null} */
+  /** @type {DrawnFeature[] | null} */
   let drawn = null;
   let unmappedCount = 0;
+  /**
+   * @param {unknown} entries
+   * @param {string} qualifierField
+   * @param {string} valueField
+   */
   const migrate = (entries, qualifierField, valueField) => {
     if (!Array.isArray(entries)) return entries;
     let changed = false;
     const migrated = entries.map((entry) => {
       if (!isObject(entry) || text(entry[qualifierField]).toLowerCase() !== 'hash' || !text(entry[valueField])) return entry;
       drawn ??= catalog ? catalogDrawnFeatures(catalog, mode) : legacyIndex({ ...legacy, mode }).biological;
-      const resolved = sourceHashSelectorValue(entry[valueField], drawn);
+      const resolved = sourceHashSelectorValue(entry[valueField], /** @type {DrawnFeature[]} */ (drawn));
       if (!resolved) {
         if (transformed) unmappedCount += 1;
         return entry;
@@ -333,7 +362,7 @@ export const migrateSessionHashRules = ({
   };
   return {
     rules: migrate(rules, 'qual', 'val'),
-    featureVisibilityManualRules: migrate(featureVisibilityManualRules, 'qualifier', 'value'),
+    featureVisibilityManualRules: migrate(visibilityRules, 'qualifier', 'value'),
     unmappedCount
   };
 };
