@@ -163,27 +163,30 @@ To line up records on one reference feature, choose **Align…** in the feature
 popup or in the Similarity Groups drawer. When each record has one clear
 anchor, gbdraw applies the alignment at once and keeps each record's
 direction. When the choice is ambiguous, or when you choose **Review alignment
-options…**, a review palette opens:
+options…**, the **Review alignment** dialog opens with one card per record:
 
-- Each target record shows its suggested anchor and the reason. Replace it, or
-  choose **Skip**.
-- Choose the directions: **Keep current directions**, **All selected arrows
-  right →**, **All selected arrows left ←**, or **Custom**.
+- A record with several candidates lists them with how each links to the
+  reference, marks one **Recommended**, and offers **Skip**. A record with one
+  candidate shows a compact card with a **Skip** checkbox.
+- **Arrow direction** offers **Keep as is**, **All right →**, **All left ←**,
+  or **Custom**. Each card shows its arrow before and after Align.
 
-When several anchors fit equally, gbdraw suggests a unique representative or
+When several anchors fit equally, gbdraw recommends a unique representative or
 the first stable candidate. This is a convenience, not a biological judgement.
 Reversing a record reverses the whole record; the +/− strands in your source
 file do not change. A record whose anchor is unknown, skipped, missing, or
-unusable keeps its direction, and the palette says why.
+unusable keeps its direction, and its card says why.
 
-Choices in the palette run no search. **Apply** checks the plan once. If the
+Choices in the dialog run no search. **Apply** checks the plan once. If the
 final directions or reference position differ from the preview, the preview
 refreshes and you apply again. If Apply fails, your choices and the previous
 Result stay.
 
 The alignment is saved with every anchor and **Skip** choice. A record's
 direction is its **Reverse complement** setting. Generate, reordering
-records, and a manual **Reverse complement** keep the alignment. **Reset alignment…** moves records back
+records, and a manual **Reverse complement** keep the alignment. A comparison change
+clears it, except that choosing **Upload BLAST TSV** for a pair keeps it until a file is chosen.
+**Reset alignment…** moves records back
 to where they were just before the latest Align, and can also undo the
 direction changes that Align made; its preview lists later manual edits that
 this reset replaces. Each Align can be reset once: to try the other kind of
@@ -499,5 +502,12 @@ each export format needs.
   listed `pairs` cannot be edited; **Inherit saved comparison** reuses it as saved.
 - A Session 31 to 39 whose Label whitelist has a row with a blank keyword loads
   in the web app, but replaying it on the command line fails.
+- A feature popup can cover header buttons such as **Undo**; close it to reach them.
+- Similarity Groups assignment reasons and path IDs can differ between the web app
+  and the command line for a reverse-complemented record, because inference depends
+  on the order of LOSAT hits. The drawn diagram is the same.
+- A Session that `gbdraw circular` saves for a batch or grid with a cropped or
+  reverse-complemented record stores that record as drawn, so replaying it gives its
+  features different IDs than the original render. The drawing is the same.
 
 [Documentation home](./DOCS.md) | [Beta history](./RELEASE_NOTES_0.14.0b0.md)
