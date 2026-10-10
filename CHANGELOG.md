@@ -29,6 +29,54 @@ write-up of a release.
   CLI report the ones that match no drawn feature.
 - Sessions: a **This feature only** color that 0.13.0 saved on a multi-record
   Linear diagram colors its feature again after Load and Generate (OV-416).
+- Similarity alignment (web app): the **Select alignment anchors** dialog is now
+  **Review alignment**. One summary line replaces the three introductory
+  paragraphs. **Arrow direction** offers **Keep as is**, **All right →**, **All
+  left ←**, and **Custom**, with one line that says which records reverse. Each
+  record is a card with its organism, accession, and current arrow; a record
+  that Align reverses shows the old arrow struck through, the new arrow, and a
+  **reversed** chip. The reference card says how far its record's left edge
+  moves. A record with one usable candidate shows a compact card with a
+  **Skip** checkbox; a record that still needs a choice is marked **Choose
+  one**, and the footer names how many records block **Apply**. The
+  **Recommended** chip stays on the recommended candidate after you choose
+  another. Behaviour is unchanged: choices stay local until **Apply**, which
+  validates, regenerates, and commits in one step.
+- Similarity groups (web app): member tables in the feature popup, ribbon
+  popup, and Similarity Groups drawer name each record in plain text, as the
+  diagram heading does. Before, a definition with markup such as
+  `<i>Streptomyces</i>` showed the tags, and a File default definition was
+  ignored (OV-369).
+- Collinear blocks (web app): the **Similarity groups covered** table of a
+  collinear ribbon fills every column again. Before, a ribbon without a
+  collinear group scope looked its groups up only among scoped collinear groups
+  and showed only the group IDs (OV-370).
+- Similarity alignment (web app): while an alignment is active, including one
+  loaded from a Session, the Similarity Groups drawer selects its group and
+  preselects its exact reference, so **Align…** and **Review alignment
+  options…** work from the drawer at once. Before, the drawer showed the reference in **Active plan**
+  but kept both buttons disabled until you chose the same reference again.
+  A new alignment, an Undo, or a Session load replaces an earlier drawer
+  group and reference choice with the new plan's (OV-381).
+- Similarity alignment (web app): an Undo that restores a cleared alignment
+  also removes its "Alignment cleared" notice. Before, the notice stayed while
+  the alignment was active again (OV-382).
+- Similarity alignment (web app): choosing **Upload BLAST TSV** for a pair
+  before choosing its file keeps the active alignment, because the pair has no
+  new data yet. Before, the alignment was cleared at once with "Alignment
+  cleared: comparison configuration changed." Choosing a file, another
+  program or mode, or any other comparison change still clears it (OV-380).
+- Feature popup (web app): while the first popup after a page or Session load
+  waits for Python to match the color rules, the toolbar shows **Preparing
+  feature details…**, and **Save Session** and **Load Session** stay available.
+  Before, the toolbar said "Applying an edit. Retry after the edit finishes.",
+  both buttons were disabled, and the click seemed to only highlight the
+  feature's similarity group (OV-377, OV-378).
+- History (web app): Undo and Redo of a Linear setting keep the active
+  similarity alignment and record positions. Before, undoing any Linear
+  setting, for example the first edit after loading an aligned Session,
+  silently dropped the alignment, and the next Generate drew the records
+  unaligned (OV-383).
 - Gallery: the aminoglycoside BGC example draws its arrows with **Shaft Width
   Ratio** 0.6 and aligns its records on similarity group og_6 (neoU of
   BGC0000709) instead of og_1. Its tutorial adds the **Features › Arrow Geometry

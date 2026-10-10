@@ -177,7 +177,8 @@ import {
   missingUploadPairsToResolve,
   normalizeLinearComparisonPlan,
   plainTextLinearRecordLabel,
-  reconcileLinearComparisonPlan
+  reconcileLinearComparisonPlan,
+  resolveLinearComparisonPlan
 } from '../services/linear-comparisons.js';
 import {
   projectLinearComparisonLosatModeSelection,
@@ -558,6 +559,31 @@ export const createAppSetup = () => {
     }
   };
 
+  // OV-380: a pair set to a source that has no data yet (Upload BLAST TSV
+  // without a file) compares nothing new, so it keeps the alignment. Every
+  // other pair must keep its current comparison; the pending pairs count as
+  // their current one.
+  /** @typedef {import('../services/linear-comparisons.js').LinearComparisonResolvedEdge} ResolvedEdge */
+  /** @param {DrawingState} drawing @param {import('../services/linear-comparisons.js').LinearComparisonPlan} normalized */
+  const onlyPendingSourcesChanged = (drawing, normalized) => {
+    /** @param {ResolvedEdge} edge */
+    const pending = (edge) => edge.source === LINEAR_COMPARISON_SOURCES.UPLOAD && !(edge.fileActive && edge.file);
+    /** @type {readonly ResolvedEdge[]} */
+    const before = drawing.linearComparisonResolution.value.edges;
+    /** @type {readonly ResolvedEdge[]} */
+    const after = resolveLinearComparisonPlan({
+      plan: normalized, sequences: linearSeqs, layout: effectiveLinearComparisonLayout(drawing),
+      losatProgram: drawing.losatProgram.value, blastpMode: drawing.losat.blastp?.mode
+    }).edges;
+    if (!after.some(pending)) return false;
+    const beforeByKey = new Map(before.map((edge) => [edge.edgeKey, edge]));
+    const effective = after.map((edge) => (pending(edge) ? beforeByKey.get(edge.edgeKey) : edge));
+    return effective.length === before.length && effective.every((edge, index) => (
+      edge?.edgeKey === before[index].edgeKey && edge.source === before[index].source
+      && edge.file === before[index].file && edge.losatFilename === before[index].losatFilename
+    ));
+  };
+
   /** @param {DrawingState} drawing */
   const replaceLinearComparisonPlan = (drawing, nextPlan, { invalidate = true } = {}) => {
     const normalized = normalizeLinearComparisonPlan(nextPlan);
@@ -567,7 +593,7 @@ export const createAppSetup = () => {
       || normalized.edges.some((edge, index) => (
         !sameLinearComparisonEdge(edge, drawing.linearComparisonPlan.edges[index])
       ));
-    if (invalidate && changed) {
+    if (invalidate && changed && !onlyPendingSourcesChanged(drawing, normalized)) {
       similarityAlignmentActions?.clearForMutation?.('comparison configuration changed.');
     }
     drawing.linearComparisonPlan.mode = normalized.mode;
@@ -1426,12 +1452,15 @@ export const createAppSetup = () => {
 
   const specificRuleNotice = ref('');
   const { ruleMatchingPending } = state;
+  // An edit's rule preparation: Save and Load wait for it, not for a popup's (OV-377).
+  const ruleMatchingBlocking = ref(false);
   // Python's rule evaluation (R7): the rule preparation's, and the Label TSV
   // import's own stateless one (`evaluateLabelRules`).
   const evaluateRules = async (payload, options) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, payload, options)).result;
   const rulePreparation = createRulePreparation({
     state,
     pending: ruleMatchingPending,
+    blocking: ruleMatchingBlocking,
     notify: notice => { specificRuleNotice.value = notice; },
     evaluate: evaluateRules,
     visibilityRules: () => requestFeatureVisibilityRules(state.activeDrawing().featureVisibilityManualRules)
@@ -2967,7 +2996,7 @@ export const createAppSetup = () => {
   // here, so the root composes the availability that Save, Load, and their
   // controls read (R13).
   const sessionPreparationBusyReason = () => (
-    history.mutationPending() || ruleMatchingPending.value || auxiliaryFileImportPending()
+    history.mutationPending() || ruleMatchingBlocking.value || auxiliaryFileImportPending()
       ? 'Applying an edit. Retry after the edit finishes.'
       : ''
   );
@@ -2979,6 +3008,9 @@ export const createAppSetup = () => {
   const sessionSaveAvailable = computed(() => !sessionSaveLoadAvailability('save'));
   const sessionLoadAvailable = computed(() => !sessionSaveLoadAvailability('load'));
   const sessionBusyReason = computed(() => sessionSaveLoadAvailability('save')?.reason || '');
+  // OV-378: the first feature popup after a Session load waits for Python to
+  // match the rules; say so, since Save and Load stay available meanwhile.
+  const featureDetailsPending = computed(() => ruleMatchingPending.value && !ruleMatchingBlocking.value);
   const circularRecordPresentationPanel = ref(null);
   // UJ-09 (Owner 2026-10-05): loading a Session replaces the work and clears
   // History, so every route that loads one asks first when History changed
@@ -4423,7 +4455,7 @@ export const createAppSetup = () => {
     const groupId = similarityAlignmentActions.repair.value?.groupId
       || state.similarityAlignmentPlan.value?.groupId
       || '';
-    similarityAlignmentActions.drawerReferenceKey.value = '';
+    similarityAlignmentActions.setDrawerReference(groupId, '');
     return openOrthogroupInDrawer(groupId);
   };
 
@@ -6018,6 +6050,7 @@ export const createAppSetup = () => {
     similarityAlignmentUnresolvedCount: similarityAlignmentActions.unresolvedCount,
     similarityAlignmentApplyDisabledReason: similarityAlignmentActions.applyDisabledReason,
     similarityAlignmentDrawerReferenceKey: similarityAlignmentActions.drawerReferenceKey,
+    featureDetailsPending,
     similarityAlignmentPlanInspector: similarityAlignmentActions.activePlanInspector,
     canApplySimilarityAlignment: similarityAlignmentActions.canApply,
     resetSimilarityAlignment: similarityAlignmentActions.resetAlignment,

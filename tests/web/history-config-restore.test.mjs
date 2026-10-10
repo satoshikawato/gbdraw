@@ -66,6 +66,27 @@ assert.equal(state.similarityAlignmentPlan.value, null);
 assert.deepEqual(state.linearRecordTranslations.value, [
   { recordKey: 'record-a', x: 21, y: 4 }
 ]);
+// OV-383: Undo and Redo of a Linear setting keep the active alignment. The
+// config a History step restores carries no alignment, so restoring it must
+// not clear the plan or the record translations.
+state.mode.value = 'linear';
+const keptPlan = { schema: 1, mode: 'position', groupId: 'og-ov383',
+  reference: { recordKey: 'record-a', biologicalFeatureId: 'feature-a', sourceFeatureIndex: 0, stableFeatureSvgId: 'feature-a' },
+  records: [] };
+const keptTranslations = [{ recordKey: 'record-a', x: 12, y: -3 }];
+state.similarityAlignmentPlan.value = keptPlan;
+state.linearRecordTranslations.value = keptTranslations;
+const shaftBefore = state.drawings.linear.adv.arrow_shaft_width_ratio;
+await history.initializeIntentBaseline();
+await history.runUndoable('Arrow shaft', () => { state.drawings.linear.adv.arrow_shaft_width_ratio = 0.6; });
+await history.undo();
+assert.equal(state.drawings.linear.adv.arrow_shaft_width_ratio, shaftBefore);
+assert.equal(state.similarityAlignmentPlan.value?.groupId, 'og-ov383', 'Undo keeps the alignment plan');
+assert.deepEqual(state.linearRecordTranslations.value, keptTranslations, 'Undo keeps the record translations');
+await history.redo();
+assert.equal(state.drawings.linear.adv.arrow_shaft_width_ratio, 0.6);
+assert.equal(state.similarityAlignmentPlan.value?.groupId, 'og-ov383', 'Redo keeps the alignment plan');
+assert.deepEqual(state.linearRecordTranslations.value, keptTranslations, 'Redo keeps the record translations');
 console.log('History restores nullable config values and preserves key guards.');
 
 // SE-01, N-19, N-20: History checkpoints and the Session rollback hold the
