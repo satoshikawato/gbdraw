@@ -269,7 +269,11 @@ const applyStep = (page, step) => evaluateWithRetainedPromise(page, async (curre
       } else if (finished && outstanding === 0) {
         break;
       } else {
-        await Promise.race([applied.catch(() => {}), sleep(20)]);
+        // Once the edit has settled, its promise wins the race at once: the
+        // loop would then never yield a task, and an answer that waits for one
+        // (a Worker reply) would never settle while the timers pile up until
+        // the renderer runs out of memory (OV-330).
+        await (finished ? sleep(20) : Promise.race([applied.catch(() => {}), sleep(20)]));
       }
     }
     await Promise.all([applied, ...answers]);
@@ -368,7 +372,7 @@ const applyStepWithin = async (page, step) => {
   const expired = new Promise((_, reject) => {
     timer = setTimeout(async () => {
       const open = await page.evaluate(() => Object.entries(window.__GBDRAW_APP__)
-        .filter(([name, value]) => /Dialog$/.test(name) && value?.show).map(([name]) => name)).catch(() => ['(page unreadable)']);
+        .filter(([name, value]) => /Dialog$/.test(name) && value?.show).map(([name]) => name)).catch((error) => [`(page unreadable: ${error?.message || error})`]);
       const answered = await page.evaluate(() => window.__GBDRAW_WALK_NOTES__).catch(() => []);
       reject(new Error(`the step did not settle within ${STEP_TIMEOUT_MS / 1000} s; open dialogs: [${open}]; answered: [${answered}]`));
     }, STEP_TIMEOUT_MS);
