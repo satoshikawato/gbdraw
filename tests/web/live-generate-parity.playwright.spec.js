@@ -1038,7 +1038,9 @@ test('a stroke and a palette change reach a Session 30 Result loaded without a f
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     app.paletteInstantPreviewEnabled = true;
-    return app.selectPalette(app.paletteNames.find((name) => name !== app.selectedPalette));
+    // The fixture has a user default color, so the switch asks first (D-15);
+    // take the palette's colors, as the dialog's "Change palette" does.
+    return app.selectPalette(app.paletteNames.find((name) => name !== app.selectedPalette), 'palette');
   });
   await settleLive(page);
   // A 0.13.0 Result has no part or label records, so it is compared with

@@ -864,7 +864,7 @@ test('an edit after a rolled-back Load commits into the restored Result', async 
     const { state } = await import('/gbdraw/web/js/state.js');
     const app = window.__GBDRAW_APP__;
     const root = app.svgContainer.querySelector('svg');
-    const outcome = app.updateLegendEntryColor(0, '#ff00ff');
+    const outcome = await app.updateLegendEntryColor(0, '#ff00ff');
     await window.Vue.nextTick();
     const result = state.results.value[state.selectedResultIndex.value];
     return {
