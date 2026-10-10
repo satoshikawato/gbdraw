@@ -2,6 +2,7 @@
 /** @import { DrawingState } from '../state.js' */
 // Source-bound editable rotation intent. The request service owns serialization.
 import {
+  bindRecordDisplayDrafts,
   buildRecordDisplayRows,
   parseRecordDisplayStart,
   recordDisplayKey,
@@ -79,7 +80,16 @@ export const createRecordDisplayControls = ({
   // A row's drafts are those of its mode's drawing.
   /** @param {Record<string, any>} row @returns {DrawingState} */
   const drawingOfRow = (row) => (row?.scope === 'linear' ? state.drawings.linear : state.drawings.circular);
-  const draftFor = (row) => drawingOfRow(row).recordDisplayDrafts.find((draft) => recordDisplayKey(draft) === row.key) || {};
+  // A drawing's drafts on the rows of their sources (OV-278). An edit of a
+  // draft first writes them there, within its own step.
+  /** @param {DrawingState} drawing */
+  const boundDrafts = (drawing) => bindRecordDisplayDrafts(drawing.recordDisplayDrafts, allRows.value);
+  /** @param {DrawingState} drawing */
+  const settleDrafts = (drawing) => {
+    const bound = boundDrafts(drawing);
+    if (bound !== drawing.recordDisplayDrafts) drawing.recordDisplayDrafts.splice(0, bound.length, ...bound);
+  };
+  const draftFor = (row) => boundDrafts(drawingOfRow(row)).find((draft) => recordDisplayKey(draft) === row.key) || {};
   // Linear orientation has one owner, the File card's region_reverse (CO-03,
   // N-09). A row that is the only record its card draws writes it there; the
   // row override remains only for Circular and for a Linear card that draws
@@ -102,6 +112,7 @@ export const createRecordDisplayControls = ({
   };
   /** @param {DrawingState} drawing */
   const edit = (drawing, row, patch, label) => runUndoable(label, () => {
+    settleDrafts(drawing);
     let draft = drawing.recordDisplayDrafts.find((entry) => recordDisplayKey(entry) === row.key);
     if (!draft) {
       draft = { sourceUid: row.sourceUid, selector: row.selector,
@@ -125,6 +136,7 @@ export const createRecordDisplayControls = ({
     }
     const resolvedStart = parseRecordDisplayStart(startCoordinate);
     const resolvedIntent = validateAnchorIntent(anchorIntent);
+    settleDrafts(drawing);
     let draft = drawing.recordDisplayDrafts.find(
       (entry) => recordDisplayKey(entry) === row.key
     );
@@ -358,6 +370,7 @@ export const createRecordDisplayControls = ({
   };
   const captureTargetDraft = (row) => {
     const drawing = drawingOfRow(row);
+    settleDrafts(drawing);
     const key = recordDisplayKey(row);
     const index = drawing.recordDisplayDrafts.findIndex(
       (draft) => recordDisplayKey(draft) === key

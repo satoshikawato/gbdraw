@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from '../../gbdraw/web/js/app/record-display-options.js';
 import {
-  buildRecordDisplayRows, parseRecordDisplayStart, reconcileRecordDisplayDrafts, effectiveRecordReverseComplement, migrateLegacyRecordDisplayDrafts, recordDisplaySurface, requestedRecordTransform, validateAnchorIntent, validateRecordDisplayDrafts
+  bindRecordDisplayDrafts, buildRecordDisplayRows, parseRecordDisplayStart, reconcileRecordDisplayDrafts, effectiveRecordReverseComplement, migrateLegacyRecordDisplayDrafts, recordDisplaySurface, requestedRecordTransform, validateAnchorIntent, validateRecordDisplayDrafts
 } from '../../gbdraw/web/js/services/record-display-model.js';
 import { circularDiscoveryForInput, parseSequenceRecordText } from '../../gbdraw/web/js/services/record-discovery.js';
 import { isCurrentFeature } from '../../gbdraw/web/js/services/feature-identity.js';
@@ -41,6 +41,27 @@ test('source replacement purges drafts; inactive selectors survive rediscovery a
   assert.deepEqual(reconcileRecordDisplayDrafts(drafts, [...rows].reverse()), drafts);
   assert.deepEqual(reconcileRecordDisplayDrafts(drafts, rows, ['card-1']), []);
   assert.deepEqual(reconcileRecordDisplayDrafts(drafts, rows.map(r => ({ ...r, sourceUid: 'replacement' }))), []);
+});
+
+// OV-278: Load projects a request's record-ID selection into a draft with the
+// placeholder selector '#1'; it belongs to the row with that record ID.
+test('a draft that names its record by ID moves to that record once the rows are known', () => {
+  const shared = buildRecordDisplayRows({ scope: 'linear', sourceUid: 'card-2', source, records: [
+    { selector: '#1', recordId: 'AAA.1', recordLength: 60, detectedTopology: 'circular' },
+    { selector: '#2', recordId: 'BBB.1', recordLength: 60, detectedTopology: 'circular' }
+  ] });
+  const draft = (selector, recordId, startCoordinate) => ({ sourceUid: 'card-2', selector, recordId,
+    topologyOverride: null, startCoordinate, reverseComplementOverride: null, anchorIntent: null });
+  assert.deepEqual(bindRecordDisplayDrafts([draft('#1', 'BBB.1', 11)], shared), [draft('#2', 'BBB.1', 11)]);
+  // Unchanged (the same array): a draft on its record, records not yet listed,
+  // a duplicate ID, a record the file lacks, and a row that already has a draft.
+  for (const [drafts, known] of [
+    [[draft('#1', 'AAA.1', 7)], shared],
+    [[draft('#1', 'BBB.1', 11)], []],
+    [[draft('#2', 'same', 25)], rows.map((row) => ({ ...row, sourceUid: 'card-2' }))],
+    [[draft('#1', 'CCC.1', 11)], shared],
+    [[draft('#1', 'BBB.1', 11), draft('#2', 'BBB.1', 9)], shared]
+  ]) assert.equal(bindRecordDisplayDrafts(drafts, known), drafts);
 });
 
 test('blank remains null, explicit 1 survives, malformed input is never clamped', () => {
