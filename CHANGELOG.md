@@ -20,7 +20,10 @@ write-up of a release.
   now match the feature catalog in plain, interactive, and web-app SVGs, so
   `gbdraw.api.enrich_svg(..., feature_catalog=...)` accepts these diagrams and
   the web app's interactive export writes the same stable ID as the CLI
-  (OV-401, OV-412).
+  (OV-401, OV-412). A `hash=` selector (color, label, and visibility rules,
+  annotation targets and tables, Feature Edits) now names that source-record
+  hash on every record; before, rules matched the hash after the crop or
+  reverse complement.
 - Gallery: the aminoglycoside BGC example draws its arrows with **Shaft Width
   Ratio** 0.6 and aligns its records on similarity group og_6 (neoU of
   BGC0000709) instead of og_1. Its tutorial adds the **Features › Arrow Geometry

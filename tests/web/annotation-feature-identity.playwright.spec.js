@@ -128,8 +128,9 @@ test('OV-03: an annotation of a selected feature on a cropped record stays on it
 });
 
 // Design 6.4: the annotation table has no source-identity selector, so the TSV
-// names each selected feature by its current record position and drawn hash.
-test('the annotation TSV writes a selected feature by its current record position and drawn hash', async ({ page }, testInfo) => {
+// names each selected feature by its current record position and feature hash,
+// its source-record hash also in a cropped record (OV-401).
+test('the annotation TSV writes a selected feature by its current record position and feature hash', async ({ page }, testInfo) => {
   test.setTimeout(300_000);
   const alerts = [];
   page.on('dialog', (dialog) => alerts.push(dialog.message()));
@@ -150,16 +151,16 @@ test('the annotation TSV writes a selected feature by its current record positio
   expect(rest).toEqual([]);
   const cell = (name) => row[header.indexOf(name)];
   expect([cell('record'), cell('feature_selector'), cell('envelope'), cell('circular_path')])
-    .toEqual(['#1', `hash=${X.drawnHash}`, 'outer_bounds', 'shortest']);
+    .toEqual(['#1', `hash=${X.identity}`, 'outer_bounds', 'shortest']);
   expect(alerts).toEqual([
-    '1 annotation(s) of selected features were written as record=#<position> and feature_selector=hash=<drawn hash>. '
-      + 'They name the same features only while the crop, orientation, and record order stay as drawn.'
+    '1 annotation(s) of selected features were written as record=#<position> and feature_selector=hash=<feature hash>. '
+      + 'They name the same features only while the record order stays as drawn.'
   ]);
 
   // The table imported back draws the same annotation in the same placement.
   await panel(page).locator('input[type=file]').setInputFiles(tsvPath);
   await expect.poll(() => annotationTargets(page)).toMatchObject([{
-    kind: 'featureSpan', selectors: [{ key: 'hash', value: X.drawnHash }]
+    kind: 'featureSpan', selectors: [{ key: 'hash', value: X.identity }]
   }]);
   await generate(page);
   expect(await drawnAnnotations(page)).toEqual([{ id: 'feature_1', recordIndex: 0, segments: [[2200, 2300]] }]);

@@ -397,6 +397,8 @@ def test_get_label_text_feature_object_hash_override_works() -> None:
         qualifiers={"product": ["enzyme alpha"], "gene": ["geneA"]},
         record_id="rec1",
     )
+    # The factory stores each FeatureObject's source hash (OV-401).
+    feature_object.feature_hash = feature_hash
     filtering = preprocess_label_filtering(
         _base_filtering(
             label_override_df=_rules_df(
@@ -436,10 +438,11 @@ def test_get_label_text_feature_object_record_location_override_works() -> None:
     assert get_label_text(feature_object, filtering) == "Object record location match"
 
 
-def test_get_label_text_feature_object_origin_spanning_hash_override_uses_coordinates() -> None:
+def test_get_label_text_feature_object_origin_spanning_hash_override_uses_feature_hash() -> None:
     seq_feature = _make_origin_spanning_seq_feature()
     feature_hash = compute_feature_hash(seq_feature, record_id="rec1")
     feature_object = _make_origin_spanning_feature_object(record_id="rec1")
+    feature_object.feature_hash = feature_hash
     filtering = preprocess_label_filtering(
         _base_filtering(
             label_override_df=_rules_df(
@@ -474,6 +477,7 @@ def test_get_label_text_hmmtdna_d_loop_hash_override_matches_origin_spanning_fea
     d_loop_feature = next(feature for feature in record.features if feature.type == "D-loop")
     d_loop_hash = compute_feature_hash(d_loop_feature, record_id=record.id)
     feature_object = _make_origin_spanning_feature_object(record_id=record.id)
+    feature_object.feature_hash = d_loop_hash
     filtering = preprocess_label_filtering(
         _base_filtering(
             label_override_df=_rules_df(

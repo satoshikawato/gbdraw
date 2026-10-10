@@ -18,6 +18,7 @@ from gbdraw.core.sequence import translate_cds
 from gbdraw.features.overrides import feature_override_lookup
 from gbdraw.features.selector_values import build_feature_selector_values
 from gbdraw.features.ids import (
+    compute_feature_hash,
     compute_feature_hash_from_location_parts,
     make_linear_rendered_feature_id,
     source_feature_location_parts,
@@ -168,14 +169,17 @@ def _biological_selector_values(
     """Return source selector values, the feature hash, and the drawn
     record's selector values.
 
-    The drawn values are the ones the renderer's rule matching reads from the
-    processed (cropped, reverse-complemented) record (feature catalog 5,
-    ``drawnSelector``).
+    The drawn values are the ones the renderer's `location` and
+    `record_location` rule matching reads from the processed (cropped,
+    reverse-complemented) record (feature catalog 5, ``drawnSelector``); a
+    `hash` rule matches the source hash in ``selector``.
     """
 
     selector = build_feature_selector_values(feature, record_id=record.id)
+    # The drawn values are frame tags for Session readers: `hash` here is the
+    # drawn location's hash, which only legacy rendered-ID readers compare.
     drawn_selector = {
-        "hash": str(selector.get("hash") or "") or None,
+        "hash": compute_feature_hash(feature, record_id=record.id) or None,
         "location": str(selector.get("location") or "") or None,
         "recordLocation": str(selector.get("record_location") or "") or None,
     }

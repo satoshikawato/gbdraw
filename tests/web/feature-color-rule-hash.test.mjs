@@ -24,14 +24,17 @@ test('the live rule payload uses the hash Python matches', () => {
 
 // OV-02: catalog 5 gives the drawn record's selector values; a cropped record
 // draws other coordinates than its source (design Q4 3.6).
-test('the live rule payload sends the drawn selector values of catalog 5', () => {
+// A `hash` rule matches the source-record hash (OV-401); `location` rules
+// match the drawn coordinates of catalog 5.
+test('the live rule payload sends the source hash and the drawn locations of catalog 5', () => {
   const payload = ruleFeaturePayload({
     type: 'misc_feature', svg_id: 'fb5977f81', record_id: 'TESTA', start: 2400, end: 2500, strand: '+',
     drawnSelector: { hash: 'f3b928d8c', location: '2200..2300', recordLocation: 'TESTA:2200..2300:+' },
+    selector: { hash: 'fb5977f81', location: '2400..2500', record_location: 'TESTA:2400..2500:+', qualifiers: {} },
     qualifiers: {}
   });
   assert.deepEqual(payload.selector, {
-    hash: 'f3b928d8c', location: '2200..2300', record_location: 'TESTA:2200..2300:+'
+    hash: 'fb5977f81', location: '2200..2300', record_location: 'TESTA:2200..2300:+'
   });
 });
 

@@ -143,16 +143,16 @@ def compute_feature_hash(feature: Any, record_id: str | None = None) -> str:
 
 def source_feature_location_parts(
     feature: Any,
-    record: Any,
+    record: Any = None,
 ) -> tuple[tuple[int, int, int | None], ...]:
     """The feature's location parts in its source record.
 
     A cropped or reverse-complemented record keeps each feature's source parts
     (``core/record_metadata.py``); any other record maps its parts through its
-    coordinate map.
+    coordinate map (none: the record is its own source).
     """
 
-    coord_base, coord_step = _read_coord_map(record)
+    coord_base, coord_step = (1, 1) if record is None else _read_coord_map(record)
     return _source_feature_location_parts(feature) or _mapped_feature_location_parts(
         feature,
         coord_base=coord_base,
@@ -160,10 +160,18 @@ def source_feature_location_parts(
     )
 
 
-def compute_source_feature_hash(feature: Any, record: Any) -> str | None:
-    """The feature hash: the catalog's stable feature ID and the base of every
-    SVG ID drawn for the feature, whatever crop or reverse complement its
-    record has (OV-401, OV-412)."""
+def compute_source_feature_hash(
+    feature: Any,
+    record: Any = None,
+    *,
+    record_id: str | None = None,
+) -> str | None:
+    """The feature hash: the catalog's stable feature ID, the base of every
+    SVG ID drawn for the feature, and the value a `hash` selector matches,
+    whatever crop or reverse complement its record has (OV-401, OV-412).
+
+    ``record_id`` defaults to the record's ID.
+    """
 
     parts = source_feature_location_parts(feature, record)
     if not parts:
@@ -171,7 +179,7 @@ def compute_source_feature_hash(feature: Any, record: Any) -> str | None:
     return compute_feature_hash_from_location_parts(
         str(getattr(feature, "type", "") or ""),
         parts,
-        record_id=getattr(record, "id", None),
+        record_id=record_id if record_id is not None else getattr(record, "id", None),
     )
 
 
@@ -179,11 +187,11 @@ def compute_feature_object_hash(
     feature_object: Any,
     record_id: str | None = None,
 ) -> str | None:
-    """The `hash` selector value of a FeatureObject: its drawn location.
+    """The hash of a FeatureObject's drawn location.
 
-    Rule matching (`selector_values.get_feature_hash`) and comparison rows'
-    view feature IDs name drawn features by this hash. SVG IDs use
-    `FeatureObject.feature_hash` (`compute_source_feature_hash`).
+    Only comparison rows name a drawn feature by it (`*_view_feature_svg_id`,
+    a frame tag). SVG IDs and `hash` selectors use the source hash
+    (`compute_source_feature_hash`, `FeatureObject.feature_hash`).
     """
 
     parts = _feature_object_coordinate_parts(feature_object)

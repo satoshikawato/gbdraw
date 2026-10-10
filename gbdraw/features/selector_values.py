@@ -9,7 +9,7 @@ from typing import Any, Optional
 
 from Bio.SeqFeature import SeqFeature
 
-from .ids import compute_feature_hash, compute_feature_object_hash
+from .ids import compute_source_feature_hash
 
 
 def normalize_qualifier_values(raw_values: Any) -> list[str]:
@@ -149,11 +149,13 @@ def normalize_strand_token(strand: Any) -> str:
 
 
 def get_feature_hash(feature: Any, record_id: Optional[str]) -> Optional[str]:
-    resolved_record_id = get_feature_record_id(feature, record_id)
+    """The value a `hash` selector matches: the feature's source hash, also
+    in a cropped or reverse-complemented record (OV-401)."""
     if isinstance(feature, SeqFeature):
-        return compute_feature_hash(feature, record_id=resolved_record_id)
-
-    return compute_feature_object_hash(feature, record_id=resolved_record_id)
+        return compute_source_feature_hash(
+            feature, record_id=get_feature_record_id(feature, record_id)
+        )
+    return getattr(feature, "feature_hash", None)
 
 
 def get_feature_location_str(feature: Any) -> Optional[str]:

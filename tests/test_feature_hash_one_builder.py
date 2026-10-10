@@ -198,3 +198,48 @@ def test_catalog_row_swapped_within_a_record_is_rejected(tmp_path: Path, case: s
             result_name=item["resultName"],
             feature_catalog=catalog,
         )
+
+
+@pytest.mark.parametrize("transform", ("reverse", "crop", "crop-reverse"))
+def test_source_hash_selector_matches_on_a_transformed_record(
+    tmp_path: Path, transform: str
+) -> None:
+    """`hash=` names a feature by its source-record hash on every record."""
+    import pandas as pd
+
+    from gbdraw.features.ids import source_feature_location_parts
+    from gbdraw.features.source import build_source_feature_catalog
+    from gbdraw.features.visibility import (
+        compile_feature_visibility_rules,
+        should_render_feature,
+    )
+    from gbdraw.io.record_select import reverse_records
+    from gbdraw.io.regions import apply_region_specs, parse_region_specs
+
+    source = SeqIO.read(_write_records(tmp_path)[1], "genbank")
+    catalog = build_source_feature_catalog(source)
+    record = source
+    if transform != "reverse":
+        record = apply_region_specs(
+            [record],
+            parse_region_specs(["recB:51-1800" + (":rc" if transform == "crop-reverse" else "")]),
+        )[0]
+    else:
+        record = reverse_records([record], True)[0]
+    for entry in catalog:
+        rules = compile_feature_visibility_rules(pd.DataFrame(
+            [["*", "*", "hash", f"^{entry.stable_feature_id}$", "off"]],
+            columns=["record_id", "feature_type", "qualifier", "value", "action"],
+        ))
+        hidden = [
+            feature
+            for feature in record.features
+            if not should_render_feature(
+                feature, ["CDS"], feature_visibility_rules=rules, record_id=record.id
+            )
+        ]
+        # The one feature whose source parts are the row's.
+        assert [source_feature_location_parts(feature, record) for feature in hidden] == [
+            entry.location_parts
+        ]
+        assert len(hidden) == 1

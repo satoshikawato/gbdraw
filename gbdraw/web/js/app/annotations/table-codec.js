@@ -172,7 +172,7 @@ export const parseAnnotationTable = (text) => parseAnnotationTableWithNotice(tex
 
 // The table has no source-identity selector. A selected-feature target is
 // written in its current placement (design Q4 6.4): `drawnPlacement(target)`
-// gives its drawn record position and drawn hash, written as `record=#<n>` and
+// gives its drawn record position and feature hash, written as `record=#<n>` and
 // `feature_selector=hash=<hash>`; a target it does not place is not written.
 /**
  * @param {AnnotationSet[]} sets

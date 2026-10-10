@@ -1,7 +1,7 @@
 // @ts-check
 import { normalizeSpecificRule, ruleCaptionsAreNormalized } from '../services/specific-color-rules.js';
 import { normalizeFeatureSelectorMetadata } from '../services/feature-selector.js';
-import { getFeatureColorRuleHash } from '../services/feature-utils.js';
+import { getFeatureColorRuleHash, getRenderedFeatureHash } from '../services/feature-utils.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
   recordRuleMatches, recordVisibilityMatch, ruleKey, ruleKeysPending, ruleMatcher, visibilityRuleKnown
@@ -16,7 +16,7 @@ import {
 export const DRAWN_SELECTOR_QUALIFIERS = new Set(['location', 'record_location']);
 export const drawnSelectorUnknown = (feature) => !feature?.drawnSelector
   && Object.prototype.hasOwnProperty.call(feature || {}, 'drawnSelector')
-  && getFeatureColorRuleHash(feature) !== String(feature?.selector?.hash || '');
+  && getRenderedFeatureHash(feature) !== String(feature?.selector?.hash || '');
 // The indexes of the `rules` a feature declines (`drawnSelectorUnknown`).
 const liveMatchDeclines = (rules) => {
   const drawnRules = rules.flatMap((rule, index) => (
@@ -25,21 +25,20 @@ const liveMatchDeclines = (rules) => {
   return (feature) => (drawnSelectorUnknown(feature) ? drawnRules : []);
 };
 // A catalog feature that Python did not render carries no drawn values (feature
-// catalog 5 has them on rendered features only), so a `hash`, `location`, or
+// catalog 5 has them on rendered features only), so a `location` or
 // `record_location` rule is not matched live for it.
-const DRAWN_VALUE_QUALIFIERS = new Set(['hash', ...DRAWN_SELECTOR_QUALIFIERS]);
 const declinesVisibilityMatch = (feature, rule) => {
   const qualifier = String(rule?.qualifier || '').toLowerCase();
   return Object.prototype.hasOwnProperty.call(feature || {}, 'drawnSelector')
     ? drawnSelectorUnknown(feature) && DRAWN_SELECTOR_QUALIFIERS.has(qualifier)
-    : DRAWN_VALUE_QUALIFIERS.has(qualifier);
+    : DRAWN_SELECTOR_QUALIFIERS.has(qualifier);
 };
-// Generate matches `hash`, `location`, and `record_location` rules against the
-// drawn feature (D-14, PD-OI-069): a cropped or reverse-complemented record
-// draws other coordinates than its source. The catalog gives those drawn
-// values (`drawnSelector`, feature catalog 5, OV-02); a feature of an older
-// catalog sends the hash its rendered ID carries, and its source values only
-// where they are the drawn ones.
+// Generate matches `location` and `record_location` rules against the drawn
+// feature (D-14): a cropped or reverse-complemented record draws other
+// coordinates than its source. The catalog gives those drawn values
+// (`drawnSelector`, feature catalog 5, OV-02); a feature of an older catalog
+// sends its source values only where they are the drawn ones. A `hash` rule
+// matches the feature's source-record hash on every record (OV-401).
 // The payload of a feature without a label is built once per feature object.
 /** @type {WeakMap<object, Record<string, any>>} */
 const payloads = new WeakMap();
@@ -57,7 +56,7 @@ const buildRuleFeaturePayload = (feature, label) => {
     .map(([key, values]) => [key, (Array.isArray(values) ? values : [values]).filter(value => value != null).map(String)]));
   const drawn = feature?.drawnSelector;
   const selector = drawn
-    ? { hash: drawn.hash, location: drawn.location, record_location: drawn.recordLocation }
+    ? { hash: getFeatureColorRuleHash(feature) || null, location: drawn.location, record_location: drawn.recordLocation }
     : drawnSelectorUnknown(feature)
       ? { hash: getFeatureColorRuleHash(feature) || null, location: null, record_location: null }
       : {
