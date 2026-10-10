@@ -48,7 +48,9 @@ example** button in the header does the same after a Result is shown; `gbdraw
 gui` has no Gallery and no such buttons. The Gallery examples were rebuilt: the
 Vibrio chromosomes start at their replication initiator, and the aminoglycoside
 BGC example draws gene arrows with Shaft Width Ratio 0.6 and aligns the clusters
-on the neoU similarity group.
+on the neoU similarity group. The majanivirus example keeps its rows centered
+and reverse-complements record 6 (LvMJNV) with that record's **Reverse complement**
+setting, so its links to the neighboring genomes no longer cross.
 
 In Linear mode, **Generate Diagram** with a pair set to **Upload BLAST TSV**
 but no file opens a **BLAST TSV missing** dialog. It offers **Choose BLAST TSV
@@ -409,6 +411,18 @@ internal function `gbdraw.render.export.save_figure` now warns with
    keep editing, use **Save Session**. Compare output only between runs of the
    same gbdraw version: SVG bytes and text measurements can differ between
    versions.
+6. For cropped or reverse-complemented records, SVG feature IDs
+   (`data-gbdraw-feature-id`, element `id`, `data-gbdraw-stable-feature-id`) and
+   `hash=` selectors now use the feature's hash in its source record, as for
+   untransformed records. In 0.13.0 they used the hash after the crop or reverse
+   complement. Scripts that match those IDs, and TSV tables or CLI options with
+   `hash=` rows written for such records, need the new values. Loading or
+   upgrading a Session saved before 0.14.0 renames its **This feature only**
+   color rules on cropped or reverse-complemented records to the source-record
+   hash. `--session` replay of a Session 31–44 renames the same rules, and the
+   label text edits in its label override table. A Session 27–30 replayed with
+   `--session` keeps these rules as saved and warns. Other saved `hash=` values
+   load as saved, and every value that cannot be renamed is reported.
 
 Some command-line input that 0.13 accepted now stops the run with a message:
 
@@ -525,5 +539,13 @@ each export format needs.
 - A Session that `gbdraw circular` saves for a batch or grid with a cropped or
   reverse-complemented record stores that record as drawn, so replaying it gives its
   features different IDs than the original render. The drawing is the same.
+- After you load a Session saved by 0.13.0, its Result keeps the 0.13.0 feature IDs
+  on cropped or reverse-complemented records until you click **Generate**. Colors
+  are unaffected. An SVG downloaded before **Generate** carries the old IDs.
+- A label whitelist row that **Whitelist only** saved before 0.14.0, for a feature
+  without a unique qualifier, names the feature by its old drawn ID. On a cropped
+  or reverse-complemented record it no longer matches that feature, and its label
+  is no longer whitelisted. Use **Whitelist only** on the feature again to add a
+  row that matches.
 
 [Documentation home](./DOCS.md) | [Beta history](./RELEASE_NOTES_0.14.0b0.md)
