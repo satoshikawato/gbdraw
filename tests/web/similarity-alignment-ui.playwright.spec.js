@@ -1721,6 +1721,10 @@ test('exclusive directions include the minority reference and keep Custom Select
   await right.focus();
   await page.keyboard.press('Space');
   expect(await changed()).toEqual(['record-1']);
+  // D-11: reversing the reference record keeps its feature in place; the card
+  // says how far the record's left edge moves.
+  await expect(dialog.locator('[data-similarity-alignment-reference-correction]'))
+    .toContainText(/stays where it is; the record's left edge moves [1-9][\d,]* px \(at 100% zoom\) to the (left|right)\./);
   await dialog.getByRole('radio', { name: 'All left', exact: true }).check();
   expect(await changed()).toEqual(['record-2', 'record-3', 'record-4', 'record-5']);
   const custom = dialog.getByRole('radio', { name: 'Custom', exact: true });
@@ -2254,7 +2258,7 @@ test('@pr-smoke native Python engine error reaches Align review and retains choi
 // OV-380: a comparison edit before Generate is a pending form edit; it keeps the
 // committed alignment. OV-381: the drawer offers the active plan's exact
 // reference, so Align works from the drawer after a Session load.
-test('a loaded alignment survives a pending comparison edit and the drawer offers its reference', async ({ page }) => {
+test('choosing Upload BLAST TSV without a file keeps a loaded alignment and the drawer offers its reference', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);

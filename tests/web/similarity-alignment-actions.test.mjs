@@ -692,6 +692,43 @@ test('drawer does not offer a stale plan reference (OV-381)', async () => {
   assert.notEqual(fixture.actions.drawerDisabledReason('og-1'), '');
 });
 
+test('a new committed plan drops the drawer pick (OV-381)', async () => {
+  const planKey = (fixture) => JSON.stringify(fixture.state.similarityAlignmentPlan.value.reference);
+  // Drawer Align with a picked reference, then a popup Align from another one.
+  const popupAfterDrawer = create({ members: [reference, otherReference, targetA, targetC] });
+  const picked = popupAfterDrawer.actions.drawerReferenceOptions('og-1')
+    .find(({ anchor: a }) => a.biologicalFeatureId === 'clicked');
+  assert.equal(popupAfterDrawer.actions.setDrawerReference('og-1', picked.key), true);
+  await popupAfterDrawer.actions.startFromDrawer({ groupId: 'og-1', mode: 'review' });
+  await popupAfterDrawer.actions.applyDraft();
+  await startReview(popupAfterDrawer, otherReference);
+  await popupAfterDrawer.actions.applyDraft();
+  assert.equal(popupAfterDrawer.state.similarityAlignmentPlan.value.reference.biologicalFeatureId, 'other');
+  assert.equal(popupAfterDrawer.actions.drawerReferenceKey.value, planKey(popupAfterDrawer));
+
+  // Loading a Session installs its own plan.
+  const sessionLoad = create({ members: [reference, otherReference, targetA, targetC] });
+  await startReview(sessionLoad);
+  await sessionLoad.actions.applyDraft();
+  sessionLoad.actions.setDrawerReference('og-1', '');
+  const loaded = JSON.parse(JSON.stringify(sessionLoad.state.similarityAlignmentPlan.value));
+  sessionLoad.state.similarityAlignmentPlan.value = loaded;
+  assert.equal(sessionLoad.actions.drawerReferenceKey.value, planKey(sessionLoad));
+
+  // The repair route empties the pick; the next committed plan restores the offer.
+  const repaired = create();
+  await startReview(repaired);
+  await repaired.actions.applyDraft();
+  const removed = repaired.currentGroup.members.splice(0, 1);
+  assert.equal((await repaired.actions.validateBeforeGenerate()).reason, 'stale-reference');
+  repaired.actions.setDrawerReference('og-1', '');
+  repaired.currentGroup.members.unshift(...removed);
+  await startReview(repaired);
+  await repaired.actions.applyDraft();
+  assert.equal(repaired.actions.drawerReferenceKey.value, planKey(repaired));
+  assert.equal(repaired.actions.drawerDisabledReason('og-1'), '');
+});
+
 test('malformed Python projection and initial Worker errors leave the prior Result intact', async () => {
   for (const helper of [
     (_operation, { request }) => ({ result: { ...responseFor(request), schema: 1 } }),
@@ -750,6 +787,10 @@ test('manual Reverse keeps the plan while invalidating edits clear it with a not
   assert.equal(fixture.actions.clearForMutation('record crop changed.'), true);
   assert.equal(fixture.state.similarityAlignmentPlan.value, null);
   assert.match(fixture.actions.notice.value, /record crop changed/);
+  // OV-382: an Undo that restores the plan retires the notice.
+  const restored = { ...plan };
+  fixture.state.similarityAlignmentPlan.value = restored;
+  assert.equal(fixture.actions.notice.value, '');
 });
 
 test('missing saved reference blocks regeneration while preserving plan and Result', async () => {
@@ -823,6 +864,11 @@ test('exclusive modes, reference Custom, Select and Skip are local with zero Wor
   f.actions.skipRecord('b');assert.equal(f.actions.directionPreview.value.records[1].afterReverseComplement,false);
   f.actions.setDirectionMode('keep');assert.deepEqual(f.actions.draft.value.intent,{mode:'keep'});
   assert.equal(f.helperCalls.length,1);assert.equal(f.generationCalls.length,0);
+  // An unknown-strand anchor still moves its record; only its direction stays (PD-OI-027).
+  const unknown=f.actions.directionPreview.value.records.find(r=>r.exclusion==='unknown_strand');
+  assert.match(unknown.exclusionLabel,/^Direction unchanged: /);
+  assert.match(f.actions.directionPreview.value.effect,/1 record keeps its direction/);
+  assert.match(f.actions.directionPreview.value.effect,/1 record stays unchanged/);
 });
 test('Apply and both Reset scopes own one History transaction and consume receipt',async()=>{
   for(const scope of ['positions','positions-and-directions']){

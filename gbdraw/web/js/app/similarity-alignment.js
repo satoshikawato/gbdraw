@@ -876,6 +876,8 @@ const anchorsAgree = (left, right) => {
  * @property {boolean} afterReverseComplement
  * @property {boolean} reversed
  * @property {string} shortLabel
+ * @property {string} label
+ * @property {string} description
  */
 
 /**
@@ -970,10 +972,16 @@ export const createSimilarityAlignmentActions = ({
   const busy = computed(() => status.value === 'resolving' || status.value === 'applying');
   const error = ref(null);
   const summary = ref(null);
-  const notice = ref('');
+  // A "cleared" notice holds only while no plan is active, so an Undo that
+  // restores the plan also retires it (OV-382).
+  const noticeState = ref({ text: '', whileNoPlan: false });
+  const notice = computed(() => (
+    noticeState.value.whileNoPlan && state.similarityAlignmentPlan?.value ? '' : noticeState.value.text
+  ));
   const repair = ref(null);
-  // The user's drawer reference pick; null until the user picks one (or none).
-  const drawerReferencePick = ref(/** @type {string | null} */ (null));
+  // The user's drawer reference pick and the committed plan it was made
+  // against. A new plan (Apply, Session load, Undo) drops the pick (OV-381).
+  const drawerReferencePick = ref(/** @type {{ key: string, plan: unknown } | null} */ (null));
   const resetDialogOpen = ref(false);
   const automaticApply = ref(false);
   const resetScope = ref('positions');
@@ -1076,8 +1084,8 @@ export const createSimilarityAlignmentActions = ({
     state.linearRecordTranslations.value = cloneJson(value.translations);
   };
 
-  const publishNotice = (message) => {
-    notice.value = String(message || '');
+  const publishNotice = (message, whileNoPlan = false) => {
+    noticeState.value = { text: String(message || ''), whileNoPlan };
   };
 
   const clearCommittedPlan = (reason) => {
@@ -1093,7 +1101,7 @@ export const createSimilarityAlignmentActions = ({
     state.similarityAlignmentPlan.value = null;
     summary.value = null;
     repair.value = null;
-    publishNotice(`Alignment cleared: ${reason}`);
+    publishNotice(`Alignment cleared: ${reason}`, true);
     return true;
   };
 
@@ -1162,7 +1170,7 @@ export const createSimilarityAlignmentActions = ({
     if (outcome?.status === 'ok') {
       summary.value = successfulSummary(response.plan, projected.records.filter(record => (
         record.beforeReverseComplement !== record.afterReverseComplement)).length);
-      repair.value = null; notice.value = ''; activeBaseline = null;
+      repair.value = null; publishNotice(''); activeBaseline = null;
       clearDraft(); error.value = null; status.value = 'idle';
       return {status:'ok'};
     }
@@ -1355,9 +1363,10 @@ export const createSimilarityAlignmentActions = ({
   // OV-381: until the user picks, the drawer offers the committed plan's exact
   // reference (from a popup Align or a loaded Session), never a stale one.
   const drawerReferenceKey = computed(() => {
-    if (drawerReferencePick.value !== null) return drawerReferencePick.value;
-    const planReference = state.similarityAlignmentPlan.value?.reference;
-    return planReference && !repair.value ? anchorKey(planReference) : '';
+    const plan = state.similarityAlignmentPlan.value;
+    const pick = drawerReferencePick.value;
+    if (pick && pick.plan === plan) return pick.key;
+    return plan?.reference && !repair.value ? anchorKey(plan.reference) : '';
   });
 
   const selectedDrawerReference = (groupId) => (
@@ -1671,18 +1680,23 @@ export const createSimilarityAlignmentActions = ({
       const label = isReference ? reference.recordLabel : row?.recordLabel || record.recordKey;
       const beforeDirection = arrowLabel(record.beforeArrow);
       const afterDirection = arrowLabel(record.afterArrow);
-      const exclusionLabel = directionExclusionLabels[record.exclusion] || record.exclusion;
+      // An anchor of unknown strand still moves its record; only the direction stays (PD-OI-027).
+      const exclusionLabel = record.exclusion
+        ? `${record.exclusion === 'unknown_strand' ? 'Direction unchanged' : 'Unchanged'}: ${directionExclusionLabels[record.exclusion] || record.exclusion}`
+        : '';
       return { ...record, label, beforeDirection, afterDirection, exclusionLabel,
         shortLabel: (isReference ? reference.recordDetail || reference.recordName : row?.recordDetail || row?.recordName) || label,
         reversed: record.beforeReverseComplement !== record.afterReverseComplement,
         // The accessible before/after statement each card and its Custom select describe.
         description: `${label}${isReference ? ' · exact reference' : ''}: Current ${beforeDirection}; after Align ${afterDirection}.`
-          + (record.exclusion ? ` Unchanged: ${exclusionLabel}` : '') };
+          + (exclusionLabel ? ` ${exclusionLabel}` : '') };
     }));
     const eligible = records.filter(record => !record.exclusion);
     const reversed = records.filter(record => record.reversed);
     // A record still waiting for Select or Skip is counted by the footer, not here.
-    const excluded = records.filter(record => record.exclusion && record.exclusion !== 'selection_required').length;
+    const excluded = records.filter(record => record.exclusion
+      && !['selection_required', 'unknown_strand'].includes(record.exclusion)).length;
+    const unknownStrand = records.filter(record => record.exclusion === 'unknown_strand').length;
     const plural = (/** @type {number} */ count, /** @type {string} */ word) => `${count} ${word}${count === 1 ? '' : 's'}`;
     const reversedText = `${plural(reversed.length, 'record')} (${reversed.map(({ shortLabel }) => shortLabel).join(', ')})`;
     const sameAfter = eligible.length > 0 && eligible.every(({ afterArrow }) => afterArrow === eligible[0].afterArrow)
@@ -1699,13 +1713,14 @@ export const createSimilarityAlignmentActions = ({
       effect = `No record is reversed. ${plural(eligible.length, 'chosen feature')} keep their current directions.`;
     }
     if (excluded) effect += ` ${plural(excluded, 'record')} ${excluded === 1 ? 'stays' : 'stay'} unchanged; the reason is in ${excluded === 1 ? 'its card' : 'their cards'}.`;
+    if (unknownStrand) effect += ` ${plural(unknownStrand, 'record')} ${unknownStrand === 1 ? 'keeps its' : 'keep their'} direction; the reason is in ${unknownStrand === 1 ? 'its card' : 'their cards'}.`;
     // D-11: the reference feature centre stays fixed; its record's left edge may move.
     const shift = Math.round(projected.reference.deltaX);
     const referenceShift = shift
-      ? `${reference.name} stays where it is; the record's left edge moves ${Math.abs(shift).toLocaleString('en-US')} px to the ${shift > 0 ? 'right' : 'left'}.`
+      ? `${reference.name} stays where it is; the record's left edge moves ${Math.abs(shift).toLocaleString('en-US')} px (at 100% zoom) to the ${shift > 0 ? 'right' : 'left'}.`
       : '';
-    return { ...projected, eligibleCount: eligible.length, reversedCount: reversed.length, effect, referenceShift,
-      records, byRecordKey: Object.fromEntries(records.map(record => [record.recordKey, record])) };
+    const severalCandidateCount = rows.filter(row => row.candidates.length > 1).length;
+    return { ...projected, effect, referenceShift, records, severalCandidateCount };
   });
   const setDirectionIntent = (intent) => {
     if (!draft.value || status.value !== 'reviewing') return {status:'rejected'};
@@ -1776,7 +1791,7 @@ export const createSimilarityAlignmentActions = ({
     drawerReferenceOptions,
     setDrawerReference: (groupId, key) => {
       const option = drawerReferenceOptions(groupId).find((entry) => entry.key === key);
-      drawerReferencePick.value = option?.key || '';
+      drawerReferencePick.value = { key: option?.key || '', plan: state.similarityAlignmentPlan.value };
       return Boolean(option);
     },
     drawerDisabledReason,

@@ -7431,7 +7431,7 @@
                             <p id="similarity-alignment-dialog-description" data-similarity-alignment-count class="mt-0.5 text-[12px] text-slate-500">
                                 Similarity group <span class="font-semibold text-slate-700">{{ similarityAlignmentDraft?.response.groupId }}</span>
                                 · {{ (similarityAlignmentDraft?.rows.length || 0) + 1 }} records
-                                <template v-if="similarityAlignmentDraft?.rows.filter(row => row.candidates.length > 1).length">· {{ similarityAlignmentDraft.rows.filter(row => row.candidates.length > 1).length }} with several candidates</template>
+                                <template v-if="similarityAlignmentDirectionPreview?.severalCandidateCount">· {{ similarityAlignmentDirectionPreview.severalCandidateCount }} with several candidates</template>
                                 <span v-if="similarityAlignmentUnresolvedCount" class="font-semibold text-amber-700"> · {{ similarityAlignmentUnresolvedCount }} {{ similarityAlignmentUnresolvedCount === 1 ? 'needs' : 'need' }} a choice</span>
                             </p>
                         </div>
@@ -7593,7 +7593,7 @@
                                         </div>
                                     </template>
                                     <p v-if="direction.exclusion && direction.exclusion !== 'selection_required'" class="mt-1 text-[11px] text-slate-600">
-                                        Unchanged: {{ direction.exclusionLabel }}
+                                        {{ direction.exclusionLabel }}
                                     </p>
                                 </component>
                             </template>

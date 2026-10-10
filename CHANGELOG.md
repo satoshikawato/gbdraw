@@ -38,8 +38,12 @@ write-up of a release.
   loaded from a Session, the Similarity Groups drawer preselects its exact
   reference, so **Align…** and **Review alignment options…** work from the
   drawer at once. Before, the drawer showed the reference in **Active plan**
-  but kept both buttons disabled until you chose the same reference again
-  (OV-381).
+  but kept both buttons disabled until you chose the same reference again.
+  A new alignment, an Undo, or a Session load replaces an earlier drawer
+  choice with the new plan's reference (OV-381).
+- Similarity alignment (web app): an Undo that restores a cleared alignment
+  also removes its "Alignment cleared" notice. Before, the notice stayed while
+  the alignment was active again (OV-382).
 - Similarity alignment (web app): choosing **Upload BLAST TSV** for a pair
   before choosing its file keeps the active alignment, because the pair has no
   new data yet. Before, the alignment was cleared at once with "Alignment

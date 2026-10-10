@@ -653,7 +653,7 @@ fails, the Keep draft opens so you can correct it and retry.
 Choose **Review alignment options…** beside **Align…** to inspect anchors,
 choose **Skip**, or change display directions before commitment. Ambiguity
 opens the same **Review alignment** dialog automatically. It shows one card
-per displayed record in diagram order, starting from the reference. Python selects the only usable
+per displayed record in diagram order; the reference card is marked **Reference**. Python selects the only usable
 candidate or unique direct reciprocal-best-hit (RBH) candidate. For remaining
 ambiguity, it recommends the unique representative or candidate 1 in stable
 identity order. Recommendation reasons are visible; they are convenience
@@ -661,12 +661,14 @@ heuristics; they do not show that an anchor is biologically better. A hidden
 member is usable when its center maps into the displayed crop; a member outside
 that crop is unusable. RBH query/subject direction is symmetric.
 
-Each candidate shows its name, protein or feature ID, source coordinates,
-current display strand, representative status, and how it is directly linked
-to the reference (**reciprocal best hit**, **near-reciprocal hit**, **local
-paralog hit**, or **no direct hit**). The recommended candidate always carries
-a **Recommended** chip. A record with one usable candidate shows a compact card
-with a **Skip** checkbox. A record that still needs a choice is marked **Choose
+In a record with several candidates, each candidate shows its name, protein or
+feature ID, source coordinates, current display strand, representative status,
+and how it is directly linked to the reference (**reciprocal best hit**,
+**near-reciprocal hit**, **local paralog hit**, or **no direct hit**). The
+recommended candidate always carries a **Recommended** chip. A record with one
+usable candidate shows a compact card with that candidate's name, ID, coordinates
+and strand and a **Skip** checkbox; it does not show the link or
+representative status. A record that still needs a choice is marked **Choose
 one**, and **Apply** stays disabled until each such record has a candidate or
 **Skip**.
 A thin line marks the reference center and numbered badges locate visible
@@ -741,7 +743,10 @@ and unrelated settings stay pending. Ordinary **Generate Diagram** after
 style, label or canvas changes and stable record reorder keep the plan and
 the saved positions and directions that Reset needs. Manual **Reverse complement** keeps the plan; the next
 Generate aligns the same anchors in the new direction. Source replacement,
-crop, selector changes and manual record drag clear it with a visible reason.
+crop, selector changes, manual record drag, and comparison changes (a pair's
+source or file, the program, or the mode) clear it with a visible reason.
+Choosing **Upload BLAST TSV** for a pair keeps it until you choose the file.
+An Undo that restores the plan also removes the "Alignment cleared" notice.
 A stale reference requires **Reselect** or **Clear**; a stale target requires
 **Select** or **Skip**. Pending or failed repair keeps the last successful Result.
 
