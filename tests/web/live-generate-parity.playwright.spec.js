@@ -10,7 +10,7 @@
 // use in tests/web/helpers/live-generate-parity-steps.cjs.
 const { test, expect } = require('@playwright/test');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
-const { expectLiveEqualsGenerate, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
+const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 const {
   open, generate, popupEdit, addVisibilityRule, appAction, addColorRule, history, FL1_OFF,
   legendRowColor, FL1_ALPHA
@@ -559,6 +559,63 @@ test('each allowed difference names its scope and cites its decision', () => {
   }
   expect(new Set(entries.map(({ id }) => id)).size).toBe(entries.length);
 });
+
+// OV-287, OV-289, OV-290 (R-04, D-05): Reset Settings clears the editor
+// edits, and the displayed Result shows the reset draft as the next Generate
+// draws it, one case per edit domain. The Legend list (caption and the color
+// the editor shows) equals the list after that Generate. A Reset before the
+// first Generate puts the draft at the default settings, so the Reset under
+// test changes no setting that only Generate draws.
+const resetSettings = (page) => evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.resetSettings(); })
+  .then(() => settleLive(page));
+const legendList = (page) => page.evaluate(() => {
+  const app = window.__GBDRAW_APP__;
+  return app.legendEntries.map((entry) => ({ caption: entry.caption, color: app.legendEntryColor(entry) }));
+});
+const RESET_CASES = [
+  {
+    domain: 'a Legend row stroke (OV-287)',
+    edit: (page) => legendRowStrokeColor(page, 'CDS', '#e63946')
+  },
+  {
+    domain: 'a Legend row color (U5 review L2)',
+    edit: (page) => legendRowColor(page, 'CDS', '#7b2cbf')
+  },
+  {
+    domain: 'a deleted Legend row (OV-289)',
+    edit: (page) => evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      await app.deleteLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'GC content'));
+    }).then(() => settleLive(page))
+  },
+  {
+    domain: 'a feature fill (OV-290)',
+    edit: (page) => popupEdit(page, 'FL1', { fill: '#2a9d8f' })
+  },
+  {
+    domain: 'a feature hidden (OV-290)',
+    edit: (page) => popupEdit(page, 'FL2', { visibility: 'off' })
+  },
+  {
+    domain: 'a label text with Label visibility On (OV-290)',
+    edit: (page) => popupEdit(page, 'FL1', { labelText: 'FL1-X', labelVisibility: 'on' })
+  }
+];
+for (const { domain, edit } of RESET_CASES) {
+  test(`Reset Settings after ${domain} shows what Generate draws`, async ({ page }) => {
+    test.setTimeout(120_000);
+    await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+    await resetSettings(page);
+    await generate(page);
+    const drawn = await semanticSnapshot(page);
+    await edit(page);
+    expect(await semanticSnapshot(page), 'the edit shows on the Result').not.toEqual(drawn);
+    await resetSettings(page);
+    const listed = await legendList(page);
+    await expectLiveEqualsGenerate(page, { label: `Reset Settings after ${domain}` });
+    expect(listed, 'the Legend list after Reset Settings').toEqual(await legendList(page));
+  });
+}
 
 for (const { edit, states, setup, run, knownMismatch } of CASES) {
   test(`${edit}: ${statesName(states)}`, async ({ page }) => {

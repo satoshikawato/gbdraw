@@ -1282,18 +1282,29 @@ export const createAppSetup = () => {
       if (drafts) specificRuleRestorePorts.restoreSpecificRulePatternDrafts(drafts);
     }
   };
-  /** @param {DrawingState} drawing */
-  const restoreRuleEdits = async (drawing, restore, ...args) => {
+  // A restore, or Reset Settings, that rewrites the rules: the rule owner
+  // follows the rules `write` replaced.
+  /**
+   * @template T
+   * @param {DrawingState} drawing
+   * @param {() => Promise<T>} write
+   * @returns {Promise<T>}
+   */
+  const followRuleEdits = async (drawing, write) => {
     const previousRules = drawing.manualSpecificRules.map((rule) => ({ ...rule }));
     specificRuleRestorePorts.retainRulesForRestore(previousRules);
     try {
-      const restored = await restoreWithSpecificRuleDrafts(restore, ...args);
+      const written = await write();
       specificRuleRestorePorts.followRestoredSpecificRules(previousRules);
-      return restored;
+      return written;
     } finally {
       specificRuleRestorePorts.retainRulesForRestore([]);
     }
   };
+  /** @param {DrawingState} drawing */
+  const restoreRuleEdits = (drawing, restore, ...args) => followRuleEdits(
+    drawing, () => restoreWithSpecificRuleDrafts(restore, ...args)
+  );
   const history = createHistoryManager(/** @type {any} */ ({
     buildIntent: historySnapshots.buildHistoryIntent,
     applyIntent: (...args) => {
@@ -4182,8 +4193,21 @@ export const createAppSetup = () => {
     );
     if (!proceed) return false;
 
-    return history.runUndoableCheckpoint('Reset settings', async () => {
+    // OV-287, OV-289, OV-290 (PD-OI-066): the displayed Result shows the
+    // reset draft as the next Generate draws it. The Legend editor's Restore
+    // all and Reset all strokes show the deleted rows and the strokes before
+    // the reset clears what they read; the editor projection then shows the
+    // fills, Legend colors, visibility and labels, the rule owner follows the
+    // removed rules (a changed Legend source asks for the rerender, as their
+    // Undo does), and the Legend list follows the Result.
+    return history.runUndoableCheckpoint('Reset settings', () => followRuleEdits(state.activeDrawing(), async () => {
       featureActions.clearSpecificRulePatternDrafts();
+      const shown = Boolean(svgContainer.value?.querySelector?.('svg'));
+      if (shown) {
+        await restoreDeletedLegendEntries();
+        resetAllStrokes();
+      }
+      const palette = JSON.stringify(appliedPaletteColors.value);
       resetSettingsState(state);
       // Linear records return to their File defaults and inferred definitions;
       // Files, record selections, File defaults, and depth stay. The mutation
@@ -4203,8 +4227,18 @@ export const createAppSetup = () => {
       depthTrackUiCounts.circular = 1;
       ensureDepthTrackConfigCount(state.drawings.circular, activeDepthTrackCount('circular'));
       ensureDepthTrackConfigCount(drawing, activeDepthTrackCount('linear'));
+      if (shown) {
+        // A Reset that changes the palette leaves the fills to the palette watcher.
+        await projectMountedEditorIntent({
+          colors: JSON.stringify(appliedPaletteColors.value) === palette,
+          visibility: true,
+          rerender: true,
+          labels: true
+        });
+        legendActions.extractLegendEntries();
+      }
       return true;
-    });
+    }));
   };
 
   const resetLayout = () => {
