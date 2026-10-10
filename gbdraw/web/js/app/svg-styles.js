@@ -32,7 +32,8 @@ const setColorAttributeIfChanged = (element, attribute, value) => {
   return true;
 };
 
-const paletteColorsEqual = (left, right) => {
+// Whether two palettes give every key the same color (the palette watcher's test).
+export const paletteColorsEqual = (left, right) => {
   const keys = new Set([...Object.keys(left || {}), ...Object.keys(right || {})]);
   return Array.from(keys).every(
     (key) => normalizeComparableColor(left?.[key]) === normalizeComparableColor(right?.[key])

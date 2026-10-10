@@ -95,7 +95,7 @@ import { createFeatureEditor } from './feature-editor.js';
 import { PAIRWISE_MATCH_SELECTOR } from './pairwise-match-popup.js';
 import { createFeatureSelection } from './feature-selection.js';
 import { createPreviewFeatureSearch } from './feature-search/preview-actions.js';
-import { createSvgStyles } from './svg-styles.js';
+import { createSvgStyles, paletteColorsEqual } from './svg-styles.js';
 import { createLegendManager } from './legend.js';
 import { createPaletteLoader } from './palettes.js';
 import { afterPaint, createRunAnalysis } from './run-analysis.js';
@@ -4204,10 +4204,16 @@ export const createAppSetup = () => {
       featureActions.clearSpecificRulePatternDrafts();
       const shown = Boolean(svgContainer.value?.querySelector?.('svg'));
       if (shown) {
-        await restoreDeletedLegendEntries();
+        // Generate draws again the rows it drew (a row added in the editor and
+        // deleted stays gone).
+        const generated = new Set(originalLegendOrder.value);
+        await restoreDeletedLegendEntries(state.activeDrawing().deletedLegendEntries.value.flatMap(
+          (/** @type {{ caption?: string, originalCaption?: string }} */ entry, /** @type {number} */ index) => (
+            generated.has(entry.originalCaption || entry.caption) ? [index] : [])
+        ));
         resetAllStrokes();
       }
-      const palette = JSON.stringify(appliedPaletteColors.value);
+      const palette = { ...appliedPaletteColors.value };
       resetSettingsState(state);
       // Linear records return to their File defaults and inferred definitions;
       // Files, record selections, File defaults, and depth stay. The mutation
@@ -4230,7 +4236,7 @@ export const createAppSetup = () => {
       if (shown) {
         // A Reset that changes the palette leaves the fills to the palette watcher.
         await projectMountedEditorIntent({
-          colors: JSON.stringify(appliedPaletteColors.value) === palette,
+          colors: paletteColorsEqual(appliedPaletteColors.value, palette),
           visibility: true,
           rerender: true,
           labels: true
