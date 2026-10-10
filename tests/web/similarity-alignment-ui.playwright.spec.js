@@ -1300,6 +1300,13 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
       await apply.click();await page.waitForFunction(()=>!window.__GBDRAW_APP__.similarityAlignmentBusy,null,{timeout:180000});
     }
   };
+  // Align… and Review alignment options… leave the feature popup open, and the
+  // popup opened at the top-left corner can cover header buttons such as Undo.
+  const closeFeaturePopup = async () => {
+    const popup = page.locator('.feature-popup[role="dialog"]');
+    await popup.getByRole('button', { name: 'Close feature popup', exact: true }).click();
+    await expect(popup).toHaveCount(0);
+  };
   const before = await recordState();
   console.log('S02 Gallery: imported baseline');
   // Default Align renders comparisons and preserves every record direction.
@@ -1320,6 +1327,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   await expect(page.locator('[data-similarity-alignment-summary]')).toContainText('0 reversed');
   expect((await recordState()).orientations).toEqual(before.orientations);
   await expect(page.getByRole('dialog', { name: 'Select alignment anchors' })).toHaveCount(0);
+  await closeFeaturePopup();
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect.poll(recordState).toEqual(before);
   console.log('S02 Gallery: Undo restored baseline');
@@ -1448,6 +1456,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   await expect(direction).toBeEnabled();
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
+  await closeFeaturePopup();
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect.poll(recordState).toEqual(before);
   console.log('S02 Gallery: Undo restored baseline');
