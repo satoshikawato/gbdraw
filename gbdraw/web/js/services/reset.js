@@ -10,7 +10,7 @@ import {
   createDefaultPriorityRule,
   createDefaultSpecificRule
 } from '../state.js';
-/** @import { DrawingState } from '../state.js' */
+/** @import { DrawingState, LegendCaption, LegendEntry } from '../state.js' */
 import { createDefaultLayoutPreferences } from './layout-preferences.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
 import { normalizePaletteColors } from '../utils/color-utils.js';
@@ -115,6 +115,12 @@ const resetEditorDraftState = (state, drawing) => {
   clearReactiveObject(drawing.legendStrokeOverrides);
   drawing.deletedLegendEntries.value = [];
   drawing.dormantLegendEntries.value = [];
+  // R15-14: every renamed row, a feature row's or a track row's, returns to
+  // the caption Python draws, its key.
+  drawing.legendEntries.value = drawing.legendEntries.value.map((/** @type {LegendEntry} */ entry) => {
+    const drawn = /** @type {LegendCaption} */ (/** @type {string} */ (entry.originalCaption));
+    return entry.caption === drawn ? entry : { ...entry, caption: drawn };
+  });
   drawing.addedLegendCaptions.value = new Set();
   drawing.fileLegendCaptions.value = new Set();
 

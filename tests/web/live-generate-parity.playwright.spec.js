@@ -671,8 +671,17 @@ const RESET_CASES = [
     edit: (page) => loadEditorLegendRows(page, [['Manual row', '#118833']])
   },
   {
-    domain: 'a Legend row renamed',
-    edit: async (page) => { await renameRow(page, 'CDS', 'Coding'); await settleLive(page); }
+    // R15-14: Reset returns every Legend rename, a feature row's and a track
+    // row's, to the caption Python draws; Undo of Reset restores them.
+    domain: 'Legend rows renamed, a feature row and a track row (R15-14)',
+    edit: async (page) => {
+      await renameRow(page, 'CDS', 'Coding');
+      await settleLive(page);
+      await renameRow(page, 'GC content', 'GC %');
+      await settleLive(page);
+    },
+    undoRedo: true,
+    resetShowsDrawn: true
   },
   {
     // A popup "this feature only" color draws its own Legend row; Reset
@@ -694,7 +703,7 @@ const RESET_CASES = [
     edit: (page) => popupEdit(page, 'FL1', { labelText: 'FL1-X', labelVisibility: 'on' })
   }
 ];
-for (const { domain, edit, undoRedo, sameDrawing } of RESET_CASES) {
+for (const { domain, edit, undoRedo, sameDrawing, resetShowsDrawn } of RESET_CASES) {
   test(`Reset Settings after ${domain} shows what Generate draws`, async ({ page }) => {
     test.setTimeout(120_000);
     await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
@@ -706,8 +715,9 @@ for (const { domain, edit, undoRedo, sameDrawing } of RESET_CASES) {
     if (sameDrawing) expect(edited, 'the edit leaves the drawing as Generate drew it').toEqual(drawn);
     else expect(edited, 'the edit shows on the Result').not.toEqual(drawn);
     await resetSettings(page);
+    const reset = await semanticSnapshot(page);
+    if (resetShowsDrawn) expect(reset, 'Reset Settings shows the drawing Generate drew').toEqual(drawn);
     if (undoRedo) {
-      const reset = await semanticSnapshot(page);
       await history(page, 'undo');
       expect(await semanticSnapshot(page), 'Undo of Reset Settings').toEqual(edited);
       await history(page, 'redo');
