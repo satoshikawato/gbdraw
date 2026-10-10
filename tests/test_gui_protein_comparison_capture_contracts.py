@@ -923,10 +923,17 @@ def test_protein_popup_state_uses_catalog_commit_path() -> None:
         in history_snapshot
     )
 
+    # Match popups read their groups from the committed catalog state. The
+    # catalog puts every group, collinear presentation groups included, in
+    # `orthogroups`, so one committed list serves pairwise and collinear
+    # ribbons (OV-370) and the popup reads no second group source.
+    orthogroup_push = feature_catalog.index("context.orthogroups.push(expanded);")
+    assert orthogroup_push < feature_catalog.index("context.collinearGroups.push(expanded);")
     for fragment in (
-        "collinearGroups,",
-        "orthogroups: groupsForMatch(matchElement),",
-        "orthogroups: () => groupsForMatch(matchElement),",
+        "const groupsForMatch = () => orthogroups?.value || [];",
+        "orthogroups: groupsForMatch(),",
+        "orthogroups: groupsForMatch,",
         "const payload = buildMatchPayload(drawing, matchElement, featureLookup);",
     ):
         assert fragment in svg_actions
+    assert "collinearGroups" not in svg_actions

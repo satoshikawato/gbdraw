@@ -124,6 +124,8 @@ export const runWhenPrepared = (state, preparations, commit) => {
  * @property {(payload: Record<string, any>, options?: Record<string, any>) => Promise<RuleEvaluationResult>} evaluate
  *   The diagram helper that matches rules against feature payloads (R7).
  * @property {{ value: boolean }} [pending] Receives whether a preparation is running.
+ * @property {{ value: boolean }} [blocking] Receives whether an edit's preparation is running: one
+ *   that is not a `view` preparation (OV-377). Save and Load wait for it.
  * @property {(notice: string) => void} [notify] Shows the notice of a caption Python changed.
  * @property {() => Record<string, any>[]} [visibilityRules] The Feature visibility rule rows, in table order.
  */
@@ -146,9 +148,10 @@ export const runWhenPrepared = (state, preparations, commit) => {
  *   the other options are the evaluation's.
  * @property {(rules?: Record<string, any>[]) => void} retain
  *   Keeps the rules a History restore replaces, so the next preparation matches them with the restored ones.
- * @property {(options?: { strict?: boolean }) => boolean | Promise<boolean | { error: any }>} prepareDrawn
+ * @property {(options?: { strict?: boolean, view?: boolean }) => boolean | Promise<boolean | { error: any }>} prepareDrawn
  *   Prepares what `resolveFeatureDrawn` reads; resolves to `{ error }` when Generate rejects the visibility rule table.
  *   `strict` rejects when the color preparation fails and resolves to false when it is stale, as a run does.
+ *   `view` marks a preparation that only reads the matches (a popup opening): it does not raise `blocking`.
  * @property {(rules?: Record<string, any>[]) => boolean} isPrepared
  * @property {(rules?: Record<string, any>[], options?: Record<string, any>) => Promise<RuleCandidate | null>} prepareCandidate
  *   `options.captions` false prepares the rules as given, without Python's caption normalization.
@@ -163,12 +166,23 @@ export const runWhenPrepared = (state, preparations, commit) => {
  * @returns {RulePreparation}
  */
 export const createRulePreparation = ({
-  state, evaluate, pending = { value: false }, notify = () => {}, visibilityRules = () => []
+  state, evaluate, pending = { value: false }, blocking = { value: false }, notify = () => {}, visibilityRules = () => []
 }) => {
   // The rule keys Python accepted: a key's syntax is a fact of its content.
   /** @type {Set<string>} */
   const validated = new Set();
   let pendingCount = 0;
+  let blockingCount = 0;
+  // Raises `pending` (and `blocking`, unless `view`) until the returned release runs.
+  /** @param {boolean} view */
+  const track = (view) => {
+    pending.value = ++pendingCount > 0;
+    if (!view) blocking.value = ++blockingCount > 0;
+    return () => {
+      pending.value = --pendingCount > 0;
+      if (!view) blocking.value = --blockingCount > 0;
+    };
+  };
   const features = () => [...new Set([
     ...(state.extractedFeatures.value || []), ...(state.biologicalFeatures?.value || [])
   ])];
@@ -230,8 +244,8 @@ export const createRulePreparation = ({
   let retained = [];
   const retain = (rules = []) => { retained = rules; };
   const prepare = (rules = state.activeDrawing().manualSpecificRules, {
-    blocked = () => Boolean(state.sessionOperationAvailability?.()), ...options
-  } = /** @type {{ blocked?: () => boolean } & Record<string, unknown>} */ ({})) => {
+    blocked = () => Boolean(state.sessionOperationAvailability?.()), view = false, ...options
+  } = /** @type {{ blocked?: () => boolean, view?: boolean } & Record<string, unknown>} */ ({})) => {
     const targets = features();
     const draft = [...new Map([...rules, ...retained].map((rule) => [ruleKey(rule), { feat: rule.feat, qual: rule.qual, val: rule.val }])).values()];
     // Empty catalogs still require syntax validation at input boundaries.
@@ -241,7 +255,7 @@ export const createRulePreparation = ({
     const pendingKeys = new Set(ruleKeysPending(targets, draft.map(ruleKey)));
     const sent = draft.filter((rule) => pendingKeys.has(ruleKey(rule)) || !validated.has(ruleKey(rule)));
     const before = snapshot();
-    pending.value = ++pendingCount > 0;
+    const release = track(view);
     return evaluate({ features: targets.map((feature) => ruleFeaturePayload(feature)), rules: sent, kind: 'color' }, options)
       .then((result) => {
         if (!isCurrent(before) || blocked()) return false;
@@ -252,14 +266,14 @@ export const createRulePreparation = ({
           matched: result.matches[index], priorities: result.priorities[index], declined: declines(targets[index])
         }));
         return true;
-      }).finally(() => { pending.value = --pendingCount > 0; });
+      }).finally(release);
   };
   // The visibility rule matches of every catalog feature. The rules go to
   // Python in table order, so a table Generate rejects (an invalid regex)
   // fails with Generate's error and row: its matches stay unknown, and the
   // preparation resolves to `{ error }`.
   /** @returns {boolean | Promise<boolean | { error: any }>} */
-  const prepareVisibility = () => {
+  const prepareVisibility = (view = false) => {
     const draft = visibilityRules().map((rule) => ({
       recordId: rule.recordId, featureType: rule.featureType, qualifier: rule.qualifier,
       value: rule.value, action: rule.action
@@ -267,7 +281,7 @@ export const createRulePreparation = ({
     if (draft.length === 0) return true;
     const targets = features().filter((feature) => draft.some((rule) => !visibilityRuleKnown(feature, rule)));
     if (targets.length === 0) return true;
-    pending.value = ++pendingCount > 0;
+    const release = track(view);
     return Promise.resolve()
       .then(() => evaluate({
         features: targets.map((feature) => ruleFeaturePayload(feature)), rules: draft, kind: 'visibility'
@@ -281,7 +295,7 @@ export const createRulePreparation = ({
         });
         return true;
       }, (error) => ({ error }))
-      .finally(() => { pending.value = --pendingCount > 0; });
+      .finally(release);
   };
   // Everything `resolveFeatureDrawn` reads: the visibility rule matches and,
   // for a feature of a type the request does not select, the color rule
@@ -289,10 +303,10 @@ export const createRulePreparation = ({
   // to `{ error }` when Generate would reject the visibility rule table. A
   // `strict` preparation is a run's: a failed color preparation rejects and a
   // stale one resolves to false (`runWhenPrepared`).
-  const prepareDrawn = ({ strict = false } = {}) => {
+  const prepareDrawn = ({ strict = false, view = false } = {}) => {
     const drawing = state.activeDrawing();
-    const colors = prepare(drawing.manualSpecificRules || []);
-    const visibility = prepareVisibility();
+    const colors = prepare(drawing.manualSpecificRules || [], { view });
+    const visibility = prepareVisibility(view);
     if (colors === true && visibility === true) return true;
     return Promise.all([strict ? colors : Promise.resolve(colors).catch(() => false), visibility])
       .then(([current, outcome]) => strict && !current ? false : /** @type {any} */ (outcome)?.error ? outcome : true);

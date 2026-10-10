@@ -143,9 +143,9 @@ an **Align…** action because the current result is in Similarity-groups mode.
 
 Select **Align…**. gbdraw regenerates the same 23-group comparison without
 rerunning LOSATP and shifts each record so its `og_1` member shares one
-x-coordinate. If ambiguity opens **Select alignment anchors**, select the
-recommended first candidate in each unresolved row, leave **Keep current
-directions** selected and choose **Apply**. Inspect and accept a refreshed
+x-coordinate. If ambiguity opens **Review alignment**, select the
+**Recommended** candidate in each card marked **Choose one**, leave **Keep as
+is** selected and choose **Apply**. Inspect and accept a refreshed
 preview with another Apply if requested. This is the alignment used by the
 Interactive SVG Gallery.
 
@@ -169,10 +169,9 @@ member count, record coverage, RBH seeds, paths, and every member protein.
 Use the same five records and presentation from Steps 1–5. Click the first
 record's left-facing `livA` CDS (`CAG38712.1`, group `og_18`) and choose
 **Review alignment options…**. Choose a
-**Select** anchor for each row still needing a choice. Start with **Keep current
-directions**, then select **All selected arrows right →**. The reference
-currently points left while the selected targets point right, so the preview
-changes only the reference record. Select **Apply**; if final validation updates
+candidate in each card marked **Choose one**. Start with **Keep as is**, then
+select **All right →**. The reference currently points left while the selected
+targets point right, so only the reference card shows **reversed**. Select **Apply**; if final validation updates
 the preview, inspect it and select **Apply** again. Features and labels reverse
 with the record; biological source strands stay unchanged.
 

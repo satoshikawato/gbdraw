@@ -643,16 +643,18 @@ Generate a Linear diagram with **LOSATP → Similarity groups**, then choose
 **Align…** from a feature popup. The exact clicked feature is the reference,
 even when it is not the group representative. The Similarity Groups drawer
 offers the same action after you select an exact reference record and feature;
-group selection alone cannot choose a reference. Both entry points show
+group selection alone cannot choose a reference. While an alignment is active,
+including one loaded from a Session, the drawer preselects its exact reference
+until you choose another; a reference that no longer resolves is not preselected. Both entry points show
 **Resolving…** while Python determines the anchors. When every target resolves,
-**Align…** applies immediately in **Keep current directions** and shows the
+**Align…** applies immediately in **Keep as is** and shows the
 Result summary. Missing or unusable targets stay unchanged. If generation
 fails, the Keep draft opens so you can correct it and retry.
 
 Choose **Review alignment options…** beside **Align…** to inspect anchors,
 choose **Skip**, or change display directions before commitment. Ambiguity
-opens the same **Select alignment anchors** review automatically. It lists the
-other displayed records in diagram order. Python selects the only usable
+opens the same **Review alignment** dialog automatically. It shows one card
+per displayed record in diagram order; the reference card is marked **Reference**. Python selects the only usable
 candidate or unique direct reciprocal-best-hit (RBH) candidate. For remaining
 ambiguity, it recommends the unique representative or candidate 1 in stable
 identity order. Recommendation reasons are visible; they are convenience
@@ -660,9 +662,16 @@ heuristics; they do not show that an anchor is biologically better. A hidden
 member is usable when its center maps into the displayed crop; a member outside
 that crop is unusable. RBH query/subject direction is symmetric.
 
-Each candidate shows its name or feature ID, source coordinates, current
-display strand, representative status, a **Direct evidence** line (how
-it is directly linked to the reference), and internal identity.
+In a record with several candidates, each candidate shows its name, protein or
+feature ID, source coordinates, current display strand, representative status,
+and how it is directly linked to the reference (**reciprocal best hit**,
+**near-reciprocal hit**, **local paralog hit**, or **no direct hit**). The
+recommended candidate always carries a **Recommended** chip. A record with one
+usable candidate shows a compact card with that candidate's name, ID, coordinates
+and strand and a **Skip** checkbox; it does not show the link or
+representative status. A record that still needs a choice is marked **Choose
+one**, and **Apply** stays disabled until each such record has a candidate or
+**Skip**.
 A thin line marks the reference center and numbered badges locate visible
 candidates. Hover a row or its feature to highlight the other; clicking a
 feature or badge selects the same anchor as its row control. Candidates without
@@ -671,25 +680,27 @@ badges appear only in the preview, never in downloads or saved Sessions.
 
 ### Choose display directions
 
-**Alignment direction** offers one exclusive choice:
+**Arrow direction** offers one exclusive choice:
 
 | Choice | Effect on the selected anchors |
 | --- | --- |
-| **Keep current directions** (default) | Preserve every record's current display direction. |
-| **All selected arrows right →** | Reverse each eligible record only when its selected anchor currently points left. |
-| **All selected arrows left ←** | Reverse each eligible record only when its selected anchor currently points right. |
+| **Keep as is** (default) | Preserve every record's current display direction. |
+| **All right →** | Reverse each eligible record only when its selected anchor currently points left. |
+| **All left ←** | Reverse each eligible record only when its selected anchor currently points right. |
 | **Custom** | Choose **Keep**, **Right →**, or **Left ←** separately for each eligible record, including the reference. |
 
 The scope is the exact reference and selected target anchors with a known
-direction. It is not every input record or every gene. The review lists the
-scope, current → after-Align arrows, excluded records and their reasons.
+direction. It is not every input record or every gene. A line under the choice
+states which records reverse. Each record card shows its current arrow; when
+Align reverses the record, the card shows the old arrow struck through, the new
+arrow and a **reversed** chip. Excluded records state their reason.
 Unknown direction is never guessed; **Skip**, missing members, and unusable
 anchors keep their directions. Changing Select/Skip immediately updates the
 scope. An excluded Custom row is disabled and its choice is not applied.
 
-For a left-facing reference with right-facing targets, **All selected arrows
-right →** reverses only the reference record. **All selected arrows left ←**
-reverses only those targets. To change one record independently, choose
+For a left-facing reference with right-facing targets, **All right →**
+reverses only the reference record. **All left ←** reverses only those
+targets. To change one record independently, choose
 **Custom** and leave the other rows at **Keep**. These choices replace the former
 **Match reference direction** checkbox.
 
@@ -702,8 +713,8 @@ relative to the source.
 
 Align keeps the exact reference feature center at its immediate pre-Align
 logical canvas x and aligns target centers there. Every record's logical y is
-preserved. Reversing the reference can move its record's left edge; the review
-shows that correction. Automatic diagram composition, viewBox fitting and zoom
+preserved. Reversing the reference can move its record's left edge; the
+reference card says by how many pixels and in which direction. Automatic diagram composition, viewBox fitting and zoom
 can move the reference on screen. This is not a promise of fixed screen pixels.
 
 ### Apply, retry, and continue editing
@@ -733,7 +744,10 @@ and unrelated settings stay pending. Ordinary **Generate Diagram** after
 style, label or canvas changes and stable record reorder keep the plan and
 the saved positions and directions that Reset needs. Manual **Reverse complement** keeps the plan; the next
 Generate aligns the same anchors in the new direction. Source replacement,
-crop, selector changes and manual record drag clear it with a visible reason.
+crop, selector changes, manual record drag, and comparison changes (a pair's
+source or file, the program, or the mode) clear it with a visible reason.
+Choosing **Upload BLAST TSV** for a pair keeps it until you choose the file.
+An Undo that restores the plan also removes the "Alignment cleared" notice.
 A stale reference requires **Reselect** or **Clear**; a stale target requires
 **Select** or **Skip**. Pending or failed repair keeps the last successful Result.
 
@@ -802,7 +816,10 @@ both the app and downloaded Interactive SVG. Python-only syntax such as
 explains returning to word search by turning Regex off.
 
 A normal feature click opens its identity, location, strand, qualifiers, and
-available sequence actions. The popup header shows the feature label, its
+available sequence actions. The first popup after a page or Session load can
+wait several seconds while the Python runtime starts and matches the color
+rules; the toolbar shows **Preparing feature details…** meanwhile, and **Save
+Session** and **Load Session** stay available. The popup header shows the feature label, its
 `<record ID>: <location>`, and the gene when it differs from the label. **Edit** groups controls by when they apply. **Appearance · updates the current
 Result** holds **Fill Color**, **Stroke**, **Label text** with **Label
 visibility** and **Apply Label**, **Feature visibility**, and **Legend name**.
