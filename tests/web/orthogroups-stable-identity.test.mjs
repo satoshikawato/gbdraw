@@ -42,6 +42,11 @@ await copyModule('gbdraw/web/js/services/feature-identity.js', 'services/feature
 await copyModule('gbdraw/web/js/services/feature-catalog.js', 'services/feature-catalog.js');
 await copyModule('gbdraw/web/js/services/runtime-test-hooks.js', 'services/runtime-test-hooks.js');
 await copyModule('gbdraw/web/js/services/text-download.js', 'services/text-download.js');
+// The member tables name records through the Linear record label owners (OV-369).
+for (const name of ['linear-comparisons', 'linear-sources', 'file-content-cache', 'session-resource-backing',
+  'byte-utils', 'depth-file-codec', 'depth-track-state', 'track-slot-display', 'record-options']) {
+  await copyModule(`gbdraw/web/js/services/${name}.js`, `services/${name}.js`);
+}
 await copyModule('gbdraw/web/js/utils/clipboard.js', 'utils/clipboard.js');
 const standaloneSource = await readFile(
   join(repoRoot, 'gbdraw/web/js/services/standalone-interactivity.js'),

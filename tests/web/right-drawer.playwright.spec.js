@@ -1044,6 +1044,28 @@ test('adjacent Collinear mixed groups remain selectable after current-session sa
 });
 
 
+test('a collinear ribbon without a collinear group scope fills its Similarity groups covered table (OV-370)', async ({ page }) => {
+  test.setTimeout(180000);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  expect(await loadGallerySession(page, 'hepatoplasmataceae_collinear.gbdraw-session.json.gz'))
+    .toMatchObject({ status: 'ok' });
+  // The Gallery ribbons name ordinary similarity groups and carry no collinear group scope.
+  const ribbon = page.locator('.gbdraw-preview-surface path[data-match-kind="collinear"][data-collinearity-block-id="block_0024"]').first();
+  await expect(ribbon).not.toHaveAttribute('data-collinear-group-scope', /./);
+  await ribbon.dispatchEvent('click', { clientX: 500, clientY: 350 });
+  const covered = await page.evaluate(() => window.__GBDRAW_APP__.clickedPairwiseMatch?.blockOrthogroups
+    .map(({ id, memberCount, recordCoverage, queryMember, subjectMember }) => ({
+      id, memberCount, recordCoverage, query: Boolean(queryMember), subject: Boolean(subjectMember)
+    })));
+  expect(covered).toHaveLength(15);
+  expect(covered[0]).toEqual({ id: 'og_34', memberCount: '5', recordCoverage: '5', query: true, subject: true });
+  expect(covered.every(({ memberCount, query, subject }) => memberCount && query && subject)).toBe(true);
+  const table = page.locator('table').filter({ hasText: 'Subject member' });
+  await expect(table.locator('tbody tr').first().locator('td').nth(2)).toHaveText('5');
+});
+
 // Scroll recovery checks keep the same center hit oracle as M01. A short
 // screen need not show every operation at once, but must expose each in turn.
 const exposeControl = async (page, control) => {
