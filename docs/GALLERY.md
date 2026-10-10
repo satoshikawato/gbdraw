@@ -74,7 +74,7 @@ The five Hepatoplasmataceae genomes of the collinear example, linked by LOSATP s
 
 <a href="https://gbdraw.app/gallery/#BGC0000708-BGC0000713"><img src="../gbdraw/web/gallery/thumbnails/BGC0000708-BGC0000713.webp" alt="Five aminoglycoside gene clusters with antiSMASH gene-kind colors and protein-similarity links" width="640"></a>
 
-Five aminoglycoside biosynthetic gene clusters from MIBiG (lividomycin, two neomycin, paromomycin, and ribostamycin), colored by antiSMASH gene kind and linked by LOSATP similarity groups at 30% identity or more. The records are aligned on the group of <i>livE</i> from the lividomycin cluster, which is also the only record with gene labels. A run of core biosynthetic genes links through all five clusters, while regulatory genes appear only in the two neomycin clusters; the links show protein similarity, not phylogenetic orthology.
+Five aminoglycoside biosynthetic gene clusters from MIBiG (lividomycin, two neomycin, paromomycin, and ribostamycin), colored by antiSMASH gene kind and linked by LOSATP similarity groups at 30% identity or more. The records are aligned on the group of the ABC transporter <i>neoU</i> from the first neomycin cluster; the lividomycin cluster has two members of that group, and its <i>livU</i> is the anchor. Only the lividomycin cluster shows gene labels. A run of core biosynthetic genes links through all five clusters, while regulatory genes appear only in the two neomycin clusters; the links show protein similarity, not phylogenetic orthology.
 
 [Open in the interactive Gallery](https://gbdraw.app/gallery/#BGC0000708-BGC0000713) | [Tutorial: Find shared proteins across five aminoglycoside gene clusters](./TUTORIALS/compare-proteins-losatp.md)
 

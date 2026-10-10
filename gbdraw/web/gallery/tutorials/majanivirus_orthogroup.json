@@ -153,7 +153,7 @@
     },
     {
       "title": "Configure browser LOSAT",
-      "body": "In Comparison, choose Run LOSAT, open Settings, set LOSAT Mode to LOSATP, and set LOSATP mode to Similarity groups. Runtime controls are under Advanced comparison and layout.",
+      "body": "In Comparison, choose Run LOSAT, open Settings, set LOSAT Mode to LOSATP, and set LOSATP mode to Similarity groups. The runtime controls are in the same Settings panel, under Runtime and reproducibility.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -282,19 +282,19 @@
             "source": "webapp",
             "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json.gz",
             "viewport": {"width": 1600, "height": 1100},
-            "openDetails": ["Advanced comparison and layout"],
+            "openDetails": ["Settings"],
             "actions": [
               {
                 "type": "evaluate",
-                "script": "async () => { const app = window.__GBDRAW_APP__; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('orthogroup'); app.losat.executionMode = 'auto'; app.losat.totalThreadBudget = 'safe'; app.losat.parallelWorkers = undefined; app.losat.threadsPerJob = '32'; }"
+                "script": "async () => { const app = window.__GBDRAW_APP__; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('orthogroup'); app.losatExecution.executionMode = 'auto'; app.losatExecution.totalThreadBudget = 'safe'; app.losatExecution.parallelWorkers = undefined; app.losatExecution.threadsPerJob = '32'; }"
               },
               {
                 "type": "waitForFunction",
-                "script": "() => Array.from(document.querySelectorAll('[data-linear-advanced-comparison] section')).some((section) => section.textContent.includes('Runtime and reproducibility'))"
+                "script": "() => Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).some((section) => section.textContent.includes('Runtime and reproducibility'))"
               },
               {
                 "type": "evaluate",
-                "script": "const section = Array.from(document.querySelectorAll('[data-linear-advanced-comparison] section')).find((node) => node.textContent.includes('Runtime and reproducibility')); if (!section) throw new Error('Runtime and reproducibility section was not found.'); section.dataset.capture = 'majanivirus-runtime'; section.scrollIntoView({ block: 'center' });"
+                "script": "const section = Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).find((node) => node.textContent.includes('Runtime and reproducibility')); if (!section) throw new Error('Runtime and reproducibility section was not found.'); section.dataset.capture = 'majanivirus-runtime'; section.scrollIntoView({ block: 'center' });"
               }
             ],
             "selector": "[data-capture='majanivirus-runtime']",
@@ -303,15 +303,15 @@
               "mode": "linear",
               "linearComparisonPlan.mode": "adjacent",
               "linearComparisonPlan.defaultSource": "losat",
-              "losat.executionMode": "auto",
-              "losat.totalThreadBudget": "safe",
-              "losat.threadsPerJob": "32"
+              "losatExecution.executionMode": "auto",
+              "losatExecution.totalThreadBudget": "safe",
+              "losatExecution.threadsPerJob": "32"
             },
             "visibleText": ["Runtime and reproducibility", "Parallel runs"],
             "visibleControls": [
-              {"label": "Execution", "value": "auto"},
-              {"label": "Total threads", "value": "safe"},
-              {"label": "Threads per run", "value": "32"}
+              {"selector": "[data-capture='majanivirus-runtime'] select[aria-label='LOSAT execution']", "value": "auto"},
+              {"selector": "[data-capture='majanivirus-runtime'] select[aria-label='LOSAT total threads']", "value": "safe"},
+              {"selector": "[data-capture='majanivirus-runtime'] select[aria-label='LOSAT threads per run']", "value": "32"}
             ]
           }
         }

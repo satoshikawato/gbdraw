@@ -60,6 +60,22 @@ write-up of a release.
   setting, for example the first edit after loading an aligned Session,
   silently dropped the alignment, and the next Generate drew the records
   unaligned (OV-383).
+- Gallery: the aminoglycoside BGC example draws its arrows with **Shaft Width
+  Ratio** 0.6 and aligns its records on similarity group og_6 (neoU of
+  BGC0000709) instead of og_1. Its tutorial adds the **Features › Arrow Geometry
+  › Shaft Width Ratio** step and walks through **Review alignment options…**,
+  where BGC0000708 has two og_6 members and keeps the recommended livU.
+- Gallery tutorials: the BGC, Hepatoplasmataceae, and majanivirus tutorials now
+  say that the LOSAT runtime controls are under **Comparison › Settings ›
+  Runtime and reproducibility**, not under **Advanced comparison and layout**
+  (OV-366).
+- Gallery publication (maintainer tooling): `tools/refresh_gallery_sessions.py`
+  publishes a Session that the web app saved. It rebuilds the request from the
+  request's own color, whitelist, and priority tables rather than from the
+  files bound to those inputs (OV-367). It stores Default colors as the CLI
+  replay resolves them (OV-375) and one-record GenBank sources as `exactly_one`
+  (OV-376). It also names the example's GenBank files in `examples.json` when
+  the Session has no CLI invocation (OV-397).
 - Sessions (CLI and Python): a Session saved from a Linear diagram with a
   reverse-complemented record now stores that record's feature-bound comparison
   rows (saved or fresh LOSATP rows) in the search frame, as the web app does,

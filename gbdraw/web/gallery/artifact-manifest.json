@@ -13,12 +13,12 @@
   ],
   "files": {
     "gallery/examples.json": {
-      "bytes": 24218,
-      "sha256": "8e4f5e9041c553fb2b6d32b7b1125282e8eddca7ebb9fc11400ec699149e6779"
+      "bytes": 24476,
+      "sha256": "b00c32b8f2d1bd5fa72f965ee0cce4886df747a088968c81a7c96ff5473160f1"
     },
     "gallery/examples/BGC0000708-BGC0000713.svg": {
-      "bytes": 1158101,
-      "sha256": "8e6affcbb061412b03cdad0f3f002f9cd6fd8978d1273b675332948c1cb14c26"
+      "bytes": 1162604,
+      "sha256": "b90e9147662a3e5c37852e7bb931dbf33ba8afd4adad02e4feb194a60d0154a6"
     },
     "gallery/examples/HmmtDNA_ATskew.svg": {
       "bytes": 489357,
@@ -57,8 +57,8 @@
       "sha256": "3ea9b6689139b6bf209fcdf70dc7883e8355f4d78cceefb9247e1f9fbebe4ad6"
     },
     "gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json": {
-      "bytes": 2904452,
-      "sha256": "ce1d2800eeef31d53049cb7c75e0fe88a3f739cacec7f8522929e47eaf7697d7"
+      "bytes": 2902797,
+      "sha256": "b8c45b5d1b0de945cb3ad8f46a275066a1437068577acc507a4c423d1b6f97d9"
     },
     "gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json": {
       "bytes": 325073,
@@ -97,8 +97,8 @@
       "sha256": "b52083e4a662e1d9ec16d3e14555d4cca90c7c417235153a0783b1fcf101522e"
     },
     "gallery/sources/BGC0000708-BGC0000713.svg": {
-      "bytes": 245739,
-      "sha256": "c2839ecc2d7cab2a992d3c22b419d3de63ece4f340aa911058c862ab0dfcc4ed"
+      "bytes": 250242,
+      "sha256": "fe73f0c7ec2db996f3c899ad2da314a69efa60bbb8cd5ce2c4802215d32541ea"
     },
     "gallery/sources/HmmtDNA_ATskew.svg": {
       "bytes": 134329,
@@ -137,8 +137,8 @@
       "sha256": "f4d1aeb84b9bd2777b9ec53e8dfe2cc9bae404de391abba64f90b5ea40a5b51c"
     },
     "gallery/thumbnails/BGC0000708-BGC0000713.webp": {
-      "bytes": 17932,
-      "sha256": "24ad9c487288cca36a7178c0eb66acbb018d7b0da05f65a073fcaf249925de69"
+      "bytes": 19368,
+      "sha256": "bc4d7b5c039d89c07d4f8cf4109ed0c4dd7e9201dd57d3f8a2e3bacbadf9b63b"
     },
     "gallery/thumbnails/HmmtDNA_ATskew.webp": {
       "bytes": 22334,
