@@ -86,8 +86,10 @@ test('promotion audit jobs run only on the release-tier dispatch and stay outsid
   assert.match(job('promotion-audit-journeys'), /journey: \[J1, J2, J3, J4, J5, J6, J7\]/);
   assert.match(job('promotion-audit-random-walk'), /- name: Print the random walk seed\n[\s\S]*GBDRAW_RANDOM_WALK_SEED=\$GITHUB_RUN_ID/);
   assert.ok(job('promotion-audit-random-walk').indexOf('Print the random walk seed') < job('promotion-audit-random-walk').indexOf('- name: Checkout'));
-  // A failed LOSAT install leaves the job running; the probe only resolves the runtime.
-  assert.match(job('promotion-audit-recipes'), /run: gbdraw setup-losat \|\| echo "::warning::/);
+  // The LOSATP recipes require the bundled runtime: a managed install would outrank it, and the probe only
+  // resolves the runtime and accepts the bundled one.
+  assert.doesNotMatch(job('promotion-audit-recipes'), /run: gbdraw setup-losat/);
+  assert.match(job('promotion-audit-recipes'), /&& \[\[ "\$found" == "bundled "\* \]\]; then/);
   assert.doesNotMatch(job('promotion-audit-recipes'), /--version/);
   assert.match(job('promotion-audit-recipes'), /skipped-run-locally/);
   // The summary keeps a failed table write visible and still publishes the contact sheet.
