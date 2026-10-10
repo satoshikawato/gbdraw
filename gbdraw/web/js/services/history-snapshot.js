@@ -702,7 +702,7 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
  * @property {((rows: HistorySnapshotData[]) => HistorySnapshotData[]) | null} [normalizeLinearSeqList]
  *   The Linear record rows' normalization after a files restore.
  * @property {((drawing: HistorySnapshotDrawing) => HistorySnapshotData) | null} [buildConfigData] The Settings capture.
- * @property {((drawing: HistorySnapshotDrawing, config: HistorySnapshotData, options: { resolveTrackPlacements: boolean }) => unknown) | null} [applyConfigData]
+ * @property {((drawing: HistorySnapshotDrawing, config: HistorySnapshotData, options: { resolveTrackPlacements: boolean, applyAlignment?: boolean }) => unknown) | null} [applyConfigData]
  *   The Settings restore.
  * @property {((drawing: HistorySnapshotDrawing, options: { includePreviewNavigation: boolean }) => HistorySnapshotData) | null} [buildUiStateData]
  *   The UI capture; `includePreviewNavigation` adds pan, zoom, and tab state.
