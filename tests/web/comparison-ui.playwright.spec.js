@@ -569,12 +569,17 @@ test('imported comparison resolutions are explicit and create one History entry 
     const app = window.__GBDRAW_APP__;
     await app.setLinearComparisonGlobalAction('losat');
     app.setLinearComparisonGapAction(app.linearComparisonResolution.edges[0].edgeKey, 'upload');
+    const undoBefore = window.__GBDRAW_HISTORY__.getUndoCount();
     const result = await app.runAnalysis();
-    return { status: result?.status, code: app.errorLog?.code, context: app.errorLog?.context };
+    return { status: result?.status, code: app.errorLog?.code, context: app.errorLog?.context,
+      undoAdded: window.__GBDRAW_HISTORY__.getUndoCount() - undoBefore };
   });
   expect(invalidReplacement).toMatchObject({
-    status: 'error', code: 'COMPARISON_INPUT', context: { reason: 'BLAST_TSV_REQUIRED' }
+    status: 'error', code: 'COMPARISON_INPUT', undoAdded: 0,
+    context: { reason: 'BLAST_TSV_REQUIRED', queryRecordIndex: 0, subjectRecordIndex: 1 }
   });
+  await expect(page.getByRole('region', { name: 'Result Preview' }))
+    .toContainText('Last Successful Result');
   await expect(resolution).toContainText('Selected action: REPLACE');
 
   await setIntent(

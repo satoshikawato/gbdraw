@@ -386,9 +386,10 @@ export const importedComparisonExecution = ({ intent, draftResolution }) => {
     return { ok: true, mode: 'clear' };
   }
   if (intent?.action === IMPORTED_COMPARISON_ACTIONS.REPLACE) {
-    // An invalid draft fails in the run with its own diagnostic, as an editable
-    // comparison does. An empty draft would clear the saved comparison instead.
-    if (draftResolution && (draftResolution.valid !== true || draftResolution.hasComparisonIntent === true)) {
+    // An invalid draft (issues need an edge, so it has an intent) fails in the run
+    // with its own diagnostic, as an editable comparison does. An empty draft
+    // would clear the saved comparison instead.
+    if (draftResolution?.hasComparisonIntent === true) {
       return { ok: true, mode: 'draft' };
     }
     return {
