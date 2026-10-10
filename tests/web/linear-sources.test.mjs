@@ -6,6 +6,7 @@ import {
   isPristineLinearSource,
   linearSourceHasPrimaryInput,
   linearSourceDepthStatus,
+  losatSearchSequences,
   moveLinearSourceGroup,
   planLinearSourceRemoval,
   planLosatSourceJobs,
@@ -273,6 +274,46 @@ for (const batch of noSelf.batches) {
 }
 assert.equal(noSelf.batches.length, 2 + 8);
 assert.equal(noSelf.batches.reduce((sum, batch) => sum + batch.specs.length, 0), 56);
+
+// Record selection D-07: an OFF record is never a query, and its source's
+// database keeps it, so turning a record ON or OFF changes no other E-value.
+test('the LOSAT plan over the drawn records keeps OFF records in their source database', async () => {
+  const fileA = { name: 'a.gbk' };
+  const fileB = { name: 'b.gbk' };
+  const cards = [
+    { uid: 'a0', gb: fileA }, { uid: 'a1', gb: fileA }, { uid: 'a2', gb: fileA },
+    { uid: 'b0', gb: fileB }, { uid: 'b1', gb: fileB }
+  ].map((card) => ({ gff: null, fasta: null, ...card }));
+  const recordsOff = new Set(['a1', 'b1']);
+  const drawn = cards.filter((card) => !recordsOff.has(card.uid));
+  const search = losatSearchSequences(drawn, cards);
+  assert.deepEqual(search.sequences.map((card) => card.uid), ['a0', 'a2', 'b0', 'a1', 'b1']);
+  assert.equal(search.drawnCount, 3);
+  // Pairs only between drawn records: a0 -> b0, a2 -> b0, and a0 -> a2 within file A.
+  const drawnSpecs = [{ queryIndex: 0, subjectIndex: 2 }, { queryIndex: 1, subjectIndex: 2 }, { queryIndex: 0, subjectIndex: 1 }];
+  const getEntry = async (index) => ({ fasta: `>${search.sequences[index].uid}\nACGT\n` });
+  const uids = (indexes) => indexes.map((index) => search.sequences[index].uid).sort();
+  const planned = await prepareLosatSourceBatches({
+    ...search, specs: drawnSpecs, getEntry, buildArgs: () => ['--task', 'blastn'], hashText, protein: false
+  });
+  const between = planned.batches.find((batch) => batch.scope === 'between-sources');
+  assert.deepEqual(uids(between.query.indexes), ['a0', 'a2'], 'an OFF record is not a query');
+  assert.deepEqual(uids(between.subject.indexes), ['b0', 'b1'], 'the database is the whole subject file');
+  const within = planned.batches.find((batch) => batch.scope === 'within-source');
+  assert.deepEqual(uids(within.subject.indexes), ['a1', 'a2'], 'a within-file database keeps the OFF record');
+  assert.equal(planLosatSourceJobs({ ...search, specs: drawnSpecs, buildArgs: () => [] }).jobs.length, planned.batches.length);
+
+  // Turning b1 ON keeps the database of file B, so a0 -> b0 keeps its search scope.
+  const allOn = losatSearchSequences(cards, cards);
+  const allOnPlan = await prepareLosatSourceBatches({
+    ...allOn,
+    specs: [{ queryIndex: 0, subjectIndex: 3 }, { queryIndex: 2, subjectIndex: 3 }],
+    getEntry: async (index) => ({ fasta: `>${allOn.sequences[index].uid}\nACGT\n` }),
+    buildArgs: () => ['--task', 'blastn'], hashText, protein: false
+  });
+  const allOnBetween = allOnPlan.batches.find((batch) => batch.scope === 'between-sources');
+  assert.equal(allOnBetween.subject.hash, between.subject.hash);
+});
 
 // CO-04 (D-19, PD-OI-018 revision 4): two records packaged in one source file
 // search the same database as two single-record files, so an unrequested

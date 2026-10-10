@@ -19,6 +19,10 @@ await Promise.all([
     join(tempRoot, 'js', 'services', 'linear-comparisons.js')
   ),
   cp(
+    join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'record-draw-selection.js'),
+    join(tempRoot, 'js', 'services', 'record-draw-selection.js')
+  ),
+  cp(
     join(repoRoot, 'gbdraw', 'web', 'js', 'mode-profiles.js'),
     join(tempRoot, 'js', 'mode-profiles.js')
   ),

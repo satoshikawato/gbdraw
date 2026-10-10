@@ -1,4 +1,5 @@
 // @ts-check
+import { drawnLinearSequences, omittedLinearUids } from './record-draw-selection.js';
 /**
  * @typedef {'none' | 'adjacent' | 'selected'} LinearComparisonMode
  * @typedef {'losat' | 'upload'} LinearComparisonSource
@@ -359,10 +360,31 @@ const resolvedEdge = ({ edge, queryUid, subjectUid, queryIndex, subjectIndex, so
   losatFilenameActive: edge?.losatFilenameActive === true
 });
 
+// A selected pair that names an OFF record is left out with its record and
+// comes back with it; a pair that names a record without a card stays an issue.
 /**
+ * @param {Record<string, any>} plan
+ * @param {any[]} sequences Every record card.
+ * @param {Iterable<unknown> | null | undefined} recordsOff
+ */
+const drawnComparisonInputs = (plan, sequences, recordsOff) => {
+  const normalized = normalizeLinearComparisonPlan(plan);
+  const omitted = omittedLinearUids(sequences, recordsOff);
+  if (omitted.size > 0) {
+    normalized.edges = normalized.edges.filter((edge) => (
+      !omitted.has(cleanUid(edge.queryUid)) && !omitted.has(cleanUid(edge.subjectUid))
+    ));
+  }
+  return { normalized, sequenceList: drawnLinearSequences(sequences, recordsOff) };
+};
+
+/**
+ * The plan a Generate runs: its pairs join the drawn records, and every index
+ * is a position in the drawn list (`drawnLinearSequences`).
  * @param {{
  *   plan?: Record<string, any>,
  *   sequences?: any[],
+ *   recordsOff?: Iterable<unknown>,
  *   layout?: any[],
  *   losatProgram?: string,
  *   blastpMode?: string
@@ -372,12 +394,14 @@ const resolvedEdge = ({ edge, queryUid, subjectUid, queryIndex, subjectIndex, so
 export const resolveLinearComparisonPlan = ({
   plan = createDefaultLinearComparisonPlan(),
   sequences = [],
+  recordsOff = [],
   layout = [],
   losatProgram = 'blastn',
   blastpMode = 'orthogroup'
 } = {}) => {
-  const normalized = normalizeLinearComparisonPlan(plan);
-  const sequenceList = Array.isArray(sequences) ? sequences : [];
+  const { normalized, sequenceList } = drawnComparisonInputs(
+    plan, Array.isArray(sequences) ? sequences : [], recordsOff
+  );
   const indexByUid = new Map(sequenceList.map((sequence, index) => [cleanUid(sequence?.uid), index]));
   const draftByEdgeKey = new Map();
   normalized.edges.forEach((edge) => {
@@ -581,16 +605,21 @@ const presentationSource = ({ normalizedPlan, candidateKind, draft, resolved }) 
  */
 
 /**
- * @param {{ sequences?: any[], layout?: any[], plan?: Record<string, any>, resolution?: LinearComparisonResolution | null }} [options]
+ * The rows of drawn records and the pairs between them; a pair that names an
+ * OFF record is neither drawn nor listed as unplaced.
+ * @param {{ sequences?: any[], recordsOff?: Iterable<unknown>, layout?: any[], plan?: Record<string, any>,
+ *   resolution?: LinearComparisonResolution | null }} [options]
  */
 export const buildLinearComparisonTimeline = ({
   sequences = [],
+  recordsOff = [],
   layout = [],
   plan = createDefaultLinearComparisonPlan(),
   resolution = null
 } = {}) => {
-  const sequenceList = Array.isArray(sequences) ? sequences : [];
-  const normalizedPlan = normalizeLinearComparisonPlan(plan);
+  const { normalized: normalizedPlan, sequenceList } = drawnComparisonInputs(
+    plan, Array.isArray(sequences) ? sequences : [], recordsOff
+  );
   const indexByUid = new Map(sequenceList.map((sequence, index) => [cleanUid(sequence?.uid), index]));
   const {
     rowByUid,

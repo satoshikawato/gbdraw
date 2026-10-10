@@ -248,6 +248,9 @@ _CONFIG_ROWS = (
     ),
     ModeScopedSetting("config", "annotationSets", "both", "id", "by-binding"),
     ModeScopedSetting("config", "recordDisplayDrafts", "both", "JSON[sourceUid,selector]", "by-scope"),
+    # The keys of the records the drawing leaves out: Linear card uids or
+    # Circular source selectors ``#N`` (record-selection D-05).
+    ModeScopedSetting("config", "recordsOff", "both", None, "copy"),
     ModeScopedSetting(
         "config", "featurePlacementOverrides", "both", "JSON[recordKey,biologicalFeatureId]", "by-side"
     ),

@@ -187,7 +187,11 @@ export const losatRecordGencode = (sequence) => {
 // within one source searches that source without the query record, and a
 // requested self comparison searches the record alone. Explicit translation
 // tables may require compatible subsets within one source.
-export const planLosatSourceJobs = ({ sequences, specs, buildArgs }) => {
+// With records turned OFF (D-07), `sequences` lists the drawn records first,
+// whose indexes the specs use, then the OFF records (`losatSearchSequences`):
+// an OFF record is never a query, but stays in its source's database, so
+// turning a record ON or OFF changes no other record's E-value.
+export const planLosatSourceJobs = ({ sequences, specs, buildArgs, drawnCount = sequences.length }) => {
   const byRecord = new Map();
   groupLinearSourceRecords(sequences).forEach((source) => {
     source.records.forEach(({ index }) => byRecord.set(index, source));
@@ -208,7 +212,7 @@ export const planLosatSourceJobs = ({ sequences, specs, buildArgs }) => {
     if (!job) {
       const queryIndexes = scope === 'between-sources'
         ? querySource.records.map(({ index }) => index).filter(
-            (index) => JSON.stringify(buildArgs(index, subjectIndex)) === argsText
+            (index) => index < drawnCount && JSON.stringify(buildArgs(index, subjectIndex)) === argsText
           )
         : [queryIndex];
       const subjectIndexes = scope === 'self'
@@ -225,10 +229,24 @@ export const planLosatSourceJobs = ({ sequences, specs, buildArgs }) => {
   return { jobs: [...jobs.values()], bySpec };
 };
 
+/**
+ * The records a LOSAT search reads: the drawn records, whose positions the
+ * request and the specs use, then the OFF records, which are database members
+ * only (`planLosatSourceJobs`).
+ * @template {{ uid?: unknown }} T
+ * @param {readonly T[]} drawn
+ * @param {readonly T[]} sequences Every record card, in file order.
+ * @returns {{ sequences: T[], drawnCount: number }}
+ */
+export const losatSearchSequences = (drawn, sequences) => {
+  const drawnSet = new Set(drawn);
+  return { sequences: [...drawn, ...sequences.filter((sequence) => !drawnSet.has(sequence))], drawnCount: drawn.length };
+};
+
 export const prepareLosatSourceBatches = async ({
-  sequences, specs, getEntry, buildArgs, hashText, protein
+  sequences, specs, getEntry, buildArgs, hashText, protein, drawnCount = sequences.length
 }) => {
-  const plan = planLosatSourceJobs({ sequences, specs, buildArgs });
+  const plan = planLosatSourceJobs({ sequences, specs, buildArgs, drawnCount });
   const sides = new Map();
   const prepareSide = async (indexes) => {
     const ordered = [...indexes].sort((a, b) => String(sequences[a].uid).localeCompare(String(sequences[b].uid)));

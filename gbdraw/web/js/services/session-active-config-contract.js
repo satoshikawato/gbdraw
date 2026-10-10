@@ -10,6 +10,7 @@ import { MODE_DEFAULT_FEATURE_TYPES, comparisonStateForMode, managedAdvStateForM
 import { assertSafeObjectKeys } from './safe-object-keys.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { validateRecordDisplayDrafts } from './record-display-model.js';
+import { isRecordDrawKey } from './record-draw-selection.js';
 import { requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
 import { canonicalFeaturePlacements } from './feature-placement.js';
 import { validateScopedFeaturePlacements } from './feature-edit-migration.js';
@@ -104,7 +105,7 @@ export const createDefaultCircularConservation = () => ({ enabled: false, source
 export const CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS = Object.freeze([
   'form', 'adv', 'losat', 'cliOptions', 'colors', 'palette', 'paletteInstantPreviewEnabled', 'rules',
   'qualifierPriorityRules', 'filterMode', 'whitelist', 'blacklistText', 'losatProgram', 'circularConservation',
-  'annotationSets', 'recordDisplayDrafts', 'featurePlacementOverrides', 'modeProfiles', 'unmanagedConfigOverrides',
+  'annotationSets', 'recordDisplayDrafts', 'recordsOff', 'featurePlacementOverrides', 'modeProfiles', 'unmanagedConfigOverrides',
   'linearRecordLayout', 'linearComparisonPlan', 'importedComparisonResolution', 'webEdits'
 ]);
 // The `config` keys the CLI writer of Sessions 40 and 41 derived from its
@@ -129,7 +130,7 @@ export const CURRENT_WRITER_ADV_FIELDS = Object.freeze([...Object.keys(createDef
 const DOMAIN_SHAPES = Object.freeze({ form: 'object', adv: 'object', losat: 'object', cliOptions: 'object', colors: 'object',
   circularConservation: 'object', modeProfiles: 'object', linearRecordLayout: 'object', linearComparisonPlan: 'object', webEdits: 'object',
   importedComparisonResolution: 'object', unmanagedConfigOverrides: 'object',
-  recordDisplayDrafts: 'array', featurePlacementOverrides: 'object', rules: 'array', qualifierPriorityRules: 'array', whitelist: 'array', annotationSets: 'array', palette: 'string', filterMode: 'string', blacklistText: 'string',
+  recordDisplayDrafts: 'array', recordsOff: 'array', featurePlacementOverrides: 'object', rules: 'array', qualifierPriorityRules: 'array', whitelist: 'array', annotationSets: 'array', palette: 'string', filterMode: 'string', blacklistText: 'string',
   losatProgram: 'string', paletteInstantPreviewEnabled: 'boolean' });
 const ROW_FIELDS = { rules: ['feat', 'qual', 'val', 'color', 'cap', 'fromFile'],
   qualifierPriorityRules: ['feat', 'order'], whitelist: ['feat', 'qual', 'key'],
@@ -223,6 +224,11 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, 
   if (!isObject(config.form) || !isObject(config.adv)) throw new Error('Current session is missing its active form or advanced settings.');
   validateDomainShapes(config); validateCollections(config); requireCurrentWebStateFieldNames(config);
   if (has(config, 'recordDisplayDrafts')) validateRecordDisplayDrafts(config.recordDisplayDrafts, { scoped: scopedDrafts });
+  // A Linear card uid or a Circular source selector `#N`, once each; that a
+  // Linear uid names a bound card is checked with the bindings (session-authority.js).
+  if (has(config, 'recordsOff') && (new Set(config.recordsOff).size !== config.recordsOff.length
+    || !config.recordsOff.every((key) => isRecordDrawKey(/** @type {'circular' | 'linear'} */ (mode), key))))
+    throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
   if (has(config, 'featurePlacementOverrides')) {
     if (scopedDrafts) validateScopedFeaturePlacements(config.featurePlacementOverrides);
     else canonicalFeaturePlacements(config.featurePlacementOverrides, mode);

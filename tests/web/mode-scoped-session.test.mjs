@@ -244,3 +244,45 @@ test('Load and Save keep a Linear row without a Depth file as depth null (OV-337
   const second = await save('gallery round trip again');
   assert.deepEqual(second.webFiles.bindings.linearSeqs.map((row) => row.depth), rows.map((row) => row.depth));
 });
+
+// Record selection D-05: each slice keeps the keys of its OFF records; an
+// omitted list draws every record, and a malformed or unbound key is rejected.
+test('a slice keeps its OFF records, and omission draws every record (record-selection D-05)', async () => {
+  resetDrawings();
+  state.mode.value = 'circular';
+  const gallery = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', import.meta.url), 'utf8'));
+  assert.equal((await load(gallery)).status, 'ok');
+  const uid = state.linearSeqs[0].uid;
+  state.drawings.linear.recordsOff.splice(0, Infinity, uid);
+  state.drawings.circular.recordsOff.splice(0, Infinity, '#2');
+  const saved = await save('records off');
+  assert.deepEqual(saved.modes.linear.config.recordsOff, [uid]);
+  assert.deepEqual(saved.modes.circular.config.recordsOff, ['#2']);
+
+  state.drawings.linear.recordsOff.splice(0);
+  state.drawings.circular.recordsOff.splice(0);
+  assert.equal((await load(saved)).status, 'ok');
+  assert.deepEqual([...state.drawings.linear.recordsOff], [uid]);
+  assert.deepEqual([...state.drawings.circular.recordsOff], ['#2']);
+  assert.deepEqual(state.drawings.linear.drawnLinearSeqs.value, []);
+
+  const omitted = structuredClone(saved);
+  delete omitted.modes.linear.config.recordsOff;
+  delete omitted.modes.circular.config.recordsOff;
+  assert.equal((await load(omitted)).status, 'ok');
+  assert.deepEqual([...state.drawings.linear.recordsOff], []);
+  assert.deepEqual([...state.drawings.circular.recordsOff], []);
+
+  const rejected = async (mutate, label, code = 'INPUT_INVALID') => {
+    const session = structuredClone(saved);
+    mutate(session.modes);
+    const result = await load(session);
+    assert.equal(result.status, 'error', label);
+    if (code) assert.equal(result.error?.code, code, label);
+  };
+  await rejected((modes) => { modes.linear.config.recordsOff = ['not-a-bound-card']; }, 'unbound Linear uid');
+  await rejected((modes) => { modes.linear.config.recordsOff = [uid, uid]; }, 'duplicate key');
+  await rejected((modes) => { modes.circular.config.recordsOff = ['contig_2']; }, 'Circular key is not #N');
+  // A domain of the wrong shape fails like every other domain of the slice.
+  await rejected((modes) => { modes.circular.config.recordsOff = '#2'; }, 'not a list', null);
+});

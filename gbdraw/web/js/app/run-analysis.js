@@ -15,7 +15,9 @@ import { rekeyOrthogroupOverrides } from '../services/orthogroup-feature-metadat
 import { resolveLinearRegionBounds } from '../services/feature-metadata-extraction.js';
 import { buildSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import { prepareLosatRuntime, runLosatPairsParallel } from '../services/losat.js';
-import { losatRecordGencode, prepareLosatSourceBatches, splitLosatSourceResult } from '../services/linear-sources.js';
+import {
+  losatRecordGencode, losatSearchSequences, prepareLosatSourceBatches, splitLosatSourceResult
+} from '../services/linear-sources.js';
 import {
   cancelDiagramGeneration,
   DIAGRAM_HELPER_OPERATIONS,
@@ -1307,7 +1309,8 @@ export const createRunAnalysis = ({
     circularRecordList,
     circularRecordDiscovery,
     files,
-    linearSeqs,
+    // Every Linear record card; a Generate reads the drawn ones (`drawing.drawnLinearSeqs`).
+    linearSeqs: allLinearSeqs,
     shouldDeferCircularPreviewUpdates,
     extractedFeatures,
     biologicalFeatures,
@@ -1716,12 +1719,13 @@ export const createRunAnalysis = ({
     const edge = getResolvedLinearEdge(drawing, edgeKey) || cacheEntry;
     const queryIndex = Number(edge?.queryIndex);
     const subjectIndex = Number(edge?.subjectIndex);
+    const drawnSeqs = drawing.drawnLinearSeqs.value;
     const leftLabel = getSeqLabel(
-      linearSeqs[queryIndex],
+      drawnSeqs[queryIndex],
       queryEntry?.recordId || `seq_${Number.isInteger(queryIndex) ? queryIndex + 1 : 1}`
     );
     const rightLabel = getSeqLabel(
-      linearSeqs[subjectIndex],
+      drawnSeqs[subjectIndex],
       subjectEntry?.recordId || `seq_${Number.isInteger(subjectIndex) ? subjectIndex + 1 : 2}`
     );
     return buildLosatFilename(drawing, leftLabel, rightLabel);
@@ -1873,7 +1877,7 @@ export const createRunAnalysis = ({
     if (!drawing.form.show_depth && !customDepthRequested) return '';
     let rows;
     if (linear) {
-      rows = linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
+      rows = drawing.drawnLinearSeqs.value.map((seq) => depthFileSlotsFromValue(seq.depth));
     } else {
       const discoveredCount = (
         circularDiscoveryMatchesCurrentInput() &&
@@ -2127,6 +2131,8 @@ export const createRunAnalysis = ({
     let failureStage = 'request-validation';
     recordSessionLifecycleEvent('generate-start');
     recordSessionLifecycleEvent('generation-input-resolution-start');
+    // The records this Generate draws; every Linear index below is a position in it.
+    const linearSeqs = drawing.drawnLinearSeqs.value;
     const useCommittedComparison = comparisonExecution?.mode === 'inherit';
     const forceEmptyComparison = useCommittedComparison || comparisonExecution?.mode === 'clear';
     const activeComparisonPlanSnapshot = mode.value === 'linear'
@@ -2134,14 +2140,16 @@ export const createRunAnalysis = ({
           forceEmptyComparison
             ? resolveLinearComparisonPlan({
                 plan: { mode: 'none', defaultSource: 'losat', edges: [] },
-                sequences: linearSeqs,
+                sequences: allLinearSeqs,
+                recordsOff: drawing.recordsOff,
                 layout: drawing.linearRecordLayoutEnabled.value ? drawing.linearRecordRows : [],
                 losatProgram: drawing.losatProgram.value,
                 blastpMode: normalizeBlastpMode(drawing.losat.blastp?.mode)
               })
             : comparisonPlanSnapshot || resolveLinearComparisonPlan({
                 plan: drawing.linearComparisonPlan,
-                sequences: linearSeqs,
+                sequences: allLinearSeqs,
+                recordsOff: drawing.recordsOff,
                 layout: drawing.linearRecordLayoutEnabled.value ? drawing.linearRecordRows : [],
                 losatProgram: drawing.losatProgram.value,
                 blastpMode: normalizeBlastpMode(drawing.losat.blastp?.mode)
@@ -3247,10 +3255,11 @@ export const createRunAnalysis = ({
         }
 
         const viewTransformSpecs = [];
-        const buildRegionSpec = (seq, idx) => {
+        const buildRegionSpec = (seq) => {
           const recordIdRaw = seq.region_record_id ? String(seq.region_record_id).trim() : '';
           const wantsReverse = Boolean(seq.region_reverse);
-          const bounds = resolveLinearRegionBounds(seq, idx);
+          // An error names the record card, OFF cards counted.
+          const bounds = resolveLinearRegionBounds(seq, allLinearSeqs.indexOf(seq));
 
           recordSelectors.push(recordIdRaw || '');
 
@@ -3270,6 +3279,11 @@ export const createRunAnalysis = ({
           return null;
         };
 
+        // LOSAT reads the drawn records, then the OFF records of the same
+        // files, which stay in the searched databases (D-07); an index below
+        // `losatSearch.drawnCount` is a position in the drawn list.
+        const losatSearch = losatSearchSequences(linearSeqs, useLosat ? allLinearSeqs : linearSeqs);
+        const losatSeqs = losatSearch.sequences;
         const fastaCache = new Map();
         const fastaHashCache = new Map();
         const sequenceEntriesByKey = new Map();
@@ -3347,7 +3361,7 @@ export const createRunAnalysis = ({
 
         const buildProteinRecordInstanceKeys = async () => {
           const used = new Set();
-          return linearSeqs.map((sequence, index) => {
+          return losatSeqs.map((sequence, index) => {
             const base = String(sequence?.uid || `record-${index + 1}`).trim() || `record-${index + 1}`;
             let key = base;
             let suffix = 2;
@@ -3371,11 +3385,11 @@ export const createRunAnalysis = ({
           const recordSelector = recordSelectors[idx] ?? '';
           const reverseFlag = /** @type {string} */ ('0');
           const sourceFile = lInputType.value === 'gb'
-            ? linearSeqs[idx]?.gb
-            : (useProteinBlastp ? linearSeqs[idx]?.gff : linearSeqs[idx]?.fasta);
+            ? losatSeqs[idx]?.gb
+            : (useProteinBlastp ? losatSeqs[idx]?.gff : losatSeqs[idx]?.fasta);
           const sourceText = sourceFile ? linearFileTextCache.get(sourceFile) : null;
           const pairedFastaFile = lInputType.value === 'gff' && useProteinBlastp
-            ? linearSeqs[idx]?.fasta
+            ? losatSeqs[idx]?.fasta
             : null;
           const recordInstanceKey = useProteinBlastp
             ? (proteinRecordInstanceKeys[idx] || `r_${idx + 1}`)
@@ -3709,8 +3723,8 @@ export const createRunAnalysis = ({
           if (drawing.losatProgram.value === 'blastn') {
             pushArg(args, '--task', drawing.losat.blastn.task);
           } else if (drawing.losatProgram.value === 'tblastx') {
-            pushArg(args, '--query-gencode', losatRecordGencode(linearSeqs[queryIdx]));
-            pushArg(args, '--db-gencode', losatRecordGencode(linearSeqs[subjectIdx]));
+            pushArg(args, '--query-gencode', losatRecordGencode(losatSeqs[queryIdx]));
+            pushArg(args, '--db-gencode', losatRecordGencode(losatSeqs[subjectIdx]));
           } else {
             if (!useOrthogroupBlastp && !useCollinearBlastp) {
               pushArg(args, '--max-hsps-per-subject', 1);
@@ -3751,7 +3765,7 @@ export const createRunAnalysis = ({
           if (losatTiming) losatTiming.inputWriteMs += getNow() - inputWriteStartedAt;
         }
 
-        regionSpecs = linearSeqs.map((seq, idx) => buildRegionSpec(seq, idx));
+        regionSpecs = losatSeqs.map((seq) => buildRegionSpec(seq));
         if (useLosat && useProteinBlastp) {
           proteinRecordInstanceKeys = await buildProteinRecordInstanceKeys();
           const proteinRecordIndexes = (useOrthogroupBlastp || useCollinearBlastp)
@@ -3842,7 +3856,7 @@ export const createRunAnalysis = ({
           }));
 
           const sourcePlan = await prepareLosatSourceBatches({
-            sequences: linearSeqs,
+            ...losatSearch,
             specs: jobSpecs,
             getEntry: getSeqEntry,
             buildArgs: buildLosatArgs,

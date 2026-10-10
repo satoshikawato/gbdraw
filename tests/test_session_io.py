@@ -4128,3 +4128,64 @@ def test_internal_composite_transport_rejects_unsupported_shapes(invalid):
         composite['components'][0] = None
     with pytest.raises(ValidationError):
         session_io_module._attach_current_web_file_bindings({'resources': {}}, inventory)
+
+
+def _linear_session_with_cards(source_session: dict | None = None, **card_fields: str) -> dict:
+    cards = [{"uid": uid, "gb": None, "gff": None, "fasta": None, **card_fields} for uid in ("seq-1", "seq-2")]
+    return build_session_json(
+        SessionBuildContext(
+            mode="linear", output_prefix="out", render_formats=("svg",), source_session=source_session,
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={"linearSeqs": cards},
+        generated_at=datetime(2026, 10, 10),
+        canonical_request=_canonical_request("linear"),
+    )
+
+
+def test_session_mode_slices_keep_records_off_and_reject_unknown_keys() -> None:
+    # Record selection D-05: each slice lists its OFF records once each, a
+    # Linear card uid bound in webFiles or a Circular source selector `#N`.
+    payload = _linear_session_with_cards()
+    modes = payload.setdefault("modes", {})
+    modes.setdefault("linear", {}).setdefault("config", {})["recordsOff"] = ["seq-2"]
+    modes.setdefault("circular", {}).setdefault("config", {})["recordsOff"] = ["#2", "#10"]
+    validate_session(payload)
+
+    for mode, records_off in (
+        ("linear", ["not-a-card"]),
+        ("linear", ["seq-2", "seq-2"]),
+        ("linear", "seq-2"),
+        ("linear", [""]),
+        ("circular", ["contig_2"]),
+        ("circular", ["#0"]),
+        ("circular", [2]),
+    ):
+        invalid = copy.deepcopy(payload)
+        invalid["modes"][mode]["config"]["recordsOff"] = records_off
+        with pytest.raises(ValidationError) as caught:
+            validate_session(invalid)
+        assert caught.value.diagnostic == {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}, (
+            mode, records_off,
+        )
+
+    # A CLI re-save keeps the OFF records of both slices.
+    resaved = build_session_json(
+        SessionBuildContext(mode="linear", output_prefix="again", render_formats=("svg",), source_session=payload),
+        svg_results=(("again", "<svg></svg>"),),
+        embedded_files={"linearSeqs": payload["webFiles"]["bindings"]["linearSeqs"]},
+        generated_at=datetime(2026, 10, 11),
+        canonical_request=_canonical_request("linear"),
+    )
+    assert resaved["modes"]["linear"]["config"]["recordsOff"] == ["seq-2"]
+    assert resaved["modes"]["circular"]["config"]["recordsOff"] == ["#2", "#10"]
+
+
+def test_cli_resave_keeps_file_defaults_of_linear_cards() -> None:
+    # OV-402: the File definition, File subtitle, and inferred definition of a
+    # Linear card survive a CLI re-save, as the Web writer saves them.
+    defaults = {"file_definition": "File def", "file_subtitle": "File sub", "inferred_definition": "Inferred"}
+    payload = _linear_session_with_cards(**defaults)
+    validate_session(payload)
+    for card in payload["webFiles"]["bindings"]["linearSeqs"]:
+        assert {key: card.get(key) for key in defaults} == defaults

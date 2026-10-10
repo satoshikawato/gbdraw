@@ -1099,14 +1099,44 @@ def _validate_mode_slices(session: Mapping[str, Any]) -> None:
         raise ValidationError(
             "Session modes holds a circular and a linear slice only.", diagnostic=_SESSION_FIELDS_INVALID
         )
+    web_files = session.get("webFiles")
+    bindings = web_files.get("bindings") if isinstance(web_files, Mapping) else None
+    cards = bindings.get("linearSeqs") if isinstance(bindings, Mapping) else None
+    bound_uids = {card.get("uid") for card in cards if isinstance(card, Mapping)} if isinstance(cards, list) else set()
     for mode, mode_slice in modes.items():
         _validate_mode_slice_fields(mode_slice, mode)
         config = mode_slice.get("config", {})
+        if "recordsOff" in config:
+            _validate_records_off(config["recordsOff"], mode, bound_uids)
         _validate_display_placement_draft_config(config, mode=mode, scoped=False, current=True)
         _validate_feature_override_drafts(mode_slice.get("features", {}))
         overrides = config.get("unmanagedConfigOverrides")
         if overrides:
             validate_and_project_web_config_overrides(mode=mode, overrides=overrides)
+
+
+def _validate_records_off(records_off: object, mode: str, bound_uids: set[object]) -> None:
+    """Validate a slice's OFF records (record selection D-05), as the Web reader does.
+
+    Each key appears once: a Linear card uid bound in ``webFiles``, or a
+    Circular source selector ``#N``.
+    """
+
+    if (
+        not isinstance(records_off, list)
+        or len(set(map(str, records_off))) != len(records_off)
+        or not all(
+            isinstance(key, str)
+            and key
+            and key == key.strip()
+            and (key in bound_uids if mode == "linear" else re.fullmatch(r"#[1-9][0-9]*", key) is not None)
+            for key in records_off
+        )
+    ):
+        raise ValidationError(
+            f"Session modes.{mode}.config.recordsOff must list distinct record keys of its mode.",
+            diagnostic=_SESSION_FIELDS_INVALID,
+        )
 
 
 def _validate_mode_slice_fields(value: object, mode: str, container: str = "") -> None:
@@ -4779,6 +4809,9 @@ def _attach_current_web_file_bindings(
                 "losat_gencode": sequence.get("losat_gencode", 1),
                 "definition": str(sequence.get("definition") or ""),
                 "record_subtitle": str(sequence.get("record_subtitle") or ""),
+                "file_definition": str(sequence.get("file_definition") or ""),
+                "file_subtitle": str(sequence.get("file_subtitle") or ""),
+                "inferred_definition": str(sequence.get("inferred_definition") or ""),
                 "region_record_id": str(sequence.get("region_record_id") or ""),
                 "region_start": sequence.get("region_start"),
                 "region_end": sequence.get("region_end"),
