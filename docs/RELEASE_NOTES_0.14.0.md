@@ -49,8 +49,11 @@ modes, and one **Undo** restores both.
 changes. On gbdraw.app, **Load an example** opens any Gallery example, and the **Load
 example** button in the header does the same after a Result is shown; `gbdraw
 gui` has no Gallery and no such buttons. The Gallery examples were rebuilt:
-the Vibrio example starts each chromosome at its replication initiator, and the
-BGC and majanivirus_orthogroup examples show alignments.
+the Vibrio example starts each chromosome at its replication initiator, the BGC
+example draws gene arrows with Shaft Width Ratio 0.6 and lines up its records on
+the neoU transporter group (showing how to choose between two candidates in one
+record), and the majanivirus_orthogroup example aligns on a similarity group and
+reverses a record to match.
 
 Each change of a checkbox, radio button, or button is one **Undo** step. Undo
 and Redo are unavailable while Generate runs, and the header says why. Error
