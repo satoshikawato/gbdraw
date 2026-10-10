@@ -54,6 +54,15 @@ import {
  */
 
 /**
+ * A rename of a Legend row from the Legend editor or the feature popup.
+ * `oldCaption` is the caption the source shows; `sourceKey` is its row's
+ * Python key (the Legend editor's `legendEntryKey`, the popup's effective
+ * caption), by which the rules the row draws are read. A renamed row's shown
+ * caption is not its key (OV-294 residual, review M1 of 2b96350f).
+ * @typedef {{ oldCaption: string, sourceKey: PythonLegendKey, newCaption: string, currentColor?: string, siblingCount?: number, [field: string]: unknown }} LegendRenameRequest
+ */
+
+/**
  * @typedef {object} FeatureColorActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
  * @property {((options: { domains: readonly string[] }) => unknown) | null} [showEditorIntent]
@@ -297,22 +306,14 @@ export const createFeatureColorActions = ({
   const findLegendEntryByCaption = (drawing, caption) => entryByCaption(drawing.legendEntries.value, caption);
   // OV-282 (D-26): the color a listed row shows, the palette's for a row the
   // palette colors; never the color the row recorded at the last Generate.
+  // Without a row, nothing is derived (review L4).
   /** @param {DrawingState} drawing @param {LegendEntry | null} entry */
-  const listedRowColor = (drawing, entry) => displayedLegendRowColors(state, drawing).listed(entry);
+  const listedRowColor = (drawing, entry) => (entry ? displayedLegendRowColors(state, drawing).listed(entry) : undefined);
   // R15-3 (OV-285): the deleted row a rename's caption names. The caption only
   // detects the conflict; the row is its Python key (an editor row's own
   // caption), which the composition root's Restore acts on.
   /** @param {DrawingState} drawing @param {string} caption */
   const findDeletedLegendEntryByCaption = (drawing, caption) => entryByCaption(drawing.deletedLegendEntries.value, caption);
-  // The Python key of the row a caption shows (`legendEntryKey`): a renamed
-  // row's shown caption is not its key, so the rules a row draws are read by
-  // its key, never by the caption (OV-294 residual). A caption no row shows
-  // is the key of a rule's row the Result does not list.
-  /** @param {DrawingState} drawing @param {string} caption @returns {PythonLegendKey} */
-  const rowKeyOf = (drawing, caption) => {
-    const entry = findLegendEntryByCaption(drawing, caption) || findDeletedLegendEntryByCaption(drawing, caption);
-    return entry ? legendEntryKey(entry) : /** @type {PythonLegendKey} */ (normalizeCaption(caption));
-  };
 
   /** @param {DrawingState} drawing */
   const findExistingCaptionColor = (drawing, feat, caption) => {
@@ -839,7 +840,7 @@ export const createFeatureColorActions = ({
     const color = resolveColorToHex(request.finalColor || request.currentColor) || '#cccccc';
     if (!caption) return false;
     const features = (request.features || []).filter(Boolean);
-    const sourceRules = getLegendRowRules(rowKeyOf(drawing, oldCaption));
+    const sourceRules = getLegendRowRules(request.sourceKey);
     if (sourceRules.length || features.length) {
       const rules = request.sourceScope === 'group' && sourceRules.length
         ? drawing.manualSpecificRules.map(rule => sourceRules.includes(rule) ? { ...rule, cap: caption, color } : { ...rule })
@@ -885,7 +886,7 @@ export const createFeatureColorActions = ({
   };
 
   /**
-   * @param {{ oldCaption: string, newCaption: string, currentColor?: string, siblingCount?: number, [field: string]: unknown }} request
+   * @param {LegendRenameRequest} request
    * @param {LegendEntry} targetEntry
    * @param {string} targetColor The color the target row shows.
    * @param {boolean | null} mergeAvailable
@@ -962,7 +963,7 @@ export const createFeatureColorActions = ({
     const targetColor = String((deletedTarget
       ? displayedLegendRowColors(state, drawing).deleted(deletedTarget) : listedRowColor(drawing, listedTarget)) || '');
     const ruleOwnedTarget = isDistinctTargetEntry && getLegendRowRules(legendEntryKey(targetEntry)).length > 0;
-    const featureOrRuleRename = features.length > 0 || getLegendRowRules(rowKeyOf(drawing, oldCaption)).length > 0;
+    const featureOrRuleRename = features.length > 0 || getLegendRowRules(request.sourceKey).length > 0;
     // OV-62 (PD-OI-061 amended): two rows merge only when each draws features of
     // one type and the type is the same. A row without features (GC content,
     // GC skew), rows of different types, and a row that spans several types
@@ -1086,7 +1087,7 @@ export const createFeatureColorActions = ({
    */
   const paletteRowType = (drawing, caption, features) => {
     const type = normalizeCaption(caption);
-    if (!features.every((feature) => feature?.type === type) || getLegendRowRules(rowKeyOf(drawing, type)).length > 0) return null;
+    if (!features.every((feature) => feature?.type === type) || getLegendRowRules(/** @type {PythonLegendKey} */ (type)).length > 0) return null;
     const matches = ruleMatcher(drawing.manualSpecificRules);
     return features.every((feature) => matches.matchesAny(feature) === false
       && !getFeatureOverride(drawing.featureColorOverrides, feature)) ? type : null;
@@ -1094,7 +1095,7 @@ export const createFeatureColorActions = ({
 
   /** @param {DrawingState} drawing */
   const applyColorToLegendSpecificRules = async (drawing, caption, color) => {
-    const rowRules = getLegendRowRules(rowKeyOf(drawing, caption));
+    const rowRules = getLegendRowRules(caption);
     const specificRules = rowRules.filter(rule => !isHashSpecificRule(rule));
     if (!specificRules.length) return false;
     const specificMatches = ruleMatcher(specificRules);
@@ -1188,6 +1189,7 @@ export const createFeatureColorActions = ({
       source: 'popup',
       feat,
       oldCaption: currentCaption,
+      sourceKey: /** @type {PythonLegendKey} */ (currentCaption),
       newCaption: requestedCaption,
       currentColor: getCurrentFeatureFillColor(drawing, feat),
       sourceScope: null
@@ -1269,6 +1271,7 @@ export const createFeatureColorActions = ({
     await continueLegendRenameRequest(drawing, {
       source: 'legend',
       oldCaption: normalizeCaption(entry.caption),
+      sourceKey: legendEntryKey(entry),
       newCaption: requestedCaption,
       currentColor: resolveColorToHex(shownColor) || shownColor || '#cccccc',
       features: getFeaturesForLegendCaption(entry.caption),

@@ -6,7 +6,7 @@
 const { test, expect } = require('@playwright/test');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { expectLiveEqualsGenerate, settleLive } = require('./helpers/live-generate-parity.cjs');
-const { generate, open, renameRow } = require('./helpers/live-generate-parity-steps.cjs');
+const { deleteLegendRow, generate, history, open, renameRow } = require('./helpers/live-generate-parity-steps.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -281,6 +281,14 @@ test('a palette row offers and keeps the color it shows after palette edits', as
   await expect.poll(async () => (await facts(page)).palette).toBe(next);
   const nextCds = await paletteCds(next);
   await expectShown(nextCds, 'palette switch');
+  // Review L3 of 2b96350f: the Deleted items list shows a deleted palette row
+  // in the color it showed, not the color it recorded at the last Generate.
+  await deleteLegendRow(page, 'CDS');
+  expect.soft(await page.evaluate(() => String([...document.querySelectorAll('ul[aria-labelledby="deleted-legend-items-label"] li')]
+    .find((item) => item.textContent.includes('CDS'))?.querySelector('div[title]')?.getAttribute('title') || 'no Deleted items row')
+    .toLowerCase()), 'the Deleted items swatch of the CDS row').toBe(nextCds);
+  await history(page, 'undo');
+  await expect.poll(() => legendRowColor(page, 'CDS'), { message: 'Undo of the delete' }).toBe(nextCds);
 
   await renameRow(page, 'CDS', 'Proteins');
   await settleLive(page);

@@ -839,9 +839,11 @@ export const sessionOperationAvailability = (
 /**
  * The color a Legend row records, never its identity (OV-288): one the user
  * set (a Legend color, an editor row's color, the color of a rule's row), or,
- * for a row the palette colors, the swatch Python drew at the last Generate,
- * which no palette, Default colors or Reset edit refreshes. A row shows
- * `displayedLegendRowColors` (app/candidate-render.js; OV-282, D-26).
+ * for a row the palette colors, the swatch the displayed Result showed when
+ * its Legend list was last extracted (a Generate, a Result display, Settings
+ * Reset). That can be a draft palette color, not Python's swatch, and a
+ * palette, Default colors or Reset edit does not refresh it by itself. A row
+ * shows `displayedLegendRowColors` (app/candidate-render.js; OV-282, D-26).
  * @typedef {string & { readonly __brand: 'RecordedLegendColor' }} RecordedLegendColor
  */
 /**

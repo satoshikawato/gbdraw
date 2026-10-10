@@ -869,7 +869,9 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       querySelectorAll: () => []
     };
   };
-  const build = ({ entries, order, rules = [], features = [], legendColorOverrides = {}, deleted = [] }) => {
+  const build = ({ entries, order, rules = [], features = [], legendColorOverrides = {}, deleted = [], scopeDialog = {}, clicked = null }) => {
+    // Each derivation of the Legend row colors reads the displayed Result once.
+    const derivations = { count: 0 };
     const groupEntries = new Map(entries.map((entry) => [entry.caption, fakeEntry(entry.caption)]));
     const legendGroup = {
       querySelector: (selector) => [...groupEntries].find(([caption]) => selector.includes(`"${caption}"`))?.[1] || null
@@ -886,12 +888,13 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
         results: ref([]), selectedResultIndex: ref(0), appliedPaletteColors: ref({ tRNA: '#e8b441' }),
         manualSpecificRules: rules, extractedFeatures: featureList, biologicalFeatures: featureList,
         featureColorOverrides: {}, svgContainer: ref({ querySelector: (selector) => selector === 'svg' ? svgRoot : null }),
-        clickedFeature: ref(null), featureStyleScopeDialog: {}, resetColorDialog: {}, legendRenameDialog,
+        clickedFeature: ref(clicked), featureStyleScopeDialog: scopeDialog, resetColorDialog: {}, legendRenameDialog,
         legendEntries: stateLegendEntries, deletedLegendEntries: ref(deleted), dormantLegendEntries: ref([]),
         legendStrokeOverrides: {}, legendColorOverrides,
         originalLegendOrder: originalOrder, originalLegendColors: ref({}),
         featureStrokeOverrides: {}, skipCaptureBaseConfig: ref(false), skipExtractOnSvgChange: ref(false),
-        addedLegendCaptions: ref(new Set())
+        addedLegendCaptions: ref(new Set()),
+        svgContent: { get value() { derivations.count += 1; return null; } }
       }),
       nextTick: async () => {},
       ruleActions: {
@@ -912,7 +915,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       getFeatureElements: () => [],
       getFeatureFillElements: () => []
     });
-    return { renameActions, committed, legendRenameDialog, stateLegendEntries, originalOrder, legendColorOverrides, deleted };
+    return { renameActions, committed, legendRenameDialog, stateLegendEntries, originalOrder, legendColorOverrides, deleted, derivations };
   };
 
   // PV-02: a renamed renderer-generated row keeps its generated identity, so
@@ -922,6 +925,9 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     order: ['CDS', 'GC content']
   });
   await gc.renameActions.renameLegendEntry(1, 'GC percent');
+  // Review L4: a rename onto a caption no row shows derives the row colors
+  // once, for the source row's color, and none for the absent target.
+  assert.equal(gc.derivations.count, 1, 'one Legend row color derivation');
   assert.equal(gc.stateLegendEntries.value[1].caption, 'GC percent');
   assert.equal(gc.stateLegendEntries.value[1].originalCaption, 'GC content');
   assert.deepEqual(gc.originalOrder.value, ['CDS', 'GC content']);
@@ -961,6 +967,26 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   assert.deepEqual(onRule.committed, [], 'no rule commit');
   assert.deepEqual(onRule.stateLegendEntries.value.map(({ caption, originalCaption }) => [caption, originalCaption]),
     [['CDS', 'CDS'], ['GC percent', 'GC content']]);
+  // Review M1 of 2b96350f: the popup and Apply to all hold the rule's row key
+  // (the feature's effective caption), so a renamed row that shows the same
+  // caption does not take the rule's place: Apply to all recolors the rule and
+  // a group rename recaptions it, as on 579ea705.
+  const locusFeature = (tag) => ({ id: tag, svg_id: tag, type: 'CDS', product: 'p', qualifiers: { locus_tag: [tag] }, start: 1, end: 90 });
+  const [fl1, fl2] = [locusFeature('FL1'), locusFeature('FL2')];
+  const drawnRule = { feat: 'CDS', qual: 'locus_tag', val: '^FL[12]$', color: '#c83366', cap: 'Zeta' };
+  const shownByRenamedRow = (options) => build({
+    entries: [{ caption: 'CDS', color: '#54bcf8' }, { caption: 'Zeta', originalCaption: 'GC content', color: '#a1a1a1' }],
+    order: ['CDS', 'GC content'], rules: [drawnRule], features: [fl1, fl2], ...options
+  });
+  const applyToAll = shownByRenamedRow({ scopeDialog: { feat: fl1, color: '#123456', legendName: 'Zeta' } });
+  await applyToAll.renameActions.handleColorScopeChoice('caption');
+  assert.deepEqual(applyToAll.committed.map((rules) => rules.map(({ val, color, cap }) => [val, color, cap])),
+    [[['^FL[12]$', '#123456', 'Zeta']]], 'Apply to all recolors the rule');
+  const popupRename = shownByRenamedRow({ clicked: { svg_id: 'FL1', feat: fl1, legendName: 'Eta', appliedLegendName: 'Zeta' } });
+  await popupRename.renameActions.handleLegendNameCommit();
+  await popupRename.renameActions.handleLegendRenameChoice('group');
+  assert.deepEqual(popupRename.committed.map((rules) => rules.map(({ val, cap }) => [val, cap])),
+    [[['^FL[12]$', 'Eta']]], 'a group rename recaptions the rule');
 
   // PV-04 (PD-OI-061 amended, OV-62): rows that draw features of one same type
   // ask Merge, Suffix, or Cancel before any rule commit. Any other pair, with

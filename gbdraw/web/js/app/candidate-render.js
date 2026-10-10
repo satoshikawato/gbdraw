@@ -302,8 +302,9 @@ export const draftLegendPanelColors = ({ legendColorOverrides, rules, pythonRows
 // OV-282 (D-26): the one reader of the color a Legend row of the displayed
 // Result shows, listed or deleted: the palette's for a row the palette colors
 // (`draftLegendPanelColors`), else the color the row records. The Legend
-// panel, "Use existing color" and the rename and color requests read it; a
-// row's recorded color is never refreshed from the palette.
+// panel, "Use existing color" and the rename and color requests read it. No
+// palette edit writes a row's recorded color; only a Legend extraction
+// records the swatch the Result shows (`RecordedLegendColor`).
 /**
  * @param {DisplayedLegendState & Parameters<typeof appliedFeatureColors>[0] & { svgContent?: { value?: unknown } }} state
  * @param {Parameters<typeof displayedLegendRowContext>[1] & Pick<DrawingState,
