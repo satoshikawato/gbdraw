@@ -1462,7 +1462,7 @@
                                 <div class="flex items-center justify-between gap-2">
                                     <span class="input-label text-[10px]">Record <help-tip id="help-circular-record" text="Select one stable record identity for a single Circular diagram. Leave this on All records to keep separate-diagram batch output."></help-tip></span>
                                     <button
-                                        v-if="circularRecordDiscoveryState.status === 'ready' && circularRecordDiscoveryState.records.length > 1"
+                                        v-if="circularRecordDiscoveryState.status === 'ready' ? circularRecordDiscoveryState.records.length > 1 : circularRecordDiscoveryState.hasInput && circularRecordDiscoveryState.status === 'deferred'"
                                         type="button"
                                         data-history-ignore
                                         data-record-list-open="circular"
@@ -2536,8 +2536,8 @@
                                 >
                                     <legend class="px-1 text-[9px] font-semibold text-amber-800">Unplaced draft</legend>
                                     <div class="grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-2" data-comparison-focus="pair-row">
-                                        <select :value="unplaced.draft.queryUid" @change="setLinearComparisonEndpoint(unplaced.draft.id, 'queryUid', $event.target.value)" :aria-label="`From record for unplaced comparison ${unplaced.draft.id}`" class="form-input form-input-compact min-w-0" :disabled="!semanticMutationAvailable"><option v-for="(seq, idx) in linearSeqs" :key="`q-${unplaced.draft.id}-${seq.uid}`" :value="seq.uid">From #{{ idx + 1 }}</option></select>
-                                        <select :value="unplaced.draft.subjectUid" @change="setLinearComparisonEndpoint(unplaced.draft.id, 'subjectUid', $event.target.value)" :aria-label="`To record for unplaced comparison ${unplaced.draft.id}`" class="form-input form-input-compact min-w-0" :disabled="!semanticMutationAvailable"><option v-for="(seq, idx) in linearSeqs" :key="`s-${unplaced.draft.id}-${seq.uid}`" :value="seq.uid">To #{{ idx + 1 }}</option></select>
+                                        <select :value="unplaced.draft.queryUid" @change="setLinearComparisonEndpoint(unplaced.draft.id, 'queryUid', $event.target.value)" :aria-label="`From record for unplaced comparison ${unplaced.draft.id}`" class="form-input form-input-compact min-w-0" :disabled="!semanticMutationAvailable"><template v-for="(seq, idx) in linearSeqs" :key="`q-${unplaced.draft.id}-${seq.uid}`"><option v-if="recordSelection.isDrawn('linear', seq.uid)" :value="seq.uid">From #{{ idx + 1 }}</option></template></select>
+                                        <select :value="unplaced.draft.subjectUid" @change="setLinearComparisonEndpoint(unplaced.draft.id, 'subjectUid', $event.target.value)" :aria-label="`To record for unplaced comparison ${unplaced.draft.id}`" class="form-input form-input-compact min-w-0" :disabled="!semanticMutationAvailable"><template v-for="(seq, idx) in linearSeqs" :key="`s-${unplaced.draft.id}-${seq.uid}`"><option v-if="recordSelection.isDrawn('linear', seq.uid)" :value="seq.uid">To #{{ idx + 1 }}</option></template></select>
                                     </div>
                                     <ul class="space-y-0.5 text-[9px] leading-snug text-amber-800">
                                         <li v-for="issue in unplaced.issues" :key="`${unplaced.draft.id}-${issue.code}`">{{ issue.message }}</li>

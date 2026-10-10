@@ -33,6 +33,9 @@ import {
  *   Removes a whole file inside the open History step (D-06 Remove File).
  * @typedef {(mode: RecordSelectionMode, keys: RecordDrawKey[]) => unknown} DeleteRecordSettingsPort
  *   Deletes the settings and edits of records inside the open History step (D-08).
+ * @typedef {(mode: RecordSelectionMode) => Promise<unknown>} PrepareRecordsPort
+ *   Reads the records of the mode's inputs when they are not read yet (after a
+ *   Session load), so the list shows their lengths and settings.
  * @typedef {object} RecordSelectionOptions
  * @property {<T extends object>(value: T) => T} reactive Vue `reactive`.
  * @property {<T>(getter: () => T) => { readonly value: T }} computed Vue `computed`.
@@ -44,6 +47,7 @@ import {
  * @property {AfterRecordSetChangePort} afterRecordSetChange
  * @property {RemoveSourcePort} removeSource
  * @property {DeleteRecordSettingsPort} deleteRecordSettings
+ * @property {PrepareRecordsPort} prepareRecords
  * @property {RecordListRequest[]} autoOpenRequests The files whose upload opens their list (D-04), in
  *   upload order; the composition root adds one when a discovery of an upload finds more records than
  *   `WEB_UX_PROFILE.recordList.autoOpenAbove`.
@@ -59,8 +63,10 @@ import {
 /** @param {RecordSelectionOptions} options */
 export const createRecordSelection = ({
   reactive, computed, recordsOff, source, runUndoable, withDialogChoice, closeAfterDialogChoice,
-  afterRecordSetChange, removeSource, deleteRecordSettings, autoOpenRequests
+  afterRecordSetChange, removeSource, deleteRecordSettings, prepareRecords, autoOpenRequests
 }) => {
+  /** @param {RecordSelectionMode} mode A failed read leaves the records unread; the list shows what is known. */
+  const readRecords = (mode) => prepareRecords(mode).catch(() => null);
   const offSets = computed(() => ({
     linear: new Set(recordsOff('linear')),
     circular: new Set(recordsOff('circular'))
@@ -162,9 +168,10 @@ export const createRecordSelection = ({
    * @param {RecordSelectionMode} mode
    * @param {RecordDrawKey[]} keys
    */
-  const deleteSettings = (mode, keys) => {
+  const deleteSettings = async (mode, keys) => {
     const off = keys.filter((key) => !isDrawn(mode, key));
-    if (off.length === 0) return Promise.resolve(false);
+    if (off.length === 0) return false;
+    await readRecords(mode);
     return runUndoable('Delete record settings', () => deleteRecordSettings(mode, off));
   };
   const deleteShownOffSettings = () => deleteSettings(listMode(), recordListView.value.offWithSettings);
@@ -174,7 +181,8 @@ export const createRecordSelection = ({
    * @param {string} sourceKey
    * @param {HTMLElement | null} [returnFocus]
    */
-  const openRecordList = (mode, sourceKey, returnFocus = null) => {
+  const openRecordList = async (mode, sourceKey, returnFocus = null) => {
+    await readRecords(mode);
     if (!source(mode, sourceKey)) return false;
     Object.assign(recordList, { open: true, mode, sourceKey, query: '', sort: 'file', returnFocus });
     return true;

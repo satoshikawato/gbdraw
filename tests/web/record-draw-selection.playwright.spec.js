@@ -147,6 +147,18 @@ test('a Linear record turned OFF leaves the request, its pairs, and its row, and
   expect(on.records.map((entry) => entry.presentation.gridRow)).toEqual([1, 2, 3]);
   expect(on.comparisons.map((entry) => [entry.queryRecordIndex, entry.subjectRecordIndex])).toEqual([[0, 1], [1, 2]]);
   expect(await drawnRecordIds(page)).toEqual([['R1', 'R2', 'R3']]);
+
+  // An unplaced draft's endpoints offer the drawn cards by card number (review #992, finding 2).
+  await (await drawCheckbox(page, 'R2')).uncheck();
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const [a, , c] = app.linearSeqs.map((seq) => seq.uid);
+    const edge = (id) => ({ id, queryUid: a, subjectUid: c, included: true, fileActive: false,
+      losatFilenameActive: false, source: 'losat', file: null, losatFilename: '' });
+    Object.assign(app.linearComparisonPlan, { mode: 'selected', edges: [edge('first'), edge('again')] });
+  });
+  const unplaced = page.locator('[data-linear-unplaced-draft="again"] select').first();
+  await expect.poll(() => unplaced.locator('option').allTextContents()).toEqual(['From #1', 'From #3']);
 });
 
 test('an upload with 25 records opens its list; search, sort, bulk OFF, and the D-06 question', async ({ page, browser }) => {
@@ -185,7 +197,9 @@ test('an upload with 25 records opens its list; search, sort, bulk OFF, and the 
   await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(dialog).toBeHidden();
 
-  // A Session load reads the File again but opens no list.
+  // After a Session load the records are read on demand (review #992,
+  // finding 3): Choose records… reads them, so the list shows their lengths.
+  // That read is no upload, so no list waits behind it (D-04, finding 4).
   const saved = await saveSession(page, 'record-list');
   const fresh = await browser.newPage();
   try {
@@ -193,6 +207,15 @@ test('an upload with 25 records opens its list; search, sort, bulk OFF, and the 
     await loadSession(fresh, saved);
     await expect.poll(() => fresh.evaluate(() => window.__GBDRAW_APP__.linearSeqs
       .filter((seq) => window.__GBDRAW_APP__.recordSelection.isDrawn('linear', seq.uid)).length)).toBe(14);
+    await expect(fresh.locator('[data-record-list-dialog]')).toHaveCount(0);
+    await fresh.locator('[data-linear-source-card]').first().locator('[data-record-list-open]').click();
+    const reopened = fresh.locator('[data-record-list-dialog]');
+    await expect(reopened.locator('[data-record-list-count]')).toHaveText('14 of 25 records drawn');
+    await reopened.getByRole('combobox', { name: 'Sort', exact: true }).selectOption('length-desc');
+    await expect(reopened.locator('[data-record-list-row]').first()).toHaveAttribute('data-record-list-row',
+      await fresh.evaluate(() => window.__GBDRAW_APP__.linearSeqs.at(-1).uid));
+    await expect(reopened.locator('li').first()).toContainText('bp');
+    await reopened.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(fresh.locator('[data-record-list-dialog]')).toHaveCount(0);
   } finally {
     await fresh.close();

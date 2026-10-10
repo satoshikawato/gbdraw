@@ -291,6 +291,33 @@ test('a slice keeps its OFF records, and omission draws every record (record-sel
   await rejected((modes) => { modes.circular.config.recordsOff = '#2'; }, 'not a list');
 });
 
+// Review #992 finding 1: a Session without a slice of a mode (a Gallery
+// Session of one mode) draws every record of that mode too, and saves again.
+test('a Session without a mode slice turns every record of that mode ON (record selection)', async () => {
+  resetDrawings();
+  const gallery = (name) => JSON.parse(readFileSync(new URL(`../../gbdraw/web/gallery/sessions/${name}.gbdraw-session.json`, import.meta.url), 'utf8'));
+  assert.equal((await load(gallery('lambda_basic_linear'))).status, 'ok');
+  state.drawings.linear.recordsOff.splice(0, Infinity, state.linearSeqs[0].uid);
+  state.drawings.circular.recordsOff.splice(0, Infinity, '#2');
+  assert.equal((await load(gallery('HmmtDNA_basic_circular'))).status, 'ok');
+  assert.deepEqual([...state.drawings.linear.recordsOff], []);
+  assert.deepEqual([...state.drawings.circular.recordsOff], []);
+  await save('circular only, saved again');
+});
+
+// Review #992 finding 6: Reset Settings keeps which records are ON in both
+// drawings (PD-OI-070, PD-OI-091).
+test('Reset Settings keeps the OFF records of both drawings (record selection)', async () => {
+  const { resetSettings } = await import('../../gbdraw/web/js/services/reset.js');
+  state.drawings.linear.recordsOff.splice(0, Infinity, 'card-b');
+  state.drawings.circular.recordsOff.splice(0, Infinity, '#3');
+  resetSettings(state);
+  assert.deepEqual([...state.drawings.linear.recordsOff], ['card-b']);
+  assert.deepEqual([...state.drawings.circular.recordsOff], ['#3']);
+  state.drawings.linear.recordsOff.splice(0);
+  state.drawings.circular.recordsOff.splice(0);
+});
+
 // Record selection 2.5: a Linear drawing with every card OFF (only a
 // hand-edited Session reaches it) fails Generate and Save with NONE_DRAWN.
 test('a Linear drawing with no ON record names the fix', () => {

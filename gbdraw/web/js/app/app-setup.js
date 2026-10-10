@@ -5711,6 +5711,11 @@ export const createAppSetup = () => {
     },
     removeSource: removeRecordSource,
     deleteRecordSettings,
+    // After a Session load the records are read on demand, as Generate reads them.
+    prepareRecords: async (listMode) => {
+      if (listMode === 'linear') return linearRecordSelector.refresh();
+      return getCircularRecordDiscoveryState().status === 'ready' ? null : inspectCircularSourceRecords();
+    },
     autoOpenRequests: recordListRequests
   });
 

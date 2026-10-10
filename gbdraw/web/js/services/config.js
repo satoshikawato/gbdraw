@@ -4239,6 +4239,9 @@ const resetSessionBaseline = () => {
   resetSettingsState(state);
   resetLayoutState(state);
   resetRightDrawerState(state);
+  // Reset Settings keeps which records are ON (PD-OI-070); a new Session draws
+  // every record its slices do not turn OFF (PD-OI-091).
+  for (const drawing of Object.values(state.drawings)) drawing.recordsOff.splice(0);
   state.mode.value = 'circular';
   state.cInputType.value = 'gb';
   state.lInputType.value = 'gb';

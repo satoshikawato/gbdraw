@@ -17,7 +17,7 @@ import {
 const computed = (getter) => ({ get value() { return getter(); } });
 const reactive = (value) => value;
 
-const makeOwner = ({ sources, recordsOff = { linear: [], circular: [] }, requests = [] } = {}) => {
+const makeOwner = ({ sources, recordsOff = { linear: [], circular: [] }, requests = [], prepareRecords = async () => {} } = {}) => {
   const log = [];
   const offLists = { linear: [...recordsOff.linear], circular: [...recordsOff.circular] };
   const choice = { pending: false };
@@ -36,6 +36,7 @@ const makeOwner = ({ sources, recordsOff = { linear: [], circular: [] }, request
     afterRecordSetChange: (mode) => log.push(`invalidate:${mode}`),
     removeSource: (mode, key) => { log.push(`remove:${mode}:${key}`); return true; },
     deleteRecordSettings: (mode, keys) => { log.push(`delete:${mode}:${keys.join(',')}`); return true; },
+    prepareRecords: async (mode) => { await prepareRecords(mode); log.push(`prepare:${mode}`); },
     autoOpenRequests: requests
   });
   return { owner, offLists, log, choice };
@@ -83,18 +84,18 @@ test('Remove File removes the whole file in one step and closes its list (D-06)'
   const { owner, log } = makeOwner({
     sources: { circular: [linearFile('circular', 2, 'genome.gb')] }, recordsOff: { linear: [], circular: ['circular-1'] }
   });
-  owner.openRecordList('circular', 'circular');
+  await owner.openRecordList('circular', 'circular');
   await owner.toggleRecord('circular', 'circular', 'circular-2', checkbox(false));
   assert.equal(owner.removeFileDialog.open, true);
   owner.resolveRemoveFile('remove');
-  assert.deepEqual(log, ['step:Remove File', 'remove:circular:circular']);
+  assert.deepEqual(log, ['prepare:circular', 'step:Remove File', 'remove:circular:circular']);
   assert.equal(owner.removeFileDialog.open, false);
   assert.equal(owner.recordListView.value.open, false);
 });
 
 test('Select all and Select none act on the rows shown; a bulk change that empties the file applies nothing', async () => {
   const { owner, offLists, log } = makeOwner({ sources: { linear: [linearFile('f', 12)] } });
-  owner.openRecordList('linear', 'f');
+  await owner.openRecordList('linear', 'f');
   owner.setRecordListQuery('contig_1');
   // contig_1, contig_10, contig_11, contig_12
   assert.equal(owner.recordListView.value.rows.length, 4);
@@ -114,14 +115,14 @@ test('Select all and Select none act on the rows shown; a bulk change that empti
   ]);
 });
 
-test('the list sorts for display only, numbers as numbers (D-10)', () => {
+test('the list sorts for display only, numbers as numbers (D-10)', async () => {
   const file = { key: 'f', name: 'f.gb', records: [
     { key: 'a', recordId: 'contig_10', length: 5 },
     { key: 'b', recordId: 'contig_2', length: 50 },
     { key: 'c', recordId: 'contig_1', length: 20 }
   ] };
   const { owner } = makeOwner({ sources: { linear: [file] } });
-  owner.openRecordList('linear', 'f');
+  await owner.openRecordList('linear', 'f');
   const order = () => owner.recordListView.value.rows.map((row) => row.recordId);
   assert.deepEqual(order(), ['contig_10', 'contig_2', 'contig_1']);
   owner.setRecordListSort('id-asc');
@@ -147,14 +148,15 @@ test('Delete settings reaches only OFF records, as one step (D-08)', async () =>
   const { owner, log } = makeOwner({ sources: { linear: [file] }, recordsOff: { linear: ['f-1', 'f-3'], circular: [] } });
   assert.equal(await owner.deleteSettings('linear', ['f-2']), false);
   await owner.deleteSettings('linear', ['f-1', 'f-2']);
-  owner.openRecordList('linear', 'f');
+  await owner.openRecordList('linear', 'f');
   // The OFF rows shown with settings: f-1 only (f-3 has none, f-2 is ON).
   assert.deepEqual(owner.recordListView.value.offWithSettings, ['f-1']);
   await owner.deleteShownOffSettings();
-  assert.deepEqual(log, ['step:Delete record settings', 'delete:linear:f-1', 'step:Delete record settings', 'delete:linear:f-1']);
+  assert.deepEqual(log, ['prepare:linear', 'step:Delete record settings', 'delete:linear:f-1', 'prepare:linear',
+    'prepare:linear', 'step:Delete record settings', 'delete:linear:f-1']);
 });
 
-test('an upload with many records opens its list; several open one at a time (D-04)', () => {
+test('an upload with many records opens its list; several open one at a time (D-04)', async () => {
   const requests = [];
   const { owner } = makeOwner({ sources: { linear: [linearFile('a', 25), linearFile('b', 30)] }, requests });
   assert.equal(owner.recordListView.value.open, false);
@@ -164,7 +166,7 @@ test('an upload with many records opens its list; several open one at a time (D-
   owner.closeRecordList();
   assert.equal(owner.recordListView.value.sourceKey, 'b');
   // Choose records… on another file shows that one first; the request waits.
-  owner.openRecordList('linear', 'a');
+  await owner.openRecordList('linear', 'a');
   assert.equal(owner.recordListView.value.sourceKey, 'a');
   owner.closeRecordList();
   assert.equal(owner.recordListView.value.sourceKey, 'b');
@@ -236,4 +238,21 @@ test('a card holds settings when a field Delete settings resets differs from its
   assert.equal(linearCardHasSettings({ ...RECORD_SETTINGS_DEFAULTS, record_subtitle: 'x' }), true);
   assert.equal(linearCardHasSettings({ ...RECORD_SETTINGS_DEFAULTS, losat_gencode: 11 }), true);
   assert.equal(linearCardHasSettings({ ...RECORD_SETTINGS_DEFAULTS, region_reverse: true }), true);
+});
+
+// Review #992 finding 3: after a Session load the records of a file are read
+// only on demand; the list and Delete settings read them first.
+test('the list and Delete settings read the records of a file first', async () => {
+  let ready = false;
+  const file = linearFile('f', 2);
+  const { owner, log } = makeOwner({
+    sources: { linear: [{ ...file, get records() { return ready ? file.records : []; } }] },
+    recordsOff: { linear: ['f-2'], circular: [] },
+    prepareRecords: async () => { ready = true; }
+  });
+  assert.equal(await owner.openRecordList('linear', 'f'), true);
+  assert.deepEqual(owner.recordListView.value.rows.map((row) => row.length), [100, 200]);
+  ready = false;
+  await owner.deleteSettings('linear', ['f-2']);
+  assert.deepEqual(log.slice(-3), ['prepare:linear', 'step:Delete record settings', 'delete:linear:f-2']);
 });
