@@ -40,11 +40,11 @@ write-up of a release.
   drawer at once. Before, the drawer showed the reference in **Active plan**
   but kept both buttons disabled until you chose the same reference again
   (OV-381).
-- Similarity alignment (web app): changing a comparison before Generate, such
-  as choosing **Upload BLAST TSV** for a pair, no longer clears the active
-  alignment. It is a pending form edit; the next Generate validates the
-  alignment's exact anchors. Before, the alignment was cleared at once with
-  "Alignment cleared: comparison configuration changed." (OV-380).
+- Similarity alignment (web app): choosing **Upload BLAST TSV** for a pair
+  before choosing its file keeps the active alignment, because the pair has no
+  new data yet. Before, the alignment was cleared at once with "Alignment
+  cleared: comparison configuration changed." Choosing a file, another
+  program or mode, or any other comparison change still clears it (OV-380).
 - Feature popup (web app): while the first popup after a page or Session load
   waits for Python to match the color rules, the toolbar shows **Preparing
   feature details…**, and **Save Session** and **Load Session** stay available.

@@ -177,7 +177,8 @@ import {
   missingUploadPairsToResolve,
   normalizeLinearComparisonPlan,
   plainTextLinearRecordLabel,
-  reconcileLinearComparisonPlan
+  reconcileLinearComparisonPlan,
+  resolveLinearComparisonPlan
 } from '../services/linear-comparisons.js';
 import {
   projectLinearComparisonLosatModeSelection,
@@ -558,11 +559,43 @@ export const createAppSetup = () => {
     }
   };
 
+  // OV-380: a pair set to a source that has no data yet (Upload BLAST TSV
+  // without a file) compares nothing new, so it keeps the alignment. Every
+  // other pair must keep its current comparison; the pending pairs count as
+  // their current one.
+  /** @typedef {import('../services/linear-comparisons.js').LinearComparisonResolvedEdge} ResolvedEdge */
+  /** @param {DrawingState} drawing @param {import('../services/linear-comparisons.js').LinearComparisonPlan} normalized */
+  const onlyPendingSourcesChanged = (drawing, normalized) => {
+    /** @param {ResolvedEdge} edge */
+    const pending = (edge) => edge.source === LINEAR_COMPARISON_SOURCES.UPLOAD && !(edge.fileActive && edge.file);
+    /** @type {readonly ResolvedEdge[]} */
+    const before = drawing.linearComparisonResolution.value.edges;
+    /** @type {readonly ResolvedEdge[]} */
+    const after = resolveLinearComparisonPlan({
+      plan: normalized, sequences: linearSeqs, layout: effectiveLinearComparisonLayout(drawing),
+      losatProgram: drawing.losatProgram.value, blastpMode: drawing.losat.blastp?.mode
+    }).edges;
+    if (!after.some(pending)) return false;
+    const beforeByKey = new Map(before.map((edge) => [edge.edgeKey, edge]));
+    const effective = after.map((edge) => (pending(edge) ? beforeByKey.get(edge.edgeKey) : edge));
+    return effective.length === before.length && effective.every((edge, index) => (
+      edge?.edgeKey === before[index].edgeKey && edge.source === before[index].source
+      && edge.file === before[index].file && edge.losatFilename === before[index].losatFilename
+    ));
+  };
+
   /** @param {DrawingState} drawing */
   const replaceLinearComparisonPlan = (drawing, nextPlan, { invalidate = true } = {}) => {
-    // OV-380: a comparison edit is a pending form edit; it keeps the committed
-    // alignment, whose exact anchors the next Generate validates.
     const normalized = normalizeLinearComparisonPlan(nextPlan);
+    const changed = normalized.mode !== drawing.linearComparisonPlan.mode
+      || normalized.defaultSource !== drawing.linearComparisonPlan.defaultSource
+      || normalized.edges.length !== drawing.linearComparisonPlan.edges.length
+      || normalized.edges.some((edge, index) => (
+        !sameLinearComparisonEdge(edge, drawing.linearComparisonPlan.edges[index])
+      ));
+    if (invalidate && changed && !onlyPendingSourcesChanged(drawing, normalized)) {
+      similarityAlignmentActions?.clearForMutation?.('comparison configuration changed.');
+    }
     drawing.linearComparisonPlan.mode = normalized.mode;
     drawing.linearComparisonPlan.defaultSource = normalized.defaultSource;
     drawing.linearComparisonPlan.edges.splice(
@@ -788,6 +821,7 @@ export const createAppSetup = () => {
     if (!selection.selectable || !selection.patch) return false;
     const nextProgram = selection.patch.losatProgram;
     if (drawing.losatProgram.value === nextProgram) return true;
+    similarityAlignmentActions?.clearForMutation?.('comparison program changed.');
     drawing.losatProgram.value = nextProgram;
     invalidateLinearComparisonArtifacts(drawing);
     return true;
@@ -804,6 +838,7 @@ export const createAppSetup = () => {
     if (!selection.selectable || !selection.patch) return false;
     const nextBlastpMode = selection.patch.blastpMode;
     if (drawing.losat.blastp?.mode === nextBlastpMode) return true;
+    similarityAlignmentActions?.clearForMutation?.('comparison mode changed.');
     const hitLimits = drawing.losat.blastp.hitLimitsByMode ||= createDefaultLosatpHitLimits();
     hitLimits[drawing.losat.blastp.mode] = {
       candidateLimit: drawing.losat.blastp.candidateLimit,
