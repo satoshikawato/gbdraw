@@ -2373,3 +2373,28 @@ def test_declared_command_invocation_keeps_its_declared_inputs(tmp_path: Path) -
         "-o",
         "card-id",
     ]
+
+
+def test_feature_sources_of_a_web_saved_session_come_from_its_record_resources() -> None:
+    # A Web-saved Session has no cliInvocation; its input names live in
+    # webFiles.resourceOriginalNames, keyed by each record's source resource.
+    session = {
+        "renderRequest": {
+            "records": [
+                {"recordKey": "record-1", "source": {"kind": "genbank", "resourceId": "record-1-genbank"}},
+                {"recordKey": "record-2", "source": {"kind": "genbank", "resourceId": "record-2-genbank"}},
+            ]
+        },
+        "webFiles": {
+            "resourceOriginalNames": {
+                "colors-default-colors-file": "colors-default-colors.tsv",
+                "record-2-genbank": "second.gbk",
+                "record-1-genbank": "first.gbk",
+            }
+        },
+    }
+
+    assert gallery_assets_module._session_feature_sources(session) == [
+        "first.gbk",
+        "second.gbk",
+    ]

@@ -519,6 +519,21 @@ def _session_feature_sources(session: dict[str, Any]) -> list[str]:
                 continue
             add_name(binding.get("name"))
 
+    # A Web-saved Session has no cliInvocation: name each record's source
+    # resources from webFiles.resourceOriginalNames, in record order.
+    web_files = session.get("webFiles")
+    original_names = web_files.get("resourceOriginalNames") if isinstance(web_files, dict) else None
+    render_request = session.get("renderRequest")
+    records = render_request.get("records") if isinstance(render_request, dict) else None
+    if isinstance(original_names, dict) and isinstance(records, list):
+        for record in records:
+            source = record.get("source") if isinstance(record, dict) else None
+            if not isinstance(source, dict):
+                continue
+            for key, resource_id in source.items():
+                if key.endswith("esourceId") and isinstance(resource_id, str):
+                    add_name(original_names.get(resource_id))
+
     files = session.get("files")
     if isinstance(files, dict):
         c_gb = files.get("c_gb")
