@@ -1503,7 +1503,7 @@ test('Generate asks how to resolve Upload pairs without a BLAST TSV', async ({ p
   expect(bothToNone).toEqual({ status: 'ok', undoAdded: 2, comparisons: [] });
   await expect(dialog).toHaveCount(0);
   expect(await pairSources()).toEqual([]);
-  expect(await page.evaluate(async () => {
+  expect(await evaluateWithRetainedPromise(page, async () => {
     const history = window.__GBDRAW_HISTORY__;
     await history.undo();
     const label = history.undoLabel();
