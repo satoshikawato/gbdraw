@@ -2,7 +2,7 @@
 import { resolveColorToHex } from '../utils/color-utils.js';
 import { parseSpecificRules } from './file-imports.js';
 import { ruleMatcher } from './rule-matchers.js';
-/** @import { PythonLegendKey, PythonLegendRow } from './legend-svg.js' */
+/** @import { PythonLegendKey, PythonLegendRow, SwatchColor } from './legend-svg.js' */
 
 const normalizeText = (value) => String(value ?? '').trim();
 const normalizeColor = (value) => String(resolveColorToHex(normalizeText(value)) || '').toLowerCase();
@@ -76,6 +76,13 @@ const fillIdentity = (value) => {
   const color = normalizeColor(value);
   return /^#[0-9a-f]{3}$/.test(color) ? `#${[...color.slice(1)].map((char) => char + char).join('')}` : color;
 };
+/** @param {unknown} value @returns {SwatchColor} */
+const fillOf = (value) => /** @type {SwatchColor} */ (fillIdentity(value));
+// The key of the row Python draws under a caption: the caption itself (a
+// feature type's row by the type, a rule's row by the rule's caption), where
+// N-06 allocates no "<caption> [<hex>]" key.
+/** @param {string} caption @returns {PythonLegendKey} */
+const captionRowKey = (caption) => /** @type {PythonLegendKey} */ (caption);
 const allocatedRowBase = (rule) => `${rule.cap} [${fillIdentity(rule.color)}]`;
 const isAllocatedRow = (caption, rule) => {
   const base = allocatedRowBase(rule);
@@ -97,16 +104,32 @@ const drawsRow = (row, rule) => row.color === fillIdentity(rule.color)
  *   Result (`pythonLegendRows`; none before the first Generate). A rule is compared with each row's key
  *   and the fill Python drew for it, as Python allocates (`generated_fills`, R15-4), never with the
  *   color a row's swatch shows (OV-294).
- * @property {readonly string[]} [originalLegendOrder]
- * @property {readonly Partial<SpecificColorRule>[]} [rules]
- * @property {Iterable<LegendRowFeature>} [features] The features of the displayed Result, with their
- *   known rule matches (`rowsLeftOut`).
+ * @property {readonly string[]} originalLegendOrder
+ * @property {readonly Partial<SpecificColorRule>[]} rules
+ * @property {Iterable<LegendRowFeature>} features The features the displayed Result draws
+ *   (feature-visibility.js `displayedDrawnFeatures`), with their known rule matches (`rowsLeftOut`).
  */
 
-// The names Python gives the rows of a feature type (`_generated_legend_fills`):
-// the type's row and its "other" row.
-/** @param {string} type */
-const typeRowKeys = (type) => [type, type === 'CDS' ? 'other proteins' : `other ${type}s`];
+// Python's own Legend rows (gbdraw/legend/table.py::_generated_legend_fills),
+// read from a key: a track's row ("<NT> content" and "<NT> skew", each also
+// as "(+)" and "(-)", and "Depth"), with the palette key of its fill ('' for
+// Depth, which no palette key colors), else the row of the feature type it
+// names, the type's own row or its "other" row, which the type's palette key
+// colors. tests/fixtures/legend_generated_rows.json holds Python's keys.
+const TRACK_ROW = /^[ACGTU]{2} (content|skew)(?: \(([+-])\))?$/;
+/**
+ * @param {string} key
+ * @returns {{ track: boolean, paletteKey: string }}
+ */
+export const generatedLegendRow = (key) => {
+  if (key === 'Depth') return { track: true, paletteKey: '' };
+  const track = TRACK_ROW.exec(key);
+  if (track) return { track: true, paletteKey: track[1] === 'content' ? 'gc_content' : `skew_${track[2] === '-' ? 'low' : 'high'}` };
+  if (!key.toLowerCase().startsWith('other ')) return { track: false, paletteKey: key };
+  const type = key.slice(6).trim();
+  if (type.toLowerCase() === 'proteins') return { track: false, paletteKey: 'CDS' };
+  return { track: false, paletteKey: type.endsWith('s') ? type.slice(0, -1) : type };
+};
 
 // The Python rows N-06 does not compare a rule with, read from the displayed
 // features and their known rule matches (a match not known yet colors no
@@ -117,18 +140,19 @@ const typeRowKeys = (type) => [type, type === 'CDS' ? 'other proteins' : `other 
 // - OV-307: a row Python drew for a rule is no row of the renderer, also when
 //   a live edit of the rule's color leaves the row in the color Python drew it
 //   in until Generate: a feature Python drew in the row's color takes a rule
-//   of the row's caption, and the caption names no feature type's row.
+//   of the row's caption, and the caption names no row Python generates
+//   (`generatedLegendRow`: a track's row, or a displayed type's row).
 /**
  * @param {LegendRowContext} context
- * @returns {Set<string>}
+ * @returns {Set<PythonLegendKey>}
  */
 const rowsLeftOut = ({ rules = [], pythonRows, features = [] }) => {
   const captioned = rules.map((rule) => normalizeSpecificRule(rule)).filter((rule) => rule.cap);
-  const typed = captioned.filter((rule) => pythonRows.has(/** @type {PythonLegendKey} */ (rule.feat)));
+  const typed = captioned.filter((rule) => pythonRows.has(captionRowKey(rule.feat)));
   /** @type {Map<string, string>} A caption naming a Python row of another color, and that row's fill. */
   const recolored = new Map();
   captioned.forEach((rule) => {
-    const color = fillIdentity(pythonRows.get(/** @type {PythonLegendKey} */ (rule.cap))?.color);
+    const color = fillIdentity(pythonRows.get(captionRowKey(rule.cap))?.color);
     if (color && color !== fillIdentity(rule.color)) recolored.set(rule.cap, color);
   });
   if (typed.length === 0 && recolored.size === 0) return new Set();
@@ -151,11 +175,15 @@ const rowsLeftOut = ({ rules = [], pythonRows, features = [] }) => {
     taken.add(pair(rule));
     if (recolored.get(caption) === fillIdentity(feature.fill_color)) drawnForRules.add(caption);
   }
-  const typeRows = new Set([...types].flatMap(typeRowKeys));
+  /** @param {string} caption */
+  const generated = (caption) => {
+    const row = generatedLegendRow(caption);
+    return row.track || types.has(row.paletteKey);
+  };
   return new Set([
     ...typed.filter((rule) => taken.has(pair(rule))).map((rule) => rule.feat),
-    ...[...drawnForRules].filter((caption) => !typeRows.has(caption))
-  ]);
+    ...[...drawnForRules].filter((caption) => !generated(caption))
+  ].map(captionRowKey));
 };
 
 // Python's rows of the displayed Result, by key and drawn fill: those N-06
@@ -165,12 +193,12 @@ const pythonRowsOf = (context) => {
   const leftOut = rowsLeftOut(context);
   /** @type {RendererLegendRow[]} */
   const compared = [];
-  /** @type {RendererLegendRow[]} */
-  const taken = [];
+  /** @type {Set<PythonLegendKey>} */
+  const taken = new Set();
   for (const row of context.pythonRows.values()) {
     if (!row.color) continue;
-    const caption = String(row.key);
-    (leftOut.has(caption) ? taken : compared).push({ caption, color: fillIdentity(row.color) });
+    if (leftOut.has(row.key)) taken.add(row.key);
+    else compared.push({ caption: row.key, color: fillOf(row.color) });
   }
   return { compared, taken };
 };
@@ -188,16 +216,17 @@ const rendererRowsOf = (rows, { originalLegendOrder = [], rules = [] }) => {
 };
 
 // The rows a commit of `context.rules` reads: the renderer rows of the N-06
-// allocation, and the rows Python drew that those rules take, which the commit
-// replaces (a feature type's row that a rule captioned with the type draws in
-// its own color, OV-306).
+// allocation, and the keys of the rows Python drew that those rules take,
+// whose listed rows the commit replaces (`rowsLeftOut`: the row of a feature
+// type once a captioned rule of the type colors a feature the displayed
+// Result draws, OV-306, and a row Python drew for a rule, OV-307).
 /**
  * @param {LegendRowContext} context
- * @returns {{ rendererRows: RendererLegendRow[], takenRows: RendererLegendRow[] }}
+ * @returns {{ rendererRows: RendererLegendRow[], takenKeys: Set<PythonLegendKey> }}
  */
 export const ruleCommitLegendRows = (context) => {
   const { compared, taken } = pythonRowsOf(context);
-  return { rendererRows: rendererRowsOf(compared, context), takenRows: taken };
+  return { rendererRows: rendererRowsOf(compared, context), takenKeys: taken };
 };
 
 const uniqueLegendKey = (reserved, preferred) => {
@@ -208,10 +237,11 @@ const uniqueLegendKey = (reserved, preferred) => {
 };
 
 /**
- * A Legend row of the renderer: its caption and its fill (`fillIdentity`).
+ * A Legend row of the renderer: Python's key and the fill Python drew it in
+ * (`fillIdentity`), never the caption or the swatch a Legend edit shows.
  * @typedef {object} RendererLegendRow
- * @property {string} caption
- * @property {string} color
+ * @property {PythonLegendKey} caption
+ * @property {SwatchColor} color
  */
 
 /**
@@ -226,51 +256,57 @@ const uniqueLegendKey = (reserved, preferred) => {
  */
 
 /**
- * Returns rule -> the legend caption Generate draws for that rule.
+ * Returns rule -> the key of the Legend row Generate draws for that rule.
  * @param {Partial<SpecificColorRule>[]} [rules]
  * @param {RendererLegendRow[]} [rendererRows]
- * @returns {(rule: Partial<SpecificColorRule> | null | undefined) => string}
+ * @returns {(rule: Partial<SpecificColorRule> | null | undefined) => PythonLegendKey}
  */
 export const createRuleLegendCaptions = (rules = [], rendererRows = []) => {
+  /** @type {Map<PythonLegendKey, SwatchColor>} */
   const rowColors = new Map((rendererRows || []).map((row) => [row.caption, row.color]));
   const normalizedRules = (rules || []).map((rule) => normalizeSpecificRule(rule));
+  /** @type {Set<string>} */
   const reserved = new Set([...rowColors.keys(), ...normalizedRules.map((rule) => rule.cap).filter(Boolean)]);
+  /** @type {Map<string, PythonLegendKey>} */
   const allocated = new Map();
   const keyOf = (rule) => JSON.stringify([rule.cap, fillIdentity(rule.color)]);
   normalizedRules
-    .filter((rule) => rule.cap && rowColors.has(rule.cap) && rowColors.get(rule.cap) !== fillIdentity(rule.color))
+    .filter((rule) => {
+      const rowColor = rule.cap ? rowColors.get(captionRowKey(rule.cap)) : undefined;
+      return rowColor !== undefined && rowColor !== fillIdentity(rule.color);
+    })
     .sort((left, right) => keyOf(left).localeCompare(keyOf(right)))
     .forEach((rule) => {
       if (allocated.has(keyOf(rule))) return;
       const caption = uniqueLegendKey(reserved, allocatedRowBase(rule));
       reserved.add(caption);
-      allocated.set(keyOf(rule), caption);
+      allocated.set(keyOf(rule), captionRowKey(caption));
     });
   return (rule) => {
     const normalized = normalizeSpecificRule(rule);
-    return allocated.get(keyOf(normalized)) || normalized.cap;
+    return allocated.get(keyOf(normalized)) || captionRowKey(normalized.cap);
   };
 };
 
 // Only a caption that names a current row of another color can be allocated.
 /** @param {ReturnType<typeof normalizeSpecificRule>} rule @param {RendererLegendRow[]} rows */
 const mayBeAllocated = (rule, rows) => Boolean(rule.cap) && rows.some((row) => (
-  row.caption === rule.cap && row.color !== fillIdentity(rule.color)
+  row.caption === captionRowKey(rule.cap) && row.color !== fillIdentity(rule.color)
 ));
 
-// The legend caption Generate draws for a rule of `context.rules`, read for
-// many rules: the captions are allocated once, when a rule first needs it.
+// The key of the Legend row Generate draws for a rule of `context.rules`,
+// read for many rules: the keys are allocated once, when a rule first needs it.
 /**
  * @param {LegendRowContext} context
- * @returns {(rule: Partial<SpecificColorRule> | null | undefined) => string}
+ * @returns {(rule: Partial<SpecificColorRule> | null | undefined) => PythonLegendKey}
  */
 export const ruleLegendCaptions = (context) => {
   const rows = pythonRowsOf(context).compared;
-  /** @type {((rule: Partial<SpecificColorRule> | null | undefined) => string) | null} */
+  /** @type {((rule: Partial<SpecificColorRule> | null | undefined) => PythonLegendKey) | null} */
   let allocated = null;
   return (rule) => {
     const normalized = normalizeSpecificRule(rule);
-    if (!mayBeAllocated(normalized, rows)) return normalized.cap;
+    if (!mayBeAllocated(normalized, rows)) return captionRowKey(normalized.cap);
     allocated ||= createRuleLegendCaptions([...context.rules || []], rendererRowsOf(rows, context));
     return allocated(normalized);
   };
@@ -290,14 +326,15 @@ export const buildLegendIntents = (rules, rendererRows = []) => {
 };
 
 // The rules a legend row draws, by the allocation above (never by reading a
-// suffix back): editing that row edits these rules.
+// suffix back): editing that row edits these rules. The row is Python's key
+// (`legendEntryKey` of a listed row), never the caption a rename shows.
 /**
- * @param {string | undefined} caption
+ * @param {PythonLegendKey | undefined} key
  * @param {LegendRowContext} context
  * @returns {Partial<SpecificColorRule>[]}
  */
-export const legendRowRules = (caption, context) => {
-  const target = normalizeText(caption);
+export const legendRowRules = (key, context) => {
+  const target = normalizeText(key);
   if (!target) return [];
   const rules = context.rules || [];
   const legendCaption = createRuleLegendCaptions([...rules], rendererRowsOf(pythonRowsOf(context).compared, context));

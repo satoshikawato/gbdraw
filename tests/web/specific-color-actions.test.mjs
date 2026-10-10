@@ -3,8 +3,12 @@ import { test } from 'node:test';
 import { createFeatureRuleActions } from '../../gbdraw/web/js/app/feature-editor/rule-actions.js';
 import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
 import { createLegendManager } from '../../gbdraw/web/js/app/legend.js';
-import { diffLegendIntents, legendRowRules } from '../../gbdraw/web/js/services/specific-color-rules.js';
+import { readFileSync } from 'node:fs';
+import {
+  diffLegendIntents, generatedLegendRow, legendRowRules, ruleCommitLegendRows, ruleLegendCaptions
+} from '../../gbdraw/web/js/services/specific-color-rules.js';
 import { recordRuleMatches, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
+import { setFeatureVisibilityOverride } from '../../gbdraw/web/js/services/feature-visibility.js';
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
@@ -260,7 +264,10 @@ const resultSvg = (rows) => {
   const legend = element({}, rows.map(([key, fill]) => element({ 'data-legend-key': key }, [element({ fill })])));
   return { getElementById: (id) => (id === 'legend' ? legend : null) };
 };
-const mounted = (rows) => ({ value: { querySelector: () => resultSvg(rows) } });
+const mounted = (rows) => {
+  const svg = resultSvg(rows);
+  return { value: { querySelector: () => svg } };
+};
 
 // OV-294 A (R15-6): the rules a Legend row draws are read from Python's rows
 // of the displayed Result, never from the row's swatch. OV-307: a row Python
@@ -344,6 +351,85 @@ test('a rule captioned with its own feature type commits the type\'s row in its 
   assert.equal(await s.actions.commitSpecificRules([rule]), true);
   assert.deepEqual(intents, [{ caption: 'CDS', color: '#c83366' }]);
   assert.deepEqual(s.previousIntents(), [{ caption: 'CDS', color: '#54bcf8' }], 'the commit owns the type\'s row');
+});
+
+// OV-310: the commit owns the listed row of a Python row its rules take by
+// the row's key, and diffs it by the caption and the swatch the row shows: a
+// Legend color on the type's row is no other row of that caption.
+test('a rule captioned with its own feature type commits while the type\'s row shows a Legend color', async () => {
+  const s = setup();
+  const ref = (value) => ({ value });
+  Object.assign(s.state, {
+    originalLegendOrder: ref(['CDS']), deletedLegendEntries: ref([]), dormantLegendEntries: ref([]),
+    originalLegendColors: ref({}), legendStrokeOverrides: {}, legendColorOverrides: { CDS: '#ff8800' }, adv: {},
+    selectedResultIndex: ref(0), svgContainer: mounted([['CDS', '#54bcf8']])
+  });
+  s.state.legendEntries.value = [{ caption: 'CDS', originalCaption: 'CDS', color: '#ff8800' }];
+  let intents = null;
+  s.setLegendPreparation(async (next) => { intents = next; });
+  const rule = { feat: 'CDS', qual: 'gene', val: '.', color: '#c83366', cap: 'CDS' };
+  assert.equal(await s.actions.commitSpecificRules([rule]), true);
+  assert.deepEqual(intents, [{ caption: 'CDS', color: '#c83366' }]);
+  assert.deepEqual(s.previousIntents(), [{ caption: 'CDS', color: '#ff8800' }], 'the listed row, by its key');
+  // The Legend preparation owns that row and updates it.
+  s.state.legendEntries.value = [{ caption: 'CDS', originalCaption: 'CDS', color: '#ff8800' }];
+  const legend = createLegendManager({ state: withDrawings(s.state), commitLegendRowRules: () => true });
+  const prepared = await legend.prepareFileLegendEntries(intents, { previousFileIntents: s.previousIntents() });
+  assert.deepEqual(prepared.diff.update.map(({ caption, color }) => ({ caption, color })), [{ caption: 'CDS', color: '#c83366' }]);
+});
+
+// L2 (OV-306 to OV-308 in batch): the rows the rules take are read from the
+// features the displayed Result draws: a rule that colors a feature only in
+// another batch Result, or a feature hidden since, takes no row of this one.
+test('a rule commit owns no type row of the displayed Result for a feature it does not draw', async () => {
+  const s = setup();
+  const a1 = { type: 'CDS', svg_id: 'a1', fill_color: '#54bcf8', qualifiers: { locus_tag: ['A1'] } };
+  const fl2 = { type: 'CDS', svg_id: 'fl2', fill_color: '#54bcf8', qualifiers: { locus_tag: ['FL2'] } };
+  const hidden = { type: 'CDS', svg_id: 'a2', fill_color: '#54bcf8', qualifiers: { locus_tag: ['A2'] }, record_key: 'A', biological_feature_id: 'a2' };
+  s.state.extractedFeatures.value = [a1, hidden, fl2];
+  s.state.results.value = [{ name: 'A', content: 'a' }, { name: 'B', content: 'b' }];
+  setFeatureVisibilityOverride(s.state.featureOverrides, hidden, 'off');
+  Object.assign(s.state, {
+    displayedResultMetadata: () => ({ renderedFeatureIdentities: { renderedIds: new Set(['a1', 'a2']) } }),
+    originalLegendOrder: { value: ['CDS'] }, svgContainer: mounted([['CDS', '#54bcf8']])
+  });
+  s.state.legendEntries.value = [{ caption: 'CDS', originalCaption: 'CDS', color: '#54bcf8' }];
+  s.setLegendPreparation(async () => {});
+  const rule = { feat: 'CDS', qual: 'locus_tag', val: '^(FL2|A2)$', color: '#2266aa', cap: 'Group' };
+  assert.equal(await s.actions.commitSpecificRules([rule]), true);
+  assert.deepEqual(s.previousIntents(), [], 'Python keeps the CDS row of the displayed Result');
+});
+
+// L1: a rule captioned with a track's row (Python's own rows,
+// `_generated_legend_fills`) is no rule of that row, also in the track's
+// color: Python draws it in "<caption> [<hex>]" and keeps the track's row.
+test('a rule captioned with a track row draws its own row, and the commit leaves the track row alone', () => {
+  const rows = (entries) => new Map(entries.map(([key, color]) => [key, { key, color }]));
+  const fl2 = { type: 'CDS', svg_id: 'fl2', fill_color: '#a0a0a0', qualifiers: {} };
+  const live = { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#ff0000', cap: 'GC content' };
+  const next = { ...live, color: '#00ff00' };
+  recordRuleMatches([fl2], [ruleKey(live), ruleKey(next)], () => ({ matched: [0, 1], priorities: [0, 0], declined: [] }));
+  const context = {
+    rules: [live], features: [fl2], originalLegendOrder: ['other proteins', 'GC content'],
+    pythonRows: rows([['other proteins', '#54bcf8'], ['GC content', '#a0a0a0']])
+  };
+  assert.equal(ruleLegendCaptions(context)(live), 'GC content [#ff0000]', 'Python\'s key for the rule');
+  assert.deepEqual(legendRowRules('GC content', context), [], 'the GC content row is the track\'s');
+  assert.deepEqual([...ruleCommitLegendRows({ ...context, rules: [live, next] }).takenKeys], []);
+});
+
+// The Python rows the Web app reads from their keys, with the palette key of
+// their fill, are those Python generates (tests/test_legend_row_facts.py).
+test('the generated Legend rows read from their keys are Python\'s', () => {
+  const { cases } = JSON.parse(readFileSync(new URL('../fixtures/legend_generated_rows.json', import.meta.url), 'utf8'));
+  for (const { name, features_present: types, rows } of cases) {
+    for (const [key, paletteKey] of rows) {
+      const row = generatedLegendRow(key);
+      assert.equal(row.paletteKey, paletteKey, `${name}: ${key}`);
+      assert.ok(row.track || types.includes(row.paletteKey), `${name}: ${key} is a track row or a present type's row`);
+    }
+  }
+  assert.deepEqual(generatedLegendRow('Group'), { track: false, paletteKey: 'Group' }, 'any other key names a type\'s row');
 });
 
 test('the Legend editor recolors the rule of a suffixed row, and only that row', () => {

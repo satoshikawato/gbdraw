@@ -2,14 +2,15 @@
 /** @import { FeatureCatalogAdmission } from '../services/feature-catalog.js' */
 /** @import { LegendStrokeOperation, SvgAdmissionRuntime, SvgResultTransform } from '../services/svg-result-ingestion.js' */
 /** @import { PythonLegendKey, PythonLegendRow, RenderedFeatureId, SwatchColor } from '../services/legend-svg.js' */
-/** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
+/** @import { LegendRowContext, SpecificColorRule } from '../services/specific-color-rules.js' */
+/** @import { LegendCaption } from '../state.js' */
 /** @import { AddressedFeature } from '../services/feature-override-identity.js' */
 import { normalizeDefaultColor, resolveColorToHex } from '../utils/color-utils.js';
 import { defaultLegendCaptionOrder, isLegendOrderEdited } from '../services/legend-svg.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { biologicalFeatureKey } from '../services/feature-catalog.js';
 import { ruleMatcher } from '../services/rule-matchers.js';
-import { ruleLegendCaptions } from '../services/specific-color-rules.js';
+import { generatedLegendRow, ruleLegendCaptions } from '../services/specific-color-rules.js';
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
 import { resolveFeatureDrawn } from '../services/feature-visibility.js';
 import {
@@ -58,6 +59,8 @@ import {
  * @property {RuleLegendRows | null} [ruleRows] The Legend rows a rule commit shows at once.
  * @property {ReadonlyMap<PythonLegendKey, PythonLegendRow>} [pythonRows] Python's Legend rows of the
  *   displayed Result (`pythonLegendRows`), by which the draft allocates a rule's row (N-06).
+ * @property {LegendRowContext['features']} [features] The features the displayed Result draws
+ *   (`displayedLegendRowContext`), whose rule matches decide the rows Python leaves out.
  */
 
 /**
@@ -162,11 +165,11 @@ const matchingRuleDerivedFill = (override, manualSpecificRules) => {
 /**
  * @param {unknown} override A `featureColorOverrides` value.
  * @param {readonly Partial<SpecificColorRule>[]} rules
- * @returns {string}
+ * @returns {LegendCaption | ''}
  */
 export const namedLegendCaption = (override, rules) => (
   override && typeof override === 'object' && !matchingRuleDerivedFill(override, rules)
-    ? text(/** @type {{ caption?: unknown }} */ (override).caption)
+    ? /** @type {LegendCaption} */ (text(/** @type {{ caption?: unknown }} */ (override).caption))
     : ''
 );
 
@@ -175,25 +178,9 @@ const samePaint = (left, right) => (
 );
 
 // The palette color of a Legend row Python draws for a feature type or a
-// track (`other <type>s` rows take their type's color).
-/** @type {Record<string, string>} */
-const LEGEND_PALETTE_KEYS = {
-  'GC content': 'gc_content',
-  'GC skew (+)': 'skew_high',
-  'GC skew (-)': 'skew_low'
-};
-/** @param {string} caption @param {Record<string, string>} palette */
-const paletteLegendColor = (caption, palette) => {
-  const key = LEGEND_PALETTE_KEYS[caption] || caption;
-  if (palette[key]) return palette[key];
-  const lower = caption.toLowerCase();
-  if (lower === 'other proteins') return palette.CDS || '';
-  if (!lower.startsWith('other ')) return '';
-  let type = caption.slice(6).trim();
-  if (type.toLowerCase() === 'proteins') return palette.CDS || '';
-  if (type.endsWith('s')) type = type.slice(0, -1);
-  return palette[type] || '';
-};
+// track (`generatedLegendRow`).
+/** @param {string} key @param {Record<string, string>} palette */
+const paletteLegendColor = (key, palette) => palette[generatedLegendRow(key).paletteKey] || '';
 
 // The color the draft gives the features of a Legend row (its Python key)
 // where a displayed Result predates the draft: its first rule's color, else
@@ -206,8 +193,8 @@ const paletteLegendColor = (caption, palette) => {
 // it the same way.
 /**
  * @param {{ rules: readonly Partial<SpecificColorRule>[], pythonRows?: ReadonlyMap<PythonLegendKey, PythonLegendRow>,
- *   features?: Iterable<object>, originalLegendOrder: readonly string[], paletteColors: Record<string, string> }} draft
- *   `features`: the displayed Result's features, whose rule matches decide the rows Python leaves out (OV-306).
+ *   features?: LegendRowContext['features'], originalLegendOrder: readonly string[], paletteColors: Record<string, string> }} draft
+ *   `features`: the features the displayed Result draws, whose rule matches decide the rows Python leaves out (OV-306).
  * @returns {{ ruleCaptions: PythonLegendKey[], colorOf: (key: PythonLegendKey) => SwatchColor | null }}
  */
 export const draftLegendRowColors = ({ rules, pythonRows = new Map(), features = [], originalLegendOrder, paletteColors }) => {
@@ -215,7 +202,7 @@ export const draftLegendRowColors = ({ rules, pythonRows = new Map(), features =
   /** @type {Map<PythonLegendKey, string>} */
   const ruleColors = new Map();
   rules.forEach((rule) => {
-    const key = /** @type {PythonLegendKey} */ (text(rule?.cap) ? text(rowOf(rule)) : '');
+    const key = text(rule?.cap) ? rowOf(rule) : null;
     if (key && !ruleColors.has(key)) ruleColors.set(key, text(rule.color));
   });
   return {
@@ -277,7 +264,7 @@ export const draftLegendRows = ({
 /**
  * @param {Pick<EditorPlanOptions, 'legendEntries' | 'deletedLegendEntries' | 'dormantLegendEntries' | 'originalLegendOrder'>
  *   & { legendColorOverrides: Readonly<Record<string, unknown>>, rules: readonly Partial<SpecificColorRule>[],
- *   pythonRows: ReadonlyMap<PythonLegendKey, PythonLegendRow>, features?: Iterable<object>, paletteColors: Record<string, string> }} draft
+ *   pythonRows: ReadonlyMap<PythonLegendKey, PythonLegendRow>, features?: LegendRowContext['features'], paletteColors: Record<string, string> }} draft
  * @returns {Map<string, SwatchColor>}
  */
 export const draftLegendPanelColors = ({ legendColorOverrides, rules, pythonRows, features, paletteColors, ...legend }) => {
@@ -670,7 +657,7 @@ const compilePlanBundle = ({
   const draftRowColors = livePreview && draftLegendRowColors({
     rules,
     pythonRows: livePreview.pythonRows,
-    features: { * [Symbol.iterator]() { for (const rendered of catalogAdmission.renderedFeaturesByResult || []) yield* rendered.values(); } },
+    features: livePreview.features,
     originalLegendOrder: [...originalCaptions],
     paletteColors: livePreview.paletteColors
   });

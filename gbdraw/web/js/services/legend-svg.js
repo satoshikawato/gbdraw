@@ -274,6 +274,11 @@ export const setsFeatureStroke = (override) => {
  * @property {SwatchColor | null} color Null when the row has no swatch fill.
  */
 
+// The key of a listed Legend row: its key record (`originalCaption`), else
+// its caption (a row saved before U3a has no record).
+/** @param {{ caption?: unknown, originalCaption?: unknown }} entry @returns {PythonLegendKey} */
+export const legendEntryKey = (entry) => /** @type {PythonLegendKey} */ (String(entry.originalCaption || entry.caption || '').trim());
+
 /** @param {Element} row @returns {PythonLegendRow} */
 export const pythonLegendRow = (row) => {
   const color = String(pythonDrawnAttribute(getLegendEntrySwatch(row), 'fill') ?? '').trim();

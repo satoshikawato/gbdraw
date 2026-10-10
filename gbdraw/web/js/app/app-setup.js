@@ -9,6 +9,7 @@
 /** @import { AnnotationCatalogSource } from './annotations/record-catalog.js' */
 /** @import { LegacyResultSvgTransform } from '../services/config.js' */
 /** @import { ArtifactSlot } from '../services/artifact-slot.js' */
+/** @import { LegendRowContext } from '../services/specific-color-rules.js' */
 /** @import { GalleryExample } from '../services/gallery-examples.js' */
 /** @import { LinearComparisonPlan } from '../services/linear-comparisons.js' */
 /** @typedef {{ opening: Readonly<ArtifactSlot> | null, stashed: Readonly<ArtifactSlot> | null }} LoadedArtifactSlots */
@@ -16,9 +17,10 @@ import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan, draftLegendPanelColors, editorPaintDomains, LIVE_EDIT_DOMAINS } from './candidate-render.js';
 import { createResultPaintRecord } from './result-paint-record.js';
 import {
-  countUnresolvedFeatureEdits, featureDrawnContext, removeUnresolvedFeatureEdits, requestFeatureVisibilityRules
+  countUnresolvedFeatureEdits, displayedLegendRowContext, featureDrawnContext, removeUnresolvedFeatureEdits,
+  requestFeatureVisibilityRules
 } from '../services/feature-visibility.js';
-import { drawnBlockStroke, drawsPythonLegendRow, isLegendOrderEdited, legendStructureEdited, pythonLegendRows } from '../services/legend-svg.js';
+import { drawnBlockStroke, drawsPythonLegendRow, isLegendOrderEdited, legendStructureEdited } from '../services/legend-svg.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
@@ -1466,10 +1468,9 @@ export const createAppSetup = () => {
   const paletteLegendRowColors = computed(() => {
     const drawing = state.activeDrawing();
     return svgContent.value ? draftLegendPanelColors({
+      ...displayedLegendRowContext(state, drawing), originalLegendOrder: originalLegendOrder.value,
       legendEntries: drawing.legendEntries.value, deletedLegendEntries: drawing.deletedLegendEntries.value,
-      dormantLegendEntries: drawing.dormantLegendEntries.value, originalLegendOrder: originalLegendOrder.value,
-      legendColorOverrides: drawing.legendColorOverrides, rules: drawing.manualSpecificRules,
-      pythonRows: pythonLegendRows(svgContainer.value?.querySelector('svg')), features: extractedFeatures.value || [],
+      dormantLegendEntries: drawing.dormantLegendEntries.value, legendColorOverrides: drawing.legendColorOverrides,
       paletteColors: appliedFeatureColors(state)
     }) : new Map();
   });
@@ -3391,6 +3392,9 @@ export const createAppSetup = () => {
     const departed = resultPaintRecord.depart(currentEditorProjectionState(drawing));
     if (departed) departedResultIntent.set(departed, displayedIntentSignature(drawing));
   };
+  // What the live compile reads of the displayed Result's Legend state.
+  /** @param {LegendRowContext} context */
+  const legendRowsOf = ({ pythonRows, features }) => ({ pythonRows, features });
   /**
    * @param {DrawingState} drawing
    * @param {number} resultIndex
@@ -3428,7 +3432,7 @@ export const createAppSetup = () => {
       livePreview: domains ? {
         domains,
         paletteColors: appliedFeatureColors(state),
-        pythonRows: pythonLegendRows(svg),
+        ...legendRowsOf(displayedLegendRowContext(state, drawing)),
         drawnContext: domains.includes('featureVisibility')
           ? featureDrawnContext(drawing, { diagramOptions: getCommittedCanonicalRenderRequest()?.diagramOptions })
           : null,

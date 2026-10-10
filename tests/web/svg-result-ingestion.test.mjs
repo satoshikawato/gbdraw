@@ -1188,7 +1188,7 @@ test('Load records Python\'s paint on a Session 44 Result', () => {
 const previewFeature = (admission) => admission.renderedFeaturesByResult[0].get('f0001');
 const PREVIEW_DOMAINS = ['featureFills', 'featureVisibility', 'legendFills'];
 // Python's rows of the displayed Result (`pythonLegendRows`): the CDS row as
-// `buildSvgRoot` draws it.
+// `buildSvgRoot` draws it; the features it draws (`displayedDrawnFeatures`).
 const pythonRowsOf = (color) => new Map([['CDS', { key: 'CDS', color }]]);
 const previewPlan = (admission, {
   paletteColors = { CDS: '#aaaaaa' }, drawnContext = null, domains = PREVIEW_DOMAINS, pythonRows = pythonRowsOf('#aaaaaa'), ...options
@@ -1197,7 +1197,7 @@ const previewPlan = (admission, {
     catalogAdmission: admission,
     legendEntries: [{ caption: 'CDS', originalCaption: 'CDS', color: '#aaaaaa' }],
     originalLegendOrder: ['CDS'],
-    livePreview: { domains, paletteColors, drawnContext, pythonRows },
+    livePreview: { domains, paletteColors, drawnContext, pythonRows, features: [...admission.renderedFeaturesByResult[0].values()] },
     ...options
   }).operationsByResult[0]
 );

@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DrawingState } from '../state.js' */
+/** @import { DrawingState, LegendEntry } from '../state.js' */
 import { createLegendDragActions } from './legend/drag-actions.js';
 import { createLegendEntryActions } from './legend/entry-actions.js';
 import { createLegendLayoutActions } from './legend/layout-actions.js';
@@ -9,9 +9,10 @@ import {
   getAllFeatureLegendGroups,
   getVisibleFeatureLegendGroup,
   isCurrentLegendHorizontal,
-  pythonLegendRows
+  legendEntryKey
 } from '../services/legend-svg.js';
 import { legendRowRules } from '../services/specific-color-rules.js';
+import { displayedLegendRowContext } from '../services/feature-visibility.js';
 
 /**
  * @typedef {object} LegendManagerOptions
@@ -44,14 +45,14 @@ export const createLegendManager = ({
   const entryActions = createLegendEntryActions({ state, readActiveResultIdentity });
   const sortActions = createLegendSortActions({ state, showLegendStructure });
   const strokeActions = createLegendStrokeActions({ state });
-  // The rules a row draws, by Python's rows of the displayed Result (OV-294).
+  // The rules a row draws, by its key among Python's rows of the displayed
+  // Result (OV-294).
   /** @param {DrawingState} drawing @param {number} index */
-  const rowRulesAt = (drawing, index) => legendRowRules(drawing.legendEntries.value[index]?.caption, {
-    rules: drawing.manualSpecificRules,
-    pythonRows: pythonLegendRows(state.svgContainer?.value?.querySelector?.('svg')),
-    features: state.extractedFeatures?.value || [],
-    originalLegendOrder: state.originalLegendOrder?.value || []
-  });
+  const rowRulesAt = (drawing, index) => {
+    /** @type {LegendEntry | undefined} */
+    const entry = drawing.legendEntries.value[index];
+    return entry ? legendRowRules(legendEntryKey(entry), displayedLegendRowContext(state, drawing)) : [];
+  };
   const dragActions = createLegendDragActions({
     state,
     beginHistoryTransaction,

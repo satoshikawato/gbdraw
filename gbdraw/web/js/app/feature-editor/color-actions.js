@@ -9,10 +9,11 @@ import { getFeatureCaption, getFeatureColorRuleHash, getFeatureHashCandidates } 
 import { exactRegexValue } from '../../services/feature-selector.js';
 import {
   drawnLegendRowStroke,
+  legendEntryKey,
   legendRowFeatureIds,
-  pythonLegendRows,
   setsFeatureStroke
 } from '../../services/legend-svg.js';
+import { displayedLegendRowContext } from '../../services/feature-visibility.js';
 import { isAutoFeatureUnderlay } from '../../services/feature-dom.js';
 import { pythonDrawnAttribute } from '../../services/result-paint-bases.js';
 import {
@@ -265,16 +266,13 @@ export const createFeatureColorActions = ({
     const id = /** @type {RenderedFeatureId} */ (svgId);
     const drawnFills = [/** @type {[RenderedFeatureId, string]} */ ([id, getFeatureFillElements(svg, svgId)[0]?.getAttribute('fill') || ''])];
     const namedCaption = normalizeCaption(namedLegendCaption(getFeatureOverride(drawing.featureColorOverrides, feature), drawing.manualSpecificRules));
-    const pythonRows = pythonLegendRows(svg);
-    const originalOrder = originalLegendOrder.value || [];
+    const context = displayedLegendRowContext(state, drawing);
+    const { pythonRows } = context;
     const rows = draftLegendRows({
       legendEntries: drawing.legendEntries.value, deletedLegendEntries: drawing.deletedLegendEntries.value,
-      dormantLegendEntries: drawing.dormantLegendEntries.value, originalLegendOrder: originalOrder
+      dormantLegendEntries: drawing.dormantLegendEntries.value, originalLegendOrder: originalLegendOrder.value || []
     });
-    const draft = draftLegendRowColors({
-      rules: drawing.manualSpecificRules, pythonRows, features: state.extractedFeatures.value || [],
-      originalLegendOrder: originalOrder, paletteColors: appliedFeatureColors(state)
-    });
+    const draft = draftLegendRowColors({ ...context, paletteColors: appliedFeatureColors(state) });
     return Object.entries(drawing.legendStrokeOverrides).find(([caption]) => {
       const row = rows.styledRow(caption);
       if (!row) return false;
@@ -302,8 +300,6 @@ export const createFeatureColorActions = ({
   // caption), which the composition root's Restore acts on.
   /** @param {DrawingState} drawing @param {string} caption */
   const findDeletedLegendEntryByCaption = (drawing, caption) => entryByCaption(drawing.deletedLegendEntries.value, caption);
-  /** @param {LegendEntry} entry @returns {PythonLegendKey} */
-  const deletedEntryKey = (entry) => /** @type {PythonLegendKey} */ (entry.originalCaption || entry.caption);
 
   /** @param {DrawingState} drawing */
   const findExistingCaptionColor = (drawing, feat, caption) => {
@@ -982,7 +978,7 @@ export const createFeatureColorActions = ({
           },
           targetEntry,
           mergeAllowed,
-          deletedTarget ? deletedEntryKey(deletedTarget) : ''
+          deletedTarget ? legendEntryKey(deletedTarget) : ''
         );
         return;
       }

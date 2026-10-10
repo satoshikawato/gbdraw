@@ -1,6 +1,5 @@
 // @ts-check
-/** @import { DrawingState } from '../../state.js' */
-/** @import { LegendRowContext } from '../../services/specific-color-rules.js' */
+/** @import { DrawingState, LegendEntry } from '../../state.js' */
 import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { runWhenPrepared } from '../rule-matching.js';
@@ -23,8 +22,10 @@ import {
   normalizeFeatureRendering
 } from '../../utils/feature-rendering.js';
 import { featureOverrideValue } from '../../services/feature-placement.js';
-import { featureDrawnContext, legendRowsShowable, legendRuleOrder, resultLegendRowKeys } from '../../services/feature-visibility.js';
-import { legendRowTakesPlace, pythonLegendRows, shownLegendKeys, shownPythonLegendRow } from '../../services/legend-svg.js';
+import {
+  displayedLegendRowContext, featureDrawnContext, legendRowsShowable, legendRuleOrder, resultLegendRowKeys
+} from '../../services/feature-visibility.js';
+import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegendRow } from '../../services/legend-svg.js';
 
 // R13: `projectPaletteAndRules` is the composition root's projection of the
 // palette and the specific-color rules (R3); this owner calls it after a rule
@@ -114,8 +115,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   };
   // The legend rows the candidate rules draw on rendered features, and the rows
   // the commit retires: those the current rules draw (so it retires the row
-  // Generate drew), the rows Python drew that the rules take (`takenRows`),
-  // and `retiredLegendIntents`, rows this commit replaces, which are no
+  // Generate drew), the listed rows of the Python rows the rules take (by key,
+  // `takenKeys`, with the caption and the swatch they show, OV-310), and
+  // `retiredLegendIntents`, rows this commit replaces, which are no
   // renderer rows for the N-06 caption allocation. `removedRuleRows` are
   // the rows of current rules that no candidate rule names, drawn or not.
   /** @param {DrawingState} drawing */
@@ -124,14 +126,18 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       featureOverrideValue(drawing.featureOverrides, feature, 'featureVisibility') !== 'off');
     const candidateMatches = ruleMatcher(candidateRules);
     const used = new Set(rendered.map(feature => candidateMatches.first(feature)).filter(Boolean));
-    const { rendererRows, takenRows } = ruleCommitLegendRows({
-      ...legendRowContext(drawing),
+    const { rendererRows, takenKeys } = ruleCommitLegendRows({
+      ...displayedLegendRowContext(state, drawing),
       rules: [...drawing.manualSpecificRules, ...candidateRules,
         ...retiredLegendIntents.map(intent => ({ cap: intent?.caption, color: intent?.color }))]
     });
     const currentCaption = createRuleLegendCaptions(drawing.manualSpecificRules, rendererRows);
     const ruleRows = drawing.manualSpecificRules.filter(rule => rule.cap)
       .map(rule => ({ caption: currentCaption(rule), color: rule.color }));
+    /** @type {LegendEntry[]} */
+    const listed = drawing.legendEntries.value || [];
+    const takenRows = listed.filter(entry => takenKeys.has(legendEntryKey(entry)))
+      .map(entry => ({ caption: entry.caption, color: entry.color }));
     const candidateCaptions = new Set(buildLegendIntents(candidateRules, rendererRows).intents.map(intent => intent.caption));
     return {
       intents: buildLegendIntents(candidateRules.filter(rule => used.has(rule)), rendererRows).intents,
@@ -520,18 +526,10 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     return normalizeCaption(getIndividualFeatureLabel(feat));
   };
 
-  // The N-06 allocation reads Python's rows of the displayed Result (OV-294).
-  /** @param {DrawingState} drawing @returns {LegendRowContext} */
-  const legendRowContext = (drawing) => ({
-    rules: drawing.manualSpecificRules,
-    pythonRows: pythonLegendRows(state.svgContainer?.value?.querySelector?.('svg')),
-    features: extractedFeatures.value || [],
-    originalLegendOrder: state.originalLegendOrder?.value || []
-  });
   // The rules a legend row draws; editing the row edits them (N-06).
   const getLegendRowRules = (caption) => {
     const drawing = state.activeDrawing();
-    return legendRowRules(caption, legendRowContext(drawing));
+    return legendRowRules(caption, displayedLegendRowContext(state, drawing));
   };
 
   // Resolve the effective legend item label used by current SVG coloring
@@ -541,7 +539,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   const effectiveLegendCaptions = () => {
     const drawing = state.activeDrawing();
     const ruleMatches = ruleMatcher(drawing.manualSpecificRules);
-    const legendCaption = ruleLegendCaptions(legendRowContext(drawing));
+    const legendCaption = ruleLegendCaptions(displayedLegendRowContext(state, drawing));
     return (feat) => {
       if (!feat) return '';
       const rule = ruleMatches.first(feat);

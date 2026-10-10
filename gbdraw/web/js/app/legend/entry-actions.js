@@ -10,11 +10,12 @@ import {
   defaultLegendCaptionOrder,
   getAllFeatureLegendGroups,
   isLegendOrderEdited,
-  pythonLegendRows,
+  legendEntryKey,
   recordedLegendOrder,
   resultLegendRows
 } from '../../services/legend-svg.js';
 import { diffLegendIntents, legendRowRules } from '../../services/specific-color-rules.js';
+import { displayedLegendRowContext } from '../../services/feature-visibility.js';
 
 const normalizedColor = (value) => {
   const resolved = String(resolveColorToHex(String(value || '').trim()) || value || '').trim().toLowerCase();
@@ -573,16 +574,11 @@ export const createLegendEntryActions = ({
     const returning = deleted.filter((/** @type {unknown} */ _, /** @type {number} */ index) => picked.has(index));
     if (!svgContainer.value?.querySelector?.('svg') || returning.length === 0) return false;
     const inventory = (originalLegendOrder.value || []).map((/** @type {unknown} */ caption) => String(caption || '').trim());
-    const context = {
-      rules: drawing.manualSpecificRules,
-      pythonRows: pythonLegendRows(svgContainer.value.querySelector('svg')),
-      features: state.extractedFeatures?.value || [],
-      originalLegendOrder: inventory
-    };
+    const context = displayedLegendRowContext(state, drawing);
     let entries = [...(drawing.legendEntries.value || [])];
     for (const entry of returning) {
       const caption = legendCaption(entry);
-      const color = String(drawing.legendColorOverrides[caption] || legendRowRules(caption, context)[0]?.color || entry.color);
+      const color = String(drawing.legendColorOverrides[caption] || legendRowRules(legendEntryKey(entry), context)[0]?.color || entry.color);
       entries = withEntryAtDefaultPlace(entries, { ...entry, color }, inventory);
     }
     drawing.deletedLegendEntries.value = deleted.filter((/** @type {unknown} */ _, /** @type {number} */ index) => !picked.has(index));

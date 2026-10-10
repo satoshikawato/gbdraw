@@ -11,8 +11,10 @@ import {
   updateFeatureOverride
 } from './feature-placement.js';
 import { normalizeTsvCell as normalizeCell } from '../utils/tsv-cell.js';
+import { pythonLegendRows } from './legend-svg.js';
 /** @import { FeatureRequestRecord } from './feature-placement.js' */
 /** @import { RuleMatcher } from './rule-matchers.js' */
+/** @import { LegendRowContext, SpecificColorRule } from './specific-color-rules.js' */
 export { escapeRegexLiteral, exactRegexValue } from './feature-selector.js';
 
 const REQUIRED_COLUMNS = ['record_id', 'feature_type', 'qualifier', 'value', 'action'];
@@ -468,6 +470,52 @@ export const resolveFeatureDrawn = (feature, context) => {
   if (selectedTypes.size === 0 || selectedTypes.has(String(feature?.type ?? ''))) return true;
   return colorRuleMatcher(context).matchesAny(feature);
 };
+
+// The features the displayed Result draws, as its Legend rows are read
+// (`LegendRowContext.features`, N-06): those Python drew in it at its last
+// render (the rendered IDs of its committed metadata; every read feature for a
+// Result without them) that are still drawn (`resolveFeatureDrawn`; an unknown
+// answer keeps a feature). Read when iterated.
+/**
+ * @param {{ extractedFeatures?: { value?: unknown },
+ *   displayedResultMetadata?: () => { renderedFeatureIdentities?: { renderedIds?: unknown } | null } | null | undefined }} state
+ * @param {Parameters<typeof featureDrawnContext>[0]} drawing
+ * @returns {Iterable<{ svg_id?: unknown, type?: unknown, fill_color?: unknown }>}
+ */
+export const displayedDrawnFeatures = (state, drawing) => ({
+  * [Symbol.iterator]() {
+    const features = Array.isArray(state.extractedFeatures?.value) ? state.extractedFeatures.value : [];
+    const renderedIds = state.displayedResultMetadata?.()?.renderedFeatureIdentities?.renderedIds;
+    const context = featureDrawnContext(drawing);
+    for (const feature of features) {
+      if (renderedIds instanceof Set && !renderedIds.has(feature?.svg_id)) continue;
+      if (resolveFeatureDrawn(feature, context) !== false) yield feature;
+    }
+  }
+});
+
+/**
+ * What `displayedLegendRowContext` reads of the app state.
+ * @typedef {Parameters<typeof displayedDrawnFeatures>[0] & {
+ *   svgContainer?: { value?: { querySelector?: (selector: string) => Element | null } | null },
+ *   originalLegendOrder?: { value?: readonly string[] }
+ * }} DisplayedLegendState
+ */
+
+// The Legend state of the displayed Result that every caller of the N-06
+// allocation (specific-color-rules.js) reads: the compile, the Legend panel, the feature popup, the
+// Legend editor and the rule commit.
+/**
+ * @param {DisplayedLegendState} state
+ * @param {Parameters<typeof displayedDrawnFeatures>[1] & { manualSpecificRules: readonly Partial<SpecificColorRule>[] }} drawing
+ * @returns {LegendRowContext}
+ */
+export const displayedLegendRowContext = (state, drawing) => ({
+  rules: drawing.manualSpecificRules,
+  pythonRows: pythonLegendRows(state.svgContainer?.value?.querySelector?.('svg')),
+  features: displayedDrawnFeatures(state, drawing),
+  originalLegendOrder: state.originalLegendOrder?.value || []
+});
 
 // Whether a Result draws a catalog feature (R-5): the resolver's answer, else
 // (unknown) whether the Result's catalog (`resultCatalogFeatures`) renders it,

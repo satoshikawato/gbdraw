@@ -290,6 +290,18 @@ test('the Legend panel shows the palette color of the rows the compile colors', 
   assert.deepEqual(entries[0], { caption: 'CDS', color: '#AABBCC' }, 'the derivation writes no Legend row');
 });
 
+// OV-309: the track rows take the palette color Python draws them in, under
+// every dinucleotide and as one row or two (`_generated_legend_fills`);
+// Depth takes no palette color.
+test('the compile gives every track row Python draws its palette color', async () => {
+  const { draftLegendRowColors } = await import('../../gbdraw/web/js/app/candidate-render.js');
+  const paletteColors = { gc_content: '#a1a1a1', skew_high: '#b2b2b2', skew_low: '#c3c3c3' };
+  const keys = ['GC content', 'AT content', 'AT content (-)', 'GC skew', 'AT skew (+)', 'AT skew (-)', 'Depth'];
+  const { colorOf } = draftLegendRowColors({ rules: [], pythonRows: new Map(), originalLegendOrder: keys, paletteColors });
+  assert.deepEqual(keys.map((key) => colorOf(key)),
+    ['#a1a1a1', '#a1a1a1', '#a1a1a1', '#b2b2b2', '#b2b2b2', '#c3c3c3', null]);
+});
+
 // Review 2: a Legend row that a Specific color rule draws keeps the rule's
 // color, also when its caption names a palette key (a rule captioned CDS
 // whose color Python drew in the CDS row): the compile gives it the rule's
