@@ -21,10 +21,6 @@ write-up of a release.
   (LC738872.1) reverse-complemented with its record's **Reverse complement**
   setting, so its links to the neighboring genomes no longer cross. The rows stay
   centered, and the Gallery command adds `--reverse_complement 1` for that record.
-- Gallery publication (maintainer tooling): `tools/refresh_gallery_sessions.py`
-  accepts a Session whose LOSAT rows the web app computed. The CLI replay
-  rewrites their `true`/`false` cells as `True`/`False`, which the comparison
-  now reads as the same value, as it already did for number spellings (OV-413).
 - Gallery tutorials: the BGC, Hepatoplasmataceae, and majanivirus tutorials now
   say that the LOSAT runtime controls are under **Comparison › Settings ›
   Runtime and reproducibility**, not under **Advanced comparison and layout**
