@@ -76,7 +76,7 @@ export {
  * The visibility owner's preparation of the rule matches `resolveFeatureDrawn`
  * reads. Strict, it rejects when the color preparation fails and resolves to
  * false when it is stale.
- * @typedef {(options?: { strict?: boolean }) => boolean | Promise<boolean | { error: any }>} PrepareDrawnFeatureMatchesPort
+ * @typedef {(options?: { strict?: boolean, view?: boolean }) => boolean | Promise<boolean | { error: any }>} PrepareDrawnFeatureMatchesPort
  */
 
 /**
@@ -173,7 +173,6 @@ export const createFeatureSvgActions = ({
 }) => {
   const {
     orthogroups,
-    collinearGroups,
     extractedFeatures,
     biologicalFeatures,
     featuresBySvgId,
@@ -567,7 +566,7 @@ export const createFeatureSvgActions = ({
     const drawing = state.activeDrawing();
     return reportRuleRunFailure(
       state, 'feature-extraction', () => runWhenPrepared(
-        state, () => [prepareDrawnFeatureMatches({ strict: true })], () => openPreparedFeatureEditor(drawing, feat, eventLike)
+        state, () => [prepareDrawnFeatureMatches({ strict: true, view: true })], () => openPreparedFeatureEditor(drawing, feat, eventLike)
       )
     );
   };
@@ -749,11 +748,11 @@ export const createFeatureSvgActions = ({
     hoverSummaryState.lastEvent = null;
   }
 
-  const groupsForMatch = (matchElement) => (
-    matchElement.getAttribute('data-match-kind') === 'collinear'
-      ? collinearGroups?.value || []
-      : orthogroups?.value || []
-  );
+  // Every catalog group, collinear presentation groups included, is in
+  // `orthogroups`; the popup's scoped lookup picks the one a ribbon names. A
+  // collinear ribbon without a collinear group scope names ordinary similarity
+  // groups, which the presentation subset lacks (OV-370).
+  const groupsForMatch = () => orthogroups?.value || [];
 
   /** @param {DrawingState} drawing */
   const buildMatchPayload = (drawing, matchElement, featureLookup) => buildMatchPopupPayload(matchElement, {
@@ -761,7 +760,7 @@ export const createFeatureSvgActions = ({
     sourceFeatures: Array.isArray(biologicalFeatures?.value) && biologicalFeatures.value.length > 0
       ? biologicalFeatures.value
       : (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []),
-    orthogroups: groupsForMatch(matchElement),
+    orthogroups: groupsForMatch(),
     orthogroupNameOverrides: drawing.orthogroupNameOverrides,
     orthogroupDescriptionOverrides: drawing.orthogroupDescriptionOverrides,
     resolveSequenceSource: matchSequenceRegistry?.resolve
@@ -769,7 +768,7 @@ export const createFeatureSvgActions = ({
 
   // The summary builder reads a function as well as a list.
   const buildMatchHoverSummary = (matchElement) => buildPairwiseMatchHoverSummary(matchElement, /** @type {any} */ ({
-    orthogroups: () => groupsForMatch(matchElement),
+    orthogroups: groupsForMatch,
     orthogroupNameOverrides: state.activeDrawing().orthogroupNameOverrides
   }));
 

@@ -1405,6 +1405,7 @@
                     <span v-if="sessionBusyReason && !sessionSavePending && !sessionImportPending" data-session-busy-reason role="status" aria-live="polite" class="text-[10px] text-amber-700">{{ sessionBusyReason }}</span>
                     <span v-if="sessionSavePending" data-session-save-status role="status" aria-live="polite" class="text-[10px] font-semibold text-blue-700 whitespace-nowrap">Saving session…</span>
                     <span v-if="sessionImportPending" data-session-import-status role="status" aria-live="polite" class="text-[10px] font-semibold text-blue-700 whitespace-nowrap">Loading session…</span>
+                    <span v-if="featureDetailsPending && !sessionBusyReason && !sessionSavePending && !sessionImportPending" data-feature-details-pending role="status" aria-live="polite" class="text-[10px] font-semibold text-blue-700 whitespace-nowrap">Preparing feature details…</span>
                 </div>
                 <span id="session-save-help" class="sr-only">Save stores the current Result and generation settings draft. It does not Generate.</span>
                 <div class="app-session-actions flex items-center gap-1 min-w-0">
@@ -7194,15 +7195,16 @@
                                 <select id="similarity-alignment-reference"
                                         data-history-scope="transient"
                                         data-similarity-alignment-drawer-reference
-                                        :value="similarityAlignmentDrawerReferenceKey"
                                         @change="setSimilarityAlignmentDrawerReference(selectedOrthogroup.id, $event.target.value)"
                                         :disabled="!semanticMutationAvailable || (similarityAlignmentDrawerReferenceOptions(selectedOrthogroup.id).length === 0)"
                                         aria-describedby="similarity-alignment-drawer-reason"
                                         class="form-select text-xs w-full disabled:cursor-not-allowed disabled:opacity-50">
-                                    <option value="">Select exact reference…</option>
+                                    <option value="" :selected="!similarityAlignmentDrawerReferenceKey">Select exact reference…</option>
+                                    <!-- Each option states its own selection, so a preselected reference (OV-381) survives option re-renders. -->
                                     <option v-for="option in similarityAlignmentDrawerReferenceOptions(selectedOrthogroup.id)"
                                             :key="option.key"
-                                            :value="option.key">{{ option.label }}</option>
+                                            :value="option.key"
+                                            :selected="option.key === similarityAlignmentDrawerReferenceKey">{{ option.label }}</option>
                                 </select>
                                 <p id="similarity-alignment-drawer-reason" class="ui-hint">
                                     {{ similarityAlignmentDrawerDisabledReason(selectedOrthogroup.id) || 'The selected exact feature will remain fixed as the reference.' }}
@@ -7477,16 +7479,26 @@
                  data-similarity-alignment-overlay
                  data-similarity-alignment-dialog
                  :style="similarityAlignmentPaletteStyle"
-                 :class="similarityAlignmentCompact ? 'alignment-review-panel h-full w-full' : 'fixed right-3 top-3 max-h-[calc(100dvh-1.5rem)] w-[calc(100vw-1.5rem)] max-w-[26rem] shadow-2xl'"
+                 :class="similarityAlignmentCompact ? 'alignment-review-panel h-full w-full' : 'fixed right-3 top-3 max-h-[calc(100dvh-1.5rem)] w-[calc(100vw-1.5rem)] max-w-[30rem] shadow-2xl'"
                  class="z-[55] flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white">
                 <header class="shrink-0 cursor-move select-none border-b border-slate-200 px-4 py-3 touch-none"
                         @pointerdown="startSimilarityAlignmentPaletteDrag">
                     <div class="flex items-start justify-between gap-4">
-                        <div>
-                            <h2 id="similarity-alignment-dialog-title" tabindex="-1"
-                                class="text-base font-bold text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
-                                Select alignment anchors
-                            </h2>
+                        <div class="min-w-0">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <h2 id="similarity-alignment-dialog-title" tabindex="-1"
+                                    class="text-base font-bold text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
+                                    Review alignment
+                                </h2>
+                                <span id="similarity-alignment-application-help" data-alignment-application-help
+                                      class="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">Apply required<span class="sr-only">: nothing changes until Apply succeeds. Cancel keeps the current Result.</span></span>
+                            </div>
+                            <p id="similarity-alignment-dialog-description" data-similarity-alignment-count class="mt-0.5 text-[12px] text-slate-500">
+                                Similarity group <span class="font-semibold text-slate-700">{{ similarityAlignmentDraft?.response.groupId }}</span>
+                                · {{ (similarityAlignmentDraft?.rows.length || 0) + 1 }} records
+                                <template v-if="similarityAlignmentDirectionPreview?.severalCandidateCount">· {{ similarityAlignmentDirectionPreview.severalCandidateCount }} with several candidates</template>
+                                <span v-if="similarityAlignmentUnresolvedCount" class="font-semibold text-amber-700"> · {{ similarityAlignmentUnresolvedCount }} {{ similarityAlignmentUnresolvedCount === 1 ? 'needs' : 'need' }} a choice</span>
+                            </p>
                         </div>
                         <button type="button"
                                 @click="cancelSimilarityAlignmentDialog"
@@ -7497,161 +7509,194 @@
                     </div>
                 </header>
 
-                <div class="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-3 custom-scrollbar sm:p-5">
-                    <div class="space-y-4">
-                            <p id="similarity-alignment-application-help" data-alignment-application-help class="mt-1 text-xs font-semibold text-blue-700">Apply required: selections stay in this review draft until Apply succeeds. Cancel keeps the current Result.</p>
-                            <operation-error v-if="similarityAlignmentError" :error="similarityAlignmentError" :recovery="generationFailureRecovery"
-                               tabindex="-1" class="mb-2 text-xs text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-700"
-                               data-similarity-alignment-error>
-                                <p class="mt-2">Keep these choices and retry Apply below, or edit the choices before applying.</p>
-                            </operation-error>
-
-                            <p id="similarity-alignment-dialog-description" class="mt-1 text-xs leading-relaxed text-slate-600">
-                                Choose Select or Skip for ambiguous records. Direction choices include the exact reference and selected anchors with a known direction. Skipped, missing, unusable and unknown-direction anchors stay unchanged.
-                            </p>
-                            <p class="mt-2 text-xs font-semibold text-blue-700" data-similarity-alignment-count>
-                                {{ similarityAlignmentDraft?.rows.length || 0 }} target records · {{ similarityAlignmentUnresolvedCount }} need a choice
-                            </p>
-                        <section class="min-w-0 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-slate-700"
-                                 data-similarity-alignment-reference
-                                 aria-label="Exact alignment reference">
-                            <h3 class="font-semibold text-blue-900">Exact reference</h3>
-                            <p class="mt-1 break-all font-semibold">{{ similarityAlignmentDraft?.reference.label }}</p>
-                            <p class="mt-1 break-all">Record: {{ similarityAlignmentDraft?.reference.recordLabel }}</p>
-                            <p class="mt-1">Coordinates: {{ similarityAlignmentDraft?.reference.coordinates }} · Strand: {{ similarityAlignmentDraft?.reference.displayedStrand }} (current display)</p>
-                        </section>
-                        <fieldset class="min-w-0 text-xs text-slate-700" data-similarity-alignment-direction-mode aria-describedby="alignment-direction-scope alignment-direction-transform">
-                            <legend class="font-semibold">Alignment direction</legend>
-                            <div class="mt-2 flex flex-wrap gap-3">
-                                <label v-for="option in [{value:'keep',label:'Keep current directions'},{value:'right',label:'All selected arrows right'},{value:'left',label:'All selected arrows left'},{value:'custom',label:'Custom'}]" :key="option.value" class="flex items-center gap-1">
-                                    <input type="radio" name="alignment-direction-mode"
-                                           :value="option.value" :checked="similarityAlignmentDraft?.intent.mode === option.value"
-                                           :disabled="!semanticMutationAvailable || (similarityAlignmentBusy)" @change="setSimilarityAlignmentDirectionMode(option.value)">
-                                    {{ option.label }}<span v-if="option.value === 'right' || option.value === 'left'" aria-hidden="true">{{ option.value === 'right' ? '→' : '←' }}</span>
-                                </label>
-                            </div>
-                            <p id="alignment-direction-scope" role="status" aria-live="polite" aria-atomic="true" class="mt-2">
-                                {{ similarityAlignmentDraft?.intent.mode === 'keep' ? 'Keep current directions' : similarityAlignmentDraft?.intent.mode === 'custom' ? 'Custom directions' : similarityAlignmentDraft?.intent.mode === 'right' ? 'All right-facing' : 'All left-facing' }}:
-                                {{ similarityAlignmentDirectionPreview?.eligibleCount || 0 }} selected anchors with known direction, including the exact reference when known.
-                            </p>
-                            <p id="alignment-direction-transform" class="mt-2">A direction change reverses the whole record, including features, labels and comparison ribbons. Biological source strands (+/−) stay unchanged.</p>
-                            <p class="mt-2">Current to after Align (selected anchor arrows):</p>
-                            <div v-for="record in (similarityAlignmentDirectionPreview?.records || [])" :key="record.recordKey" class="mt-2 flex flex-wrap items-center gap-2" data-similarity-alignment-direction>
-                                <span class="min-w-0 break-words" :id="'alignment-direction-' + record.recordKey">{{ record.label }}{{ record.status === 'reference' ? ' · exact reference' : '' }}:
-                                    <span aria-hidden="true">{{ record.beforeArrow === 1 ? '→' : record.beforeArrow === -1 ? '←' : 'unknown' }} → {{ record.afterArrow === 1 ? '→' : record.afterArrow === -1 ? '←' : 'unknown' }}</span>
-                                    <span class="sr-only">Current {{ record.beforeDirection }}; after Align {{ record.afterDirection }}.</span>
-                                    <span v-if="record.exclusion"> · unchanged: {{ record.exclusionLabel }}</span>
-                                </span>
-                                <label v-if="similarityAlignmentDraft?.intent.mode === 'custom'">
-                                    <span class="sr-only">Direction for {{ record.label }}</span>
-                                    <select :value="similarityAlignmentDraft.intent.byRecordKey[record.recordKey] || 'keep'"
-                                            :aria-label="'Direction for ' + record.label"
-                                            :aria-describedby="'alignment-direction-' + record.recordKey"
-                                            :disabled="!semanticMutationAvailable || (similarityAlignmentBusy || Boolean(record.exclusion))"
-                                            @change="setSimilarityAlignmentCustomDirection(record.recordKey, $event.target.value)"
-                                            class="rounded border border-slate-300 p-1">
-                                        <option value="keep">Keep</option><option value="right">Right →</option><option value="left">Left ←</option>
-                                    </select>
-                                </label>
-                            </div>
-                            <p class="mt-2" data-similarity-alignment-reference-correction>
-                                The exact reference feature center stays at logical canvas x {{ similarityAlignmentDirectionPreview?.reference.beforeX?.toFixed(2) }}.
-                                Its record left edge moves by {{ similarityAlignmentDirectionPreview?.reference.deltaX?.toFixed(2) }} to keep that center fixed. Automatic diagram fitting and zoom may move it on screen.
-                            </p>
-                        </fieldset>
-                        <fieldset v-for="record in (similarityAlignmentDraft?.rows || [])"
-                                  :key="'alignment-review-' + record.recordKey"
-                                  class="min-w-0 rounded-lg border border-slate-200 p-3"
-                                  :data-alignment-record-key="record.recordKey">
-                            <legend class="max-w-full break-all px-1 text-sm font-semibold text-slate-700">
-                                {{ record.recordLabel }}
-                            </legend>
-                            <p class="mb-2 text-xs font-medium text-slate-700">
-                                {{ record.choice?.kind === 'select' ? 'Selected anchor' : record.choice?.kind === 'skip' ? 'Unchanged: ' + record.reasonLabel : 'Select or Skip is required.' }}
-                            </p>
-                            <p v-if="record.recommendedKey" class="mb-3 text-[11px] leading-relaxed text-slate-600"
-                               data-similarity-alignment-reason>
-                                Python suggested {{ record.candidates.find(candidate => candidate.key === record.recommendedKey)?.label }}:
-                                {{ record.recommendationReasonLabel }}
-                            </p>
-                            <div v-if="record.candidates.length" class="grid min-w-0 gap-2">
-                                <label v-for="(candidate, candidateIndex) in record.candidates"
-                                       :key="candidate.key"
+                <div class="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-3 custom-scrollbar sm:p-4">
+                    <div class="space-y-3">
+                        <operation-error v-if="similarityAlignmentError" :error="similarityAlignmentError" :recovery="generationFailureRecovery"
+                           tabindex="-1" class="text-xs text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-700"
+                           data-similarity-alignment-error>
+                            <p class="mt-2">Keep these choices and retry Apply below, or edit the choices before applying.</p>
+                        </operation-error>
+                        <fieldset class="min-w-0" data-similarity-alignment-direction-mode aria-describedby="alignment-direction-scope">
+                            <legend class="text-[12px] font-semibold text-slate-700">Arrow direction</legend>
+                            <div class="mt-1.5 flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1">
+                                <label v-for="option in [{value:'keep',label:'Keep as is'},{value:'right',label:'All right',arrow:'→'},{value:'left',label:'All left',arrow:'←'},{value:'custom',label:'Custom'}]" :key="option.value"
                                        :class="[
-                                         'block min-w-0 cursor-pointer rounded-lg border p-3 text-xs transition-colors focus-within:ring-2 focus-within:ring-blue-500',
-                                         record.choice?.kind === 'select' && record.choice.candidateKey === candidate.key
-                                           ? 'border-blue-500 bg-blue-50'
-                                           : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/50',
-                                         similarityAlignmentCanvasHover?.recordKey === record.recordKey && similarityAlignmentCanvasHover?.candidateKey === candidate.key ? 'ring-2 ring-blue-500 border-blue-500 bg-blue-50' : '',
-                                         similarityAlignmentBusy ? 'cursor-wait opacity-60' : ''
-                                       ]"
-                                       @mouseenter="previewSimilarityAlignmentCandidate(candidate.anchor)"
-                                       @mouseleave="clearSimilarityAlignmentCandidatePreview"
-                                       @focusin="previewSimilarityAlignmentCandidate(candidate.anchor)"
-                                       @focusout="clearSimilarityAlignmentCandidatePreview">
-                                    <span class="flex min-w-0 items-start gap-2">
-                                        <input type="radio"
-                                               :name="'alignment-choice-' + record.recordKey"
-                                               :checked="record.choice?.kind === 'select' && record.choice.candidateKey === candidate.key"
-                                               :disabled="similarityAlignmentBusy"
-                                               @change="selectSimilarityAlignmentCandidate(record.recordKey, candidate.anchor)"
-                                               :aria-label="'Select ' + candidate.label + ', ' + candidate.coordinates + ', strand ' + candidate.displayedStrand + ' for ' + record.recordLabel"
-                                               class="mt-0.5 border-slate-300 text-blue-600 focus:ring-blue-500">
-                                        <span class="min-w-0 flex-1">
-                                            <span class="flex flex-wrap items-center gap-1 min-w-0">
-                                                <span class="shrink-0 rounded bg-blue-100 px-1.5 py-0.5 font-semibold text-blue-800">{{ candidateIndex + 1 }}</span>
-                                                <span class="shrink-0 text-[10px] font-semibold text-blue-800">{{ record.choice?.candidateKey === candidate.key ? 'Selected' : 'Select' }}</span>
-                                                <span class="min-w-0 break-all font-semibold text-slate-800" :title="candidate.label">{{ candidate.label }}</span>
-                                                <span v-if="record.choice?.candidateKey === candidate.key && record.recommendedKey === candidate.key"
-                                                      class="rounded bg-emerald-100 px-1.5 py-0.5 font-semibold text-emerald-900">Recommended</span>
-                                            </span>
-                                            <span class="mt-1 block font-mono text-[10px] text-slate-600">
-                                                {{ candidate.coordinates }} · Strand {{ candidate.displayedStrand }}
-                                            </span>
-                                            <span class="mt-1 block break-all text-[11px] text-slate-600">
-                                                {{ candidate.representative ? 'Representative' : 'Not representative' }} ·
-                                                Direct evidence: {{ candidate.directEvidence.join(', ') }}
-                                            </span>
-                                        </span>
-                                    </span>
+                                         'relative flex flex-1 cursor-pointer items-center justify-center whitespace-nowrap rounded-md px-1.5 py-1 text-[12px] font-semibold focus-within:ring-2 focus-within:ring-blue-600',
+                                         similarityAlignmentDraft?.intent.mode === option.value ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-300' : 'text-slate-600 hover:text-slate-800'
+                                       ]">
+                                    <!-- The native radio covers its segment, transparent, so a click or tap lands on it. -->
+                                    <input type="radio" name="alignment-direction-mode" class="absolute inset-0 m-0 h-full w-full cursor-pointer appearance-none rounded-md opacity-0 disabled:cursor-not-allowed"
+                                           :value="option.value" :checked="similarityAlignmentDraft?.intent.mode === option.value"
+                                           :disabled="!semanticMutationAvailable || similarityAlignmentBusy" @change="setSimilarityAlignmentDirectionMode(option.value)">
+                                    {{ option.label }}<span v-if="option.arrow" aria-hidden="true">&nbsp;{{ option.arrow }}</span>
                                 </label>
                             </div>
-                            <label v-if="record.candidates.length" :class="[
-                                     'mt-2 flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-xs focus-within:ring-2 focus-within:ring-amber-500',
-                                     record.choice?.kind === 'skip' ? 'border-amber-400 bg-amber-50' : 'border-slate-200 bg-white hover:border-amber-300',
-                                     similarityAlignmentBusy ? 'cursor-wait opacity-60' : ''
-                                   ]">
-                                <input type="radio"
-                                       :name="'alignment-choice-' + record.recordKey"
-                                       :checked="record.choice?.kind === 'skip'"
-                                       :disabled="similarityAlignmentBusy"
-                                       @change="skipSimilarityAlignmentRecord(record.recordKey)"
-                                       :aria-label="'Skip ' + record.recordLabel"
-                                       class="border-slate-300 text-amber-600 focus:ring-amber-500">
-                                <span><strong>Skip</strong> — leave this record's position and orientation unchanged.</span>
-                            </label>
-                            <p v-else class="text-xs text-slate-600">No usable candidate. This record stays unchanged.</p>
+                            <p id="alignment-direction-scope" role="status" aria-live="polite" aria-atomic="true" class="mt-1.5 text-[11px] text-slate-600">
+                                {{ similarityAlignmentDirectionPreview?.effect }}
+                            </p>
                         </fieldset>
+                        <div class="space-y-2">
+                            <p class="text-[12px] font-semibold text-slate-700">Feature to line up in each record</p>
+                            <template v-for="direction in (similarityAlignmentDirectionPreview?.records || [])" :key="'alignment-card-' + direction.recordKey">
+                                <component :is="direction.status === 'reference' ? 'section' : 'fieldset'"
+                                           v-for="record in [direction.status === 'reference' ? similarityAlignmentDraft.reference : similarityAlignmentDraft.rows.find(row => row.recordKey === direction.recordKey)]"
+                                           :key="direction.recordKey"
+                                           :data-alignment-record-key="direction.status === 'reference' ? null : direction.recordKey"
+                                           :data-similarity-alignment-reference="direction.status === 'reference' ? '' : null"
+                                           :aria-label="direction.status === 'reference' ? 'Exact alignment reference' : null"
+                                           :class="[
+                                             'min-w-0 rounded-lg border px-3 py-2.5',
+                                             direction.status === 'reference' ? 'border-blue-200 bg-blue-50/60'
+                                               : record.choice === null ? 'border-amber-400 ring-1 ring-amber-300'
+                                               : 'border-slate-200'
+                                           ]">
+                                    <legend v-if="direction.status !== 'reference'" class="sr-only">{{ record.recordLabel }}</legend>
+                                    <div class="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                                        <div class="min-w-0 flex-1">
+                                            <p class="[overflow-wrap:anywhere] text-[13px] font-semibold text-slate-800">{{ record.recordName }}</p>
+                                            <p v-if="record.recordDetail" class="[overflow-wrap:anywhere] text-[11px] text-slate-500">{{ record.recordDetail }}</p>
+                                        </div>
+                                        <div class="ml-auto flex flex-wrap items-center justify-end gap-2" data-similarity-alignment-direction>
+                                            <span v-if="direction.status === 'reference'" class="flex items-center gap-1 rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-semibold text-white"><i class="ph ph-push-pin" aria-hidden="true"></i>Reference</span>
+                                            <span v-else-if="record.choice === null" class="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">Choose one</span>
+                                            <span v-else-if="record.candidates.length > 1" class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">{{ record.candidates.length }} candidates</span>
+                                            <span :id="'alignment-direction-' + direction.recordKey" class="sr-only">{{ direction.description }}</span>
+                                            <span v-if="direction.reversed" aria-hidden="true" class="flex items-center gap-1">
+                                                <span class="text-base leading-none text-slate-400 line-through decoration-slate-300">{{ direction.beforeArrow === 1 ? '→' : direction.beforeArrow === -1 ? '←' : '?' }}</span>
+                                                <span class="text-base font-bold leading-none text-amber-700">{{ direction.afterArrow === 1 ? '→' : direction.afterArrow === -1 ? '←' : '?' }}</span>
+                                                <span class="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">reversed</span>
+                                            </span>
+                                            <span v-else-if="direction.afterArrow !== null" aria-hidden="true" class="text-base leading-none text-slate-500">{{ direction.afterArrow === 1 ? '→' : '←' }}</span>
+                                            <select v-if="similarityAlignmentDraft.intent.mode === 'custom'"
+                                                    :value="similarityAlignmentDraft.intent.byRecordKey[direction.recordKey] || 'keep'"
+                                                    :aria-label="'Direction for ' + direction.label"
+                                                    :aria-describedby="'alignment-direction-' + direction.recordKey"
+                                                    :disabled="!semanticMutationAvailable || similarityAlignmentBusy || Boolean(direction.exclusion)"
+                                                    @change="setSimilarityAlignmentCustomDirection(direction.recordKey, $event.target.value)"
+                                                    class="rounded-md border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] text-slate-700 disabled:opacity-50">
+                                                <option value="keep">Keep</option><option value="right">Right →</option><option value="left">Left ←</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <template v-if="direction.status === 'reference'">
+                                        <p class="mt-1.5 [overflow-wrap:anywhere] text-[12px] text-slate-700"><span class="font-semibold">{{ record.name }}</span> <span v-if="record.ids" class="font-mono text-[11px] text-slate-500">{{ record.ids }}</span> · <span class="text-slate-500">{{ record.coordinates }} · strand {{ record.displayedStrand }}</span></p>
+                                        <p class="mt-1 text-[11px] text-blue-900" data-similarity-alignment-reference-correction>
+                                            {{ similarityAlignmentDirectionPreview.referenceShift || 'Stays in place. The other records move to line up with it.' }}
+                                        </p>
+                                    </template>
+                                    <div v-else-if="record.candidates.length === 1 && record.choice !== null"
+                                         :class="['mt-1.5 flex items-center justify-between gap-2 rounded', similarityAlignmentCanvasHover?.recordKey === record.recordKey ? 'ring-2 ring-blue-500' : '']"
+                                         @mouseenter="previewSimilarityAlignmentCandidate(record.candidates[0].anchor)"
+                                         @mouseleave="clearSimilarityAlignmentCandidatePreview">
+                                        <p class="min-w-0 [overflow-wrap:anywhere] text-[12px] text-slate-700"><span class="font-semibold">{{ record.candidates[0].name }}</span> <span v-if="record.candidates[0].ids" class="font-mono text-[11px] text-slate-500">{{ record.candidates[0].ids }}</span> · <span class="text-slate-500">{{ record.candidates[0].coordinates }} · strand {{ record.candidates[0].displayedStrand }} · only candidate</span></p>
+                                        <label class="flex shrink-0 cursor-pointer items-center gap-1 text-[11px] text-slate-600">
+                                            <input type="checkbox" class="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                                                   :checked="record.choice.kind === 'skip'"
+                                                   :disabled="similarityAlignmentBusy"
+                                                   :aria-label="'Skip ' + record.recordLabel"
+                                                   @change="$event.target.checked ? skipSimilarityAlignmentRecord(record.recordKey) : selectSimilarityAlignmentCandidate(record.recordKey, record.candidates[0].anchor)">
+                                            Skip
+                                        </label>
+                                    </div>
+                                    <template v-else-if="record.candidates.length">
+                                        <!-- One line: the recommendation, and in a record that still needs a choice, what to do. -->
+                                        <p v-if="record.choice === null || record.recommendedKey"
+                                           :class="['mt-1 text-[11px]', record.choice === null ? 'text-amber-800' : 'text-slate-600']"
+                                           data-similarity-alignment-reason>
+                                            <i v-if="record.choice === null" class="ph ph-warning" aria-hidden="true"></i>
+                                            {{ record.choice === null ? 'Choose a feature to line up, or skip this record.' : '' }}
+                                            <template v-if="record.recommendedKey">Recommended: {{ record.candidates.find(candidate => candidate.key === record.recommendedKey)?.name }}, {{ record.recommendationReasonLabel }}.</template>
+                                        </p>
+                                        <div class="mt-2 grid min-w-0 gap-1.5">
+                                            <label v-for="(candidate, candidateIndex) in record.candidates"
+                                                   :key="candidate.key"
+                                                   :class="[
+                                                     'flex min-w-0 cursor-pointer items-start gap-2 rounded-md border px-2.5 py-2 transition-colors focus-within:ring-2 focus-within:ring-blue-500',
+                                                     record.choice?.kind === 'select' && record.choice.candidateKey === candidate.key
+                                                       ? 'border-blue-500 bg-blue-50'
+                                                       : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/50',
+                                                     similarityAlignmentCanvasHover?.recordKey === record.recordKey && similarityAlignmentCanvasHover?.candidateKey === candidate.key ? 'ring-2 ring-blue-500 border-blue-500 bg-blue-50' : '',
+                                                     similarityAlignmentBusy ? 'cursor-wait opacity-60' : ''
+                                                   ]"
+                                                   @mouseenter="previewSimilarityAlignmentCandidate(candidate.anchor)"
+                                                   @mouseleave="clearSimilarityAlignmentCandidatePreview"
+                                                   @focusin="previewSimilarityAlignmentCandidate(candidate.anchor)"
+                                                   @focusout="clearSimilarityAlignmentCandidatePreview">
+                                                <input type="radio"
+                                                       :name="'alignment-choice-' + record.recordKey"
+                                                       :checked="record.choice?.kind === 'select' && record.choice.candidateKey === candidate.key"
+                                                       :disabled="similarityAlignmentBusy"
+                                                       @change="selectSimilarityAlignmentCandidate(record.recordKey, candidate.anchor)"
+                                                       :aria-label="'Select ' + candidate.label + ', ' + candidate.coordinates + ', strand ' + candidate.displayedStrand + ' for ' + record.recordLabel"
+                                                       class="mt-0.5 border-slate-300 text-blue-600 focus:ring-blue-500">
+                                                <span class="min-w-0 flex-1">
+                                                    <span class="flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+                                                        <span class="shrink-0 rounded bg-blue-100 px-1 text-[10px] font-semibold text-blue-800" title="Number on the diagram">{{ candidateIndex + 1 }}</span>
+                                                        <span class="min-w-0 [overflow-wrap:anywhere] text-[13px] font-semibold text-slate-800">{{ candidate.name }}</span>
+                                                        <span v-if="candidate.ids" class="break-all font-mono text-[11px] text-slate-500">{{ candidate.ids }}</span>
+                                                        <span v-if="record.recommendedKey === candidate.key" class="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-900">Recommended</span>
+                                                        <span v-for="evidence in candidate.evidence" :key="evidence" class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-700">{{ evidence }}</span>
+                                                        <span v-if="!candidate.evidence.length" class="text-[10px] text-slate-500">no direct hit</span>
+                                                    </span>
+                                                    <span class="mt-0.5 block text-[11px] text-slate-500">{{ candidate.coordinates }} · strand {{ candidate.displayedStrand }}{{ candidate.representative ? ' · group representative' : '' }}</span>
+                                                </span>
+                                            </label>
+                                            <label :class="[
+                                                     'flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-[11px] text-slate-600 focus-within:ring-2 focus-within:ring-amber-500',
+                                                     record.choice?.kind === 'skip' ? 'border-amber-400 bg-amber-50' : 'border-dashed border-slate-300 bg-white hover:border-amber-300',
+                                                     similarityAlignmentBusy ? 'cursor-wait opacity-60' : ''
+                                                   ]">
+                                                <input type="radio"
+                                                       :name="'alignment-choice-' + record.recordKey"
+                                                       :checked="record.choice?.kind === 'skip'"
+                                                       :disabled="similarityAlignmentBusy"
+                                                       @change="skipSimilarityAlignmentRecord(record.recordKey)"
+                                                       :aria-label="'Skip ' + record.recordLabel"
+                                                       class="border-slate-300 text-amber-600 focus:ring-amber-500">
+                                                Skip this record (position and direction unchanged)
+                                            </label>
+                                        </div>
+                                    </template>
+                                    <p v-if="direction.exclusion && direction.exclusion !== 'selection_required'" class="mt-1 text-[11px] text-slate-600">
+                                        {{ direction.exclusionLabel }}
+                                    </p>
+                                </component>
+                            </template>
+                        </div>
+                        <details class="rounded-lg border border-slate-200 px-3 py-2 text-[11px] text-slate-600">
+                            <summary class="cursor-pointer font-semibold text-slate-700">How alignment works</summary>
+                            <ul class="mt-1.5 list-disc space-y-1 pl-4">
+                                <li>Nothing changes until Apply. Cancel keeps the current diagram.</li>
+                                <li>The reference feature keeps its place; each record moves so its chosen feature lines up with it.</li>
+                                <li>Reversing flips a whole record with its labels and ribbons. Strands in the data (+/−) do not change.</li>
+                                <li>The direction choice covers the reference and every chosen feature with a known direction. Skipped records and records without a usable candidate stay where they are.</li>
+                                <li>Reciprocal best hit: the two proteins are each other's best match.</li>
+                                <li>Automatic diagram fitting and zoom may move records on screen.</li>
+                            </ul>
+                        </details>
                     </div>
                 </div>
-                <footer class="shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:px-5">
-                    <p id="similarity-alignment-apply-reason"
-                       class="mb-2 text-xs"
-                       :class="canApplySimilarityAlignment ? 'text-emerald-700' : 'text-amber-700'">
-                        {{ canApplySimilarityAlignment ? 'Apply validates the complete draft with Python, then regenerates the diagram.' : similarityAlignmentApplyDisabledReason }}
-                    </p>
-                    <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                        <button type="button"
-                                @click="cancelSimilarityAlignmentDialog"
-                                class="btn btn-secondary min-w-28 py-2 text-xs font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">Cancel</button>
-                        <button type="button"
-                                @click="applySimilarityAlignmentDraft"
-                                :disabled="!semanticMutationAvailable || (!canApplySimilarityAlignment)"
-                                aria-describedby="similarity-alignment-apply-reason"
-                                class="btn btn-primary min-w-28 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
-                            <span v-if="similarityAlignmentStatus === 'applying'">Applying…</span>
-                            <span v-else>Apply</span>
-                        </button>
+                <footer class="shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-3">
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <p id="similarity-alignment-apply-reason"
+                           class="text-[12px]"
+                           :class="canApplySimilarityAlignment ? 'text-slate-600' : 'font-medium text-amber-800'">
+                            <i :class="canApplySimilarityAlignment ? 'ph ph-check-circle text-emerald-700' : 'ph ph-warning'" aria-hidden="true"></i>
+                            {{ canApplySimilarityAlignment ? 'Ready. Apply regenerates the diagram; Cancel keeps it.' : similarityAlignmentApplyDisabledReason }}
+                        </p>
+                        <div class="flex flex-wrap justify-end gap-2 sm:shrink-0 sm:flex-nowrap">
+                            <button type="button"
+                                    @click="cancelSimilarityAlignmentDialog"
+                                    class="btn btn-secondary min-w-24 py-2 text-xs font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">Cancel</button>
+                            <button type="button"
+                                    @click="applySimilarityAlignmentDraft"
+                                    :disabled="!semanticMutationAvailable || (!canApplySimilarityAlignment)"
+                                    aria-describedby="similarity-alignment-apply-reason"
+                                    class="btn btn-primary min-w-24 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
+                                <span v-if="similarityAlignmentStatus === 'applying'">Applying…</span>
+                                <span v-else>Apply</span>
+                            </button>
+                        </div>
                     </div>
                 </footer>
         </section>

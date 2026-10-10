@@ -12,7 +12,7 @@ import {
 import { materializeRecordTranslations } from './legend-layout/composition-actions.js';
 import { isInternalProteinDisplayId } from '../services/feature-utils.js';
 
-const { computed, ref } = window.Vue;
+const { computed, ref, watch } = window.Vue;
 
 const REVIEW_REASONS = new Set([
   'only_usable_candidate', 'unique_direct_rbh',
@@ -93,11 +93,20 @@ const directionExclusionLabels = Object.freeze({
 
 const arrowLabel = (arrow) => arrow === 1 ? 'right-facing' : arrow === -1 ? 'left-facing' : 'unknown';
 
+// Direct evidence kinds between a candidate and the exact reference (Python edge kinds).
+/** @type {Readonly<Record<string, string>>} */
+const evidenceLabels = Object.freeze({
+  rbh: 'reciprocal best hit',
+  coortholog: 'near-reciprocal hit',
+  record_local_paralog: 'local paralog hit'
+});
+
+// Why a candidate is recommended, as a clause after its name ("Recommended: livU, …").
 const reviewReasonLabels = Object.freeze({
-  only_usable_candidate: 'The only usable candidate in this record.',
-  unique_direct_rbh: 'The only candidate with a direct reciprocal best hit.',
-  unique_representative: 'The only representative candidate.',
-  deterministic_candidate_1: 'The first candidate in Python’s stable order.'
+  only_usable_candidate: 'the only usable candidate in this record',
+  unique_direct_rbh: 'the only candidate with a reciprocal best hit',
+  unique_representative: 'the only group representative among the candidates',
+  deterministic_candidate_1: 'the first candidate in a fixed order; none stands out'
 });
 
 const cloneJson = (value) => {
@@ -118,7 +127,7 @@ const displayText = (...values) => values
 
 // Human-readable names shared by Review, the direction and Reset previews, and
 // the active-plan inspector. Record keys and feature hashes stay binding-only.
-const featureName = (anchor, facts = {}, fallback = '') => {
+const featureNameParts = (anchor, facts = {}, fallback = '') => {
   const feature = facts.sequenceFeature || facts;
   const qualifiers = feature.qualifiers || {};
   const gene = displayText(feature.gene, facts.gene, qualifiers.gene);
@@ -129,17 +138,28 @@ const featureName = (anchor, facts = {}, fallback = '') => {
   const product = displayText(feature.product, facts.product, qualifiers.product);
   const name = gene || product || locusTag || proteinId
     || (fallback === anchor.biologicalFeatureId ? '' : displayText(fallback));
-  if (name) return [name, ...[locusTag, proteinId].filter((value) => value && value !== name)].join(' · ');
+  if (name) {
+    const ids = [locusTag, proteinId].filter((value) => value && value !== name);
+    return { name, ids, label: [name, ...ids].join(' · ') };
+  }
   const start = Number(feature.start ?? facts.start);
   const end = Number(feature.end ?? facts.end);
   const coordinates = Number.isSafeInteger(start) && Number.isSafeInteger(end)
     ? `${(start + 1).toLocaleString('en-US')}..${end.toLocaleString('en-US')} bp` : '';
-  return [displayText(feature.type, facts.type) || 'Feature', coordinates].filter(Boolean).join(' ');
+  const typeName = [displayText(feature.type, facts.type) || 'Feature', coordinates].filter(Boolean).join(' ');
+  return { name: typeName, ids: [], label: typeName };
 };
 
-const featureLabel = (anchor, displayFacts, fallback = '') => (
-  featureName(anchor, displayFacts.get(anchorKey(anchor)) || {}, fallback)
-);
+// The joined label names a feature in accessible names; the parts lay it out.
+/**
+ * @param {{ biologicalFeatureId?: string }} anchor
+ * @param {Map<string, object>} displayFacts
+ * @param {string} [fallback]
+ */
+const featureView = (anchor, displayFacts, fallback = '') => {
+  const parts = featureNameParts(anchor, displayFacts.get(anchorKey(anchor)) || {}, fallback);
+  return { label: parts.label, name: parts.name, ids: parts.ids.join(' · ') };
+};
 
 const catalogBiologicalFeatures = (catalog) => (Array.isArray(catalog?.items) ? catalog.items : [])
   .flatMap((item) => (Array.isArray(item?.biologicalFeatures) ? item.biologicalFeatures : []));
@@ -161,21 +181,32 @@ const recordNames = ({ recordKeys, request = null, linearSeqs = [], catalog = nu
     const id = displayText(feature?.record_id, feature?.recordId);
     if (key && id && !accessions.has(key)) accessions.set(key, id);
   });
-  const labels = recordKeys.map((recordKey, index) => {
+  const parts = recordKeys.map((recordKey, index) => {
     const record = request?.records?.find((entry) => entry?.recordKey === recordKey);
     const sequence = (Array.isArray(linearSeqs) ? linearSeqs : [])
       .find((entry) => String(entry?.uid || '') === recordKey);
-    const name = plainTextLinearRecordLabel(displayText(record?.presentation?.label,
-      sequence ? resolveLinearRecordEffectiveDefinition(sequence) : ''));
+    const definition = displayText(record?.presentation?.label,
+      sequence ? resolveLinearRecordEffectiveDefinition(sequence) : '');
+    const name = definition ? plainTextLinearRecordLabel(definition) : '';
     const accession = displayText(sequence?.accession, accessions.get(recordKey));
-    return [...new Set([name, accession].filter(Boolean))].join(' · ')
-      || plainTextLinearRecordLabel(displayText(sequence?.gb?.name, sequence?.gff?.name))
+    const fileName = displayText(sequence?.gb?.name, sequence?.gff?.name);
+    const label = [...new Set([name, accession].filter(Boolean))].join(' · ')
+      || (fileName ? plainTextLinearRecordLabel(fileName) : '')
       || `Record ${index + 1}`;
+    return { label, name: name || accession || label, accession: name && accession !== name ? accession : '' };
   });
   const counts = new Map();
-  labels.forEach((label) => counts.set(label, (counts.get(label) || 0) + 1));
-  return new Map(recordKeys.map((recordKey, index) => [recordKey,
-    counts.get(labels[index]) > 1 ? `${labels[index]} · Record ${index + 1}` : labels[index]]));
+  parts.forEach(({ label }) => counts.set(label, (counts.get(label) || 0) + 1));
+  // Each entry keeps the joined label for accessible names and its parts for layout.
+  return new Map(recordKeys.map((recordKey, index) => {
+    const { label, name, accession } = parts[index];
+    const duplicate = counts.get(label) > 1 ? `Record ${index + 1}` : '';
+    return [recordKey, {
+      label: duplicate ? `${label} · ${duplicate}` : label,
+      name,
+      detail: [accession, duplicate].filter(Boolean).join(' · ')
+    }];
+  }));
 };
 
 const candidateView = (candidate, request, displayFacts = new Map()) => {
@@ -183,10 +214,14 @@ const candidateView = (candidate, request, displayFacts = new Map()) => {
   const member = request.members.find(({ anchor }) => anchorKey(anchor) === key);
   if (!member) throw new Error('Alignment candidate has no current member facts.');
   const coordinates = `${(candidate.sourceStart + 1).toLocaleString('en-US')}..${candidate.sourceEnd.toLocaleString('en-US')} bp`;
+  const feature = featureView(candidate.anchor, displayFacts, candidate.displayName);
   return {
     key,
     anchor: candidate.anchor,
-    label: featureLabel(candidate.anchor, displayFacts, candidate.displayName),
+    label: feature.label,
+    name: feature.name,
+    ids: feature.ids,
+    evidence: candidate.directEvidence.map((/** @type {string} */ kind) => evidenceLabels[kind] || kind),
     coordinates,
     displayedStrand: strandLabel(candidate.displayedStrand),
     representative: candidate.representative,
@@ -200,9 +235,15 @@ const candidateView = (candidate, request, displayFacts = new Map()) => {
 const referenceView = (response, request, displayFacts, recordLabels) => {
   const member = request.members.find(({ anchor }) => sameJson(anchor, response.reference));
   if (!member) throw new Error('Alignment reference has no current member facts.');
+  const feature = featureView(response.reference, displayFacts);
+  const record = recordLabels.get(response.reference.recordKey);
   return {
-    label: featureLabel(response.reference, displayFacts),
-    recordLabel: recordLabels.get(response.reference.recordKey),
+    label: feature.label,
+    name: feature.name,
+    ids: feature.ids,
+    recordLabel: record?.label,
+    recordName: record?.name,
+    recordDetail: record?.detail,
     recordKey: response.reference.recordKey,
     coordinates: (member.sourceStart + 1).toLocaleString('en-US') + '..'
       + member.sourceEnd.toLocaleString('en-US') + ' bp',
@@ -221,9 +262,12 @@ const reviewRows = (response, request, displayFacts, recordLabels) => response.r
       : record.status === 'skipped' ? record.rationale : record.reviewReason;
     const recommendedKey = selectedAnchor && REVIEW_REASONS.has(reason)
       ? anchorKey(selectedAnchor) : null;
+    const names = recordLabels.get(record.recordKey);
     return {
       recordKey: record.recordKey,
-      recordLabel: recordLabels.get(record.recordKey),
+      recordLabel: names?.label,
+      recordName: names?.name,
+      recordDetail: names?.detail,
       candidates: record.candidates.filter(({ usable }) => usable)
         .map((candidate) => candidateView(candidate, request, displayFacts)),
       reason,
@@ -281,8 +325,8 @@ const inspectActivePlan = (plan, { linearSeqs = [], catalog = null, request = nu
     const key = `${feature?.recordKey}\0${feature?.biologicalFeatureId}`;
     if (!features.has(key)) features.set(key, feature);
   });
-  const nameOf = (anchor) => featureName(anchor,
-    features.get(`${anchor.recordKey}\0${anchor.biologicalFeatureId}`) || {});
+  const nameOf = (anchor) => featureNameParts(anchor,
+    features.get(`${anchor.recordKey}\0${anchor.biologicalFeatureId}`) || {}).label;
   const names = recordNames({ recordKeys: plan.records.map(({ recordKey }) => recordKey),
     request, linearSeqs, catalog });
   return deepFreeze({
@@ -291,12 +335,12 @@ const inspectActivePlan = (plan, { linearSeqs = [], catalog = null, request = nu
     reference: {
       ...plan.reference,
       label: nameOf(plan.reference),
-      recordLabel: names.get(plan.reference.recordKey)
+      recordLabel: names.get(plan.reference.recordKey)?.label
     },
     records: plan.records.map((decision) => {
       return {
         recordKey: decision.recordKey,
-        recordLabel: names.get(decision.recordKey),
+        recordLabel: names.get(decision.recordKey)?.label,
         anchorLabel: decision.anchor ? nameOf(decision.anchor) : 'Skip',
         status: decision.status,
         rationale: decision.rationale,
@@ -824,6 +868,21 @@ const anchorsAgree = (left, right) => {
 };
 
 /**
+ * One record of the Review alignment direction preview, as the cards read it.
+ * @typedef {object} DirectionPreviewRecord
+ * @property {string} recordKey
+ * @property {string} status
+ * @property {string | null} exclusion
+ * @property {number} afterArrow
+ * @property {boolean} beforeReverseComplement
+ * @property {boolean} afterReverseComplement
+ * @property {boolean} reversed
+ * @property {string} shortLabel
+ * @property {string} label
+ * @property {string} description
+ */
+
+/**
  * One alignment run that the composition root executes as a candidate (R13):
  * the root commits `orientations` to the record display intent.
  * @typedef {object} AlignmentCandidateRun
@@ -916,9 +975,16 @@ export const createSimilarityAlignmentActions = ({
   const busy = computed(() => status.value === 'resolving' || status.value === 'applying');
   const error = ref(null);
   const summary = ref(null);
-  const notice = ref('');
+  // A "cleared" notice holds only while no plan is active, so an Undo that
+  // restores the plan also retires it (OV-382).
+  const noticeState = ref({ text: '', whileNoPlan: false });
+  const notice = computed(() => (
+    noticeState.value.whileNoPlan && state.similarityAlignmentPlan?.value ? '' : noticeState.value.text
+  ));
   const repair = ref(null);
-  const drawerReferenceKey = ref('');
+  // The user's drawer reference pick and the committed plan it was made
+  // against. A new plan (Apply, Session load, Undo) drops the pick (OV-381).
+  const drawerReferencePick = ref(/** @type {{ key: string, plan: unknown } | null} */ (null));
   const resetDialogOpen = ref(false);
   const automaticApply = ref(false);
   const resetScope = ref('positions');
@@ -1021,8 +1087,8 @@ export const createSimilarityAlignmentActions = ({
     state.linearRecordTranslations.value = cloneJson(value.translations);
   };
 
-  const publishNotice = (message) => {
-    notice.value = String(message || '');
+  const publishNotice = (message, whileNoPlan = false) => {
+    noticeState.value = { text: String(message || ''), whileNoPlan };
   };
 
   const clearCommittedPlan = (reason) => {
@@ -1038,7 +1104,7 @@ export const createSimilarityAlignmentActions = ({
     state.similarityAlignmentPlan.value = null;
     summary.value = null;
     repair.value = null;
-    publishNotice(`Alignment cleared: ${reason}`);
+    publishNotice(`Alignment cleared: ${reason}`, true);
     return true;
   };
 
@@ -1107,7 +1173,7 @@ export const createSimilarityAlignmentActions = ({
     if (outcome?.status === 'ok') {
       summary.value = successfulSummary(response.plan, projected.records.filter(record => (
         record.beforeReverseComplement !== record.afterReverseComplement)).length);
-      repair.value = null; notice.value = ''; activeBaseline = null;
+      repair.value = null; publishNotice(''); activeBaseline = null;
       clearDraft(); error.value = null; status.value = 'idle';
       return {status:'ok'};
     }
@@ -1297,6 +1363,23 @@ export const createSimilarityAlignmentActions = ({
       .map(({ canonicalKey: _canonicalKey, ...candidate }) => candidate);
   };
 
+  // OV-381: a new plan (Apply, Session load, Undo) selects its own group in the
+  // drawer, whichever group was selected or saved before, so the drawer can
+  // offer the plan's reference below.
+  watch(() => state.similarityAlignmentPlan.value, (plan) => {
+    const groupId = String(plan?.groupId || '');
+    if (groupId && getOrthogroupById(groupId)) state.selectedOrthogroupId.value = groupId;
+  });
+
+  // OV-381: until the user picks, the drawer offers the committed plan's exact
+  // reference (from a popup Align or a loaded Session), never a stale one.
+  const drawerReferenceKey = computed(() => {
+    const plan = state.similarityAlignmentPlan.value;
+    const pick = drawerReferencePick.value;
+    if (pick && pick.plan === plan) return pick.key;
+    return plan?.reference && !repair.value ? anchorKey(plan.reference) : '';
+  });
+
   const selectedDrawerReference = (groupId) => (
     drawerReferenceOptions(groupId)
       .find(({ key }) => key === drawerReferenceKey.value)?.anchor || null
@@ -1330,7 +1413,7 @@ export const createSimilarityAlignmentActions = ({
       request, linearSeqs: state.linearSeqs, catalog: state.featureCatalog?.value });
     const targets = (receipt?.directions || []).map(delta => {
       const record = request?.records.find(({recordKey}) => recordKey === delta.recordKey);
-      return {recordKey: delta.recordKey, label: names.get(delta.recordKey) || 'Unavailable record',
+      return {recordKey: delta.recordKey, label: names.get(delta.recordKey)?.label || 'Unavailable record',
         current: baseReverseComplement(record), restored: delta.before,
         laterManualEdit: baseReverseComplement(record) !== delta.after};
     });
@@ -1601,14 +1684,54 @@ export const createSimilarityAlignmentActions = ({
   const directionPreview = computed(() => {
     if (!draft.value) return null;
     const projected = projectDraft();
-    return { ...projected,
-      eligibleCount: projected.records.filter(record => !record.exclusion).length,
-      records: projected.records.map(record => ({ ...record,
-        label: record.status === 'reference' ? draft.value.reference.recordLabel
-          : draft.value.rows.find(row => row.recordKey === record.recordKey)?.recordLabel || record.recordKey,
-        beforeDirection: arrowLabel(record.beforeArrow), afterDirection: arrowLabel(record.afterArrow),
-        exclusionLabel: directionExclusionLabels[record.exclusion] || record.exclusion
-      })) };
+    const { reference, rows, intent } = draft.value;
+    const records = /** @type {DirectionPreviewRecord[]} */ (projected.records.map((record) => {
+      const row = rows.find(entry => entry.recordKey === record.recordKey);
+      const isReference = record.status === 'reference';
+      const label = isReference ? reference.recordLabel : row?.recordLabel || record.recordKey;
+      const beforeDirection = arrowLabel(record.beforeArrow);
+      const afterDirection = arrowLabel(record.afterArrow);
+      // An anchor of unknown strand still moves its record; only the direction stays (PD-OI-027).
+      const exclusionLabel = record.exclusion
+        ? `${record.exclusion === 'unknown_strand' ? 'Direction unchanged' : 'Unchanged'}: ${directionExclusionLabels[record.exclusion] || record.exclusion}`
+        : '';
+      return { ...record, label, beforeDirection, afterDirection, exclusionLabel,
+        shortLabel: (isReference ? reference.recordDetail || reference.recordName : row?.recordDetail || row?.recordName) || label,
+        reversed: record.beforeReverseComplement !== record.afterReverseComplement,
+        // The accessible before/after statement each card and its Custom select describe.
+        description: `${label}${isReference ? ' · exact reference' : ''}: Current ${beforeDirection}; after Align ${afterDirection}.`
+          + (exclusionLabel ? ` ${exclusionLabel}` : '') };
+    }));
+    const eligible = records.filter(record => !record.exclusion);
+    const reversed = records.filter(record => record.reversed);
+    // A record still waiting for Select or Skip is counted by the footer, not here.
+    const excluded = records.filter(record => record.exclusion
+      && !['selection_required', 'unknown_strand'].includes(record.exclusion)).length;
+    const unknownStrand = records.filter(record => record.exclusion === 'unknown_strand').length;
+    const plural = (/** @type {number} */ count, /** @type {string} */ word) => `${count} ${word}${count === 1 ? '' : 's'}`;
+    const reversedText = `${plural(reversed.length, 'record')} (${reversed.map(({ shortLabel }) => shortLabel).join(', ')})`;
+    const sameAfter = eligible.length > 0 && eligible.every(({ afterArrow }) => afterArrow === eligible[0].afterArrow)
+      ? (eligible[0].afterArrow === 1 ? 'right' : eligible[0].afterArrow === -1 ? 'left' : '') : '';
+    const features = eligible.length === 1 ? 'the chosen feature' : `all ${eligible.length} chosen features`;
+    let effect;
+    if (intent.mode === 'custom') {
+      effect = reversed.length ? `Reverses ${reversedText}.` : 'No record is reversed yet. Choose a direction in each card.';
+    } else if (reversed.length) {
+      effect = `Reverses ${reversedText} so ${features} point${eligible.length === 1 ? 's' : ''} ${intent.mode}.`;
+    } else if (sameAfter) {
+      effect = `No record is reversed. ${features[0].toUpperCase()}${features.slice(1)} already point${eligible.length === 1 ? 's' : ''} ${sameAfter}.`;
+    } else {
+      effect = `No record is reversed. ${plural(eligible.length, 'chosen feature')} keep their current directions.`;
+    }
+    if (excluded) effect += ` ${plural(excluded, 'record')} ${excluded === 1 ? 'stays' : 'stay'} unchanged; the reason is in ${excluded === 1 ? 'its card' : 'their cards'}.`;
+    if (unknownStrand) effect += ` ${plural(unknownStrand, 'record')} ${unknownStrand === 1 ? 'keeps its' : 'keep their'} direction; the reason is in ${unknownStrand === 1 ? 'its card' : 'their cards'}.`;
+    // D-11: the reference feature centre stays fixed; its record's left edge may move.
+    const shift = Math.round(projected.reference.deltaX);
+    const referenceShift = shift
+      ? `${reference.name} stays where it is; the record's left edge moves ${Math.abs(shift).toLocaleString('en-US')} px (at 100% zoom) to the ${shift > 0 ? 'right' : 'left'}.`
+      : '';
+    const severalCandidateCount = rows.filter(row => row.candidates.length > 1).length;
+    return { ...projected, effect, referenceShift, records, severalCandidateCount };
   });
   const setDirectionIntent = (intent) => {
     if (!draft.value || status.value !== 'reviewing') return {status:'rejected'};
@@ -1631,7 +1754,7 @@ export const createSimilarityAlignmentActions = ({
     if (status.value === 'applying') return 'Applying the alignment plan.';
     if (status.value === 'resolving') return 'Resolving the current alignment.';
     if (unresolvedCount.value > 0) {
-      return `${unresolvedCount.value} record${unresolvedCount.value === 1 ? '' : 's'} still require Select or Skip.`;
+      return `Choose a candidate or Skip for ${unresolvedCount.value} record${unresolvedCount.value === 1 ? '' : 's'}.`;
     }
     if (status.value !== 'reviewing') return 'Open an alignment review before applying.';
     return '';
@@ -1679,7 +1802,7 @@ export const createSimilarityAlignmentActions = ({
     drawerReferenceOptions,
     setDrawerReference: (groupId, key) => {
       const option = drawerReferenceOptions(groupId).find((entry) => entry.key === key);
-      drawerReferenceKey.value = option?.key || '';
+      drawerReferencePick.value = { key: option?.key || '', plan: state.similarityAlignmentPlan.value };
       return Boolean(option);
     },
     drawerDisabledReason,

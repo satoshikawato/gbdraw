@@ -16,7 +16,7 @@ const setup = async (page, mode = 'circular') => {
   await openApp(page);
   await load(page, fixture(mode));
   await page.waitForFunction(() => window.__GBDRAW_APP__.extractedFeatures.length);
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     const a = window.__GBDRAW_APP__;
     Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: '(?i)protein', color: '#f01234', cap: '' });
     await a.addSpecificRule();
@@ -113,7 +113,7 @@ test('a root update renders no Specific color rule row; a rule edit does', async
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await setup(page);
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     const a = window.__GBDRAW_APP__;
     Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'gene', val: 'ND1', color: '#123456', cap: '' });
     await a.addSpecificRule();
@@ -271,7 +271,7 @@ test('real History, failed Session rollback, fresh Save/Load, Export and Generat
   await reject(page);
   await load(page, fixture('linear'));
   expect(await draft(page)).toBe(null);
-  await page.evaluate(async () => { const a = window.__GBDRAW_APP__; Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: 'protein', color: '#f01234', cap: '' }); await a.addSpecificRule(); });
+  await evaluateWithRetainedPromise(page, async () => { const a = window.__GBDRAW_APP__; Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: 'protein', color: '#f01234', cap: '' }); await a.addSpecificRule(); });
   await reject(page);
   await page.evaluate(() => window.__GBDRAW_APP__.resetSettings());
   expect(await draft(page)).toBe(null);
@@ -291,7 +291,7 @@ for (const boundary of ['drawer', 'mode cycle', 'remove', 'reorder', 'Session', 
     // asks for when it gives rule 1's caption to rule 0 in another color (a
     // Load waits for a pending match, U3a 1e), so the Load takes over while
     // the edit is late.
-    await page.evaluate(async (captionEdit) => {
+    await evaluateWithRetainedPromise(page, async (captionEdit) => {
       const a = window.__GBDRAW_APP__;
       if (captionEdit) {
         Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: '(?i)cytochrome', color: '#2266aa', cap: 'Shared' });
@@ -318,7 +318,7 @@ for (const boundary of ['drawer', 'mode cycle', 'remove', 'reorder', 'Session', 
     if (boundary === 'drawer') await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.openRightDrawerTab('features'); a.closeRightDrawer(); a.openRightDrawerTab('features'); });
     if (boundary === 'mode cycle') await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.setDiagramMode('linear'); a.setDiagramMode('circular'); });
     if (boundary === 'remove') await page.evaluate(() => window.__GBDRAW_APP__.removeSpecificRule(0));
-    if (boundary === 'reorder') await page.evaluate(async () => { const a = window.__GBDRAW_APP__; Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: 'other', color: '#abcdef', cap: '' }); await a.addSpecificRule(); await a.moveSpecificRuleDown(0); });
+    if (boundary === 'reorder') await evaluateWithRetainedPromise(page, async () => { const a = window.__GBDRAW_APP__; Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: 'other', color: '#abcdef', cap: '' }); await a.addSpecificRule(); await a.moveSpecificRuleDown(0); });
     if (boundary === 'Session') await load(page, fixture('circular'));
     if (boundary === 'new edit') await page.evaluate(() => window.__GBDRAW_APP__.setSpecificRuleField(0, 'val', '(?P<enzyme>protein)'));
     if (boundary === 'new keystroke') await page.getByLabel('Color rule 1 pattern', { exact: true }).fill('[new');

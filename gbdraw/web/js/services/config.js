@@ -2367,7 +2367,7 @@ const restoreLayoutPreferences = (drawing, ui = {}, { projected = null } = {}) =
 // track stacks are installed as given, so unset slot sides, lane directions,
 // and axis indexes stay unset (R11).
 /** @param {DrawingState} drawing */
-export const applyConfigData = (drawing, data, { resolveTrackPlacements = true } = {}) => {
+export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAlignment = true } = {}) => {
   requireCurrentWebStateFieldNames(data);
   if (isPlainObject(data.form) && Object.prototype.hasOwnProperty.call(data.form, 'linear_track_layout')) {
     requireCurrentLinearTrackLayout(data.form.linear_track_layout);
@@ -2429,15 +2429,17 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true }
       .filter((entry) => entry.uid && Number.isInteger(entry.row) && entry.row > 0)
   );
   // The record translations and alignment plan are the Linear mode's
-  // artifact; only the Linear drawing's settings carry them.
-  if (state.linearRecordTranslations && drawing === state.drawings.linear) {
+  // artifact; only the Linear drawing's settings carry them. A History
+  // config step carries neither and leaves them alone (OV-383).
+  const ownsAlignment = applyAlignment && drawing === state.drawings.linear;
+  if (state.linearRecordTranslations && ownsAlignment) {
     state.linearRecordTranslations.value = cloneJsonData(
       Array.isArray(linearLayout?.recordTranslations)
         ? linearLayout.recordTranslations
         : []
     );
   }
-  if (state.similarityAlignmentPlan && drawing === state.drawings.linear) {
+  if (state.similarityAlignmentPlan && ownsAlignment) {
     state.similarityAlignmentPlan.value = linearLayout?.similarityAlignment
       ? cloneJsonData(linearLayout.similarityAlignment)
       : null;

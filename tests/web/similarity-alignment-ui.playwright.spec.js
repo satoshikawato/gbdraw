@@ -95,7 +95,7 @@ test('alignment canvas guide and candidates stay transient and share palette cho
   const align = drawer.getByRole('button', { name: 'Align…', exact: true });
   const before = await artifactSnapshot(page);
   await align.click();
-  const dialog = page.getByRole('dialog', { name: 'Select alignment anchors' });
+  const dialog = page.getByRole('dialog', { name: 'Review alignment' });
   await expect(dialog).toBeVisible({ timeout: 180000 });
   await expect(dialog.locator('[data-alignment-application-help]')).toContainText('Apply required');
   await expect(page.locator('[data-generation-application-feedback]')).toHaveCount(0);
@@ -340,25 +340,27 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
     text: 'Resolving…', disabled: true, busy: 'true',
     live: 'Resolving similarity alignment…'
   });
-  const dialog = page.getByRole('dialog', { name: 'Select alignment anchors' });
+  const dialog = page.getByRole('dialog', { name: 'Review alignment' });
   await expect(dialog).toBeVisible({ timeout: 180000 });
-  await expect(dialog.getByRole('heading', { name: 'Select alignment anchors' })).toBeFocused();
+  await expect(dialog.getByRole('heading', { name: 'Review alignment' })).toBeFocused();
   await expect(dialog).toHaveAttribute('aria-describedby', 'similarity-alignment-dialog-description similarity-alignment-application-help');
   const referenceCard = dialog.locator('[data-similarity-alignment-reference]');
   await expect(referenceCard).toContainText('b0');
   await expect(referenceCard).toContainText('record_b');
   await expect(referenceCard).toContainText('121..419 bp');
-  await expect(referenceCard).toContainText('Strand: +');
+  await expect(referenceCard).toContainText('strand +');
+  await expect(referenceCard).toContainText('Stays in place.');
   await expect(dialog.locator('[data-alignment-record-key]')).toHaveCount(1);
   await expect(dialog.locator('[data-similarity-alignment-reason]')).toContainText(
-    'The only representative candidate.'
+    'Recommended: a0, the only group representative among the candidates.'
   );
   await dialog.getByRole('radio', {name:/Select .*bp, strand/}).first().check();
   await expect(dialog.getByText('Recommended', { exact: true })).toHaveCount(1);
   await expect(dialog).not.toHaveAttribute('aria-modal', 'true');
   expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
   expect((await page.locator('.gbdraw-preview-surface').boundingBox()).width).toBe(diagramWidthBefore);
-  await expect(page.locator('[data-similarity-alignment-count]')).toContainText('0 need a choice');
+  await expect(page.locator('[data-similarity-alignment-count]')).toContainText('2 records');
+  await expect(page.locator('[data-similarity-alignment-count]')).not.toContainText('a choice');
   const paletteHeader = dialog.locator('header');
   const headerBox = await paletteHeader.boundingBox();
   await page.mouse.move(headerBox.x + 35, headerBox.y + 20);
@@ -378,7 +380,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await page.setViewportSize({ width: 900, height: 650 });
   paletteBox = await dialog.boundingBox();
   if(await page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentCompact)) {
-    await expect(page.locator('[data-similarity-alignment-dock]')).toContainText('Select alignment anchors');
+    await expect(page.locator('[data-similarity-alignment-dock]')).toContainText('Review alignment');
     expect((await page.locator('.preview-canvas').boundingBox()).height).toBeGreaterThanOrEqual(200);
   } else {
     expect(paletteBox.x + paletteBox.width).toBeLessThanOrEqual(889);
@@ -412,14 +414,14 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await expect(removalDialog).toBeHidden();
   await expect(dialog).toBeVisible();
   expect(await artifactSnapshot(page)).toEqual(beforeCancel);
-  await expect(dialog).toContainText(/\d[\d,]*\.\.\d[\d,]* bp · Strand [+-]/);
-  await expect(dialog).toContainText('Direct evidence: None');
+  await expect(dialog).toContainText(/\d[\d,]*\.\.\d[\d,]* bp · strand [+-]/);
+  await expect(dialog).toContainText('no direct hit');
   await expect(dialog).not.toContainText(/score/i);
   const apply = dialog.getByRole('button', { name: 'Apply', exact: true });
   await expect(apply).toBeEnabled();
   await expect(apply).toHaveAttribute('aria-describedby', 'similarity-alignment-apply-reason');
   await expect(page.locator('#similarity-alignment-apply-reason')).toContainText(
-    'complete draft'
+    'Ready. Apply regenerates the diagram'
   );
   await page.screenshot({
     path: testInfo.outputPath('desktop-ambiguity.png'),
@@ -449,22 +451,24 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await firstCandidate.locator('..').hover();
   await expect.poll(previewState).toMatchObject({ otherHighlighted: 0 });
   expect((await previewState()).candidate).toContain('0.7');
-  await dialog.getByRole('heading', { name: 'Select alignment anchors' }).hover();
+  await dialog.getByRole('heading', { name: 'Review alignment' }).hover();
   await expect.poll(async () => (await previewState()).candidate.includes('0.7')).toBe(false);
   const replacementCandidate = dialog.getByRole('radio', { name: /Select .*bp, strand/ }).nth(1);
   await replacementCandidate.check();
   await expect(replacementCandidate).toBeChecked();
-  await expect(dialog.getByText('Recommended', { exact: true })).toHaveCount(0);
+  // The recommendation stays marked on its candidate whatever is selected.
+  await expect(dialog.getByText('Recommended', { exact: true })).toHaveCount(1);
+  await expect(firstCandidate.locator('xpath=ancestor::label')).toContainText('Recommended');
   await expect(dialog.locator('[data-similarity-alignment-reason]')).toContainText(
-    'The only representative candidate.'
+    'Recommended: a0, the only group representative among the candidates.'
   );
   await firstCandidate.check();
   await expect(dialog.getByText('Recommended', { exact: true })).toHaveCount(1);
 
-  await dialog.getByRole('radio', { name: /Skip / }).focus();
+  await dialog.getByLabel(/^Skip /).focus();
   await page.keyboard.press('Space');
-  await expect(dialog).toContainText('Unchanged');
-  await expect(dialog.getByText('Recommended', { exact: true })).toHaveCount(0);
+  await expect(dialog).toContainText('Unchanged: Skipped by user.');
+  await expect(dialog.getByText('Recommended', { exact: true })).toHaveCount(1);
   await expect(apply).toBeEnabled();
   await apply.focus();
   await page.keyboard.press('Tab');
@@ -749,7 +753,7 @@ const openAlignmentFromDrawer = async (page) => {
   ));
   await drawer.getByLabel('Exact reference record and feature').selectOption(reference);
   await drawer.getByRole('button', { name: 'Align…', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Select alignment anchors' });
+  const dialog = page.getByRole('dialog', { name: 'Review alignment' });
   await expect(dialog).toBeVisible({ timeout: 180000 });
   return dialog;
 };
@@ -767,23 +771,23 @@ test('exclusive direction modes and Custom follow keyboard choices without Worke
     };
   });
   const before = await artifactSnapshot(page);
-  const modes = dialog.getByRole('group', { name: 'Alignment direction', exact: true });
+  const modes = dialog.getByRole('group', { name: 'Arrow direction', exact: true });
   await expect(modes.getByRole('radio')).toHaveCount(4);
-  await expect(modes.getByRole('radio', { name: 'Keep current directions', exact: true })).toBeChecked();
+  await expect(modes.getByRole('radio', { name: 'Keep as is', exact: true })).toBeChecked();
   await expect(dialog.getByRole('combobox')).toHaveCount(0);
   const first = dialog.getByRole('radio', { name: /Select .*bp, strand/ }).first();
-  const skip = dialog.getByRole('radio', { name: /Skip / });
+  const skip = dialog.getByLabel(/^Skip /);
   await first.focus(); await page.keyboard.press('Space');
   await expect(first).toBeChecked();
   await page.keyboard.press('ArrowDown');
   await expect(dialog.getByRole('radio', { name: /Select .*bp, strand/ }).nth(1)).toBeChecked();
   await page.keyboard.press('ArrowDown'); await expect(skip).toBeChecked();
-  await expect(dialog.locator('#alignment-direction-scope')).toContainText('1 selected anchors');
-  await modes.getByRole('radio', { name: 'Keep current directions', exact: true }).focus();
+  await expect(dialog.locator('#alignment-direction-scope')).toContainText('1 record stays unchanged');
+  await modes.getByRole('radio', { name: 'Keep as is', exact: true }).focus();
   await page.keyboard.press('ArrowRight');
-  await expect(modes.getByRole('radio', { name: 'All selected arrows right', exact: true })).toBeChecked();
+  await expect(modes.getByRole('radio', { name: 'All right', exact: true })).toBeChecked();
   await page.keyboard.press('ArrowRight');
-  await expect(modes.getByRole('radio', { name: 'All selected arrows left', exact: true })).toBeChecked();
+  await expect(modes.getByRole('radio', { name: 'All left', exact: true })).toBeChecked();
   await page.keyboard.press('ArrowRight');
   await expect(modes.getByRole('radio', { name: 'Custom', exact: true })).toBeChecked();
   await expect(modes.locator('input:checked')).toHaveCount(1);
@@ -792,7 +796,7 @@ test('exclusive direction modes and Custom follow keyboard choices without Worke
   await expect(dialog.locator('#alignment-direction-record_a')).toContainText('Skipped by user');
   await first.focus(); await page.keyboard.press('Space');
   await expect(target).toBeEnabled();
-  await expect(dialog.locator('#alignment-direction-scope')).toContainText('2 selected anchors');
+  await expect(dialog.locator('#alignment-direction-scope')).toContainText('No record is reversed yet');
   const reference = directionSelect(dialog, 'record_b');
   await reference.selectOption('left'); await target.selectOption('right');
   await expect(reference).toHaveAccessibleDescription(/exact reference.*Current right-facing; after Align left-facing/);
@@ -805,7 +809,7 @@ test('exclusive direction modes and Custom follow keyboard choices without Worke
   await target.selectOption('left'); await expect(target).toHaveValue('left');
   expect(await dialog.locator('.custom-scrollbar').evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true);
   await dialog.screenshot({ path: testInfo.outputPath('custom-390.png') });
-  await modes.getByRole('radio', { name: 'Keep current directions', exact: true }).check();
+  await modes.getByRole('radio', { name: 'Keep as is', exact: true }).check();
   await expect(dialog.getByRole('combobox')).toHaveCount(0);
   expect(await page.evaluate(() => window.__s03Jobs)).toBe(0);
   expect(await artifactSnapshot(page)).toEqual(before);
@@ -822,7 +826,7 @@ test('Apply error retains draft, focuses retry guidance, and accepts correction'
   const before = await artifactSnapshot(page);
   await expect(dialog.locator('[data-alignment-application-help]')).toContainText('Apply required');
   const application = page.locator('[data-generation-application-feedback]');
-  await dialog.getByRole('radio', { name: /Skip / }).check();
+  await dialog.getByLabel(/^Skip /).check();
   await expect(application).toHaveCount(0);
   expect(await artifactSnapshot(page)).toEqual(before);
   await dialog.getByRole('radio', { name: /Select .*bp, strand/ }).first().check();
@@ -858,7 +862,7 @@ test('Apply error retains draft, focuses retry guidance, and accepts correction'
   await page.evaluate((layout) => {
     window.__GBDRAW_APP__.form.linear_track_layout = layout;
   }, priorLayout);
-  await dialog.getByRole('radio', { name: /Skip / }).check();
+  await dialog.getByLabel(/^Skip /).check();
   await expect(error).toBeHidden();
   await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(dialog).toBeHidden({ timeout: 180000 });
@@ -940,17 +944,20 @@ test('one usable member applies directly through one Worker resolve and one Hist
     reviewBusy: 'true', reviewDisabled: true, alignBusy: 'true', alignDisabled: true,
     live: 'Resolving similarity alignment…'
   });
-  const resolvedReview = page.getByRole('dialog', { name: 'Select alignment anchors' });
+  const resolvedReview = page.getByRole('dialog', { name: 'Review alignment' });
   await expect(resolvedReview).toBeVisible({ timeout: 180000 });
-  await expect(resolvedReview.getByRole('heading', { name: 'Select alignment anchors' })).toBeFocused();
+  await expect(resolvedReview.getByRole('heading', { name: 'Review alignment' })).toBeFocused();
   await expect(resolvedReview.locator('[data-similarity-alignment-reference]')).toContainText('b0');
   await expect(resolvedReview.locator('[data-alignment-record-key]')).toHaveCount(1);
   await expect(resolvedReview.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
   await expect(resolvedReview.getByRole('checkbox', { name: /Match reference direction for/ }))
     .toHaveCount(0);
-  await resolvedReview.getByRole('radio', { name: /Skip / }).check();
-  await expect(resolvedReview).toContainText('Unchanged');
-  await resolvedReview.getByRole('radio', { name: /Select .*bp, strand/ }).first().check();
+  // One usable candidate: a compact card whose Skip checkbox is the only choice.
+  await expect(resolvedReview.getByRole('radio', { name: /Select .*bp, strand/ })).toHaveCount(0);
+  await expect(resolvedReview.locator('[data-alignment-record-key]')).toContainText('only candidate');
+  await resolvedReview.getByRole('checkbox', { name: /^Skip / }).check();
+  await expect(resolvedReview).toContainText('Unchanged: Skipped by user.');
+  await resolvedReview.getByRole('checkbox', { name: /^Skip / }).uncheck();
   await resolvedReview.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(drawerReview).toBeFocused();
   expect(await artifactSnapshot(page)).toEqual(before);
@@ -1001,7 +1008,7 @@ test('one usable member applies directly through one Worker resolve and one Hist
     }).observe(document.body, { childList: true, subtree: true });
   });
   await normalAlign.click();
-  await expect(page.getByRole('dialog', { name: 'Select alignment anchors' })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'Review alignment' })).toHaveCount(0);
   await expect.poll(() => page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     return state.similarityAlignmentPlan.value?.schema || null;
@@ -1090,7 +1097,7 @@ test('one usable member applies directly through one Worker resolve and one Hist
   await page.evaluate((layout) => {
     window.__GBDRAW_APP__.form.linear_track_layout = layout;
   }, priorLayout);
-  await resolvedReview.getByRole('radio', { name: /Skip / }).check();
+  await resolvedReview.getByLabel(/^Skip /).check();
   await resolvedReview.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(resolvedReview).toBeHidden({ timeout: 180000 });
   await expect(page.locator('[data-similarity-alignment-summary]')).toContainText('explicitly skipped');
@@ -1262,7 +1269,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
       .dispatchEvent('click', { clientX: -100, clientY: -100 });
     await page.locator('.feature-popup[role="dialog"]')
       .getByRole('button', { name: 'Review alignment options…' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Select alignment anchors' });
+    const dialog = page.getByRole('dialog', { name: 'Review alignment' });
     await expect(dialog).toBeVisible({ timeout: 180000 });
     const unresolved=await page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentDraft.rows.filter(row=>!row.choice).map(row=>row.recordKey));
     for(const key of unresolved)await dialog.locator(`[data-alignment-record-key="${key}"]`).getByRole('radio',{name:/Select .*bp, strand/}).first().check();
@@ -1326,7 +1333,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   console.log('S02 Gallery: default Align finished',await page.evaluate(()=>({status:window.__GBDRAW_APP__.similarityAlignmentStatus,error:window.__GBDRAW_APP__.similarityAlignmentError?.summary})));
   await expect(page.locator('[data-similarity-alignment-summary]')).toContainText('0 reversed');
   expect((await recordState()).orientations).toEqual(before.orientations);
-  await expect(page.getByRole('dialog', { name: 'Select alignment anchors' })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'Review alignment' })).toHaveCount(0);
   await closeFeaturePopup();
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect.poll(recordState).toEqual(before);
@@ -1337,12 +1344,13 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   const targetRow = dialog.locator('[data-alignment-record-key="record-2"]');
   await expect(targetRow).toContainText('Streptomyces fradiae');
   await expect(dialog.getByRole('checkbox',{name:'Match reference direction'})).toHaveCount(0);
-  const direction = dialog.getByRole('radio', { name: 'All selected arrows left', exact: true });
+  const direction = dialog.getByRole('radio', { name: 'All left', exact: true });
   await expect(direction).not.toBeChecked();
   await direction.focus();
   await page.keyboard.press('Space');
   await expect(direction).toBeChecked();
-  await expect(directionRow(dialog, 'record-2')).toContainText('→ → ←');
+  await expect(directionRow(dialog, 'record-2')).toContainText('reversed');
+  await expect(dialog.locator('#alignment-direction-record-2')).toHaveText(/Current right-facing; after Align left-facing\./);
   await dialog.screenshot({ path: testInfo.outputPath('direction-review-desktop.png') });
   await page.setViewportSize({ width: 390, height: 740 });
   await direction.scrollIntoViewIfNeeded();
@@ -1594,7 +1602,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   const exportPath = testInfo.outputPath('record-owned-direction-export.svg');
   await exported.saveAs(exportPath);
   expect(readFileSync(exportPath, 'utf8'))
-    .not.toMatch(/gbdraw-alignment-|Select alignment anchors|Match reference direction/);
+    .not.toMatch(/gbdraw-alignment-|Review alignment|Apply required|Match reference direction/);
   const downloadFormat = async (format, suffix) => {
     const pending = page.waitForEvent('download');
     await evaluateWithRetainedPromise(page, (method) => window.__GBDRAW_APP__[method](), `download${format}`);
@@ -1632,7 +1640,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
     .find(item=>item.recordKey===anchor.recordKey && item.biologicalFeatureId===anchor.biologicalFeatureId).svg_id,saved.plan.reference);
   await freshPage.locator(`[data-gbdraw-feature-id="${referenceFeature}"]`).first().dispatchEvent('click',{clientX:-100,clientY:-100});
   await freshPage.locator('.feature-popup[role="dialog"]').getByRole('button',{name:'Review alignment options…'}).click();
-  const customReview=freshPage.getByRole('dialog',{name:'Select alignment anchors'});
+  const customReview=freshPage.getByRole('dialog',{name:'Review alignment'});
   await expect(customReview).toBeVisible({timeout:180000});
   const unresolvedC=await freshPage.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentDraft.rows.filter(row=>!row.choice).map(row=>row.recordKey));
   for(const key of unresolvedC)await customReview.locator(`[data-alignment-record-key="${key}"]`).getByRole('radio',{name:/Select .*bp, strand/}).first().check();
@@ -1704,7 +1712,7 @@ test('exclusive directions include the minority reference and keep Custom Select
     .dispatchEvent('click', { clientX: -100, clientY: -100 });
   await page.locator('.feature-popup[role="dialog"]')
     .getByRole('button', { name: 'Review alignment options…' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Select alignment anchors' });
+  const dialog = page.getByRole('dialog', { name: 'Review alignment' });
   await expect(dialog).toBeVisible({ timeout: 180000 });
   for (const key of await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDraft.rows
     .filter(row => !row.choice).map(row => row.recordKey))) {
@@ -1716,13 +1724,17 @@ test('exclusive directions include the minority reference and keep Custom Select
     .map(record => record.recordKey));
   const before = await artifactSnapshot(page);
   const posts = await page.evaluate(() => window.__ALIGNMENT_POSTS__.length);
-  await expect(dialog.getByRole('radio', { name: 'Keep current directions', exact: true })).toBeChecked();
+  await expect(dialog.getByRole('radio', { name: 'Keep as is', exact: true })).toBeChecked();
   await expect(dialog.getByRole('combobox')).toHaveCount(0);
-  const right = dialog.getByRole('radio', { name: 'All selected arrows right', exact: true });
+  const right = dialog.getByRole('radio', { name: 'All right', exact: true });
   await right.focus();
   await page.keyboard.press('Space');
   expect(await changed()).toEqual(['record-1']);
-  await dialog.getByRole('radio', { name: 'All selected arrows left', exact: true }).check();
+  // D-11: reversing the reference record keeps its feature in place; the card
+  // says how far the record's left edge moves.
+  await expect(dialog.locator('[data-similarity-alignment-reference-correction]'))
+    .toContainText(/stays where it is; the record's left edge moves [1-9][\d,]* px \(at 100% zoom\) to the (left|right)\./);
+  await dialog.getByRole('radio', { name: 'All left', exact: true }).check();
   expect(await changed()).toEqual(['record-2', 'record-3', 'record-4', 'record-5']);
   const custom = dialog.getByRole('radio', { name: 'Custom', exact: true });
   await custom.focus();
@@ -1733,14 +1745,14 @@ test('exclusive directions include the minority reference and keep Custom Select
   await directionSelect(dialog, 'record-2').selectOption('left');
   expect(await changed()).toEqual(['record-1', 'record-2']);
   const target = dialog.locator('[data-alignment-record-key="record-2"]');
-  await target.getByRole('radio', { name: /Skip / }).focus();
+  await target.getByLabel(/^Skip /).focus();
   await page.keyboard.press('Space');
   expect(await changed()).toEqual(['record-1']);
   await expect(directionSelect(dialog, 'record-2')).toBeDisabled();
   await expect(directionRow(dialog, 'record-2'))
-    .toContainText('unchanged: Skipped by user.');
+    .toContainText('Unchanged: Skipped by user.');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDirectionPreview.records.find(record => record.recordKey === 'record-2').exclusion)).toBe('skipped_by_user');
-  await target.getByRole('radio', { name: /Select .*bp, strand/ }).first().check();
+  await target.getByRole('checkbox', { name: /^Skip / }).uncheck();
   expect(await changed()).toEqual(['record-1', 'record-2']);
   await page.setViewportSize({ width: 390, height: 740 });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentCompact)).toBe(true);
@@ -1801,7 +1813,7 @@ const openDirectionReview = async page => {
     .find(({ anchor }) => anchor.recordKey === 'record-1').key);
   await drawer.getByLabel('Exact reference record and feature').selectOption(key);
   await drawer.getByRole('button', { name: 'Review alignment options…' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Select alignment anchors' });
+  const dialog = page.getByRole('dialog', { name: 'Review alignment' });
   await page.waitForFunction(() => !window.__GBDRAW_APP__.similarityAlignmentBusy, null, { timeout: 180000 });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentError?.summary || '')).toBe('');
   await expect(dialog).toBeVisible({ timeout: 180000 });
@@ -1819,13 +1831,13 @@ test('minority reference, source strands and Reset scopes have truthful accessib
   test.setTimeout(600000);
   await loadDirectionSession(page, testInfo);
   const dialog = await openDirectionReview(page);
-  await dialog.getByRole('radio', { name: /Skip skip/ }).press('Space');
+  await dialog.getByLabel(/^Skip skip/).press('Space');
   const unknown = dialog.locator('#alignment-direction-record-3');
   const missing = dialog.locator('#alignment-direction-record-5');
-  await dialog.getByRole('radio', { name: 'All selected arrows right', exact: true }).check();
+  await dialog.getByRole('radio', { name: 'All right', exact: true }).check();
   await expect(unknown).toContainText('no known direction; it is never guessed');
   await expect(missing).toContainText('No usable candidate');
-  await expect(dialog.locator('#alignment-direction-scope')).toContainText('2 selected anchors');
+  await expect(dialog.locator('#alignment-direction-scope')).toContainText('all 2 chosen features point right');
   const initial = await artifactSnapshot(page);
   const preview = await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDirectionPreview);
   expect(preview.records.filter(r => r.beforeReverseComplement !== r.afterReverseComplement).map(r => r.recordKey)).toEqual(['record-1']);
@@ -1878,8 +1890,8 @@ test('minority reference, source strands and Reset scopes have truthful accessib
   expect(restored.plan).toBeNull(); expect(restored.receipt).toBeNull();
   await page.setViewportSize({ width: 1600, height: 1000 });
   const targetOnly = await openDirectionReview(page);
-  await targetOnly.getByRole('radio', { name: /Skip skip/ }).check();
-  await targetOnly.getByRole('radio', { name: 'All selected arrows left', exact: true }).check();
+  await targetOnly.getByLabel(/^Skip skip/).check();
+  await targetOnly.getByRole('radio', { name: 'All left', exact: true }).check();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDirectionPreview.records
     .filter(r => r.beforeReverseComplement !== r.afterReverseComplement).map(r => r.recordKey))).toEqual(['record-2']);
   outcome = await applyAndSettle(page, targetOnly);
@@ -1888,7 +1900,7 @@ test('minority reference, source strands and Reset scopes have truthful accessib
   await expect(targetOnly).toBeHidden();
   expect((await artifactSnapshot(page)).receipt.directions).toEqual([{ recordKey: 'record-2', before: false, after: true }]);
   const keepReview = await openDirectionReview(page);
-  await keepReview.getByRole('radio', { name: /Skip skip/ }).check();
+  await keepReview.getByLabel(/^Skip skip/).check();
   expect((await applyAndSettle(page, keepReview)).error).toBe('');
   await expect(keepReview).toBeHidden();
   expect((await artifactSnapshot(page)).receipt.directions).toEqual([]);
@@ -1944,7 +1956,7 @@ test('changed final facts require a separate Apply and validation errors preserv
   });
   const dialog = await openDirectionReview(page);
   await page.evaluate(() => { window.__s03FinalBatches = 0; });
-  await dialog.getByRole('radio', { name: /Skip skip/ }).check();
+  await dialog.getByLabel(/^Skip skip/).check();
   await dialog.getByRole('radio', { name: 'Custom', exact: true }).check();
   await directionSelect(dialog, 'record-1').selectOption('right');
   const before = await artifactSnapshot(page);
@@ -2056,7 +2068,7 @@ for(const entry of ['resolved explicit','multiple target ambiguity','automatic r
     await page.setViewportSize({width:390,height:844});
     const start=drawer.getByRole('button',{name:entry==='resolved explicit'?'Review alignment options…':'Align…',exact:true});
     await exposeReviewControl(page,start);await start.click();
-    const dialog=page.getByRole('dialog',{name:'Select alignment anchors'});
+    const dialog=page.getByRole('dialog',{name:'Review alignment'});
     await expect(dialog).toBeVisible({timeout:180000});
     await expect.poll(()=>page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentBusy),{timeout:180000}).toBe(false);
     if(entry==='multiple target ambiguity')expect(await page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentDraft.rows.filter(row=>row.candidates.length>1).length)).toBeGreaterThanOrEqual(2);
@@ -2070,7 +2082,7 @@ for(const entry of ['resolved explicit','multiple target ambiguity','automatic r
       before=settled;
       for(const viewport of [{width:390,height:740},{width:320,height:740},{width:195,height:422}]) {
         await page.setViewportSize(viewport);
-        await exposeReviewControl(page,dialog.locator('[data-alignment-record-key]').first().getByRole('radio',{name:/Select .*bp, strand/}).first());
+        await exposeReviewControl(page,dialog.locator('[data-alignment-record-key]').first().locator('input').first());
         await exposeReviewControl(page,dialog.getByRole('button',{name:'Cancel',exact:true}));
         await exposeReviewControl(page,dialog.locator('[data-similarity-alignment-error]'));
         await expect(dialog.locator('[data-similarity-alignment-error]')).toContainText('without recognized diagnostic information');
@@ -2086,9 +2098,16 @@ for(const entry of ['resolved explicit','multiple target ambiguity','automatic r
     await dialog.getByRole('radio',{name:'Custom',exact:true}).check();
     const target=dialog.locator('[data-alignment-record-key]').first();
     const select=target.getByRole('radio',{name:/Select .*bp, strand/}).first();
-    await exposeReviewControl(page,select);await select.focus();await page.keyboard.press('Space');
-    const skip=target.getByRole('radio',{name:/Skip /});await exposeReviewControl(page,skip);await skip.focus();await page.keyboard.press('Space');await expect(skip).toBeChecked();
-    await exposeReviewControl(page,select);await select.focus();await page.keyboard.press('Space');await expect(select).toBeChecked();
+    const skip=target.getByLabel(/^Skip /);
+    if(await select.count()) {
+      await exposeReviewControl(page,select);await select.focus();await page.keyboard.press('Space');
+      await exposeReviewControl(page,skip);await skip.focus();await page.keyboard.press('Space');await expect(skip).toBeChecked();
+      await exposeReviewControl(page,select);await select.focus();await page.keyboard.press('Space');await expect(select).toBeChecked();
+    } else {
+      // A one-candidate record: Space on its Skip checkbox skips, and again selects.
+      await exposeReviewControl(page,skip);await skip.focus();await page.keyboard.press('Space');await expect(skip).toBeChecked();
+      await page.keyboard.press('Space');await expect(skip).not.toBeChecked();
+    }
     const custom=directionSelect(dialog, 'record-1');await custom.selectOption('right');
     const local=await page.evaluate(()=>JSON.stringify(window.__GBDRAW_APP__.similarityAlignmentDraft));
     const posts=await page.evaluate(()=>window.__S06_POSTS__.length);
@@ -2107,7 +2126,8 @@ for(const entry of ['resolved explicit','multiple target ambiguity','automatic r
         expect((await dialog.boundingBox()).x).toBeLessThan(previous.x);
       }
       if(viewport.width===390&&viewport.height===422)await page.getByRole('searchbox',{name:'Search features',exact:true}).focus();
-      await exposeReviewControl(page,select);await exposeReviewControl(page,skip);await exposeReviewControl(page,custom);
+      if(await select.count())await exposeReviewControl(page,select);
+      await exposeReviewControl(page,skip);await exposeReviewControl(page,custom);
       for(const control of [dialog.getByRole('button',{name:'Apply',exact:true}),dialog.getByRole('button',{name:'Cancel',exact:true})])await exposeReviewControl(page,control);
       await page.locator('.preview-canvas').evaluate(el=>el.scrollIntoView({block:'start'}));
       const measured=await compactReviewGeometry(page);geometry.push({...measured,cssCompact:expectedCompact});
@@ -2121,7 +2141,8 @@ for(const entry of ['resolved explicit','multiple target ambiguity','automatic r
       // Native pointer input, not a DOM dispatch or a fit-camera assignment.
       const canvas=await page.locator('.preview-canvas').boundingBox();
       const pan=await page.evaluate(()=>({...window.__GBDRAW_APP__.canvasPan}));
-      const point={x:canvas.x+(expectedCompact?5:100),y:Math.max(canvas.y+5,await page.locator('.app-header').evaluate(el=>el.getBoundingClientRect().bottom+5))};
+      // Wide: the dragged review sits at the left, so pan from the canvas's right side.
+      const point={x:expectedCompact?canvas.x+5:canvas.x+canvas.width-100,y:Math.max(canvas.y+5,await page.locator('.app-header').evaluate(el=>el.getBoundingClientRect().bottom+5))};
       await page.mouse.move(point.x,point.y);await page.mouse.down();await page.mouse.move(point.x+24,point.y+10,{steps:4});await page.mouse.up();
       await expect.poll(()=>page.evaluate(()=>({...window.__GBDRAW_APP__.canvasPan}))).toEqual({x:pan.x+24,y:pan.y+10});
       const zoom=page.getByRole('button',{name:'Zoom in',exact:true});await exposeReviewControl(page,zoom);const zoomBefore=await page.evaluate(()=>window.__GBDRAW_APP__.zoom);await zoom.click();
@@ -2187,7 +2208,7 @@ test('@pr-smoke native Python engine error reaches Align review and retains choi
   const key=await page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentDrawerReferenceOptions('og_1').find(o=>o.anchor.recordKey==='record-1').key);
   await drawer.getByLabel('Exact reference record and feature').selectOption(key);
   await drawer.getByRole('button',{name:'Review alignment options…',exact:true}).click();
-  const dialog=page.getByRole('dialog',{name:'Select alignment anchors'});
+  const dialog=page.getByRole('dialog',{name:'Review alignment'});
   await expect(dialog).toBeVisible({timeout:180000});
   await page.waitForFunction(()=>!window.__GBDRAW_APP__.similarityAlignmentBusy);
   for(const key of await page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentDraft.rows.filter(r=>!r.choice).map(r=>r.recordKey))) {
@@ -2244,4 +2265,53 @@ test('@pr-smoke native Python engine error reaches Align review and retains choi
   expect((await artifactSnapshot(page)).history[0]).toBe(before.history[0]+1);
   expect(await page.evaluate(()=>window.__GBDRAW_APP__.errorLog)).toBeNull();
   expect(logs.join('\n')).not.toContain('PRIVATE_');
+});
+
+// OV-380: a comparison edit before Generate is a pending form edit; it keeps the
+// committed alignment. OV-381: the drawer offers the active plan's exact
+// reference, so Align works from the drawer after a Session load.
+test('choosing Upload BLAST TSV without a file keeps a loaded alignment and the drawer offers its reference', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, readFileSync(
+    'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'
+  ), 'BGC0000708-BGC0000713.gbdraw-session.json');
+  const plan = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return { reference: state.similarityAlignmentPlan.value?.reference ?? null,
+      groupId: state.similarityAlignmentPlan.value?.groupId ?? null,
+      notice: window.__GBDRAW_APP__.similarityAlignmentNotice };
+  });
+  const loaded = await plan();
+  expect(loaded.groupId).toBeTruthy();
+  // The Session saved another drawer group and the plan's group is not the
+  // first one, so the drawer must select the plan's group itself.
+  const groups = await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return state.orthogroups.value.map(({ id }) => id);
+  });
+  const savedSelection = JSON.parse(readFileSync(
+    'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json', 'utf8'
+  )).orthogroupState.selectedOrthogroupId;
+  expect(groups[0]).not.toBe(loaded.groupId);
+  expect(savedSelection).not.toBe(loaded.groupId);
+
+  await page.evaluate(() => document.querySelectorAll('details').forEach((details) => { details.open = true; }));
+  const upload = page.getByRole('radio', { name: 'Upload BLAST TSV' }).first();
+  await upload.check({ force: true });
+  await expect(upload).toBeChecked();
+  expect(await plan()).toEqual(loaded);
+  await expect(page.getByText('Alignment cleared', { exact: false })).toHaveCount(0);
+
+  await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('orthogroups'));
+  expect(await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return state.selectedOrthogroupId.value;
+  })).toBe(loaded.groupId);
+  const reference = page.locator('#similarity-alignment-reference');
+  await expect(reference).toHaveValue(JSON.stringify(loaded.reference));
+  await expect(page.locator('#similarity-alignment-drawer-reason'))
+    .not.toContainText('Select an exact reference');
+  await expect(page.locator('button[title="Align to the selected exact feature"]')).toBeEnabled();
 });

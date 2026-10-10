@@ -486,9 +486,9 @@ def _align_to_orthogroup(page: Page, popup: Any, orthogroup_id: str) -> None:
       return !app.similarityAlignmentBusy && (app.similarityAlignmentDialogOpen
         || app.similarityAlignmentError || window.__GBDRAW_HISTORY__.revision.value > before);
     }""", arg=history_before, timeout=GENERATION_TIMEOUT_MS)
-    dialog = page.get_by_role("dialog", name="Select alignment anchors", exact=True)
+    dialog = page.get_by_role("dialog", name="Review alignment", exact=True)
     if dialog.is_visible():
-        expect(dialog.get_by_role("radio", name="Keep current directions", exact=True)).to_be_checked()
+        expect(dialog.get_by_role("radio", name="Keep as is", exact=True)).to_be_checked()
         _apply_alignment_review(page, dialog)
     expect(page.get_by_role("alert", name="Generation Error")).to_have_count(0)
     assert page.evaluate("() => window.__GBDRAW_HISTORY__.revision.value") > history_before
@@ -508,10 +508,10 @@ def _verify_direction_reset(page: Page) -> None:
     before = snapshot()
     popup = _open_orthogroup_alignment_target(page, "og_18")
     popup.get_by_role("button", name="Review alignment options…", exact=True).click()
-    dialog = page.get_by_role("dialog", name="Select alignment anchors", exact=True)
+    dialog = page.get_by_role("dialog", name="Review alignment", exact=True)
     expect(dialog).to_be_visible(timeout=GENERATION_TIMEOUT_MS)
-    expect(dialog.get_by_role("radio", name="Keep current directions", exact=True)).to_be_checked()
-    dialog.get_by_role("radio", name="All selected arrows right", exact=True).check()
+    expect(dialog.get_by_role("radio", name="Keep as is", exact=True)).to_be_checked()
+    dialog.get_by_role("radio", name="All right", exact=True).check()
     changed = page.evaluate("() => window.__GBDRAW_APP__.similarityAlignmentDirectionPreview.records.filter(row => row.beforeReverseComplement !== row.afterReverseComplement).map(row => row.recordKey)")
     assert changed == [before["plan"]["reference"]["recordKey"]], changed
     _apply_alignment_review(page, dialog)

@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { execFileSync } = require('node:child_process');
 const { load, generate, download, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
-const { getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
 
 // A rule edit that changes the Legend asks for the automatic rerender (OV-42,
 // OV-43, #857), so the Result is read once Python has drawn it.
@@ -45,7 +45,7 @@ for(const width of [1440,390]) {
     try {
       page.setDefaultTimeout(180000);
       await generate(page);
-      const source=await page.evaluate(async()=>{
+      const source=await evaluateWithRetainedPromise(page, async()=>{
         const a=window.__GBDRAW_APP__;
         const {getFeatureColorRuleHash}=await import('./js/services/feature-utils.js');
         const selected=a.extractedFeatures.filter(f=>f.type==='CDS').slice(0,3);
@@ -182,7 +182,7 @@ test('generated-caption collisions roll back and old Session drafts normalize on
     // An editor row a Session holds (R15-2 retired Add legend item).
     await loadEditorLegendRows(page,[['Conflict [#112233]','#abcdef']]);
     await expect.poll(()=>page.evaluate(()=>window.__GBDRAW_APP__.legendEntries.some(e=>e.caption==='Conflict [#112233]'))).toBe(true);
-    const ids=await page.evaluate(async()=>{
+    const ids=await evaluateWithRetainedPromise(page, async()=>{
       const a=window.__GBDRAW_APP__,{getFeatureColorRuleHash}=await import('./js/services/feature-utils.js');
       const ids=a.extractedFeatures.filter(f=>f.type==='CDS').slice(0,2).map(getFeatureColorRuleHash);
       Object.assign(a.newSpecRule,{feat:'CDS',qual:'hash',val:ids[0],color:'#445566',cap:'Conflict'});
@@ -190,7 +190,7 @@ test('generated-caption collisions roll back and old Session drafts normalize on
     });
     const before=await inspect(page);
     const warningBefore=await page.evaluate(async()=>JSON.stringify((await import('./js/state.js')).state.annotationWarnings.value));
-    await page.evaluate(async id=>{
+    await evaluateWithRetainedPromise(page, async id=>{
       const a=window.__GBDRAW_APP__;
       Object.assign(a.newSpecRule,{feat:'CDS',qual:'hash',val:id,color:'#112233',cap:'Conflict'});
       await a.addSpecificRule();
@@ -239,7 +239,7 @@ test('Linear comparison keeps both legend orientations and their swatches canoni
   page.setDefaultTimeout(180000);
   try {
     await generate(page);
-    await page.evaluate(async()=>{
+    await evaluateWithRetainedPromise(page, async()=>{
       const a=window.__GBDRAW_APP__,{getFeatureColorRuleHash}=await import('./js/services/feature-utils.js');
       const features=a.extractedFeatures.filter(f=>f.type==='CDS').slice(0,2);
       for(let i=0;i<features.length;i++) {
@@ -331,7 +331,7 @@ for (const width of [1440, 390]) {
       await generate(fresh);
       expect((await inspect(fresh)).result.find(entry => entry.caption === 'tRNA')?.color).toBe('#c026d3');
       await history(page, 'Undo');
-      await page.evaluate(async () => {
+      await evaluateWithRetainedPromise(page, async () => {
         const a = window.__GBDRAW_APP__;
         const { getFeatureColorRuleHash } = await import('./js/services/feature-utils.js');
         Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'hash',

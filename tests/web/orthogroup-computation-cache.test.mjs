@@ -89,3 +89,24 @@ test('group names follow exact member sets and unmatched names stay dormant (CO-
     names: { og_3: 'LivC', og_4: 'LivB' }, descriptions: { og_3: 'transporter' }, dormant: {}
   }, 'a dormant name returns when its member set forms one group again');
 });
+
+test('member tables name each record in plain text, as the diagram heading reads (OV-369)', () => {
+  const state = {
+    orthogroups: ref([]),
+    orthogroupNameOverrides: reactive({}), orthogroupDescriptionOverrides: reactive({}),
+    selectedOrthogroupId: ref(''), orthogroupSearch: ref(''), orthogroupSortMode: ref('id'),
+    clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'),
+    svgContainer: ref(null), extractedFeatures: ref([]), biologicalFeatures: ref([]),
+    linearSeqs: reactive([
+      { uid: 'record-1', definition: '<i>Streptomyces lividus</i> CBS 844.73', gb: { name: 'BGC0000708' } },
+      { uid: 'record-2', definition: '', file_definition: '<i>S. fradiae</i>', gb: { name: 'BGC0000709' } },
+      { uid: 'record-3', definition: '', gb: { name: 'BGC0000711' } }
+    ])
+  };
+  const editor = createOrthogroupEditor({ state: withDrawings(state) });
+  const rows = editor.groupOrthogroupMembersByRecord([
+    { recordIndex: 0 }, { recordIndex: 1 }, { recordIndex: 2 }
+  ]);
+  assert.deepEqual(rows.map(({ recordLabel }) => recordLabel),
+    ['Streptomyces lividus CBS 844.73', 'S. fradiae', 'BGC0000711']);
+});

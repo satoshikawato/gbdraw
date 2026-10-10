@@ -14,6 +14,8 @@ import {
   resolveDisplayProteinId
 } from '../services/feature-utils.js';
 import { downloadTextFile } from '../services/text-download.js';
+import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
+import { resolveLinearRecordEffectiveDefinition } from '../services/linear-sources.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import {
   ORTHOGROUP_ID_KEYS,
@@ -646,9 +648,11 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
       .sort((left, right) => left[0] - right[0])
       .map(([recordIndex, members]) => ({
         recordIndex,
+        // The record's drawn definition as plain text (the diagram heading
+        // renders its markup), else its file name (OV-369).
         recordLabel: recordIndex >= 0
-          ? (
-              cardOf(recordIndex)?.definition ||
+          ? plainTextLinearRecordLabel(
+              resolveLinearRecordEffectiveDefinition(cardOf(recordIndex)) ||
               cardOf(recordIndex)?.gb?.name ||
               cardOf(recordIndex)?.gff?.name ||
               `Record ${recordIndex + 1}`

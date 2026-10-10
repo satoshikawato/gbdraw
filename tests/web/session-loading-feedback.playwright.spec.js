@@ -593,3 +593,29 @@ test('the example chooser cancels with focus back on Load an example and keeps t
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(0);
   await expect(example).toHaveCount(0);
 });
+
+// OV-377/OV-378: the first feature popup after a Session load waits for Python
+// to match the color rules. That wait is not an edit: Save and Load stay
+// available, and the top bar says the popup is being prepared instead of
+// "Applying an edit".
+test('the first feature popup after a Session load says it is preparing and keeps Save and Load available', async ({ page }) => {
+  await openApp(page);
+  const dialogPromise = page.waitForEvent('dialog');
+  await page.locator(sessionInputSelector).setInputFiles(join(
+    repoRoot, 'gbdraw', 'web', 'gallery', 'sessions', 'BGC0000708-BGC0000713.gbdraw-session.json'
+  ));
+  await (await dialogPromise).accept();
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending === false
+    && (window.__GBDRAW_APP__?.results || []).length > 0);
+  // The livE CDS of record 1; no ribbon lies under its centre.
+  const feature = page.locator('.gbdraw-preview-surface svg path[id="fed46a3a6_record_1"]');
+  await feature.click({ force: true });
+  const preparing = page.locator('[data-feature-details-pending]');
+  await expect(preparing).toHaveText('Preparing feature details…');
+  await expect(page.locator('[data-session-busy-reason]')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Save Session', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Load Session', exact: true })).toBeEnabled();
+  await expect(page.locator('.feature-popup')).toBeVisible({ timeout: 180_000 });
+  await expect(preparing).toHaveCount(0);
+  expect(await page.evaluate(() => Boolean(window.__GBDRAW_APP__.clickedPairwiseMatch))).toBe(false);
+});
