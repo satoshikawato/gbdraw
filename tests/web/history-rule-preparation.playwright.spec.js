@@ -1,6 +1,8 @@
 const { test, expect } = require('@playwright/test');
 const { resolve } = require('node:path');
 const { openApp, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
+const { expectLiveEqualsGenerate } = require('./helpers/live-generate-parity.cjs');
+const { appAction, history } = require('./helpers/live-generate-parity-steps.cjs');
 
 const fixture = resolve('gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
 
@@ -92,4 +94,22 @@ test('History prepares cold rules once, skips warm config preparation, and reche
   } finally {
     await cdp.send('Profiler.stopPreciseCoverage');
   }
+});
+
+// OV-347 (D-15-6 (3)): Undo and Redo of a rule color and a rule predicate
+// change, made through the rule owner, show the Legend rows and fills Generate
+// draws for the restored rules.
+test('Redo of a rule predicate change shows what Generate draws', async ({ page }) => {
+  test.setTimeout(240_000);
+  page.on('dialog', dialog => dialog.accept());
+  await openApp(page);
+  await page.locator('input[accept^=".json,"]').setInputFiles(fixture);
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
+  await appAction(page, 'setSpecificRuleField', 0, 'color', '#ff0000');
+  await appAction(page, 'setSpecificRuleField', 0, 'val', 'psaA_NO_MATCH');
+  await history(page, 'undo');
+  await history(page, 'undo');
+  await history(page, 'redo');
+  await history(page, 'redo');
+  await expectLiveEqualsGenerate(page, { label: 'Redo of a rule predicate change' });
 });
