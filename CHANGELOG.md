@@ -23,7 +23,7 @@ write-up of a release.
   compatibility, and installation availability. Publication dates are recorded
   in [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases).
 
-- Editing (web app): an edit to a Feature visibility rule made while a label rerender is running is drawn as **Generate Diagram** draws it; before, the shown Result could keep the older rule until the next Generate (#TBD-C).
+- Editing (web app): an edit to a Feature visibility rule made while a label rerender is running is drawn as **Generate Diagram** draws it; before, the shown Result could keep the older rule until the next Generate (#987).
 - Web app: **Load example** is now also in the header, after **Load Session**, so a
   second Gallery example can be loaded once a Result is shown. It opens the same chooser
   as the **Load an example** button in the empty Preview, which stays. At 769 to about
@@ -52,7 +52,7 @@ write-up of a release.
   dialog; when both rows draw one feature type it offers (Restore the deleted row and merge into it, Keep current color and add a suffix, or Cancel). Rows of different types get the suffix or Cancel. A Legend row stroke follows the color Python gives the row's
   features, so it stays after a Legend row color edit in either order (OV-288). Rule
   rows are addressed by Python's rows (OV-292, OV-294), and a palette row's Legend color
-  is read from the color the row shows now, not from the last Generate (OV-282, OV-311)
+  is read from the color the row shows now, not from the last Generate (OV-282)
   (#975).
 - Removed (web app): **Add legend item** is retired. No control called it, and it was
   reachable only from the browser console. Sessions with editor-added Legend rows still
