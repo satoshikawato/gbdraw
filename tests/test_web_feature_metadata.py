@@ -574,7 +574,9 @@ def test_web_feature_extraction_region_uses_absolute_display_coordinates(
         record.features[0],
         record_id=record.id,
     )
-    assert feature["rendered_feature_svg_id"] == compute_feature_hash(
+    # A cropped record draws the feature with its source hash (OV-401).
+    assert feature["rendered_feature_svg_id"] == feature["svg_id"]
+    assert feature["drawn_selector"]["hash"] == compute_feature_hash(
         cropped_record.features[0],
         record_id=cropped_record.id,
     )

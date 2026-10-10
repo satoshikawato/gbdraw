@@ -14,6 +14,7 @@ from ..core.record_metadata import (
     _feature_source_index_map,
     _source_feature_index,
 )
+from .ids import compute_source_feature_hash
 from .objects import GeneObject, RepeatObject, FeatureObject
 from .overrides import feature_override_lookup
 from .visibility import should_render_feature
@@ -292,6 +293,7 @@ def _build_feature_layers(
             if source_feature_index is None
             else source_feature_index
         )
+        feature_object.feature_hash = compute_source_feature_hash(feature, gb_record)
         if record_transform is not None and record_transform.start_coordinate is not None:
             feature_object.display_parts = project_feature_parts(
                 feature.location.parts, record_transform,

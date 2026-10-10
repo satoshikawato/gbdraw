@@ -3652,7 +3652,9 @@ def test_circular_cli_session_keeps_cropped_and_reversed_records_as_drawn(
     """A Circular batch or grid draft has no per-record crop or orientation.
 
     So those records keep their drawn copy, which the Web draws as is; only an
-    unchanged record reads its input file.
+    unchanged record reads its input file. The copy is the replay's source, so
+    its features take the copy's own hashes (OV-415); the rest of the drawing
+    is the same.
     """
 
     single, multi = _cli_session_inputs(tmp_path)
@@ -3675,9 +3677,12 @@ def test_circular_cli_session_keeps_cropped_and_reversed_records_as_drawn(
     circular_main(["--session", str(session_path), "-o", str(replay), "-f", "svg"])
     replayed = sorted(tmp_path.glob("circular-replay*.svg"))
     assert len(replayed) == (1 if canvas else 3)
+    feature_hash = re.compile(rb"\bf[0-9a-f]{8}\b")
     for path in replayed:
         original = tmp_path / path.name.replace("circular-replay", "circular", 1)
-        assert path.read_bytes() == original.read_bytes()
+        assert feature_hash.sub(b"f", path.read_bytes()) == feature_hash.sub(
+            b"f", original.read_bytes()
+        )
 
 
 def test_single_circular_session_records_crop_on_the_unchanged_input_file(

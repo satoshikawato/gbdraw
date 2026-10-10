@@ -435,6 +435,8 @@ def test_pairwise_match_resolves_duplicate_view_ids_by_source_feature_index() ->
     second = feature(7)
     view_id = compute_feature_object_hash(first)
     assert view_id == compute_feature_object_hash(second)
+    # An untransformed record draws the source location: one hash for both.
+    first.feature_hash = second.feature_hash = view_id
     feature_dom_index = build_linear_feature_dom_index(
         [{"first": first, "second": second}, {}]
     )
@@ -474,6 +476,7 @@ def test_linear_feature_dom_index_rejects_repeated_source_feature_index() -> Non
             feature_type="CDS",
             record_id="record_1",
             source_feature_index=4,
+            feature_hash="fsource",
         )
 
     with pytest.raises(ValueError, match="duplicate source feature index"):

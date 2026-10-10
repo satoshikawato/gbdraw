@@ -10,7 +10,6 @@ from collections import Counter
 from functools import lru_cache
 
 from ..features.coordinates import get_strand
-from ..features.ids import compute_feature_object_hash
 from .filtering import preprocess_label_filtering
 from .circular_candidates import build_circular_label_candidates
 from .circular_radial import place_radial_labels
@@ -4564,7 +4563,7 @@ def prepare_label_list(
             _candidate_cache["candidates"] = candidates
     candidates_by_id = {candidate.stable_id: candidate for candidate in candidates}
     feature_ids = {
-        key: compute_feature_object_hash(feature) for key, feature in feature_dict.items()
+        key: feature.feature_hash for key, feature in feature_dict.items()
     }
     feature_id_counts = Counter(feature_ids.values())
 

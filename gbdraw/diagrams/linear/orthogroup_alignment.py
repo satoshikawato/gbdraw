@@ -12,14 +12,9 @@ from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
 from ...analysis.protein_colinearity import OrthogroupResult, OrthogroupGraphResult
-from ...core.record_metadata import (
-    _mapped_feature_location_parts,
-    _read_coord_map,
-    _source_feature_index,
-    _source_feature_location_parts,
-)
+from ...core.record_metadata import _source_feature_index
 from ...exceptions import ValidationError
-from ...features.ids import compute_feature_hash_from_location_parts
+from ...features.ids import compute_source_feature_hash
 
 
 @dataclass(frozen=True)
@@ -180,24 +175,6 @@ def _features_by_source_index(record: SeqRecord) -> dict[int, object]:
     return by_source_index
 
 
-def _biological_feature_svg_id(record: SeqRecord, feature: object) -> str:
-    parts = _source_feature_location_parts(feature)
-    if parts is None:
-        coord_base, coord_step = _read_coord_map(record)
-        parts = _mapped_feature_location_parts(
-            feature,
-            coord_base=coord_base,
-            coord_step=coord_step,
-        )
-    if not parts:
-        return ""
-    return compute_feature_hash_from_location_parts(
-        str(getattr(feature, "type", "") or ""),
-        parts,
-        record_id=record.id,
-    )
-
-
 def _member_label_identity(
     member: OrthogroupLabelMember,
     *,
@@ -217,10 +194,10 @@ def _member_label_identity(
             raise ValidationError(
                 "Orthogroup member source feature index is absent from its record."
             )
-        biological_id = _biological_feature_svg_id(
-            records[member.record_index],
+        biological_id = compute_source_feature_hash(
             feature,
-        )
+            records[member.record_index],
+        ) or ""
         if member.feature_svg_id and biological_id != member.feature_svg_id:
             raise ValidationError(
                 "Orthogroup member source feature index conflicts with its stable feature ID."

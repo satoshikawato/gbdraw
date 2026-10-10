@@ -13,7 +13,6 @@ from gbdraw.core.record_metadata import (
     _read_coord_map as _read_record_coord_map,
     _source_feature_anchor_profile,
     _source_feature_index,
-    _source_feature_location_parts,
 )
 from gbdraw.core.sequence import translate_cds
 from gbdraw.features.overrides import feature_override_lookup
@@ -21,6 +20,7 @@ from gbdraw.features.selector_values import build_feature_selector_values
 from gbdraw.features.ids import (
     compute_feature_hash_from_location_parts,
     make_linear_rendered_feature_id,
+    source_feature_location_parts,
 )
 from gbdraw.features.visibility import (
     compile_feature_visibility_rules,
@@ -162,35 +162,28 @@ def _biological_location_parts(
 def _biological_selector_values(
     feature: Any,
     *,
-    record_id: str | None,
-    coord_base: int,
+    record: Any,
     coord_step: int,
-) -> tuple[dict[str, object], str, str, dict[str, str | None]]:
-    """Return source selector values, the biological and processed-record
-    feature IDs, and the drawn record's selector values.
+) -> tuple[dict[str, object], str, dict[str, str | None]]:
+    """Return source selector values, the feature hash, and the drawn
+    record's selector values.
 
     The drawn values are the ones the renderer's rule matching reads from the
     processed (cropped, reverse-complemented) record (feature catalog 5,
     ``drawnSelector``).
     """
 
-    selector = build_feature_selector_values(feature, record_id=record_id)
-    rendered_feature_id = str(selector.get("hash") or "")
+    selector = build_feature_selector_values(feature, record_id=record.id)
     drawn_selector = {
-        "hash": rendered_feature_id or None,
+        "hash": str(selector.get("hash") or "") or None,
         "location": str(selector.get("location") or "") or None,
         "recordLocation": str(selector.get("record_location") or "") or None,
     }
-    rendered_parts = _biological_location_parts(
-        feature.location,
-        coord_base,
-        coord_step,
-    )
-    parts = _source_feature_location_parts(feature) or tuple(rendered_parts)
+    parts = source_feature_location_parts(feature, record)
     stable_feature_id = compute_feature_hash_from_location_parts(
         str(getattr(feature, "type", "") or ""),
         parts,
-        record_id=record_id,
+        record_id=record.id,
     )
     selector["hash"] = stable_feature_id
     if parts:
@@ -200,11 +193,11 @@ def _biological_selector_values(
             _biological_strand(feature.location.strand, coord_step)
         )
         selector["location"] = f"{start}..{end}"
-        if record_id:
-            selector["record_location"] = f"{record_id}:{start}..{end}:{strand}"
+        if record.id:
+            selector["record_location"] = f"{record.id}:{start}..{end}:{strand}"
         else:
             selector.pop("record_location", None)
-    return selector, stable_feature_id, rendered_feature_id, drawn_selector
+    return selector, stable_feature_id, drawn_selector
 
 
 
@@ -345,12 +338,11 @@ def extract_features_from_records_payload(
                 continue
             selector_values = _biological_selector_values(
                 feat,
-                record_id=hash_record_id,
-                coord_base=coord_base,
+                record=record,
                 coord_step=coord_step,
             )
-            if is_rendered_feature and selector_values[2]:
-                rendered_id_counts[selector_values[2]] += 1
+            if is_rendered_feature and selector_values[1]:
+                rendered_id_counts[selector_values[1]] += 1
             prepared_features.append(
                 (
                     feature_index,
@@ -389,7 +381,7 @@ def extract_features_from_records_payload(
             )
             sequence_warnings.extend(translation_warnings)
 
-            selector, stable_svg_id, rendered_stable_svg_id, drawn_selector = selector_values
+            selector, stable_svg_id, drawn_selector = selector_values
 
             # The same qualifier map rule matching reads: keys stripped and
             # lowercased, case variants merged in key order (OV-249).
@@ -449,19 +441,19 @@ def extract_features_from_records_payload(
             rendered_feature_payload = dict(feature_payload)
             rendered_feature_payload["id"] = f"f{idx}"
             rendered_feature_payload["drawn_selector"] = drawn_selector
-            rendered_feature_svg_id = rendered_stable_svg_id
+            rendered_feature_svg_id = stable_svg_id
             if linear_rendered_feature_ids:
                 rendered_feature_svg_id = (
                     make_linear_rendered_feature_id(
                         record_index=rec_idx,
-                        stable_feature_id=rendered_stable_svg_id,
+                        stable_feature_id=stable_svg_id,
                         record_count=len(records),
                     )
-                    or rendered_stable_svg_id
+                    or stable_svg_id
                 )
             if (
                 rendered_feature_svg_id
-                and rendered_id_counts[rendered_stable_svg_id] > 1
+                and rendered_id_counts[stable_svg_id] > 1
             ):
                 rendered_feature_svg_id = instance_svg_id(
                     rendered_feature_svg_id,

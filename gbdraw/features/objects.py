@@ -128,6 +128,9 @@ class FeatureObject:
         self.placement: FeaturePlacementAssignment | None = None
         self.feature_track_id: int = 0
         self.source_feature_index: int | None = None
+        # The source-record feature hash that every SVG ID drawn for this
+        # feature starts with (`ids.compute_source_feature_hash`).
+        self.feature_hash: str | None = None
         # The identity-addressed edits of this feature (features/overrides.py).
         self.feature_override: ResolvedFeatureOverride | None = None
         self._feature_type: str = type

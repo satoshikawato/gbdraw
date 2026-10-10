@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 
+from gbdraw.core.record_metadata import (
+    _mapped_feature_location_parts,
+    _read_coord_map,
+    _source_feature_location_parts,
+)
 from gbdraw.exceptions import ValidationError
 
 import hashlib
@@ -136,11 +141,50 @@ def compute_feature_hash(feature: Any, record_id: str | None = None) -> str:
     )
 
 
+def source_feature_location_parts(
+    feature: Any,
+    record: Any,
+) -> tuple[tuple[int, int, int | None], ...]:
+    """The feature's location parts in its source record.
+
+    A cropped or reverse-complemented record keeps each feature's source parts
+    (``core/record_metadata.py``); any other record maps its parts through its
+    coordinate map.
+    """
+
+    coord_base, coord_step = _read_coord_map(record)
+    return _source_feature_location_parts(feature) or _mapped_feature_location_parts(
+        feature,
+        coord_base=coord_base,
+        coord_step=coord_step,
+    )
+
+
+def compute_source_feature_hash(feature: Any, record: Any) -> str | None:
+    """The feature hash: the catalog's stable feature ID and the base of every
+    SVG ID drawn for the feature, whatever crop or reverse complement its
+    record has (OV-401, OV-412)."""
+
+    parts = source_feature_location_parts(feature, record)
+    if not parts:
+        return None
+    return compute_feature_hash_from_location_parts(
+        str(getattr(feature, "type", "") or ""),
+        parts,
+        record_id=getattr(record, "id", None),
+    )
+
+
 def compute_feature_object_hash(
     feature_object: Any,
     record_id: str | None = None,
 ) -> str | None:
-    """Compute the stable data-gbdraw-feature-id for a rendered FeatureObject."""
+    """The `hash` selector value of a FeatureObject: its drawn location.
+
+    Rule matching (`selector_values.get_feature_hash`) and comparison rows'
+    view feature IDs name drawn features by this hash. SVG IDs use
+    `FeatureObject.feature_hash` (`compute_source_feature_hash`).
+    """
 
     parts = _feature_object_coordinate_parts(feature_object)
     if not parts:
@@ -262,6 +306,8 @@ __all__ = [
     "compute_feature_hash_from_parts",
     "compute_feature_hash_from_location_parts",
     "compute_feature_object_hash",
+    "compute_source_feature_hash",
+    "source_feature_location_parts",
     "make_linear_dom_id",
     "make_linear_rendered_feature_id",
     "make_svg_safe_id_fragment",

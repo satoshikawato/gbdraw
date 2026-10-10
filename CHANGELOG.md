@@ -12,6 +12,15 @@ write-up of a release.
 
 ## [Unreleased]
 
+- SVG feature IDs: a feature of a cropped or reverse-complemented record
+  (`--region`, `--reverse_complement`, **Reverse complement**, or a direction
+  chosen in **Review alignment options…**) is now drawn with its source-record
+  hash, as on an untransformed record. `data-gbdraw-feature-id`, the element IDs
+  built from it, and `data-gbdraw-stable-feature-id` change for such records and
+  now match the feature catalog in plain, interactive, and web-app SVGs, so
+  `gbdraw.api.enrich_svg(..., feature_catalog=...)` accepts these diagrams and
+  the web app's interactive export writes the same stable ID as the CLI
+  (OV-401, OV-412).
 - Gallery: the aminoglycoside BGC example draws its arrows with **Shaft Width
   Ratio** 0.6 and aligns its records on similarity group og_6 (neoU of
   BGC0000709) instead of og_1. Its tutorial adds the **Features › Arrow Geometry

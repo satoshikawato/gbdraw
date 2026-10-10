@@ -16,14 +16,15 @@ from pandas import DataFrame, isna
 from gbdraw.core.record_metadata import (
     _feature_source_index_map,
     _iter_source_features,
-    _mapped_feature_location_parts,
-    _read_coord_map,
     _source_feature_index,
-    _source_feature_location_parts,
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.record_select import RecordSelector, parse_record_selector, select_record
-from .ids import compute_feature_hash_from_location_parts, disambiguate_feature_ids
+from .ids import (
+    compute_feature_hash_from_location_parts,
+    disambiguate_feature_ids,
+    source_feature_location_parts,
+)
 from .selector_values import (
     matches_feature_selector,
     normalize_qualifier_values,
@@ -63,17 +64,10 @@ def build_source_feature_catalog(
     record: SeqRecord,
 ) -> tuple[SourceFeatureIdentity, ...]:
     """Capture before request crop/visibility; never mutate or reread the source."""
-    base, step = _read_coord_map(record)
     entries = []
     for ordinal, feature in enumerate(_iter_source_features(record.features)):
         index = _source_feature_index(feature)
-        parts = _source_feature_location_parts(
-            feature
-        ) or _mapped_feature_location_parts(
-            feature,
-            coord_base=base,
-            coord_step=step,
-        )
+        parts = source_feature_location_parts(feature, record)
         if not parts:
             continue
         feature_type = str(feature.type)

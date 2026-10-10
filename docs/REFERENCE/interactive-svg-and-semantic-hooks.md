@@ -92,8 +92,10 @@ interactive runtime. They can change in any release.
 To find the same feature in two renders, use the pair `(recordKey,
 biologicalFeatureId)`. When a source feature carries it explicitly,
 `(recordIndex, stableFeatureId)` or `(recordIndex, sourceFeatureIndex)` also
-identifies it. A rendered feature ID names one drawn element and can change
-after reverse-complement display or another rendering change. Protein handles
+identifies it. A rendered feature ID names one drawn element: the feature's
+source-record hash, also for a cropped or reverse-complemented record, plus a
+suffix for the record when several records are drawn, and for identical
+features. It changes when the records or their order change. Protein handles
 created during a comparison are valid only inside the saved result and protein
 identity manifest that created them. `protein_id` and `sourceProteinId` are for
 display and export; do not join on them.

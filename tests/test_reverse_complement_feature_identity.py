@@ -121,7 +121,8 @@ def test_reverse_complement_metadata_separates_biological_and_rendered_ids() -> 
 
     assert feature["svg_id"] == BIOLOGICAL_FEATURE_ID
     assert feature["stable_feature_id"] == BIOLOGICAL_FEATURE_ID
-    assert feature["rendered_feature_svg_id"] == PROCESSED_FEATURE_ID
+    # One builder: the drawn feature carries its source hash (OV-401).
+    assert feature["rendered_feature_svg_id"] == BIOLOGICAL_FEATURE_ID
     assert feature["selector"]["hash"] == BIOLOGICAL_FEATURE_ID
     assert feature["selector"]["record_location"] == "BGC0000713:7134..8157:+"
     assert feature["location_parts"] == [
@@ -362,10 +363,15 @@ def test_web_helper_uses_cropped_view_parts_for_forward_and_reverse_ids() -> Non
         reverse_transform,
     )
 
+    # View IDs are comparison-row frame tags: the drawn location's hash.
     assert raw_data["view_feature_hash_parts"] == [[20, 80, 1]]
-    assert forward_id == forward_feature["rendered_feature_svg_id"]
-    assert reverse_id == reverse_feature["rendered_feature_svg_id"]
+    assert forward_id == compute_feature_hash(cropped.features[0], record_id=cropped.id)
+    assert reverse_id == compute_feature_hash(
+        reversed_record.features[0], record_id=reversed_record.id
+    )
     assert forward_id != reverse_id
+    assert forward_feature["rendered_feature_svg_id"] == forward_feature["stable_feature_id"]
+    assert reverse_feature["rendered_feature_svg_id"] == reverse_feature["stable_feature_id"]
     assert raw_data["feature_svg_id"] == forward_feature["stable_feature_id"]
     assert raw_data["feature_svg_id"] == reverse_feature["stable_feature_id"]
 
@@ -377,10 +383,10 @@ def test_interactive_svg_maps_biological_id_to_actual_reversed_dom_path() -> Non
     ]
     rendered_id = make_linear_rendered_feature_id(
         record_index=4,
-        stable_feature_id=PROCESSED_FEATURE_ID,
+        stable_feature_id=BIOLOGICAL_FEATURE_ID,
         record_count=5,
     )
-    assert rendered_id == "f20e4885e_record_5"
+    assert rendered_id == "feb87ab70_record_5"
 
     context = build_interactive_svg_context(
         records,
@@ -404,7 +410,7 @@ def test_interactive_svg_maps_biological_id_to_actual_reversed_dom_path() -> Non
     source = f"""<svg xmlns="http://www.w3.org/2000/svg" width="100px" height="80px"
       viewBox="0 0 100 80"><path id="{rendered_id}"
       data-gbdraw-feature-id="{rendered_id}"
-      data-gbdraw-stable-feature-id="{PROCESSED_FEATURE_ID}"
+      data-gbdraw-stable-feature-id="{BIOLOGICAL_FEATURE_ID}"
       data-gbdraw-record-index="4" data-gbdraw-feature-part="block"
       fill="#54bcf8" d="M 1 1 L 2 2" /></svg>"""
     enriched = enrich_svg(source, context)
