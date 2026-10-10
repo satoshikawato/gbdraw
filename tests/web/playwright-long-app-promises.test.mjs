@@ -18,6 +18,7 @@ const { evaluateWithRetainedPromise } = createRequire(import.meta.url)('./helper
 // rematch the rules). The editor actions await the same work as Generate does.
 const LONG_OPERATIONS = [
   'runAnalysis',
+  'addSpecificRule',
   'importSession',
   'saveSessionWithTitle',
   'openFeatureEditorFromList',

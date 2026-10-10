@@ -7,7 +7,7 @@
 // history-generated-authority.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, editFeature, openFresh, openWithGenBank, settle } = require('./helpers/audit-browser.cjs');
 const { download, load } = require('./helpers/mode-transition.cjs');
 
@@ -84,7 +84,7 @@ const EDITS = [
   }],
   // N-06 (PD-OI-042): a rule captioned like the generated `other proteins` row
   // draws its own `other proteins [#hex]` row; that row then edits the rule.
-  ['rule caption naming a generated row', (page) => page.evaluate(() => {
+  ['rule caption naming a generated row', (page) => evaluateWithRetainedPromise(page, () => {
     const app = window.__GBDRAW_APP__;
     Object.assign(app.newSpecRule, {
       feat: 'CDS', qual: 'locus_tag', val: '^TESTA_0006$', color: '#e63946', cap: 'other proteins'

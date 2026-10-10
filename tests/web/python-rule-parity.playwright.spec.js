@@ -34,7 +34,7 @@ test('Python-only color rules commit atomically, retain History and agree with G
   expect((await getDiagramWorkerActivity(page)).constructions).toBe(0);
   messages.length = 0;
   const before = await page.evaluate(() => window.__GBDRAW_APP__.svgContent);
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     const a = window.__GBDRAW_APP__;
     Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: '(?i)NADH', color: '#f01234', cap: '' });
     await a.addSpecificRule();
@@ -95,7 +95,7 @@ test('late Python evaluation cannot replace a newer rule or a loaded Session', a
     };
   });
   await loadSession(page);
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     const a = window.__GBDRAW_APP__;
     Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: '(?i)NADH', color: '#f01234', cap: '' });
     await a.addSpecificRule();
@@ -112,7 +112,7 @@ test('late Python evaluation cannot replace a newer rule or a loaded Session', a
   // A caption edit that gives one caption two colors asks Python to
   // normalize the captions before the matches (U3a 1e); the Load runs while
   // that request is late. A pending match would make the Load wait instead.
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     const a = window.__GBDRAW_APP__;
     Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: '(?i)cytochrome', color: '#2266aa', cap: 'Shared' });
     await a.addSpecificRule();
@@ -163,7 +163,7 @@ test('Unicode regex corpus has identical live and generated color/label targets'
     ['(?i)NADH', ['R0', 'R1']], ['(?P<enzyme>NADH)', ['R0', 'R1']],
     ['NADH\\Z', ['R0']], ['\\bβ', ['R2']], ['i', ['R3', 'R4', 'R5']]
   ]) {
-    await page.evaluate(async (pattern) => {
+    await evaluateWithRetainedPromise(page, async (pattern) => {
       const a = window.__GBDRAW_APP__;
       await a.clearAllSpecificRules();
       Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: pattern, color: '#f01234', cap: '' });
