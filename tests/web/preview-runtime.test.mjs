@@ -234,6 +234,22 @@ assert.equal(state.results.value[1].content, '<svg data-count="4" data-elements=
   assert.equal(state.results.value[0].content, '<svg data-count="6" data-elements="1"></svg>');
 }
 
+// OV-345: a display, History restore, or Reset that changes nothing in the
+// displayed Result neither lays out its Legend nor serializes it, so the
+// Result keeps the bytes it has (Python's, after a Generate or a Load).
+{
+  const { createEmptySvgMutationPlan } = await import(pathToFileURL(join(tempDir, 'services', 'svg-result-ingestion.js')));
+  const shown = state.results.value[0];
+  const serialized = serializeCount;
+  const writes = resultReplacementCount;
+  let laidOut = 0;
+  const afterApply = () => { laidOut += 1; };
+  assert.equal(runtime.applyEditorOperations(null, { afterApply }), false);
+  assert.equal(runtime.applyEditorOperations(createEmptySvgMutationPlan(1).operationsByResult[0], { domains: [], afterApply }), false);
+  assert.deepEqual([serializeCount, resultReplacementCount, laidOut], [serialized, writes, 0]);
+  assert.equal(state.results.value[0], shown);
+}
+
 const structuralMetrics = [];
 const lifecycleEvents = [];
 globalThis.__GBDRAW_TEST_HOOKS__ = {

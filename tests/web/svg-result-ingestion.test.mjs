@@ -579,6 +579,48 @@ test('the mounted executor is idempotent', () => {
   assert.equal(serializeNode(mounted), once);
 });
 
+// OV-345: a reconcile says whether it changed the Result, so a display,
+// History restore, or Reset that changes nothing keeps the Result's bytes.
+test('a reconcile reports whether it changed the Result and whether the Legend rows changed', () => {
+  const { admission } = currentFixture();
+  const fill = compileDirectEditorMutationPlan(planOptions.fill(admission)).operationsByResult[0];
+  const reset = createEmptySvgMutationPlan(1).operationsByResult[0];
+  const mounted = buildSvgRoot();
+  const python = serializeNode(mounted);
+  assert.deepEqual(reconcileMountedResult(mounted, reset), { changed: false, legendChanged: false }, 'nothing to show');
+  assert.deepEqual(reconcileMountedResult(mounted, fill), { changed: true, legendChanged: false });
+  assert.deepEqual(reconcileMountedResult(mounted, fill), { changed: false, legendChanged: false }, 'shown again');
+  assert.deepEqual(reconcileMountedResult(mounted, reset), { changed: true, legendChanged: false }, 'returned to Python');
+  assert.equal(serializeNode(mounted), python);
+});
+
+// OV-345: Load keeps a saved Result's bytes when its records change nothing
+// (an EU Result whose edits Python drew at Generate), and admits the records
+// of a Result that shows an edit without them.
+test('Load keeps a saved Result\'s bytes when its records change nothing', () => {
+  const content = '<svg data-python="bytes"><path id="f0001" fill="#aaaaaa"></path></svg>';
+  const admit = (fillColor) => {
+    const featureCatalog = catalog();
+    featureCatalog.items[0].features[0].fillColor = fillColor;
+    const results = [{ name: 'diagram.svg', content }];
+    const admission = admitFeatureCatalog(featureCatalog, results, { mode: 'linear' });
+    const plan = createSavedResultPlan(results, admission, {
+      featureColorOverrides: { [biologicalFeatureKey('record-a', 'feature-a')]: '#aaaaaa' },
+      featureStrokeOverrides: {}, legendEntries: [], legendColorOverrides: {}, legendStrokeOverrides: {},
+      originalLegendColors: {}, originalLegendOrder: [], mode: 'linear', blockStroke: null
+    });
+    assert.equal(plan.kind, 'MUTATING');
+    return captureMetrics(() => admitCurrentSessionResults(createCurrentSessionResultSource(results, admission), {
+      mutationPlan: plan, sanitizer: sanitizer({ calls: 0 }), parser: FakeDomParser
+    }));
+  };
+  const drawn = admit('#aaaaaa');
+  assert.equal(drawn.value[0].content, content, 'Python drew the edit: the bytes are kept');
+  assert.equal(drawn.metrics.filter(({ name }) => name === 'svgSerializationCount').length, 0);
+  const recorded = admit('#bbbbbb');
+  assert.match(recorded.value[0].content, /data-gbdraw-base-fill="#bbbbbb"/);
+});
+
 test('a mounted batch Result skips the features and Legend rows it does not draw', () => {
   const { admission } = currentFixture();
   const renamed = compileDirectEditorMutationPlan({
@@ -1522,6 +1564,9 @@ test('the Load normalizer records no fill Python is not known to have drawn', ()
   assert.doesNotMatch(serializeNode(svg), /data-gbdraw-base-fill/);
 });
 
+/** @param {Parameters<typeof reconcileMountedResult>} args */
+const legendRowsChanged = (...args) => reconcileMountedResult(...args).legendChanged;
+
 // U3a: the executor reconciles the Legend structure. A row of Python's keeps
 // Python's key when renamed and stays hidden when deleted, so a reconcile
 // without the edit returns the row as Python drew it.
@@ -1609,12 +1654,19 @@ test('a restored Result shows a relabeled row in place only where Python\'s orde
   assert.equal(shownPythonLegendRow(placed, 'tRNA'), true);
 });
 
+test('a reconcile that hides a Legend row reports a Legend change once', () => {
+  const svg = legendSvg();
+  const deleted = legendOperations({ legendDeletes: [{ caption: 'tRNA' }] });
+  assert.deepEqual(reconcileMountedResult(svg, deleted, { domains: LEGEND_STRUCTURE }), { changed: true, legendChanged: true });
+  assert.deepEqual(reconcileMountedResult(svg, deleted, { domains: LEGEND_STRUCTURE }), { changed: false, legendChanged: false });
+});
+
 test('a deleted Legend row is hidden with Python\'s key and a reconcile without the delete shows it in its slot', () => {
   const svg = legendSvg();
   const drawn = serializeNode(svg);
-  assert.equal(reconcileMountedResult(svg, legendOperations({ legendDeletes: [{ caption: 'tRNA' }] }), { domains: LEGEND_STRUCTURE }), true);
+  assert.equal(legendRowsChanged(svg, legendOperations({ legendDeletes: [{ caption: 'tRNA' }] }), { domains: LEGEND_STRUCTURE }), true);
   assert.deepEqual(legendRows(svg), [['CDS', 'CDS', null], ['tRNA', 'tRNA', 'none'], ['rRNA', 'rRNA', null]]);
-  assert.equal(reconcileMountedResult(svg, legendOperations(), { domains: LEGEND_STRUCTURE }), true);
+  assert.equal(legendRowsChanged(svg, legendOperations(), { domains: LEGEND_STRUCTURE }), true);
   assert.equal(serializeNode(svg), drawn);
 });
 
@@ -1628,7 +1680,7 @@ test('a fill addressed by Python\'s key reaches a renamed row; a reconcile witho
   });
   assert.deepEqual(legendRows(svg)[0], ['Genes', 'Genes', null]);
   assert.equal(legendSwatch(svg.querySelectorAll('g[data-legend-key]')[0]).getAttribute('fill'), '#123456');
-  assert.equal(reconcileMountedResult(svg, legendOperations({ legendFills: [fill] }), {
+  assert.equal(legendRowsChanged(svg, legendOperations({ legendFills: [fill] }), {
     domains: [...LEGEND_STRUCTURE, 'legendFills']
   }), true);
   assert.deepEqual(legendRows(svg)[0], ['CDS', 'CDS', null]);
@@ -1646,14 +1698,14 @@ test('an editor row is cloned from Python\'s first row and removed by a reconcil
   reconcileMountedResult(svg, legendOperations({
     legendRenames: [{ from: 'CDS', to: 'Genes' }], legendDeletes: [{ caption: 'CDS' }], legendAdds: [mine]
   }), { domains: LEGEND_STRUCTURE });
-  assert.equal(reconcileMountedResult(svg, legendOperations({
+  assert.equal(legendRowsChanged(svg, legendOperations({
     legendRenames: [{ from: 'CDS', to: 'Genes' }], legendDeletes: [{ caption: 'CDS' }], legendAdds: [mine, add]
   }), { domains: LEGEND_STRUCTURE }), true);
   const added = svg.querySelectorAll('g[data-legend-key]').find((row) => row.getAttribute('data-legend-key') === 'New');
   assert.equal(serializeNode(added), serializeNode(legendRow('New', 31))
     .replace('<g data-legend-key="New">', '<g data-legend-key="New" data-legend-owner="direct-editor">')
     .replace('fill="#aaaaaa"', 'fill="#556677"'));
-  assert.equal(reconcileMountedResult(svg, legendOperations({
+  assert.equal(legendRowsChanged(svg, legendOperations({
     legendRenames: [{ from: 'CDS', to: 'Genes' }], legendDeletes: [{ caption: 'CDS' }], legendAdds: [mine]
   }), { domains: LEGEND_STRUCTURE }), true);
   assert.deepEqual(legendRows(svg).map(([key]) => key), ['Mine', 'Genes', 'tRNA']);
@@ -1664,9 +1716,9 @@ test('a reconcile without an order returns Python\'s order', () => {
   const drawn = serializeNode(svg);
   const order = { captions: ['rRNA', 'Genes', 'tRNA'] };
   const renames = [{ from: 'CDS', to: 'Genes' }];
-  assert.equal(reconcileMountedResult(svg, legendOperations({ legendRenames: renames, legendOrder: [order] }), { domains: LEGEND_STRUCTURE }), true);
+  assert.equal(legendRowsChanged(svg, legendOperations({ legendRenames: renames, legendOrder: [order] }), { domains: LEGEND_STRUCTURE }), true);
   assert.deepEqual(legendRows(svg).map(([key]) => key), ['rRNA', 'Genes', 'tRNA']);
-  assert.equal(reconcileMountedResult(svg, legendOperations({ legendRenames: renames }), { domains: LEGEND_STRUCTURE }), true);
+  assert.equal(legendRowsChanged(svg, legendOperations({ legendRenames: renames }), { domains: LEGEND_STRUCTURE }), true);
   assert.deepEqual(legendRows(svg).map(([key]) => key), ['Genes', 'tRNA', 'rRNA']);
   reconcileMountedResult(svg, legendOperations(), { domains: LEGEND_STRUCTURE });
   assert.equal(serializeNode(svg), drawn);
@@ -1690,9 +1742,9 @@ test('a second Legend structure reconcile changes nothing', () => {
     legendFills: [{ caption: 'CDS', color: '#123456' }]
   });
   const domains = [...LEGEND_STRUCTURE, 'legendFills'];
-  assert.equal(reconcileMountedResult(svg, operations, { domains }), true);
+  assert.equal(legendRowsChanged(svg, operations, { domains }), true);
   const once = serializeNode(svg);
-  assert.equal(reconcileMountedResult(svg, operations, { domains }), false);
+  assert.equal(legendRowsChanged(svg, operations, { domains }), false);
   assert.equal(serializeNode(svg), once);
 });
 
@@ -1719,18 +1771,18 @@ test('a rule commit\'s row is added where the Result lacks it and a retired row 
     legendAdds: [{ caption: 'Rule', color: '#123456', xPos: null, yPos: null, ifAbsent: true, before: 'tRNA' }],
     legendDeletes: [{ caption: 'tRNA', allowMissing: true, retire: true }]
   });
-  assert.equal(reconcileMountedResult(svg, operations, { domains: LEGEND_STRUCTURE }), true);
+  assert.equal(legendRowsChanged(svg, operations, { domains: LEGEND_STRUCTURE }), true);
   const shown = [['CDS', 'CDS', null], ['Rule', 'Rule', null], ['tRNA', 'tRNA', 'none'], ['rRNA', 'rRNA', null]];
   assert.deepEqual(legendRows(svg), shown);
   const rule = svg.querySelectorAll('g[data-legend-key]')[1];
   assert.equal(rule.getAttribute('data-legend-owner'), 'specific-color-file');
   assert.equal(legendSwatch(rule).getAttribute('fill'), '#123456');
-  assert.equal(reconcileMountedResult(svg, operations, { domains: LEGEND_STRUCTURE }), false);
-  assert.equal(reconcileMountedResult(svg, legendOperations(), { domains: LEGEND_STRUCTURE }), false);
+  assert.equal(legendRowsChanged(svg, operations, { domains: LEGEND_STRUCTURE }), false);
+  assert.equal(legendRowsChanged(svg, legendOperations(), { domains: LEGEND_STRUCTURE }), false);
   assert.deepEqual(legendRows(svg), shown);
   const drawn = legendSvg([legendRow('CDS', 7), legendRow('Rule', 31)]);
   const bytes = serializeNode(drawn);
-  assert.equal(reconcileMountedResult(drawn, operations, { domains: LEGEND_STRUCTURE }), false);
+  assert.equal(legendRowsChanged(drawn, operations, { domains: LEGEND_STRUCTURE }), false);
   assert.equal(serializeNode(drawn), bytes);
 });
 
@@ -1740,6 +1792,6 @@ test('editor rows follow the order of their additions', () => {
   const svg = legendSvg();
   const add = (caption) => ({ caption, color: '#556677', xPos: null, yPos: null });
   reconcileMountedResult(svg, legendOperations({ legendAdds: [add('A'), add('B')] }), { domains: LEGEND_STRUCTURE });
-  assert.equal(reconcileMountedResult(svg, legendOperations({ legendAdds: [add('A2'), add('B')] }), { domains: LEGEND_STRUCTURE }), true);
+  assert.equal(legendRowsChanged(svg, legendOperations({ legendAdds: [add('A2'), add('B')] }), { domains: LEGEND_STRUCTURE }), true);
   assert.deepEqual(legendRows(svg).map(([key]) => key), ['CDS', 'tRNA', 'rRNA', 'A2', 'B']);
 });

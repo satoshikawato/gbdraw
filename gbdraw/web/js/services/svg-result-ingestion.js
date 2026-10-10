@@ -50,6 +50,7 @@ const text = (value) => String(value ?? '').trim();
 
 /**
  * A caller's rewrite of one parsed Result SVG. The return value is ignored.
+ * A transform that returns false changed nothing; any other value counts as a change (OV-345).
  * @typedef {(svg: Element, context: { result: any, resultIndex: number }) => unknown} SvgResultTransform
  */
 
@@ -483,9 +484,10 @@ const keepPaintAttribute = (index, element, name) => {
 
 // A paint attribute the executor changes keeps Python's value beside it
 // (`resultBaseAttribute`), recorded on the first change. The index notes
-// each attribute an operation sets, so a reconcile leaves it alone.
+// each attribute an operation sets, so a reconcile leaves it alone, and
+// whether the pass changed the Result.
 /**
- * @param {{ painted: Map<Element, Set<string>> }} index
+ * @param {{ painted: Map<Element, Set<string>>, changed: boolean }} index
  * @param {Element} element
  * @param {string} name
  * @param {string | number | null} value null removes the attribute.
@@ -499,6 +501,7 @@ const setPaintAttribute = (index, element, name, value) => {
   if (!element.hasAttribute(base)) element.setAttribute(base, current ?? '');
   if (next === null) element.removeAttribute(name);
   else element.setAttribute(name, next);
+  index.changed = true;
   return true;
 };
 
@@ -538,10 +541,11 @@ const updateLegendCaption = (entry, caption) => {
 /**
  * Return every attribute the executor changed in `domains` and no operation
  * of this pass set to the value Python drew (a Legend row's key with its
- * text). Returns whether a Legend row changed.
+ * text). Returns whether an attribute returned, and whether a Legend row did.
  * @param {Element} root
  * @param {readonly string[]} domains
  * @param {Map<Element, Set<string>>} painted
+ * @returns {{ changed: boolean, rowsChanged: boolean }}
  */
 const restorePaintBases = (root, domains, painted) => {
   const owned = { feature: new Set(), swatch: new Set(), row: new Set() };
@@ -551,8 +555,9 @@ const restorePaintBases = (root, domains, painted) => {
     attributes?.swatch.forEach((name) => owned.swatch.add(name));
     attributes?.row.forEach((name) => owned.row.add(name));
   });
+  let changed = false;
   let rowsChanged = false;
-  if (owned.feature.size === 0 && owned.swatch.size === 0 && owned.row.size === 0) return rowsChanged;
+  if (owned.feature.size === 0 && owned.swatch.size === 0 && owned.row.size === 0) return { changed, rowsChanged };
   [root, ...Array.from(root.querySelectorAll(RESULT_BASE_SELECTOR))].forEach((element) => {
     const kind = paintElementKind(element);
     owned[kind].forEach((name) => {
@@ -564,10 +569,11 @@ const restorePaintBases = (root, domains, painted) => {
       else if (name === 'data-legend-key') updateLegendCaption(element, value);
       else element.setAttribute(name, value);
       element.removeAttribute(base);
+      changed = true;
       if (kind === 'row') rowsChanged = true;
     });
   });
-  return rowsChanged;
+  return { changed, rowsChanged };
 };
 
 const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
@@ -586,6 +592,7 @@ const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
   return {
     /** @type {Map<Element, Set<string>>} */
     painted: new Map(),
+    changed: false,
     features() {
       announce();
       if (built.featureElements) return built.featureElements;
@@ -731,9 +738,9 @@ const applyLegendOperations = (index, operations, {
         const swatch = legendSwatch(entry);
         if (!swatch) throw new Error('Current SVG has no Legend swatch template.');
         // The editor row's own color is its drawn fill; Python drew none.
-        setAttributeIfDifferent(swatch, 'fill', color);
-        removeAttributeIfPresent(swatch, resultBaseAttribute('fill'));
-        entry.setAttribute('data-legend-owner', 'direct-editor');
+        const recolored = setAttributeIfDifferent(swatch, 'fill', color);
+        const unrecorded = removeAttributeIfPresent(swatch, resultBaseAttribute('fill'));
+        if (setAttributeIfDifferent(entry, 'data-legend-owner', 'direct-editor') || recolored || unrecorded) index.changed = true;
         changed = moveLegendEntryToAnchor(entry, xPos, yPos) || changed;
       });
       return;
@@ -881,11 +888,13 @@ const restoreLegendStructure = (index, operations, domains) => {
  * The preview binder owns label DOM identity, so label operations stay with
  * it. Legend operations are diagram-wide and a batch Result shows only its own
  * categories and features, so an absent caption or feature is skipped.
- * Returns whether the Legend's rows changed, so the caller lays it out once.
+ * Returns whether the reconcile changed the Result, so a caller commits only
+ * a change (OV-345), and whether the Legend's rows changed, so the caller
+ * lays it out once.
  * @param {Element} svg
  * @param {SvgMutationOperations} operations
  * @param {{ resultIndex?: number, domains?: readonly string[] }} [options]
- * @returns {boolean}
+ * @returns {{ changed: boolean, legendChanged: boolean }}
  */
 export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domains = RESULT_PAINT_DOMAINS } = {}) => {
   const index = createLazyMutationIndex(svg, { phase: 'result-selection', resultIndex });
@@ -912,7 +921,11 @@ export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domai
     }, { displayed: true, restoresFills: domains.includes('featureFills') });
     legendChanged = restoreLegendStructure(index, operations, domains) || legendChanged;
   }
-  return restorePaintBases(svg, domains, index.painted) || legendChanged;
+  const restored = restorePaintBases(svg, domains, index.painted);
+  return {
+    changed: index.changed || legendChanged || restored.changed,
+    legendChanged: restored.rowsChanged || legendChanged
+  };
 };
 
 /**
@@ -976,14 +989,16 @@ const strokeKind = (element, parts, perRecord) => {
 // kept may be an edited one, or another Result's). A Session 46 with one
 // Result kept that Result's block stroke. A kind no part of which escaped the
 // edits, or whose parts disagree, is not known: its parts get no record and
-// show the saved stroke until Generate.
+// show the saved stroke until Generate. Returns whether it recorded a value.
 /**
  * @param {Element} svg
  * @param {{ resultIndex: number, catalogAdmission: FeatureCatalogAdmission, edits: SavedResultEdits,
  *   blockStroke: SavedResultEdits['blockStroke'] }} saved
+ * @returns {boolean}
  */
 const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits, blockStroke }) => {
   const index = createLazyMutationIndex(svg, { phase: 'session-load', resultIndex });
+  let recorded = false;
   /** @param {Element} element @param {string} name @param {unknown} edited @param {unknown} original */
   const record = (element, name, edited, original) => {
     const current = element.getAttribute(name);
@@ -993,8 +1008,9 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits, block
     // A value read from the drawing returns as written; one the Session kept
     // as a number is as good as any spelling of it.
     const drawn = typeof original === 'number' ? samePaint(name, current, original) : text(current) === text(original);
-    if (drawn || !samePaint(name, current, edited)) return;
-    if (!element.hasAttribute(resultBaseAttribute(name))) element.setAttribute(resultBaseAttribute(name), text(original));
+    if (drawn || !samePaint(name, current, edited) || element.hasAttribute(resultBaseAttribute(name))) return;
+    element.setAttribute(resultBaseAttribute(name), text(original));
+    recorded = true;
   };
   /** @param {string} key */
   const renderedIdsOf = (key) => (catalogAdmission.renderedTargetsByOverrideKey.get(key) || [])
@@ -1096,6 +1112,7 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits, block
       if (swatch) recordStroke(swatch, drawnStrokes.get(firstBlocks), edit);
     });
   });
+  return recorded;
 };
 
 // The renamed generated rows a Session lists, by their caption: main's writer
@@ -1121,8 +1138,10 @@ const savedLegendRenames = (edits) => {
 // a rename without the record, so a live edit addressed by Python's key misses
 // the row. Load records it once, on the one row of Python's with the renamed
 // caption, in a Result that has no row of Python's caption (U3a H1).
-/** @param {Element} svg @param {Map<string, string>} renames */
+// Returns whether it recorded a key.
+/** @param {Element} svg @param {Map<string, string>} renames @returns {boolean} */
 const recordSavedLegendKeys = (svg, renames) => {
+  let recorded = false;
   const keyRecord = resultBaseAttribute('data-legend-key');
   const groups = getAllFeatureLegendGroups(svg);
   const rows = groups.flatMap((group) => Array.from(group.querySelectorAll('g[data-legend-key]')));
@@ -1135,9 +1154,11 @@ const recordSavedLegendKeys = (svg, renames) => {
       const [row] = named;
       if (named.length === 1 && !row.hasAttribute('data-legend-owner') && !row.hasAttribute(keyRecord)) {
         row.setAttribute(keyRecord, original);
+        recorded = true;
       }
     });
   });
+  return recorded;
 };
 
 /**
@@ -1227,10 +1248,16 @@ const admitCurrentResult = (
   recordStructuralMetric('applicationSvgParseCount', 1, { phase, resultIndex });
   const index = createLazyMutationIndex(svg, { phase, resultIndex });
   applyFeatureOperations(index, operations);
-  applyLegendOperations(index, operations, {
+  const rowsChanged = applyLegendOperations(index, operations, {
     mayBeAbsent: (caption) => legendRowMayBeAbsent(legendRows, resultIndex, caption)
   });
-  operations.callerTransforms.forEach((transform) => transform(svg, { result, resultIndex }));
+  // Every transform runs; one that returns false changed nothing.
+  const transformed = operations.callerTransforms
+    .map((transform) => transform(svg, { result, resultIndex }) !== false).includes(true);
+  // A Result the plan leaves as it is keeps its bytes (OV-345).
+  if (!index.changed && !rowsChanged && !transformed) {
+    return commitCatalogBackedResult({ ...result, content: sanitized }, metadata);
+  }
   const content = serializeAdmittedSvg(svg, { phase, resultIndex });
   return commitCatalogBackedResult({ ...result, content }, metadata);
 };

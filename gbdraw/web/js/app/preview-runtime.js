@@ -1066,18 +1066,19 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
 
   // D-07: reconcile the displayed Result with the canonical editor operations
   // through the executor that Generate admission uses, then persist the Result
-  // once. `domains` are the domains returned to Python's values first;
-  // `afterApply` learns whether the reconcile changed the Legend's rows.
+  // once when the reconcile changed it: a display that changes nothing keeps
+  // the Result's bytes (OV-345). `domains` are the domains returned to
+  // Python's values first; `afterApply` learns whether the reconcile changed
+  // the Legend's rows.
   /**
    * @param {SvgMutationOperations | null | undefined} operations
    * @param {{ domains?: readonly string[], afterApply?: ((svg: SVGSVGElement, legendChanged: boolean) => void) | null }} [options]
    */
   const applyEditorOperations = (operations, { domains = [], afterApply = null } = {}) => {
     const runtime = activeRuntime || ensureRuntimeForCurrentSvg();
-    if (!runtime?.svg) return false;
-    const legendChanged = operations
-      ? reconcileMountedResult(runtime.svg, operations, { resultIndex: runtime.resultIndex, domains })
-      : false;
+    if (!runtime?.svg || !operations) return false;
+    const { changed, legendChanged } = reconcileMountedResult(runtime.svg, operations, { resultIndex: runtime.resultIndex, domains });
+    if (!changed) return false;
     afterApply?.(runtime.svg, legendChanged);
     invalidatePreviewIndexes('editor-intent-display');
     return commitActiveResultEdit('editor-intent-display');
