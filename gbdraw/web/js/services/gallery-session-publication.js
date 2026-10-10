@@ -179,14 +179,11 @@ const rebuildIntent = async (session, owners) => {
     deferResourceContent: false, adoptCanonicalPayloads: true });
   const config = publicationConfig(session, projection); validateCurrentWriterActiveConfig({ mode: projection.mode, storedConfig: config });
   const layout = publicationLayout(session, config, projection);
-  // The CLI writes the resolved palette (its -d rows over the named palette)
-  // beside the -d file it read; the rebuild writes the resolved colors, so both
-  // requests name the same table (OV-266).
-  const filesData = isCliWritten(session) ? { ...projection.files, d_color: null } : projection.files;
+  const filesData = projection.files;
   if (projection.mode === 'linear') filesData.linearSeqs.forEach((sequence, index) => {
     sequence.cardinality = renderRequest.records[index]?.cardinality;
   });
-  const { state, drawing, features } = owners.buildRequestState({ session: { ...session, features: draftFeatures(session) }, projection, config, filesData });
+  const { state, drawing, features } = owners.buildRequestState({ session: { ...session, features: draftFeatures(session) }, projection, config });
   const plan = projection.mode === 'linear' ? owners.resolveComparisonPlan({
     plan: inherit ? noComparisonPlan() : drawing.linearComparisonPlan, sequences: filesData.linearSeqs,
     layout: drawing.linearRecordLayoutEnabled.value ? drawing.linearRecordRows : [],

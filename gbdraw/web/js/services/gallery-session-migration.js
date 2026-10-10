@@ -619,7 +619,7 @@ const promoteGuiAuthoredSession = (session, args, forceWebDraft = true) => {
   const config = migratedDraft.config;
   const filesData = migratedDraft.filesData;
   hydrateLinearFilePresentations(filesData, args);
-  const { state, drawing } = buildCanonicalRequestState({ session, projection, config, filesData });
+  const { state, drawing } = buildCanonicalRequestState({ session, projection, config });
   restoreConservationFiles(session, filesData, drawing.circularConservation);
   const comparisonPlanSnapshot = projection.mode === 'linear'
     ? resolveLinearComparisonPlan({
