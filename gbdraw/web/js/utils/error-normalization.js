@@ -160,6 +160,8 @@ const DEFINITIONS = Object.freeze({
   COMPARISON_IDENTITY: ['Comparison endpoints disagree with the displayed features. Review the comparison inputs and display transforms; save a Session if it continues.', ['edit-comparison', 'retry', 'save-session']],
   // A read-only saved comparison fails the same way until Inherit, Replace, or Clear is chosen.
   COMPARISON_CHOICE_REQUIRED: ['Choose how to handle the saved comparison in the Comparison panel, then Generate again.', ['edit-comparison']],
+  // Replace with an empty draft would clear the saved comparison, which Clear comparison does explicitly.
+  COMPARISON_REPLACEMENT_EMPTY: ['Set up a comparison in the Comparison panel, or choose Clear comparison, then Generate again.', ['edit-comparison']],
   ANNOTATION_TARGET: ['The region annotation target is invalid.', ['edit-annotation', 'retry']],
   TRACK_INVALID: ['The track settings are invalid.', ['edit-track', 'retry']],
   TRACK_LAYOUT: ['A circular track does not fit.', ['edit-track', 'retry']],

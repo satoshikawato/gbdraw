@@ -19,6 +19,10 @@ write-up of a release.
   generic "The operation failed without recognized diagnostic information" (OV-303).
   A saved comparison whose resource is missing still reports the comparison input
   error.
+  After **Replace with current controls**, an incomplete pair in the comparison
+  controls reports its own comparison input error, and controls that set no
+  comparison say "Set up a comparison in the Comparison panel, or choose Clear
+  comparison, then Generate again." Both showed the generic error before (OV-301).
 - Sessions and Legend (web app): a stored Legend entry color and a feature color
   override are checked with the same rule as the **Override File (-d)** import. A
   Legend entry whose stored color is outside that rule, such as `ButtonFace`, is

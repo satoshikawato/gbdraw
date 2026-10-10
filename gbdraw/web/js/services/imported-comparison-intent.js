@@ -386,13 +386,16 @@ export const importedComparisonExecution = ({ intent, draftResolution }) => {
     return { ok: true, mode: 'clear' };
   }
   if (intent?.action === IMPORTED_COMPARISON_ACTIONS.REPLACE) {
-    if (draftResolution?.valid === true && draftResolution?.hasComparisonIntent === true) {
+    // An invalid draft (issues need an edge, so it has an intent) fails in the run
+    // with its own diagnostic, as an editable comparison does. An empty draft
+    // would clear the saved comparison instead.
+    if (draftResolution?.hasComparisonIntent === true) {
       return { ok: true, mode: 'draft' };
     }
     return {
       ok: false,
-      message: draftResolution?.error
-        || 'Set one complete, valid comparison before generating.'
+      message: 'Set one complete, valid comparison before generating.',
+      fallbackCode: 'COMPARISON_REPLACEMENT_EMPTY'
     };
   }
   // A reason with its own diagnostic (a missing resource) keeps it; any other

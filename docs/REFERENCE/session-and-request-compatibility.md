@@ -184,6 +184,11 @@ with current controls**, or **Clear comparison** stops with
 `COMPARISON_CHOICE_REQUIRED` ("Choose how to handle the saved comparison in the
 Comparison panel, then Generate again."). A saved comparison whose resource is
 missing reports `COMPARISON_INPUT` instead.
+After **Replace with current controls**, Generate checks the comparison controls
+as it does for an editable comparison, so an incomplete pair reports its
+`COMPARISON_INPUT` issue. Controls that set no comparison stop with
+`COMPARISON_REPLACEMENT_EMPTY` ("Set up a comparison in the Comparison panel, or
+choose Clear comparison, then Generate again.").
 
 A CLI Linear Session written without `-b` or `--losat` commits only a disabled
 protein pipeline (mode `none`, no pairs). It loads with **No comparison** and
