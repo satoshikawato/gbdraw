@@ -288,3 +288,28 @@ test('a candidate whose captions each have one color sends no caption request', 
   await preparation.prepareCandidate(split.rules);
   assert.deepEqual(kinds, [], 'Python\'s captions are a fixpoint: the next run asks nothing (OV-238)');
 });
+
+// OV-377: opening a feature popup prepares rule matches only to read them. It
+// is not an edit, so it does not hold the lock that keeps Save and Load
+// waiting; it still raises `pending`, whose fall refreshes the lists that read
+// the matches. Edit preparations keep holding the lock.
+test('a view preparation raises pending but not the edit lock (OV-377)', async () => {
+  const { state } = setup();
+  state.manualSpecificRules = [rule('NADH')];
+  const pending = { value: false };
+  const blocking = { value: false };
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const preparation = createRulePreparation({ state: withDrawings(state), pending, blocking,
+    evaluate: async (payload) => { await gate; return evaluatePythonRules(payload); } });
+  const viewing = preparation.prepareDrawn({ strict: true, view: true });
+  assert.equal(pending.value, true);
+  assert.equal(blocking.value, false);
+  const editing = preparation.prepare([rule('other')]);
+  assert.equal(blocking.value, true);
+  release();
+  assert.equal(await viewing, true);
+  assert.equal(await editing, true);
+  assert.equal(pending.value, false);
+  assert.equal(blocking.value, false);
+});

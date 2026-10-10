@@ -656,6 +656,42 @@ test('drawer requires a unique exact reference before starting the Worker', asyn
     .filter(({ anchor: selected }) => selected.biologicalFeatureId === 'clicked'), []);
 });
 
+// OV-381: a committed plan (from the popup or a loaded Session) shows its exact
+// reference in the drawer; the drawer offers that reference for Align until the
+// user picks another one, and never offers a stale one.
+test('drawer offers the active plan exact reference until the user picks another (OV-381)', async () => {
+  const fixture = create({ members: [reference, otherReference, targetA, targetC] });
+  await startReview(fixture);
+  await fixture.actions.applyDraft();
+  const planKey = JSON.stringify(fixture.state.similarityAlignmentPlan.value.reference);
+  assert.equal(fixture.actions.drawerReferenceKey.value, planKey);
+  assert.equal(fixture.actions.drawerDisabledReason('og-1'), '');
+  const calls = fixture.helperCalls.length;
+  assert.deepEqual(await fixture.actions.startFromDrawer({ groupId: 'og-1', mode: 'review' }),
+    { status: 'reviewing' });
+  assert.deepEqual(fixture.helperCalls[calls].payload.request.reference,
+    fixture.state.similarityAlignmentPlan.value.reference);
+  fixture.actions.cancel();
+  const other = fixture.actions.drawerReferenceOptions('og-1')
+    .find(({ anchor: a }) => a.biologicalFeatureId === 'other');
+  assert.equal(fixture.actions.setDrawerReference('og-1', other.key), true);
+  assert.equal(fixture.actions.drawerReferenceKey.value, other.key);
+  // Choosing "none" explicitly is kept as well.
+  assert.equal(fixture.actions.setDrawerReference('og-1', ''), false);
+  assert.match(fixture.actions.drawerDisabledReason('og-1'), /Select an exact reference/);
+});
+
+test('drawer does not offer a stale plan reference (OV-381)', async () => {
+  const fixture = create();
+  await startReview(fixture);
+  await fixture.actions.applyDraft();
+  fixture.currentGroup.members.splice(0, 1);
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(),
+    { status: 'blocked', reason: 'stale-reference' });
+  assert.equal(fixture.actions.drawerReferenceKey.value, '');
+  assert.notEqual(fixture.actions.drawerDisabledReason('og-1'), '');
+});
+
 test('malformed Python projection and initial Worker errors leave the prior Result intact', async () => {
   for (const helper of [
     (_operation, { request }) => ({ result: { ...responseFor(request), schema: 1 } }),

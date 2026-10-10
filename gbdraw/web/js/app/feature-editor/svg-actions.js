@@ -76,7 +76,7 @@ export {
  * The visibility owner's preparation of the rule matches `resolveFeatureDrawn`
  * reads. Strict, it rejects when the color preparation fails and resolves to
  * false when it is stale.
- * @typedef {(options?: { strict?: boolean }) => boolean | Promise<boolean | { error: any }>} PrepareDrawnFeatureMatchesPort
+ * @typedef {(options?: { strict?: boolean, view?: boolean }) => boolean | Promise<boolean | { error: any }>} PrepareDrawnFeatureMatchesPort
  */
 
 /**
@@ -566,7 +566,7 @@ export const createFeatureSvgActions = ({
     const drawing = state.activeDrawing();
     return reportRuleRunFailure(
       state, 'feature-extraction', () => runWhenPrepared(
-        state, () => [prepareDrawnFeatureMatches({ strict: true })], () => openPreparedFeatureEditor(drawing, feat, eventLike)
+        state, () => [prepareDrawnFeatureMatches({ strict: true, view: true })], () => openPreparedFeatureEditor(drawing, feat, eventLike)
       )
     );
   };

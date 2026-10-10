@@ -280,7 +280,7 @@ export const createFeatureVisibilityActions = ({
   // Also the reaction the popup and Label On ask this owner for: the matches
   // `resolveFeatureDrawn` reads are this owner's read model (R13).
   /**
-   * @param {{ strict?: boolean }} [options]
+   * @param {{ strict?: boolean, view?: boolean }} [options]
    * @returns {boolean | Promise<boolean | { error: any }>}
    */
   const prepareDrawn = (options) => rulePreparation?.prepareDrawn?.(options) ?? true;

@@ -1672,6 +1672,13 @@ export const createHistorySnapshotService = ({
         await nextTick();
       }
 
+      // OV-383: a config step carries no alignment, and applyConfigData clears
+      // the Linear plan and record translations; a step that did not change
+      // the alignment puts the same objects back.
+      const keptAlignment = domains.has('alignmentState') ? null : {
+        plan: getGeneratedArtifactRef(state.similarityAlignmentPlan, null),
+        translations: getGeneratedArtifactRef(state.linearRecordTranslations, null)
+      };
       drawingModes.forEach((drawingMode) => {
         if (!changed(drawingMode, 'config')) return;
         const drawing = drawingOfMode(state, drawingMode);
@@ -1682,6 +1689,10 @@ export const createHistorySnapshotService = ({
           replaceLinearComparisonPlan(drawing.linearComparisonPlan, config.linearComparisonPlan);
         }
       });
+      if (keptAlignment) {
+        setGeneratedArtifactRef(state.similarityAlignmentPlan, keptAlignment.plan);
+        setGeneratedArtifactRef(state.linearRecordTranslations, keptAlignment.translations);
+      }
       if (retainedComparisonFiles) {
         (linearDrawing.linearComparisonPlan?.edges || []).forEach((edge) => {
           const edgeId = String(edge?.id || '');

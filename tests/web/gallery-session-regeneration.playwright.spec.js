@@ -66,14 +66,18 @@ test('uncached protein LOSAT helpers and render share one lazy Worker runtime', 
       program: app.losatProgram,
       blastpMode: app.losat.blastp.mode,
       cacheEntries: state.losatCache.value.size,
-      activeAlignmentPlan: state.similarityAlignmentPlan.value
+      activeAlignmentGroup: state.similarityAlignmentPlan.value?.groupId ?? null,
+      alignmentNotice: app.similarityAlignmentNotice
     };
   });
+  // OV-380: comparison edits are pending form edits. They keep the committed
+  // alignment, whose exact anchors the next Generate validates.
   expect(proteinMode).toEqual({
     program: 'blastp',
     blastpMode: 'pairwise',
     cacheEntries: 0,
-    activeAlignmentPlan: null
+    activeAlignmentGroup: 'og_1',
+    alignmentNotice: ''
   });
 
   const generated = await evaluateWithRetainedPromise(page, async () => {
@@ -104,12 +108,14 @@ test('uncached protein LOSAT helpers and render share one lazy Worker runtime', 
   const repeated = await evaluateWithRetainedPromise(page, async () => ({
     result: await window.__GBDRAW_APP__.runAnalysis(),
     errorLog: window.__GBDRAW_APP__.errorLog,
-    executorCalls: window.__GBDRAW_LOSAT_EXECUTOR_CALLS__
+    executorCalls: window.__GBDRAW_LOSAT_EXECUTOR_CALLS__,
+    activeAlignmentGroup: (await import('/gbdraw/web/js/state.js')).state.similarityAlignmentPlan.value?.groupId ?? null
   }));
   expect(repeated).toEqual({
     result: { status: 'ok' },
     errorLog: null,
-    executorCalls: 1
+    executorCalls: 1,
+    activeAlignmentGroup: 'og_1'
   });
 
   const activity = await assertWorkerReuseAcrossHelperAndRender(page);
