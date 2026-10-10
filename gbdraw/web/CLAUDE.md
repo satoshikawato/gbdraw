@@ -211,9 +211,13 @@ Guards:
 Editor overrides are created, pruned, or deleted only by an explicit Reset or
 Import, Undo or Redo, a Session replacement, the owner reconcile inside a
 successful source-replacing Generate (`pruneUnmatchedFeatureOverrides` in
-`services/feature-visibility.js`), or **Remove N unmatched feature edits**
-(`removeUnresolvedFeatureEdits`). Result selection, mount, record selection,
-mode change, hiding, and reflow never touch them. Per-feature edits
+`services/feature-visibility.js`), **Remove N unmatched feature edits**
+(`removeUnresolvedFeatureEdits`), or **Delete settings** of a record whose
+drawing is turned off, which deletes that record's per-feature edits, Feature
+placements, and the annotations that target that record. Result selection,
+mount, record selection (including turning a record's drawing on or off), mode
+change, hiding, and reflow never touch them. A source-replacing Generate keeps
+the rows of records that are turned off. Per-feature edits
 (`featureOverrides`) and Feature placements live in the drawing of the mode
 they were made in (R15) and are keyed by
 `JSON.stringify([recordKey, biologicalFeatureId])`. Both modes can use the same
