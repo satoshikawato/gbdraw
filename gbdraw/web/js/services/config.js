@@ -2758,7 +2758,8 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
         val: String(r.val || ''),
         color: resolveColorToHex(String(r.color || '#000000')),
         cap: String(r.cap || ''),
-        fromFile: !!r.fromFile
+        // The shape normalizeSpecificRule gives: `fromFile` only when true.
+        ...(r.fromFile ? { fromFile: true } : {})
       });
     });
     drawing.fileLegendCaptions.value = new Set(
@@ -3854,7 +3855,9 @@ const reconcileDepthTrackStateAfterSessionFiles = (drawing, mode) => {
         slots: drawing.adv.linear_track_slots
       })
     : depthTrackMatrixWidth(linearRows);
-  if (mode === 'linear' && linearDepthCount > 0) {
+  // Rows are padded to the series count only when one holds a Depth file, as
+  // Circular counts its series, so rows without a file load as saved (OV-337).
+  if (mode === 'linear' && linearDepthCount > 0 && linearRows.some((row) => row.some(Boolean))) {
     state.linearSeqs.forEach((seq) => {
       seq.depth = padDepthFileSlots(seq.depth, linearDepthCount);
     });

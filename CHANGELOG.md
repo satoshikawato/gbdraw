@@ -60,7 +60,17 @@ write-up of a release.
   setting, for example the first edit after loading an aligned Session,
   silently dropped the alignment, and the next Generate drew the records
   unaligned (OV-383).
-
+- Sessions (CLI and Python): a Session saved from a Linear diagram with a
+  reverse-complemented record now stores that record's feature-bound comparison
+  rows (saved or fresh LOSATP rows) in the search frame, as the web app does,
+  also with `--similarity_alignment_feature`. Before,
+  `gbdraw linear --session ... --session_output` and Python Session saves wrote
+  them after the reverse complement with extra `*_view_feature_svg_id` columns;
+  the drawing was the same (OV-399).
+- Gallery publication: a Session saved in the web app after Load, without
+  **Generate Diagram**, is accepted when its committed request states a default
+  that the web draft leaves implicit: a definition-line `font_weight` of
+  `normal` or a feature rendering at its default (OV-398).
 - Comparison (web app): **Generate Diagram** in Linear mode with pairs set to
   **Upload BLAST TSV** but without a file opens the **BLAST TSV missing** dialog
   instead of failing. It lists the pairs and offers **Choose BLAST TSV for
