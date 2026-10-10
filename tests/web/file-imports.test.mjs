@@ -41,6 +41,11 @@ await writeFile(
   await readFile(join(sourceDir, 'specific-color-rules.js'), 'utf8'),
   'utf8'
 );
+await writeFile(
+  join(tempDir, 'rule-matchers.js'),
+  await readFile(join(sourceDir, 'rule-matchers.js'), 'utf8'),
+  'utf8'
+);
 
 const { parseColorTable, parsePriorityRules, parseSpecificRules, parseWhitelistRules, serializeSpecificRules } = await import(
   pathToFileURL(join(tempDir, 'file-imports.js'))

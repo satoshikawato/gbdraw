@@ -78,7 +78,9 @@ for (const mode of ['circular', 'linear']) for (const width of [1600, 390]) {
     expect(await snapshot(page)).toEqual(before);
     const afterRetry = await getDiagramWorkerActivity(page);
     expect(afterRetry.constructions).toBe(activity.constructions);
-    expect(afterRetry.helpers - activity.helpers).toBe(4); // captions + one Python syntax/match operation per attempt
+    // One Python syntax/match operation per attempt; rules whose captions have
+    // one color each send no caption request (U3a 1e, OV-238).
+    expect(afterRetry.helpers - activity.helpers).toBe(2);
     await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.openRightDrawerTab('features'); a.closeRightDrawer(); a.openRightDrawerTab('features'); });
     await expect(field).toHaveValue('😀[PRIVATE_PATTERN_SENTINEL');
     await page.evaluate(() => window.__GBDRAW_APP__.closeRightDrawer());
@@ -245,7 +247,13 @@ test('real History, failed Session rollback, fresh Save/Load, Export and Generat
   expect(exported).not.toContain('PRIVATE_');
   expect(exported).toContain('#f01234');
   const exportXml = await page.evaluate(text => new XMLSerializer().serializeToString(new DOMParser().parseFromString(text, 'image/svg+xml')), exported);
-  expect(exportXml).toBe((await snapshot(page)).result[0].content);
+  // An export strips the paint records the Result keeps (result-paint-bases.js).
+  expect(exportXml).toBe(await page.evaluate(async (content) => {
+    const { stripResultBaseAttributes } = await import('/gbdraw/web/js/services/result-paint-bases.js');
+    const root = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
+    stripResultBaseAttributes(root);
+    return new XMLSerializer().serializeToString(root);
+  }, (await snapshot(page)).result[0].content));
   expect((await draft(page)).text).toBe('[PRIVATE_DRAFT_SENTINEL');
   await generateAndWaitForResult(page);
   expect((await draft(page)).text).toBe('(?i)NADH');
@@ -279,21 +287,34 @@ for (const boundary of ['drawer', 'mode cycle', 'remove', 'reorder', 'Session', 
       await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.setDiagramMode('linear'); a.setDiagramMode('circular'); });
       await snapshot(page);
     }
-    await page.evaluate(() => {
+    // Session: the held request is the caption normalization a caption edit
+    // asks for when it gives rule 1's caption to rule 0 in another color (a
+    // Load waits for a pending match, U3a 1e), so the Load takes over while
+    // the edit is late.
+    await page.evaluate(async (captionEdit) => {
+      const a = window.__GBDRAW_APP__;
+      if (captionEdit) {
+        Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: '(?i)cytochrome', color: '#2266aa', cap: 'Shared' });
+        await a.addSpecificRule();
+      }
       const send = Worker.prototype.postMessage;
       Worker.prototype.postMessage = function (message, ...args) {
         if (message.operation === 'evaluateRules') {
           Worker.prototype.postMessage = send;
+          window.__heldKind = message.payload?.kind;
           window.__releasePattern = () => send.call(this, message, ...args);
           return;
         }
         return send.call(this, message, ...args);
       };
-      window.__pendingPattern = window.__GBDRAW_APP__.setSpecificRuleField(0, 'val', '(?P<enzyme>NADH)');
-    });
+      window.__pendingPattern = captionEdit
+        ? a.setSpecificRuleField(0, 'cap', 'Shared')
+        : a.setSpecificRuleField(0, 'val', '(?P<enzyme>NADH)');
+    }, boundary === 'Session');
     await page.waitForFunction(() => window.__releasePattern);
     const before = await snapshot(page);
-    expect((await draft(page)).draft.pending).toBe(true);
+    if (boundary === 'Session') expect(await page.evaluate(() => window.__heldKind)).toBe('color-captions');
+    else expect((await draft(page)).draft.pending).toBe(true);
     if (boundary === 'drawer') await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.openRightDrawerTab('features'); a.closeRightDrawer(); a.openRightDrawerTab('features'); });
     if (boundary === 'mode cycle') await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.setDiagramMode('linear'); a.setDiagramMode('circular'); });
     if (boundary === 'remove') await page.evaluate(() => window.__GBDRAW_APP__.removeSpecificRule(0));

@@ -156,3 +156,18 @@ def test_color_priorities_are_aligned_with_the_matched_rules():
     answer = json.loads(evaluate_rules_json(json.dumps(payload), json.dumps(rules)))
     assert answer["matches"] == [[2, 3, 0, 1], []]
     assert answer["priorities"] == [[0, 0, 2, 4], []]
+
+
+CAPTION_FIXPOINTS = json.loads(
+    (Path(__file__).parent / "fixtures" / "specific_color_caption_fixpoints.json").read_text(encoding="utf-8")
+)["cases"]
+
+
+@pytest.mark.parametrize("case", CAPTION_FIXPOINTS, ids=[case["name"] for case in CAPTION_FIXPOINTS])
+def test_caption_normalization_keeps_every_web_fixpoint(case):
+    """The Web app skips the caption request for a fixpoint (U3a 1e, R4)."""
+    response = json.loads(evaluate_rules_json("[]", json.dumps(case["rules"]), "color-captions"))
+    captions = [rule["cap"] for rule in response["rules"]]
+    assert captions == case["captions"]
+    if case["fixpoint"]:
+        assert captions == [rule["cap"] for rule in case["rules"]]

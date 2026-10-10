@@ -785,8 +785,17 @@ test(`individual Feature, Label, and Legend edits update the mounted SVG: ${live
     const resultLabelParts = Array.from(resultSvg.querySelectorAll('[data-label-feature-id]'))
       .filter((element) => element.getAttribute('data-label-feature-id') === labeledFeature.svg_id);
 
+    // The feature color's rule makes Python relabel the Legend (the rerender
+    // runs as a label reflow), so the Legend edit waits for Python's rows. A
+    // row the feature's color edit names recolors that feature too (its rule),
+    // so the Legend edit takes another row and stays independent.
+    for (let attempt = 0; attempt < 1200 && app.labelReflowProcessing; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 50));
+    }
+    currentSvg = document.querySelector('.origin-top svg');
+    const editedCaptions = new Set(Object.values(app.featureColorOverrides).map((override) => override?.caption));
     const legendIndex = app.legendEntries.findIndex((entry) => {
-      if (!entry?.caption) return false;
+      if (!entry?.caption || editedCaptions.has(entry.caption)) return false;
       const group = currentSvg.querySelector(
         `g[data-legend-key="${CSS.escape(entry.caption)}"]`
       );
@@ -795,7 +804,7 @@ test(`individual Feature, Label, and Legend edits update the mounted SVG: ${live
     if (legendIndex < 0) throw new Error('No editable legend entry was found.');
     const legendCaption = app.legendEntries[legendIndex].caption;
     const legendColor = '#ab3412';
-    app.updateLegendEntryColor(legendIndex, legendColor);
+    await app.updateLegendEntryColor(legendIndex, legendColor);
     currentSvg = document.querySelector('.origin-top svg');
     const legendFill = currentSvg.querySelector(
       `g[data-legend-key="${CSS.escape(legendCaption)}"] path[fill]:not([fill="none"])`

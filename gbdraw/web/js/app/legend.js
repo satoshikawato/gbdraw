@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DrawingState } from '../state.js' */
+/** @import { DrawingState, LegendEntry } from '../state.js' */
 import { createLegendDragActions } from './legend/drag-actions.js';
 import { createLegendEntryActions } from './legend/entry-actions.js';
 import { createLegendLayoutActions } from './legend/layout-actions.js';
@@ -8,9 +8,11 @@ import { createLegendStrokeActions } from './legend/stroke-actions.js';
 import {
   getAllFeatureLegendGroups,
   getVisibleFeatureLegendGroup,
-  isCurrentLegendHorizontal
+  isCurrentLegendHorizontal,
+  legendEntryKey
 } from '../services/legend-svg.js';
 import { legendRowRules } from '../services/specific-color-rules.js';
+import { displayedLegendRowContext } from '../services/feature-visibility.js';
 
 /**
  * @typedef {object} LegendManagerOptions
@@ -25,6 +27,9 @@ import { legendRowRules } from '../services/specific-color-rules.js';
  *   The preview owner's commit of an edit to the displayed Result (R1, R13).
  * @property {(() => string | undefined) | null} [readActiveResultIdentity]
  *   The preview owner's runtime identity of the mounted Result.
+ * @property {import('./candidate-render.js').LegendRowColorOf} readShownLegendColor
+ *   The root's color of a listed row as the Legend panel shows it (OV-282).
+ * @property {() => unknown} showLegendStructure The root's show of the Legend structure intent (R1).
  */
 
 /** @param {LegendManagerOptions} options */
@@ -35,30 +40,24 @@ export const createLegendManager = ({
   commitHistoryTransaction = null,
   // R13: the preview owner's ports; the Legend owners never hold it.
   commitActiveResultEdit = null,
-  readActiveResultIdentity = null
+  readActiveResultIdentity = null,
+  readShownLegendColor,
+  showLegendStructure
 }) => {
   const layoutActions = createLegendLayoutActions();
-  const entryActions = createLegendEntryActions({
-    state,
-    commitActiveResultEdit,
-    readActiveResultIdentity
-  });
-  const sortActions = createLegendSortActions({
-    state,
-    extractLegendEntries: entryActions.extractLegendEntries,
-    orderMountedLegend: entryActions.orderMountedLegend,
-    commitActiveResultEdit
-  });
-  const strokeActions = createLegendStrokeActions({ state, commitActiveResultEdit });
-  /** @param {DrawingState} drawing */
-  const rowRulesAt = (drawing, index) => legendRowRules(drawing.legendEntries.value[index]?.caption, {
-    rules: drawing.manualSpecificRules,
-    legendEntries: drawing.legendEntries.value,
-    originalLegendOrder: state.originalLegendOrder?.value || []
-  });
+  const entryActions = createLegendEntryActions({ state, readActiveResultIdentity, readShownLegendColor });
+  const sortActions = createLegendSortActions({ state, showLegendStructure });
+  const strokeActions = createLegendStrokeActions({ state });
+  // The rules a row draws, by its key among Python's rows of the displayed
+  // Result (OV-294).
+  /** @param {DrawingState} drawing @param {number} index */
+  const rowRulesAt = (drawing, index) => {
+    /** @type {LegendEntry | undefined} */
+    const entry = drawing.legendEntries.value[index];
+    return entry ? legendRowRules(legendEntryKey(entry), displayedLegendRowContext(state, drawing)) : [];
+  };
   const dragActions = createLegendDragActions({
     state,
-    extractLegendEntries: entryActions.extractLegendEntries,
     beginHistoryTransaction,
     commitHistoryTransaction,
     commitActiveResultEdit
@@ -68,7 +67,9 @@ export const createLegendManager = ({
     ...entryActions,
     // A row a rule draws, including its N-06 "<caption> [<hex>]" row, edits
     // that rule through the rule owner's port (R13); any other row is a
-    // legend-only edit.
+    // legend-only edit, which the root shows on the Result.
+    /** @param {number} index */
+    legendRowHasRules: (index) => rowRulesAt(state.activeDrawing(), index).length > 0,
     updateLegendEntryColor: (index, color) => {
       const drawing = state.activeDrawing();
       const rowRules = rowRulesAt(drawing, index);
@@ -76,14 +77,6 @@ export const createLegendManager = ({
         return commitLegendRowRules(drawing.manualSpecificRules.map(rule => rowRules.includes(rule) ? { ...rule, color } : { ...rule }), 'Change legend color');
       }
       return entryActions.updateLegendEntryColor(index, color);
-    },
-    updateLegendEntryCaption: (index, caption) => {
-      const drawing = state.activeDrawing();
-      const rowRules = rowRulesAt(drawing, index);
-      if (rowRules.length) {
-        return commitLegendRowRules(drawing.manualSpecificRules.map(rule => rowRules.includes(rule) ? { ...rule, cap: caption } : { ...rule }), 'Rename legend item');
-      }
-      return entryActions.updateLegendEntryCaption(index, caption);
     },
     ...layoutActions,
     ...sortActions,

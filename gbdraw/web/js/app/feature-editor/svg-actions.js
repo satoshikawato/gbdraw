@@ -88,7 +88,6 @@ export {
  * @property {PrepareDrawnFeatureMatchesPort} [prepareDrawnFeatureMatches]
  *   The visibility owner's preparation of the rule matches `resolveFeatureDrawn` reads.
  * @property {FeatureSelectionPort | null} [featureSelection]
- * @property {((changes: { featureId: string, mode: string }[], options?: { reason?: string }) => boolean) | null} [applyFeatureVisibilityChanges]
  *   The preview owner's projection of feature visibility changes.
  * @property {PreviewTransformInteractionPort | null} [previewTransformInteraction]
  */
@@ -170,8 +169,6 @@ export const createFeatureSvgActions = ({
   // prepared; the composition root injects the visibility owner's preparation.
   prepareDrawnFeatureMatches = () => true,
   featureSelection = null,
-  // R13: the preview owner's projection of feature visibility changes.
-  applyFeatureVisibilityChanges = null,
   previewTransformInteraction = null
 }) => {
   const {
@@ -493,8 +490,6 @@ export const createFeatureSvgActions = ({
       appliedLegendName: effectiveCaption,
       strokeColor: currentStrokeColor,
       strokeWidth: currentStrokeWidth,
-      originalStrokeColor: currentStrokeColor,
-      originalStrokeWidth: currentStrokeWidth,
       labelKey: '',
       labelText: '',
       labelSourceText: '',
@@ -791,21 +786,6 @@ export const createFeatureSvgActions = ({
     clickedPairwiseMatchPos.y = popupPosition.y;
     return payload;
   };
-
-  const applyVisibilityPreviewChanges = (changes, { reason = 'feature-visibility' } = {}) => {
-    const normalizedChanges = (Array.isArray(changes) ? changes : [])
-      .map((change) => ({
-        featureId: String(change?.featureId || change?.svgId || change?.id || '').trim(),
-        mode: normalizeVisibilityMode(change?.mode)
-      }))
-      .filter((change) => change.featureId);
-    if (normalizedChanges.length === 0) return false;
-    return applyFeatureVisibilityChanges?.(normalizedChanges, { reason }) === true;
-  };
-
-  const applyVisibilityPreviewBySvgId = (svgId, modeRaw) => (
-    applyVisibilityPreviewChanges([{ featureId: svgId, mode: modeRaw }])
-  );
 
   /** @param {{ root?: Element | null, phase?: string, rootGeneration?: number }} [options] */
   const attachSvgFeatureHandlers = ({
@@ -1627,8 +1607,6 @@ export const createFeatureSvgActions = ({
   };
 
   return {
-    applyVisibilityPreviewBySvgId,
-    applyVisibilityPreviewChanges,
     attachSvgFeatureHandlers,
     getFeatureElements,
     getFeatureFillElements,

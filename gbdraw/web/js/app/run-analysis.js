@@ -170,6 +170,7 @@ import {
   prepareCandidateRenderCommit,
   prepareReflowResultCommit
 } from './candidate-render.js';
+import { editorPaintState } from './result-paint-record.js';
 import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
@@ -1361,6 +1362,12 @@ export const createRunAnalysis = ({
   // progress waits for it: the rerender would take the newer generation token
   // and silently supersede the run (OV-48). It runs once after the run settles.
   let reflowDeferredByProcessing = false;
+  // The label rerender loop while it runs. A run that sets `processing` waits
+  // for it before it renders: its iteration may already be in the diagram
+  // Worker, which takes one request at a time (OV-349), and no further
+  // iteration starts.
+  /** @type {Promise<void> | null} */
+  let activeReflowRun = null;
   let featureExtractionRequestId = 0;
   let latestGenerationToken = 0;
   let latestOperationId = 0;
@@ -5041,7 +5048,7 @@ export const createRunAnalysis = ({
       && (errorLog.value === previousAlert || errorLog.value === null);
     /** @type {Record<string, any> | null} */
     let beforeHandle = null;
-    const initialResults = results.value;
+    let initialResults = results.value;
     /** @type {string | null} */
     let historyRecovery = null;
     // UJ-10: whether the draft this run reads is the one of the shown Result.
@@ -5065,6 +5072,11 @@ export const createRunAnalysis = ({
       const decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity, drawing);
       await nextTick();
       await waitForAfterPaint();
+      // A rerender this run waited for may commit a Result; a failure keeps that one.
+      if (activeReflowRun) {
+        await activeReflowRun;
+        initialResults = results.value;
+      }
       if (!isCurrentOperation()) return { status: 'stale' };
       recordSessionLifecycleEvent('generate.paint-opportunity-completed');
       // Cancel is honored before rendering, including during preparation.
@@ -5460,7 +5472,7 @@ export const createRunAnalysis = ({
       && (errorLog.value === previousAlert || errorLog.value === null);
     /** @type {Record<string, any> | null} */
     let beforeHandle = null;
-    const initialResults = results.value;
+    let initialResults = results.value;
     /** @type {string | null} */
     let historyRecovery = null;
     processing.value = true;
@@ -5470,6 +5482,11 @@ export const createRunAnalysis = ({
       const decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity, drawing);
       await nextTick();
       await waitForAfterPaint();
+      // A rerender this run waited for may commit a Result; a failure keeps that one.
+      if (activeReflowRun) {
+        await activeReflowRun;
+        initialResults = results.value;
+      }
       if (!isCurrentOperation()) return { status: 'stale' };
       const execute = (handle) => {
         beforeHandle = handle;
@@ -5542,7 +5559,7 @@ export const createRunAnalysis = ({
   // the diagnostic Generate raises for it (R6, OV-06). The rerender also draws
   // the Legend again, so the Legend it draws is the generated inventory, as
   // after Generate (OV-42, OV-43): the next edit compares against it.
-  const expectReflowBindings = (commit, resultIndex, isCurrentReflow, diagramOptions) => {
+  const expectReflowBindings = (commit, resultIndex, isCurrentReflow, diagramOptions, drawnPaint) => {
     const result = commit.results[resultIndex];
     const featureIds = forcedLabelFeatureIds(commit.mutationPlan?.operationsByResult?.[resultIndex], {
       features: [...(commit.featureState?.renderedFeaturesByResult?.[resultIndex]?.values()
@@ -5561,6 +5578,7 @@ export const createRunAnalysis = ({
       phase: 'label-reflow',
       bindingOptions: {
         replaceGeneratedLegend: true,
+        drawnPaint,
         ...(featureIds.length === 0 ? {} : {
           reportedLabelBinding: Object.freeze({
             featureIds,
@@ -5598,9 +5616,16 @@ export const createRunAnalysis = ({
     clearLabelBuildNotices({ rerender: true });
     skipCaptureBaseConfig.value = true;
     const isCurrent = () => generationToken === latestGenerationToken && requestId === pendingReflowRequestId;
+    // The editor state the rerender draws from; an edit made from here on is
+    // shown on its Results after they commit (OV-346).
+    const drawnPaint = editorPaintState(/** @type {import('./result-paint-record.js').PaintStateSource} */ (state), drawing);
+    // A candidate whose rule inputs changed while it was prepared or drawn (an
+    // edit the Result shows live) is not admitted. No newer request replaces
+    // it, so the rerender it was asked for (a Legend relabel) runs again (OV-351).
+    const notAdmitted = () => ({ status: 'stale', rerun: isCurrent() });
     try {
       colorCandidate = await prepareAndAdmitCandidate(drawing, isCurrent);
-      if (!colorCandidate) return { status: 'stale' };
+      if (!colorCandidate) return notAdmitted();
       const candidateRules = colorCandidate.rules;
       const canonical = projectCommittedEditorIntent({
         committed,
@@ -5642,7 +5667,7 @@ export const createRunAnalysis = ({
         resultNames: committedResultNames
       });
       console.info(`gbdraw ${canonical.renderRequest.mode} typed request render: ${formatDuration(execution.elapsedMs)}.`);
-      if (execution.status === 'superseded' || !isCurrent()) return { status: 'stale' };
+      if (execution.status === 'superseded' || !isCurrent()) return notAdmitted();
       if (execution.status === 'engine-error') {
         logPostGbdrawTimings(timingEntries);
         const error = formatError(execution.engineError, 'generate', 'render');
@@ -5671,7 +5696,7 @@ export const createRunAnalysis = ({
         previewRuntime.selectResult(nextSelectedResultIndex);
       }
       expectReflowBindings(
-        execution.commit, nextSelectedResultIndex, isCurrent, canonical.renderRequest.diagramOptions
+        execution.commit, nextSelectedResultIndex, isCurrent, canonical.renderRequest.diagramOptions, drawnPaint
       );
       logPostGbdrawTimings(timingEntries);
       colorCandidate.notifyChanges();
@@ -5699,7 +5724,7 @@ export const createRunAnalysis = ({
     }
 
     labelReflowProcessing.value = true;
-    try {
+    activeReflowRun = (async () => {
       // Generate takes priority: an iteration never starts while it runs.
       while (!processing.value && activeReflowRequestId < pendingReflowRequestId) {
         activeReflowRequestId = pendingReflowRequestId;
@@ -5710,18 +5735,21 @@ export const createRunAnalysis = ({
           labelReflowLastError.value = liveEditFailure(formatError(error));
           return;
         }
-        await runLabelReflowCandidate(drawing, {
+        const outcome = await runLabelReflowCandidate(drawing, {
           decorationContinuity,
           requestId: activeReflowRequestId
         });
+        if (outcome.rerun && !processing.value && !state.sessionOperationAvailability?.()) pendingReflowRequestId += 1;
       }
       if (processing.value && activeReflowRequestId < pendingReflowRequestId) {
         reflowDeferredByProcessing = true;
       }
-    } finally {
+    })().finally(() => {
       activeReflowRequestId = 0;
       labelReflowProcessing.value = false;
-    }
+      activeReflowRun = null;
+    });
+    await activeReflowRun;
   };
 
   // Called where a run clears `processing`: the requests it held back run once.

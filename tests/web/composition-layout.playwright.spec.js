@@ -313,19 +313,18 @@ test('frozen v39 session is admitted once with usable composition geometry', asy
   expect(admitted.liveRecordBounds.width).toBeGreaterThan(0);
   expect(admitted.liveRecordBounds.height).toBeGreaterThan(0);
 
-  // The first explicit layout edit (here a Legend addition, which reflows the
-  // Legend at its side) replaces the conservative legacy envelope. A legend
+  // The first explicit layout edit (here a Legend row delete, which reflows
+  // the Legend at its side) replaces the conservative legacy envelope. A legend
   // side change applies on Generate (D-30), so it is not that edit.
   const legendSide = admitted.metadata.legendSide;
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
-    app.newLegendCaption = 'Legacy edit';
-    app.newLegendColor = '#884422';
-    await app.addNewLegendEntry();
+    await app.deleteLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'CDS'));
   });
   await page.waitForFunction(() => {
     const svg = document.querySelector('svg[data-gbdraw-composition-schema="1"]');
-    if (!svg || !svg.querySelector('g[data-legend-key="Legacy edit"]')) return false;
+    const rows = Array.from(svg?.querySelectorAll('g[data-legend-key="CDS"]') || []);
+    if (rows.length === 0 || rows.some((row) => row.getAttribute('display') !== 'none')) return false;
     return JSON.parse(svg.getAttribute('data-gbdraw-composition')).legacyNormalized !== true;
   }, null, { timeout: 180000 });
 

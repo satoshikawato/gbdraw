@@ -90,6 +90,11 @@ export const requireUniqueEditableLabelBindings = (
   }, /** @type {{ stage?: string, operation?: string }} */ ({ stage: 'render', operation: 'generate' }));
 };
 
+// Whether a label is drawn only when it fits inside its feature, which only
+// Python measures: a label edit then asks for the label rerender.
+/** @param {{ configOverrides?: Readonly<Record<string, unknown>> } | null | undefined} diagramOptions */
+const labelsEmbeddedOnly = (diagramOptions) => diagramOptions?.configOverrides?.['labels.rendering'] === 'embedded_only';
+
 // A feature drawn as underlay has no label (gbdraw/features/factory.py), and
 // with Label Rendering = Embedded Only no label is drawn that does not fit
 // inside its feature (gbdraw/labels/). Returns 'underlay', 'embedded_only', or
@@ -100,7 +105,7 @@ export const labelDrawingBlocker = (feature, diagramOptions) => {
   if (featureType && (
     diagramOptions?.featureShapes?.[featureType] || defaultFeatureRendering(featureType)
   ) === 'underlay') return 'underlay';
-  return diagramOptions?.configOverrides?.['labels.rendering'] === 'embedded_only' ? 'embedded_only' : '';
+  return labelsEmbeddedOnly(diagramOptions) ? 'embedded_only' : '';
 };
 // Why the diagram draws no label for a feature (`labelAbsenceReason`): the one
 // table of sentences the popup note and the Label Not Shown dialog both render.
@@ -748,7 +753,7 @@ export const createFeatureLabelActions = ({
    *   reportedLabelBinding?: { featureIds: readonly string[], report: (error: unknown) => void } | null,
    *   queueIncompleteVisibility?: boolean
    * }} [options]
-   * @returns {{ changed: boolean, rerender: boolean } | undefined} The projection; undefined when no Result is mounted.
+   * @returns {{ changed: boolean, rerender: boolean, textChanged: boolean } | undefined} The projection; undefined when no Result is mounted.
    */
   const syncLabelEditor = ({
     requiredFeatureIds = [],
@@ -763,6 +768,7 @@ export const createFeatureLabelActions = ({
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
+    boundLabelRoots.add(svg);
 
     // Label intent is keyed by feature identity, not by the mounted view: a
     // Result switch, record selection, hide, or reflow changes which labels
@@ -815,6 +821,7 @@ export const createFeatureLabelActions = ({
   // live edit, a Label TSV import, History apply, and the display of a Result.
   // `rerender`: only the label rerender can show the intent; a caller that
   // queues its own reflow (`queueIncompleteVisibility: false`) forces it then.
+  // `textChanged`: a label shows another text, which only Python fits.
   /** @param {DrawingState} drawing @param {Element} svg @param {{ queueIncompleteVisibility?: boolean }} [options] */
   const projectLabelIntent = (drawing, svg, { queueIncompleteVisibility = true } = {}) => {
     const textChanged = projectLabelTextIntent(drawing, svg);
@@ -826,22 +833,42 @@ export const createFeatureLabelActions = ({
     if (queueIncompleteVisibility && visibilityProjection.unavailableOverride) {
       queueLabelReflow(true);
     }
-    return { changed, rerender: visibilityProjection.unavailableOverride };
+    return { changed, rerender: visibilityProjection.unavailableOverride, textChanged };
   };
 
-  const reconcileLabelOverrides = () => {
+  // The mounted roots whose labels a popup or the binder bound.
+  /** @type {WeakSet<Element>} */
+  const boundLabelRoots = new WeakSet();
+  // The label intent on the mounted Result, and the one label reflow request
+  // of the edit that projects it: `reflow` places the labels (Auto Reflow),
+  // `rerender` asks for the automatic rerender. The labels of a root no popup
+  // or binder has bound are bound first, once (OV-237). OV-200: with Embedded
+  // Only a changed label text asks for the rerender, which draws the label
+  // only when it fits, as Generate does; a label hidden, or shown as Python
+  // drew it, needs no such decision.
+  const reconcileLabelOverrides = ({ reflow = false, rerender = false } = {}) => {
     const drawing = state.activeDrawing();
     const svg = svgContainer.value?.querySelector?.('svg');
-    return svg ? projectLabelIntent(drawing, svg).changed : false;
+    if (!svg) return false;
+    const projection = boundLabelRoots.has(svg) || svg.querySelector(EDITABLE_LABEL_SELECTOR)
+      ? projectLabelIntent(drawing, svg, { queueIncompleteVisibility: false })
+      : syncLabelEditor({ queueIncompleteVisibility: false });
+    const force = rerender || Boolean(projection?.rerender)
+      || (Boolean(projection?.textChanged) && labelsEmbeddedOnly(getCommittedRequest()?.diagramOptions));
+    if (reflow || force) queueLabelReflow(force);
+    return Boolean(projection?.changed);
   };
 
   // A feature visibility edit shows or hides the feature's label in the same
   // action, then Auto Reflow places the labels as Generate does (F-3). An edit
   // that draws a feature the Result does not draw (`rerender`) always reruns
-  // the rerender, which draws it and its label (R-5).
-  const applyFeatureVisibilityToLabels = ({ reflow = true, rerender = false } = {}) => {
+  // the rerender, which draws it and its label (R-5). A caller that also
+  // projects the label intent (`labels`) does so here, so the edit queues one
+  // request.
+  const applyFeatureVisibilityToLabels = ({ reflow = true, rerender = false, labels = false } = {}) => {
     const drawing = state.activeDrawing();
     if (generatedMode.value !== mode.value) return false;
+    if (labels) return reconcileLabelOverrides({ reflow, rerender });
     const svg = svgContainer.value?.querySelector?.('svg');
     if (!svg) return false;
     const projection = applyStoredVisibilityOverridesToSvg(drawing, svg);
@@ -1015,7 +1042,7 @@ export const createFeatureLabelActions = ({
     }
 
     if (textChanged) {
-      queueLabelReflow();
+      queueLabelReflow(labelsEmbeddedOnly(getCommittedRequest()?.diagramOptions));
     }
   };
 
@@ -1167,8 +1194,7 @@ export const createFeatureLabelActions = ({
     // changed, and the label reflow draws the Result they describe again.
     restoreFeatureLabelIntent(drawing, feature, labelIntent);
     if (showFeature) setFeatureVisibility?.(feature, featureVisibility, { triggerReflow: false });
-    reconcileLabelOverrides();
-    queueLabelReflow(true);
+    reconcileLabelOverrides({ rerender: true });
     return cancelLabelOn();
   };
 

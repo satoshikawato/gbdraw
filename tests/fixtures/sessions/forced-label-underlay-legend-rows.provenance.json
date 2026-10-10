@@ -1,0 +1,46 @@
+{
+  "purpose": "Positive fixture for a Session 44 saved by main's writer: its Result has a renamed, a deleted (removed from the bytes) and an added Legend row, without Legend structure records. Load shows the same Legend; a Restore of the deleted row asks for the automatic rerender (U3a O-2).",
+  "writer": "gbdraw/web/js/services/config.js Save Session (Web), bytes kept unchanged",
+  "sourceCommit": "fe6861f06d0eaaecac0ba4ee6b1c3095019789df",
+  "checkout": "git worktree add --detach <dir> fe6861f0; python tools/prepare_browser_wheel.py; Playwright with that commit's tests/web/helpers (audit-browser.cjs openWithGenBank with labels_mode out, Auto Reflow off, app-lifecycle.cjs generateAndWaitForResult, mode-transition.cjs download), Circular, one Result; the input GenBank file (not in that commit) passed by path",
+  "tools": {
+    "node": "v26.8.2",
+    "playwright": "1.61.1",
+    "python": "3.13.3"
+  },
+  "sessions": {
+    "forced-label-underlay-legend-rows.v44.gbdraw-session.json.gz": {
+      "wheel": "gbdraw-0.14.0-py3-none-any.whl",
+      "sessionVersion": 44,
+      "records": "tests/fixtures/forced_label_underlay.gb (sha256 a9e11770edd5736d727d466fac3131b88ddb991486391db543e6ba091b559ea7), Circular, labels out, one Result",
+      "steps": [
+        "Generate",
+        "Legend editor: rename GC content to GC %",
+        "Legend editor: delete repeat_region",
+        "Legend editor: Add legend item Added, #123456",
+        "Save Session"
+      ],
+      "legend": {
+        "entries": [
+          "CDS",
+          "GC %",
+          "GC skew (+)",
+          "GC skew (-)",
+          "Added"
+        ],
+        "deleted": [
+          "repeat_region"
+        ],
+        "shownRows": [
+          "CDS",
+          "GC %",
+          "GC skew (+)",
+          "GC skew (-)",
+          "Added"
+        ]
+      },
+      "sha256": "795cff177783c53620df0f3c6f263b72e00e60403f29cd8fe00c6ce94a751d77",
+      "decompressedSha256": "552d5a96639c3a556dbc4fa45bfb064e50054ab4f786a6aabbde159175b5e3c7"
+    }
+  }
+}

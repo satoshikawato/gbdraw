@@ -1,10 +1,19 @@
 // @ts-check
 /** @import { FeatureCatalogAdmission } from '../services/feature-catalog.js' */
-/** @import { SvgAdmissionRuntime, SvgResultTransform } from '../services/svg-result-ingestion.js' */
-import { normalizeDefaultColor } from '../utils/color-utils.js';
-import { defaultLegendCaptionOrder, isLegendOrderEdited, legendRowFeatureIds } from '../services/legend-svg.js';
+/** @import { LegendStrokeOperation, SvgAdmissionRuntime, SvgResultTransform } from '../services/svg-result-ingestion.js' */
+/** @import { PythonLegendKey, PythonLegendRow, RenderedFeatureId, SwatchColor } from '../services/legend-svg.js' */
+/** @import { LegendRowContext, SpecificColorRule } from '../services/specific-color-rules.js' */
+/** @import { DrawingState, LegendCaption, LegendEntry, RecordedLegendColor } from '../state.js' */
+/** @import { DisplayedLegendState } from '../services/feature-visibility.js' */
+/** @import { AddressedFeature } from '../services/feature-override-identity.js' */
+import { appliedFeatureColors, normalizeDefaultColor, resolveColorToHex } from '../utils/color-utils.js';
+import { defaultLegendCaptionOrder, isLegendOrderEdited, legendEntryKey } from '../services/legend-svg.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { biologicalFeatureKey } from '../services/feature-catalog.js';
+import { ruleMatcher } from '../services/rule-matchers.js';
+import { generatedLegendRow, ruleCaptionsAreNormalized, ruleLegendCaptions } from '../services/specific-color-rules.js';
+import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
+import { displayedLegendRowContext, resolveFeatureDrawn } from '../services/feature-visibility.js';
 import {
   admitCurrentGeneratedResults
 } from '../services/svg-result-ingestion.js';
@@ -13,7 +22,8 @@ import {
  * The committed editor state a direct mutation plan compiles. Python and the
  * editor owners define the row shapes (R7), so each map is a record here.
  * @typedef {object} EditorPlanOptions
- * @property {FeatureCatalogAdmission} catalogAdmission
+ * @property {EditorAddressing} catalogAdmission The feature catalog's admission, or the addressing of
+ *   a Result without a catalog (`displayedFeatureAddressing`).
  * @property {Record<string, any>} [featureColorOverrides]
  * @property {Record<string, any>} [featureStrokeOverrides]
  * @property {Record<string, any>} [featureOverrides]
@@ -31,10 +41,42 @@ import {
  * @property {string[] | null} [replayDefaultLegendOrder]
  * @property {SvgResultTransform[]} [resultTransforms] One transform per Result, by index.
  * @property {SvgResultTransform | null} [transformSvg] A transform applied to every Result.
+ * @property {LivePreview | null} [livePreview] The draft's palette, specific-color rules, and Feature
+ *   visibility as the displayed Result previews them. Generate leaves it out: Python drew them.
  */
 
 /**
- * @typedef {EditorPlanOptions & SvgAdmissionRuntime & { generationResponse: any }} CandidateCommitOptions
+ * What Python draws from the draft at Generate, previewed live on the
+ * displayed Result for the operation domains it shows (`domains`): the
+ * applied palette, the specific-color rules through their prepared matches
+ * (Python's, R4), and whether each rendered feature is drawn
+ * (`resolveFeatureDrawn`). The compile runs only the stages those domains
+ * need (`COMPILE_STAGES`).
+ * @typedef {object} LivePreview
+ * @property {readonly string[]} domains
+ * @property {Record<string, string>} paletteColors
+ * @property {ReturnType<typeof import('../services/feature-visibility.js').featureDrawnContext> | null} drawnContext
+ *   `featureDrawnContext` of the drawing; read when `domains` has featureVisibility.
+ * @property {RuleLegendRows | null} [ruleRows] The Legend rows a rule commit shows at once.
+ * @property {ReadonlyMap<PythonLegendKey, PythonLegendRow>} [pythonRows] Python's Legend rows of the
+ *   displayed Result (`pythonLegendRows`), by which the draft allocates a rule's row (N-06).
+ * @property {LegendRowContext['features']} [features] The features the displayed Result draws
+ *   (`displayedLegendRowContext`), whose rule matches decide the rows Python leaves out.
+ */
+
+/**
+ * The Legend rows of a rule commit until Python draws them (`prepareFileLegendEntries`):
+ * the rows its rules add, each before the row it replaces, and the rows they retire.
+ * @typedef {{ add: Array<{ caption: string, color: string, before?: string }>, retire: string[] }} RuleLegendRows
+ */
+
+/**
+ * What the compile reads of a feature catalog's admission.
+ * @typedef {FeatureCatalogAdmission | ReturnType<typeof import('../services/feature-override-identity.js').displayedFeatureAddressing>} EditorAddressing
+ */
+
+/**
+ * @typedef {EditorPlanOptions & SvgAdmissionRuntime & { generationResponse: any, catalogAdmission: FeatureCatalogAdmission }} CandidateCommitOptions
  */
 
 const text = (value) => String(value ?? '').trim();
@@ -63,9 +105,9 @@ const normalizeStrokeWidth = (value) => {
  * services/svg-result-ingestion.js declares as `SvgMutationOperations`).
  * @typedef {Record<
  *   'featureFills' | 'featureStrokes' | 'featureVisibility' | 'labelText' | 'labelVisibility'
- *   | 'legendFills' | 'legendStrokes' | 'legendRenames' | 'legendDeletes' | 'legendAdds' | 'legendOrder',
+ *   | 'legendFills' | 'legendRenames' | 'legendDeletes' | 'legendAdds' | 'legendOrder',
  *   Record<string, any>[]
- * > & { callerTransforms: SvgResultTransform[] }} MutableOperations
+ * > & { legendStrokes: LegendStrokeOperation[], callerTransforms: SvgResultTransform[] }} MutableOperations
  */
 
 /** @returns {MutableOperations} */
@@ -116,6 +158,242 @@ const matchingRuleDerivedFill = (override, manualSpecificRules) => {
   ));
 };
 
+// The Legend row caption a feature color edit names its feature into
+// (`LegendRowReach.namedIds`): the edit's caption when no rule draws the edit.
+// Python draws a rule's feature in the row it draws for the rule (N-06), which
+// a row's stroke reaches by that row's color, never by the rule's caption
+// (OV-292 A, R15-6).
+/**
+ * @param {unknown} override A `featureColorOverrides` value.
+ * @param {readonly Partial<SpecificColorRule>[]} rules
+ * @returns {LegendCaption | ''}
+ */
+export const namedLegendCaption = (override, rules) => (
+  override && typeof override === 'object' && !matchingRuleDerivedFill(override, rules)
+    ? /** @type {LegendCaption} */ (text(/** @type {{ caption?: unknown }} */ (override).caption))
+    : ''
+);
+
+const samePaint = (left, right) => (
+  text(resolveColorToHex(text(left))).toLowerCase() === text(resolveColorToHex(text(right))).toLowerCase()
+);
+
+// The palette color of a Legend row Python draws for a feature type or a
+// track (`generatedLegendRow`).
+/** @param {string} key @param {Record<string, string>} palette */
+const paletteLegendColor = (key, palette) => palette[generatedLegendRow(key).paletteKey] || '';
+
+// Rules of one caption in two colors (a table Python's caption normalization
+// has not seen, as a History step restores it) share a live row, which takes
+// the color of the first rule a drawn feature takes: Python draws only the
+// caption and color a feature took (OV-347). Rules of unknown matches follow.
+/** @param {readonly Partial<SpecificColorRule>[]} rules @param {LegendRowContext['features']} features */
+const drawnRulesFirst = (rules, features) => {
+  const { firstIfKnown } = ruleMatcher([...rules]);
+  const drawn = new Set(Array.from(features, (feature) => firstIfKnown(feature)));
+  return [...rules.filter((rule) => drawn.has(rule)), ...rules.filter((rule) => !drawn.has(rule))];
+};
+
+// The color the draft gives the features of a Legend row (its Python key)
+// where a displayed Result predates the draft: its first rule's color
+// (`drawnRulesFirst`), else its palette color, as Python draws them. A rule's
+// row is the key Python draws for it (N-06: "<caption> [<hex>]" when the caption names a row of
+// another color), allocated from the colors Python drew for its rows, never
+// from their swatches (R15-4), nor a row its caption only spells. The live
+// compile shows it on rows without a Legend color of their own, and a row's
+// stroke reaches by it (`LegendRowReach.draftColor`); the feature popup reads
+// it the same way.
+/**
+ * @param {{ rules: readonly Partial<SpecificColorRule>[], pythonRows?: ReadonlyMap<PythonLegendKey, PythonLegendRow>,
+ *   features?: LegendRowContext['features'], originalLegendOrder: readonly string[], paletteColors: Record<string, string> }} draft
+ *   `features`: the features the displayed Result draws, whose rule matches decide the rows Python leaves out (OV-306).
+ * @returns {{ ruleCaptions: PythonLegendKey[], colorOf: (key: PythonLegendKey) => SwatchColor | null }}
+ */
+export const draftLegendRowColors = ({ rules, pythonRows = new Map(), features = [], originalLegendOrder, paletteColors }) => {
+  const rowOf = ruleLegendCaptions({ rules: [...rules], pythonRows, features, originalLegendOrder: [...originalLegendOrder] });
+  /** @type {Map<PythonLegendKey, string>} */
+  const ruleColors = new Map();
+  (ruleCaptionsAreNormalized(rules) ? rules : drawnRulesFirst(rules, features)).forEach((rule) => {
+    const key = text(rule?.cap) ? rowOf(rule) : null;
+    if (key && !ruleColors.has(key)) ruleColors.set(key, text(rule.color));
+  });
+  return {
+    ruleCaptions: [...ruleColors.keys()],
+    colorOf: (key) => {
+      const color = normalizePaint(ruleColors.get(key) || paletteLegendColor(key, paletteColors), 'legend color');
+      return color ? /** @type {SwatchColor} */ (color) : null;
+    }
+  };
+};
+
+// The draft's Legend rows: the listed and the dormant entries, Python's keys
+// of the generated and the deleted rows, and the row a styled caption (a key
+// of `legendColorOverrides` or `legendStrokeOverrides`) addresses, by Python's
+// key where Python draws it; null for a deleted row. The compile and the
+// feature popup read the rows through it, so a deleted row's stroke reaches
+// no feature in either.
+/**
+ * @param {Pick<EditorPlanOptions, 'legendEntries' | 'deletedLegendEntries' | 'dormantLegendEntries' | 'originalLegendOrder'>} legend
+ */
+export const draftLegendRows = ({
+  legendEntries = [], deletedLegendEntries = [], dormantLegendEntries = [], originalLegendOrder = []
+}) => {
+  const currentEntries = normalizedLegendEntries(legendEntries);
+  const originalCaptions = new Set(
+    (Array.isArray(originalLegendOrder) ? originalLegendOrder : []).map(text).filter(Boolean)
+  );
+  const deletedCaptions = new Set(
+    (Array.isArray(deletedLegendEntries) ? deletedLegendEntries : [])
+      .map((entry) => text(entry?.originalCaption || entry?.caption))
+      .filter((caption) => originalCaptions.has(caption))
+  );
+  // OV-120: a renamed row an earlier Generate hid (GC off, Show Depth off)
+  // waits in the drawing; this Result may draw it again or still leave it out.
+  const shownOriginals = new Set(currentEntries.map((entry) => entry.originalCaption));
+  const dormantEntries = normalizedLegendEntries(dormantLegendEntries)
+    .filter((entry) => entry.caption !== entry.originalCaption && !shownOriginals.has(entry.originalCaption)
+      && !deletedCaptions.has(entry.originalCaption));
+  const dormantOriginals = new Set(dormantEntries.map((entry) => entry.originalCaption));
+  const entriesByCaption = new Map([...dormantEntries, ...currentEntries].map(entry => [entry.caption, entry]));
+  /** @param {string} caption */
+  const styledRow = (caption) => {
+    const entry = entriesByCaption.get(caption);
+    const originalCaption = entry?.originalCaption || caption;
+    if (deletedCaptions.has(originalCaption)) return null;
+    const dormant = dormantOriginals.has(originalCaption);
+    const isOriginal = dormant || originalCaptions.has(originalCaption);
+    return { entry, dormant, isOriginal, targetCaption: /** @type {PythonLegendKey} */ (isOriginal ? originalCaption : caption) };
+  };
+  return { currentEntries, originalCaptions, deletedCaptions, dormantEntries, styledRow };
+};
+
+// OV-276, OV-282 (D-26): the swatch color of each Legend panel row that the
+// palette colors, listed by its caption and deleted by its Python key: a row
+// of Python's without a Legend color of its own that no rule draws takes the
+// color the live compile's `legendFills` stage gives its Python key
+// (`draftLegendRowColors`). The other rows keep the color they record.
+// Nothing writes it into the rows, which are inputs of the rule preparation.
+/**
+ * @param {Pick<EditorPlanOptions, 'legendEntries' | 'deletedLegendEntries' | 'dormantLegendEntries' | 'originalLegendOrder'>
+ *   & { legendColorOverrides: Readonly<Record<string, unknown>>, rules: readonly Partial<SpecificColorRule>[],
+ *   pythonRows: ReadonlyMap<PythonLegendKey, PythonLegendRow>, features?: LegendRowContext['features'], paletteColors: Record<string, string> }} draft
+ * @returns {{ listed: Map<string, SwatchColor>, deleted: Map<PythonLegendKey, SwatchColor> }}
+ */
+export const draftLegendPanelColors = ({ legendColorOverrides, rules, pythonRows, features, paletteColors, ...legend }) => {
+  const rows = draftLegendRows(legend);
+  const draft = draftLegendRowColors({ rules, pythonRows, features, originalLegendOrder: [...rows.originalCaptions], paletteColors });
+  const ruleRows = new Set(draft.ruleCaptions);
+  /** @param {string} caption @param {PythonLegendKey} key */
+  const paletteColor = (caption, key) => (
+    hasOwn(legendColorOverrides, caption) || !rows.originalCaptions.has(key) || ruleRows.has(key) ? null : draft.colorOf(key)
+  );
+  /** @type {Map<string, SwatchColor>} */
+  const listed = new Map();
+  rows.currentEntries.forEach(({ caption }) => {
+    const row = rows.styledRow(caption);
+    const color = row ? paletteColor(caption, row.targetCaption) : null;
+    if (color) listed.set(caption, color);
+  });
+  /** @type {Map<PythonLegendKey, SwatchColor>} */
+  const deleted = new Map();
+  normalizedLegendEntries(legend.deletedLegendEntries || []).forEach((entry) => {
+    const key = legendEntryKey(entry);
+    const color = paletteColor(entry.caption, key);
+    if (color) deleted.set(key, color);
+  });
+  return { listed, deleted };
+};
+
+/**
+ * The color a Legend row shows: the palette's swatch color, else the color the row records.
+ * @typedef {(entry: Pick<LegendEntry, 'caption' | 'originalCaption'> & { color?: RecordedLegendColor } | null | undefined)
+ *   => SwatchColor | RecordedLegendColor | undefined} LegendRowColorOf
+ */
+
+// OV-282 (D-26): the one reader of the color a Legend row of the displayed
+// Result shows, listed or deleted: the palette's for a row the palette colors
+// (`draftLegendPanelColors`), else the color the row records. The Legend
+// panel, "Use existing color" and the rename and color requests read it. No
+// palette edit writes a row's recorded color; only a Legend extraction
+// records the swatch the Result shows (`RecordedLegendColor`).
+/**
+ * @param {DisplayedLegendState & Parameters<typeof appliedFeatureColors>[0] & { svgContent?: { value?: unknown } }} state
+ * @param {Parameters<typeof displayedLegendRowContext>[1] & Pick<DrawingState,
+ *   'legendEntries' | 'deletedLegendEntries' | 'dormantLegendEntries' | 'legendColorOverrides'>} drawing
+ * @returns {{ listed: LegendRowColorOf, deleted: LegendRowColorOf }}
+ */
+export const displayedLegendRowColors = (state, drawing) => {
+  const context = state.svgContent?.value ? displayedLegendRowContext(state, drawing) : null;
+  const colors = context ? draftLegendPanelColors({
+    ...context, originalLegendOrder: [...context.originalLegendOrder],
+    legendEntries: drawing.legendEntries.value, deletedLegendEntries: drawing.deletedLegendEntries.value,
+    dormantLegendEntries: drawing.dormantLegendEntries.value, legendColorOverrides: drawing.legendColorOverrides,
+    paletteColors: appliedFeatureColors(state)
+  }) : { listed: new Map(), deleted: new Map() };
+  return {
+    listed: (entry) => (entry ? colors.listed.get(String(entry.caption || '')) || entry.color : undefined),
+    deleted: (entry) => (entry ? colors.deleted.get(legendEntryKey(entry)) || entry.color : undefined)
+  };
+};
+
+// Python's fill of a feature type (gbdraw/features/colors.py
+// `default_color_map.get(feature.type, "#d3d3d3")`): the palette has no
+// fallback key.
+/** @param {Record<string, string>} palette @param {unknown} type */
+const paletteFeatureColor = (palette, type) => {
+  const key = String(type ?? '');
+  return (hasOwn(palette, key) && palette[key]) || '#d3d3d3';
+};
+
+// The stages of one compile and the operation domains each one writes. Generate
+// runs every stage but `rules`; a live display runs the stages of the domains
+// it shows. `rules` matches the specific-color rules for the live feature fills.
+const COMPILE_STAGES = Object.freeze({
+  fills: Object.freeze(['featureFills']),
+  rules: Object.freeze(['featureFills']),
+  visibility: Object.freeze(['featureVisibility']),
+  labels: Object.freeze(['labelText', 'labelVisibility']),
+  legend: Object.freeze(['legendRenames', 'legendDeletes', 'legendAdds', 'legendOrder']),
+  legendFills: Object.freeze(['legendFills']),
+  strokes: Object.freeze(['featureStrokes', 'legendStrokes'])
+});
+
+// The operation domains each kind of live edit shows on the displayed Result
+// (app-setup): a Legend row stroke also strokes the row's features; the
+// palette and the rules fill features and Legend rows; a Result display shows
+// the Legend structure and the paint domains whose intent changed. An edit
+// that returns Legend rows (Restore, a History step of the rows) shows their
+// structure and fills: a returning row of Python's shows the color Generate
+// gives it.
+export const LIVE_EDIT_DOMAINS = Object.freeze({
+  strokes: COMPILE_STAGES.strokes,
+  legendFills: COMPILE_STAGES.legendFills,
+  fills: Object.freeze(['featureFills', 'legendFills']),
+  visibility: COMPILE_STAGES.visibility,
+  legendStructure: COMPILE_STAGES.legend,
+  legendRows: Object.freeze([...COMPILE_STAGES.legend, ...COMPILE_STAGES.legendFills]),
+  // A deleted row strokes no feature, and a returned row strokes its own
+  // again, as Generate draws them (OV-293).
+  deletedRows: Object.freeze([...COMPILE_STAGES.legend, ...COMPILE_STAGES.legendFills, ...COMPILE_STAGES.strokes])
+});
+/** @type {ReadonlyArray<[string[], readonly string[]]>} */
+const EDITOR_PAINT_PATHS = Object.freeze([
+  [['editorState', 'featureStrokes'], LIVE_EDIT_DOMAINS.strokes],
+  [['editorState', 'legend', 'strokeOverrides'], LIVE_EDIT_DOMAINS.strokes],
+  [['editorState', 'legend', 'colorOverrides'], LIVE_EDIT_DOMAINS.legendFills],
+  ...['entries', 'dormantEntries', 'addedCaptions']
+    .map((/** @type {string} */ key) => /** @type {[string[], readonly string[]]} */ ([['editorState', 'legend', key], LIVE_EDIT_DOMAINS.legendRows])),
+  [['editorState', 'legend', 'deletedEntries'], LIVE_EDIT_DOMAINS.deletedRows]
+]);
+// The domains an Undo or Redo shows, by the paths of the step's changes.
+/** @param {unknown} changes A History step's change list. @returns {string[]} */
+export const editorPaintDomains = (changes) => [...new Set((Array.isArray(changes) ? changes : []).flatMap(({ path } = {}) => (
+  Array.isArray(path)
+    ? EDITOR_PAINT_PATHS.filter(([paintPath]) => paintPath.every((key, index) => index >= path.length || path[index] === key))
+      .flatMap(([, domains]) => domains)
+    : []
+)))];
+
 const resolvedStableTargets = (catalogAdmission, key) => (
   catalogAdmission.renderedTargetsByOverrideKey.get(key) || []
 );
@@ -164,81 +442,132 @@ const compilePlanBundle = ({
   manualSpecificRules = [],
   replayDefaultLegendOrder = null,
   resultTransforms = [],
-  transformSvg = null
+  transformSvg = null,
+  livePreview = null
 }) => {
   if (!catalogAdmission || !Array.isArray(catalogAdmission.resultNames)) {
     throw new Error('Direct editor mutation planning requires an admitted feature catalog.');
   }
   const operationsByResult = catalogAdmission.resultNames.map(() => emptyOperations());
   const normalizedFeatureColorOverrides = {};
+  const drawnFillById = 'fillByRenderedId' in catalogAdmission ? catalogAdmission.fillByRenderedId : null;
+  // The fill Python drew a rendered feature with: its catalog row's, else the
+  // displayed Result's (a Result without a catalog).
+  /** @param {string} renderedId @param {AddressedFeature | undefined} feature */
+  const pythonFill = (renderedId, feature) => text(feature?.fill_color) || text(drawnFillById?.get(renderedId));
+  const shownDomains = new Set(livePreview?.domains || []);
+  /** @param {string} domain */
+  const shows = (domain) => !livePreview || shownDomains.has(domain);
+  // Every stage runs through `runStage`, which records it; one structural
+  // metric per compile names the stages that ran (the work guard reads it).
+  /** @type {Set<keyof typeof COMPILE_STAGES>} */
+  const stagesRun = new Set();
+  /**
+   * @template T
+   * @param {keyof typeof COMPILE_STAGES} name
+   * @param {() => T} run
+   * @returns {T | undefined}
+   */
+  const runStage = (name, run) => {
+    if (name !== 'rules' && !COMPILE_STAGES[name].some(shows)) return undefined;
+    stagesRun.add(name);
+    return run();
+  };
+  const rules = Array.isArray(manualSpecificRules) ? manualSpecificRules : [];
 
-  Object.entries(featureColorOverrides || {}).forEach(([key, rawOverride]) => {
-    const color = normalizePaint(
-      rawOverride && typeof rawOverride === 'object' && hasOwn(rawOverride, 'color')
-        ? rawOverride.color
-        : rawOverride,
-      'feature fill'
-    );
-    const targets = resolvedStableTargets(catalogAdmission, key);
-    if (!color || targets.length === 0) return;
-    normalizedFeatureColorOverrides[key] = rawOverride && typeof rawOverride === 'object'
-      ? { ...cloneJsonValue(rawOverride, {}), color }
-      : color;
-    if (matchingRuleDerivedFill(rawOverride, manualSpecificRules)) return;
-    targets.forEach(({ resultIndex, renderedId }) => {
-      operationsByResult[resultIndex].featureFills.push({ renderedId, color });
+  // Fill precedence, live as at Generate: a feature's fill edit, else its
+  // first matching rule, else its palette color, else what Python drew. Python
+  // drew the rules and the palette of the request, so only the live preview
+  // emits them, where they differ from Python's fill. A feature whose rule
+  // match is not known yet keeps the fill the Result shows (`color: null`).
+  runStage('fills', () => {
+    Object.entries(featureColorOverrides || {}).forEach(([key, rawOverride]) => {
+      const color = normalizePaint(
+        rawOverride && typeof rawOverride === 'object' && hasOwn(rawOverride, 'color')
+          ? rawOverride.color
+          : rawOverride,
+        'feature fill'
+      );
+      const targets = resolvedStableTargets(catalogAdmission, key);
+      if (!color || targets.length === 0) return;
+      normalizedFeatureColorOverrides[key] = rawOverride && typeof rawOverride === 'object'
+        ? { ...cloneJsonValue(rawOverride, {}), color }
+        : color;
+      if (matchingRuleDerivedFill(rawOverride, manualSpecificRules)) return;
+      targets.forEach(({ resultIndex, renderedId }) => {
+        operationsByResult[resultIndex].featureFills.push({ renderedId, color });
+      });
     });
-  });
-
-  Object.entries(featureStrokeOverrides || {}).forEach(([key, rawOverride]) => {
-    if (!rawOverride || typeof rawOverride !== 'object') return;
-    const strokeColor = hasOwn(rawOverride, 'strokeColor')
-      ? normalizePaint(rawOverride.strokeColor, 'feature stroke color')
-      : '';
-    const strokeWidth = hasOwn(rawOverride, 'strokeWidth')
-      ? normalizeStrokeWidth(rawOverride.strokeWidth)
-      : null;
-    const targets = resolvedStableTargets(catalogAdmission, key);
-    if ((!strokeColor && strokeWidth === null) || targets.length === 0) return;
-    targets.forEach(({ resultIndex, renderedId }) => {
-      operationsByResult[resultIndex].featureStrokes.push({
-        renderedId,
-        strokeColor,
-        strokeWidth
+    if (!livePreview) return;
+    const paletteColors = livePreview.paletteColors || {};
+    const winnerOf = rules.length > 0 ? ruleMatcher(rules).firstIfKnown : null;
+    operationsByResult.forEach((operations, resultIndex) => {
+      const edited = new Set(operations.featureFills.map(({ renderedId }) => renderedId));
+      /** @type {Map<string, AddressedFeature>} */
+      const rendered = catalogAdmission.renderedFeaturesByResult?.[resultIndex] || new Map();
+      const unedited = [...rendered].filter(([renderedId]) => !edited.has(renderedId));
+      const winners = winnerOf
+        ? runStage('rules', () => new Map(unedited.map(([renderedId, feature]) => [renderedId, winnerOf(feature)])))
+        : null;
+      unedited.forEach(([renderedId, feature]) => {
+        const rule = winners ? winners.get(renderedId) : null;
+        if (rule === undefined) {
+          operations.featureFills.push({ renderedId, color: null });
+          return;
+        }
+        const color = normalizePaint(rule ? rule.color : paletteFeatureColor(paletteColors, feature.type), 'feature fill');
+        if (color && !samePaint(color, pythonFill(renderedId, feature))) operations.featureFills.push({ renderedId, color });
       });
     });
   });
 
+  // Python draws every rendered feature, so the live preview names the
+  // rendered features the resolver hides; Generate replays the On and Off
+  // edits of the identity rows.
   const hiddenRenderedIds = new Set();
-  Object.values(featureOverrides || {}).forEach((row) => {
-    const targets = identityTargets(catalogAdmission, row);
-    const featureMode = text(row?.featureVisibility).toLowerCase();
-    const labelMode = text(row?.labelVisibility).toLowerCase();
-    targets.forEach(({ resultIndex, renderedId }) => {
-      const operations = operationsByResult[resultIndex];
-      if (!operations) return;
-      if (featureMode === 'on' || featureMode === 'off') {
+  runStage('visibility', () => {
+    if (livePreview) {
+      const { drawnContext } = livePreview;
+      if (!drawnContext) return;
+      operationsByResult.forEach((operations, resultIndex) => {
+        /** @type {Map<string, AddressedFeature>} */
+        const rendered = catalogAdmission.renderedFeaturesByResult?.[resultIndex] || new Map();
+        rendered.forEach((feature, renderedId) => {
+          if (resolveFeatureDrawn(feature, drawnContext) === false) operations.featureVisibility.push({ renderedId, mode: 'off' });
+        });
+      });
+      return;
+    }
+    Object.values(featureOverrides || {}).forEach((row) => {
+      const featureMode = text(row?.featureVisibility).toLowerCase();
+      if (featureMode !== 'on' && featureMode !== 'off') return;
+      identityTargets(catalogAdmission, row).forEach(({ resultIndex, renderedId }) => {
+        const operations = operationsByResult[resultIndex];
+        if (!operations) return;
         operations.featureVisibility.push({ renderedId, mode: featureMode });
         if (featureMode === 'off') hiddenRenderedIds.add(renderedId);
-      }
-      if (typeof row?.labelText === 'string') {
-        operations.labelText.push({ renderedId, value: row.labelText });
-      }
-      if (labelMode === 'on' || labelMode === 'off') {
-        operations.labelVisibility.push({ renderedId, mode: labelMode });
-      }
+      });
+    });
+  });
+  // The preview binder shows labels live; Generate replays them.
+  runStage('labels', () => {
+    Object.values(featureOverrides || {}).forEach((row) => {
+      const labelMode = text(row?.labelVisibility).toLowerCase();
+      identityTargets(catalogAdmission, row).forEach(({ resultIndex, renderedId }) => {
+        const operations = operationsByResult[resultIndex];
+        if (!operations) return;
+        if (typeof row?.labelText === 'string') {
+          operations.labelText.push({ renderedId, value: row.labelText });
+        }
+        if (labelMode === 'on' || labelMode === 'off') {
+          operations.labelVisibility.push({ renderedId, mode: labelMode });
+        }
+      });
     });
   });
 
-  const currentEntries = normalizedLegendEntries(legendEntries);
-  const originalCaptions = new Set(
-    (Array.isArray(originalLegendOrder) ? originalLegendOrder : []).map(text).filter(Boolean)
-  );
-  const deletedCaptions = new Set(
-    (Array.isArray(deletedLegendEntries) ? deletedLegendEntries : [])
-      .map((entry) => text(entry?.originalCaption || entry?.caption))
-      .filter((caption) => originalCaptions.has(caption))
-  );
+  const legendRows = draftLegendRows({ legendEntries, deletedLegendEntries, dormantLegendEntries, originalLegendOrder });
+  const { currentEntries, originalCaptions, deletedCaptions, dormantEntries } = legendRows;
   const manualCaptions = new Set(
     (Array.isArray(manualSpecificRules) ? manualSpecificRules : [])
       .map((rule) => text(rule?.cap))
@@ -252,151 +581,220 @@ const compilePlanBundle = ({
   // The rule reads the caption an operation addresses in Python's output, so a
   // rename of the row and the styles under its new name are excused too (OV-88).
   const unrequestedDepth = new Set(Array.from(unrequestedDepthCaptions || []).map(text).filter(Boolean));
-  // OV-120: a renamed row an earlier Generate hid (GC off, Show Depth off)
-  // waits in the drawing; this Result may draw it again or still leave it out.
-  const shownOriginals = new Set(currentEntries.map((entry) => entry.originalCaption));
-  const dormantEntries = normalizedLegendEntries(dormantLegendEntries)
-    .filter((entry) => entry.caption !== entry.originalCaption && !shownOriginals.has(entry.originalCaption)
-      && !deletedCaptions.has(entry.originalCaption));
-  const dormantOriginals = new Set(dormantEntries.map((entry) => entry.originalCaption));
-  const renderedIdsByDirectCaption = new Map();
-  Object.entries(featureColorOverrides || {}).forEach(([key, override]) => {
-    const caption = text(override?.caption);
-    if (!caption) return;
-    const renderedIds = renderedIdsByDirectCaption.get(caption) || new Set();
-    resolvedStableTargets(catalogAdmission, key).forEach(({ renderedId }) => {
-      if (renderedId) renderedIds.add(renderedId);
-    });
-    renderedIdsByDirectCaption.set(caption, renderedIds);
-  });
   const allResultIndexes = operationsByResult.map((_, index) => index);
-  // The fill each feature of a Result is drawn with (its feature fill edit, else
-  // the renderer's fill) and the features with a stroke edit of their own: what
-  // a Legend row's stroke reads to reach the row's features, as the live stroke
-  // does on the mounted Result (`legendRowFeatureIds`, OV-123).
-  /** @type {Map<number, { drawnFills: Array<[string, string]>, ownStrokeIds: string[] }>} */
-  const drawnFeaturesByResult = new Map();
-  /** @param {number} resultIndex */
-  const drawnFeaturesIn = (resultIndex) => {
-    const known = drawnFeaturesByResult.get(resultIndex);
-    if (known) return known;
-    const operations = operationsByResult[resultIndex];
-    const edited = new Map(operations.featureFills.map(({ renderedId, color }) => [renderedId, color]));
-    /** @type {Map<string, Record<string, any>>} */
-    const rendered = catalogAdmission.renderedFeaturesByResult?.[resultIndex] || new Map();
-    const drawn = {
-      /** @type {Array<[string, string]>} */
-      drawnFills: [...rendered].map(([renderedId, feature]) => [renderedId, edited.get(renderedId) ?? text(feature?.fill_color)]),
-      ownStrokeIds: operations.featureStrokes.map(({ renderedId }) => renderedId)
-    };
-    drawnFeaturesByResult.set(resultIndex, drawn);
-    return drawn;
-  };
 
-  // D-08 (PD-OI-063): an edited Legend order is replayed over the renderer's
-  // slots. The renderer places generated entries in their generated order and
-  // direct additions after them; only a different order emits an operation.
-  // A renamed entry keeps its row, and the Legend layout places it (OV-156,
-  // zero shift), so a rename carries no position. A displayed batch
-  // Result that may still show an earlier edited order also receives its own
-  // default order, the generated order of that Result (D-07, B20, OV-47).
-  const legendOrderChanged = isLegendOrderEdited(currentEntries, [...originalCaptions]);
-  const defaultOrder = Array.isArray(replayDefaultLegendOrder) ? replayDefaultLegendOrder.map(text).filter(Boolean) : [];
-  const replayedLegendCaptions = legendOrderChanged
-    ? currentEntries.map((entry) => entry.caption)
-    : (defaultOrder.length > 0 ? defaultLegendCaptionOrder(currentEntries, defaultOrder) : null);
-  if (replayedLegendCaptions) {
-    addToResults(operationsByResult, allResultIndexes, 'legendOrder', {
-      captions: Object.freeze(replayedLegendCaptions)
-    });
-  }
-
-  currentEntries.forEach((entry) => {
-    const isOriginal = originalCaptions.has(entry.originalCaption);
-    if (
-      isOriginal
-      && entry.caption !== entry.originalCaption
-    ) {
-      // A rename onto a color rule's caption is explicit and wins (PV-02). A
-      // rule that replaced the source row leaves nothing to rename.
-      addToResults(operationsByResult, allResultIndexes, 'legendRenames', {
-        from: entry.originalCaption,
-        to: entry.caption,
-        allowMissing: sourceReplaced || manualCaptions.has(entry.caption) || unrequestedDepth.has(entry.originalCaption)
+  runStage('legend', () => {
+    // D-08 (PD-OI-063): an edited Legend order is replayed over the renderer's
+    // slots. The renderer places generated entries in their generated order and
+    // direct additions after them; only a different order emits an operation.
+    // A renamed entry keeps its row, and the Legend layout places it (OV-156,
+    // zero shift), so a rename carries no position. A displayed batch
+    // Result that may still show an earlier edited order also receives its own
+    // default order, the generated order of that Result (D-07, B20, OV-47).
+    const legendOrderChanged = isLegendOrderEdited(currentEntries, [...originalCaptions]);
+    const defaultOrder = Array.isArray(replayDefaultLegendOrder) ? replayDefaultLegendOrder.map(text).filter(Boolean) : [];
+    const replayedLegendCaptions = legendOrderChanged
+      ? currentEntries.map((entry) => entry.caption)
+      : (defaultOrder.length > 0 ? defaultLegendCaptionOrder(currentEntries, defaultOrder) : null);
+    if (replayedLegendCaptions) {
+      addToResults(operationsByResult, allResultIndexes, 'legendOrder', {
+        captions: Object.freeze(replayedLegendCaptions)
       });
     }
-    if (
-      originalCaptions.size > 0
-      && !isOriginal
-      && !manualCaptions.has(entry.caption)
-      && !rendererDerivedCaptions.has(entry.caption)
-    ) {
-      const color = normalizePaint(entry.color, 'added legend color');
-      if (color) {
-        addToResults(operationsByResult, allResultIndexes, 'legendAdds', {
-          caption: entry.caption,
-          color,
-          xPos: entry.xPos,
-          yPos: entry.yPos
+
+    currentEntries.forEach((entry) => {
+      const isOriginal = originalCaptions.has(entry.originalCaption);
+      if (
+        isOriginal
+        && entry.caption !== entry.originalCaption
+      ) {
+        // A rename onto a color rule's caption is explicit and wins (PV-02). A
+        // rule that replaced the source row leaves nothing to rename.
+        addToResults(operationsByResult, allResultIndexes, 'legendRenames', {
+          from: entry.originalCaption,
+          to: entry.caption,
+          allowMissing: sourceReplaced || manualCaptions.has(entry.caption) || unrequestedDepth.has(entry.originalCaption)
         });
       }
-    }
-  });
+      if (
+        originalCaptions.size > 0
+        && !isOriginal
+        && !manualCaptions.has(entry.caption)
+        && !rendererDerivedCaptions.has(entry.caption)
+      ) {
+        const color = normalizePaint(entry.color, 'added legend color');
+        if (color) {
+          addToResults(operationsByResult, allResultIndexes, 'legendAdds', {
+            caption: entry.caption,
+            color,
+            xPos: entry.xPos,
+            yPos: entry.yPos
+          });
+        }
+      }
+    });
 
-  dormantEntries.forEach((entry) => {
-    addToResults(operationsByResult, allResultIndexes, 'legendRenames', {
-      from: entry.originalCaption, to: entry.caption, allowMissing: true
+    dormantEntries.forEach((entry) => {
+      addToResults(operationsByResult, allResultIndexes, 'legendRenames', {
+        from: entry.originalCaption, to: entry.caption, allowMissing: true
+      });
+    });
+
+    deletedCaptions.forEach((caption) => {
+      // Explicit deletions remain valid while their category is absent, including
+      // subsequent Generate calls after a source replacement.
+      addToResults(operationsByResult, allResultIndexes, 'legendDeletes', { caption, allowMissing: true });
+    });
+    // The rows of a rule commit, shown at once on the displayed Result until
+    // Python draws them (gaps 1 and 2): the rule's row where the Result lacks
+    // it, before the row it replaces, and the retired row of a removed or
+    // renamed rule. Generate compiles neither: Python draws the rules' rows.
+    const ruleRows = livePreview?.ruleRows;
+    (ruleRows?.add || []).forEach(({ caption, color, before = '' }) => {
+      const paint = normalizePaint(color, 'rule legend color');
+      if (caption && paint) addToResults(operationsByResult, allResultIndexes, 'legendAdds', {
+        caption, color: paint, xPos: null, yPos: null, ifAbsent: true, before
+      });
+    });
+    (ruleRows?.retire || []).forEach((caption) => {
+      addToResults(operationsByResult, allResultIndexes, 'legendDeletes', { caption, allowMissing: true, retire: true });
     });
   });
 
   // Category style preferences outlive the current generated entry projection.
   // Apply a returning category's preference without synthesizing a manual row.
-  const entriesByCaption = new Map([...dormantEntries, ...currentEntries].map(entry => [entry.caption, entry]));
-  const styledCaptions = new Set([...Object.keys(legendColorOverrides), ...Object.keys(legendStrokeOverrides)]);
-  styledCaptions.forEach(caption => {
-    const entry = entriesByCaption.get(caption);
-    const originalCaption = entry?.originalCaption || caption;
-    if (deletedCaptions.has(originalCaption)) return;
-    const dormant = dormantOriginals.has(originalCaption);
-    const isOriginal = dormant || originalCaptions.has(originalCaption);
-    const targetCaption = isOriginal ? originalCaption : caption;
-    const namedIds = [...(renderedIdsByDirectCaption.get(caption) || [])];
-    const legendRenderedIds = entry && entry.featureIds.length > 0 ? entry.featureIds : namedIds;
+  // A caption's features excuse a Result that draws none of them from drawing
+  // its row; a row's stroke reaches only those an edit no rule draws names
+  // into it (`namedLegendCaption`).
+  /** @type {Map<string, Set<RenderedFeatureId>>} */
+  const renderedIdsByDirectCaption = new Map();
+  /** @type {Set<RenderedFeatureId>} */
+  const ruleDrawnIds = new Set();
+  Object.entries(featureColorOverrides || {}).forEach(([key, override]) => {
+    const caption = text(override?.caption);
+    if (!caption) return;
+    const renderedIds = renderedIdsByDirectCaption.get(caption) || new Set();
+    const named = namedLegendCaption(override, rules) === caption;
+    resolvedStableTargets(catalogAdmission, key).forEach(({ renderedId }) => {
+      if (!renderedId) return;
+      renderedIds.add(/** @type {RenderedFeatureId} */ (renderedId));
+      if (!named) ruleDrawnIds.add(/** @type {RenderedFeatureId} */ (renderedId));
+    });
+    renderedIdsByDirectCaption.set(caption, renderedIds);
+  });
+  // The row a styled caption addresses in Python's output, and where a Result
+  // may lack it; null for a deleted category.
+  /** @param {string} caption */
+  const styledRow = (caption) => {
+    const row = legendRows.styledRow(caption);
+    if (!row) return null;
+    const { entry, dormant, isOriginal, targetCaption } = row;
+    const captionIds = [...(renderedIdsByDirectCaption.get(caption) || [])];
+    const namedIds = captionIds.filter((id) => !ruleDrawnIds.has(id));
+    const legendRenderedIds = entry && entry.featureIds.length > 0 ? entry.featureIds : captionIds;
     const allowMissing = !entry || (sourceReplaced && isOriginal) || unrequestedDepth.has(targetCaption)
       || dormant || (rendererDerivedCaptions.has(caption)
       && (legendRenderedIds.length === 0 || legendRenderedIds.every(id => hiddenRenderedIds.has(id))));
     // Each Result styles only the category features it renders. A batch Result
     // that renders none of them draws no row for the category (OV-45).
-    const renderedIdsIn = (resultIndex) => legendRenderedIds
-      .filter(id => renderedResultIndexes(catalogAdmission, id).has(resultIndex));
     // A row of unknown features may be absent from a Result that does not draw it
     // or whose draft removed it; admission decides that from Python's Legend row
     // facts (`metadata.legendRows`, OV-46, OV-63), not here.
+    /** @param {number} resultIndex */
     const allowMissingIn = (resultIndex) => allowMissing
-      || (legendRenderedIds.length > 0 && renderedIdsIn(resultIndex).length === 0);
-    if (hasOwn(legendColorOverrides, caption)) {
+      || (legendRenderedIds.length > 0
+        && legendRenderedIds.every((id) => !renderedResultIndexes(catalogAdmission, id).has(resultIndex)));
+    return { entry, targetCaption, namedIds, allowMissingIn };
+  };
+  const styledCaptions = new Set([...Object.keys(legendColorOverrides), ...Object.keys(legendStrokeOverrides)]);
+  // Live only: at Generate Python's row has the color (OV-288).
+  const draftRowColors = livePreview && draftLegendRowColors({
+    rules,
+    pythonRows: livePreview.pythonRows,
+    features: livePreview.features,
+    originalLegendOrder: [...originalCaptions],
+    paletteColors: livePreview.paletteColors
+  });
+  /** @param {PythonLegendKey} key */
+  const draftRowColor = (key) => (draftRowColors ? draftRowColors.colorOf(key) : null);
+
+  runStage('legendFills', () => {
+    /** @type {Set<string>} */
+    const filledCaptions = new Set();
+    styledCaptions.forEach((caption) => {
+      if (!hasOwn(legendColorOverrides, caption)) return;
+      const row = styledRow(caption);
+      if (!row) return;
       const color = normalizePaint(legendColorOverrides[caption], 'legend color');
-      if (color) operationsByResult.forEach((operations, resultIndex) => {
-        operations.legendFills.push({ caption: targetCaption, color, allowMissing: allowMissingIn(resultIndex) });
+      if (!color) return;
+      filledCaptions.add(row.targetCaption);
+      operationsByResult.forEach((operations, resultIndex) => {
+        operations.legendFills.push({ caption: row.targetCaption, color, allowMissing: row.allowMissingIn(resultIndex) });
       });
-    }
-    const stroke = legendStrokeOverrides[caption];
-    if (stroke && typeof stroke === 'object') {
-      const strokeColor = hasOwn(stroke, 'strokeColor') ? normalizePaint(stroke.strokeColor, 'legend stroke color') : '';
-      const strokeWidth = hasOwn(stroke, 'strokeWidth') ? normalizeStrokeWidth(stroke.strokeWidth) : null;
-      if (strokeColor || strokeWidth !== null) operationsByResult.forEach((operations, resultIndex) => {
-        operations.legendStrokes.push({
-          caption: targetCaption, strokeColor, strokeWidth, allowMissing: allowMissingIn(resultIndex),
-          renderedIds: legendRowFeatureIds(entry, { ...drawnFeaturesIn(resultIndex), namedIds })
-        });
-      });
-    }
+    });
+    // A row without a Legend color of its own shows the color the draft gives
+    // its features (OV-146: every swatch fill is an operation, so a reconcile
+    // never returns a rule or palette row to an older fill). A Result may not
+    // draw the row.
+    if (!draftRowColors) return;
+    new Set([.../** @type {Set<PythonLegendKey>} */ (originalCaptions), ...draftRowColors.ruleCaptions]).forEach((caption) => {
+      if (filledCaptions.has(caption) || deletedCaptions.has(caption)) return;
+      const color = draftRowColor(caption);
+      if (color) addToResults(operationsByResult, allResultIndexes, 'legendFills', { caption, color, allowMissing: true });
+    });
   });
 
-  deletedCaptions.forEach((caption) => {
-    // Explicit deletions remain valid while their category is absent, including
-    // subsequent Generate calls after a source replacement.
-    addToResults(operationsByResult, allResultIndexes, 'legendDeletes', { caption, allowMissing: true });
+  runStage('strokes', () => {
+    Object.entries(featureStrokeOverrides || {}).forEach(([key, rawOverride]) => {
+      if (!rawOverride || typeof rawOverride !== 'object') return;
+      const strokeColor = hasOwn(rawOverride, 'strokeColor')
+        ? normalizePaint(rawOverride.strokeColor, 'feature stroke color')
+        : '';
+      const strokeWidth = hasOwn(rawOverride, 'strokeWidth')
+        ? normalizeStrokeWidth(rawOverride.strokeWidth)
+        : null;
+      const targets = resolvedStableTargets(catalogAdmission, key);
+      if ((!strokeColor && strokeWidth === null) || targets.length === 0) return;
+      targets.forEach(({ resultIndex, renderedId }) => {
+        operationsByResult[resultIndex].featureStrokes.push({
+          renderedId,
+          strokeColor,
+          strokeWidth
+        });
+      });
+    });
+    // A Legend row's stroke reaches the features the executor finds in each
+    // Result from Python's row there (`legendRowFeatureIds`, OV-123, OV-288);
+    // the compile gives what the editor intent says of the row.
+    /** @type {Map<number, RenderedFeatureId[]>} */
+    const ownStrokesByResult = new Map();
+    /** @param {number} resultIndex */
+    const ownStrokeIdsIn = (resultIndex) => {
+      const known = ownStrokesByResult.get(resultIndex);
+      if (known) return known;
+      const own = operationsByResult[resultIndex].featureStrokes.map(({ renderedId }) => /** @type {RenderedFeatureId} */ (renderedId));
+      ownStrokesByResult.set(resultIndex, own);
+      return own;
+    };
+    styledCaptions.forEach((caption) => {
+      const stroke = legendStrokeOverrides[caption];
+      if (!stroke || typeof stroke !== 'object') return;
+      const row = styledRow(caption);
+      if (!row) return;
+      const strokeColor = hasOwn(stroke, 'strokeColor') ? normalizePaint(stroke.strokeColor, 'legend stroke color') : '';
+      const strokeWidth = hasOwn(stroke, 'strokeWidth') ? normalizeStrokeWidth(stroke.strokeWidth) : null;
+      if (!strokeColor && strokeWidth === null) return;
+      const listedIds = /** @type {RenderedFeatureId[]} */ (row.entry ? row.entry.featureIds : []);
+      const { namedIds } = row;
+      const draftColor = draftRowColor(row.targetCaption);
+      operationsByResult.forEach((operations, resultIndex) => {
+        operations.legendStrokes.push({
+          caption: row.targetCaption, strokeColor, strokeWidth,
+          allowMissing: row.allowMissingIn(resultIndex),
+          reach: { listedIds, namedIds, ownStrokeIds: ownStrokeIdsIn(resultIndex), draftColor }
+        });
+      });
+    });
   });
 
   resultTransforms.forEach((transform, index) => {
@@ -407,6 +805,10 @@ const compilePlanBundle = ({
     addToResults(operationsByResult, allResultIndexes, 'callerTransforms', transformSvg);
   }
 
+  recordStructuralMetric('editorPlanCompile', 1, {
+    stages: [...stagesRun],
+    domains: livePreview ? [...shownDomains] : null
+  });
   const frozenOperations = Object.freeze(operationsByResult.map(freezeOperations));
   const kind = frozenOperations.some((operations) => operationCount(operations) > 0)
     ? 'MUTATING'

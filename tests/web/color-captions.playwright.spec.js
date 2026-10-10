@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { execFileSync } = require('node:child_process');
-const { load, generate, download } = require('./helpers/mode-transition.cjs');
+const { load, generate, download, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 const { getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
 
 // A rule edit that changes the Legend asks for the automatic rerender (OV-42,
@@ -14,10 +14,13 @@ const inspect = async page => {
 };
 const inspectNow = page => page.evaluate(async () => {
   const { state: s } = await import('./js/state.js');
-  const { getVisibleFeatureLegendGroup, getAllFeatureLegendGroups } = await import('./js/services/legend-svg.js');
+  const { getVisibleFeatureLegendGroup, getAllFeatureLegendGroups, legendRowShown } = await import('./js/services/legend-svg.js');
   const root=s.svgContainer.value.querySelector('svg');
   const result=new DOMParser().parseFromString(s.results.value[s.selectedResultIndex.value].content,'image/svg+xml').documentElement;
-  const entries=svg=>[...(getVisibleFeatureLegendGroup(svg)?.querySelectorAll('g[data-legend-key]')||[])].map(e=>({caption:e.getAttribute('data-legend-key'),color:e.querySelector('path[fill]')?.getAttribute('fill')}));
+  // The rows a Result shows: a rule commit that merges a row into a shown row
+  // retires it live as a hidden row, which the layout skips and every export
+  // strips, until Python draws the Legend again (D-15-6 (2), (3); OV-313).
+  const entries=svg=>[...(getVisibleFeatureLegendGroup(svg)?.querySelectorAll('g[data-legend-key]')||[])].filter(legendRowShown).map(e=>({caption:e.getAttribute('data-legend-key'),color:e.querySelector('path[fill]')?.getAttribute('fill')}));
   return {rules:JSON.parse(JSON.stringify(s.activeDrawing().manualSpecificRules.map(rule=>({...rule,fromFile:Boolean(rule.fromFile)})))), mounted:entries(root), result:entries(result),
     dual:getAllFeatureLegendGroups(root).map(group=>[...group.querySelectorAll('g[data-legend-key]')].map(e=>e.getAttribute('data-legend-key'))),
     dualStyles:getAllFeatureLegendGroups(root).map(group=>[...group.querySelectorAll('g[data-legend-key]')].map(e=>({caption:e.getAttribute('data-legend-key'),color:e.querySelector('path[fill]')?.getAttribute('fill')}))),
@@ -176,11 +179,8 @@ test('generated-caption collisions roll back and old Session drafts normalize on
   let fresh;
   try {
     await generate(page);
-    await page.evaluate(async()=>{
-      const a=window.__GBDRAW_APP__;
-      a.newLegendCaption='Conflict [#112233]';a.newLegendColor='#abcdef';
-      await a.addNewLegendEntry();
-    });
+    // An editor row a Session holds (R15-2 retired Add legend item).
+    await loadEditorLegendRows(page,[['Conflict [#112233]','#abcdef']]);
     await expect.poll(()=>page.evaluate(()=>window.__GBDRAW_APP__.legendEntries.some(e=>e.caption==='Conflict [#112233]'))).toBe(true);
     const ids=await page.evaluate(async()=>{
       const a=window.__GBDRAW_APP__,{getFeatureColorRuleHash}=await import('./js/services/feature-utils.js');

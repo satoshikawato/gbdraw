@@ -6,7 +6,7 @@
 const { test, expect } = require('@playwright/test');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { expectLiveEqualsGenerate, settleLive } = require('./helpers/live-generate-parity.cjs');
-const { open } = require('./helpers/live-generate-parity-steps.cjs');
+const { deleteLegendRow, generate, history, open, renameRow } = require('./helpers/live-generate-parity-steps.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -220,4 +220,83 @@ test('while a palette is queued, Apply to all shows its color now and switching 
   await expect(select).toHaveValue(applied);
   expect(await queued()).toMatchObject({ pending: '', applied: USER_CDS, cds: USER_CDS });
   await expectLiveEqualsGenerate(page, { label: 'switch back to the applied palette, keeping the CDS color' });
+});
+
+// OV-282 (D-26): a palette row's color is read from one function, never from
+// the color the row recorded at the last Generate. After a Default colors
+// edit, a Default colors Reset and a palette switch (Instant Preview), "Use
+// existing color" offers the color the CDS row shows, and a Legend editor
+// rename of the row keeps its features in that color (OV-311).
+test('a palette row offers and keeps the color it shows after palette edits', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await page.evaluate(async () => {
+    (await import('/gbdraw/web/js/state.js')).state.paletteInstantPreviewEnabled.value = true;
+  });
+  const colors = page.locator('summary[aria-label="Colors"]');
+  if ((await colors.locator('..').getAttribute('open')) === null) await colors.click();
+  // The "Use existing" color the scope dialog offers for a CDS feature; Cancel changes nothing.
+  const offered = () => evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.openFeatureEditorFromList(app.filteredFeatures.find((item) => item.locus_tag === 'FL1'), null);
+    await window.Vue.nextTick();
+    await app.updateClickedFeatureColor('#0f0f0f');
+    const color = app.featureStyleScopeDialog.show ? String(app.featureStyleScopeDialog.existingCaptionColor || '').toLowerCase() : 'no dialog';
+    if (app.featureStyleScopeDialog.show) await app.handleFeatureStyleScopeChoice('cancel');
+    app.clickedFeature = null;
+    return color;
+  });
+  const paletteCds = (name) => page.evaluate((palette) => String(
+    window.__GBDRAW_APP__.paletteDefinitions[palette || window.__GBDRAW_APP__.selectedPalette].CDS
+  ).toLowerCase(), name);
+  const expectShown = async (color, label) => {
+    await settleLive(page);
+    await expect.poll(() => legendRowColor(page, 'CDS'), { message: label }).toBe(color);
+    expect.soft(await offered(), label).toBe(color);
+  };
+  const original = await paletteCds();
+  await expectShown(original, 'Generate');
+
+  await evaluateWithRetainedPromise(page, async (color) => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    await window.__GBDRAW_HISTORY__.runUndoable('Change color', async () => {
+      state.activeDrawing().currentColors.value = { ...state.activeDrawing().currentColors.value, CDS: color };
+      await window.Vue.nextTick();
+    });
+  }, USER_CDS);
+  await expectShown(USER_CDS, 'Default colors edit');
+  await generate(page);
+  await expectShown(USER_CDS, 'Generate after the edit');
+
+  await page.locator('h4[aria-label="DEFAULT COLORS"]').locator('..').getByRole('button', { name: 'Reset', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Reset default colors' })
+    .getByRole('button', { name: "Reset to the palette's colors", exact: true }).click();
+  await expectShown(original, 'Default colors Reset');
+
+  const next = await page.evaluate(() => window.__GBDRAW_APP__.paletteNames.find((name) => (
+    name !== window.__GBDRAW_APP__.selectedPalette
+    && window.__GBDRAW_APP__.paletteDefinitions[name].CDS.toLowerCase() !== window.__GBDRAW_APP__.paletteDefinitions[window.__GBDRAW_APP__.selectedPalette].CDS.toLowerCase()
+  )));
+  await page.getByRole('combobox', { name: 'Palette', exact: true }).selectOption(next);
+  await expect.poll(async () => (await facts(page)).palette).toBe(next);
+  const nextCds = await paletteCds(next);
+  await expectShown(nextCds, 'palette switch');
+  // Review L3 of 2b96350f: the Deleted items list shows a deleted palette row
+  // in the color it showed, not the color it recorded at the last Generate.
+  await deleteLegendRow(page, 'CDS');
+  expect.soft(await page.evaluate(() => String([...document.querySelectorAll('ul[aria-labelledby="deleted-legend-items-label"] li')]
+    .find((item) => item.textContent.includes('CDS'))?.querySelector('div[title]')?.getAttribute('title') || 'no Deleted items row')
+    .toLowerCase()), 'the Deleted items swatch of the CDS row').toBe(nextCds);
+  await history(page, 'undo');
+  await expect.poll(() => legendRowColor(page, 'CDS'), { message: 'Undo of the delete' }).toBe(nextCds);
+
+  await renameRow(page, 'CDS', 'Proteins');
+  await settleLive(page);
+  expect.soft(await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const { getFeatureFillElements } = await import('/gbdraw/web/js/app/feature-editor/svg-actions.js');
+    const svgId = app.extractedFeatures.find((feature) => feature.locus_tag === 'FL1')?.svg_id;
+    return String(getFeatureFillElements(document.querySelector('.origin-top svg'), svgId)[0]?.getAttribute('fill') || '').toLowerCase();
+  }), 'a renamed CDS row keeps its features in the color it shows').toBe(nextCds);
+  await expectLiveEqualsGenerate(page, { label: 'rename of a palette row after a palette switch' });
 });

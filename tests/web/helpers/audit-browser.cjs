@@ -107,13 +107,14 @@ const featurePresentation = (page, locusTags) => page.evaluate((tags) => {
 }, locusTags);
 
 const legendCaptions = (page, { source = 'mounted' } = {}) => page.evaluate(async (from) => {
-  const { getVisibleFeatureLegendGroup } = await import('/gbdraw/web/js/services/legend-svg.js');
+  const { getVisibleFeatureLegendGroup, legendRowShown } = await import('/gbdraw/web/js/services/legend-svg.js');
   const app = window.__GBDRAW_APP__;
   const root = from === 'mounted'
     ? app.svgContainer.querySelector('svg')
     : new DOMParser().parseFromString(app.results[app.selectedResultIndex].content, 'image/svg+xml').documentElement;
   const group = getVisibleFeatureLegendGroup(root);
-  const entries = [...(group?.querySelectorAll('g[data-legend-key]') || [])].map((entry) => {
+  // D-15-6 (2): a deleted row stays hidden in the stored Result; list the rows a user sees.
+  const entries = [...(group?.querySelectorAll('g[data-legend-key]') || [])].filter(legendRowShown).map((entry) => {
     const text = entry.querySelector('text');
     const match = String(text?.getAttribute('transform') || '').match(/translate\(\s*([-\d.e]+)[ ,]+([-\d.e]+)/);
     return { caption: text?.textContent || entry.getAttribute('data-legend-key'), x: match ? Number(match[1]) : 0, y: match ? Number(match[2]) : 0 };

@@ -1,11 +1,15 @@
-// S4 (perf 0.14.x, counts not timings): the Legend rows the specific-color
-// rules draw are prepared on a copy of the mounted `#legend` group, not of the
-// whole SVG, and their `apply` serializes the Result once when the Legend
-// changed and not at all when the rule commit leaves it as it is.
+// S4 (perf 0.14.x, counts not timings), on the edit port (U3a A2a): the
+// Legend rows the specific-color rules draw are computed on the listed rows, so
+// their preparation copies no node of the mounted Result, and their `apply`
+// writes the intent only: it neither lays out nor serializes the Result. The
+// rule commit's one show (`projectPaletteAndRules` -> `showEditorIntent` ->
+// preview-runtime `applyEditorOperations`) lays out a changed Legend and
+// serializes the Result once (live-generate-parity-legend.playwright.spec.js,
+// "a rule commit ... serializes the Result once").
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createLegendEntryActions } from '../../gbdraw/web/js/app/legend/entry-actions.js';
-import { SPECIFIC_COLOR_FILE_OWNER } from '../../gbdraw/web/js/services/specific-color-rules.js';
+import { SPECIFIC_COLOR_FILE_OWNER } from '../../gbdraw/web/js/services/legend-svg.js';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
 const ref = (value) => ({ value });
@@ -93,8 +97,11 @@ const setup = () => {
   const state = withDrawings({
     results: ref([{ content: '<svg/>' }]), svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? svg : null) }),
     originalLegendOrder: ref(['CDS', 'Rule A']), originalLegendColors: ref({ CDS: '#111111' }),
-    newLegendCaption: ref(''), newLegendColor: ref('#000000'), originalSvgStroke: ref({ color: null, width: null }),
-    legendEntries: ref([]), dormantLegendEntries: ref([]), deletedLegendEntries: ref([]),
+    originalSvgStroke: ref({ color: null, width: null }),
+    legendEntries: ref([
+      { caption: 'CDS', originalCaption: 'CDS', color: '#111111', featureIds: [] },
+      { caption: 'Rule A', originalCaption: 'Rule A', color: '#222222', featureIds: [] }
+    ]), dormantLegendEntries: ref([]), deletedLegendEntries: ref([]),
     legendColorOverrides: {}, legendStrokeOverrides: {}
   });
   const work = { commits: 0, layouts: 0 };
@@ -106,36 +113,54 @@ const setup = () => {
     work.layouts += 1;
     if (commit) commitActiveResultEdit();
   });
-  return { svg, actions, work };
+  return { svg, state, actions, work };
 };
 const intent = (caption, color) => ({ caption, color });
 
-test('a rule commit that leaves the Legend as it is copies the Legend only and serializes nothing', async () => {
-  const { svg, actions, work } = setup();
+const listed = (state) => state.activeDrawing().legendEntries.value.map(({ caption, color }) => [caption, color]);
+const fills = (svg) => svg.getElementById('legend').querySelectorAll('g[data-legend-key]')
+  .map((entry) => [entry.getAttribute('data-legend-key'), entry.querySelector('path').getAttribute('fill')]);
+
+test('a rule commit that leaves the Legend as it is copies no node and serializes nothing', async () => {
+  const { svg, state, actions, work } = setup();
   cloned = 0;
   const legend = await actions.prepareFileLegendEntries([intent('Rule A', '#222222')], {
     previousFileIntents: [intent('Rule A', '#222222')]
   });
   assert.deepEqual([legend.diff.add, legend.diff.update, legend.diff.remove], [[], [], []]);
-  assert.ok(cloned <= 9, `${cloned} nodes copied for a Legend of 8`);
+  assert.equal(cloned, 0, `${cloned} nodes copied`);
   const before = svg.getElementById('legend');
-  legend.apply();
+  assert.equal(legend.apply(), null, 'no Legend row to show');
   assert.deepEqual(work, { commits: 0, layouts: 0 });
   assert.equal(svg.getElementById('legend'), before);
+  assert.deepEqual(listed(state), [['CDS', '#111111'], ['Rule A', '#222222']]);
 });
 
-test('a rule commit that changes a Legend row lays it out and serializes the Result once', async () => {
-  const { svg, actions, work } = setup();
+test('a rule commit that changes a Legend row writes its intent and leaves the show to the one compile', async () => {
+  const { svg, state, actions, work } = setup();
   cloned = 0;
   const legend = await actions.prepareFileLegendEntries([intent('Rule A', '#333333')], {
     previousFileIntents: [intent('Rule A', '#222222')]
   });
   assert.equal(legend.diff.update.length, 1);
-  assert.ok(cloned <= 9, `${cloned} nodes copied for a Legend of 8`);
-  legend.apply();
-  assert.deepEqual(work, { commits: 1, layouts: 1 });
-  const rows = svg.getElementById('legend').querySelectorAll('g[data-legend-key]');
-  assert.deepEqual(rows.map((entry) => [entry.getAttribute('data-legend-key'), entry.querySelector('path').getAttribute('fill')]),
-    [['CDS', '#111111'], ['Rule A', '#333333']]);
+  assert.equal(cloned, 0, `${cloned} nodes copied`);
+  // A color change is a `legendFills` operation of the rule commit's one show.
+  assert.equal(legend.apply(), null);
+  assert.deepEqual(work, { commits: 0, layouts: 0 });
+  assert.deepEqual(listed(state), [['CDS', '#111111'], ['Rule A', '#333333']]);
+  assert.deepEqual(fills(svg), [['CDS', '#111111'], ['Rule A', '#222222']], 'apply writes no node');
   assert.equal(svg.querySelectorAll('path').length, FEATURES + 2);
+});
+
+test('a rule commit that adds a Legend row returns it for the one show and serializes nothing itself', async () => {
+  const { svg, state, actions, work } = setup();
+  cloned = 0;
+  const legend = await actions.prepareFileLegendEntries([intent('Rule A', '#222222'), intent('Rule B', '#444444')], {
+    previousFileIntents: [intent('Rule A', '#222222')]
+  });
+  assert.equal(cloned, 0, `${cloned} nodes copied`);
+  assert.deepEqual(legend.apply(), { add: [{ caption: 'Rule B', color: '#444444' }], retire: [] });
+  assert.deepEqual(work, { commits: 0, layouts: 0 });
+  assert.deepEqual(listed(state), [['CDS', '#111111'], ['Rule A', '#222222'], ['Rule B', '#444444']]);
+  assert.deepEqual(fills(svg), [['CDS', '#111111'], ['Rule A', '#222222']], 'apply writes no node');
 });

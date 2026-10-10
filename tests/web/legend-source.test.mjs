@@ -4,10 +4,14 @@ import test from 'node:test';
 import { resultCatalogFeatures } from '../../gbdraw/web/js/services/feature-catalog.js';
 import {
   featureDrawnContext,
+  legendRowsShowable,
+  legendRuleOrder,
+  resultLegendRowKeys,
   resultLegendSources,
   sameLegendSources,
   setFeatureVisibilityOverride
 } from '../../gbdraw/web/js/services/feature-visibility.js';
+import { recordRuleMatches, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
 
 // OV-42, OV-43 (Owner decision 2026-10-06, option A): a live edit that changes
 // what a Result's Legend derives from asks for the automatic rerender, so the
@@ -86,4 +90,155 @@ test('a type without a captioned rule needs no match, whatever its rules match',
   assert.notEqual(source, null);
   assert.equal(sameLegendSources(sourcesOf(), sourcesOf([], [uncaptioned])), true, 'an uncaptioned rule draws no row');
   assert.equal(sameLegendSources(sourcesOf([], [uncaptioned]), sourcesOf([], [{ ...uncaptioned, val: '^B$' }])), true);
+});
+
+// U3a 1d (R14-8): a rule change asks for the automatic rerender only when the
+// Legend rows it regroups cannot be shown live. Each row of the displayed
+// Result keeps its features together: it is relabeled (its old row hidden,
+// the new one shown), merged into a row it joins, or recolored. A row that
+// loses part of its features, a row built from parts of others, a merge into
+// a new row, an unknown match, or a row of another batch Result that changes
+// asks Python. `rows` are each Result's features, `[id, type]`; the rules
+// match by locus_tag.
+const batchStateOf = (rows, rules) => {
+  const items = rows.map((features, resultIndex) => {
+    const record = `REC${resultIndex + 1}`;
+    const drawn = features.map(([id, type], index) => ({
+      ...biological(id, type, index * 100), recordKey: record, record_id: record
+    }));
+    return {
+      resultIndex,
+      resultName: `result-${resultIndex}.svg`,
+      recordKeys: [record],
+      biologicalFeatures: drawn,
+      features: features.map(([id]) => ({ ...rendered(id), recordKey: record })),
+      orthogroups: [],
+      annotations: [],
+      comparisonMatches: []
+    };
+  });
+  return {
+    featureCatalog: { value: { schema: 5, items } },
+    results: { value: rows.map((_, index) => ({ name: `result-${index}.svg`, content: '<svg />' })) },
+    selectedResultIndex: { value: 0 },
+    generatedMode: { value: 'circular' },
+    featureOverrides: {},
+    featureVisibilityManualRules: [],
+    manualSpecificRules: rules
+  };
+};
+const tagRule = (pattern, cap, color = '#ff0000') => ({ feat: 'CDS', qual: 'locus_tag', val: `^(${pattern})$`, color, cap });
+// Records each rule's match on the rendered features of every Result, as the
+// rule preparation does with Python's answers.
+const prepareMatches = (state, rules) => {
+  state.results.value.forEach((_, index) => {
+    const features = [...resultCatalogFeatures(state, index).renderedByIdentity.values()];
+    const keys = rules.map(ruleKey);
+    recordRuleMatches(features, keys, (featureIndex) => {
+      const tag = features[featureIndex].locus_tag || features[featureIndex].biological_feature_id;
+      const matched = rules.flatMap((rule, ruleIndex) => (
+        rule.feat === features[featureIndex].type && new RegExp(rule.val).test(tag) ? [ruleIndex] : []
+      ));
+      return { matched, priorities: matched.map(() => 0), declined: [] };
+    });
+  });
+};
+const rowKeysOf = (rows, rules, { prepared = true } = {}) => {
+  const state = batchStateOf(rows, rules);
+  if (prepared) prepareMatches(state, rules);
+  const context = {
+    ...featureDrawnContext(state, { diagramOptions: { selectedFeaturesSet: ['CDS', 'repeat_region'] } }),
+    colorRules: rules
+  };
+  return resultLegendRowKeys(state, context);
+};
+/** @param {string[]} shown */
+const showing = (shown) => (key) => shown.includes(key);
+const ONE = [[['A', 'CDS'], ['R', 'repeat_region'], ['B', 'CDS']]];
+
+// Whether the displayed Result shows the rows the rules regroup (`before`
+// rules to `after` rules), with Python's rule order of the rules before.
+const showable = (rows, before, after, options) => legendRowsShowable(
+  rowKeysOf(rows, before), rowKeysOf(rows, after), { displayed: 0, firstRule: legendRuleOrder(before), ...options }
+);
+
+test('a whole-row relabel, a merge into a shown row and a recolor are shown live', () => {
+  const alpha = [tagRule('A|B', 'alpha')];
+  const beta = [tagRule('A|B', 'beta')];
+  assert.equal(showable(ONE, alpha, beta, { shows: showing(['beta', 'repeat_region']) }), true,
+    'relabel: the old row hidden, the new row shown');
+  assert.equal(showable(ONE, alpha, beta, { shows: showing(['alpha', 'beta', 'repeat_region']) }), false,
+    'relabel while the old row stays shown');
+  assert.equal(showable(ONE, alpha, beta, { shows: showing(['repeat_region']) }), false, 'relabel without the new row');
+  assert.equal(showable(ONE, alpha, beta, {
+    shows: showing(['beta', 'repeat_region']), placed: (key, next) => key === 'alpha' && next === 'beta'
+  }), true, 'relabel whose new row takes the old row\'s place');
+  assert.equal(showable(ONE, alpha, beta, { shows: showing(['beta', 'repeat_region']), placed: () => false }),
+    false, 'relabel whose new row is appended: Python keeps it in the old row\'s place');
+  assert.equal(showable(ONE, alpha, [tagRule('A|B', 'alpha', '#00ff00')], { shows: showing(['alpha', 'repeat_region']) }), true,
+    'recolor');
+  assert.equal(showable(ONE, [tagRule('A', 'alpha'), tagRule('B', 'beta')], [tagRule('A', 'alpha'), tagRule('B', 'alpha')],
+    { shows: showing(['alpha', 'repeat_region']) }), true, 'merge into the shown row alpha, whose rule comes first');
+  // The palette row of a type with features is renamed by rules of its features (P-1).
+  assert.equal(showable(ONE, [], [tagRule('A|B', 'gamma')], { shows: showing(['gamma', 'repeat_region']) }), true,
+    'the CDS row relabeled');
+});
+
+// U3a review H2: Python places a merged row at the first rule of its caption,
+// so a merge into a row whose rule comes later moves that row.
+test('a merge into a row whose rule comes later asks Python; a merge into an "other" row does not', () => {
+  const THREE = [[['A', 'CDS'], ['G', 'CDS'], ['B', 'CDS'], ['D', 'CDS']]];
+  const rules = [tagRule('A', 'alpha'), tagRule('G', 'gamma', '#00ff00'), tagRule('B', 'beta')];
+  const shown = showing(['gamma', 'beta', 'other proteins']);
+  assert.equal(showable(THREE, rules, [tagRule('A', 'beta'), rules[1], rules[2]], { shows: shown }), false,
+    'alpha merged into the later row beta');
+  assert.equal(showable(THREE, rules, [rules[0], rules[1], tagRule('B', 'alpha')], { shows: showing(['alpha', 'gamma', 'other proteins']) }),
+    true, 'beta merged into the earlier row alpha');
+  assert.equal(showable(THREE, rules, [rules[1], rules[2]], { shows: shown }), true,
+    'alpha merged into other proteins (its rule removed)');
+});
+
+// U3a review M1, L1: a History restore shows the bytes History kept. A
+// relabel shows only where the new row took the old row's place; the rows a
+// restore splits are exact when the restored Result shows Python's rows.
+test('a History restore accepts a relabel in place and an exact split', () => {
+  const alpha = [tagRule('A|B', 'alpha')];
+  const beta = [tagRule('A|B', 'beta')];
+  assert.equal(showable(ONE, alpha, beta, { shows: showing(['beta', 'repeat_region']), placed: () => false, restored: () => true }),
+    false, 'a relabel whose new row the restored Result appended');
+  const two = [tagRule('A', 'alpha'), tagRule('B', 'beta')];
+  const merged = [tagRule('A', 'alpha'), tagRule('B', 'alpha')];
+  assert.equal(showable(ONE, merged, two, { shows: showing(['alpha', 'beta', 'repeat_region']) }), false,
+    'a split asks Python');
+  assert.equal(showable(ONE, merged, two, { shows: showing(['alpha', 'beta', 'repeat_region']), restored: () => true }), true,
+    'Undo of a merge: the restored Result shows Python\'s rows of both keys');
+  assert.equal(showable(ONE, merged, two, { shows: showing(['alpha', 'beta', 'repeat_region']), restored: (key) => key !== 'beta' }),
+    false, 'a split whose new row a commit showed before Python drew it');
+  assert.equal(showable(ONE, merged, two, { shows: showing(['alpha', 'repeat_region']), restored: showing(['alpha', 'repeat_region']) }),
+    false, 'a split whose new row the restored Result lacks');
+});
+
+test('a split, a merge into a new row, a swap, an unknown match or a generated caption asks Python', () => {
+  const alpha = [tagRule('A|B', 'alpha')];
+  const all = showing(['alpha', 'beta', 'gamma', 'other proteins', 'repeat_region']);
+  assert.equal(showable(ONE, alpha, [tagRule('A', 'alpha')], { shows: all }), false, 'B leaves the row for other proteins');
+  assert.equal(showable(ONE, [], [tagRule('A', 'gamma')], { shows: all }), false, 'a row built from part of the CDS row');
+  const two = [tagRule('A', 'alpha'), tagRule('B', 'beta')];
+  assert.equal(showable(ONE, two, [tagRule('A', 'gamma'), tagRule('B', 'gamma')], { shows: showing(['gamma', 'repeat_region']) }),
+    false, 'a merge into a new row');
+  assert.equal(showable(ONE, two, [tagRule('A', 'beta'), tagRule('B', 'alpha')], { shows: all }), false, 'a swap of two rows');
+  assert.deepEqual(rowKeysOf(ONE, alpha, { prepared: false }), [null], 'a match not known yet');
+  assert.equal(legendRowsShowable([null], rowKeysOf(ONE, alpha), { displayed: 0, firstRule: () => -1, shows: all }), false);
+  assert.deepEqual(rowKeysOf(ONE, [tagRule('A', 'repeat_region')]), [null], 'Python suffixes a caption of a generated row');
+});
+
+test('another batch Result changes no row live; its colors may change', () => {
+  const BATCH = [...ONE, [['C', 'CDS'], ['D', 'CDS']]];
+  const shows = showing(['beta', 'repeat_region']);
+  assert.equal(showable(BATCH, [tagRule('A|B|C|D', 'alpha')], [tagRule('A|B|C|D', 'beta')], { shows }), false,
+    'Result 2 draws the relabeled row');
+  assert.equal(showable(BATCH, [tagRule('A|B|C|D', 'alpha')], [tagRule('A|B|C|D', 'alpha', '#00ff00')],
+    { shows: showing(['alpha', 'repeat_region']) }), true, 'a recolor');
+  assert.equal(showable(BATCH, [tagRule('A|B', 'alpha')], [tagRule('A|B', 'beta')], { shows }), true,
+    'a row only the displayed Result draws');
 });

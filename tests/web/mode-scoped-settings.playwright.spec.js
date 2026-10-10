@@ -11,7 +11,7 @@ const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { semanticSnapshot, settleLive } = require('./helpers/live-generate-parity.cjs');
-const { download } = require('./helpers/mode-transition.cjs');
+const { download, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -297,13 +297,9 @@ const LINEAR_LEGEND_EDITS = [
     rows: ['CDS']
   },
   {
+    // An editor row comes from a Session (R15-2 retired Add legend item).
     name: 'an added row (F7)',
-    edit: (page) => evaluateWithRetainedPromise(page, async (color) => {
-      const app = window.__GBDRAW_APP__;
-      app.newLegendCaption = 'Extra';
-      app.newLegendColor = color;
-      await app.addNewLegendEntry();
-    }, COLOR),
+    edit: (page) => loadEditorLegendRows(page, [['Extra', COLOR]]),
     rows: ['CDS', 'repeat_region', 'Extra']
   }
 ];

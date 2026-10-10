@@ -1,11 +1,8 @@
 // @ts-check
+/** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
-  getFeatureElementIndex,
-  normalizeFeatureIdentity
-} from '../services/feature-dom.js';
-import {
-  applyEditorOperationsToMountedSvg,
+  reconcileMountedResult,
   getCommittedSvgResultMetadata,
   getCommittedSvgResultRuntimeIdentity,
   markCommittedSvgResultMounted,
@@ -28,6 +25,7 @@ import {
  * @property {readonly string[]} [requiredLabelFeatureIds]
  * @property {readonly string[]} [optionalLabelFeatureIds]
  * @property {{ featureIds: readonly string[], report: (error: unknown) => void }} [reportedLabelBinding]
+ * @property {import('./result-paint-record.js').EditorPaintState} [drawnPaint] The editor state a label rerender drew from.
  */
 
 /**
@@ -163,23 +161,6 @@ import {
  * @property {() => unknown} restore The artifact owner's restore.
  * @property {string} [phase]
  */
-
-const normalizeVisibilityMode = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === 'suppress') return 'exclude_matching';
-  return ['on', 'off', 'exclude_matching'].includes(normalized) ? normalized : 'default';
-};
-
-const normalizeChanges = (changes) => {
-  if (!Array.isArray(changes)) return [];
-  const byFeatureId = new Map();
-  changes.forEach((change) => {
-    const featureId = normalizeFeatureIdentity(change?.featureId ?? change?.svgId ?? change?.id);
-    if (!featureId) return;
-    byFeatureId.set(featureId, { ...change, featureId });
-  });
-  return Array.from(byFeatureId.values());
-};
 
 const REQUIRED_BINDING_FLAGS = Object.freeze([
   'rootAdopted',
@@ -1048,48 +1029,8 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     bindingOptions
   );
 
-  const buildFeatureIndex = (runtime) => {
-    const indexed = runtime?.svg ? getFeatureElementIndex(runtime.svg) : new Map();
-    runtime.indexes.features = indexed;
-    return indexed;
-  };
-
-  const getFeatureElements = (featureId) => {
-    const normalizedId = normalizeFeatureIdentity(featureId);
-    const runtime = activeRuntime || ensureRuntimeForCurrentSvg();
-    if (!runtime?.svg || !normalizedId) return [];
-
-    const featureIndex = runtime.indexes.features || buildFeatureIndex(runtime);
-    const indexed = featureIndex.get(normalizedId);
-    if (indexed?.length) return indexed;
-
-    const byId = runtime.svg.getElementById?.(normalizedId);
-    return byId ? [byId] : [];
-  };
-
-  const applyFeatureVisibilityChanges = (changes, { reason = 'feature-visibility' } = {}) => {
-    const normalized = normalizeChanges(changes);
-    if (normalized.length === 0) return false;
-
-    let updated = 0;
-    normalized.forEach((change) => {
-      const mode = normalizeVisibilityMode(change?.mode);
-      getFeatureElements(change.featureId).forEach((element) => {
-        if (mode === 'off') {
-          if (element.getAttribute?.('display') === 'none') return;
-          element.setAttribute('display', 'none');
-        } else {
-          if (element.getAttribute?.('display') === null) return;
-          element.removeAttribute('display');
-        }
-        updated += 1;
-      });
-    });
-
-    if (updated === 0) return false;
-    commitActiveResultEdit(reason);
-    return true;
-  };
+  // The readiness of the Result being bound, while its binding runs.
+  const pendingReadiness = () => activeExpectation?.promise ?? null;
 
   // R1: the one commit for an editor's edit of the displayed Result's SVG.
   // Serializes the mounted root into its Result at once, so no edit waits for
@@ -1124,19 +1065,22 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return true;
   };
 
-  // D-07: show the canonical editor operations on the displayed Result with
-  // the executor that Generate admission uses, then persist the Result once.
+  // D-07: reconcile the displayed Result with the canonical editor operations
+  // through the executor that Generate admission uses, then persist the Result
+  // once when the reconcile changed it: a display that changes nothing keeps
+  // the Result's bytes (OV-345). `domains` are the domains returned to
+  // Python's values first; `afterApply` learns whether the reconcile changed
+  // the Legend's rows.
   /**
-   * @param {Record<string, any> | null | undefined} operations
-   * @param {{ afterApply?: ((svg: SVGSVGElement) => void) | null }} [options]
+   * @param {SvgMutationOperations | null | undefined} operations
+   * @param {{ domains?: readonly string[], afterApply?: ((svg: SVGSVGElement, legendChanged: boolean) => void) | null }} [options]
    */
-  const applyEditorOperations = (operations, { afterApply = null } = {}) => {
+  const applyEditorOperations = (operations, { domains = [], afterApply = null } = {}) => {
     const runtime = activeRuntime || ensureRuntimeForCurrentSvg();
-    if (!runtime?.svg) return false;
-    if (operations) {
-      applyEditorOperationsToMountedSvg(runtime.svg, operations, { resultIndex: runtime.resultIndex });
-    }
-    afterApply?.(runtime.svg);
+    if (!runtime?.svg || !operations) return false;
+    const { changed, legendChanged } = reconcileMountedResult(runtime.svg, operations, { resultIndex: runtime.resultIndex, domains });
+    if (!changed) return false;
+    afterApply?.(runtime.svg, legendChanged);
     invalidatePreviewIndexes('editor-intent-display');
     return commitActiveResultEdit('editor-intent-display');
   };
@@ -1144,7 +1088,6 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
   return {
     acceptReadyReceipt,
     applyEditorOperations,
-    applyFeatureVisibilityChanges,
     bindMountedResult,
     clearActiveRuntime,
     commitActiveResultEdit,
@@ -1152,13 +1095,13 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     configureMountedResultBinder,
     createMountedResultContext,
     getActiveRuntime,
-    getFeatureElements,
     getResultIdentity: resultRuntimeIdentity,
     invalidateReadinessExpectation,
     invalidateReadyReceipt,
     invalidatePreviewIndexes,
     isActiveResultReady,
     mountResultSvg,
+    pendingReadiness,
     presentSelectedResult,
     registerReadinessExpectation,
     restorePreviousSelectedResult,

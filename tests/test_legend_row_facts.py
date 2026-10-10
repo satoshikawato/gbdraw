@@ -6,10 +6,14 @@ name that the draft did not draw. A key in neither is stale.
 
 from __future__ import annotations
 
+import inspect
+import json
 import re
 from pathlib import Path
+from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 from Bio.Seq import Seq
 from Bio.SeqFeature import SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
@@ -29,6 +33,7 @@ from gbdraw.api import (
 )
 from gbdraw.api.request_render import render_request
 from gbdraw.legend.row_facts import collect_legend_row_facts
+from gbdraw.legend.table import _generated_legend_fills
 
 _COLOR_COLUMNS = ["feature_type", "qualifier_key", "value", "color", "caption"]
 _VISIBILITY_COLUMNS = ["record_id", "feature_type", "qualifier", "value", "action"]
@@ -249,3 +254,43 @@ def test_a_multi_record_canvas_with_a_hidden_legend_still_reports_its_facts(tmp_
     [(facts, svg_keys)] = _render(request, tmp_path)
     assert svg_keys == [] and facts["drawn"] == []
     assert {"CDS", "repeat_region", "GC content"} <= set(facts["suppressed"])
+
+
+GENERATED_ROWS = json.loads(
+    (Path(__file__).parent / "fixtures" / "legend_generated_rows.json").read_text(encoding="utf-8")
+)["cases"]
+
+
+@pytest.mark.parametrize("case", GENERATED_ROWS, ids=[case["name"] for case in GENERATED_ROWS])
+def test_generated_legend_rows_are_the_rows_the_web_reads_from_their_keys(case):
+    """The Web app reads these keys as Python's own rows (OV-307) and their palette keys (OV-309)."""
+    def track(fills):
+        return SimpleNamespace(dinucleotide=case["dinucleotide"], high_fill_color=fills[0], low_fill_color=fills[1])
+
+    default_colors = pd.DataFrame(
+        [{"feature_type": key, "color": color} for key, color in (
+            ("CDS", "#54bcf8"), ("tRNA", "#e8b441"), ("repeat_region", "#d3d3d3"), ("default", "#d3d3d3")
+        )]
+    )
+    fills = _generated_legend_fills(
+        {key: [tuple(row) for row in rows] for key, rows in case["feature_specific_colors"].items()},
+        case["features_present"],
+        default_colors,
+        used_color_rules={tuple(row) for row in case["used_color_rules"]},
+        default_used_features=set(case["default_used_features"]),
+        gc_config=track(case["gc"]),
+        skew_config=track(case["skew"]),
+        depth_config=SimpleNamespace(fill_color=case["depth"]),
+        show_gc=case["show_gc"],
+        show_skew=case["show_skew"],
+        show_depth=case["show_depth"],
+    )
+    assert list(fills) == [key for key, _ in case["rows"]]
+
+
+def test_generated_legend_rows_take_no_input_the_web_pin_lacks():
+    """A new kind of generated row arrives as a new input; add it to the fixture and the Web reader."""
+    assert list(inspect.signature(_generated_legend_fills).parameters) == [
+        "feature_specific_colors", "features_present", "default_colors", "used_color_rules",
+        "default_used_features", "gc_config", "skew_config", "depth_config", "show_gc", "show_skew", "show_depth",
+    ]

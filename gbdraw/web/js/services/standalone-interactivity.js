@@ -305,11 +305,6 @@ const normalizeStandaloneContext = (options = {}) => ({
     options.orthogroupDescriptionOverrides && typeof options.orthogroupDescriptionOverrides === 'object'
       ? options.orthogroupDescriptionOverrides
       : {},
-  legendEntries: Array.isArray(options.legendEntries) ? options.legendEntries : [],
-  currentColors:
-    options.currentColors && typeof options.currentColors === 'object'
-      ? options.currentColors
-      : {},
   sequenceSources: Array.isArray(options.sequenceSources) ? options.sequenceSources : []
 });
 
@@ -1012,7 +1007,9 @@ const getRenderedFeatureFill = (entry) => {
   return '';
 };
 
-const collectLegendCaptionsByColor = (svg, context) => {
+// The captions of the exported SVG's Legend by swatch fill: the colors the
+// exported Result shows, never a Legend row's recorded color (OV-282).
+const collectLegendCaptionsByColor = (svg) => {
   const captionsByColor = new Map();
   const addCaption = (color, caption) => {
     const key = normalizeColorKey(color);
@@ -1021,14 +1018,6 @@ const collectLegendCaptionsByColor = (svg, context) => {
       captionsByColor.set(key, text);
     }
   };
-
-  const legendEntries = Array.isArray(context?.legendEntries) ? context.legendEntries : [];
-  legendEntries.forEach((entry) => addCaption(entry?.color, entry?.caption || entry?.originalCaption));
-
-  const paletteColors = context?.currentColors && typeof context.currentColors === 'object'
-    ? context.currentColors
-    : {};
-  Object.entries(paletteColors).forEach(([caption, color]) => addCaption(color, caption));
 
   if (!svg) return captionsByColor;
   const legendRoots = Array.from(svg.querySelectorAll('#legend, g[id*="legend"], [data-gbdraw-sticky-legend]'));
@@ -1203,7 +1192,7 @@ const buildStandaloneFeaturePayloads = (svg, options = {}) => {
   const normalizedPopupMode = normalizeStandalonePopupMode(context.popupMode);
   const resolveSourceFeature = createStandaloneBiologicalFeatureResolver(context.features);
   const payloads = [];
-  const captionsByColor = collectLegendCaptionsByColor(svg, context);
+  const captionsByColor = collectLegendCaptionsByColor(svg);
   renderedEntries.forEach((entry, svgId) => {
     const feature = resolveSourceFeature({
       stableSvgId: entry.stableId,

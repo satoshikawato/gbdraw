@@ -239,9 +239,7 @@ export const createDefaultEditorDraftState = () => ({
   featurePanelTab: 'colors',
   newColorFeat: 'gene',
   newColorVal: '#d3d3d3',
-  newFeatureToAdd: 'mobile_element',
-  newLegendCaption: '',
-  newLegendColor: '#808080'
+  newFeatureToAdd: 'mobile_element'
 });
 
 const defaultEditorDraftState = createDefaultEditorDraftState();
@@ -502,6 +500,9 @@ const legendRenameDialog = reactive({
   currentColor: '',
   siblingCount: 0,
   mergeAvailable: true, // false unless both rows draw features of one same type
+  // R15-3 (OV-285): the Python key of the deleted row the new caption names;
+  // '' when the target is listed. Its Merge restores that row first.
+  deletedTargetKey: /** @type {PythonLegendKey | ''} */ (''),
   pendingRequest: null
 });
 
@@ -546,8 +547,6 @@ const isResizing = ref(false);
 // Legend Editor state
 const originalLegendOrder = ref([]); // Store original order from generation
 const originalLegendColors = ref({}); // Store original colors: { caption: color }
-const newLegendCaption = ref(defaultEditorDraftState.newLegendCaption);
-const newLegendColor = ref(defaultEditorDraftState.newLegendColor);
 
 // The Legend editor rows whose stroke options are shown, by caption: app-level
 // view state, which History and the Session do not hold (OV-157).
@@ -668,6 +667,9 @@ const newPriorityRule = reactive(createDefaultPriorityRule());
 
 const newFeatureToAdd = ref(defaultEditorDraftState.newFeatureToAdd);
 
+// The committed metadata of the displayed Result (svg-result-ingestion.js).
+const displayedResultMetadata = () => getCommittedSvgResultMetadata(toRaw(results.value[selectedResultIndex.value]));
+
 // The Features drawer and Search features list the displayed Result's catalog
 // features (`listFeatureRows`, R-5): a hidden feature stays listed so it can be
 // shown again. The selected feature types are those of the request that drew
@@ -680,11 +682,17 @@ const newFeatureToAdd = ref(defaultEditorDraftState.newFeatureToAdd);
 // content (an editor edit, R1) keeps both, so it does not list the features
 // again. The rule matches the drawn state reads are recorded while
 // `ruleMatchingPending` holds, so the list follows its fall.
-const listedResults = computed((previous) => {
+/**
+ * What the list reads of the displayed Result's committed metadata.
+ * @typedef {{ selectedFeatureTypes?: string[] | null, renderedFeatureIdentities?: { renderedIds?: unknown } | null }} ListedResultMetadata
+ */
+/** @typedef {{ list: readonly { name?: unknown }[], names: unknown[], metadata: ListedResultMetadata | null }} ListedResults */
+const listedResults = computed((/** @type {ListedResults | undefined} */ previous) => {
+  /** @type {readonly { name?: unknown }[]} */
   const list = results.value;
   const names = list.map((result) => result?.name);
-  const metadata = getCommittedSvgResultMetadata(toRaw(list[selectedResultIndex.value]));
-  return previous?.metadata === metadata && previous.names.length === names.length
+  const metadata = displayedResultMetadata();
+  return previous !== undefined && previous.metadata === metadata && previous.names.length === names.length
     && previous.names.every((name, index) => name === names[index])
     ? previous : { list, names, metadata };
 });
@@ -826,6 +834,32 @@ export const sessionOperationAvailability = (
 
 /** @typedef {'circular' | 'linear'} DiagramMode */
 
+/** @import { PythonLegendKey, RenderedFeatureId } from './services/legend-svg.js' */
+/** @typedef {string & { readonly __brand: 'LegendCaption' }} LegendCaption The caption a Legend row shows, which a rename writes. */
+/**
+ * The color a Legend row records, never its identity (OV-288): one the user
+ * set (a Legend color, an editor row's color, the color of a rule's row), or,
+ * for a row the palette colors, the swatch the displayed Result showed when
+ * its Legend list was last extracted (a Generate, a Result display, Settings
+ * Reset). That can be a draft palette color, not Python's swatch, and a
+ * palette, Default colors or Reset edit does not refresh it by itself. A row
+ * shows `displayedLegendRowColors` (app/candidate-render.js; OV-282, D-26).
+ * @typedef {string & { readonly __brand: 'RecordedLegendColor' }} RecordedLegendColor
+ */
+/**
+ * A row of a drawing's Legend list. Its identity is Python's key
+ * (`originalCaption`; an editor row's own caption); the caption and the
+ * recorded color are display values their writers own (rename, Legend color),
+ * never a row's identity or the features it reaches (OV-288).
+ * @typedef {object} LegendEntry
+ * @property {LegendCaption} caption
+ * @property {PythonLegendKey} originalCaption
+ * @property {RecordedLegendColor} color
+ * @property {number} xPos
+ * @property {number} yPos
+ * @property {RenderedFeatureId[]} featureIds The features the row lists (older Sessions); empty: Python's row decides.
+ */
+
 // The drawing of a diagram mode: its settings, its editor edits, and the
 // values derived from them, under their former `state` names and kinds (a ref
 // stays a ref). Only the drawing holds them: a service reads them from the
@@ -903,7 +937,7 @@ const createDrawingState = (drawingMode) => {
     featureVisibilityManualRules,
     labelTextBulkOverrides: reactive({}), // { sourceText: text }
     canonicalLabelOverrideRows: ref([]),
-    legendEntries: ref([]), // [{caption, originalCaption, color, yPos, featureIds}]
+    legendEntries: ref([]), // LegendEntry[]; typed with its writers (OV-288 STATUS)
     deletedLegendEntries: ref([]),
     // OV-120: renamed rows the last Generate did not draw (GC off, Show Depth
     // off); their renames apply again when a Generate draws the row.
@@ -963,6 +997,7 @@ export const state = {
   sessionImportRollbackInProgress,
   results,
   selectedResultIndex,
+  displayedResultMetadata,
   failedGeneratePreservedResult,
   generationFailureRecovery,
   resultPanelTab,
@@ -1101,8 +1136,6 @@ export const state = {
   isResizing,
   originalLegendOrder,
   originalLegendColors,
-  newLegendCaption,
-  newLegendColor,
   legendStrokeOptionsOpen,
   originalSvgStroke,
   legendDragging,

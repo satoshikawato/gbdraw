@@ -1,7 +1,7 @@
 // @ts-check
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { state, sessionOperationAvailability, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
-import { normalizeDefaultColor, normalizePaletteColors, resolveColorToHex } from '../utils/color-utils.js';
+import { normalizeDefaultColor, normalizeOptionalHexColor, normalizePaletteColors, resolveColorToHex } from '../utils/color-utils.js';
 import {
   captureRightDrawerState,
   resetRightDrawerState,
@@ -123,8 +123,8 @@ import {
   admitCurrentSessionResults,
   admitLegacyImportedResults,
   createCurrentSessionResultSource,
-  createLegacyNormalizationSvgMutationPlan,
   createLegacyImportResultSource,
+  createSavedResultPlan,
   isCommittedSvgResult
 } from './svg-result-ingestion.js';
 import {
@@ -282,6 +282,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { ActiveWebConfig } from './session-active-config-contract.js' */
 /** @import { CanonicalRenderEnvelope, CanonicalRenderRequest } from './session-request.js' */
 /** @import { FeatureCatalog } from './feature-catalog.js' */
+/** @import { LegacyResultNormalization, SavedResultEdits } from './svg-result-ingestion.js' */
 /** @import { SessionResourceSource } from './session-resources.js' */
 /** @import { ArtifactSlot } from './artifact-slot.js' */
 /** @import { FeatureOverrideDraft } from './feature-placement.js' */
@@ -368,23 +369,18 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 
 /**
  * What an older Session's Result needs from the Session: the committed legend
- * and title sides with the saved user offsets, and the extracted features with
- * the two saved stroke override maps.
+ * and title sides with the saved user offsets. Its saved bytes already show
+ * its strokes.
  * @typedef {object} LegacyResultSvgData
  * @property {{ legendSide: string, titleSide: string, userDeltas: Record<string, number[] | null> }} composition
- * @property {{
- *   features: Record<string, any>[],
- *   legendStrokeOverrides: Record<string, any>,
- *   featureStrokeOverrides: Record<string, any>
- * }} strokes
  */
 
 /**
  * The composition root's transform of an older Session's Result (R13 port):
- * it gives a Result without composition metadata the legacy composition and
- * projects the saved strokes. Returns whether the SVG changed.
- * `appliesToContent` tells from a Result's text whether it lacks composition
- * metadata, so a Session 40+ Result is parsed only when it does (OV-273).
+ * it gives a Result without composition metadata the legacy composition.
+ * Returns whether the SVG changed. `appliesToContent` tells from a Result's
+ * text whether it lacks composition metadata, so a Session 40+ Result is
+ * parsed only when it does (OV-273).
  * @typedef {((svg: Element, data: LegacyResultSvgData) => boolean)
  *   & { appliesToContent: (content: unknown) => boolean }} LegacyResultSvgTransform
  */
@@ -825,17 +821,6 @@ const normalizeHexColor = (value, fallback = '#4e79a7') => {
     return `#${shortMatch[1].split('').map((char) => char + char).join('').toLowerCase()}`;
   }
   return /^#[0-9a-fA-F]{6}$/.test(color) ? color.toLowerCase() : fallback;
-};
-
-const normalizeOptionalHexColor = (value) => {
-  if (value === null || value === undefined || value === '') return null;
-  const resolved = resolveColorToHex(String(value).trim());
-  const color = String(resolved || '').trim();
-  const shortMatch = color.match(/^#([0-9a-fA-F]{3})$/);
-  if (shortMatch) {
-    return `#${shortMatch[1].split('').map((char) => char + char).join('').toLowerCase()}`;
-  }
-  return /^#[0-9a-fA-F]{6}$/.test(color) ? color.toLowerCase() : null;
 };
 
 // A stored entry color is read with the Default colors domain (D-41). An entry
@@ -2237,6 +2222,36 @@ const restoreLoadedSetSequenceSources = async ({
   }
 };
 
+// The stroke and color edits the saved Results of `mode` show (its Session 46
+// slice, else the flat draft) and the values the Session kept as Python's
+// (`setEditorState`: the set's own editor state). Load records Python's values
+// from them on a Result of a Session that saved no such records.
+/**
+ * @param {Record<string, any>} data
+ * @param {'circular' | 'linear'} mode
+ * @param {unknown} setEditorState
+ * @param {number} sessionVersion The version of the Session `data`.
+ * @returns {SavedResultEdits}
+ */
+export const savedResultEdits = (data, mode, setEditorState, sessionVersion) => {
+  const slice = sessionVersion >= MODE_SCOPED_SESSION_VERSION
+    ? data.modes?.[mode]
+    : { editorState: data.editorState, features: data.features };
+  const edits = normalizeEditorStateData(isPlainObject(slice?.editorState) ? slice.editorState : {});
+  const kept = normalizeEditorStateData(isPlainObject(setEditorState) ? /** @type {Record<string, any>} */ (setEditorState) : {});
+  return {
+    featureColorOverrides: cloneJsonObject(slice?.features?.featureColorOverrides),
+    featureStrokeOverrides: edits.featureStrokes.overrides,
+    legendEntries: [...edits.legend.entries, ...edits.legend.dormantEntries],
+    legendColorOverrides: edits.legend.colorOverrides,
+    legendStrokeOverrides: edits.legend.strokeOverrides,
+    originalLegendColors: kept.legend.originalColors,
+    originalLegendOrder: kept.legend.originalOrder,
+    mode,
+    sessionVersion
+  };
+};
+
 // E1: the Results of one saved Result set of a current Session (the top-level
 // set or `otherModeResult`), admitted with that set's catalog in its mode.
 /**
@@ -2245,22 +2260,15 @@ const restoreLoadedSetSequenceSources = async ({
  * transform of a pre-40 Result; every other Result is admitted as written.
  * @param {Record<string, any>[]} logicalResults
  * @param {{ featureCatalog: FeatureCatalog, mode: 'circular' | 'linear', selectedFeatureTypes: readonly string[] | null | undefined,
- *   legacy?: { transform: (svg: Element) => unknown, applies?: (content: unknown) => boolean } | null }} set
+ *   savedEdits: SavedResultEdits | null, legacy?: LegacyResultNormalization | null }} set
  */
-const admitLoadedSetResults = (logicalResults, { featureCatalog, mode, selectedFeatureTypes, legacy = null }) => (
-  admitCurrentSessionResults(
-    createCurrentSessionResultSource(
-      logicalResults,
-      admitFeatureCatalog(featureCatalog, logicalResults, { adopt: true, mode })
-    ),
-    {
-      mutationPlan: createLegacyNormalizationSvgMutationPlan(logicalResults.map((result) => (
-        legacy?.applies?.(result?.content) ? legacy.transform : null
-      ))),
-      selectedFeatureTypes
-    }
-  )
-);
+const admitLoadedSetResults = (logicalResults, { featureCatalog, mode, selectedFeatureTypes, savedEdits, legacy = null }) => {
+  const catalogAdmission = admitFeatureCatalog(featureCatalog, logicalResults, { adopt: true, mode });
+  return admitCurrentSessionResults(
+    createCurrentSessionResultSource(logicalResults, catalogAdmission),
+    { mutationPlan: createSavedResultPlan(logicalResults, catalogAdmission, savedEdits, legacy), selectedFeatureTypes }
+  );
+};
 
 // E1: one saved Result set of a current Session (the top-level set or
 // `otherModeResult`) as the artifact slot of its mode, built off-line during
@@ -2271,12 +2279,13 @@ const admitLoadedSetResults = (logicalResults, { featureCatalog, mode, selectedF
  * @param {{ renderRequest: Record<string, any>, results: Record<string, any>[], editorState?: unknown,
  *   ui?: unknown, runMetadata?: unknown }} set
  * @param {{ featureCatalog: FeatureCatalog, admittedResults?: Record<string, any>[] | null,
- *   restoredSequenceSources: Record<string, any>[], resources: Record<string, any>, resourceTable: any,
- *   webFiles: any, retainedBytes: number, droppedLegendColors: { list: string, caption: string }[] }} options
+ *   savedEdits?: SavedResultEdits | null, restoredSequenceSources: Record<string, any>[], resources: Record<string, any>,
+ *   resourceTable: any, webFiles: any, retainedBytes: number,
+ *   droppedLegendColors: { list: string, caption: string }[] }} options
  */
 const buildLoadedArtifactSlot = (set, {
-  featureCatalog, admittedResults = null, restoredSequenceSources, resources, resourceTable, webFiles, retainedBytes,
-  droppedLegendColors
+  featureCatalog, admittedResults = null, savedEdits = null, restoredSequenceSources, resources, resourceTable, webFiles,
+  retainedBytes, droppedLegendColors
 }) => {
   const mode = set.renderRequest.mode === 'linear' ? 'linear' : 'circular';
   const results = admittedResults || admitLoadedSetResults(normalizeLogicalResults(set.results.map(
@@ -2284,7 +2293,7 @@ const buildLoadedArtifactSlot = (set, {
       name: result?.name || `Result ${index + 1}`,
       content: result?.content || ''
     })
-  )), { featureCatalog, mode, selectedFeatureTypes: set.renderRequest.diagramOptions?.selectedFeaturesSet });
+  )), { featureCatalog, mode, selectedFeatureTypes: set.renderRequest.diagramOptions?.selectedFeaturesSet, savedEdits });
   const features = featureStateFromCatalog(featureCatalog, { mode });
   const editorState = normalizeEditorStateData(
     isPlainObject(set.editorState) ? /** @type {Record<string, any>} */ (set.editorState) : {},
@@ -3992,8 +4001,6 @@ const captureSessionImportTransientState = () => ({
   newColorFeat: state.newColorFeat.value,
   newColorVal: state.newColorVal.value,
   newFeatureToAdd: state.newFeatureToAdd.value,
-  newLegendCaption: state.newLegendCaption.value,
-  newLegendColor: state.newLegendColor.value,
   featureSearch: state.featureSearch.value,
   labelSearch: state.labelSearch.value,
   selectedFeatureIds: Array.from(state.selectedFeatureIds.value || []),
@@ -4049,8 +4056,6 @@ const restoreSessionImportTransientState = (snapshot) => {
   state.newColorFeat.value = snapshot.newColorFeat;
   state.newColorVal.value = snapshot.newColorVal;
   state.newFeatureToAdd.value = snapshot.newFeatureToAdd;
-  state.newLegendCaption.value = snapshot.newLegendCaption;
-  state.newLegendColor.value = snapshot.newLegendColor;
   state.featureSearch.value = snapshot.featureSearch;
   state.labelSearch.value = snapshot.labelSearch;
   state.selectedFeatureIds.value = new Set(snapshot.selectedFeatureIds);
@@ -5126,7 +5131,6 @@ const importSessionDocument = async (e, options = {}) => {
     });
 
     recordSessionLifecycleEvent('session-candidate-sequences-end');
-    const restoredFeatureState = currentCatalogFeatureState || features || {};
     // A saved Result is laid out at its committed legend and title sides.
     const committedLayout = canonicalProjection?.layoutPreferences
       ? resolveActiveLayoutPreference(
@@ -5158,11 +5162,6 @@ const importSessionDocument = async (e, options = {}) => {
               ? [ui.plotTitleUserOffset.x, ui.plotTitleUserOffset.y]
               : null
           }
-        },
-        strokes: {
-          features: restoredFeatureState.extractedFeatures || [],
-          legendStrokeOverrides: restoredEditorState?.legend?.strokeOverrides || {},
-          featureStrokeOverrides: restoredEditorState?.featureStrokes?.overrides || {}
         }
       });
       return legendGroupsChanged || legacyResultChanged;
@@ -5178,7 +5177,10 @@ const importSessionDocument = async (e, options = {}) => {
     const committedImportedResults = currentSchemaSession && validatedSessionCatalog
       ? admitLoadedSetResults(logicalImportedResults, {
           featureCatalog: validatedSessionCatalog, mode: committedMode, selectedFeatureTypes,
-          legacy: { transform: transformRestoredSessionSvg, applies: transformLegacyResultSvg?.appliesToContent }
+          savedEdits: savedResultEdits(data, committedMode === 'linear' ? 'linear' : 'circular', data.editorState, sourceSessionVersion),
+          legacy: transformLegacyResultSvg
+            ? { transform: transformRestoredSessionSvg, applies: transformLegacyResultSvg.appliesToContent }
+            : null
         })
       : admitLegacyImportedResults(
           createLegacyImportResultSource(logicalImportedResults),
@@ -5216,6 +5218,7 @@ const importSessionDocument = async (e, options = {}) => {
       ? buildLoadedArtifactSlot(otherModeResult, {
           ...slotOptions,
           featureCatalog: otherModeCatalogAdmitted,
+          savedEdits: savedResultEdits(data, otherSetMode, otherModeResult.editorState, sourceSessionVersion),
           restoredSequenceSources: (await restoreLoadedSetSequenceSources({
             ...setSequenceSourceOptions,
             mode: otherSetMode,
@@ -5835,9 +5838,10 @@ export const exportSession = (titleOverride = null, options = {}) => {
     });
     const modes = { circular: sliceOf('circular'), linear: sliceOf('linear') };
     SLICE_MODES.forEach((mode) => validateModeSliceFields(modes[mode]));
-    const { artifact, otherArtifact } = chooseSessionArtifacts(
+    const readArtifacts = () => chooseSessionArtifacts(
       /** @type {{ readOtherModeArtifact?: () => Readonly<ArtifactSlot> | null }} */ (options).readOtherModeArtifact?.() ?? null
     );
+    let { artifact, otherArtifact } = readArtifacts();
     if (!artifact.committedCanonicalSession
       && hasBiologicalSessionInputs({ ...state.files, linearSeqs: state.linearSeqs })) {
       assertActiveModeInputs();
@@ -5865,6 +5869,9 @@ export const exportSession = (titleOverride = null, options = {}) => {
     };
     const prepared = await options.beforeExport?.({ draftRequest: !artifact.committedCanonicalSession });
     if (!isCurrent()) return { status: 'canceled' };
+    // `beforeExport` may show edits on the displayed Result, which commits
+    // its content: the Results are read as they are now.
+    ({ artifact, otherArtifact } = readArtifacts());
     const result = await exportSessionDocument(title, {
       ...options, ...prepared, drawing, modes, savedUi, isCurrent, artifact, otherArtifact
     });

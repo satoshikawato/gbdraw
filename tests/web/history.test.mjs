@@ -1496,7 +1496,6 @@ const createLayoutPreferences = () => ({
   };
   state.legendEntries = Object.create({ value: [{ caption: 'tRNA', color: '#e8b441' }] });
   state.deletedLegendEntries = Object.create({ value: [] });
-  const entryOwners = [{ target: 'feature_legend', entries: [{ caption: 'tRNA', owner: '' }] }];
   const snapshots = createHistorySnapshotService({
     state: withDrawings(state),
     fileStore,
@@ -1518,14 +1517,14 @@ const createLayoutPreferences = () => ({
       throw new Error('Results must not be serialized for intent');
     }
   });
-  // R13: the Legend and composition owners are created after the snapshot
-  // service and register their captures once they exist. Until then the
-  // intent holds neither capture, as a service without those owners.
+  // R13: the composition owner is created after the snapshot service and
+  // registers its capture once it exists. Until then the intent holds no
+  // capture, as a service without that owner. U3b: the Legend list is intent,
+  // so History captures no Legend row owners.
   const unregisteredIntent = await snapshots.buildHistoryIntent();
-  assert.equal(Object.hasOwn(unregisteredIntent.modes.circular.editorState.legend, 'entryOwners'), false);
   assert.equal(Object.hasOwn(unregisteredIntent.ui, 'compositionUserDeltas'), false);
   assert.throws(() => snapshots.registerCapture('legendOrder', () => []), /Unknown History intent capture: legendOrder/);
-  snapshots.registerCapture('legend', () => entryOwners);
+  assert.throws(() => snapshots.registerCapture('legend', () => []), /Unknown History intent capture: legend/);
   const compositionRecord = { 'result-2': { primary: [[4, 5]] } };
   snapshots.registerCapture('composition', () => compositionRecord);
   const intent = await snapshots.buildHistoryIntent();
@@ -1538,9 +1537,7 @@ const createLayoutPreferences = () => ({
   state.legendEntries.value = [{ caption: 'tRNA', color: '#c026d3' }];
   await snapshots.applyHistoryIntent(intent, { changes: [{ path: ['modes', 'circular', 'editorState'] }] });
   assert.deepEqual(state.legendEntries.value, [{ caption: 'tRNA', color: '#e8b441' }]);
-  entryOwners[0].entries[0].owner = 'specific-color-file';
-  assert.equal(intent.modes.circular.editorState.legend.entryOwners[0].entries[0].owner, '');
-  assert.equal(state.legendEntries.value.some(entry => Object.hasOwn(entry, 'entryOwners')), false);
+  assert.equal(Object.hasOwn(intent.modes.circular.editorState.legend, 'entryOwners'), false);
   assert.equal(forbiddenArtifactBuilds, 0);
   assert.equal(Object.prototype.hasOwnProperty.call(intent, 'results'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(intent, 'runState'), false);
@@ -1722,8 +1719,6 @@ const createLayoutPreferences = () => ({
     newColorFeat: ref('gene'),
     newColorVal: ref('#123456'),
     newFeatureToAdd: ref('mobile_element'),
-    newLegendCaption: ref('Draft legend'),
-    newLegendColor: ref('#654321'),
     fileLegendCaptions: ref(new Set(['Imported legend'])),
     semanticFileWatchersSuppressed: ref(false)
   };
@@ -1750,8 +1745,6 @@ const createLayoutPreferences = () => ({
     newColorFeat: state.newColorFeat.value,
     newColorVal: state.newColorVal.value,
     newFeatureToAdd: state.newFeatureToAdd.value,
-    newLegendCaption: state.newLegendCaption.value,
-    newLegendColor: state.newLegendColor.value,
     fileLegendCaptions: Array.from(state.fileLegendCaptions.value)
   });
   const before = draftState();
@@ -1765,8 +1758,6 @@ const createLayoutPreferences = () => ({
     state.newColorFeat.value = 'CDS';
     state.newColorVal.value = '#abcdef';
     state.newFeatureToAdd.value = 'repeat_region';
-    state.newLegendCaption.value = 'Edited legend';
-    state.newLegendColor.value = '#fedcba';
     state.fileLegendCaptions.value = new Set(['Edited imported legend']);
   });
   const after = draftState();
@@ -1785,12 +1776,29 @@ const createLayoutPreferences = () => ({
     state.newColorFeat.value = 'gene';
     state.newColorVal.value = '#d3d3d3';
     state.newFeatureToAdd.value = 'mobile_element';
-    state.newLegendCaption.value = '';
-    state.newLegendColor.value = '#808080';
     state.fileLegendCaptions.value = new Set();
   });
   await history.undo();
   assert.deepEqual(draftState(), after);
+
+  // R15-2 retired Add legend item and its form drafts. A History intent or
+  // checkpoint that still carries them restores the other drafts and writes
+  // nothing for them, even where a holder of the old name exists.
+  const retiredDrafts = { newLegendCaption: 'Old draft', newLegendColor: '#123123' };
+  const oldIntent = { ...(await snapshots.buildHistoryIntent()) };
+  oldIntent.drafts = { ...oldIntent.drafts, ...retiredDrafts };
+  const oldCheckpoint = { ...(await snapshots.buildArtifactCheckpoint()) };
+  oldCheckpoint.drafts = { ...oldCheckpoint.drafts, ...retiredDrafts };
+  state.newLegendCaption = ref('');
+  state.newLegendColor = ref('#808080');
+  state.newColorVal.value = '#000001';
+  await snapshots.applyHistoryIntent(oldIntent);
+  assert.deepEqual(draftState(), after);
+  state.newColorVal.value = '#000002';
+  await snapshots.applyArtifactCheckpoint(oldCheckpoint);
+  assert.deepEqual(draftState(), after);
+  assert.deepEqual([state.newLegendCaption.value, state.newLegendColor.value], ['', '#808080']);
+  assert.equal(Object.hasOwn((await snapshots.buildHistoryIntent()).drafts, 'newLegendCaption'), false);
 }
 
 {

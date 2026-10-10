@@ -7,6 +7,7 @@ const { readFileSync } = require('node:fs');
 const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./app-lifecycle.cjs');
 const { BATCH_FIXTURE, openFresh, openWithGenBank } = require('./audit-browser.cjs');
 const { settleLive } = require('./live-generate-parity.cjs');
+const { loadEditorLegendRows } = require('./mode-transition.cjs');
 
 const SINGLE_FIXTURE = 'tests/fixtures/forced_label_underlay.gb';
 
@@ -181,6 +182,41 @@ const renameRow = (page, from, to) => evaluateWithRetainedPromise(page, async ({
   await app.renameLegendEntry(index, to);
 }, { from, to });
 
+// The Legend editor's stroke color control, one History step.
+const legendRowStrokeColor = async (page, caption, color) => {
+  await evaluateWithRetainedPromise(page, async ({ row, value }) => {
+    const app = window.__GBDRAW_APP__;
+    await app.setLegendEntryStrokeColorValue(app.legendEntries.findIndex((entry) => entry.caption === row), value);
+  }, { row: caption, value: color });
+  await settleLive(page);
+};
+
+// Legend editor rows ([caption, color]) from a Session that holds them
+// (R15-2 retired Add legend item), loaded and generated.
+const editorLegendRows = async (page, rows) => {
+  await loadEditorLegendRows(page, rows);
+  await settleLive(page);
+};
+
+// A palette change with instant preview (the palette menu).
+const switchPalette = async (page, name) => {
+  await page.evaluate((palette) => {
+    const app = window.__GBDRAW_APP__;
+    app.paletteInstantPreviewEnabled = true;
+    return app.selectPalette(palette);
+  }, name);
+  await settleLive(page);
+};
+
+// A row deleted in the Legend editor, settled.
+const deleteLegendRow = async (page, caption) => {
+  await evaluateWithRetainedPromise(page, async (row) => {
+    const app = window.__GBDRAW_APP__;
+    await app.deleteLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === row));
+  }, caption);
+  await settleLive(page);
+};
+
 module.exports = {
   SINGLE_FIXTURE,
   open,
@@ -196,5 +232,9 @@ module.exports = {
   DEPTH_TSV,
   colorLegendRow,
   openCanvas,
-  renameRow
+  renameRow,
+  legendRowStrokeColor,
+  editorLegendRows,
+  switchPalette,
+  deleteLegendRow
 };

@@ -1,5 +1,6 @@
 // @ts-check
 import { stableFeatureOverrideKey } from './feature-catalog.js';
+import { pythonDrawnAttribute } from './result-paint-bases.js';
 
 const text = (value) => String(value ?? '').trim();
 const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
@@ -207,4 +208,61 @@ export const migrateLegacyFeatureOverrides = (
   }
   reportDiagnostic();
   return result;
+};
+
+// The fill Python drew each rendered feature of a mounted Result with, by
+// rendered ID.
+/**
+ * @param {Element | null | undefined} svg
+ * @returns {Map<string, string>}
+ */
+const pythonFeatureFills = (svg) => {
+  /** @type {Map<string, string>} */
+  const fills = new Map();
+  Array.from(svg?.querySelectorAll?.('[data-gbdraw-feature-id]') || []).forEach((element) => {
+    const id = text(element.getAttribute('data-gbdraw-rendered-feature-id') || element.getAttribute('data-gbdraw-feature-id'));
+    const fill = text(pythonDrawnAttribute(element, 'fill'));
+    if (id && fill && fill !== 'none' && !fills.has(id)) fills.set(id, fill);
+  });
+  return fills;
+};
+
+/**
+ * A feature the editor compile reaches: a catalog row, or a feature read from
+ * the displayed Result. The rule matcher and the visibility resolver read its
+ * other fields.
+ * @typedef {Readonly<Record<string, unknown>> & { svg_id?: unknown, svgId?: unknown, type?: string, fill_color?: unknown }} AddressedFeature
+ */
+
+// What a feature catalog's admission gives the editor compile, for a Result
+// without a catalog (a Session older than 40): each feature read from the
+// displayed Result is reached by its override key, and its fill is the one
+// the mounted Result records as Python's (a catalog row's `fill_color`).
+/**
+ * @param {readonly AddressedFeature[]} features
+ * @param {readonly string[]} resultNames
+ * @param {number} resultIndex The displayed Result.
+ * @param {Element | null} [svg] The displayed Result.
+ */
+export const displayedFeatureAddressing = (features, resultNames, resultIndex, svg = null) => {
+  const fillByRenderedId = pythonFeatureFills(svg);
+  /** @type {Map<string, { resultIndex: number, renderedId: string }[]>} */
+  const renderedTargetsByOverrideKey = new Map();
+  /** @type {Map<string, AddressedFeature>} */
+  const rendered = new Map();
+  features.forEach((feature) => {
+    const renderedId = text(feature?.svg_id ?? feature?.svgId);
+    if (!renderedId || rendered.has(renderedId)) return;
+    rendered.set(renderedId, feature);
+    new Set([featureOverrideKey(feature), renderedId]).forEach((key) => {
+      if (key) renderedTargetsByOverrideKey.set(key, [...(renderedTargetsByOverrideKey.get(key) || []), { resultIndex, renderedId }]);
+    });
+  });
+  return {
+    resultNames,
+    renderedTargetsByOverrideKey,
+    resultIndexesByRenderedId: new Map([...rendered.keys()].map((renderedId) => [renderedId, new Set([resultIndex])])),
+    renderedFeaturesByResult: resultNames.map((_, index) => (index === resultIndex ? rendered : new Map())),
+    fillByRenderedId
+  };
 };

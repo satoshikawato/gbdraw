@@ -1,11 +1,21 @@
 // @ts-check
-/** @import { DrawingState } from '../../state.js' */
+/** @import { DrawingState, LegendEntry } from '../../state.js' */
+/** @import { LegendRowReach, PythonLegendKey, RenderedFeatureId } from '../../services/legend-svg.js' */
+import { displayedLegendRowColors, draftLegendRowColors, draftLegendRows, LIVE_EDIT_DOMAINS, namedLegendCaption } from '../candidate-render.js';
 import { reportRuleRunFailure } from '../rule-matching.js';
 import { matchedRuleKeys, ruleKey, ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { appliedFeatureColors, resolveColorToHex } from '../../utils/color-utils.js';
 import { getFeatureCaption, getFeatureColorRuleHash, getFeatureHashCandidates } from '../../services/feature-utils.js';
 import { exactRegexValue } from '../../services/feature-selector.js';
-import { getAllFeatureLegendGroups, mountedLegendRowFeatureIds, setsFeatureStroke } from '../../services/legend-svg.js';
+import {
+  drawnLegendRowStroke,
+  legendEntryKey,
+  legendRowFeatureIds,
+  setsFeatureStroke
+} from '../../services/legend-svg.js';
+import { displayedLegendRowContext } from '../../services/feature-visibility.js';
+import { isAutoFeatureUnderlay } from '../../services/feature-dom.js';
+import { pythonDrawnAttribute } from '../../services/result-paint-bases.js';
 import {
   featureOverrideKey,
   getFeatureOverride
@@ -27,7 +37,7 @@ import {
  * @property {(feature: Record<string, any>) => string} getIndividualFeatureLabel
  * @property {(feature: Record<string, any>) => { qual: string, val: string } | null} getFeatureQualifier
  * @property {(feature: Record<string, any>, label: string) => { feat: string, qual: string, val: string } | null} getLabelSpecificRule
- * @property {(caption: string) => Record<string, any>[]} getLegendRowRules
+ * @property {(key: PythonLegendKey) => Record<string, any>[]} getLegendRowRules
  * @property {(rules: Record<string, any>[], commit: () => any) => any} runWithRuleMatches
  *   Runs an action once the color rule matches of `rules` are prepared: the rule owner prepares the rules it builds.
  */
@@ -44,16 +54,22 @@ import {
  */
 
 /**
+ * A rename of a Legend row from the Legend editor or the feature popup.
+ * `oldCaption` is the caption the source shows; `sourceKey` is its row's
+ * Python key (the Legend editor's `legendEntryKey`, the popup's effective
+ * caption), by which the rules the row draws are read. A renamed row's shown
+ * caption is not its key (OV-294 residual, review M1 of 2b96350f).
+ * @typedef {{ oldCaption: string, sourceKey: PythonLegendKey, newCaption: string, currentColor?: string, siblingCount?: number, [field: string]: unknown }} LegendRenameRequest
+ */
+
+/**
  * @typedef {object} FeatureColorActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
- * @property {(options?: { replaceGeneratedInventory?: boolean }) => any} extractLegendEntries
- *   The Legend owner's reading of the mounted Legend rows.
- * @property {() => void} onLegendGeometryChanged The Legend owner's reaction to a change of Legend geometry.
+ * @property {((options: { domains: readonly string[] }) => unknown) | null} [showEditorIntent]
+ *   The root's port of the editor intent onto the displayed Result (R1).
  * @property {ColorActionsRuleActions} ruleActions The rule owner's lookups and commit of specific-color rules.
  * @property {(svg: Element, featureId: string) => Element[]} getFeatureElements The mounted elements of a feature.
  * @property {(svg: Element, featureId: string) => Element[]} getFeatureFillElements The mounted fill elements of a feature.
- * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
- *   The preview owner's commit of an edit to the displayed Result (R1, R13).
  * @property {(close: () => unknown) => void} [closeAfterDialogChoice]
  *   Runs a dialog's close at once, or once the History step of the dialog's
  *   choice in flight ends (D-12, OIC-028).
@@ -64,14 +80,11 @@ import {
 /** @param {FeatureColorActionsOptions} options */
 export const createFeatureColorActions = ({
   state,
-  extractLegendEntries,
-  onLegendGeometryChanged,
+  showEditorIntent = null,
   ruleActions,
-  // R13: the mounted feature element lookups and the preview owner's commit
-  // of an edit to the displayed Result.
+  // R13: the mounted feature element lookups.
   getFeatureElements,
   getFeatureFillElements,
-  commitActiveResultEdit = null,
   closeAfterDialogChoice = (close) => { close(); },
   // R13, D-15: the palette owner's user default colors.
   readUserDefaultColor,
@@ -86,8 +99,7 @@ export const createFeatureColorActions = ({
     resetColorDialog,
     legendRenameDialog,
     originalLegendOrder,
-    originalLegendColors,
-    originalSvgStroke
+    originalLegendColors
   } = state;
 
   const {
@@ -113,24 +125,9 @@ export const createFeatureColorActions = ({
   const colorsMatch = (left, right) => normalizeColor(left) === normalizeColor(right);
   const isHashSpecificRule = (rule) => String(rule?.qual || '').toLowerCase() === 'hash';
   const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
-  // The DOM edits of one color action reach the Result in one commit, when the
-  // last running color action settles.
-  let colorActionDepth = 0;
-  let pendingCommitReason = '';
-
-  const runColorAction = async (action) => {
-    colorActionDepth += 1;
-    try {
-      return await action();
-    } finally {
-      colorActionDepth -= 1;
-      if (colorActionDepth === 0 && pendingCommitReason) {
-        const reason = pendingCommitReason;
-        pendingCommitReason = '';
-        commitActiveResultEdit?.(reason);
-      }
-    }
-  };
+  // The domains a Legend row rename shows: the row's structure, and the fill
+  // and stroke an editor row takes under its new caption.
+  const RENAMED_ROW_DOMAINS = [...LIVE_EDIT_DOMAINS.legendStructure, ...LIVE_EDIT_DOMAINS.legendFills, ...LIVE_EDIT_DOMAINS.strokes];
 
   // Runs `run` once the rules a color edit may add for the features in `args`,
   // the clicked feature and the scope dialog's feature (their hash and label
@@ -164,7 +161,7 @@ export const createFeatureColorActions = ({
   // not to open their dialog, which reads the saved rules only (OV-225).
   const colorAction = (action, { targetRules = true } = {}) => (...args) => {
     const drawing = state.activeDrawing();
-    const run = () => runColorAction(() => action(drawing, ...args));
+    const run = async () => action(drawing, ...args);
     const prepareTargets = () => (targetRules ? withTargetRules(drawing, args, run) : run());
     return reportRuleRunFailure(state, 'evaluateRules', () => runWithRuleMatches(drawing.manualSpecificRules, prepareTargets));
   };
@@ -251,34 +248,72 @@ export const createFeatureColorActions = ({
     if (key) delete drawing.featureStrokeOverrides[key];
   };
 
+  // The stroke Python drew on a feature's block (its first part that is not
+  // an automatic underlay), which a Session 46 stroke edit keeps.
+  /** @param {Element[]} elements */
+  const drawnFeatureStroke = (elements) => {
+    const block = elements.find((element) => !isAutoFeatureUnderlay(element)) || elements[0] || null;
+    return {
+      originalStrokeColor: pythonDrawnAttribute(block, 'stroke'),
+      originalStrokeWidth: pythonDrawnAttribute(block, 'stroke-width')
+    };
+  };
+
   // The stroke a Legend row edit gives a feature without a stroke edit of its
-  // own, which the feature shows once its own edit is removed, as Generate
-  // draws it (`legendRowFeatureIds`, OV-123). Null when no row's stroke reaches it.
+  // own, which the feature shows once its own edit is removed, as the executor
+  // draws it from Python's row (`legendRowFeatureIds`, OV-123, OV-288). The
+  // stroked rows are the compile's (`draftLegendRows`): a deleted row strokes
+  // nothing. Null when no row's stroke reaches it.
   /**
    * @param {DrawingState} drawing
    * @param {Element} svg
    * @param {Record<string, any>} feature
    * @param {string} svgId
-   * @returns {Record<string, any> | null}
+   * @returns {{ strokeColor?: unknown, strokeWidth?: unknown } | null}
    */
   const legendRowStrokeOf = (drawing, svg, feature, svgId) => {
-    const namedCaption = normalizeCaption(getFeatureOverride(drawing.featureColorOverrides, feature)?.caption);
-    return Object.entries(drawing.legendStrokeOverrides).find(([caption]) => mountedLegendRowFeatureIds(
-      svg, caption, drawing.legendEntries.value, { namedIds: caption === namedCaption ? [svgId] : [] }
-    ).includes(svgId))?.[1] || null;
+    const id = /** @type {RenderedFeatureId} */ (svgId);
+    const drawnFills = [/** @type {[RenderedFeatureId, string]} */ ([id, getFeatureFillElements(svg, svgId)[0]?.getAttribute('fill') || ''])];
+    const namedCaption = normalizeCaption(namedLegendCaption(getFeatureOverride(drawing.featureColorOverrides, feature), drawing.manualSpecificRules));
+    const context = displayedLegendRowContext(state, drawing);
+    const { pythonRows } = context;
+    const rows = draftLegendRows({
+      legendEntries: drawing.legendEntries.value, deletedLegendEntries: drawing.deletedLegendEntries.value,
+      dormantLegendEntries: drawing.dormantLegendEntries.value, originalLegendOrder: originalLegendOrder.value || []
+    });
+    const draft = draftLegendRowColors({ ...context, paletteColors: appliedFeatureColors(state) });
+    return Object.entries(drawing.legendStrokeOverrides).find(([caption]) => {
+      const row = rows.styledRow(caption);
+      if (!row) return false;
+      /** @type {LegendRowReach} */
+      const reach = {
+        listedIds: /** @type {RenderedFeatureId[]} */ (row.entry ? row.entry.featureIds : []),
+        namedIds: caption === namedCaption ? [id] : [],
+        ownStrokeIds: [],
+        draftColor: draft.colorOf(row.targetCaption)
+      };
+      return legendRowFeatureIds(reach, pythonRows.get(row.targetCaption)?.color ?? null, drawnFills).length > 0;
+    })?.[1] || null;
   };
 
-  /** @param {DrawingState} drawing */
-  const findLegendEntryByCaption = (drawing, caption) => {
+  /** @param {LegendEntry[]} entries @param {string} caption @returns {LegendEntry | null} */
+  const entryByCaption = (entries, caption) => {
     const normalizedCaption = normalizeCaptionKey(caption);
     if (!normalizedCaption) return null;
-
-    return (
-      drawing.legendEntries.value.find(
-        (entry) => normalizeCaptionKey(entry?.caption) === normalizedCaption
-      ) || null
-    );
+    return entries.find((entry) => normalizeCaptionKey(entry?.caption) === normalizedCaption) || null;
   };
+  /** @param {DrawingState} drawing @param {string} caption */
+  const findLegendEntryByCaption = (drawing, caption) => entryByCaption(drawing.legendEntries.value, caption);
+  // OV-282 (D-26): the color a listed row shows, the palette's for a row the
+  // palette colors; never the color the row recorded at the last Generate.
+  // Without a row, nothing is derived (review L4).
+  /** @param {DrawingState} drawing @param {LegendEntry | null} entry */
+  const listedRowColor = (drawing, entry) => (entry ? displayedLegendRowColors(state, drawing).listed(entry) : undefined);
+  // R15-3 (OV-285): the deleted row a rename's caption names. The caption only
+  // detects the conflict; the row is its Python key (an editor row's own
+  // caption), which the composition root's Restore acts on.
+  /** @param {DrawingState} drawing @param {string} caption */
+  const findDeletedLegendEntryByCaption = (drawing, caption) => entryByCaption(drawing.deletedLegendEntries.value, caption);
 
   /** @param {DrawingState} drawing */
   const findExistingCaptionColor = (drawing, feat, caption) => {
@@ -292,10 +327,11 @@ export const createFeatureColorActions = ({
     }
 
     const legendEntry = findLegendEntryByCaption(drawing, caption);
-    if (legendEntry?.color) {
+    const legendColor = listedRowColor(drawing, legendEntry);
+    if (legendEntry && legendColor) {
       return {
         caption: legendEntry.caption,
-        color: legendEntry.color,
+        color: legendColor,
         rule: null
       };
     }
@@ -415,11 +451,6 @@ export const createFeatureColorActions = ({
 
   const getCurrentSvg = () => svgContainer.value?.querySelector('svg') || null;
 
-  const persistCurrentSvg = (svg = getCurrentSvg(), reason = 'feature-color') => {
-    if (!svg) return;
-    pendingCommitReason ||= reason;
-  };
-
   /** @param {DrawingState} drawing */
   const exactHashRulesForFeature = (drawing, feature) => drawing.manualSpecificRules.filter(
     (rule) => hashRuleTargetsFeatureExactly(rule, feature)
@@ -463,7 +494,7 @@ export const createFeatureColorActions = ({
     if (!liveFeatureColorMatches(feature, color)) return false;
     if (!requireLegend) return true;
     const legendEntry = findLegendEntryByCaption(drawing, caption);
-    return Boolean(legendEntry && colorsMatch(legendEntry.color, color));
+    return Boolean(legendEntry && colorsMatch(listedRowColor(drawing, legendEntry), color));
   };
 
   const findCaptionKey = (store, caption) => {
@@ -561,6 +592,7 @@ export const createFeatureColorActions = ({
     legendRenameDialog.currentColor = '';
     legendRenameDialog.siblingCount = 0;
     legendRenameDialog.mergeAvailable = true;
+    legendRenameDialog.deletedTargetKey = '';
     legendRenameDialog.pendingRequest = null;
   });
 
@@ -609,7 +641,8 @@ export const createFeatureColorActions = ({
     );
 
     const existingKeys = new Set();
-    drawing.legendEntries.value.forEach((entry) => {
+    // A deleted row keeps its caption for Restore (R15-3).
+    [...drawing.legendEntries.value, ...drawing.deletedLegendEntries.value].forEach((entry) => {
       const key = normalizeCaptionKey(entry?.caption);
       if (key) existingKeys.add(key);
     });
@@ -763,42 +796,16 @@ export const createFeatureColorActions = ({
     return hasPrecedenceConflict ? null : first;
   };
 
-  /** @param {DrawingState} drawing */
-  const renameLegendEntryInSvg = (drawing, oldCaption, newCaption, color = null) => {
-    const svg = getCurrentSvg();
-    if (!svg) return false;
-
-    const targetGroups = getAllFeatureLegendGroups(svg);
-    if (targetGroups.length === 0) return false;
-
-    let updated = false;
-
-    for (const targetGroup of targetGroups) {
-      const entryGroup = targetGroup.querySelector(`g[data-legend-key="${CSS.escape(oldCaption)}"]`);
-      if (!entryGroup) continue;
-
-      entryGroup.setAttribute('data-legend-key', newCaption);
-      const textEl = entryGroup.querySelector('text');
-      if (textEl) {
-        textEl.textContent = newCaption;
-      }
-
-      if (color) {
-        const paths = entryGroup.querySelectorAll('path');
-        for (const path of paths) {
-          const fill = path.getAttribute('fill');
-          if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-            path.setAttribute('fill', color);
-            break;
-          }
-        }
-      }
-
-      updated = true;
-    }
-
-    if (!updated) return false;
-
+  // The rename of a Legend row without rules or features writes the intent
+  // (U3a gap 3): the row's styles move to the new caption, a row of Python's
+  // keeps its generated caption, so Generate and the port rename it
+  // (`legendRenames`, PV-02), and an editor row is identified by its caption,
+  // so the port removes the old row and adds the new one with its styles, in
+  // its place in the order. The text control's open step holds the edit.
+  /** @param {DrawingState} drawing @param {string} oldCaption @param {string} newCaption */
+  const renameLegendRow = (drawing, oldCaption, newCaption) => {
+    const legendEntry = drawing.legendEntries.value.find((entry) => captionsMatch(entry?.caption, oldCaption));
+    if (!legendEntry) return false;
     // The renamed row takes the caption: a style that an earlier row left under
     // that caption does not follow it, as Generate would otherwise apply it (OV-60).
     if (!findLegendEntryByCaption(drawing, newCaption)) {
@@ -810,27 +817,15 @@ export const createFeatureColorActions = ({
     moveCaptionStateKey(drawing.legendColorOverrides, oldCaption, newCaption);
     moveCaptionStateKey(drawing.legendStrokeOverrides, oldCaption, newCaption);
     moveAddedLegendCaption(drawing, oldCaption, newCaption);
-
-    // A renderer-generated row keeps its generated caption as its identity, so
-    // Generate replays the rename onto the regenerated row (PV-02). Rows the
-    // editor added are identified by their current caption.
-    const legendEntry = drawing.legendEntries.value.find((entry) => captionsMatch(entry?.caption, oldCaption));
-    const generatedRow = Boolean(legendEntry) && originalLegendOrder.value.some(
+    const generatedRow = originalLegendOrder.value.some(
       (caption) => captionsMatch(caption, legendEntry.originalCaption || legendEntry.caption)
     );
-    if (!generatedRow) syncOriginalLegendMetadataRename(oldCaption, newCaption, color);
-    if (legendEntry) {
-      legendEntry.caption = newCaption;
-      if (!generatedRow) legendEntry.originalCaption = newCaption;
-      if (color) {
-        legendEntry.color = color;
-      }
+    if (!generatedRow) {
+      syncOriginalLegendMetadataRename(oldCaption, newCaption);
+      legendEntry.originalCaption = newCaption;
     }
-
-    // The layout owner lays the Legend out as Python would with the renamed
-    // row (zero shift; OV-127) and docks it.
-    onLegendGeometryChanged();
-    persistCurrentSvg(svg);
+    legendEntry.caption = newCaption;
+    showEditorIntent?.({ domains: RENAMED_ROW_DOMAINS });
     return true;
   };
 
@@ -845,7 +840,7 @@ export const createFeatureColorActions = ({
     const color = resolveColorToHex(request.finalColor || request.currentColor) || '#cccccc';
     if (!caption) return false;
     const features = (request.features || []).filter(Boolean);
-    const sourceRules = getLegendRowRules(oldCaption);
+    const sourceRules = getLegendRowRules(request.sourceKey);
     if (sourceRules.length || features.length) {
       const rules = request.sourceScope === 'group' && sourceRules.length
         ? drawing.manualSpecificRules.map(rule => sourceRules.includes(rule) ? { ...rule, cap: caption, color } : { ...rule })
@@ -874,10 +869,7 @@ export const createFeatureColorActions = ({
         }
       });
     }
-    // Unrelated manual legend rows retain their existing editor semantics.
-    renameLegendEntryInSvg(drawing, oldCaption, caption, color);
-    extractLegendEntries();
-    return true;
+    return renameLegendRow(drawing, oldCaption, caption);
   };
 
   const openLegendRenameScopeDialog = (request, siblingCount) => {
@@ -889,19 +881,28 @@ export const createFeatureColorActions = ({
     legendRenameDialog.targetColor = '';
     legendRenameDialog.currentColor = request.currentColor || '';
     legendRenameDialog.siblingCount = Math.max(0, siblingCount);
+    legendRenameDialog.deletedTargetKey = '';
     legendRenameDialog.pendingRequest = request;
   };
 
-  const openLegendRenameTargetDialog = (request, targetEntry, mergeAvailable) => {
+  /**
+   * @param {LegendRenameRequest} request
+   * @param {LegendEntry} targetEntry
+   * @param {string} targetColor The color the target row shows.
+   * @param {boolean | null} mergeAvailable
+   * @param {PythonLegendKey | ''} deletedTargetKey The key of a deleted target row, else ''.
+   */
+  const openLegendRenameTargetDialog = (request, targetEntry, targetColor, mergeAvailable, deletedTargetKey) => {
     legendRenameDialog.show = true;
     legendRenameDialog.mode = 'target';
     legendRenameDialog.oldCaption = request.oldCaption;
     legendRenameDialog.newCaption = request.newCaption;
     legendRenameDialog.targetCaption = targetEntry.caption;
-    legendRenameDialog.targetColor = targetEntry.color || '';
+    legendRenameDialog.targetColor = targetColor;
     legendRenameDialog.currentColor = request.currentColor || '';
     legendRenameDialog.siblingCount = request.siblingCount || 0;
     legendRenameDialog.mergeAvailable = mergeAvailable;
+    legendRenameDialog.deletedTargetKey = deletedTargetKey;
     legendRenameDialog.pendingRequest = request;
   };
 
@@ -918,7 +919,7 @@ export const createFeatureColorActions = ({
 
     const currentColor =
       resolveColorToHex(request.currentColor) ||
-      (request.feat ? getCurrentFeatureFillColor(drawing, request.feat) : resolveColorToHex(findLegendEntryByCaption(drawing, oldCaption)?.color)) ||
+      (request.feat ? getCurrentFeatureFillColor(drawing, request.feat) : resolveColorToHex(listedRowColor(drawing, findLegendEntryByCaption(drawing, oldCaption)))) ||
       '#cccccc';
 
     let features = Array.isArray(request.features) ? request.features.filter(Boolean) : [];
@@ -952,10 +953,17 @@ export const createFeatureColorActions = ({
     // D-06 (PD-OI-061): a rename onto another entry of a different color asks
     // Merge, Suffix, or Cancel, with or without features. A target owned by a
     // specific-color rule keeps the PD-OI-042 caption disambiguation instead.
-    const targetEntry = findLegendEntryByCaption(drawing, newCaption);
+    // R15-3 (OV-285): a rename onto a deleted row's caption always asks, as onto
+    // a listed row; its Merge is a Restore of that row, then the merge.
+    const listedTarget = findLegendEntryByCaption(drawing, newCaption);
+    const deletedTarget = listedTarget ? null : findDeletedLegendEntryByCaption(drawing, newCaption);
+    const targetEntry = listedTarget || deletedTarget;
     const isDistinctTargetEntry = targetEntry && !captionsMatch(targetEntry.caption, oldCaption);
-    const ruleOwnedTarget = isDistinctTargetEntry && getLegendRowRules(targetEntry.caption).length > 0;
-    const featureOrRuleRename = features.length > 0 || getLegendRowRules(oldCaption).length > 0;
+    // OV-282: the color the target row shows, the palette's for a row the palette colors.
+    const targetColor = String((deletedTarget
+      ? displayedLegendRowColors(state, drawing).deleted(deletedTarget) : listedRowColor(drawing, listedTarget)) || '');
+    const ruleOwnedTarget = isDistinctTargetEntry && getLegendRowRules(legendEntryKey(targetEntry)).length > 0;
+    const featureOrRuleRename = features.length > 0 || getLegendRowRules(request.sourceKey).length > 0;
     // OV-62 (PD-OI-061 amended): two rows merge only when each draws features of
     // one type and the type is the same. A row without features (GC content,
     // GC skew), rows of different types, and a row that spans several types
@@ -969,15 +977,17 @@ export const createFeatureColorActions = ({
     const mergeAllowed = isDistinctTargetEntry && sourceTypes.size === 1 && targetTypes.size === 1
       && [...sourceTypes][0] === [...targetTypes][0];
 
-    if (featureOrRuleRename && (!isDistinctTargetEntry
-      || (mergeAllowed && (ruleOwnedTarget || colorsMatch(targetEntry.color, currentColor))))) {
+    // A chosen Merge adopts the target's color, also once a Restore made a
+    // rule-owned deleted target a listed one.
+    if (featureOrRuleRename && request.targetResolution !== 'merge' && (!isDistinctTargetEntry
+      || (!deletedTarget && mergeAllowed && (ruleOwnedTarget || colorsMatch(targetColor, currentColor))))) {
       await applyLegendRenameRequest(drawing, { ...request, currentColor, features,
         finalCaption: newCaption, finalColor: currentColor });
       clearLegendRenameDialog(drawing);
       return;
     }
 
-    if (isDistinctTargetEntry && (!mergeAllowed || !colorsMatch(targetEntry.color, currentColor))) {
+    if (isDistinctTargetEntry && (deletedTarget || !mergeAllowed || !colorsMatch(targetColor, currentColor))) {
       if (!request.targetResolution) {
         openLegendRenameTargetDialog(
           {
@@ -986,12 +996,15 @@ export const createFeatureColorActions = ({
             features
           },
           targetEntry,
-          mergeAllowed
+          targetColor,
+          mergeAllowed,
+          deletedTarget ? legendEntryKey(deletedTarget) : ''
         );
         return;
       }
 
-      if (request.targetResolution === 'merge' && !mergeAllowed) {
+      // A deleted row takes the merge only once the Restore returned it.
+      if (request.targetResolution === 'merge' && (!mergeAllowed || deletedTarget)) {
         clearLegendRenameDialog(drawing, { restoreInput: true });
         return;
       }
@@ -1002,7 +1015,7 @@ export const createFeatureColorActions = ({
           currentColor,
           features,
           finalCaption: targetEntry.caption,
-          finalColor: targetEntry.color
+          finalColor: targetColor
         });
         clearLegendRenameDialog(drawing);
         return;
@@ -1022,9 +1035,9 @@ export const createFeatureColorActions = ({
     }
 
     const finalCaption =
-      isDistinctTargetEntry && colorsMatch(targetEntry.color, currentColor) ? targetEntry.caption : newCaption;
+      isDistinctTargetEntry && colorsMatch(targetColor, currentColor) ? targetEntry.caption : newCaption;
     const finalColor =
-      isDistinctTargetEntry && colorsMatch(targetEntry.color, currentColor) ? targetEntry.color : currentColor;
+      isDistinctTargetEntry && colorsMatch(targetColor, currentColor) ? targetColor : currentColor;
 
     await applyLegendRenameRequest(drawing, {
       ...request,
@@ -1074,7 +1087,7 @@ export const createFeatureColorActions = ({
    */
   const paletteRowType = (drawing, caption, features) => {
     const type = normalizeCaption(caption);
-    if (!features.every((feature) => feature?.type === type) || getLegendRowRules(type).length > 0) return null;
+    if (!features.every((feature) => feature?.type === type) || getLegendRowRules(/** @type {PythonLegendKey} */ (type)).length > 0) return null;
     const matches = ruleMatcher(drawing.manualSpecificRules);
     return features.every((feature) => matches.matchesAny(feature) === false
       && !getFeatureOverride(drawing.featureColorOverrides, feature)) ? type : null;
@@ -1176,6 +1189,7 @@ export const createFeatureColorActions = ({
       source: 'popup',
       feat,
       oldCaption: currentCaption,
+      sourceKey: /** @type {PythonLegendKey} */ (currentCaption),
       newCaption: requestedCaption,
       currentColor: getCurrentFeatureFillColor(drawing, feat),
       sourceScope: null
@@ -1253,11 +1267,13 @@ export const createFeatureColorActions = ({
       return;
     }
 
+    const shownColor = listedRowColor(drawing, entry);
     await continueLegendRenameRequest(drawing, {
       source: 'legend',
       oldCaption: normalizeCaption(entry.caption),
+      sourceKey: legendEntryKey(entry),
       newCaption: requestedCaption,
-      currentColor: resolveColorToHex(entry.color) || entry.color || '#cccccc',
+      currentColor: resolveColorToHex(shownColor) || shownColor || '#cccccc',
       features: getFeaturesForLegendCaption(entry.caption),
       sourceScope: getFeaturesForLegendCaption(entry.caption).length > 0 ? 'group' : 'manual'
     });
@@ -1287,10 +1303,6 @@ export const createFeatureColorActions = ({
         // The row's swatch follows the default color again (svg-styles.js).
         delete drawing.legendColorOverrides[defaultColorType];
         setDefaultColor(drawing, defaultColorType, color);
-        // OV-264: the Legend row takes the color in the same step, as a rule
-        // commit's Legend change does; its color feeds the rule captions.
-        drawing.legendEntries.value = drawing.legendEntries.value.map((entry) => (
-          captionsMatch(entry.caption, defaultColorType) ? { ...entry, color } : entry));
       } else if (!(await applyColorToLegendSpecificRules(drawing, targetLegendName, color))) {
         const siblings = findFeaturesWithSameLegendItem(feat, targetLegendName);
         await applyColorToFeatureGroup(drawing, [feat, ...siblings], targetLegendName, color);
@@ -1334,50 +1346,37 @@ export const createFeatureColorActions = ({
     clearFeatureStyleScopeDialog();
   };
 
+  // The stroke edits write the editor intent only. The composition root shows
+  // them on the Result through the executor as one History step
+  // (`editEditorIntent` in app/app-setup.js), which records Python's strokes.
   /** @param {DrawingState} drawing */
   const updateClickedFeatureStroke = (drawing, strokeColor, strokeWidth) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return false;
-    if (!svgContainer.value) return false;
-
-    const svg = svgContainer.value.querySelector('svg');
+    const svg = getCurrentSvg();
     if (!svg) return false;
 
-    const svgId = clickedFeature.value.svg_id;
-    const elements = getFeatureElements(svg, svgId);
+    const elements = getFeatureElements(svg, clickedFeature.value.svg_id);
     if (elements.length === 0) return false;
     const normalizedStrokeColor = strokeColor === null || strokeColor === undefined
       ? null
       : String(strokeColor).trim();
     const normalizedStrokeWidth = normalizeStrokeWidthValue(strokeWidth);
     if (normalizedStrokeColor === null && normalizedStrokeWidth === null) return false;
-    const firstElement = elements[0] || null;
-    let changed = false;
-
-    elements.forEach((element) => {
-      if (normalizedStrokeColor !== null && !strokeColorAttributeMatches(element, normalizedStrokeColor)) {
-        element.setAttribute('stroke', normalizedStrokeColor);
-        changed = true;
-      }
-      if (normalizedStrokeWidth !== null && !strokeWidthAttributeMatches(element, normalizedStrokeWidth)) {
-        element.setAttribute('stroke-width', /** @type {any} */ (normalizedStrokeWidth));
-        changed = true;
-      }
-    });
-
+    const changed = elements.some((element) => (
+      (normalizedStrokeColor !== null && !strokeColorAttributeMatches(element, normalizedStrokeColor))
+      || (normalizedStrokeWidth !== null && !strokeWidthAttributeMatches(element, normalizedStrokeWidth))
+    ));
     if (!changed) return false;
     recordFeatureStrokeOverride(drawing, clickedFeature.value.feat || clickedFeature.value, {
       strokeColor: normalizedStrokeColor,
       strokeWidth: normalizedStrokeWidth,
-      originalStrokeColor: clickedFeature.value.originalStrokeColor ?? null,
-      originalStrokeWidth: clickedFeature.value.originalStrokeWidth ?? firstElement?.getAttribute('stroke-width') ?? null
+      ...drawnFeatureStroke(elements)
     });
 
     if (normalizedStrokeColor !== null) clickedFeature.value.strokeColor = normalizedStrokeColor;
     if (normalizedStrokeWidth !== null) clickedFeature.value.strokeWidth = normalizedStrokeWidth;
-
-    persistCurrentSvg(svg, 'feature-stroke');
     return true;
   };
 
@@ -1415,43 +1414,21 @@ export const createFeatureColorActions = ({
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return false;
-    if (!svgContainer.value) return false;
-
-    const svg = svgContainer.value.querySelector('svg');
+    const svg = getCurrentSvg();
     if (!svg) return false;
 
     const svgId = clickedFeature.value.svg_id;
-    const elements = getFeatureElements(svg, svgId);
-
-    // Without its own stroke edit, the feature shows its Legend row's stroke.
-    const rowStroke = legendRowStrokeOf(drawing, svg, clickedFeature.value.feat || clickedFeature.value, svgId);
-    const originalColor = String(rowStroke?.strokeColor || '').trim() || originalSvgStroke.value.color;
-    const originalWidth = normalizeStrokeWidthValue(rowStroke?.strokeWidth)
-      ?? normalizeStrokeWidthValue(originalSvgStroke.value.width);
-    let changed = false;
-
-    elements.forEach((element) => {
-      if (!strokeColorAttributeMatches(element, originalColor)) {
-        if (originalColor === null) element.removeAttribute('stroke');
-        else element.setAttribute('stroke', originalColor);
-        changed = true;
-      }
-      if (!strokeWidthAttributeMatches(element, originalWidth)) {
-        if (originalWidth === null) element.removeAttribute('stroke-width');
-        else element.setAttribute('stroke-width', /** @type {any} */ (originalWidth));
-        changed = true;
-      }
-    });
-
     const feature = clickedFeature.value.feat || clickedFeature.value;
     const overrideKey = featureStrokeKey(feature, svgId);
-    const hadOverride = Boolean(overrideKey && drawing.featureStrokeOverrides[overrideKey]);
-    if (!changed && !hadOverride) return false;
-    clickedFeature.value.strokeColor = originalColor || '';
-    clickedFeature.value.strokeWidth = originalWidth ?? '';
+    if (!overrideKey || !drawing.featureStrokeOverrides[overrideKey]) return false;
+    // Without its own stroke edit, the feature shows its Legend row's stroke,
+    // else the stroke Python drew.
+    const rowStroke = legendRowStrokeOf(drawing, svg, feature, svgId);
+    const drawn = drawnFeatureStroke(getFeatureElements(svg, svgId));
+    clickedFeature.value.strokeColor = String(rowStroke?.strokeColor || '').trim() || drawn.originalStrokeColor || '';
+    clickedFeature.value.strokeWidth = normalizeStrokeWidthValue(rowStroke?.strokeWidth)
+      ?? normalizeStrokeWidthValue(drawn.originalStrokeWidth) ?? '';
     clearFeatureStrokeOverride(drawing, feature, svgId);
-
-    if (changed) persistCurrentSvg(svg, 'feature-stroke');
     return true;
   };
 
@@ -1468,9 +1445,12 @@ export const createFeatureColorActions = ({
   const setClickedFeatureStrokeColorValue = (drawing, value) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
+    if (!clickedFeature.value) return false;
+    const svg = getCurrentSvg();
+    if (!svg) return false;
+    const feature = clickedFeature.value.feat || clickedFeature.value;
+    const elements = getFeatureElements(svg, clickedFeature.value.svg_id);
     if (value !== null) {
-      if (!clickedFeature.value) return false;
-      const feature = clickedFeature.value.feat || clickedFeature.value;
       const override = getFeatureOverride(drawing.featureStrokeOverrides, feature);
       if (
         !hasOwn(override, 'strokeColor')
@@ -1478,50 +1458,23 @@ export const createFeatureColorActions = ({
       ) {
         const normalizedValue = String(value || '').trim();
         if (updateClickedFeatureStroke(drawing, normalizedValue, null)) return true;
-        const svg = getCurrentSvg();
-        if (!svg) return false;
-        const elements = getFeatureElements(svg, clickedFeature.value.svg_id);
         if (elements.length === 0) return false;
-        recordFeatureStrokeOverride(drawing, feature, {
-          strokeColor: normalizedValue,
-          originalStrokeColor: clickedFeature.value.originalStrokeColor ?? elements[0]?.getAttribute('stroke') ?? null,
-          originalStrokeWidth: clickedFeature.value.originalStrokeWidth ?? elements[0]?.getAttribute('stroke-width') ?? null
-        });
+        recordFeatureStrokeOverride(drawing, feature, { strokeColor: normalizedValue, ...drawnFeatureStroke(elements) });
         return true;
       }
       return requestClickedFeatureStrokeChange(drawing, value, clickedFeature.value.strokeWidth);
     }
-    if (!clickedFeature.value || !svgContainer.value) return false;
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return false;
-    const feature = clickedFeature.value.feat || clickedFeature.value;
     const key = featureStrokeKey(feature, clickedFeature.value.svg_id);
     const override = key ? drawing.featureStrokeOverrides[key] : null;
+    if (!override || !hasOwn(override, 'strokeColor')) return false;
     // Without a stroke edit of its own left, the feature shows its Legend row's stroke.
-    const rowStroke = setsFeatureStroke({ strokeWidth: override?.strokeWidth })
+    const rowStroke = setsFeatureStroke({ strokeWidth: override.strokeWidth })
       ? null
       : legendRowStrokeOf(drawing, svg, feature, clickedFeature.value.svg_id);
-    const inheritedColor = String(rowStroke?.strokeColor || '').trim() || (override && hasOwn(override, 'originalStrokeColor')
-      ? override.originalStrokeColor
-      : (clickedFeature.value.originalStrokeColor ?? originalSvgStroke.value.color));
-    const elements = getFeatureElements(svg, clickedFeature.value.svg_id);
-    const domChanged = elements.some((element) => !strokeColorAttributeMatches(element, inheritedColor));
-    const stateChanged = Boolean(override && hasOwn(override, 'strokeColor'));
-    if (!domChanged && !stateChanged) return false;
-    if (override) {
-      delete override.strokeColor;
-      if (!hasOwn(override, 'strokeWidth')) delete drawing.featureStrokeOverrides[key];
-    }
-    elements.forEach((element) => {
-      if (strokeColorAttributeMatches(element, inheritedColor)) return;
-      if (inheritedColor === null || inheritedColor === '') {
-        element.removeAttribute('stroke');
-      } else {
-        element.setAttribute('stroke', inheritedColor);
-      }
-    });
-    clickedFeature.value.strokeColor = inheritedColor || '';
-    if (domChanged) persistCurrentSvg(svg, 'feature-stroke');
+    delete override.strokeColor;
+    if (!hasOwn(override, 'strokeWidth')) delete drawing.featureStrokeOverrides[key];
+    clickedFeature.value.strokeColor = String(rowStroke?.strokeColor || '').trim()
+      || drawnFeatureStroke(elements).originalStrokeColor || '';
     return true;
   };
 
@@ -1624,9 +1577,8 @@ export const createFeatureColorActions = ({
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const targetFeatures = uniqueFeaturesBySvgId(features);
-    if (targetFeatures.length === 0 || !svgContainer.value) return false;
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return false;
+    const svg = getCurrentSvg();
+    if (targetFeatures.length === 0 || !svg) return false;
 
     const normalizedStrokeColor = String(strokeColor || '').trim();
     const normalizedStrokeWidth = normalizeStrokeWidthValue(strokeWidth);
@@ -1635,40 +1587,22 @@ export const createFeatureColorActions = ({
     let updatedCount = 0;
     targetFeatures.forEach((feature) => {
       const elements = getFeatureElements(svg, feature.svg_id);
-      if (elements.length === 0) return;
       const needsUpdate = elements.some((element) => (
         (normalizedStrokeColor && !strokeColorAttributeMatches(element, normalizedStrokeColor))
         || (normalizedStrokeWidth !== null && !strokeWidthAttributeMatches(element, normalizedStrokeWidth))
       ));
       if (!needsUpdate) return;
-      const firstElement = elements[0] || null;
       recordFeatureStrokeOverride(drawing, feature, {
         strokeColor: normalizedStrokeColor || null,
         strokeWidth: normalizedStrokeWidth,
-        originalStrokeColor: firstElement?.getAttribute('stroke') ?? null,
-        originalStrokeWidth: firstElement?.getAttribute('stroke-width') ?? null
+        ...drawnFeatureStroke(elements)
       });
-      elements.forEach((element) => {
-        let changed = false;
-        if (normalizedStrokeColor && !strokeColorAttributeMatches(element, normalizedStrokeColor)) {
-          element.setAttribute('stroke', normalizedStrokeColor);
-          changed = true;
-        }
-        if (normalizedStrokeWidth !== null && !strokeWidthAttributeMatches(element, normalizedStrokeWidth)) {
-          element.setAttribute('stroke-width', /** @type {any} */ (normalizedStrokeWidth));
-          changed = true;
-        }
-        if (changed) updatedCount += 1;
-      });
+      updatedCount += 1;
       if (clickedFeature.value?.svg_id === feature.svg_id) {
         if (normalizedStrokeColor) clickedFeature.value.strokeColor = normalizedStrokeColor;
         if (normalizedStrokeWidth !== null) clickedFeature.value.strokeWidth = normalizedStrokeWidth;
       }
     });
-
-    if (updatedCount > 0) {
-      persistCurrentSvg(svg, 'feature-stroke');
-    }
     return updatedCount > 0;
   };
 
@@ -1682,38 +1616,6 @@ export const createFeatureColorActions = ({
     const normalizedStrokeWidth = normalizeStrokeWidthValue(strokeWidth);
     if (!normalizedStrokeColor && normalizedStrokeWidth === null) return false;
 
-    let domChanged = false;
-    /** @type {{ color: string | null, width: number | null } | null} */
-    let originalSwatchStroke = null;
-    const escapedCaption = globalThis.CSS?.escape
-      ? globalThis.CSS.escape(targetLegendEntry.caption)
-      : String(targetLegendEntry.caption).replace(/["\\]/g, '\\$&');
-    for (const targetGroup of getAllFeatureLegendGroups(svg)) {
-      const entryGroup = targetGroup.querySelector(
-        `g[data-legend-key="${escapedCaption}"]`
-      );
-      if (!entryGroup) continue;
-      const swatch = Array.from(entryGroup.querySelectorAll('path')).find((path) => {
-        const fill = path.getAttribute('fill');
-        return fill && fill !== 'none' && !fill.startsWith('url(');
-      });
-      if (!swatch) continue;
-      if (!originalSwatchStroke) {
-        originalSwatchStroke = {
-          color: swatch.getAttribute('stroke'),
-          width: normalizeStrokeWidthValue(swatch.getAttribute('stroke-width'))
-        };
-      }
-      if (normalizedStrokeColor && !strokeColorAttributeMatches(swatch, normalizedStrokeColor)) {
-        swatch.setAttribute('stroke', normalizedStrokeColor);
-        domChanged = true;
-      }
-      if (normalizedStrokeWidth !== null && !strokeWidthAttributeMatches(swatch, normalizedStrokeWidth)) {
-        swatch.setAttribute('stroke-width', normalizedStrokeWidth);
-        domChanged = true;
-      }
-    }
-
     const overrideKey = targetLegendEntry.caption;
     const previousOverride = drawing.legendStrokeOverrides[overrideKey] || {};
     const nextOverride = { ...previousOverride };
@@ -1721,8 +1623,7 @@ export const createFeatureColorActions = ({
       !hasOwn(previousOverride, 'strokeColor')
       && !hasOwn(previousOverride, 'strokeWidth')
     ) {
-      nextOverride.originalStrokeColor = originalSwatchStroke?.color ?? null;
-      nextOverride.originalStrokeWidth = originalSwatchStroke?.width ?? null;
+      Object.assign(nextOverride, drawnLegendRowStroke(svg, overrideKey));
     }
     if (normalizedStrokeColor) nextOverride.strokeColor = normalizedStrokeColor;
     if (normalizedStrokeWidth !== null) nextOverride.strokeWidth = normalizedStrokeWidth;
@@ -1731,8 +1632,7 @@ export const createFeatureColorActions = ({
       || normalizeStrokeWidthValue(previousOverride.strokeWidth)
         !== normalizeStrokeWidthValue(nextOverride.strokeWidth);
     if (stateChanged) drawing.legendStrokeOverrides[overrideKey] = nextOverride;
-    if (domChanged) persistCurrentSvg(svg, 'feature-stroke');
-    return domChanged || stateChanged;
+    return stateChanged;
   };
 
   /** @param {DrawingState} drawing */

@@ -68,6 +68,23 @@ Sessions 33 have no feature catalog. They are the positive fixtures for the
 readers that move those edits onto source identities (Session 46). The steps,
 inputs, and hashes are in `feature-edits.provenance.json`.
 
+`forced-label-underlay-strokes.v44.gbdraw-session.json.gz` is a Web **Save
+Session** download, kept unchanged, from first-parent `main` commit `fe6861f0`
+(Session 44). Its Result shows a feature stroke, a Legend row stroke, and a
+Legend row color without `data-gbdraw-base-*` records. It is the positive
+fixture for the Load reader that records them from the strokes of the parts no
+edit reached, `originalColors`, and catalog fills (`createSavedResultPlan`),
+which runs for Sessions older than 46. The steps, inputs, and hashes are in
+`forced-label-underlay-strokes.provenance.json`.
+
+`forced-label-underlay-legend-rows.v44.gbdraw-session.json.gz` is a Web **Save
+Session** download, kept unchanged, from first-parent `main` commit `fe6861f0`
+(Session 44). Its Result shows a renamed, an added and no deleted Legend row,
+without Legend structure records: the deleted row is not in its bytes. It is
+the positive fixture for loading such a Result with the same Legend, and for
+the Restore that asks Python to draw a row the bytes lack (U3a O-2). The steps,
+inputs, and hashes are in `forced-label-underlay-legend-rows.provenance.json`.
+
 `whitelist-tab-keyword.v39.gbdraw-session.json.gz` is a Web **Save Session**
 download, kept unchanged, from first-parent `main` commit `17e2c9de`
 (Session 39). Its Label whitelist rule was typed with a tab in the keyword, and
@@ -105,7 +122,9 @@ rule, a feature placement, and a label edit. The Linear Result is the committed
 Result while `ui.mode` is `circular`, both modes have a staged record-display
 row, and the inactive Linear profile holds an edited plot title. It is the
 positive fixture for the reader that splits one Session 27–44 draft into
-drawings; `TESTA.gb` and the Depth TSV are stored once for both modes.
+drawings, and, with its Linear Legend row stroke and colors, for the Sessions
+40–45 path of the Load reader above (`savedResultEdits`); `TESTA.gb` and the
+Depth TSV are stored once for both modes.
 `inactive-class-m.v44.gbdraw-session.json.gz` is a Web **Save Session**
 download from the same commit: Circular has `TESTA.gb` and a Result, and Linear
 has no inputs but an edited plot title, Accession, Length, and legend position.

@@ -1,15 +1,30 @@
 // @ts-check
 /** @import { FeatureCatalogAdmission } from './feature-catalog.js' */
-import { FEATURE_SELECTOR, filterFeatureFillTargets, getFeatureIdentity } from './feature-dom.js';
+/** @import { LegendRowReach, PythonLegendKey, RenderedFeatureId } from './legend-svg.js' */
+import {
+  AUTO_FEATURE_UNDERLAY_STROKE,
+  FEATURE_PART_CONNECTOR,
+  FEATURE_SELECTOR,
+  filterFeatureFillTargets,
+  getFeatureIdentity,
+  getFeaturePart,
+  isAutoFeatureUnderlay
+} from './feature-dom.js';
 import {
   getAllFeatureLegendGroups,
   getLegendEntrySwatch as legendSwatch,
+  legendRowFeatureIds,
   moveLegendEntryToAnchor,
-  orderLegendEntries
+  orderLegendEntries,
+  pythonLegendKey,
+  pythonLegendRow,
+  setsFeatureStroke,
+  SPECIFIC_COLOR_FILE_OWNER
 } from './legend-svg.js';
 import { isCurrentWorkerGenerationResponse } from './current-worker-result-source.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { sanitizeSvgContent } from './svg-sanitization.js';
+import { LEGEND_ORDER_RECORD, RESULT_BASE_SELECTOR, pythonDrawnAttribute, resultBaseAttribute } from './result-paint-bases.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { collectRenderedFeatureIdentitiesFromSvgRoot } from './session-feature-metadata.js';
 import { normalizeSvgResultIds } from './svg-result-normalization.js';
@@ -35,17 +50,30 @@ const text = (value) => String(value ?? '').trim();
 
 /**
  * A caller's rewrite of one parsed Result SVG. The return value is ignored.
+ * A transform that returns false changed nothing; any other value counts as a change (OV-345).
  * @typedef {(svg: Element, context: { result: any, resultIndex: number }) => unknown} SvgResultTransform
+ */
+
+/**
+ * A stroke on a Legend row: its swatch, and the features the row reaches in
+ * the Result, which the executor reads from Python's row there (OV-288).
+ * @typedef {object} LegendStrokeOperation
+ * @property {PythonLegendKey} caption The row: Python's key, or an editor row's own key.
+ * @property {string} strokeColor Empty: the operation sets no color.
+ * @property {number | null} strokeWidth Null: the operation sets no width.
+ * @property {boolean} [allowMissing]
+ * @property {LegendRowReach} reach
  */
 
 /**
  * One Result's compiled editor operations. The planner is app/candidate-render.js;
  * this module declares the shape it applies.
+ * A live feature fill of `color: null` keeps the fill the Result shows.
  * @typedef {Record<
  *   'featureFills' | 'featureStrokes' | 'featureVisibility' | 'labelText' | 'labelVisibility'
- *   | 'legendFills' | 'legendStrokes' | 'legendRenames' | 'legendDeletes' | 'legendAdds' | 'legendOrder',
+ *   | 'legendFills' | 'legendRenames' | 'legendDeletes' | 'legendAdds' | 'legendOrder',
  *   readonly Record<string, any>[]
- * > & { callerTransforms: readonly SvgResultTransform[] }} SvgMutationOperations
+ * > & { legendStrokes: readonly LegendStrokeOperation[], callerTransforms: readonly SvgResultTransform[] }} SvgMutationOperations
  */
 
 /**
@@ -53,7 +81,7 @@ const text = (value) => String(value ?? '').trim();
  * @property {'EMPTY' | 'MUTATING'} kind
  * @property {readonly SvgMutationOperations[]} operationsByResult One entry per Result.
  * @property {number} [legacyNormalizationCount] The Results whose transform is a
- *   legacy normalization (`createLegacyNormalizationSvgMutationPlan`).
+ *   legacy normalization (`createSavedResultPlan`).
  */
 
 /**
@@ -292,12 +320,21 @@ const resultFeatureTypes = (selectedFeatureTypes) => (
   Array.isArray(selectedFeatureTypes) ? Object.freeze(selectedFeatureTypes.map(String)) : null
 );
 
-const metadataFromCatalogAdmission = (catalogAdmission, resultIndex, sourceClass, selectedFeatureTypes) => {
+// `drawnLegendKeys`: the Legend rows Python drew in the Result (its row facts),
+// kept in memory with the committed Result; null for a Result Load admitted.
+/**
+ * @param {FeatureCatalogAdmission} catalogAdmission @param {number} resultIndex @param {string} sourceClass
+ * @param {readonly string[] | null} selectedFeatureTypes
+ * @param {readonly SvgLegendRowFacts[] | null} [legendRows]
+ */
+const metadataFromCatalogAdmission = (catalogAdmission, resultIndex, sourceClass, selectedFeatureTypes, legendRows = null) => {
   const renderedFeatureIdentities = catalogAdmission.renderedIdentitiesByResult[resultIndex];
   if (!renderedFeatureIdentities) {
     throw new Error('The admitted feature catalog is missing Result identity metadata.');
   }
-  return Object.freeze({ renderedFeatureIdentities, sourceClass, selectedFeatureTypes });
+  return Object.freeze({
+    renderedFeatureIdentities, sourceClass, selectedFeatureTypes, drawnLegendKeys: legendRows?.[resultIndex]?.drawn ?? null
+  });
 };
 
 export const isCommittedSvgResult = (result) => Boolean(committedState(result));
@@ -421,24 +458,6 @@ export const createEmptySvgMutationPlan = (resultCount) => {
   });
 };
 
-/**
- * A Load plan whose only operations are one legacy normalization per Result
- * that needs one (`null` for none, OV-273); without one it is the EMPTY plan.
- * @param {ReadonlyArray<SvgResultTransform | null>} transforms
- * @returns {SvgMutationPlan}
- */
-export const createLegacyNormalizationSvgMutationPlan = (transforms) => {
-  const empty = createEmptySvgMutationPlan(transforms.length);
-  if (!transforms.some(Boolean)) return empty;
-  return Object.freeze({
-    kind: 'MUTATING',
-    legacyNormalizationCount: transforms.filter(Boolean).length,
-    operationsByResult: Object.freeze(empty.operationsByResult.map((operations, index) => (
-      transforms[index] ? Object.freeze({ ...operations, callerTransforms: Object.freeze([transforms[index]]) }) : operations
-    )))
-  });
-};
-
 const setAttributeIfDifferent = (element, name, value) => {
   const normalized = String(value);
   if (element.getAttribute(name) === normalized) return false;
@@ -450,6 +469,111 @@ const removeAttributeIfPresent = (element, name) => {
   if (!element.hasAttribute(name)) return false;
   element.removeAttribute(name);
   return true;
+};
+
+// An operation that keeps what the Result shows (a live value not known yet)
+// still claims the attribute, so a reconcile leaves it as it is.
+/**
+ * @param {{ painted: Map<Element, Set<string>> }} index
+ * @param {Element} element
+ * @param {string} name
+ */
+const keepPaintAttribute = (index, element, name) => {
+  index.painted.set(element, (index.painted.get(element) || new Set()).add(name));
+};
+
+// A paint attribute the executor changes keeps Python's value beside it
+// (`resultBaseAttribute`), recorded on the first change. The index notes
+// each attribute an operation sets, so a reconcile leaves it alone, and
+// whether the pass changed the Result.
+/**
+ * @param {{ painted: Map<Element, Set<string>>, changed: boolean }} index
+ * @param {Element} element
+ * @param {string} name
+ * @param {string | number | null} value null removes the attribute.
+ */
+const setPaintAttribute = (index, element, name, value) => {
+  keepPaintAttribute(index, element, name);
+  const current = element.getAttribute(name);
+  const next = value === null ? null : String(value);
+  if (current === next) return false;
+  const base = resultBaseAttribute(name);
+  if (!element.hasAttribute(base)) element.setAttribute(base, current ?? '');
+  if (next === null) element.removeAttribute(name);
+  else element.setAttribute(name, next);
+  index.changed = true;
+  return true;
+};
+
+// The domains a reconcile returns to Python's values, and the attributes
+// each one owns on feature elements, on Legend swatches, and on Legend rows
+// (a rename's key and a delete's hiding). A Legend row stroke also strokes
+// the row's features.
+const PAINT_DOMAIN_ATTRIBUTES = Object.freeze({
+  featureFills: { feature: ['fill'], swatch: [], row: [] },
+  featureStrokes: { feature: ['stroke', 'stroke-width'], swatch: [], row: [] },
+  featureVisibility: { feature: ['display'], swatch: [], row: [] },
+  legendFills: { feature: [], swatch: ['fill'], row: [] },
+  legendStrokes: { feature: ['stroke', 'stroke-width'], swatch: ['stroke', 'stroke-width'], row: [] },
+  legendRenames: { feature: [], swatch: [], row: ['data-legend-key'] },
+  legendDeletes: { feature: [], swatch: [], row: ['display'] }
+});
+const RESULT_PAINT_DOMAINS = Object.freeze(
+  /** @type {Array<keyof typeof PAINT_DOMAIN_ATTRIBUTES>} */ (Object.keys(PAINT_DOMAIN_ATTRIBUTES))
+);
+
+/** @param {Element} element @returns {'feature' | 'swatch' | 'row'} */
+const paintElementKind = (element) => {
+  if (element.hasAttribute('data-legend-key')) return 'row';
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    if (node.hasAttribute('data-legend-key')) return 'swatch';
+  }
+  return 'feature';
+};
+
+/** @param {Element} entry @param {string} caption */
+const updateLegendCaption = (entry, caption) => {
+  entry.setAttribute('data-legend-key', caption);
+  const label = entry.querySelector('text');
+  if (label) label.textContent = caption;
+};
+
+/**
+ * Return every attribute the executor changed in `domains` and no operation
+ * of this pass set to the value Python drew (a Legend row's key with its
+ * text). Returns whether an attribute returned, and whether a Legend row did.
+ * @param {Element} root
+ * @param {readonly string[]} domains
+ * @param {Map<Element, Set<string>>} painted
+ * @returns {{ changed: boolean, rowsChanged: boolean }}
+ */
+const restorePaintBases = (root, domains, painted) => {
+  const owned = { feature: new Set(), swatch: new Set(), row: new Set() };
+  domains.forEach((domain) => {
+    const attributes = PAINT_DOMAIN_ATTRIBUTES[/** @type {keyof typeof PAINT_DOMAIN_ATTRIBUTES} */ (domain)];
+    attributes?.feature.forEach((name) => owned.feature.add(name));
+    attributes?.swatch.forEach((name) => owned.swatch.add(name));
+    attributes?.row.forEach((name) => owned.row.add(name));
+  });
+  let changed = false;
+  let rowsChanged = false;
+  if (owned.feature.size === 0 && owned.swatch.size === 0 && owned.row.size === 0) return { changed, rowsChanged };
+  [root, ...Array.from(root.querySelectorAll(RESULT_BASE_SELECTOR))].forEach((element) => {
+    const kind = paintElementKind(element);
+    owned[kind].forEach((name) => {
+      if (painted.get(element)?.has(name)) return;
+      const base = resultBaseAttribute(name);
+      const value = element.getAttribute(base);
+      if (value === null) return;
+      if (value === '') element.removeAttribute(name);
+      else if (name === 'data-legend-key') updateLegendCaption(element, value);
+      else element.setAttribute(name, value);
+      element.removeAttribute(base);
+      changed = true;
+      if (kind === 'row') rowsChanged = true;
+    });
+  });
+  return { changed, rowsChanged };
 };
 
 const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
@@ -466,6 +590,9 @@ const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
     recordStructuralMetric('svgMutationIndexBuildCount', 1, { phase, resultIndex });
   };
   return {
+    /** @type {Map<Element, Set<string>>} */
+    painted: new Map(),
+    changed: false,
     features() {
       announce();
       if (built.featureElements) return built.featureElements;
@@ -491,14 +618,20 @@ const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
       const legendEntries = new Map();
       built.legendEntries = legendEntries;
       built.legendGroups = getAllFeatureLegendGroups(svg);
+      // A row of Python's is found by Python's key, also once renamed or
+      // hidden; an editor row by its own key, unless a row of Python's has it.
       built.legendGroups.forEach((group) => {
-        const seen = new Set();
-        Array.from(group.querySelectorAll('g[data-legend-key]')).forEach((entry) => {
-          const caption = text(entry.getAttribute('data-legend-key'));
-          if (!caption || seen.has(caption)) {
+        /** @type {Map<string, Element>} */
+        const seen = new Map();
+        const rows = Array.from(group.querySelectorAll('g[data-legend-key]'));
+        [...rows.filter((entry) => !isEditorRow(entry)), ...rows.filter(isEditorRow)].forEach((entry) => {
+          const caption = isEditorRow(entry) ? text(entry.getAttribute('data-legend-key')) : pythonLegendKey(entry);
+          const other = seen.get(caption);
+          if (other && !isEditorRow(other) && isEditorRow(entry)) return;
+          if (!caption || other) {
             throw new Error('Current SVG contains an ambiguous Legend binding.');
           }
-          seen.add(caption);
+          seen.set(caption, entry);
           if (!legendEntries.has(caption)) legendEntries.set(caption, []);
           // `get` holds the array set on the line above.
           /** @type {Element[]} */ (legendEntries.get(caption)).push(entry);
@@ -509,6 +642,9 @@ const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
     }
   };
 };
+
+/** @param {Element} entry */
+const isEditorRow = (entry) => entry.getAttribute('data-legend-owner') === 'direct-editor';
 
 const requireFeatureElements = (index, renderedId) => {
   const elements = index.features().get(renderedId) || [];
@@ -536,45 +672,76 @@ const applyFeatureOperations = (index, operations) => {
     if (targets.length === 0) {
       throw new Error('Sanitized SVG content is missing a rendered Feature fill target.');
     }
-    targets.forEach((element) => setAttributeIfDifferent(element, 'fill', color));
+    targets.forEach((element) => (color === null
+      ? keepPaintAttribute(index, element, 'fill')
+      : setPaintAttribute(index, element, 'fill', color)));
   });
   operations.featureStrokes.forEach(({ renderedId, strokeColor, strokeWidth }) => {
     requireFeatureElements(index, renderedId).forEach((element) => {
-      if (strokeColor) setAttributeIfDifferent(element, 'stroke', strokeColor);
-      if (strokeWidth !== null) setAttributeIfDifferent(element, 'stroke-width', strokeWidth);
+      if (strokeColor) setPaintAttribute(index, element, 'stroke', strokeColor);
+      if (strokeWidth !== null) setPaintAttribute(index, element, 'stroke-width', strokeWidth);
     });
   });
   operations.featureVisibility.forEach(({ renderedId, mode }) => {
     requireFeatureElements(index, renderedId).forEach((element) => {
-      if (mode === 'off') setAttributeIfDifferent(element, 'display', 'none');
-      else removeAttributeIfPresent(element, 'display');
+      setPaintAttribute(index, element, 'display', mode === 'off' ? 'none' : null);
     });
   });
 };
 
-const updateLegendCaption = (entry, caption) => {
-  entry.setAttribute('data-legend-key', caption);
-  const label = entry.querySelector('text');
-  if (label) label.textContent = caption;
-};
-
 // `mayBeAbsent(caption)` says whether Python's Legend row facts let a required row
-// be missing from this Result (OV-63).
-const applyLegendOperations = (index, operations, { displayed = false, mayBeAbsent = /** @type {((caption: string) => boolean) | undefined} */ (undefined) } = {}) => {
+// be missing from this Result (OV-63). Fills, strokes, renames, and deletes
+// address a row of Python's by Python's key; an addition and its styles address
+// the editor row by its caption; the order addresses the keys the rows show.
+// `restoresFills`: the pass returns the feature fills no operation sets to
+// Python's (a reconcile that shows them).
+// Returns whether a Legend row was added, renamed, hidden, or moved.
+const applyLegendOperations = (index, operations, {
+  displayed = false, restoresFills = false, mayBeAbsent = /** @type {((caption: string) => boolean) | undefined} */ (undefined)
+} = {}) => {
   const requireRow = (operation) => requireLegendEntries(index, operation.caption, operation, mayBeAbsent);
+  // The fill each drawn feature shows once this pass ends, read once per pass
+  // for the Legend row strokes (perf-014x S5).
+  /** @type {Array<[RenderedFeatureId, string]> | null} */
+  let drawnFills = null;
+  const featureFills = () => {
+    drawnFills ??= [...index.features()].flatMap(([renderedId, elements]) => {
+      const element = filterFeatureFillTargets(elements)[0];
+      if (!element) return [];
+      const fill = restoresFills && !index.painted.get(element)?.has('fill')
+        ? pythonDrawnAttribute(element, 'fill')
+        : element.getAttribute('fill');
+      return [/** @type {[RenderedFeatureId, string]} */ ([renderedId, text(fill)])];
+    });
+    return drawnFills;
+  };
+  let changed = false;
   // Python never draws a row the Legend editor added, so the row is added first and
   // a fill or stroke on it then finds it like a generated row (OV-86). An added row
-  // copies the first row before this pass styles that row.
-  operations.legendAdds.forEach(({ caption, color, xPos, yPos }) => {
+  // copies Python's first row as Python drew it, before this pass styles that row.
+  // A rule commit's row (`ifAbsent`) is added only where the Result lacks it,
+  // before the row it replaces, and owned by the rules; a row of that caption
+  // the Result has stays as it is, shown again if a commit retired it.
+  // An editor row goes before the rows of the later additions, as Generate
+  // appends them in order, so a renamed editor row keeps its place among them.
+  operations.legendAdds.forEach(({ caption, color, xPos, yPos, ifAbsent = false, before = '' }, addIndex) => {
     const { entries, groups } = index.legends();
     const existingEntries = entries.get(caption) || [];
+    if (ifAbsent && existingEntries.length > 0) {
+      existingEntries.forEach((entry) => {
+        if (!entry.hasAttribute(resultBaseAttribute('display'))) changed = removeAttributeIfPresent(entry, 'display') || changed;
+      });
+      return;
+    }
     if (existingEntries.length > 0) {
       existingEntries.forEach((entry) => {
         const swatch = legendSwatch(entry);
         if (!swatch) throw new Error('Current SVG has no Legend swatch template.');
-        setAttributeIfDifferent(swatch, 'fill', color);
-        entry.setAttribute('data-legend-owner', 'direct-editor');
-        moveLegendEntryToAnchor(entry, xPos, yPos);
+        // The editor row's own color is its drawn fill; Python drew none.
+        const recolored = setAttributeIfDifferent(swatch, 'fill', color);
+        const unrecorded = removeAttributeIfPresent(swatch, resultBaseAttribute('fill'));
+        if (setAttributeIfDifferent(entry, 'data-legend-owner', 'direct-editor') || recolored || unrecorded) index.changed = true;
+        changed = moveLegendEntryToAnchor(entry, xPos, yPos) || changed;
       });
       return;
     }
@@ -582,86 +749,471 @@ const applyLegendOperations = (index, operations, { displayed = false, mayBeAbse
       throw new Error('Current SVG cannot admit the requested Legend addition.');
     }
     entries.set(caption, groups.map((group) => {
-      const template = group.querySelector('g[data-legend-key]');
-      const added = template?.cloneNode?.(true) || null;
-      if (!added) throw new Error('Current SVG has no Legend entry template.');
-      updateLegendCaption(added, caption);
-      const swatch = legendSwatch(added);
+      const rows = Array.from(group.querySelectorAll('g[data-legend-key]'));
+      const template = rows.find((entry) => !isEditorRow(entry));
+      const row = /** @type {Element | null} */ (template?.cloneNode?.(true) || null);
+      if (!row) throw new Error('Current SVG has no Legend entry template.');
+      // The copy is of Python's row as drawn, not of that row's edits (OV-121);
+      // Python draws no hidden row.
+      restorePaintBases(row, RESULT_PAINT_DOMAINS, new Map());
+      row.removeAttribute('display');
+      updateLegendCaption(row, caption);
+      const swatch = legendSwatch(row);
       if (!swatch) throw new Error('Current SVG has no Legend swatch template.');
       swatch.setAttribute('fill', color);
-      added.setAttribute('data-legend-owner', 'direct-editor');
-      moveLegendEntryToAnchor(added, xPos, yPos);
-      group.appendChild(added);
-      return added;
+      row.setAttribute('data-legend-owner', ifAbsent ? SPECIFIC_COLOR_FILE_OWNER : 'direct-editor');
+      moveLegendEntryToAnchor(row, xPos, yPos);
+      const later = new Set(operations.legendAdds.slice(addIndex + 1).map((add) => add.caption));
+      const next = rows.find((entry) => (before
+        ? text(entry.getAttribute('data-legend-key')) === before
+        : !ifAbsent && isEditorRow(entry) && later.has(text(entry.getAttribute('data-legend-key')))));
+      if (next?.parentElement) next.parentElement.insertBefore(row, next);
+      else group.appendChild(row);
+      return row;
     }));
+    changed = true;
   });
   operations.legendFills.forEach((operation) => {
     const { color } = operation;
     requireRow(operation).forEach((entry) => {
       const swatch = legendSwatch(entry);
       if (!swatch) throw new Error('Sanitized SVG content is missing a Legend swatch.');
-      setAttributeIfDifferent(swatch, 'fill', color);
+      setPaintAttribute(index, swatch, 'fill', color);
     });
   });
-  operations.legendStrokes.forEach((operation) => {
-    const { strokeColor, strokeWidth, renderedIds } = operation;
-    (Array.isArray(renderedIds) ? renderedIds : []).forEach((renderedId) => {
+  operations.legendStrokes.forEach((/** @type {LegendStrokeOperation} */ operation) => {
+    const { strokeColor, strokeWidth, reach } = operation;
+    const rows = requireRow(operation);
+    const pythonColor = rows.length > 0 ? pythonLegendRow(rows[0]).color : null;
+    legendRowFeatureIds(reach, pythonColor, featureFills()).forEach((renderedId) => {
       requireFeatureElements(index, renderedId).forEach((element) => {
-        if (strokeColor) setAttributeIfDifferent(element, 'stroke', strokeColor);
-        if (strokeWidth !== null) setAttributeIfDifferent(element, 'stroke-width', strokeWidth);
+        if (strokeColor) setPaintAttribute(index, element, 'stroke', strokeColor);
+        if (strokeWidth !== null) setPaintAttribute(index, element, 'stroke-width', strokeWidth);
       });
     });
-    requireRow(operation).forEach((entry) => {
+    rows.forEach((entry) => {
       const swatch = legendSwatch(entry);
       if (!swatch) throw new Error('Sanitized SVG content is missing a Legend swatch.');
-      if (strokeColor) setAttributeIfDifferent(swatch, 'stroke', strokeColor);
-      if (strokeWidth !== null) setAttributeIfDifferent(swatch, 'stroke-width', strokeWidth);
+      if (strokeColor) setPaintAttribute(index, swatch, 'stroke', strokeColor);
+      if (strokeWidth !== null) setPaintAttribute(index, swatch, 'stroke-width', strokeWidth);
     });
   });
-  // A rename keeps the row in place; the Legend layout then places every row
-  // in the Legend's order, as Python does (OV-156).
+  // A rename keeps the row in place and Python's key as a record; the Legend
+  // layout then places every row in the Legend's order, as Python does (OV-156).
   operations.legendRenames.forEach(({ from, to, allowMissing }) => {
-    requireLegendEntries(index, from, { allowMissing }, mayBeAbsent).forEach((entry) => updateLegendCaption(entry, to));
+    requireLegendEntries(index, from, { allowMissing }, mayBeAbsent).forEach((entry) => {
+      if (!setPaintAttribute(index, entry, 'data-legend-key', to)) return;
+      updateLegendCaption(entry, to);
+      changed = true;
+    });
   });
-  operations.legendDeletes.forEach(({ caption, allowMissing }) => {
-    requireLegendEntries(index, caption, { allowMissing }).forEach((entry) => entry.remove());
+  // A delete hides the row and keeps it with Python's key, so a reconcile
+  // without the delete shows it in its place.
+  // A rule commit's retired row (`retire`) stays hidden, with no record, until
+  // Python draws the Legend again.
+  operations.legendDeletes.forEach(({ caption, allowMissing, retire = false }) => {
+    requireLegendEntries(index, caption, { allowMissing }).forEach((entry) => {
+      changed = (retire ? setAttributeIfDifferent(entry, 'display', 'none') : setPaintAttribute(index, entry, 'display', 'none'))
+        || changed;
+    });
   });
   // The edited Legend order is replayed last, over the renderer's slots (D-08).
   // A displayed batch Result that already follows it keeps its order, so the
   // entries only that Result draws keep their places (B18).
   operations.legendOrder.forEach(({ captions }) => {
-    index.legends().groups.forEach((group) => orderLegendEntries(group, captions, { keepFollowed: displayed }));
+    index.legends().groups.forEach((group) => { changed = orderLegendGroup(group, captions, displayed) || changed; });
   });
+  return changed;
+};
+
+// The executor's one ordering of a feature Legend group (R3). The first change
+// of a group's order records Python's order of its rows (their Python keys).
+/** @param {Element} group @param {readonly string[]} captions @param {boolean} keepFollowed */
+const orderLegendGroup = (group, captions, keepFollowed) => {
+  const pythonOrder = JSON.stringify(Array.from(group.querySelectorAll('g[data-legend-key]'))
+    .filter((entry) => !isEditorRow(entry)).map(pythonLegendKey));
+  const moved = orderLegendEntries(group, captions, { keepFollowed });
+  if (moved && !group.hasAttribute(LEGEND_ORDER_RECORD)) group.setAttribute(LEGEND_ORDER_RECORD, pythonOrder);
+  return moved;
+};
+
+// The Legend structure a reconcile shows returns to Python's where no
+// operation keeps it: editor rows no addition names are removed, and a group
+// whose order no order operation sets takes Python's recorded order again.
+// Returns whether a row was removed or moved.
+/**
+ * @param {{ legends: () => { groups: Element[] } }} index
+ * @param {SvgMutationOperations} operations
+ * @param {readonly string[]} domains
+ */
+const restoreLegendStructure = (index, operations, domains) => {
+  let changed = false;
+  const { groups } = index.legends();
+  if (domains.includes('legendAdds')) {
+    const added = new Set(operations.legendAdds.map(({ caption }) => caption));
+    groups.forEach((group) => Array.from(group.querySelectorAll('g[data-legend-key]')).forEach((entry) => {
+      if (!isEditorRow(entry) || added.has(text(entry.getAttribute('data-legend-key')))) return;
+      entry.remove();
+      changed = true;
+    }));
+  }
+  if (domains.includes('legendOrder') && operations.legendOrder.length === 0) {
+    groups.forEach((group) => {
+      const recorded = group.getAttribute(LEGEND_ORDER_RECORD);
+      if (recorded === null) return;
+      /** @type {unknown} */
+      let order = null;
+      try { order = JSON.parse(recorded); } catch { order = null; }
+      const shownKeys = new Map(Array.from(group.querySelectorAll('g[data-legend-key]'))
+        .filter((entry) => !isEditorRow(entry))
+        .map((entry) => [pythonLegendKey(entry), text(entry.getAttribute('data-legend-key'))]));
+      if (Array.isArray(order)) {
+        changed = orderLegendGroup(group, order.map((key) => shownKeys.get(text(key)) || ''), false) || changed;
+      }
+      // The record's removal is a change, so the stored Result loses it too.
+      group.removeAttribute(LEGEND_ORDER_RECORD);
+      changed = true;
+    });
+  }
+  return changed;
 };
 
 /**
- * Apply one Result's compiled editor operations to its mounted SVG with the
- * executor that Generate admission uses (D-07, PD-OI-062). The preview binder
- * owns label DOM identity, so label operations stay with it. Legend operations
- * are diagram-wide and a batch Result shows only its own categories and
- * features, so an absent caption or feature is skipped.
+ * Reconcile one Result's mounted SVG with its compiled editor operations,
+ * using the executor that Generate admission uses (D-07, PD-OI-062). Every
+ * operation given is applied; then each attribute the executor changed
+ * earlier in one of `domains` that no operation set returns to the value
+ * Python drew, and the Legend structure of `domains` returns to Python's where
+ * no operation keeps it: a row's key and text (`legendRenames`), a hidden row
+ * (`legendDeletes`), the editor rows (`legendAdds`), and the order
+ * (`legendOrder`). A second call changes nothing.
+ * The preview binder owns label DOM identity, so label operations stay with
+ * it. Legend operations are diagram-wide and a batch Result shows only its own
+ * categories and features, so an absent caption or feature is skipped.
+ * Returns whether the reconcile changed the Result, so a caller commits only
+ * a change (OV-345), and whether the Legend's rows changed, so the caller
+ * lays it out once.
+ * @param {Element} svg
+ * @param {SvgMutationOperations} operations
+ * @param {{ resultIndex?: number, domains?: readonly string[] }} [options]
+ * @returns {{ changed: boolean, legendChanged: boolean }}
  */
-export const applyEditorOperationsToMountedSvg = (svg, operations, { resultIndex = 0 } = {}) => {
+export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domains = RESULT_PAINT_DOMAINS } = {}) => {
   const index = createLazyMutationIndex(svg, { phase: 'result-selection', resultIndex });
-  const present = ({ renderedId }) => (index.features().get(renderedId) || []).length > 0;
+  const present = (/** @type {Readonly<Record<string, unknown>>} */ operation) => (
+    index.features().get(String(operation.renderedId)) || []
+  ).length > 0;
   applyFeatureOperations(index, {
     featureFills: operations.featureFills.filter(present),
     featureStrokes: operations.featureStrokes.filter(present),
     featureVisibility: operations.featureVisibility.filter(present)
   });
-  if (index.legends().groups.length === 0) return;
-  const allowMissing = (operation) => ({ ...operation, allowMissing: true });
-  applyLegendOperations(index, {
-    legendFills: operations.legendFills.map(allowMissing),
-    legendStrokes: operations.legendStrokes.map((operation) => ({
-      ...allowMissing(operation),
-      renderedIds: (operation.renderedIds || []).filter((renderedId) => present({ renderedId }))
-    })),
-    legendRenames: operations.legendRenames.map(allowMissing),
-    legendDeletes: operations.legendDeletes.map(allowMissing),
-    legendAdds: operations.legendAdds,
-    legendOrder: operations.legendOrder
-  }, { displayed: true });
+  let legendChanged = false;
+  if (index.legends().groups.length > 0) {
+    // Every row operation addresses Python's key (the index keeps it for a
+    // renamed row), or an editor row's own key, and may miss its row here.
+    const allowMissing = (operation) => ({ ...operation, allowMissing: true });
+    legendChanged = applyLegendOperations(index, {
+      legendFills: operations.legendFills.map(allowMissing),
+      legendStrokes: operations.legendStrokes.map(allowMissing),
+      legendRenames: operations.legendRenames.map(allowMissing),
+      legendDeletes: operations.legendDeletes.map(allowMissing),
+      legendAdds: operations.legendAdds,
+      legendOrder: operations.legendOrder
+    }, { displayed: true, restoresFills: domains.includes('featureFills') });
+    legendChanged = restoreLegendStructure(index, operations, domains) || legendChanged;
+  }
+  const restored = restorePaintBases(svg, domains, index.painted);
+  return {
+    changed: index.changed || legendChanged || restored.changed,
+    legendChanged: restored.rowsChanged || legendChanged
+  };
+};
+
+/**
+ * A saved feature color edit: a color, or a color with the Legend caption it
+ * names (older Sessions wrote the color alone).
+ * @typedef {string | { color?: unknown, caption?: unknown } | null} SavedFeatureColorEdit
+ */
+/**
+ * A saved stroke edit of a feature or a Legend row.
+ * @typedef {{ strokeColor?: unknown, strokeWidth?: unknown }} SavedStrokeEdit
+ */
+/**
+ * A saved Legend row as Load reads it: its caption, Python's key, and the
+ * features older Sessions listed.
+ * @typedef {{ caption?: unknown, originalCaption?: unknown, featureIds?: unknown }} SavedLegendEntry
+ */
+/**
+ * The stroke and color edits a saved Result shows, as Load reads them for its
+ * mode, and the values the Session recorded as Python's.
+ * @typedef {object} SavedResultEdits
+ * @property {Record<string, SavedFeatureColorEdit>} featureColorOverrides
+ * @property {Record<string, SavedStrokeEdit>} featureStrokeOverrides
+ * @property {SavedLegendEntry[]} legendEntries
+ * @property {Record<string, string>} legendColorOverrides
+ * @property {Record<string, SavedStrokeEdit>} legendStrokeOverrides
+ * @property {Record<string, string>} originalLegendColors
+ * @property {string[]} originalLegendOrder The captions of the rows Python drew (the Legend inventory).
+ * @property {'circular' | 'linear'} mode
+ * @property {number} sessionVersion The version of the Session that saved the edits.
+ */
+
+/** @param {string} name @param {unknown} left @param {unknown} right */
+const samePaint = (name, left, right) => {
+  const a = text(left).toLowerCase();
+  const b = text(right).toLowerCase();
+  if (name !== 'stroke-width' || !a || !b) return a === b;
+  return Number(a) === Number(b);
+};
+
+// Python strokes the feature parts of one kind alike within one size class
+// (a Circular record; a whole Linear canvas): a block and its outline with
+// the block stroke, a block drawn under an outline with none, a connector
+// with the line stroke. A Legend swatch of a feature row has the block stroke
+// of the first record.
+/** @param {Element} element @param {readonly Element[]} parts @param {boolean} perRecord */
+const strokeKind = (element, parts, perRecord) => {
+  const record = perRecord ? text(element.getAttribute('data-gbdraw-record-index')) : '';
+  if (getFeaturePart(element) === FEATURE_PART_CONNECTOR) return `${record}|connector`;
+  const id = text(element.getAttribute('id'));
+  const outlined = Boolean(id) && parts.some((part) => part.getAttribute('id') === `${id}__outline`);
+  return `${record}|${outlined ? 'outlined' : 'block'}`;
+};
+
+// Sessions older than 46 (main writes 44) saved a Result with its stroke and
+// color edits drawn in but without the records of Python's values. Load
+// records them once, on each element that shows its edit, so Reset and Undo
+// return it to Python's value: fills from the catalog, swatch fills from the
+// Legend's original colors, and strokes from the parts of the same kind that
+// no saved stroke edit reached (a stroke an edit or the Session kept may be an
+// edited one, or another Result's). A kind no part of which escaped the
+// edits, or whose parts disagree, is not known: its parts get no record and
+// show the saved stroke until Generate. Returns whether it recorded a value.
+/**
+ * @param {Element} svg
+ * @param {{ resultIndex: number, catalogAdmission: FeatureCatalogAdmission, edits: SavedResultEdits }} saved
+ * @returns {boolean}
+ */
+const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits }) => {
+  const index = createLazyMutationIndex(svg, { phase: 'session-load', resultIndex });
+  let recorded = false;
+  /** @param {Element} element @param {string} name @param {unknown} edited @param {unknown} original */
+  const record = (element, name, edited, original) => {
+    const current = element.getAttribute(name);
+    if (edited === null || edited === undefined || edited === '') return;
+    // A catalog row without Python's fill cannot say what Python drew: no record.
+    if (name === 'fill' && !text(original)) return;
+    // A value read from the drawing returns as written; one the Session kept
+    // as a number is as good as any spelling of it.
+    const drawn = typeof original === 'number' ? samePaint(name, current, original) : text(current) === text(original);
+    if (drawn || !samePaint(name, current, edited) || element.hasAttribute(resultBaseAttribute(name))) return;
+    element.setAttribute(resultBaseAttribute(name), text(original));
+    recorded = true;
+  };
+  /** @param {string} key */
+  const renderedIdsOf = (key) => (catalogAdmission.renderedTargetsByOverrideKey.get(key) || [])
+    .filter((target) => target.resultIndex === resultIndex).map((target) => target.renderedId);
+  const elementsOf = (/** @type {string} */ renderedId) => index.features().get(renderedId) || [];
+
+  /** @type {Map<string, string>} */
+  const editedFills = new Map();
+  /** @type {Map<string, RenderedFeatureId[]>} */
+  const namedIdsByCaption = new Map();
+  /** @type {Map<string, { fill_color?: unknown }>} */
+  const renderedFeatures = catalogAdmission.renderedFeaturesByResult?.[resultIndex] || new Map();
+  Object.entries(edits.featureColorOverrides).forEach(([key, edit]) => {
+    const color = text(edit && typeof edit === 'object' ? edit.color : edit);
+    const caption = text(edit && typeof edit === 'object' ? edit.caption : '');
+    renderedIdsOf(key).forEach((renderedId) => {
+      if (color) editedFills.set(renderedId, color);
+      if (caption) namedIdsByCaption.set(caption, [...(namedIdsByCaption.get(caption) || []), /** @type {RenderedFeatureId} */ (renderedId)]);
+      filterFeatureFillTargets(elementsOf(renderedId)).forEach((element) => (
+        record(element, 'fill', color, renderedFeatures.get(renderedId)?.fill_color)
+      ));
+    });
+  });
+  /** @type {Array<[string, SavedStrokeEdit]>} The rendered features each stroke edit reaches. */
+  const stroked = [];
+  Object.entries(edits.featureStrokeOverrides).forEach(([key, edit]) => {
+    if (setsFeatureStroke(edit)) renderedIdsOf(key).forEach((renderedId) => stroked.push([renderedId, edit]));
+  });
+  const ownStrokeIds = /** @type {RenderedFeatureId[]} */ (stroked.map(([renderedId]) => renderedId));
+  const drawnFills = [...renderedFeatures].map(([renderedId, feature]) => (
+    /** @type {[RenderedFeatureId, string]} */ ([renderedId, editedFills.get(renderedId) ?? text(feature?.fill_color)])
+  ));
+  const rows = index.legends().entries;
+  // A swatch shows its Legend color; its record keeps Python's, which is the
+  // color the row's stroke reaches by (OV-288), so the records come first.
+  Object.entries(edits.legendColorOverrides).forEach(([caption, color]) => {
+    const entry = edits.legendEntries.find((row) => text(row?.caption) === caption);
+    const original = edits.originalLegendColors[text(entry?.originalCaption) || caption];
+    if (original === undefined) return;
+    (rows.get(caption) || []).forEach((row) => {
+      const swatch = legendSwatch(row);
+      if (swatch) record(swatch, 'fill', color, original);
+    });
+  });
+  /** @type {Array<[string, SavedStrokeEdit]>} */
+  const strokedRows = Object.entries(edits.legendStrokeOverrides).filter(([, edit]) => setsFeatureStroke(edit));
+  strokedRows.forEach(([caption, edit]) => {
+    const entry = edits.legendEntries.find((row) => text(row?.caption) === caption);
+    const row = rows.get(caption)?.[0];
+    /** @type {LegendRowReach} */
+    const reach = {
+      listedIds: /** @type {RenderedFeatureId[]} */ ((Array.isArray(entry?.featureIds) ? entry.featureIds : []).map(text).filter(Boolean)),
+      namedIds: namedIdsByCaption.get(caption) || [],
+      ownStrokeIds,
+      draftColor: null
+    };
+    legendRowFeatureIds(reach, row ? pythonLegendRow(row).color : null, drawnFills)
+      .forEach((renderedId) => stroked.push([renderedId, edit]));
+  });
+
+  // Python's stroke of each kind: the one every unedited part of it shows.
+  const perRecord = edits.mode === 'circular';
+  const reached = new Set(stroked.map(([renderedId]) => renderedId));
+  /** @type {Map<string, { color: unknown, width: unknown } | null>} null: the parts disagree. */
+  const drawnStrokes = new Map();
+  index.features().forEach((parts, renderedId) => {
+    if (reached.has(renderedId)) return;
+    parts.filter((element) => !isAutoFeatureUnderlay(element)).forEach((element) => {
+      const kind = strokeKind(element, parts, perRecord);
+      const drawn = { color: element.getAttribute('stroke'), width: element.getAttribute('stroke-width') };
+      const known = drawnStrokes.get(kind);
+      if (known === undefined) drawnStrokes.set(kind, drawn);
+      else if (known && !(samePaint('stroke', known.color, drawn.color) && samePaint('stroke-width', known.width, drawn.width))) {
+        drawnStrokes.set(kind, null);
+      }
+    });
+  });
+  const firstPart = [...index.features().values()].flat().find((element) => !isAutoFeatureUnderlay(element));
+  const firstBlocks = `${perRecord ? text(firstPart?.getAttribute('data-gbdraw-record-index')) : ''}|block`;
+  /** @param {Element} element @param {{ color: unknown, width: unknown } | null | undefined} drawn @param {SavedStrokeEdit} edit */
+  const recordStroke = (element, drawn, edit) => {
+    if (!drawn) return;
+    record(element, 'stroke', edit.strokeColor, drawn.color);
+    record(element, 'stroke-width', edit.strokeWidth, drawn.width);
+  };
+  stroked.forEach(([renderedId, edit]) => {
+    const parts = elementsOf(renderedId);
+    parts.forEach((element) => recordStroke(
+      element,
+      isAutoFeatureUnderlay(element) ? AUTO_FEATURE_UNDERLAY_STROKE : drawnStrokes.get(strokeKind(element, parts, perRecord)),
+      edit
+    ));
+  });
+
+  strokedRows.forEach(([caption, edit]) => {
+    (rows.get(caption) || []).forEach((row) => {
+      const swatch = legendSwatch(row);
+      if (swatch) recordStroke(swatch, drawnStrokes.get(firstBlocks), edit);
+    });
+  });
+  return recorded;
+};
+
+// The first Session version whose Results carry the records of Python's
+// paint (0.14.0); an older Session's Result shows its edits without them.
+const PAINT_RECORD_SESSION_VERSION = 46;
+
+// The renamed generated rows a Session lists, by their caption: main's writer
+// (Sessions 44 to 46) renamed a row of Python's by rewriting its key and kept
+// Python's caption only as the entry's `originalCaption`. Only a caption no
+// other listed entry has, that is not itself a generated caption (Python may
+// draw a row of it), names one such row.
+/** @param {SavedResultEdits} edits @returns {Map<string, string>} */
+const savedLegendRenames = (edits) => {
+  const generated = new Set(edits.originalLegendOrder.map(text));
+  /** @type {Map<string, number>} */
+  const listed = new Map();
+  edits.legendEntries.forEach((entry) => listed.set(text(entry?.caption), (listed.get(text(entry?.caption)) || 0) + 1));
+  return new Map(edits.legendEntries.flatMap((entry) => {
+    const caption = text(entry?.caption);
+    const original = text(entry?.originalCaption);
+    return caption && original && caption !== original && generated.has(original) && !generated.has(caption)
+      && listed.get(caption) === 1 ? [[caption, original]] : [];
+  }));
+};
+
+// A Result saved before the executor recorded Python's Legend key shows such
+// a rename without the record, so a live edit addressed by Python's key misses
+// the row. Load records it once, on the one row of Python's with the renamed
+// caption, in a Result that has no row of Python's caption (U3a H1).
+// Returns whether it recorded a key.
+/** @param {Element} svg @param {Map<string, string>} renames @returns {boolean} */
+const recordSavedLegendKeys = (svg, renames) => {
+  let recorded = false;
+  const keyRecord = resultBaseAttribute('data-legend-key');
+  const groups = getAllFeatureLegendGroups(svg);
+  const rows = groups.flatMap((group) => Array.from(group.querySelectorAll('g[data-legend-key]')));
+  const drawnKeys = new Set(rows.flatMap((row) => [text(row.getAttribute('data-legend-key')), text(row.getAttribute(keyRecord))]));
+  groups.forEach((group) => {
+    const groupRows = Array.from(group.querySelectorAll('g[data-legend-key]'));
+    renames.forEach((original, caption) => {
+      if (drawnKeys.has(original)) return;
+      const named = groupRows.filter((row) => text(row.getAttribute('data-legend-key')) === caption);
+      const [row] = named;
+      if (named.length === 1 && !row.hasAttribute('data-legend-owner') && !row.hasAttribute(keyRecord)) {
+        row.setAttribute(keyRecord, original);
+        recorded = true;
+      }
+    });
+  });
+  return recorded;
+};
+
+/**
+ * A legacy normalization of a Result saved without composition metadata (a
+ * Session 40 Result of main 8228ffab or 7aad9e3e, OV-273): `applies` tells it
+ * from the Result's text.
+ * @typedef {{ transform: SvgResultTransform, applies: (content: unknown) => boolean }} LegacyResultNormalization
+ */
+
+/**
+ * The plan a current Session's Results are admitted with at Load: none, or,
+ * for each Result the legacy normalization applies to, that normalization;
+ * for each Result of a Session older than 46, which saved no records of
+ * Python's paint, the records of the edits it shows (`recordSavedEditBases`);
+ * and for each Result the records of Python's key on the rows a Session
+ * renamed without one (`recordSavedLegendKeys`).
+ * @param {readonly { content?: unknown }[]} results
+ * @param {FeatureCatalogAdmission} catalogAdmission
+ * @param {SavedResultEdits | null} edits
+ * @param {LegacyResultNormalization | null} [legacy]
+ * @returns {SvgMutationPlan}
+ */
+export const createSavedResultPlan = (results, catalogAdmission, edits, legacy = null) => {
+  const editsShown = edits && [
+    edits.featureColorOverrides, edits.featureStrokeOverrides, edits.legendColorOverrides, edits.legendStrokeOverrides
+  ].some((overrides) => Object.keys(overrides || {}).length > 0);
+  const needsRecords = Boolean(edits && editsShown && edits.sessionVersion < PAINT_RECORD_SESSION_VERSION);
+  const normalizes = (/** @type {{ content?: unknown }} */ result) => Boolean(legacy?.applies(result?.content));
+  const legacyNormalizationCount = results.filter(normalizes).length;
+  const renames = edits ? savedLegendRenames(edits) : new Map();
+  if (legacyNormalizationCount === 0 && renames.size === 0 && !needsRecords) {
+    return createEmptySvgMutationPlan(results.length);
+  }
+  const savedEdits = /** @type {SavedResultEdits} */ (edits);
+  return Object.freeze({
+    kind: 'MUTATING',
+    legacyNormalizationCount,
+    operationsByResult: Object.freeze(results.map((result, resultIndex) => {
+      // The records find a row by the key the normalized Legend shows, so the
+      // normalization comes first; the paint records find a renamed row by the
+      // key it shows, so they come before the key records.
+      const transforms = [
+        ...(legacy && normalizes(result) ? [legacy.transform] : []),
+        ...(needsRecords
+          ? [(/** @type {Element} */ svg) => recordSavedEditBases(svg, { resultIndex, catalogAdmission, edits: savedEdits })]
+          : []),
+        ...(renames.size > 0 ? [(/** @type {Element} */ svg) => recordSavedLegendKeys(svg, renames)] : [])
+      ];
+      return transforms.length > 0
+        ? Object.freeze({ ...freezeEmptyOperations(), callerTransforms: Object.freeze(transforms) })
+        : freezeEmptyOperations();
+    }))
+  });
 };
 
 const admitCurrentResult = (
@@ -692,10 +1244,16 @@ const admitCurrentResult = (
   recordStructuralMetric('applicationSvgParseCount', 1, { phase, resultIndex });
   const index = createLazyMutationIndex(svg, { phase, resultIndex });
   applyFeatureOperations(index, operations);
-  applyLegendOperations(index, operations, {
+  const rowsChanged = applyLegendOperations(index, operations, {
     mayBeAbsent: (caption) => legendRowMayBeAbsent(legendRows, resultIndex, caption)
   });
-  operations.callerTransforms.forEach((transform) => transform(svg, { result, resultIndex }));
+  // Every transform runs; one that returns false changed nothing.
+  const transformed = operations.callerTransforms
+    .map((transform) => transform(svg, { result, resultIndex }) !== false).includes(true);
+  // A Result the plan leaves as it is keeps its bytes (OV-345).
+  if (!index.changed && !rowsChanged && !transformed) {
+    return commitCatalogBackedResult({ ...result, content: sanitized }, metadata);
+  }
   const content = serializeAdmittedSvg(svg, { phase, resultIndex });
   return commitCatalogBackedResult({ ...result, content }, metadata);
 };
@@ -728,7 +1286,8 @@ const admitCatalogBackedResults = (
   recordStructuralMetric('manualRuleFeatureMatchCount', 0, { phase: sourceClass });
   const admitted = results.map((result, resultIndex) => admitCurrentResult(
     result,
-    metadataFromCatalogAdmission(catalogAdmission, resultIndex, sourceClass, featureTypes),
+    // `requireAlignedCatalogAdmission` above throws for a null admission.
+    metadataFromCatalogAdmission(/** @type {FeatureCatalogAdmission} */ (catalogAdmission), resultIndex, sourceClass, featureTypes, legendRows),
     currentResultOperations(plan, resultIndex),
     { sanitizer, parser, resultIndex, sourceClass, legendRows }
   ));

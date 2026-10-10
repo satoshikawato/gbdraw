@@ -292,9 +292,11 @@ const diagramWorkerResourceBytes = (activity) => (
   ), 0)
 );
 
-const expectRulePreparationWorker = (activity, runs = 0) => {
+// `helpers`: the exact count of rule-caption requests, or null for "at least one".
+const expectRulePreparationWorker = (activity, runs = 0, helpers = null) => {
   expect(activity).toMatchObject({ constructions: 1, initializations: 1, runs });
-  expect(activity.helpers).toBeGreaterThan(0);
+  if (helpers === null) expect(activity.helpers).toBeGreaterThan(0);
+  else expect(activity.helpers).toBe(helpers);
   for (const helper of activity.instances.flatMap(instance => instance.helpers || [])) {
     expect(helper).toMatchObject({ operation: 'evaluateRules', transferredBytes: 0 });
   }
@@ -1700,7 +1702,7 @@ test('loaded current preview supports direct edits before the first Generate', a
     );
     if (index < 0) throw new Error('The loaded legend entry is no longer available.');
     return {
-      color: app.updateLegendEntryColor(index, color),
+      color: await app.updateLegendEntryColor(index, color),
       stroke: await app.setLegendEntryStrokeColorValue(index, stroke),
       strokeWidth: await app.updateLegendEntryStrokeWidth(index, strokeWidth)
     };
@@ -1852,7 +1854,9 @@ test('loaded current preview supports direct edits before the first Generate', a
     freshlyLoaded.history.artifactCheckpointBuilds
   );
   const generatedWorker = await getDiagramWorkerActivity(freshPage);
-  expectRulePreparationWorker(generatedWorker, 1);
+  // Every rule caption has one color, so Generate skips Python's caption
+  // normalization (D-15-6 (4)): no rule-caption request.
+  expectRulePreparationWorker(generatedWorker, 1, 0);
 
   expect(await evaluateWithRetainedPromise(freshPage, () => window.__GBDRAW_HISTORY__.undo())).toBe(true);
   await settleMountedDom(freshPage);
@@ -1865,7 +1869,7 @@ test('loaded current preview supports direct edits before the first Generate', a
     artifactReplacementHistoryEntryCount: 1
   });
   const workerAfterGenerateUndo = await getDiagramWorkerActivity(freshPage);
-  expectRulePreparationWorker(workerAfterGenerateUndo, 1);
+  expectRulePreparationWorker(workerAfterGenerateUndo, 1, 0);
 
   expect(await evaluateWithRetainedPromise(freshPage, () => window.__GBDRAW_HISTORY__.redo())).toBe(true);
   await settleMountedDom(freshPage);
@@ -1878,7 +1882,7 @@ test('loaded current preview supports direct edits before the first Generate', a
     artifactReplacementHistoryEntryCount: 1
   });
   const workerAfterGenerateRedo = await getDiagramWorkerActivity(freshPage);
-  expectRulePreparationWorker(workerAfterGenerateRedo, 1);
+  expectRulePreparationWorker(workerAfterGenerateRedo, 1, 0);
 
   await testInfo.attach('loaded-preview-direct-edit.json', {
     body: Buffer.from(JSON.stringify({

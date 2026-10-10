@@ -1004,7 +1004,8 @@ Generate gives the loaded diagram. Ctrl+Z undoes and Ctrl+Shift+Z or Ctrl+Y redo
 select has focus. In a text field these keys keep the browser's text undo. Undo and Redo, like a failed Session Load, restore each setting exactly as
 it was: a setting that was not set, such as a track slot side or the Circular
 multi-record legend position, stays unset. **Reset Settings** is broader than undo and requires
-confirmation. In Linear it also clears each record's **Definition**, **Subtitle**,
+confirmation. Every Legend rename, of a feature row or a track row such as GC content, returns
+to the caption Python draws. In Linear it also clears each record's **Definition**, **Subtitle**,
 crop, and reverse complement, and the comparison alignment plan; the Files, each
 row's selected record, the file defaults, and Depth assignments stay. **Undo**
 restores them. Generate when the exported figure should include draft settings.

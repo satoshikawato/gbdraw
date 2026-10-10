@@ -117,6 +117,20 @@ export const resolveColorToHex = (colorValue) => {
   return namedColorHex(trimmed) || trimmed;
 };
 
+// A color as a Session holds it: lowercase #rrggbb, or null for a value that
+// does not resolve to one (also `none`).
+/** @param {unknown} value @returns {string | null} */
+export const normalizeOptionalHexColor = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const resolved = resolveColorToHex(String(value).trim());
+  const color = String(resolved || '').trim();
+  const shortMatch = color.match(/^#([0-9a-fA-F]{3})$/);
+  if (shortMatch) {
+    return `#${shortMatch[1].split('').map((char) => char + char).join('').toLowerCase()}`;
+  }
+  return /^#[0-9a-fA-F]{6}$/.test(color) ? color.toLowerCase() : null;
+};
+
 // Specific-color table domain, shared with Python's read_color_table:
 // `none`, #RGB, #RRGGBB, or a color name of the table Python uses, resolved
 // to hex. Names only a browser knows are rejected as in Python (OV-271).

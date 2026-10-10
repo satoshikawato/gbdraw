@@ -5,7 +5,10 @@ import {
   setFeatureVisibilityOverride
 } from '../../gbdraw/web/js/services/feature-visibility.js';
 import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
-import { resultCatalogFeatures } from '../../gbdraw/web/js/services/feature-catalog.js';
+import { admitFeatureCatalog, resultCatalogFeatures } from '../../gbdraw/web/js/services/feature-catalog.js';
+import { featureDrawnContext } from '../../gbdraw/web/js/services/feature-visibility.js';
+import { displayedFeatureAddressing } from '../../gbdraw/web/js/services/feature-override-identity.js';
+import { compileDirectEditorMutationPlan } from '../../gbdraw/web/js/app/candidate-render.js';
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
@@ -18,6 +21,25 @@ const rulePreparationFor = (state) => createRulePreparation({
   visibilityRules: () => requestFeatureVisibilityRules(state.featureVisibilityManualRules)
 });
 const committedRequest = (selectedFeaturesSet) => () => ({ diagramOptions: { selectedFeaturesSet } });
+// The root's port (R13) as it shows Feature visibility: the compile hides the
+// rendered features `resolveFeatureDrawn` does not draw. `show` receives each
+// rendered feature's mode and answers whether the Result changed.
+const visibilityPort = (state, getCommittedRequest, show, addressing = () => displayedFeatureAddressing(
+  state.extractedFeatures.value, ['one.svg'], 0
+)) => ({ domains }) => {
+  assert.deepEqual(domains, ['featureVisibility']);
+  const catalogAdmission = addressing();
+  const hidden = new Set(compileDirectEditorMutationPlan({
+    catalogAdmission,
+    livePreview: {
+      domains,
+      paletteColors: {},
+      drawnContext: featureDrawnContext(state.activeDrawing(), { diagramOptions: getCommittedRequest()?.diagramOptions })
+    }
+  }).operationsByResult[0].featureVisibility.map(({ renderedId }) => renderedId));
+  return show(Object.fromEntries([...catalogAdmission.renderedFeaturesByResult[0].keys()]
+    .map((renderedId) => [renderedId, hidden.has(renderedId) ? 'off' : 'on'])));
+};
 // Per-feature visibility is the identity row of the feature (design Q4).
 const identity = (id) => ({ scope: 'circular', record_key: 'record-1', biological_feature_id: `bio-${id}` });
 const modes = (overrides) => Object.fromEntries(Object.values(overrides)
@@ -57,10 +79,10 @@ const actions = createFeatureVisibilityActions({
   state: withDrawings(actionState),
   rulePreparation: rulePreparationFor(actionState),
   getCommittedRequest: committedRequest(['CDS']),
-  applyVisibilityPreviewChanges: (changes, options = {}) => {
-    appliedPreviewChanges.push({ changes, reason: options.reason });
+  showEditorIntent: visibilityPort(actionState, committedRequest(['CDS']), (modes) => {
+    appliedPreviewChanges.push(modes);
     return true;
-  },
+  }),
   ports: {
     applyFeatureVisibilityToLabels: (options = {}) => {
       labelVisibilityCalls.push(options.reflow !== false);
@@ -81,10 +103,7 @@ assert.deepEqual(modes(featureVisibilityOverrides), {
   'feature-b': 'off'
 });
 assert.equal(appliedPreviewChanges.length, 1);
-assert.deepEqual(
-  appliedPreviewChanges[0].changes.map((change) => [change.featureId, change.mode]),
-  [['feature-a', 'off'], ['feature-b', 'off']]
-);
+assert.deepEqual(appliedPreviewChanges[0], { 'feature-a': 'off', 'feature-b': 'off' });
 
 assert.equal(await command.revert(), true);
 assert.deepEqual(featureVisibilityOverrides, {});
@@ -93,10 +112,7 @@ assert.deepEqual(labelVisibilityCalls, [
   true,
   true
 ]);
-assert.deepEqual(
-  appliedPreviewChanges[1].changes.map((change) => [change.featureId, change.mode]),
-  [['feature-a', 'on'], ['feature-b', 'on']]
-);
+assert.deepEqual(appliedPreviewChanges[1], { 'feature-a': 'on', 'feature-b': 'on' });
 
 assert.equal(actions.setFeatureVisibility(featureA, 'off', {
   triggerReflow: false,
@@ -106,10 +122,7 @@ assert.equal(modes(featureVisibilityOverrides)['feature-a'], 'off');
 assert.equal(appliedPreviewChanges.length, 3);
 assert.deepEqual(labelVisibilityCalls.at(-1), false,
   'the label follows the feature even when the caller declines the reflow');
-assert.deepEqual(
-  appliedPreviewChanges[2].changes.map((change) => [change.featureId, change.mode]),
-  [['feature-a', 'off']]
-);
+assert.deepEqual(appliedPreviewChanges[2], { 'feature-a': 'off', 'feature-b': 'on' });
 clear(featureVisibilityOverrides);
 
 const sourceIdFeature = {
@@ -306,10 +319,10 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
     state: withDrawings(productState),
     rulePreparation: productPreparation,
     getCommittedRequest: committedRequest(['CDS', 'tRNA']),
-    applyVisibilityPreviewChanges: (changes) => {
-      reconciled.push(Object.fromEntries(changes.map((change) => [change.featureId, change.mode])));
+    showEditorIntent: visibilityPort(productState, committedRequest(['CDS', 'tRNA']), (modes) => {
+      reconciled.push(modes);
       return true;
-    },
+    }),
     ports: { applyFeatureVisibilityToLabels: () => true },
     selectResult: () => true
   });
@@ -363,11 +376,12 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
     state: withDrawings(panelState),
     rulePreparation: rulePreparationFor(panelState),
     getCommittedRequest: committedRequest(['CDS']),
-    applyVisibilityPreviewChanges: (changes) => changes.reduce((changed, { featureId, mode }) => {
-      if (shown[featureId] === mode) return changed;
-      shown[featureId] = mode;
-      return true;
-    }, false),
+    showEditorIntent: visibilityPort(panelState, committedRequest(['CDS']), (modes) => Object.entries(modes)
+      .reduce((changed, [featureId, mode]) => {
+        if (shown[featureId] === mode) return changed;
+        shown[featureId] = mode;
+        return true;
+      }, false)),
     ports: { applyFeatureVisibilityToLabels: (options) => labelProjections.push(options) },
     selectResult: () => true
   });
@@ -461,14 +475,14 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
     state: withDrawings(portState),
     rulePreparation: rulePreparationFor(portState),
     getCommittedRequest: committedRequest(['CDS']),
-    applyVisibilityPreviewChanges: (changes) => {
+    showEditorIntent: visibilityPort(portState, committedRequest(['CDS']), (modes) => {
       projections += 1;
-      return changes.reduce((changed, { featureId, mode }) => {
+      return Object.entries(modes).reduce((changed, [featureId, mode]) => {
         if (mounted[featureId] === mode) return changed;
         mounted[featureId] = mode;
         return true;
       }, false);
-    },
+    }, () => admitFeatureCatalog(catalog, portState.results.value, { mode: 'circular' })),
     ports,
     selectResult: () => true
   });
@@ -480,25 +494,30 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
 
   assert.equal(await owner.projectFeatureVisibility({ rerender: true }), false);
   assert.deepEqual(follows, [], 'nothing to follow when the Result draws what Generate draws');
+  // U2BFIX2 review M1: a caller that also projects the label intent (a loaded
+  // table, a History step) has the label owner project it in the same follow.
+  assert.equal(await owner.projectFeatureVisibility({ rerender: true, labels: true }), false);
+  assert.deepEqual(follows, [{ reflow: false, rerender: false, labels: true }]);
+  follows.length = 0;
 
   // OV-35: a Result display (or a History step) that hides A hides its label.
   setFeatureVisibilityOverride(overrides, featureOf('A'), 'off');
   assert.equal(await owner.projectFeatureVisibility(), true);
   assert.deepEqual(mounted, { 'svg-A': 'off' });
-  assert.deepEqual(follows, [{ reflow: false, rerender: false }], 'the label follows the feature');
+  assert.deepEqual(follows, [{ reflow: false, rerender: false, labels: false }], 'the label follows the feature');
 
   // B is shown, which the Result does not draw.
   setFeatureVisibilityOverride(overrides, featureOf('A'), 'default');
   setFeatureVisibilityOverride(overrides, featureOf('B'), 'on');
   await owner.projectFeatureVisibility();
-  assert.deepEqual(follows.at(-1), { reflow: false, rerender: false }, 'a Result display does not rerender');
+  assert.deepEqual(follows.at(-1), { reflow: false, rerender: false, labels: false }, 'a Result display does not rerender');
   await owner.projectFeatureVisibility({ rerender: true });
-  assert.deepEqual(follows.at(-1), { reflow: false, rerender: true }, 'a History step rerenders to draw B');
+  assert.deepEqual(follows.at(-1), { reflow: false, rerender: true, labels: false }, 'a History step rerenders to draw B');
   await owner.projectFeatureVisibility({ rerender: true, reflow: true });
-  assert.deepEqual(follows.at(-1), { reflow: true, rerender: true }, 'a loaded table also places the labels');
+  assert.deepEqual(follows.at(-1), { reflow: true, rerender: true, labels: false }, 'a loaded table also places the labels');
   setFeatureVisibilityOverride(overrides, featureOf('B'), 'off');
   await owner.projectFeatureVisibility({ rerender: true, reflow: true });
-  assert.deepEqual(follows.at(-1), { reflow: true, rerender: false });
+  assert.deepEqual(follows.at(-1), { reflow: true, rerender: false, labels: false });
 
   setFeatureVisibilityOverride(overrides, featureOf('A'), 'off');
   const projectionsBefore = projections;

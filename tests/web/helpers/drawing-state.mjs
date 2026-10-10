@@ -85,13 +85,13 @@ export const TRANSIENT_KEYS = Object.freeze([
   'featurePopupRef', 'featurePopupDrag', 'featurePopupSize', 'featurePopupResize', 'clickedLabel',
   'clickedLabelPos', 'featureStyleScopeDialog', 'paletteColorsDialog', 'resetColorDialog', 'legendRenameDialog',
   'labelTextScopeDialog', 'featureVisibilityScopeDialog', 'hiddenLabelTextDialog', 'labelOnDialog',
-  'sidebarWidth', 'isResizing', 'newLegendCaption', 'newLegendColor', 'legendStrokeOptionsOpen', 'legendDragging', 'legendDragStart',
+  'sidebarWidth', 'isResizing', 'legendStrokeOptionsOpen', 'legendDragging', 'legendDragStart',
   'legendOriginalTransform', 'legendInitialTransform', 'diagramDragging', 'diagramDragStart',
   'diagramElementIds', 'diagramElementOriginalTransforms', 'diagramElements', 'lengthBarElement',
   'lengthBarOriginalTransform', 'plotTitleElement', 'plotTitleDragging', 'plotTitleDragStart',
   'plotTitleAutoTransform', 'showCanvasControls', 'shouldDeferCircularPreviewUpdates', 'skipCaptureBaseConfig',
   'skipExtractOnSvgChange', 'trustedArtifactRestoreInProgress', 'newColorFeat', 'newColorVal',
-  'newPriorityRule', 'newFeatureToAdd', 'featureList', 'featureListState', 'filteredFeatures',
+  'newPriorityRule', 'newFeatureToAdd', 'displayedResultMetadata', 'featureList', 'featureListState', 'filteredFeatures',
   'filteredEditableLabels', 'ruleMatchingPending'
 ]);
 

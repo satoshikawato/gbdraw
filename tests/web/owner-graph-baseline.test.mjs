@@ -59,9 +59,9 @@ const PROJECTION_SHAPE_BASELINE = {
   'feature-visibility': 1,
   'feature-visibility-labels': 1,
   'label-intent': 1,
-  'legend-order': 2,
-  'palette-rules': 2,
-  'strokes': 2,
+  'legend-order': 1,
+  'palette-rules': 1,
+  'strokes': 0,
   'composition': 1
 };
 
