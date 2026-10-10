@@ -3791,7 +3791,9 @@ export const createAppSetup = () => {
         });
         if (!comparisonExecution.ok) {
           errorLog.value = normalizeUserFacingError(comparisonExecution.message, {
-            operation: 'generate', stage: 'request-validation', code: comparisonExecution.fallbackCode
+            operation: 'generate', stage: 'request-validation',
+            // Only the Linear Comparison panel offers the choice the code names.
+            code: mode.value === 'linear' ? comparisonExecution.fallbackCode : undefined
           });
           generationFailureRecovery.value = results.value.length ? 'preserved' : 'no-result';
           failedGeneratePreservedResult.value = results.value.length > 0;

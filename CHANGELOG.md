@@ -12,7 +12,7 @@ write-up of a release.
 
 ## [Unreleased]
 
-- Sessions (web app): **Generate Diagram** on a loaded Session whose saved
+- Sessions (web app): **Generate Diagram** on a loaded Linear Session whose saved
   comparison waits for **Inherit saved comparison**, **Replace with current
   controls**, or **Clear comparison** now says "Choose how to handle the saved
   comparison in the Comparison panel, then Generate again." Before, it showed the
