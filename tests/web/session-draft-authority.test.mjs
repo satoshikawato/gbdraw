@@ -766,7 +766,9 @@ const expectedActiveIntent = {
     pendingColors: { CDS: '#123456', tRNA: '#abcdef' },
     instantPreview: false
   },
-  specificRules: structuredClone(activeSlice.config.rules),
+  // A loaded rule that is not from a file has no `fromFile` key, the shape
+  // Generate commits (normalizeSpecificRule), so Save + Load leaves it equal (OV-334).
+  specificRules: activeSlice.config.rules.map(({ fromFile: _fromFile, ...rule }) => rule),
   qualifierPriorityRules: structuredClone(activeSlice.config.qualifierPriorityRules),
   filters: {
     mode: 'Whitelist',
@@ -956,7 +958,9 @@ assert.equal(state.activeDrawing().currentColors.value.tRNA, '#f59e0b');
 assert.equal(state.appliedPaletteName.value, 'orange');
 assert.equal(state.appliedPaletteColors.value.CDS, '#0b4f6c');
 assert.equal(state.activeDrawing().pendingPaletteName.value, '');
-assert.deepEqual(state.activeDrawing().manualSpecificRules, legacyActiveIntent.rules);
+assert.deepEqual(state.activeDrawing().manualSpecificRules, legacyActiveIntent.rules.map(
+  ({ fromFile: _fromFile, ...rule }) => rule
+));
 assert.deepEqual(state.activeDrawing().manualPriorityRules, legacyActiveIntent.qualifierPriorityRules);
 assert.equal(state.activeDrawing().filterMode.value, 'Blacklist');
 assert.deepEqual(state.activeDrawing().manualWhitelist, legacyActiveIntent.whitelist);

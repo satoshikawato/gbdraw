@@ -488,12 +488,16 @@ const snapshotUserOwnedState = (page) => page.evaluate(async () => {
   const orthogroups = config.buildOrthogroupStateData(drawing);
   orthogroups.groupCount = orthogroups.groups.length;
   delete orthogroups.groups;
+  const ui = config.buildUiStateData(drawing, { includePreviewNavigation: false });
+  // A drawing reads and saves only its own mode's layout slot (state.js,
+  // `modes.<mode>.ui.layoutPreferences`); the other mode's slot is never read.
+  ui.layoutPreferences = ui.layoutPreferences?.[state.mode.value];
   const history = window.__GBDRAW_HISTORY__;
   return JSON.parse(JSON.stringify({
     state: {
       mode: state.mode.value,
       config: config.buildConfigData(drawing),
-      ui: config.buildUiStateData(drawing, { includePreviewNavigation: false }),
+      ui,
       editor,
       features,
       orthogroups
