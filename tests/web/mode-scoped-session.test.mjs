@@ -216,7 +216,8 @@ test('a stored Legend entry color outside the Default colors domain is dropped a
     / Legend: entries 'X', 'W' \(deleted\) had a color the app does not accept and were dropped\.$/);
 
   const older = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/settings-only.v42.json.gz', import.meta.url))));
-  older.editorState.legend.entries = structuredClone(stored);
+  // A caption whose first row has a bad color but a later row a valid one is shown, not named.
+  older.editorState.legend.entries = [{ caption: 'Z', color: 'notacolor', featureIds: [] }, ...structuredClone(stored)];
   resetDrawings();
   alerts.length = 0;
   const loadedOlder = await load(older);

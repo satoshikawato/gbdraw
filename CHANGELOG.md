@@ -16,7 +16,8 @@ write-up of a release.
   override are checked with the same rule as the **Override File (-d)** import. A
   Legend entry whose stored color is outside that rule, such as `ButtonFace`, is
   dropped at Session Load and named in the Load notice. Before, Load kept it, and
-  every **Generate Diagram** failed with a generic error (OV-300). A stored color
+  when the Result did not draw that entry, every **Generate Diagram** failed with a
+  generic error (OV-300). A stored color
   name is now saved as its table hex, such as `#FF0000` for `red`.
 - Default colors (CLI, Python API, and web app): the web app's **Override File (-d)**
   import accepts the documented Default colors forms, including `rgb()`, `rgba()`,

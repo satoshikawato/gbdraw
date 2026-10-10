@@ -850,12 +850,13 @@ const normalizeSessionLegendEntries = (entries, list, droppedLegendColors) => {
   if (!Array.isArray(entries)) return [];
   const normalized = [];
   const captions = new Set();
+  const dropped = [];
   entries.forEach((entry) => {
     if (!isPlainObject(entry)) return;
     const caption = String(entry.caption || '').trim();
     const color = normalizeDefaultColor(entry.color);
     if (caption && !color && !captions.has(caption)) {
-      droppedLegendColors?.push({ list: entry.dormant === true ? 'dormantEntries' : list, caption });
+      dropped.push({ list: entry.dormant === true ? 'dormantEntries' : list, caption });
     }
     if (!caption || !color || captions.has(caption)) return;
     captions.add(caption);
@@ -872,6 +873,8 @@ const normalizeSessionLegendEntries = (entries, list, droppedLegendColors) => {
         : []
     });
   });
+  // A caption that a later row with a valid color keeps is shown, not dropped.
+  dropped.filter(({ caption }) => !captions.has(caption)).forEach((drop) => droppedLegendColors?.push(drop));
   return normalized;
 };
 
