@@ -29,6 +29,10 @@ published packages, and [Installation](./INSTALL.md) explains each install route
 
 ## In the web app
 
+In Linear mode, **Generate Diagram** with a pair set to **Upload BLAST TSV**
+but no file opens a **BLAST TSV missing** dialog. It offers **Choose BLAST TSV
+for #i → #j…**, **Set to No comparison and Generate**, or **Cancel**.
+
 **Generate Diagram** shows each stage as it runs: preparing the runtime and
 inputs, comparing, rendering, and finishing. When a comparison reuses a cached
 search, the status says so. The status shows stages, not a percentage or a
@@ -42,8 +46,11 @@ the rich feature popup are shared by both modes. **Reset Settings** resets both
 modes, and one **Undo** restores both.
 
 **Load Session** asks **Replace the current work?** before it replaces unsaved
-changes. On gbdraw.app, **Load an example** opens any Gallery example; `gbdraw
-gui` has no Gallery and no such button.
+changes. On gbdraw.app, **Load an example** opens any Gallery example, and the **Load
+example** button in the header does the same after a Result is shown; `gbdraw
+gui` has no Gallery and no such buttons. The Gallery examples were rebuilt:
+the Vibrio example starts each chromosome at its replication initiator, and the
+BGC and majanivirus_orthogroup examples show alignments.
 
 Each change of a checkbox, radio button, or button is one **Undo** step. Undo
 and Redo are unavailable while Generate runs, and the header says why. Error
@@ -52,6 +59,9 @@ involved. A value gbdraw cannot use, such as a GC window of 0, is reported
 instead of being replaced by a default without notice. Every visible control
 has an accessible name, every **?** tip is a **Help** button that opens on
 hover, focus, click, or tap, and **Escape** closes only the top layer.
+
+Large Sessions (thousands of features) open popups and apply color choices in
+seconds instead of freezing the page.
 
 Dragging the preview now follows the pointer over blank space and over
 comparison ribbons, also in large diagrams. Pan, zoom, **Fit**, and **Reset**
@@ -121,8 +131,18 @@ In **Search features**, **All** no longer searches nucleotide or amino-acid
 sequences or `/translation` values. Locations are shown and searched as
 1-based INSDC locations, with every part of a split location. In the Legend
 editor, removed rows are listed under **Deleted items** with **Restore** and
-**Restore all**, and added, renamed, and reordered rows keep their place
-through Generate and **Save Session**.
+**Restore all**, and renamed and reordered rows keep their place through
+Generate and **Save Session**.
+
+Every editor edit (stroke, fill, palette, color rule, feature visibility,
+Legend rename, recolor, delete, Restore, and sort) shows on the displayed Result
+as the next **Generate Diagram** draws it, also after Undo, Redo, a Result
+switch, **Reset Settings**, and **Load Session**. **Reset Settings** returns
+Legend renames to the default captions. Renaming a Legend row onto a deleted
+row's caption opens the Legend Name Conflict dialog. A Default colors value that
+differs from the selected palette counts as your color, as `-d` does over `-p`
+on the command line: switching the palette or pressing Default colors **Reset**
+asks before it discards your colors.
 
 In Linear mode, **Arrange in rows** puts every record selected from a source
 file on that file's row, in file and record order. Row spacing follows the
@@ -324,6 +344,7 @@ reads the file.
 | `--protein_blastp_mode pairwise` / `orthogroup` / `collinear` | `--losat losatp --losatp_mode pairwise` / `similarity_groups` / `collinear`; `none` is omitted |
 | `--losatp_bin`, `--ncbi_blastp_bin`, `--losatp_threads` | `--losat_bin`, `--ncbi_blast_bin`, `--losat_threads` |
 | `--protein_blastp_max_hits`, `--protein_blastp_candidate_limit` | `--losatp_max_hits`, `--losatp_max_target_seqs` |
+| Web app **Add legend item** (reachable only from the browser console) | A Specific color rule with a Legend caption |
 | `--align_orthogroup_feature` | `--similarity_alignment_feature` |
 | `--protein_blastp_output FILE` | `--losat_output_dir DIR` (writes `DIR/losatp.raw.tsv`) |
 | `LinearComparisonOptions(protein_mode=..., blastp_executable=..., candidate_limit=..., orthogroup_member_max_hits=...)` | `losat=` with `losatp_mode=`, `ncbi_blast_executable=`, `max_target_seqs=`, `member_max_hits=` |
@@ -369,6 +390,11 @@ Some command-line input that 0.13 accepted now stops the run with a message:
 
 - `--window`, `--step`, `--depth_window`, and `--depth_step` must be positive,
   and `--scale_interval` must be greater than 0.
+- `currentColor`, `inherit`, `url(#id)` and other paint references, `icc-color()`,
+  and an empty color in a configuration file are no longer accepted as colors
+  in the CLI and Python; Default colors are checked against one documented
+  domain, also in the web app. A Session Load drops a stored Legend entry color
+  outside that domain and names the entry in the Load notice.
 - `-n`/`--nt` takes two letters from A, C, G, T, and U (U counts as T).
 - A missing, unreadable, or malformed `-b` file, or more `-b` files than
   adjacent record pairs, is an error.
@@ -442,5 +468,22 @@ each export format needs.
   input, no scored inference or ranking by support count, and no automatic
   selection across several steps.
 - The hosted Gallery is not included in local installs.
+
+## Known issues
+
+- Editing the color of a group of features in the feature popup writes one rule
+  per feature (each keyed by the feature's hash) instead of one rule for the group.
+- The command line and the browser can differ in the last digits of collinear
+  support scores. The figure is unchanged.
+- The web app does not record a LOSAT runtime version in a Session, and a FASTA
+  comparison ring gets a different default label in the web app than on the
+  command line.
+- The web app and the command line judge color names with non-ASCII whitespace or
+  digits differently.
+- A Session saved from Python with listed LOSATP `pairs` opens read-only in the
+  web app.
+- A Session 31 to 39 whose Label whitelist has a row with a blank keyword loads
+  in the web app, but replaying it on the command line fails.
+<!-- WS-D findings pending: OV-330, OV-338 -->
 
 [Documentation home](./DOCS.md) | [Beta history](./RELEASE_NOTES_0.14.0b0.md)

@@ -12,126 +12,58 @@ write-up of a release.
 
 ## [Unreleased]
 
-- SVG feature IDs: a feature of a cropped or reverse-complemented record
-  (`--region`, `--reverse_complement`, **Reverse complement**, or a direction
-  chosen in **Review alignment options…**) is now drawn with its source-record
-  hash, as on an untransformed record. `data-gbdraw-feature-id`, the element IDs
-  built from it, and `data-gbdraw-stable-feature-id` change for such records and
-  now match the feature catalog in plain, interactive, and web-app SVGs, so
-  `gbdraw.api.enrich_svg(..., feature_catalog=...)` accepts these diagrams and
-  the web app's interactive export writes the same stable ID as the CLI
-  (OV-401, OV-412). A `hash=` selector (color, label, and visibility rules,
-  annotation targets and tables, Feature Edits) now names that source-record
-  hash on every record; before, rules matched the hash after the crop or
-  reverse complement. Loading or upgrading a Session saved before 0.14.0 renames
-  the **This feature only** color rules it saved for such records to the
-  source-record hash. Replaying a Session 31–44 with `--session` renames the
-  same rules in its color table and the label text edits in its label override
-  table. The Web app and the CLI report each value they cannot rename (see the
-  Session compatibility reference for the other saved `hash=` values, which
-  load as saved). `hash=` values that
-  you wrote yourself for a feature of a cropped or reverse-complemented record,
-  in a TSV file, a CLI option, or a table typed into the Web app, need that
-  feature's new hash: the one its newly drawn SVG ID carries.
-- Sessions: a **This feature only** color that 0.13.0 saved on a multi-record
-  Linear diagram colors its feature again after Load and Generate (OV-416).
-- Similarity alignment (web app): the **Select alignment anchors** dialog is now
-  **Review alignment**. One summary line replaces the three introductory
-  paragraphs. **Arrow direction** offers **Keep as is**, **All right →**, **All
-  left ←**, and **Custom**, with one line that says which records reverse. Each
-  record is a card with its organism, accession, and current arrow; a record
-  that Align reverses shows the old arrow struck through, the new arrow, and a
-  **reversed** chip. The reference card says how far its record's left edge
-  moves. A record with one usable candidate shows a compact card with a
-  **Skip** checkbox; a record that still needs a choice is marked **Choose
-  one**, and the footer names how many records block **Apply**. The
-  **Recommended** chip stays on the recommended candidate after you choose
-  another. Behaviour is unchanged: choices stay local until **Apply**, which
-  validates, regenerates, and commits in one step.
-- Similarity groups (web app): member tables in the feature popup, ribbon
-  popup, and Similarity Groups drawer name each record in plain text, as the
-  diagram heading does. Before, a definition with markup such as
-  `<i>Streptomyces</i>` showed the tags, and a File default definition was
-  ignored (OV-369).
-- Collinear blocks (web app): the **Similarity groups covered** table of a
-  collinear ribbon fills every column again. Before, a ribbon without a
-  collinear group scope looked its groups up only among scoped collinear groups
-  and showed only the group IDs (OV-370).
-- Similarity alignment (web app): while an alignment is active, including one
-  loaded from a Session, the Similarity Groups drawer selects its group and
-  preselects its exact reference, so **Align…** and **Review alignment
-  options…** work from the drawer at once. Before, the drawer showed the reference in **Active plan**
-  but kept both buttons disabled until you chose the same reference again.
-  A new alignment, an Undo, or a Session load replaces an earlier drawer
-  group and reference choice with the new plan's (OV-381).
-- Similarity alignment (web app): an Undo that restores a cleared alignment
-  also removes its "Alignment cleared" notice. Before, the notice stayed while
-  the alignment was active again (OV-382).
-- Similarity alignment (web app): choosing **Upload BLAST TSV** for a pair
-  before choosing its file keeps the active alignment, because the pair has no
-  new data yet. Before, the alignment was cleared at once with "Alignment
-  cleared: comparison configuration changed." Choosing a file, another
-  program or mode, or any other comparison change still clears it (OV-380).
-- Feature popup (web app): while the first popup after a page or Session load
-  waits for Python to match the color rules, the toolbar shows **Preparing
-  feature details…**, and **Save Session** and **Load Session** stay available.
-  Before, the toolbar said "Applying an edit. Retry after the edit finishes.",
-  both buttons were disabled, and the click seemed to only highlight the
-  feature's similarity group (OV-377, OV-378).
-- History (web app): Undo and Redo of a Linear setting keep the active
-  similarity alignment and record positions. Before, undoing any Linear
-  setting, for example the first edit after loading an aligned Session,
-  silently dropped the alignment, and the next Generate drew the records
-  unaligned (OV-383).
-- Gallery: the aminoglycoside BGC example draws its arrows with **Shaft Width
-  Ratio** 0.6 and aligns its records on similarity group og_6 (neoU of
-  BGC0000709) instead of og_1. Its tutorial adds the **Features › Arrow Geometry
-  › Shaft Width Ratio** step and walks through **Review alignment options…**,
-  where BGC0000708 has two og_6 members and keeps the recommended livU.
-- Gallery: the majanivirus example shows Litopenaeus vannamei majanivirus
-  (LC738872.1) reverse-complemented with its record's **Reverse complement**
-  setting, so its links to the neighboring genomes no longer cross. The rows stay
-  centered, and the Gallery command adds `--reverse_complement 1` for that record.
-- Gallery tutorials: the BGC, Hepatoplasmataceae, and majanivirus tutorials now
-  say that the LOSAT runtime controls are under **Comparison › Settings ›
-  Runtime and reproducibility**, not under **Advanced comparison and layout**
-  (OV-366).
-- Gallery publication (maintainer tooling): `tools/refresh_gallery_sessions.py`
-  publishes a Session that the web app saved. It rebuilds the request from the
-  request's own color, whitelist, and priority tables rather than from the
-  files bound to those inputs (OV-367). It stores Default colors as the CLI
-  replay resolves them (OV-375) and one-record GenBank sources as `exactly_one`
-  (OV-376). It also names the example's GenBank files in `examples.json` when
-  the Session has no CLI invocation (OV-397).
-- Records (web app): choose which records of a file to draw. Linear record cards
-  gain **Draw this record**, and a File with several records gains **Choose
-  records…**, a list that searches and sorts by file order, record ID, or length
-  and turns records on or off in bulk. **Choose records…** also appears beside
-  **Record** in Circular, where **Multi-Record Canvas** and separate diagrams
-  draw only the records that are on. A record that is off is left out of
-  **Generate Diagram**, comparisons, row layout, and the Legend, keeps its
-  settings (also in a saved Session), and returns in its place when turned on;
-  **Delete settings** removes its card settings, feature edits and Feature
-  placements, annotations that target it, and comparison pairs that name it.
-  LOSAT keeps the whole subject file as its E-value database. After an upload, a
-  file with more than 20 records opens the list, and turning off the last drawn
-  record of a file asks whether to remove the file. Before, Linear drew every
-  record of a file and Multi-Record Canvas drew every record. Session version
-  46 gains the optional `recordsOff` field.
-- Sessions (CLI): a CLI re-save of a Web Session no longer drops **File
-  definition**, **File subtitle**, or the inferred definition from Linear cards
-  (OV-402).
-- Sessions (CLI and Python): a Session saved from a Linear diagram with a
-  reverse-complemented record now stores that record's feature-bound comparison
-  rows (saved or fresh LOSATP rows) in the search frame, as the web app does,
-  also with `--similarity_alignment_feature`. Before,
-  `gbdraw linear --session ... --session_output` and Python Session saves wrote
-  them after the reverse complement with extra `*_view_feature_svg_id` columns;
-  the drawing was the same (OV-399).
-- Gallery publication: a Session saved in the web app after Load, without
-  **Generate Diagram**, is accepted when its committed request states a default
-  that the web draft leaves implicit: a definition-line `font_weight` of
-  `normal` or a feature rendering at its default (OV-398).
+## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
+
+- Added circular-record display-start rotation and manual feature lane placement.
+- Improved Run Info / Exact replay, Save Session resource preservation, preview
+  navigation, and Generate processing-stage feedback.
+- Includes the beta's package-root Python API and current session/request
+  compatibility, plus isolated wheel/sdist installation and local GUI packaging fixes.
+- See the [full release notes](./docs/RELEASE_NOTES_0.14.0.md) for migration,
+  compatibility, and installation availability. Publication dates are recorded
+  in [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases).
+
+- Web app: **Load example** is now also in the header, after **Load Session**, so a
+  second Gallery example can be loaded once a Result is shown. It opens the same chooser
+  as the **Load an example** button in the empty Preview, which stays. At 769 to about
+  830 px the header no longer runs past the viewport, and its button labels no longer
+  wrap onto two lines up to about 1300 px (OV-368, #986).
+- Sessions (web app): Session Load keeps Specific-colors rules in the shape Generate
+  stores them, and keeps a Linear row without a Depth file as saved (`null`, not
+  `[null]`). Before, a Session saved after Generate and then loaded did not give back
+  the same editor state. What the app draws does not change (OV-334, OV-337, #984).
+- Sessions (web app): the Session Load notice quotes a dropped Legend entry's caption
+  with double quotes, so a caption such as `5' UTR` reads clearly (#983).
+- Editing (web app): every editor edit (stroke, fill, palette, color rule, feature
+  visibility, Legend rename, recolor, delete, Restore, and sort) now reaches the
+  displayed Result through the compile and Result executor that Generate uses, so the
+  live Result shows what the next Generate draws. This fixes Reset Stroke, Reset all
+  strokes, and Undo of a stroke for connectors and every size class; a batch Result
+  shown again after an edit was removed; Undo, Redo, and a batch Result display after a
+  Legend color, color rule, or palette step; Feature Edits TSV loads and popup label
+  edits with Label Rendering = Embedded Only; and Reset Settings, which now shows reset
+  strokes, Legend colors, and deleted rows at once (OV-129, OV-144, OV-146, OV-150,
+  OV-200, OV-235 to OV-237, OV-287, OV-289, OV-293, OV-309). A Legend whole-row rename,
+  merge within one feature type, recolor, delete, Restore, and sort show live without
+  the automatic rerender when Python would draw the same rows. Deleted Legend rows stay
+  in the Result, hidden; exports strip them (#975).
+- Editing (web app): **Reset Settings** returns every Legend rename, including track
+  rows such as `GC content`, to the default caption, and Undo of Reset restores the
+  renames. A Legend rename onto a deleted row's caption opens the Legend Name Conflict
+  dialog (Restore the deleted row and merge into it, Keep current color and add a
+  suffix, or Cancel). A Legend row stroke follows the color Python gives the row's
+  features, so it stays after a Legend row color edit in either order (OV-288). Rule
+  rows are addressed by Python's rows (OV-292, OV-294), and a palette row's Legend color
+  is read from the color the row shows now, not from the last Generate (OV-282, OV-311)
+  (#975).
+- Removed (web app): **Add legend item** is retired. No control called it, and it was
+  reachable only from the browser console. Sessions with editor-added Legend rows still
+  load and show them, and the popup reset dialog's "This only + add legend entry" is
+  unchanged (#975).
+- Gallery: the BGC example uses Shaft Width Ratio 0.6 and an og_6 alignment with neoU as
+  the reference, the majanivirus_orthogroup example aligns a reversed record, a tutorial
+  step is corrected (OV-365), and the Gallery publication tools are fixed (#TBD
+  Gallery).
 - Comparison (web app): **Generate Diagram** in Linear mode with pairs set to
   **Upload BLAST TSV** but without a file opens the **BLAST TSV missing** dialog
   instead of failing. It lists the pairs and offers **Choose BLAST TSV for
@@ -1381,17 +1313,117 @@ Retired names and their replacements are listed under
 - Sessions: replaying a Session 27–30 with an unlabelled precomputed ring labels it with the
   original file name instead of the temporary `arg<n>-<name>` (OV-202), and the web app loads an
   older CLI Session without ring labels with the full file name, as the CLI draws it (OV-203).
-
-## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
-
-- Added circular-record display-start rotation and manual feature lane placement.
-- Improved Run Info / Exact replay, Save Session resource preservation, preview
-  navigation, and Generate processing-stage feedback.
-- Includes the beta's package-root Python API and current session/request
-  compatibility, plus isolated wheel/sdist installation and local GUI packaging fixes.
-- See the [full release notes](./docs/RELEASE_NOTES_0.14.0.md) for migration,
-  compatibility, and installation availability. Publication dates are recorded
-  in [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases).
+- Placement (web app, CLI): the Feature placement table can name one of two identical
+  features (same record, type, and coordinates). `hash=` also compares the complete
+  biological feature ID such as `fe6f54094~1`, and the Run Info source recipe writes
+  `feature_selector=hash=<biologicalFeatureId>`, so the CLI accepts the recipe. A value
+  without `~` keeps its meaning (#766).
+- Generate (web app): a Generate that fails before it replaces the displayed Result now
+  ends with the classified **Generation Error**, the previous Result stays, and Undo and
+  **Save Session** work again. Before, the page stayed on "Generating Diagram..." until
+  reloaded. The History rollback of **Rotate record to feature** uses the same restore
+  (#785).
+- Labels (web app): the Label Not Shown dialog and the feature popup note state the
+  actual reason a label is absent (hidden, Underlay, Embedded Only, Show Labels None or
+  First, the whitelist, or the blacklist) instead of one sentence about Show Labels and
+  the label filter (#799).
+- Placement (web app): every control that changes the direction of the feature slot
+  (**Use custom stack**, the custom stack resets, adding, deleting, disabling, moving,
+  duplicating, or re-typing a stack row, and the Circular **Separate Strands**) opens
+  the "Reset Feature placements?" dialog when a lane placement would become undrawable.
+  **Reset N placements to Auto** is one Undo step, and **Cancel change** keeps the
+  value. Before, they changed the slot silently and the next Generate stopped on
+  `FEATURE_PLACEMENT` (#805).
+- Annotations (web app): an annotation made from a selected feature is kept in the mode
+  it was selected in. Before, a Circular selection could be drawn on the Linear diagram,
+  and the reverse, when both used the same record key. Annotation sets stay shared by
+  both modes (OV-21, #806).
+- Linear (web app, CLI): a multi-record Linear diagram with a cropped record that has
+  two features at the same coordinates no longer stops at result admission or at
+  `--session_output` with "Feature metadata identity does not agree with rendered SVG
+  ID" (#808).
+- Sessions (web app): loading a Session 40 to 44 moves an annotation target
+  `hash=<hash>` that a selection made onto its feature, where the figure cannot change,
+  so it stays on its feature after a crop or reverse complement. The Load notice reports
+  how many targets moved (#811).
+- Sessions (web app): loading a Session before 40 that has feature edits but no saved
+  feature catalog now fails with the `WORKER_INIT` diagnostic when the diagram runtime
+  cannot start, and the previous Session stays. Before, Load reported the edits as
+  dropped, and the next Save lost them (OV-39, #833).
+- Sessions (web app): a Session 27 to 33 saved with Custom Track Slots off, such as the
+  0.13.0 Gallery Session `BGC0000708-BGC0000713`, loads. Another retired slot field
+  still fails Load, and the message now names the field and the track row (OV-38, #834).
+- Sessions (web app): a Session 31 to 39 whose Default colors, Label whitelist, or
+  Qualifier priority table has a row with extra cells now loads. Extra cells join the
+  last column with one space, a row that lacks a required column is dropped, and the
+  Load notice names each changed row. A remaining table error names the table and says
+  it comes from the Session (OV-40, #835).
+- Live edit (web app): a Generate that succeeds removes the "Live edit failed: ..." note
+  above the Result. A failed, canceled, or superseded Generate keeps it (OV-36, #838).
+- Legend (web app): in a Circular batch, a second **This feature only** fill or stroke
+  on a feature colored at the last Generate no longer fails Generate when another Result
+  does not draw that row. A missing Legend row that the plan requires now reports
+  `RESULT_INVALID` instead of the generic error (OV-45, #845).
+- Sessions (web app): after loading a Circular Session, the Record control reads
+  "NC_012920.1 (not inspected)" until the source records are inspected, and says "not
+  found" or "ambiguous" only after an inspection (#852).
+- Legend (web app): a live visibility or specific-color rule edit that changes what the
+  Legend derives from (drawn feature types, their first-drawn order, or the rules the
+  drawn features use) asks for the automatic rerender, with Auto Reflow on or off, so
+  the Legend of every Result matches Generate (OV-44, #857).
+- Legend (web app): a Legend-only color or stroke on a row that only one Result of a
+  batch draws no longer fails Generate. Result admission requires the row in at least
+  one Result (OV-46, #871).
+- Generate (web app): an automatic rerender never starts while Generate runs. Before, it
+  could take the newer generation token, and Generate ended with no Result and no
+  message. A rerender requested meanwhile runs once after Generate (OV-48, #879).
+- Legend (web app): recoloring a Legend row, or its rule in the Specific color rules
+  table, after coloring that row's features in the feature popup keeps the new color at
+  the next Generate. Before, the Legend swatch came back to the popup's color (#887).
+- Errors (web app): a preserved setting that belongs to the other diagram mode, and a
+  stale Reset alignment, now fail Generate with messages that name the setting or the
+  evidence and the ways out, instead of generic text (OV-130, #925).
+- Performance (web app): the popup feature color change prepares only the clicked
+  feature's rules, so it no longer hangs or crashes on Sessions with 6,000 or more
+  features (#949).
+- Performance (web app, Python): popup "same Legend item" color choices and stroke edits
+  on large Sessions do work linear in features plus rules, and Generate validates LOSATP
+  manifests once. On a 6,304-feature Session the color choice went from over 60 s to
+  12.9 s. SVG bytes are unchanged (#952).
+- Search (web app): the active match line names its record, such as `Record NC_022349.1
+  · Matched Qualifier gene: dnaA`. The sidebar buttons **Use selected feature 5′ end**
+  and **Use selected feature midpoint** are removed; start a record at a feature with
+  **Rotate record using this feature** in the feature popup (PD-OI-087, #954).
+- Performance (web app, Python): large Sessions pay repeated copies, validations, and
+  per-feature Worker messages less often on Load, Generate, rule commits, and `gbdraw
+  <mode> --session`. SVG and Session JSON bytes are unchanged (#956).
+- Gallery: the Vibrio collinearity example starts every chromosome at its replication
+  initiator, the other nine examples have titles that name the result, `docs/GALLERY.md`
+  mirrors the Web Gallery, and the label settings stay visible while a feature label is
+  On (OV-222, #957).
+- Web app: the popup color scope, Legend name, and **Reset fill color** dialogs open at
+  once and show **Applying an edit…** until the choice is applied. Opening them no
+  longer redraws the Specific color rules rows. gbdraw checks every user color once when
+  it reads it, and an unreadable color stops with a gbdraw error (PD-OI-088, #958).
+- Gallery: the Vibrio Gallery Session stores its finished comparison result, so the
+  first Generate after Load takes about 20 to 29 s instead of 37 to 39 s. The figure is
+  unchanged (#961).
+- Colors (web app): a Default colors value that differs from the selected palette is a
+  user color, as `-d` over `-p` on the command line. A palette switch or Default colors
+  **Reset** asks before it discards user colors (**Keep my N colors**, **Use the
+  palette's colors**, or **Cancel**), and **Apply to all "<type>"** on a palette Legend
+  row sets the type's default color instead of one hash rule per feature (PD-OI-089,
+  #963).
+- Colors (web app): choosing **Apply to all** in the popup's Color Change Scope dialog
+  while an automatic rerender runs now applies after the rerender, with the dialog
+  showing **Applying an edit…** (OV-280, #969).
+- Reset (web app): after **Reset Settings** the displayed Result shows the reset Legend
+  strokes, Legend row colors, deleted rows, feature fills, hidden features, and label
+  edits at once. Load then Generate of the Vibrio Gallery Session draws the published
+  figure with V. alginolyticus chromosome II starting at `display_start 430232`.
+  **Save** after **Load** of a CLI-written Circular Session that gives two records of
+  one file a display start no longer fails, and the Linear comparison **Result filters**
+  say they apply on Generate (OV-325, OV-332, #977).
 
 ## [0.14.0b0](./docs/RELEASE_NOTES_0.14.0b0.md) — unreleased (beta)
 
