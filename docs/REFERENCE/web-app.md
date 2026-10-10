@@ -159,9 +159,10 @@ after every section, and its bar stays fixed at the bottom of the panel.
 asks whether to download that file again. When the compressed Session is larger
 than 50 MiB, Save reports its size and asks whether to continue. **Cancel** in
 either dialog saves nothing. **Load Session** accepts `.gbdraw-session.json` and
-`.gbdraw-session.json.gz` files. On gbdraw.app, the empty Preview also offers
-**Load an example**, which lists the Gallery examples and loads the chosen one's
-Session; the local `gbdraw gui` ships no Gallery and shows no such button.
+`.gbdraw-session.json.gz` files. On gbdraw.app, **Load example** in the header
+and **Load an example** in the empty Preview list the Gallery examples and load
+the chosen one's Session, asking first when the current work has unsaved
+changes. The local `gbdraw gui` ships no Gallery and shows neither button.
 
 While **Saving session…** or **Loading session…** is shown, the operation works
 on one consistent document. **Generate Diagram**, file inputs, mode, settings,

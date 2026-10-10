@@ -416,6 +416,7 @@ const blockExternalRequests = async (page) => {
 };
 const exampleControls = (page) => ({
   example: page.getByRole('button', { name: 'Load an example', exact: true }),
+  header: page.locator('header.app-header').getByRole('button', { name: 'Load example', exact: true }),
   chooser: page.getByRole('dialog', { name: 'Choose an example', exact: true }),
   confirm: page.getByRole('dialog', { name: 'Replace the current work?', exact: true })
 });
@@ -511,7 +512,45 @@ test('Load an example is absent where this origin serves no Gallery catalog', as
   expect(diagnostics.pageErrors).toEqual([]);
   await expect(page.getByText('No Circular Result yet. Configure settings and click Generate.')).toBeVisible();
   await expect(exampleControls(page).example).toHaveCount(0);
+  await expect(exampleControls(page).header).toHaveCount(0);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorDisplay)).toBeFalsy();
+});
+
+// D-07 (Owner 2026-10-10): the header keeps Load example once a Result exists,
+// so a second example loads through the same chooser and UJ-09 question.
+test('the header Load example stays after an example loads and loads another', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openApp(page);
+  const { example, header, chooser, confirm } = exampleControls(page);
+  await expect(header).toBeVisible();
+  await header.click();
+  const circularLoaded = await acceptLoadedSession(page, 'HmmtDNA_basic_circular');
+  await chooser.locator('[data-gallery-example="HmmtDNA_basic_circular"]').click();
+  await circularLoaded();
+  await expect(example).toHaveCount(0);
+  await expect(header).toBeVisible();
+  await expect(header).toBeEnabled();
+
+  await header.click();
+  await expect(chooser).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(chooser).toHaveCount(0);
+  await expect(header).toBeFocused();
+
+  const prefix = page.locator('#output-prefix');
+  await prefix.fill('unsaved-work');
+  await prefix.press('Tab');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(1);
+  await header.click();
+  await chooser.locator('[data-gallery-example="lambda_basic_linear"]').click();
+  await expect(confirm).toBeVisible();
+  const linearLoaded = await acceptLoadedSession(page, 'lambda_basic_linear');
+  await confirm.getByRole('button', { name: 'Load example', exact: true }).click();
+  await linearLoaded();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('linear');
+  await expectExampleFitted(page);
+  await expect(header).toBeVisible();
 });
 
 test('the example chooser cancels with focus back on Load an example and keeps the UJ-09 question', async ({ page }) => {
