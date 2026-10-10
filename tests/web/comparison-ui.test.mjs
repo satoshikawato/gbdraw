@@ -19,6 +19,10 @@ await Promise.all([
     join(tempRoot, 'js', 'services', 'linear-comparisons.js')
   ),
   cp(
+    join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'record-draw-selection.js'),
+    join(tempRoot, 'js', 'services', 'record-draw-selection.js')
+  ),
+  cp(
     join(repoRoot, 'gbdraw', 'web', 'js', 'mode-profiles.js'),
     join(tempRoot, 'js', 'mode-profiles.js')
   ),
@@ -34,6 +38,10 @@ await Promise.all([
   cp(
     join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'optional-positive-number.js'),
     join(tempRoot, 'js', 'utils', 'optional-positive-number.js')
+  ),
+  cp(
+    join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'download-names.js'),
+    join(tempRoot, 'js', 'utils', 'download-names.js')
   )
 ]);
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');

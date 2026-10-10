@@ -136,3 +136,26 @@ test('source replacement retires the strokes of features the new source lost (OV
   assert.equal(pruneUnmatchedFeatureOverrides({ featureStrokeOverrides, replacedRecordKeys: [] }), 0);
   assert.equal(Object.keys(featureStrokeOverrides).length, 2);
 });
+
+test('an OFF record is not dropped: its edits wait for it (record selection D-05)', () => {
+  const featureOverrides = {
+    [key('seq-a', 'f1')]: row('seq-a', 'f1', { featureVisibility: 'off' }),
+    [key('seq-b', 'f2')]: row('seq-b', 'f2', { labelVisibility: 'off' })
+  };
+  const featurePlacementOverrides = { [key('seq-a', 'f1')]: placement('seq-a', 'f1') };
+  const featureStrokeOverrides = { 'seq-a\0stable-1': { width: 2 } };
+  const before = structuredClone({ featureOverrides, featurePlacementOverrides, featureStrokeOverrides });
+  const removed = pruneUnmatchedFeatureOverrides({
+    featureOverrides,
+    featurePlacementOverrides,
+    featureStrokeOverrides,
+    notices: [],
+    replacedRecordKeys: ['seq-a', 'seq-b'],
+    previousRecords: [{ recordKey: 'seq-a' }, { recordKey: 'seq-b' }],
+    currentRecords: [{ recordKey: 'seq-b' }],
+    retainedRecordKeys: ['seq-a'],
+    biologicalFeatures: [{ scope: 'linear', record_key: 'seq-b', biological_feature_id: 'f2' }]
+  });
+  assert.equal(removed, 0);
+  assert.deepEqual({ featureOverrides, featurePlacementOverrides, featureStrokeOverrides }, before);
+});

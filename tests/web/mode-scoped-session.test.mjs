@@ -24,7 +24,7 @@ const alerts = [];
 globalThis.alert = (message) => alerts.push(String(message));
 installSessionImportWorker();
 
-const { SESSION_VERSION, exportSession, importSession } = await import('../../gbdraw/web/js/services/config.js');
+const { SESSION_VERSION, assertActiveModeInputs, exportSession, importSession } = await import('../../gbdraw/web/js/services/config.js');
 const { MODE_SLICE_CONTAINERS } = await import('../../gbdraw/web/js/services/mode-scoped-migration.js');
 const { createDefaultAdv, createDefaultForm } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
@@ -243,4 +243,90 @@ test('Load and Save keep a Linear row without a Depth file as depth null (OV-337
   assert.deepEqual(state.linearSeqs.map((seq) => seq.depth), [null]);
   const second = await save('gallery round trip again');
   assert.deepEqual(second.webFiles.bindings.linearSeqs.map((row) => row.depth), rows.map((row) => row.depth));
+});
+
+// Record selection D-05: each slice keeps the keys of its OFF records; an
+// omitted list draws every record, and a malformed or unbound key is rejected.
+test('a slice keeps its OFF records, and omission draws every record (record-selection D-05)', async () => {
+  resetDrawings();
+  state.mode.value = 'circular';
+  const gallery = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', import.meta.url), 'utf8'));
+  assert.equal((await load(gallery)).status, 'ok');
+  const uid = state.linearSeqs[0].uid;
+  state.drawings.linear.recordsOff.splice(0, Infinity, uid);
+  state.drawings.circular.recordsOff.splice(0, Infinity, '#2');
+  const saved = await save('records off');
+  assert.deepEqual(saved.modes.linear.config.recordsOff, [uid]);
+  assert.deepEqual(saved.modes.circular.config.recordsOff, ['#2']);
+
+  state.drawings.linear.recordsOff.splice(0);
+  state.drawings.circular.recordsOff.splice(0);
+  assert.equal((await load(saved)).status, 'ok');
+  assert.deepEqual([...state.drawings.linear.recordsOff], [uid]);
+  assert.deepEqual([...state.drawings.circular.recordsOff], ['#2']);
+  assert.deepEqual(state.drawings.linear.drawnLinearSeqs.value, []);
+
+  const omitted = structuredClone(saved);
+  delete omitted.modes.linear.config.recordsOff;
+  delete omitted.modes.circular.config.recordsOff;
+  assert.equal((await load(omitted)).status, 'ok');
+  assert.deepEqual([...state.drawings.linear.recordsOff], []);
+  assert.deepEqual([...state.drawings.circular.recordsOff], []);
+  // Review F6: with every record ON a Save writes no list, so the Session keeps its bytes.
+  const allOn = await save('records on');
+  assert.equal('recordsOff' in allOn.modes.linear.config, false);
+  assert.equal('recordsOff' in allOn.modes.circular.config, false);
+
+  const rejected = async (mutate, label, code = 'INPUT_INVALID') => {
+    const session = structuredClone(saved);
+    mutate(session.modes);
+    const result = await load(session);
+    assert.equal(result.status, 'error', label);
+    if (code) assert.equal(result.error?.code, code, label);
+  };
+  await rejected((modes) => { modes.linear.config.recordsOff = ['not-a-bound-card']; }, 'unbound Linear uid');
+  await rejected((modes) => { modes.linear.config.recordsOff = [uid, uid]; }, 'duplicate key');
+  await rejected((modes) => { modes.circular.config.recordsOff = ['contig_2']; }, 'Circular key is not #N');
+  // Review F8: a list of the wrong shape fails with the code Python gives it.
+  await rejected((modes) => { modes.circular.config.recordsOff = '#2'; }, 'not a list');
+});
+
+// Review #992 finding 1: a Session without a slice of a mode (a Gallery
+// Session of one mode) draws every record of that mode too, and saves again.
+test('a Session without a mode slice turns every record of that mode ON (record selection)', async () => {
+  resetDrawings();
+  const gallery = (name) => JSON.parse(readFileSync(new URL(`../../gbdraw/web/gallery/sessions/${name}.gbdraw-session.json`, import.meta.url), 'utf8'));
+  assert.equal((await load(gallery('lambda_basic_linear'))).status, 'ok');
+  state.drawings.linear.recordsOff.splice(0, Infinity, state.linearSeqs[0].uid);
+  state.drawings.circular.recordsOff.splice(0, Infinity, '#2');
+  assert.equal((await load(gallery('HmmtDNA_basic_circular'))).status, 'ok');
+  assert.deepEqual([...state.drawings.linear.recordsOff], []);
+  assert.deepEqual([...state.drawings.circular.recordsOff], []);
+  await save('circular only, saved again');
+});
+
+// Review #992 finding 6: Reset Settings keeps which records are ON in both
+// drawings (PD-OI-070, PD-OI-091).
+test('Reset Settings keeps the OFF records of both drawings (record selection)', async () => {
+  const { resetSettings } = await import('../../gbdraw/web/js/services/reset.js');
+  state.drawings.linear.recordsOff.splice(0, Infinity, 'card-b');
+  state.drawings.circular.recordsOff.splice(0, Infinity, '#3');
+  resetSettings(state);
+  assert.deepEqual([...state.drawings.linear.recordsOff], ['card-b']);
+  assert.deepEqual([...state.drawings.circular.recordsOff], ['#3']);
+  state.drawings.linear.recordsOff.splice(0);
+  state.drawings.circular.recordsOff.splice(0);
+});
+
+// Record selection 2.5: a Linear drawing with every card OFF (only a
+// hand-edited Session reaches it) fails Generate and Save with NONE_DRAWN.
+test('a Linear drawing with no ON record names the fix', () => {
+  const sourceState = {
+    files: {}, lInputType: { value: 'gb' }, linearSeqs: [{ uid: 'a', gb: {} }, { uid: 'b', gb: {} }],
+    drawings: { linear: { recordsOff: ['a', 'b'] } }
+  };
+  assert.throws(() => assertActiveModeInputs('linear', sourceState),
+    (error) => error.code === 'RECORD_SELECTION' && error.context.reason === 'NONE_DRAWN');
+  sourceState.drawings.linear.recordsOff = ['a'];
+  assert.doesNotThrow(() => assertActiveModeInputs('linear', sourceState));
 });

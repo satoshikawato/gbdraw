@@ -26,6 +26,7 @@ import {
   getCommittedSvgResultRuntimeIdentity
 } from './services/svg-result-ingestion.js';
 import { createImportedComparisonIntentState } from './services/imported-comparison-intent.js';
+import { drawnLinearSequences } from './services/record-draw-selection.js';
 import {
   createDefaultAdv,
   createDefaultCircularConservation,
@@ -898,9 +899,15 @@ const createDrawingState = (drawingMode) => {
   const linearComparisonPlan = reactive(createDefaultLinearComparisonPlan());
   const linearRecordLayoutEnabled = ref(WEB_UX_PROFILE.linear.arrangeInRowsByDefault);
   const linearRecordRows = reactive([]);
+  // The keys of the records this drawing leaves out (record-selection D-02):
+  // Linear card uids or Circular source selectors `#N`
+  // (services/record-draw-selection.js).
+  /** @type {string[]} */
+  const recordsOff = reactive([]);
   const linearComparisonResolution = computed(() => resolveLinearComparisonPlan({
     plan: linearComparisonPlan,
     sequences: linearSeqs,
+    recordsOff,
     layout: linearRecordLayoutEnabled.value ? linearRecordRows : [],
     losatProgram: losatProgram.value,
     blastpMode: losat.blastp?.mode
@@ -920,6 +927,7 @@ const createDrawingState = (drawingMode) => {
     linearRecordGap: ref(24),
     linearRecordRows,
     recordDisplayDrafts: reactive([]),
+    recordsOff,
     unmanagedConfigOverrides: reactive({}),
     importedComparisonIntent: reactive(createImportedComparisonIntentState()),
     layoutPreferences,
@@ -964,6 +972,12 @@ const createDrawingState = (drawingMode) => {
     canvasPadding: reactive({ top: 0, right: 0, bottom: 0, left: 0 }),
     // Derived from the members above
     activeLayoutPreferences,
+    // The Linear record cards a Generate draws, in file order (read-only; the
+    // cards are project inputs that both drawings read).
+    // Frozen: a reader never edits the drawn list (the cards are `linearSeqs`).
+    drawnLinearSeqs: /** @type {{ readonly value: LinearSeq[] }} */ (
+      computed(() => Object.freeze(drawnLinearSequences(linearSeqs, recordsOff)))
+    ),
     linearComparisonResolution,
     hasLinearComparisonIntent: computed(() => linearComparisonResolution.value.hasComparisonIntent),
     hasActiveLinearLosatIntent: computed(() => linearComparisonResolution.value.hasLosatIntent),

@@ -210,6 +210,7 @@ export const MODE_SCOPED_SETTINGS = deepFreeze({
     {"domain": "config", "key": null, "migrate": "own", "modes": "linear", "path": "webEdits"},
     {"domain": "config", "key": "id", "migrate": "by-binding", "modes": "both", "path": "annotationSets"},
     {"domain": "config", "key": "JSON[sourceUid,selector]", "migrate": "by-scope", "modes": "both", "path": "recordDisplayDrafts"},
+    {"domain": "config", "key": null, "migrate": "copy", "modes": "both", "path": "recordsOff"},
     {"domain": "config", "key": "JSON[recordKey,biologicalFeatureId]", "migrate": "by-side", "modes": "both", "path": "featurePlacementOverrides"},
     {"domain": "features", "key": "JSON[recordKey,biologicalFeatureId]", "migrate": "result-mode", "modes": "both", "path": "featureOverrides"},
     {"domain": "features", "key": "recordKey\\0featureId", "migrate": "result-mode", "modes": "both", "path": "featureColorOverrides"},

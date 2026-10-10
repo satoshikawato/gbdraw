@@ -10,6 +10,8 @@ export const WEB_UX_PROFILE = Object.freeze({
     legend: 'left',
     plotTitlePosition: 'none'
   }),
+  // A file with more records opens its record list after an upload (D-04).
+  recordList: Object.freeze({ autoOpenAbove: 20 }),
   linear: Object.freeze({
     arrangeInRowsByDefault: true,
     legend: 'bottom',

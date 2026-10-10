@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `37`
+- Contract revision: `38`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -37,7 +37,7 @@ Status: active Product authority
   `PD-OI-071`, `PD-OI-072`, `PD-OI-073`, `PD-OI-074`, `PD-OI-075`,
   `PD-OI-076`, `PD-OI-077`, `PD-OI-078`, `PD-OI-079`, `PD-OI-080`,
   `PD-OI-081`, `PD-OI-082`, `PD-OI-083`, `PD-OI-084`, `PD-OI-085`,
-  `PD-OI-086`, `PD-OI-087`, `PD-OI-088`, `PD-OI-089`, and `PD-OI-090`
+  `PD-OI-086`, `PD-OI-087`, `PD-OI-088`, `PD-OI-089`, `PD-OI-090`, and `PD-OI-091`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -492,6 +492,37 @@ Status: active Product authority
     `PD-OI-073`, `PD-OI-079`, and `PD-OI-089`. Earlier decisions retain their
     scope. This authority-only amendment contains no runtime; dependent
     runtime requires it merged into its base, and the Review is `REQUIRED`.
+- Revision 38 changes: `PD-OI-091` is added
+  (`A / RECORD-DRAW-ON-OFF`, concern `diagram-generation.record-draw-selection`).
+  It comes from the Product Decision Owner `satoshikawato`'s replies of
+  `2026-10-10` for drawing a chosen subset of a file's records in the Web app.
+  - Replies (question text abbreviated, option labels as selected): D-01
+    「特定のレコードだけ描画する機能をv0.14.0に絶対に入れなければならない。例えば100本以上コンティグがあるドラフトアセンブリとかだったら絶対に必要。」;
+    D-02 「個々のレコードのプルタブを開くとチェックを外して/入れて描画OFF/ONできるようにするほかに、レコードのリストをポップアップしてそこからチェックを外して/入れて描画OFF/ONできるようにする2ルートが必要」;
+    D-03 「範囲：Circular の Multi-Record Canvas の部分選択も 0.14.0 に入れる。」;
+    D-04 「アップロード直後の既定： レコード数が閾値（例：20）を超えたらピッカーを自動で開く」;
+    D-05 「外したレコードのカード設定: 外しても保持しよう。オプションで削除できるようにしよう。」 and
+    「Session には基本保存するけど、さっきの回答のように、完全削除するオプションもつける」;
+    D-06 「これはポップアップで質問して「ファイルごと消しますか？」って出すのがいいと思う」;
+    D-07 「P-1：推奨どおり」 (the LOSAT E-value database stays the whole subject source file);
+    D-08 「P-4: 推奨どおり」 (Delete settings also removes the record's feature edits, Feature placements, annotations that target it, and comparison pairs that name it);
+    D-09 「残りも推奨通り。」;
+    D-10 「一覧ではレコードのソートもできるようにしたい。IDとか、長さ順とか、オリジナルの順に戻すとか」.
+  - The question asked with the full receipt text recorded below was answered
+    by the Owner on `2026-10-10` with 「文面承認」. The Owner approved the
+    receipt text as written; it is recorded byte for byte.
+  - `PD-OI-010` accepted residual risk "Arbitrary multi-record subset editing
+    remains unavailable" and the exclusion of record-subset editing in
+    `PD-OI-044` scenario revision `2` `May retire` are retired by the
+    `PD-OI-091` `May retire`. Their texts are unchanged; the later record
+    controls where they differ, and Git history retains the approved receipts.
+  - `PD-OI-018` is not amended: the E-value database stays the whole subject
+    source file. `PD-OI-019`, `PD-OI-044`, `PD-OI-070`, and `PD-OI-090` keep
+    their scope and are read together with `PD-OI-091`. Session version `46`
+    is unchanged; the new field is optional.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -4328,6 +4359,50 @@ Decision date: 2026-10-08
   "acceptedResidualRisk": "環状の record の原点をまたぐ領域は、最初の版では切り出せない（作成の画面で理由を示す）。Auto の大きさは record の長さの区分（50 kb など）で切り替わるため、区分の境をまたぐ領域では見た目が急に変わる。2 つの図を同じ設定にしたいときは、複製かスタイルのコピーを使うか、両方の drawing で設定する。以前の Session から作った他方の drawing に Result がなければ Generate が必要で、version 27〜44 の Session の凡例の編集は保存された Result の drawing だけに入る。version 27〜44 の Session で両方の mode に写した共有の値（Depth の最小・最大、window など）が、他方の mode のデータに合わないことがある。0.14.0 で他方の mode を表示も Generate もせず、ファイルも置かず、設定を一方の mode と同じにしていた Session では、その mode の drawing は作らない（スタイルをコピーして新規で作り直せる）。version 27〜44 の Session を開くときは、保存された図をすぐ示したうえで Python を一度起動して移し、その間（約 8 秒）は編集を待つ（新しい形式で保存し直すと起こらない）。新しい形式（version 47）で保存した Session は以前の版の gbdraw では読めない。drawing が増えると Session とメモリが大きくなる（Result と History は drawing ごと）。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-08"
+}
+```
+
+### PD-OI-091: Per-record draw ON/OFF
+
+- Concern key: `diagram-generation.record-draw-selection`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / RECORD-DRAW-ON-OFF`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its JSON representation below.
+- Decision source: the Owner replies quoted verbatim in the Revision 38 entry
+  above. The Owner approved the receipt text below as written. The receipt
+  reproduces its fields without translation or additional terms. Dependent
+  runtime requires this authority merged into its base, or merged together
+  with it through the reviewed static Product Contract co-change route; this
+  record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `3eba5a6876af4b5ab575ab586291516e42bc298e53ef61b80a29093e2d5f49d6`.
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.record-draw-selection
+Scenario revision: 1
+Choice: A / RECORD-DRAW-ON-OFF
+Rationale: 100 本以上のコンティグがあるドラフトアセンブリのように record の多いファイルから、見たい record だけを描けるようにする。0.13.0 の Web の Linear では record を 1 つ選んで描けたが、複数 record のファイルを record ごとの card に展開してから（#526）、record を外す方法がなくなった。CLI（--record_id、--records_table）と Python API はすでに一部の record だけを描ける。
+Must preserve: 〔状態〕record ごとの「描く／描かない（ON/OFF）」を drawing ごとに 1 つ持つ（PD-OI-090）。既定はすべて ON（PD-OI-019）。〔2 つの入口〕Linear の record の card の中の Draw this record のチェックと、ファイルの record の一覧（Choose records…）のチェックの 2 か所から切り替え、どちらも同じ状態を読み書きする。Circular は Record の select の横の一覧から切り替える。一覧は record ID で検索でき、長さを示し、ファイルの順（元の順。既定）、record ID の順（昇順と降順。数字は数として比べ、contig_2 は contig_10 より前）、長さの順（長い順と短い順）に並べ替えられる。並べ替えは一覧の表示だけで、描く順は変えない。表示中の行をまとめて ON または OFF にできる。変更はすぐ反映し、1 つの操作は 1 回の Undo で戻る。〔描画〕OFF の record は Generate に送らず、図、比較のペア（All adjacent pairs を含む）、行の配置、凡例、注釈から外れる。比較の画面には ON の record だけを示し、Record Layout と Circular の Record Order には OFF の record を灰色で示す。OFF の card は閉じた状態でも灰色と OFF の印で分かる。ON に戻すと、ファイルの中の元の位置（Linear の行、Circular の grid の位置）に戻る。Circular の Multi-Record Canvas と record ごとの別々の図は ON の record だけを描く。Record の select で 1 つの record を選んだときは、ON/OFF によらずその record を描く。ON の record が 1 つでも、All records は別々の図のままで、自動で 1 つの図に切り替えない（PD-OI-044）。ON/OFF を変えると、次の Generate まで比較の結果と Similarity alignment の計画は無効になる。〔LOSAT〕E-value の database は今までどおり subject 側の source ファイル全体で（PD-OI-018）、record を ON/OFF しても他の record の E-value は変わらない。ペアは ON の record どうしだけを作る。〔設定の保持と削除〕OFF の record の card の設定（Organism、Subtitle、Region、Reverse complement、LOSAT Gencode、開始位置）、feature の編集、注釈、比較のペア、行は残り、Session の保存と読み込みでも残る。Delete settings（OFF の card と一覧にある）は、その record の card の設定を既定に戻し、その record の feature の編集と Feature placement、その record を選んだ注釈、その record を含む比較のペアも消す。1 回の Undo で戻る。〔最後の record〕ファイルの最後の ON の record を OFF にしようとすると、Remove the whole file? と聞く。Remove File はそのファイルを外し（ほかにファイルがなければ空にする。Circular は GenBank、または GFF3 と FASTA の組を外す）、Cancel は何も変えない（まとめて OFF にする操作なら、その操作全体を取り消す）。〔upload〕record が 20 を超えるファイルを upload すると、すべて ON のまま一覧を自動で開く。複数のファイルなら 1 つずつ開く。Session の読み込み、取り消し、Undo では開かない。〔Reset と Session〕Reset Settings は ON/OFF を残す（PD-OI-070）。Session は drawing ごとに OFF の record を保存し、その項目のない Session（以前の Web、CLI、Gallery の Session）はすべて ON として読む。Session の version は 46 のまま。CLI の --session の再生は ON の record だけを描き、保存し直しても OFF の record とその設定を残す。あるファイルの record がすべて OFF の Session はそのまま読み込み、そのファイルは描かない。すべての record が OFF なら、Generate は Turn on at least one record to draw. と示す。
+May retire: 複数 record のファイルの全 record を必ず描く Web の Linear の動作（#526 以降）。Multi-Record Canvas と record ごとの別々の図が全 record を必ず描く動作。PD-OI-010 の受け入れた残余リスク（Arbitrary multi-record subset editing remains unavailable）と、PD-OI-044 revision 2 の May retire が record の一部を選ぶ編集を除外していること。
+Accepted residual risk: record が数百あると Linear の card が数百並び、画面が重くなることがある（#526 から変わらない）。OFF の record の設定は Session に残るので、Session が大きくなる（Delete settings で消せる）。CLI には ON/OFF の option はなく、--record_id と --records_table で同じ図を描く。
+Owner: satoshikawato
+Decision date: 2026-10-10
+```
+
+```json
+{
+  "concern": "diagram-generation.record-draw-selection",
+  "scenarioRevision": 1,
+  "choice": "A / RECORD-DRAW-ON-OFF",
+  "rationale": "100 本以上のコンティグがあるドラフトアセンブリのように record の多いファイルから、見たい record だけを描けるようにする。0.13.0 の Web の Linear では record を 1 つ選んで描けたが、複数 record のファイルを record ごとの card に展開してから（#526）、record を外す方法がなくなった。CLI（--record_id、--records_table）と Python API はすでに一部の record だけを描ける。",
+  "mustPreserve": "〔状態〕record ごとの「描く／描かない（ON/OFF）」を drawing ごとに 1 つ持つ（PD-OI-090）。既定はすべて ON（PD-OI-019）。〔2 つの入口〕Linear の record の card の中の Draw this record のチェックと、ファイルの record の一覧（Choose records…）のチェックの 2 か所から切り替え、どちらも同じ状態を読み書きする。Circular は Record の select の横の一覧から切り替える。一覧は record ID で検索でき、長さを示し、ファイルの順（元の順。既定）、record ID の順（昇順と降順。数字は数として比べ、contig_2 は contig_10 より前）、長さの順（長い順と短い順）に並べ替えられる。並べ替えは一覧の表示だけで、描く順は変えない。表示中の行をまとめて ON または OFF にできる。変更はすぐ反映し、1 つの操作は 1 回の Undo で戻る。〔描画〕OFF の record は Generate に送らず、図、比較のペア（All adjacent pairs を含む）、行の配置、凡例、注釈から外れる。比較の画面には ON の record だけを示し、Record Layout と Circular の Record Order には OFF の record を灰色で示す。OFF の card は閉じた状態でも灰色と OFF の印で分かる。ON に戻すと、ファイルの中の元の位置（Linear の行、Circular の grid の位置）に戻る。Circular の Multi-Record Canvas と record ごとの別々の図は ON の record だけを描く。Record の select で 1 つの record を選んだときは、ON/OFF によらずその record を描く。ON の record が 1 つでも、All records は別々の図のままで、自動で 1 つの図に切り替えない（PD-OI-044）。ON/OFF を変えると、次の Generate まで比較の結果と Similarity alignment の計画は無効になる。〔LOSAT〕E-value の database は今までどおり subject 側の source ファイル全体で（PD-OI-018）、record を ON/OFF しても他の record の E-value は変わらない。ペアは ON の record どうしだけを作る。〔設定の保持と削除〕OFF の record の card の設定（Organism、Subtitle、Region、Reverse complement、LOSAT Gencode、開始位置）、feature の編集、注釈、比較のペア、行は残り、Session の保存と読み込みでも残る。Delete settings（OFF の card と一覧にある）は、その record の card の設定を既定に戻し、その record の feature の編集と Feature placement、その record を選んだ注釈、その record を含む比較のペアも消す。1 回の Undo で戻る。〔最後の record〕ファイルの最後の ON の record を OFF にしようとすると、Remove the whole file? と聞く。Remove File はそのファイルを外し（ほかにファイルがなければ空にする。Circular は GenBank、または GFF3 と FASTA の組を外す）、Cancel は何も変えない（まとめて OFF にする操作なら、その操作全体を取り消す）。〔upload〕record が 20 を超えるファイルを upload すると、すべて ON のまま一覧を自動で開く。複数のファイルなら 1 つずつ開く。Session の読み込み、取り消し、Undo では開かない。〔Reset と Session〕Reset Settings は ON/OFF を残す（PD-OI-070）。Session は drawing ごとに OFF の record を保存し、その項目のない Session（以前の Web、CLI、Gallery の Session）はすべて ON として読む。Session の version は 46 のまま。CLI の --session の再生は ON の record だけを描き、保存し直しても OFF の record とその設定を残す。あるファイルの record がすべて OFF の Session はそのまま読み込み、そのファイルは描かない。すべての record が OFF なら、Generate は Turn on at least one record to draw. と示す。",
+  "mayRetire": "複数 record のファイルの全 record を必ず描く Web の Linear の動作（#526 以降）。Multi-Record Canvas と record ごとの別々の図が全 record を必ず描く動作。PD-OI-010 の受け入れた残余リスク（Arbitrary multi-record subset editing remains unavailable）と、PD-OI-044 revision 2 の May retire が record の一部を選ぶ編集を除外していること。",
+  "acceptedResidualRisk": "record が数百あると Linear の card が数百並び、画面が重くなることがある（#526 から変わらない）。OFF の record の設定は Session に残るので、Session が大きくなる（Delete settings で消せる）。CLI には ON/OFF の option はなく、--record_id と --records_table で同じ図を描く。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-10"
 }
 ```
 

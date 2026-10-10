@@ -1,4 +1,6 @@
 // @ts-check
+import { circularRecordsToDraw } from './record-draw-selection.js';
+
 const cleanText = (value) => String(value ?? '').trim();
 const NULL_RECORD_SELECTOR_TOKENS = new Set([
   'none', 'null', 'jsnull', 'undefined', 'jsundefined', '-'
@@ -61,15 +63,19 @@ export const resolveDisambiguatedRecordSelection = (records, requestedValue) => 
 };
 
 // The source records one Circular request draws: the selected record of a
-// single presentation, otherwise every record. services/session-request.js
+// single presentation, otherwise every ON record (record selection; an
+// explicit single choice draws its record ON or OFF). services/session-request.js
 // builds the request from this set and the region annotation record catalog
-// offers the same records.
+// offers the same records. `presentedCount` is how many records the
+// presentation offers (1 for a single choice), which decides single or batch;
+// `omittedRecords` are the offered records that are OFF.
 /**
  * @typedef {Object} CircularRequestRecordSetOptions
  * @property {any[]} [records] Discovered records (`record_id` or `recordId`, `recordLength`, `selector`).
  * @property {string} [selector]
  * @property {boolean} [multiRecordCanvas]
  * @property {string} [groupingIntent]
+ * @property {readonly string[]} [recordsOff] The drawing's OFF records (`#N`).
  */
 
 /** @param {CircularRequestRecordSetOptions} [options] */
@@ -77,7 +83,8 @@ export const resolveCircularRequestRecordSet = ({
   records,
   selector = '',
   multiRecordCanvas = false,
-  groupingIntent = ''
+  groupingIntent = '',
+  recordsOff = []
 } = {}) => {
   const recordSelectors = buildDisambiguatedRecordEntries(
     (Array.isArray(records) ? records : []).map((record) => ({
@@ -93,10 +100,18 @@ export const resolveCircularRequestRecordSet = ({
   const selectionFailure = singlePresentation && requestedSelector && selection.status !== 'resolved'
     ? (selection.status === 'ambiguous' ? 'AMBIGUOUS' : 'NO_MATCH')
     : '';
+  if (singlePresentation && selection.record) {
+    return { recordSelectors, records: [selection.record], omittedRecords: [], presentedCount: 1,
+      singlePresentation, selectionFailure };
+  }
+  const drawnRecords = circularRecordsToDraw(recordSelectors, recordsOff);
+  const drawn = new Set(drawnRecords);
   return {
     recordSelectors,
-    records: singlePresentation && selection.record ? [selection.record] : recordSelectors,
+    records: drawnRecords,
+    omittedRecords: recordSelectors.filter((record) => !drawn.has(record)),
+    presentedCount: recordSelectors.length,
     singlePresentation,
-    selectionFailure
+    selectionFailure: selectionFailure || (recordSelectors.length > 0 && drawnRecords.length === 0 ? 'NONE_DRAWN' : '')
   };
 };

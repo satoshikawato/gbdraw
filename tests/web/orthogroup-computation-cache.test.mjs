@@ -103,7 +103,10 @@ test('member tables name each record in plain text, as the diagram heading reads
       { uid: 'record-3', definition: '', gb: { name: 'BGC0000711' } }
     ])
   };
-  const editor = createOrthogroupEditor({ state: withDrawings(state) });
+  // A member's record index names a record of the Result's request, whose
+  // recordKey is the card uid (record selection).
+  const getCommittedRequest = () => ({ records: state.linearSeqs.map(({ uid }) => ({ recordKey: uid })) });
+  const editor = createOrthogroupEditor({ state: withDrawings(state), getCommittedRequest });
   const rows = editor.groupOrthogroupMembersByRecord([
     { recordIndex: 0 }, { recordIndex: 1 }, { recordIndex: 2 }
   ]);

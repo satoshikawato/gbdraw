@@ -11,6 +11,7 @@ import { normalizePaletteColors } from '../utils/color-utils.js';
 import { cloneJsonData } from './json-clone.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { featureIdentityKey } from './feature-placement.js';
+import { ANNOTATION_RECORD_BINDING_KEY } from './annotation-state.js';
 
 /** @typedef {'circular' | 'linear'} SliceMode */
 /**
@@ -149,8 +150,6 @@ export const unscopedDraftRows = (rows, mode) => {
   });
   return Object.fromEntries(kept);
 };
-
-const ANNOTATION_RECORD_BINDING_KEY = '_gbdraw_web_target_record_key';
 
 // The mode whose record an annotation's target names, if it names one: a
 // featureIdentity target's `scope`, or the mode its record binding starts with.

@@ -48,6 +48,7 @@ import {
   normalizeOrthogroupMembershipMode
 } from './losat-normalization.js';
 import { normalizeDefinitionLineStyleState } from './definition-line-style-state.js';
+import { drawnLinearSequences } from './record-draw-selection.js';
 import {
   migrateLegacyLinearLabelVisibility,
   requireLinearLabelVisibilityMode
@@ -1113,6 +1114,8 @@ export const buildConfigData = (drawing) => ({
   circularConservation: drawing.circularConservation,
   annotationSets: normalizeAnnotationSets(drawing.annotationSets),
   recordDisplayDrafts: cloneJsonData(drawing.recordDisplayDrafts),
+  // Written only when a record is OFF: a Session with every record ON keeps its bytes (omission = all ON).
+  ...(drawing.recordsOff?.length ? { recordsOff: [...drawing.recordsOff] } : {}),
   featurePlacementOverrides: cloneJsonData(drawing.featurePlacementOverrides),
   linearRecordLayout: {
     enabled: Boolean(drawing.linearRecordLayoutEnabled.value),
@@ -2391,6 +2394,8 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
       : {}
   );
   drawing.recordDisplayDrafts.splice(0, drawing.recordDisplayDrafts.length, ...cloneJsonData(data.recordDisplayDrafts || []));
+  // Omitted: every record is drawn.
+  drawing.recordsOff.splice(0, drawing.recordsOff.length, ...(Array.isArray(data.recordsOff) ? data.recordsOff : []));
   replacePlainObject(drawing.featurePlacementOverrides, cloneJsonData(data.featurePlacementOverrides || {}));
   drawing.annotationSets.splice(
     0,
@@ -3031,8 +3036,10 @@ const restoredLosatCacheInfoIdentity = (drawing, entry) => {
   const subjectUid = subjectInstanceUid || identity.subjectUid || '';
   if (!queryUid || !subjectUid || queryUid === subjectUid) return {};
 
+  // Indexes of the committed request: positions in the drawn list.
   const indexByUid = new Map(
-    state.linearSeqs.map((sequence, index) => [String(sequence?.uid || ''), index])
+    drawnLinearSequences(state.linearSeqs, drawing.recordsOff)
+      .map((sequence, index) => [String(sequence?.uid || ''), index])
   );
   const queryIndex = indexByUid.get(queryUid);
   const subjectIndex = indexByUid.get(subjectUid);
@@ -3357,16 +3364,24 @@ export const assertActiveModeInputs = (mode = state.mode.value, sourceState = st
     return;
   }
   const gff = sourceState.lInputType?.value === 'gff';
-  (Array.isArray(sourceState.linearSeqs) ? sourceState.linearSeqs : []).forEach((seq, index) => {
+  const sequences = Array.isArray(sourceState.linearSeqs) ? sourceState.linearSeqs : [];
+  sequences.forEach((seq, index) => {
     if (!(gff ? seq?.gff : seq?.gb)) throw diagnosticError('INPUT_REQUIRED', { inputOrdinal: index + 1 });
     if (gff && !seq?.fasta) throw diagnosticError('FASTA_REQUIRED', { inputOrdinal: index + 1 });
   });
+  // Only a hand-edited Session turns every record OFF (D-06 asks first).
+  if (sequences.length > 0
+    && drawnLinearSequences(sequences, sourceState.drawings?.linear?.recordsOff).length === 0) {
+    throw diagnosticError('RECORD_SELECTION', { reason: 'NONE_DRAWN' });
+  }
 };
 
+// `sequences`: the drawn record files, in request order. `cards`: every
+// Linear card, OFF cards included; an error names its card number among them.
 export const materializeLinearRecordFiles = (
   sequences,
   catalog,
-  _options = {}
+  { cards = /** @type {{ uid: string }[]} */ ([]) } = {}
 ) => {
   const sourceSequences = Array.isArray(sequences) ? sequences : [];
   if (catalog == null) return sourceSequences;
@@ -3384,13 +3399,14 @@ export const materializeLinearRecordFiles = (
   });
   sourceSequences.forEach((source, sourceIndex) => {
     const count = recordCountBySource.get(sourceIndex) || 0;
-    if (count === 0) throw diagnosticError('NO_RECORDS', { inputOrdinal: sourceIndex + 1 });
+    const inputOrdinal = cards.findIndex((card) => card.uid === source.uid) + 1 || sourceIndex + 1;
+    if (count === 0) throw diagnosticError('NO_RECORDS', { inputOrdinal });
     if (count <= 1) return;
     const hasRegion = [source.region_start, source.region_end].some(
       (value) => value !== null && value !== undefined && value !== ''
     );
     if (hasRegion) {
-      throw diagnosticError('REGION_INVALID', { inputOrdinal: sourceIndex + 1, reason: 'SELECT_RECORD_FOR_REGION' });
+      throw diagnosticError('REGION_INVALID', { inputOrdinal, reason: 'SELECT_RECORD_FOR_REGION' });
     }
   });
   return sourceSequences;
@@ -3412,8 +3428,9 @@ export const serializeActiveRenderFiles = async (
     throw new Error(`Unsupported render mode: ${String(mode)}.`);
   }
   const sourceFiles = sourceState.files || {};
+  // The request holds the drawn records only (record-selection D-02).
   const normalizedLinearSeqs = mode === 'linear'
-    ? normalizeLinearSeqList(sourceState.linearSeqs)
+    ? normalizeLinearSeqList(drawnLinearSequences(sourceState.linearSeqs, drawing.recordsOff))
     : [];
   const depthRequested = customDepthRequested(mode, drawing);
   const serializedLinearSeqs = await Promise.all(
@@ -3449,12 +3466,13 @@ export const serializeActiveRenderFiles = async (
   const linearSeqs = materializeLinearRecordFiles(
     serializedLinearSeqs,
     optionBag?.linearRecordCatalog ?? null,
-    { layoutEnabled: Boolean(drawing.linearRecordLayoutEnabled?.value) }
+    { cards: Array.isArray(sourceState.linearSeqs) ? sourceState.linearSeqs : [] }
   );
   const resolvedComparisonPlan = mode === 'linear'
     ? suppliedComparisonPlan || resolveLinearComparisonPlan({
         plan: drawing.linearComparisonPlan,
-        sequences: normalizedLinearSeqs,
+        sequences: normalizeLinearSeqList(sourceState.linearSeqs),
+        recordsOff: drawing.recordsOff,
         layout: drawing.linearRecordLayoutEnabled?.value
           ? drawing.linearRecordRows
           : [],
@@ -4223,6 +4241,9 @@ const resetSessionBaseline = () => {
   resetSettingsState(state);
   resetLayoutState(state);
   resetRightDrawerState(state);
+  // Reset Settings keeps which records are ON (PD-OI-070); a new Session draws
+  // every record its slices do not turn OFF (PD-OI-091).
+  for (const drawing of Object.values(state.drawings)) drawing.recordsOff.splice(0);
   state.mode.value = 'circular';
   state.cInputType.value = 'gb';
   state.lInputType.value = 'gb';
@@ -4754,6 +4775,7 @@ const buildOtherModeResult = (other, renderRequest) => {
  * @typedef {{
  *   drawing: DrawingState,
  *   linearRecordCatalog?: any,
+ *   omittedAnnotationRecordKeys?: string[],
  *   recordDisplayRows?: any,
  *   modes: Record<'circular' | 'linear', SessionModeSlice>,
  *   savedUi: Record<string, any>,
@@ -4770,7 +4792,8 @@ const buildOtherModeResult = (other, renderRequest) => {
 const exportSessionDocument = async (
   titleOverride = null,
   {
-    drawing, linearRecordCatalog = null, recordDisplayRows = null, modes, savedUi, isCurrent, artifact, otherArtifact
+    drawing, linearRecordCatalog = null, omittedAnnotationRecordKeys = [], recordDisplayRows = null, modes, savedUi,
+    isCurrent, artifact, otherArtifact
   }
 ) => {
   const resolvedTitle =
@@ -4840,6 +4863,7 @@ const exportSessionDocument = async (
       ? resolveLinearComparisonPlan({
           plan: drawing.linearComparisonPlan,
           sequences: normalizeLinearSeqList(state.linearSeqs),
+          recordsOff: drawing.recordsOff,
           layout: drawing.linearRecordLayoutEnabled?.value
             ? drawing.linearRecordRows
             : [],
@@ -4861,7 +4885,8 @@ const exportSessionDocument = async (
       drawing,
       filesData: activeFiles,
       recordDisplayRows: recordDisplayRows?.value || [],
-      comparisonPlanSnapshot
+      comparisonPlanSnapshot,
+      omittedAnnotationRecordKeys
     });
   }
   committed = promoteSavedCanonicalSession(committed, artifact, editorState.featureCatalog);

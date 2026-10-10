@@ -42,12 +42,14 @@ await copyModule('gbdraw/web/js/services/feature-identity.js', 'services/feature
 await copyModule('gbdraw/web/js/services/feature-catalog.js', 'services/feature-catalog.js');
 await copyModule('gbdraw/web/js/services/runtime-test-hooks.js', 'services/runtime-test-hooks.js');
 await copyModule('gbdraw/web/js/services/text-download.js', 'services/text-download.js');
+await copyModule('gbdraw/web/js/services/record-draw-selection.js', 'services/record-draw-selection.js');
 // The member tables name records through the Linear record label owners (OV-369).
 for (const name of ['linear-comparisons', 'linear-sources', 'file-content-cache', 'session-resource-backing',
   'byte-utils', 'depth-file-codec', 'depth-track-state', 'track-slot-display', 'record-options']) {
   await copyModule(`gbdraw/web/js/services/${name}.js`, `services/${name}.js`);
 }
 await copyModule('gbdraw/web/js/utils/clipboard.js', 'utils/clipboard.js');
+await copyModule('gbdraw/web/js/utils/download-names.js', 'utils/download-names.js');
 const standaloneSource = await readFile(
   join(repoRoot, 'gbdraw/web/js/services/standalone-interactivity.js'),
   'utf8'
@@ -1923,4 +1925,18 @@ console.log('orthogroup stable identity tests passed');
     members: [{ recordKey: 'record-key-c', biologicalFeatureId: 'biological-c' }] })[0];
   assert.equal(member.nucleotideSequence, 'GGGG');
   assert.equal(member.aminoAcidSequence, 'MQ');
+}
+
+// Record selection: a member's record index is a position in the records of
+// the Result's request. A Generate drew a and c (b OFF); turning c OFF and b ON
+// afterwards does not relabel the members until the next Generate.
+{
+  const offState = { ...state, recordsOff: ['uid-c'],
+    linearSeqs: state.linearSeqs.map((sequence, index) => ({ ...sequence, uid: `uid-${'abc'[index]}` })) };
+  const offEditor = createOrthogroupEditor({
+    state: withDrawings(offState),
+    getCommittedRequest: () => ({ records: [{ recordKey: 'uid-a' }, { recordKey: 'uid-c' }] })
+  });
+  const grouped = offEditor.groupOrthogroupMembersByRecord([{ fileIdx: 1 }, { fileIdx: 0 }]);
+  assert.deepEqual(grouped.map((entry) => entry.recordLabel), ['record-a', 'record-c']);
 }

@@ -3793,7 +3793,7 @@ test('@comparison-contract one uploaded source stays one file card through recor
   await expect(sources.getByRole('button', { name: /^Choose (GenBank \/ DDBJ File|GFF3|FASTA)$/ })).toHaveCount(2);
   const recordList = sources.first().locator('[data-linear-source-records]');
   const recordSummary = recordList.locator(':scope > summary');
-  await expect(recordSummary).toHaveText('Number of records: 2');
+  await expect(recordSummary).toHaveText('Number of records: 2 · 2 drawn');
   await expect(recordList).not.toHaveAttribute('open', '');
   await expect(sources.first().getByRole('button', { name: 'Record options for sequence 1' })).not.toBeVisible();
   await recordSummary.press('Enter');

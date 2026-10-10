@@ -22,7 +22,7 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-const NO_IMPLICIT_ANY_BASELINE = 7533;
+const NO_IMPLICIT_ANY_BASELINE = 7509;
 
 const REPOSITORY_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const RATCHET_CONFIG = 'tests/web/types/tsconfig.no-implicit-any.json';
