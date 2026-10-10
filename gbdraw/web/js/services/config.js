@@ -2756,7 +2756,8 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true }
         val: String(r.val || ''),
         color: resolveColorToHex(String(r.color || '#000000')),
         cap: String(r.cap || ''),
-        fromFile: !!r.fromFile
+        // The shape normalizeSpecificRule gives: `fromFile` only when true.
+        ...(r.fromFile ? { fromFile: true } : {})
       });
     });
     drawing.fileLegendCaptions.value = new Set(
