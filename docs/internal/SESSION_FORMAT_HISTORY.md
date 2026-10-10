@@ -71,18 +71,17 @@ source files instead.
 
 On the command line, `gbdraw circular --session` and `gbdraw linear --session`
 render the set of their own mode, at the top level or in `otherModeResult`. A
-re-save with `--save_session` or `--session_output` writes Session 46: the
-subcommand's set at the top level, the other set in `otherModeResult`, and an
-older Session's draft split into `modes` as the Web app splits it. It keeps
-`ui.mode`, so the Web app still opens on the saved mode. The re-save replaces
-the subcommand's set with the new render and keeps the other set. It also
-changes these parts that both sets share:
+re-save with `--save_session` or `--session_output` writes Session 46. It
+replaces the subcommand's set with the new render where that set is, keeps the
+other set, and splits an older Session's draft into `modes` as the Web app
+splits it. It keeps `ui.mode`, so the Web app still opens on the saved mode. It
+also changes these parts that both sets share:
 
 - `losatCache` holds the entries that the render returns, and
   `losatDerivedCache` is emptied.
 - `proteinIdentityManifest` and `legacyArtifacts` are replaced by the render's.
-- When the render migrates legacy protein IDs, the protein references are
-  rewritten throughout the Session, `otherModeResult` included.
+- When the render migrates legacy protein IDs (only Sessions 44 and older have
+  them), the protein references are rewritten throughout the Session.
 - Resources that neither set's request nor the Web files name are dropped.
 
 ## Unreleased: Web Load of 0.13.0 Sessions
@@ -113,10 +112,12 @@ them: the extra cells of a row join its last column with one space, and a row
 without its required columns is dropped (`feature_type` and `qualifier` for
 Label whitelist, `feature_type` and `priorities` for Qualifier priority, and
 `feature_type` and a color for Default colors). The Load notice names each
-table and line read this way. Sessions 40 and later are read as before, and
-table file imports and CLI replay (`--session`) still reject such a row. When
-another table of a Session fails to load, the message names the table, for
-example `Session table: Specific colors.`
+table and line read this way. CLI replay and re-save (`--session`,
+`gbdraw render --session`) and `upgrade_session_document` read them the same
+way and log a warning that names the lines; a re-saved Session holds the table
+as read. Sessions 40 and later are read as before, and table file imports
+still reject such a row. When another table of a Session fails to load, the
+message names the table, for example `Session table: Specific colors.`
 
 ## Unreleased: Session 46 and Web feature edits by source identity
 
@@ -172,11 +173,14 @@ Feature visibility edit hid every feature with the same hash, such as each copy
 of a duplicated record; it now applies only to the feature that was edited, and
 Load reports how many edits the next Generate draws differently for this.
 Each moved edit goes to the slice of the Session's diagram's mode. The CLI moves the
-edits of a Session 40–44 through its saved catalog in the same way when it
-replays the Session with `--session_output` or `--save_session`, and logs these
-counts. It does not read the sources of an older Session again, so it drops
-that Session's edits; the replayed request's tables keep their effect on the
-diagram. A Feature placement
+edits in the same way when it replays the Session with `--session_output` or
+`--save_session`, as does `upgrade_session_document()`, and logs these counts:
+a Session 40–44 through its saved catalog, a Session 31–39 through its GenBank
+sources read again with the crops and orientations Load uses. When a source
+cannot be read, the CLI uses the saved feature metadata; it does not read the
+features of the saved SVG, which Load tries before the saved metadata, so an
+edit that only those features name is dropped and counted. The replay of a
+Session 27–30 still drops these edits. A Feature placement
 draft of a Session 41–44 reached every request with its record key: a lane
 placement goes to the slice of its side's mode, and a Main placement to both
 slices. The CLI applies the same mapping when it replays such a Session with

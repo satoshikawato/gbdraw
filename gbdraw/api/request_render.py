@@ -880,7 +880,7 @@ class CircularBatchRequestPlan:
     def preflight_outputs(self) -> None:
         """Validate every materialized batch output before diagram construction."""
 
-        _preflight_circular_batch_outputs(self.request)
+        preflight_diagram_request_outputs((self.request,))
 
     def item_plans(self) -> tuple[CircularRequestPlan, ...]:
         assert self.resolved_annotations is not None  # filled by __post_init__
@@ -1471,11 +1471,17 @@ def _coerce_resolved_collection(
     return ResolvedRecordCollection(records, tuple(provenance))
 
 
+def resolve_request_records(request: DiagramRequest) -> ResolvedRecordCollection:
+    """Load the records ``request`` draws, with the provenance of each."""
+
+    # Every request mode loads its records the same way.
+    return _load_request_records(cast(Any, request), _prepare_diagram_inputs(request))[1]
+
+
 def normalize_request_records(request: DiagramRequest) -> tuple[SeqRecord, ...]:
     """Resolve typed record inputs according to their explicit cardinality."""
 
-    # Every request mode loads its records the same way.
-    return _load_request_records(cast(Any, request), _prepare_diagram_inputs(request))[1].records
+    return resolve_request_records(request).records
 
 
 def _materialized_record_inputs(
@@ -3117,7 +3123,7 @@ def render_prepared_request(
         raise ValidationError("prepared must be a prepared diagram request.")
     if isinstance(prepared, PreparedCircularBatchRequest):
         if not batch_outputs_preflighted:
-            _preflight_circular_batch_outputs(prepared.request)
+            preflight_diagram_request_outputs((prepared.request,))
     return _render_request_diagram(
         prepared,
         include_feature_catalog=include_feature_catalog,
@@ -3209,14 +3215,37 @@ def _preflight_render_output(output: RenderOutputRequest) -> None:
     )
 
 
-def _preflight_circular_batch_outputs(
-    request: CircularBatchRequest,
-) -> None:
-    """Reject batch collisions before writing any item."""
+def _diagram_request_outputs(
+    request: DiagramRequest,
+) -> tuple[RenderOutputRequest, ...]:
+    return (
+        tuple(request.outputs)
+        if isinstance(request, CircularBatchRequest)
+        else (request.output,)
+    )
+
+
+def diagram_request_output_paths(request: DiagramRequest) -> tuple[Path, ...]:
+    """Return every file path one resolved typed request will write."""
+
+    return tuple(
+        path
+        for output in _diagram_request_outputs(request)
+        for path in _render_output_paths(output)
+    )
+
+
+def preflight_diagram_request_outputs(requests: Sequence[DiagramRequest]) -> None:
+    """Check every output of the requests together before any is written.
+
+    Each output keeps its own overwrite permission; two outputs that resolve
+    to one file are rejected.
+    """
 
     path_groups = tuple(
         (output, _render_output_paths(output))
-        for output in request.outputs
+        for request in requests
+        for output in _diagram_request_outputs(request)
     )
     for output, paths in path_groups:
         preflight_output_paths(paths, overwrite=output.overwrite)
@@ -3228,11 +3257,16 @@ def _preflight_circular_batch_outputs(
         ]
     except (OSError, ValueError) as exc:
         raise ValidationError(
-            "Could not resolve one or more Circular batch output paths."
+            "Could not resolve one or more diagram output paths."
         ) from exc
-    if len(set(path_identities)) != len(path_identities):
+    repeated = sorted(
+        {str(path) for path in path_identities if path_identities.count(path) > 1}
+    )
+    if repeated:
         raise ValidationError(
-            "Circular batch output requests resolve to duplicate file paths."
+            "Diagram output requests resolve to duplicate file paths: "
+            + ", ".join(repeated)
+            + "."
         )
 
 
@@ -3302,11 +3336,13 @@ __all__ = [
     "build_request_plan_diagram",
     "build_request_diagram",
     "build_prepared_interactive_context",
+    "diagram_request_output_paths",
     "normalize_request_records",
     "plan_request",
     "plan_circular_batch_request",
     "plan_circular_request",
     "plan_linear_request",
+    "preflight_diagram_request_outputs",
     "render_request",
     "render_prepared_request",
     "resolve_request",

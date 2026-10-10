@@ -681,18 +681,13 @@ def test_canonical_session_replay_uses_current_overwrite_permission(
     session = build_session_document(stored_request).to_dict()
     captured: dict[str, bool] = {}
 
-    def fake_render(
-        request,
-        *,
-        session_document=None,
-        include_feature_catalog=False,
-    ):
-        captured["overwrite"] = request.output.overwrite
+    def fake_render(materialized, plans, *, include_feature_catalog=False):
+        (plan,) = plans
+        captured["overwrite"] = plan.request.output.overwrite
         captured["include_feature_catalog"] = include_feature_catalog
-        assert session_document is not None
-        return SimpleNamespace(feature_identity_notices=())
+        return {plan.drawing.id: SimpleNamespace(feature_identity_notices=())}
 
-    monkeypatch.setattr(cli_session, "_render_request", fake_render)
+    monkeypatch.setattr(session_module, "_render_session_drawing_plans", fake_render)
 
     assert cli_session.render_canonical_session_if_present(
         session,
@@ -732,41 +727,43 @@ def test_legacy_canonical_sidecar_saves_rendered_request_and_migrated_adjunct(
     session["ui"] = {"mode": "linear"}
     captured: dict[str, object] = {}
 
-    def fake_render(
-        request,
-        *,
-        session_document=None,
-        include_feature_catalog=False,
-    ):
-        assert session_document is not None
+    def fake_render(materialized, plans, *, include_feature_catalog=False):
+        (plan,) = plans
         assert include_feature_catalog is True
         rendered_request = replace(
-            request,
-            output=replace(request.output, output_prefix="adapter-owned"),
+            plan.request,
+            output=replace(plan.request.output, output_prefix="adapter-owned"),
         )
         captured["rendered_request"] = rendered_request
-        return SimpleNamespace(
-            request=rendered_request,
-            drawing=object(),
-            output_paths=(),
-            interactive_context=None,
-            losat_derived_cache_entries=({"schema": 3},),
-            feature_identity_notices=(),
-        )
+        return {
+            plan.drawing.id: SimpleNamespace(
+                request=rendered_request,
+                drawing=object(),
+                output_paths=(),
+                interactive_context=None,
+                losat_derived_cache_entries=({"schema": 3},),
+                feature_identity_notices=(),
+            )
+        }
 
-    def fake_build(request, **kwargs):
-        captured["saved_request"] = request
-        captured["adjunct"] = kwargs["adjunct"]
-        return object()
+    real_build = session_module._build_session_document_from_drawings
+
+    def capturing_build(drawings, **kwargs):
+        if kwargs.get("base") is not None:
+            (drawing,) = drawings
+            captured["saved_request"] = drawing.request
+            captured["adjunct"] = drawing.state
+        return real_build(drawings, **kwargs)
 
     def fake_write(path, document, **kwargs):
         captured["saved_path"] = path
+        captured["document"] = document
 
-    monkeypatch.setattr(cli_session, "_render_request", fake_render)
+    monkeypatch.setattr(session_module, "_render_session_drawing_plans", fake_render)
     monkeypatch.setattr(
         session_module,
-        "_build_session_document_from_resolved_request",
-        fake_build,
+        "_build_session_document_from_drawings",
+        capturing_build,
     )
     monkeypatch.setattr(session_module, "_write_session_document", fake_write)
     sidecar_path = tmp_path / "saved.gbdraw-session.json"
@@ -783,16 +780,16 @@ def test_legacy_canonical_sidecar_saves_rendered_request_and_migrated_adjunct(
 
     assert captured["saved_path"] == sidecar_path
     assert captured["saved_request"] is captured["rendered_request"]
-    adjunct = captured["adjunct"]
-    assert isinstance(adjunct, dict)
-    assert "config" not in adjunct
+    saved = captured["document"].to_dict()
+    assert saved["renderRequest"]["output"]["prefix"] == "adapter-owned"
+    assert "config" not in saved
     for mode in ("circular", "linear"):
-        adv = adjunct["modes"][mode]["config"]["adv"]
+        adv = saved["modes"][mode]["config"]["adv"]
         assert adv["depth_large_tick_interval"] == 10
         assert adv["depth_tracks"] == [{"large_tick_interval": 5}]
-    linear = adjunct["modes"]["linear"]["config"]
+    linear = saved["modes"]["linear"]["config"]
     assert linear["losat"]["blastp"]["collinearMaxUnitGap"] == 2
-    assert adjunct["losatDerivedCache"] == {"entries": []}
+    assert saved["losatDerivedCache"] == {"entries": []}
     assert "depth_tick_interval" in session["config"]["adv"]
     assert "collinearMaxGeneGap" in session["config"]["losat"]["blastp"]
 

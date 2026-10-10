@@ -55,6 +55,7 @@ class TickGroup:
         self.manual_interval = cfg.objects.scale.interval
         self.font_family = cfg.objects.text.font_family
         self.track_type = str(track_preset or cfg.canvas.circular.track_type)
+        self.length_threshold = int(cfg.labels.length_threshold.circular)
         self.separate_strands = profile.strandedness
         normalized_tick_channel = str(tick_track_channel_override or "").strip().lower()
         self.tick_track_channel_override = (
@@ -91,6 +92,7 @@ class TickGroup:
             tick_length_px=self.tick_length_px,
             length_reference_radius_px=float(self.canvas_config.radius),
             record_transform=self.record_transform,
+            length_threshold=self.length_threshold,
         )
         ticks_large_nonzero: list[int] = [x for x in ticks_large if x != 0]
         tick_label_paths_large: list[Text] = generate_circular_tick_labels(
@@ -116,6 +118,7 @@ class TickGroup:
             record_identifier=str(self.gb_record.id),
             record_transform=self.record_transform,
             tick_interval=self.tick_large,
+            length_threshold=self.length_threshold,
         )
         for tick_path_large in tick_paths_large:
             self.tick_group.add(tick_path_large)

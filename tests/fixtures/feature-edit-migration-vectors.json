@@ -1,5 +1,5 @@
 {
-  "description": "Session 44 and older per-feature edit maps keyed by rendered SVG ID (input.features, with the Session's diagram mode and its saved feature catalog, projected to the fields the readers use) and the Session 45 features both readers must produce: features.featureOverrides rows keyed by [mode, recordKey, biologicalFeatureId], the four maps removed, labelOverrideRows cleared when a label map was migrated, and the counts of dropped and narrowed edits. A case with `fixture` is projected from that Session saved by first-parent main. Read by tests/test_session_compat.py (session_io.migrate_session_feature_edits) and tests/web/feature-edit-migration.test.mjs (migrateSessionFeatureEdits).",
+  "description": "Session 44 and older per-feature edit maps keyed by rendered SVG ID (input.features, with the Session's diagram mode and its saved feature catalog, or without one `legacy`: the request records and the source features read again or the saved feature metadata, projected to the fields the readers use) and the Session 45 features both readers must produce: features.featureOverrides rows keyed by [mode, recordKey, biologicalFeatureId], the four maps removed, labelOverrideRows cleared when a label map was migrated, and the counts of dropped and narrowed edits. A case with `fixture` is projected from that Session saved by first-parent main; a Session 31-39 case's `sourceReads` are the reads Web Load makes of its sources (resource, region spec, record selector, reverse flag), and its `legacy` features are what those reads give. Read by tests/test_session_compat.py (session_io.migrate_session_feature_edits, session_migration.legacy_source_reads and read_legacy_source_features) and tests/web/feature-edit-migration.test.mjs (migrateSessionFeatureEdits). `sourceReadCases` replace the Linear request records of `fixture` with `records`; `sourceReads` are the GenBank reads Web Load makes of them (request projection, buildLinearRegionExtractionContext) and the Python twin (session_migration.legacy_source_reads) must give: a crop as `<start>-<end>[:rc]` without the reverse flag, otherwise the record's reverse flag, and its record selector (recordId value or `#<index + 1>`).",
   "cases": [
     {
       "name": "Session 44 Linear, cropped and reverse-complemented records: rule 1 for every map",
@@ -1095,6 +1095,2037 @@
         "droppedCount": 5,
         "narrowedVisibilityCount": 0
       }
+    },
+    {
+      "name": "Sessions 31-33 Linear: source features read again name each record by its input and drawn hash",
+      "input": {
+        "features": {
+          "featureVisibilityOverrides": {
+            "fdrwa2_record_1": "off",
+            "fdrwb2_record_2": "off",
+            "fsame_record_4": "exclude_matching",
+            "fdup_record_4__instance_5_0123456789abcdef": "off"
+          },
+          "labelTextFeatureOverrides": {
+            "fdrwb4_record_2": "B_LABEL"
+          },
+          "labelVisibilityOverrides": {
+            "fsame_record_3": "off"
+          }
+        },
+        "mode": "linear",
+        "catalog": null,
+        "legacy": {
+          "records": [
+            {
+              "recordKey": "seq-a",
+              "cardinality": "exactly_one",
+              "region": {
+                "selector": null,
+                "start": 201,
+                "end": 3800,
+                "reverseComplement": false
+              },
+              "presentation": {
+                "reverseComplement": false
+              }
+            },
+            {
+              "recordKey": "seq-b",
+              "cardinality": "all",
+              "region": null,
+              "presentation": {
+                "reverseComplement": true
+              }
+            },
+            {
+              "recordKey": "seq-c",
+              "cardinality": "all",
+              "region": null,
+              "presentation": {
+                "reverseComplement": false
+              }
+            }
+          ],
+          "features": [
+            {
+              "fileIdx": 0,
+              "record_idx": 0,
+              "feature_index": 2,
+              "stable_feature_id": "fsrca2",
+              "svg_id": "fsrca2",
+              "drawn_selector": {
+                "hash": "fdrwa2"
+              }
+            },
+            {
+              "fileIdx": 1,
+              "record_idx": 0,
+              "feature_index": 2,
+              "stable_feature_id": "fsrcb2",
+              "svg_id": "fsrcb2",
+              "drawn_selector": {
+                "hash": "fdrwb2"
+              }
+            },
+            {
+              "fileIdx": 1,
+              "record_idx": 0,
+              "feature_index": 4,
+              "stable_feature_id": "fsame",
+              "svg_id": "fsame",
+              "drawn_selector": {
+                "hash": "fdrwb4"
+              }
+            },
+            {
+              "fileIdx": 2,
+              "record_idx": 0,
+              "feature_index": 1,
+              "stable_feature_id": "fsame",
+              "svg_id": "fsame",
+              "drawn_selector": {
+                "hash": "fsame"
+              }
+            },
+            {
+              "fileIdx": 2,
+              "record_idx": 1,
+              "feature_index": 1,
+              "stable_feature_id": "fsame",
+              "svg_id": "fsame",
+              "drawn_selector": {
+                "hash": "fsame"
+              }
+            },
+            {
+              "fileIdx": 2,
+              "record_idx": 1,
+              "feature_index": 3,
+              "stable_feature_id": "fdup",
+              "svg_id": "fdup",
+              "drawn_selector": {
+                "hash": "fdup"
+              }
+            },
+            {
+              "fileIdx": 2,
+              "record_idx": 1,
+              "feature_index": 5,
+              "stable_feature_id": "fdup",
+              "svg_id": "fdup",
+              "drawn_selector": {
+                "hash": "fdup"
+              }
+            }
+          ]
+        }
+      },
+      "expected": {
+        "features": {
+          "featureOverrides": {
+            "[\"linear\",\"seq-a\",\"fsrca2\"]": {
+              "scope": "linear",
+              "recordKey": "seq-a",
+              "biologicalFeatureId": "fsrca2",
+              "featureVisibility": "off",
+              "labelVisibility": null,
+              "labelText": null,
+              "labelSourceText": null
+            },
+            "[\"linear\",\"seq-b\",\"fsrcb2\"]": {
+              "scope": "linear",
+              "recordKey": "seq-b",
+              "biologicalFeatureId": "fsrcb2",
+              "featureVisibility": "off",
+              "labelVisibility": null,
+              "labelText": null,
+              "labelSourceText": null
+            },
+            "[\"linear\",\"seq-c:2\",\"fsame\"]": {
+              "scope": "linear",
+              "recordKey": "seq-c:2",
+              "biologicalFeatureId": "fsame",
+              "featureVisibility": "exclude_matching",
+              "labelVisibility": null,
+              "labelText": null,
+              "labelSourceText": null
+            },
+            "[\"linear\",\"seq-c:2\",\"fdup~5\"]": {
+              "scope": "linear",
+              "recordKey": "seq-c:2",
+              "biologicalFeatureId": "fdup~5",
+              "featureVisibility": "off",
+              "labelVisibility": null,
+              "labelText": null,
+              "labelSourceText": null
+            },
+            "[\"linear\",\"seq-c:1\",\"fsame\"]": {
+              "scope": "linear",
+              "recordKey": "seq-c:1",
+              "biologicalFeatureId": "fsame",
+              "featureVisibility": null,
+              "labelVisibility": "off",
+              "labelText": null,
+              "labelSourceText": null
+            },
+            "[\"linear\",\"seq-b\",\"fsame\"]": {
+              "scope": "linear",
+              "recordKey": "seq-b",
+              "biologicalFeatureId": "fsame",
+              "featureVisibility": null,
+              "labelVisibility": null,
+              "labelText": "B_LABEL",
+              "labelSourceText": null
+            }
+          },
+          "labelOverrideRows": []
+        },
+        "droppedCount": 0,
+        "narrowedVisibilityCount": 2
+      }
+    },
+    {
+      "name": "Sessions 31-33 Linear: saved metadata names features only of records drawn untransformed",
+      "input": {
+        "features": {
+          "featureVisibilityOverrides": {
+            "fdrwa2_record_1": "off",
+            "fdrwb2_record_2": "off",
+            "fplain_record_3": "off"
+          }
+        },
+        "mode": "linear",
+        "catalog": null,
+        "legacy": {
+          "records": [
+            {
+              "recordKey": "seq-a",
+              "cardinality": "exactly_one",
+              "region": {
+                "selector": null,
+                "start": 201,
+                "end": 3800,
+                "reverseComplement": false
+              },
+              "presentation": {
+                "reverseComplement": false
+              }
+            },
+            {
+              "recordKey": "seq-b",
+              "cardinality": "all",
+              "region": null,
+              "presentation": {
+                "reverseComplement": true
+              }
+            },
+            {
+              "recordKey": "seq-c",
+              "cardinality": "all",
+              "region": null,
+              "presentation": {
+                "reverseComplement": false
+              }
+            }
+          ],
+          "features": [
+            {
+              "fileIdx": 0,
+              "record_idx": 0,
+              "svg_id": "fdrwa2_record_1",
+              "stable_feature_id": "fdrwa2",
+              "stable_svg_id": "fdrwa2"
+            },
+            {
+              "fileIdx": 1,
+              "record_idx": 0,
+              "svg_id": "fdrwb2_record_2",
+              "stable_feature_id": "fdrwb2",
+              "stable_svg_id": "fdrwb2"
+            },
+            {
+              "fileIdx": 2,
+              "record_idx": 0,
+              "svg_id": "fplain_record_3",
+              "stable_feature_id": "fplain",
+              "stable_svg_id": "fplain"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "features": {
+          "featureOverrides": {
+            "[\"linear\",\"seq-c\",\"fplain\"]": {
+              "scope": "linear",
+              "recordKey": "seq-c",
+              "biologicalFeatureId": "fplain",
+              "featureVisibility": "off",
+              "labelVisibility": null,
+              "labelText": null,
+              "labelSourceText": null
+            }
+          }
+        },
+        "droppedCount": 2,
+        "narrowedVisibilityCount": 0
+      }
+    },
+    {
+      "name": "Session 33 Circular: the source read again names every edit",
+      "fixture": "sessions/feature-edits-circular.v33.gbdraw-session.json.gz",
+      "sourceReads": [
+        {
+          "resourceId": "record-1-genbank",
+          "regionSpec": null,
+          "recordSelector": null,
+          "reverse": false
+        }
+      ],
+      "input": {
+        "features": {
+          "selectedFeatureRecordIdx": 0,
+          "featureColorOverrides": {},
+          "featureVisibilityManualRules": [],
+          "featureVisibilityOverrides": {
+            "f406d90f1": "off"
+          },
+          "labelTextFeatureOverrides": {
+            "fbe3a7c0c": "V33_LABEL"
+          },
+          "labelOverrideRows": [],
+          "labelTextBulkOverrides": {},
+          "labelTextFeatureOverrideSources": {
+            "fbe3a7c0c": "NADH dehydrogenase subunit 2"
+          },
+          "labelVisibilityOverrides": {
+            "f48b7bf2f": "off"
+          }
+        },
+        "mode": "circular",
+        "catalog": null,
+        "legacy": {
+          "records": [
+            {
+              "recordKey": "record-1",
+              "cardinality": "exactly_one"
+            }
+          ],
+          "features": [
+            {
+              "record_idx": 0,
+              "feature_index": 0,
+              "stable_feature_id": "f99219fb0",
+              "svg_id": "f99219fb0",
+              "drawn_selector": {
+                "hash": "f99219fb0"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 1,
+              "stable_feature_id": "fcf4827e2",
+              "svg_id": "fcf4827e2",
+              "drawn_selector": {
+                "hash": "fcf4827e2"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 2,
+              "stable_feature_id": "f3e95f5c1",
+              "svg_id": "f3e95f5c1",
+              "drawn_selector": {
+                "hash": "f3e95f5c1"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 3,
+              "stable_feature_id": "fb8ff22d9",
+              "svg_id": "fb8ff22d9",
+              "drawn_selector": {
+                "hash": "fb8ff22d9"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 4,
+              "stable_feature_id": "f08e33deb",
+              "svg_id": "f08e33deb",
+              "drawn_selector": {
+                "hash": "f08e33deb"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 5,
+              "stable_feature_id": "f24a47546",
+              "svg_id": "f24a47546",
+              "drawn_selector": {
+                "hash": "f24a47546"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 6,
+              "stable_feature_id": "ffd465c11",
+              "svg_id": "ffd465c11",
+              "drawn_selector": {
+                "hash": "ffd465c11"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 7,
+              "stable_feature_id": "fc39ea03d",
+              "svg_id": "fc39ea03d",
+              "drawn_selector": {
+                "hash": "fc39ea03d"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 8,
+              "stable_feature_id": "f63349742",
+              "svg_id": "f63349742",
+              "drawn_selector": {
+                "hash": "f63349742"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 9,
+              "stable_feature_id": "fbdb78069",
+              "svg_id": "fbdb78069",
+              "drawn_selector": {
+                "hash": "fbdb78069"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 10,
+              "stable_feature_id": "f649178ac",
+              "svg_id": "f649178ac",
+              "drawn_selector": {
+                "hash": "f649178ac"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 11,
+              "stable_feature_id": "f0dfbb648",
+              "svg_id": "f0dfbb648",
+              "drawn_selector": {
+                "hash": "f0dfbb648"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 12,
+              "stable_feature_id": "f6bb0489e",
+              "svg_id": "f6bb0489e",
+              "drawn_selector": {
+                "hash": "f6bb0489e"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 13,
+              "stable_feature_id": "f3abebc77",
+              "svg_id": "f3abebc77",
+              "drawn_selector": {
+                "hash": "f3abebc77"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 14,
+              "stable_feature_id": "f406d90f1",
+              "svg_id": "f406d90f1",
+              "drawn_selector": {
+                "hash": "f406d90f1"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 15,
+              "stable_feature_id": "fd7b07fe3",
+              "svg_id": "fd7b07fe3",
+              "drawn_selector": {
+                "hash": "fd7b07fe3"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 16,
+              "stable_feature_id": "fcf9fcd75",
+              "svg_id": "fcf9fcd75",
+              "drawn_selector": {
+                "hash": "fcf9fcd75"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 17,
+              "stable_feature_id": "f11e24866",
+              "svg_id": "f11e24866",
+              "drawn_selector": {
+                "hash": "f11e24866"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 18,
+              "stable_feature_id": "fbb5964e6",
+              "svg_id": "fbb5964e6",
+              "drawn_selector": {
+                "hash": "fbb5964e6"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 19,
+              "stable_feature_id": "f7bcecb63",
+              "svg_id": "f7bcecb63",
+              "drawn_selector": {
+                "hash": "f7bcecb63"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 20,
+              "stable_feature_id": "f5a6329de",
+              "svg_id": "f5a6329de",
+              "drawn_selector": {
+                "hash": "f5a6329de"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 21,
+              "stable_feature_id": "fab89b199",
+              "svg_id": "fab89b199",
+              "drawn_selector": {
+                "hash": "fab89b199"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 22,
+              "stable_feature_id": "fbe3a7c0c",
+              "svg_id": "fbe3a7c0c",
+              "drawn_selector": {
+                "hash": "fbe3a7c0c"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 23,
+              "stable_feature_id": "f4d7aac5e",
+              "svg_id": "f4d7aac5e",
+              "drawn_selector": {
+                "hash": "f4d7aac5e"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 24,
+              "stable_feature_id": "f9da385a4",
+              "svg_id": "f9da385a4",
+              "drawn_selector": {
+                "hash": "f9da385a4"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 25,
+              "stable_feature_id": "f7abc8f00",
+              "svg_id": "f7abc8f00",
+              "drawn_selector": {
+                "hash": "f7abc8f00"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 26,
+              "stable_feature_id": "f0c728fec",
+              "svg_id": "f0c728fec",
+              "drawn_selector": {
+                "hash": "f0c728fec"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 27,
+              "stable_feature_id": "f07d827b3",
+              "svg_id": "f07d827b3",
+              "drawn_selector": {
+                "hash": "f07d827b3"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 28,
+              "stable_feature_id": "fe111b113",
+              "svg_id": "fe111b113",
+              "drawn_selector": {
+                "hash": "fe111b113"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 29,
+              "stable_feature_id": "f96a4fbce",
+              "svg_id": "f96a4fbce",
+              "drawn_selector": {
+                "hash": "f96a4fbce"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 30,
+              "stable_feature_id": "fcd230250",
+              "svg_id": "fcd230250",
+              "drawn_selector": {
+                "hash": "fcd230250"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 31,
+              "stable_feature_id": "faa951d2e",
+              "svg_id": "faa951d2e",
+              "drawn_selector": {
+                "hash": "faa951d2e"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 32,
+              "stable_feature_id": "faa41e395",
+              "svg_id": "faa41e395",
+              "drawn_selector": {
+                "hash": "faa41e395"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 33,
+              "stable_feature_id": "f0315bd40",
+              "svg_id": "f0315bd40",
+              "drawn_selector": {
+                "hash": "f0315bd40"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 34,
+              "stable_feature_id": "f48b7bf2f",
+              "svg_id": "f48b7bf2f",
+              "drawn_selector": {
+                "hash": "f48b7bf2f"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 35,
+              "stable_feature_id": "f9b118322",
+              "svg_id": "f9b118322",
+              "drawn_selector": {
+                "hash": "f9b118322"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 36,
+              "stable_feature_id": "f5770d33c",
+              "svg_id": "f5770d33c",
+              "drawn_selector": {
+                "hash": "f5770d33c"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 37,
+              "stable_feature_id": "f0ce2407d",
+              "svg_id": "f0ce2407d",
+              "drawn_selector": {
+                "hash": "f0ce2407d"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 38,
+              "stable_feature_id": "f7f51ee0f",
+              "svg_id": "f7f51ee0f",
+              "drawn_selector": {
+                "hash": "f7f51ee0f"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 39,
+              "stable_feature_id": "fc474e24c",
+              "svg_id": "fc474e24c",
+              "drawn_selector": {
+                "hash": "fc474e24c"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 40,
+              "stable_feature_id": "f77c8cbef",
+              "svg_id": "f77c8cbef",
+              "drawn_selector": {
+                "hash": "f77c8cbef"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 41,
+              "stable_feature_id": "f515149b5",
+              "svg_id": "f515149b5",
+              "drawn_selector": {
+                "hash": "f515149b5"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 42,
+              "stable_feature_id": "fc5d8f111",
+              "svg_id": "fc5d8f111",
+              "drawn_selector": {
+                "hash": "fc5d8f111"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 43,
+              "stable_feature_id": "f788d23db",
+              "svg_id": "f788d23db",
+              "drawn_selector": {
+                "hash": "f788d23db"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 44,
+              "stable_feature_id": "f31dbd2ba",
+              "svg_id": "f31dbd2ba",
+              "drawn_selector": {
+                "hash": "f31dbd2ba"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 45,
+              "stable_feature_id": "f433f5130",
+              "svg_id": "f433f5130",
+              "drawn_selector": {
+                "hash": "f433f5130"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 46,
+              "stable_feature_id": "f00bf02dc",
+              "svg_id": "f00bf02dc",
+              "drawn_selector": {
+                "hash": "f00bf02dc"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 47,
+              "stable_feature_id": "f8776238f",
+              "svg_id": "f8776238f",
+              "drawn_selector": {
+                "hash": "f8776238f"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 48,
+              "stable_feature_id": "fb3d5165e",
+              "svg_id": "fb3d5165e",
+              "drawn_selector": {
+                "hash": "fb3d5165e"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 49,
+              "stable_feature_id": "f1d53babb",
+              "svg_id": "f1d53babb",
+              "drawn_selector": {
+                "hash": "f1d53babb"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 50,
+              "stable_feature_id": "f0854cefc",
+              "svg_id": "f0854cefc",
+              "drawn_selector": {
+                "hash": "f0854cefc"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 51,
+              "stable_feature_id": "f301fbf8c",
+              "svg_id": "f301fbf8c",
+              "drawn_selector": {
+                "hash": "f301fbf8c"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 52,
+              "stable_feature_id": "f9b1f5604",
+              "svg_id": "f9b1f5604",
+              "drawn_selector": {
+                "hash": "f9b1f5604"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 53,
+              "stable_feature_id": "f0c267c31",
+              "svg_id": "f0c267c31",
+              "drawn_selector": {
+                "hash": "f0c267c31"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 54,
+              "stable_feature_id": "faaf9f51c",
+              "svg_id": "faaf9f51c",
+              "drawn_selector": {
+                "hash": "faaf9f51c"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 55,
+              "stable_feature_id": "ff6ab824b",
+              "svg_id": "ff6ab824b",
+              "drawn_selector": {
+                "hash": "ff6ab824b"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 56,
+              "stable_feature_id": "f63cda8a2",
+              "svg_id": "f63cda8a2",
+              "drawn_selector": {
+                "hash": "f63cda8a2"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 57,
+              "stable_feature_id": "fa8bcb86c",
+              "svg_id": "fa8bcb86c",
+              "drawn_selector": {
+                "hash": "fa8bcb86c"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 58,
+              "stable_feature_id": "fa61b27c5",
+              "svg_id": "fa61b27c5",
+              "drawn_selector": {
+                "hash": "fa61b27c5"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 59,
+              "stable_feature_id": "fac7d2eed",
+              "svg_id": "fac7d2eed",
+              "drawn_selector": {
+                "hash": "fac7d2eed"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 60,
+              "stable_feature_id": "fe68573e6",
+              "svg_id": "fe68573e6",
+              "drawn_selector": {
+                "hash": "fe68573e6"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 61,
+              "stable_feature_id": "faf6ee781",
+              "svg_id": "faf6ee781",
+              "drawn_selector": {
+                "hash": "faf6ee781"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 62,
+              "stable_feature_id": "fa5493a05",
+              "svg_id": "fa5493a05",
+              "drawn_selector": {
+                "hash": "fa5493a05"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 63,
+              "stable_feature_id": "f1f6af7f3",
+              "svg_id": "f1f6af7f3",
+              "drawn_selector": {
+                "hash": "f1f6af7f3"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 64,
+              "stable_feature_id": "fcb99f355",
+              "svg_id": "fcb99f355",
+              "drawn_selector": {
+                "hash": "fcb99f355"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 65,
+              "stable_feature_id": "f1bf35018",
+              "svg_id": "f1bf35018",
+              "drawn_selector": {
+                "hash": "f1bf35018"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 66,
+              "stable_feature_id": "f088dccd3",
+              "svg_id": "f088dccd3",
+              "drawn_selector": {
+                "hash": "f088dccd3"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 67,
+              "stable_feature_id": "f7d940d37",
+              "svg_id": "f7d940d37",
+              "drawn_selector": {
+                "hash": "f7d940d37"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 68,
+              "stable_feature_id": "f6b2a293e",
+              "svg_id": "f6b2a293e",
+              "drawn_selector": {
+                "hash": "f6b2a293e"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 69,
+              "stable_feature_id": "f58ee7c1e",
+              "svg_id": "f58ee7c1e",
+              "drawn_selector": {
+                "hash": "f58ee7c1e"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 70,
+              "stable_feature_id": "fc01139b2",
+              "svg_id": "fc01139b2",
+              "drawn_selector": {
+                "hash": "fc01139b2"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 71,
+              "stable_feature_id": "f1f1dbd18",
+              "svg_id": "f1f1dbd18",
+              "drawn_selector": {
+                "hash": "f1f1dbd18"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 72,
+              "stable_feature_id": "f2e5a9636",
+              "svg_id": "f2e5a9636",
+              "drawn_selector": {
+                "hash": "f2e5a9636"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 73,
+              "stable_feature_id": "f6b98810d",
+              "svg_id": "f6b98810d",
+              "drawn_selector": {
+                "hash": "f6b98810d"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 74,
+              "stable_feature_id": "f7e1a704e",
+              "svg_id": "f7e1a704e",
+              "drawn_selector": {
+                "hash": "f7e1a704e"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 75,
+              "stable_feature_id": "f02c1b25d",
+              "svg_id": "f02c1b25d",
+              "drawn_selector": {
+                "hash": "f02c1b25d"
+              }
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 76,
+              "stable_feature_id": "f94185e65",
+              "svg_id": "f94185e65",
+              "drawn_selector": {
+                "hash": "f94185e65"
+              }
+            }
+          ],
+          "biologicalFeatures": [
+            {
+              "record_idx": 0,
+              "feature_index": 0,
+              "stable_feature_id": "f99219fb0",
+              "svg_id": "f99219fb0"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 1,
+              "stable_feature_id": "fcf4827e2",
+              "svg_id": "fcf4827e2"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 2,
+              "stable_feature_id": "f3e95f5c1",
+              "svg_id": "f3e95f5c1"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 3,
+              "stable_feature_id": "fb8ff22d9",
+              "svg_id": "fb8ff22d9"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 4,
+              "stable_feature_id": "f08e33deb",
+              "svg_id": "f08e33deb"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 5,
+              "stable_feature_id": "f24a47546",
+              "svg_id": "f24a47546"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 6,
+              "stable_feature_id": "ffd465c11",
+              "svg_id": "ffd465c11"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 7,
+              "stable_feature_id": "fc39ea03d",
+              "svg_id": "fc39ea03d"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 8,
+              "stable_feature_id": "f63349742",
+              "svg_id": "f63349742"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 9,
+              "stable_feature_id": "fbdb78069",
+              "svg_id": "fbdb78069"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 10,
+              "stable_feature_id": "f649178ac",
+              "svg_id": "f649178ac"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 11,
+              "stable_feature_id": "f0dfbb648",
+              "svg_id": "f0dfbb648"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 12,
+              "stable_feature_id": "f6bb0489e",
+              "svg_id": "f6bb0489e"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 13,
+              "stable_feature_id": "f3abebc77",
+              "svg_id": "f3abebc77"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 14,
+              "stable_feature_id": "f406d90f1",
+              "svg_id": "f406d90f1"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 15,
+              "stable_feature_id": "fd7b07fe3",
+              "svg_id": "fd7b07fe3"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 16,
+              "stable_feature_id": "fcf9fcd75",
+              "svg_id": "fcf9fcd75"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 17,
+              "stable_feature_id": "f11e24866",
+              "svg_id": "f11e24866"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 18,
+              "stable_feature_id": "fbb5964e6",
+              "svg_id": "fbb5964e6"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 19,
+              "stable_feature_id": "f7bcecb63",
+              "svg_id": "f7bcecb63"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 20,
+              "stable_feature_id": "f5a6329de",
+              "svg_id": "f5a6329de"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 21,
+              "stable_feature_id": "fab89b199",
+              "svg_id": "fab89b199"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 22,
+              "stable_feature_id": "fbe3a7c0c",
+              "svg_id": "fbe3a7c0c"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 23,
+              "stable_feature_id": "f4d7aac5e",
+              "svg_id": "f4d7aac5e"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 24,
+              "stable_feature_id": "f9da385a4",
+              "svg_id": "f9da385a4"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 25,
+              "stable_feature_id": "f7abc8f00",
+              "svg_id": "f7abc8f00"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 26,
+              "stable_feature_id": "f0c728fec",
+              "svg_id": "f0c728fec"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 27,
+              "stable_feature_id": "f07d827b3",
+              "svg_id": "f07d827b3"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 28,
+              "stable_feature_id": "fe111b113",
+              "svg_id": "fe111b113"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 29,
+              "stable_feature_id": "f96a4fbce",
+              "svg_id": "f96a4fbce"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 30,
+              "stable_feature_id": "fcd230250",
+              "svg_id": "fcd230250"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 31,
+              "stable_feature_id": "faa951d2e",
+              "svg_id": "faa951d2e"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 32,
+              "stable_feature_id": "faa41e395",
+              "svg_id": "faa41e395"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 33,
+              "stable_feature_id": "f0315bd40",
+              "svg_id": "f0315bd40"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 34,
+              "stable_feature_id": "f48b7bf2f",
+              "svg_id": "f48b7bf2f"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 35,
+              "stable_feature_id": "f9b118322",
+              "svg_id": "f9b118322"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 36,
+              "stable_feature_id": "f5770d33c",
+              "svg_id": "f5770d33c"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 37,
+              "stable_feature_id": "f0ce2407d",
+              "svg_id": "f0ce2407d"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 38,
+              "stable_feature_id": "f7f51ee0f",
+              "svg_id": "f7f51ee0f"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 39,
+              "stable_feature_id": "fc474e24c",
+              "svg_id": "fc474e24c"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 40,
+              "stable_feature_id": "f77c8cbef",
+              "svg_id": "f77c8cbef"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 41,
+              "stable_feature_id": "f515149b5",
+              "svg_id": "f515149b5"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 42,
+              "stable_feature_id": "fc5d8f111",
+              "svg_id": "fc5d8f111"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 43,
+              "stable_feature_id": "f788d23db",
+              "svg_id": "f788d23db"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 44,
+              "stable_feature_id": "f31dbd2ba",
+              "svg_id": "f31dbd2ba"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 45,
+              "stable_feature_id": "f433f5130",
+              "svg_id": "f433f5130"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 46,
+              "stable_feature_id": "f00bf02dc",
+              "svg_id": "f00bf02dc"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 47,
+              "stable_feature_id": "f8776238f",
+              "svg_id": "f8776238f"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 48,
+              "stable_feature_id": "fb3d5165e",
+              "svg_id": "fb3d5165e"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 49,
+              "stable_feature_id": "f1d53babb",
+              "svg_id": "f1d53babb"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 50,
+              "stable_feature_id": "f0854cefc",
+              "svg_id": "f0854cefc"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 51,
+              "stable_feature_id": "f301fbf8c",
+              "svg_id": "f301fbf8c"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 52,
+              "stable_feature_id": "f9b1f5604",
+              "svg_id": "f9b1f5604"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 53,
+              "stable_feature_id": "f0c267c31",
+              "svg_id": "f0c267c31"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 54,
+              "stable_feature_id": "faaf9f51c",
+              "svg_id": "faaf9f51c"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 55,
+              "stable_feature_id": "ff6ab824b",
+              "svg_id": "ff6ab824b"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 56,
+              "stable_feature_id": "f63cda8a2",
+              "svg_id": "f63cda8a2"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 57,
+              "stable_feature_id": "fa8bcb86c",
+              "svg_id": "fa8bcb86c"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 58,
+              "stable_feature_id": "fa61b27c5",
+              "svg_id": "fa61b27c5"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 59,
+              "stable_feature_id": "fac7d2eed",
+              "svg_id": "fac7d2eed"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 60,
+              "stable_feature_id": "fe68573e6",
+              "svg_id": "fe68573e6"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 61,
+              "stable_feature_id": "faf6ee781",
+              "svg_id": "faf6ee781"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 62,
+              "stable_feature_id": "fa5493a05",
+              "svg_id": "fa5493a05"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 63,
+              "stable_feature_id": "f1f6af7f3",
+              "svg_id": "f1f6af7f3"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 64,
+              "stable_feature_id": "fcb99f355",
+              "svg_id": "fcb99f355"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 65,
+              "stable_feature_id": "f1bf35018",
+              "svg_id": "f1bf35018"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 66,
+              "stable_feature_id": "f088dccd3",
+              "svg_id": "f088dccd3"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 67,
+              "stable_feature_id": "f7d940d37",
+              "svg_id": "f7d940d37"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 68,
+              "stable_feature_id": "f6b2a293e",
+              "svg_id": "f6b2a293e"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 69,
+              "stable_feature_id": "f58ee7c1e",
+              "svg_id": "f58ee7c1e"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 70,
+              "stable_feature_id": "fc01139b2",
+              "svg_id": "fc01139b2"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 71,
+              "stable_feature_id": "f1f1dbd18",
+              "svg_id": "f1f1dbd18"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 72,
+              "stable_feature_id": "f2e5a9636",
+              "svg_id": "f2e5a9636"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 73,
+              "stable_feature_id": "f6b98810d",
+              "svg_id": "f6b98810d"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 74,
+              "stable_feature_id": "f7e1a704e",
+              "svg_id": "f7e1a704e"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 75,
+              "stable_feature_id": "f02c1b25d",
+              "svg_id": "f02c1b25d"
+            },
+            {
+              "record_idx": 0,
+              "feature_index": 76,
+              "stable_feature_id": "f94185e65",
+              "svg_id": "f94185e65"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "features": {
+          "selectedFeatureRecordIdx": 0,
+          "featureColorOverrides": {},
+          "featureVisibilityManualRules": [],
+          "labelOverrideRows": [],
+          "labelTextBulkOverrides": {},
+          "featureOverrides": {
+            "[\"circular\",\"record-1\",\"f406d90f1\"]": {
+              "scope": "circular",
+              "recordKey": "record-1",
+              "biologicalFeatureId": "f406d90f1",
+              "featureVisibility": "off",
+              "labelVisibility": null,
+              "labelText": null,
+              "labelSourceText": null
+            },
+            "[\"circular\",\"record-1\",\"f48b7bf2f\"]": {
+              "scope": "circular",
+              "recordKey": "record-1",
+              "biologicalFeatureId": "f48b7bf2f",
+              "featureVisibility": null,
+              "labelVisibility": "off",
+              "labelText": null,
+              "labelSourceText": null
+            },
+            "[\"circular\",\"record-1\",\"fbe3a7c0c\"]": {
+              "scope": "circular",
+              "recordKey": "record-1",
+              "biologicalFeatureId": "fbe3a7c0c",
+              "featureVisibility": null,
+              "labelVisibility": null,
+              "labelText": "V33_LABEL",
+              "labelSourceText": "NADH dehydrogenase subunit 2"
+            }
+          }
+        },
+        "droppedCount": 0,
+        "narrowedVisibilityCount": 0
+      }
+    },
+    {
+      "name": "Session 33 Linear, cropped and reverse-complemented inputs: the sources read again name every edit",
+      "fixture": "sessions/feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz",
+      "sourceReads": [
+        {
+          "resourceId": "record-1-genbank",
+          "regionSpec": "201-3800",
+          "recordSelector": null,
+          "reverse": false
+        },
+        {
+          "resourceId": "record-2-genbank",
+          "regionSpec": null,
+          "recordSelector": null,
+          "reverse": true
+        }
+      ],
+      "input": {
+        "features": {
+          "selectedFeatureRecordIdx": 0,
+          "featureColorOverrides": {},
+          "featureVisibilityManualRules": [],
+          "featureVisibilityOverrides": {
+            "fab2facf4_record_1": "off",
+            "fe45e2b17_record_2": "off"
+          },
+          "labelTextFeatureOverrides": {
+            "f64320c02_record_2": "V33_LINEAR_TRNA"
+          },
+          "labelOverrideRows": [],
+          "labelTextBulkOverrides": {},
+          "labelTextFeatureOverrideSources": {
+            "f64320c02_record_2": "tRNA-Leu"
+          },
+          "labelVisibilityOverrides": {
+            "f1c991841_record_1": "off"
+          }
+        },
+        "mode": "linear",
+        "catalog": null,
+        "legacy": {
+          "records": [
+            {
+              "recordKey": "linear-seq-fb2e9c66-e0c2-415b-af5a-fb1b509c12d6",
+              "cardinality": "exactly_one"
+            },
+            {
+              "recordKey": "linear-seq-60fc2358-f811-44a5-97c0-ff8b8e5cc957",
+              "cardinality": "all"
+            }
+          ],
+          "features": [
+            {
+              "fileIdx": 0,
+              "record_idx": 0,
+              "feature_index": 0,
+              "stable_feature_id": "fa25ce602",
+              "svg_id": "fa25ce602",
+              "drawn_selector": {
+                "hash": "f50a8cede"
+              }
+            },
+            {
+              "fileIdx": 0,
+              "record_idx": 0,
+              "feature_index": 1,
+              "stable_feature_id": "f3ccacda4",
+              "svg_id": "f3ccacda4",
+              "drawn_selector": {
+                "hash": "fbd3d0b74"
+              }
+            },
+            {
+              "fileIdx": 0,
+              "record_idx": 0,
+              "feature_index": 2,
+              "stable_feature_id": "ffa1f4c4a",
+              "svg_id": "ffa1f4c4a",
+              "drawn_selector": {
+                "hash": "fab2facf4"
+              }
+            },
+            {
+              "fileIdx": 0,
+              "record_idx": 0,
+              "feature_index": 4,
+              "stable_feature_id": "f779210b8",
+              "svg_id": "f779210b8",
+              "drawn_selector": {
+                "hash": "f9ee6ddc8"
+              }
+            },
+            {
+              "fileIdx": 0,
+              "record_idx": 0,
+              "feature_index": 5,
+              "stable_feature_id": "fef810304",
+              "svg_id": "fef810304",
+              "drawn_selector": {
+                "hash": "f1c991841"
+              }
+            },
+            {
+              "fileIdx": 0,
+              "record_idx": 0,
+              "feature_index": 6,
+              "stable_feature_id": "f01237d96",
+              "svg_id": "f01237d96",
+              "drawn_selector": {
+                "hash": "f9df18bc8"
+              }
+            },
+            {
+              "fileIdx": 0,
+              "record_idx": 0,
+              "feature_index": 7,
+              "stable_feature_id": "fb5977f81",
+              "svg_id": "fb5977f81",
+              "drawn_selector": {
+                "hash": "f3b928d8c"
+              }
+            },
+            {
+              "fileIdx": 0,
+              "record_idx": 0,
+              "feature_index": 8,
+              "stable_feature_id": "f571eb983",
+              "svg_id": "f571eb983",
+              "drawn_selector": {
+                "hash": "f32bdefd9"
+              }
+            },
+            {
+              "fileIdx": 1,
+              "record_idx": 0,
+              "feature_index": 0,
+              "stable_feature_id": "f8d05c32c",
+              "svg_id": "f8d05c32c",
+              "drawn_selector": {
+                "hash": "f10b226a6"
+              }
+            },
+            {
+              "fileIdx": 1,
+              "record_idx": 0,
+              "feature_index": 3,
+              "stable_feature_id": "f5aa08bf5",
+              "svg_id": "f5aa08bf5",
+              "drawn_selector": {
+                "hash": "f811dc37d"
+              }
+            },
+            {
+              "fileIdx": 1,
+              "record_idx": 0,
+              "feature_index": 8,
+              "stable_feature_id": "f88047061",
+              "svg_id": "f88047061",
+              "drawn_selector": {
+                "hash": "f64320c02"
+              }
+            },
+            {
+              "fileIdx": 1,
+              "record_idx": 0,
+              "feature_index": 7,
+              "stable_feature_id": "fcecf4036",
+              "svg_id": "fcecf4036",
+              "drawn_selector": {
+                "hash": "ffb26b768"
+              }
+            },
+            {
+              "fileIdx": 1,
+              "record_idx": 0,
+              "feature_index": 6,
+              "stable_feature_id": "fbc76b20f",
+              "svg_id": "fbc76b20f",
+              "drawn_selector": {
+                "hash": "f2869b912"
+              }
+            },
+            {
+              "fileIdx": 1,
+              "record_idx": 0,
+              "feature_index": 5,
+              "stable_feature_id": "f5eb0c689",
+              "svg_id": "f5eb0c689",
+              "drawn_selector": {
+                "hash": "f2bf39381"
+              }
+            },
+            {
+              "fileIdx": 1,
+              "record_idx": 0,
+              "feature_index": 4,
+              "stable_feature_id": "fd6a65bce",
+              "svg_id": "fd6a65bce",
+              "drawn_selector": {
+                "hash": "f18376efe"
+              }
+            },
+            {
+              "fileIdx": 1,
+              "record_idx": 0,
+              "feature_index": 2,
+              "stable_feature_id": "f3f7207f4",
+              "svg_id": "f3f7207f4",
+              "drawn_selector": {
+                "hash": "fe45e2b17"
+              }
+            },
+            {
+              "fileIdx": 1,
+              "record_idx": 0,
+              "feature_index": 1,
+              "stable_feature_id": "fbf6c27e1",
+              "svg_id": "fbf6c27e1",
+              "drawn_selector": {
+                "hash": "fcf2870a4"
+              }
+            }
+          ],
+          "biologicalFeatures": [
+            {
+              "fileIdx": 0,
+              "record_idx": 0,
+              "feature_index": 0,
+              "stable_feature_id": "fa25ce602",
+              "svg_id": "fa25ce602"
+            },
+            {
+              "fileIdx": 0,
+              "record_idx": 0,
+              "feature_index": 1,
+              "stable_feature_id": "f3ccacda4",
+              "svg_id": "f3ccacda4"
+            },
+            {
+              "fileIdx": 0,
+              "record_idx": 0,
+              "feature_index": 2,
+              "stable_feature_id": "ffa1f4c4a",
+              "svg_id": "ffa1f4c4a"
+            },
+            {
+              "fileIdx": 0,
+              "record_idx": 0,
+              "feature_index": 4,
+              "stable_feature_id": "f779210b8",
+              "svg_id": "f779210b8"
+            },
+            {
+              "fileIdx": 0,
+              "record_idx": 0,
+              "feature_index": 5,
+              "stable_feature_id": "fef810304",
+              "svg_id": "fef810304"
+            },
+            {
+              "fileIdx": 0,
+              "record_idx": 0,
+              "feature_index": 6,
+              "stable_feature_id": "f01237d96",
+              "svg_id": "f01237d96"
+            },
+            {
+              "fileIdx": 0,
+              "record_idx": 0,
+              "feature_index": 7,
+              "stable_feature_id": "fb5977f81",
+              "svg_id": "fb5977f81"
+            },
+            {
+              "fileIdx": 0,
+              "record_idx": 0,
+              "feature_index": 8,
+              "stable_feature_id": "f571eb983",
+              "svg_id": "f571eb983"
+            },
+            {
+              "fileIdx": 1,
+              "record_idx": 0,
+              "feature_index": 0,
+              "stable_feature_id": "f8d05c32c",
+              "svg_id": "f8d05c32c"
+            },
+            {
+              "fileIdx": 1,
+              "record_idx": 0,
+              "feature_index": 3,
+              "stable_feature_id": "f5aa08bf5",
+              "svg_id": "f5aa08bf5"
+            },
+            {
+              "fileIdx": 1,
+              "record_idx": 0,
+              "feature_index": 8,
+              "stable_feature_id": "f88047061",
+              "svg_id": "f88047061"
+            },
+            {
+              "fileIdx": 1,
+              "record_idx": 0,
+              "feature_index": 7,
+              "stable_feature_id": "fcecf4036",
+              "svg_id": "fcecf4036"
+            },
+            {
+              "fileIdx": 1,
+              "record_idx": 0,
+              "feature_index": 6,
+              "stable_feature_id": "fbc76b20f",
+              "svg_id": "fbc76b20f"
+            },
+            {
+              "fileIdx": 1,
+              "record_idx": 0,
+              "feature_index": 5,
+              "stable_feature_id": "f5eb0c689",
+              "svg_id": "f5eb0c689"
+            },
+            {
+              "fileIdx": 1,
+              "record_idx": 0,
+              "feature_index": 4,
+              "stable_feature_id": "fd6a65bce",
+              "svg_id": "fd6a65bce"
+            },
+            {
+              "fileIdx": 1,
+              "record_idx": 0,
+              "feature_index": 2,
+              "stable_feature_id": "f3f7207f4",
+              "svg_id": "f3f7207f4"
+            },
+            {
+              "fileIdx": 1,
+              "record_idx": 0,
+              "feature_index": 1,
+              "stable_feature_id": "fbf6c27e1",
+              "svg_id": "fbf6c27e1"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "features": {
+          "selectedFeatureRecordIdx": 0,
+          "featureColorOverrides": {},
+          "featureVisibilityManualRules": [],
+          "labelOverrideRows": [],
+          "labelTextBulkOverrides": {},
+          "featureOverrides": {
+            "[\"linear\",\"linear-seq-fb2e9c66-e0c2-415b-af5a-fb1b509c12d6\",\"ffa1f4c4a\"]": {
+              "scope": "linear",
+              "recordKey": "linear-seq-fb2e9c66-e0c2-415b-af5a-fb1b509c12d6",
+              "biologicalFeatureId": "ffa1f4c4a",
+              "featureVisibility": "off",
+              "labelVisibility": null,
+              "labelText": null,
+              "labelSourceText": null
+            },
+            "[\"linear\",\"linear-seq-60fc2358-f811-44a5-97c0-ff8b8e5cc957\",\"f3f7207f4\"]": {
+              "scope": "linear",
+              "recordKey": "linear-seq-60fc2358-f811-44a5-97c0-ff8b8e5cc957",
+              "biologicalFeatureId": "f3f7207f4",
+              "featureVisibility": "off",
+              "labelVisibility": null,
+              "labelText": null,
+              "labelSourceText": null
+            },
+            "[\"linear\",\"linear-seq-fb2e9c66-e0c2-415b-af5a-fb1b509c12d6\",\"fef810304\"]": {
+              "scope": "linear",
+              "recordKey": "linear-seq-fb2e9c66-e0c2-415b-af5a-fb1b509c12d6",
+              "biologicalFeatureId": "fef810304",
+              "featureVisibility": null,
+              "labelVisibility": "off",
+              "labelText": null,
+              "labelSourceText": null
+            },
+            "[\"linear\",\"linear-seq-60fc2358-f811-44a5-97c0-ff8b8e5cc957\",\"f88047061\"]": {
+              "scope": "linear",
+              "recordKey": "linear-seq-60fc2358-f811-44a5-97c0-ff8b8e5cc957",
+              "biologicalFeatureId": "f88047061",
+              "featureVisibility": null,
+              "labelVisibility": null,
+              "labelText": "V33_LINEAR_TRNA",
+              "labelSourceText": "tRNA-Leu"
+            }
+          }
+        },
+        "droppedCount": 0,
+        "narrowedVisibilityCount": 0
+      }
+    }
+  ],
+  "sourceReadCases": [
+    {
+      "name": "Linear crop with reverse complement and record ID, record index, record ID, crop drawn reversed",
+      "fixture": "sessions/feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz",
+      "records": [
+        {
+          "recordKey": "crop-rc-record-id",
+          "source": {
+            "kind": "genbank",
+            "resourceId": "record-1-genbank"
+          },
+          "selector": null,
+          "region": {
+            "selector": {
+              "kind": "recordId",
+              "value": "TESTA"
+            },
+            "start": 10,
+            "end": 200,
+            "reverseComplement": true
+          },
+          "presentation": {
+            "label": null,
+            "subtitle": null,
+            "reverseComplement": false,
+            "gridRow": null,
+            "gridColumn": null
+          }
+        },
+        {
+          "recordKey": "record-index-reversed",
+          "source": {
+            "kind": "genbank",
+            "resourceId": "record-2-genbank"
+          },
+          "selector": {
+            "kind": "recordIndex",
+            "index": 1
+          },
+          "region": null,
+          "presentation": {
+            "label": null,
+            "subtitle": null,
+            "reverseComplement": true,
+            "gridRow": null,
+            "gridColumn": null
+          }
+        },
+        {
+          "recordKey": "record-id",
+          "source": {
+            "kind": "genbank",
+            "resourceId": "record-2-genbank"
+          },
+          "selector": {
+            "kind": "recordId",
+            "value": "TESTB"
+          },
+          "region": null,
+          "presentation": {
+            "label": null,
+            "subtitle": null,
+            "reverseComplement": false,
+            "gridRow": null,
+            "gridColumn": null
+          }
+        },
+        {
+          "recordKey": "crop-shown-reversed",
+          "source": {
+            "kind": "genbank",
+            "resourceId": "record-1-genbank"
+          },
+          "selector": null,
+          "region": {
+            "selector": null,
+            "start": 300,
+            "end": 50,
+            "reverseComplement": false
+          },
+          "presentation": {
+            "label": null,
+            "subtitle": null,
+            "reverseComplement": true,
+            "gridRow": null,
+            "gridColumn": null
+          }
+        }
+      ],
+      "sourceReads": [
+        {
+          "resourceId": "record-1-genbank",
+          "regionSpec": "10-200:rc",
+          "recordSelector": "TESTA",
+          "reverse": false
+        },
+        {
+          "resourceId": "record-2-genbank",
+          "regionSpec": null,
+          "recordSelector": "#2",
+          "reverse": true
+        },
+        {
+          "resourceId": "record-2-genbank",
+          "regionSpec": null,
+          "recordSelector": "TESTB",
+          "reverse": false
+        },
+        {
+          "resourceId": "record-1-genbank",
+          "regionSpec": "300-50:rc",
+          "recordSelector": null,
+          "reverse": false
+        }
+      ]
     }
   ]
 }

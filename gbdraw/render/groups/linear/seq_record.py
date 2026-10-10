@@ -7,6 +7,7 @@ from typing import Optional
 from Bio.SeqRecord import SeqRecord
 from gbdraw.svg.elements import Group, Line, Text
 
+from ....auto_sizes import linear_tick_interval
 from ....canvas import LinearCanvasConfigurator
 from ....core.record_metadata import _read_coord_map
 from ...drawers.linear.features import FeatureDrawer
@@ -22,7 +23,6 @@ from .feature_identity import LinearFeatureDomIndex
 from .length_bar import (
     RULER_LABEL_OFFSET,
     RULER_TICK_LENGTH,
-    auto_linear_tick_interval,
     format_linear_tick_label,
 )
 
@@ -106,7 +106,7 @@ class SeqRecordGroup:
         self.scale_font_weight = scale_cfg.font_weight
         self.scale_font_family = cfg.objects.text.font_family
         self.scale_interval = scale_cfg.interval
-        self.auto_scale_interval = auto_linear_tick_interval(max(1, int(self.canvas_config.longest_genome)))
+        self.auto_scale_interval = linear_tick_interval(max(1, int(self.canvas_config.longest_genome)))
         self.scale_label_context_length = max(1, int(self.canvas_config.longest_genome))
         self.axis_stroke_width = self._cfg.objects.axis.linear.stroke_width.for_length_param(self.length_param)
         self.record_group: Group = self.setup_record_group()

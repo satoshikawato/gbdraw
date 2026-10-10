@@ -22,7 +22,7 @@ from ...config.models import (
     LinearRenderProfile,
 )
 from ...configurators import FeatureDrawingConfigurator
-from ...core.sequence import determine_length_parameter
+from ...auto_sizes import linear_label_font_size
 from ...features.colors import preprocess_color_tables
 from ...features.factory import (
     FeatureBuildResult,
@@ -53,17 +53,14 @@ def _resolve_linear_diagram_label_font_size(
     """
 
     cfg = profile.config
-    label_font_sizes: list[float] = []
-    threshold = int(cfg.labels.length_threshold.linear)
     sized_indexes = [index for index in range(len(records)) if profile.labels_in_scope(index)]
-    for index, record in enumerate(records):
-        if sized_indexes and index not in sized_indexes:
-            continue
-        length_param = determine_length_parameter(len(record.seq), threshold)
-        label_font_sizes.append(cfg.labels.font_size.linear.for_length_param(length_param))
-
-    if label_font_sizes:
-        return max(label_font_sizes)
+    sized_lengths = [
+        len(record.seq)
+        for index, record in enumerate(records)
+        if not sized_indexes or index in sized_indexes
+    ]
+    if sized_lengths:
+        return linear_label_font_size(sized_lengths, cfg)
     return cfg.labels.font_size.linear.for_length_param(canvas_config.length_param)
 
 

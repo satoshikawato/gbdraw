@@ -6,6 +6,7 @@ import logging
 from dataclasses import dataclass, replace
 from typing import Any, Collection, Literal, Mapping, Sequence, TypedDict
 
+from ...auto_sizes import circular_track_width_px
 from ...canvas import CircularCanvasConfigurator
 from ...config.models import GbdrawConfig
 from ...configurators import DepthConfigurator
@@ -430,6 +431,7 @@ def _tick_layout_from_params(
         side=params.get("_slot_side"),
     )
     tick_length_px = float(width_px) if explicit_width and width_px > 0 else None
+    length_threshold = int(cfg.labels.length_threshold.circular)
 
     if tick_side in {"none", ""}:
         tick_band = RadialBand(anchor_radius_px, anchor_radius_px)
@@ -444,6 +446,7 @@ def _tick_layout_from_params(
             tick_side=tick_side,
             tick_length_px=tick_length_px,
             length_reference_radius_px=base_radius,
+            length_threshold=length_threshold,
         )
         tick_band = RadialBand(tick_inner, tick_outer)
 
@@ -463,6 +466,7 @@ def _tick_layout_from_params(
         tick_length_px=tick_length_px,
         tick_width=float(cfg.objects.ticks.tick_width),
         length_reference_radius_px=base_radius,
+        length_threshold=length_threshold,
     )
     if label_bounds is not None:
         label_band = RadialBand(*label_bounds)
@@ -485,19 +489,14 @@ def _default_width_px(
     canvas_config: CircularCanvasConfigurator,
     cfg: GbdrawConfig,
 ) -> float:
-    length_param = str(canvas_config.length_param)
-    base = float(canvas_config.radius) * float(canvas_config.track_ratio)
-    if renderer == "features":
-        return base * float(cfg.canvas.circular.track_ratio_factors[length_param][0])
-    if renderer == "sequence_conservation":
-        return base * float(cfg.canvas.circular.track_ratio_factors[length_param][0])
-    if renderer == "depth":
-        return base * float(cfg.canvas.circular.track_ratio_factors[length_param][1]) * 0.5
-    if renderer == "dinucleotide_skew":
-        return base * float(cfg.canvas.circular.track_ratio_factors[length_param][2])
     if renderer == "ticks":
         return 0.0
-    return base * float(cfg.canvas.circular.track_ratio_factors[length_param][1])
+    return circular_track_width_px(
+        renderer,
+        radius=canvas_config.radius,
+        track_ratio=canvas_config.track_ratio,
+        factors=cfg.canvas.circular.track_ratio_factors[str(canvas_config.length_param)],
+    )
 
 
 def _default_spacing_px(axis_radius_px: float) -> float:

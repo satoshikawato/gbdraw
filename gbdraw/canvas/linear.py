@@ -9,7 +9,7 @@ from typing import Literal
 from svgwrite import Drawing
 
 from ..config.models import LinearRenderProfile
-from ..core.sequence import determine_length_parameter
+from ..auto_sizes import determine_length_parameter
 
 # The configured arrow coefficients are calibrated to these non-stranded heights.
 _ARROW_LENGTH_REFERENCE_CDS_HEIGHT = {

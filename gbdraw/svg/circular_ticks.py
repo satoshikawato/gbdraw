@@ -7,6 +7,7 @@ from typing import Literal
 
 from gbdraw.svg.elements import Path, Text, TextPath
 
+from ..auto_sizes import circular_tick_intervals, determine_length_parameter
 from ..core.numeric import scaled_tick_text
 from ..core.text import calculate_bbox_dimensions
 from .ids import stable_svg_id
@@ -42,17 +43,7 @@ def get_circular_tick_intervals(total_len: int, manual_interval: int | None = No
         tick_small = int(manual_interval) // 10
         return tick_large, tick_small
 
-    if total_len <= 30000:
-        return 1000, 100
-    if 30000 < total_len <= 50000:
-        return 5000, 1000
-    if 50000 < total_len <= 150000:
-        return 10000, 1000
-    if 150000 < total_len <= 1000000:
-        return 50000, 10000
-    if 1000000 < total_len <= 10000000:
-        return 500000, 100000
-    return 1000000, 200000
+    return circular_tick_intervals(total_len)
 
 
 def _format_tick_label_text(tick: int, total_len: int, tick_interval: int | None) -> str:
@@ -100,15 +91,19 @@ def _tick_path_ratio_table(track_channel: str, track_type: str, strandedness: bo
 
 def _resolve_tick_track_channel(
     total_len: int,
-    tick_track_channel_override: str | None = None,
+    tick_track_channel_override: str | None,
+    length_threshold: int,
 ) -> Literal["short", "long"]:
-    """Resolve tick ratio channel from override or record length."""
+    """Resolve the tick ratio channel: the override, else the record's size class.
+
+    ``length_threshold`` is the configured ``labels.length_threshold.circular``.
+    """
     normalized = str(tick_track_channel_override or "").strip().lower()
     if normalized == "short":
         return "short"
     if normalized == "long":
         return "long"
-    return "short" if total_len < 50000 else "long"
+    return determine_length_parameter(int(total_len), int(length_threshold))
 
 
 def get_circular_tick_path_ratio_bounds(
@@ -116,11 +111,14 @@ def get_circular_tick_path_ratio_bounds(
     track_type: str,
     strandedness: bool,
     tick_track_channel_override: str | None = None,
+    *,
+    length_threshold: int,
 ) -> tuple[float, float]:
     """Return (min_ratio, max_ratio) across small/large tick path ratios."""
     track_channel = _resolve_tick_track_channel(
         total_len,
-        tick_track_channel_override=tick_track_channel_override,
+        tick_track_channel_override,
+        length_threshold,
     )
     ratio_table = _tick_path_ratio_table(track_channel, track_type, strandedness)
     ratio_values = [ratio for pair in ratio_table.values() for ratio in pair]
@@ -146,6 +144,8 @@ def get_circular_tick_path_radius_bounds(
     tick_side: str = "legacy",
     tick_length_px: float | None = None,
     length_reference_radius_px: float | None = None,
+    *,
+    length_threshold: int,
 ) -> tuple[float, float]:
     """Return the radial bounds occupied by circular tick marks."""
     normalized_side = str(tick_side or "legacy").strip().lower()
@@ -153,7 +153,8 @@ def get_circular_tick_path_radius_bounds(
     if normalized_side == "legacy":
         track_channel = _resolve_tick_track_channel(
             total_len,
-            tick_track_channel_override=tick_track_channel_override,
+            tick_track_channel_override,
+            length_threshold,
         )
         ratio = _tick_path_ratio_table(track_channel, track_type, strandedness)
         prox, dist = ratio[size]
@@ -235,6 +236,8 @@ def get_circular_tick_label_radius_bounds(
     tick_length_px: float | None = None,
     tick_width: float = 0.0,
     length_reference_radius_px: float | None = None,
+    *,
+    length_threshold: int,
 ) -> tuple[float, float] | None:
     """Return (inner, outer) radial bounds occupied by large circular tick labels."""
     if str(label_side or "legacy").strip().lower() in {"none", ""}:
@@ -268,6 +271,7 @@ def get_circular_tick_label_radius_bounds(
             tick_length_px=tick_length_px,
             tick_width=tick_width,
             length_reference_radius_px=length_reference_radius_px,
+            length_threshold=length_threshold,
         )
 
         min_radius = min(min_radius, geometry.radial_inner_px)
@@ -292,6 +296,7 @@ def _raw_tick_label_base_radius(
     label_side: str,
     tick_length_px: float | None,
     length_reference_radius_px: float | None,
+    length_threshold: int,
 ) -> float | None:
     normalized_side = str(label_side or "legacy").strip().lower()
     radius = float(center_radius_px)
@@ -300,7 +305,8 @@ def _raw_tick_label_base_radius(
     if normalized_side == "legacy":
         track_channel = _resolve_tick_track_channel(
             total_len,
-            tick_track_channel_override=tick_track_channel_override,
+            tick_track_channel_override,
+            length_threshold,
         )
         ratio = _tick_label_ratio_table(track_channel, track_type, strandedness)
         prox, _ = ratio[size]
@@ -388,6 +394,7 @@ def resolve_circular_tick_label_geometry(
     tick_length_px: float | None = None,
     tick_width: float = 0.0,
     length_reference_radius_px: float | None = None,
+    length_threshold: int,
 ) -> CircularTickLabelGeometry:
     """Resolve one circular tick label path and its radial text footprint."""
     label_radius_base = _raw_tick_label_base_radius(
@@ -401,6 +408,7 @@ def resolve_circular_tick_label_geometry(
         label_side=label_side,
         tick_length_px=tick_length_px,
         length_reference_radius_px=length_reference_radius_px,
+        length_threshold=length_threshold,
     )
     if label_radius_base is None:
         return CircularTickLabelGeometry(0.0, 0.0, 0.0, 0.0, 0.0)
@@ -425,6 +433,7 @@ def resolve_circular_tick_label_geometry(
         tick_side=tick_side,
         tick_length_px=tick_length_px,
         length_reference_radius_px=length_reference_radius_px,
+        length_threshold=length_threshold,
     )
     normalized_label_side = str(label_side or "legacy").strip().lower()
     normalized_tick_side = str(tick_side or "legacy").strip().lower()
@@ -474,6 +483,8 @@ def generate_circular_tick_paths(
     tick_length_px: float | None = None,
     length_reference_radius_px: float | None = None,
     record_transform: RecordDisplayTransform | None = None,
+    *,
+    length_threshold: int,
 ) -> list[Path]:
     """
     Generates SVG path descriptions for tick marks on a circular canvas.
@@ -491,6 +502,7 @@ def generate_circular_tick_paths(
         tick_side=tick_side,
         tick_length_px=tick_length_px,
         length_reference_radius_px=length_reference_radius_px,
+        length_threshold=length_threshold,
     )
     for tick in ticks:
         if record_transform is not None and record_transform.start_coordinate is not None:
@@ -571,6 +583,8 @@ def generate_circular_tick_labels(
     record_identifier: str | None = None,
     record_transform: RecordDisplayTransform | None = None,
     tick_interval: int | None = None,
+    *,
+    length_threshold: int,
 ) -> list[Text]:
     tick_label_paths_list: list[Text] = []
     normalized_side = str(label_side or "legacy").strip().lower()
@@ -599,6 +613,7 @@ def generate_circular_tick_labels(
             tick_length_px=tick_length_px,
             tick_width=tick_width,
             length_reference_radius_px=length_reference_radius_px,
+            length_threshold=length_threshold,
         )
         path_radius = geometry.path_radius_px
         label_as_feature_length = total_len * 1.5 * geometry.bbox_width_px / (2 * math.pi * max(1.0, path_radius))

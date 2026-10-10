@@ -20,12 +20,6 @@ def create_dict_for_sequence_lengths(records: Sequence[SeqRecord]) -> dict[str, 
     return {record.id: len(record.seq) for record in records}
 
 
-def determine_length_parameter(record_length: int, length_threshold: int) -> str:
-    if record_length < length_threshold:
-        return "short"
-    return "long"
-
-
 def check_feature_presence(
     records: Union[List[SeqRecord], SeqRecord],
     features_list: List[str],
@@ -167,7 +161,6 @@ def translate_cds(
 __all__ = [
     "check_feature_presence",
     "create_dict_for_sequence_lengths",
-    "determine_length_parameter",
     "get_coordinates_of_longest_segment",
     "translate_cds",
 ]

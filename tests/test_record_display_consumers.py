@@ -438,6 +438,6 @@ def test_circular_tick_radial_reservation_is_rotation_invariant():
     for tick in (0, 1, 2499, 2500, 5000, 7499, 7500, 9999):
         geometry = resolve_circular_tick_label_geometry(center_radius_px=300, total_len=10000,
             size="large", tick=tick, label_text="2 kbp", font_size=14, font_family="Arial",
-            track_type="tuckin", strandedness=False, dpi=96)
+            track_type="tuckin", strandedness=False, dpi=96, length_threshold=50_000)
         bounds.append((geometry.radial_inner_px, geometry.radial_outer_px))
     assert all(bound == pytest.approx(bounds[0]) for bound in bounds)

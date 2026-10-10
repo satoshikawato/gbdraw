@@ -19,7 +19,7 @@ from ..config.models import (
     GbdrawConfig,
 )
 from ..core.text import calculate_bbox_dimensions
-from ..core.sequence import determine_length_parameter
+from ..auto_sizes import determine_length_parameter
 from ..layout.common import calculate_cds_ratio
 from ..layout.circular import (
     CircularFeatureLayout,

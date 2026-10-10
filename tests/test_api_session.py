@@ -29,6 +29,7 @@ from gbdraw.api import (
     RecordInput,
     RenderOutputRequest,
     ScalarSpec,
+    SessionDrawingSpec,
     SessionFormatError,
     SessionRenderError,
     SessionResourceError,
@@ -187,8 +188,12 @@ def test_current_document_quarantines_legacy_protein_cache_on_save(
 
     saved = save_session_document(
         session_path,
-        LinearDiagramRequest(records=(_record(),)),
-        adjunct={"losatCache": {"entries": [legacy_entry]}},
+        drawings=[
+            SessionDrawingSpec(
+                LinearDiagramRequest(records=(_record(),)),
+                state={"losatCache": {"entries": [legacy_entry]}},
+            )
+        ],
     )
     reloaded = load_session_document(session_path)
 
@@ -889,9 +894,9 @@ def _record_local_collinear_session(tmp_path: Path, search_scope: str = "adjacen
     assert [path.get("d") for path in comparison_paths(web["results"][0]["content"])] == [paths[0].get("d")]
 
     session_path = tmp_path / "mixed.gbdraw-session.json"
-    saved = save_session_document(session_path, request, adjunct={
+    saved = save_session_document(session_path, drawings=[SessionDrawingSpec(request, state={
         "results": web["results"], "editorState": {"featureCatalog": web["metadata"]["featureCatalog"]},
-    })
+    })])
     reloaded = load_session_document(session_path)
     assert reloaded.version == saved.version == CURRENT_SESSION_VERSION
     assert reloaded.to_dict()["editorState"]["featureCatalog"] == web["metadata"]["featureCatalog"]

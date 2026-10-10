@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 
 from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResult  # noqa: E402
-from gbdraw.api import build_session_document, materialize_session, save_session_document  # noqa: E402
+from gbdraw.api import SessionDrawingSpec, build_session_document, materialize_session, save_session_document  # noqa: E402
 from gbdraw.web_support.request_render import render_canonical_web_request  # noqa: E402
 from tests.test_alignment_direction_projection import build_fixture  # noqa: E402
 
@@ -41,8 +41,8 @@ def main(directory: Path) -> None:
     with materialize_session(document, output_directory=directory / 'decoded') as materialized:
         web = render_canonical_web_request(document.to_dict()['renderRequest'],
             resource_paths=materialized.resource_paths, output_directory=directory / 'web')
-    save_session_document(directory / 'directions.gbdraw-session.json', request, adjunct={
-        'results': web['results'], 'editorState': {'featureCatalog': web['metadata']['featureCatalog']}})
+    save_session_document(directory / 'directions.gbdraw-session.json', drawings=[SessionDrawingSpec(request, state={
+        'results': web['results'], 'editorState': {'featureCatalog': web['metadata']['featureCatalog']}})])
 
 
 if __name__ == '__main__':

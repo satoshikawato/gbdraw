@@ -285,35 +285,26 @@ assert.deepEqual(parseWhitelistRules('CDS\tproduct\t\n').rules, [{ feat: 'CDS', 
 // line break a short row. With legacyRows a parser reads such a row as the
 // current writer writes it: the extra cells join the last field with one space,
 // and a row without a required field is dropped. It lists each such row; every
-// other caller keeps the strict reader above.
-for (const [name, parse, text, read, expected, repairs, valid] of [
-  ['Label whitelist', parseWhitelistRules,
-    'CDS\tproduct\tkinase\nCDS\tproduct\tDNA\t\tpolymerase \npolymerase\n\tproduct\tATP\nCDS\tproduct\t\n',
-    (parsed) => parsed.rules,
-    [{ feat: 'CDS', qual: 'product', key: 'kinase' }, { feat: 'CDS', qual: 'product', key: 'DNA polymerase' },
-      { feat: 'CDS', qual: 'product', key: '' }],
-    [{ row: 2, repair: 'joined' }, { row: 3, repair: 'dropped' }, { row: 4, repair: 'dropped' }], 'CDS\tproduct\tkinase'],
-  ['Qualifier priority', parsePriorityRules,
-    'feature_type\tpriorities\nCDS\tgene,\tproduct\nrRNA\n\tproduct\ntRNA\t\n',
-    (parsed) => parsed.rules,
-    [{ feat: 'CDS', order: 'gene, product' }],
-    [{ row: 2, repair: 'joined' }, { row: 3, repair: 'dropped' }, { row: 4, repair: 'dropped' }, { row: 5, repair: 'dropped' }],
-    'CDS\tgene,product'],
-  ['Default colors', parseColorTable,
-    'feature_type\tcolor\nCDS\t#54bcf8\ntRNA\tred\t\nrRNA\n\tblue\nmisc_feature\tcurrentColor\n',
-    (parsed) => parsed.colors,
-    // A color name reads as its CSS hex, as in the browser (OV-160); a color outside
-    // the Default colors domain (OV-272) is dropped and listed instead of failing Load.
-    { CDS: '#54bcf8', tRNA: '#FF0000' },
-    [{ row: 3, repair: 'joined' }, { row: 4, repair: 'dropped' }, { row: 5, repair: 'dropped' }, { row: 6, repair: 'invalid' }],
-    'CDS\t#54bcf8']
-]) {
+// other caller keeps the strict reader above. Python reads the same vectors
+// (tests/test_session_legacy_table_rows.py, OV-148).
+const legacyTableRowVectors = JSON.parse(await readFile(
+  join(repoRoot, 'tests', 'fixtures', 'legacy-table-row-vectors.json'), 'utf8'
+));
+const legacyTableParsers = {
+  'label-whitelist': parseWhitelistRules,
+  'qualifier-priority': parsePriorityRules,
+  'default-colors': parseColorTable
+};
+for (const { name, table, text, repairedText, repairs, valid } of legacyTableRowVectors.cases) {
+  const parse = legacyTableParsers[table];
   const parsed = parse(text, { legacyRows: true });
-  assert.deepEqual(read(parsed), expected, `${name}: legacy rows`);
+  assert.deepEqual({ ...parsed, repairs: [] }, parse(repairedText), `${name}: legacy rows read as the current writer writes them`);
   assert.deepEqual(parsed.repairs, repairs, `${name}: repaired rows`);
   assert.throws(() => parse(text), { code: 'TABLE_INVALID' }, `${name}: strict reader`);
   assert.deepEqual(parse(`${valid}\n`, { legacyRows: true }), parse(`${valid}\n`), `${name}: a valid row reads the same`);
 }
+// A color name reads as its CSS hex, as in the browser (OV-160).
+assert.deepEqual(parseColorTable('tRNA\tred\t\n', { legacyRows: true }).colors, { tRNA: '#FF0000' });
 
 // OV-26/OV-27: Python skips whole-line comments in these tables too, so the Web
 // parsers and Python agree: an indented or plain `#` line is skipped, a `#` or `"`

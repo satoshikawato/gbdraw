@@ -636,20 +636,25 @@ test('an aligned Linear Result saved while Circular is shown keeps its alignment
   }
 });
 
-// A two-Result Session that `gbdraw linear --session ... --session_output`
-// re-saved: the Linear set at the top level, the Circular set in
-// `otherModeResult`, and `ui.mode` still Circular.
-const cliResavedSession = (info) => {
+// A two-Result Session with the Linear set at the top level, the Circular set
+// in `otherModeResult`, and `ui.mode` Circular. The fixture's drawings are laid
+// out Linear first by the Python layout owner (`write_session_drawings`), then
+// `gbdraw linear --session ... --session_output` re-saves it in place (D-15-36).
+const linearTopResavedSession = (info) => {
   const directory = info.outputPath('cli-resave');
   mkdirSync(directory, { recursive: true });
   execFileSync('python', ['-c', [
     'import sys',
     'from pathlib import Path',
     'from gbdraw.cli_utils import session as cli_session',
+    'from gbdraw.session import load_session_document, session_drawing_artifacts',
+    'from gbdraw.session_drawings import write_session_drawings',
     'from gbdraw.session_io import load_session, write_session_json',
     'from tests.utils.two_mode_session import two_mode_session',
     'out = Path(sys.argv[1])',
-    "write_session_json(out / 'two.gbdraw-session.json', two_mode_session())",
+    'two = load_session_document(two_mode_session())',
+    "views = {d.mode: dict(session_drawing_artifacts(two, d.id).fields) for d in two.drawings}",
+    "write_session_json(out / 'two.gbdraw-session.json', write_session_drawings([views['linear'], views['circular']], active=1))",
     "assert cli_session.render_canonical_session_if_present(load_session(str(out / 'two.gbdraw-session.json')),"
       + " mode='linear', output_override=str(out / 'replayed'), format_override='svg', save_session=False,"
       + " session_output=str(out / 'resaved.gbdraw-session.json'))"
@@ -668,7 +673,7 @@ const cliResavedSession = (info) => {
 // projected while Circular is shown.
 test('a CLI re-saved Session opens on its shown mode with each Result in its own mode', async ({ page }, info) => {
   test.setTimeout(480_000);
-  const { path, session } = cliResavedSession(info);
+  const { path, session } = linearTopResavedSession(info);
   const holds = async (label) => {
     const state = await shown(page);
     expect(state.generatedMode === state.mode || state.count === 0, label).toBe(true);
@@ -738,7 +743,7 @@ test('a Session opened on its other Result set generates the Legend it shows', a
 // committed Session and match-sequence owner) and the other mode's Result.
 test('a Load canceled within its History baseline keeps both modes\' Results', async ({ page }, info) => {
   test.setTimeout(480_000);
-  const { path } = cliResavedSession(info);
+  const { path } = linearTopResavedSession(info);
   await openBothSources(page);
   await generate(page);
   await showMode(page, 'linear');

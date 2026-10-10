@@ -798,7 +798,9 @@ def _decode_canonical_request(
             "renderRequest.records must be a non-empty array."
         )
     records = tuple(
-        _decode_record(value, index=index, schema=schema, resource_paths=resource_paths)
+        _decode_record(
+            value, index=index, mode=mode, schema=schema, resource_paths=resource_paths
+        )
         for index, value in enumerate(raw_records, start=1)
     )
     options_kwargs = _decode_diagram_options(
@@ -848,6 +850,18 @@ def _decode_canonical_request(
             )
         if schema == 1:
             similarity_alignment = None
+        if schema < 6 and linear_layout is not None and linear_layout.multi_record_positions:
+            # Schemas 2-5 wrote one ``#<card>@<row>`` per record card; as Web
+            # Load promotes them, each card's row becomes its gridRow, which
+            # the records an ALL card expands to inherit.
+            rows = [token.rpartition("@")[2] for token in linear_layout.multi_record_positions]
+            records = tuple(
+                replace(record, presentation=replace(record.presentation, grid_row=int(row)))
+                if row.isdigit() and int(row) > 0
+                else record
+                for record, row in zip(records, [*rows, *[""] * len(records)])
+            )
+            linear_layout = replace(linear_layout, multi_record_positions=None)
         request = LinearDiagramRequest(
             records=records,
             options=options,
@@ -1194,10 +1208,24 @@ def _encode_record(
     }
 
 
+def legacy_record_cardinality(mode: object, record: Mapping[str, Any]) -> RecordCardinality:
+    """The cardinality of a request schema 1-5 record, which saved none.
+
+    As Web Load promotes it (``promoteRenderRequestToSchema8``), a Linear
+    record without selector and region draws every record of its source; any
+    other record draws one.
+    """
+
+    if mode == "linear" and record.get("selector") is None and record.get("region") is None:
+        return RecordCardinality.ALL
+    return RecordCardinality.EXACTLY_ONE
+
+
 def _decode_record(
     value: object,
     *,
     index: int,
+    mode: str,
     schema: int,
     resource_paths: Mapping[str, str | Path],
 ) -> RecordInput:
@@ -1280,7 +1308,7 @@ def _decode_record(
         cardinality=(
             RecordCardinality(item["cardinality"])
             if schema >= 6
-            else RecordCardinality.EXACTLY_ONE
+            else legacy_record_cardinality(mode, item)
         ),
         selector=_decode_selector(item["selector"], path=f"{path}.selector"),
         region=_decode_region(item["region"], path=f"{path}.region"),

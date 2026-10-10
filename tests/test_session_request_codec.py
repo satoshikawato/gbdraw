@@ -628,24 +628,48 @@ def test_schema7_decodes_alignment_string_only_as_private_legacy_state(
         )
 
 
-def test_schema5_defaults_record_cardinality_to_exactly_one(
-    tmp_path: Path,
+@pytest.mark.parametrize("schema", (2, 5))
+def test_schema5_linear_records_without_selector_or_region_draw_every_record(
+    tmp_path: Path, schema: int
 ) -> None:
+    # OV-149: as Web Load promotes them (session-request.js
+    # promoteRenderRequestToSchema8), a Linear record without selector and
+    # region draws every record of its source; the others draw one record. The
+    # per-card rows of layout.multiRecordPositions become each record's gridRow.
     source = _source_file(tmp_path / "record.gbk")
     encoded = encode_canonical_request(
         LinearDiagramRequest(
-            records=(RecordInput(source=GenBankInputSource(source)),),
+            records=(
+                RecordInput(source=GenBankInputSource(source)),
+                RecordInput(source=GenBankInputSource(source), selector=parse_record_selector("#2")),
+                RecordInput(source=GenBankInputSource(source), region=parse_region_spec("#1:1-10")),
+            ),
+            layout=LinearMultiRecordOptions(multi_record_positions=("#1@2", "#2@1", "#3@1")),
         )
     )
-    payload = _payload_for_schema(encoded, 5)
+    payload = _payload_for_schema(encoded, schema)
+    assert all("cardinality" not in record for record in payload["records"])
 
-    assert "cardinality" not in payload["records"][0]
     decoded = decode_canonical_request(
         payload,
         resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
         output_directory=tmp_path / "output",
     )
-    assert decoded.records[0].cardinality is RecordCardinality.EXACTLY_ONE
+    assert [record.cardinality for record in decoded.records] == [
+        RecordCardinality.ALL, RecordCardinality.EXACTLY_ONE, RecordCardinality.EXACTLY_ONE
+    ]
+    assert [record.presentation.grid_row for record in decoded.records] == [2, 1, 1]
+    assert decoded.layout is not None and decoded.layout.multi_record_positions is None
+
+    circular = encode_canonical_request(
+        CircularDiagramRequest(records=(RecordInput(source=GenBankInputSource(source)),))
+    )
+    decoded_circular = decode_canonical_request(
+        _payload_for_schema(circular, schema),
+        resource_paths=_materialize_resources(circular, tmp_path / "circular"),
+        output_directory=tmp_path / "output",
+    )
+    assert decoded_circular.records[0].cardinality is RecordCardinality.EXACTLY_ONE
 
 
 @pytest.mark.parametrize("schema", (3, 4))

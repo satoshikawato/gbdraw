@@ -12,6 +12,7 @@ from pandas import DataFrame
 from svgwrite import Drawing
 from svgwrite.container import Group
 
+from ...auto_sizes import circular_track_width_px
 from ...canvas import CircularCanvasConfigurator
 from ...features.factory import FeatureBuildResult
 from ...layout.circular import CircularRecordRenderContext
@@ -60,7 +61,12 @@ def add_depth_group_on_canvas(
     depth_track_width = (
         float(track_width_override)
         if track_width_override is not None
-        else canvas_config.radius * canvas_config.track_ratio * canvas_config.track_ratio_factors[1] * 0.5
+        else circular_track_width_px(
+            "depth",
+            radius=canvas_config.radius,
+            track_ratio=canvas_config.track_ratio,
+            factors=canvas_config.track_ratio_factors,
+        )
     )
     depth_group: Group = DepthGroup(
         gb_record,
@@ -144,7 +150,12 @@ def add_gc_skew_group_on_canvas(
     skew_track_width = (
         float(track_width_override)
         if track_width_override is not None
-        else canvas_config.radius * canvas_config.track_ratio * canvas_config.track_ratio_factors[2]
+        else circular_track_width_px(
+            "dinucleotide_skew",
+            radius=canvas_config.radius,
+            track_ratio=canvas_config.track_ratio,
+            factors=canvas_config.track_ratio_factors,
+        )
     )
     gc_skew_group: Group = GcSkewGroup(
         gb_record,
@@ -191,7 +202,12 @@ def add_gc_content_group_on_canvas(
     gc_content_track_width = (
         float(track_width_override)
         if track_width_override is not None
-        else canvas_config.radius * canvas_config.track_ratio * canvas_config.track_ratio_factors[1]
+        else circular_track_width_px(
+            "dinucleotide_content",
+            radius=canvas_config.radius,
+            track_ratio=canvas_config.track_ratio,
+            factors=canvas_config.track_ratio_factors,
+        )
     )
     gc_content_group: Group = GcContentGroup(
         gb_record,

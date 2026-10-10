@@ -10,7 +10,12 @@ import pandas as pd
 from pandas import DataFrame
 
 from ..exceptions import InputFileError, ParseError, ValidationError
-from ..io.table_text import read_literal_table, read_table_lines, table_text_stream
+from ..io.table_text import (
+    LEGACY_TABLE_ROWS,
+    read_literal_table,
+    read_table_lines,
+    table_text_stream,
+)
 from ..features.selector_values import (
     _matches_constraint,
     get_feature_hash as _get_feature_hash,
@@ -53,7 +58,12 @@ def read_qualifier_priority_file(filepath: str) -> Optional[DataFrame]:
     required_cols = ["feature_type", "priorities"]
 
     try:
-        df = read_literal_table(filepath, names=required_cols, label="qualifier priority file")
+        df = read_literal_table(
+            filepath,
+            names=required_cols,
+            label="qualifier priority file",
+            legacy_rows=LEGACY_TABLE_ROWS["qualifier-priority"],
+        )
     except ParseError:
         raise
     except pd.errors.ParserError as e:
@@ -96,6 +106,7 @@ def read_filter_list_file(filepath: str) -> Optional[DataFrame]:
             names=required_cols,
             label="filter list file",
             filepath=filepath,
+            legacy_rows=LEGACY_TABLE_ROWS["label-whitelist"],
         )
     except ParseError:
         raise

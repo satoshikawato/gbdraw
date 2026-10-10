@@ -157,6 +157,48 @@ write-up of a release.
   metadata also records the font file, font size, DPI, and wrap width the Legend was
   laid out with, and the diagram bounds it was placed against, so that the web app
   can lay out an edited Legend as Python does. Drawn content is unchanged.
+- CLI: `gbdraw render --session FILE` renders the drawings of a saved Session:
+  every drawing with a committed render by default, or the ones named with
+  `--drawing ID` (an ID or a name, repeatable). A drawing without a committed
+  render is skipped with a notice, and naming one is an error.
+  `--list_drawings` prints each drawing's ID, mode, name, and whether it has a
+  committed render. One drawing keeps its output names; several write
+  `<prefix>_<ID>`, and every diagram path and the Session output are checked
+  before the first file is written. `--save_session` or `--session_output`
+  writes the Session again with only the rendered drawings replaced; the
+  Session is brought to the current version and validated before any render,
+  so a Session that cannot be written again leaves no diagram behind. For a
+  Session 31–39, which saved no feature catalog, the command prints a warning
+  that names each saved Result it drops; the re-saved Session holds the Results
+  of the new render.
+  `gbdraw circular --session` and `gbdraw linear --session` take `--drawing ID`
+  and, without it, render the Session's only drawing of their mode; a drawing of
+  the other mode is an error that lists the drawings.
+- Python API: a Session's diagrams are drawings. `SessionDocument.drawings`
+  lists them as `SessionDrawing` values (ID, name, mode, and whether a committed
+  render exists); `SessionDocument.drawing()` selects one by ID or name, and
+  `SessionDocument.active_drawing_id` names the one the Web app opens. A
+  selection that is missing, unknown, or ambiguous raises
+  `SessionDrawingSelectionError` with the list of drawings. Pass `drawing=` to
+  `session_to_request()` and `render_session()`. The new
+  `render_session_drawings()` renders several drawings together: several
+  drawings write `<base>_<id>` outputs, every output path is checked before the
+  first write, and each embedded resource is parsed once for all drawings.
+  `build_session_document()` and `save_session_document()` take
+  `drawings=[...]` (typed requests or `SessionDrawingSpec` values) and
+  `active_drawing=`; the undocumented `adjunct=` argument is replaced by
+  `SessionDrawingSpec(state=...)`. The new `upgrade_session_document()` returns
+  a Session 31–44 in the current version without rendering it, as a
+  `SessionUpgrade` with the `document` and its `warnings`. Sessions 31–39
+  saved no feature catalog, so the upgrade drops their Results; each such
+  drawing gets a warning that names every dropped Result, also logged.
+  Session 46 holds at most one Circular and one Linear drawing, named by their
+  mode.
+- Python API: `gbdraw.api.derive_region_drawing()` derives a new drawing of
+  selected regions (`RegionSelection`) from a materialized Session. It keeps the
+  drawing's look for those records, refuses regions that cross the origin, and
+  returns a size you set to Auto only when its Auto value changes at the new
+  length and mode (`adaptation.reset` lists each one).
 - Legend colors (web app): Generate no longer fails with "The generated result could
   not be accepted" after a color or stroke is set on a row added in the Legend editor,
   in Linear and Circular. The added row is drawn with its color and stroke after
@@ -316,8 +358,8 @@ write-up of a release.
   and its **Generate** button switches to that mode and generates there.
   `gbdraw circular --session` and `gbdraw linear --session` render the Result
   set of their own mode; a re-save with `--save_session` or `--session_output`
-  puts that set at the top level, keeps the other mode's set in
-  `otherModeResult`, and keeps the saved `ui.mode`.
+  replaces only that set, where it is, and keeps the other mode's set and the
+  saved `ui.mode`.
 - CLI: `gbdraw circular|linear --session <file> --session_output out.json` (and
   `--save_session`) keeps the resource IDs and file names of the Session's unchanged
   inputs. Before, the rewritten Session renamed them to positional IDs such as

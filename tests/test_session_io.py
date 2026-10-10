@@ -4078,7 +4078,9 @@ def test_cli_i24f_invalid_bindings_reject_before_render_or_publication(tmp_path,
         svg.write_bytes(b'existing diagram')
         sidecar.write_bytes(b'existing sidecar')
     calls = []
-    monkeypatch.setattr(cli_session, '_render_request', lambda *a, **kw: calls.append(a))
+    import gbdraw.session as session_module
+
+    monkeypatch.setattr(session_module, '_render_session_drawing_plans', lambda *a, **kw: calls.append(a))
     with pytest.raises((ValidationError, SystemExit)):
         circular_main([
             '--session', str(source_path), '-o', str(svg.with_suffix('')),
@@ -4100,7 +4102,7 @@ def test_cli_i24_explicit_null_inventory_survives_without_direct_fields(tmp_path
 
 
 def test_cli_projection_request_only_session_keeps_no_inventory():
-    from gbdraw.cli_utils.session import _project_web_file_inventory
+    from gbdraw.session_migration import _project_web_file_inventory
 
     source = _cli_composite_source()
     del source['webFiles']
@@ -4111,7 +4113,7 @@ def test_cli_projection_request_only_session_keeps_no_inventory():
 @pytest.mark.parametrize('invalid', ['mixed-leaf', 'mixed-composite', 'nested', 'null'])
 def test_internal_composite_transport_rejects_unsupported_shapes(invalid):
     source = _cli_composite_source()
-    from gbdraw.cli_utils.session import _project_web_file_inventory
+    from gbdraw.session_migration import _project_web_file_inventory
 
     load_session_document(source)
     inventory = _project_web_file_inventory(source)

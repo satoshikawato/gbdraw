@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from gbdraw.api.config import apply_config_overrides
 from gbdraw.render.groups.linear.length_bar import format_linear_tick_label
 from gbdraw.svg.circular_ticks import (
     generate_circular_tick_labels,
@@ -9,6 +10,9 @@ from gbdraw.svg.circular_ticks import (
     resolve_circular_tick_label_geometry,
     set_tick_label_anchor_value,
 )
+
+# The packaged labels.length_threshold.circular.
+LENGTH_THRESHOLD = int(apply_config_overrides(None, None).labels.length_threshold.circular)
 
 
 def _tick_label_kwargs() -> dict:
@@ -25,6 +29,7 @@ def _tick_label_kwargs() -> dict:
         "tick_side": "inside",
         "tick_length_px": 10.0,
         "tick_width": 2.0,
+        "length_threshold": LENGTH_THRESHOLD,
     }
 
 
@@ -70,6 +75,7 @@ def test_circular_tick_label_outside_uses_margin_from_tick_band() -> None:
         strandedness=base_kwargs["strandedness"],
         tick_side=base_kwargs["tick_side"],
         tick_length_px=base_kwargs["tick_length_px"],
+        length_threshold=LENGTH_THRESHOLD,
     )
 
     for tick, label_text in ((1_000_000, "1.0 Mbp"), (3_000_000, "3.0 Mbp")):
@@ -97,6 +103,7 @@ def test_circular_tick_label_inside_uses_legacy_center_offset_clearance() -> Non
         strandedness=base_kwargs["strandedness"],
         tick_side=base_kwargs["tick_side"],
         tick_length_px=base_kwargs["tick_length_px"],
+        length_threshold=LENGTH_THRESHOLD,
     )
 
     path_radii = []
@@ -131,6 +138,7 @@ def test_circular_tick_label_textpath_uses_middle_anchor() -> None:
         tick_side="inside",
         tick_length_px=10.0,
         tick_width=2.0,
+        length_threshold=LENGTH_THRESHOLD,
     )
     text_elements = [element.tostring() for element in elements if element.elementname == "text"]
 
@@ -166,6 +174,7 @@ def test_circular_tick_labels_resolve_an_interval_below_one_kbp() -> None:
         tick_length_px=10.0,
         tick_width=2.0,
         tick_interval=250,
+        length_threshold=LENGTH_THRESHOLD,
     )
     texts = [element.tostring() for element in elements if element.elementname == "text"]
 
@@ -196,3 +205,4 @@ def test_linear_tick_labels_resolve_their_interval(
         format_linear_tick_label(position, context_length=context_length, tick_interval=interval)
         == expected
     )
+from gbdraw.api.config import apply_config_overrides
