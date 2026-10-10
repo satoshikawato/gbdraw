@@ -24,6 +24,7 @@ published packages, and [Installation](./INSTALL.md) explains each install route
   preview over blank space and comparison ribbons alike.
 - Draw from Python with `draw_circular()` and `draw_linear()`, which return a
   `Diagram` you can save in any format.
+- Choose which records of a multi-record file are drawn (**Choose records…**, **Draw this record**).
 - Install from a wheel or source package that includes the local web app's
   palettes and browser files.
 
@@ -52,6 +53,21 @@ on the neoU similarity group.
 In Linear mode, **Generate Diagram** with a pair set to **Upload BLAST TSV**
 but no file opens a **BLAST TSV missing** dialog. It offers **Choose BLAST TSV
 for #i → #j…**, **Set to No comparison and Generate**, or **Cancel**.
+
+Choose which records of a file are drawn. Each Linear record card has **Draw
+this record**, and a file with several records has **Choose records…**, a list
+that searches and sorts by file order, record ID, or length and turns records
+on or off in bulk. **Choose records…** also sits beside **Record** in Circular,
+where Multi-Record Canvas and separate diagrams draw the records that are on. A
+record that is off is left out of Generate, comparisons, row layout, and the
+Legend, keeps its settings (also in a saved Session), and returns in its place
+when turned on; **Delete settings** removes its card settings, feature edits
+and Feature placements, annotations that target it, and comparison pairs that
+name it. LOSAT keeps the whole subject file as its E-value database. After an
+upload, a file with more than 20 records opens the list, and turning off the
+last drawn record of a file asks whether to remove the file. In 0.13.0, a
+Linear File card drew every record or the one record named in Record ID, and
+Multi-Record Canvas drew every record.
 
 Each change of a checkbox, radio button, or button is one **Undo** step. Undo
 and Redo are unavailable while Generate runs, and the header says why. Error
