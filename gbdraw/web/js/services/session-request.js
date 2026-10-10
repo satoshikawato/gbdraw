@@ -3613,10 +3613,11 @@ export const legacyTableRowsNotice = (repairs) => {
 
 // The Load notice for the Legend entries a Session stored with a color outside
 // the Default colors domain (D-43): `drops` lists `{ list, caption }` per
-// dropped entry, possibly more than once.
+// dropped entry, possibly more than once. Captions are free text, quoted with " as
+// other user text is.
 const LEGEND_LIST_MARKS = { entries: '', dormantEntries: ' (not drawn)', deletedEntries: ' (deleted)' };
 export const legendColorDropNotice = (drops) => {
-  const named = [...new Set((drops || []).map(({ list, caption }) => `'${caption}'${LEGEND_LIST_MARKS[list] ?? ''}`))];
+  const named = [...new Set((drops || []).map(({ list, caption }) => `"${caption}"${LEGEND_LIST_MARKS[list] ?? ''}`))];
   if (!named.length) return '';
   return `Legend: ${cappedList('entry', 'entries', named)} had a color the app does not accept and ${named.length === 1 ? 'was' : 'were'} dropped.`;
 };
