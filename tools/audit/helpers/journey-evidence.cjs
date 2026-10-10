@@ -202,4 +202,4 @@ if (require.main === module) {
   console.log(JSON.stringify(writeContactSheet(dir)));
 }
 
-module.exports = { createJourney, writeContactSheet, withinLimit };
+module.exports = { createJourney, writeContactSheet };

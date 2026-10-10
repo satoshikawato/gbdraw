@@ -36,4 +36,4 @@ const compareSvgFiles = (left, right, {
   return { status: run.status, equal: run.status === 0, report: `${run.stdout || ''}\n${run.stderr || ''}`.trim() };
 };
 
-module.exports = { IGNORED_ATTRIBUTES, compareSvgFiles };
+module.exports = { compareSvgFiles };

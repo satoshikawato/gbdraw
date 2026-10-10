@@ -21,7 +21,8 @@ const artifact = (files) => {
 test('an artifact counts failed tests, failed recipes, and parity replay differences', () => {
   const dir = artifact({
     'report.json': { stats: { expected: 3, unexpected: 2 } },
-    'recipes/recipes-status.tsv': 'cli\tT-CLI-01\tpass\ncli\tH-CLI-06\tfail\npython\tT-PY-01\tpass\n',
+    'recipes/recipes-status.tsv': 'cli\tT-CLI-01\tpass\ncli\tH-CLI-02\tfail\npython\tT-PY-01\tpass\n'
+      + 'cli\tH-CLI-06\tskipped-run-locally\npython\tT-PY-05\tskipped-run-locally\n',
     'parity/linear-MJNV/replay-report.json': [{ outcome: 'DIFF' }, { outcome: 'MATCH' }, { outcome: 'NO_EFFECT' }],
     'losat.txt': 'unavailable: no bundled LOSAT\n',
     'seed.txt': '1234\n'
@@ -29,7 +30,7 @@ test('an artifact counts failed tests, failed recipes, and parity replay differe
   const read = readArtifact(dir);
   assert.equal(read.findings, 2 + 1 + 1);
   assert.ok(read.notes.includes('2 failed test(s)'));
-  assert.ok(read.notes.includes('2 of 3 recipes pass; failed: H-CLI-06'));
+  assert.ok(read.notes.includes('2 of 3 recipes pass; failed: H-CLI-02; run locally (no LOSAT runtime): H-CLI-06, T-PY-05'));
   assert.ok(read.notes.includes('linear-MJNV: 1 DIFF, 1 NO_EFFECT of 3'));
   assert.ok(read.notes.some((note) => note.startsWith('LOSAT runtime unavailable')));
   assert.ok(read.notes.includes('seed 1234'));
@@ -42,7 +43,7 @@ test('the summary lists each audit job with its artifact link and the uncovered 
   mkdirSync(join(journeys, 'journeys'), { recursive: true });
   writeFileSync(join(journeys, 'report.json'), JSON.stringify({ stats: { unexpected: 0 } }));
   writeFileSync(join(journeys, 'journeys', 'coverage.json'), JSON.stringify({
-    changed: ['web-runtime', 'packaging'], uncovered: ['packaging']
+    changed: ['web-runtime', 'packaging'], uncovered: ['packaging'], uncoveredPaths: { packaging: ['pyproject.toml'] }
   }));
   const markdown = renderSummary({
     jobs: [
@@ -59,6 +60,7 @@ test('the summary lists each audit job with its artifact link and the uncovered 
   assert.match(markdown, /\| recipes \| failure \| none \| unknown \| no artifact \|/);
   assert.doesNotMatch(markdown, /Core|\| summary \|/);
   assert.match(markdown, /Uncovered by the user journeys \(hand look with a time limit, or an Owner waiver\): packaging/);
+  assert.match(markdown, /\| packaging \| `pyproject\.toml` \|/);
 });
 
 test('promotion audit jobs run only on the release-tier dispatch and stay outside every gate', () => {
@@ -82,4 +84,13 @@ test('promotion audit jobs run only on the release-tier dispatch and stay outsid
   assert.match(job('promotion-audit-journeys'), /journey: \[J1, J2, J3, J4, J5, J6, J7\]/);
   assert.match(job('promotion-audit-random-walk'), /- name: Print the random walk seed\n[\s\S]*GBDRAW_RANDOM_WALK_SEED=\$GITHUB_RUN_ID/);
   assert.ok(job('promotion-audit-random-walk').indexOf('Print the random walk seed') < job('promotion-audit-random-walk').indexOf('- name: Checkout'));
+  // A failed LOSAT install leaves the job running; the probe only resolves the runtime.
+  assert.match(job('promotion-audit-recipes'), /run: gbdraw setup-losat \|\| echo "::warning::/);
+  assert.doesNotMatch(job('promotion-audit-recipes'), /--version/);
+  assert.match(job('promotion-audit-recipes'), /skipped-run-locally/);
+  // The summary keeps a failed table write visible and still publishes the contact sheet.
+  assert.match(job('promotion-audit-summary'), /- name: Write the audit table to the run summary\n\s+shell: bash\n/);
+  for (const name of ['Merge the journey contact sheets', 'Upload the journey contact sheet']) {
+    assert.match(job('promotion-audit-summary'), new RegExp(`- name: ${name}\\n\\s+if: always\\(\\)\\n`), name);
+  }
 });

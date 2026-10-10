@@ -4,7 +4,8 @@
 // It lists each `Promotion audit / <key>` job with its result, the link to its
 // `promotion-audit-<key>` artifact, and the findings counted in that artifact:
 // failed Playwright tests (`report.json`), failed recipes (`recipes-status.tsv`),
-// and DIFF rows of parity replays (`replay-report.json`).
+// and DIFF rows of parity replays (`replay-report.json`). Recipes skipped for want
+// of a LOSAT runtime are listed to run locally, not counted.
 //
 //   node tools/audit/release-audit-summary.mjs <downloaded artifacts dir> >> "$GITHUB_STEP_SUMMARY"
 //
@@ -14,8 +15,8 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-export const JOB_PREFIX = 'Promotion audit / ';
-export const ARTIFACT_PREFIX = 'promotion-audit-';
+const JOB_PREFIX = 'Promotion audit / ';
+const ARTIFACT_PREFIX = 'promotion-audit-';
 
 const files = (dir) => readdirSync(dir).flatMap((name) => {
   const path = join(dir, name);
@@ -46,10 +47,12 @@ export const readArtifact = (dir) => {
       }
     } else if (name === 'recipes-status.tsv') {
       const rows = readFileSync(path, 'utf8').split('\n').filter(Boolean).map((line) => line.split('\t'));
-      const failed = rows.filter(([, , status]) => status !== 'pass');
+      const skipped = rows.filter(([, , status]) => status === 'skipped-run-locally');
+      const failed = rows.filter(([, , status]) => status !== 'pass' && status !== 'skipped-run-locally');
       result.findings += failed.length;
-      result.notes.push(`${rows.length - failed.length} of ${rows.length} recipes pass`
-        + (failed.length ? `; failed: ${failed.map(([, id]) => id).join(', ')}` : ''));
+      result.notes.push(`${rows.length - failed.length - skipped.length} of ${rows.length - skipped.length} recipes pass`
+        + (failed.length ? `; failed: ${failed.map(([, id]) => id).join(', ')}` : '')
+        + (skipped.length ? `; run locally (no LOSAT runtime): ${skipped.map(([, id]) => id).join(', ')}` : ''));
     } else if (name === 'replay-report.json') {
       const rows = readJson(path) || [];
       const diff = rows.filter((row) => row?.outcome === 'DIFF').length;
@@ -58,7 +61,7 @@ export const readArtifact = (dir) => {
       result.notes.push(`${basename(join(path, '..'))}: ${diff} DIFF, ${noEffect} NO_EFFECT of ${rows.length}`);
     } else if (name === 'losat.txt') {
       const text = readFileSync(path, 'utf8').trim();
-      if (!text.startsWith('available')) result.notes.push(`LOSAT runtime unavailable on the runner; rerun the failed LOSAT recipes locally (${text})`);
+      if (!text.startsWith('available')) result.notes.push(`LOSAT runtime unavailable on the runner (${text})`);
     } else if (name === 'seed.txt') {
       result.notes.push(`seed ${readFileSync(path, 'utf8').trim()}`);
     } else if (name === 'coverage.json') {
@@ -101,6 +104,13 @@ export const renderSummary = ({ jobs, artifacts, artifactsDir, runUrl }) => {
   } else if (coverage) {
     lines.push(`Changed capabilities since \`origin/main\`: ${coverage.changed.join(', ') || 'none'}`);
     lines.push(`Uncovered by the user journeys (hand look with a time limit, or an Owner waiver): ${coverage.uncovered.join(', ') || 'none'}`);
+    const uncoveredPaths = coverage.uncoveredPaths || {};
+    if (coverage.uncovered.length) {
+      lines.push('', '| Uncovered capability | Changed paths |', '| --- | --- |');
+      for (const capability of coverage.uncovered) {
+        lines.push(`| ${cell(capability)} | ${cell((uncoveredPaths[capability] || []).map((path) => `\`${path}\``).join(', ') || 'unknown')} |`);
+      }
+    }
   }
   return `${lines.join('\n')}\n`;
 };

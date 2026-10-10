@@ -2,8 +2,9 @@
 const { defineConfig } = require('@playwright/test');
 const baseConfig = require('../../../playwright.config.js');
 
-// Promotion-only checks (docs/internal/WEB_PERIODIC_AUDIT.md). No PR or dev
-// workflow runs this configuration, and the shared configurations match
+// Promotion-only checks (docs/internal/WEB_PERIODIC_AUDIT.md). Only the
+// release-tier `Tests` dispatch (`Promotion audit / random-walk`) runs this
+// configuration; PR and push CI do not, and the shared configurations match
 // `.playwright.spec.js`, which `.promotion.spec.js` is not.
 module.exports = defineConfig({
   ...baseConfig,

@@ -63,9 +63,11 @@ procedure and the checklist. The admission rules for a `PROMOTION` stay in
    investigate a finding.
 2. Recipe checks. `Promotion audit / recipes` runs every CLI and Python recipe
    check, one scenario at a time, including the LOSATP recipes that the
-   `recipe` pytest marker skips. If the runner has no LOSAT runtime, the
-   summary says so; rerun the failed LOSATP recipes locally. The local
-   commands:
+   `recipe` pytest marker skips. The job first runs `gbdraw setup-losat`. If
+   the runner still has no LOSAT runtime, the job skips the scenarios with a
+   `comparison.losatp-*` capability in `docs/scenarios/manifest.json`, and the
+   summary lists them as run locally rather than as findings; run them locally.
+   The local commands:
 
    ```bash
    PYTHONPATH=$PWD python docs/recipes/run_cli_scenarios.py --all --check
@@ -129,7 +131,7 @@ procedure and the checklist. The admission rules for a `PROMOTION` stay in
    promotion.
 6. The seeded live-vs-Generate random walk
    ([`live-generate-random-walk.promotion.spec.js`](../../tests/web/live-generate-random-walk.promotion.spec.js),
-   run by `tests/web/playwright/promotion.config.js`; no PR or dev workflow collects it).
+   run by `tests/web/playwright/promotion.config.js`; PR and push CI do not run it).
    `Promotion audit / random-walk` runs it with the default budget (20 steps on
    each of a Circular Result, a Linear Result, and a two-Result Circular
    batch) and the run ID as the seed, which its first step prints, so each

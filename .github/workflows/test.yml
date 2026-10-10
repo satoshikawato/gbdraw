@@ -1122,36 +1122,53 @@ jobs:
       - name: Set the audit evidence folder
         run: echo "GBDRAW_AUDIT_OUT=$RUNNER_TEMP/promotion-audit" >> "$GITHUB_ENV"
 
-      # The LOSATP recipes need the bundled LOSAT; without it their failures are
-      # rerun locally (the summary says so).
-      - name: Check the bundled LOSAT runtime
+      # The LOSATP recipes need a LOSAT runtime. A failed install leaves the
+      # job running: the LOSATP recipes are then listed to run locally.
+      - name: Install the pinned LOSAT release
+        run: gbdraw setup-losat || echo "::warning::gbdraw setup-losat failed; the LOSATP recipes run locally"
+
+      - name: Check the LOSAT runtime
         run: |
           mkdir -p "$GBDRAW_AUDIT_OUT"
-          if version="$(python -c 'import contextlib, subprocess
+          if found="$(python -c 'import contextlib
           from gbdraw.comparisons.losat_runtime import resolve_losat_runtime
           with contextlib.ExitStack() as stack:
               runtime = resolve_losat_runtime("losatp", stack=stack)
-              print(runtime.source, subprocess.run([runtime.executable, "--version"], capture_output=True, text=True, check=True).stdout.strip())' 2>&1)"; then
-            echo "available: $version" > "$GBDRAW_AUDIT_OUT/losat.txt"
+              print(runtime.source, runtime.executable)' 2>&1)"; then
+            echo "available: $found" > "$GBDRAW_AUDIT_OUT/losat.txt"
           else
-            echo "unavailable: $version" > "$GBDRAW_AUDIT_OUT/losat.txt"
+            echo "unavailable: $found" > "$GBDRAW_AUDIT_OUT/losat.txt"
           fi
           cat "$GBDRAW_AUDIT_OUT/losat.txt"
 
       # Every CLI and Python recipe, one at a time, so one failure does not hide
-      # the rest (run_*_scenarios.py --all stops at the first).
+      # the rest (run_*_scenarios.py --all stops at the first). Without a LOSAT
+      # runtime, the scenarios with a comparison.losatp-* capability in
+      # docs/scenarios/manifest.json are listed as skipped-run-locally.
       - name: Run every recipe check
         env:
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/docs/recipes
         run: |
           out="$GBDRAW_AUDIT_OUT/recipes"
           mkdir -p "$out"
+          skip=""
+          if ! grep -q '^available' "$GBDRAW_AUDIT_OUT/losat.txt"; then
+            skip="$(python -c 'import json
+          scenarios = json.load(open("docs/scenarios/manifest.json"))["scenarios"]
+          print(" ".join(item["id"] for item in scenarios if any(c.startswith("comparison.losatp-") for c in item["capabilities"])))')"
+          fi
           status=0
           for surface in cli python; do
             script="docs/recipes/run_${surface}_scenarios.py"
             ids="$(python -c 'import runpy, sys; print(" ".join(runpy.run_path(sys.argv[1])["SCENARIO_IDS"]))' "$script")"
             for id in $ids; do
-              if python "$script" --scenario "$id" --check > "$out/$id.log" 2>&1; then result=pass; else result=fail; status=1; fi
+              if [[ " $skip " == *" $id "* ]]; then
+                result=skipped-run-locally
+              elif python "$script" --scenario "$id" --check > "$out/$id.log" 2>&1; then
+                result=pass
+              else
+                result=fail; status=1
+              fi
               printf '%s\t%s\t%s\n' "$surface" "$id" "$result" | tee -a "$out/recipes-status.tsv"
             done
           done
@@ -1485,11 +1502,13 @@ jobs:
           path: ${{ runner.temp }}/audit-artifacts
 
       - name: Write the audit table to the run summary
+        shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node tools/audit/release-audit-summary.mjs "$RUNNER_TEMP/audit-artifacts" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Merge the journey contact sheets
+        if: always()
         run: |
           merged="$RUNNER_TEMP/journeys"
           mkdir -p "$merged"
@@ -1499,6 +1518,7 @@ jobs:
           node tools/audit/helpers/journey-evidence.cjs "$merged"
 
       - name: Upload the journey contact sheet
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: promotion-journeys-contact-sheet

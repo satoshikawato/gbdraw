@@ -22,10 +22,10 @@ const { createJourney, writeContactSheet } = require('./helpers/journey-evidence
 const repo = (path) => join(A.REPO_ROOT, path);
 const {
   CURRENT_SESSION_VERSION, assertOperationHealth, diffUserOwnedState, evaluateWithRetainedPromise,
-  generateAndWaitForResult, openApp, reveal, snapshotUserOwnedState
+  openApp, reveal, snapshotUserOwnedState
 } = A.helpers();
 const { expectLiveEqualsGenerate, semanticSnapshot, settleLive } = require(repo('tests/web/helpers/live-generate-parity.cjs'));
-const { renameRow } = require(repo('tests/web/helpers/live-generate-parity-steps.cjs'));
+const { colorLegendRow, generate, history, renameRow } = require(repo('tests/web/helpers/live-generate-parity-steps.cjs'));
 const { compareSvgFiles } = require(repo('tests/web/helpers/svg-semantic-compare.cjs'));
 
 // Journey -> the capabilities (tools/ci-impact-policy.mjs classifyChanges) it
@@ -62,20 +62,25 @@ const changedCapabilities = async () => {
     const [status, ...paths] = line.split('\t');
     return { status, paths };
   });
-  if (!changes.length) return { changed: [] };
+  if (!changes.length) return { changed: [], paths: {} };
   const { classifyChanges } = await import(pathToFileURL(repo('tools/ci-impact-policy.mjs')).href);
-  return { changed: [...classifyChanges(changes).capabilities] };
+  const classified = classifyChanges(changes);
+  const paths = {};
+  for (const { path, impact } of classified.paths) (paths[impact] ||= []).push(path);
+  return { changed: [...classified.capabilities], paths };
 };
 
 test.beforeAll(async () => {
-  const { changed, error } = await changedCapabilities();
+  const { changed, paths, error } = await changedCapabilities();
   const covered = new Set(Object.values(COVERAGE).flat());
+  const uncovered = error ? [] : changed.filter((capability) => !covered.has(capability) && !NOT_USER_FACING.includes(capability));
   const report = error
     ? { error }
     : {
       changed,
       covered: changed.filter((capability) => covered.has(capability)),
-      uncovered: changed.filter((capability) => !covered.has(capability) && !NOT_USER_FACING.includes(capability)),
+      uncovered,
+      uncoveredPaths: Object.fromEntries(uncovered.map((capability) => [capability, paths[capability] || []])),
       notUserFacing: changed.filter((capability) => NOT_USER_FACING.includes(capability)),
       coverage: COVERAGE
     };
@@ -84,7 +89,8 @@ test.beforeAll(async () => {
   console.log(error
     ? `user journeys: changed capabilities unknown: ${error}`
     : `user journeys: changed capabilities since origin/main: ${changed.join(', ') || 'none'}\n`
-      + `  uncovered (hand look with a time limit, or an Owner waiver): ${report.uncovered.join(', ') || 'none'}\n`
+      + `  uncovered (hand look with a time limit, or an Owner waiver): ${uncovered.join(', ') || 'none'}\n`
+      + uncovered.map((capability) => `    ${capability}: ${report.uncoveredPaths[capability].join(', ')}\n`).join('')
       + `  not user-facing: ${report.notUserFacing.join(', ') || 'none'}`);
 });
 
@@ -118,12 +124,6 @@ const displayedSvg = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
   return String(app.results?.[app.selectedResultIndex]?.content || '');
 });
-
-const generate = async (page) => {
-  const outcome = await generateAndWaitForResult(page);
-  await settleLive(page);
-  return { status: outcome.result?.status };
-};
 
 // The loaded preview, then Generate from the loaded draft: the two Results must
 // be the same drawing (the Gallery publication parity comparison).
@@ -250,11 +250,6 @@ const closePopup = async (page) => {
 
 const legendCaptions = (page) => page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => String(entry.caption || '')));
 
-const historyStep = async (page, name) => {
-  await evaluateWithRetainedPromise(page, (step) => window.__GBDRAW_HISTORY__[step](), name);
-  await settleLive(page);
-};
-
 const historyDepth = (page) => page.evaluate(() => ({
   undo: window.__GBDRAW_HISTORY__.getUndoCount(),
   redo: window.__GBDRAW_HISTORY__.getRedoCount()
@@ -275,6 +270,10 @@ const showMode = async (page, mode) => {
 };
 
 const pairwiseMatches = (svg) => (svg.match(/data-gbdraw-pairwise-match-id=/g) || []).length;
+// The data-identity of each drawn comparison match.
+const matchIdentities = (svg) => (svg.match(/<[^>]*data-gbdraw-pairwise-match-id=[^>]*>/g) || [])
+  .map((tag) => Number(tag.match(/data-identity="([^"]*)"/)?.[1]))
+  .filter(Number.isFinite);
 
 // J1 and J7: upload, Generate with the button, and every export. At phone width
 // each step also checks the controls it uses are reachable and nothing overflows.
@@ -476,10 +475,7 @@ journey('J4', 'Legend editing and History', 15, async ({ page, steps }) => {
   };
   const edits = [
     ['rename the row tRNA to "transfer RNA"', () => renameRow(page, 'tRNA', 'transfer RNA')],
-    ['color the row rRNA #7b2cbf', async () => {
-      const index = await rowIndex('rRNA');
-      await page.evaluate((row) => window.__GBDRAW_APP__.updateLegendEntryColor(row, '#7b2cbf'), index);
-    }],
+    ['color the row rRNA #7b2cbf', () => colorLegendRow(page, 'rRNA', '#7b2cbf')],
     ['stroke the row CDS #e63946, width 2', async () => {
       const index = await rowIndex('CDS');
       await page.evaluate((row) => window.__GBDRAW_APP__.setLegendEntryStrokeColorValue(row, '#e63946'), index);
@@ -504,7 +500,7 @@ journey('J4', 'Legend editing and History', 15, async ({ page, steps }) => {
     end = await shown();
     let undone = 0;
     while ((await historyDepth(page)).undo > floor) {
-      await historyStep(page, 'undo');
+      await history(page, 'undo');
       undone += 1;
     }
     const back = await shown();
@@ -515,7 +511,7 @@ journey('J4', 'Legend editing and History', 15, async ({ page, steps }) => {
   await steps.step('Redo every step: the drawing equals the end', async () => {
     let redone = 0;
     while ((await historyDepth(page)).redo > 0) {
-      await historyStep(page, 'redo');
+      await history(page, 'redo');
       redone += 1;
     }
     const forward = await shown();
@@ -617,28 +613,40 @@ journey('J6', 'Comparisons', 20, async ({ page, steps, dir }) => {
     expect(before, 'drawn comparison matches').toBeGreaterThan(0);
     return { ...outcome, matches: before };
   }, { limitMs: 600_000 });
-  // Minimum identity applies at Generate, not as a live edit, so the check is
-  // that Generate succeeds and draws no more matches; then the shown Result
-  // equals the next Generate.
-  await steps.step('raise Minimum identity, Generate', async () => {
-    const current = Number(await page.evaluate(() => window.__GBDRAW_APP__.adv.identity)) || 0;
-    const target = Math.min(95, Math.max(50, current + 10));
-    const input = page.getByLabel('Linear comparison minimum identity', { exact: true });
-    await reveal(input).catch(() => {});
-    let via = 'control';
-    if (await input.isVisible()) {
-      await input.fill(String(target));
-      await input.press('Tab');
-    } else {
-      via = 'app (the control is not shown for this Session)';
-      await page.evaluate((value) => { window.__GBDRAW_APP__.adv.identity = value; }, target);
-    }
+  // Minimum identity is a Generate-time setting. No live-generate-parity spec
+  // pins a comparison setting, and docs/REFERENCE/web-app.md ("The operation
+  // labels below state when each kind of edit reaches the Result") lists no
+  // comparison filter under Live edit: a setting outside that row stays in the
+  // settings draft and "the Result keeps its applied settings" until the next
+  // successful Generate. So the edit must leave the shown Result unchanged, and
+  // Generate must apply it: a threshold above the lowest drawn identity removes
+  // at least one match.
+  let edited;
+  await steps.step('raise Minimum identity with its control: the shown Result keeps its applied settings', async () => {
+    const svg = await displayedSvg(page);
+    const identities = matchIdentities(svg).sort((left, right) => left - right);
+    expect(identities.length, 'drawn matches with an identity').toBe(before);
+    const median = identities[Math.floor(identities.length / 2)];
+    const target = Math.ceil(median) > identities[0] ? Math.ceil(median) : Math.floor(identities[0]) + 1;
+    const current = Number(await page.evaluate(() => window.__GBDRAW_APP__.adv.identity));
+    const shownBefore = await semanticSnapshot(page);
+    const input = await reveal(page.getByLabel('Linear comparison minimum identity', { exact: true }));
+    await expect(input, 'the Minimum identity control is reachable').toBeVisible();
+    await input.fill(String(target));
+    await input.press('Tab');
     await settleLive(page);
     expect(Number(await page.evaluate(() => window.__GBDRAW_APP__.adv.identity))).toBe(target);
-    const outcome = await generate(page);
+    expect(pairwiseMatches(await displayedSvg(page)), 'drawn matches before Generate').toBe(before);
+    expect(await semanticSnapshot(page), 'the shown Result before Generate').toEqual(shownBefore);
+    const removable = identities.filter((value) => value < target).length;
+    edited = { target, removable };
+    return { identity: [current, target], lowestDrawn: identities[0], removable };
+  }, { limitMs: 120_000 });
+  await steps.step('Generate applies Minimum identity', async () => {
+    await generate(page);
     const after = pairwiseMatches(await displayedSvg(page));
-    expect(after, `matches at minimum identity ${target} (was ${current})`).toBeLessThanOrEqual(before);
-    return { ...outcome, identity: [current, target], via, matches: [before, after] };
+    expect(after, `matches at minimum identity ${edited.target} (was ${before}; ${edited.removable} drawn below it)`).toBeLessThan(before);
+    return { matches: [before, after] };
   }, { limitMs: 600_000 });
   await steps.step('shown Result = Generate', () => expectLiveEqualsGenerate(page, { label: 'after the Minimum identity Generate' })
     .then(({ tolerated }) => ({ tolerated: tolerated.length })), { limitMs: 600_000 });
