@@ -23,7 +23,12 @@ write-up of a release.
   (OV-401, OV-412). A `hash=` selector (color, label, and visibility rules,
   annotation targets and tables, Feature Edits) now names that source-record
   hash on every record; before, rules matched the hash after the crop or
-  reverse complement.
+  reverse complement. Loading, replaying (`--session`), or upgrading a Session
+  saved before 0.14.0 renames such `hash=` values on cropped or
+  reverse-complemented records to the source-record hash; the Web app and the
+  CLI report the ones that match no drawn feature.
+- Sessions: a **This feature only** color that 0.13.0 saved on a multi-record
+  Linear diagram colors its feature again after Load and Generate (OV-416).
 - Gallery: the aminoglycoside BGC example draws its arrows with **Shaft Width
   Ratio** 0.6 and aligns its records on similarity group og_6 (neoU of
   BGC0000709) instead of og_1. Its tutorial adds the **Features › Arrow Geometry

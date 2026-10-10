@@ -64,13 +64,31 @@ the features they name:
   side's mode. A Main placement, which reached requests of both modes, goes to
   both slices.
 - An annotation target `hash=<hash>` of a Session 40–44 moves to a
-  `featureIdentity` target in the Session's mode only when its record is drawn
-  without a crop, reverse complement, or rotation and the hash names exactly
-  one feature of the saved catalog, in that record. The Web app reports how
-  many moved, and every other target loads unchanged.
+  `featureIdentity` target in the Session's mode when the hash names exactly
+  one feature in its record: one feature of the saved catalog on a record drawn
+  without a crop, reverse complement, or rotation, or one feature the saved
+  diagram drew with that hash on a record drawn with one. The Web app reports
+  how many moved, and every other target loads unchanged except for the hash
+  change below.
+- Since 0.14.0, `hash=` names a feature by its hash in its source record. A
+  Session 44 or older matched it against the drawn feature, so on a cropped or
+  reverse-complemented record its specific color rules, Feature visibility
+  rules, label override rows, and `hash=` annotation targets hold drawn hashes
+  (release 0.13.0 wrote the rendered ID, with its `_record_<n>` suffix). Load,
+  `--session` replay, a CLI re-save, and `upgrade_session_document()` give each
+  such value the source hash of the features the saved diagram drew with it,
+  through the saved catalog or the sources read again. A value that names no
+  drawn feature is kept, so it now names the feature with that source hash, if
+  any; the Web app and the CLI report how many. The CLI does not read the
+  sources of a Session 27–30 again, so its re-save keeps such rules as saved
+  and reports them.
 - A catalog of schema 3 or 4 reads as schema 5 without selector values until
   the next Generate. A feature whose rendered ID carries its source hash was
   drawn with its source coordinates, so its source values serve until then.
+
+A CLI Circular batch or grid Session stores a cropped or reverse-complemented
+record as drawn, so its `--session` replay gives those features the hashes of
+the drawn copy, not of the original source record.
 
 In a Session of any version, the Web app reads a Legend entry color with the
 [Default colors](input-formats-and-tsv-schemas.md#styling-tables) forms. An

@@ -178,10 +178,12 @@ or the CLI's `--annotation_table` option.
 
 The download preserves effective row targets and styles, including explicit
 no-fill, unique record IDs, and one-based `#N` record references. The table has
-no selector for a source feature, so an annotation made from **Selected
-features** is written as the current Result draws it: `record=#<position>` and
-`feature_selector=hash=<drawn hash>`. That row names the same feature only while
-the crop, orientation, and record order stay as drawn, and the download says so.
+no selector for a source record, so an annotation made from **Selected
+features** is written with the record position the current Result draws:
+`record=#<position>` and `feature_selector=hash=<hash>`, the feature's hash in
+its source record. That row names the same feature after a crop or reverse
+complement, but only while the record order stays as drawn, and the download
+says so.
 If the current Result does not draw the feature, the annotation is not written
 and the download says how many. A blank `fill`
 cell in a styled row means no fill; omitting the column keeps the Web import
@@ -269,6 +271,10 @@ Retry, Revert and Save/Generate/Export behavior.
 
 Selector qualifiers may also use the documented synthetic keys `location`,
 `record_location`, and `hash` where that surface supports exact feature identity.
+`hash` is the feature's hash in its source record (its biological feature ID
+without the `~<n>` suffix), so it names the same feature on a cropped or
+reverse-complemented record; `location` and `record_location` are the drawn
+coordinates.
 Visibility `action` is `show`, `off`,
 or `exclude_matching`.
 
