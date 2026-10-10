@@ -226,3 +226,21 @@ test('a stored Legend entry color outside the Default colors domain is dropped a
   assert.match(alerts.at(-1), / Legend: entry "X" had a color the app does not accept and was dropped\.$/);
   assert.equal(alerts.at(-1).match(/Legend:/g).length, 1);
 });
+
+// OV-337: Load leaves a Linear row without a Depth file as the Session binds it
+// (`depth: null`), so Save writes it back unchanged. Load pads Depth rows to
+// the Depth track count only when a row holds a Depth file, as for Circular.
+test('Load and Save keep a Linear row without a Depth file as depth null (OV-337)', async () => {
+  resetDrawings();
+  state.mode.value = 'circular';
+  const gallery = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', import.meta.url), 'utf8'));
+  assert.equal((await load(gallery)).status, 'ok');
+  const first = await save('gallery round trip');
+  const rows = first.webFiles.bindings.linearSeqs;
+  assert.deepEqual(rows.map((row) => row.depth), [null]);
+  assert.equal(first.modes.linear.config.adv.depth_tracks.length, 1, 'the Linear drawing has a Depth series');
+  assert.equal((await load(first)).status, 'ok');
+  assert.deepEqual(state.linearSeqs.map((seq) => seq.depth), [null]);
+  const second = await save('gallery round trip again');
+  assert.deepEqual(second.webFiles.bindings.linearSeqs.map((row) => row.depth), rows.map((row) => row.depth));
+});
