@@ -33,7 +33,13 @@ from gbdraw.exceptions import GbdrawError
 from gbdraw.io.regions import parse_region_spec
 from gbdraw.linear import linear_main
 
-_SUFFIX_RE = re.compile(r"(__instance_.*|_record_\d+)+$")
+_RECORD_SUFFIX_RE = re.compile(r"_record_\d+$")
+
+
+def _hash_base(svg_id: str) -> str:
+    """Strip the ``_record_<n>`` and ``__instance_...`` suffixes (gbdraw/svg/ids.py)."""
+
+    return _RECORD_SUFFIX_RE.sub("", svg_id.split("__instance_", 1)[0])
 
 
 def _write_records(tmp_path: Path) -> list[Path]:
@@ -144,9 +150,9 @@ def test_transformed_record_draws_source_feature_hash(tmp_path: Path, case: str)
     for row in rows:
         expected = stable[(row["recordKey"], row["biologicalFeatureId"])]
         # The handle is the source hash plus the record/instance suffixes.
-        assert _SUFFIX_RE.sub("", row["svgId"]) == expected
+        assert _hash_base(row["svgId"]) == expected
         element = plain_elements[row["svgId"]]
-        assert _SUFFIX_RE.sub("", element.get("data-gbdraw-feature-id")) == expected
+        assert _hash_base(element.get("data-gbdraw-feature-id")) == expected
         # OV-412: the plain SVG (the web app's Result SVG) already writes the
         # stable ID that the interactive export writes.
         assert element.get("data-gbdraw-stable-feature-id") == expected
