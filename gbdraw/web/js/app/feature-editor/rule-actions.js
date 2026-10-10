@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { DrawingState, LegendEntry } from '../../state.js' */
+/** @import { PythonLegendKey } from '../../services/legend-svg.js' */
 import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { runWhenPrepared } from '../rule-matching.js';
@@ -526,11 +527,10 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     return normalizeCaption(getIndividualFeatureLabel(feat));
   };
 
-  // The rules a legend row draws; editing the row edits them (N-06).
-  const getLegendRowRules = (caption) => {
-    const drawing = state.activeDrawing();
-    return legendRowRules(caption, displayedLegendRowContext(state, drawing));
-  };
+  // The rules a legend row draws, by its Python key (`legendEntryKey`);
+  // editing the row edits them (N-06).
+  /** @param {PythonLegendKey} key */
+  const getLegendRowRules = (key) => legendRowRules(key, displayedLegendRowContext(state, state.activeDrawing()));
 
   // Resolve the effective legend item label used by current SVG coloring
   // priority: a rule's feature belongs to the row Generate draws for it (N-06).

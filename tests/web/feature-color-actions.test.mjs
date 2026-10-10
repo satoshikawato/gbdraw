@@ -954,6 +954,13 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   assert.deepEqual(onRulePlan.operationsByResult[0].legendRenames.map(({ from, to, allowMissing }) => [from, to, allowMissing]),
     [['GC content', 'Zeta', true]]);
   assert.deepEqual(onRulePlan.operationsByResult[0].legendFills, []);
+  // OV-294 residual: the renamed row's rules are read by its Python key, not
+  // by the caption it shows, so renaming it again renames the row and leaves
+  // the rule whose caption it shows alone.
+  await onRule.renameActions.renameLegendEntry(1, 'GC percent');
+  assert.deepEqual(onRule.committed, [], 'no rule commit');
+  assert.deepEqual(onRule.stateLegendEntries.value.map(({ caption, originalCaption }) => [caption, originalCaption]),
+    [['CDS', 'CDS'], ['GC percent', 'GC content']]);
 
   // PV-04 (PD-OI-061 amended, OV-62): rows that draw features of one same type
   // ask Merge, Suffix, or Cancel before any rule commit. Any other pair, with

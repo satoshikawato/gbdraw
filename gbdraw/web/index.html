@@ -6876,7 +6876,7 @@
                                 </div>
                                 <ul aria-labelledby="deleted-legend-items-label" class="space-y-1">
                                     <li v-for="(entry, idx) in deletedLegendEntries" :key="`deleted-${idx}-${entry.caption}`" class="flex items-center gap-2 p-1.5 bg-slate-50 rounded border border-slate-100">
-                                        <div class="w-4 h-4 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: entry.color }" :title="entry.color"></div>
+                                        <div class="w-4 h-4 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: deletedLegendEntryColor(entry) }" :title="deletedLegendEntryColor(entry)"></div>
                                         <span class="flex-1 text-xs text-slate-500 truncate min-w-0">{{ entry.caption }}</span>
                                         <button :aria-label="`Restore ${entry.caption}`" @click="restoreDeletedLegendEntry(idx)" class="text-[10px] text-blue-600 hover:text-blue-800 shrink-0 px-1" title="Restore this item" :disabled="!semanticMutationAvailable">Restore</button>
                                     </li>

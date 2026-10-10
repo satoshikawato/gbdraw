@@ -834,17 +834,25 @@ export const sessionOperationAvailability = (
 
 /** @typedef {'circular' | 'linear'} DiagramMode */
 
-/** @import { PythonLegendKey, RenderedFeatureId, SwatchColor } from './services/legend-svg.js' */
+/** @import { PythonLegendKey, RenderedFeatureId } from './services/legend-svg.js' */
 /** @typedef {string & { readonly __brand: 'LegendCaption' }} LegendCaption The caption a Legend row shows, which a rename writes. */
 /**
+ * The color a Legend row records, never its identity (OV-288): one the user
+ * set (a Legend color, an editor row's color, the color of a rule's row), or,
+ * for a row the palette colors, the swatch Python drew at the last Generate,
+ * which no palette, Default colors or Reset edit refreshes. A row shows
+ * `displayedLegendRowColors` (app/candidate-render.js; OV-282, D-26).
+ * @typedef {string & { readonly __brand: 'RecordedLegendColor' }} RecordedLegendColor
+ */
+/**
  * A row of a drawing's Legend list. Its identity is Python's key
- * (`originalCaption`; an editor row's own caption); the caption and the swatch
- * color are display values their writers own (rename, Legend color), never a
- * row's identity or the features it reaches (OV-288).
+ * (`originalCaption`; an editor row's own caption); the caption and the
+ * recorded color are display values their writers own (rename, Legend color),
+ * never a row's identity or the features it reaches (OV-288).
  * @typedef {object} LegendEntry
  * @property {LegendCaption} caption
  * @property {PythonLegendKey} originalCaption
- * @property {SwatchColor} color
+ * @property {RecordedLegendColor} color
  * @property {number} xPos
  * @property {number} yPos
  * @property {RenderedFeatureId[]} featureIds The features the row lists (older Sessions); empty: Python's row decides.

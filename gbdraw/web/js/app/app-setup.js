@@ -5,6 +5,7 @@
 /** @import { EditorPaintState } from './result-paint-record.js' */
 /** @import { FeatureEditorOptions } from './feature-editor.js' */
 /** @import { ColorActionsRuleActions } from './feature-editor/color-actions.js' */
+/** @import { LegendRowColorOf } from './candidate-render.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { AnnotationCatalogSource } from './annotations/record-catalog.js' */
 /** @import { LegacyResultSvgTransform } from '../services/config.js' */
@@ -14,7 +15,7 @@
 /** @import { LinearComparisonPlan } from '../services/linear-comparisons.js' */
 /** @typedef {{ opening: Readonly<ArtifactSlot> | null, stashed: Readonly<ArtifactSlot> | null }} LoadedArtifactSlots */
 import { createRulePreparation } from './rule-matching.js';
-import { compileDirectEditorMutationPlan, draftLegendPanelColors, editorPaintDomains, LIVE_EDIT_DOMAINS } from './candidate-render.js';
+import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS } from './candidate-render.js';
 import { createResultPaintRecord } from './result-paint-record.js';
 import {
   countUnresolvedFeatureEdits, displayedLegendRowContext, featureDrawnContext, removeUnresolvedFeatureEdits,
@@ -1448,6 +1449,7 @@ export const createAppSetup = () => {
     commitHistoryTransaction: history.commit,
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
     readActiveResultIdentity: () => previewRuntime.getActiveRuntime()?.resultIdentity,
+    readShownLegendColor: (entry) => legendEntryColor(entry),
     showLegendStructure: () => showEditorIntent({ domains: LIVE_EDIT_DOMAINS.legendStructure })
   });
   // R13: the palette watcher reacts through the root's palette and rules
@@ -1462,20 +1464,15 @@ export const createAppSetup = () => {
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
     projectPaletteAndRules: (...args) => paletteRulePorts.projectPaletteAndRules(...args)
   });
-  // OV-276: a Legend panel row shows the color the palette gives its swatch on
-  // the displayed Result (the live compile's, by Python's rows), derived here
-  // and never written into the rows. A new Result brings new Python rows.
-  const paletteLegendRowColors = computed(() => {
-    const drawing = state.activeDrawing();
-    return svgContent.value ? draftLegendPanelColors({
-      ...displayedLegendRowContext(state, drawing), originalLegendOrder: originalLegendOrder.value,
-      legendEntries: drawing.legendEntries.value, deletedLegendEntries: drawing.deletedLegendEntries.value,
-      dormantLegendEntries: drawing.dormantLegendEntries.value, legendColorOverrides: drawing.legendColorOverrides,
-      paletteColors: appliedFeatureColors(state)
-    }) : new Map();
-  });
-  /** @param {{ caption?: string, color?: string } | null | undefined} entry */
-  const legendEntryColor = (entry) => paletteLegendRowColors.value.get(entry?.caption || '') || entry?.color;
+  // OV-276, OV-282 (D-26): a Legend panel row shows the color the palette
+  // gives its swatch on the displayed Result (the live compile's, by Python's
+  // rows), derived and never written into the rows. A new Result brings new
+  // Python rows.
+  const legendRowColors = computed(() => displayedLegendRowColors(state, state.activeDrawing()));
+  /** @param {Parameters<LegendRowColorOf>[0]} entry */
+  const legendEntryColor = (entry) => legendRowColors.value.listed(entry);
+  /** @param {Parameters<LegendRowColorOf>[0]} entry */
+  const deletedLegendEntryColor = (entry) => legendRowColors.value.deleted(entry);
   // The palette and the specific-color rules on the mounted Result (R3): the
   // one call of their projection, shared by `projectMountedEditorIntent`, the
   // palette watcher, and a rule commit. It prepares the rule matches first
@@ -6288,6 +6285,7 @@ export const createAppSetup = () => {
     openFeatureEditorFromList,
     legendEntries: drawingMember('legendEntries'),
     legendEntryColor,
+    deletedLegendEntryColor,
     updateLegendEntryColor: updateLegendEntryColorShown,
     renameLegendEntry,
     // A Legend row delete is one History step of the intent, which Undo and

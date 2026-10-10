@@ -51,6 +51,9 @@ const entriesInOrder = (entries, captions, { keepFollowed = false } = {}) => {
  * @property {Record<string, any>} state App state (state.js; not yet typed).
  * @property {(() => string | undefined) | null} [readActiveResultIdentity]
  *   The preview owner's runtime identity of the mounted Result.
+ * @property {import('../candidate-render.js').LegendRowColorOf} readShownLegendColor
+ *   The color a listed row shows (`displayedLegendRowColors`, OV-282), read
+ *   from the composition root's derivation the Legend panel shows.
  */
 
 // The Legend entry owner (U3a, R1): its writers edit the drawing's Legend
@@ -60,7 +63,8 @@ const entriesInOrder = (entries, captions, { keepFollowed = false } = {}) => {
 /** @param {LegendEntryActionsOptions} options */
 export const createLegendEntryActions = ({
   state,
-  readActiveResultIdentity = null
+  readActiveResultIdentity = null,
+  readShownLegendColor
 }) => {
   const {
     results,
@@ -511,7 +515,9 @@ export const createLegendEntryActions = ({
   };
 
   // A Legend row color writes the editor intent only; the composition root
-  // shows it on the Result through the executor (`editEditorIntent`).
+  // shows it on the Result through the executor (`editEditorIntent`). A color
+  // the row already shows is no edit (OV-282: the palette's, for a row the
+  // palette colors).
   /** @param {number} idx @param {string} newColor */
   const updateLegendEntryColor = (idx, newColor) => {
     const drawing = state.activeDrawing();
@@ -519,7 +525,7 @@ export const createLegendEntryActions = ({
     if (sessionBusy) return sessionBusy;
     const entry = drawing.legendEntries.value[idx];
     if (!entry?.caption) return false;
-    if (normalizedColor(entry.color) === normalizedColor(newColor)) return false;
+    if (normalizedColor(readShownLegendColor(entry)) === normalizedColor(newColor)) return false;
     entry.color = newColor;
     drawing.legendColorOverrides[entry.caption] = newColor;
     return true;

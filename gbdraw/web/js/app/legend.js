@@ -27,6 +27,8 @@ import { displayedLegendRowContext } from '../services/feature-visibility.js';
  *   The preview owner's commit of an edit to the displayed Result (R1, R13).
  * @property {(() => string | undefined) | null} [readActiveResultIdentity]
  *   The preview owner's runtime identity of the mounted Result.
+ * @property {import('./candidate-render.js').LegendRowColorOf} readShownLegendColor
+ *   The root's color of a listed row as the Legend panel shows it (OV-282).
  * @property {() => unknown} showLegendStructure The root's show of the Legend structure intent (R1).
  */
 
@@ -39,10 +41,11 @@ export const createLegendManager = ({
   // R13: the preview owner's ports; the Legend owners never hold it.
   commitActiveResultEdit = null,
   readActiveResultIdentity = null,
+  readShownLegendColor,
   showLegendStructure
 }) => {
   const layoutActions = createLegendLayoutActions();
-  const entryActions = createLegendEntryActions({ state, readActiveResultIdentity });
+  const entryActions = createLegendEntryActions({ state, readActiveResultIdentity, readShownLegendColor });
   const sortActions = createLegendSortActions({ state, showLegendStructure });
   const strokeActions = createLegendStrokeActions({ state });
   // The rules a row draws, by its key among Python's rows of the displayed

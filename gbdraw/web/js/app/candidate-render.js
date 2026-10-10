@@ -3,16 +3,17 @@
 /** @import { LegendStrokeOperation, SvgAdmissionRuntime, SvgResultTransform } from '../services/svg-result-ingestion.js' */
 /** @import { PythonLegendKey, PythonLegendRow, RenderedFeatureId, SwatchColor } from '../services/legend-svg.js' */
 /** @import { LegendRowContext, SpecificColorRule } from '../services/specific-color-rules.js' */
-/** @import { LegendCaption } from '../state.js' */
+/** @import { DrawingState, LegendCaption, LegendEntry, RecordedLegendColor } from '../state.js' */
+/** @import { DisplayedLegendState } from '../services/feature-visibility.js' */
 /** @import { AddressedFeature } from '../services/feature-override-identity.js' */
-import { normalizeDefaultColor, resolveColorToHex } from '../utils/color-utils.js';
-import { defaultLegendCaptionOrder, isLegendOrderEdited } from '../services/legend-svg.js';
+import { appliedFeatureColors, normalizeDefaultColor, resolveColorToHex } from '../utils/color-utils.js';
+import { defaultLegendCaptionOrder, isLegendOrderEdited, legendEntryKey } from '../services/legend-svg.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { biologicalFeatureKey } from '../services/feature-catalog.js';
 import { ruleMatcher } from '../services/rule-matchers.js';
 import { generatedLegendRow, ruleLegendCaptions } from '../services/specific-color-rules.js';
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
-import { resolveFeatureDrawn } from '../services/feature-visibility.js';
+import { displayedLegendRowContext, resolveFeatureDrawn } from '../services/feature-visibility.js';
 import {
   admitCurrentGeneratedResults
 } from '../services/svg-result-ingestion.js';
@@ -255,31 +256,72 @@ export const draftLegendRows = ({
   return { currentEntries, originalCaptions, deletedCaptions, dormantEntries, styledRow };
 };
 
-// OV-276: the swatch color of each listed Legend panel row that the palette
-// colors, by the row's caption: a row of Python's without a Legend color of
-// its own that no rule draws takes the color the live compile's
-// `legendFills` stage gives its Python key (`draftLegendRowColors`). The
-// other rows keep their listed color. Nothing writes it into the rows, which
-// are inputs of the rule preparation.
+// OV-276, OV-282 (D-26): the swatch color of each Legend panel row that the
+// palette colors, listed by its caption and deleted by its Python key: a row
+// of Python's without a Legend color of its own that no rule draws takes the
+// color the live compile's `legendFills` stage gives its Python key
+// (`draftLegendRowColors`). The other rows keep the color they record.
+// Nothing writes it into the rows, which are inputs of the rule preparation.
 /**
  * @param {Pick<EditorPlanOptions, 'legendEntries' | 'deletedLegendEntries' | 'dormantLegendEntries' | 'originalLegendOrder'>
  *   & { legendColorOverrides: Readonly<Record<string, unknown>>, rules: readonly Partial<SpecificColorRule>[],
  *   pythonRows: ReadonlyMap<PythonLegendKey, PythonLegendRow>, features?: LegendRowContext['features'], paletteColors: Record<string, string> }} draft
- * @returns {Map<string, SwatchColor>}
+ * @returns {{ listed: Map<string, SwatchColor>, deleted: Map<PythonLegendKey, SwatchColor> }}
  */
 export const draftLegendPanelColors = ({ legendColorOverrides, rules, pythonRows, features, paletteColors, ...legend }) => {
   const rows = draftLegendRows(legend);
   const draft = draftLegendRowColors({ rules, pythonRows, features, originalLegendOrder: [...rows.originalCaptions], paletteColors });
   const ruleRows = new Set(draft.ruleCaptions);
+  /** @param {string} caption @param {PythonLegendKey} key */
+  const paletteColor = (caption, key) => (
+    hasOwn(legendColorOverrides, caption) || !rows.originalCaptions.has(key) || ruleRows.has(key) ? null : draft.colorOf(key)
+  );
   /** @type {Map<string, SwatchColor>} */
-  const colors = new Map();
+  const listed = new Map();
   rows.currentEntries.forEach(({ caption }) => {
-    const row = hasOwn(legendColorOverrides, caption) ? null : rows.styledRow(caption);
-    if (!row || !rows.originalCaptions.has(row.targetCaption) || ruleRows.has(row.targetCaption)) return;
-    const color = draft.colorOf(row.targetCaption);
-    if (color) colors.set(caption, color);
+    const row = rows.styledRow(caption);
+    const color = row ? paletteColor(caption, row.targetCaption) : null;
+    if (color) listed.set(caption, color);
   });
-  return colors;
+  /** @type {Map<PythonLegendKey, SwatchColor>} */
+  const deleted = new Map();
+  normalizedLegendEntries(legend.deletedLegendEntries || []).forEach((entry) => {
+    const key = legendEntryKey(entry);
+    const color = paletteColor(entry.caption, key);
+    if (color) deleted.set(key, color);
+  });
+  return { listed, deleted };
+};
+
+/**
+ * The color a Legend row shows: the palette's swatch color, else the color the row records.
+ * @typedef {(entry: Pick<LegendEntry, 'caption' | 'originalCaption'> & { color?: RecordedLegendColor } | null | undefined)
+ *   => SwatchColor | RecordedLegendColor | undefined} LegendRowColorOf
+ */
+
+// OV-282 (D-26): the one reader of the color a Legend row of the displayed
+// Result shows, listed or deleted: the palette's for a row the palette colors
+// (`draftLegendPanelColors`), else the color the row records. The Legend
+// panel, "Use existing color" and the rename and color requests read it; a
+// row's recorded color is never refreshed from the palette.
+/**
+ * @param {DisplayedLegendState & Parameters<typeof appliedFeatureColors>[0] & { svgContent?: { value?: unknown } }} state
+ * @param {Parameters<typeof displayedLegendRowContext>[1] & Pick<DrawingState,
+ *   'legendEntries' | 'deletedLegendEntries' | 'dormantLegendEntries' | 'legendColorOverrides'>} drawing
+ * @returns {{ listed: LegendRowColorOf, deleted: LegendRowColorOf }}
+ */
+export const displayedLegendRowColors = (state, drawing) => {
+  const context = state.svgContent?.value ? displayedLegendRowContext(state, drawing) : null;
+  const colors = context ? draftLegendPanelColors({
+    ...context, originalLegendOrder: [...context.originalLegendOrder],
+    legendEntries: drawing.legendEntries.value, deletedLegendEntries: drawing.deletedLegendEntries.value,
+    dormantLegendEntries: drawing.dormantLegendEntries.value, legendColorOverrides: drawing.legendColorOverrides,
+    paletteColors: appliedFeatureColors(state)
+  }) : { listed: new Map(), deleted: new Map() };
+  return {
+    listed: (entry) => (entry ? colors.listed.get(String(entry.caption || '')) || entry.color : undefined),
+    deleted: (entry) => (entry ? colors.deleted.get(legendEntryKey(entry)) || entry.color : undefined)
+  };
 };
 
 // Python's fill of a feature type (gbdraw/features/colors.py

@@ -1,7 +1,7 @@
 // @ts-check
 /** @import { DrawingState, LegendEntry } from '../../state.js' */
 /** @import { LegendRowReach, PythonLegendKey, RenderedFeatureId } from '../../services/legend-svg.js' */
-import { draftLegendRowColors, draftLegendRows, LIVE_EDIT_DOMAINS, namedLegendCaption } from '../candidate-render.js';
+import { displayedLegendRowColors, draftLegendRowColors, draftLegendRows, LIVE_EDIT_DOMAINS, namedLegendCaption } from '../candidate-render.js';
 import { reportRuleRunFailure } from '../rule-matching.js';
 import { matchedRuleKeys, ruleKey, ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { appliedFeatureColors, resolveColorToHex } from '../../utils/color-utils.js';
@@ -37,7 +37,7 @@ import {
  * @property {(feature: Record<string, any>) => string} getIndividualFeatureLabel
  * @property {(feature: Record<string, any>) => { qual: string, val: string } | null} getFeatureQualifier
  * @property {(feature: Record<string, any>, label: string) => { feat: string, qual: string, val: string } | null} getLabelSpecificRule
- * @property {(caption: string) => Record<string, any>[]} getLegendRowRules
+ * @property {(key: PythonLegendKey) => Record<string, any>[]} getLegendRowRules
  * @property {(rules: Record<string, any>[], commit: () => any) => any} runWithRuleMatches
  *   Runs an action once the color rule matches of `rules` are prepared: the rule owner prepares the rules it builds.
  */
@@ -295,11 +295,24 @@ export const createFeatureColorActions = ({
   };
   /** @param {DrawingState} drawing @param {string} caption */
   const findLegendEntryByCaption = (drawing, caption) => entryByCaption(drawing.legendEntries.value, caption);
+  // OV-282 (D-26): the color a listed row shows, the palette's for a row the
+  // palette colors; never the color the row recorded at the last Generate.
+  /** @param {DrawingState} drawing @param {LegendEntry | null} entry */
+  const listedRowColor = (drawing, entry) => displayedLegendRowColors(state, drawing).listed(entry);
   // R15-3 (OV-285): the deleted row a rename's caption names. The caption only
   // detects the conflict; the row is its Python key (an editor row's own
   // caption), which the composition root's Restore acts on.
   /** @param {DrawingState} drawing @param {string} caption */
   const findDeletedLegendEntryByCaption = (drawing, caption) => entryByCaption(drawing.deletedLegendEntries.value, caption);
+  // The Python key of the row a caption shows (`legendEntryKey`): a renamed
+  // row's shown caption is not its key, so the rules a row draws are read by
+  // its key, never by the caption (OV-294 residual). A caption no row shows
+  // is the key of a rule's row the Result does not list.
+  /** @param {DrawingState} drawing @param {string} caption @returns {PythonLegendKey} */
+  const rowKeyOf = (drawing, caption) => {
+    const entry = findLegendEntryByCaption(drawing, caption) || findDeletedLegendEntryByCaption(drawing, caption);
+    return entry ? legendEntryKey(entry) : /** @type {PythonLegendKey} */ (normalizeCaption(caption));
+  };
 
   /** @param {DrawingState} drawing */
   const findExistingCaptionColor = (drawing, feat, caption) => {
@@ -313,10 +326,11 @@ export const createFeatureColorActions = ({
     }
 
     const legendEntry = findLegendEntryByCaption(drawing, caption);
-    if (legendEntry?.color) {
+    const legendColor = listedRowColor(drawing, legendEntry);
+    if (legendEntry && legendColor) {
       return {
         caption: legendEntry.caption,
-        color: legendEntry.color,
+        color: legendColor,
         rule: null
       };
     }
@@ -479,7 +493,7 @@ export const createFeatureColorActions = ({
     if (!liveFeatureColorMatches(feature, color)) return false;
     if (!requireLegend) return true;
     const legendEntry = findLegendEntryByCaption(drawing, caption);
-    return Boolean(legendEntry && colorsMatch(legendEntry.color, color));
+    return Boolean(legendEntry && colorsMatch(listedRowColor(drawing, legendEntry), color));
   };
 
   const findCaptionKey = (store, caption) => {
@@ -825,7 +839,7 @@ export const createFeatureColorActions = ({
     const color = resolveColorToHex(request.finalColor || request.currentColor) || '#cccccc';
     if (!caption) return false;
     const features = (request.features || []).filter(Boolean);
-    const sourceRules = getLegendRowRules(oldCaption);
+    const sourceRules = getLegendRowRules(rowKeyOf(drawing, oldCaption));
     if (sourceRules.length || features.length) {
       const rules = request.sourceScope === 'group' && sourceRules.length
         ? drawing.manualSpecificRules.map(rule => sourceRules.includes(rule) ? { ...rule, cap: caption, color } : { ...rule })
@@ -873,16 +887,17 @@ export const createFeatureColorActions = ({
   /**
    * @param {{ oldCaption: string, newCaption: string, currentColor?: string, siblingCount?: number, [field: string]: unknown }} request
    * @param {LegendEntry} targetEntry
+   * @param {string} targetColor The color the target row shows.
    * @param {boolean | null} mergeAvailable
    * @param {PythonLegendKey | ''} deletedTargetKey The key of a deleted target row, else ''.
    */
-  const openLegendRenameTargetDialog = (request, targetEntry, mergeAvailable, deletedTargetKey) => {
+  const openLegendRenameTargetDialog = (request, targetEntry, targetColor, mergeAvailable, deletedTargetKey) => {
     legendRenameDialog.show = true;
     legendRenameDialog.mode = 'target';
     legendRenameDialog.oldCaption = request.oldCaption;
     legendRenameDialog.newCaption = request.newCaption;
     legendRenameDialog.targetCaption = targetEntry.caption;
-    legendRenameDialog.targetColor = targetEntry.color || '';
+    legendRenameDialog.targetColor = targetColor;
     legendRenameDialog.currentColor = request.currentColor || '';
     legendRenameDialog.siblingCount = request.siblingCount || 0;
     legendRenameDialog.mergeAvailable = mergeAvailable;
@@ -903,7 +918,7 @@ export const createFeatureColorActions = ({
 
     const currentColor =
       resolveColorToHex(request.currentColor) ||
-      (request.feat ? getCurrentFeatureFillColor(drawing, request.feat) : resolveColorToHex(findLegendEntryByCaption(drawing, oldCaption)?.color)) ||
+      (request.feat ? getCurrentFeatureFillColor(drawing, request.feat) : resolveColorToHex(listedRowColor(drawing, findLegendEntryByCaption(drawing, oldCaption)))) ||
       '#cccccc';
 
     let features = Array.isArray(request.features) ? request.features.filter(Boolean) : [];
@@ -943,8 +958,11 @@ export const createFeatureColorActions = ({
     const deletedTarget = listedTarget ? null : findDeletedLegendEntryByCaption(drawing, newCaption);
     const targetEntry = listedTarget || deletedTarget;
     const isDistinctTargetEntry = targetEntry && !captionsMatch(targetEntry.caption, oldCaption);
-    const ruleOwnedTarget = isDistinctTargetEntry && getLegendRowRules(targetEntry.caption).length > 0;
-    const featureOrRuleRename = features.length > 0 || getLegendRowRules(oldCaption).length > 0;
+    // OV-282: the color the target row shows, the palette's for a row the palette colors.
+    const targetColor = String((deletedTarget
+      ? displayedLegendRowColors(state, drawing).deleted(deletedTarget) : listedRowColor(drawing, listedTarget)) || '');
+    const ruleOwnedTarget = isDistinctTargetEntry && getLegendRowRules(legendEntryKey(targetEntry)).length > 0;
+    const featureOrRuleRename = features.length > 0 || getLegendRowRules(rowKeyOf(drawing, oldCaption)).length > 0;
     // OV-62 (PD-OI-061 amended): two rows merge only when each draws features of
     // one type and the type is the same. A row without features (GC content,
     // GC skew), rows of different types, and a row that spans several types
@@ -961,14 +979,14 @@ export const createFeatureColorActions = ({
     // A chosen Merge adopts the target's color, also once a Restore made a
     // rule-owned deleted target a listed one.
     if (featureOrRuleRename && request.targetResolution !== 'merge' && (!isDistinctTargetEntry
-      || (!deletedTarget && mergeAllowed && (ruleOwnedTarget || colorsMatch(targetEntry.color, currentColor))))) {
+      || (!deletedTarget && mergeAllowed && (ruleOwnedTarget || colorsMatch(targetColor, currentColor))))) {
       await applyLegendRenameRequest(drawing, { ...request, currentColor, features,
         finalCaption: newCaption, finalColor: currentColor });
       clearLegendRenameDialog(drawing);
       return;
     }
 
-    if (isDistinctTargetEntry && (deletedTarget || !mergeAllowed || !colorsMatch(targetEntry.color, currentColor))) {
+    if (isDistinctTargetEntry && (deletedTarget || !mergeAllowed || !colorsMatch(targetColor, currentColor))) {
       if (!request.targetResolution) {
         openLegendRenameTargetDialog(
           {
@@ -977,6 +995,7 @@ export const createFeatureColorActions = ({
             features
           },
           targetEntry,
+          targetColor,
           mergeAllowed,
           deletedTarget ? legendEntryKey(deletedTarget) : ''
         );
@@ -995,7 +1014,7 @@ export const createFeatureColorActions = ({
           currentColor,
           features,
           finalCaption: targetEntry.caption,
-          finalColor: targetEntry.color
+          finalColor: targetColor
         });
         clearLegendRenameDialog(drawing);
         return;
@@ -1015,9 +1034,9 @@ export const createFeatureColorActions = ({
     }
 
     const finalCaption =
-      isDistinctTargetEntry && colorsMatch(targetEntry.color, currentColor) ? targetEntry.caption : newCaption;
+      isDistinctTargetEntry && colorsMatch(targetColor, currentColor) ? targetEntry.caption : newCaption;
     const finalColor =
-      isDistinctTargetEntry && colorsMatch(targetEntry.color, currentColor) ? targetEntry.color : currentColor;
+      isDistinctTargetEntry && colorsMatch(targetColor, currentColor) ? targetColor : currentColor;
 
     await applyLegendRenameRequest(drawing, {
       ...request,
@@ -1067,7 +1086,7 @@ export const createFeatureColorActions = ({
    */
   const paletteRowType = (drawing, caption, features) => {
     const type = normalizeCaption(caption);
-    if (!features.every((feature) => feature?.type === type) || getLegendRowRules(type).length > 0) return null;
+    if (!features.every((feature) => feature?.type === type) || getLegendRowRules(rowKeyOf(drawing, type)).length > 0) return null;
     const matches = ruleMatcher(drawing.manualSpecificRules);
     return features.every((feature) => matches.matchesAny(feature) === false
       && !getFeatureOverride(drawing.featureColorOverrides, feature)) ? type : null;
@@ -1075,7 +1094,7 @@ export const createFeatureColorActions = ({
 
   /** @param {DrawingState} drawing */
   const applyColorToLegendSpecificRules = async (drawing, caption, color) => {
-    const rowRules = getLegendRowRules(caption);
+    const rowRules = getLegendRowRules(rowKeyOf(drawing, caption));
     const specificRules = rowRules.filter(rule => !isHashSpecificRule(rule));
     if (!specificRules.length) return false;
     const specificMatches = ruleMatcher(specificRules);
@@ -1246,11 +1265,12 @@ export const createFeatureColorActions = ({
       return;
     }
 
+    const shownColor = listedRowColor(drawing, entry);
     await continueLegendRenameRequest(drawing, {
       source: 'legend',
       oldCaption: normalizeCaption(entry.caption),
       newCaption: requestedCaption,
-      currentColor: resolveColorToHex(entry.color) || entry.color || '#cccccc',
+      currentColor: resolveColorToHex(shownColor) || shownColor || '#cccccc',
       features: getFeaturesForLegendCaption(entry.caption),
       sourceScope: getFeaturesForLegendCaption(entry.caption).length > 0 ? 'group' : 'manual'
     });
@@ -1280,10 +1300,6 @@ export const createFeatureColorActions = ({
         // The row's swatch follows the default color again (svg-styles.js).
         delete drawing.legendColorOverrides[defaultColorType];
         setDefaultColor(drawing, defaultColorType, color);
-        // OV-264: the Legend row takes the color in the same step, as a rule
-        // commit's Legend change does; its color feeds the rule captions.
-        drawing.legendEntries.value = drawing.legendEntries.value.map((entry) => (
-          captionsMatch(entry.caption, defaultColorType) ? { ...entry, color } : entry));
       } else if (!(await applyColorToLegendSpecificRules(drawing, targetLegendName, color))) {
         const siblings = findFeaturesWithSameLegendItem(feat, targetLegendName);
         await applyColorToFeatureGroup(drawing, [feat, ...siblings], targetLegendName, color);

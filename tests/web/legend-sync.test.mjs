@@ -238,7 +238,9 @@ const mockLegendEntry = (caption, color, x) => {
     commitActiveResultEdit: () => {
       dirtyMarks += 1;
       return true;
-    }
+    },
+    // The root's reader without a displayed Result: the row's recorded color.
+    readShownLegendColor: (entry) => entry?.color
   });
   // The layout owner lays the Legend out after a restore (zero shift).
   actions.setLegendGeometryChangedHandler(() => { layoutRefreshes += 1; });

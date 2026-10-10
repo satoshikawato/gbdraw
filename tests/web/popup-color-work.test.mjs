@@ -278,8 +278,9 @@ for (const queued of [false, true]) test(`Apply to all on a palette row sets the
     'history:buildIntent', 'history:signature'
   ]);
   assert.equal(setup_.state.currentColors.value.CDS, '#123456');
-  // OV-264: the Legend row takes the color in the same step.
-  assert.deepEqual(setup_.state.legendEntries.value, [{ caption: 'CDS', color: '#123456' }]);
+  // OV-282 (D-26): the step writes no Legend row; the row shows the default
+  // color through its one reader (`displayedLegendRowColors`).
+  assert.deepEqual(setup_.state.legendEntries.value, [{ caption: 'CDS', color: '#cccccc' }]);
   // The shown Result takes the color now; with a queued palette, the queued
   // colors take it too and the applied palette stays (Q1 B).
   assert.equal(setup_.state.appliedPaletteColors.value.CDS, '#123456');

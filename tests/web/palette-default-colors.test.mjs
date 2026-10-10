@@ -286,8 +286,27 @@ const legendPanelSetup = async ({ rules = [], cdsDrawn = '#AABBCC' } = {}) => {
 test('the Legend panel shows the palette color of the rows the compile colors', async () => {
   const { panel, compiled, entries } = await legendPanelSetup();
   assert.equal(compiled.colorOf('CDS'), '#123456');
-  assert.deepEqual([...panel], [['CDS', '#123456'], ['other tRNAs', '#333333']]);
+  assert.deepEqual([...panel.listed], [['CDS', '#123456'], ['other tRNAs', '#333333']]);
   assert.deepEqual(entries[0], { caption: 'CDS', color: '#AABBCC' }, 'the derivation writes no Legend row');
+});
+
+// OV-282 (D-26): a deleted row the palette colors shows the palette's color
+// in the Deleted items list, by its Python key; a deleted row with a Legend
+// color of its own and an editor row keep the color they record.
+test('the Deleted items list shows the palette color of a deleted palette row', async () => {
+  const { draftLegendPanelColors } = await import('../../gbdraw/web/js/app/candidate-render.js');
+  const panel = draftLegendPanelColors({
+    legendEntries: [{ caption: 'CDS', color: '#AABBCC' }],
+    deletedLegendEntries: [
+      { caption: 'tRNAs', originalCaption: 'other tRNAs', color: '#111111' },
+      { caption: 'rRNA', color: '#121212' }, { caption: 'Manual', color: '#010101' }
+    ],
+    originalLegendOrder: ['CDS', 'other tRNAs', 'rRNA'],
+    legendColorOverrides: { rRNA: '#121212' }, rules: [], pythonRows: new Map(),
+    paletteColors: { ...paletteOf('default'), CDS: '#123456', tRNA: '#333333', rRNA: '#444444' }
+  });
+  assert.deepEqual([...panel.listed], [['CDS', '#123456']]);
+  assert.deepEqual([...panel.deleted], [['other tRNAs', '#333333']]);
 });
 
 // OV-309: the track rows take the palette color Python draws them in, under
@@ -309,6 +328,6 @@ test('the compile gives every track row Python draws its palette color', async (
 test('a palette change leaves a Legend row that a rule draws', async () => {
   const rule = { feat: 'CDS', qual: 'product', val: '.', color: '#00aa00', cap: 'CDS' };
   const { panel, compiled } = await legendPanelSetup({ rules: [rule], cdsDrawn: '#00aa00' });
-  assert.deepEqual([...panel], [['other tRNAs', '#333333']]);
+  assert.deepEqual([...panel.listed], [['other tRNAs', '#333333']]);
   assert.equal(compiled.colorOf('CDS'), '#00aa00');
 });

@@ -449,7 +449,7 @@ test('the Legend editor recolors the rule of a suffixed row, and only that row',
   const legend = createLegendManager({ state: withDrawings(state), commitLegendRowRules: (next, label) => {
     committed.push({ rules: next, label });
     return true;
-  } });
+  }, readShownLegendColor: (entry) => entry?.color });
   assert.equal(legend.updateLegendEntryColor(1, '#00ff00'), true);
   assert.deepEqual(committed, [{ rules: [{ ...rule, color: '#00ff00' }], label: 'Change legend color' }]);
   assert.deepEqual([legend.legendRowHasRules(0), legend.legendRowHasRules(1)], [false, true]);

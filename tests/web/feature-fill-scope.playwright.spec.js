@@ -31,7 +31,8 @@ const inspectFillState = async (page, target) => page.evaluate(async ({ caption,
     legendFill: legendGroup
       ?.querySelector('path[fill]:not([fill="none"])')
       ?.getAttribute('fill') || null,
-    legendEntryColor: legendEntry?.color || null,
+    // OV-282 (D-26): the color the Legend row shows, read through its one reader.
+    legendEntryColor: app.legendEntryColor(legendEntry) || null,
     featureColorOverrides: JSON.stringify(app.featureColorOverrides),
     manualSpecificRules: JSON.stringify(app.manualSpecificRules),
     resultContent: app.results[app.selectedResultIndex]?.content || '',
