@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import re
 from dataclasses import dataclass, field, fields, is_dataclass, replace
+from pathlib import Path
 from typing import Any, Mapping, Sequence, cast
 
 from pandas import DataFrame
@@ -22,6 +24,7 @@ from gbdraw.analysis.protein_colinearity import (
     validate_legacy_protein_raw_candidate_envelope,
     validate_protein_raw_entry_references,
 )
+from gbdraw.annotations.models import FeatureSpan
 from gbdraw.core.record_metadata import _iter_source_features, _source_feature_index
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.ids import compute_feature_hash
@@ -36,11 +39,14 @@ from gbdraw.session_drawings import SessionDrawingArtifacts, drawing_draft_confi
 from gbdraw.session_io import (
     classify_raw_losat_cache_entry,
     empty_protein_identity_manifest,
+    source_hash_of_drawn_selector,
+    unmapped_hash_selector_warning,
 )
 
 from .options import LinearMultiRecordOptions, LinearRecordTranslation
 from .record_planning import (
     ResolvedRecordCollection,
+    ResolvedRecordProvenance,
     project_similarity_alignment_centers,
 )
 
@@ -80,6 +86,8 @@ _LEGACY_PROTEIN_REFERENCE_RE = re.compile(
     r"(?:_[2-9][0-9]*)?"
 )
 _FEATURE_ANALYSIS_REFERENCE_RE = re.compile(r"f_[0-9a-f]{64}")
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -593,6 +601,34 @@ def _mapping_items(value: object) -> tuple[Mapping[str, Any], ...]:
     return tuple(item for item in value if isinstance(item, Mapping))
 
 
+def _drawn_source_hashes(
+    record: Any, provenance: ResolvedRecordProvenance
+) -> dict[str, set[str]]:
+    """The source hashes of the features of a planned record, by drawn hash.
+
+    Release 0.13.0 and Sessions up to 44 hashed the drawn feature, so a cropped
+    or reverse-complemented record saved hashes of its drawn coordinates; the
+    source feature catalog hashes source coordinates (OV-401). Only these
+    legacy readers compute the drawn hash.
+    """
+
+    catalog = {
+        entry.source_feature_index: entry.stable_feature_id
+        for entry in provenance.source_feature_catalog or ()
+    }
+    sources: dict[str, set[str]] = {}
+    # A feature's source index, or its ordinal in an untransformed record, as
+    # build_source_feature_catalog reads it.
+    for ordinal, feature in enumerate(_iter_source_features(record.features)):
+        index = _source_feature_index(feature)
+        index = ordinal if index is None else index
+        if index in catalog:
+            sources.setdefault(compute_feature_hash(feature, record_id=record.id), set()).add(
+                catalog[index]
+            )
+    return sources
+
+
 def _legacy_display_frame_feature_id(
     plan: LinearRequestPlan | None,
     record_key: str,
@@ -600,9 +636,7 @@ def _legacy_display_frame_feature_id(
 ) -> str:
     """Bind a release-0.13.0 display-frame feature ID to its source-frame ID.
 
-    0.13.0 hashed the displayed feature, so a reverse-complemented record saved
-    IDs of its displayed coordinates; the source feature catalog hashes source
-    coordinates. An ID that already names a catalog feature is returned as is.
+    An ID that already names a catalog feature is returned as is.
     """
 
     if plan is None:
@@ -610,19 +644,13 @@ def _legacy_display_frame_feature_id(
     for record, provenance in zip(plan.records, plan.provenance, strict=True):
         if provenance.record_key != record_key:
             continue
-        catalog = {
-            entry.source_feature_index: entry
+        if any(
+            entry.stable_feature_id == feature_id
             for entry in provenance.source_feature_catalog or ()
-        }
-        if any(entry.stable_feature_id == feature_id for entry in catalog.values()):
+        ):
             return feature_id
-        matches = {
-            catalog[index].stable_feature_id
-            for feature in _iter_source_features(record.features)
-            if (index := _source_feature_index(feature)) in catalog
-            and compute_feature_hash(feature, record_id=record.id) == feature_id
-        }
-        return matches.pop() if len(matches) == 1 else feature_id
+        matches = _drawn_source_hashes(record, provenance).get(feature_id, set())
+        return next(iter(matches)) if len(matches) == 1 else feature_id
     return feature_id
 
 
@@ -1140,14 +1168,160 @@ def _main_display_frame_rows_to_search_frame(
     return replace(request, options=replace(request.options, linear_comparisons=converted))
 
 
+_MAIN_DRAWN_HASH_SESSION_VERSION = 44
+# The (qualifier, value) columns of the tables that hold `hash` rows.
+_HASH_TABLE_COLUMNS = {"color": (1, 2), "visibility": (2, 3), "label": (2, 3)}
+
+
+def _main_drawn_hash_selectors_to_source(
+    plan: DiagramRequestPlan,
+    request: DiagramRequest,
+    drawing: SessionDrawingArtifacts,
+) -> tuple[DiagramRequest, int]:
+    """Name the ``hash`` selectors of a Session 44 or older by source hash (S6, S7).
+
+    Such a Session matched ``hash=`` against the drawn feature, so on a cropped
+    or reverse-complemented record its color, Feature visibility, and label
+    override rows and its ``hash=`` annotation targets carry drawn hashes
+    (OV-401, release D-39). Each value that names features drawn with its
+    hash (:func:`gbdraw.session_io.source_hash_of_drawn_selector`) gets their
+    source hash; a table file gets a copy beside it. Returns the request and
+    the number of other ``hash`` values, which stay as saved. A request with no
+    transformed record is returned as is.
+    """
+
+    if drawing.version > _MAIN_DRAWN_HASH_SESSION_VERSION:
+        return request, 0
+    drawn = [
+        _drawn_source_hashes(record, provenance)
+        for record, provenance in zip(plan.records, plan.provenance, strict=True)
+    ]
+    if all(sources == {hash_} for by_hash in drawn for hash_, sources in by_hash.items()):
+        return request, 0
+    unmapped = 0
+
+    def source_value(value: object) -> str:
+        nonlocal unmapped
+        resolved = source_hash_of_drawn_selector(value, drawn)
+        if resolved is None:
+            unmapped += 1
+            return str(value)
+        return resolved
+
+    def table_text(text: str, table: str) -> str:
+        qualifier_column, value_column = _HASH_TABLE_COLUMNS[table]
+        lines = []
+        for line in text.splitlines(keepends=True):
+            cells = line.rstrip("\r\n").split("\t")
+            ending = line[len(line.rstrip("\r\n")):]
+            if (
+                not line.lstrip().startswith("#")
+                and len(cells) > value_column
+                and cells[qualifier_column].strip().lower() == "hash"
+                and cells[value_column].strip()
+            ):
+                cells[value_column] = source_value(cells[value_column].strip())
+                line = "\t".join(cells) + ending
+            lines.append(line)
+        return "".join(lines)
+
+    def table_file(path: str | None, table: str) -> str | None:
+        if path is None:
+            return None
+        source = Path(path)
+        text = source.read_text(encoding="utf-8")
+        migrated = table_text(text, table)
+        if migrated == text:
+            return path
+        copy_path = source.with_name(f"{source.stem}.source-hash{source.suffix}")
+        copy_path.write_text(migrated, encoding="utf-8")
+        return str(copy_path)
+
+    def table_frame(frame: DataFrame | None, qualifier: str) -> DataFrame | None:
+        if frame is None or qualifier not in frame.columns or "value" not in frame.columns:
+            return frame
+        rows = frame[qualifier].astype(str).str.strip().str.lower() == "hash"
+        if not rows.any():
+            return frame
+        migrated = frame.copy()
+        migrated.loc[rows, "value"] = [
+            source_value(value) for value in migrated.loc[rows, "value"]
+        ]
+        return migrated
+
+    def target(annotation_target: Any) -> Any:
+        if not isinstance(annotation_target, FeatureSpan):
+            return annotation_target
+        selectors = tuple(
+            replace(selector, value=source_value(selector.value))
+            if selector.key == "hash"
+            else selector
+            for selector in annotation_target.selectors
+        )
+        return replace(annotation_target, selectors=selectors)
+
+    options = request.options
+    changes: dict[str, Any] = {}
+    colors = options.colors
+    if colors is not None:
+        color_table = table_frame(colors.color_table, "qualifier_key")
+        color_table_file = table_file(colors.color_table_file, "color")
+        if color_table is not colors.color_table or color_table_file != colors.color_table_file:
+            changes["colors"] = replace(
+                colors, color_table=color_table, color_table_file=color_table_file
+            )
+    for field_name, file_name, table in (
+        ("feature_visibility_table", "feature_visibility_table_file", "visibility"),
+        ("label_override_table", "label_override_file", "label"),
+    ):
+        frame = getattr(options, field_name, None)
+        migrated_frame = table_frame(frame, "qualifier")
+        if migrated_frame is not frame:
+            changes[field_name] = migrated_frame
+        path = getattr(options, file_name, None)
+        migrated_path = table_file(path, table)
+        if migrated_path != path:
+            changes[file_name] = migrated_path
+    annotations = options.annotations
+    if annotations is not None and annotations.sets:
+        sets = tuple(
+            replace(
+                annotation_set,
+                annotations=tuple(
+                    replace(annotation, target=target(annotation.target))
+                    for annotation in annotation_set.annotations
+                ),
+            )
+            for annotation_set in annotations.sets
+        )
+        if sets != annotations.sets:
+            changes["annotations"] = replace(annotations, sets=sets)
+    if not changes:
+        return request, unmapped
+    # Each request type takes its own options type, which mypy cannot pair.
+    return cast(DiagramRequest, replace(cast(Any, request), options=replace(options, **changes))), unmapped
+
+
 def _adapt_session_plan(
+    request: DiagramRequest,
     plan: DiagramRequestPlan,
     drawing: SessionDrawingArtifacts,
-) -> tuple[AdaptedSessionRequest, ProteinExtractionResult | None]:
-    """Adapt ``plan``'s request and artifacts; also return the protein extraction
-    of ``plan`` when the adaptation ran one, so its build reuses it."""
+) -> tuple[AdaptedSessionRequest, ProteinExtractionResult | None, DiagramRequestPlan]:
+    """Adapt the request and artifacts of ``plan``, the plan of ``request``;
+    also return the protein extraction of the plan when the adaptation ran one,
+    so its build reuses it, and the plan it adapted (``plan``, or ``request``
+    planned again)."""
 
     source = _read_session_artifact_source(drawing.fields)
+    # Tables and annotation targets are prepared with the plan, so a request
+    # whose hash selectors change is planned again. ``plan.request`` is a
+    # resolved projection (its regions are applied), so the saved request is
+    # the one rewritten and planned.
+    rewritten, unmapped_hash_selectors = _main_drawn_hash_selectors_to_source(
+        plan, request, drawing
+    )
+    if rewritten is not request:
+        plan = plan_request(rewritten)
     request = promote_legacy_session_similarity_alignment_request(
         plan.request,
         drawing,
@@ -1248,7 +1422,13 @@ def _adapt_session_plan(
         )
         if unresolved
         else ()
+    ) + (
+        (unmapped_hash_selector_warning(unmapped_hash_selectors, drawing.version),)
+        if unmapped_hash_selectors
+        else ()
     )
+    for warning in warnings[len(warnings) - bool(unmapped_hash_selectors):]:
+        logger.warning("WARNING: %s", warning)
     return AdaptedSessionRequest(
         request=request,
         artifacts=artifacts,
@@ -1258,7 +1438,7 @@ def _adapt_session_plan(
             protein_id_map=id_map,
             warnings=warnings,
         ),
-    ), extraction
+    ), extraction, plan
 
 
 def _require_drawing(drawing: object) -> SessionDrawingArtifacts:
@@ -1275,7 +1455,9 @@ def adapt_session_request(
 ) -> AdaptedSessionRequest:
     """Convert one drawing of a validated Session to the current render contract."""
 
-    return _adapt_session_plan(plan_request(request), _require_drawing(drawing))[0]
+    return _adapt_session_plan(
+        request, plan_request(request), _require_drawing(drawing)
+    )[0]
 
 
 def _adjust_migration_report(
@@ -1302,6 +1484,7 @@ def build_session_compatible_request_diagram(
     """Build one drawing of a released session after adapting its artifacts."""
 
     prepared, _report = _build_session_compatible_plan(
+        request,
         plan_request(request),
         _require_drawing(drawing),
     )
@@ -1309,15 +1492,16 @@ def build_session_compatible_request_diagram(
 
 
 def _build_session_compatible_plan(
+    request: DiagramRequest,
     plan: DiagramRequestPlan,
     drawing: SessionDrawingArtifacts,
 ) -> tuple[
     PreparedDiagramRequest | PreparedCircularBatchRequest,
     SessionMigrationReport,
 ]:
-    """Adapt and build one already-resolved session request plan."""
+    """Adapt and build ``plan``, the already-resolved plan of ``request``."""
 
-    adapted, extraction = _adapt_session_plan(plan, drawing)
+    adapted, extraction, plan = _adapt_session_plan(request, plan, drawing)
     if adapted.request is not plan.request:
         # The replacement keeps the records, their inputs and the record keys
         # that the extraction read.
@@ -1346,6 +1530,7 @@ def render_session_compatible_request(
     batch_outputs_preflighted = isinstance(plan, CircularBatchRequestPlan)
     plan.preflight_outputs()
     prepared, migration_report = _build_session_compatible_plan(
+        request,
         plan,
         drawing,
     )

@@ -70,11 +70,15 @@ import {
   ANNOTATION_TARGET_MIGRATION_NOTICE,
   FEATURE_EDIT_MIGRATION_WARNING,
   FEATURE_VISIBILITY_NARROWED_NOTICE,
+  HASH_SELECTOR_UNMAPPED_NOTICE,
   RENDERED_ID_FEATURE_EDIT_FIELDS,
+  hasHashSelectorRules,
   hasRenderedIdFeatureEdits,
+  legacyLinearRequestRecords,
   migrateSessionAnnotationTargets,
   migrateSessionFeatureEdits,
-  migrateSessionFeaturePlacements
+  migrateSessionFeaturePlacements,
+  migrateSessionHashRules
 } from './feature-edit-migration.js';
 import {
   buildSessionFeatureRecoveryPlan,
@@ -5266,37 +5270,57 @@ const importSessionDocument = async (e, options = {}) => {
     let droppedFeatureEditCount = 0;
     let narrowedFeatureVisibilityCount = 0;
     let migratedAnnotationTargetCount = 0;
+    let unmappedHashSelectorCount = 0;
     if (sourceSessionVersion < SESSION_VERSION) {
       const recovered = legacyFeatureRecoveryPlan?.recoveredFeatureState;
-      const sourceFeatures = !validatedSessionCatalog && hasRenderedIdFeatureEdits(features)
+      const sessionMode = data.renderRequest?.mode || candidateMode;
+      const sourceFeatures = !validatedSessionCatalog && (hasRenderedIdFeatureEdits(features)
+        || hasHashSelectorRules(restoredConfig?.rules, features.featureVisibilityManualRules))
         ? await extractSessionSourceFeatures(/** @type {any} */ ({ snapshot: legacyFeatureSnapshot }))
         : null;
+      const legacy = validatedSessionCatalog ? null : {
+        records: data.renderRequest?.records,
+        features: [
+          sourceFeatures?.extractedFeatures, recovered?.biologicalFeatures, recovered?.extractedFeatures,
+          features.biologicalFeatures, features.extractedFeatures
+        ].find((list) => Array.isArray(list) && list.length > 0) || [],
+        biologicalFeatures: sourceFeatures?.biologicalFeatures || []
+      };
       const migration = migrateSessionFeatureEdits({
-        features,
-        mode: data.renderRequest?.mode || candidateMode,
-        catalog: validatedSessionCatalog,
-        legacy: validatedSessionCatalog ? null : {
-          records: data.renderRequest?.records,
-          features: [
-            sourceFeatures?.extractedFeatures, recovered?.biologicalFeatures, recovered?.extractedFeatures,
-            features.biologicalFeatures, features.extractedFeatures
-          ].find((list) => Array.isArray(list) && list.length > 0) || [],
-          biologicalFeatures: sourceFeatures?.biologicalFeatures || []
-        }
+        features, mode: sessionMode, catalog: validatedSessionCatalog, legacy
       });
       features = migration.features;
       droppedFeatureEditCount = migration.droppedCount;
       narrowedFeatureVisibilityCount = migration.narrowedVisibilityCount;
+      // S6: a `hash` color or Feature visibility rule names its features by
+      // their source hash (OV-401, release D-39). A Session before 31 has no
+      // request: its Linear cards give the records.
+      const ruleRecords = data.renderRequest?.records
+        ?? (candidateMode === 'linear' ? legacyLinearRequestRecords(candidateFiles.linearSeqs) : undefined);
+      const hashRules = migrateSessionHashRules({
+        rules: restoredConfig?.rules,
+        featureVisibilityManualRules: features.featureVisibilityManualRules,
+        mode: sessionMode,
+        catalog: validatedSessionCatalog,
+        legacy: legacy && { ...legacy, records: ruleRecords },
+        records: ruleRecords
+      });
+      if (restoredConfig && hashRules.rules !== restoredConfig.rules) restoredConfig.rules = hashRules.rules;
+      if (hashRules.featureVisibilityManualRules !== features.featureVisibilityManualRules) {
+        features = { ...features, featureVisibilityManualRules: hashRules.featureVisibilityManualRules };
+      }
+      unmappedHashSelectorCount = hashRules.unmappedCount;
       // R-7: an annotation's `hash=` target moves to its source feature only
       // where the saved catalog makes the figure certain.
       if (restoredConfig) {
         const annotationMigration = migrateSessionAnnotationTargets({
           annotationSets: restoredConfig.annotationSets,
-          mode: data.renderRequest?.mode || candidateMode,
+          mode: sessionMode,
           catalog: validatedSessionCatalog,
           records: data.renderRequest?.records
         });
         migratedAnnotationTargetCount = annotationMigration.migratedCount;
+        unmappedHashSelectorCount += annotationMigration.unmappedCount;
         if (migratedAnnotationTargetCount > 0) restoredConfig.annotationSets = annotationMigration.annotationSets;
       }
       if (recovered) {
@@ -5726,6 +5750,7 @@ const importSessionDocument = async (e, options = {}) => {
       droppedFeatureEditCount > 0 ? FEATURE_EDIT_MIGRATION_WARNING(droppedFeatureEditCount) : '',
       narrowedFeatureVisibilityCount > 0 ? FEATURE_VISIBILITY_NARROWED_NOTICE(narrowedFeatureVisibilityCount) : '',
       migratedAnnotationTargetCount > 0 ? ANNOTATION_TARGET_MIGRATION_NOTICE(migratedAnnotationTargetCount) : '',
+      unmappedHashSelectorCount > 0 ? HASH_SELECTOR_UNMAPPED_NOTICE(unmappedHashSelectorCount) : '',
       legacyTableRowsNotice(canonicalProjection?.legacyTableRepairs),
       legendColorDropNotice(droppedLegendColors)
     ].filter(Boolean).join(' '));

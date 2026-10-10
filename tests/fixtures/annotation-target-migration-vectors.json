@@ -1,5 +1,5 @@
 {
-  "description": "Session 44 and older annotation sets (input.annotationSets, the Session's config.annotationSets) with the Session's diagram mode, its saved feature catalog (projected to the fields the readers use), and its request records, and the annotation sets both readers must produce: a featureSpan target with one hash selector moves to a featureIdentity target in that mode when the record it binds is drawn without a crop, reverse complement, or rotation and the hash names exactly one catalog feature, in that record. migratedCount counts the moved targets; with none, the input is returned as saved. Expected outputs are JSON: a target field the saved target did not have is absent. A case with `fixture` is projected from that Session saved by first-parent main. Read by tests/test_session_compat.py (session_io.migrate_session_annotation_targets) and tests/web/feature-edit-migration.test.mjs (migrateSessionAnnotationTargets).",
+  "description": "Session 44 and older annotation sets (input.annotationSets, the Session's config.annotationSets) with the Session's diagram mode, its saved feature catalog (projected to the fields the readers use), and its request records, and the annotation sets both readers must produce: a featureSpan target with one hash selector moves to a featureIdentity target in that mode when the record it binds is drawn without a crop, reverse complement, or rotation and the hash names exactly one catalog feature, in that record. On a record drawn transformed, the hash is the drawn hash: it names the catalog features drawn with it in that record (drawnSelector.hash, or the svgId hash before catalog schema 5); one feature gives its featureIdentity target, features of one source hash keep the featureSpan target with that source hash. migratedCount counts the moved targets; with none, the input is returned as saved. unmappedCount counts the other hash targets that are unbound or bound to a transformed record when a request record is drawn transformed. Expected outputs are JSON: a target field the saved target did not have is absent. A case with `fixture` is projected from that Session saved by first-parent main. Read by tests/test_session_compat.py (session_io.migrate_session_annotation_targets) and tests/web/feature-edit-migration.test.mjs (migrateSessionAnnotationTargets).",
   "cases": [
     {
       "name": "Session 44 Linear: only the annotation whose feature is certain moves",
@@ -113,6 +113,83 @@
               "recordKeys": [
                 "linear-seq-2a202a77-de61-437d-babb-3058902ec696",
                 "linear-seq-b1ef06a7-93eb-49e8-a324-c59b199ade62"
+              ],
+              "features": [
+                {
+                  "svgId": "f3ccacda4_record_1__instance_1_6b86b273ff34fce1",
+                  "recordKey": "linear-seq-2a202a77-de61-437d-babb-3058902ec696",
+                  "biologicalFeatureId": "f3ccacda4~1"
+                },
+                {
+                  "svgId": "f3ccacda4_record_1__instance_2_d4735e3a265e16ee",
+                  "recordKey": "linear-seq-2a202a77-de61-437d-babb-3058902ec696",
+                  "biologicalFeatureId": "f3ccacda4~2"
+                },
+                {
+                  "svgId": "ffa1f4c4a_record_1",
+                  "recordKey": "linear-seq-2a202a77-de61-437d-babb-3058902ec696",
+                  "biologicalFeatureId": "ffa1f4c4a"
+                },
+                {
+                  "svgId": "fcd5590a9_record_1",
+                  "recordKey": "linear-seq-2a202a77-de61-437d-babb-3058902ec696",
+                  "biologicalFeatureId": "fcd5590a9"
+                },
+                {
+                  "svgId": "f779210b8_record_1",
+                  "recordKey": "linear-seq-2a202a77-de61-437d-babb-3058902ec696",
+                  "biologicalFeatureId": "f779210b8"
+                },
+                {
+                  "svgId": "fef810304_record_1",
+                  "recordKey": "linear-seq-2a202a77-de61-437d-babb-3058902ec696",
+                  "biologicalFeatureId": "fef810304"
+                },
+                {
+                  "svgId": "f01237d96_record_1",
+                  "recordKey": "linear-seq-2a202a77-de61-437d-babb-3058902ec696",
+                  "biologicalFeatureId": "f01237d96"
+                },
+                {
+                  "svgId": "f571eb983_record_1",
+                  "recordKey": "linear-seq-2a202a77-de61-437d-babb-3058902ec696",
+                  "biologicalFeatureId": "f571eb983"
+                },
+                {
+                  "svgId": "f811dc37d_record_2",
+                  "recordKey": "linear-seq-b1ef06a7-93eb-49e8-a324-c59b199ade62",
+                  "biologicalFeatureId": "f5aa08bf5"
+                },
+                {
+                  "svgId": "f64320c02_record_2",
+                  "recordKey": "linear-seq-b1ef06a7-93eb-49e8-a324-c59b199ade62",
+                  "biologicalFeatureId": "f88047061"
+                },
+                {
+                  "svgId": "f2869b912_record_2",
+                  "recordKey": "linear-seq-b1ef06a7-93eb-49e8-a324-c59b199ade62",
+                  "biologicalFeatureId": "fbc76b20f"
+                },
+                {
+                  "svgId": "f2bf39381_record_2",
+                  "recordKey": "linear-seq-b1ef06a7-93eb-49e8-a324-c59b199ade62",
+                  "biologicalFeatureId": "f5eb0c689"
+                },
+                {
+                  "svgId": "f18376efe_record_2",
+                  "recordKey": "linear-seq-b1ef06a7-93eb-49e8-a324-c59b199ade62",
+                  "biologicalFeatureId": "fd6a65bce"
+                },
+                {
+                  "svgId": "fe45e2b17_record_2",
+                  "recordKey": "linear-seq-b1ef06a7-93eb-49e8-a324-c59b199ade62",
+                  "biologicalFeatureId": "f3f7207f4"
+                },
+                {
+                  "svgId": "fcf2870a4_record_2",
+                  "recordKey": "linear-seq-b1ef06a7-93eb-49e8-a324-c59b199ade62",
+                  "biologicalFeatureId": "fbf6c27e1"
+                }
               ],
               "biologicalFeatures": [
                 {
@@ -345,7 +422,285 @@
             "legendLabel": null
           }
         ],
-        "migratedCount": 1
+        "migratedCount": 1,
+        "unmappedCount": 1
+      }
+    },
+    {
+      "name": "A drawn hash on a transformed record names the features the catalog drew with it",
+      "input": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R1"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "d1"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "shortest"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {}
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R1"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "d2"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "shortest"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {}
+              },
+              {
+                "id": "a3",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R1"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "d3"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "shortest"
+                },
+                "label": "L3",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {}
+              },
+              {
+                "id": "a4",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R1"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "s1"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "shortest"
+                },
+                "label": "L4",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {}
+              }
+            ]
+          }
+        ],
+        "mode": "linear",
+        "catalog": {
+          "schema": 5,
+          "items": [
+            {
+              "recordKeys": [
+                "linear-seq-k1"
+              ],
+              "features": [
+                {
+                  "svgId": "d1_record_1",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "s1",
+                  "drawnSelector": {
+                    "hash": "d1"
+                  }
+                },
+                {
+                  "svgId": "d2_record_1__instance_1_a",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "s2~1",
+                  "drawnSelector": {
+                    "hash": "d2"
+                  }
+                },
+                {
+                  "svgId": "d2_record_1__instance_2_b",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "s2~2",
+                  "drawnSelector": {
+                    "hash": "d2"
+                  }
+                },
+                {
+                  "svgId": "d3_record_1",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "s3"
+                }
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "s1",
+                  "record_id": "R1"
+                },
+                {
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "s2~1",
+                  "stableFeatureId": "s2",
+                  "record_id": "R1"
+                },
+                {
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "s2~2",
+                  "stableFeatureId": "s2",
+                  "record_id": "R1"
+                },
+                {
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "s3",
+                  "record_id": "R1"
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "linear-seq-k1",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": true
+            }
+          }
+        ]
+      },
+      "expected": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "s1",
+                  "envelope": "segments",
+                  "circularPath": "shortest"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {}
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R1"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "s2"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "shortest"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {}
+              },
+              {
+                "id": "a3",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "s3",
+                  "envelope": "segments",
+                  "circularPath": "shortest"
+                },
+                "label": "L3",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {}
+              },
+              {
+                "id": "a4",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R1"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "s1"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "shortest"
+                },
+                "label": "L4",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {}
+              }
+            ]
+          }
+        ],
+        "migratedCount": 3,
+        "unmappedCount": 1
       }
     },
     {
@@ -644,7 +999,8 @@
             "legendLabel": null
           }
         ],
-        "migratedCount": 3
+        "migratedCount": 3,
+        "unmappedCount": 0
       }
     },
     {
@@ -1095,7 +1451,8 @@
             "legendLabel": null
           }
         ],
-        "migratedCount": 3
+        "migratedCount": 3,
+        "unmappedCount": 0
       }
     },
     {
@@ -2058,7 +2415,8 @@
             "legendLabel": null
           }
         ],
-        "migratedCount": 7
+        "migratedCount": 7,
+        "unmappedCount": 8
       }
     },
     {
@@ -2380,7 +2738,8 @@
             "legendLabel": null
           }
         ],
-        "migratedCount": 0
+        "migratedCount": 0,
+        "unmappedCount": 0
       }
     },
     {
@@ -3075,7 +3434,8 @@
             "legendLabel": null
           }
         ],
-        "migratedCount": 1
+        "migratedCount": 1,
+        "unmappedCount": 0
       }
     },
     {
@@ -3359,7 +3719,8 @@
             "legendLabel": null
           }
         ],
-        "migratedCount": 2
+        "migratedCount": 2,
+        "unmappedCount": 0
       }
     },
     {
@@ -3527,7 +3888,8 @@
             "legendLabel": null
           }
         ],
-        "migratedCount": 0
+        "migratedCount": 0,
+        "unmappedCount": 2
       }
     },
     {
@@ -4413,7 +4775,8 @@
             "legendLabel": null
           }
         ],
-        "migratedCount": 4
+        "migratedCount": 4,
+        "unmappedCount": 0
       }
     },
     {
@@ -4696,7 +5059,8 @@
             "legendLabel": null
           }
         ],
-        "migratedCount": 3
+        "migratedCount": 3,
+        "unmappedCount": 0
       }
     },
     {
@@ -4932,7 +5296,8 @@
             "legendLabel": null
           }
         ],
-        "migratedCount": 2
+        "migratedCount": 2,
+        "unmappedCount": 0
       }
     },
     {
@@ -5522,7 +5887,8 @@
             "legendLabel": null
           }
         ],
-        "migratedCount": 7
+        "migratedCount": 7,
+        "unmappedCount": 0
       }
     },
     {
@@ -5745,7 +6111,8 @@
             "legendLabel": null
           }
         ],
-        "migratedCount": 4
+        "migratedCount": 4,
+        "unmappedCount": 0
       }
     },
     {
@@ -5885,7 +6252,8 @@
             "legendLabel": null
           }
         ],
-        "migratedCount": 0
+        "migratedCount": 0,
+        "unmappedCount": 0
       }
     },
     {
@@ -5995,7 +6363,8 @@
             "legendLabel": null
           }
         ],
-        "migratedCount": 0
+        "migratedCount": 0,
+        "unmappedCount": 0
       }
     },
     {
@@ -6105,7 +6474,8 @@
             "legendLabel": null
           }
         ],
-        "migratedCount": 0
+        "migratedCount": 0,
+        "unmappedCount": 0
       }
     },
     {
@@ -6185,7 +6555,8 @@
             }
           ]
         },
-        "migratedCount": 0
+        "migratedCount": 0,
+        "unmappedCount": 0
       }
     },
     {
@@ -6227,7 +6598,8 @@
       },
       "expected": {
         "annotationSets": null,
-        "migratedCount": 0
+        "migratedCount": 0,
+        "unmappedCount": 0
       }
     },
     {
@@ -6337,7 +6709,8 @@
             }
           }
         ],
-        "migratedCount": 1
+        "migratedCount": 1,
+        "unmappedCount": 0
       }
     }
   ]

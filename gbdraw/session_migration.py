@@ -16,6 +16,7 @@ from gbdraw.session_io import (
     CURRENT_AUTHORITY_SESSION_MIN_VERSION,
     MODE_SCOPED_SESSION_MIN_VERSION,
     RETIRED_RENDERED_ID_FEATURE_FIELDS,
+    SessionDraftMigration,
     _project_web_file_binding,
     empty_protein_identity_manifest,
     migrate_legacy_linear_comparison_draft_for_current_writer,
@@ -24,6 +25,7 @@ from gbdraw.session_io import (
     session_depth_source_widths,
     session_mode,
     split_draft_into_modes,
+    unmapped_hash_selector_warning,
 )
 
 logger = logging.getLogger(__name__)
@@ -304,6 +306,42 @@ def read_legacy_source_features(
     return read_again
 
 
+def log_session_draft_migration(migration: SessionDraftMigration, source_version: int) -> None:
+    """Report what the draft migrations of a Session 27-44 changed or could not move."""
+
+    if migration.dropped_feature_edit_count:
+        logger.warning(
+            "WARNING: %d feature edit(s) from Session version %d could not "
+            "be matched to a feature of its saved diagram and were dropped "
+            "from the written Session.",
+            migration.dropped_feature_edit_count,
+            source_version,
+        )
+    if migration.narrowed_visibility_count:
+        logger.warning(
+            "WARNING: %d Feature visibility edit(s) from Session version %d "
+            "hid every feature with the same hash; in the written Session "
+            "each applies only to the feature that was edited.",
+            migration.narrowed_visibility_count,
+            source_version,
+        )
+    if migration.unmapped_hash_selector_count:
+        logger.warning(
+            "WARNING: %s",
+            unmapped_hash_selector_warning(
+                migration.unmapped_hash_selector_count, source_version
+            ),
+        )
+    if migration.migrated_annotation_count:
+        logger.info(
+            "INFO: %d annotation(s) from Session version %d named a feature "
+            "by hash=; in the written Session each names that feature by "
+            "its source.",
+            migration.migrated_annotation_count,
+            source_version,
+        )
+
+
 def project_session_adjunct_for_current_write(
     session: Mapping[str, Any],
     *,
@@ -343,30 +381,7 @@ def project_session_adjunct_for_current_write(
                 adjunct[key] = migration.session[key]
             else:
                 adjunct.pop(key, None)
-        if migration.dropped_feature_edit_count:
-            logger.warning(
-                "WARNING: %d feature edit(s) from Session version %d could not "
-                "be matched to a feature of its saved diagram and were dropped "
-                "from the written Session.",
-                migration.dropped_feature_edit_count,
-                source_version,
-            )
-        if migration.narrowed_visibility_count:
-            logger.warning(
-                "WARNING: %d Feature visibility edit(s) from Session version %d "
-                "hid every feature with the same hash; in the written Session "
-                "each applies only to the feature that was edited.",
-                migration.narrowed_visibility_count,
-                source_version,
-            )
-        if migration.migrated_annotation_count:
-            logger.info(
-                "INFO: %d annotation(s) from Session version %d named a feature "
-                "by hash=; in the written Session each names that feature by "
-                "its source.",
-                migration.migrated_annotation_count,
-                source_version,
-            )
+        log_session_draft_migration(migration, source_version)
     orthogroup_state = adjunct.get("orthogroupState")
     if isinstance(orthogroup_state, Mapping):
         projected_orthogroup_state = dict(orthogroup_state)
@@ -576,6 +591,7 @@ def with_current_artifacts(
 __all__ = [
     "LegacySourceRead",
     "legacy_source_reads",
+    "log_session_draft_migration",
     "project_session_adjunct_for_current_write",
     "read_legacy_source_features",
     "replace_current_derived_feature_state",

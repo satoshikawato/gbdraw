@@ -207,7 +207,6 @@ def test_source_hash_selector_matches_on_a_transformed_record(
     """`hash=` names a feature by its source-record hash on every record."""
     import pandas as pd
 
-    from gbdraw.features.ids import source_feature_location_parts
     from gbdraw.features.source import build_source_feature_catalog
     from gbdraw.features.visibility import (
         compile_feature_visibility_rules,
@@ -238,8 +237,7 @@ def test_source_hash_selector_matches_on_a_transformed_record(
                 feature, ["CDS"], feature_visibility_rules=rules, record_id=record.id
             )
         ]
-        # The one feature whose source parts are the row's.
-        assert [source_feature_location_parts(feature, record) for feature in hidden] == [
-            entry.location_parts
+        # The one feature drawn from the row's source feature (each has its own product).
+        assert [feature.qualifiers["product"] for feature in hidden] == [
+            source.features[entry.source_feature_index].qualifiers["product"]
         ]
-        assert len(hidden) == 1

@@ -10,7 +10,8 @@ import {
   migrateRenderedIdFeatureEdits,
   migrateSessionAnnotationTargets,
   migrateSessionFeatureEdits,
-  migrateSessionFeaturePlacements
+  migrateSessionFeaturePlacements,
+  migrateSessionHashRules
 } from '../../gbdraw/web/js/services/feature-edit-migration.js';
 import { canonicalFeatureOverrides } from '../../gbdraw/web/js/services/feature-placement.js';
 import { annotationOptionsPayload, normalizeAnnotationSets } from '../../gbdraw/web/js/services/annotation-state.js';
@@ -368,5 +369,16 @@ test('hash annotation targets migrate to the vectors both readers share', () => 
     const result = migrateSessionAnnotationTargets(structuredClone(input));
     // As saved: a target field the saved target did not have is absent.
     assert.deepEqual(JSON.parse(JSON.stringify(result)), expected, name);
+  }
+});
+
+// The same vectors pin the Python reader (tests/test_session_compat.py), which
+// the CLI uses when it writes a Session 27-44 again (S6, release D-39).
+test('hash color and Feature visibility rules migrate to the vectors both readers share', () => {
+  const { cases } = JSON.parse(readFileSync(new URL('../fixtures/hash-rule-migration-vectors.json', import.meta.url), 'utf8'));
+  for (const { name, input, expected } of cases) {
+    const saved = structuredClone(input);
+    assert.deepEqual(migrateSessionHashRules(saved), expected, name);
+    assert.deepEqual(saved, input, name);
   }
 });

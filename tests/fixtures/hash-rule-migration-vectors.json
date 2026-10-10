@@ -1,0 +1,676 @@
+{
+  "description": "Session 44 and older hash rules, the specific color rules (config.rules: qual, val) and Feature visibility rules (features.featureVisibilityManualRules: qualifier, value), with the Session's diagram mode, its saved feature catalog (projected to the fields the readers use), and its request records, and the rules both readers must produce. Such a Session matched hash= against the drawn feature; hash= names the source hash now (release D-39). A value, written <hash> or ^<hash>$ and maybe with the rendered ID's record and instance suffixes (release 0.13.0), names the catalog features drawn with that hash (drawnSelector.hash, or the svgId hash before catalog schema 5), in the record its suffix gives; when they share one source hash, the value names it in the same form without the suffixes. Every other hash value is kept, and counted in unmappedCount when a request record is drawn cropped, reverse-complemented, or rotated. A list without a change is returned as saved. Read by tests/test_session_compat.py (session_io.migrate_session_hash_rules) and tests/web/feature-edit-migration.test.mjs (migrateSessionHashRules).",
+  "cases": [
+    {
+      "name": "A drawn hash on a transformed record gets the source hash of the features drawn with it",
+      "input": {
+        "rules": [
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "d1",
+            "color": "#ff0000",
+            "cap": "CDS (1)"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "d3",
+            "color": "#ff0000",
+            "cap": "CDS (1)"
+          },
+          {
+            "feat": "CDS",
+            "qual": "Hash",
+            "val": "d4_record_2",
+            "color": "#ff0000",
+            "cap": "CDS (1)"
+          },
+          {
+            "feat": "CDS",
+            "qual": "product",
+            "val": "x",
+            "color": "#ff0000",
+            "cap": "CDS (1)"
+          }
+        ],
+        "featureVisibilityManualRules": [
+          {
+            "feat": "CDS",
+            "qualifier": "hash",
+            "value": "^d1$",
+            "visibility": "off"
+          },
+          {
+            "feat": "CDS",
+            "qualifier": "hash",
+            "value": "^d4$",
+            "visibility": "off"
+          }
+        ],
+        "mode": "linear",
+        "catalog": {
+          "schema": 5,
+          "items": [
+            {
+              "recordKeys": [
+                "linear-seq-k1",
+                "linear-seq-k2"
+              ],
+              "features": [
+                {
+                  "svgId": "a1_record_1",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "a1",
+                  "drawnSelector": {
+                    "hash": "a1"
+                  }
+                },
+                {
+                  "svgId": "d1_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "s1",
+                  "drawnSelector": {
+                    "hash": "d1"
+                  }
+                },
+                {
+                  "svgId": "d3_record_2__instance_1_x",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "s3~1",
+                  "drawnSelector": {
+                    "hash": "d3"
+                  }
+                },
+                {
+                  "svgId": "d3_record_2__instance_2_y",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "s3~2",
+                  "drawnSelector": {
+                    "hash": "d3"
+                  }
+                },
+                {
+                  "svgId": "d4_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "s4"
+                },
+                {
+                  "svgId": "d5_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "s5",
+                  "drawnSelector": {
+                    "hash": "d5"
+                  }
+                },
+                {
+                  "svgId": "d5_record_1",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "d5",
+                  "drawnSelector": {
+                    "hash": "d5"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "linear-seq-k1",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            }
+          },
+          {
+            "recordKey": "linear-seq-k2",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": true
+            }
+          }
+        ]
+      },
+      "expected": {
+        "rules": [
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "s1",
+            "color": "#ff0000",
+            "cap": "CDS (1)"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "s3",
+            "color": "#ff0000",
+            "cap": "CDS (1)"
+          },
+          {
+            "feat": "CDS",
+            "qual": "Hash",
+            "val": "s4",
+            "color": "#ff0000",
+            "cap": "CDS (1)"
+          },
+          {
+            "feat": "CDS",
+            "qual": "product",
+            "val": "x",
+            "color": "#ff0000",
+            "cap": "CDS (1)"
+          }
+        ],
+        "featureVisibilityManualRules": [
+          {
+            "feat": "CDS",
+            "qualifier": "hash",
+            "value": "^s1$",
+            "visibility": "off"
+          },
+          {
+            "feat": "CDS",
+            "qualifier": "hash",
+            "value": "^s4$",
+            "visibility": "off"
+          }
+        ],
+        "unmappedCount": 0
+      }
+    },
+    {
+      "name": "A rendered ID names the drawn features of its record (release 0.13.0)",
+      "input": {
+        "rules": [
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "d5_record_2",
+            "color": "#ff0000",
+            "cap": "CDS (1)"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "d5_record_1",
+            "color": "#ff0000",
+            "cap": "CDS (1)"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "d1_record_1",
+            "color": "#ff0000",
+            "cap": "CDS (1)"
+          }
+        ],
+        "featureVisibilityManualRules": [],
+        "mode": "linear",
+        "catalog": {
+          "schema": 5,
+          "items": [
+            {
+              "recordKeys": [
+                "linear-seq-k1",
+                "linear-seq-k2"
+              ],
+              "features": [
+                {
+                  "svgId": "a1_record_1",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "a1",
+                  "drawnSelector": {
+                    "hash": "a1"
+                  }
+                },
+                {
+                  "svgId": "d1_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "s1",
+                  "drawnSelector": {
+                    "hash": "d1"
+                  }
+                },
+                {
+                  "svgId": "d3_record_2__instance_1_x",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "s3~1",
+                  "drawnSelector": {
+                    "hash": "d3"
+                  }
+                },
+                {
+                  "svgId": "d3_record_2__instance_2_y",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "s3~2",
+                  "drawnSelector": {
+                    "hash": "d3"
+                  }
+                },
+                {
+                  "svgId": "d4_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "s4"
+                },
+                {
+                  "svgId": "d5_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "s5",
+                  "drawnSelector": {
+                    "hash": "d5"
+                  }
+                },
+                {
+                  "svgId": "d5_record_1",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "d5",
+                  "drawnSelector": {
+                    "hash": "d5"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "linear-seq-k1",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            }
+          },
+          {
+            "recordKey": "linear-seq-k2",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": true
+            }
+          }
+        ]
+      },
+      "expected": {
+        "rules": [
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "s5",
+            "color": "#ff0000",
+            "cap": "CDS (1)"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "d5",
+            "color": "#ff0000",
+            "cap": "CDS (1)"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "d1_record_1",
+            "color": "#ff0000",
+            "cap": "CDS (1)"
+          }
+        ],
+        "featureVisibilityManualRules": [],
+        "unmappedCount": 1
+      }
+    },
+    {
+      "name": "A value that names no drawn feature, or features of two source hashes, is kept and counted when a record is transformed",
+      "input": {
+        "rules": [
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "s1",
+            "color": "#ff0000",
+            "cap": "CDS (1)"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "d5",
+            "color": "#ff0000",
+            "cap": "CDS (1)"
+          }
+        ],
+        "featureVisibilityManualRules": [
+          {
+            "feat": "CDS",
+            "qualifier": "hash",
+            "value": "^s4$",
+            "visibility": "off"
+          }
+        ],
+        "mode": "linear",
+        "catalog": {
+          "schema": 5,
+          "items": [
+            {
+              "recordKeys": [
+                "linear-seq-k1",
+                "linear-seq-k2"
+              ],
+              "features": [
+                {
+                  "svgId": "a1_record_1",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "a1",
+                  "drawnSelector": {
+                    "hash": "a1"
+                  }
+                },
+                {
+                  "svgId": "d1_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "s1",
+                  "drawnSelector": {
+                    "hash": "d1"
+                  }
+                },
+                {
+                  "svgId": "d3_record_2__instance_1_x",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "s3~1",
+                  "drawnSelector": {
+                    "hash": "d3"
+                  }
+                },
+                {
+                  "svgId": "d3_record_2__instance_2_y",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "s3~2",
+                  "drawnSelector": {
+                    "hash": "d3"
+                  }
+                },
+                {
+                  "svgId": "d4_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "s4"
+                },
+                {
+                  "svgId": "d5_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "s5",
+                  "drawnSelector": {
+                    "hash": "d5"
+                  }
+                },
+                {
+                  "svgId": "d5_record_1",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "d5",
+                  "drawnSelector": {
+                    "hash": "d5"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "linear-seq-k1",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            }
+          },
+          {
+            "recordKey": "linear-seq-k2",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": true
+            }
+          }
+        ]
+      },
+      "expected": {
+        "rules": [
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "s1",
+            "color": "#ff0000",
+            "cap": "CDS (1)"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "d5",
+            "color": "#ff0000",
+            "cap": "CDS (1)"
+          }
+        ],
+        "featureVisibilityManualRules": [
+          {
+            "feat": "CDS",
+            "qualifier": "hash",
+            "value": "^s4$",
+            "visibility": "off"
+          }
+        ],
+        "unmappedCount": 3
+      }
+    },
+    {
+      "name": "Without a transformed record nothing is counted, and lists without a change are returned as saved",
+      "input": {
+        "rules": [
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "a1",
+            "color": "#ff0000",
+            "cap": "CDS (1)"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "zz",
+            "color": "#ff0000",
+            "cap": "CDS (1)"
+          }
+        ],
+        "featureVisibilityManualRules": [
+          {
+            "feat": "CDS",
+            "qualifier": "hash",
+            "value": "^zz$",
+            "visibility": "off"
+          }
+        ],
+        "mode": "linear",
+        "catalog": {
+          "schema": 5,
+          "items": [
+            {
+              "recordKeys": [
+                "linear-seq-k1"
+              ],
+              "features": [
+                {
+                  "svgId": "a1_record_1",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "a1",
+                  "drawnSelector": {
+                    "hash": "a1"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "linear-seq-k1",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            }
+          }
+        ]
+      },
+      "expected": {
+        "rules": [
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "a1",
+            "color": "#ff0000",
+            "cap": "CDS (1)"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "zz",
+            "color": "#ff0000",
+            "cap": "CDS (1)"
+          }
+        ],
+        "featureVisibilityManualRules": [
+          {
+            "feat": "CDS",
+            "qualifier": "hash",
+            "value": "^zz$",
+            "visibility": "off"
+          }
+        ],
+        "unmappedCount": 0
+      }
+    },
+    {
+      "name": "Rules that are not lists or not hash rules are kept",
+      "input": {
+        "rules": null,
+        "featureVisibilityManualRules": [
+          {
+            "feat": "CDS",
+            "qualifier": "product",
+            "value": "p",
+            "visibility": "off"
+          },
+          "text",
+          {
+            "qualifier": "hash",
+            "value": ""
+          }
+        ],
+        "mode": "linear",
+        "catalog": {
+          "schema": 5,
+          "items": [
+            {
+              "recordKeys": [
+                "linear-seq-k1",
+                "linear-seq-k2"
+              ],
+              "features": [
+                {
+                  "svgId": "a1_record_1",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "a1",
+                  "drawnSelector": {
+                    "hash": "a1"
+                  }
+                },
+                {
+                  "svgId": "d1_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "s1",
+                  "drawnSelector": {
+                    "hash": "d1"
+                  }
+                },
+                {
+                  "svgId": "d3_record_2__instance_1_x",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "s3~1",
+                  "drawnSelector": {
+                    "hash": "d3"
+                  }
+                },
+                {
+                  "svgId": "d3_record_2__instance_2_y",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "s3~2",
+                  "drawnSelector": {
+                    "hash": "d3"
+                  }
+                },
+                {
+                  "svgId": "d4_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "s4"
+                },
+                {
+                  "svgId": "d5_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "s5",
+                  "drawnSelector": {
+                    "hash": "d5"
+                  }
+                },
+                {
+                  "svgId": "d5_record_1",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "d5",
+                  "drawnSelector": {
+                    "hash": "d5"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "linear-seq-k1",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            }
+          },
+          {
+            "recordKey": "linear-seq-k2",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": true
+            }
+          }
+        ]
+      },
+      "expected": {
+        "rules": null,
+        "featureVisibilityManualRules": [
+          {
+            "feat": "CDS",
+            "qualifier": "product",
+            "value": "p",
+            "visibility": "off"
+          },
+          "text",
+          {
+            "qualifier": "hash",
+            "value": ""
+          }
+        ],
+        "unmappedCount": 0
+      }
+    }
+  ]
+}
