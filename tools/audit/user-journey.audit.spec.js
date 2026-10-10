@@ -125,9 +125,8 @@ const displayedSvg = (page) => page.evaluate(() => {
   return String(app.results?.[app.selectedResultIndex]?.content || '');
 });
 
-// The loaded preview, then Generate from the loaded draft: the two Results must
-// be the same drawing (the Gallery publication parity comparison).
-const generateEqualsLoadedPreview = async (page, dir, name) => {
+// The loaded preview, then Generate from the loaded draft.
+const generateOverLoadedPreview = async (page, dir, name) => {
   const loaded = await displayedSvg(page);
   expect(loaded, 'the Session shows a saved preview').toContain('<svg');
   await generate(page);
@@ -136,9 +135,37 @@ const generateEqualsLoadedPreview = async (page, dir, name) => {
   const generatedPath = join(dir, `${name}-generated.svg`);
   writeFileSync(loadedPath, loaded);
   writeFileSync(generatedPath, generated);
+  return { loaded, generated, loadedPath, generatedPath };
+};
+
+// The two Results must be the same drawing (the Gallery publication parity comparison).
+const generateEqualsLoadedPreview = async (page, dir, name) => {
+  const { loaded, generated, loadedPath, generatedPath } = await generateOverLoadedPreview(page, dir, name);
   const comparison = compareSvgFiles(loadedPath, generatedPath, { repoRoot: A.REPO_ROOT });
   expect(comparison.status, `Generate differs from the loaded preview:\n${comparison.report.slice(0, 4000)}`).toBe(0);
   return { loadedChars: loaded.length, generatedChars: generated.length };
+};
+
+const recordIds = (svg) => [...new Set([...svg.matchAll(/data-gbdraw-record-id="([^"]*)"/g)].map((match) => match[1]))];
+
+// A Session whose saved Result its draft no longer draws: Load keeps the saved
+// Result and Generate draws the draft with the current renderer
+// (docs/REFERENCE/session-and-request-compatibility.md: "Loading preserves the
+// saved preview", "Saving before Generate keeps the newer draft alongside the
+// earlier Result", SVG bytes can differ across versions). Generate must keep
+// the records and their order and draw the draft (`draftMarks`: SVG text the
+// draft draws and the saved Result lacks), so a draft lost or misbound on Load
+// (the OV-278 class) fails here; exact equality is checked after the round trip.
+const generateDrawsLoadedDraft = async (page, dir, name, draftMarks) => {
+  const { loaded, generated } = await generateOverLoadedPreview(page, dir, name);
+  const records = recordIds(loaded);
+  expect(records.length, 'the saved preview names its records').toBeGreaterThan(0);
+  expect(recordIds(generated), 'Generate draws the records of the saved preview in order').toEqual(records);
+  for (const mark of draftMarks) {
+    expect(loaded, `the saved Result predates the draft: ${mark}`).not.toContain(mark);
+    expect(generated, `Generate draws the draft: ${mark}`).toContain(mark);
+  }
+  return { records, draftMarks };
 };
 
 const loadSession = async (page, file) => {
@@ -406,9 +433,16 @@ journey('J2', 'Mode switch with per-mode settings', 15, async ({ page, steps }) 
   });
 });
 
+// `draftMarks`: the saved Result is not what the draft draws now, and these
+// SVG strings show the draft. The 0.13.0 Gallery Session saved a Result older
+// than its four color rules and plot title; the Session 44 holds a staged
+// record-display row (TESTB from 201, reversed) and `main`'s renderer output.
 const J3_SESSIONS = [
-  { key: 'v30-bgc', name: '0.13.0 Session 30 (BGC0000708-BGC0000713, Linear)', file: FIXTURE('BGC0000708-BGC0000713.v30.gbdraw-session.json.gz') },
-  { key: 'v44-two-mode', name: 'main-written Session 44 (two-mode project)', file: FIXTURE('two-mode-project.v44.gbdraw-session.json.gz') },
+  { key: 'v30-bgc', name: '0.13.0 Session 30 (BGC0000708-BGC0000713, Linear)', file: FIXTURE('BGC0000708-BGC0000713.v30.gbdraw-session.json.gz'),
+    draftMarks: ['Core biosynthetic genes', 'Additional biosynthetic genes', 'Transport-related genes', 'Regulatory genes']
+      .map((caption) => `data-legend-key="${caption}"`).concat('Aminoglycoside biosynthetic gene clusters from') },
+  { key: 'v44-two-mode', name: 'main-written Session 44 (two-mode project)', file: FIXTURE('two-mode-project.v44.gbdraw-session.json.gz'),
+    draftMarks: ['[201..1], [4,000..202] bp'] },
   { key: 'gallery-hmmt', name: 'Gallery HmmtDNA_basic_circular (Circular)', file: GALLERY('HmmtDNA_basic_circular.gbdraw-session.json') },
   { key: 'gallery-bgc', name: 'Gallery BGC0000708-BGC0000713 (Linear, LOSATP comparisons)', file: GALLERY('BGC0000708-BGC0000713.gbdraw-session.json') }
 ];
@@ -428,7 +462,11 @@ journey('J3', 'Session round trip across versions', 30, async ({ steps, dir, fre
     });
     if (passed()) {
       // A mismatch here (the OV-278 class) does not stop the round trip below.
-      await step('Generate equals the loaded preview', () => generateEqualsLoadedPreview(first, dir, `${session.key}-first`));
+      if (session.draftMarks) {
+        await step('Generate draws the draft over the saved Result: same records', () => generateDrawsLoadedDraft(first, dir, `${session.key}-first`, session.draftMarks));
+      } else {
+        await step('Generate equals the loaded preview', () => generateEqualsLoadedPreview(first, dir, `${session.key}-first`));
+      }
       await step('Save (writes the current Session version)', async () => {
         const state = await snapshotUserOwnedState(first);
         const result = await A.saveSession(first, savedPath);
@@ -486,12 +524,21 @@ journey('J4', 'Legend editing and History', 15, async ({ page, steps }) => {
       const index = await rowIndex('GC content');
       await evaluateWithRetainedPromise(page, (row) => window.__GBDRAW_APP__.deleteLegendEntry(row), index);
     }],
-    ['sort the rows Z to A', () => page.evaluate(() => window.__GBDRAW_APP__.sortLegendEntries('desc'))]
+    // Sort and Move are History steps through their buttons (the History input
+    // adapter, R11), so the journey clicks the control as a user does.
+    ['sort the rows Z to A', async () => {
+      const drawer = page.locator('.right-drawer');
+      if (!await drawer.isVisible()) await page.locator('.drawer-toggle').click();
+      await drawer.getByRole('button', { name: 'Legend', exact: true }).click();
+      await drawer.getByRole('button', { name: 'Sort Z-A', exact: true }).click();
+    }]
   ];
   for (const [name, edit] of edits) {
     await steps.step(name, async () => {
+      const before = (await historyDepth(page)).undo;
       await edit();
       await settleLive(page);
+      expect((await historyDepth(page)).undo, `${name}: a History step`).toBeGreaterThan(before);
       return { legend: await legendCaptions(page) };
     });
   }
