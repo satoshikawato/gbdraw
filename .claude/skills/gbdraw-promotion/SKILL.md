@@ -19,9 +19,15 @@ and "Carrying evidence to a later commit" in
    evidence whose verdict (`releaseEvidenceCarries`,
    `generatedArtifactChecksCarry`, `localTestEvidenceCarries`) is false; link
    E's evidence and the classify output.
-3. Run the suites that run only on `main` or on deploy before promoting:
-   dispatch `deploy_web.yml` on `dev`, or run its suites locally (for example
-   `npm run test:web:vibrio-generate`).
+3. Collect the audit evidence with the release-tier dispatch:
+   `gh workflow run test.yml --ref dev -f tier=release`. Besides
+   `Vibrio full generation`, its `Promotion audit / ...` jobs run every recipe
+   check, the `tools/audit/` sweeps (report-only), the user journeys, and the
+   random walk (seeded with the run ID), and `Promotion audit / summary`
+   tabulates their results, artifacts, findings, and the capabilities no
+   journey covers. Copy that table and the uncovered capabilities into the
+   checklist. Run other suites that run only on `main` or on deploy by
+   dispatching `deploy_web.yml` on `dev`, or locally.
 4. Grep `tests/`, `docs/capture/`, `docs/recipes/`, and tool fixtures for
    schema or version literals that changed since `main`.
 5. Fill every item of the checklist with links. Report each item that is not

@@ -864,7 +864,10 @@ test('browser jobs seed apt from one verified cache and bound their test steps',
     'playwright-performance',
     'acceptance-supported-main',
     'vibrio-generate-release',
-    'losat-cache-browser-acceptance'
+    'losat-cache-browser-acceptance',
+    'promotion-audit-sweeps',
+    'promotion-audit-journeys',
+    'promotion-audit-random-walk'
   ]);
 
   const cacheSteps = [
@@ -923,7 +926,10 @@ test('browser jobs seed apt from one verified cache and bound their test steps',
     'playwright-performance': 25,
     'acceptance-supported-main': 20,
     'vibrio-generate-release': 35,
-    'losat-cache-browser-acceptance': 20
+    'losat-cache-browser-acceptance': 20,
+    'promotion-audit-sweeps': 120,
+    'promotion-audit-journeys': 45,
+    'promotion-audit-random-walk': 120
   });
   const stepTimeouts = {
     gallery: { 'Run Gallery tests': 10, 'Verify Gallery first-Generate parity': 10 },
@@ -935,6 +941,8 @@ test('browser jobs seed apt from one verified cache and bound their test steps',
     },
     'web-contracts-pr': { 'Run fast Web JavaScript contracts': 5, 'Run non-slow Python browser tests': 10 },
     'web-pr-smoke': { 'Run Playwright PR smoke': 10 },
+    'promotion-audit-journeys': { 'Run the user journey': 35 },
+    'promotion-audit-random-walk': { 'Run the live-vs-Generate random walk': 100 },
     'playwright-performance': { 'Run Playwright performance tests': 10 },
     'vibrio-generate-release': { 'Run Vibrio full generation': 25 }
   };

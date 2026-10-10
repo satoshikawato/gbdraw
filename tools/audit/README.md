@@ -1,16 +1,20 @@
 # Web audit sweeps
 
-These are the manual sweeps from the 2026-09-30 Web GUI audit
-(`docs/internal/web-gui-audit-20260930/`). They are too slow or too broad
-for CI, so they live here as tools. CI runs the guards that were derived from
-them (G-A to G-J); these sweeps cover the long tail. Run them during the periodic
-audit before a `dev` to `main` promotion (see
-[`docs/internal/WEB_PERIODIC_AUDIT.md`](../../docs/internal/WEB_PERIODIC_AUDIT.md)),
-or when you investigate a finding.
+These are the sweeps from the 2026-09-30 Web GUI audit
+(`docs/internal/web-gui-audit-20260930/`) and the promotion user journeys.
+They are too slow or too broad for PR and push CI, so they live here as tools.
+PR and push CI run the guards that were derived from them (G-A to G-J); these
+sweeps cover the long tail. The release-tier `Tests` dispatch runs them for the
+periodic audit before a `dev` to `main` promotion (the `Promotion audit / ...`
+jobs; see
+[`docs/internal/WEB_PERIODIC_AUDIT.md`](../../docs/internal/WEB_PERIODIC_AUDIT.md)).
+Run one locally when you investigate a finding.
 
-A sweep records evidence; a failing sweep is not a release block by itself.
-Each confirmed problem becomes an audit row with a severity, and then a guard
-or a recorded decision not to add one.
+A sweep records evidence; a failing sweep is not a release block by itself,
+and the release-tier jobs run the sweeps report-only. Each confirmed problem
+becomes an audit row with a severity, and then a guard or a recorded decision
+not to add one. A user journey is different: it asserts the correct outcome,
+and a failed journey is a finding that fails its job.
 
 ## Setup
 
@@ -40,6 +44,7 @@ The config serves the repository root with `python3 -m http.server`, like
 | `viewport-sweep.audit.spec.js` | Horizontal overflow of the app (open, after upload, after Generate) at 390, 768, 1280, and 1920 px, and of the Gallery page and its tabs at 390, 768, and 1280 px. Records the elements past the viewport and saves screenshots. | `AUDIT_WIDTHS=390,768` | `viewport/` |
 | `gallery-roundtrip.audit.spec.js` | Every Gallery session: Load, Save, Load the saved file in a fresh context, and Save again. User-owned state (the G-C snapshot from `tests/web/helpers/app-lifecycle.cjs`) and the saved documents must match, apart from save timestamps. | `AUDIT_SESSIONS=name1,name2` | `gallery-roundtrip/` |
 | `session-load-timing.audit.spec.js` | Session load time and the order of Worker starts, Worker messages, and session lifecycle events after the load starts. | `AUDIT_SESSIONS=name1,name2` | `session-load-timing/` |
+| `user-journey.audit.spec.js` | User journeys J1 to J7, one test each: input, Generate, and every export (the interactive SVG also opened alone); mode switch with per-mode settings; Session round trip of a 0.13.0 Session 30, a `main`-written Session 44, and two Gallery Sessions (Generate equals the loaded preview, Save, reload in a fresh context, user state equal); Legend editing with Undo and Redo; feature editing and Reset Settings (live equals Generate); a comparison setting on a LOSATP Gallery Session; the flow at 390 px. After each step: no page error, console error, or unhandled rejection, and no busy indicator left. The run prints the capabilities changed since `origin/main` that no journey covers, with their changed paths (`COVERAGE` in the spec). | `--grep "J5 "` runs one journey | `journeys/<journey>/` (a screenshot per step, `steps.json`), `journeys/index.html` (contact sheet, failures first), `journeys/coverage.json` |
 
 Example: run the full parity sweep, then replay it.
 
@@ -53,6 +58,11 @@ python tools/audit/parity_replay.py "$GBDRAW_AUDIT_OUT/parity/linear-MJNV" \
 The parity sweep reopens the app for every probe, so the full run takes longer
 than the others. The 2026-09-30 audit estimated about 20 minutes for both modes.
 Use `AUDIT_ONLY` to repeat single probes.
+
+`release-audit-summary.mjs` writes the `Promotion audit / summary` table of
+a release-tier run (job, result, artifact link, findings count) from the
+downloaded `promotion-audit-*` artifacts. `node tools/audit/helpers/journey-evidence.cjs <journeys dir>`
+rebuilds a journey contact sheet, for example after merging the shards.
 
 ## Investigation helpers
 
@@ -71,6 +81,7 @@ It reuses `tests/web/helpers/app-lifecycle.cjs` and does not copy it.
 ## Keeping the sweeps current
 
 The sweeps drive the app through `window.__GBDRAW_APP__` and visible labels. If
-a UI change breaks a sweep, fix the sweep in the same PR as the UI change or in
-the next periodic audit. Do not move a sweep into CI. Instead, turn the bug
-class it found into a small guard under `tests/` (see W8 in the audit folder).
+a UI change breaks a sweep or a journey, fix it in the same PR as the UI
+change or in the next periodic audit. Do not move a sweep into PR or push CI
+(the release-tier dispatch runs them report-only). Instead, turn the bug class
+it found into a small guard under `tests/` (see W8 in the audit folder).

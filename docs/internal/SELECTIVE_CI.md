@@ -11,7 +11,7 @@ classification rules.
 | --- | --- | --- |
 | PR | Every PR into `dev` | Changed subsystem, cross-layer smoke, architecture/Product policy; all functional Playwright in eight shards for Web runtime, session, Gallery, LOSAT, shared-test, and unknown changes; Python 3.11 primary |
 | Integrated dev | Every push to `dev`; `Tests` dispatch with `tier=dev` | Core on Python 3.10/3.11/3.12; recipes, Gallery, browser/package integration, offline GUI, LOSAT cache, all functional Playwright in eight shards, performance smoke on 3.11 |
-| Release / S11 | Explicit `Tests` dispatch on `dev` with `tier=release` | Every dev functional job, additional recipe/Gallery/browser acceptance on 3.10/3.12, exhaustive non-browser slow tests on all three versions, Vibrio full generation (`vibrio-generate-release`), exact-candidate Gallery readiness |
+| Release / S11 | Explicit `Tests` dispatch on `dev` with `tier=release` | Every dev functional job, additional recipe/Gallery/browser acceptance on 3.10/3.12, exhaustive non-browser slow tests on all three versions, Vibrio full generation (`vibrio-generate-release`), exact-candidate Gallery readiness; outside `Release / gate`, the promotion audit jobs (every recipe check, report-only `tools/audit/` sweeps, the user journeys, the random walk, and their summary) |
 
 PR feedback targets 5–8 minutes without functional Playwright and 15–20 minutes
 with it. Integrated functional validation targets 15–20 minutes where practical.
@@ -265,9 +265,12 @@ for a Web test, does not matter.
 | `localTestEvidenceCarries` | Metadata; documentation and policy documentation outside `docs/recipes/`; leaf tests, except `tests/test_*.py` files with a `slow` marker or unreadable markers | Recipe runs (`run_cli_scenarios.py` and `run_python_scenarios.py` with `--all --check`), `TestOutputComparison`, the `tools/audit/` sweeps, and the `main`-written Session fixture tests |
 
 The release tier runs the Vibrio full-generation spec (`vibrio-generate-release`),
-tests marked `slow` (`slow-main`), and tests marked `recipe`, `gallery`, or
-`browser` on Python 3.10 and 3.12 (`acceptance-supported-main`). The dev tier
-repeats none of these, so changing them does not carry release evidence. When
+tests marked `slow` (`slow-main`), tests marked `recipe`, `gallery`, or
+`browser` on Python 3.10 and 3.12 (`acceptance-supported-main`), and the
+promotion audit jobs (`promotion-audit-*`: the recipe runners under
+`docs/recipes/`, the `tools/audit/` sweeps and user journeys, and the random
+walk). The dev tier repeats none of these, so changing them does not carry
+release evidence. When
 the markers of a Python test cannot be read from the file, the verdict is false.
 A changed leaf test that is itself one of the local checks reruns on H in the
 dev tier, unless it is marked `slow`.
@@ -366,6 +369,9 @@ commit.
 `PR / gate`, `Dev staging / gate`, `Gallery readiness / gate`, and `Promotion / gate`
 remain stable. `Release / gate` is separate and requires every release-profile
 job, including both exhaustive matrices, plus exact-candidate Gallery readiness.
+The promotion audit jobs are not release-profile jobs and no gate reads them;
+`Promotion audit / summary` tabulates their findings for the promotion
+checklist ([`WEB_PERIODIC_AUDIT.md`](WEB_PERIODIC_AUDIT.md)).
 A release dispatch cannot emit ordinary `Dev staging / gate` success.
 
 Plans use schema 3 and include the capability union. A leaf-test plan also lists
