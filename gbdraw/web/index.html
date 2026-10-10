@@ -957,6 +957,29 @@
             }
         }
 
+        /* OV-368: the header keeps one row without overflow. Below 1440px it drops
+           the tagline; below 1280px its buttons show only their icons, named by
+           aria-label and title. */
+        @media (max-width: 1439px) {
+            .app-tagline {
+                display: none !important;
+            }
+        }
+
+        @media (max-width: 1279px) {
+            .app-config-button {
+                width: 2rem !important;
+                height: 2rem !important;
+                padding: 0 !important;
+                justify-content: center !important;
+                font-size: 0 !important;
+            }
+
+            .app-config-button i {
+                font-size: 0.95rem !important;
+            }
+        }
+
         @media (max-width: 768px) {
             body {
                 overflow-x: hidden !important;
@@ -989,7 +1012,6 @@
                 max-width: 8.5rem !important;
             }
 
-            .app-tagline,
             .app-session-label {
                 display: none !important;
             }
@@ -1005,18 +1027,6 @@
                 flex-wrap: wrap !important;
                 gap: 0.25rem !important;
                 order: 2 !important;
-            }
-
-            .app-config-button {
-                width: 2rem !important;
-                height: 2rem !important;
-                padding: 0 !important;
-                justify-content: center !important;
-                font-size: 0 !important;
-            }
-
-            .app-config-button i {
-                font-size: 0.95rem !important;
             }
 
             .app-session-actions {
@@ -1320,7 +1330,7 @@
             .btn-danger { @apply border border-red-200 bg-white text-red-600 hover:bg-red-50; }
             .btn-sm { @apply px-2 py-1 text-xs; }
             .btn-icon-sm { @apply inline-flex h-6 w-6 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed; }
-            .app-config-button { @apply flex items-center gap-0.5 rounded border px-1 py-0.5 font-bold transition-colors; font-size: 11px; color: #475569; background-color: var(--ui-surface); border-color: var(--ui-line); }
+            .app-config-button { @apply flex items-center gap-0.5 rounded border px-1 py-0.5 font-bold whitespace-nowrap transition-colors; font-size: 11px; color: #475569; background-color: var(--ui-surface); border-color: var(--ui-line); }
             .app-config-button:hover:not(:disabled) { color: var(--ui-accent); border-color: var(--ui-accent); }
 
             /* One row, about 32 px; neutral until a file is chosen. */
@@ -1386,6 +1396,10 @@
                     </button>
                     <button data-history-managed @click="openSessionFilePicker" :disabled="!sessionLoadAvailable" :aria-busy="sessionImportPending" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" title="Load Session" aria-label="Load Session">
                         <i class="ph ph-archive-tray" aria-hidden="true"></i> Load Session
+                    </button>
+                    <!-- D-07: Load example stays here once a Result replaces the empty Preview. -->
+                    <button v-if="galleryExamples.length" data-history-managed @click="openExampleChooser" :disabled="!sessionLoadAvailable || exampleSessionPending" :aria-busy="exampleSessionPending" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" title="Open a finished Gallery example as a Session" aria-label="Load example" aria-haspopup="dialog">
+                        <i :class="exampleSessionPending ? 'ph ph-spinner animate-spin' : 'ph ph-play-circle'" aria-hidden="true"></i> Load example
                     </button>
                     <input data-history-managed type="file" ref="sessionInput" accept=".json,.gz,application/json,application/gzip" class="hidden" @change="importSession">
                     <span v-if="sessionBusyReason && !sessionSavePending && !sessionImportPending" data-session-busy-reason role="status" aria-live="polite" class="text-[10px] text-amber-700">{{ sessionBusyReason }}</span>
