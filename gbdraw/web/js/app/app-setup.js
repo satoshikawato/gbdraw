@@ -4203,14 +4203,18 @@ export const createAppSetup = () => {
     return history.runUndoableCheckpoint('Reset settings', () => followRuleEdits(state.activeDrawing(), async () => {
       featureActions.clearSpecificRulePatternDrafts();
       const shown = Boolean(svgContainer.value?.querySelector?.('svg'));
-      if (shown) {
-        // Generate draws again the rows it drew (a row added in the editor and
-        // deleted stays gone).
-        const generated = new Set(originalLegendOrder.value);
-        await restoreDeletedLegendEntries(state.activeDrawing().deletedLegendEntries.value.flatMap(
-          (/** @type {{ caption?: string, originalCaption?: string }} */ entry, /** @type {number} */ index) => (
-            generated.has(entry.originalCaption || entry.caption) ? [index] : [])
-        ));
+      // Each Legend owner runs only when there is an edit to undo, so a Reset
+      // without one rewrites no Result and resets the draft at once.
+      const active = state.activeDrawing();
+      // Generate draws again the rows it drew (a row added in the editor and
+      // deleted stays gone).
+      const generated = new Set(originalLegendOrder.value);
+      const deleted = active.deletedLegendEntries.value.flatMap(
+        (/** @type {{ caption?: string, originalCaption?: string }} */ entry, /** @type {number} */ index) => (
+          generated.has(entry.originalCaption || entry.caption) ? [index] : [])
+      );
+      if (shown && deleted.length > 0) await restoreDeletedLegendEntries(deleted);
+      if (shown && Object.keys({ ...active.legendStrokeOverrides, ...active.featureStrokeOverrides }).length > 0) {
         resetAllStrokes();
       }
       const palette = { ...appliedPaletteColors.value };
