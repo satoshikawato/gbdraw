@@ -482,6 +482,7 @@ test('uploader, comparison commands, and native summaries work from the keyboard
 });
 
 test('imported comparison resolutions are explicit and create one History entry each', async ({ page }) => {
+  test.setTimeout(300000);
   await openLinear(page);
   await inputAddAction(page).click();
   await page.evaluate(() => {
@@ -552,6 +553,29 @@ test('imported comparison resolutions are explicit and create one History entry 
   await expect(resolution).toContainText('Selected action: REPLACE');
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
     .toBe(beforeReplace + 1);
+
+  // OV-301: a replacement draft that becomes empty or invalid after Replace is
+  // reported with its own diagnostic, not the unclassified fallback.
+  await comparisonCommands(page).getByRole('button', { name: 'Set no comparison' }).click();
+  await page.getByRole('button', { name: 'Generate Diagram' }).click();
+  await expect(page.getByRole('alert', { name: 'Generation Error' })).toContainText(
+    'Set up a comparison in the Comparison panel, or choose Clear comparison, then Generate again.',
+    { timeout: 180000 }
+  );
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
+    code: 'COMPARISON_REPLACEMENT_EMPTY', operation: 'generate', stage: 'request-validation'
+  });
+  const invalidReplacement = await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.setLinearComparisonGlobalAction('losat');
+    app.setLinearComparisonGapAction(app.linearComparisonResolution.edges[0].edgeKey, 'upload');
+    const result = await app.runAnalysis();
+    return { status: result?.status, code: app.errorLog?.code, context: app.errorLog?.context };
+  });
+  expect(invalidReplacement).toMatchObject({
+    status: 'error', code: 'COMPARISON_INPUT', context: { reason: 'BLAST_TSV_REQUIRED' }
+  });
+  await expect(resolution).toContainText('Selected action: REPLACE');
 
   await setIntent(
     'DECISION_REQUIRED',
