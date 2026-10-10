@@ -311,3 +311,34 @@ assert.ok(inputReads > 0, 'saving must bind the active input file');
 assert.equal(compressionAttempts, 5);
 assert.equal(downloadedBlobs, 5);
 assert.ok(downloadedBlob instanceof Blob);
+
+// OV-325: Load of a Circular Session without a Web draft (CLI, Python) that
+// gives two records of one GenBank file, selected by record ID, a display start
+// projects both drafts on '#1'. Save writes each draft on its record's row
+// once the File card lists the file's records, instead of failing validation.
+{
+  const draft = (recordId, startCoordinate) => ({
+    sourceUid: 'circular', selector: '#1', recordId, startCoordinate,
+    topologyOverride: null, reverseComplementOverride: null, anchorIntent: null
+  });
+  const rows = ['NC_004603.1', 'NC_004605.1'].map((recordId, index) => ({
+    key: JSON.stringify(['circular', `#${index + 1}`]), scope: 'circular', sourceUid: 'circular',
+    selector: `#${index + 1}`, recordId, recordLength: 60, detectedTopology: 'circular'
+  }));
+  const drafts = state.drawings.circular.recordDisplayDrafts;
+  drafts.splice(0, drafts.length, draft('NC_004603.1', 1000), draft('NC_004605.1', 2000));
+  URL.createObjectURL = () => 'blob:ov325-session';
+  try {
+    const saved = await exportSession('ov325-cli-circular', { recordDisplayRows: { value: rows } });
+    assert.equal(saved.status, 'saved');
+    const session = JSON.parse(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())).toString('utf8'));
+    assert.deepEqual(
+      session.modes.circular.config.recordDisplayDrafts.map(({ selector, recordId, startCoordinate }) => [selector, recordId, startCoordinate]),
+      [['#1', 'NC_004603.1', 1000], ['#2', 'NC_004605.1', 2000]],
+      'OV-325: Save after Load writes each draft on its record'
+    );
+  } finally {
+    URL.createObjectURL = originalCreateObjectUrl;
+    drafts.splice(0, drafts.length);
+  }
+}

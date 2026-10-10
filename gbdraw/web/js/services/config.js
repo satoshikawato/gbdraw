@@ -134,7 +134,7 @@ import {
   validateFeatureCatalog,
   validateFeatureCatalogForImport
 } from './feature-catalog.js';
-import { migrateLegacyRecordDisplayDrafts } from './record-display-model.js';
+import { bindRecordDisplayDrafts, migrateLegacyRecordDisplayDrafts } from './record-display-model.js';
 import {
   buildOrthogroupFeatureIndex,
   enrichFeaturesWithOrthogroups,
@@ -5785,8 +5785,8 @@ export const disposeSessionOperations = () => {
 
 // `options.availability` is the Save and Load availability the composition
 // root composes from `sessionOperationAvailability` and the edits still
-// applying (R13); `options.recordDisplayRows` are the draft record display
-// rows a Save without a committed request projects;
+// applying (R13); `options.recordDisplayRows` are the record display rows of
+// both drawings' sources, on which Save writes their drafts;
 // `options.readOtherModeArtifact` returns the other mode's artifact slot that
 // the root keeps (E1), `options.beforeExport` learns whether Save projects
 // the draft request, and `options.onSaved` runs once the download is handed off.
@@ -5815,13 +5815,22 @@ export const exportSession = (titleOverride = null, options = {}) => {
     // Session 46 keeps each drawing as its mode's slice (PD-OI-086); the
     // Features-list record is the shown Result's. `drawing` is the shown mode's.
     const drawing = state.drawings[state.mode.value];
+    // Each drawing's drafts are written on the rows of their records (OV-278,
+    // OV-325): a Session without a Web draft loads a draft selected by record ID on '#1'.
+    const recordDisplayRows = /** @type {{ recordDisplayRows?: { value?: Parameters<typeof bindRecordDisplayDrafts>[1] } }} */ (options).recordDisplayRows?.value || [];
+    /** @param {'circular' | 'linear'} mode @returns {DrawingState} */
+    const savedDrawing = (mode) => {
+      const live = state.drawings[mode];
+      const drafts = bindRecordDisplayDrafts(live.recordDisplayDrafts, recordDisplayRows);
+      return drafts === live.recordDisplayDrafts ? live : { ...live, recordDisplayDrafts: drafts };
+    };
     // Each drawing is checked as it is, before the JSON copy, so a value JSON
     // cannot write (Infinity, NaN) fails Save instead of being written as null.
     SLICE_MODES.forEach((mode) => validateCurrentWriterActiveConfig({
-      mode, storedConfig: buildConfigData(state.drawings[mode])
+      mode, storedConfig: buildConfigData(savedDrawing(mode))
     }));
     /** @param {'circular' | 'linear'} mode */
-    const sliceOf = (mode) => buildModeSliceData(state.drawings[mode], mode, {
+    const sliceOf = (mode) => buildModeSliceData(savedDrawing(mode), mode, {
       selectedFeatureRecordIdx: mode === state.mode.value ? Number(state.selectedFeatureRecordIdx.value) || 0 : 0
     });
     const modes = { circular: sliceOf('circular'), linear: sliceOf('linear') };

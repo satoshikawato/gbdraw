@@ -467,3 +467,19 @@ test('Circular discovery metadata belongs only to the current source and complet
   assert.equal(circularDiscoveryForInput(state).status, 'deferred');
   assert.deepEqual(circularDiscoveryForInput(state).records, []);
 });
+
+// OV-278: Load of a Session without a Web draft writes a draft selected by
+// record ID on '#1'. The row of its record reads it, and an edit there leaves
+// one draft for that record.
+test('a loaded draft selected by record ID is read and edited on its own record row', () => {
+  const model = compositeControls();
+  const loaded = (recordId, startCoordinate) => ({ sourceUid: 'circular', selector: '#1', recordId, startCoordinate,
+    topologyOverride: null, reverseComplementOverride: null, anchorIntent: null });
+  model.state.recordDisplayDrafts.push(loaded('first', 7), loaded('second', 11));
+  const [first, second] = model.controls.allRows.value;
+  assert.equal(model.controls.draftFor(first).startCoordinate, 7);
+  assert.equal(model.controls.draftFor(second).startCoordinate, 11);
+  model.controls.setStart(second, 12);
+  assert.deepEqual(model.state.recordDisplayDrafts.map(({ selector, recordId, startCoordinate }) => [selector, recordId, startCoordinate]),
+    [['#1', 'first', 7], ['#2', 'second', 12]]);
+});
