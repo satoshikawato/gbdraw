@@ -170,6 +170,8 @@ BGC_COMMAND = (
     "gbdraw linear --losat losatp --losatp_mode similarity_groups "
     "--similarity_alignment_feature CAF33315.1 -f interactive_svg "
     "--gbk BGC0000708.gbk BGC0000709.gbk BGC0000711.gbk BGC0000712.gbk BGC0000713.gbk "
+    "--reverse_complement 0 --reverse_complement 0 --reverse_complement 0 "
+    "--reverse_complement 0 --reverse_complement 1 "
     "-k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p orange "
     "-d BGC0000708-BGC0000713_default_colors.tsv "
     "-t BGC0000708-BGC0000713_specific_colors.tsv "

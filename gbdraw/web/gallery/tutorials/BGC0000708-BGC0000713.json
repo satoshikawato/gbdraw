@@ -82,13 +82,13 @@
       "title": "Upload the five GenBank files",
       "body": "Add the GenBank files in this order, then fill the Organism / strain and Subtitle / title fields exactly as shown. Type the <i> tags literally; the generated SVG uses them to italicize taxon names.",
       "table": {
-        "columns": ["Order", "GenBank file", "Organism / strain", "Subtitle"],
+        "columns": ["Order", "GenBank file", "Organism / strain", "Subtitle", "Reverse complement"],
         "rows": [
-          ["1", "BGC0000708.gbk", "<i>Streptomyces lividus</i> CBS 844.73", "Lividomycin biosynthetic gene cluster"],
-          ["2", "BGC0000709.gbk", "<i>Streptomyces fradiae</i> ATCC 10745", "Neomycin biosynthetic gene cluster"],
-          ["3", "BGC0000711.gbk", "<i>Streptomyces fradiae</i> MCIMB 8233", "Neomycin biosynthetic gene cluster"],
-          ["4", "BGC0000712.gbk", "<i>Streptomyces rimosus</i> subsp. <i>paromomycinus</i> NRRL 2455", "Paromomycin biosynthetic gene cluster"],
-          ["5", "BGC0000713.gbk", "<i>Streptomyces ribosidificus</i> ATCC 21294", "Ribostamycin biosynthetic gene"]
+          ["1", "BGC0000708.gbk", "<i>Streptomyces lividus</i> CBS 844.73", "Lividomycin biosynthetic gene cluster", "Off"],
+          ["2", "BGC0000709.gbk", "<i>Streptomyces fradiae</i> ATCC 10745", "Neomycin biosynthetic gene cluster", "Off"],
+          ["3", "BGC0000711.gbk", "<i>Streptomyces fradiae</i> MCIMB 8233", "Neomycin biosynthetic gene cluster", "Off"],
+          ["4", "BGC0000712.gbk", "<i>Streptomyces rimosus</i> subsp. <i>paromomycinus</i> NRRL 2455", "Paromomycin biosynthetic gene cluster", "Off"],
+          ["5", "BGC0000713.gbk", "<i>Streptomyces ribosidificus</i> ATCC 21294", "Ribostamycin biosynthetic gene", "On"]
         ]
       },
       "operations": [
@@ -386,16 +386,52 @@
       ]
     },
     {
-      "title": "Set the comparison layout and arrow shape",
-      "body": "Before the first generation, keep features in the middle of each axis and narrow the arrow shafts. A Shaft Width Ratio of 0.6 draws each shaft at 60% of the feature height, so the arrowheads stay visible on short genes and at Gallery thumbnail size.",
+      "title": "Set record orientation, comparison layout, and arrow shape",
+      "body": "Before the first generation, reverse-complement BGC0000713, keep features in the middle of each axis, and narrow the arrow shafts. MIBiG stores BGC0000713 on the opposite strand from the other four clusters, so its core genes (rbmA to rbmF) read on the minus strand until you reverse it. A Shaft Width Ratio of 0.6 draws each shaft at 60% of the feature height, so the arrowheads stay visible on short genes and at Gallery thumbnail size.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
+          ["Reverse complement", "BGC0000713 only"],
           ["Track Layout", "Middle"],
           ["Features › Arrow Geometry › Shaft Width Ratio", "0.6"]
         ]
       },
       "operations": [
+        {
+          "dataDependent": true,
+          "title": "Reverse-complement selector",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-04-02-reverse-bgc0000713.webp",
+            "alt": "BGC0000713 record card with Record options open and Reverse complement checked in Region.",
+            "caption": "Open BGC0000713 Record options and check Reverse complement for that record only."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {"width": 1280, "height": 1000},
+            "actions": [
+              {"type": "evaluate", "script": "async () => { await window.__GBDRAW_APP__.refreshLinearRecordSelectors(); }"},
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const seq = app.linearSeqs[4]; if (seq?.uid !== 'record-5') throw new Error('BGC0000713 record was not restored as sequence 5.'); seq.region_reverse = true; const row = document.querySelector('[data-linear-record-card=\"record-5\"]'); const options = row?.querySelector('[data-linear-record-options=\"record-5\"]'); if (!row || !options) throw new Error('BGC0000713 Record options were not found.'); options.open = true; const card = row.closest('[data-linear-source-card]'); const uploader = card?.querySelector(':scope > .space-y-2'); if (!card || !uploader) throw new Error('BGC0000713 file card was not found.'); uploader.setAttribute('data-capture', 'bgc0713-file'); row.setAttribute('data-capture', 'bgc0713-record'); card.scrollIntoView({ block: 'start' });"
+              },
+              {"type": "evaluate", "script": "window.__GBDRAW_APP__.sidebarWidth = 600;"},
+              {"type": "waitForFunction", "script": "() => { const select = document.querySelector('[data-linear-record-card=record-5] select'); return Boolean(select) && !select.textContent.includes('Loading records'); }"}
+            ],
+            "clipSelectors": ["[data-capture='bgc0713-file']", "[data-capture='bgc0713-record']"],
+            "cropPadding": {"top": 0, "right": 14, "bottom": 14, "left": 14},
+            "assertAppState": {
+              "mode": "linear",
+              "linearSeqs.4.uid": "record-5",
+              "linearSeqs.4.gb.name": "BGC0000713.gbk",
+              "linearSeqs.4.region_reverse": true
+            },
+            "visibleText": ["BGC0000713.gbk", "Record options", "Region (optional)", "Reverse complement"],
+            "visibleControls": [
+              {"selector": "input[aria-label='Reverse complement for sequence 5']", "checked": true}
+            ]
+          }
+        },
         {
           "title": "Track layout selector",
           "media": {
@@ -1174,7 +1210,7 @@
   "troubleshooting": [
     {
       "title": "The rows do not line up like the Gallery figure",
-      "body": "Check the input order and the alignment to gbdraw group og_6: neoU of BGC0000709 is the exact reference, and BGC0000708 keeps livU (CAG38700.1), not the transport protein CAG38692.1."
+      "body": "Check the input order, the reverse-complement setting for BGC0000713, and the alignment to gbdraw group og_6: neoU of BGC0000709 is the exact reference, and BGC0000708 keeps livU (CAG38700.1), not the transport protein CAG38692.1."
     },
     {
       "title": "Core genes are not red",

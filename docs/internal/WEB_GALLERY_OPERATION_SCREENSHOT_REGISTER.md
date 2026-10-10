@@ -5,14 +5,18 @@ Last updated: 2026-10-10
 This register records task-specific decisions for Gallery operation media.
 Capture metadata remains the executable source of truth in each tutorial JSON.
 
-## BGC record orientation (OV-365)
+## BGC record orientation
 
-The BGC Gallery Session has not reverse-complemented BGC0000713 since
-2026-07-15, so the tutorial no longer asks for it.
+MIBiG stores BGC0000713 on the opposite strand from the other four clusters.
+Since 2026-07-15 the BGC Gallery Session stores a reverse-complemented copy of
+that file instead of the original file with **Reverse complement** on, so a
+reader who starts from the MIBiG files still needs the step. The recipe reads
+the records first, so the **Record** select shows its loaded options rather
+than **Loading records...**.
 
 | Tutorial | Operation media | Decision | Required capture state | Status |
 | --- | --- | --- | --- | --- |
-| `BGC0000708-BGC0000713` | `manual-04-02-reverse-bgc0000713.webp` | Delete | None; the step and its table row and column are removed | Deleted |
+| `BGC0000708-BGC0000713` | `manual-04-02-reverse-bgc0000713.webp` | Recapture | Exact BGC Session; the BGC0000713 file card from its file name to **Region (optional)**, with **Record options** open and **Reverse complement** checked | Captured at DSF 3; accepted |
 | `BGC0000708-BGC0000713` | `manual-04-04-pairwise-style-curve.webp` | Delete | None; no step referenced it | Deleted |
 
 ## BGC og_6 alignment and arrow shaft width (Gallery revision 2026-10-10)

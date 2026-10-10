@@ -417,7 +417,11 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
   await expect(
     tutorialPanel.getByRole('row', { name: 'Definition line: Accession 20; Normal; #7b7c7d' })
   ).toBeVisible();
-  await expect(tutorialPanel.getByRole('columnheader', { name: 'Reverse complement' })).toHaveCount(0);
+  await expect(
+    tutorialPanel.getByRole('row', {
+      name: 'Reverse complement BGC0000713 only'
+    })
+  ).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Track Layout Middle' })).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', { name: 'Features › Arrow Geometry › Shaft Width Ratio 0.6' })
@@ -450,14 +454,14 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
     { text: 'BGC0000713.gbk', overflowWrap: 'normal', lineCount: 1 }
   ]);
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(21);
+  await expect(mediaImages).toHaveCount(22);
   await expect(tutorialPanel.locator('img[src$="manual-03-03-first-comparison-boundary.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-09-01-orthogroup-popup.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-10-01-feature-popup.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-04-03-track-layout-middle.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-03-02-select-losatp-orthogroups.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-04-04-pairwise-style-curve.webp"]')).toHaveCount(0);
-  await expect(tutorialPanel.locator('img[src$="manual-04-02-reverse-bgc0000713.webp"]')).toHaveCount(0);
+  await expect(tutorialPanel.locator('img[src$="manual-04-02-reverse-bgc0000713.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-06-02-record-labels.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-07-01-specific-rules-all.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-04-04-arrow-shaft-width.webp"]')).toHaveCount(1);

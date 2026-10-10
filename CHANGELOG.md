@@ -16,9 +16,7 @@ write-up of a release.
   Ratio** 0.6 and aligns its records on similarity group og_6 (neoU of
   BGC0000709) instead of og_1. Its tutorial adds the **Features › Arrow Geometry
   › Shaft Width Ratio** step and walks through **Review alignment options…**,
-  where BGC0000708 has two og_6 members and keeps the recommended livU. The
-  tutorial no longer asks you to reverse-complement BGC0000713, which the
-  example has not done since July 2026 (OV-365).
+  where BGC0000708 has two og_6 members and keeps the recommended livU.
 - Gallery tutorials: the BGC, Hepatoplasmataceae, and majanivirus tutorials now
   say that the LOSAT runtime controls are under **Comparison › Settings ›
   Runtime and reproducibility**, not under **Advanced comparison and layout**
