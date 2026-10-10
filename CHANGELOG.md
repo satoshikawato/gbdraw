@@ -12,6 +12,13 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Sessions (web app): **Generate Diagram** on a loaded Session whose saved
+  comparison waits for **Inherit saved comparison**, **Replace with current
+  controls**, or **Clear comparison** now says "Choose how to handle the saved
+  comparison in the Comparison panel, then Generate again." Before, it showed the
+  generic "The operation failed without recognized diagnostic information" (OV-303).
+  A saved comparison whose resource is missing still reports the comparison input
+  error.
 - Sessions and Legend (web app): a stored Legend entry color and a feature color
   override are checked with the same rule as the **Override File (-d)** import. A
   Legend entry whose stored color is outside that rule, such as `ButtonFace`, is

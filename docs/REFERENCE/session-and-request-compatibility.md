@@ -179,6 +179,11 @@ the current schema. A Linear Session without a stored comparison plan loads
 with **No comparison**. A CLI Session written with `-b` therefore offers
 **Replace with current controls** only after a comparison is set up, and starts
 no LOSAT run before that.
+**Generate Diagram** before choosing **Inherit saved comparison**, **Replace
+with current controls**, or **Clear comparison** stops with
+`COMPARISON_CHOICE_REQUIRED` ("Choose how to handle the saved comparison in the
+Comparison panel, then Generate again."). A saved comparison whose resource is
+missing reports `COMPARISON_INPUT` instead.
 
 A CLI Linear Session written without `-b` or `--losat` commits only a disabled
 protein pipeline (mode `none`, no pairs). It loads with **No comparison** and

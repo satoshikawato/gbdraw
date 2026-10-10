@@ -596,6 +596,17 @@ test('preserved imported comparison generates only after explicit inheritance', 
   });
   expect(imported.undoCount).toBe(0);
 
+  // OV-303: Generate before the choice names it instead of the unclassified fallback.
+  await page.getByRole('button', { name: 'Generate Diagram' }).click();
+  await expect(page.getByRole('alert', { name: 'Generation Error' })).toContainText(
+    'Choose how to handle the saved comparison in the Comparison panel, then Generate again.',
+    { timeout: 180000 }
+  );
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
+    code: 'COMPARISON_CHOICE_REQUIRED', operation: 'generate', stage: 'request-validation'
+  });
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(0);
+
   await resolution.getByRole('button', { name: 'Inherit saved comparison' }).click();
   const generated = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;

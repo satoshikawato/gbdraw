@@ -3790,7 +3790,9 @@ export const createAppSetup = () => {
           draftResolution: comparisonPlanSnapshot
         });
         if (!comparisonExecution.ok) {
-          errorLog.value = normalizeUserFacingError(comparisonExecution.message, { operation: 'generate', stage: 'request-validation' });
+          errorLog.value = normalizeUserFacingError(comparisonExecution.message, {
+            operation: 'generate', stage: 'request-validation', code: comparisonExecution.fallbackCode
+          });
           generationFailureRecovery.value = results.value.length ? 'preserved' : 'no-result';
           failedGeneratePreservedResult.value = results.value.length > 0;
           if (mode.value === 'linear') await focusLinearComparisonIssue();

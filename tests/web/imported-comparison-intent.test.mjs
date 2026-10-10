@@ -11,6 +11,7 @@ import {
   restoreImportedComparisonIntent,
   serializeImportedComparisonResolution
 } from '../../gbdraw/web/js/services/imported-comparison-intent.js';
+import { normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
 
 const records = [
   {
@@ -205,10 +206,26 @@ assert.deepEqual(importedComparisonExecution({
 
 const decisionState = createImportedComparisonIntentState();
 restoreImportedComparisonIntent(decisionState, decision);
-assert.equal(importedComparisonExecution({
-  intent: decisionState,
-  draftResolution: { valid: true, hasComparisonIntent: false }
-}).ok, false);
+// Generate before the choice, as the app reports it.
+const generateBeforeChoice = (intent) => {
+  const execution = importedComparisonExecution({
+    intent,
+    draftResolution: { valid: true, hasComparisonIntent: false }
+  });
+  assert.equal(execution.ok, false);
+  return normalizeUserFacingError(execution.message, {
+    operation: 'generate', stage: 'request-validation', code: execution.fallbackCode
+  });
+};
+// A missing resource keeps its own diagnostic.
+assert.equal(generateBeforeChoice(decisionState)?.code, 'COMPARISON_INPUT');
+// OV-303: any other reason names the pending choice, not the UNKNOWN fallback.
+for (const intent of [preserved, nonExecutableEndpoints]) {
+  const error = generateBeforeChoice(intent);
+  assert.deepEqual([error?.code, error?.actions], ['COMPARISON_CHOICE_REQUIRED', ['edit-comparison']]);
+  assert.equal(error?.summary,
+    'Choose how to handle the saved comparison in the Comparison panel, then Generate again.');
+}
 assert.equal(resolveImportedComparisonAction({
   intent: decisionState,
   action: IMPORTED_COMPARISON_ACTIONS.INHERIT,
