@@ -125,9 +125,8 @@ const displayedSvg = (page) => page.evaluate(() => {
   return String(app.results?.[app.selectedResultIndex]?.content || '');
 });
 
-// The loaded preview, then Generate from the loaded draft: the two Results must
-// be the same drawing (the Gallery publication parity comparison).
-const generateEqualsLoadedPreview = async (page, dir, name) => {
+// The loaded preview, then Generate from the loaded draft.
+const generateOverLoadedPreview = async (page, dir, name) => {
   const loaded = await displayedSvg(page);
   expect(loaded, 'the Session shows a saved preview').toContain('<svg');
   await generate(page);
@@ -136,9 +135,31 @@ const generateEqualsLoadedPreview = async (page, dir, name) => {
   const generatedPath = join(dir, `${name}-generated.svg`);
   writeFileSync(loadedPath, loaded);
   writeFileSync(generatedPath, generated);
+  return { loaded, generated, loadedPath, generatedPath };
+};
+
+// The two Results must be the same drawing (the Gallery publication parity comparison).
+const generateEqualsLoadedPreview = async (page, dir, name) => {
+  const { loaded, generated, loadedPath, generatedPath } = await generateOverLoadedPreview(page, dir, name);
   const comparison = compareSvgFiles(loadedPath, generatedPath, { repoRoot: A.REPO_ROOT });
   expect(comparison.status, `Generate differs from the loaded preview:\n${comparison.report.slice(0, 4000)}`).toBe(0);
   return { loadedChars: loaded.length, generatedChars: generated.length };
+};
+
+const recordIds = (svg) => [...new Set([...svg.matchAll(/data-gbdraw-record-id="([^"]*)"/g)].map((match) => match[1]))];
+
+// A Session whose saved Result its draft no longer draws: Load keeps the saved
+// Result and Generate draws the draft with the current renderer
+// (docs/REFERENCE/session-and-request-compatibility.md: "Loading preserves the
+// saved preview", "Saving before Generate keeps the newer draft alongside the
+// earlier Result", SVG bytes can differ across versions). Generate must keep
+// the records and their order; exact equality is checked after the round trip.
+const generateKeepsLoadedRecords = async (page, dir, name) => {
+  const { loaded, generated } = await generateOverLoadedPreview(page, dir, name);
+  const records = recordIds(loaded);
+  expect(records.length, 'the saved preview names its records').toBeGreaterThan(0);
+  expect(recordIds(generated), 'Generate draws the records of the saved preview in order').toEqual(records);
+  return { records };
 };
 
 const loadSession = async (page, file) => {
@@ -406,9 +427,12 @@ journey('J2', 'Mode switch with per-mode settings', 15, async ({ page, steps }) 
   });
 });
 
+// `draftAhead`: the saved Result is not what the draft draws now. The 0.13.0
+// Gallery Session saved a Result older than its color rules and plot title;
+// the Session 44 holds a staged record-display row and `main`'s renderer output.
 const J3_SESSIONS = [
-  { key: 'v30-bgc', name: '0.13.0 Session 30 (BGC0000708-BGC0000713, Linear)', file: FIXTURE('BGC0000708-BGC0000713.v30.gbdraw-session.json.gz') },
-  { key: 'v44-two-mode', name: 'main-written Session 44 (two-mode project)', file: FIXTURE('two-mode-project.v44.gbdraw-session.json.gz') },
+  { key: 'v30-bgc', name: '0.13.0 Session 30 (BGC0000708-BGC0000713, Linear)', file: FIXTURE('BGC0000708-BGC0000713.v30.gbdraw-session.json.gz'), draftAhead: true },
+  { key: 'v44-two-mode', name: 'main-written Session 44 (two-mode project)', file: FIXTURE('two-mode-project.v44.gbdraw-session.json.gz'), draftAhead: true },
   { key: 'gallery-hmmt', name: 'Gallery HmmtDNA_basic_circular (Circular)', file: GALLERY('HmmtDNA_basic_circular.gbdraw-session.json') },
   { key: 'gallery-bgc', name: 'Gallery BGC0000708-BGC0000713 (Linear, LOSATP comparisons)', file: GALLERY('BGC0000708-BGC0000713.gbdraw-session.json') }
 ];
@@ -428,7 +452,11 @@ journey('J3', 'Session round trip across versions', 30, async ({ steps, dir, fre
     });
     if (passed()) {
       // A mismatch here (the OV-278 class) does not stop the round trip below.
-      await step('Generate equals the loaded preview', () => generateEqualsLoadedPreview(first, dir, `${session.key}-first`));
+      if (session.draftAhead) {
+        await step('Generate draws the draft over the saved Result: same records', () => generateKeepsLoadedRecords(first, dir, `${session.key}-first`));
+      } else {
+        await step('Generate equals the loaded preview', () => generateEqualsLoadedPreview(first, dir, `${session.key}-first`));
+      }
       await step('Save (writes the current Session version)', async () => {
         const state = await snapshotUserOwnedState(first);
         const result = await A.saveSession(first, savedPath);
