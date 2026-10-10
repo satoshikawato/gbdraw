@@ -1093,6 +1093,419 @@ jobs:
       - name: Run LOSAT cache migration browser acceptance
         run: python tests/run_losat_cache_browser_acceptance.py
 
+  # Promotion audit (docs/internal/WEB_PERIODIC_AUDIT.md, Procedure steps 2, 3,
+  # 4, and 6): only on the release-tier dispatch, outside every gate. Sweeps are
+  # report-only; recipes, user journeys, and the random walk fail their job on a
+  # finding. Each job uploads its evidence as `promotion-audit-<key>`, and
+  # `Promotion audit / summary` tabulates them.
+  promotion-audit-recipes:
+    name: Promotion audit / recipes
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/dev' && inputs.tier == 'release'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install recipe dependencies
+        run: python -m pip install -e ".[dev]"
+
+      - name: Set the audit evidence folder
+        run: echo "GBDRAW_AUDIT_OUT=$RUNNER_TEMP/promotion-audit" >> "$GITHUB_ENV"
+
+      # The LOSATP recipes need the bundled LOSAT; without it their failures are
+      # rerun locally (the summary says so).
+      - name: Check the bundled LOSAT runtime
+        run: |
+          mkdir -p "$GBDRAW_AUDIT_OUT"
+          if version="$(python -c 'import contextlib, subprocess
+          from gbdraw.comparisons.losat_runtime import resolve_losat_runtime
+          with contextlib.ExitStack() as stack:
+              runtime = resolve_losat_runtime("losatp", stack=stack)
+              print(runtime.source, subprocess.run([runtime.executable, "--version"], capture_output=True, text=True, check=True).stdout.strip())' 2>&1)"; then
+            echo "available: $version" > "$GBDRAW_AUDIT_OUT/losat.txt"
+          else
+            echo "unavailable: $version" > "$GBDRAW_AUDIT_OUT/losat.txt"
+          fi
+          cat "$GBDRAW_AUDIT_OUT/losat.txt"
+
+      # Every CLI and Python recipe, one at a time, so one failure does not hide
+      # the rest (run_*_scenarios.py --all stops at the first).
+      - name: Run every recipe check
+        env:
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/docs/recipes
+        run: |
+          out="$GBDRAW_AUDIT_OUT/recipes"
+          mkdir -p "$out"
+          status=0
+          for surface in cli python; do
+            script="docs/recipes/run_${surface}_scenarios.py"
+            ids="$(python -c 'import runpy, sys; print(" ".join(runpy.run_path(sys.argv[1])["SCENARIO_IDS"]))' "$script")"
+            for id in $ids; do
+              if python "$script" --scenario "$id" --check > "$out/$id.log" 2>&1; then result=pass; else result=fail; status=1; fi
+              printf '%s\t%s\t%s\n' "$surface" "$id" "$result" | tee -a "$out/recipes-status.tsv"
+            done
+          done
+          exit "$status"
+
+      - name: Upload recipe evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: promotion-audit-recipes
+          path: ${{ runner.temp }}/promotion-audit/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  promotion-audit-sweeps:
+    name: Promotion audit / sweep-${{ matrix.sweep }}
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/dev' && inputs.tier == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sweep: parity
+            specs: parity-sweep
+          - sweep: xss-viewport
+            specs: xss-sweep viewport-sweep
+          - sweep: gallery-roundtrip
+            specs: gallery-roundtrip
+          - sweep: session-load-timing
+            specs: session-load-timing
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install audit dependencies
+        run: |
+          python -m pip install -e ".[dev]"
+          npm ci
+
+      - name: Restore Playwright system packages
+        id: playwright-apt
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/playwright-apt
+          key: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
+          restore-keys: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install Playwright Chromium and system packages
+        id: playwright-install
+        run: |
+          # Seed apt with cached .deb files; apt checks each against the signed index.
+          sudo cp -t /var/cache/apt/archives/ ~/.cache/playwright-apt/*.deb 2>/dev/null || true
+          npx playwright install --with-deps chromium
+          # Keep the .deb files apt can still download; key the cache by their content.
+          sudo apt-get autoclean -qq || true
+          rm -rf ~/.cache/playwright-apt && mkdir -p ~/.cache/playwright-apt
+          if cp -t ~/.cache/playwright-apt/ /var/cache/apt/archives/*.deb 2>/dev/null; then
+            sum="$(cd ~/.cache/playwright-apt && sha256sum -- *.deb | LC_ALL=C sort | sha256sum | cut -c1-16)"
+            echo "apt-cache-key=playwright-apt-v1-${RUNNER_OS}-${RUNNER_ARCH}-${sum}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save Playwright system packages
+        if: >-
+          steps.playwright-install.outputs.apt-cache-key != '' &&
+          steps.playwright-install.outputs.apt-cache-key != steps.playwright-apt.outputs.cache-matched-key
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/playwright-apt
+          key: ${{ steps.playwright-install.outputs.apt-cache-key }}
+
+      - name: Prepare browser wheel
+        run: python tools/prepare_browser_wheel.py
+
+      - name: Set the audit evidence folder
+        run: echo "GBDRAW_AUDIT_OUT=$RUNNER_TEMP/promotion-audit" >> "$GITHUB_ENV"
+
+      # Report-only (tools/audit/README.md): a failed sweep test is an audit row
+      # counted in the summary, not a failed job.
+      - name: Run the sweep (report-only)
+        env:
+          SWEEP_SPECS: ${{ matrix.specs }}
+        run: |
+          export PLAYWRIGHT_JSON_OUTPUT_FILE="$GBDRAW_AUDIT_OUT/report.json"
+          npx playwright test -c tools/audit/playwright.audit.config.cjs --reporter=line,json $SWEEP_SPECS \
+            || echo "::warning::Sweep tests failed; each failure is an audit row (report-only)."
+
+      - name: Replay the parity sweep with the CLI (report-only)
+        if: matrix.sweep == 'parity'
+        run: |
+          python tools/audit/parity_replay.py "$GBDRAW_AUDIT_OUT/parity/circular-HmmtDNA_gbk" tests/test_inputs/HmmtDNA.gbk \
+            || echo "::warning::The Circular parity replay reported differences."
+          python tools/audit/parity_replay.py "$GBDRAW_AUDIT_OUT/parity/linear-MJNV" \
+            examples/MjeNMV.gb examples/MelaMJNV.gb examples/MjeNMV.MelaMJNV.tblastx.out \
+            || echo "::warning::The Linear parity replay reported differences."
+
+      - name: Upload sweep evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: promotion-audit-sweep-${{ matrix.sweep }}
+          path: ${{ runner.temp }}/promotion-audit/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  promotion-audit-journeys:
+    name: Promotion audit / journeys-${{ matrix.journey }}
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/dev' && inputs.tier == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        journey: [J1, J2, J3, J4, J5, J6, J7]
+    steps:
+      # The journeys print the capabilities changed since origin/main, so the
+      # checkout keeps the history (without old file contents).
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install audit dependencies
+        run: |
+          python -m pip install -e ".[dev]"
+          npm ci
+
+      - name: Restore Playwright system packages
+        id: playwright-apt
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/playwright-apt
+          key: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
+          restore-keys: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install Playwright Chromium and system packages
+        id: playwright-install
+        run: |
+          # Seed apt with cached .deb files; apt checks each against the signed index.
+          sudo cp -t /var/cache/apt/archives/ ~/.cache/playwright-apt/*.deb 2>/dev/null || true
+          npx playwright install --with-deps chromium
+          # Keep the .deb files apt can still download; key the cache by their content.
+          sudo apt-get autoclean -qq || true
+          rm -rf ~/.cache/playwright-apt && mkdir -p ~/.cache/playwright-apt
+          if cp -t ~/.cache/playwright-apt/ /var/cache/apt/archives/*.deb 2>/dev/null; then
+            sum="$(cd ~/.cache/playwright-apt && sha256sum -- *.deb | LC_ALL=C sort | sha256sum | cut -c1-16)"
+            echo "apt-cache-key=playwright-apt-v1-${RUNNER_OS}-${RUNNER_ARCH}-${sum}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save Playwright system packages
+        if: >-
+          steps.playwright-install.outputs.apt-cache-key != '' &&
+          steps.playwright-install.outputs.apt-cache-key != steps.playwright-apt.outputs.cache-matched-key
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/playwright-apt
+          key: ${{ steps.playwright-install.outputs.apt-cache-key }}
+
+      - name: Prepare browser wheel
+        run: python tools/prepare_browser_wheel.py
+
+      - name: Set the audit evidence folder
+        run: echo "GBDRAW_AUDIT_OUT=$RUNNER_TEMP/promotion-audit" >> "$GITHUB_ENV"
+
+      - name: Run the user journey
+        timeout-minutes: 35
+        env:
+          JOURNEY: ${{ matrix.journey }}
+        run: |
+          export PLAYWRIGHT_JSON_OUTPUT_FILE="$GBDRAW_AUDIT_OUT/report.json"
+          npx playwright test -c tools/audit/playwright.audit.config.cjs user-journey --grep "$JOURNEY " --reporter=line,json
+
+      - name: Upload journey evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: promotion-audit-journeys-${{ matrix.journey }}
+          path: ${{ runner.temp }}/promotion-audit/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  promotion-audit-random-walk:
+    name: Promotion audit / random-walk
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/dev' && inputs.tier == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      # A new seed for each promotion without a new input: the run ID. A rerun of
+      # the same run replays the same walk.
+      - name: Print the random walk seed
+        run: |
+          echo "Random walk seed: $GITHUB_RUN_ID (replay: GBDRAW_RANDOM_WALK_SEED=$GITHUB_RUN_ID)"
+          echo "GBDRAW_RANDOM_WALK_SEED=$GITHUB_RUN_ID" >> "$GITHUB_ENV"
+          echo "GBDRAW_AUDIT_OUT=$RUNNER_TEMP/promotion-audit" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/promotion-audit"
+          echo "$GITHUB_RUN_ID" > "$RUNNER_TEMP/promotion-audit/seed.txt"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install audit dependencies
+        run: |
+          python -m pip install -e ".[dev]"
+          npm ci
+
+      - name: Restore Playwright system packages
+        id: playwright-apt
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/playwright-apt
+          key: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
+          restore-keys: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install Playwright Chromium and system packages
+        id: playwright-install
+        run: |
+          # Seed apt with cached .deb files; apt checks each against the signed index.
+          sudo cp -t /var/cache/apt/archives/ ~/.cache/playwright-apt/*.deb 2>/dev/null || true
+          npx playwright install --with-deps chromium
+          # Keep the .deb files apt can still download; key the cache by their content.
+          sudo apt-get autoclean -qq || true
+          rm -rf ~/.cache/playwright-apt && mkdir -p ~/.cache/playwright-apt
+          if cp -t ~/.cache/playwright-apt/ /var/cache/apt/archives/*.deb 2>/dev/null; then
+            sum="$(cd ~/.cache/playwright-apt && sha256sum -- *.deb | LC_ALL=C sort | sha256sum | cut -c1-16)"
+            echo "apt-cache-key=playwright-apt-v1-${RUNNER_OS}-${RUNNER_ARCH}-${sum}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save Playwright system packages
+        if: >-
+          steps.playwright-install.outputs.apt-cache-key != '' &&
+          steps.playwright-install.outputs.apt-cache-key != steps.playwright-apt.outputs.cache-matched-key
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/playwright-apt
+          key: ${{ steps.playwright-install.outputs.apt-cache-key }}
+
+      - name: Prepare browser wheel
+        run: python tools/prepare_browser_wheel.py
+
+      - name: Run the live-vs-Generate random walk
+        timeout-minutes: 100
+        run: |
+          export PLAYWRIGHT_JSON_OUTPUT_FILE="$GBDRAW_AUDIT_OUT/report.json"
+          npx playwright test --config=tests/web/playwright/promotion.config.js --workers=1 \
+            --reporter=list,json --output="$GBDRAW_AUDIT_OUT/playwright"
+
+      - name: Upload random walk evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: promotion-audit-random-walk
+          path: ${{ runner.temp }}/promotion-audit/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  promotion-audit-summary:
+    name: Promotion audit / summary
+    needs:
+      - promotion-audit-recipes
+      - promotion-audit-sweeps
+      - promotion-audit-journeys
+      - promotion-audit-random-walk
+    if: >-
+      always() && github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/dev' && inputs.tier == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout audit tools
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: tools/audit
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Download audit evidence
+        uses: actions/download-artifact@v4
+        with:
+          pattern: promotion-audit-*
+          path: ${{ runner.temp }}/audit-artifacts
+
+      - name: Write the audit table to the run summary
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/audit/release-audit-summary.mjs "$RUNNER_TEMP/audit-artifacts" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Merge the journey contact sheets
+        run: |
+          merged="$RUNNER_TEMP/journeys"
+          mkdir -p "$merged"
+          for dir in "$RUNNER_TEMP"/audit-artifacts/promotion-audit-journeys-*/journeys; do
+            [ -d "$dir" ] && cp -r "$dir"/. "$merged"/
+          done
+          node tools/audit/helpers/journey-evidence.cjs "$merged"
+
+      - name: Upload the journey contact sheet
+        uses: actions/upload-artifact@v4
+        with:
+          name: promotion-journeys-contact-sheet
+          path: ${{ runner.temp }}/journeys/
+          if-no-files-found: ignore
+          retention-days: 30
+
   pr-gate:
     name: PR / gate
     needs:
