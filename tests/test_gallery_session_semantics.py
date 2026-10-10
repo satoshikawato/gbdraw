@@ -478,7 +478,8 @@ def test_majanivirus_gallery_session_keeps_record_labels_and_color_rules(
         "Metapenaeus joyneri majanivirus",
     )
     captions = {"WSSV-like proteins", "BIRP", "tyrosine recombinase"}
-    expected_colors = {"#89d1fa", "yellow", "red"}
+    # A web-saved Session spells named colors in hex.
+    expected_colors = ({"#89d1fa"}, {"yellow", "#ffff00"}, {"red", "#ff0000"})
 
     _example, session = gallery_sessions["majanivirus_orthogroup"]
     request = _request(session)
@@ -495,7 +496,7 @@ def test_majanivirus_gallery_session_keeps_record_labels_and_color_rules(
     rules_ref = _option_resource_ref(colors, "colorTableFile", "colorTable")
     rules = _resource_text(session, rules_ref)
     assert all(caption in rules for caption in captions)
-    assert all(color in rules for color in expected_colors)
+    assert all(any(color in rules for color in spellings) for spellings in expected_colors)
 
     for location, root in gallery_visual_roots("majanivirus_orthogroup", False):
         texts = set(_texts(root))
@@ -507,7 +508,7 @@ def test_majanivirus_gallery_session_keeps_record_labels_and_color_rules(
         ]
         assert set(expected_labels) <= texts, location
         assert captions <= texts, location
-        assert expected_colors <= fills, location
+        assert all(spellings & fills for spellings in expected_colors), location
         assert len(definitions) == 9, location
 
 

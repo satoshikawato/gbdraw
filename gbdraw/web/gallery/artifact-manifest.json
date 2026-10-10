@@ -13,8 +13,8 @@
   ],
   "files": {
     "gallery/examples.json": {
-      "bytes": 24476,
-      "sha256": "b00c32b8f2d1bd5fa72f965ee0cce4886df747a088968c81a7c96ff5473160f1"
+      "bytes": 24817,
+      "sha256": "d3e61f01b2564e78ff324d3c11631edc41de38e591bd1945ea617a97d49be903"
     },
     "gallery/examples/BGC0000708-BGC0000713.svg": {
       "bytes": 1162604,
@@ -45,8 +45,8 @@
       "sha256": "9611e30aadb38fc09d57fbeb8bcf0f4155f192455ece8243f4b28cd343cafa20"
     },
     "gallery/examples/majanivirus_orthogroup.svg": {
-      "bytes": 7320935,
-      "sha256": "b05bf5fc64ba08b3cfdb51e071831db55085f598060d63321e18b27a46641d76"
+      "bytes": 7545140,
+      "sha256": "f0997d7578f6edbb4129754b9007605892b6e3936a106655dec5685d3553583a"
     },
     "gallery/examples/tobacco-chloroplast.svg": {
       "bytes": 1447075,
@@ -85,8 +85,8 @@
       "sha256": "40a5f22e2aa09130549a87abd1416465d44e25c7fbaed12d3e266e4134b98422"
     },
     "gallery/sessions/majanivirus_orthogroup.gbdraw-session.json.gz": {
-      "bytes": 6281763,
-      "sha256": "e5b74d7591e4f6cc4e7286ef20193efc12c0c70a6dde3048af1f60216ecdfe49"
+      "bytes": 6269551,
+      "sha256": "25f8769b6a7aa2a06ad17bf0f723d0ba5b6951d737a3742323a698d41e9673ff"
     },
     "gallery/sessions/tobacco-chloroplast.gbdraw-session.json": {
       "bytes": 1646829,
@@ -125,8 +125,8 @@
       "sha256": "0fe1b94cde364d393e0900ee8610a6e83169f2d1184a58d27883f4e4cc1bd862"
     },
     "gallery/sources/majanivirus_orthogroup.svg": {
-      "bytes": 1895121,
-      "sha256": "962f8e5a34952bc0a483992ccc0536e0008f19757b6a72377e3a5751972a79c5"
+      "bytes": 1895477,
+      "sha256": "4aeca241ac516ce3fe5ec05eb4f3e24061152bc2bd52ab5e6e7f19c30002fbd1"
     },
     "gallery/sources/tobacco-chloroplast.svg": {
       "bytes": 278628,
@@ -165,8 +165,8 @@
       "sha256": "a5b0744bbbe96f51df541ba9cc985d2f8be822774f271d8b167e2d5a4f1f2f78"
     },
     "gallery/thumbnails/majanivirus_orthogroup.webp": {
-      "bytes": 15854,
-      "sha256": "d4f5f591d6810da018b61f50d5c8ee6bbf16cccd35d72ba057f341bcedce26d4"
+      "bytes": 15786,
+      "sha256": "fee59db7aa2d5c00dd1eb4740091f38e0677bee9bb0cbd71d9950897a5ac4962"
     },
     "gallery/thumbnails/tobacco-chloroplast.webp": {
       "bytes": 19504,

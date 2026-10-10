@@ -82,7 +82,7 @@ Five aminoglycoside biosynthetic gene clusters from MIBiG (lividomycin, two neom
 
 <a href="https://gbdraw.app/gallery/#majanivirus_orthogroup"><img src="../gbdraw/web/gallery/thumbnails/majanivirus_orthogroup.webp" alt="Nine majanivirus genomes in rows joined by protein-similarity links" width="640"></a>
 
-Nine majanivirus genomes from penaeid shrimp, one per row, linked by LOSATP similarity groups at 20% identity or more. A color table marks WSSV-like proteins, BIRP, and tyrosine recombinase by product name. The first five genomes share dense, high-identity links, while links further down are paler and sparser; the links show protein similarity, not orthology.
+Nine majanivirus genomes from penaeid shrimp, one per row, linked by LOSATP similarity groups at 20% identity or more. A color table marks WSSV-like proteins, BIRP, and tyrosine recombinase by product name. The Litopenaeus vannamei majanivirus genome is shown reverse-complemented, so its synteny with the other genomes reads left to right. The first five genomes share dense, high-identity links, while links further down are paler and sparser; the links show protein similarity, not orthology.
 
 [Open in the interactive Gallery](https://gbdraw.app/gallery/#majanivirus_orthogroup)
 

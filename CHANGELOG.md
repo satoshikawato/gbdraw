@@ -17,6 +17,10 @@ write-up of a release.
   BGC0000709) instead of og_1. Its tutorial adds the **Features › Arrow Geometry
   › Shaft Width Ratio** step and walks through **Review alignment options…**,
   where BGC0000708 has two og_6 members and keeps the recommended livU.
+- Gallery: the majanivirus example shows Litopenaeus vannamei majanivirus
+  (LC738872.1) reverse-complemented with its record's **Reverse complement**
+  setting, so its links to the neighboring genomes no longer cross. The rows stay
+  centered, and the Gallery command adds `--reverse_complement 1` for that record.
 - Gallery publication (maintainer tooling): `tools/refresh_gallery_sessions.py`
   accepts a Session whose LOSAT rows the web app computed. The CLI replay
   rewrites their `true`/`false` cells as `True`/`False`, which the comparison
