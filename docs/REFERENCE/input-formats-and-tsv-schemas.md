@@ -237,7 +237,9 @@ browsers read; the comparison gradient colors of the Default colors table take
 Any other value, including `currentColor`, `inherit`, a paint reference such as
 `url(#id)`, and names that only a browser knows, such as system colors, is
 rejected on every surface: the Web app names the line of the Default colors
-table, and the CLI and Python API name the feature type or the setting.
+table, and the CLI and Python API name the feature type or the setting. A blank
+Default colors cell keeps the built-in color; an empty configuration color is
+rejected.
 The Web app converts a Default colors color name to hex when it reads the
 table. PNG, PDF, EPS, and PS export (CairoSVG) cannot draw some of them: it draws
 `hsl()` and `hsla()` black, drops the alpha of `#RGBA` and `#RRGGBBAA`, and

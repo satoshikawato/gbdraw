@@ -106,6 +106,14 @@ def test_default_colors_file_reads_a_shared_valid_row(tmp_path: Path) -> None:
     assert _resolve_default_colors(tmp_path, entry["value"]) == entry["normalized"]
 
 
+@pytest.mark.parametrize("cell", ["", "   "], ids=repr)
+def test_default_colors_file_keeps_the_built_in_color_for_a_blank_cell(tmp_path: Path, cell: str) -> None:
+    # A blank or whitespace-only cell is a missing color on both surfaces (the Web
+    # import skips it); it is not an empty user color (D-42, REVIEW-6 F1).
+    built_in = load_default_colors("").set_index("feature_type").at["CDS", "color"]
+    assert _resolve_default_colors(tmp_path, cell) == built_in
+
+
 def test_default_colors_file_rejects_a_shared_invalid_row(tmp_path: Path) -> None:
     with pytest.raises(ValidationError, match="Invalid color 'currentColor' for feature type 'CDS'") as raised:
         _resolve_default_colors(tmp_path, "currentColor")

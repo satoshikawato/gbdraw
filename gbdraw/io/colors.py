@@ -244,7 +244,7 @@ def check_user_color(
     where: str,
     diagnostic: Mapping[str, object],
 ) -> None:
-    """Raise ``ValidationError`` unless a renderer reads ``value`` as a color."""
+    """Raise ``ValidationError`` unless ``value`` is a documented user color."""
 
     if not is_user_color(value):
         raise ValidationError(
@@ -317,8 +317,8 @@ def load_default_colors(
                 user_df["color"].astype(str).str.strip().str.lower() == "color"
             )
             user_df = user_df[~header]
-            # Drop rows with missing colour cells
-            missing = user_df["color"].isna()
+            # Drop rows with a missing or blank colour cell, as the web import does
+            missing = user_df["color"].isna() | user_df["color"].astype(str).str.strip().eq("")
             if missing.any():
                 for ft in user_df[missing].index.tolist():
                     logger.warning(
