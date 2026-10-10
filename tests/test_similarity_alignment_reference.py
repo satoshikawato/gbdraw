@@ -444,3 +444,128 @@ def test_existing_output_stops_the_render_before_the_analysis(
             )
         )
     assert analysis_calls == []
+
+
+def _stored_tables(request: LinearDiagramRequest) -> list[DataFrame]:
+    import base64
+    from io import StringIO
+
+    import pandas as pd
+
+    payload = build_session_document(request).to_dict()
+    return [
+        pd.read_csv(StringIO(base64.b64decode(payload["resources"][item["resourceId"]]["data"]).decode()), sep="\t")
+        for item in payload["renderRequest"]["comparisons"]
+        if "resourceId" in item and item.get("encoding") == "canonicalTsv"
+    ]
+
+
+def _reversed_b(request: LinearDiagramRequest, reverse: bool = True) -> LinearDiagramRequest:
+    from gbdraw.api import RecordPresentation
+
+    records = tuple(
+        replace(record, presentation=RecordPresentation(reverse_complement=reverse))
+        if index == 1 else record
+        for index, record in enumerate(request.records)
+    )
+    return replace(request, records=records)
+
+
+def test_reference_resolution_keeps_given_comparison_rows_in_the_search_frame(genbank_paths, analysis_calls):
+    # OV-399 (review 1): the resolved request copied the analysis build's
+    # comparisons, which the build projects into the drawn frame.
+    import pandas as pd
+
+    from gbdraw.api.request_render import plan_linear_request
+    from gbdraw.linear_comparison import LinearComparison
+
+    inputs = tuple(RecordInput(GenBankInputSource(path), record_key=f"k{index}")
+                   for index, path in enumerate(genbank_paths))
+    plan = plan_linear_request(LinearDiagramRequest(records=inputs))
+    row: dict[str, object] = {
+        "query": "a", "subject": "b", "identity": 99.0, "alignment_length": 20, "mismatches": 0,
+        "gap_opens": 0, "qstart": 51, "qend": 110, "sstart": 201, "send": 260, "evalue": 1e-20,
+        "bitscore": 50.0,
+    }
+    for role, provenance in zip(("query", "subject"), plan.provenance[:2], strict=True):
+        source = provenance.source_feature_catalog[0]
+        row[f"{role}_feature_index"] = str(source.source_feature_index)
+        row[f"{role}_feature_svg_id"] = source.stable_feature_id
+    request = _reversed_b(LinearDiagramRequest(
+        records=inputs,
+        options=LinearDiagramOptions(
+            losat_search=SIMILARITY_GROUPS,
+            linear_comparisons=(LinearComparison(0, 1, pd.DataFrame([row])),),
+        ),
+        similarity_alignment=SimilarityAlignmentReference("a-dnaA"),
+    ))
+    (given,) = [table for table in _stored_tables(request) if "query" in table.columns and len(table)
+                and table.iloc[0]["query"] == "a"]
+    assert "subject_view_feature_svg_id" not in given.columns
+    assert given.loc[0, ["qstart", "qend", "sstart", "send"]].tolist() == [51, 110, 201, 260]
+
+
+def test_reference_resolution_stores_generated_rows_of_a_reversed_record_in_the_search_frame(
+    genbank_paths, monkeypatch,
+):
+    # The analysis searches the drawn records; the resolved request stores its
+    # rows in the search frame, so reversing record b moves no stored span.
+    # (The stub reports each hit in the drawn orientation, so the direction of
+    # a reversed endpoint's span flips.)
+    import pandas as pd
+
+    from gbdraw.analysis.protein_colinearity import ProteinBlastpResult as Result
+
+    def groups_with_rows(records, *, protein_extraction, **_kwargs):
+        members: dict[str, list[OrthogroupMember]] = {}
+        dnaa = {}
+        for proteins in protein_extraction.proteins_by_record:
+            for protein in proteins:
+                group = GROUPS.get(str(protein.source_protein_id))
+                if group is None:
+                    continue
+                if group == "og_1":
+                    dnaa[protein.record_index] = protein
+                members.setdefault(group, []).append(OrthogroupMember(
+                    orthogroup_id=group, protein_id=protein.protein_id, record_index=protein.record_index,
+                    feature_index=protein.feature_index, record_id=protein.record_id, label=protein.label,
+                    start=protein.start, end=protein.end, strand=protein.strand,
+                    feature_svg_id=protein.feature_svg_id, source_protein_id=protein.source_protein_id,
+                ))
+        query, subject = dnaa[0], dnaa[1]
+        row = {column: 0 for column in COMPARISON_COLUMNS}
+        row.update(query=query.record_id, subject=subject.record_id, identity=99.0, alignment_length=20,
+                   qstart=query.start + 1, qend=query.end, sstart=subject.start + 1, send=subject.end,
+                   evalue=1e-20, bitscore=50.0)
+        for role, protein in (("query", query), ("subject", subject)):
+            row[f"{role}_feature_index"] = str(protein.feature_index)
+            row[f"{role}_feature_svg_id"] = protein.feature_svg_id
+            row[f"{role}_view_feature_svg_id"] = protein.view_feature_svg_id
+        return Result(
+            comparisons=[pd.DataFrame([row])] + [
+                DataFrame(columns=COMPARISON_COLUMNS) for _ in range(len(records) - 2)
+            ],
+            orthogroups=OrthogroupResult(
+                orthogroups=members,
+                member_by_protein_id={m.protein_id: m for group in members.values() for m in group},
+            ),
+        )
+
+    monkeypatch.setattr(api_diagram_module, "build_rbh_orthogroup_protein_blastp_comparisons", groups_with_rows)
+    request = LinearDiagramRequest(
+        records=tuple(RecordInput(GenBankInputSource(path), record_key=f"k{index}")
+                      for index, path in enumerate(genbank_paths)),
+        options=LinearDiagramOptions(losat_search=SIMILARITY_GROUPS),
+        similarity_alignment=SimilarityAlignmentReference("a-dnaA"),
+    )
+    forward = _stored_tables(_reversed_b(request, reverse=False))
+    reversed_ = _stored_tables(_reversed_b(request))
+    assert len(forward[0]) == 1
+    assert len(forward) == len(reversed_)
+    for expected, actual in zip(forward, reversed_, strict=True):
+        for start, end in (("qstart", "qend"), ("sstart", "send")):
+            for table in (expected, actual) if len(expected) else ():
+                table[[start, end]] = pd.DataFrame(
+                    [sorted(pair) for pair in table[[start, end]].values.tolist()], index=table.index
+                )
+        pd.testing.assert_frame_equal(actual, expected)
