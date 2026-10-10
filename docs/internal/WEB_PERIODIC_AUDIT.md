@@ -65,8 +65,8 @@ procedure and the checklist. The admission rules for a `PROMOTION` stay in
    check, one scenario at a time, including the LOSATP recipes that the
    `recipe` pytest marker skips. The LOSATP recipes check the LOSAT runtime
    bundled in the source checkout, so the job installs no managed runtime
-   (`gbdraw setup-losat` would take precedence). If the bundled runtime does
-   not resolve, the job skips the scenarios with a
+   (`gbdraw setup-losat` would take precedence). If the bundled runtime is
+   not the one selected, the job skips the scenarios with a
    `comparison.losatp-*` capability in `docs/scenarios/manifest.json`, and the
    summary lists them as run locally rather than as findings; run them locally.
    The local commands:
