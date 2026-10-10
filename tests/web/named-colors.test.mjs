@@ -31,3 +31,19 @@ test('a color name resolves without a browser canvas, in any case; other values 
   assert.equal(resolveColorToHex('notacolor'), 'notacolor');
   assert.equal(namedColorHex('constructor'), null);
 });
+
+test('a name outside the shared table stays as written, also in a browser (OV-272)', () => {
+  // A canvas resolves system colors such as ButtonFace to an OS- or theme-chosen hex.
+  let fillStyle = '#000000';
+  const context = {
+    get fillStyle() { return fillStyle; },
+    set fillStyle(value) { fillStyle = String(value).toLowerCase() === 'buttonface' ? '#efefef' : String(value); }
+  };
+  globalThis.document = { createElement: () => ({ getContext: () => context }) };
+  try {
+    assert.equal(resolveColorToHex('ButtonFace'), 'ButtonFace');
+    assert.equal(resolveColorToHex('DarkGrey'), '#A9A9A9');
+  } finally {
+    delete globalThis.document;
+  }
+});

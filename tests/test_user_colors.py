@@ -1,8 +1,9 @@
 """User colors and SVG keywords are checked once, where gbdraw reads them (P10c, OV-245).
 
 The check accepts what a renderer reads today (svgwrite's ``paint`` values and
-the CSS color forms browsers read) and rejects the rest with a gbdraw
-``ValidationError``, so the SVG elements need no svgwrite validation.
+the CSS color forms browsers read), except ``currentColor`` and ``inherit``
+(OV-272), and rejects the rest with a gbdraw ``ValidationError``, so the SVG
+elements need no svgwrite validation.
 """
 
 from __future__ import annotations
@@ -38,17 +39,22 @@ GALLERY_SESSIONS = sorted((REPO / "gbdraw" / "web" / "gallery" / "sessions").ite
 # Values that render today somewhere: svgwrite ``paint`` values, the CSS forms
 # browsers read, and color keywords in any letter case.
 ACCEPTED = (
-    "red", "Red", "RED", " red ", "rebeccapurple", "none", "None", "currentColor", "currentcolor",
-    "inherit", "transparent", "#abc", "#AABBCC", "#abcd", "#11223344",
+    "red", "Red", "RED", " red ", "rebeccapurple", "none", "None",
+    "transparent", "#abc", "#AABBCC", "#abcd", "#11223344",
     "rgb(1,2,3)", "rgb( 10 , 20 , 30 )", "rgb(10%,20%,30%)", "RGB(1,2,3)", "rgba(1,2,3,0.5)",
     "rgb(1 2 3 / 50%)", "hsl(120,50%,50%)", "hsla(120deg 50% 50% / .5)",
     "url(#g)", "url(#g) red", "icc-color(x,1)",
     "", "   ",  # svgwrite's paint type takes an empty value (no paint)
 )
+# OV-272 (Owner decision, 2026-10-10): svgwrite's paint type takes these, but
+# Default colors and configuration override colors no longer do.
+INHERITED_PAINT = ("currentColor", "currentcolor", "CURRENTCOLOR", "inherit", "Inherit")
 # Values no renderer reads.
 REJECTED = (
     "notacolor", "#ab", "#abcde", "#ggg", "#junk", "rgb(1,2)", "rgb(1,2,3,4,5)",
     "rgb(a,b,c)", "hsl(1,2)", "rgb(1,2,3)/", "url(", "nan",
+    # OV-272: svgwrite paint keywords whose color the embedding document decides.
+    *INHERITED_PAINT,
 )
 
 
@@ -67,7 +73,10 @@ def _tsv(tmp_path: Path, name: str, text: str) -> str:
     return str(path)
 
 
-@pytest.mark.parametrize("line", ["gc_content\tnotacolor", "CDS\tnotacolor", "skew_high\t#ggg"])
+@pytest.mark.parametrize(
+    "line",
+    ["gc_content\tnotacolor", "CDS\tnotacolor", "skew_high\t#ggg", "CDS\tcurrentColor", "CDS\tinherit"],
+)
 def test_invalid_default_color_is_a_gbdraw_error(
     line: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -216,7 +225,7 @@ def test_rejected_colors_fail_every_entry_point(value: str) -> None:
 def test_the_check_accepts_everything_the_older_checks_accepted() -> None:
     svg = Full11TypeChecker()
     for value in (*ACCEPTED, *REJECTED):
-        if svg.is_paint(value):  # svgwrite's debug check let it through
+        if svg.is_paint(value) and value not in INHERITED_PAINT:  # svgwrite's debug check let it through
             assert is_user_color(value), value
         if color_io._is_specific_table_color(value):  # the -t file domain
             assert is_user_color(value), value

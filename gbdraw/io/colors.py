@@ -187,7 +187,10 @@ _COLOR_FUNCTION = re.compile(r"(rgba?|hsla?)\((.*)\)", re.IGNORECASE | re.DOTALL
 _CSS_NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
 _CSS_NUMBER_OR_PERCENT = re.compile(rf"{_CSS_NUMBER}%?")
 _CSS_HUE = re.compile(rf"{_CSS_NUMBER}(?:deg|grad|rad|turn)?", re.IGNORECASE)
-_PAINT_KEYWORDS = frozenset({"none", "currentcolor", "inherit", "transparent"})
+_PAINT_KEYWORDS = frozenset({"none", "transparent"})
+# svgwrite's paint type takes these too, but the embedding document decides
+# their color, so a user color is never one of them (OV-272).
+_DOCUMENT_PAINT_KEYWORDS = frozenset({"currentcolor", "inherit"})
 _SVG_TYPES = Full11TypeChecker()
 USER_COLOR_FORMS = "none, an SVG color name, #RGB, #RRGGBB, rgb(), or hsl()"
 
@@ -218,16 +221,17 @@ def is_user_color(value: object) -> bool:
     """Whether an SVG or CSS renderer reads ``value`` as a fill or stroke color.
 
     The union of svgwrite's ``paint`` type and the CSS color forms browsers
-    read: keywords and color names in any letter case, ``transparent``,
-    #RGB/#RGBA/#RRGGBB/#RRGGBBAA, and rgb()/rgba()/hsl()/hsla(). svgwrite's
-    ``paint`` also takes an empty value (no paint), so it stays accepted.
+    read: ``none``, ``transparent`` and color names in any letter case,
+    #RGB/#RGBA/#RRGGBB/#RRGGBBAA, and rgb()/rgba()/hsl()/hsla(), but not
+    ``currentColor`` or ``inherit``. svgwrite's ``paint`` also takes an empty
+    value (no paint), so it stays accepted.
     """
 
     if not isinstance(value, str):
         return False
     text = value.strip()
     lowered = text.lower()
-    return (
+    return lowered not in _DOCUMENT_PAINT_KEYWORDS and (
         lowered in _PAINT_KEYWORDS
         or lowered in _COLOR_NAME_MAP
         or _HEX_COLOR.fullmatch(text) is not None

@@ -217,6 +217,46 @@ assert.deepEqual(buildLegendIntents(canonicalRules).intents, [
   }
 }
 
+{
+  // OV-272, OV-302: the Default colors (-d) domain is shared with Python's
+  // user-color check. A valid row imports as `normalized` (a name as the hex of
+  // the shared table); any other value stops at its line, as -t does; a blank
+  // color cell keeps the palette color, as Python keeps the built-in one.
+  const { normalizeDefaultColor } = await import(pathToFileURL(join(tempRoot, 'utils', 'color-utils.js')));
+  const domain = JSON.parse(await readFile(
+    join(repoRoot, 'tests', 'fixtures', 'default_color_domain.json'),
+    'utf8'
+  ));
+  const rejected = [...domain.invalid, ...domain.svg_paint_only];
+  const importsTheDomain = () => {
+    domain.valid.forEach(({ value, normalized }) => {
+      assert.equal(normalizeDefaultColor?.(value), normalized, value);
+      assert.deepEqual(parseColorTable(`tRNA\t#123456\nCDS\t${value}\n`).colors, { tRNA: '#123456', CDS: normalized }, value);
+    });
+    rejected.forEach(({ value }) => assert.equal(normalizeDefaultColor?.(value), null, value));
+    rejected.filter(({ value }) => value).forEach(({ value }) => assert.throws(
+      () => parseColorTable(`tRNA\t#123456\nCDS\t${value}\n`),
+      { code: 'TABLE_INVALID', context: { row: 2, field: 'color', reason: 'COLOR' } },
+      value
+    ));
+    assert.deepEqual(parseColorTable('tRNA\t#123456\nCDS\t\n'), { colors: { tRNA: '#123456' }, count: 1, repairs: [] });
+  };
+  importsTheDomain();
+  // A browser canvas, which reads system colors and currentColor, does not widen it.
+  let fillStyle = '#000000';
+  const browserColors = new Map([['buttonface', '#efefef'], ['canvas', '#ffffff'], ['currentcolor', '#000000']]);
+  const context = {
+    get fillStyle() { return fillStyle; },
+    set fillStyle(value) { fillStyle = browserColors.get(String(value).toLowerCase()) || String(value); }
+  };
+  globalThis.document = { createElement: () => ({ getContext: () => context }) };
+  try {
+    importsTheDomain();
+  } finally {
+    delete globalThis.document;
+  }
+}
+
 // OV-28: the import parsers reject a row of the wrong width like Python does
 // (OV-25), with the diagnostic the Label override parser uses.
 const wrongWidthDiagnostic = (row, columnCount) => ({
@@ -260,11 +300,13 @@ for (const [name, parse, text, read, expected, repairs, valid] of [
     [{ row: 2, repair: 'joined' }, { row: 3, repair: 'dropped' }, { row: 4, repair: 'dropped' }, { row: 5, repair: 'dropped' }],
     'CDS\tgene,product'],
   ['Default colors', parseColorTable,
-    'feature_type\tcolor\nCDS\t#54bcf8\ntRNA\tred\t\nrRNA\n\tblue\n',
+    'feature_type\tcolor\nCDS\t#54bcf8\ntRNA\tred\t\nrRNA\n\tblue\nmisc_feature\tcurrentColor\n',
     (parsed) => parsed.colors,
-    // A color name reads as its CSS hex, as in the browser (OV-160).
+    // A color name reads as its CSS hex, as in the browser (OV-160); a color outside
+    // the Default colors domain (OV-272) is dropped and listed instead of failing Load.
     { CDS: '#54bcf8', tRNA: '#FF0000' },
-    [{ row: 3, repair: 'joined' }, { row: 4, repair: 'dropped' }, { row: 5, repair: 'dropped' }], 'CDS\t#54bcf8']
+    [{ row: 3, repair: 'joined' }, { row: 4, repair: 'dropped' }, { row: 5, repair: 'dropped' }, { row: 6, repair: 'invalid' }],
+    'CDS\t#54bcf8']
 ]) {
   const parsed = parse(text, { legacyRows: true });
   assert.deepEqual(read(parsed), expected, `${name}: legacy rows`);

@@ -229,10 +229,17 @@ colors, are rejected with their line number. The Web app converts a color name t
 it reads the table. In this table, cells such as `None`, `NA`, and `null` are
 values, not blanks.
 
-A Default colors `color`, a Specific-colors `color` without captions, and a
-color in a configuration override also accept `transparent`, `#RGBA`,
-`#RRGGBBAA`, and `rgb()`, `rgba()`, `hsl()`, and `hsla()`, which browsers read.
-PNG, PDF, EPS, and PS export (CairoSVG) cannot draw some of them: it draws
+A Default colors `color` of a feature type, a Specific-colors `color` without
+captions, and a color in a configuration override also accept `transparent`,
+`#RGBA`, `#RRGGBBAA`, and `rgb()`, `rgba()`, `hsl()`, and `hsla()`, which
+browsers read; the comparison gradient colors of the Default colors table take
+`#RGB` or `#RRGGBB`, and the conservation colors a color name or `#RRGGBB`.
+`currentColor`, `inherit`, and names that only a browser knows, such as system
+colors, are rejected on every surface: the Web app names the line of the
+Default colors table, and the CLI and Python API name the feature type or the
+setting. The Web app rejects any other value at its line as well.
+The Web app converts a Default colors color name to hex when it reads the
+table. PNG, PDF, EPS, and PS export (CairoSVG) cannot draw some of them: it draws
 `hsl()` and `hsla()` black, drops the alpha of `#RGBA` and `#RRGGBBAA`, and
 fails on the space syntax `rgb(1 2 3 / 50%)`. Use an SVG color name,
 `#RRGGBB`, or comma-separated `rgb()` or `rgba()` for those formats.

@@ -1,5 +1,5 @@
 // @ts-check
-import { normalizeSpecificRuleColor, resolveColorToHex } from '../utils/color-utils.js';
+import { normalizeDefaultColor, normalizeSpecificRuleColor } from '../utils/color-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { normalizeTsvCell } from '../utils/tsv-cell.js';
 
@@ -52,24 +52,32 @@ const tableCells = (line, columnCount, row, repairs, complete) => {
   if (parts.length > columnCount) repairs.push({ row, repair: 'joined' });
   return cells;
 };
-const isTableColor = (color) => color.startsWith('#') || /^[a-z]+$/i.test(color);
+const isColorHeader = (key, color) => key.toLowerCase() === 'feature_type' && color.toLowerCase() === 'color';
 
+// A color outside the Default colors domain stops the import at its line, as
+// Python stops (OV-272); a blank color cell keeps the palette color, as Python
+// keeps the built-in one.
 export const parseColorTable = (text, { legacyRows = false } = {}) => {
   const colors = {};
   let count = 0;
+  /** @type {Array<{ row: number, repair: string }> | null} */
   const repairs = legacyRows ? [] : null;
   const lines = text.split(/\r?\n/);
 
   for (const [index, line] of lines.entries()) {
     if (!line.trim() || line.trim().startsWith('#') || line.trim().startsWith('[')) continue;
-    const cells = tableCells(line, 2, index + 1, repairs, ([key, color]) => key && isTableColor(color));
+    const cells = tableCells(line, 2, index + 1, repairs, ([key, color]) => key && color);
     if (!cells) continue;
     const [key, color] = cells;
-    if (key.toLowerCase() === 'feature_type' && color.toLowerCase() === 'color') continue;
-    if (key && isTableColor(color)) {
-      colors[key] = resolveColorToHex(color);
-      count++;
+    if (isColorHeader(key, color) || !key || !color) continue;
+    const normalized = normalizeDefaultColor(color);
+    if (!normalized) {
+      // A Sessions 31-39 table (`repairs`) lists the row instead of failing Load.
+      if (repairs) { repairs.push({ row: index + 1, repair: 'invalid' }); continue; }
+      throw diagnosticError('TABLE_INVALID', { row: index + 1, field: 'color', reason: 'COLOR' });
     }
+    colors[key] = normalized;
+    count++;
   }
 
   return { colors, count, repairs: repairs || [] };

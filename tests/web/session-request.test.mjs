@@ -5502,10 +5502,12 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
     + 'Label whitelist: line 1 had extra cells, joined into the last column with one space.');
   assert.equal(legacyTableRowsNotice([
     ...[3, 4, 5, 6, 7, 9, 12].map((row) => ({ table: 'qualifier-priority', row, repair: 'dropped' })),
-    { table: 'label-whitelist', row: 2, repair: 'dropped' }
+    { table: 'label-whitelist', row: 2, repair: 'dropped' },
+    { table: 'default-colors', row: 4, repair: 'invalid' }
   ]), 'Some table rows of this older Session were read as the current version writes them. '
     + 'Qualifier priority: lines 3, 4, 5, 6, 7, and 2 more lacked a required column and were dropped. '
-    + 'Label whitelist: line 2 lacked a required column and was dropped.');
+    + 'Label whitelist: line 2 lacked a required column and was dropped. '
+    + 'Default colors: line 4 had a color the table does not accept and was dropped.');
   assert.equal(legacyTableRowsNotice([]), '');
   const sessionTableFailure = (document, repairLegacyTableRows) => {
     try {
@@ -5523,6 +5525,8 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
     summary: 'The table is invalid. Session table: Label whitelist. Line 1. Check the required fields. Required columns: 3.',
     actions: ['select-input']
   });
+  const COLOR_GUIDANCE = 'Use none, a supported named color, or a hex color with 3 or 6 digits. '
+    + 'Feature type rows of a Default colors table and configuration colors other than conservation also accept transparent, rgb(), and hsl(); comparison gradient colors take #RGB or #RRGGBB.';
   // A Specific colors row with an invalid color still fails Load, naming the table.
   const specificColors = structuredClone(session);
   const text = 'CDS\tproduct\tkinase\tnot-a-color\n';
@@ -5538,7 +5542,23 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
   assert.equal(specificFailure?.code, 'TABLE_INVALID');
   assert.deepEqual(specificFailure.context, { sessionTable: 'specific-colors', field: 'color', reason: 'COLOR', row: 1 });
   assert.equal(specificFailure.summary, 'The table is invalid. Session table: Specific colors. Line 1. Field: color. '
-    + 'Use none, a supported named color, or a hex color with 3 or 6 digits.');
+    + COLOR_GUIDANCE);
+  // OV-272: so does a Default colors row whose color only a document or a
+  // browser decides; the guidance names the forms that table also takes.
+  const defaultColors = structuredClone(session);
+  const defaultText = 'tRNA\trgb(1,2,3)\nCDS\tcurrentColor\n';
+  defaultColors.resources['colors-default-colors-file'] = {
+    kind: 'colors-default-colors-file', name: 'colors-default-colors-file-default-colors.tsv',
+    type: 'text/tab-separated-values', size: Buffer.byteLength(defaultText), lastModified: 0,
+    encoding: 'base64', data: Buffer.from(defaultText).toString('base64')
+  };
+  defaultColors.renderRequest.diagramOptions.colors.defaultColorsFile = {
+    resourceId: 'colors-default-colors-file', representation: 'file'
+  };
+  const defaultFailure = sessionTableFailure(defaultColors, false);
+  assert.deepEqual(defaultFailure?.context, { sessionTable: 'default-colors', field: 'color', reason: 'COLOR', row: 2 });
+  assert.equal(defaultFailure.summary, 'The table is invalid. Session table: Default colors. Line 2. Field: color. '
+    + COLOR_GUIDANCE);
 }
 
 // E1 (REVIEW-2 P-b): Session Load admits the alignment plan and record

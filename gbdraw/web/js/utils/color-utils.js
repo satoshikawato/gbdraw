@@ -106,34 +106,15 @@ export const estimateColorFactor = (currentColor, minColor, maxColor) => {
   return Math.max(0, Math.min(1, currentDist / totalDist));
 };
 
-let namedColorContext;
-
-const resolveBrowserNamedColor = (value) => {
-  if (!/^[a-z]+$/i.test(value) || !globalThis.document?.createElement) return null;
-  if (namedColorContext === undefined) {
-    namedColorContext = globalThis.document.createElement('canvas').getContext?.('2d') || null;
-  }
-  if (!namedColorContext) return null;
-
-  namedColorContext.fillStyle = '#010203';
-  namedColorContext.fillStyle = value;
-  const resolved = String(namedColorContext.fillStyle || '');
-  if (resolved.toLowerCase() === '#010203') return null;
-  if (/^#[0-9a-f]{6}$/i.test(resolved)) return resolved.toUpperCase();
-
-  const rgb = resolved.match(/^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/i);
-  return rgb ? rgbToHex(Number(rgb[1]), Number(rgb[2]), Number(rgb[3])).toUpperCase() : null;
-};
-
 // A CSS color name resolves through the table Python shares (OV-160), so
-// Load, the Session split and Python agree also without a browser canvas; the
-// canvas still resolves the other names a browser knows.
+// Load, the Session split and Python agree with or without a browser; a name
+// outside that table, such as a system color, stays as written (OV-272).
 export const resolveColorToHex = (colorValue) => {
   if (!colorValue || typeof colorValue !== 'string') return colorValue;
   const trimmed = colorValue.trim();
   if (!trimmed) return trimmed;
   if (trimmed.startsWith('#')) return trimmed;
-  return namedColorHex(trimmed) || resolveBrowserNamedColor(trimmed) || trimmed;
+  return namedColorHex(trimmed) || trimmed;
 };
 
 // Specific-color table domain, shared with Python's read_color_table:
@@ -143,6 +124,45 @@ export const normalizeSpecificRuleColor = (colorValue) => {
   const color = String(colorValue ?? '').trim().toLowerCase();
   if (color === 'none' || /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/.test(color)) return color;
   return namedColorHex(color)?.toLowerCase() || null;
+};
+
+// Default colors (-d) domain, shared with Python's is_user_color minus
+// svgwrite's other paint values (OV-272, OV-302): `none` or `transparent`, a
+// color name of the shared table resolved to hex, #RGB, #RGBA, #RRGGBB,
+// #RRGGBBAA, or rgb()/rgba()/hsl()/hsla() with the arguments
+// `_is_css_color_function` reads, both as written. Anything else is null.
+const CSS_NUMBER = String.raw`[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?`;
+const CSS_NUMBER_OR_PERCENT = new RegExp(`^${CSS_NUMBER}%?$`);
+const CSS_HUE = new RegExp(`^${CSS_NUMBER}(?:deg|grad|rad|turn)?$`, 'i');
+/**
+ * @param {unknown} colorValue
+ * @returns {string | null}
+ */
+export const normalizeDefaultColor = (colorValue) => {
+  const color = String(colorValue ?? '').trim();
+  const keyword = color.toLowerCase();
+  if (keyword === 'none' || keyword === 'transparent') return keyword;
+  if (/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(color)) return color;
+  const fn = /^(rgba?|hsla?)\(([\s\S]*)\)$/i.exec(color);
+  if (!fn) return namedColorHex(color) || null;
+  const args = fn[2].trim();
+  let channels;
+  let alpha;
+  if (args.includes(',')) {
+    const parts = args.split(',').map((part) => part.trim());
+    if (args.includes('/') || (parts.length !== 3 && parts.length !== 4)) return null;
+    [channels, alpha] = [parts.slice(0, 3), parts.slice(3)];
+  } else {
+    const slash = args.indexOf('/');
+    const words = (/** @type {string} */ text) => text.split(/\s+/).filter(Boolean);
+    channels = words(slash < 0 ? args : args.slice(0, slash));
+    alpha = slash < 0 ? [] : words(args.slice(slash + 1));
+    if (channels.length !== 3 || (slash >= 0 && alpha.length !== 1)) return null;
+  }
+  const first = fn[1].toLowerCase().startsWith('hsl') ? CSS_HUE : CSS_NUMBER_OR_PERCENT;
+  return first.test(channels[0]) && [...channels.slice(1), ...alpha].every((part) => CSS_NUMBER_OR_PERCENT.test(part))
+    ? color
+    : null;
 };
 
 export const colorValueMode = (colorValue) => {
