@@ -22,7 +22,9 @@ write-up of a release.
   and the Python API no longer accept `currentColor` and `inherit` as a user color
   (`-d` rows, configuration override colors, depth track colors, and the CLI stroke
   and label color options). Through 0.13.0 they accepted both without documenting
-  them.
+  them. They also no longer accept the other values of svgwrite's paint type as a
+  user color: a paint reference such as `url(#id)`, `icc-color()`, and an empty
+  value; the web app never accepted them.
 - Sessions (web app): a Linear Session that the Python API saved from a CLI LOSATP
   comparison loads with the comparison plan the CLI drew, so the next **Generate
   Diagram** draws the same comparison. Before, the web app took the file bindings

@@ -36,25 +36,29 @@ REPO = Path(__file__).resolve().parents[1]
 EXAMPLES = REPO / "examples"
 GALLERY_SESSIONS = sorted((REPO / "gbdraw" / "web" / "gallery" / "sessions").iterdir())
 
-# Values that render today somewhere: svgwrite ``paint`` values, the CSS forms
-# browsers read, and color keywords in any letter case.
+# The documented user color domain: color keywords and names in any letter
+# case, hex colors, and the CSS color functions browsers read.
 ACCEPTED = (
     "red", "Red", "RED", " red ", "rebeccapurple", "none", "None",
     "transparent", "#abc", "#AABBCC", "#abcd", "#11223344",
     "rgb(1,2,3)", "rgb( 10 , 20 , 30 )", "rgb(10%,20%,30%)", "RGB(1,2,3)", "rgba(1,2,3,0.5)",
     "rgb(1 2 3 / 50%)", "hsl(120,50%,50%)", "hsla(120deg 50% 50% / .5)",
-    "url(#g)", "url(#g) red", "icc-color(x,1)",
-    "", "   ",  # svgwrite's paint type takes an empty value (no paint)
 )
 # OV-272 (Owner decision, 2026-10-10): svgwrite's paint type takes these, but
 # Default colors and configuration override colors no longer do.
 INHERITED_PAINT = ("currentColor", "currentcolor", "CURRENTCOLOR", "inherit", "Inherit")
+# svgwrite's paint type also takes a paint reference, an ICC color, and an
+# empty value (no paint); none is a documented user color (Owner decision
+# 2026-10-10, D-38), so the CLI and the Python API reject them as the web app does.
+SVG_PAINT_ONLY = ("url(#g)", "url(#g) red", "icc-color(x,1)")
+EMPTY = ("", "   ")
 # Values no renderer reads.
 REJECTED = (
     "notacolor", "#ab", "#abcde", "#ggg", "#junk", "rgb(1,2)", "rgb(1,2,3,4,5)",
     "rgb(a,b,c)", "hsl(1,2)", "rgb(1,2,3)/", "url(", "nan",
     # OV-272: svgwrite paint keywords whose color the embedding document decides.
     *INHERITED_PAINT,
+    *SVG_PAINT_ONLY,
 )
 
 
@@ -222,10 +226,25 @@ def test_rejected_colors_fail_every_entry_point(value: str) -> None:
         clone_depth_config(SimpleNamespace(fill_color="#000000"), fill_color=value)
 
 
+@pytest.mark.parametrize("value", EMPTY, ids=repr)
+def test_an_empty_color_is_not_a_user_color(value: str) -> None:
+    # D-38: svgwrite's paint type reads an empty value as no paint; a user color
+    # is never empty. A depth track reads an unset color as its default instead.
+    assert not is_user_color(value)
+    with pytest.raises(ValidationError):
+        validate_config_overrides({"objects.gc_content.stroke_color": value})
+    defaults = load_default_colors("")
+    defaults.loc[defaults["feature_type"] == "CDS", "color"] = value
+    with pytest.raises(ValidationError):
+        resolve_feature_inputs(color_table=None, default_colors=defaults, feature_visibility_table=None)
+    assert clone_depth_config(SimpleNamespace(fill_color="#000000"), fill_color="").fill_color == "#000000"
+
+
 def test_the_check_accepts_everything_the_older_checks_accepted() -> None:
     svg = Full11TypeChecker()
-    for value in (*ACCEPTED, *REJECTED):
-        if svg.is_paint(value) and value not in INHERITED_PAINT:  # svgwrite's debug check let it through
+    left_the_domain = (*INHERITED_PAINT, *SVG_PAINT_ONLY, *EMPTY)
+    for value in (*ACCEPTED, *REJECTED, *EMPTY):
+        if svg.is_paint(value) and value not in left_the_domain:  # svgwrite's debug check let it through
             assert is_user_color(value), value
         if color_io._is_specific_table_color(value):  # the -t file domain
             assert is_user_color(value), value

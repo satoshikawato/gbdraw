@@ -16,7 +16,6 @@ from typing import Mapping, Optional
 
 import pandas as pd
 from pandas import DataFrame
-from svgwrite.data.typechecker import Full11TypeChecker
 
 from ..core.color import normalize_hex_color
 from ..exceptions import InputFileError, ParseError, ValidationError
@@ -191,7 +190,6 @@ _PAINT_KEYWORDS = frozenset({"none", "transparent"})
 # svgwrite's paint type takes these too, but the embedding document decides
 # their color, so a user color is never one of them (OV-272).
 _DOCUMENT_PAINT_KEYWORDS = frozenset({"currentcolor", "inherit"})
-_SVG_TYPES = Full11TypeChecker()
 USER_COLOR_FORMS = "none, an SVG color name, #RGB, #RRGGBB, rgb(), or hsl()"
 
 
@@ -218,13 +216,14 @@ def _is_css_color_function(text: str) -> bool:
 
 
 def is_user_color(value: object) -> bool:
-    """Whether an SVG or CSS renderer reads ``value`` as a fill or stroke color.
+    """Whether ``value`` is a documented user color.
 
-    The union of svgwrite's ``paint`` type and the CSS color forms browsers
-    read: ``none``, ``transparent`` and color names in any letter case,
-    #RGB/#RGBA/#RRGGBB/#RRGGBBAA, and rgb()/rgba()/hsl()/hsla(), but not
-    ``currentColor`` or ``inherit``. svgwrite's ``paint`` also takes an empty
-    value (no paint), so it stays accepted.
+    ``none``, ``transparent`` and color names in any letter case,
+    #RGB/#RGBA/#RRGGBB/#RRGGBBAA, and rgb()/rgba()/hsl()/hsla(): the forms the
+    web app checks with the same vectors (tests/fixtures/default_color_domain.json).
+    Not ``currentColor`` or ``inherit`` (OV-272), and not the other values of
+    svgwrite's ``paint`` type: ``url()`` references, ``icc-color()``, and an
+    empty value (Owner decision 2026-10-10, D-38).
     """
 
     if not isinstance(value, str):
@@ -236,7 +235,6 @@ def is_user_color(value: object) -> bool:
         or lowered in _COLOR_NAME_MAP
         or _HEX_COLOR.fullmatch(text) is not None
         or _is_css_color_function(text)
-        or bool(_SVG_TYPES.is_paint(text))
     )
 
 

@@ -234,10 +234,10 @@ captions, and a color in a configuration override also accept `transparent`,
 `#RGBA`, `#RRGGBBAA`, and `rgb()`, `rgba()`, `hsl()`, and `hsla()`, which
 browsers read; the comparison gradient colors of the Default colors table take
 `#RGB` or `#RRGGBB`, and the conservation colors a color name or `#RRGGBB`.
-`currentColor`, `inherit`, and names that only a browser knows, such as system
-colors, are rejected on every surface: the Web app names the line of the
-Default colors table, and the CLI and Python API name the feature type or the
-setting. The Web app rejects any other value at its line as well.
+Any other value, including `currentColor`, `inherit`, a paint reference such as
+`url(#id)`, and names that only a browser knows, such as system colors, is
+rejected on every surface: the Web app names the line of the Default colors
+table, and the CLI and Python API name the feature type or the setting.
 The Web app converts a Default colors color name to hex when it reads the
 table. PNG, PDF, EPS, and PS export (CairoSVG) cannot draw some of them: it draws
 `hsl()` and `hsla()` black, drops the alpha of `#RGBA` and `#RRGGBBAA`, and

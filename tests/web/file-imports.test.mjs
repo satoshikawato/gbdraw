@@ -227,7 +227,7 @@ assert.deepEqual(buildLegendIntents(canonicalRules).intents, [
     join(repoRoot, 'tests', 'fixtures', 'default_color_domain.json'),
     'utf8'
   ));
-  const rejected = [...domain.invalid, ...domain.svg_paint_only];
+  const rejected = domain.invalid;
   const importsTheDomain = () => {
     domain.valid.forEach(({ value, normalized }) => {
       assert.equal(normalizeDefaultColor?.(value), normalized, value);

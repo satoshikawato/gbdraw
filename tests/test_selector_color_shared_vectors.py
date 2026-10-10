@@ -85,17 +85,11 @@ def test_default_colors_accept_the_shared_domain(entry: dict) -> None:
     assert is_user_color(entry["value"])
 
 
-@pytest.mark.parametrize("entry", DEFAULT_COLOR_DOMAIN["invalid"], ids=lambda entry: entry["value"])
+@pytest.mark.parametrize("entry", DEFAULT_COLOR_DOMAIN["invalid"], ids=lambda entry: repr(entry["value"]))
 def test_default_colors_reject_colors_outside_the_shared_domain(entry: dict) -> None:
-    # OV-272: currentColor and inherit leave the domain as system colors did.
+    # OV-272: currentColor and inherit leave the domain as system colors did;
+    # D-38: so do svgwrite's paint references, icc-color(), and the empty value.
     assert not is_user_color(entry["value"])
-
-
-@pytest.mark.parametrize("entry", DEFAULT_COLOR_DOMAIN["svg_paint_only"], ids=lambda entry: repr(entry["value"]))
-def test_python_keeps_svg_paint_values_the_web_import_rejects(entry: dict) -> None:
-    # Outside the documented domain and outside OV-272: svgwrite's paint type
-    # still takes them in Python; the Web Override File (-d) import does not.
-    assert is_user_color(entry["value"])
 
 
 def _resolve_default_colors(tmp_path: Path, color: str) -> object:
