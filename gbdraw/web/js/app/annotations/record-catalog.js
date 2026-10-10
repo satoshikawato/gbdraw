@@ -113,6 +113,19 @@ const selectSourceRecords = (records, selectorValue) => {
   return { records: matches, error: '', explicit: true };
 };
 
+/**
+ * The catalog keys of the records a source selects (all its records without a
+ * selector), as an annotation binds them; also those of an OFF record, which
+ * the catalog leaves out (record selection).
+ * @param {AnnotationCatalogSource} source
+ * @param {string} fallbackSourceKey
+ * @returns {string[]}
+ */
+export const annotationRecordKeysOf = (source, fallbackSourceKey) => (
+  selectSourceRecords(sourceRecords(source, fallbackSourceKey), source?.selector).records
+    .map((/** @type {{ key: string }} */ record) => record.key)
+);
+
 const finalizeRecords = (records) => {
   const indexed = records.map((record, index) => ({ ...record, selector: `#${index + 1}` }));
   return buildDisambiguatedRecordEntries(indexed).map((record, index) => ({
@@ -142,8 +155,7 @@ const buildLinearCatalog = (sources) => {
     const inputOrdinal = cardIndex + 1;
     if (source?.drawn === false) {
       if (source.status !== 'ready') return;
-      const selected = selectSourceRecords(sourceRecords(source, `linear-source-${inputOrdinal}`), source.selector);
-      omittedRecordKeys.push(...selected.records.map((/** @type {{ key: string }} */ record) => record.key));
+      omittedRecordKeys.push(...annotationRecordKeysOf(source, `linear-source-${inputOrdinal}`));
       return;
     }
     sourceIndex += 1;

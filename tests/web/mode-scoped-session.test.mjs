@@ -272,6 +272,10 @@ test('a slice keeps its OFF records, and omission draws every record (record-sel
   assert.equal((await load(omitted)).status, 'ok');
   assert.deepEqual([...state.drawings.linear.recordsOff], []);
   assert.deepEqual([...state.drawings.circular.recordsOff], []);
+  // Review F6: with every record ON a Save writes no list, so the Session keeps its bytes.
+  const allOn = await save('records on');
+  assert.equal('recordsOff' in allOn.modes.linear.config, false);
+  assert.equal('recordsOff' in allOn.modes.circular.config, false);
 
   const rejected = async (mutate, label, code = 'INPUT_INVALID') => {
     const session = structuredClone(saved);
@@ -283,8 +287,8 @@ test('a slice keeps its OFF records, and omission draws every record (record-sel
   await rejected((modes) => { modes.linear.config.recordsOff = ['not-a-bound-card']; }, 'unbound Linear uid');
   await rejected((modes) => { modes.linear.config.recordsOff = [uid, uid]; }, 'duplicate key');
   await rejected((modes) => { modes.circular.config.recordsOff = ['contig_2']; }, 'Circular key is not #N');
-  // A domain of the wrong shape fails like every other domain of the slice.
-  await rejected((modes) => { modes.circular.config.recordsOff = '#2'; }, 'not a list', null);
+  // Review F8: a list of the wrong shape fails with the code Python gives it.
+  await rejected((modes) => { modes.circular.config.recordsOff = '#2'; }, 'not a list');
 });
 
 // Record selection 2.5: a Linear drawing with every card OFF (only a

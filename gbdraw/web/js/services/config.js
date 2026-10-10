@@ -1114,7 +1114,8 @@ export const buildConfigData = (drawing) => ({
   circularConservation: drawing.circularConservation,
   annotationSets: normalizeAnnotationSets(drawing.annotationSets),
   recordDisplayDrafts: cloneJsonData(drawing.recordDisplayDrafts),
-  recordsOff: [...(drawing.recordsOff || [])],
+  // Written only when a record is OFF: a Session with every record ON keeps its bytes (omission = all ON).
+  ...(drawing.recordsOff?.length ? { recordsOff: [...drawing.recordsOff] } : {}),
   featurePlacementOverrides: cloneJsonData(drawing.featurePlacementOverrides),
   linearRecordLayout: {
     enabled: Boolean(drawing.linearRecordLayoutEnabled.value),
@@ -3373,10 +3374,12 @@ export const assertActiveModeInputs = (mode = state.mode.value, sourceState = st
   }
 };
 
+// `sequences`: the drawn record files, in request order. `cards`: every
+// Linear card, OFF cards included; an error names its card number among them.
 export const materializeLinearRecordFiles = (
   sequences,
   catalog,
-  _options = {}
+  { cards = /** @type {{ uid: string }[]} */ ([]) } = {}
 ) => {
   const sourceSequences = Array.isArray(sequences) ? sequences : [];
   if (catalog == null) return sourceSequences;
@@ -3394,13 +3397,14 @@ export const materializeLinearRecordFiles = (
   });
   sourceSequences.forEach((source, sourceIndex) => {
     const count = recordCountBySource.get(sourceIndex) || 0;
-    if (count === 0) throw diagnosticError('NO_RECORDS', { inputOrdinal: sourceIndex + 1 });
+    const inputOrdinal = cards.findIndex((card) => card.uid === source.uid) + 1 || sourceIndex + 1;
+    if (count === 0) throw diagnosticError('NO_RECORDS', { inputOrdinal });
     if (count <= 1) return;
     const hasRegion = [source.region_start, source.region_end].some(
       (value) => value !== null && value !== undefined && value !== ''
     );
     if (hasRegion) {
-      throw diagnosticError('REGION_INVALID', { inputOrdinal: sourceIndex + 1, reason: 'SELECT_RECORD_FOR_REGION' });
+      throw diagnosticError('REGION_INVALID', { inputOrdinal, reason: 'SELECT_RECORD_FOR_REGION' });
     }
   });
   return sourceSequences;
@@ -3460,7 +3464,7 @@ export const serializeActiveRenderFiles = async (
   const linearSeqs = materializeLinearRecordFiles(
     serializedLinearSeqs,
     optionBag?.linearRecordCatalog ?? null,
-    { layoutEnabled: Boolean(drawing.linearRecordLayoutEnabled?.value) }
+    { cards: Array.isArray(sourceState.linearSeqs) ? sourceState.linearSeqs : [] }
   );
   const resolvedComparisonPlan = mode === 'linear'
     ? suppliedComparisonPlan || resolveLinearComparisonPlan({

@@ -63,7 +63,7 @@ import {
   resolveCircularRequestRecordSet,
   resolveDisambiguatedRecordSelection
 } from './record-options.js';
-import { circularRecordRequestKey } from './record-draw-selection.js';
+import { circularRecordRequestKey, circularSingleRecordKey } from './record-draw-selection.js';
 import {
   orderedConservationSources,
   orderedOptionalConservationFiles
@@ -977,14 +977,6 @@ const circularRegionPayload = (form, record) => {
   };
 };
 
-const circularRecordKey = (record) => {
-  const preserved = String(record?.recordKey || '').trim();
-  if (preserved) return preserved;
-  const recordId = downloadSafeName(record?.recordId, 'record');
-  const selector = downloadSafeName(record?.selector, '1');
-  return `circular-${recordId}-${selector}`;
-};
-
 const linearRegionPayload = (seq) => {
   // projectOptionalNumber yields null or a finite number: the only arm without
   // a number-or-null value is 'invalid', which it throws on.
@@ -1119,7 +1111,7 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
       const region = circularRegionPayload(drawing.form, selected);
       records[0] = {
         ...record,
-        recordKey: record.recordKey || circularRecordKey(selected),
+        recordKey: record.recordKey || circularSingleRecordKey(selected),
         selector: region ? null : selectorPayload(selected.value),
         region,
         presentation: circularPresentationPayload(drawing.form, {
@@ -1167,7 +1159,7 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
     // A record keeps its key while others go OFF: `record-<file position>`.
     return {
       recordKey: singleJourney && record
-        ? circularRecordKey(record)
+        ? circularSingleRecordKey(record)
         : circularRecordRequestKey(Number.isInteger(record?.sourceIndex) ? record.sourceIndex : index),
       cardinality: 'exactly_one',
       source,

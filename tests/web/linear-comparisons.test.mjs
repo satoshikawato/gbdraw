@@ -6,14 +6,10 @@ import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-linear-comparisons-'));
-await cp(
-  join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'linear-comparisons.js'),
-  join(tempRoot, 'linear-comparisons.js')
-);
-await cp(
-  join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'record-draw-selection.js'),
-  join(tempRoot, 'record-draw-selection.js')
-);
+// The modules keep their js/ layout, so their relative imports resolve.
+for (const path of ['services/linear-comparisons.js', 'services/record-draw-selection.js', 'utils/download-names.js']) {
+  await cp(join(repoRoot, 'gbdraw', 'web', 'js', path), join(tempRoot, path));
+}
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 
 const {
@@ -21,6 +17,7 @@ const {
   adjacentRowPairs,
   buildLinearComparisonTimeline,
   buildPairwiseLosatJobSpecs,
+  canonicalGridDisplayPairs,
   createDefaultLinearComparisonPlan,
   createLinearComparisonEdge,
   linearComparisonEdgeKey,
@@ -31,7 +28,7 @@ const {
   reconcileLinearComparisonPlan,
   resolveLinearComparisonPlan,
   validateLinearComparisonEdges
-} = await import(pathToFileURL(join(tempRoot, 'linear-comparisons.js')));
+} = await import(pathToFileURL(join(tempRoot, 'services', 'linear-comparisons.js')));
 
 assert.equal(plainTextLinearRecordLabel('Alpha <em>beta</em>'), 'Alpha beta');
 assert.equal(plainTextLinearRecordLabel('Alpha <scr<script>ipt>'), 'Alpha');
@@ -722,4 +719,21 @@ for (const blastpMode of ['orthogroup', 'collinear']) {
   assert.deepEqual(timeline.rows[0].boundaryAfter.pairs.map((pair) => pair.edgeKey), [linearComparisonEdgeKey('a', 'c')]);
   // The OFF record's pair b->d is not unplaced; only the pair naming no card is.
   assert.deepEqual(timeline.unplacedDrafts.map(({ draft }) => draft.id), ['ag']);
+}
+
+{
+  // Review F2: a CLI Session's row grid with its middle row turned OFF.
+  // The drawn rows 1 and 3 are adjacent, as Python closes up the empty row.
+  const cell = (uid, row) => ({ uid, row, canonicalRow: row, canonicalColumn: 1, canonicalCardinality: 'exactly_one' });
+  const rows = [cell('a', 1), cell('b', 2), cell('c', 3), cell('d', 4)];
+  const drawn = [{ uid: 'a' }, { uid: 'c' }, { uid: 'd' }];
+  const displayed = canonicalGridDisplayPairs(drawn, rows);
+  assert.ok(displayed);
+  assert.equal(displayed(0, 1), true, 'rows 1 and 3 are adjacent once row 2 is OFF');
+  assert.equal(displayed(1, 2), true);
+  assert.equal(displayed(0, 2), false);
+  assert.equal(displayed(1, 0), false, 'a pair is displayed once, query before subject');
+  // A record without a canonical grid cell leaves the decision to the plan's edges.
+  assert.equal(canonicalGridDisplayPairs(drawn, [cell('a', 1), { uid: 'c', row: 3 }, cell('d', 4)]), null);
+  assert.equal(canonicalGridDisplayPairs([{ uid: 'a' }], rows), null);
 }

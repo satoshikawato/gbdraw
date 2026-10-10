@@ -281,6 +281,31 @@ export const adjacentRowPairs = (sequences = [], layout = [], allPairs = false) 
   return pairs;
 };
 
+/**
+ * The display pairs of a collinear comparison laid out by a CLI Session's
+ * complete row grid: every pair across adjacent occupied rows of the drawn
+ * records, as Python closes up a row that records turned OFF leave empty.
+ * Null when the drawn records do not all hold a canonical grid cell; the
+ * comparison plan's edges decide then.
+ * @param {readonly { uid: string }[]} sequences The drawn records, in request order.
+ * @param {readonly { uid: string, row: number, canonicalRow?: number, canonicalColumn?: number,
+ *   canonicalCardinality?: string }[]} rows The drawing's record rows.
+ * @returns {((queryIndex: number, subjectIndex: number) => boolean) | null}
+ */
+export const canonicalGridDisplayPairs = (sequences, rows) => {
+  const cells = sequences.map((seq) => rows.find((entry) => entry.uid === seq.uid));
+  if (cells.length < 2 || !cells.every((entry) => entry?.canonicalRow === entry?.row
+    && Number.isInteger(entry?.canonicalColumn) && Number(entry?.canonicalColumn) > 0
+    && entry?.canonicalCardinality === 'exactly_one')) return null;
+  const pairs = new Set(adjacentRowPairs([...sequences], /** @type {{ uid: string, row: number }[]} */ (cells), true)
+    .map(([upper, lower]) => `${upper}\0${lower}`));
+  return (queryIndex, subjectIndex) => {
+    const query = sequences[queryIndex]?.uid;
+    const subject = sequences[subjectIndex]?.uid;
+    return queryIndex < subjectIndex && (pairs.has(`${query}\0${subject}`) || pairs.has(`${subject}\0${query}`));
+  };
+};
+
 /** @param {LinearComparisonEdge | null} [edge] */
 const validationIssue = (code, message, edge = null) => ({
   code,

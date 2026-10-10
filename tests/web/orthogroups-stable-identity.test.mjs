@@ -1921,12 +1921,16 @@ console.log('orthogroup stable identity tests passed');
   assert.equal(member.aminoAcidSequence, 'MQ');
 }
 
-// Record selection: a member's record index is a position among the drawn
-// records, so an OFF record before it does not shift its record label.
+// Record selection: a member's record index is a position in the records of
+// the Result's request. A Generate drew a and c (b OFF); turning c OFF and b ON
+// afterwards does not relabel the members until the next Generate.
 {
-  const offState = { ...state, recordsOff: ['uid-b'],
+  const offState = { ...state, recordsOff: ['uid-c'],
     linearSeqs: state.linearSeqs.map((sequence, index) => ({ ...sequence, uid: `uid-${'abc'[index]}` })) };
-  const offEditor = createOrthogroupEditor({ state: withDrawings(offState) });
+  const offEditor = createOrthogroupEditor({
+    state: withDrawings(offState),
+    getCommittedRequest: () => ({ records: [{ recordKey: 'uid-a' }, { recordKey: 'uid-c' }] })
+  });
   const grouped = offEditor.groupOrthogroupMembersByRecord([{ fileIdx: 1 }, { fileIdx: 0 }]);
   assert.deepEqual(grouped.map((entry) => entry.recordLabel), ['record-a', 'record-c']);
 }

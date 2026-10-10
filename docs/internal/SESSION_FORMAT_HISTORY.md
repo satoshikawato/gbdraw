@@ -235,6 +235,16 @@ an integer, as the definition line interval. This restores the 0.13.0 Web and
 CLI spacing. The rule is applied when the overrides are applied, so the stored
 request is unchanged and replay writes the same overrides back.
 
+## Unreleased: records turned off for drawing
+
+Session version 46 and request schema 9 are unchanged. A slice of `modes` may
+hold `config.recordsOff`, the list of record keys the Web app does not draw: a
+Linear card uid, or a Circular source selector `#N`. A Session without it, and
+`[]`, read as all records on. The Web app always writes it; the render request
+holds only the records that are on, so the request has no new field. A CLI
+`--session` replay draws only the records that are on, and a CLI re-save keeps
+`recordsOff` and the settings of the records that are off.
+
 ## Unreleased: default label of a precomputed similarity ring
 
 Session version 46 and request schema 9 are unchanged. A Circular ring from a

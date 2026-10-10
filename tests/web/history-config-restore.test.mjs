@@ -53,6 +53,56 @@ for (const [domain, key, first, second] of [
   drawing.recordsOff.splice(0);
 }
 
+// Delete settings (record selection D-08) is one step: Undo restores the
+// card settings and every edit of the record it deleted.
+{
+  const config = await import('../../gbdraw/web/js/services/config.js');
+  const { RECORD_SETTINGS_DEFAULTS, removeRecordEdits } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
+  const editorSnapshots = createHistorySnapshotService({
+    state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData,
+    buildFeatureStateData: config.buildFeatureStateData, applyFeatureStateData: config.applyFeatureStateData,
+    buildEditorStateData: config.buildEditorStateData, applyEditorStateData: config.applyEditorStateData
+  });
+  const editorHistory = createHistoryManager({
+    buildIntent: editorSnapshots.buildHistoryIntent, applyIntent: editorSnapshots.applyHistoryIntent,
+    buildCheckpoint: () => assert.fail('Delete settings must use intent History'),
+    applyCheckpoint: () => assert.fail('Delete settings must use intent History')
+  });
+  const drawing = state.drawings.linear;
+  const card = state.linearSeqs[0];
+  const uid = card.uid;
+  card.definition = 'Kept organism';
+  card.losat_gencode = 11;
+  drawing.recordsOff.splice(0, Infinity, uid);
+  const key = JSON.stringify([uid, 'cds-1']);
+  drawing.featureOverrides[key] = {
+    recordKey: uid, biologicalFeatureId: 'cds-1', featureVisibility: 'off', labelVisibility: null, labelText: null, labelSourceText: null
+  };
+  drawing.annotationSets.splice(0, Infinity, { id: 'set', label: 'Set', annotations: [
+    { id: 'feature_1', target: { kind: 'featureIdentity', recordKey: uid, biologicalFeatureId: 'cds-1' },
+      label: '', mark: 'highlight', lane: null, style: null, legendLabel: null, metadata: {} }
+  ] });
+  await editorHistory.initializeIntentBaseline();
+  await editorHistory.runUndoable('Delete record settings', () => {
+    removeRecordEdits([{ key: uid, requestKeys: [uid], ownsExpansions: true, bindingKeys: [], displaySource: uid, displaySelector: null }],
+      { featureOverrides: drawing.featureOverrides, annotationSets: drawing.annotationSets, annotationBindingField: 'binding' });
+    Object.assign(card, RECORD_SETTINGS_DEFAULTS);
+  });
+  assert.equal(card.definition, '');
+  assert.equal(drawing.featureOverrides[key], undefined);
+  assert.equal(drawing.annotationSets[0].annotations.length, 0);
+  await editorHistory.undo();
+  const restored = state.linearSeqs.find((sequence) => sequence.uid === uid);
+  assert.equal(restored.definition, 'Kept organism');
+  assert.equal(restored.losat_gencode, 11);
+  assert.equal(drawing.featureOverrides[key]?.featureVisibility, 'off');
+  assert.deepEqual(drawing.annotationSets[0].annotations.map((item) => item.id), ['feature_1']);
+  assert.deepEqual([...drawing.recordsOff], [uid]);
+  drawing.recordsOff.splice(0);
+  drawing.annotationSets.splice(0);
+  delete drawing.featureOverrides[key];
+}
+
 applyConfigData(state.activeDrawing(), { form: JSON.parse('{"unknown":1,"__proto__":{"polluted":true}}') });
 assert.equal(Object.hasOwn(state.activeDrawing().form, 'unknown'), false);
 assert.equal({}.polluted, undefined);

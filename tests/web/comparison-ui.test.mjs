@@ -38,6 +38,10 @@ await Promise.all([
   cp(
     join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'optional-positive-number.js'),
     join(tempRoot, 'js', 'utils', 'optional-positive-number.js')
+  ),
+  cp(
+    join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'download-names.js'),
+    join(tempRoot, 'js', 'utils', 'download-names.js')
   )
 ]);
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');

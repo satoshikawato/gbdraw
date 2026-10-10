@@ -13,7 +13,6 @@ import {
   isInternalProteinDisplayId,
   resolveDisplayProteinId
 } from '../services/feature-utils.js';
-import { drawnLinearSequences } from '../services/record-draw-selection.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import {
@@ -324,13 +323,17 @@ const renderedFeatureIdForMember = (member, renderedIndex) => {
  * @property {Record<string, string>} orthogroupNameOverrides
  * @property {Record<string, string>} orthogroupDescriptionOverrides
  * @property {Record<string, { name?: string, description?: string }>} orthogroupDormantOverrides
- * @property {readonly string[]} [recordsOff] The Linear cards not drawn (record selection).
  */
 
 /**
- * @param {{ state: OrthogroupEditorState }} options
+ * @typedef {() => { records?: { recordKey?: unknown }[] } | null} CommittedRequestPort
+ *   The request of the shown Result, whose `records[i].recordKey` is the card uid of record index i.
  */
-export const createOrthogroupEditor = ({ state }) => {
+
+/**
+ * @param {{ state: OrthogroupEditorState, getCommittedRequest?: CommittedRequestPort }} options
+ */
+export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null }) => {
   const {
     orthogroups,
     selectedOrthogroupId,
@@ -622,9 +625,16 @@ export const createOrthogroupEditor = ({ state }) => {
     return getGroupMembers(group).map(enrichOrthogroupMember);
   };
 
-  // A member's record index is its record's position among the drawn cards.
+  // A member's record index is a position in the records of the Result's
+  // request, which names each record's card (record selection: a card turned
+  // OFF after Generate does not shift the labels).
   const groupOrthogroupMembersByRecord = (members) => {
-    const drawn = drawnLinearSequences(linearSeqs, state.drawings.linear.recordsOff);
+    const requestRecords = getCommittedRequest()?.records || [];
+    /** @param {number} recordIndex */
+    const cardOf = (recordIndex) => {
+      const uid = String(requestRecords[recordIndex]?.recordKey ?? '');
+      return uid ? linearSeqs.find((sequence) => sequence.uid === uid) : undefined;
+    };
     const byRecord = new Map();
     (Array.isArray(members) ? members : []).forEach((member) => {
       const recordIndex = nonnegativeIntegerAliasStatus(member, RECORD_INDEX_KEYS);
@@ -638,9 +648,9 @@ export const createOrthogroupEditor = ({ state }) => {
         recordIndex,
         recordLabel: recordIndex >= 0
           ? (
-              drawn[recordIndex]?.definition ||
-              drawn[recordIndex]?.gb?.name ||
-              drawn[recordIndex]?.gff?.name ||
+              cardOf(recordIndex)?.definition ||
+              cardOf(recordIndex)?.gb?.name ||
+              cardOf(recordIndex)?.gff?.name ||
               `Record ${recordIndex + 1}`
             )
           : 'Record',

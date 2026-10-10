@@ -82,6 +82,7 @@ import {
 import { buildRunInfo, buildSourceRecipe, summarizeLosatRuntimes } from './run-info.js';
 import {
   buildLosatJobSpecs,
+  canonicalGridDisplayPairs,
   resolveLinearComparisonPlan
 } from '../services/linear-comparisons.js';
 import {
@@ -1226,6 +1227,8 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {(options?: { pan?: any, resetZoom?: boolean }) => void} resetPreviewViewport The preview owner's viewport reset.
  * @property {(() => ({ code: string, context?: any } | null | undefined)) | null} [validateAnnotationTargets]
  * @property {(() => string[]) | null} [omittedAnnotationRecordKeys] The record-catalog keys of the drawing's OFF records.
+ * @property {((discovered: { primaryFile: File | null, pairedFile: File | null, recordCount: number }) => void) | null}
+ *   [onCircularRecordsDiscovered] A discovery of the Circular input settled (success or error).
  * @property {(() => Promise<Record<string, any>>) | null} [prepareLinearRecordCatalog]
  * @property {{ value: Record<string, any>[] } | null} [recordDisplayRows]
  *   The draft record display rows the request reads (`recordDisplayControls.allRows`, R13).
@@ -1263,6 +1266,7 @@ export const createRunAnalysis = ({
   resetPreviewViewport,
   validateAnnotationTargets = null,
   omittedAnnotationRecordKeys = null,
+  onCircularRecordsDiscovered = null,
   prepareLinearRecordCatalog = null,
   // The draft record display rows the request reads (`recordDisplayControls.allRows`, R13).
   recordDisplayRows = null,
@@ -2032,6 +2036,7 @@ export const createRunAnalysis = ({
       const nextPositions = mergeCircularRecordPositions(nextRecords, drawing.adv.multi_record_positions);
       drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length, ...nextPositions);
       if (nextRecords.length > 0) releaseSourceInputFailure('circular');
+      onCircularRecordsDiscovered?.({ primaryFile, pairedFile, recordCount: nextRecords.length });
     } catch (error) {
       if (
         refreshGeneration !== circularRecordRefreshGeneration ||
@@ -2052,6 +2057,7 @@ export const createRunAnalysis = ({
       circularRecordDiscovery.status = 'error';
       circularRecordDiscovery.error = formatError(error, inputType === 'gff' ? 'listGffFastaRecords' : 'listSequenceRecords', 'helper');
       drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length);
+      onCircularRecordsDiscovered?.({ primaryFile, pairedFile, recordCount: 0 });
     }
   };
 
@@ -3922,13 +3928,10 @@ export const createRunAnalysis = ({
           // CLI Sessions can specify a complete two-dimensional row layout.
           // For collinearity, every pair across adjacent rows is displayed;
           // the Web comparison-plan edges alone do not represent those pairs.
-          const canonicalGridRows = useCollinearBlastp && drawing.linearRecordLayoutEnabled.value
-            ? linearSeqs.map((seq) => drawing.linearRecordRows.find((entry) => entry.uid === seq.uid))
+          const canonicalGridPair = useCollinearBlastp && drawing.linearRecordLayoutEnabled.value
+            ? canonicalGridDisplayPairs(linearSeqs, drawing.linearRecordRows)
             : null;
-          const hasCanonicalGridRows = canonicalGridRows !== null && canonicalGridRows.length > 1
-            && canonicalGridRows.every((entry) => entry?.canonicalRow === entry.row
-              && Number.isInteger(entry.canonicalColumn) && entry.canonicalColumn > 0
-              && entry.canonicalCardinality === 'exactly_one');
+          const hasCanonicalGridRows = canonicalGridPair !== null;
           try {
             for (const [jobIndex, { spec, losatArgs, cacheMetadata, batch }] of preparedJobs.entries()) {
               throwIfGenerationCanceled();
@@ -3975,11 +3978,8 @@ export const createRunAnalysis = ({
               const resolvedEdge = comparisonResolution.edges.find(
                 (edge) => edge.edgeKey === spec.edgeKey
               );
-              const isResolvedDisplayPair = hasCanonicalGridRows
-                ? spec.queryIndex < spec.subjectIndex && Math.abs(
-                    canonicalGridRows[spec.queryIndex].row
-                    - canonicalGridRows[spec.subjectIndex].row
-                  ) === 1
+              const isResolvedDisplayPair = canonicalGridPair
+                ? canonicalGridPair(spec.queryIndex, spec.subjectIndex)
                 : Boolean(
                     resolvedEdge &&
                     spec.queryIndex === resolvedEdge.queryIndex &&

@@ -1,4 +1,5 @@
 // @ts-check
+import { downloadSafeName } from '../utils/download-names.js';
 // Which records of a drawing are drawn (D-01..D-10, record-selection). A
 // drawing holds the keys of its OFF records in `recordsOff`: a Linear record
 // card's `uid`, or a Circular record's source selector `#N` (1-based position
@@ -83,6 +84,19 @@ export const circularRecordsToDraw = (entries, recordsOff) => {
  * @param {number} sourceIndex 0-based position in the input file.
  */
 export const circularRecordRequestKey = (sourceIndex) => `record-${sourceIndex + 1}`;
+
+/**
+ * The request key of a Circular record drawn alone (a single presentation):
+ * its preserved key, or one built from its record ID and selector.
+ * @param {{ recordKey?: unknown, recordId?: unknown, selector?: unknown } | null | undefined} record
+ */
+export const circularSingleRecordKey = (record) => {
+  const preserved = String(record?.recordKey || '').trim();
+  if (preserved) return preserved;
+  const recordId = downloadSafeName(record?.recordId, 'record');
+  const selector = downloadSafeName(record?.selector, '1');
+  return `circular-${recordId}-${selector}`;
+};
 
 /**
  * The request record keys of a drawing's OFF records: a Linear card's uid, or
@@ -211,4 +225,146 @@ export const recordListRows = ({ records, recordsOff, query = '', sort = 'file' 
     default: return rows;
   }
   return rows.sort((left, right) => compare(left, right) || left.position - right.position);
+};
+
+// D-08 Delete settings: what a record keeps while it is OFF and what Delete
+// settings removes. The card fields return to these values (the record
+// fields Reset Settings resets, plus LOSAT Gencode).
+export const RECORD_SETTINGS_DEFAULTS = Object.freeze({
+  definition: '', record_subtitle: '', region_start: null, region_end: null, region_reverse: false, losat_gencode: 1
+});
+
+/**
+ * Whether a Linear record card holds a value that Delete settings resets.
+ * @param {Record<string, unknown> | null | undefined} card
+ */
+export const linearCardHasSettings = (card) => Object.entries(RECORD_SETTINGS_DEFAULTS)
+  .some(([field, fallback]) => (card?.[field] ?? fallback) !== fallback);
+
+/**
+ * One record whose edits Delete settings finds or removes.
+ * @typedef {object} RecordSettingsOwner
+ * @property {RecordDrawKey} key
+ * @property {readonly string[]} requestKeys The request record keys its feature edits use: a Linear
+ *   card's uid (which also owns its `<uid>:<n>` records), a Circular record's `record-N` and its
+ *   single-record key.
+ * @property {boolean} [ownsExpansions] Linear: the key also owns `<key>:<n>`.
+ * @property {readonly string[]} bindingKeys The record-catalog keys an annotation binds it by.
+ * @property {string} displaySource The `sourceUid` of its record display drafts.
+ * @property {string | null} displaySelector Circular: its `#N`; Linear: null (every draft of the card).
+ *
+ * The edits of one drawing, mutated in place by `removeRecordEdits`.
+ * @typedef {object} RecordEditData
+ * @property {Record<string, { recordKey?: unknown }>} [featureOverrides]
+ * @property {Record<string, { recordKey?: unknown }>} [featurePlacementOverrides]
+ * @property {Record<string, unknown>} [featureStrokeOverrides] Keyed `<recordKey>\0…`.
+ * @property {{ annotations: { target?: { kind?: string, recordKey?: unknown },
+ *   metadata?: Record<string, unknown> | null }[] }[]} [annotationSets]
+ * @property {{ sourceUid?: unknown, selector?: unknown }[]} [recordDisplayDrafts]
+ * @property {{ queryUid?: unknown, subjectUid?: unknown }[]} [comparisonEdges] Linear edges, by card uid.
+ * @property {string} annotationBindingField The annotation metadata field of a record binding.
+ */
+
+/** @param {readonly RecordSettingsOwner[]} owners */
+const recordEditMatcher = (owners) => {
+  /** @type {Map<string, RecordDrawKey>} */
+  const byRequestKey = new Map();
+  /** @type {Map<string, RecordDrawKey>} */
+  const byBinding = new Map();
+  /** @type {Map<string, RecordDrawKey>} */
+  const byDisplay = new Map();
+  /** @type {Set<string>} */
+  const expanding = new Set();
+  owners.forEach((owner) => {
+    owner.requestKeys.forEach((requestKey) => {
+      if (!requestKey) return;
+      byRequestKey.set(requestKey, owner.key);
+      if (owner.ownsExpansions) expanding.add(requestKey);
+    });
+    owner.bindingKeys.forEach((bindingKey) => { if (bindingKey) byBinding.set(bindingKey, owner.key); });
+    byDisplay.set(JSON.stringify([owner.displaySource, owner.displaySelector]), owner.key);
+  });
+  /** @param {unknown} value @returns {RecordDrawKey | undefined} */
+  const ofRequestKey = (value) => {
+    const recordKey = cleanKey(value);
+    const direct = byRequestKey.get(recordKey);
+    if (direct !== undefined) return direct;
+    const match = /^(.*):[1-9]\d*$/.exec(recordKey);
+    return match && expanding.has(match[1]) ? byRequestKey.get(match[1]) : undefined;
+  };
+  return {
+    ofRequestKey,
+    /** @param {unknown} value */
+    ofBinding: (value) => byBinding.get(cleanKey(value)),
+    /** @param {{ sourceUid?: unknown, selector?: unknown }} draft */
+    ofDisplayDraft: (draft) => byDisplay.get(JSON.stringify([cleanKey(draft?.sourceUid), null]))
+      ?? byDisplay.get(JSON.stringify([cleanKey(draft?.sourceUid), cleanKey(draft?.selector)])),
+    /** @param {{ queryUid?: unknown, subjectUid?: unknown }} edge */
+    ofEdge: (edge) => byRequestKey.get(cleanKey(edge?.queryUid)) ?? byRequestKey.get(cleanKey(edge?.subjectUid))
+  };
+};
+
+/**
+ * Walks the edits of `owners` in a drawing's data: `visit(key, remove)` for each.
+ * @param {readonly RecordSettingsOwner[]} owners
+ * @param {RecordEditData} data
+ * @param {(key: RecordDrawKey, remove: () => void) => void} visit
+ */
+const forEachRecordEdit = (owners, data, visit) => {
+  const match = recordEditMatcher(owners);
+  /** @param {Record<string, { recordKey?: unknown }> | undefined} rows */
+  const rowsOf = (rows) => Object.entries(rows || {}).forEach(([draftKey, row]) => {
+    const key = match.ofRequestKey(row?.recordKey);
+    if (key !== undefined) visit(key, () => { delete /** @type {Record<string, unknown>} */ (rows)[draftKey]; });
+  });
+  rowsOf(data.featureOverrides);
+  rowsOf(data.featurePlacementOverrides);
+  Object.keys(data.featureStrokeOverrides || {}).forEach((strokeKey) => {
+    const key = strokeKey.includes('\0') ? match.ofRequestKey(strokeKey.split('\0')[0]) : undefined;
+    if (key !== undefined) visit(key, () => { delete /** @type {Record<string, unknown>} */ (data.featureStrokeOverrides)[strokeKey]; });
+  });
+  (data.annotationSets || []).forEach((set) => {
+    [...set.annotations].forEach((item) => {
+      const key = item?.target?.kind === 'featureIdentity'
+        ? match.ofRequestKey(item.target.recordKey)
+        : match.ofBinding(item?.metadata?.[data.annotationBindingField]);
+      if (key !== undefined) visit(key, () => { set.annotations.splice(set.annotations.indexOf(item), 1); });
+    });
+  });
+  /**
+   * @template T
+   * @param {T[] | undefined} list
+   * @param {(entry: T) => RecordDrawKey | undefined} of
+   */
+  const listOf = (list, of) => [...(list || [])].forEach((entry) => {
+    const key = of(entry);
+    if (key !== undefined && list) visit(key, () => { list.splice(list.indexOf(entry), 1); });
+  });
+  listOf(data.recordDisplayDrafts, match.ofDisplayDraft);
+  listOf(data.comparisonEdges, match.ofEdge);
+};
+
+/**
+ * The records of `owners` that have a feature edit, Feature placement, stroke,
+ * annotation, record display draft, or comparison pair in the drawing (D-08).
+ * @param {readonly RecordSettingsOwner[]} owners
+ * @param {RecordEditData} data
+ * @returns {Set<RecordDrawKey>}
+ */
+export const recordsWithEdits = (owners, data) => {
+  /** @type {Set<RecordDrawKey>} */
+  const keys = new Set();
+  forEachRecordEdit(owners, data, (key) => keys.add(key));
+  return keys;
+};
+
+/**
+ * Removes those edits in place (Delete settings, D-08); returns how many.
+ * @param {readonly RecordSettingsOwner[]} owners
+ * @param {RecordEditData} data
+ */
+export const removeRecordEdits = (owners, data) => {
+  let removed = 0;
+  forEachRecordEdit(owners, data, (_key, remove) => { remove(); removed += 1; });
+  return removed;
 };

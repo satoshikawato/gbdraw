@@ -1439,8 +1439,8 @@
                     <p v-if="recordDisplayControls.hasPendingChanges.value" role="status" class="mb-2 text-xs text-amber-700">Record rotation, feature placement, or tolerance has changes pending Generate. This notice covers record display only; the Result keeps its applied settings.</p>
                     <div v-if="mode === 'circular'" class="space-y-4">
                         <div class="flex gap-4 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex">
-                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="cInputType" value="gb" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GenBank</label>
-                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="cInputType" value="gff" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
+                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="cInputType === 'gb'" @change="setCircularInputType('gb')" value="gb" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GenBank</label>
+                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="cInputType === 'gff'" @change="setCircularInputType('gff')" value="gff" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
                         </div>
                         <div v-if="cInputType === 'gb'">
                             <file-uploader label="GenBank/DDBJ File" :model-value="files.c_gb" @update:model-value="setCircularSourceFile('c_gb', $event)" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"></file-uploader>
@@ -1453,13 +1453,23 @@
                             <p data-circular-discovery-status role="status" aria-live="polite" class="text-xs text-slate-600">
                                 <span v-if="circularRecordDiscoveryState.status === 'deferred'">Records not inspected</span>
                                 <span v-else-if="circularRecordDiscoveryState.status === 'loading'">Inspecting source records…</span>
-                                <span v-else-if="circularRecordDiscoveryState.status === 'ready'">{{ circularRecordDiscoveryState.records.length }} source record(s) inspected</span>
+                                <span v-else-if="circularRecordDiscoveryState.status === 'ready'">{{ circularRecordDiscoveryState.records.length }} source record(s) inspected<template v-if="circularRecordDiscoveryState.records.length > 1"> · <span data-circular-records-drawn>{{ circularDrawnRecordCount }} of {{ circularRecordDiscoveryState.records.length }} records drawn</span></template></span>
                                 <span v-else-if="circularRecordDiscoveryState.status === 'error'" class="text-red-600">{{ circularRecordDiscoveryState.error?.summary || 'Source inspection failed. Retry or replace the input.' }}</span>
                                 <span v-else>{{ cInputType === 'gff' ? 'Upload both GFF3 and FASTA files to inspect records.' : 'Upload a source file to inspect records.' }}</span>
                             </p>
                             <button v-if="circularRecordDiscoveryState.hasInput" data-circular-inspect type="button" data-history-ignore @click="inspectCircularSourceRecords" :aria-disabled="!circularRecordInspectionEnabled" :aria-busy="circularRecordDiscoveryState.status === 'loading'" :class="circularRecordInspectionEnabled ? 'text-blue-600' : 'text-slate-400'" class="text-xs">{{ circularRecordDiscoveryState.status === 'error' ? 'Retry source inspection' : circularRecordDiscoveryState.status === 'ready' ? 'Inspect source records again' : 'Inspect source records' }}</button>
                             <div>
-                                <span class="input-label text-[10px]">Record <help-tip id="help-circular-record" text="Select one stable record identity for a single Circular diagram. Leave this on All records to keep separate-diagram batch output."></help-tip></span>
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="input-label text-[10px]">Record <help-tip id="help-circular-record" text="Select one stable record identity for a single Circular diagram. Leave this on All records to keep separate-diagram batch output."></help-tip></span>
+                                    <button
+                                        v-if="circularRecordDiscoveryState.status === 'ready' && circularRecordDiscoveryState.records.length > 1"
+                                        type="button"
+                                        data-history-ignore
+                                        data-record-list-open="circular"
+                                        @click="recordSelection.openRecordList('circular', 'circular', $event.currentTarget)"
+                                        class="text-xs text-blue-600 hover:text-blue-700"
+                                    >Choose records…</button>
+                                </div>
                                 <select
                                     :value="form.circular_record_selector"
                                     @change="setCircularRecordPresentationSelector($event.target.value)"
@@ -1860,9 +1870,19 @@
                                     </button>
                                 </div>
                             </details>
+                            <div class="min-w-0">
+                            <div v-if="source.records.length > 1" class="mt-2 flex justify-end">
+                                <button
+                                    type="button"
+                                    data-history-ignore
+                                    :data-record-list-open="source.uid"
+                                    @click="recordSelection.openRecordList('linear', source.uid, $event.currentTarget)"
+                                    class="text-xs text-blue-600 hover:text-blue-700"
+                                >Choose records…</button>
+                            </div>
                             <details :data-linear-source-records="source.uid" :open="source.records.length === 1" class="min-w-0">
-                                <summary v-show="source.records.length > 1" role="button" :aria-label="`Records for file ${sourceIndex + 1}`" class="mt-2 text-xs font-normal text-slate-500">
-                                    Number of records: {{ source.records.length }}
+                                <summary v-show="source.records.length > 1" role="button" :aria-label="`Records for file ${sourceIndex + 1}`" class="mt-1 text-xs font-normal text-slate-500">
+                                    Number of records: {{ source.records.length }} · {{ recordSelection.drawnCount('linear', source.records.map(({ sequence }) => sequence.uid)) }} drawn
                                     <span v-if="hasActiveLinearLosatIntent && losatProgram === 'tblastx' && source.records.some(({ sequence }) => !(Number(sequence.losat_gencode) >= 1))" class="ml-1 text-red-700">Gencode required</span>
                                 </summary>
                                 <div
@@ -1875,16 +1895,45 @@
                                     :aria-label="`Linear sequence ${idx + 1}`"
                                 >
                             <details class="mt-2 min-w-0 rounded border border-slate-200 bg-white/70 p-2" :data-linear-record-options="seq.uid">
-                                <summary role="button" :aria-label="`Record options for sequence ${idx + 1}`" class="linear-secondary-summary">
+                                <summary role="button" :aria-label="`Record options for sequence ${idx + 1}`" class="linear-secondary-summary" :class="{ 'opacity-60': !recordSelection.isDrawn('linear', seq.uid) }">
                                     <i class="ph ph-sliders-horizontal" aria-hidden="true"></i>
                                     <span v-if="source.records.length > 1" class="min-w-0 truncate" :title="linearComparisonRecordLabel(seq.uid)">{{ linearComparisonRecordLabel(seq.uid) }}</span>
                                     <span v-else>Record options</span>
                                     <span
+                                        v-if="!recordSelection.isDrawn('linear', seq.uid)"
+                                        data-record-off-badge
+                                        class="ml-auto rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700"
+                                    >OFF</span>
+                                    <span
                                         v-if="hasActiveLinearLosatIntent && losatProgram === 'tblastx' && !(Number(seq.losat_gencode) >= 1)"
-                                        class="ml-auto rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700"
+                                        :class="recordSelection.isDrawn('linear', seq.uid) ? 'ml-auto' : ''"
+                                        class="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700"
                                     >Gencode required</span>
                                 </summary>
                                 <div class="min-w-0 space-y-2 pt-2">
+                            <div v-if="source.records.length > 1" class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                <label class="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                                    <input
+                                        type="checkbox"
+                                        data-history-managed
+                                        :data-record-draw="seq.uid"
+                                        :checked="recordSelection.isDrawn('linear', seq.uid)"
+                                        @change="recordSelection.toggleRecord('linear', source.uid, seq.uid, $event)"
+                                        class="form-checkbox"
+                                        :disabled="!semanticMutationAvailable"
+                                    > Draw this record
+                                </label>
+                                <span class="ui-hint">Applies on Generate</span>
+                                <button
+                                    v-if="!recordSelection.isDrawn('linear', seq.uid)"
+                                    type="button"
+                                    data-history-managed
+                                    :data-record-delete-settings="seq.uid"
+                                    @click="recordSelection.deleteSettings('linear', [seq.uid])"
+                                    class="ml-auto text-[10px] text-red-600 hover:text-red-700"
+                                    :disabled="!semanticMutationAvailable"
+                                ><i class="ph ph-trash" aria-hidden="true"></i> Delete settings</button>
+                            </div>
                             <div class="mb-2 flex items-center gap-2">
                                 <div class="text-[10px] font-bold text-white bg-slate-500 px-1.5 py-0.5 rounded-full shrink-0">#{{ idx + 1 }}</div>
                             </div>
@@ -1988,6 +2037,7 @@
                             </details>
                                 </div>
                             </details>
+                            </div>
                             </section>
                         </div>
                         <div :class="linearSourceGroups.length > 1 ? 'grid-cols-2' : 'grid-cols-1'" class="grid min-w-0 gap-2" role="group" aria-label="Linear File actions">
@@ -2543,8 +2593,8 @@
                                     Arrange in rows
                                 </label>
                                 <div v-if="linearRecordLayoutEnabled" class="min-w-0 space-y-1.5">
-                                    <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_4.5rem] gap-1" v-for="(seq, idx) in linearSeqs" :key="`layout-${seq.uid}`">
-                                        <div class="min-w-0 self-center truncate text-[10px] font-semibold text-slate-600" :title="linearComparisonRecordLabel(seq.uid)">#{{ idx + 1 }} {{ linearComparisonRecordLabel(seq.uid) }}</div>
+                                    <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_4.5rem] gap-1" v-for="(seq, idx) in linearSeqs" :key="`layout-${seq.uid}`" :class="{ 'opacity-60': !recordSelection.isDrawn('linear', seq.uid) }">
+                                        <div class="min-w-0 self-center truncate text-[10px] font-semibold text-slate-600" :title="linearComparisonRecordLabel(seq.uid)">#{{ idx + 1 }} {{ linearComparisonRecordLabel(seq.uid) }}<span v-if="!recordSelection.isDrawn('linear', seq.uid)" data-record-off-badge class="ml-1 rounded bg-slate-200 px-1 text-[9px] text-slate-700">OFF</span></div>
                                         <input type="number" min="1" :value="linearRecordRowFor(seq.uid, idx + 1)" @input="setLinearRecordRow(seq.uid, $event.target.value)" class="form-input form-input-compact min-w-0" :aria-label="`Linear record row for sequence ${idx + 1}`" :disabled="!semanticMutationAvailable">
                                         <div class="col-span-2 grid min-w-0 grid-cols-2 gap-1">
                                             <button type="button" class="btn btn-secondary min-w-0 px-1 py-0.5 text-[10px]" @click="moveLinearRecordWithinRow(seq.uid, -1)" :disabled="!semanticMutationAvailable">Up</button>
@@ -3735,8 +3785,9 @@
                                                 v-for="(position, idx) in adv.multi_record_positions"
                                                 :key="`record-order-${position.selector}-${idx}`"
                                                 class="grid grid-cols-[minmax(0,1fr)_3rem_auto] items-center gap-1.5"
+                                                :class="{ 'opacity-60': !recordSelection.isDrawn('circular', position.selector) }"
                                             >
-                                                <span class="truncate text-[10px] text-slate-700">{{ getCircularRecordOrderLabel(position.selector) }}</span>
+                                                <span class="truncate text-[10px] text-slate-700">{{ getCircularRecordOrderLabel(position.selector) }}<span v-if="!recordSelection.isDrawn('circular', position.selector)" data-record-off-badge class="ml-1 rounded bg-slate-200 px-1 text-[9px]">OFF</span></span>
                                                 <select
                                                     class="form-input py-0.5 px-1 text-[10px]"
                                                     :aria-label="`Row for ${getCircularRecordOrderLabel(position.selector)}`"
@@ -7726,6 +7777,70 @@
                 <button type="button" data-history-ignore @click="resolveMissingBlastTsv('choose')" class="btn btn-primary btn-sm">Choose BLAST TSV for {{ missingBlastTsvDialog.pairs[0]?.label }}…</button>
                 <button type="button" data-history-managed :disabled="!semanticMutationAvailable" @click="resolveMissingBlastTsv('none')" class="btn btn-secondary btn-sm">Set to No comparison and Generate</button>
                 <button type="button" data-history-ignore @click="resolveMissingBlastTsv('cancel')" class="btn btn-secondary btn-sm">Cancel</button>
+            </div>
+        </choice-dialog>
+        <!-- Record selection (D-02, D-10): the records of one file, drawn or left out -->
+        <choice-dialog v-if="recordSelection.recordListView.value.open" labelledby="record-list-title" describedby="record-list-description"
+             data-record-list-dialog
+             @cancel="recordSelection.closeRecordList()" @keydown.tab="trapDialogFocus"
+             class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
+            <h2 id="record-list-title" class="text-base font-bold text-slate-800">Choose records</h2>
+            <p id="record-list-description" class="mt-1 text-sm leading-relaxed text-slate-600">
+                <strong class="break-all text-slate-800">{{ recordSelection.recordListView.value.name }}</strong>:
+                <span data-record-list-count>{{ recordSelection.recordListView.value.drawn }} of {{ recordSelection.recordListView.value.total }} records drawn</span>. Changes apply on Generate.
+            </p>
+            <div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <label class="text-xs font-semibold text-slate-600">Search record IDs
+                    <input type="search" data-history-ignore data-record-list-search
+                           :value="recordSelection.recordList.query" @input="recordSelection.setRecordListQuery($event.target.value)"
+                           class="form-input mt-1 px-2 py-1 text-xs font-normal">
+                </label>
+                <label class="text-xs font-semibold text-slate-600">Sort
+                    <select data-history-ignore data-record-list-sort
+                            :value="recordSelection.recordList.sort" @change="recordSelection.setRecordListSort($event.target.value)"
+                            class="form-select mt-1 px-2 py-1 text-xs font-normal">
+                        <option value="file">File order</option>
+                        <option value="id-asc">Record ID A to Z</option>
+                        <option value="id-desc">Record ID Z to A</option>
+                        <option value="length-desc">Longest first</option>
+                        <option value="length-asc">Shortest first</option>
+                    </select>
+                </label>
+            </div>
+            <div class="mt-2 flex flex-wrap gap-2">
+                <button type="button" data-history-managed data-record-list-select="all" @click="recordSelection.selectShown(true)" class="btn btn-secondary btn-sm" :disabled="!semanticMutationAvailable || !recordSelection.recordListView.value.rows.length">Select all</button>
+                <button type="button" data-history-managed data-record-list-select="none" @click="recordSelection.selectShown(false)" class="btn btn-secondary btn-sm" :disabled="!semanticMutationAvailable || !recordSelection.recordListView.value.rows.length">Select none</button>
+            </div>
+            <ul data-record-list-rows class="mt-2 max-h-[50vh] overflow-y-auto divide-y divide-slate-100 rounded-lg border border-slate-200">
+                <li v-for="row in recordSelection.recordListView.value.rows" :key="row.key" class="flex items-center gap-2 px-2 py-1 text-xs" :class="{ 'text-slate-400': !row.drawn }">
+                    <label class="flex min-w-0 flex-1 items-center gap-2">
+                        <input type="checkbox" data-history-managed :data-record-list-row="row.key" class="form-checkbox shrink-0"
+                               :checked="row.drawn" :disabled="!semanticMutationAvailable"
+                               @change="recordSelection.toggleRecord(recordSelection.recordListView.value.mode, recordSelection.recordListView.value.sourceKey, row.key, $event)">
+                        <span class="min-w-0 truncate" :title="row.recordId">{{ row.recordId }}</span>
+                    </label>
+                    <span v-if="row.hasSettings" data-record-list-settings class="shrink-0 rounded bg-blue-50 px-1 text-[10px] text-blue-700">settings</span>
+                    <span class="shrink-0 tabular-nums text-slate-500">{{ formatRecordLength(row.length) }}</span>
+                </li>
+                <li v-if="!recordSelection.recordListView.value.rows.length" class="px-2 py-2 text-xs text-slate-500">No record ID matches the search.</li>
+            </ul>
+            <div class="mt-3 flex flex-wrap justify-between gap-2">
+                <button type="button" data-history-managed data-record-list-delete-settings @click="recordSelection.deleteShownOffSettings()" class="btn btn-danger btn-sm" :disabled="!semanticMutationAvailable || !recordSelection.recordListView.value.offWithSettings.length">Delete settings of OFF records</button>
+                <button type="button" data-history-ignore data-record-list-close @click="recordSelection.closeRecordList()" class="btn btn-primary btn-sm">Close</button>
+            </div>
+        </choice-dialog>
+        <!-- D-06: turning off the last drawn record of a file asks to remove the file -->
+        <choice-dialog v-if="recordSelection.removeFileDialog.open" :busy="dialogChoicePending" labelledby="record-remove-file-title" describedby="record-remove-file-description"
+             data-record-remove-file-dialog
+             @cancel="recordSelection.resolveRemoveFile('cancel')" @keydown.tab="trapDialogFocus"
+             class="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-4">
+            <h2 id="record-remove-file-title" class="text-base font-bold text-slate-800">Remove the whole file?</h2>
+            <p id="record-remove-file-description" class="mt-2 text-sm leading-relaxed text-slate-600">
+                <strong class="break-all text-slate-800">{{ recordSelection.removeFileDialog.name }}</strong>: every record of this file would be OFF. Remove the file instead?
+            </p>
+            <div class="mt-4 flex justify-end gap-2">
+                <button type="button" data-history-ignore @click="recordSelection.resolveRemoveFile('cancel')" class="btn btn-secondary btn-sm">Cancel</button>
+                <button type="button" data-history-managed data-record-remove-file @click="recordSelection.resolveRemoveFile('remove')" class="btn btn-danger btn-sm" :disabled="!semanticMutationAvailable">Remove File</button>
             </div>
         </choice-dialog>
         <!-- UJ-06: the Gallery examples this origin serves -->

@@ -222,13 +222,15 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, 
   if (unknownDomains.length)
     throw new Error(`Current session active configuration contains unknown domain(s): ${unknownDomains.join(', ')}.`);
   if (!isObject(config.form) || !isObject(config.adv)) throw new Error('Current session is missing its active form or advanced settings.');
-  validateDomainShapes(config); validateCollections(config); requireCurrentWebStateFieldNames(config);
-  if (has(config, 'recordDisplayDrafts')) validateRecordDisplayDrafts(config.recordDisplayDrafts, { scoped: scopedDrafts });
-  // A Linear card uid or a Circular source selector `#N`, once each; that a
-  // Linear uid names a bound card is checked with the bindings (session-authority.js).
-  if (has(config, 'recordsOff') && (new Set(config.recordsOff).size !== config.recordsOff.length
+  // A list of Linear card uids or Circular source selectors `#N`, once each, as
+  // Python reads it; that a Linear uid names a bound card is checked with the
+  // bindings (session-authority.js).
+  if (has(config, 'recordsOff') && (!Array.isArray(config.recordsOff)
+    || new Set(config.recordsOff).size !== config.recordsOff.length
     || !config.recordsOff.every((/** @type {unknown} */ key) => isRecordDrawKey(/** @type {'circular' | 'linear'} */ (mode), key))))
     throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
+  validateDomainShapes(config); validateCollections(config); requireCurrentWebStateFieldNames(config);
+  if (has(config, 'recordDisplayDrafts')) validateRecordDisplayDrafts(config.recordDisplayDrafts, { scoped: scopedDrafts });
   if (has(config, 'featurePlacementOverrides')) {
     if (scopedDrafts) validateScopedFeaturePlacements(config.featurePlacementOverrides);
     else canonicalFeaturePlacements(config.featurePlacementOverrides, mode);
