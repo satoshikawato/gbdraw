@@ -322,12 +322,12 @@ export const legacyLinearRequestRecords = (linearSeqs) => (Array.isArray(linearS
 // drawn hashes of its features differ from their source hashes (a rotation or
 // a region that only selects a record changes no hash). The twin of
 // `_hash_frame_changed` in gbdraw/session_io.py.
-/** @param {Record<string, any>} record */
+/** @param {Record<string, unknown>} record */
 const hashFrameChanged = (record) => {
-  const region = record?.region;
+  const { region, presentation } = record;
   return Boolean((isObject(region) && (nonnegativeInteger(region.start) !== null
     || nonnegativeInteger(region.end) !== null || region.reverseComplement))
-    || record?.presentation?.reverseComplement);
+    || (isObject(presentation) && presentation.reverseComplement));
 };
 
 /**
