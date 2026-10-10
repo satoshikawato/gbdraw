@@ -23,6 +23,7 @@ write-up of a release.
   compatibility, and installation availability. Publication dates are recorded
   in [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases).
 
+- Editing (web app): an edit to a Feature visibility rule made while a label rerender is running is drawn as **Generate Diagram** draws it; before, the shown Result could keep the older rule until the next Generate (#TBD-C).
 - Web app: **Load example** is now also in the header, after **Load Session**, so a
   second Gallery example can be loaded once a Result is shown. It opens the same chooser
   as the **Load an example** button in the empty Preview, which stays. At 769 to about
@@ -40,18 +41,15 @@ write-up of a release.
   live Result shows what the next Generate draws. This fixes Reset Stroke, Reset all
   strokes, and Undo of a stroke for connectors and every size class; a batch Result
   shown again after an edit was removed; Undo, Redo, and a batch Result display after a
-  Legend color, color rule, or palette step; Feature Edits TSV loads and popup label
-  edits with Label Rendering = Embedded Only; and Reset Settings, which now shows reset
-  strokes, Legend colors, and deleted rows at once (OV-129, OV-144, OV-146, OV-150,
-  OV-200, OV-235 to OV-237, OV-287, OV-289, OV-293, OV-309). A Legend whole-row rename,
+  Legend color, color rule, or palette step; and Feature Edits TSV loads and popup label
+  edits with Label Rendering = Embedded Only (OV-129, OV-144, OV-150, OV-200, OV-293). A Legend whole-row rename,
   merge within one feature type, recolor, delete, Restore, and sort show live without
   the automatic rerender when Python would draw the same rows. Deleted Legend rows stay
   in the Result, hidden; exports strip them (#975).
 - Editing (web app): **Reset Settings** returns every Legend rename, including track
   rows such as `GC content`, to the default caption, and Undo of Reset restores the
   renames. A Legend rename onto a deleted row's caption opens the Legend Name Conflict
-  dialog (Restore the deleted row and merge into it, Keep current color and add a
-  suffix, or Cancel). A Legend row stroke follows the color Python gives the row's
+  dialog; when both rows draw one feature type it offers (Restore the deleted row and merge into it, Keep current color and add a suffix, or Cancel). Rows of different types get the suffix or Cancel. A Legend row stroke follows the color Python gives the row's
   features, so it stays after a Legend row color edit in either order (OV-288). Rule
   rows are addressed by Python's rows (OV-292, OV-294), and a palette row's Legend color
   is read from the color the row shows now, not from the last Generate (OV-282, OV-311)
@@ -1351,7 +1349,7 @@ Retired names and their replacements are listed under
   feature catalog now fails with the `WORKER_INIT` diagnostic when the diagram runtime
   cannot start, and the previous Session stays. Before, Load reported the edits as
   dropped, and the next Save lost them (OV-39, #833).
-- Sessions (web app): a Session 27 to 33 saved with Custom Track Slots off, such as the
+- Sessions (web app): a Session 27 to 30 saved with Custom Track Slots off, such as the
   0.13.0 Gallery Session `BGC0000708-BGC0000713`, loads. Another retired slot field
   still fails Load, and the message now names the field and the track row (OV-38, #834).
 - Sessions (web app): a Session 31 to 39 whose Default colors, Label whitelist, or
@@ -1410,9 +1408,9 @@ Retired names and their replacements are listed under
   first Generate after Load takes about 20 to 29 s instead of 37 to 39 s. The figure is
   unchanged (#961).
 - Colors (web app): a Default colors value that differs from the selected palette is a
-  user color, as `-d` over `-p` on the command line. A palette switch or Default colors
-  **Reset** asks before it discards user colors (**Keep my N colors**, **Use the
-  palette's colors**, or **Cancel**), and **Apply to all "<type>"** on a palette Legend
+  user color, as `-d` over `-p` on the command line. A palette switch asks before it discards user
+  colors (**Keep my N colors**, **Use the palette's colors**, or **Cancel**), and Default colors
+  **Reset** asks first (**Reset to the palette's colors** or **Cancel**), and **Apply to all "<type>"** on a palette Legend
   row sets the type's default color instead of one hash rule per feature (PD-OI-089,
   #963).
 - Colors (web app): choosing **Apply to all** in the popup's Color Change Scope dialog
