@@ -224,6 +224,52 @@ assert.equal((await compareCanonicalRenderRequests({
   actualResources: lambdaWithDefaultColorFileAliasResources
 })).equivalent, true);
 
+// OV-398: a published CLI request states the default definition-line weight
+// `normal`; the Web draft holds it as null after Load and omits it.
+const nameWeight = 'objects.definition.linear.line_styles.name.font_weight';
+const defaultWeight = structuredClone(lambdaPrepared.session.renderRequest);
+delete defaultWeight.diagramOptions.configOverrides[nameWeight];
+for (const [weight, equivalent] of [['normal', true], ['bold', false]]) {
+  const explicitWeight = structuredClone(defaultWeight);
+  explicitWeight.diagramOptions.configOverrides[nameWeight] = weight;
+  assert.equal((await compareCanonicalRenderRequests({
+    expectedRequest: explicitWeight,
+    expectedResources: lambdaPrepared.session.resources,
+    actualRequest: defaultWeight,
+    actualResources: lambdaPrepared.session.resources
+  })).equivalent, equivalent, weight);
+}
+
+// A Web draft after Load states every default feature rendering; a CLI
+// request states only the ones it changes (OV-398).
+for (const [shape, equivalent] of [['arrow', true], ['rectangle', false]]) {
+  const statedShapes = structuredClone(lambdaPrepared.session.renderRequest);
+  statedShapes.diagramOptions.featureShapes = { ...statedShapes.diagramOptions.featureShapes, CDS: shape };
+  const omittedShapes = structuredClone(lambdaPrepared.session.renderRequest);
+  delete omittedShapes.diagramOptions.featureShapes.CDS;
+  assert.equal((await compareCanonicalRenderRequests({
+    expectedRequest: omittedShapes,
+    expectedResources: lambdaPrepared.session.resources,
+    actualRequest: statedShapes,
+    actualResources: lambdaPrepared.session.resources
+  })).equivalent, equivalent, shape);
+}
+// With one changed rendering, the CLI states only that one and the Web draft
+// states it beside every default (review 3).
+const { DEFAULT_FEATURE_RENDERINGS } = await import('../../gbdraw/web/js/utils/feature-rendering.js');
+for (const [webShape, equivalent] of [['arrow', true], ['rectangle', false]]) {
+  const cliShapes = structuredClone(lambdaPrepared.session.renderRequest);
+  cliShapes.diagramOptions.featureShapes = { misc_feature: 'arrow' };
+  const webShapes = structuredClone(lambdaPrepared.session.renderRequest);
+  webShapes.diagramOptions.featureShapes = { ...DEFAULT_FEATURE_RENDERINGS, misc_feature: webShape };
+  assert.equal((await compareCanonicalRenderRequests({
+    expectedRequest: cliShapes,
+    expectedResources: lambdaPrepared.session.resources,
+    actualRequest: webShapes,
+    actualResources: lambdaPrepared.session.resources
+  })).equivalent, equivalent, `misc_feature ${webShape}`);
+}
+
 const ungeneratedDraft = structuredClone(lambda);
 ungeneratedDraft.config.adv.arrow_shaft_width_ratio = 0.5;
 await assert.rejects(

@@ -534,6 +534,9 @@ const LINEAR_DEFINITION_STYLE_PATHS = Object.freeze(
   )
 );
 const LINEAR_DEFINITION_STYLE_FIELDS = Object.freeze(['font_size', 'font_weight', 'fill']);
+const LINEAR_DEFINITION_WEIGHT_PATHS = new Set(
+  Object.values(LINEAR_DEFINITION_STYLE_PATHS).map((prefix) => `${prefix}.font_weight`)
+);
 
 const CIRCULAR_ONLY_GUI_CONFIG_OVERRIDE_PATHS = new Set([
   CONFIG_OVERRIDE_PATHS.circularAxisStrokeColor,
@@ -5244,6 +5247,13 @@ const canonicalizePublicationValue = async (value, resources, context, path = '$
       || (path === '$.diagramOptions.configOverrides' && key === 'labels.filtering.blacklist_keywords'
         && Array.isArray(value[key]) && value[key].length === 0)
       || (path === '$.diagramOptions.configOverrides' && key === 'canvas.feature_overlap_tolerance_bp' && value[key] === 0)
+      // A request may state a default the other writer omits (OV-398): the
+      // definition-line weight `normal`, which a Web draft holds as null, and
+      // a feature rendering, which a CLI request states only when changed.
+      || (path === '$.diagramOptions.configOverrides' && LINEAR_DEFINITION_WEIGHT_PATHS.has(key) && value[key] === 'normal')
+      || (path === '$.diagramOptions.featureShapes' && value[key] === defaultFeatureRendering(key))
+      || (path === '$.diagramOptions' && key === 'featureShapes' && value[key] && typeof value[key] === 'object'
+        && Object.entries(value[key]).every(([type, rendering]) => rendering === defaultFeatureRendering(type)))
       || (path === '$.diagramOptions.config.canvas' && key === 'feature_overlap_tolerance_bp' && value[key] === 0)
       || (context.ignoreComparisonFilters && path === '$.diagramOptions' && PUBLICATION_COMPARISON_FILTER_FIELDS.has(key))
       || (/^\$\.output(?:\[\d+\])?$/.test(path) && PUBLICATION_OUTPUT_ONLY_FIELDS.has(key))) continue;

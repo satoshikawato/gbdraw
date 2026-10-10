@@ -316,6 +316,15 @@ stores the `-b` table rewritten into that sequence's coordinates; replay draws
 the ribbons of the original run. CLI sidecars written by `main` already stored
 the rows that way and replay unchanged.
 
+Feature-bound rows (rows with `*_feature_index` and `*_feature_svg_id`, such as
+saved LOSATP rows) follow the same search-frame rule. Sessions written by the
+`main` CLI or Python API (`--session_output`, `save_session_document`) can
+instead hold a reversed record's feature-bound rows after the reverse
+complement, with `*_view_feature_svg_id` columns naming the drawn features
+(OV-399). The planner reads each row's frame from its view IDs, so these rows
+draw once and unchanged; a re-save keeps them as stored, and Gallery
+`finalize` reports them as a difference from the Web Session.
+
 Linear Sessions saved by the `main` Web app write
 `orthogroupState.selectedOrthogroupAlignmentFeature: ""` when no alignment
 target is selected. Readers now treat the empty string as no target instead of
