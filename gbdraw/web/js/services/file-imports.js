@@ -60,6 +60,7 @@ const isColorHeader = (key, color) => key.toLowerCase() === 'feature_type' && co
 export const parseColorTable = (text, { legacyRows = false } = {}) => {
   const colors = {};
   let count = 0;
+  /** @type {Array<{ row: number, repair: string }> | null} */
   const repairs = legacyRows ? [] : null;
   const lines = text.split(/\r?\n/);
 
