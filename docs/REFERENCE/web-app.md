@@ -921,13 +921,12 @@ the annotation and reports it in the annotation notice; the annotation stays.
 The annotation belongs to the annotation set of the mode the feature was
 selected in, and a request carries it only while its record is drawn, so
 drawing another record keeps it in the draft without drawing it. Loading a Session saved before this form (Session 40–44) turns a `hash=`
-annotation into such an annotation when the hash names one feature in its
-record: on a record drawn without a crop, reverse complement, or rotation, one
-feature of the saved catalog; on a record drawn with one, one feature the saved
-diagram drew with that hash. The figure does not change. The load reports how
-many annotations it turned. The others keep their `hash=` target, which now
-names the source hash, and the load reports each one it could not match on a
-transformed record ([compatibility](session-and-request-compatibility.md)).
+annotation into such an annotation only when two conditions hold. Its record
+must be drawn without a crop, reverse complement, or rotation, and the hash must
+name one feature. The figure does not change. The load reports how many
+annotations it turned; the others keep their `hash=` target, which names a
+feature by its source-record hash
+([compatibility](session-and-request-compatibility.md)).
 
 **Export Feature Edits TSV** in the Features list writes the feature edits for
 the records of the current diagram. The file uses the `--feature_override_table`

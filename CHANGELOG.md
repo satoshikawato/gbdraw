@@ -23,10 +23,16 @@ write-up of a release.
   (OV-401, OV-412). A `hash=` selector (color, label, and visibility rules,
   annotation targets and tables, Feature Edits) now names that source-record
   hash on every record; before, rules matched the hash after the crop or
-  reverse complement. Loading, replaying (`--session`), or upgrading a Session
-  saved before 0.14.0 renames such `hash=` values on cropped or
-  reverse-complemented records to the source-record hash; the Web app and the
-  CLI report the ones that match no drawn feature.
+  reverse complement. Loading or upgrading a Session saved before 0.14.0 renames
+  the **This feature only** color rules it saved for such records to the
+  source-record hash. Replaying a Session 31–44 with `--session` renames the
+  same rules in its color table and the label text edits in its label override
+  table. The Web app and the CLI report each value they cannot rename (see the
+  Session compatibility reference for the other saved `hash=` values, which
+  load as saved). `hash=` values that
+  you wrote yourself for a feature of a cropped or reverse-complemented record,
+  in a TSV file, a CLI option, or a table typed into the Web app, need that
+  feature's new hash: the one its newly drawn SVG ID carries.
 - Sessions: a **This feature only** color that 0.13.0 saved on a multi-record
   Linear diagram colors its feature again after Load and Generate (OV-416).
 - Similarity alignment (web app): the **Select alignment anchors** dialog is now
