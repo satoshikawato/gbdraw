@@ -8,7 +8,7 @@
 
 export const DRAWING_DRAFT_KEYS = Object.freeze([
   'form', 'adv', 'losat', 'losatProgram', 'circularConservation', 'linearComparisonPlan',
-  'linearRecordLayoutEnabled', 'linearRecordGap', 'linearRecordRows', 'recordDisplayDrafts',
+  'linearRecordLayoutEnabled', 'linearRecordGap', 'linearRecordRows', 'recordDisplayDrafts', 'recordsOff',
   'unmanagedConfigOverrides', 'importedComparisonIntent', 'layoutPreferences', 'linearTypographyLinked'
 ]);
 
@@ -24,7 +24,7 @@ export const DRAWING_EDITOR_KEYS = Object.freeze([
 
 // Computed from the members above (and project inputs); each drawing derives its own.
 export const DRAWING_DERIVED_KEYS = Object.freeze([
-  'activeLayoutPreferences', 'linearComparisonResolution', 'hasLinearComparisonIntent',
+  'activeLayoutPreferences', 'drawnLinearSeqs', 'linearComparisonResolution', 'hasLinearComparisonIntent',
   'hasActiveLinearLosatIntent', 'hasActiveLinearUploadIntent', 'featureVisibilityRules', 'hasPendingPaletteDraft'
 ]);
 

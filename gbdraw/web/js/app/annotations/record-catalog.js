@@ -18,13 +18,18 @@ import { normalizeUserFacingError } from '../../utils/error-normalization.js';
  * @typedef {{ code: string, context: Record<string, any> }} AnnotationCatalogIssue A producer diagnostic.
  * @typedef {{
  *   mode?: string, status: string, records: AnnotationCatalogRecord[],
- *   issues: AnnotationCatalogIssue[], requiresSelection: boolean, signature?: string
- * }} AnnotationRecordCatalog `status` is 'ready', 'loading', or 'error'.
+ *   issues: AnnotationCatalogIssue[], requiresSelection: boolean, signature?: string,
+ *   omittedRecordKeys?: string[]
+ * }} AnnotationRecordCatalog `status` is 'ready', 'loading', or 'error'. `records` are the
+ *   drawn records; `omittedRecordKeys` are the keys of the OFF records (record selection), whose
+ *   annotations stay in the draft and leave the request.
  * @typedef {{
  *   sourceKey?: string, hasInput: boolean, status: string, error?: any, selector?: string,
- *   records?: Record<string, any>[]
+ *   records?: Record<string, any>[], drawn?: boolean, omittedRecords?: Record<string, unknown>[]
  * }} AnnotationCatalogSource A discovered input: the Circular discovery state or a Linear source.
  *   Each record carries `recordId` or `record_id`, `recordLength` or `record_length`, and `selector`.
+ *   A Linear source with `drawn: false` is an OFF card; the Circular source lists its OFF records
+ *   in `omittedRecords`.
  * @typedef {object} AnnotationRecordCatalogOptions
  * @property {string} [mode] 'linear' selects `linearSources`; anything else `circularSource`.
  * @property {AnnotationCatalogSource | null} [circularSource]
@@ -108,6 +113,19 @@ const selectSourceRecords = (records, selectorValue) => {
   return { records: matches, error: '', explicit: true };
 };
 
+/**
+ * The catalog keys of the records a source selects (all its records without a
+ * selector), as an annotation binds them; also those of an OFF record, which
+ * the catalog leaves out (record selection).
+ * @param {AnnotationCatalogSource} source
+ * @param {string} fallbackSourceKey
+ * @returns {string[]}
+ */
+export const annotationRecordKeysOf = (source, fallbackSourceKey) => (
+  selectSourceRecords(sourceRecords(source, fallbackSourceKey), source?.selector).records
+    .map((/** @type {{ key: string }} */ record) => record.key)
+);
+
 const finalizeRecords = (records) => {
   const indexed = records.map((record, index) => ({ ...record, selector: `#${index + 1}` }));
   return buildDisambiguatedRecordEntries(indexed).map((record, index) => ({
@@ -124,12 +142,23 @@ const catalogStatus = (issues, sources) => {
   return sources.some((source) => source?.status === 'loading') ? 'loading' : 'error';
 };
 
+// `inputOrdinal` is the card number; `sourceIndex` counts the drawn cards, as
+// the request's record files do (materializeLinearRecordFiles).
 const buildLinearCatalog = (sources) => {
   const normalizedSources = Array.isArray(sources) ? sources : [];
   const records = [];
   const issues = [];
-  normalizedSources.forEach((source, sourceIndex) => {
-    const inputOrdinal = sourceIndex + 1;
+  /** @type {string[]} */
+  const omittedRecordKeys = [];
+  let sourceIndex = -1;
+  normalizedSources.forEach((source, cardIndex) => {
+    const inputOrdinal = cardIndex + 1;
+    if (source?.drawn === false) {
+      if (source.status !== 'ready') return;
+      omittedRecordKeys.push(...annotationRecordKeysOf(source, `linear-source-${inputOrdinal}`));
+      return;
+    }
+    sourceIndex += 1;
     if (!source?.hasInput) {
       issues.push(catalogIssue('INPUT_REQUIRED', { inputOrdinal }));
       return;
@@ -140,7 +169,7 @@ const buildLinearCatalog = (sources) => {
         : catalogIssue('RECORD_SELECTION', { inputOrdinal, reason: 'DISCOVERY_PENDING' }));
       return;
     }
-    const availableRecords = sourceRecords(source, `linear-source-${sourceIndex + 1}`);
+    const availableRecords = sourceRecords(source, `linear-source-${inputOrdinal}`);
     if (availableRecords.length === 0) {
       issues.push(catalogIssue('NO_RECORDS', { inputOrdinal }));
       return;
@@ -159,7 +188,8 @@ const buildLinearCatalog = (sources) => {
     records: finalized,
     issues,
     requiresSelection: finalized.length > 1,
-    signature: finalized.map((record) => record.key).join('|')
+    signature: finalized.map((record) => record.key).join('|'),
+    omittedRecordKeys
   };
 };
 
@@ -181,7 +211,11 @@ const buildCircularCatalog = (source) => {
     records,
     issues,
     requiresSelection: records.length > 1,
-    signature: records.map((record) => record.key).join('|')
+    signature: records.map((record) => record.key).join('|'),
+    omittedRecordKeys: issues.length === 0
+      ? sourceRecords({ ...source, records: source?.omittedRecords }, 'circular-source')
+        .map((/** @type {{ key: string }} */ record) => record.key)
+      : []
   };
 };
 

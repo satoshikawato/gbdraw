@@ -72,6 +72,7 @@ assert.deepEqual(WEB_UX_PROFILE, {
     legend: 'left',
     plotTitlePosition: 'none'
   },
+  recordList: { autoOpenAbove: 20 },
   linear: {
     arrangeInRowsByDefault: true,
     legend: 'bottom',

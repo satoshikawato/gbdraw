@@ -103,6 +103,24 @@ write-up of a release.
   replay resolves them (OV-375) and one-record GenBank sources as `exactly_one`
   (OV-376). It also names the example's GenBank files in `examples.json` when
   the Session has no CLI invocation (OV-397).
+- Records (web app): choose which records of a file to draw. Linear record cards
+  gain **Draw this record**, and a File with several records gains **Choose
+  records…**, a list that searches and sorts by file order, record ID, or length
+  and turns records on or off in bulk. **Choose records…** also appears beside
+  **Record** in Circular, where **Multi-Record Canvas** and separate diagrams
+  draw only the records that are on. A record that is off is left out of
+  **Generate Diagram**, comparisons, row layout, and the Legend, keeps its
+  settings (also in a saved Session), and returns in its place when turned on;
+  **Delete settings** removes its card settings, feature edits and Feature
+  placements, annotations that target it, and comparison pairs that name it.
+  LOSAT keeps the whole subject file as its E-value database. After an upload, a
+  file with more than 20 records opens the list, and turning off the last drawn
+  record of a file asks whether to remove the file. Before, Linear drew every
+  record of a file and Multi-Record Canvas drew every record. Session version
+  46 gains the optional `recordsOff` field.
+- Sessions (CLI): a CLI re-save of a Web Session no longer drops **File
+  definition**, **File subtitle**, or the inferred definition from Linear cards
+  (OV-402).
 - Sessions (CLI and Python): a Session saved from a Linear diagram with a
   reverse-complemented record now stores that record's feature-bound comparison
   rows (saved or fresh LOSATP rows) in the search frame, as the web app does,

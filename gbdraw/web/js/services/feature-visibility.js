@@ -338,8 +338,10 @@ const removeFeatureEdits = ({
  *   replacedRecordKeys?: string[],
  *   previousRecords?: Record<string, any>[],
  *   currentRecords?: Record<string, any>[],
+ *   retainedRecordKeys?: Iterable<string>,
  *   biologicalFeatures?: Record<string, any>[]
- * }} [options]
+ * }} [options] `retainedRecordKeys`: the request keys of OFF records, which the
+ *   request leaves out without dropping them (record selection D-05).
  */
 export const pruneUnmatchedFeatureOverrides = ({
   featureOverrides = {},
@@ -349,9 +351,11 @@ export const pruneUnmatchedFeatureOverrides = ({
   replacedRecordKeys = [],
   previousRecords = [],
   currentRecords = [],
+  retainedRecordKeys = [],
   biologicalFeatures = []
 } = {}) => {
-  const replaced = new Set(replacedRecordKeys);
+  const retained = new Set(retainedRecordKeys);
+  const replaced = new Set(replacedRecordKeys.filter((recordKey) => !retained.has(recordKey)));
   const presentFeatures = Array.isArray(biologicalFeatures) ? biologicalFeatures : [];
   const present = new Set(presentFeatures.map(featureIdentityKeyOf).filter(Boolean));
   const presentStrokeKeys = new Set(presentFeatures.map(stableKeyOf).filter(Boolean));
@@ -368,7 +372,8 @@ export const pruneUnmatchedFeatureOverrides = ({
     unresolved: unresolvedNoticeKinds(notices, (recordKey) => replaced.has(recordKey)),
     // The records are those of canonical render requests, which all carry `recordKey`.
     dropped: (row) => rowBelongsToRequest(row, /** @type {FeatureRequestRecord[]} */ (previousRecords))
-      && !rowBelongsToRequest(row, /** @type {FeatureRequestRecord[]} */ (currentRecords)),
+      && !rowBelongsToRequest(row, /** @type {FeatureRequestRecord[]} */ (currentRecords))
+      && !retained.has(row?.recordKey),
     sourceGone: (key, row) => replaced.has(row?.recordKey) && !present.has(key)
   });
 };

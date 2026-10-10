@@ -3,6 +3,7 @@ import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
 import { resolveLinearRecordEffectiveDefinition } from '../services/linear-sources.js';
 import { canonicalRecordReverseComplement } from '../services/record-display-model.js';
+import { drawnLinearSequences } from '../services/record-draw-selection.js';
 import { validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import {
   featureIdentity,
@@ -710,7 +711,8 @@ const strandValue = (value, path) => {
   throw new Error(`${path} has an invalid source strand.`);
 };
 
-const recordLengths = (catalog, recordCatalog, linearSeqs) => {
+// `drawnSeqs`: the drawn Linear cards, which the record catalog's `sourceIndex` counts.
+const recordLengths = (catalog, recordCatalog, drawnSeqs) => {
   const lengths = new Map();
   (Array.isArray(catalog?.items) ? catalog.items : []).forEach((item) => {
     const keys = Array.isArray(item?.recordKeys) ? item.recordKeys : [];
@@ -731,7 +733,7 @@ const recordLengths = (catalog, recordCatalog, linearSeqs) => {
       discovered.set(index, discovered.has(index) ? null : record);
     });
     discovered.forEach((record, index) => {
-      const key = String(linearSeqs?.[index]?.uid || '');
+      const key = String(drawnSeqs?.[index]?.uid || '');
       if (key && record && Number.isSafeInteger(record.recordLength)
           && record.recordLength > 0 && !lengths.has(key)) {
         lengths.set(key, record.recordLength);
@@ -742,7 +744,7 @@ const recordLengths = (catalog, recordCatalog, linearSeqs) => {
 };
 
 const buildHelperRequest = ({ group, members, reference, request, catalog,
-  recordCatalog, linearSeqs, choices }) => {
+  recordCatalog, drawnSeqs, choices }) => {
   const groupStatus = orthogroupIdStatus(group);
   if (!groupStatus.valid || !groupStatus.supplied) {
     throw new Error('The selected Similarity Group identity is invalid.');
@@ -751,7 +753,7 @@ const buildHelperRequest = ({ group, members, reference, request, catalog,
   if (!request || request.mode !== 'linear' || !Array.isArray(request.records)) {
     throw new Error('Generate a Linear diagram before aligning a Similarity Group.');
   }
-  const lengths = recordLengths(catalog, recordCatalog, linearSeqs);
+  const lengths = recordLengths(catalog, recordCatalog, drawnSeqs);
   const records = request.records.map((record, index) => {
     const recordKey = text(record?.recordKey, `renderRequest.records[${index}].recordKey`);
     const region = record?.region === null || record?.region === undefined
@@ -954,6 +956,7 @@ export const createSimilarityAlignmentActions = ({
   clearCandidatePreview = null,
   onError = null
 }) => {
+  const drawnLinearCards = () => drawnLinearSequences(state.linearSeqs, state.drawings?.linear?.recordsOff);
   if (
     !state
     || typeof getOrthogroupById !== 'function'
@@ -1237,7 +1240,7 @@ export const createSimilarityAlignmentActions = ({
         request: activeBaseline.request,
         catalog: state.featureCatalog?.value,
         recordCatalog: getRecordCatalog?.(),
-        linearSeqs: state.linearSeqs,
+        drawnSeqs: drawnLinearCards(),
         choices: []
       });
       setReviewNames(request, members, activeBaseline.request);
@@ -1455,7 +1458,7 @@ export const createSimilarityAlignmentActions = ({
         });
         const request = buildHelperRequest({group:{id:plan.groupId}, members,
           reference:plan.reference, request:current.request, catalog:state.featureCatalog?.value,
-          recordCatalog:getRecordCatalog?.(), linearSeqs:state.linearSeqs, choices:planChoices(plan)});
+          recordCatalog:getRecordCatalog?.(), drawnSeqs:drawnLinearCards(), choices:planChoices(plan)});
         const vector = Object.fromEntries(orientations.map(direction => [direction.recordKey,direction.reverseComplement]));
         const helper = await runHelperOperation(resolveOperation, {request,
           projection:{canonicalRequest:current.request,orientations:vector},resources:current.canonical.resources});
@@ -1591,7 +1594,7 @@ export const createSimilarityAlignmentActions = ({
         request: currentRequest(),
         catalog: state.featureCatalog?.value,
         recordCatalog: getRecordCatalog?.(),
-        linearSeqs: state.linearSeqs,
+        drawnSeqs: drawnLinearCards(),
         choices: planChoices(plan)
       });
     } catch (cause) {

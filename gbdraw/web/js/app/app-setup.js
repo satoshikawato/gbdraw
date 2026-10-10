@@ -1,6 +1,6 @@
 // @ts-check
 /** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
-/** @import { DrawingState, LegendEntry } from '../state.js' */
+/** @import { DrawingState, LegendEntry, LinearSeq } from '../state.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { EditorPaintState } from './result-paint-record.js' */
 /** @import { FeatureEditorOptions } from './feature-editor.js' */
@@ -13,6 +13,9 @@
 /** @import { LegendRowContext } from '../services/specific-color-rules.js' */
 /** @import { GalleryExample } from '../services/gallery-examples.js' */
 /** @import { LinearComparisonPlan } from '../services/linear-comparisons.js' */
+/** @import { LinearSourceRemovalPlan } from '../services/linear-sources.js' */
+/** @import { RecordDrawKey, RecordSettingsOwner, RecordEditData } from '../services/record-draw-selection.js' */
+/** @import { RecordListRequest, RecordSelectionMode, RecordSource } from './record-selection.js' */
 /** @typedef {{ opening: Readonly<ArtifactSlot> | null, stashed: Readonly<ArtifactSlot> | null }} LoadedArtifactSlots */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS } from './candidate-render.js';
@@ -135,6 +138,7 @@ import { createLinearTrackSlotEditor } from './linear-track-slots.js';
 import { createAnnotationEditor } from './annotations.js';
 import { buildLegendStyleRetirement, trackDataLegendCaptions } from './legend/track-data-styles.js';
 import {
+  annotationRecordKeysOf,
   annotationSourceKey,
   buildAnnotationRecordCatalog
 } from './annotations/record-catalog.js';
@@ -180,6 +184,20 @@ import {
   reconcileLinearComparisonPlan,
   resolveLinearComparisonPlan
 } from '../services/linear-comparisons.js';
+import {
+  RECORD_SETTINGS_DEFAULTS,
+  circularRecordDrawKey,
+  circularRecordRequestKey,
+  circularRecordsToDraw,
+  circularSingleRecordKey,
+  linearCardHasSettings,
+  pruneRecordsOff,
+  recordsWithEdits,
+  removeRecordEdits
+} from '../services/record-draw-selection.js';
+import { ANNOTATION_RECORD_BINDING_KEY } from '../services/annotation-state.js';
+import { WEB_UX_PROFILE } from '../web-ux-profile.js';
+import { createRecordSelection } from './record-selection.js';
 import {
   projectLinearComparisonLosatModeSelection,
   projectLinearComparisonLosatpModeSelection,
@@ -521,8 +539,9 @@ export const createAppSetup = () => {
   /** @param {DrawingState} drawing */
   const reindexLinearLosatCacheInfo = (drawing) => {
     if (!Array.isArray(losatCacheInfo.value)) return;
+    // Resolution indexes are positions among the drawn records.
     const indexByUid = new Map(
-      linearSeqs.map((sequence, index) => [String(sequence?.uid || ''), index])
+      drawing.drawnLinearSeqs.value.map((sequence, index) => [String(sequence?.uid || ''), index])
     );
     const resolvedByEdgeKey = new Map(
       drawing.linearComparisonResolution.value.edges.map((edge) => [edge.edgeKey, edge])
@@ -682,7 +701,7 @@ export const createAppSetup = () => {
     return projectLinearComparisonUi({
       plan: drawing.linearComparisonPlan,
       resolution: drawing.linearComparisonResolution.value,
-      adjacentEdgeKeys: adjacentRowPairs(linearSeqs, effectiveLinearComparisonLayout(drawing), true)
+      adjacentEdgeKeys: adjacentRowPairs(drawing.drawnLinearSeqs.value, effectiveLinearComparisonLayout(drawing), true)
         .map(([queryUid, subjectUid]) => linearComparisonEdgeKey(queryUid, subjectUid)),
       losatProgram: drawing.losatProgram.value,
       blastpMode: drawing.losat.blastp?.mode,
@@ -699,7 +718,7 @@ export const createAppSetup = () => {
     const { intentKey } = linearComparisonUi.value;
     return intentKey === 'custom' ? 'selected' : intentKey;
   });
-  const canRunLinearLosat = computed(() => linearSeqs.filter((sequence) => (
+  const canRunLinearLosat = computed(() => state.drawings.linear.drawnLinearSeqs.value.filter((sequence) => (
     lInputType.value === 'gff'
       ? sequence.gff && sequence.fasta
       : sequence.gb
@@ -712,19 +731,23 @@ export const createAppSetup = () => {
     linearSourceGroups.value.find((source) => source.uid === linearSourceRemovalDialog.sourceUid) || null
   ));
   const linearSourceRemovalCanDelete = computed(() => linearSourceGroups.value.length > 1);
-  const linearSourceRemovalTargetName = computed(() => {
-    const source = linearSourceRemovalTarget.value;
-    if (!source) return 'Unavailable File';
+  /** The file names of a Linear File, as its dialogs name it. */
+  const linearSourceFileName = (source) => {
     const sequence = source.sequence || source.records?.[0]?.sequence || {};
     const names = [sequence.gb, sequence.gff, sequence.fasta]
       .filter(Boolean)
       .map((file) => String(file?.name || 'Unnamed file'));
     return names.length ? names.join(' + ') : `File ${linearSourceGroups.value.indexOf(source) + 1}`;
+  };
+  const linearSourceRemovalTargetName = computed(() => {
+    const source = linearSourceRemovalTarget.value;
+    return source ? linearSourceFileName(source) : 'Unavailable File';
   });
   const linearComparisonTimeline = computed(() => {
     const drawing = state.activeDrawing();
     return buildLinearComparisonTimeline({
       sequences: linearSeqs,
+      recordsOff: drawing.recordsOff,
       layout: effectiveLinearComparisonLayout(drawing),
       plan: drawing.linearComparisonPlan,
       resolution: drawing.linearComparisonResolution.value
@@ -911,13 +934,11 @@ export const createAppSetup = () => {
     const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
-    if (linearSeqs.length < 2) return;
+    const drawn = drawing.drawnLinearSeqs.value;
+    if (drawn.length < 2) return;
     syncLinearRecordLayout();
-    const [firstPair] = adjacentRowPairs(
-      linearSeqs,
-      effectiveLinearComparisonLayout(drawing)
-    );
-    const [queryUid, subjectUid] = firstPair || [linearSeqs[0].uid, linearSeqs[1].uid];
+    const [firstPair] = adjacentRowPairs(drawn, effectiveLinearComparisonLayout(drawing));
+    const [queryUid, subjectUid] = firstPair || [drawn[0].uid, drawn[1].uid];
     const next = selectedPlanForEdit(drawing);
     upsertSelectedComparison(next, { queryUid, subjectUid });
     replaceLinearComparisonPlan(drawing, next);
@@ -1111,7 +1132,7 @@ export const createAppSetup = () => {
     const drawing = state.drawings.linear;
     syncLinearRecordLayout();
     const next = selectedPlanForEdit(drawing);
-    adjacentRowPairs(linearSeqs, effectiveLinearComparisonLayout(drawing), allPairs).forEach(([queryUid, subjectUid]) => {
+    adjacentRowPairs(drawing.drawnLinearSeqs.value, effectiveLinearComparisonLayout(drawing), allPairs).forEach(([queryUid, subjectUid]) => {
       upsertSelectedComparison(next, { queryUid, subjectUid });
     });
     replaceLinearComparisonPlan(drawing, next);
@@ -1168,7 +1189,20 @@ export const createAppSetup = () => {
   ));
 
   const pendingLinearRecordExpansions = new Set();
-  const pendingLinearMetadataInference = new Set();
+  // The Linear Files and the Circular input just uploaded: their first record
+  // discovery infers record definitions (Linear GenBank) and opens the record
+  // list of a file with many records (D-04). A Session load, a rollback, and a
+  // History step never add one.
+  /** @type {Set<string>} */
+  const pendingLinearUploads = new Set();
+  /** @type {File | null} */
+  let pendingCircularUpload = null;
+  /** @type {RecordListRequest[]} */
+  const recordListRequests = reactive([]);
+  /** @param {RecordSelectionMode} listMode @param {string} sourceKey @param {number} recordCount */
+  const requestRecordListAfterUpload = (listMode, sourceKey, recordCount) => {
+    if (recordCount > WEB_UX_PROFILE.recordList.autoOpenAbove) recordListRequests.push({ mode: listMode, sourceKey });
+  };
   /** @param {DrawingState} drawing */
   const expandDiscoveredLinearRecords = (drawing, { uid, records, inferDefinitions = false }) => {
     const expanding = pendingLinearRecordExpansions.delete(uid);
@@ -1208,9 +1242,23 @@ export const createAppSetup = () => {
       state.sessionImportRollbackInProgress?.value ||
       state.sessionResourceDiscoveryDeferred?.value
     );
-    // Only an upload infers record definitions; a loaded Session keeps its own.
-    const inferDefinitions = !isRollbackOrSessionLoad && pendingLinearMetadataInference.delete(uid);
-    return expandDiscoveredLinearRecords(drawing, { uid, records, inferDefinitions });
+    // Only an upload infers record definitions and opens the record list; a
+    // loaded Session keeps its own.
+    const fromUpload = !isRollbackOrSessionLoad && pendingLinearUploads.delete(uid);
+    const expanded = expandDiscoveredLinearRecords(drawing, {
+      uid, records, inferDefinitions: fromUpload && lInputType.value === 'gb'
+    });
+    if (fromUpload) requestRecordListAfterUpload('linear', uid, records.length);
+    return expanded;
+  };
+  /**
+   * The Circular input's first discovery after its upload (success or error).
+   * @param {{ primaryFile: File | null, pairedFile: File | null, recordCount: number }} discovered
+   */
+  const handleCircularRecordsDiscovered = ({ primaryFile, pairedFile, recordCount }) => {
+    if (!pendingCircularUpload || (pendingCircularUpload !== primaryFile && pendingCircularUpload !== pairedFile)) return;
+    pendingCircularUpload = null;
+    requestRecordListAfterUpload('circular', 'circular', recordCount);
   };
   const materializeAutomaticLinearRecords = async () => {
     if (mode.value !== 'linear') return;
@@ -1231,49 +1279,61 @@ export const createAppSetup = () => {
     )
   });
   const getCircularRecordDiscoveryState = () => circularDiscoveryForInput(state);
+  const circularAnnotationSourceKey = () => annotationSourceKey({
+    scope: 'circular',
+    inputType: cInputType.value,
+    primaryFile: cInputType.value === 'gff' ? files.c_gff : files.c_gb,
+    pairedFile: cInputType.value === 'gff' ? files.c_fasta : null
+  });
+  /**
+   * A Linear record card as the annotation record catalog reads it.
+   * @param {LinearSeq} seq
+   * @param {boolean} drawn
+   * @returns {AnnotationCatalogSource}
+   */
+  const linearAnnotationSource = (seq, drawn) => {
+    const primaryFile = lInputType.value === 'gff' ? seq.gff : seq.gb;
+    const pairedFile = lInputType.value === 'gff' ? seq.fasta : null;
+    return {
+      sourceKey: annotationSourceKey({
+        scope: 'linear',
+        uid: seq.uid,
+        inputType: lInputType.value,
+        primaryFile,
+        pairedFile
+      }),
+      selector: seq.region_record_id,
+      drawn,
+      hasInput: Boolean(primaryFile && (lInputType.value !== 'gff' || pairedFile)),
+      status: linearRecordSelector.statusFor(seq),
+      error: linearRecordSelector.errorFor(seq),
+      records: linearRecordSelector.recordsFor(seq)
+    };
+  };
   /** @param {AnnotationCatalogSource[] | null} [linearSourcesOverride] */
   const getAnnotationRecordCatalog = (linearSourcesOverride = null) => {
     const drawing = state.drawings.circular;
-    const circularPrimaryFile = cInputType.value === 'gff' ? files.c_gff : files.c_gb;
-    const circularPairedFile = cInputType.value === 'gff' ? files.c_fasta : null;
     const circularDiscovery = getCircularRecordDiscoveryState();
+    const circularRecordSet = resolveCircularRequestRecordSet(/** @type {any} */ ({
+      records: circularDiscovery.records,
+      selector: drawing.form.circular_record_selector,
+      multiRecordCanvas: drawing.form.multi_record_canvas,
+      groupingIntent: drawing.adv.circular_grouping_intent,
+      recordsOff: drawing.recordsOff
+    }));
+    const linearRecordsOff = new Set(state.drawings.linear.recordsOff);
     return buildAnnotationRecordCatalog(/** @type {any} */ ({
       mode: mode.value,
       circularSource: {
-        sourceKey: annotationSourceKey({
-          scope: 'circular',
-          inputType: cInputType.value,
-          primaryFile: circularPrimaryFile,
-          pairedFile: circularPairedFile
-        }),
+        sourceKey: circularAnnotationSourceKey(),
         hasInput: circularDiscovery.hasInput,
         status: circularDiscovery.status,
         error: circularDiscovery.error,
-        records: resolveCircularRequestRecordSet(/** @type {any} */ ({
-          records: circularDiscovery.records,
-          selector: drawing.form.circular_record_selector,
-          multiRecordCanvas: drawing.form.multi_record_canvas,
-          groupingIntent: drawing.adv.circular_grouping_intent
-        })).records
+        records: circularRecordSet.records,
+        omittedRecords: circularRecordSet.omittedRecords
       },
-      linearSources: linearSourcesOverride || linearSeqs.map((seq) => {
-        const primaryFile = lInputType.value === 'gff' ? seq.gff : seq.gb;
-        const pairedFile = lInputType.value === 'gff' ? seq.fasta : null;
-        return {
-          sourceKey: annotationSourceKey({
-            scope: 'linear',
-            uid: seq.uid,
-            inputType: lInputType.value,
-            primaryFile,
-            pairedFile
-          }),
-          selector: seq.region_record_id,
-          hasInput: Boolean(primaryFile && (lInputType.value !== 'gff' || pairedFile)),
-          status: linearRecordSelector.statusFor(seq),
-          error: linearRecordSelector.errorFor(seq),
-          records: linearRecordSelector.recordsFor(seq)
-        };
-      })
+      linearSources: linearSourcesOverride
+        || linearSeqs.map((seq) => linearAnnotationSource(seq, !linearRecordsOff.has(seq.uid)))
     }));
   };
   const previewRuntime = createPreviewRuntime({ state, serializeSvg: serializeCleanSvg });
@@ -1583,7 +1643,7 @@ export const createAppSetup = () => {
     },
     getOpenDisabledReason: () => similarityAlignmentPorts.reviewBlocksEditor()
       ? 'Finish or cancel alignment review before opening Editor.' : '' });
-  const orthogroupActions = createOrthogroupEditor({ state });
+  const orthogroupActions = createOrthogroupEditor({ state, getCommittedRequest: getCommittedCanonicalRenderRequest });
   const previewFeatureSearch = createPreviewFeatureSearch({
     state,
     watch,
@@ -1909,7 +1969,7 @@ export const createAppSetup = () => {
   const linearLabelHasSharedRow = computed(() => {
     const drawing = state.activeDrawing();
     return linearRecordLayoutHasSharedRow(
-      linearSeqs,
+      drawing.drawnLinearSeqs.value,
       drawing.linearRecordRows,
       { enabled: Boolean(drawing.linearRecordLayoutEnabled.value) }
     );
@@ -2867,7 +2927,9 @@ export const createAppSetup = () => {
       const catalog = getAnnotationRecordCatalog();
       reconcileAnnotationRecordBindings(drawing.annotationSets, catalog);
       return validateAnnotationRecordTargets(drawing.annotationSets, catalog);
-    }
+    },
+    omittedAnnotationRecordKeys: () => getAnnotationRecordCatalog().omittedRecordKeys || [],
+    onCircularRecordsDiscovered: handleCircularRecordsDiscovered
   });
   const resolvePopupRotationFeature = ({ recordKey, biologicalFeatureId }) => {
     const matchesIdentity = (feature) => (
@@ -3977,7 +4039,9 @@ export const createAppSetup = () => {
       return { catalog: null, error: '' };
     }
     if (privateCandidate) {
+      const linearRecordsOff = new Set(drawing.recordsOff);
       const sources = await Promise.all(linearSeqs.map(async (seq) => {
+        const drawn = !linearRecordsOff.has(seq.uid);
         const inputType = lInputType.value;
         const primaryFile = inputType === 'gff' ? seq.gff : seq.gb;
         const pairedFile = inputType === 'gff' ? seq.fasta : null;
@@ -3986,9 +4050,9 @@ export const createAppSetup = () => {
           const records = inputType === 'gff'
             ? await discoverGffFastaRecords({ gffFile: primaryFile, fastaFile: pairedFile })
             : await discoverSequenceRecords({ file: primaryFile, format: 'genbank' });
-          return { sourceKey, selector: seq.region_record_id, hasInput: Boolean(primaryFile), status: 'ready', records };
+          return { sourceKey, selector: seq.region_record_id, drawn, hasInput: Boolean(primaryFile), status: 'ready', records };
         } catch (error) {
-          return { sourceKey, selector: seq.region_record_id, hasInput: Boolean(primaryFile), status: 'error', error: error.message, records: [] };
+          return { sourceKey, selector: seq.region_record_id, drawn, hasInput: Boolean(primaryFile), status: 'error', error: error.message, records: [] };
         }
       }));
       const catalog = getAnnotationRecordCatalog(sources);
@@ -4008,7 +4072,7 @@ export const createAppSetup = () => {
       ? { catalog, error: '' }
       : {
           catalog: null,
-          error: linearSeqs.map(seq => linearRecordSelector.errorModelFor(seq)).find(error => error?.code)
+          error: drawing.drawnLinearSeqs.value.map(seq => linearRecordSelector.errorModelFor(seq)).find(error => error?.code)
             || catalogIssueError(catalog)
         };
   }
@@ -5027,7 +5091,10 @@ export const createAppSetup = () => {
         reusedCommittedSession: !draftRequest
       });
       if (error) throw error;
-      return { linearRecordCatalog: catalog };
+      return {
+        linearRecordCatalog: catalog,
+        omittedAnnotationRecordKeys: draftRequest ? getAnnotationRecordCatalog().omittedRecordKeys || [] : []
+      };
     },
     onError: (error) => { errorLog.value = normalizeUserFacingError(error); },
     // UJ-09: a saved download is the History position Load Session compares with.
@@ -5066,6 +5133,9 @@ export const createAppSetup = () => {
     )
   );
 
+  const circularDrawnRecordCount = computed(() => (
+    circularRecordsToDraw(circularRecordPresentationEntries(), state.drawings.circular.recordsOff).length
+  ));
   const circularRecordPresentationOptions = computed(() => {
     const drawing = state.activeDrawing();
     const entries = circularRecordPresentationEntries();
@@ -5073,8 +5143,9 @@ export const createAppSetup = () => {
     const selection = resolveDisambiguatedRecordSelection(entries, current);
     // Without an inspected catalog the saved selector is unverified, not missing.
     const inspected = circularRecordDiscoveryState.value.status === 'ready';
+    const drawnCount = circularDrawnRecordCount.value;
     const automaticLabel = entries.length > 1 || drawing.adv.circular_grouping_intent === 'batch'
-      ? 'All records (separate diagrams)'
+      ? (drawnCount < entries.length ? `${drawnCount} of ${entries.length} records (separate diagrams)` : 'All records (separate diagrams)')
       : 'Automatic (only record)';
     return [
       { value: '', label: automaticLabel, synthetic: false },
@@ -5130,10 +5201,12 @@ export const createAppSetup = () => {
     region_end: null, region_reverse: false, definition: '', record_subtitle: '' });
   // The record reference names a record of the old file, so any replacement retires it.
   const RETIRED_LINEAR_RECORD_REFERENCE = Object.freeze({ region_record_id: '' });
+  // The OFF records name records of the old file too (record selection).
   /** @param {DrawingState} drawing */
-  const retireCircularRecordSelector = ({ form, adv }) => {
+  const retireCircularRecordSelector = ({ form, adv, recordsOff }) => {
     form.circular_record_selector = '';
     if (adv.circular_grouping_intent === 'single') adv.circular_grouping_intent = 'auto';
+    if (recordsOff.length) recordsOff.splice(0);
   };
   /** @param {DrawingState} drawing */
   const retireCircularRecordPresentation = (drawing) => {
@@ -5164,7 +5237,13 @@ export const createAppSetup = () => {
     const previous = files[field];
     if (previous === nextValue) return;
     files[field] = nextValue;
-    if (!previous) return;
+    if (nextValue) pendingCircularUpload = nextValue;
+    // An upload into an empty slot starts reading another input (after an
+    // Input switch), whose records the OFF list does not name.
+    if (!previous) {
+      if (drawing.recordsOff.length) drawing.recordsOff.splice(0);
+      return;
+    }
     if (sourceReplacementRetiresPresentation({
       removed: !nextValue, previousRecordCount: circularRecordList.value.length
     })) retireCircularRecordPresentation(drawing);
@@ -5337,7 +5416,8 @@ export const createAppSetup = () => {
     {
       preserveLosatCacheInfo = false,
       layoutEntries = drawing.linearRecordRows,
-      alignmentMutation = 'source set changed.'
+      alignmentMutation = 'source set changed.',
+      retiredRecordKeys = /** @type {string[]} */ ([])
     } = {}
   ) => {
     const sessionBusy = sessionOperationAvailability();
@@ -5357,11 +5437,15 @@ export const createAppSetup = () => {
     pendingLinearRecordExpansions.forEach((uid) => {
       if (!activeUids.has(uid)) pendingLinearRecordExpansions.delete(uid);
     });
-    pendingLinearMetadataInference.forEach((uid) => {
-      if (!activeUids.has(uid)) pendingLinearMetadataInference.delete(uid);
+    pendingLinearUploads.forEach((uid) => {
+      if (!activeUids.has(uid)) pendingLinearUploads.delete(uid);
     });
     const nextRows = reconcileLinearRecordLayout(linearSeqs, layoutEntries);
     drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...nextRows);
+    // A card that stays but now reads another file (`retiredRecordKeys`) is ON.
+    const retired = new Set(retiredRecordKeys);
+    const recordsOff = pruneRecordsOff(drawing.recordsOff, new Set([...activeUids].filter((uid) => !retired.has(uid))));
+    if (recordsOff.length !== drawing.recordsOff.length) drawing.recordsOff.splice(0, Infinity, ...recordsOff);
     replaceLinearComparisonPlan(
       drawing,
       reconcileLinearComparisonPlan(drawing.linearComparisonPlan, linearSeqs),
@@ -5441,8 +5525,18 @@ export const createAppSetup = () => {
     return true;
   };
   const cancelLinearSourceRemoval = () => closeLinearSourceRemovalDialog();
+  /**
+   * Deletes a Linear File, or clears it to one blank File (`clear`), inside
+   * the caller's History step: the removal dialog and Remove File (D-06).
+   * @param {Extract<LinearSourceRemovalPlan, { allowed: true }>} plan
+   * @param {'clear' | 'delete'} intent
+   */
+  const removeLinearSource = (plan, intent) => {
+    const next = [...plan.retainedSequences];
+    if (intent === 'clear') next.splice(plan.insertionIndex, 0, createLinearSeq());
+    return applyLinearSeqMutation(state.drawings.linear, next);
+  };
   const applyLinearSourceRemoval = async (intent) => {
-    const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (linearSourceRemovalDialog.origin === 'global' && intent !== 'delete') return false;
@@ -5455,11 +5549,9 @@ export const createAppSetup = () => {
       closeLinearSourceRemovalDialog();
       return false;
     }
-    const next = [...plan.retainedSequences];
-    if (intent === 'clear') next.splice(plan.insertionIndex, 0, createLinearSeq());
     const operation = await history.runUndoable(
       intent === 'clear' ? 'Clear Linear File' : 'Delete Linear File',
-      () => applyLinearSeqMutation(drawing, next)
+      () => removeLinearSource(plan, intent)
     );
     closeLinearSourceRemovalDialog({ restoreFocus: false });
     await focusLinearSourceAfterRemoval(plan.sourceIndex);
@@ -5512,10 +5604,152 @@ export const createAppSetup = () => {
     applyLinearSeqMutation(drawing, linearSeqs.flatMap((entry) => (
       entry.uid === group.uid ? (keepSource ? [replacement] : [])
         : members.has(entry.uid) ? [] : [entry]
-    )), { alignmentMutation: 'source replaced.' });
-    if (keepSource) pendingLinearRecordExpansions.add(replacement.uid);
-    if (keepSource && field === 'gb') pendingLinearMetadataInference.add(replacement.uid);
+    )), { alignmentMutation: 'source replaced.', retiredRecordKeys: [...members] });
+    if (keepSource) {
+      pendingLinearRecordExpansions.add(replacement.uid);
+      pendingLinearUploads.add(replacement.uid);
+    }
   };
+
+  // Record selection (D-01..D-10): the record sources and edits its owner
+  // reads, and the transitions it asks the root for.
+  /** @param {LinearSeq} seq The discovered record a Linear card draws. */
+  const linearCardRecord = (seq) => {
+    const selection = resolveDisambiguatedRecordSelection(linearRecordSelector.recordsFor(seq), seq.region_record_id);
+    return selection.record || (selection.entries.length === 1 ? selection.entries[0] : null);
+  };
+  /** @param {LinearSeq} seq @returns {RecordSettingsOwner} */
+  const linearRecordSettingsOwner = (seq) => ({
+    key: seq.uid, requestKeys: [seq.uid], ownsExpansions: true,
+    bindingKeys: annotationRecordKeysOf(linearAnnotationSource(seq, false), seq.uid),
+    displaySource: seq.uid, displaySelector: null
+  });
+  const circularRecordEntries = () => buildDisambiguatedRecordEntries(
+    getCircularRecordDiscoveryState().records.map((record) => ({
+      ...record, recordId: record?.record_id ?? record?.recordId, recordLength: record?.record_length ?? record?.recordLength
+    }))
+  );
+  /** @returns {RecordSettingsOwner[]} */
+  const circularRecordSettingsOwners = () => {
+    const discovery = getCircularRecordDiscoveryState();
+    const bindingKeys = annotationRecordKeysOf(
+      { sourceKey: circularAnnotationSourceKey(), hasInput: discovery.hasInput, status: discovery.status, records: discovery.records },
+      'circular-source'
+    );
+    return circularRecordEntries().map((entry, index) => ({
+      key: circularRecordDrawKey(entry),
+      requestKeys: [circularRecordRequestKey(entry.sourceIndex), circularSingleRecordKey(entry)],
+      bindingKeys: bindingKeys[index] ? [bindingKeys[index]] : [],
+      displaySource: 'circular', displaySelector: circularRecordDrawKey(entry)
+    }));
+  };
+  /** @param {DrawingState} drawing @returns {RecordEditData} */
+  const recordEditData = (drawing) => ({
+    featureOverrides: drawing.featureOverrides,
+    featurePlacementOverrides: drawing.featurePlacementOverrides,
+    featureStrokeOverrides: drawing.featureStrokeOverrides,
+    annotationSets: drawing.annotationSets,
+    recordDisplayDrafts: drawing.recordDisplayDrafts,
+    comparisonEdges: drawing === state.drawings.linear ? drawing.linearComparisonPlan.edges : [],
+    annotationBindingField: ANNOTATION_RECORD_BINDING_KEY
+  });
+  /** @param {RecordSelectionMode} listMode @param {string} sourceKey @returns {RecordSource | null} */
+  const recordSourceOf = (listMode, sourceKey) => {
+    if (listMode === 'circular') {
+      if (sourceKey !== 'circular' || getCircularRecordDiscoveryState().status !== 'ready') return null;
+      const owners = circularRecordSettingsOwners();
+      if (owners.length === 0) return null;
+      const edited = recordsWithEdits(owners, recordEditData(state.drawings.circular));
+      const entries = circularRecordEntries();
+      return {
+        key: 'circular',
+        name: [cInputType.value === 'gff' ? files.c_gff : files.c_gb, cInputType.value === 'gff' ? files.c_fasta : null]
+          .filter(Boolean).map((file) => String(file?.name || 'Unnamed file')).join(' + '),
+        records: owners.map((owner, index) => ({
+          key: owner.key, recordId: entries[index].recordId, length: entries[index].recordLength ?? null,
+          hasSettings: edited.has(owner.key)
+        }))
+      };
+    }
+    const group = linearSourceGroups.value.find((entry) => entry.uid === sourceKey);
+    if (!group) return null;
+    const cards = group.records.map(({ sequence }) => sequence);
+    const edited = recordsWithEdits(cards.map(linearRecordSettingsOwner), recordEditData(state.drawings.linear));
+    return {
+      key: group.uid,
+      name: linearSourceFileName(group),
+      records: cards.map((seq) => {
+        const record = linearCardRecord(seq);
+        return {
+          key: seq.uid, recordId: String(record?.recordId || seq.region_record_id || ''),
+          length: record?.recordLength ?? null, hasSettings: edited.has(seq.uid) || linearCardHasSettings(seq)
+        };
+      })
+    };
+  };
+  /**
+   * Delete settings (D-08), inside the owner's History step: the records' card
+   * settings and rotation, feature edits and placements, annotations, and
+   * comparison pairs.
+   * @param {RecordSelectionMode} listMode
+   * @param {RecordDrawKey[]} keys
+   */
+  const deleteRecordSettings = (listMode, keys) => {
+    const drawing = state.drawings[listMode];
+    const deleted = new Set(keys);
+    const owners = listMode === 'circular'
+      ? circularRecordSettingsOwners().filter((owner) => deleted.has(owner.key))
+      : linearSeqs.filter((seq) => deleted.has(seq.uid)).map(linearRecordSettingsOwner);
+    retireLegendStylesOfUnnamedCaptions(() => removeRecordEdits(owners, recordEditData(drawing)));
+    if (listMode === 'linear') {
+      applyLinearSeqMutation(drawing, linearSeqs.map((seq) => (
+        deleted.has(seq.uid) ? { ...seq, ...RECORD_SETTINGS_DEFAULTS } : seq
+      )), { alignmentMutation: 'record settings deleted.' });
+    }
+    return true;
+  };
+  /**
+   * D-06 Remove File, inside the dialog's History step: a Linear File is
+   * deleted, or cleared when it is the only File; the Circular input loses its
+   * GenBank file or its GFF3 and FASTA pair.
+   * @param {RecordSelectionMode} listMode
+   * @param {string} sourceKey
+   */
+  const removeRecordSource = (listMode, sourceKey) => {
+    if (listMode === 'circular') {
+      if (cInputType.value === 'gff') {
+        setCircularSourceFile('c_gff', null);
+        return setCircularSourceFile('c_fasta', null);
+      }
+      return setCircularSourceFile('c_gb', null);
+    }
+    const intent = linearSourceGroups.value.length > 1 ? 'delete' : 'clear';
+    const plan = planLinearSourceRemoval({ sequences: linearSeqs, sourceUid: sourceKey, intent });
+    return plan.allowed ? removeLinearSource(plan, intent) : false;
+  };
+  const recordSelection = createRecordSelection({
+    reactive,
+    computed,
+    recordsOff: (listMode) => state.drawings[listMode].recordsOff,
+    source: recordSourceOf,
+    runUndoable: history.runUndoable,
+    withDialogChoice: dialogChoice.withHistory,
+    closeAfterDialogChoice: dialogChoice.closeAfterChoice,
+    // A toggle invalidates comparison results and the alignment plan until Generate (P-9).
+    afterRecordSetChange: (listMode) => {
+      if (listMode !== 'linear') return;
+      invalidateLinearComparisonArtifacts(state.drawings.linear, { preserveLosatCacheInfo: true });
+      similarityAlignmentActions?.clearForMutation?.('record drawing changed.');
+    },
+    removeSource: removeRecordSource,
+    deleteRecordSettings,
+    // After a Session load the records are read on demand, as Generate reads them.
+    prepareRecords: async (listMode) => {
+      if (listMode === 'linear') return linearRecordSelector.refresh();
+      return getCircularRecordDiscoveryState().status === 'ready' ? null : inspectCircularSourceRecords();
+    },
+    autoOpenRequests: recordListRequests
+  });
 
   /** @param {DrawingState} drawing */
   const linearSourceMovePlan = (drawing, sourceIndex, direction) => planLinearSourceRowMove({
@@ -5573,7 +5807,12 @@ export const createAppSetup = () => {
   const setCircularInputType = (value) => {
     const busy = sessionOperationAvailability();
     if (busy) return busy;
-    cInputType.value = value;
+    const next = value === 'gff' ? 'gff' : 'gb';
+    if (cInputType.value === next) return { status: 'ok' };
+    cInputType.value = next;
+    // The other input's records are not the ones the OFF list names.
+    const drawing = state.drawings.circular;
+    if (drawing.recordsOff.length) drawing.recordsOff.splice(0);
     return { status: 'ok' };
   };
 
@@ -6101,6 +6340,9 @@ export const createAppSetup = () => {
     showCircularCanvasSetting,
     setCircularRecordPresentationSelector,
     setCircularSourceFile,
+    recordSelection,
+    circularDrawnRecordCount,
+    formatRecordLength,
     paletteDefinitions,
     paletteNames,
     selectedPalette: drawingMember('selectedPalette'),

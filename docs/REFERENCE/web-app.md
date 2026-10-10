@@ -373,6 +373,14 @@ current Result stays in the Preview until the next successful Generate.
 | Several records | **All records (separate diagrams)** | One diagram per record |
 | Several records | One listed record | One diagram of that record |
 
+**Choose records…** beside **Record** opens the same record list, and `M of N
+records drawn` shows the count. **Multi-Record Canvas** and **All records
+(separate diagrams)** draw only the records that are on; choosing one record in
+**Record** draws it whether it is on or off. Turning off the last record that is
+on asks **Remove the whole file?**: **Remove File** removes the GenBank file or
+the GFF3 + FASTA pair, and **Cancel** changes nothing. See
+[Choose the records to draw](#choose-the-records-to-draw).
+
 **Multi-Record Canvas** is on in new pages and after **Reset Settings**. It
 draws every record on one grid, so **Record** is unavailable and reads **Multi-Record
 Canvas uses a grid. Turn it off to select one record.** Select **Show
@@ -444,6 +452,41 @@ Reverse complementation changes displayed coordinates and feature orientation
 without rewriting the input. Comparison tables keep the search frame of the
 cropped record, and gbdraw maps their rows onto the displayed orientation; see
 [Comparison and numeric tables](input-formats-and-tsv-schemas.md#comparison-and-numeric-tables).
+
+### Choose the records to draw
+
+In a File with more than one record, each Linear record card starts with
+**Draw this record**. Clear it to leave the record out of **Generate Diagram**, the comparison pairs (including **All
+adjacent pairs**), row layout, the Legend, and annotations. An off card is grey
+and shows an **OFF** badge when collapsed. The record keeps its settings and
+its position: turning it on again puts it back in its place in the File. A
+File with more than one record shows `Number of records: N · M drawn` and
+**Choose records…**, which opens the record list, **Choose records**.
+
+The record list searches by record ID and sorts by **File order** (default),
+**Record ID A to Z**, **Record ID Z to A** (numbers compare as numbers, so
+`contig_2` precedes `contig_10`), **Longest first**, or **Shortest first**.
+Sorting changes only the list, never the drawing order. Each row shows the
+record's length and a mark when it has saved settings. **Select all** and
+**Select none** act on the rows shown, and so does **Delete settings of OFF
+records**. **Close** ends the dialog. Each change applies at once to the settings and on
+the next **Generate Diagram** to the Preview, and each action is one Undo step. After an upload, a File with more than 20 records opens the list
+automatically (not on Session load or Undo), one File at a time.
+
+**Delete settings** (on an OFF card, and in the list) removes the record's card
+settings (Organism/strain, Subtitle, Region, Reverse complement, LOSAT Gencode,
+and record rotation), its feature edits and Feature placements, the annotations
+that target it, and the comparison pairs that name it, in one Undo step. Without
+it, an OFF record's settings are kept and saved in the Session. **Reset
+Settings** keeps which records are on. The Comparison panel lists only records
+that are on; Record Layout shows OFF records greyed.
+
+Turning off the last record that is on in a File asks **Remove the whole
+file?** **Remove File** deletes the File, or clears it when it is the only
+File; **Cancel** changes nothing, and a bulk action is then not applied at all.
+When every record is off, **Generate Diagram** shows "Turn on at least one
+record to draw." LOSAT keeps the whole subject File as its E-value database and
+runs pairs only between records that are on.
 
 Turn on **Arrange in rows** to assign records to rows. Record-card order is the
 left-to-right order within a row, and **Record gap (px)** separates records in

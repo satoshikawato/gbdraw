@@ -279,6 +279,14 @@ value, then the file default, then this value. Sessions saved before the field
 existed, and Sessions written by the CLI, carry none and are not re-inferred when
 loaded, so their records keep the definitions they were drawn with.
 
+`modes.<mode>.config.recordsOff` lists the records the Web app does not draw:
+a Linear card uid, or a Circular source selector such as `#3`. Omission or `[]`
+means every record is drawn. The Web app writes it only when a record is off, and Session version
+46 is unchanged. The settings of an off record stay in the Session. The render
+request holds only the records that are drawn, so it has no new field. A CLI
+`--session` replay draws only those records, and a CLI re-save keeps
+`recordsOff` and the settings of the off records.
+
 Session 44 replaces the two editable Linear visibility booleans with independent
 selected modes: `linear_accession_visibility` and `linear_length_visibility`,
 each set to `auto`, `show`, or `hide`. Auto resolves from the effective rendered
