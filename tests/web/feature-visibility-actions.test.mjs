@@ -531,29 +531,68 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
   assert.equal(follows.length, followCount + 1);
 }
 
-// OV-330: the label rerender admits its Result only while the rule
-// preparation's inputs are those it drew from (`shouldAdmit`). A rerender
-// asked for by a rule that hid a feature, and drawn before the next edit of
-// that rule showed it again, must not be admitted: the rerun draws the rule
-// as edited. A row a request does not carry (no value yet) changes nothing.
+// OV-330: a rule edit made while an automatic rerender runs is decided
+// against the Result that rerender is about to replace, and the rerender may
+// have read the rules before the edit. The edit therefore asks for one more
+// rerender (the running one coalesces it), also when the displayed Result
+// already draws what the edited rules draw. Without a running rerender, such
+// an edit asks for nothing.
 {
-  const rulesState = {
-    extractedFeatures: ref([]),
-    featureVisibilityManualRules: [],
-    featureOverrides: {},
-    manualSpecificRules: []
+  const catalog = {
+    schema: 5,
+    items: [{
+      resultIndex: 0,
+      resultName: 'result-0.svg',
+      recordKeys: ['REC1'],
+      biologicalFeatures: [{
+        recordKey: 'REC1', biologicalFeatureId: 'A', record_id: 'REC1', type: 'CDS', start: 0, end: 30, strand: 1,
+        anchorProfile: { precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+' },
+        qualifiers: { locus_tag: ['A'] }
+      }],
+      features: [{
+        svgId: 'svg-A', recordKey: 'REC1', biologicalFeatureId: 'A', fillColor: '#000000',
+        drawnSelector: { hash: 'svg-A', location: null, recordLocation: null }
+      }],
+      orthogroups: [],
+      annotations: [],
+      comparisonMatches: []
+    }]
   };
-  const preparation = rulePreparationFor(rulesState);
-  const empty = preparation.snapshot();
-  // Stored rows carry an id; a row without one gets a new id on every read.
-  rulesState.featureVisibilityManualRules.push({ id: 'feature-visibility-rule-1', recordId: '*', featureType: '*', qualifier: 'product', value: '', action: 'off' });
-  assert.equal(preparation.isCurrent(empty), true);
-  rulesState.featureVisibilityManualRules[0] = { ...rulesState.featureVisibilityManualRules[0], featureType: 'CDS', qualifier: 'locus_tag', value: '^FL1$' };
-  assert.equal(preparation.isCurrent(empty), false);
-  const hiding = preparation.snapshot();
-  assert.equal(preparation.isCurrent(hiding), true);
-  rulesState.featureVisibilityManualRules[0] = { ...rulesState.featureVisibilityManualRules[0], action: 'show' };
-  assert.equal(preparation.isCurrent(hiding), false);
+  const follows = [];
+  const rerenderState = {
+    clickedFeature: ref(null),
+    extractedFeatures: ref([]),
+    orthogroups: ref([]),
+    featureVisibilityManualRules: [],
+    featureVisibilityRules: ref([]),
+    featureOverrides: {},
+    featureVisibilityScopeDialog: {},
+    featureCatalog: ref(catalog),
+    generatedMode: ref('circular'),
+    labelReflowProcessing: ref(false),
+    resultGenerationKey: ref('generation-1'),
+    results: ref([{ name: 'result-0.svg', content: '<svg />' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? {} : null) }),
+    errorLog: ref(null)
+  };
+  const owner = createFeatureVisibilityActions({
+    state: withDrawings(rerenderState),
+    rulePreparation: rulePreparationFor(rerenderState),
+    getCommittedRequest: committedRequest(['CDS']),
+    showEditorIntent: visibilityPort(rerenderState, committedRequest(['CDS']), () => false,
+      () => admitFeatureCatalog(catalog, rerenderState.results.value, { mode: 'circular' })),
+    ports: { applyFeatureVisibilityToLabels: (options) => follows.push(options) },
+    selectResult: () => true
+  });
+  await owner.addFeatureVisibilityRule();
+  for (const [field, value] of [['featureType', 'CDS'], ['qualifier', 'locus_tag'], ['action', 'show'], ['value', '^A$']]) {
+    await owner.setFeatureVisibilityRuleField(0, field, value);
+  }
+  assert.deepEqual(follows, [], 'a rule that draws what the Result draws asks for nothing');
+  rerenderState.labelReflowProcessing.value = true;
+  await owner.setFeatureVisibilityRuleField(0, 'value', '^(A)$');
+  assert.deepEqual(follows, [{ rerender: true }], 'an edit during a rerender asks for one more');
 }
 
 console.log('feature visibility action tests passed');

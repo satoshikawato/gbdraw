@@ -436,6 +436,9 @@ export const createFeatureVisibilityActions = ({
   // does not draw asks for the rerender (R-5). The draft keeps a rule that
   // Generate rejects. An edit that leaves the rules Generate reads as they
   // were (a rule added, or a field set before its value) projects nothing.
+  // A rerender that runs when the rules change may have read the old ones and
+  // is about to replace the Result this edit is decided against, so the edit
+  // asks for one more, which the running one coalesces (OV-330).
   /** @param {DrawingState} drawing */
   const editFeatureVisibilityRules = async (drawing, edit) => {
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -445,8 +448,10 @@ export const createFeatureVisibilityActions = ({
     const requested = JSON.stringify(requestFeatureVisibilityRules(drawing.featureVisibilityManualRules));
     drawing.featureVisibilityManualRules.splice(0, drawing.featureVisibilityManualRules.length, ...rules);
     if (JSON.stringify(requestFeatureVisibilityRules(rules)) === requested) return true;
+    const rerendering = Boolean(state.labelReflowProcessing?.value);
     const projection = await runProjection(drawing);
-    if (projection?.updated || projection?.needsRerender) followLabels({ rerender: projection.needsRerender });
+    const rerender = Boolean(projection?.needsRerender) || (Boolean(projection) && rerendering);
+    if (projection?.updated || rerender) followLabels({ rerender });
     return true;
   };
 
