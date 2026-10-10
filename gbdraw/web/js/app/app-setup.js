@@ -3954,7 +3954,10 @@ export const createAppSetup = () => {
   const setMissingBlastTsvPairsToNone = dialogChoice.withHistory(
     () => 'Set pairs to No comparison',
     () => {
-      omitLinearComparisonPairs(state.drawings.linear, missingBlastTsvDialog.pairs.map((entry) => entry.edgeKey));
+      // The pairs as they are now: Undo may have changed them while the dialog was open.
+      const drawing = state.drawings.linear;
+      const pairs = missingUploadPairsToResolve(drawing.linearComparisonResolution.value);
+      if (pairs.length) omitLinearComparisonPairs(drawing, pairs.map((entry) => entry.edgeKey));
       dialogChoice.closeAfterChoice(closeMissingBlastTsvDialog);
       return true;
     },

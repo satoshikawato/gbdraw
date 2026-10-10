@@ -1429,6 +1429,15 @@ test('removing the BLAST TSV of an Upload pair names the missing file at Generat
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   await expect(page.getByRole('alert', { name: 'Generation Error' })).toHaveCount(0);
+
+  // Retry Generate on an earlier failure asks the same way.
+  const shortRow = await generateWithTable('Co06A\tCo06B\t95\n', 'short-row.tsv');
+  expect(shortRow.status).toBe('error');
+  await page.getByRole('group', { name: 'BLAST TSV for #1 to #2 selection' })
+    .getByRole('button', { name: 'Remove' }).click();
+  await page.getByRole('alert', { name: 'Generation Error' })
+    .getByRole('button', { name: 'Retry Generate' }).click();
+  await expect(dialog).toContainText('These pairs are set to Upload BLAST TSV but have no file: #1 → #2.');
 });
 
 // D-54: Generate with pairs set to Upload BLAST TSV but without a file asks
@@ -1479,6 +1488,31 @@ test('Generate asks how to resolve Upload pairs without a BLAST TSV', async ({ p
   expect(await resultCount()).toBe(0);
   expect(await pairSources()).toEqual(['#1 → #2: upload', '#2 → #3: upload']);
 
+  // Set to No comparison and Generate sets both listed pairs to No comparison
+  // as one History step, then Generate succeeds; Undo restores both pairs.
+  await generate.click();
+  await expect(dialog).toContainText('have no file: #1 → #2, #2 → #3.');
+  const bothToNone = await evaluateWithRetainedPromise(page, async () => {
+    const history = window.__GBDRAW_HISTORY__;
+    const undoBefore = history.getUndoCount();
+    const result = await window.__GBDRAW_APP__.resolveMissingBlastTsv('none');
+    const { getCommittedCanonicalRenderRequest } = await import('/gbdraw/web/js/services/config.js');
+    return { status: result?.status, undoAdded: history.getUndoCount() - undoBefore,
+      comparisons: getCommittedCanonicalRenderRequest()?.comparisons ?? null };
+  });
+  expect(bothToNone).toEqual({ status: 'ok', undoAdded: 2, comparisons: [] });
+  await expect(dialog).toHaveCount(0);
+  expect(await pairSources()).toEqual([]);
+  expect(await page.evaluate(async () => {
+    const history = window.__GBDRAW_HISTORY__;
+    await history.undo();
+    const label = history.undoLabel();
+    await history.undo();
+    return label;
+  })).toBe('Set pairs to No comparison');
+  expect(await pairSources()).toEqual(['#1 → #2: upload', '#2 → #3: upload']);
+  expect(await undoCount()).toBe(beforeCancel);
+
   // Choose opens the first pair's file chooser in the panel and does not generate.
   await selectedPairs(page).evaluate((details) => { details.open = false; });
   await generate.click();
@@ -1499,26 +1533,28 @@ test('Generate asks how to resolve Upload pairs without a BLAST TSV', async ({ p
   await expect(page.getByRole('group', { name: 'BLAST TSV for #1 to #2 selection' }))
     .toContainText('pair-1-2.tsv');
 
-  // The next Generate names only the pair still without a file. Set to No
-  // comparison records one History entry, then Generate draws the other pair.
+  // The next Generate names only the pair still without a file. The button
+  // reads the pairs when it is pressed: a pair that got its file while the
+  // dialog was open (as Undo can do) is kept, and Generate draws both pairs.
   await generate.click();
   await expect(dialog).toContainText('These pairs are set to Upload BLAST TSV but have no file: #2 → #3.');
-  const beforeNone = await undoCount();
+  await page.evaluate((text) => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearComparisonCardFile(app.linearComparisonResolution.edges[1].edgeKey,
+      new File([text], 'pair-2-3.tsv', { type: 'text/tab-separated-values' }));
+  }, 'TsvB\tTsvC\t95\t80\t4\t0\t1\t80\t5\t84\t1e-40\t160\n');
   await dialog.getByRole('button', { name: 'Set to No comparison and Generate' }).click();
   await expect(dialog).toHaveCount(0);
-  await expect.poll(resultCount, { timeout: 180000 }).toBe(1);
+  await expect.poll(() => page.evaluate(() => (
+    !window.__GBDRAW_APP__.processing && !window.__GBDRAW_HISTORY__.mutationPending()
+      && window.__GBDRAW_APP__.results.length
+  )), { timeout: 180000 }).toBe(1);
   await expect(alert).toHaveCount(0);
   expect(await page.evaluate(async () => {
     const { getCommittedCanonicalRenderRequest } = await import('/gbdraw/web/js/services/config.js');
     return getCommittedCanonicalRenderRequest().comparisons
       .map((comparison) => [comparison.kind, comparison.queryRecordIndex, comparison.subjectRecordIndex]);
-  })).toEqual([['nucleotideBlast', 0, 1]]);
-  expect(await pairSources()).toEqual(['#1 → #2: upload']);
-  expect(await undoCount()).toBe(beforeNone + 2);
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
-  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel()))
-    .toBe('Set pairs to No comparison');
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  })).toEqual([['nucleotideBlast', 0, 1], ['nucleotideBlast', 1, 2]]);
   expect(await pairSources()).toEqual(['#1 → #2: upload', '#2 → #3: upload']);
 });
 
