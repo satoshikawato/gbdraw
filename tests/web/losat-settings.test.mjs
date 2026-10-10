@@ -39,6 +39,7 @@ await writeFile(
   source.replace("../services/losat-normalization.js", "./losat-normalization.mjs")
     .replace("../services/linear-comparisons.js", new URL("../services/linear-comparisons.js", sourceRoot).href)
     .replace("../services/linear-sources.js", new URL("../services/linear-sources.js", sourceRoot).href)
+    .replace("../services/record-draw-selection.js", new URL("../services/record-draw-selection.js", sourceRoot).href)
     .replace("../services/losat-thread-plan.js", new URL("../services/losat-thread-plan.js", sourceRoot).href)
     .replace("../services/losat.js", new URL("../services/losat.js", sourceRoot).href)
 );
@@ -177,6 +178,21 @@ expansionState.linearComparisonResolution.value = {
   valid: false
 };
 assert.equal(expansionSettings.losatEstimatedJobCount.value, 0);
+
+// Record selection D-07: an OFF record is no query and no pair, so the
+// estimate plans the searches of the drawn records only, as Generate does.
+const offState = {
+  linearSeqs: Array.from({ length: 3 }, (_, index) => ({ uid: `record-${index}` })),
+  recordsOff: ['record-1'],
+  linearComparisonResolution: resolved({ sources: ['losat'] }),
+  losatExecution: { totalThreadBudget: 'safe', threadsPerJob: 'auto', parallelWorkers: undefined },
+  losat: { blastp: { mode: 'orthogroup', collinearSearchScope: 'all' } },
+  losatProgram: { value: 'blastp' }
+};
+const offSettings = createLosatSettings({ state: withDrawings(offState) });
+assert.equal(offSettings.losatEstimatedJobCount.value, 4, 'two drawn records: two self and two cross searches');
+offState.recordsOff = [];
+assert.equal(offSettings.losatEstimatedJobCount.value, 9);
 
 console.log('losat-settings tests passed');
 

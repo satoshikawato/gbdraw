@@ -13,6 +13,7 @@ import {
   isInternalProteinDisplayId,
   resolveDisplayProteinId
 } from '../services/feature-utils.js';
+import { drawnLinearSequences } from '../services/record-draw-selection.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import {
@@ -323,6 +324,7 @@ const renderedFeatureIdForMember = (member, renderedIndex) => {
  * @property {Record<string, string>} orthogroupNameOverrides
  * @property {Record<string, string>} orthogroupDescriptionOverrides
  * @property {Record<string, { name?: string, description?: string }>} orthogroupDormantOverrides
+ * @property {readonly string[]} [recordsOff] The Linear cards not drawn (record selection).
  */
 
 /**
@@ -620,7 +622,9 @@ export const createOrthogroupEditor = ({ state }) => {
     return getGroupMembers(group).map(enrichOrthogroupMember);
   };
 
+  // A member's record index is its record's position among the drawn cards.
   const groupOrthogroupMembersByRecord = (members) => {
+    const drawn = drawnLinearSequences(linearSeqs, state.drawings.linear.recordsOff);
     const byRecord = new Map();
     (Array.isArray(members) ? members : []).forEach((member) => {
       const recordIndex = nonnegativeIntegerAliasStatus(member, RECORD_INDEX_KEYS);
@@ -634,9 +638,9 @@ export const createOrthogroupEditor = ({ state }) => {
         recordIndex,
         recordLabel: recordIndex >= 0
           ? (
-              linearSeqs[recordIndex]?.definition ||
-              linearSeqs[recordIndex]?.gb?.name ||
-              linearSeqs[recordIndex]?.gff?.name ||
+              drawn[recordIndex]?.definition ||
+              drawn[recordIndex]?.gb?.name ||
+              drawn[recordIndex]?.gff?.name ||
               `Record ${recordIndex + 1}`
             )
           : 'Record',

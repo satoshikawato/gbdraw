@@ -153,19 +153,29 @@ export const uniqueAnnotationSetId = (sets, base = 'annotations') => {
   return id;
 };
 
+// The annotation metadata field that binds a target to a record-catalog key.
+export const ANNOTATION_RECORD_BINDING_KEY = '_gbdraw_web_target_record_key';
+
 // A selected-feature target names its record by key: a request carries only
 // the targets of its own records, and the others stay in the drawing's draft
-// for the records that draw them (design Q4 3.2, R2).
-export const annotationOptionsPayload = (sets, records = []) => ({
-  sets: normalizeAnnotationSets(sets).map((set) => ({
-    ...set,
-    annotations: set.annotations.filter((item) => (
-      item.target.kind !== 'featureIdentity' || rowBelongsToRequest(item.target, records)
-    ))
-  })),
-  table: null,
-  tableFile: null
-});
+// for the records that draw them (design Q4 3.2, R2). A target bound to an OFF
+// record (`omittedRecordKeys` of the record catalog) waits the same way.
+/** @param {Iterable<string>} [omittedRecordKeys] */
+export const annotationOptionsPayload = (sets, records = [], omittedRecordKeys = []) => {
+  const omitted = new Set(omittedRecordKeys);
+  return {
+    sets: normalizeAnnotationSets(sets).map((set) => ({
+      ...set,
+      annotations: set.annotations.filter((item) => (
+        item.target.kind === 'featureIdentity'
+          ? rowBelongsToRequest(item.target, records)
+          : !omitted.has(String(item.metadata?.[ANNOTATION_RECORD_BINDING_KEY] ?? '').trim())
+      ))
+    })),
+    table: null,
+    tableFile: null
+  };
+};
 
 // The draft sets of a request's annotation sets.
 export const draftAnnotationSetsOfRequest = (sets) => normalizeAnnotationSets(Array.isArray(sets) ? sets : []);

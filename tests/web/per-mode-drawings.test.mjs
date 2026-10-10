@@ -164,3 +164,29 @@ test('two Circular Depth series and one Linear Depth file both build their reque
   state.mode.value = 'circular';
   MODES.forEach(resetDrawing);
 });
+
+test('records turned OFF in one mode stay ON in the other (record selection)', () => {
+  MODES.forEach(resetDrawing);
+  const circular = state.drawings.circular;
+  const linear = state.drawings.linear;
+  state.mode.value = 'circular';
+  state.cInputType.value = 'gb';
+  state.circularRecordList.value = [{ selector: '#1', record_id: 'a' }, { selector: '#2', record_id: 'b' }];
+  circular.form.multi_record_canvas = true;
+  const circularKeys = () => buildCanonicalRenderRequest({
+    state, drawing: circular, filesData: { c_gb: genbank(), linearSeqs: [] }
+  }).renderRequest.records.map((record) => record.recordKey);
+  const savedCards = [...state.linearSeqs];
+  state.linearSeqs.splice(0, Infinity, { uid: 'card-1' }, { uid: 'card-2' });
+  linear.recordsOff.splice(0, Infinity, 'card-2');
+  assert.deepEqual(circularKeys(), ['record-1', 'record-2'], 'a Linear OFF card leaves the Circular request alone');
+  circular.recordsOff.splice(0, Infinity, '#2');
+  assert.deepEqual(circularKeys(), ['record-1']);
+  assert.deepEqual([...linear.recordsOff], ['card-2']);
+  assert.deepEqual(linear.drawnLinearSeqs.value.map((card) => card.uid), ['card-1']);
+  circular.recordsOff.splice(0);
+  linear.recordsOff.splice(0);
+  state.linearSeqs.splice(0, Infinity, ...savedCards);
+  state.circularRecordList.value = [];
+  MODES.forEach(resetDrawing);
+});

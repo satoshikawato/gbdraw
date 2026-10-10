@@ -363,8 +363,9 @@ const resolvedEdge = ({ edge, queryUid, subjectUid, queryIndex, subjectIndex, so
 // A selected pair that names an OFF record is left out with its record and
 // comes back with it; a pair that names a record without a card stays an issue.
 /**
- * @param {Record<string, any>} plan
- * @param {any[]} sequences Every record card.
+ * @template {{ uid?: unknown }} T
+ * @param {Record<string, unknown>} plan
+ * @param {readonly T[]} sequences Every record card.
  * @param {Iterable<unknown> | null | undefined} recordsOff
  */
 const drawnComparisonInputs = (plan, sequences, recordsOff) => {

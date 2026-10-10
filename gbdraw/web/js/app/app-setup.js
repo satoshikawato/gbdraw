@@ -179,6 +179,7 @@ import {
   plainTextLinearRecordLabel,
   reconcileLinearComparisonPlan
 } from '../services/linear-comparisons.js';
+import { pruneRecordsOff } from '../services/record-draw-selection.js';
 import {
   projectLinearComparisonLosatModeSelection,
   projectLinearComparisonLosatpModeSelection,
@@ -520,8 +521,9 @@ export const createAppSetup = () => {
   /** @param {DrawingState} drawing */
   const reindexLinearLosatCacheInfo = (drawing) => {
     if (!Array.isArray(losatCacheInfo.value)) return;
+    // Resolution indexes are positions among the drawn records.
     const indexByUid = new Map(
-      linearSeqs.map((sequence, index) => [String(sequence?.uid || ''), index])
+      drawing.drawnLinearSeqs.value.map((sequence, index) => [String(sequence?.uid || ''), index])
     );
     const resolvedByEdgeKey = new Map(
       drawing.linearComparisonResolution.value.edges.map((edge) => [edge.edgeKey, edge])
@@ -656,7 +658,7 @@ export const createAppSetup = () => {
     return projectLinearComparisonUi({
       plan: drawing.linearComparisonPlan,
       resolution: drawing.linearComparisonResolution.value,
-      adjacentEdgeKeys: adjacentRowPairs(linearSeqs, effectiveLinearComparisonLayout(drawing), true)
+      adjacentEdgeKeys: adjacentRowPairs(drawing.drawnLinearSeqs.value, effectiveLinearComparisonLayout(drawing), true)
         .map(([queryUid, subjectUid]) => linearComparisonEdgeKey(queryUid, subjectUid)),
       losatProgram: drawing.losatProgram.value,
       blastpMode: drawing.losat.blastp?.mode,
@@ -673,7 +675,7 @@ export const createAppSetup = () => {
     const { intentKey } = linearComparisonUi.value;
     return intentKey === 'custom' ? 'selected' : intentKey;
   });
-  const canRunLinearLosat = computed(() => linearSeqs.filter((sequence) => (
+  const canRunLinearLosat = computed(() => state.drawings.linear.drawnLinearSeqs.value.filter((sequence) => (
     lInputType.value === 'gff'
       ? sequence.gff && sequence.fasta
       : sequence.gb
@@ -699,6 +701,7 @@ export const createAppSetup = () => {
     const drawing = state.activeDrawing();
     return buildLinearComparisonTimeline({
       sequences: linearSeqs,
+      recordsOff: drawing.recordsOff,
       layout: effectiveLinearComparisonLayout(drawing),
       plan: drawing.linearComparisonPlan,
       resolution: drawing.linearComparisonResolution.value
@@ -885,13 +888,11 @@ export const createAppSetup = () => {
     const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
-    if (linearSeqs.length < 2) return;
+    const drawn = drawing.drawnLinearSeqs.value;
+    if (drawn.length < 2) return;
     syncLinearRecordLayout();
-    const [firstPair] = adjacentRowPairs(
-      linearSeqs,
-      effectiveLinearComparisonLayout(drawing)
-    );
-    const [queryUid, subjectUid] = firstPair || [linearSeqs[0].uid, linearSeqs[1].uid];
+    const [firstPair] = adjacentRowPairs(drawn, effectiveLinearComparisonLayout(drawing));
+    const [queryUid, subjectUid] = firstPair || [drawn[0].uid, drawn[1].uid];
     const next = selectedPlanForEdit(drawing);
     upsertSelectedComparison(next, { queryUid, subjectUid });
     replaceLinearComparisonPlan(drawing, next);
@@ -1085,7 +1086,7 @@ export const createAppSetup = () => {
     const drawing = state.drawings.linear;
     syncLinearRecordLayout();
     const next = selectedPlanForEdit(drawing);
-    adjacentRowPairs(linearSeqs, effectiveLinearComparisonLayout(drawing), allPairs).forEach(([queryUid, subjectUid]) => {
+    adjacentRowPairs(drawing.drawnLinearSeqs.value, effectiveLinearComparisonLayout(drawing), allPairs).forEach(([queryUid, subjectUid]) => {
       upsertSelectedComparison(next, { queryUid, subjectUid });
     });
     replaceLinearComparisonPlan(drawing, next);
@@ -1211,6 +1212,14 @@ export const createAppSetup = () => {
     const circularPrimaryFile = cInputType.value === 'gff' ? files.c_gff : files.c_gb;
     const circularPairedFile = cInputType.value === 'gff' ? files.c_fasta : null;
     const circularDiscovery = getCircularRecordDiscoveryState();
+    const circularRecordSet = resolveCircularRequestRecordSet(/** @type {any} */ ({
+      records: circularDiscovery.records,
+      selector: drawing.form.circular_record_selector,
+      multiRecordCanvas: drawing.form.multi_record_canvas,
+      groupingIntent: drawing.adv.circular_grouping_intent,
+      recordsOff: drawing.recordsOff
+    }));
+    const linearRecordsOff = new Set(state.drawings.linear.recordsOff);
     return buildAnnotationRecordCatalog(/** @type {any} */ ({
       mode: mode.value,
       circularSource: {
@@ -1223,12 +1232,8 @@ export const createAppSetup = () => {
         hasInput: circularDiscovery.hasInput,
         status: circularDiscovery.status,
         error: circularDiscovery.error,
-        records: resolveCircularRequestRecordSet(/** @type {any} */ ({
-          records: circularDiscovery.records,
-          selector: drawing.form.circular_record_selector,
-          multiRecordCanvas: drawing.form.multi_record_canvas,
-          groupingIntent: drawing.adv.circular_grouping_intent
-        })).records
+        records: circularRecordSet.records,
+        omittedRecords: circularRecordSet.omittedRecords
       },
       linearSources: linearSourcesOverride || linearSeqs.map((seq) => {
         const primaryFile = lInputType.value === 'gff' ? seq.gff : seq.gb;
@@ -1242,6 +1247,7 @@ export const createAppSetup = () => {
             pairedFile
           }),
           selector: seq.region_record_id,
+          drawn: !linearRecordsOff.has(seq.uid),
           hasInput: Boolean(primaryFile && (lInputType.value !== 'gff' || pairedFile)),
           status: linearRecordSelector.statusFor(seq),
           error: linearRecordSelector.errorFor(seq),
@@ -1880,7 +1886,7 @@ export const createAppSetup = () => {
   const linearLabelHasSharedRow = computed(() => {
     const drawing = state.activeDrawing();
     return linearRecordLayoutHasSharedRow(
-      linearSeqs,
+      drawing.drawnLinearSeqs.value,
       drawing.linearRecordRows,
       { enabled: Boolean(drawing.linearRecordLayoutEnabled.value) }
     );
@@ -2838,7 +2844,8 @@ export const createAppSetup = () => {
       const catalog = getAnnotationRecordCatalog();
       reconcileAnnotationRecordBindings(drawing.annotationSets, catalog);
       return validateAnnotationRecordTargets(drawing.annotationSets, catalog);
-    }
+    },
+    omittedAnnotationRecordKeys: () => getAnnotationRecordCatalog().omittedRecordKeys || []
   });
   const resolvePopupRotationFeature = ({ recordKey, biologicalFeatureId }) => {
     const matchesIdentity = (feature) => (
@@ -3945,7 +3952,9 @@ export const createAppSetup = () => {
       return { catalog: null, error: '' };
     }
     if (privateCandidate) {
+      const linearRecordsOff = new Set(drawing.recordsOff);
       const sources = await Promise.all(linearSeqs.map(async (seq) => {
+        const drawn = !linearRecordsOff.has(seq.uid);
         const inputType = lInputType.value;
         const primaryFile = inputType === 'gff' ? seq.gff : seq.gb;
         const pairedFile = inputType === 'gff' ? seq.fasta : null;
@@ -3954,9 +3963,9 @@ export const createAppSetup = () => {
           const records = inputType === 'gff'
             ? await discoverGffFastaRecords({ gffFile: primaryFile, fastaFile: pairedFile })
             : await discoverSequenceRecords({ file: primaryFile, format: 'genbank' });
-          return { sourceKey, selector: seq.region_record_id, hasInput: Boolean(primaryFile), status: 'ready', records };
+          return { sourceKey, selector: seq.region_record_id, drawn, hasInput: Boolean(primaryFile), status: 'ready', records };
         } catch (error) {
-          return { sourceKey, selector: seq.region_record_id, hasInput: Boolean(primaryFile), status: 'error', error: error.message, records: [] };
+          return { sourceKey, selector: seq.region_record_id, drawn, hasInput: Boolean(primaryFile), status: 'error', error: error.message, records: [] };
         }
       }));
       const catalog = getAnnotationRecordCatalog(sources);
@@ -3976,7 +3985,7 @@ export const createAppSetup = () => {
       ? { catalog, error: '' }
       : {
           catalog: null,
-          error: linearSeqs.map(seq => linearRecordSelector.errorModelFor(seq)).find(error => error?.code)
+          error: drawing.drawnLinearSeqs.value.map(seq => linearRecordSelector.errorModelFor(seq)).find(error => error?.code)
             || catalogIssueError(catalog)
         };
   }
@@ -4995,7 +5004,10 @@ export const createAppSetup = () => {
         reusedCommittedSession: !draftRequest
       });
       if (error) throw error;
-      return { linearRecordCatalog: catalog };
+      return {
+        linearRecordCatalog: catalog,
+        omittedAnnotationRecordKeys: draftRequest ? getAnnotationRecordCatalog().omittedRecordKeys || [] : []
+      };
     },
     onError: (error) => { errorLog.value = normalizeUserFacingError(error); },
     // UJ-09: a saved download is the History position Load Session compares with.
@@ -5098,10 +5110,12 @@ export const createAppSetup = () => {
     region_end: null, region_reverse: false, definition: '', record_subtitle: '' });
   // The record reference names a record of the old file, so any replacement retires it.
   const RETIRED_LINEAR_RECORD_REFERENCE = Object.freeze({ region_record_id: '' });
+  // The OFF records name records of the old file too (record selection).
   /** @param {DrawingState} drawing */
-  const retireCircularRecordSelector = ({ form, adv }) => {
+  const retireCircularRecordSelector = ({ form, adv, recordsOff }) => {
     form.circular_record_selector = '';
     if (adv.circular_grouping_intent === 'single') adv.circular_grouping_intent = 'auto';
+    if (recordsOff.length) recordsOff.splice(0);
   };
   /** @param {DrawingState} drawing */
   const retireCircularRecordPresentation = (drawing) => {
@@ -5330,6 +5344,8 @@ export const createAppSetup = () => {
     });
     const nextRows = reconcileLinearRecordLayout(linearSeqs, layoutEntries);
     drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...nextRows);
+    const recordsOff = pruneRecordsOff(drawing.recordsOff, activeUids);
+    if (recordsOff.length !== drawing.recordsOff.length) drawing.recordsOff.splice(0, Infinity, ...recordsOff);
     replaceLinearComparisonPlan(
       drawing,
       reconcileLinearComparisonPlan(drawing.linearComparisonPlan, linearSeqs),

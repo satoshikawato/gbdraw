@@ -36,6 +36,23 @@ for (const [domain, key, first, second] of [
   assert.equal(state.activeDrawing()[domain][key], first, `${domain}.${key}: Redo explicit value`);
 }
 
+// Record selection: a toggle is one intent step, and Undo and Redo restore
+// the OFF records of the drawing it was made in.
+{
+  const drawing = state.activeDrawing();
+  drawing.recordsOff.splice(0);
+  await history.initializeIntentBaseline();
+  await history.runUndoable('Turn a record OFF', () => { drawing.recordsOff.push('#2'); });
+  await history.runUndoable('Turn another record OFF', () => { drawing.recordsOff.push('#3'); });
+  await history.undo();
+  assert.deepEqual([...drawing.recordsOff], ['#2']);
+  await history.undo();
+  assert.deepEqual([...drawing.recordsOff], []);
+  await history.redo();
+  assert.deepEqual([...drawing.recordsOff], ['#2']);
+  drawing.recordsOff.splice(0);
+}
+
 applyConfigData(state.activeDrawing(), { form: JSON.parse('{"unknown":1,"__proto__":{"polluted":true}}') });
 assert.equal(Object.hasOwn(state.activeDrawing().form, 'unknown'), false);
 assert.equal({}.polluted, undefined);

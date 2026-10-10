@@ -974,7 +974,10 @@ const createDrawingState = (drawingMode) => {
     activeLayoutPreferences,
     // The Linear record cards a Generate draws, in file order (read-only; the
     // cards are project inputs that both drawings read).
-    drawnLinearSeqs: computed(() => Object.freeze(drawnLinearSequences(linearSeqs, recordsOff))),
+    // Frozen: a reader never edits the drawn list (the cards are `linearSeqs`).
+    drawnLinearSeqs: /** @type {{ readonly value: LinearSeq[] }} */ (
+      computed(() => Object.freeze(drawnLinearSequences(linearSeqs, recordsOff)))
+    ),
     linearComparisonResolution,
     hasLinearComparisonIntent: computed(() => linearComparisonResolution.value.hasComparisonIntent),
     hasActiveLinearLosatIntent: computed(() => linearComparisonResolution.value.hasLosatIntent),

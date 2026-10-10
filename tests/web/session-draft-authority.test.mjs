@@ -252,6 +252,7 @@ assert.deepEqual(CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS, [
   'circularConservation',
   'annotationSets',
   'recordDisplayDrafts',
+  'recordsOff',
   'featurePlacementOverrides',
   'modeProfiles',
   'unmanagedConfigOverrides',

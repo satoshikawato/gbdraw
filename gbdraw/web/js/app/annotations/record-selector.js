@@ -6,8 +6,7 @@ import {
   annotationRecordSelectorValue,
   parseAnnotationRecordSelectorValue
 } from './target-actions.js';
-
-export const ANNOTATION_RECORD_BINDING_KEY = '_gbdraw_web_target_record_key';
+import { ANNOTATION_RECORD_BINDING_KEY } from '../../services/annotation-state.js';
 
 const cleanText = (value) => String(value ?? '').trim();
 

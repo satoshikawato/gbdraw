@@ -1,7 +1,8 @@
 // @ts-check
 import { normalizeCollinearSearchScope } from '../services/losat-normalization.js';
 import { buildLosatJobSpecs } from '../services/linear-comparisons.js';
-import { losatRecordGencode, planLosatSourceJobs } from '../services/linear-sources.js';
+import { losatRecordGencode, losatSearchSequences, planLosatSourceJobs } from '../services/linear-sources.js';
+import { drawnLinearSequences } from '../services/record-draw-selection.js';
 import { getLosatHardwareThreads, resolveLosatThreadPlan } from '../services/losat-thread-plan.js';
 import { losatThreadingPrecondition } from '../services/losat.js';
 
@@ -66,6 +67,7 @@ const appendRequestedIntegerOption = (options, requestedValue, effectiveValue) =
  * @property {{ value: any }} linearComparisonResolution
  * @property {LosatSettingsValues} losat
  * @property {{ value: string }} losatProgram
+ * @property {readonly string[]} [recordsOff]
  */
 
 /**
@@ -92,27 +94,30 @@ export const createLosatSettings = ({ state }) => {
 
   // Generate plans its jobs with the same two functions (N-10). Only the
   // translation tables vary per record, so they are the only arguments that
-  // can split a source batch.
+  // can split a source batch. Pairs join drawn records, and OFF records stay
+  // in their source database (record selection D-07).
   const losatEstimatedJobCount = computed(() => {
     const drawing = state.activeDrawing();
     const resolution = readResolution(drawing);
     if (resolution.valid === false || !resolution.hasLosatIntent) return 0;
     const program = drawing.losatProgram.value;
     try {
+      const drawn = drawnLinearSequences(linearSeqs, drawing.recordsOff);
+      const search = losatSearchSequences(drawn, linearSeqs);
       const specs = buildLosatJobSpecs({
         resolution,
-        recordCount: linearSeqs.length,
-        recordUids: linearSeqs.map((sequence) => sequence?.uid),
+        recordCount: drawn.length,
+        recordUids: drawn.map((sequence) => sequence?.uid),
         program,
         blastpMode: String(drawing.losat.blastp?.mode || 'orthogroup'),
         collinearInferOrthogroups: drawing.losat.blastp?.collinearInferOrthogroups !== false,
         collinearSearchScope: normalizeCollinearSearchScope(drawing.losat.blastp?.collinearSearchScope)
       });
       return planLosatSourceJobs({
-        sequences: linearSeqs,
+        ...search,
         specs,
         buildArgs: (query, subject) => (program === 'tblastx'
-          ? [losatRecordGencode(linearSeqs[query]), losatRecordGencode(linearSeqs[subject])]
+          ? [losatRecordGencode(search.sequences[query]), losatRecordGencode(search.sequences[subject])]
           : [])
       }).jobs.length;
     } catch {

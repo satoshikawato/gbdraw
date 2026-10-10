@@ -63,6 +63,7 @@ import {
   resolveCircularRequestRecordSet,
   resolveDisambiguatedRecordSelection
 } from './record-options.js';
+import { circularRecordRequestKey } from './record-draw-selection.js';
 import {
   orderedConservationSources,
   orderedOptionalConservationFiles
@@ -1058,7 +1059,7 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
         }
       };
     });
-    return { records, circularSourceIndexes: null, circularSourceCount: null };
+    return { records, circularSourceIndexes: null, circularSourceCount: null, circularPresentedCount: null };
   }
 
   if (Array.isArray(filesData.circularRecords) && filesData.circularRecords.length > 0) {
@@ -1129,7 +1130,8 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
     return {
       records,
       circularSourceIndexes: records.map((_, index) => index),
-      circularSourceCount: records.length
+      circularSourceCount: records.length,
+      circularPresentedCount: records.length
     };
   }
   const source = state.cInputType.value === 'gff'
@@ -1146,23 +1148,27 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
     records: state.circularRecordList.value,
     selector: drawing.form.circular_record_selector,
     multiRecordCanvas: drawing.form.multi_record_canvas,
-    groupingIntent: drawing.adv.circular_grouping_intent
+    groupingIntent: drawing.adv.circular_grouping_intent,
+    recordsOff: drawing.recordsOff
   }));
   if (recordSet.selectionFailure) throw diagnosticError('RECORD_SELECTION', { reason: recordSet.selectionFailure });
   const { recordSelectors } = recordSet;
   const selectedRecords = recordSet.records.length > 0 ? recordSet.records : [null];
+  // The offered records decide the journey, so one ON record of several
+  // stays a batch of one or a grid of one.
   const singleJourney = (
-    selectedRecords.length === 1 &&
+    recordSet.presentedCount <= 1 &&
     recordSet.singlePresentation
   );
   const records = selectedRecords.map((record, index) => {
     const region = singleJourney
       ? circularRegionPayload(drawing.form, record)
       : null;
+    // A record keeps its key while others go OFF: `record-<file position>`.
     return {
       recordKey: singleJourney && record
         ? circularRecordKey(record)
-        : `record-${index + 1}`,
+        : circularRecordRequestKey(Number.isInteger(record?.sourceIndex) ? record.sourceIndex : index),
       cardinality: 'exactly_one',
       source,
       selector: region
@@ -1180,7 +1186,8 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
   return {
     records,
     circularSourceIndexes,
-    circularSourceCount: recordSelectors.length || records.length
+    circularSourceCount: recordSelectors.length || records.length,
+    circularPresentedCount: recordSet.presentedCount || records.length
   };
 };
 
@@ -2376,7 +2383,8 @@ const buildComparisons = ({
  * @param {Record<string, any>} state
  * @param {RequestDrawing} drawing
  */
-const buildLayout = (state, drawing, records = []) => {
+/** @param {number[] | null} [circularSourceIndexes] The file position of each drawn Circular record. */
+const buildLayout = (state, drawing, records = [], circularSourceIndexes = null) => {
   if (state.mode.value === 'linear') {
     const recordKeys = records.map((record) => requireCanonicalText(
       record.recordKey,
@@ -2404,10 +2412,20 @@ const buildLayout = (state, drawing, records = []) => {
     };
   }
   if (!drawing.form.multi_record_canvas) return {};
+  // The draft keys each record's row by its file selector `#N`; the request
+  // names the drawn records by their position among them, so an OFF record
+  // has no token and returns to its row when it is ON again.
+  /** @param {string} selector */
+  const drawnPosition = (selector) => {
+    const match = /^#([1-9][0-9]*)$/.exec(selector);
+    if (!match || !Array.isArray(circularSourceIndexes)) return selector;
+    const position = circularSourceIndexes.indexOf(Number(match[1]) - 1);
+    return position < 0 ? '' : `#${position + 1}`;
+  };
   const positions = Array.isArray(drawing.adv.multi_record_positions)
     ? drawing.adv.multi_record_positions
         .map((entry) => {
-          const selector = String(entry?.selector || '').trim();
+          const selector = drawnPosition(String(entry?.selector || '').trim());
           const row = Number(entry?.row);
           return selector && Number.isInteger(row) && row > 0 ? `${selector}@${row}` : null;
         })
@@ -2548,6 +2566,8 @@ const projectCanonicalRenderInput = ({
   comparisonPlanSnapshot = null,
   resolvedComparisons = [],
   resolvedCircularConservation = [],
+  // The record-catalog keys of OFF records: annotations bound to them wait in the draft.
+  omittedAnnotationRecordKeys = [],
   resources = createResourceBuilder()
 }) => {
   recordStructuralMetric('canonicalRequestProjectionCount');
@@ -2655,7 +2675,7 @@ const projectCanonicalRenderInput = ({
         drawing.form.multi_record_canvas
           ? 'grid'
           : (
-              records.length === 1
+              (recordPlan.circularPresentedCount ?? records.length) === 1
                 ? (
                     circularGroupingIntent ||
                     WEB_UX_PROFILE.circular.singleRecordGrouping
@@ -2733,7 +2753,7 @@ const projectCanonicalRenderInput = ({
       : {})
   };
   if (Array.isArray(drawing.annotationSets) && drawing.annotationSets.length > 0) {
-    diagramOptions.annotations = annotationOptionsPayload(drawing.annotationSets, records);
+    diagramOptions.annotations = annotationOptionsPayload(drawing.annotationSets, records, omittedAnnotationRecordKeys);
   }
   if (state.mode.value === 'circular') {
     diagramOptions.keepFullDefinitionWithPlotTitle = Boolean(drawing.adv.keep_full_definition_with_plot_title);
@@ -2900,7 +2920,7 @@ const projectCanonicalRenderInput = ({
       grouping,
       records,
       diagramOptions,
-      layout: buildLayout(state, drawing, records),
+      layout: buildLayout(state, drawing, records, recordPlan.circularSourceIndexes),
       comparisons: buildComparisons({
       state,
       drawing,

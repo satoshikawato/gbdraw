@@ -4766,6 +4766,7 @@ const buildOtherModeResult = (other, renderRequest) => {
  * @typedef {{
  *   drawing: DrawingState,
  *   linearRecordCatalog?: any,
+ *   omittedAnnotationRecordKeys?: string[],
  *   recordDisplayRows?: any,
  *   modes: Record<'circular' | 'linear', SessionModeSlice>,
  *   savedUi: Record<string, any>,
@@ -4782,7 +4783,8 @@ const buildOtherModeResult = (other, renderRequest) => {
 const exportSessionDocument = async (
   titleOverride = null,
   {
-    drawing, linearRecordCatalog = null, recordDisplayRows = null, modes, savedUi, isCurrent, artifact, otherArtifact
+    drawing, linearRecordCatalog = null, omittedAnnotationRecordKeys = [], recordDisplayRows = null, modes, savedUi,
+    isCurrent, artifact, otherArtifact
   }
 ) => {
   const resolvedTitle =
@@ -4874,7 +4876,8 @@ const exportSessionDocument = async (
       drawing,
       filesData: activeFiles,
       recordDisplayRows: recordDisplayRows?.value || [],
-      comparisonPlanSnapshot
+      comparisonPlanSnapshot,
+      omittedAnnotationRecordKeys
     });
   }
   committed = promoteSavedCanonicalSession(committed, artifact, editorState.featureCatalog);

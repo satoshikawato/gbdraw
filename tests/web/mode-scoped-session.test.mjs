@@ -24,7 +24,7 @@ const alerts = [];
 globalThis.alert = (message) => alerts.push(String(message));
 installSessionImportWorker();
 
-const { SESSION_VERSION, exportSession, importSession } = await import('../../gbdraw/web/js/services/config.js');
+const { SESSION_VERSION, assertActiveModeInputs, exportSession, importSession } = await import('../../gbdraw/web/js/services/config.js');
 const { MODE_SLICE_CONTAINERS } = await import('../../gbdraw/web/js/services/mode-scoped-migration.js');
 const { createDefaultAdv, createDefaultForm } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
@@ -285,4 +285,17 @@ test('a slice keeps its OFF records, and omission draws every record (record-sel
   await rejected((modes) => { modes.circular.config.recordsOff = ['contig_2']; }, 'Circular key is not #N');
   // A domain of the wrong shape fails like every other domain of the slice.
   await rejected((modes) => { modes.circular.config.recordsOff = '#2'; }, 'not a list', null);
+});
+
+// Record selection 2.5: a Linear drawing with every card OFF (only a
+// hand-edited Session reaches it) fails Generate and Save with NONE_DRAWN.
+test('a Linear drawing with no ON record names the fix', () => {
+  const sourceState = {
+    files: {}, lInputType: { value: 'gb' }, linearSeqs: [{ uid: 'a', gb: {} }, { uid: 'b', gb: {} }],
+    drawings: { linear: { recordsOff: ['a', 'b'] } }
+  };
+  assert.throws(() => assertActiveModeInputs('linear', sourceState),
+    (error) => error.code === 'RECORD_SELECTION' && error.context.reason === 'NONE_DRAWN');
+  sourceState.drawings.linear.recordsOff = ['a'];
+  assert.doesNotThrow(() => assertActiveModeInputs('linear', sourceState));
 });

@@ -18,6 +18,7 @@ import { prepareLosatRuntime, runLosatPairsParallel } from '../services/losat.js
 import {
   losatRecordGencode, losatSearchSequences, prepareLosatSourceBatches, splitLosatSourceResult
 } from '../services/linear-sources.js';
+import { offRecordRequestKeys } from '../services/record-draw-selection.js';
 import {
   cancelDiagramGeneration,
   DIAGRAM_HELPER_OPERATIONS,
@@ -1224,6 +1225,7 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {((capture: { phase?: string, diagnostics?: any }) => void) | null} [onGeneratedArtifactCheckpointCapture]
  * @property {(options?: { pan?: any, resetZoom?: boolean }) => void} resetPreviewViewport The preview owner's viewport reset.
  * @property {(() => ({ code: string, context?: any } | null | undefined)) | null} [validateAnnotationTargets]
+ * @property {(() => string[]) | null} [omittedAnnotationRecordKeys] The record-catalog keys of the drawing's OFF records.
  * @property {(() => Promise<Record<string, any>>) | null} [prepareLinearRecordCatalog]
  * @property {{ value: Record<string, any>[] } | null} [recordDisplayRows]
  *   The draft record display rows the request reads (`recordDisplayControls.allRows`, R13).
@@ -1260,6 +1262,7 @@ export const createRunAnalysis = ({
   onGeneratedArtifactCheckpointCapture = null,
   resetPreviewViewport,
   validateAnnotationTargets = null,
+  omittedAnnotationRecordKeys = null,
   prepareLinearRecordCatalog = null,
   // The draft record display rows the request reads (`recordDisplayControls.allRows`, R13).
   recordDisplayRows = null,
@@ -3283,7 +3286,7 @@ export const createRunAnalysis = ({
         // files, which stay in the searched databases (D-07); an index below
         // `losatSearch.drawnCount` is a position in the drawn list.
         const losatSearch = losatSearchSequences(linearSeqs, useLosat ? allLinearSeqs : linearSeqs);
-        const losatSeqs = losatSearch.sequences;
+        const losatSeqs = /** @type {typeof linearSeqs} */ (losatSearch.sequences);
         const fastaCache = new Map();
         const fastaHashCache = new Map();
         const sequenceEntriesByKey = new Map();
@@ -3922,7 +3925,7 @@ export const createRunAnalysis = ({
           const canonicalGridRows = useCollinearBlastp && drawing.linearRecordLayoutEnabled.value
             ? linearSeqs.map((seq) => drawing.linearRecordRows.find((entry) => entry.uid === seq.uid))
             : null;
-          const hasCanonicalGridRows = canonicalGridRows?.length > 1
+          const hasCanonicalGridRows = canonicalGridRows !== null && canonicalGridRows.length > 1
             && canonicalGridRows.every((entry) => entry?.canonicalRow === entry.row
               && Number.isInteger(entry.canonicalColumn) && entry.canonicalColumn > 0
               && entry.canonicalCardinality === 'exactly_one');
@@ -4590,7 +4593,10 @@ export const createRunAnalysis = ({
         recordDisplayRows: recordDisplayRows?.value || [],
         comparisonPlanSnapshot: activeComparisonPlanSnapshot,
         resolvedComparisons,
-        resolvedCircularConservation: canonicalCircularConservation
+        resolvedCircularConservation: canonicalCircularConservation,
+        omittedAnnotationRecordKeys: requestDrawing.annotationSets.length > 0
+          ? (omittedAnnotationRecordKeys?.() || [])
+          : []
       });
       if (useCommittedComparison) {
         if (typeof getCommittedCanonicalSession !== 'function') {
@@ -4982,6 +4988,7 @@ export const createRunAnalysis = ({
           .map((feature) => String(feature.record_key)),
         previousRecords: previousRequestRecords,
         currentRecords: canonical.renderRequest.records || [],
+        retainedRecordKeys: offRecordRequestKeys(canonical.renderRequest.mode, drawing.recordsOff),
         biologicalFeatures: candidateBiologicalFeatures
       }) : 0;
       // OV-120: a source replacement also retires the renames of the Legend

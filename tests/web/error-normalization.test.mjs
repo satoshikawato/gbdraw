@@ -642,3 +642,9 @@ test('a Depth series without a file says to attach a TSV or remove the series (T
     assert.equal(model.summary, expected);
   }
 });
+
+test('a drawing with every record OFF names the fix (record selection)', () => {
+  const model = normalizeUserFacingError(diagnosticError('RECORD_SELECTION', { reason: 'NONE_DRAWN' }));
+  assert.equal(model.code, 'RECORD_SELECTION');
+  assert.match(model.summary, /Turn on at least one record to draw\./);
+});

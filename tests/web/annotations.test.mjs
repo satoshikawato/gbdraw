@@ -768,3 +768,50 @@ test('an import that would remove every set asks first, and Cancel keeps the set
   await editor.importAnnotationTable('');
   assert.equal(editor.annotationReplaceAllDialog.show, false, 'no set to remove: no question');
 });
+
+test('an annotation bound to an OFF record stays in the draft and leaves the request (record selection)', () => {
+  const source = (sourceKey, recordId, extra = {}) => ({
+    sourceKey, hasInput: true, status: 'ready', selector: '', records: [{ selector: '#1', recordId, recordLength: 100 }], ...extra
+  });
+  const allOn = buildAnnotationRecordCatalog({
+    mode: 'linear', linearSources: [source('a', 'RecA'), source('b', 'RecB'), source('c', 'RecC')]
+  });
+  const offB = buildAnnotationRecordCatalog({
+    mode: 'linear',
+    linearSources: [source('a', 'RecA'), source('b', 'RecB', { drawn: false }), source('c', 'RecC')]
+  });
+  // The drawn records only, with sources counted among the drawn cards.
+  assert.deepEqual(offB.records.map((record) => [record.recordId, record.sourceIndex]), [['RecA', 0], ['RecC', 1]]);
+  assert.deepEqual(offB.omittedRecordKeys, [allOn.records[1].key]);
+  assert.deepEqual(allOn.omittedRecordKeys, []);
+  // An OFF card that cannot be read is no issue of the drawing; a drawn one keeps its card number.
+  const pending = buildAnnotationRecordCatalog({
+    mode: 'linear',
+    linearSources: [source('a', 'RecA'), { sourceKey: 'b', hasInput: true, status: 'loading', drawn: false }, { sourceKey: 'c', hasInput: false }]
+  });
+  assert.deepEqual(pending.issues, [{ code: 'INPUT_REQUIRED', context: { inputOrdinal: 3 } }]);
+
+  const sets = [createAnnotationSet({
+    id: 'off', annotations: [{ id: 'on-b', target: coordinateTarget({ start: 1, end: 5 }), label: '', mark: 'band' }]
+  })];
+  setAnnotationRecordValue(allOn, sets[0].annotations[0], allOn.records[1].key);
+  const before = structuredClone(sets);
+  assert.equal(validateAnnotationRecordTargets(sets, offB), null);
+  reconcileAnnotationRecordBindings(sets, offB);
+  assert.deepEqual(sets, before, 'the binding to the OFF record is kept');
+  assert.deepEqual(annotationOptionsPayload(sets, [], offB.omittedRecordKeys).sets[0].annotations, []);
+  assert.equal(annotationOptionsPayload(sets, [], allOn.omittedRecordKeys).sets[0].annotations.length, 1);
+
+  // Circular: the OFF records of the file.
+  const circular = buildAnnotationRecordCatalog({
+    mode: 'circular',
+    circularSource: {
+      sourceKey: 'circ', hasInput: true, status: 'ready',
+      records: [{ selector: '#1', recordId: 'C1', recordLength: 10 }],
+      omittedRecords: [{ selector: '#2', recordId: 'C2', recordLength: 20 }]
+    }
+  });
+  assert.deepEqual(circular.records.map((record) => record.recordId), ['C1']);
+  assert.equal(circular.omittedRecordKeys.length, 1);
+  assert.match(circular.omittedRecordKeys[0], /^circ::\[1,"C2",20\]$/);
+});

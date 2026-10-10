@@ -227,7 +227,7 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, 
   // A Linear card uid or a Circular source selector `#N`, once each; that a
   // Linear uid names a bound card is checked with the bindings (session-authority.js).
   if (has(config, 'recordsOff') && (new Set(config.recordsOff).size !== config.recordsOff.length
-    || !config.recordsOff.every((key) => isRecordDrawKey(/** @type {'circular' | 'linear'} */ (mode), key))))
+    || !config.recordsOff.every((/** @type {unknown} */ key) => isRecordDrawKey(/** @type {'circular' | 'linear'} */ (mode), key))))
     throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
   if (has(config, 'featurePlacementOverrides')) {
     if (scopedDrafts) validateScopedFeaturePlacements(config.featurePlacementOverrides);

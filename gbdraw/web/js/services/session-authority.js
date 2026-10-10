@@ -560,7 +560,7 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
   // A Linear record the Session turns OFF names a bound record card (record-selection D-05).
   const linearRecordsOff = sessionData.modes?.linear?.config?.recordsOff;
   if (Number(version) >= MODE_SCOPED_SESSION_VERSION && Array.isArray(linearRecordsOff)) {
-    const boundUids = new Set((Array.isArray(bindings?.linearSeqs) ? bindings.linearSeqs : []).map((sequence) => sequence?.uid));
+    const boundUids = new Set((Array.isArray(bindings?.linearSeqs) ? bindings.linearSeqs : []).map((/** @type {{ uid?: unknown }} */ sequence) => sequence?.uid));
     if (linearRecordsOff.some((uid) => !boundUids.has(uid))) {
       throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
     }

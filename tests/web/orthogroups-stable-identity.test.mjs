@@ -42,6 +42,7 @@ await copyModule('gbdraw/web/js/services/feature-identity.js', 'services/feature
 await copyModule('gbdraw/web/js/services/feature-catalog.js', 'services/feature-catalog.js');
 await copyModule('gbdraw/web/js/services/runtime-test-hooks.js', 'services/runtime-test-hooks.js');
 await copyModule('gbdraw/web/js/services/text-download.js', 'services/text-download.js');
+await copyModule('gbdraw/web/js/services/record-draw-selection.js', 'services/record-draw-selection.js');
 await copyModule('gbdraw/web/js/utils/clipboard.js', 'utils/clipboard.js');
 const standaloneSource = await readFile(
   join(repoRoot, 'gbdraw/web/js/services/standalone-interactivity.js'),
@@ -1918,4 +1919,14 @@ console.log('orthogroup stable identity tests passed');
     members: [{ recordKey: 'record-key-c', biologicalFeatureId: 'biological-c' }] })[0];
   assert.equal(member.nucleotideSequence, 'GGGG');
   assert.equal(member.aminoAcidSequence, 'MQ');
+}
+
+// Record selection: a member's record index is a position among the drawn
+// records, so an OFF record before it does not shift its record label.
+{
+  const offState = { ...state, recordsOff: ['uid-b'],
+    linearSeqs: state.linearSeqs.map((sequence, index) => ({ ...sequence, uid: `uid-${'abc'[index]}` })) };
+  const offEditor = createOrthogroupEditor({ state: withDrawings(offState) });
+  const grouped = offEditor.groupOrthogroupMembersByRecord([{ fileIdx: 1 }, { fileIdx: 0 }]);
+  assert.deepEqual(grouped.map((entry) => entry.recordLabel), ['record-a', 'record-c']);
 }

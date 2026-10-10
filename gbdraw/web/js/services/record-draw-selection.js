@@ -78,6 +78,25 @@ export const circularRecordsToDraw = (entries, recordsOff) => {
 };
 
 /**
+ * The request key of a Circular record drawn with others (a canvas or a
+ * batch): its file position, so it keeps its key while others go OFF.
+ * @param {number} sourceIndex 0-based position in the input file.
+ */
+export const circularRecordRequestKey = (sourceIndex) => `record-${sourceIndex + 1}`;
+
+/**
+ * The request record keys of a drawing's OFF records: a Linear card's uid, or
+ * a Circular record's `record-N`.
+ * @param {string} mode 'circular', or a Linear mode.
+ * @param {Iterable<unknown> | null | undefined} recordsOff
+ * @returns {string[]}
+ */
+export const offRecordRequestKeys = (mode, recordsOff) => [...offSet(recordsOff)]
+  .map((key) => (mode !== 'circular' ? key
+    : CIRCULAR_RECORD_KEY.test(key) ? circularRecordRequestKey(Number(key.slice(1)) - 1) : ''))
+  .filter(Boolean);
+
+/**
  * Whether a key has the shape of its mode's record key.
  * @param {'circular' | 'linear'} mode
  * @param {unknown} key

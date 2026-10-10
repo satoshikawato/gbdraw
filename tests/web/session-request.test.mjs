@@ -1014,6 +1014,42 @@ assert.equal(gridWithRetainedSingleSelector.renderRequest.grouping, 'grid');
 assert.equal(gridWithRetainedSingleSelector.renderRequest.records.length, 3);
 state.form.circular_record_selector = '';
 
+// Record selection (D-02, DESIGN 2.2): a canvas or batch draws the ON records
+// under stable keys, and grid positions name positions among them. These
+// requests stay out of the characterization below (Raw builder).
+{
+  state.recordsOff = ['#2'];
+  state.adv.multi_record_positions = [
+    { selector: '#1', row: 1 }, { selector: '#2', row: 1 }, { selector: '#3', row: 2 }
+  ];
+  const offGrid = buildCanonicalRenderRequestRaw({ state, filesData }).renderRequest;
+  assert.equal(offGrid.grouping, 'grid');
+  assert.deepEqual(offGrid.records.map((record) => record.recordKey), ['record-1', 'record-3']);
+  assert.deepEqual(offGrid.layout.multiRecordPositions, ['#1@1', '#2@2']);
+
+  state.form.multi_record_canvas = false;
+  state.recordsOff = ['#1', '#3'];
+  const oneOn = buildCanonicalRenderRequestRaw({ state, filesData }).renderRequest;
+  assert.equal(oneOn.grouping, 'batch', 'All records with one ON record stays a batch of one');
+  assert.deepEqual(oneOn.records.map((record) => [record.recordKey, record.region]), [['record-2', null]]);
+
+  // An explicit single choice draws its record, ON or OFF (P-2).
+  state.form.circular_record_selector = '#1';
+  const chosen = buildCanonicalRenderRequestRaw({ state, filesData }).renderRequest;
+  assert.equal(chosen.records.length, 1);
+  assert.deepEqual(chosen.records[0].selector, { kind: 'recordIndex', index: 0 });
+  state.form.circular_record_selector = '';
+
+  state.recordsOff = ['#1', '#2', '#3'];
+  assert.throws(
+    () => buildCanonicalRenderRequestRaw({ state, filesData }),
+    (error) => error.code === 'RECORD_SELECTION' && error.context?.reason === 'NONE_DRAWN'
+  );
+  state.recordsOff = [];
+  state.adv.multi_record_positions = [];
+  state.form.multi_record_canvas = true;
+}
+
 for (const schema of [3, 4]) {
   const branchOnlyCanonical = structuredClone(implicitBatchCanonical);
   branchOnlyCanonical.renderRequest.schema = schema;
