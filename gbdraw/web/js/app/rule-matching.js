@@ -187,9 +187,11 @@ export const createRulePreparation = ({
     featureColors: (drawing) => drawing.featureColorOverrides || {},
     featureVisibility: (drawing) => Object.values(drawing.featureOverrides || {})
       .map((row) => [row.recordKey, row.biologicalFeatureId, row.featureVisibility]),
-    // The visibility rules a request carries: a rerender drawn from older rules
-    // is not admitted and runs again (OV-330), as for the per-feature rows.
+    // The visibility rule fields a request carries (not the row ids, which a
+    // row without one gets anew on each read): a rerender drawn from older
+    // rules is not admitted and runs again (OV-330), as for the per-feature rows.
     visibilityRules: () => visibilityRules()
+      .map((rule) => [rule.recordId, rule.featureType, rule.qualifier, rule.value, rule.action])
   };
   const drawingInputs = Object.entries(drawingInputReaders).map(([key, read]) => (
     /** @type {[string, { value: string }]} */ ([key, computed(() => JSON.stringify(read(state.activeDrawing())))])
