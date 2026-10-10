@@ -49,7 +49,9 @@ write-up of a release.
 - Editing (web app): **Reset Settings** returns every Legend rename, including track
   rows such as `GC content`, to the default caption, and Undo of Reset restores the
   renames. A Legend rename onto a deleted row's caption opens the Legend Name Conflict
-  dialog; when both rows draw one feature type it offers (Restore the deleted row and merge into it, Keep current color and add a suffix, or Cancel). Rows of different types get the suffix or Cancel. A Legend row stroke follows the color Python gives the row's
+  dialog. When both rows draw one feature type it offers Restore the deleted row and merge
+  into it, Keep current color and add a suffix, or Cancel; rows of different types get
+  the suffix or Cancel. A Legend row stroke follows the color Python gives the row's
   features, so it stays after a Legend row color edit in either order (OV-288). Rule
   rows are addressed by Python's rows (OV-292, OV-294), and a palette row's Legend color
   is read from the color the row shows now, not from the last Generate (OV-282)
@@ -58,11 +60,11 @@ write-up of a release.
   reachable only from the browser console. Sessions with editor-added Legend rows still
   load and show them, and the popup reset dialog's "This only + add legend entry" is
   unchanged (#975).
-- Gallery: the BGC example draws gene arrows with Shaft Width Ratio 0.6 and lines up its
-  records on the neoU transporter group (og_6, choosing between two candidates in one
-  record), the majanivirus_orthogroup example aligns on a similarity group and reverses a
-  record to match, a tutorial step is corrected (OV-365), and the Gallery publication tools
-  are fixed. No Web behavior changes (#TBD Gallery).
+- Gallery: the aminoglycoside BGC example draws gene arrows with Shaft Width Ratio 0.6
+  and aligns the clusters on og_6 (neoU). Its tutorial shows the shaft setting and the
+  **Review alignment options…** dialog, Gallery tutorials place the LOSAT runtime controls
+  under Comparison › Settings, and the Gallery publication tools are
+  fixed. No Web behavior changes (#988).
 - Comparison (web app): **Generate Diagram** in Linear mode with pairs set to
   **Upload BLAST TSV** but without a file opens the **BLAST TSV missing** dialog
   instead of failing. It lists the pairs and offers **Choose BLAST TSV for
@@ -1409,7 +1411,7 @@ Retired names and their replacements are listed under
   unchanged (#961).
 - Colors (web app): a Default colors value that differs from the selected palette is a
   user color, as `-d` over `-p` on the command line. A palette switch asks before it discards user
-  colors (**Keep my N colors**, **Use the palette's colors**, or **Cancel**), and Default colors
+  colors (**Keep my N colors**, **Use the palette's colors**, or **Cancel**); Default colors
   **Reset** asks first (**Reset to the palette's colors** or **Cancel**), and **Apply to all "<type>"** on a palette Legend
   row sets the type's default color instead of one hash rule per feature (PD-OI-089,
   #963).
