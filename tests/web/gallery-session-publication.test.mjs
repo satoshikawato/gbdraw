@@ -348,6 +348,31 @@ const replayNumberSpelling = await compareCanonicalRenderRequests({
   normalizeReplayGeneratedResources: true
 });
 assert.equal(replayNumberSpelling.equivalent, true);
+// OV-413: rows the web app computed spell booleans `true`; the CLI replay
+// rewrites them through pandas as `True`.
+const booleanResource = (value) => ({
+  'comparison-table': {
+    kind: 'canonical-tsv',
+    encoding: 'base64',
+    data: Buffer.from(`query\tsubject\tquery_orthogroup_representative\nq\ts\t${value}\n`, 'utf8').toString('base64')
+  }
+});
+const replayBooleanSpelling = await compareCanonicalRenderRequests({
+  expectedRequest: comparisonTableRequest,
+  expectedResources: booleanResource('true'),
+  actualRequest: comparisonTableRequest,
+  actualResources: booleanResource('True'),
+  normalizeReplayGeneratedResources: true
+});
+assert.equal(replayBooleanSpelling.equivalent, true);
+const changedComparisonBoolean = await compareCanonicalRenderRequests({
+  expectedRequest: comparisonTableRequest,
+  expectedResources: booleanResource('true'),
+  actualRequest: comparisonTableRequest,
+  actualResources: booleanResource('False'),
+  normalizeReplayGeneratedResources: true
+});
+assert.equal(changedComparisonBoolean.equivalent, false);
 const changedComparisonValue = await compareCanonicalRenderRequests({
   expectedRequest: comparisonTableRequest,
   expectedResources: comparisonResource('q\ts\t1.12e-132'),
