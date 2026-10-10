@@ -486,12 +486,21 @@ journey('J4', 'Legend editing and History', 15, async ({ page, steps }) => {
       const index = await rowIndex('GC content');
       await evaluateWithRetainedPromise(page, (row) => window.__GBDRAW_APP__.deleteLegendEntry(row), index);
     }],
-    ['sort the rows Z to A', () => page.evaluate(() => window.__GBDRAW_APP__.sortLegendEntries('desc'))]
+    // Sort and Move are History steps through their buttons (the History input
+    // adapter, R11), so the journey clicks the control as a user does.
+    ['sort the rows Z to A', async () => {
+      const drawer = page.locator('.right-drawer');
+      if (!await drawer.isVisible()) await page.locator('.drawer-toggle').click();
+      await drawer.getByRole('button', { name: 'Legend', exact: true }).click();
+      await drawer.getByRole('button', { name: 'Sort Z-A', exact: true }).click();
+    }]
   ];
   for (const [name, edit] of edits) {
     await steps.step(name, async () => {
+      const before = (await historyDepth(page)).undo;
       await edit();
       await settleLive(page);
+      expect((await historyDepth(page)).undo, `${name}: a History step`).toBeGreaterThan(before);
       return { legend: await legendCaptions(page) };
     });
   }
