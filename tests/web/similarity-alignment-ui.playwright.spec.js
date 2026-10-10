@@ -1887,7 +1887,10 @@ test('minority reference, source strands and Reset scopes have truthful accessib
   await expect(combined).toBeDisabled(); await expect(positions).toBeEnabled();
   await expect(reset.locator('#alignment-reset-direction-reason')).toContainText('latest Align made no direction changes');
   await reset.getByRole('button', { name: 'Cancel', exact: true }).press('Enter');
-  await importSession(page, readFileSync('gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'), 'historical-receipt.json');
+  // A Session with an Align plan but no Reset receipt (PD-OI-028); the Gallery Session ships an empty one.
+  const historical = JSON.parse(readFileSync('gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json', 'utf8'));
+  historical.editorState.alignmentResetReceipt = null;
+  await importSession(page, Buffer.from(JSON.stringify(historical)), 'historical-receipt.json');
   if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) await page.locator('.drawer-toggle').click();
   await page.locator('.right-drawer').getByRole('button', { name: 'Similarity groups' }).click();
   await resetButton.click();
