@@ -60,10 +60,11 @@ write-up of a release.
   reachable only from the browser console. Sessions with editor-added Legend rows still
   load and show them, and the popup reset dialog's "This only + add legend entry" is
   unchanged (#975).
-- Gallery: the BGC example uses Shaft Width Ratio 0.6 and an og_6 alignment with neoU as
-  the reference, the majanivirus_orthogroup example aligns a reversed record, a tutorial
-  step is corrected (OV-365), and the Gallery publication tools are fixed (#TBD
-  Gallery).
+- Gallery: the BGC example draws gene arrows with Shaft Width Ratio 0.6 and lines up its
+  records on the neoU transporter group (og_6, choosing between two candidates in one
+  record), the majanivirus_orthogroup example aligns on a similarity group and reverses a
+  record to match, a tutorial step is corrected (OV-365), and the Gallery publication tools
+  are fixed. No Web behavior changes (#TBD Gallery).
 - Comparison (web app): **Generate Diagram** in Linear mode with pairs set to
   **Upload BLAST TSV** but without a file opens the **BLAST TSV missing** dialog
   instead of failing. It lists the pairs and offers **Choose BLAST TSV for
