@@ -5611,9 +5611,13 @@ export const createRunAnalysis = ({
     // The editor state the rerender draws from; an edit made from here on is
     // shown on its Results after they commit (OV-346).
     const drawnPaint = editorPaintState(/** @type {import('./result-paint-record.js').PaintStateSource} */ (state), drawing);
+    // A candidate whose rule inputs changed while it was prepared or drawn (an
+    // edit the Result shows live) is not admitted. No newer request replaces
+    // it, so the rerender it was asked for (a Legend relabel) runs again (OV-351).
+    const notAdmitted = () => ({ status: 'stale', rerun: isCurrent() });
     try {
       colorCandidate = await prepareAndAdmitCandidate(drawing, isCurrent);
-      if (!colorCandidate) return { status: 'stale' };
+      if (!colorCandidate) return notAdmitted();
       const candidateRules = colorCandidate.rules;
       const canonical = projectCommittedEditorIntent({
         committed,
@@ -5655,7 +5659,7 @@ export const createRunAnalysis = ({
         resultNames: committedResultNames
       });
       console.info(`gbdraw ${canonical.renderRequest.mode} typed request render: ${formatDuration(execution.elapsedMs)}.`);
-      if (execution.status === 'superseded' || !isCurrent()) return { status: 'stale' };
+      if (execution.status === 'superseded' || !isCurrent()) return notAdmitted();
       if (execution.status === 'engine-error') {
         logPostGbdrawTimings(timingEntries);
         const error = formatError(execution.engineError, 'generate', 'render');
@@ -5723,10 +5727,11 @@ export const createRunAnalysis = ({
           labelReflowLastError.value = liveEditFailure(formatError(error));
           return;
         }
-        await runLabelReflowCandidate(drawing, {
+        const outcome = await runLabelReflowCandidate(drawing, {
           decorationContinuity,
           requestId: activeReflowRequestId
         });
+        if (outcome.rerun && !processing.value && !state.sessionOperationAvailability?.()) pendingReflowRequestId += 1;
       }
       if (processing.value && activeReflowRequestId < pendingReflowRequestId) {
         reflowDeferredByProcessing = true;
