@@ -1641,9 +1641,9 @@ def test_final_svg_undefined_uses_negative_geometry_pool(mode, undefined, resolv
             continue
         x, y = map(float, re.search(r"M\s*([-+0-9.eE]+)[,\s]+([-+0-9.eE]+)", node.get("d")).groups())
         starts[node.get("data-gbdraw-feature-id")] = math.hypot(x, y) if mode == "circular" else y
-    from gbdraw.features.ids import compute_feature_hash
-    # The SVG carrier is not canonical source identity (notably raw strand 0).
-    values = [starts[compute_feature_hash(feature, record_id=record.id)] for feature in record.features]
+    from gbdraw.features.ids import compute_source_feature_hash
+    # The SVG carries the source feature hash, which reads raw strand 0 as unstranded.
+    values = [starts[compute_source_feature_hash(feature, record)] for feature in record.features]
     assert (abs(values[0] - values[1]) > 1) if resolve else (values[0] == pytest.approx(values[1]))
     assert (values[2] > values[0]) if mode == "circular" else (values[2] < values[0])
 

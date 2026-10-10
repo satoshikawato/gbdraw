@@ -102,6 +102,14 @@ reverse-complemented record. It is the positive fixture for the reader that
 moves such targets onto source identities (Session 46). The steps, inputs,
 and hashes are in `selected-feature-annotations.provenance.json`.
 
+`hash-color-rule-linear-rc.v30.gbdraw-session.json.gz` is a Web **Save
+Session** download from release tag `0.13.0` (Session 30), compressed with
+`gzip -n -9`. Its one "This feature only" color rule names a CDS of a
+reverse-complemented Linear record by its rendered ID, the hash of the drawn
+feature with `_record_2`. It is the positive fixture for the reader that names
+such `hash` rules by source hash. The steps, inputs, and hashes are in
+`hash-color-rule-linear-rc.provenance.json`.
+
 `lambda_basic_linear.v44-schema8.gbdraw-session.json.gz` and
 `HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz` preserve the released
 version 44, request schema 8, feature catalog schema 4 Gallery Sessions from

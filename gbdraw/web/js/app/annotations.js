@@ -77,11 +77,11 @@ export const createAnnotationEditor = ({
     const feature = catalogFeature(item?.target);
     return feature ? getFeatureCaption(feature) : `${item?.target?.biologicalFeatureId} (not in the current diagram)`;
   };
-  // Design Q4 6.4: the drawn record position and drawn hash of a selected
-  // feature (catalog 3 and 4 features carry the drawn hash in their rendered ID).
+  // Design Q4 6.4: the drawn record position and the feature hash of a
+  // selected feature, which a `hash` selector matches (OV-401).
   const drawnPlacement = (target) => {
     const feature = catalogFeature(target, { drawnOnly: true });
-    const hash = feature ? feature.drawnSelector?.hash || getFeatureColorRuleHash(feature) : '';
+    const hash = feature ? getFeatureColorRuleHash(feature) : '';
     const recordIndex = Number(feature?.record_idx);
     return hash && Number.isSafeInteger(recordIndex) && recordIndex >= 0 ? { recordIndex, hash } : null;
   };
@@ -237,7 +237,7 @@ export const createAnnotationEditor = ({
     );
     downloadTextFile('annotations.tsv', text);
     const notice = [
-      placed > 0 ? `${placed} annotation(s) of selected features were written as record=#<position> and feature_selector=hash=<drawn hash>. They name the same features only while the crop, orientation, and record order stay as drawn.` : '',
+      placed > 0 ? `${placed} annotation(s) of selected features were written as record=#<position> and feature_selector=hash=<feature hash>. They name the same features only while the record order stays as drawn.` : '',
       skipped > 0 ? `${skipped} annotation(s) of selected features that the current diagram does not draw were not exported.` : ''
     ].filter(Boolean).join(' ');
     if (notice) window.alert(notice);

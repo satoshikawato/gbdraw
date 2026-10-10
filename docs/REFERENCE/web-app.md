@@ -900,9 +900,9 @@ the rule, and the generated `rRNA` row stays a legend-only row. **Apply to all l
 one anchored qualifier rule only when the selected features share one feature
 type, qualifier, and value and that rule matches exactly the intended loaded
 features. Otherwise the editor keeps one exact `hash` rule per biological
-feature, also when two records share a record ID. On a cropped or
-reverse-complemented Linear record that hash names the drawn feature, so the
-rule stops matching when the region or orientation changes. Identical duplicate records can
+feature, also when two records share a record ID. The hash is the feature's
+hash in its source record, so the rule keeps matching the feature when the
+region or orientation of its Linear record changes. Identical duplicate records can
 share the same hash, so a regenerated diagram cannot preserve a one-instance-only
 rule for indistinguishable duplicates: a **This feature only** color then
 applies to both copies. A one-feature rule uses a qualifier value only when no other
@@ -967,7 +967,8 @@ drawing another record keeps it in the draft without drawing it. Loading a Sessi
 annotation into such an annotation only when two conditions hold. Its record
 must be drawn without a crop, reverse complement, or rotation, and the hash must
 name one feature. The figure does not change. The load reports how many
-annotations it turned; the others keep naming the drawn hash
+annotations it turned; the others keep their `hash=` target, which names a
+feature by its source-record hash
 ([compatibility](session-and-request-compatibility.md)).
 
 **Export Feature Edits TSV** in the Features list writes the feature edits for

@@ -335,6 +335,42 @@ test('a Session 44 with crop and reverse complement keeps its feature edits', as
   expect((await drawn(page, [trna.svgId]))[trna.svgId].labels).toEqual(['PROBE_A_TRNA']);
 });
 
+// The fills of a feature's drawn blocks in the selected Result.
+const fills = (page, svgId) => page.evaluate((id) => {
+  const app = window.__GBDRAW_APP__;
+  const root = new DOMParser().parseFromString(app.results[app.selectedResultIndex].content, 'image/svg+xml')
+    .documentElement;
+  return [...new Set([...root.querySelectorAll(`path[data-gbdraw-feature-id="${CSS.escape(id)}"]`)]
+    .filter((element) => element.getAttribute('data-gbdraw-feature-part') !== 'connector')
+    .map((element) => element.getAttribute('fill')))];
+}, svgId);
+
+// OV-401, release D-39: a Session 44 or older matched a hash color rule against
+// the drawn feature; hash= names the source hash now. Load names each rule on a
+// reverse-complemented record by the source hash of the feature drawn with its
+// hash, so Generate colors the same feature. Release 0.13.0 wrote the rendered
+// ID (hash-color-rule-linear-rc.provenance.json, OV-416); main wrote the
+// drawn hash (feature-edits.provenance.json).
+for (const { session, rule, identity, color } of [
+  { session: 'hash-color-rule-linear-rc.v30.gbdraw-session.json.gz', rule: 'fbc76b20f', identity: 'fbc76b20f', color: '#ff0000' },
+  { session: 'feature-edits-crop-rc.v44.gbdraw-session.json.gz', rule: 'fcecf4036', identity: 'fcecf4036', color: '#c83366' }
+]) {
+  test(`a hash color rule of ${session} colors its feature on a reverse-complemented record`, async ({ page }) => {
+    test.setTimeout(300_000);
+    await openFresh(page);
+    await loadSession(page, `tests/fixtures/sessions/${session}`);
+    const rules = await page.evaluate(async () => {
+      const { state } = await import('/gbdraw/web/js/state.js');
+      return state.activeDrawing().manualSpecificRules.filter((item) => item.qual === 'hash').map((item) => item.val);
+    });
+    expect(rules).toEqual([rule]);
+    await generateAndWaitForResult(page);
+    await settle(page);
+    const feature = (await catalog(page)).find((item) => item.identity === identity);
+    expect(await fills(page, feature.svgId)).toEqual([color]);
+  });
+}
+
 test('a Session 33 without a feature catalog keeps its feature edits', async ({ page }) => {
   test.setTimeout(300_000);
   await openFresh(page);

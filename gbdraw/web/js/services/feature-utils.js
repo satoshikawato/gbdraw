@@ -93,14 +93,24 @@ export const getFeatureHashCandidates = (feature) => {
   return [...new Set([generationId, renderedId].filter(Boolean))];
 };
 
-// The hash Python's color-rule `hash` qualifier matches (`compute_feature_hash`):
-// no record or instance suffix, so duplicates of one record share it (PD-OI-069).
-export const getFeatureColorRuleHash = (feature) => (
+// The hash in a feature's rendered ID: no record or instance suffix. A feature
+// catalog before the one feature-hash builder (OV-401) drew a cropped or
+// reverse-complemented record with its drawn location's hash here.
+export const getRenderedFeatureHash = (feature) => (
   !feature || typeof feature !== 'object'
     ? ''
     : renderedFeatureId(feature)
       .replace(RENDERED_INSTANCE_SUFFIX, '')
       .replace(LINEAR_RENDERED_RECORD_SUFFIX, '')
+);
+
+// The hash Python's `hash` rule qualifier matches (`get_feature_hash`): the
+// feature's source-record hash, which duplicates of one record share
+// (PD-OI-069), whatever crop or orientation its record is drawn with.
+export const getFeatureColorRuleHash = (feature) => (
+  !feature || typeof feature !== 'object'
+    ? ''
+    : firstFeatureText(feature.selector?.hash) || getRenderedFeatureHash(feature)
 );
 
 const directFeatureValue = (feature, ...keys) => {

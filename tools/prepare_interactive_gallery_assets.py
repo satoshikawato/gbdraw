@@ -190,6 +190,30 @@ BGC_COMMAND = (
     "-l bottom -o BGC0000708-BGC0000713"
 )
 
+MAJANIVIRUS_COMMAND = (
+    "gbdraw linear --separate_strands --losat_threads 32 --losat losatp "
+    "--losatp_mode similarity_groups --definition_font_size 18 --block_stroke_width 1 "
+    "--line_stroke_width 2 --legend_box_size 18 --legend_font_size 18 "
+    "-d modified_default_colors.tsv -t majani_custom_color_table.tsv --align_center "
+    "--bitscore 100 --evalue 1e-3 --identity 20 --hide_length -f interactive_svg "
+    "--pairwise_match_style curve --keep_definition_left_aligned --comparison_height 25 "
+    "--record_label 'Marsupenaeus japonicus endogenous nimavirus' "
+    "--record_label 'Melicertus latisulcatus majanivirus' "
+    "--record_label 'Penaeus monodon majanivirus A' "
+    "--record_label 'Penaeus semisulcatus majanivirus' "
+    "--record_label 'Penaeus monodon majanivirus B' "
+    "--record_label 'Litopenaeus vannamei majanivirus' "
+    "--record_label 'Trachysalambria curvirostris majanivirus' "
+    "--record_label 'Metapenaeus ensis majanivirus' "
+    "--record_label 'Metapenaeus joyneri majanivirus' "
+    "--gbk MjeNMV.gb MelaMJNV.gb PemoMJNVA.gb PeseMJNV.gb PemoMJNVB.gb LvMJNV.gb "
+    "TrcuMJNV.gb MeenMJNV.gb MejoMJNV.gb "
+    "--reverse_complement 0 --reverse_complement 0 --reverse_complement 0 "
+    "--reverse_complement 0 --reverse_complement 0 --reverse_complement 1 "
+    "--reverse_complement 0 --reverse_complement 0 --reverse_complement 0 "
+    "-o majanivirus_orthogroup"
+)
+
 VNIG_COMMAND = (
     "gbdraw circular -o Vnig_TUMSAT-TG-2018 --separate_strands "
     "-k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p orchid --track_type tuckin -l left "
@@ -422,15 +446,17 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         description=(
             "Nine majanivirus genomes from penaeid shrimp, one per row, linked by LOSATP similarity "
             "groups at 20% identity or more. A color table marks WSSV-like proteins, BIRP, and "
-            "tyrosine recombinase by product name. The first five genomes share dense, "
-            "high-identity links, while links further down are paler and sparser; the links show "
-            "protein similarity, not orthology."
+            "tyrosine recombinase by product name. The Litopenaeus vannamei majanivirus genome "
+            "is shown reverse-complemented, so its synteny with the other genomes reads left to "
+            "right. The first five genomes share dense, high-identity links, while links further "
+            "down are paler and sparser; the links show protein similarity, not orthology."
         ),
         workflow="Compare many genomes by protein similarity",
         input_summary="9 GenBank + 2 color TSV files",
         display_order=90,
         command_kind="runnable",
         command_note="Download the nine accession-pinned records and both repository-managed color tables from Files.",
+        command=MAJANIVIRUS_COMMAND,
         compressed_session=True,
         source_note=GZIP_SESSION_SOURCE_NOTE,
     ),

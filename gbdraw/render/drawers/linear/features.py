@@ -8,7 +8,7 @@ from typing import Optional
 from gbdraw.svg.elements import Group, Path
 
 from ....configurators import FeatureDrawingConfigurator
-from ....features.ids import compute_feature_object_hash, make_linear_rendered_feature_id
+from ....features.ids import make_linear_rendered_feature_id
 from ....layout.linear import LinearFeatureLaneGeometry
 from ....svg.arrows import ArrowHeadLengthRatio
 from ....svg.ids import instance_svg_id
@@ -43,7 +43,7 @@ class FeatureDrawer:
 
     @staticmethod
     def get_feature_data_id(feature_object) -> Optional[str]:
-        return compute_feature_object_hash(feature_object)
+        return feature_object.feature_hash
 
     def draw_path(
         self,

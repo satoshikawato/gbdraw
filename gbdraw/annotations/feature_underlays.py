@@ -9,10 +9,7 @@ from typing import Any
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.exceptions import ValidationError
-from gbdraw.features.ids import (
-    compute_feature_object_hash,
-    make_linear_rendered_feature_id,
-)
+from gbdraw.features.ids import make_linear_rendered_feature_id
 from gbdraw.features.objects import FeatureObject
 from gbdraw.svg.ids import instance_svg_id
 
@@ -85,7 +82,7 @@ def merge_feature_underlays(
         record_index = int(indices[local_index])
         record_length = len(record.seq)
         stable_ids = [
-            compute_feature_object_hash(feature) or str(feature.feature_id)
+            feature.feature_hash or str(feature.feature_id)
             for feature in features
         ]
         stable_id_counts = Counter(stable_ids)

@@ -10,7 +10,9 @@ import {
   migrateRenderedIdFeatureEdits,
   migrateSessionAnnotationTargets,
   migrateSessionFeatureEdits,
-  migrateSessionFeaturePlacements
+  migrateSessionFeaturePlacements,
+  migrateSessionHashRules,
+  sourceHashSelectorValue
 } from '../../gbdraw/web/js/services/feature-edit-migration.js';
 import { canonicalFeatureOverrides } from '../../gbdraw/web/js/services/feature-placement.js';
 import { annotationOptionsPayload, normalizeAnnotationSets } from '../../gbdraw/web/js/services/annotation-state.js';
@@ -350,23 +352,24 @@ test('Session 41-44 placement drafts migrate to the vector both readers share', 
   assert.deepEqual(migrateSessionFeaturePlacements(structuredClone(vector.input)), vector.expected);
 });
 
-// The same vectors pin the Python reader (tests/test_session_compat.py), which
-// the CLI uses when it replays a Session 44 with --session_output.
-test('rendered-ID feature edits migrate to the vectors both readers share', () => {
-  const { cases } = JSON.parse(readFileSync(new URL('../fixtures/feature-edit-migration-vectors.json', import.meta.url), 'utf8'));
-  for (const { name, input, expected } of cases) {
-    const { features, droppedCount, narrowedVisibilityCount } = migrateSessionFeatureEdits(structuredClone(input));
-    assert.deepEqual({ features, droppedCount, narrowedVisibilityCount }, expected, name);
+// The same vectors pin the Python readers (tests/test_session_compat.py): the
+// one mapper that the Session draft and the CLI replay of a request read with,
+// and the draft reader of Sessions 44 and older (S6, release D-39).
+const hashRuleVectors = JSON.parse(readFileSync(new URL('../fixtures/hash-rule-migration-vectors.json', import.meta.url), 'utf8'));
+
+test('hash selector values read the vectors both mappers share', () => {
+  const drawn = hashRuleVectors.drawnFeatures.map(([sourceHash, drawnHash, sourceIndex, recordOrdinal]) => (
+    { sourceHash, drawnHash, sourceIndex, recordOrdinal }
+  ));
+  for (const { name, value, expected } of hashRuleVectors.selectorCases) {
+    assert.deepEqual(sourceHashSelectorValue(value, drawn), expected, name);
   }
 });
 
-// The same vectors pin the Python reader (tests/test_session_compat.py), which
-// the CLI uses when it replays a Session 40-44 with --session_output.
-test('hash annotation targets migrate to the vectors both readers share', () => {
-  const { cases } = JSON.parse(readFileSync(new URL('../fixtures/annotation-target-migration-vectors.json', import.meta.url), 'utf8'));
-  for (const { name, input, expected } of cases) {
-    const result = migrateSessionAnnotationTargets(structuredClone(input));
-    // As saved: a target field the saved target did not have is absent.
-    assert.deepEqual(JSON.parse(JSON.stringify(result)), expected, name);
+test('hash color rules migrate to the vectors both readers share', () => {
+  for (const { name, input, expected } of hashRuleVectors.cases) {
+    const saved = structuredClone(input);
+    assert.deepEqual(migrateSessionHashRules(saved), expected, name);
+    assert.deepEqual(saved, input, name);
   }
 });

@@ -40,7 +40,7 @@ from gbdraw.api.requests import (
     RecordInput,
 )
 from gbdraw.features.overrides import FeatureOverride, bind_feature_overrides
-from gbdraw.features.selector_values import get_feature_hash
+from gbdraw.features.ids import compute_feature_hash
 from gbdraw.features.source import FeatureIdentity, IdentityBinding, resolve_feature_identities
 from gbdraw.io.regions import parse_region_spec
 
@@ -77,6 +77,13 @@ def _source_id(plan, record_index: int, feature_type: str, start: int) -> str:
 
 
 def _drawn_id(plan, record_index: int, biological_feature_id: str) -> str:
+    """The `data-gbdraw-feature-id` of a feature: its source hash (OV-401)."""
+    del plan, record_index
+    return biological_feature_id.split("~")[0]
+
+
+def _drawn_location_hash(plan, record_index: int, biological_feature_id: str) -> str:
+    """The hash of the location a feature is drawn at in its cropped record."""
     identity = FeatureIdentity(plan.provenance[record_index].record_key, biological_feature_id)
     binding = resolve_feature_identities(
         records=plan.records,
@@ -84,7 +91,7 @@ def _drawn_id(plan, record_index: int, biological_feature_id: str) -> str:
         source_catalogs=tuple(item.source_feature_catalog for item in plan.provenance),
         identities=(identity,),
     )[identity]
-    return get_feature_hash(binding.feature, plan.records[record_index].id)
+    return compute_feature_hash(binding.feature, plan.records[record_index].id)
 
 
 def _drawn(svg: str) -> set[tuple[str, int]]:
@@ -108,7 +115,7 @@ def test_feature_off_hides_its_feature_and_not_the_one_drawn_at_its_source_coord
     base = plan_request(_linear(_collide()))
     x, y = _source_id(base, 0, "misc_feature", 2401), _source_id(base, 0, "misc_feature", 2601)
     # The collision this identity avoids: Y is drawn where X was in the source.
-    assert _drawn_id(base, 0, y) == x.split("~")[0]
+    assert _drawn_location_hash(base, 0, y) == x.split("~")[0]
     request = _linear(_collide(), feature_overrides=(FeatureOverride("k", x, feature_visibility="off"),))
     drawn = _drawn(_svg(request))
     assert (_drawn_id(base, 0, x), 0) not in drawn
@@ -580,9 +587,9 @@ def test_collide_fixture_layout_is_as_documented():
 
 def test_session_catalog_of_cropped_same_coordinate_features_beside_another_record(tmp_path):
     """A Linear record drawn beside another record names a feature
-    `<drawn hash>_record_<n>`, and two features at the same coordinates add
-    `__instance_<source index>_<digest>` after that. Cropping the record changes
-    the drawn hash, so the catalog must read it under both suffixes."""
+    `<source hash>_record_<n>`, and two features at the same coordinates add
+    `__instance_<source index>_<digest>` after that. A cropped record keeps
+    the source hash, so the catalog reads it under both suffixes."""
     from gbdraw.linear import linear_main
 
     testa, testb = (
@@ -606,5 +613,4 @@ def test_session_catalog_of_cropped_same_coordinate_features_beside_another_reco
         if "__instance_" in feature["svgId"]
     )
     assert [biological_id for _, biological_id in twins] == ["f3ccacda4~1", "f3ccacda4~2"]
-    assert all(re.fullmatch(r"f[0-9a-f]{8}_record_1__instance_[12]_[0-9a-f]{16}", svg_id) for svg_id, _ in twins)
-    assert twins[0][0].split("_")[0] != "f3ccacda4"
+    assert all(re.fullmatch(r"f3ccacda4_record_1__instance_[12]_[0-9a-f]{16}", svg_id) for svg_id, _ in twins)

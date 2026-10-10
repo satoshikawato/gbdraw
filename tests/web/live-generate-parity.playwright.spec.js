@@ -1026,7 +1026,20 @@ test('a stroke and a palette change reach a Session 30 Result loaded without a f
     .map(([id, { fill }]) => [id, fill]));
   const live = await featureFills();
   await generate(page);
-  expect(live, 'each feature is filled as Generate fills it').toEqual(await featureFills());
+  // OV-401: Generate writes the source-record hash into the IDs of the
+  // reverse-complemented record 5, where the loaded 0.13.0 Result keeps the
+  // drawn hash it was saved with. Each loaded ID is read as the ID Generate
+  // gives the same feature: the catalog row's ID with its drawn hash.
+  const generatedIds = await page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    return Object.fromEntries((state.featureCatalog.value?.items || []).flatMap((item) => item.features)
+      .filter((row) => row.drawnSelector?.hash)
+      .map((row) => [
+        row.svgId.replace(row.biologicalFeatureId.replace(/~\d+$/, ''), row.drawnSelector.hash), row.svgId
+      ]));
+  });
+  expect(Object.fromEntries(Object.entries(live).map(([id, fill]) => [generatedIds[id] ?? id, fill])),
+    'each feature is filled as Generate fills it').toEqual(await featureFills());
 });
 
 // Load Feature Edits TSV with one row per [locus_tag, label_visibility,

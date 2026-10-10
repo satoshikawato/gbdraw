@@ -25,7 +25,6 @@ INTERACTIVE_MATCH_GLOW_FILTER_ID = "gbdraw-interactive-feature-match-glow"
 _FEATURE_ELEMENT_SUFFIX_RE = re.compile(r"__(?:part|line)\d+$")
 _FEATURE_CONNECTOR_SUFFIX_RE = re.compile(r"__line\d+$")
 _FEATURE_RECORD_SUFFIX_RE = re.compile(r"_record_(\d+)$")
-_FEATURE_INSTANCE_SUFFIX_RE = re.compile(r"__instance_.+_[0-9a-f]{16}$")
 _NONNEGATIVE_INTEGER_RE = re.compile(r"\d+")
 _FEATURE_RECORD_INDEX_KEYS = (
     "record_idx",
@@ -598,30 +597,12 @@ def _collect_rendered_features(root: ET.Element) -> dict[str, _RenderedFeatureEn
     return entries
 
 
-def _rendered_space_stable_id_candidates(rendered_id: str) -> set[str]:
-    """Return stable-looking bases encoded by one rendered-space handle.
-
-    A handle is ``<hash>[_record_<n>][__instance_<s>_<digest>]``
-    (``gbdraw/svg/ids.py``), so the record suffix may precede the instance one.
-    """
-
-    base = _FEATURE_RECORD_SUFFIX_RE.sub("", _normalize_feature_id(rendered_id))
-    instance_base = _FEATURE_INSTANCE_SUFFIX_RE.sub("", base)
-    return {
-        value
-        for value in (base, instance_base, _FEATURE_RECORD_SUFFIX_RE.sub("", instance_base))
-        if value
-    }
-
-
 def _rendered_entry_agrees_with_identity(
     entry: _RenderedFeatureEntry,
     *,
-    rendered_id: str,
     record_index: int | None,
     stable_id: str,
     source_index: int | None = None,
-    allow_rendered_space_stable_id: bool = False,
 ) -> bool:
     if (
         record_index is not None
@@ -633,11 +614,6 @@ def _rendered_entry_agrees_with_identity(
         stable_id
         and entry.stable_id_supplied
         and entry.stable_id != stable_id
-        and not (
-            allow_rendered_space_stable_id
-            and entry.stable_id
-            in _rendered_space_stable_id_candidates(rendered_id)
-        )
     ):
         return False
     return not (
@@ -1024,11 +1000,9 @@ def _resolve_rendered_features(
         mapped_entry = rendered.get(mapped_svg_id)
         if mapped_entry is not None and not _rendered_entry_agrees_with_identity(
             mapped_entry,
-            rendered_id=mapped_svg_id,
             record_index=record_index,
             stable_id=stable_feature_id,
             source_index=feature_index,
-            allow_rendered_space_stable_id=True,
         ):
             raise GbdrawError(
                 f"Feature metadata identity does not agree with rendered SVG ID "
@@ -1549,7 +1523,6 @@ def _validate_catalog_feature_bindings(
     for rendered_id, (record_index, stable_id, source_index) in catalog_features.items():
         if not _rendered_entry_agrees_with_identity(
             rendered_entries[rendered_id],
-            rendered_id=rendered_id,
             record_index=record_index,
             stable_id=stable_id,
             source_index=source_index,

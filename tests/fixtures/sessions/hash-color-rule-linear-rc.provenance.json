@@ -1,0 +1,27 @@
+{
+  "purpose": "Positive fixture for the reader that names the hash= rules of a Session 44 or older by source hash (S6 of the one feature-hash builder, release D-39): a \"This feature only\" color rule that release 0.13.0 wrote with the rendered ID of a feature on a reverse-complemented Linear record.",
+  "history": "release tag 0.13.0",
+  "writer": "gbdraw/web/js/services/config.js Save Session (Web) of tag 0.13.0, the JSON kept unchanged and compressed with gzip -n -9",
+  "checkout": "git worktree add --detach <dir> 0.13.0 (outside the repository); python tools/prepare_browser_wheel.py in <dir>; served with python3 -m http.server <port> --bind 127.0.0.1 --directory <dir>/gbdraw/web; driven by Python Playwright",
+  "tools": {
+    "node": "v26.8.2",
+    "playwright": "1.61.0 (Python)",
+    "python": "3.13.3"
+  },
+  "sessions": {
+    "hash-color-rule-linear-rc.v30.gbdraw-session.json.gz": {
+      "sourceCommit": "8be9e3a5a2e1bc4cd983b502716ae44330396f28",
+      "wheel": "gbdraw-0.13.0-py3-none-any.whl",
+      "sessionVersion": 30,
+      "records": "record-1.gb (TESTA, sha256 8d54df8222322dbda83396359bb3bff291334cd72420c2899b3e8f448d689f3b) and record-2.gb (TESTB, sha256 d44e9566f033fbc07f42aa3b94a26c301354f7e5225f0e2a87370c6913f4a962), the two records of selected-feature-annotations.v44.gbdraw-session.json.gz",
+      "steps": [
+        "Linear; Add Seq; record 1 = record-1.gb, record 2 = record-2.gb; record 2 Reverse complement; Generate Diagram",
+        "Click TESTB CDS 2001..2300 (TESTB_0006, drawn as f2869b912_record_2); fill color #ff0000; This feature only",
+        "Save Session"
+      ],
+      "rule": "config.rules: {feat: CDS, qual: hash, val: f2869b912_record_2, color: #ff0000}. The value is the rendered ID: the hash of the reverse-complemented feature with the record suffix. The source hash of TESTB_0006 is fbc76b20f.",
+      "sha256": "4b0beb402e47f88a3338b1c7334a6519aa4b9444c7ca6d27cf2f5a5b417d13e3",
+      "decompressedSha256": "d3897b97b01dae5211bfec5c547165197d95613c738f2c6c9db9f355814e6508"
+    }
+  }
+}

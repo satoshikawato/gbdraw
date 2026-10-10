@@ -66,6 +66,8 @@ from gbdraw.session_io import (
     migrate_persisted_web_state_field_names,
     migrate_session_annotation_targets,
     migrate_session_feature_edits,
+    migrate_session_hash_rules,
+    source_hash_selector_value,
 )
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 
@@ -1913,9 +1915,134 @@ def test_session_44_hash_annotation_targets_move_in_the_cli_sidecar(
         for record in caplog.records
         if record.name == session_migration.__name__
     ] == [
+        # feature_3 names TESTB_0006 by its source hash, which main wrote: it
+        # matches that feature now, without a reader or a warning.
         "INFO: 1 annotation(s) from Session version 44 named a feature by hash=; "
-        "in the written Session each names that feature by its source."
+        "in the written Session each names that feature by its source.",
     ]
+
+
+_HASH_RULE_VECTORS = json.loads(
+    (Path(__file__).parent / "fixtures" / "hash-rule-migration-vectors.json").read_text(encoding="utf-8")
+)
+
+
+@pytest.mark.parametrize(
+    "case",
+    _HASH_RULE_VECTORS["selectorCases"],
+    ids=[case["name"] for case in _HASH_RULE_VECTORS["selectorCases"]],
+)
+def test_hash_selector_values_read_the_vectors_shared_with_the_web_reader(case: dict[str, Any]) -> None:
+    # One mapper serves the Session draft and the CLI replay of a request;
+    # tests/web/feature-edit-migration.test.mjs checks sourceHashSelectorValue.
+    drawn = [tuple(feature) for feature in _HASH_RULE_VECTORS["drawnFeatures"]]
+
+    value, source_count = source_hash_selector_value(case["value"], drawn)
+
+    assert {"value": value, "sourceCount": source_count} == case["expected"]
+
+
+@pytest.mark.parametrize(
+    "case", _HASH_RULE_VECTORS["cases"], ids=[case["name"] for case in _HASH_RULE_VECTORS["cases"]]
+)
+def test_hash_rules_migrate_to_the_vectors_shared_with_the_web_reader(case: dict[str, Any]) -> None:
+    # tests/web/feature-edit-migration.test.mjs checks the same vectors against
+    # migrateSessionHashRules.
+    source = json.loads(json.dumps(case["input"]))
+
+    migration = migrate_session_hash_rules(
+        source["rules"],
+        mode=source["mode"],
+        catalog=source["catalog"],
+        legacy=source.get("legacy"),
+        records=source["records"],
+    )
+
+    assert {"rules": migration.rules, "unmappedCount": migration.unmapped_count} == case["expected"]
+    assert source == case["input"]
+
+
+_UNMAPPED_HASH_WARNING = (
+    "WARNING: {count} hash= value(s) from Session version {version} could not be renamed "
+    "to the hash of a feature in its source record: the saved diagram drew a "
+    "cropped or reverse-complemented record, and the value names features of "
+    "several source hashes there, or the sources were not read again. hash= now "
+    "names a feature by its hash in the source record, so each may now match "
+    "another feature or none."
+)
+
+
+def test_session_44_drawn_hash_color_rule_replays_on_its_reverse_complemented_feature(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    # main matched hash= in the drawn record, so its color table names the
+    # reverse-complemented misc_feature of TESTB by its drawn hash ffb26b768
+    # (feature-edits.provenance.json). hash= names the source hash now, so the
+    # replay reads that row in the source frame (S6, release D-39).
+    fixture = Path(__file__).parent / "fixtures" / "sessions" / "feature-edits-crop-rc.v44.gbdraw-session.json.gz"
+    caplog.set_level("INFO")
+
+    linear_main(["--session", str(fixture), "--output", str(tmp_path / "replay"), "--format", "svg"])
+
+    svg = (tmp_path / "replay.svg").read_text(encoding="utf-8")
+    fills = re.findall(r'<path [^>]*data-gbdraw-feature-id="fcecf4036_record_2"[^>]*fill="([^"]+)"', svg)
+    assert fills and set(fills) == {"#c83366"}
+    # Its Feature visibility rows name source hashes, which main wrote: they
+    # match those features now, without a reader or a warning.
+    assert not [message for message in caplog.messages if "could not be renamed" in message]
+
+
+def test_session_44_request_tables_name_drawn_hash_rows_by_source_hash(tmp_path: Path) -> None:
+    # main filled the color table from the specific color rules (drawn hash
+    # ffb26b768) and the label override table from the label text edit of the
+    # reverse-complemented tRNA, which has no unique qualifier (rendered ID
+    # f64320c02_record_2); its Feature visibility table names source hashes
+    # (feature-edits.provenance.json). The replay renames only the drawn ones.
+    fixture = Path(__file__).parent / "fixtures" / "sessions" / "feature-edits-crop-rc.v44.gbdraw-session.json.gz"
+    document = load_session_document(fixture)
+
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        request = session_to_request(materialized)
+        adapted = adapt_session_request(request, session_drawing_artifacts(document))
+        options = adapted.request.options
+
+    def hash_rows(frame: Any, qualifier: str) -> list[str]:
+        assert frame is not None
+        return list(frame.loc[frame[qualifier] == "hash", "value"])
+
+    assert options.colors is not None
+    assert hash_rows(options.colors.color_table, "qualifier_key") == ["fcecf4036"]
+    assert hash_rows(options.label_override_table, "qualifier") == ["^f88047061$"]
+    assert hash_rows(options.feature_visibility_table, "qualifier") == ["^fb5977f81$", "^f88047061$"]
+    assert adapted.migration_report.warnings == ()
+
+
+def test_session_30_rendered_id_color_rule_is_reported_in_the_cli_sidecar(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    # Release 0.13.0 wrote a "This feature only" color rule with the rendered
+    # ID of the reverse-complemented TESTB_0006 (f2869b912_record_2,
+    # hash-color-rule-linear-rc.provenance.json). Web Load reads the sources
+    # again and names it by its source hash fbc76b20f (OV-416). The CLI does not
+    # read the sources of a Session before 31 again, so the written Session
+    # keeps the rule as saved and the replay reports it.
+    fixture = Path(__file__).parent / "fixtures" / "sessions" / "hash-color-rule-linear-rc.v30.gbdraw-session.json.gz"
+    source = json.loads(gzip.decompress(fixture.read_bytes()))
+    sidecar = tmp_path / "replay.gbdraw-session.json"
+    caplog.set_level("INFO")
+
+    linear_main(
+        [
+            "--session", str(fixture),
+            "--output", str(tmp_path / "replay"),
+            "--format", "svg",
+            "--session_output", str(sidecar),
+        ]
+    )
+
+    saved = load_session_document(sidecar).to_dict()
+    assert saved["modes"]["linear"]["config"]["rules"] == source["config"]["rules"]
+    assert _UNMAPPED_HASH_WARNING.format(count=1, version=30) in caplog.messages
 
 
 def test_cli_resave_keeps_an_empty_label_text_and_draws_no_label(tmp_path: Path) -> None:

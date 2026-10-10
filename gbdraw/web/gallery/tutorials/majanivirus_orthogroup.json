@@ -100,7 +100,7 @@
     },
     {
       "title": "Upload the nine GenBank files and labels",
-      "body": "Keep the records and Organism / strain labels in the same order as the Gallery command so adjacent comparison tracks and labels match the published example.",
+      "body": "Keep the records and Organism / strain labels in the same order as the Gallery command so adjacent comparison tracks and labels match the published example. For LvMJNV.gb (row 6), also check Reverse complement in its Record options, so its synteny with the other genomes reads left to right.",
       "table": {
         "columns": ["Order", "GenBank file", "Organism / strain"],
         "rows": [

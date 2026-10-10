@@ -68,9 +68,39 @@ the features they name:
   without a crop, reverse complement, or rotation and the hash names exactly
   one feature of the saved catalog, in that record. The Web app reports how
   many moved, and every other target loads unchanged.
+- Since 0.14.0, `hash=` names a feature by its hash in its source record.
+  Sessions up to 44 matched it against the drawn feature. On a cropped or
+  reverse-complemented record, their Web app wrote drawn hashes in two places:
+  the `hash` specific color rules of **This feature only** (release 0.13.0 wrote
+  the rendered ID, with its `_record_<n>` suffix), which the request's color
+  table repeats, and the `hash` rows of the request's label override table,
+  which name a label text edit of a feature without a unique qualifier by its
+  rendered ID.
+  - Load and `upgrade_session_document()` give each such color rule the source
+    hash of the features the saved diagram drew with it, through the saved
+    catalog or the sources read again. `--session` replay does the same for the
+    color and label override tables of the request.
+  - A value whose features have its own hash as source hash, on a record drawn
+    without a crop or reverse complement, stays as saved.
+  - A value that names features of several source hashes is kept, and the Web
+    app and the CLI report how many. So is a color rule of a record drawn
+    cropped or reverse-complemented that the CLI cannot read: the Session that
+    `--session_output` writes for a `--session` replay does not read the
+    sources of a Session 31–39 again, and no CLI path reads those of a Session
+    27–30.
+  - The Feature visibility rows, the draft's label override rows, and the
+    `hash=` annotation targets of these Sessions hold source hashes or values
+    a user typed. They load as saved and now match the feature with that
+    source hash on every record.
+  - A label whitelist row that **Whitelist only** wrote for a feature without
+    a unique qualifier holds its rendered ID and is not renamed either.
 - A catalog of schema 3 or 4 reads as schema 5 without selector values until
   the next Generate. A feature whose rendered ID carries its source hash was
   drawn with its source coordinates, so its source values serve until then.
+
+A CLI Circular batch or grid Session stores a cropped or reverse-complemented
+record as drawn, so its `--session` replay gives those features the hashes of
+the drawn copy, not of the original source record.
 
 In a Session of any version, the Web app reads a Legend entry color with the
 [Default colors](input-formats-and-tsv-schemas.md#styling-tables) forms. An

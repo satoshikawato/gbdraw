@@ -12,6 +12,29 @@ write-up of a release.
 
 ## [Unreleased]
 
+- SVG feature IDs: a feature of a cropped or reverse-complemented record
+  (`--region`, `--reverse_complement`, **Reverse complement**, or a direction
+  chosen in **Review alignment options…**) is now drawn with its source-record
+  hash, as on an untransformed record. `data-gbdraw-feature-id`, the element IDs
+  built from it, and `data-gbdraw-stable-feature-id` change for such records and
+  now match the feature catalog in plain, interactive, and web-app SVGs, so
+  `gbdraw.api.enrich_svg(..., feature_catalog=...)` accepts these diagrams and
+  the web app's interactive export writes the same stable ID as the CLI
+  (OV-401, OV-412). A `hash=` selector (color, label, and visibility rules,
+  annotation targets and tables, Feature Edits) now names that source-record
+  hash on every record; before, rules matched the hash after the crop or
+  reverse complement. Loading or upgrading a Session saved before 0.14.0 renames
+  the **This feature only** color rules it saved for such records to the
+  source-record hash. Replaying a Session 31–44 with `--session` renames the
+  same rules in its color table and the label text edits in its label override
+  table. The Web app and the CLI report each value they cannot rename (see the
+  Session compatibility reference for the other saved `hash=` values, which
+  load as saved). `hash=` values that
+  you wrote yourself for a feature of a cropped or reverse-complemented record,
+  in a TSV file, a CLI option, or a table typed into the Web app, need that
+  feature's new hash: the one its newly drawn SVG ID carries.
+- Sessions: a **This feature only** color that 0.13.0 saved on a multi-record
+  Linear diagram colors its feature again after Load and Generate (OV-416).
 - Similarity alignment (web app): the **Select alignment anchors** dialog is now
   **Review alignment**. One summary line replaces the three introductory
   paragraphs. **Arrow direction** offers **Keep as is**, **All right →**, **All
@@ -65,6 +88,10 @@ write-up of a release.
   BGC0000709) instead of og_1. Its tutorial adds the **Features › Arrow Geometry
   › Shaft Width Ratio** step and walks through **Review alignment options…**,
   where BGC0000708 has two og_6 members and keeps the recommended livU.
+- Gallery: the majanivirus example shows Litopenaeus vannamei majanivirus
+  (LC738872.1) reverse-complemented with its record's **Reverse complement**
+  setting, so its links to the neighboring genomes no longer cross. The rows stay
+  centered, and the Gallery command adds `--reverse_complement 1` for that record.
 - Gallery tutorials: the BGC, Hepatoplasmataceae, and majanivirus tutorials now
   say that the LOSAT runtime controls are under **Comparison › Settings ›
   Runtime and reproducibility**, not under **Advanced comparison and layout**

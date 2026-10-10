@@ -5233,8 +5233,9 @@ const normalizedPublicationBytes = async (resource, id, normalize, path) => {
   const rows = bytesToText(bytes).trimEnd().split(/\r?\n/).map((row, index) => index === 0
     ? row : row.split('\t').map((cell) => {
       const number = Number(cell);
-      return TSV_NUMBER.test(cell) && Number.isFinite(number)
-        ? String(Number(number.toPrecision(15))) : cell;
+      if (TSV_NUMBER.test(cell) && Number.isFinite(number)) return String(Number(number.toPrecision(15)));
+      // The CLI replay writes booleans through pandas as True/False (OV-413).
+      return cell === 'True' || cell === 'False' ? cell.toLowerCase() : cell;
     }).join('\t'));
   return textToBytes(`${rows.join('\n')}\n`);
 };

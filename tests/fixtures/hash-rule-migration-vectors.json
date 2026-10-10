@@ -1,0 +1,1099 @@
+{
+  "description": "The hash= readers of Sessions 44 and older. Such a Session matched hash= against the drawn feature, and its Web writers filled the specific color rules (config.rules: qual, val) and the request's color and label override tables with drawn hashes (release 0.13.0: rendered IDs); hash= names the source-record hash now (release D-39). selectorCases pin the one mapper (session_io.source_hash_selector_value, sourceHashSelectorValue): a value, written <hash> or ^<hash>$ and maybe with rendered-ID record and instance suffixes, names the drawn features (rows of drawnFeatures: source hash, drawn hash, source index, record position) with that hash, ignoring case, in the record and with the source index its suffixes give; when they share one source hash that is not the value's own hash, the result names it in the same form without the suffixes. cases pin the Session draft reader (session_io.migrate_session_hash_rules, migrateSessionHashRules) with the shapes first-parent main wrote: feature catalog schema 3 and 4 rows (svgId, recordKey, biologicalFeatureId), Session 31-44 feature metadata, or the sources read again. Read by tests/test_session_compat.py and tests/web/feature-edit-migration.test.mjs.",
+  "drawnFeatures": [
+    [
+      "fa1a1a1a1",
+      "fa1a1a1a1",
+      0,
+      1
+    ],
+    [
+      "f6d6d6d6d",
+      "f6d6d6d6d",
+      1,
+      1
+    ],
+    [
+      "f51515151",
+      "fd1d1d1d1",
+      0,
+      2
+    ],
+    [
+      "f53535353",
+      "fd3d3d3d3",
+      1,
+      2
+    ],
+    [
+      "f53535353",
+      "fd3d3d3d3",
+      2,
+      2
+    ],
+    [
+      "f54545454",
+      "fd4d4d4d4",
+      3,
+      2
+    ],
+    [
+      "f55555555",
+      "fd5d5d5d5",
+      4,
+      2
+    ],
+    [
+      "f56565656",
+      "f6d6d6d6d",
+      5,
+      2
+    ]
+  ],
+  "selectorCases": [
+    {
+      "name": "A bare drawn hash names its feature's source hash",
+      "value": "fd1d1d1d1",
+      "expected": {
+        "value": "f51515151",
+        "sourceCount": 1
+      }
+    },
+    {
+      "name": "An anchored value keeps its anchors, and case is ignored",
+      "value": "^FD1D1D1D1$",
+      "expected": {
+        "value": "^f51515151$",
+        "sourceCount": 1
+      }
+    },
+    {
+      "name": "A rendered ID names the drawn features of its record (release 0.13.0)",
+      "value": "fd5d5d5d5_record_2",
+      "expected": {
+        "value": "f55555555",
+        "sourceCount": 1
+      }
+    },
+    {
+      "name": "A rendered ID of another record names none of them",
+      "value": "fd5d5d5d5_record_1",
+      "expected": {
+        "value": null,
+        "sourceCount": 0
+      }
+    },
+    {
+      "name": "An instance suffix names the drawn feature with that source index",
+      "value": "fd3d3d3d3__instance_2_25cba05a594010cc",
+      "expected": {
+        "value": "f53535353",
+        "sourceCount": 1
+      }
+    },
+    {
+      "name": "Instances of one source hash name it once",
+      "value": "fd3d3d3d3",
+      "expected": {
+        "value": "f53535353",
+        "sourceCount": 1
+      }
+    },
+    {
+      "name": "A hash drawn by features of two source hashes names none",
+      "value": "f6d6d6d6d",
+      "expected": {
+        "value": null,
+        "sourceCount": 2
+      }
+    },
+    {
+      "name": "A value whose features keep their hash stays as saved",
+      "value": "fa1a1a1a1",
+      "expected": {
+        "value": null,
+        "sourceCount": 1
+      }
+    },
+    {
+      "name": "An instance suffix of a record drawn untransformed stays as saved",
+      "value": "fa1a1a1a1__instance_record_1_25cba05a594010cc",
+      "expected": {
+        "value": null,
+        "sourceCount": 1
+      }
+    },
+    {
+      "name": "A Linear record suffix, which no matcher reads, is removed (OV-416)",
+      "value": "fa1a1a1a1_record_1",
+      "expected": {
+        "value": "fa1a1a1a1",
+        "sourceCount": 1
+      }
+    },
+    {
+      "name": "A source hash names no drawn feature",
+      "value": "f51515151",
+      "expected": {
+        "value": null,
+        "sourceCount": 0
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "Schema 4: a drawn hash on a reverse-complemented record names the source hash of the features drawn with it",
+      "input": {
+        "rules": [
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "fd1d1d1d1",
+            "color": "#c83366",
+            "cap": "CDS"
+          },
+          {
+            "feat": "CDS",
+            "qual": "Hash",
+            "val": "^FD4D4D4D4$",
+            "color": "#c83366",
+            "cap": "CDS"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "fd3d3d3d3",
+            "color": "#c83366",
+            "cap": "CDS"
+          },
+          {
+            "feat": "CDS",
+            "qual": "product",
+            "val": "x",
+            "color": "#c83366",
+            "cap": "CDS"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "fa1a1a1a1",
+            "color": "#c83366",
+            "cap": "CDS"
+          }
+        ],
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "resultIndex": 0,
+              "resultName": "Result",
+              "recordKeys": [
+                "linear-seq-k1",
+                "linear-seq-k2"
+              ],
+              "features": [
+                {
+                  "svgId": "fa1a1a1a1_record_1",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "fa1a1a1a1"
+                },
+                {
+                  "svgId": "f6d6d6d6d_record_1",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "f6d6d6d6d"
+                },
+                {
+                  "svgId": "fd1d1d1d1_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f51515151"
+                },
+                {
+                  "svgId": "fd3d3d3d3_record_2__instance_1_25cba05a594010cc",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f53535353~1"
+                },
+                {
+                  "svgId": "fd3d3d3d3_record_2__instance_2_25cba05a594010cc",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f53535353~2"
+                },
+                {
+                  "svgId": "fd4d4d4d4_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f54545454"
+                },
+                {
+                  "svgId": "fd5d5d5d5_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f55555555"
+                },
+                {
+                  "svgId": "f6d6d6d6d_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f56565656"
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "linear-seq-k1",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          },
+          {
+            "recordKey": "linear-seq-k2",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": true
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "rules": [
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "f51515151",
+            "color": "#c83366",
+            "cap": "CDS"
+          },
+          {
+            "feat": "CDS",
+            "qual": "Hash",
+            "val": "^f54545454$",
+            "color": "#c83366",
+            "cap": "CDS"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "f53535353",
+            "color": "#c83366",
+            "cap": "CDS"
+          },
+          {
+            "feat": "CDS",
+            "qual": "product",
+            "val": "x",
+            "color": "#c83366",
+            "cap": "CDS"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "fa1a1a1a1",
+            "color": "#c83366",
+            "cap": "CDS"
+          }
+        ],
+        "unmappedCount": 0
+      }
+    },
+    {
+      "name": "Schema 3: a rendered ID names the drawn features of its record (release 0.13.0)",
+      "input": {
+        "rules": [
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "fd5d5d5d5_record_2",
+            "color": "#c83366",
+            "cap": "CDS"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "fd5d5d5d5_record_1",
+            "color": "#c83366",
+            "cap": "CDS"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "fa1a1a1a1_record_1",
+            "color": "#c83366",
+            "cap": "CDS"
+          }
+        ],
+        "mode": "linear",
+        "catalog": {
+          "schema": 3,
+          "items": [
+            {
+              "resultIndex": 0,
+              "resultName": "Result",
+              "recordKeys": [
+                "linear-seq-k1",
+                "linear-seq-k2"
+              ],
+              "features": [
+                {
+                  "svgId": "fa1a1a1a1_record_1",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "fa1a1a1a1"
+                },
+                {
+                  "svgId": "f6d6d6d6d_record_1",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "f6d6d6d6d"
+                },
+                {
+                  "svgId": "fd1d1d1d1_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f51515151"
+                },
+                {
+                  "svgId": "fd3d3d3d3_record_2__instance_1_25cba05a594010cc",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f53535353~1"
+                },
+                {
+                  "svgId": "fd3d3d3d3_record_2__instance_2_25cba05a594010cc",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f53535353~2"
+                },
+                {
+                  "svgId": "fd4d4d4d4_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f54545454"
+                },
+                {
+                  "svgId": "fd5d5d5d5_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f55555555"
+                },
+                {
+                  "svgId": "f6d6d6d6d_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f56565656"
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "linear-seq-k1",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          },
+          {
+            "recordKey": "linear-seq-k2",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": true
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "rules": [
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "f55555555",
+            "color": "#c83366",
+            "cap": "CDS"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "fd5d5d5d5_record_1",
+            "color": "#c83366",
+            "cap": "CDS"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "fa1a1a1a1",
+            "color": "#c83366",
+            "cap": "CDS"
+          }
+        ],
+        "unmappedCount": 0
+      }
+    },
+    {
+      "name": "A hash drawn by features of two source hashes is kept and counted; a source hash is kept",
+      "input": {
+        "rules": [
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "f6d6d6d6d",
+            "color": "#c83366",
+            "cap": "CDS"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "f51515151",
+            "color": "#c83366",
+            "cap": "CDS"
+          }
+        ],
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "resultIndex": 0,
+              "resultName": "Result",
+              "recordKeys": [
+                "linear-seq-k1",
+                "linear-seq-k2"
+              ],
+              "features": [
+                {
+                  "svgId": "fa1a1a1a1_record_1",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "fa1a1a1a1"
+                },
+                {
+                  "svgId": "f6d6d6d6d_record_1",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "f6d6d6d6d"
+                },
+                {
+                  "svgId": "fd1d1d1d1_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f51515151"
+                },
+                {
+                  "svgId": "fd3d3d3d3_record_2__instance_1_25cba05a594010cc",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f53535353~1"
+                },
+                {
+                  "svgId": "fd3d3d3d3_record_2__instance_2_25cba05a594010cc",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f53535353~2"
+                },
+                {
+                  "svgId": "fd4d4d4d4_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f54545454"
+                },
+                {
+                  "svgId": "fd5d5d5d5_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f55555555"
+                },
+                {
+                  "svgId": "f6d6d6d6d_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f56565656"
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "linear-seq-k1",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          },
+          {
+            "recordKey": "linear-seq-k2",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": true
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "rules": [
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "f6d6d6d6d",
+            "color": "#c83366",
+            "cap": "CDS"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "f51515151",
+            "color": "#c83366",
+            "cap": "CDS"
+          }
+        ],
+        "unmappedCount": 1
+      }
+    },
+    {
+      "name": "A rotated record or a region that only selects a record changes no hash",
+      "input": {
+        "rules": [
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "fa1a1a1a1",
+            "color": "#c83366",
+            "cap": "CDS"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "fffffffff",
+            "color": "#c83366",
+            "cap": "CDS"
+          }
+        ],
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "resultIndex": 0,
+              "resultName": "Result",
+              "recordKeys": [
+                "linear-seq-k1"
+              ],
+              "features": [
+                {
+                  "svgId": "fa1a1a1a1_record_1",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "fa1a1a1a1"
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "linear-seq-k1",
+            "cardinality": "exactly_one",
+            "region": {
+              "selector": {
+                "kind": "recordId",
+                "value": "A"
+              },
+              "start": null,
+              "end": null,
+              "reverseComplement": false
+            },
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": 5000
+            }
+          }
+        ]
+      },
+      "expected": {
+        "rules": [
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "fa1a1a1a1",
+            "color": "#c83366",
+            "cap": "CDS"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "fffffffff",
+            "color": "#c83366",
+            "cap": "CDS"
+          }
+        ],
+        "unmappedCount": 0
+      }
+    },
+    {
+      "name": "Without a catalog, the sources read again give each feature's drawn hash",
+      "input": {
+        "rules": [
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "fd1d1d1d1",
+            "color": "#c83366",
+            "cap": "CDS"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "fffffffff",
+            "color": "#c83366",
+            "cap": "CDS"
+          }
+        ],
+        "mode": "linear",
+        "catalog": null,
+        "legacy": {
+          "records": [
+            {
+              "recordKey": "linear-seq-k1",
+              "cardinality": "exactly_one",
+              "region": null,
+              "presentation": {
+                "reverseComplement": false
+              },
+              "display": {
+                "isCircular": null,
+                "startCoordinate": null
+              }
+            },
+            {
+              "recordKey": "linear-seq-k2",
+              "cardinality": "exactly_one",
+              "region": null,
+              "presentation": {
+                "reverseComplement": true
+              },
+              "display": {
+                "isCircular": null,
+                "startCoordinate": null
+              }
+            }
+          ],
+          "biologicalFeatures": [],
+          "features": [
+            {
+              "svg_id": "fa1a1a1a1_record_1",
+              "fileIdx": 0,
+              "record_idx": 0,
+              "source_feature_index": 0,
+              "stable_feature_id": "fa1a1a1a1",
+              "type": "CDS",
+              "drawn_selector": {
+                "hash": "fa1a1a1a1",
+                "location": null,
+                "recordLocation": null
+              }
+            },
+            {
+              "svg_id": "f51515151_record_2",
+              "fileIdx": 1,
+              "record_idx": 0,
+              "source_feature_index": 0,
+              "stable_feature_id": "f51515151",
+              "type": "CDS",
+              "drawn_selector": {
+                "hash": "fd1d1d1d1",
+                "location": null,
+                "recordLocation": null
+              }
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "linear-seq-k1",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          },
+          {
+            "recordKey": "linear-seq-k2",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": true
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "rules": [
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "f51515151",
+            "color": "#c83366",
+            "cap": "CDS"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "fffffffff",
+            "color": "#c83366",
+            "cap": "CDS"
+          }
+        ],
+        "unmappedCount": 0
+      }
+    },
+    {
+      "name": "Saved feature metadata without drawn hashes cannot read a cropped or reverse-complemented record: its values are counted",
+      "input": {
+        "rules": [
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "fd1d1d1d1",
+            "color": "#c83366",
+            "cap": "CDS"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "fa1a1a1a1",
+            "color": "#c83366",
+            "cap": "CDS"
+          }
+        ],
+        "mode": "linear",
+        "catalog": null,
+        "legacy": {
+          "records": [
+            {
+              "recordKey": "linear-seq-k1",
+              "cardinality": "exactly_one",
+              "region": null,
+              "presentation": {
+                "reverseComplement": false
+              },
+              "display": {
+                "isCircular": null,
+                "startCoordinate": null
+              }
+            },
+            {
+              "recordKey": "linear-seq-k2",
+              "cardinality": "exactly_one",
+              "region": null,
+              "presentation": {
+                "reverseComplement": true
+              },
+              "display": {
+                "isCircular": null,
+                "startCoordinate": null
+              }
+            }
+          ],
+          "biologicalFeatures": [],
+          "features": [
+            {
+              "svg_id": "fa1a1a1a1_record_1",
+              "fileIdx": 0,
+              "record_idx": 0,
+              "source_feature_index": 0,
+              "stable_feature_id": "fa1a1a1a1",
+              "type": "CDS"
+            },
+            {
+              "svg_id": "fd1d1d1d1_record_2",
+              "fileIdx": 1,
+              "record_idx": 0,
+              "source_feature_index": 0,
+              "stable_feature_id": "f51515151",
+              "type": "CDS"
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "linear-seq-k1",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          },
+          {
+            "recordKey": "linear-seq-k2",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": true
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "rules": [
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "fd1d1d1d1",
+            "color": "#c83366",
+            "cap": "CDS"
+          },
+          {
+            "feat": "CDS",
+            "qual": "hash",
+            "val": "fa1a1a1a1",
+            "color": "#c83366",
+            "cap": "CDS"
+          }
+        ],
+        "unmappedCount": 1
+      }
+    },
+    {
+      "name": "Rules that are not lists or hold no hash rule are returned as saved",
+      "input": {
+        "rules": null,
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "resultIndex": 0,
+              "resultName": "Result",
+              "recordKeys": [
+                "linear-seq-k1",
+                "linear-seq-k2"
+              ],
+              "features": [
+                {
+                  "svgId": "fa1a1a1a1_record_1",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "fa1a1a1a1"
+                },
+                {
+                  "svgId": "f6d6d6d6d_record_1",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "f6d6d6d6d"
+                },
+                {
+                  "svgId": "fd1d1d1d1_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f51515151"
+                },
+                {
+                  "svgId": "fd3d3d3d3_record_2__instance_1_25cba05a594010cc",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f53535353~1"
+                },
+                {
+                  "svgId": "fd3d3d3d3_record_2__instance_2_25cba05a594010cc",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f53535353~2"
+                },
+                {
+                  "svgId": "fd4d4d4d4_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f54545454"
+                },
+                {
+                  "svgId": "fd5d5d5d5_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f55555555"
+                },
+                {
+                  "svgId": "f6d6d6d6d_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f56565656"
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "linear-seq-k1",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          },
+          {
+            "recordKey": "linear-seq-k2",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": true
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "rules": null,
+        "unmappedCount": 0
+      }
+    },
+    {
+      "name": "Entries that are not hash rules are kept",
+      "input": {
+        "rules": [
+          {
+            "feat": "CDS",
+            "qual": "product",
+            "val": "p",
+            "color": "#c83366",
+            "cap": "CDS"
+          },
+          "text",
+          {
+            "qual": "hash",
+            "val": ""
+          }
+        ],
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "resultIndex": 0,
+              "resultName": "Result",
+              "recordKeys": [
+                "linear-seq-k1",
+                "linear-seq-k2"
+              ],
+              "features": [
+                {
+                  "svgId": "fa1a1a1a1_record_1",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "fa1a1a1a1"
+                },
+                {
+                  "svgId": "f6d6d6d6d_record_1",
+                  "recordKey": "linear-seq-k1",
+                  "biologicalFeatureId": "f6d6d6d6d"
+                },
+                {
+                  "svgId": "fd1d1d1d1_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f51515151"
+                },
+                {
+                  "svgId": "fd3d3d3d3_record_2__instance_1_25cba05a594010cc",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f53535353~1"
+                },
+                {
+                  "svgId": "fd3d3d3d3_record_2__instance_2_25cba05a594010cc",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f53535353~2"
+                },
+                {
+                  "svgId": "fd4d4d4d4_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f54545454"
+                },
+                {
+                  "svgId": "fd5d5d5d5_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f55555555"
+                },
+                {
+                  "svgId": "f6d6d6d6d_record_2",
+                  "recordKey": "linear-seq-k2",
+                  "biologicalFeatureId": "f56565656"
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "linear-seq-k1",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          },
+          {
+            "recordKey": "linear-seq-k2",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": true
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "rules": [
+          {
+            "feat": "CDS",
+            "qual": "product",
+            "val": "p",
+            "color": "#c83366",
+            "cap": "CDS"
+          },
+          "text",
+          {
+            "qual": "hash",
+            "val": ""
+          }
+        ],
+        "unmappedCount": 0
+      }
+    }
+  ]
+}

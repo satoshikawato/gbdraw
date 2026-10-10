@@ -208,6 +208,188 @@ const legacyIndex = ({ features = [], biologicalFeatures = [], records = [], mod
   return { renderedById: new Map(), biological };
 };
 
+// The last Session version whose `hash` color rules a Web writer filled with
+// the hash of the drawn feature (release 0.13.0: Session 30, first-parent main:
+// Session 44); `hash=` names the source-record hash after it (OV-401, release
+// D-39). The twin of DRAWN_HASH_RULE_SESSION_MAX_VERSION in gbdraw/session_io.py.
+export const DRAWN_HASH_RULE_SESSION_MAX_VERSION = 44;
+
+/**
+ * A feature a saved diagram drew: its identity key, the hash it was drawn with,
+ * its source index, and its one-based record position in its Result.
+ * @typedef {{ key: string, stableId: string, sourceIndex: number | null, recordOrdinal: number }} IndexedFeature
+ */
+/**
+ * A feature a saved diagram drew: its source hash, the hash it was drawn with,
+ * its source index, and its one-based record position in its Result.
+ * @typedef {{ sourceHash: string, drawnHash: string, sourceIndex: number | null, recordOrdinal: number }} DrawnFeature
+ */
+
+/**
+ * @param {IndexedFeature[]} index
+ * @returns {DrawnFeature[]}
+ */
+const drawnFeaturesOfIndex = (index) => index.map(({ key, stableId, sourceIndex, recordOrdinal }) => ({
+  sourceHash: String(JSON.parse(key)[2]).replace(/~\d+$/, ''), drawnHash: stableId, sourceIndex, recordOrdinal
+}));
+
+// Each feature a saved catalog (schema 3 or 4) drew, by the hash it was drawn
+// with: the hash in its rendered ID (`svgId`), and the record position of that
+// ID or of the row in its item's records. The twin of `_catalog_drawn_features`
+// in gbdraw/session_io.py.
+/**
+ * @param {unknown} catalog
+ * @param {string} mode
+ * @returns {IndexedFeature[]}
+ */
+const catalogDrawnFeatures = (catalog, mode) => {
+  /** @type {IndexedFeature[]} */
+  const drawn = [];
+  const items = /** @type {unknown[]} */ (isObject(catalog) && Array.isArray(catalog.items) ? catalog.items : []);
+  items.filter(isObject).forEach((item) => {
+    const recordKeys = Array.isArray(item.recordKeys) ? item.recordKeys.map(text) : [];
+    const features = /** @type {unknown[]} */ (Array.isArray(item.features) ? item.features : []);
+    features.filter(isObject).forEach((feature) => {
+      const recordKey = text(feature.recordKey);
+      const key = scopedIdentityKey(mode, recordKey, text(feature.biologicalFeatureId));
+      const rendered = parseRenderedId(feature.svgId);
+      if (!key || !rendered.stableId) return;
+      drawn.push({
+        key,
+        stableId: rendered.stableId,
+        sourceIndex: rendered.sourceIndex,
+        recordOrdinal: rendered.recordOrdinal ?? recordKeys.indexOf(recordKey) + 1
+      });
+    });
+  });
+  return drawn;
+};
+
+/**
+ * OV-401, release D-39: a Session 44 or older matched `hash=` against the hash
+ * of the drawn feature, so on a cropped or reverse-complemented record its
+ * value is not the source hash `hash=` names now. The value, written as
+ * `<hash>` or `^<hash>$` and maybe with the rendered ID's record and instance
+ * suffixes, names the features of `drawn` drawn with that hash, ignoring case
+ * as the matchers do, in the record and with the source index its suffixes
+ * give. Returns the value naming their one source hash, in the same form
+ * without the suffixes, and the number of their source hashes. The value is
+ * null unless they have one source hash, and when that is the value's own hash
+ * (a record drawn untransformed) and the value has no Linear record suffix
+ * `_record_<n>`, which no matcher reads (OV-416): such a value means what it
+ * meant and stays as saved. The twin of
+ * `source_hash_selector_value` in gbdraw/session_io.py.
+ * @param {unknown} value
+ * @param {DrawnFeature[]} drawn
+ * @returns {{ value: string | null, sourceCount: number }}
+ */
+export const sourceHashSelectorValue = (value, drawn) => {
+  const saved = text(value);
+  const anchored = saved.match(/^\^([\s\S]*)\$$/);
+  const { stableId, recordOrdinal, sourceIndex } = parseRenderedId(anchored ? anchored[1] : saved);
+  const wanted = stableId.toLowerCase();
+  const sources = new Set(drawn.filter((feature) => wanted && feature.drawnHash.toLowerCase() === wanted
+    && (recordOrdinal === null || feature.recordOrdinal === recordOrdinal)
+    && (sourceIndex === null || feature.sourceIndex === sourceIndex)).map((feature) => feature.sourceHash));
+  if (sources.size !== 1) return { value: null, sourceCount: sources.size };
+  const [source] = sources;
+  if (source.toLowerCase() === wanted && !LINEAR_RECORD_SUFFIX.test(saved)) return { value: null, sourceCount: 1 };
+  return { value: anchored ? `^${source}$` : source, sourceCount: 1 };
+};
+
+/**
+ * The request records of the Linear cards of a Session before 31, which has no
+ * request (release 0.13.0): each card's record key, crop, and orientation, as
+ * the hash readers read them. The twin of `_legacy_linear_request_records` in
+ * gbdraw/session_io.py.
+ * @param {unknown} linearSeqs
+ */
+export const legacyLinearRequestRecords = (linearSeqs) => (Array.isArray(linearSeqs) ? linearSeqs : [])
+  .map((seq) => {
+    const start = nonnegativeInteger(seq?.region_start);
+    const end = nonnegativeInteger(seq?.region_end);
+    const cropped = start !== null || end !== null;
+    const reverse = Boolean(seq?.region_reverse);
+    return {
+      recordKey: text(seq?.uid),
+      cardinality: cropped || text(seq?.region_record_id) ? 'exactly_one' : 'all',
+      region: cropped ? { start, end, reverseComplement: reverse } : null,
+      presentation: { reverseComplement: !cropped && reverse }
+    };
+  });
+
+// Whether a request record is drawn cropped or reverse-complemented, so the
+// drawn hashes of its features differ from their source hashes (a rotation or
+// a region that only selects a record changes no hash). The twin of
+// `_hash_frame_changed` in gbdraw/session_io.py.
+/** @param {Record<string, unknown>} record */
+const hashFrameChanged = (record) => {
+  const { region, presentation } = record;
+  return Boolean((isObject(region) && (nonnegativeInteger(region.start) !== null
+    || nonnegativeInteger(region.end) !== null || region.reverseComplement))
+    || (isObject(presentation) && presentation.reverseComplement));
+};
+
+/**
+ * Whether specific color rules (`qual` and `val`) hold a `hash` rule. The twin
+ * of `has_hash_color_rules` in gbdraw/session_io.py.
+ * @param {unknown} rules
+ */
+export const hasHashColorRules = (rules) => Array.isArray(rules)
+  && rules.some((rule) => text(rule?.qual).toLowerCase() === 'hash');
+
+/** @param {number} count */
+export const HASH_SELECTOR_UNMAPPED_NOTICE = (count) => (
+  `${count} hash= value(s) from an older Session could not be renamed to the hash of a feature in its source record:`
+  + ' the saved diagram drew a cropped or reverse-complemented record, and the value names features of several'
+  + ' source hashes there, or the sources were not read again. hash= now names a feature by its hash in the source'
+  + ' record, so each may now match another feature or none.'
+);
+
+/**
+ * S6 of the one feature-hash builder: the `hash` color rules (`rules`, `qual`
+ * and `val`) of a Session 44 or older, which release 0.13.0 and main wrote with
+ * the drawn feature's hash, get the source hash of the features drawn with
+ * their hash, through the saved `catalog` or else `legacy` (as
+ * `migrateRenderedIdFeatureEdits` reads them), so each matches the features it
+ * matched; a value whose features have its own hash as source hash (an
+ * untransformed record) is kept. A value naming features of several source
+ * hashes is kept and counted as unmapped; so is a value naming no indexed feature when a request
+ * record is drawn cropped or reverse-complemented but `legacy` holds no drawn
+ * hashes (its features are not the sources read again). A list without a
+ * change is returned as saved. The twin of `migrate_session_hash_rules` in
+ * gbdraw/session_io.py.
+ * @param {{
+ *   rules?: unknown,
+ *   mode: string,
+ *   catalog?: Record<string, unknown> | null,
+ *   legacy?: Record<string, unknown> | null,
+ *   records?: unknown
+ * }} input
+ * @returns {{ rules: unknown, unmappedCount: number }}
+ */
+export const migrateSessionHashRules = ({ rules, mode, catalog = null, legacy = null, records = [] }) => {
+  if (!hasHashColorRules(rules)) return { rules, unmappedCount: 0 };
+  const drawn = drawnFeaturesOfIndex(catalog ? catalogDrawnFeatures(catalog, mode) : legacyIndex({ ...legacy, mode }).biological);
+  const legacyFeatures = /** @type {unknown[]} */ (Array.isArray(legacy?.features) ? legacy.features : []);
+  const drawnHashesUnknown = !catalog
+    && (Array.isArray(records) ? records : []).some((record) => isObject(record) && hashFrameChanged(record))
+    && !legacyFeatures.some((feature) => isObject(feature) && isObject(feature.drawn_selector ?? feature.drawnSelector));
+  let unmappedCount = 0;
+  let changed = false;
+  const migrated = /** @type {unknown[]} */ (rules).map((rule) => {
+    if (!isObject(rule) || text(rule.qual).toLowerCase() !== 'hash' || !text(rule.val)) return rule;
+    const resolved = sourceHashSelectorValue(rule.val, drawn);
+    if (resolved.value === null) {
+      if (resolved.sourceCount > 1 || (resolved.sourceCount === 0 && drawnHashesUnknown)) unmappedCount += 1;
+      return rule;
+    }
+    changed = true;
+    return { ...rule, val: resolved.value };
+  });
+  return { rules: changed ? migrated : rules, unmappedCount };
+};
+
 // Rule 1: the old key is a rendered ID of the saved catalog, so it names every
 // identity drawn with that ID (the live projection reached all of them).
 // Rule 2: otherwise it names the one feature with its hash in the record

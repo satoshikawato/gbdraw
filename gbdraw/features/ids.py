@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 
+from gbdraw.core.record_metadata import (
+    _mapped_feature_location_parts,
+    _read_coord_map,
+    _source_feature_location_parts,
+)
 from gbdraw.exceptions import ValidationError
 
 import hashlib
@@ -136,11 +141,58 @@ def compute_feature_hash(feature: Any, record_id: str | None = None) -> str:
     )
 
 
+def source_feature_location_parts(
+    feature: Any,
+    record: Any = None,
+) -> tuple[tuple[int, int, int | None], ...]:
+    """The feature's location parts in its source record.
+
+    A cropped or reverse-complemented record keeps each feature's source parts
+    (``core/record_metadata.py``); any other record maps its parts through its
+    coordinate map (none: the record is its own source).
+    """
+
+    coord_base, coord_step = (1, 1) if record is None else _read_coord_map(record)
+    return _source_feature_location_parts(feature) or _mapped_feature_location_parts(
+        feature,
+        coord_base=coord_base,
+        coord_step=coord_step,
+    )
+
+
+def compute_source_feature_hash(
+    feature: Any,
+    record: Any = None,
+    *,
+    record_id: str | None = None,
+) -> str | None:
+    """The feature hash: the catalog's stable feature ID, the base of every
+    SVG ID drawn for the feature, and the value a `hash` selector matches,
+    whatever crop or reverse complement its record has (OV-401, OV-412).
+
+    ``record_id`` defaults to the record's ID.
+    """
+
+    parts = source_feature_location_parts(feature, record)
+    if not parts:
+        return None
+    return compute_feature_hash_from_location_parts(
+        str(getattr(feature, "type", "") or ""),
+        parts,
+        record_id=record_id if record_id is not None else getattr(record, "id", None),
+    )
+
+
 def compute_feature_object_hash(
     feature_object: Any,
     record_id: str | None = None,
 ) -> str | None:
-    """Compute the stable data-gbdraw-feature-id for a rendered FeatureObject."""
+    """The hash of a FeatureObject's drawn location.
+
+    Only comparison rows name a drawn feature by it (`*_view_feature_svg_id`,
+    a frame tag). SVG IDs and `hash` selectors use the source hash
+    (`compute_source_feature_hash`, `FeatureObject.feature_hash`).
+    """
 
     parts = _feature_object_coordinate_parts(feature_object)
     if not parts:
@@ -262,6 +314,8 @@ __all__ = [
     "compute_feature_hash_from_parts",
     "compute_feature_hash_from_location_parts",
     "compute_feature_object_hash",
+    "compute_source_feature_hash",
+    "source_feature_location_parts",
     "make_linear_dom_id",
     "make_linear_rendered_feature_id",
     "make_svg_safe_id_fragment",

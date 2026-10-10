@@ -358,6 +358,8 @@ def test_should_include_feature_in_analysis_first_match_wins() -> None:
 def test_should_render_feature_feature_object_origin_spanning_hash_rule_matches() -> None:
     feature_object = _make_origin_spanning_feature_object(record_id="rec1")
     feature_hash = compute_feature_hash(_make_origin_spanning_seq_feature(), record_id="rec1")
+    # The factory stores each FeatureObject's source hash (OV-401).
+    feature_object.feature_hash = feature_hash
     rules = compile_feature_visibility_rules(
         _visibility_df([["*", "*", "hash", f"^{feature_hash}$", "off"]])
     )
