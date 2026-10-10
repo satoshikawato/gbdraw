@@ -4,6 +4,7 @@
 // with a retired field are rejected.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 
@@ -19,7 +20,8 @@ globalThis.document = {
   body: { appendChild: () => {} },
   createElement: () => ({ addEventListener: () => {}, click: () => {}, parentNode: null })
 };
-globalThis.alert = () => {};
+const alerts = [];
+globalThis.alert = (message) => alerts.push(String(message));
 installSessionImportWorker();
 
 const { SESSION_VERSION, exportSession, importSession } = await import('../../gbdraw/web/js/services/config.js');
@@ -185,4 +187,42 @@ test('named Legend and stroke colors load as their CSS hex values (OV-160)', asy
   const loadedUnknown = await load(unknown);
   assert.equal(loadedUnknown.status, 'ok', JSON.stringify(loadedUnknown.error));
   assert.deepEqual({ ...state.drawings.circular.legendStrokeOverrides.CDS }, { strokeWidth: 2, originalStrokeColor: null });
+});
+
+// D-43 (OV-300): a stored Legend entry whose color lies outside the Default
+// colors (-d) domain is dropped at Load and named in the Load notice; a named
+// color is stored as its table hex and a hex as written (D-30). It holds for a
+// Session 46 mode slice and for the top-level editorState of an older Session.
+test('a stored Legend entry color outside the Default colors domain is dropped and named at Load (OV-300)', async () => {
+  const stored = [
+    { caption: 'X', color: 'buttonface', featureIds: [] },
+    { caption: 'Y', color: 'Red', featureIds: [] },
+    { caption: 'Z', color: '#AABBCC', featureIds: [] }
+  ];
+  const shownRows = (drawing) => drawing.legendEntries.value.map(({ caption, color }) => ({ caption, color }));
+  const kept = [{ caption: 'Y', color: '#FF0000' }, { caption: 'Z', color: '#AABBCC' }];
+
+  resetDrawings();
+  state.mode.value = 'circular';
+  const current = structuredClone(await save('legend colors'));
+  current.modes.circular.editorState.legend.entries = structuredClone(stored);
+  current.modes.circular.editorState.legend.deletedEntries = [{ caption: 'W', color: 'currentColor', featureIds: [] }];
+  alerts.length = 0;
+  const loaded = await load(current);
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(shownRows(state.drawings.circular), kept);
+  assert.deepEqual(state.drawings.circular.deletedLegendEntries.value, []);
+  assert.match(alerts.at(-1),
+    / Legend: entries 'X', 'W' \(deleted\) had a color the app does not accept and were dropped\.$/);
+
+  const older = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/settings-only.v42.json.gz', import.meta.url))));
+  // A caption whose first row has a bad color but a later row a valid one is shown, not named.
+  older.editorState.legend.entries = [{ caption: 'Z', color: 'notacolor', featureIds: [] }, ...structuredClone(stored)];
+  resetDrawings();
+  alerts.length = 0;
+  const loadedOlder = await load(older);
+  assert.equal(loadedOlder.status, 'ok', JSON.stringify(loadedOlder.error));
+  assert.deepEqual(shownRows(state.activeDrawing()), kept);
+  assert.match(alerts.at(-1), / Legend: entry 'X' had a color the app does not accept and was dropped\.$/);
+  assert.equal(alerts.at(-1).match(/Legend:/g).length, 1);
 });

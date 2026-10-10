@@ -1,7 +1,7 @@
 // @ts-check
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { state, sessionOperationAvailability, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
-import { normalizePaletteColors, resolveColorToHex } from '../utils/color-utils.js';
+import { normalizeDefaultColor, normalizePaletteColors, resolveColorToHex } from '../utils/color-utils.js';
 import {
   captureRightDrawerState,
   resetRightDrawerState,
@@ -91,6 +91,7 @@ import {
   canonicalLinearRecordLayout,
   featureEditsOverProjection,
   legacyTableRowsNotice,
+  legendColorDropNotice,
   linearDefinitionVisibilityOf,
   managedConfigOverridePathsForMode,
   promoteCanonicalRenderRequestToCurrent,
@@ -837,30 +838,26 @@ const normalizeOptionalHexColor = (value) => {
   return /^#[0-9a-fA-F]{6}$/.test(color) ? color.toLowerCase() : null;
 };
 
-const normalizeSessionLegendColor = (value) => {
-  const color = String(value || '').trim();
-  if (!color) return null;
-  if (/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(color)) {
-    return color.toLowerCase();
-  }
-  if (/^[a-z]+$/i.test(color)) return color.toLowerCase();
-  if (/^rgba?\(\s*[-+.\d%]+(?:\s*[,/]\s*|\s+)[-+.\d%]+(?:\s*[,/]\s*|\s+)[-+.\d%]+(?:\s*[,/]\s*[-+.\d%]+)?\s*\)$/i.test(color)) {
-    return color;
-  }
-  if (/^hsla?\(\s*[-+.\d]+(?:deg|grad|rad|turn)?(?:\s*[,/]\s*|\s+)[-+.\d%]+(?:\s*[,/]\s*|\s+)[-+.\d%]+(?:\s*[,/]\s*[-+.\d%]+)?\s*\)$/i.test(color)) {
-    return color;
-  }
-  return null;
-};
-
-const normalizeSessionLegendEntries = (entries) => {
+// A stored entry color is read with the Default colors domain (D-41). An entry
+// whose color lies outside it is dropped and, when `droppedLegendColors` is
+// given, listed there for the Load notice (D-43).
+/**
+ * @param {unknown} entries
+ * @param {'entries' | 'dormantEntries' | 'deletedEntries'} list
+ * @param {{ list: string, caption: string }[] | null} droppedLegendColors
+ */
+const normalizeSessionLegendEntries = (entries, list, droppedLegendColors) => {
   if (!Array.isArray(entries)) return [];
   const normalized = [];
   const captions = new Set();
+  const dropped = [];
   entries.forEach((entry) => {
     if (!isPlainObject(entry)) return;
     const caption = String(entry.caption || '').trim();
-    const color = normalizeSessionLegendColor(entry.color);
+    const color = normalizeDefaultColor(entry.color);
+    if (caption && !color && !captions.has(caption)) {
+      dropped.push({ list: entry.dormant === true ? 'dormantEntries' : list, caption });
+    }
     if (!caption || !color || captions.has(caption)) return;
     captions.add(caption);
     // `showStroke`, the Stroke options disclosure that earlier Sessions saved,
@@ -876,6 +873,8 @@ const normalizeSessionLegendEntries = (entries) => {
         : []
     });
   });
+  // A caption that a later row with a valid color keeps is shown, not dropped.
+  dropped.filter(({ caption }) => !captions.has(caption)).forEach((drop) => droppedLegendColors?.push(drop));
   return normalized;
 };
 
@@ -1212,9 +1211,10 @@ export const buildEditorStateData = (drawing) => ({
 
 /**
  * @param {Record<string, any>} [editorState]
- * @param {{ featureCatalog?: unknown }} [options]
+ * @param {{ featureCatalog?: unknown, droppedLegendColors?: { list: string, caption: string }[] | null }} [options]
+ *   `droppedLegendColors` collects the Legend entries dropped for their color.
  */
-const normalizeEditorStateData = (editorState = {}, { featureCatalog = undefined } = {}) => {
+const normalizeEditorStateData = (editorState = {}, { featureCatalog = undefined, droppedLegendColors = null } = {}) => {
   const defaults = defaultEditorStateData();
   const source = isPlainObject(editorState) ? editorState : {};
   const legend = isPlainObject(source.legend) ? source.legend : {};
@@ -1222,16 +1222,16 @@ const normalizeEditorStateData = (editorState = {}, { featureCatalog = undefined
   const originalSvgStroke = isPlainObject(source.originalSvgStroke) ? source.originalSvgStroke : {};
   // A Session 46 slice lists the renamed rows its Result does not draw
   // (OV-120) after the shown rows, marked `dormant`.
-  const entries = normalizeSessionLegendEntries(legend.entries);
+  const entries = normalizeSessionLegendEntries(legend.entries, 'entries', droppedLegendColors);
   const dormantEntries = [
-    ...normalizeSessionLegendEntries(legend.dormantEntries),
+    ...normalizeSessionLegendEntries(legend.dormantEntries, 'dormantEntries', droppedLegendColors),
     ...entries.filter((entry) => entry.dormant === true)
   ].map(({ dormant: _dormant, ...entry }) => entry);
 
   return {
     legend: {
       entries: entries.filter((entry) => entry.dormant !== true),
-      deletedEntries: normalizeSessionLegendEntries(legend.deletedEntries),
+      deletedEntries: normalizeSessionLegendEntries(legend.deletedEntries, 'deletedEntries', droppedLegendColors),
       dormantEntries,
       originalOrder: normalizeStringArray(legend.originalOrder),
       originalColors: normalizeLegendColorOverrides(legend.originalColors),
@@ -1444,16 +1444,18 @@ const overlayModeSliceConfig = (projectedConfig, sliceConfig) => {
  * @param {DrawingState} drawing
  * @param {'circular' | 'linear'} mode
  * @param {Record<string, any>} slice
- * @param {{ projectedConfig?: Record<string, any> | null, resolveTrackPlacements?: boolean, applyCanvasPadding?: boolean }} [options]
+ * @param {{ projectedConfig?: Record<string, any> | null, resolveTrackPlacements?: boolean, applyCanvasPadding?: boolean,
+ *   droppedLegendColors?: { list: string, caption: string }[] | null }} [options]
  *   `applyCanvasPadding: false` leaves the padding to the caller (Load pads the shown Result after it mounts).
  */
 const applyModeSliceData = (drawing, mode, slice, {
-  projectedConfig = null, resolveTrackPlacements = true, applyCanvasPadding = true
+  projectedConfig = null, resolveTrackPlacements = true, applyCanvasPadding = true, droppedLegendColors = null
 } = {}) => {
   const config = overlayModeSliceConfig(projectedConfig, slice.config);
   if (Object.keys(config).length) applyConfigData(drawing, config, { resolveTrackPlacements });
   applyDrawingFeatureData(drawing, isPlainObject(slice.features) ? slice.features : {});
-  applyDrawingEditorData(drawing, normalizeEditorStateData(isPlainObject(slice.editorState) ? slice.editorState : {}));
+  applyDrawingEditorData(drawing, normalizeEditorStateData(isPlainObject(slice.editorState) ? slice.editorState : {},
+    { droppedLegendColors }));
   const ui = isPlainObject(slice.ui) ? slice.ui : {};
   if (isPlainObject(ui.layoutPreferences)) {
     replaceLayoutPreferences(drawing.layoutPreferences, {
@@ -1478,7 +1480,8 @@ const validateSessionVersion = version => {
   }
 };
 
-const normalizeSessionData = (data) => {
+/** @param {{ list: string, caption: string }[] | null} droppedLegendColors */
+const normalizeSessionData = (data, droppedLegendColors) => {
   if (!isPlainObject(data) || data.format !== 'gbdraw-session') throw SESSION_FORMAT_ERROR();
   const version = data.version;
   validateSessionVersion(version);
@@ -1498,7 +1501,7 @@ const normalizeSessionData = (data) => {
 
   return {
     ...data,
-    editorState: normalizeEditorStateData(data.editorState)
+    editorState: normalizeEditorStateData(data.editorState, { droppedLegendColors })
   };
 };
 
@@ -1877,7 +1880,8 @@ const validateCurrentWriterFeatureCatalog = async (data, { adopt = false } = {})
   });
 };
 
-const preflightSessionImport = async (sessionData) => {
+/** @param {{ list: string, caption: string }[]} droppedLegendColors Collects the Legend entries dropped for their color. */
+const preflightSessionImport = async (sessionData, droppedLegendColors) => {
   const sourceSessionVersion = sessionData?.version;
   validateSessionVersion(sourceSessionVersion);
   const rawData = await convertMainSessionComparisonFrames(sessionData);
@@ -1910,7 +1914,8 @@ const preflightSessionImport = async (sessionData) => {
     recordSessionLifecycleEvent('feature-catalog-validation-end');
     recordSessionLifecycleEvent('editor-state-normalization-start');
     normalizedEditorState = normalizeEditorStateData(rawData.editorState, {
-      featureCatalog: validatedFeatureCatalog
+      featureCatalog: validatedFeatureCatalog,
+      droppedLegendColors
     });
     recordSessionLifecycleEvent('editor-state-normalization-end');
     recordSessionLifecycleEvent('resource-table-adoption-start');
@@ -1923,7 +1928,7 @@ const preflightSessionImport = async (sessionData) => {
       : rawData;
   } else {
     validateSessionAuthorityInventory(rawData, sourceSessionVersion);
-    normalizedData = normalizeSessionData(rawData);
+    normalizedData = normalizeSessionData(rawData, droppedLegendColors);
     migrateImportedLinearTrackSlots(normalizedData.config, sourceSessionVersion);
   }
 
@@ -2267,10 +2272,11 @@ const admitLoadedSetResults = (logicalResults, { featureCatalog, mode, selectedF
  *   ui?: unknown, runMetadata?: unknown }} set
  * @param {{ featureCatalog: FeatureCatalog, admittedResults?: Record<string, any>[] | null,
  *   restoredSequenceSources: Record<string, any>[], resources: Record<string, any>, resourceTable: any,
- *   webFiles: any, retainedBytes: number }} options
+ *   webFiles: any, retainedBytes: number, droppedLegendColors: { list: string, caption: string }[] }} options
  */
 const buildLoadedArtifactSlot = (set, {
-  featureCatalog, admittedResults = null, restoredSequenceSources, resources, resourceTable, webFiles, retainedBytes
+  featureCatalog, admittedResults = null, restoredSequenceSources, resources, resourceTable, webFiles, retainedBytes,
+  droppedLegendColors
 }) => {
   const mode = set.renderRequest.mode === 'linear' ? 'linear' : 'circular';
   const results = admittedResults || admitLoadedSetResults(normalizeLogicalResults(set.results.map(
@@ -2282,7 +2288,7 @@ const buildLoadedArtifactSlot = (set, {
   const features = featureStateFromCatalog(featureCatalog, { mode });
   const editorState = normalizeEditorStateData(
     isPlainObject(set.editorState) ? /** @type {Record<string, any>} */ (set.editorState) : {},
-    { featureCatalog }
+    { featureCatalog, droppedLegendColors }
   );
   const ui = isPlainObject(set.ui) ? /** @type {Record<string, any>} */ (set.ui) : {};
   const runMetadata = isPlainObject(set.runMetadata) ? /** @type {Record<string, any>} */ (set.runMetadata) : {};
@@ -4973,7 +4979,10 @@ const importSessionDocument = async (e, options = {}) => {
     }
 
     recordSessionLifecycleEvent('current-session-preflight-start');
-    const preflight = await preflightSessionImport(data);
+    // The Legend entries Load drops for their color, for the Load notice (D-43).
+    /** @type {{ list: string, caption: string }[]} */
+    const droppedLegendColors = [];
+    const preflight = await preflightSessionImport(data, droppedLegendColors);
     await validateSimilarityAlignmentResetReceipt(
       data.editorState?.alignmentResetReceipt,
       { renderRequest: data.renderRequest, resources: data.resources }
@@ -5200,7 +5209,9 @@ const importSessionDocument = async (e, options = {}) => {
     const otherSetCharacters = otherModeResult ? Math.round(candidate.characters * otherResultCharacters
       / Math.max(1, otherResultCharacters + resultCharacters(data.results))) : 0;
     const topSetCharacters = Math.max(0, candidate.characters - otherSetCharacters);
-    const slotOptions = { resources: data.resources, resourceTable: currentResourceTable, webFiles: data.webFiles };
+    const slotOptions = {
+      resources: data.resources, resourceTable: currentResourceTable, webFiles: data.webFiles, droppedLegendColors
+    };
     const otherArtifactSlot = otherModeResult && otherModeCatalogAdmitted
       ? buildLoadedArtifactSlot(otherModeResult, {
           ...slotOptions,
@@ -5453,7 +5464,8 @@ const importSessionDocument = async (e, options = {}) => {
         ? { features: featureEditsOverProjection(modeSlices[mode].features, projectionResult.renderState) } : {};
       applyModeSliceData(state.drawings[mode], mode, { ...modeSlices[mode], ...features, config: modeConfigs[mode] }, {
         resolveTrackPlacements: !settingsOnly && !storedSlice,
-        applyCanvasPadding: mode !== displayMode
+        applyCanvasPadding: mode !== displayMode,
+        droppedLegendColors
       });
     }
     // App-level settings: LOSAT execution (after the drafts, whose request
@@ -5708,7 +5720,8 @@ const importSessionDocument = async (e, options = {}) => {
       droppedFeatureEditCount > 0 ? FEATURE_EDIT_MIGRATION_WARNING(droppedFeatureEditCount) : '',
       narrowedFeatureVisibilityCount > 0 ? FEATURE_VISIBILITY_NARROWED_NOTICE(narrowedFeatureVisibilityCount) : '',
       migratedAnnotationTargetCount > 0 ? ANNOTATION_TARGET_MIGRATION_NOTICE(migratedAnnotationTargetCount) : '',
-      legacyTableRowsNotice(canonicalProjection?.legacyTableRepairs)
+      legacyTableRowsNotice(canonicalProjection?.legacyTableRepairs),
+      legendColorDropNotice(droppedLegendColors)
     ].filter(Boolean).join(' '));
     return {
       status: 'ok',

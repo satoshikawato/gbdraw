@@ -69,6 +69,10 @@ the features they name:
   the next Generate. A feature whose rendered ID carries its source hash was
   drawn with its source coordinates, so its source values serve until then.
 
+In a Session of any version, the Web app reads a Legend entry color with the
+[Default colors](input-formats-and-tsv-schemas.md#styling-tables) forms. An
+entry whose color is outside them is dropped, and the Load notice names it.
+
 A Session 46 can also hold `otherModeResult`: the Result set of the diagram
 mode that the top-level set does not draw (Circular or Linear), written when
 both modes have a Result. Its `renderRequest`, `results`, `editorState`

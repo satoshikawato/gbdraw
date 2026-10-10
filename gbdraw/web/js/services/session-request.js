@@ -3589,8 +3589,9 @@ const readSessionTable = (table, read) => {
   }
 };
 
-const lineList = (rows) => (rows.length === 1 ? `line ${rows[0]}`
-  : `lines ${rows.slice(0, 5).join(', ')}${rows.length > 5 ? `, and ${rows.length - 5} more` : ''}`);
+const cappedList = (singular, plural, items) => (items.length === 1 ? `${singular} ${items[0]}`
+  : `${plural} ${items.slice(0, 5).join(', ')}${items.length > 5 ? `, and ${items.length - 5} more` : ''}`);
+const lineList = (rows) => cappedList('line', 'lines', rows);
 // The Load notice for the rows `legacyTableRepairs` lists, by table.
 export const legacyTableRowsNotice = (repairs) => {
   if (!repairs?.length) return '';
@@ -3608,6 +3609,16 @@ export const legacyTableRowsNotice = (repairs) => {
         invalid.length ? `${SESSION_TABLE_LABELS[table]}: ${lineList(invalid)} had a color the table does not accept and ${invalid.length === 1 ? 'was' : 'were'} dropped.` : ''
       ].filter(Boolean);
     })].join(' ');
+};
+
+// The Load notice for the Legend entries a Session stored with a color outside
+// the Default colors domain (D-43): `drops` lists `{ list, caption }` per
+// dropped entry, possibly more than once.
+const LEGEND_LIST_MARKS = { entries: '', dormantEntries: ' (not drawn)', deletedEntries: ' (deleted)' };
+export const legendColorDropNotice = (drops) => {
+  const named = [...new Set((drops || []).map(({ list, caption }) => `'${caption}'${LEGEND_LIST_MARKS[list] ?? ''}`))];
+  if (!named.length) return '';
+  return `Legend: ${cappedList('entry', 'entries', named)} had a color the app does not accept and ${named.length === 1 ? 'was' : 'were'} dropped.`;
 };
 
 // Whether the committed Session drew with the given Feature visibility rules
