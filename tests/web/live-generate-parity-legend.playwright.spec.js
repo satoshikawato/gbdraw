@@ -890,6 +890,25 @@ test('U3a compat: Undo of a new edit and the Restore of a deleted row on a Sessi
   expect(await shownLegendRows(page), 'the restored row is shown').toContain('repeat_region');
   await expectLiveEqualsGenerate(page, { label: 'Restore after Load' });
 });
+// EU review A-M1: Reset Settings returns the deleted row the saved Result
+// lacks as the Restore does (O-2), so the live Legend shows it as Generate
+// draws it. Reset also returns labels_mode "out" to the default, a setting
+// only Generate draws, so the case compares the Legend.
+test('U3a compat: Reset Settings on a Session 44 main saved shows its deleted row as Generate draws it', async ({ page }) => {
+  test.setTimeout(240_000);
+  await loadLegendRowsSession(page);
+  await evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.resetSettings(); });
+  await settleLive(page);
+  const live = await semanticSnapshot(page);
+  expect(live.legend.map((row) => row.caption), 'the deleted row is shown').toContain('repeat_region');
+  const listed = await legendCaptions(page);
+  expect(listed, 'the Legend list shows the deleted row').toContain('repeat_region');
+  await generateAndWaitForResult(page);
+  await settleLive(page);
+  expect(diffSemanticSnapshots(live, await semanticSnapshot(page)).filter(({ kind }) => kind === 'legend'),
+    'the Legend after Reset Settings equals the Legend Generate draws').toEqual([]);
+  expect(listed, 'the Legend list after Reset Settings').toEqual(await legendCaptions(page));
+});
 
 // R15-2 (OV-241 decision B) retired Add legend item. A Session main saved with
 // a Legend row the editor added (MANUAL_ROW, no features, in its Linear Result;

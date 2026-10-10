@@ -1638,6 +1638,18 @@ test('a reconcile that hides a Legend row reports a Legend change once', () => {
   assert.deepEqual(reconcileMountedResult(svg, deleted, { domains: LEGEND_STRUCTURE }), { changed: false, legendChanged: false });
 });
 
+// EU review A-L2: removing the Legend order record is a change even when no
+// row moves, so the stored Result loses the record with the mounted SVG.
+test('a reconcile that removes the Legend order record reports a change though no row moves', () => {
+  const svg = legendSvg();
+  const group = svg.querySelector('#feature_legend');
+  group.setAttribute(LEGEND_ORDER_RECORD, JSON.stringify(['CDS', 'tRNA', 'rRNA']));
+  assert.equal(reconcileMountedResult(svg, legendOperations(), { domains: LEGEND_STRUCTURE }).changed, true);
+  assert.equal(group.getAttribute(LEGEND_ORDER_RECORD), null);
+  assert.deepEqual(legendRows(svg).map(([key]) => key), ['CDS', 'tRNA', 'rRNA']);
+  assert.deepEqual(reconcileMountedResult(svg, legendOperations(), { domains: LEGEND_STRUCTURE }), { changed: false, legendChanged: false });
+});
+
 test('a deleted Legend row is hidden with Python\'s key and a reconcile without the delete shows it in its slot', () => {
   const svg = legendSvg();
   const drawn = serializeNode(svg);

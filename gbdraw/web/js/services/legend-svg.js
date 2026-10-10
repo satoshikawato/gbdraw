@@ -230,8 +230,8 @@ export const drawnLegendRowStroke = (svg, caption) => {
 };
 
 // The stroke Python drew on the Result's first feature path that is not an
-// automatic underlay, which a Session keeps as `originalSvgStroke` for the
-// readers of Sessions saved before the executor's records; null without one.
+// automatic underlay: the Result's block-stroke default, which the Session
+// format keeps as `originalSvgStroke`; null without one.
 /**
  * @param {Element | null | undefined} svg
  * @returns {{ color: string | null, width: number | null } | null}

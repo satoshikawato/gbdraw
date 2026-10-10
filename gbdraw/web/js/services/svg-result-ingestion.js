@@ -870,7 +870,9 @@ const restoreLegendStructure = (index, operations, domains) => {
       if (Array.isArray(order)) {
         changed = orderLegendGroup(group, order.map((key) => shownKeys.get(text(key)) || ''), false) || changed;
       }
+      // The record's removal is a change, so the stored Result loses it too.
       group.removeAttribute(LEGEND_ORDER_RECORD);
+      changed = true;
     });
   }
   return changed;

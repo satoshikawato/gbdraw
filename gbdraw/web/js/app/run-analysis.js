@@ -5048,7 +5048,7 @@ export const createRunAnalysis = ({
       && (errorLog.value === previousAlert || errorLog.value === null);
     /** @type {Record<string, any> | null} */
     let beforeHandle = null;
-    const initialResults = results.value;
+    let initialResults = results.value;
     /** @type {string | null} */
     let historyRecovery = null;
     // UJ-10: whether the draft this run reads is the one of the shown Result.
@@ -5072,7 +5072,11 @@ export const createRunAnalysis = ({
       const decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity, drawing);
       await nextTick();
       await waitForAfterPaint();
-      if (activeReflowRun) await activeReflowRun;
+      // A rerender this run waited for may commit a Result; a failure keeps that one.
+      if (activeReflowRun) {
+        await activeReflowRun;
+        initialResults = results.value;
+      }
       if (!isCurrentOperation()) return { status: 'stale' };
       recordSessionLifecycleEvent('generate.paint-opportunity-completed');
       // Cancel is honored before rendering, including during preparation.
@@ -5468,7 +5472,7 @@ export const createRunAnalysis = ({
       && (errorLog.value === previousAlert || errorLog.value === null);
     /** @type {Record<string, any> | null} */
     let beforeHandle = null;
-    const initialResults = results.value;
+    let initialResults = results.value;
     /** @type {string | null} */
     let historyRecovery = null;
     processing.value = true;
@@ -5478,7 +5482,11 @@ export const createRunAnalysis = ({
       const decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity, drawing);
       await nextTick();
       await waitForAfterPaint();
-      if (activeReflowRun) await activeReflowRun;
+      // A rerender this run waited for may commit a Result; a failure keeps that one.
+      if (activeReflowRun) {
+        await activeReflowRun;
+        initialResults = results.value;
+      }
       if (!isCurrentOperation()) return { status: 'stale' };
       const execute = (handle) => {
         beforeHandle = handle;

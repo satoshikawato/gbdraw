@@ -96,9 +96,12 @@ test('History prepares cold rules once, skips warm config preparation, and reche
   }
 });
 
-// OV-347 (D-15-6 (3)): Undo and Redo of a rule color and a rule predicate
-// change, made through the rule owner, show the Legend rows and fills Generate
-// draws for the restored rules.
+// D-15-6 (3): Undo and Redo of a rule color and a rule predicate change, made
+// through the rule owner, show the Legend rows and fills Generate draws for
+// the restored rules. This case guards the rule-owner path of the restore; the
+// direct table edit of OV-347 is pinned by the case above and the
+// palette-default-colors node case, and its live caption differs from Generate's
+// (OV-357, accepted in D-15-38).
 test('Redo of a rule predicate change shows what Generate draws', async ({ page }) => {
   test.setTimeout(240_000);
   page.on('dialog', dialog => dialog.accept());

@@ -2751,9 +2751,9 @@ export const createAppSetup = () => {
     initializeStrokeAndCanvas(context) {
       const legendLaidOut = mountedLegendLayouts.delete(context.root);
       if (!context.bindingOptions.trustedRestore && !context.bindingOptions.isIncrementalEdit) {
-        // Save keeps the block stroke Python drew on the shown Result, as Load
-        // reads it, for the readers of Sessions saved before the executor's
-        // records (0.14.0).
+        // The block stroke Python drew on the shown Result: the Result's
+        // block-stroke default, which the Session format keeps as
+        // `originalSvgStroke`.
         const blockStroke = drawnBlockStroke(context.root);
         if (blockStroke) state.originalSvgStroke.value = { ...blockStroke, color: normalizeOptionalHexColor(blockStroke.color) };
         // Generate already padded its candidates; another batch Result shows
@@ -3251,22 +3251,28 @@ export const createAppSetup = () => {
     return shown;
   };
 
+  // O-2 (D-15-6 (5)): a Result saved before the executor kept a deleted row
+  // lacks Python's row, so a Restore or Reset that returns the row asks Python
+  // to draw it again. A Result Python drew in this session lacks only a row
+  // Python did not draw there (its Legend row facts; U3a review M2); a loaded
+  // Result has no facts.
+  /** @param {string[]} keys The Python keys of the returning rows. */
+  const drawReturningLegendRows = (keys) => {
+    const svg = svgContainer.value?.querySelector?.('svg');
+    const drawn = state.displayedResultMetadata()?.drawnLegendKeys;
+    if (keys.some((key) => (!drawn || drawn.has(key)) && !drawsPythonLegendRow(svg, key))) {
+      featureActions.requestAutomaticRerender();
+    }
+  };
+
   // OV-154: a Restore is one History step of the Legend intent, shown with the
-  // rows' fills and strokes (OV-293) through the port. O-2 (D-15-6 (5)): a
-  // Result saved before the executor kept a deleted row lacks Python's row, so
-  // Python draws it again.
-  // A Result Python drew in this session lacks only a row Python did not draw
-  // there (its Legend row facts; U3a review M2); a loaded Result has no facts.
+  // rows' fills and strokes (OV-293) through the port.
   /** @param {() => unknown} restore Returns the Python keys of the restored rows, as `restoreDeletedLegendEntries` does. */
   const restoreLegendRows = (restore) => {
     const restored = restore();
     if (!Array.isArray(restored)) return restored;
     showEditorIntent({ domains: LIVE_EDIT_DOMAINS.deletedRows });
-    const svg = svgContainer.value?.querySelector?.('svg');
-    const drawn = state.displayedResultMetadata()?.drawnLegendKeys;
-    if (restored.some((key) => (!drawn || drawn.has(key)) && !drawsPythonLegendRow(svg, key))) {
-      featureActions.requestAutomaticRerender();
-    }
+    drawReturningLegendRows(restored);
     return true;
   };
   /** @param {string} label @param {() => unknown} restore */
@@ -4444,8 +4450,9 @@ export const createAppSetup = () => {
     // reset draft as the next Generate draws it. One projection of the editor
     // intent shows the fills, Legend colors, visibility and labels, and the
     // executor shows the strokes and the Legend rows the reset intent leaves
-    // (a deleted row Python drew returns; a row added in the editor and
-    // deleted stays gone); the rule owner follows the removed rules (a
+    // (a deleted row Python drew returns, and one the Result's bytes lack asks
+    // for the rerender, O-2; a row added in the editor and deleted stays
+    // gone); the rule owner follows the removed rules (a
     // changed Legend source asks for the rerender, as their Undo does), and
     // the Legend list follows the Result. The reset itself runs at once, so a
     // caller reads the reset settings right after resetSettings().
@@ -4453,6 +4460,11 @@ export const createAppSetup = () => {
       featureActions.clearSpecificRulePatternDrafts();
       const shown = Boolean(svgContainer.value?.querySelector?.('svg'));
       const palette = { ...appliedPaletteColors.value };
+      // The deleted rows Generate drew return (a row added in the editor and
+      // deleted stays gone).
+      const returning = state.activeDrawing().deletedLegendEntries.value
+        .map((/** @type {{ caption?: string, originalCaption?: string }} */ entry) => String(entry.originalCaption || entry.caption || ''))
+        .filter((key) => originalLegendOrder.value.includes(key));
       resetSettingsState(state);
       // Linear records return to their File defaults and inferred definitions;
       // Files, record selections, File defaults, and depth stay. The mutation
@@ -4481,6 +4493,7 @@ export const createAppSetup = () => {
           labels: true,
           domains: [...STROKE_DOMAINS, ...LIVE_EDIT_DOMAINS.legendRows]
         });
+        drawReturningLegendRows(returning);
         legendActions.extractLegendEntries();
       }
       return true;
