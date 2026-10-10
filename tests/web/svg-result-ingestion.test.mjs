@@ -607,7 +607,7 @@ test('Load keeps a saved Result\'s bytes when its records change nothing', () =>
     const plan = createSavedResultPlan(results, admission, {
       featureColorOverrides: { [biologicalFeatureKey('record-a', 'feature-a')]: '#aaaaaa' },
       featureStrokeOverrides: {}, legendEntries: [], legendColorOverrides: {}, legendStrokeOverrides: {},
-      originalLegendColors: {}, originalLegendOrder: [], mode: 'linear', blockStroke: null
+      originalLegendColors: {}, originalLegendOrder: [], mode: 'linear', sessionVersion: 44
     });
     assert.equal(plan.kind, 'MUTATING');
     return captureMetrics(() => admitCurrentSessionResults(createCurrentSessionResultSource(results, admission), {
@@ -1058,13 +1058,13 @@ const parseSvgText = (content) => {
 const sessionFixture = (name) => JSON.parse(gunzipSync(readFileSync(new URL(
   `../fixtures/sessions/${name}`, import.meta.url
 ))).toString('utf8'));
-const FORCED_STROKES = 'forced-label-underlay-strokes.v46.gbdraw-session.json.gz';
+const FORCED_STROKES = 'forced-label-underlay-strokes.v44.gbdraw-session.json.gz';
 const loadSavedResults = (session, {
-  mode = 'circular', modeScoped = true, results = normalizeLogicalResults(session.results),
+  mode = 'circular', results = normalizeLogicalResults(session.results),
   featureCatalog = session.editorState.featureCatalog, patch = () => {}
 } = {}) => {
   const admission = admitFeatureCatalog(featureCatalog, results, { adopt: true, mode });
-  const plan = createSavedResultPlan(results, admission, savedResultEdits(session, mode, session.editorState, modeScoped));
+  const plan = createSavedResultPlan(results, admission, savedResultEdits(session, mode, session.editorState, session.version));
   return results.map((result, index) => {
     const svg = parseSvgText(result.content);
     patch(svg, index);
@@ -1084,17 +1084,18 @@ const connectorPart = (featureId, stroke, width) => new FakeElement('path', {
   'data-gbdraw-record-index': '0', fill: 'none', stroke, 'stroke-width': width
 });
 
-// EU U2a: a Session 46 Result saved before the executor recorded Python's
-// paint shows its edits without records. Load records Python's paint (the
-// strokes of the parts no stroke edit reached, the catalog fills, the
-// Legend's `originalColors`), so a reconcile without the edits returns each
-// part and swatch to it
+// EU U2a: main's writer (Session 44) saved a Result that shows its stroke
+// and color edits without records of Python's paint. Load records Python's
+// paint (the strokes of the parts no stroke edit reached, the catalog fills,
+// the Legend's `originalColors`), so a reconcile without the edits returns
+// each part and swatch to it
 // (tests/fixtures/sessions/forced-label-underlay-strokes.provenance.json).
-test('Load records Python\'s paint on a Session 46 Result saved without records', () => {
+test('Load records Python\'s paint on a Session 44 Result saved without records', () => {
   const session = sessionFixture(FORCED_STROKES);
+  assert.equal(session.version, 44);
   const results = normalizeLogicalResults(session.results);
   const admission = admitFeatureCatalog(session.editorState.featureCatalog, results, { adopt: true, mode: 'circular' });
-  const edits = savedResultEdits(session, 'circular', session.editorState, true);
+  const edits = savedResultEdits(session, 'circular', session.editorState, session.version);
   const svg = parseSvgText(results[0].content);
   const paint = () => Object.fromEntries([
     ...svg.querySelectorAll('[data-gbdraw-feature-id]').filter((element) => element.getAttribute('data-gbdraw-feature-part') === 'block')
@@ -1103,63 +1104,53 @@ test('Load records Python\'s paint on a Session 46 Result saved without records'
   ].map(([name, element]) => [name, ['fill', 'stroke', 'stroke-width'].map((attribute) => element.getAttribute(attribute)).join(' ')]));
   const saved = paint();
   assert.equal(saved.f38ba7c3f, '#54bcf8 #2a9d8f 2.0');
-  assert.equal(saved.CDS, '#54bcf8 #e63946 3');
-  assert.equal(saved.repeat_region, '#f4a261 gray 2.0');
+  assert.equal(saved.repeat_region, '#f4a261 #e63946 3');
 
   const plan = createSavedResultPlan(results, admission, edits);
   assert.equal(plan.kind, 'MUTATING');
-  plan.operationsByResult[0].callerTransforms.forEach((transform) => transform(svg));
+  const { callerTransforms } = plan.operationsByResult[0];
+  assert.deepEqual(callerTransforms.map((transform) => transform(svg)), [true], 'the records');
   assert.deepEqual(paint(), saved, 'the records leave the paint as saved');
-  const recorded = [{ ...results[0], content: serializeNode(svg) }];
-  assert.equal(createSavedResultPlan(recorded, admission, edits).kind, createEmptySvgMutationPlan(1).kind,
-    'a Result with records is admitted as saved');
+  assert.deepEqual(callerTransforms.map((transform) => transform(svg)), [false], 'a Result with records gets none again');
   resetPaint(svg);
   const python = paint();
-  // Every block of this Result shows an edit, so the block stroke is the one
-  // the Session 46 kept for its only Result; a width kept as a number
-  // returns as that number.
-  assert.equal(python.f38ba7c3f, '#54bcf8 #808080 2.0');
-  ['f841fb8a8', 'f2f7a48cf__instance_4_4b227777d4dd1fc6', 'f2f7a48cf__instance_5_ef2d127de37b942b']
-    .forEach((renderedId) => assert.equal(python[renderedId], '#54bcf8 #808080 2', renderedId));
-  assert.equal(python.CDS, '#54bcf8 #808080 2');
+  assert.equal(python.f38ba7c3f, '#54bcf8 gray 2.0', 'the stroke of the blocks no edit reached');
+  ['f841fb8a8', 'f2f7a48cf__instance_4_4b227777d4dd1fc6', 'f2f7a48cf__instance_5_ef2d127de37b942b', 'CDS']
+    .forEach((name) => assert.equal(python[name], saved[name], `${name} has no edit`));
   assert.equal(python.repeat_region, '#d3d3d3 gray 2.0');
-  assert.equal(python.f9cf91913, saved.f9cf91913, 'an unedited feature keeps its paint');
 });
 
-// OV-288 (R15-4): a Session 46 saved a stroked Legend row with a Legend color
-// of its own. Load finds the row's features by Python's row color, not the
+// Python's paint is recorded only for a Session older than 46: a Session 46
+// Result carries its own records, and its bytes are admitted as saved.
+test('Load records Python\'s paint only on the Result of a Session older than 46', () => {
+  const session = sessionFixture(FORCED_STROKES);
+  const results = normalizeLogicalResults(session.results);
+  const admission = admitFeatureCatalog(session.editorState.featureCatalog, results, { adopt: true, mode: 'circular' });
+  const edits = savedResultEdits(session, 'circular', session.editorState, session.version);
+  assert.equal(createSavedResultPlan(results, admission, edits).kind, 'MUTATING');
+  assert.deepEqual(createSavedResultPlan(results, admission, { ...edits, sessionVersion: 46 }), createEmptySvgMutationPlan(1));
+});
+
+// OV-288 (R15-4): the stroked repeat_region row has a Legend color of its
+// own. Load finds the row's features by Python's row color, not the
 // swatch's, so Reset returns them to Python's stroke.
 test('Load records Python\'s stroke on the features of a stroked Legend row with a Legend color (OV-288)', () => {
-  const session = sessionFixture(FORCED_STROKES);
-  const { legend } = session.modes.circular.editorState;
-  legend.entries.find((entry) => entry.caption === 'CDS').color = '#7b2cbf';
-  legend.colorOverrides.CDS = '#7b2cbf';
-  const [svg] = loadSavedResults(session, {
-    patch: (drawn) => drawn.querySelectorAll('g[data-legend-key]')
-      .find((row) => row.getAttribute('data-legend-key') === 'CDS').querySelector('path').setAttribute('fill', '#7b2cbf')
-  });
-  resetPaint(svg);
-  const blockStroke = (renderedId) => {
-    const block = svg.querySelectorAll('[data-gbdraw-feature-id]').find((element) => (
-      (element.getAttribute('data-gbdraw-rendered-feature-id') || element.id) === renderedId
-      && element.getAttribute('data-gbdraw-feature-part') === 'block'));
-    return `${block.getAttribute('stroke')} ${block.getAttribute('stroke-width')}`;
-  };
-  ['f841fb8a8', 'f2f7a48cf__instance_4_4b227777d4dd1fc6', 'f2f7a48cf__instance_5_ef2d127de37b942b']
-    .forEach((renderedId) => assert.equal(blockStroke(renderedId), '#808080 2', renderedId));
+  const [svg] = loadSavedResults(sessionFixture(FORCED_STROKES));
+  assert.equal(partStrokes(svg).f9cf91913, '#e63946 3', 'the saved row stroke');
+  assert.equal(partStrokes(resetPaint(svg)).f9cf91913, 'none 0');
 });
 
-// U2a review #2 (OV-195): the 7e7dd82d writer kept as a feature edit's
+// U2a review #2 (OV-195): a writer kept as a feature edit's
 // `originalStroke*` the stroke the feature showed when its popup opened, so a
 // feature stroked after its Legend row kept the row's stroke there. Load does
 // not read Python's stroke from it.
 test('Load does not take Python\'s stroke from a feature edit\'s originalStroke*', () => {
   const session = sessionFixture(FORCED_STROKES);
-  Object.assign(Object.values(session.modes.circular.editorState.featureStrokes.overrides)[0], {
+  Object.assign(Object.values(session.editorState.featureStrokes.overrides)[0], {
     originalStrokeColor: '#e63946', originalStrokeWidth: 3
   });
   const [svg] = loadSavedResults(session);
-  assert.equal(partStrokes(resetPaint(svg)).f38ba7c3f, '#808080 2.0');
+  assert.equal(partStrokes(resetPaint(svg)).f38ba7c3f, 'gray 2.0');
 });
 
 // U2a review #3 (OV-195): Python strokes a connector with the line stroke, a
@@ -1169,11 +1160,11 @@ test('Load does not take Python\'s stroke from a feature edit\'s originalStroke*
 test('Load gives each kind of feature part the stroke Python drew for it in this Result', () => {
   const [svg] = loadSavedResults(sessionFixture(FORCED_STROKES), {
     patch: (root) => {
-      root.appendChild(connectorPart('f841fb8a8', '#e63946', '3'));
-      root.appendChild(connectorPart('f9cf91913', 'lightgray', '5.0'));
+      root.appendChild(connectorPart('f38ba7c3f', '#2a9d8f', '2'));
+      root.appendChild(connectorPart('f841fb8a8', 'lightgray', '5.0'));
     }
   });
-  assert.equal(partStrokes(resetPaint(svg)).f841fb8a8__line1, 'lightgray 5.0');
+  assert.equal(partStrokes(resetPaint(svg)).f38ba7c3f__line1, 'lightgray 5.0');
 });
 
 // A kind of part every one of which shows a stroke edit has no known Python
@@ -1181,24 +1172,10 @@ test('Load gives each kind of feature part the stroke Python drew for it in this
 // on them until Generate.
 test('Load records no stroke Python is not known to have drawn', () => {
   const [svg] = loadSavedResults(sessionFixture(FORCED_STROKES), {
-    patch: (root) => root.appendChild(connectorPart('f841fb8a8', '#e63946', '3'))
+    patch: (root) => root.appendChild(connectorPart('f38ba7c3f', '#2a9d8f', '2'))
   });
-  assert.equal(svg.getElementById('f841fb8a8__line1').hasAttribute('data-gbdraw-base-stroke'), false);
-  assert.equal(partStrokes(resetPaint(svg)).f841fb8a8__line1, '#e63946 3');
-});
-
-// The block stroke a Session kept is that of one Result; the Results of a
-// batch may differ in size class, so none of them takes it.
-test('Load gives no Result of a batch the block stroke the Session kept', () => {
-  const session = sessionFixture(FORCED_STROKES);
-  const [first] = session.results;
-  const featureCatalog = structuredClone(session.editorState.featureCatalog);
-  featureCatalog.items.push({ ...structuredClone(featureCatalog.items[0]), resultIndex: 1, resultName: 'other.svg' });
-  loadSavedResults(session, {
-    results: normalizeLogicalResults([first, { ...first, name: 'other.svg' }]), featureCatalog
-  }).forEach((svg) => {
-    assert.doesNotMatch(serializeNode(svg), /data-gbdraw-base-stroke/);
-  });
+  assert.equal(svg.getElementById('f38ba7c3f__line1').hasAttribute('data-gbdraw-base-stroke'), false);
+  assert.equal(partStrokes(resetPaint(svg)).f38ba7c3f__line1, '#2a9d8f 2');
 });
 
 // Sessions 40-45 (main writes 44) keep one flat draft, whose edits the
@@ -1207,11 +1184,11 @@ test('Load gives no Result of a batch the block stroke the Session kept', () => 
 // Python's paint on it the same way.
 test('Load records Python\'s paint on a Session 44 Result', () => {
   const session = sessionFixture('two-mode-project.v44.gbdraw-session.json.gz');
-  const edits = savedResultEdits(session, 'linear', session.editorState, false);
+  const edits = savedResultEdits(session, 'linear', session.editorState, session.version);
   assert.deepEqual(Object.keys(edits.legendStrokeOverrides), ['tRNA_RENAMED']);
   assert.deepEqual(edits.legendColorOverrides, { CDS: '#112233' });
   assert.equal(Object.keys(edits.featureColorOverrides).length, 2);
-  const [svg] = loadSavedResults(session, { mode: 'linear', modeScoped: false });
+  const [svg] = loadSavedResults(session, { mode: 'linear' });
   assert.match(serializeNode(svg), /#333333/);
   Object.entries(partStrokes(resetPaint(svg))).forEach(([id, stroke]) => (
     assert.equal(stroke, id.includes('__line') ? 'lightgray 5.0' : 'gray 2.0', id)
@@ -1558,7 +1535,7 @@ test('the Load normalizer records no fill Python is not known to have drawn', ()
   const plan = createSavedResultPlan(response.results, admission, {
     featureColorOverrides: { [biologicalFeatureKey('record-a', 'feature-a')]: '#112233' },
     featureStrokeOverrides: {}, legendEntries: [], legendColorOverrides: {}, legendStrokeOverrides: {},
-    originalLegendColors: {}, originalLegendOrder: [], blockStroke: null
+    originalLegendColors: {}, originalLegendOrder: [], mode: 'linear', sessionVersion: 44
   });
   plan.operationsByResult[0].callerTransforms.forEach((transform) => transform(svg));
   assert.doesNotMatch(serializeNode(svg), /data-gbdraw-base-fill/);
@@ -1599,7 +1576,7 @@ const legendRows = (svg) => svg.querySelectorAll('g[data-legend-key]').map((row)
 // without the rename returns Python's row
 // (tests/fixtures/sessions/forced-label-underlay-legend-rows.provenance.json).
 test('Load records Python\'s key on a row a Session saved before U3a renamed', () => {
-  const session = sessionFixture('forced-label-underlay-legend-rows.v46.gbdraw-session.json.gz');
+  const session = sessionFixture('forced-label-underlay-legend-rows.v44.gbdraw-session.json.gz');
   const keyRecord = 'data-gbdraw-base-data-legend-key';
   const recordsOf = (svg) => svg.querySelectorAll('g[data-legend-key]')
     .map((row) => [row.getAttribute('data-legend-key'), row.getAttribute(keyRecord)]);

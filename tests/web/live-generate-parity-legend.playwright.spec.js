@@ -824,15 +824,15 @@ for (const mode of ['circular', 'linear']) {
   });
 }
 
-// U3a compat: a Session 46 saved before U3a, whose Result has a renamed, a
-// deleted, and an added Legend row
+// U3a compat: a Session 44 that main saved, whose Result has a renamed, a
+// deleted, and an added Legend row without Legend structure records (D-15-34)
 // (tests/fixtures/sessions/forced-label-underlay-legend-rows.provenance.json).
 // Load shows the Legend it saved, Undo of a new edit returns that Result, the
 // Restore of the deleted row asks for the automatic rerender (O-2), and live
 // equals Generate.
-const LEGEND_ROWS_SESSION = 'tests/fixtures/sessions/forced-label-underlay-legend-rows.v46.gbdraw-session.json.gz';
+const LEGEND_ROWS_SESSION = 'tests/fixtures/sessions/forced-label-underlay-legend-rows.v44.gbdraw-session.json.gz';
 const LEGEND_ROWS_SAVED = JSON.parse(readFileSync('tests/fixtures/sessions/forced-label-underlay-legend-rows.provenance.json', 'utf8'))
-  .sessions['forced-label-underlay-legend-rows.v46.gbdraw-session.json.gz'].legend;
+  .sessions['forced-label-underlay-legend-rows.v44.gbdraw-session.json.gz'].legend;
 const shownLegendRows = async (page) => (await semanticSnapshot(page)).legend.map((row) => row.caption);
 const loadLegendRowsSession = async (page, { fresh = true } = {}) => {
   if (fresh) await openFresh(page);
@@ -843,17 +843,17 @@ const loadLegendRowsSession = async (page, { fresh = true } = {}) => {
     .toEqual(LEGEND_ROWS_SAVED.deleted);
   expect(await shownLegendRows(page), 'the rows the saved Result shows').toEqual(LEGEND_ROWS_SAVED.shownRows);
 };
-test('U3a compat: a Session 46 saved before U3a loads its Legend rows, and live equals Generate', async ({ page }) => {
+test('U3a compat: a Session 44 main saved loads its Legend rows, and live equals Generate', async ({ page }) => {
   test.setTimeout(240_000);
   await loadLegendRowsSession(page);
-  await expectLiveEqualsGenerate(page, { label: 'Session 46 with Legend row edits, after Load' });
+  await expectLiveEqualsGenerate(page, { label: 'Session 44 with Legend row edits, after Load' });
 });
 // U3a review H1: the saved Result renamed GC content to "GC %" without a
 // record of Python's key; Load records it, so each live edit of the row
 // reaches it. A Generate after each step would replace the loaded Result, so
 // the color, stroke and rename are checked on the live row and then together
 // against Generate; the delete starts from a fresh Load.
-test('U3a compat: the row a Session 46 saved before U3a renamed takes color, stroke, rename and delete live', async ({ page }) => {
+test('U3a compat: the row a Session 44 main saved renamed takes color, stroke, rename and delete live', async ({ page }) => {
   test.setTimeout(300_000);
   await loadLegendRowsSession(page);
   const liveRow = (caption) => page.evaluate((key) => {
@@ -876,7 +876,7 @@ test('U3a compat: the row a Session 46 saved before U3a renamed takes color, str
   expect(await liveRow('GC %'), 'the delete hides the row').toBe(null);
   await expectLiveEqualsGenerate(page, { label: 'delete of the renamed row after Load' });
 });
-test('U3a compat: Undo of a new edit and the Restore of a deleted row on a Session 46 saved before U3a', async ({ page }) => {
+test('U3a compat: Undo of a new edit and the Restore of a deleted row on a Session 44 main saved', async ({ page }) => {
   test.setTimeout(240_000);
   await loadLegendRowsSession(page);
   const loaded = await semanticSnapshot(page);

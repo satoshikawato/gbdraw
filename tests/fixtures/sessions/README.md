@@ -68,24 +68,22 @@ Sessions 33 have no feature catalog. They are the positive fixtures for the
 readers that move those edits onto source identities (Session 46). The steps,
 inputs, and hashes are in `feature-edits.provenance.json`.
 
-`forced-label-underlay-strokes.v46.gbdraw-session.json.gz` is a Web **Save
-Session** download, kept unchanged, from commit `7e7dd82d` (Session 46, before
-the Result executor recorded Python's paint). Its Result shows a feature
-stroke, a Legend row stroke, and a Legend row color without
-`data-gbdraw-base-*` records. It is the positive fixture for the Load reader
-that records them from the strokes of the parts no edit reached, the block
-stroke a Session 46 keeps (`originalSvgStroke`), `originalColors`, and catalog
-fills (`createSavedResultPlan`). The steps, inputs, and hashes are in
+`forced-label-underlay-strokes.v44.gbdraw-session.json.gz` is a Web **Save
+Session** download, kept unchanged, from first-parent `main` commit `fe6861f0`
+(Session 44). Its Result shows a feature stroke, a Legend row stroke, and a
+Legend row color without `data-gbdraw-base-*` records. It is the positive
+fixture for the Load reader that records them from the strokes of the parts no
+edit reached, `originalColors`, and catalog fills (`createSavedResultPlan`),
+which runs for Sessions older than 46. The steps, inputs, and hashes are in
 `forced-label-underlay-strokes.provenance.json`.
 
-`forced-label-underlay-legend-rows.v46.gbdraw-session.json.gz` is a Web **Save
-Session** download, kept unchanged, from branch commit `f5a0d69c` (Session 46,
-before the Result executor kept deleted Legend rows hidden). Its Result shows a
-renamed, an added and no deleted Legend row, without Legend structure records:
-the deleted row is not in its bytes. It is the positive fixture for loading such
-a Result with the same Legend, and for the Restore that asks Python to draw a
-row the bytes lack (U3a O-2). The steps, inputs, and hashes are in
-`forced-label-underlay-legend-rows.provenance.json`.
+`forced-label-underlay-legend-rows.v44.gbdraw-session.json.gz` is a Web **Save
+Session** download, kept unchanged, from first-parent `main` commit `fe6861f0`
+(Session 44). Its Result shows a renamed, an added and no deleted Legend row,
+without Legend structure records: the deleted row is not in its bytes. It is
+the positive fixture for loading such a Result with the same Legend, and for
+the Restore that asks Python to draw a row the bytes lack (U3a O-2). The steps,
+inputs, and hashes are in `forced-label-underlay-legend-rows.provenance.json`.
 
 `whitelist-tab-keyword.v39.gbdraw-session.json.gz` is a Web **Save Session**
 download, kept unchanged, from first-parent `main` commit `17e2c9de`

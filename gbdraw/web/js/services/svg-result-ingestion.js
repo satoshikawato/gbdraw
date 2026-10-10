@@ -954,8 +954,7 @@ export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domai
  * @property {Record<string, string>} originalLegendColors
  * @property {string[]} originalLegendOrder The captions of the rows Python drew (the Legend inventory).
  * @property {'circular' | 'linear'} mode
- * @property {{ color: string | null, width: number | null } | null} blockStroke Python's block stroke of
- *   the set's Result as a Session 46 kept it (`originalSvgStroke`); null when the Session's is not known to be.
+ * @property {number} sessionVersion The version of the Session that saved the edits.
  */
 
 /** @param {string} name @param {unknown} left @param {unknown} right */
@@ -980,23 +979,21 @@ const strokeKind = (element, parts, perRecord) => {
   return `${record}|${outlined ? 'outlined' : 'block'}`;
 };
 
-// Session 46 (0.14.0) and older current Sessions saved a Result with its
-// stroke and color edits drawn in but without the records of Python's values.
-// Load records them once, on each element that shows its edit, so Reset and
-// Undo return it to Python's value: fills from the catalog, swatch fills
-// from the Legend's original colors, and strokes from the parts of the same
-// kind that no saved stroke edit reached (a stroke an edit or the Session
-// kept may be an edited one, or another Result's). A Session 46 with one
-// Result kept that Result's block stroke. A kind no part of which escaped the
+// Sessions older than 46 (main writes 44) saved a Result with its stroke and
+// color edits drawn in but without the records of Python's values. Load
+// records them once, on each element that shows its edit, so Reset and Undo
+// return it to Python's value: fills from the catalog, swatch fills from the
+// Legend's original colors, and strokes from the parts of the same kind that
+// no saved stroke edit reached (a stroke an edit or the Session kept may be an
+// edited one, or another Result's). A kind no part of which escaped the
 // edits, or whose parts disagree, is not known: its parts get no record and
 // show the saved stroke until Generate. Returns whether it recorded a value.
 /**
  * @param {Element} svg
- * @param {{ resultIndex: number, catalogAdmission: FeatureCatalogAdmission, edits: SavedResultEdits,
- *   blockStroke: SavedResultEdits['blockStroke'] }} saved
+ * @param {{ resultIndex: number, catalogAdmission: FeatureCatalogAdmission, edits: SavedResultEdits }} saved
  * @returns {boolean}
  */
-const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits, blockStroke }) => {
+const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits }) => {
   const index = createLazyMutationIndex(svg, { phase: 'session-load', resultIndex });
   let recorded = false;
   /** @param {Element} element @param {string} name @param {unknown} edited @param {unknown} original */
@@ -1090,7 +1087,6 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits, block
   });
   const firstPart = [...index.features().values()].flat().find((element) => !isAutoFeatureUnderlay(element));
   const firstBlocks = `${perRecord ? text(firstPart?.getAttribute('data-gbdraw-record-index')) : ''}|block`;
-  if (blockStroke && !drawnStrokes.has(firstBlocks)) drawnStrokes.set(firstBlocks, blockStroke);
   /** @param {Element} element @param {{ color: unknown, width: unknown } | null | undefined} drawn @param {SavedStrokeEdit} edit */
   const recordStroke = (element, drawn, edit) => {
     if (!drawn) return;
@@ -1114,6 +1110,10 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits, block
   });
   return recorded;
 };
+
+// The first Session version whose Results carry the records of Python's
+// paint (0.14.0); an older Session's Result shows its edits without them.
+const PAINT_RECORD_SESSION_VERSION = 46;
 
 // The renamed generated rows a Session lists, by their caption: main's writer
 // (Sessions 44 to 46) renamed a row of Python's by rewriting its key and kept
@@ -1171,9 +1171,10 @@ const recordSavedLegendKeys = (svg, renames) => {
 /**
  * The plan a current Session's Results are admitted with at Load: none, or,
  * for each Result the legacy normalization applies to, that normalization;
- * for each Result saved without records of Python's paint, the records of the
- * edits it shows (`recordSavedEditBases`); and for each Result the records of
- * Python's key on the rows a Session renamed without one (`recordSavedLegendKeys`).
+ * for each Result of a Session older than 46, which saved no records of
+ * Python's paint, the records of the edits it shows (`recordSavedEditBases`);
+ * and for each Result the records of Python's key on the rows a Session
+ * renamed without one (`recordSavedLegendKeys`).
  * @param {readonly { content?: unknown }[]} results
  * @param {FeatureCatalogAdmission} catalogAdmission
  * @param {SavedResultEdits | null} edits
@@ -1184,21 +1185,14 @@ export const createSavedResultPlan = (results, catalogAdmission, edits, legacy =
   const editsShown = edits && [
     edits.featureColorOverrides, edits.featureStrokeOverrides, edits.legendColorOverrides, edits.legendStrokeOverrides
   ].some((overrides) => Object.keys(overrides || {}).length > 0);
-  const needsRecords = (/** @type {{ content?: unknown }} */ result) => (
-    Boolean(editsShown) && String(result?.content || '').indexOf('data-gbdraw-base-') < 0
-  );
+  const needsRecords = Boolean(edits && editsShown && edits.sessionVersion < PAINT_RECORD_SESSION_VERSION);
   const normalizes = (/** @type {{ content?: unknown }} */ result) => Boolean(legacy?.applies(result?.content));
   const legacyNormalizationCount = results.filter(normalizes).length;
   const renames = edits ? savedLegendRenames(edits) : new Map();
-  if (legacyNormalizationCount === 0 && renames.size === 0 && !results.some(needsRecords)) {
+  if (legacyNormalizationCount === 0 && renames.size === 0 && !needsRecords) {
     return createEmptySvgMutationPlan(results.length);
   }
   const savedEdits = /** @type {SavedResultEdits} */ (edits);
-  // The Session's block stroke is that of one Result; a batch's Results may
-  // differ in size class.
-  const kept = edits?.blockStroke;
-  const blockStroke = results.length === 1 && text(kept?.color) && kept?.width !== null && kept?.width !== undefined
-    ? kept : null;
   return Object.freeze({
     kind: 'MUTATING',
     legacyNormalizationCount,
@@ -1208,8 +1202,8 @@ export const createSavedResultPlan = (results, catalogAdmission, edits, legacy =
       // key it shows, so they come before the key records.
       const transforms = [
         ...(legacy && normalizes(result) ? [legacy.transform] : []),
-        ...(needsRecords(result)
-          ? [(/** @type {Element} */ svg) => recordSavedEditBases(svg, { resultIndex, catalogAdmission, edits: savedEdits, blockStroke })]
+        ...(needsRecords
+          ? [(/** @type {Element} */ svg) => recordSavedEditBases(svg, { resultIndex, catalogAdmission, edits: savedEdits })]
           : []),
         ...(renames.size > 0 ? [(/** @type {Element} */ svg) => recordSavedLegendKeys(svg, renames)] : [])
       ];

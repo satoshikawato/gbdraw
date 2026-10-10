@@ -2225,18 +2225,16 @@ const restoreLoadedSetSequenceSources = async ({
 // The stroke and color edits the saved Results of `mode` show (its Session 46
 // slice, else the flat draft) and the values the Session kept as Python's
 // (`setEditorState`: the set's own editor state). Load records Python's values
-// from them on a Result saved without those records. Only a Session 46 kept
-// Python's block stroke in `originalSvgStroke`; Sessions 40-45 kept the first
-// feature's stroke as shown, which may be an underlay's or an edited one.
+// from them on a Result of a Session that saved no such records.
 /**
  * @param {Record<string, any>} data
  * @param {'circular' | 'linear'} mode
  * @param {unknown} setEditorState
- * @param {boolean} modeScoped A Session 46 (mode slices).
+ * @param {number} sessionVersion The version of the Session `data`.
  * @returns {SavedResultEdits}
  */
-export const savedResultEdits = (data, mode, setEditorState, modeScoped) => {
-  const slice = modeScoped
+export const savedResultEdits = (data, mode, setEditorState, sessionVersion) => {
+  const slice = sessionVersion >= MODE_SCOPED_SESSION_VERSION
     ? data.modes?.[mode]
     : { editorState: data.editorState, features: data.features };
   const edits = normalizeEditorStateData(isPlainObject(slice?.editorState) ? slice.editorState : {});
@@ -2250,7 +2248,7 @@ export const savedResultEdits = (data, mode, setEditorState, modeScoped) => {
     originalLegendColors: kept.legend.originalColors,
     originalLegendOrder: kept.legend.originalOrder,
     mode,
-    blockStroke: modeScoped ? kept.originalSvgStroke : null
+    sessionVersion
   };
 };
 
@@ -5179,7 +5177,7 @@ const importSessionDocument = async (e, options = {}) => {
     const committedImportedResults = currentSchemaSession && validatedSessionCatalog
       ? admitLoadedSetResults(logicalImportedResults, {
           featureCatalog: validatedSessionCatalog, mode: committedMode, selectedFeatureTypes,
-          savedEdits: savedResultEdits(data, committedMode === 'linear' ? 'linear' : 'circular', data.editorState, modeScopedSession),
+          savedEdits: savedResultEdits(data, committedMode === 'linear' ? 'linear' : 'circular', data.editorState, sourceSessionVersion),
           legacy: transformLegacyResultSvg
             ? { transform: transformRestoredSessionSvg, applies: transformLegacyResultSvg.appliesToContent }
             : null
@@ -5220,7 +5218,7 @@ const importSessionDocument = async (e, options = {}) => {
       ? buildLoadedArtifactSlot(otherModeResult, {
           ...slotOptions,
           featureCatalog: otherModeCatalogAdmitted,
-          savedEdits: savedResultEdits(data, otherSetMode, otherModeResult.editorState, modeScopedSession),
+          savedEdits: savedResultEdits(data, otherSetMode, otherModeResult.editorState, sourceSessionVersion),
           restoredSequenceSources: (await restoreLoadedSetSequenceSources({
             ...setSequenceSourceOptions,
             mode: otherSetMode,
