@@ -70,9 +70,10 @@ import {
   ANNOTATION_TARGET_MIGRATION_NOTICE,
   FEATURE_EDIT_MIGRATION_WARNING,
   FEATURE_VISIBILITY_NARROWED_NOTICE,
+  DRAWN_HASH_RULE_SESSION_MAX_VERSION,
   HASH_SELECTOR_UNMAPPED_NOTICE,
   RENDERED_ID_FEATURE_EDIT_FIELDS,
-  hasHashSelectorRules,
+  hasHashColorRules,
   hasRenderedIdFeatureEdits,
   legacyLinearRequestRecords,
   migrateSessionAnnotationTargets,
@@ -5276,11 +5277,9 @@ const importSessionDocument = async (e, options = {}) => {
     if (sourceSessionVersion < SESSION_VERSION) {
       const recovered = legacyFeatureRecoveryPlan?.recoveredFeatureState;
       const sessionMode = data.renderRequest?.mode || candidateMode;
-      const sourceFeatures = !validatedSessionCatalog && (hasRenderedIdFeatureEdits(features)
-        || hasHashSelectorRules({
-          rules: restoredConfig?.rules,
-          featureVisibilityManualRules: /** @type {Record<string, unknown>} */ (features).featureVisibilityManualRules
-        }))
+      const hashColorRules = sourceSessionVersion <= DRAWN_HASH_RULE_SESSION_MAX_VERSION
+        && hasHashColorRules(restoredConfig?.rules);
+      const sourceFeatures = !validatedSessionCatalog && (hasRenderedIdFeatureEdits(features) || hashColorRules)
         ? await extractSessionSourceFeatures(/** @type {any} */ ({ snapshot: legacyFeatureSnapshot }))
         : null;
       const legacy = validatedSessionCatalog ? null : {
@@ -5297,25 +5296,22 @@ const importSessionDocument = async (e, options = {}) => {
       features = migration.features;
       droppedFeatureEditCount = migration.droppedCount;
       narrowedFeatureVisibilityCount = migration.narrowedVisibilityCount;
-      // S6: a `hash` color or Feature visibility rule names its features by
+      // S6: a `hash` color rule of a Session 44 or older names its features by
       // their source hash (OV-401, release D-39). A Session before 31 has no
       // request: its Linear cards give the records.
-      const ruleRecords = data.renderRequest?.records
-        ?? (candidateMode === 'linear' ? legacyLinearRequestRecords(candidateFiles.linearSeqs) : undefined);
-      const savedVisibilityRules = /** @type {Record<string, unknown>} */ (features).featureVisibilityManualRules;
-      const hashRules = migrateSessionHashRules({
-        rules: restoredConfig?.rules,
-        featureVisibilityManualRules: savedVisibilityRules,
-        mode: sessionMode,
-        catalog: validatedSessionCatalog,
-        legacy: legacy && { ...legacy, records: ruleRecords },
-        records: ruleRecords
-      });
-      if (restoredConfig && hashRules.rules !== restoredConfig.rules) restoredConfig.rules = hashRules.rules;
-      if (hashRules.featureVisibilityManualRules !== savedVisibilityRules) {
-        features = { ...features, featureVisibilityManualRules: hashRules.featureVisibilityManualRules };
+      if (hashColorRules && restoredConfig) {
+        const ruleRecords = data.renderRequest?.records
+          ?? (candidateMode === 'linear' ? legacyLinearRequestRecords(candidateFiles.linearSeqs) : undefined);
+        const hashRules = migrateSessionHashRules({
+          rules: restoredConfig.rules,
+          mode: sessionMode,
+          catalog: validatedSessionCatalog,
+          legacy: legacy && { ...legacy, records: ruleRecords },
+          records: ruleRecords
+        });
+        restoredConfig.rules = hashRules.rules;
+        unmappedHashSelectorCount = hashRules.unmappedCount;
       }
-      unmappedHashSelectorCount = hashRules.unmappedCount;
       // R-7: an annotation's `hash=` target moves to its source feature only
       // where the saved catalog makes the figure certain.
       if (restoredConfig) {
@@ -5326,7 +5322,6 @@ const importSessionDocument = async (e, options = {}) => {
           records: data.renderRequest?.records
         });
         migratedAnnotationTargetCount = annotationMigration.migratedCount;
-        unmappedHashSelectorCount += annotationMigration.unmappedCount;
         if (migratedAnnotationTargetCount > 0) restoredConfig.annotationSets = annotationMigration.annotationSets;
       }
       if (recovered) {

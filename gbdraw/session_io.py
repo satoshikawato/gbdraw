@@ -2198,14 +2198,34 @@ def _legacy_feature_index(legacy: object, mode: object) -> list[_IndexedFeature]
     return biological
 
 
+# The last Session version whose `hash` color rules a Web writer filled with
+# the hash of the drawn feature (release 0.13.0: Session 30, first-parent main:
+# Session 44); `hash=` names the source-record hash after it (OV-401, release
+# D-39).
+DRAWN_HASH_RULE_SESSION_MAX_VERSION = 44
+
+# A feature a saved diagram drew: its source hash, the hash it was drawn with,
+# its source index, and its one-based record position in its Result.
+DrawnFeature = tuple[str, str, int | None, int]
+
+
+def _drawn_features_of_index(index: Sequence[_IndexedFeature]) -> list[DrawnFeature]:
+    """The features of a feature index (:func:`_legacy_feature_index`,
+    :func:`_catalog_drawn_features`) with the source hash of their identity key."""
+
+    return [
+        (_SOURCE_INDEX_SUFFIX.sub("", json.loads(key)[2], count=1), drawn_hash, source_index, ordinal)
+        for key, drawn_hash, source_index, ordinal in index
+    ]
+
+
 def _catalog_drawn_features(catalog: object, mode: object) -> list[_IndexedFeature]:
-    """Each feature a saved catalog (schema 3-5) drew, by the hash it was drawn with.
+    """Each feature a saved catalog (schema 3 or 4) drew, by the hash it was drawn with.
 
     A catalog row's rendered ID (``svgId``) carries the feature's hash in its
-    drawn (cropped, reverse-complemented) record; schema 5 also keeps that hash
-    as ``drawnSelector.hash``. The record position is the rendered ID's or the
-    row's place in its item's records. The twin of ``catalogDrawnFeatures`` in
-    the Web ``feature-edit-migration.js``.
+    drawn (cropped, reverse-complemented) record. The record position is the
+    rendered ID's or the row's place in its item's records. The twin of
+    ``catalogDrawnFeatures`` in the Web ``feature-edit-migration.js``.
     """
 
     drawn: list[_IndexedFeature] = []
@@ -2220,11 +2240,7 @@ def _catalog_drawn_features(catalog: object, mode: object) -> list[_IndexedFeatu
         for feature in _mapping_list(item.get("features")):
             record_key = _js_text(feature.get("recordKey"))
             key = _feature_identity_key(mode, record_key, _js_text(feature.get("biologicalFeatureId")))
-            rendered_hash, record_ordinal, source_index = _parse_rendered_id(feature.get("svgId"))
-            selector = feature.get("drawnSelector")
-            drawn_hash = (
-                _js_text(selector.get("hash")) if isinstance(selector, Mapping) else ""
-            ) or rendered_hash
+            drawn_hash, record_ordinal, source_index = _parse_rendered_id(feature.get("svgId"))
             if not key or not drawn_hash:
                 continue
             if record_ordinal is None:
@@ -2246,76 +2262,57 @@ def _hash_selector_parts(value: object) -> tuple[bool, str, int | None, int | No
     return (anchored is not None, *_parse_rendered_id(anchored.group(1) if anchored else text))
 
 
-def source_hash_of_drawn_selector(
-    value: object, drawn_by_record: Sequence[Mapping[str, set[str]]]
-) -> str | None:
-    """The ``hash`` value of a Session 44 or older, read in the source frame.
-
-    ``drawn_by_record`` holds, for each drawn record in Result order, the
-    source hashes of its features by drawn hash. The value names the features
-    drawn with its hash, in the record its ``_record_<n>`` suffix gives. Returns
-    the value naming their one source hash, in the same form without the
-    suffixes, or ``None``. The request twin of
-    :func:`_source_hash_selector_value`.
-    """
-
-    anchored, stable_id, record_ordinal, _ = _hash_selector_parts(value)
-    records = (
-        drawn_by_record
-        if record_ordinal is None
-        else drawn_by_record[record_ordinal - 1 : record_ordinal]
-    )
-    sources = {source for by_hash in records for source in by_hash.get(stable_id, ())}
-    if len(sources) != 1:
-        return None
-    source = sources.pop()
-    return f"^{source}$" if anchored else source
-
-
-def unmapped_hash_selector_warning(count: int, version: object) -> str:
-    """The warning for ``hash`` values of an older Session that name no drawn feature."""
-
-    return (
-        f"{count} hash= rule(s) or annotation target(s) from Session version "
-        f"{version} could not be matched to a feature of its saved diagram, which crops or "
-        "reverse-complements a record. hash= now names a feature by its hash in "
-        "the source record, so each may now match another feature or none."
-    )
-
-
-def _source_hash_selector_value(
-    value: object, drawn: Sequence[_IndexedFeature], *, record_key: str = ""
-) -> tuple[str, list[str]] | None:
-    """Read a ``hash`` selector value of a Session 44 or older in the source frame.
+def source_hash_selector_value(
+    value: object, drawn: Sequence[DrawnFeature]
+) -> tuple[str | None, int]:
+    """Read a ``hash`` value of a Session 44 or older in the source frame.
 
     Such a Session matched ``hash=`` against the hash of the drawn feature, so
     on a cropped or reverse-complemented record its value is not the source
     hash ``hash=`` names now (OV-401, release D-39). The value, written as
     ``<hash>`` or ``^<hash>$`` and maybe with the rendered ID's record and
-    instance suffixes (release 0.13.0), names the features of ``drawn`` (see
-    :func:`_catalog_drawn_features`, :func:`_legacy_feature_index`) drawn with
-    that hash, in ``record_key`` when given. Returns the value naming their one
-    source hash, in the same form without the suffixes, and their identity
-    keys; ``None`` when the value names no drawn feature or features of two
-    source hashes. The twin of ``sourceHashSelectorValue`` in the Web
-    ``feature-edit-migration.js``.
+    instance suffixes, names the features of ``drawn`` drawn with that hash,
+    ignoring case as the matchers do, in the record and with the source index
+    its suffixes give. Returns the value naming their one source hash, in the
+    same form without the suffixes, and the number of their source hashes.
+    The value is ``None`` unless they have one source hash, and when that is
+    the value's own hash (a record drawn untransformed) and the value has no
+    Linear record suffix ``_record_<n>``, which no matcher reads (OV-416): such
+    a value means what it meant and stays as saved. The
+    Session draft (:func:`migrate_session_hash_rules`) and the CLI replay of a
+    request (``gbdraw.api.session_compat``) read with it; the twin of
+    ``sourceHashSelectorValue`` in the Web ``feature-edit-migration.js``.
     """
 
     anchored, stable_id, record_ordinal, source_index = _hash_selector_parts(value)
-    keys = [
-        key
-        for key, drawn_hash, feature_source_index, feature_ordinal in drawn
-        if stable_id
-        and drawn_hash == stable_id
+    wanted = stable_id.lower()
+    sources = {
+        source_hash
+        for source_hash, drawn_hash, feature_source_index, feature_ordinal in drawn
+        if wanted
+        and drawn_hash.lower() == wanted
         and (record_ordinal is None or feature_ordinal == record_ordinal)
         and (source_index is None or feature_source_index == source_index)
-        and (not record_key or json.loads(key)[1] == record_key)
-    ]
-    sources = {_SOURCE_INDEX_SUFFIX.sub("", json.loads(key)[2], count=1) for key in keys}
+    }
     if len(sources) != 1:
-        return None
+        return None, len(sources)
     source = sources.pop()
-    return (f"^{source}$" if anchored else source), list(dict.fromkeys(keys))
+    if source.lower() == wanted and not _LINEAR_RECORD_SUFFIX.search(_js_text(value)):
+        return None, 1
+    return (f"^{source}$" if anchored else source), 1
+
+
+def unmapped_hash_selector_warning(count: int, version: object) -> str:
+    """The warning for ``hash`` values of an older Session that could not be renamed."""
+
+    return (
+        f"{count} hash= value(s) from Session version {version} could not be renamed "
+        "to the hash of a feature in its source record: the saved diagram drew a "
+        "cropped or reverse-complemented record, and the value names features of "
+        "several source hashes there, or the sources were not read again. hash= now "
+        "names a feature by its hash in the source record, so each may now match "
+        "another feature or none."
+    )
 
 
 def _legacy_linear_request_records(files: object) -> list[dict[str, Any]]:
@@ -2329,10 +2326,9 @@ def _legacy_linear_request_records(files: object) -> list[dict[str, Any]]:
     linear_seqs = files.get("linearSeqs") if isinstance(files, Mapping) else None
     records: list[dict[str, Any]] = []
     for seq in _mapping_list(linear_seqs):
-        cropped = (
-            _nonnegative_integer(seq.get("region_start")) is not None
-            or _nonnegative_integer(seq.get("region_end")) is not None
-        )
+        start = _nonnegative_integer(seq.get("region_start"))
+        end = _nonnegative_integer(seq.get("region_end"))
+        cropped = start is not None or end is not None
         reverse = bool(seq.get("region_reverse"))
         records.append(
             {
@@ -2340,87 +2336,112 @@ def _legacy_linear_request_records(files: object) -> list[dict[str, Any]]:
                 "cardinality": (
                     "exactly_one" if cropped or _js_text(seq.get("region_record_id")) else "all"
                 ),
-                "region": {"reverseComplement": reverse} if cropped else None,
+                "region": (
+                    {"start": start, "end": end, "reverseComplement": reverse} if cropped else None
+                ),
                 "presentation": {"reverseComplement": not cropped and reverse},
             }
         )
     return records
 
 
+def _hash_frame_changed(record: Mapping[str, Any]) -> bool:
+    """Whether a request record is drawn cropped or reverse-complemented, so
+    the drawn hashes of its features differ from their source hashes (a
+    rotation or a region that only selects a record changes no hash).
+
+    The twin of ``hashFrameChanged`` in the Web ``feature-edit-migration.js``.
+    """
+
+    region = record.get("region")
+    presentation = record.get("presentation")
+    return (
+        isinstance(region, Mapping)
+        and (
+            _nonnegative_integer(region.get("start")) is not None
+            or _nonnegative_integer(region.get("end")) is not None
+            or _js_truthy(region.get("reverseComplement"))
+        )
+    ) or (isinstance(presentation, Mapping) and _js_truthy(presentation.get("reverseComplement")))
+
+
+def has_hash_color_rules(rules: object) -> bool:
+    """Whether specific color rules (``qual`` and ``val``) hold a ``hash`` rule.
+
+    The twin of ``hasHashColorRules`` in the Web ``feature-edit-migration.js``.
+    """
+
+    return isinstance(rules, list) and any(
+        isinstance(rule, Mapping) and _js_text(rule.get("qual")).lower() == "hash" for rule in rules
+    )
+
+
 @dataclass(frozen=True)
 class HashRuleMigration:
-    """The ``hash`` color and Feature visibility rules of an older Session."""
+    """The ``hash`` color rules of an older Session and how many stay unrenamed."""
 
     rules: Any
-    feature_visibility_manual_rules: Any
     unmapped_count: int
 
 
 def migrate_session_hash_rules(
     rules: object,
-    feature_visibility_manual_rules: object,
     *,
     mode: object,
     catalog: object,
     legacy: object = None,
     records: object = None,
 ) -> HashRuleMigration:
-    """Name the features of the ``hash`` rules of a Session 44 or older by source hash.
+    """Name the features of the ``hash`` color rules of a Session 44 or older by source hash.
 
     ``rules`` are the Session's specific color rules (``config.rules``,
-    ``qual`` and ``val``) and ``feature_visibility_manual_rules`` its Feature
-    visibility rules (``qualifier`` and ``value``). Each ``hash`` value that
-    names features drawn with that hash (:func:`_source_hash_selector_value`,
+    ``qual`` and ``val``), whose ``hash`` values release 0.13.0 and main wrote
+    with the drawn feature's hash (its rendered ID in 0.13.0). Each such value
+    that names features drawn with that hash (:func:`source_hash_selector_value`,
     through the saved ``catalog`` or else ``legacy``, as
     :func:`migrate_session_feature_edits` reads them) gets their source hash,
     so the rule matches the features it matched (S6 of the one feature-hash
-    builder). When a request record in ``records`` is drawn transformed, every
-    other ``hash`` value is counted as unmapped and kept: it may now name
-    another feature. Lists without a change are returned as saved. The twin
-    of ``migrateSessionHashRules`` in the Web ``feature-edit-migration.js``.
+    builder); a value whose features have its own hash as source hash (an
+    untransformed record) is kept. A value naming features of several source
+    hashes is kept and counted as unmapped; so is a value naming no indexed feature when a
+    request record in ``records`` is drawn cropped or reverse-complemented but
+    ``legacy`` holds no drawn hashes (its features are not the sources read
+    again). Every other value is kept as saved. A list without a change is
+    returned as saved. The twin of ``migrateSessionHashRules`` in the Web
+    ``feature-edit-migration.js``.
     """
 
-    request_records = _mapping_list(records)
-    transformed = any(_drawn_transformed(record) for record in request_records)
-    drawn: list[_IndexedFeature] | None = None
+    if not has_hash_color_rules(rules):
+        return HashRuleMigration(rules, 0)
+    assert isinstance(rules, list)
+    if _js_truthy(catalog):
+        drawn = _drawn_features_of_index(_catalog_drawn_features(catalog, mode))
+        drawn_hashes_unknown = False
+    else:
+        drawn = _drawn_features_of_index(_legacy_feature_index(legacy, mode))
+        legacy_features = legacy.get("features") if isinstance(legacy, Mapping) else None
+        drawn_hashes_unknown = any(
+            _hash_frame_changed(record) for record in _mapping_list(records)
+        ) and not any(
+            isinstance(feature.get("drawn_selector") or feature.get("drawnSelector"), Mapping)
+            for feature in _mapping_list(legacy_features)
+        )
     unmapped_count = 0
-
-    def migrate(entries: object, qualifier_field: str, value_field: str) -> object:
-        nonlocal drawn, unmapped_count
-        if not isinstance(entries, list):
-            return entries
-        changed = False
-        migrated: list[Any] = []
-        for entry in entries:
-            if (
-                not isinstance(entry, Mapping)
-                or _js_text(entry.get(qualifier_field)).lower() != "hash"
-                or not _js_text(entry.get(value_field))
-            ):
-                migrated.append(entry)
-                continue
-            if drawn is None:
-                drawn = (
-                    _catalog_drawn_features(catalog, mode)
-                    if _js_truthy(catalog)
-                    else _legacy_feature_index(legacy, mode)
-                )
-            resolved = _source_hash_selector_value(entry.get(value_field), drawn)
-            if resolved is None:
-                unmapped_count += 1 if transformed else 0
-                migrated.append(entry)
-            elif resolved[0] != entry.get(value_field):
-                changed = True
-                migrated.append({**entry, value_field: resolved[0]})
-            else:
-                migrated.append(entry)
-        return migrated if changed else entries
-
-    return HashRuleMigration(
-        migrate(rules, "qual", "val"),
-        migrate(feature_visibility_manual_rules, "qualifier", "value"),
-        unmapped_count,
-    )
+    changed = False
+    migrated: list[Any] = []
+    for rule in rules:
+        value = rule.get("val") if isinstance(rule, Mapping) else None
+        if not isinstance(rule, Mapping) or _js_text(rule.get("qual")).lower() != "hash" or not _js_text(value):
+            migrated.append(rule)
+            continue
+        resolved, source_count = source_hash_selector_value(value, drawn)
+        if resolved is None:
+            unmapped_count += source_count > 1 or (source_count == 0 and drawn_hashes_unknown)
+            migrated.append(rule)
+        else:
+            changed = True
+            migrated.append({**rule, "val": resolved})
+    return HashRuleMigration(migrated if changed else rules, unmapped_count)
 
 
 def migrate_session_feature_edits(
@@ -2624,12 +2645,10 @@ def _record_key_belongs_to_record(record_key: str, record: Mapping[str, Any]) ->
 
 @dataclass(frozen=True)
 class AnnotationTargetMigration:
-    """The annotation sets of an older Session, how many targets moved, and how
-    many ``hash=`` targets of a transformed record stay unmapped."""
+    """The annotation sets of an older Session and how many targets moved."""
 
     annotation_sets: Any
     migrated_count: int
-    unmapped_count: int = 0
 
 
 def migrate_session_annotation_targets(
@@ -2639,20 +2658,14 @@ def migrate_session_annotation_targets(
 
     A Session before 46 named a selected feature in an annotation by
     ``hash=<hash>`` (a featureSpan target with one hash selector), which the
-    renderer matched in the drawn record. Such a target becomes a
-    featureIdentity target in ``mode`` only when the figure cannot change. On
-    a record drawn without a crop, reverse complement, or rotation by its
-    request record in ``records`` (the record the target binds: the saved
-    catalog's records in order, as the renderer binds them), the hash must name
-    exactly one feature of the saved ``catalog``, in that record. On a record
-    drawn transformed, the hash must name the features the saved catalog drew
-    with it in that record (:func:`_source_hash_selector_value`): one feature
-    gives its identity, features of one source hash keep the featureSpan with
-    that hash, which ``hash=`` names now (S7 of the one feature-hash builder).
-    A moved target keeps the saved ``envelope`` and ``circularPath`` it has.
-    Every other target stays as saved, and one that may sit on a transformed
-    record is counted as unmapped: ``hash=`` may now name another feature.
-    When none moves, ``annotation_sets`` is returned as is.
+    renderer matches in the drawn record. Such a target becomes a
+    featureIdentity target in ``mode`` only when the figure cannot change: the
+    record it binds (the saved catalog's records in order, as the renderer
+    binds them) is drawn without a crop, reverse complement, or rotation by its
+    request record in ``records``, and the hash names exactly one feature of
+    the saved ``catalog``, in that record. A moved target keeps the saved
+    ``envelope`` and ``circularPath`` it has. Every other target stays as
+    saved; when none moves, ``annotation_sets`` is returned as is.
 
     This is the twin of ``migrateSessionAnnotationTargets`` in the Web
     ``feature-edit-migration.js`` (R-7);
@@ -2706,12 +2719,7 @@ def migrate_session_annotation_targets(
         matches = [record_key for record_key in catalog_record_keys if record_id in record_ids[record_key]]
         return matches[0] if len(matches) == 1 else ""
 
-    drawn = _catalog_drawn_features(catalog, mode)
-    any_transformed = any(_drawn_transformed(record) for record in request_records)
-    unmapped_count = 0
-
     def identity_target(target: object) -> dict[str, Any] | None:
-        nonlocal unmapped_count
         if not isinstance(target, Mapping) or target.get("kind") != "featureSpan":
             return None
         selectors = target.get("selectors")
@@ -2719,27 +2727,15 @@ def migrate_session_annotation_targets(
         if not isinstance(selector, Mapping) or selector.get("key") != "hash":
             return None
         record_key = bound_record_key(target.get("record"))
+        matches = list(features_by_hash.get(_js_text(selector.get("value")), {}))
+        if not record_key or len(matches) != 1 or matches[0][0] != record_key:
+            return None
         request = next(
             (record for record in request_records if _record_key_belongs_to_record(record_key, record)),
             None,
-        ) if record_key else None
+        )
         if request is None or _drawn_transformed(request):
-            resolved = (
-                _source_hash_selector_value(selector.get("value"), drawn, record_key=record_key)
-                if request is not None
-                else None
-            )
-            if resolved is None:
-                unmapped_count += 1 if any_transformed else 0
-                return None
-            if len(resolved[1]) != 1:
-                return {**target, "selectors": [{**selector, "value": resolved[0]}]}
-            _, record_key, feature_id = json.loads(resolved[1][0])
-            matches = [(record_key, feature_id)]
-        else:
-            matches = list(features_by_hash.get(_js_text(selector.get("value")), {}))
-            if len(matches) != 1 or matches[0][0] != record_key:
-                return None
+            return None
         migrated: dict[str, Any] = {
             "kind": "featureIdentity",
             "scope": mode,
@@ -2768,7 +2764,7 @@ def migrate_session_annotation_targets(
             migrated_annotations.append({**annotation, "target": target})
         migrated_sets.append({**annotation_set, "annotations": migrated_annotations})
     return AnnotationTargetMigration(
-        migrated_sets if migrated_count else annotation_sets, migrated_count, unmapped_count
+        migrated_sets if migrated_count else annotation_sets, migrated_count
     )
 
 
@@ -3886,8 +3882,8 @@ def migrate_session_flat_draft(
     saved catalog or, without one, through the request records and the first
     non-empty of ``source_features["extractedFeatures"]`` (the sources read
     again, see :func:`gbdraw.session_migration.read_legacy_source_features`)
-    and the saved feature metadata, then the ``hash`` color and Feature
-    visibility rules through the same catalog or sources
+    and the saved feature metadata, then the ``hash`` color rules of a Session
+    44 or older through the same catalog or sources
     (``migrate_session_hash_rules``), then the ``hash=`` annotation targets of
     a Session 40-44 (``migrate_session_annotation_targets``). A Session 40-44
     without a draft takes the annotation sets of its request first, as Web
@@ -3940,31 +3936,26 @@ def migrate_session_flat_draft(
                 migrated_features.pop(key)
         migrated["features"] = migrated_features
         dropped, narrowed = edits.dropped_count, edits.narrowed_visibility_count
-    # A Session before 31 has no request: its Linear cards give the records.
-    rule_records = (
-        _promoted_request_records(request)
-        if request
-        else _legacy_linear_request_records(session.get("files"))
-    )
-    hash_rules = migrate_session_hash_rules(
-        config.get("rules") if isinstance(config, Mapping) else None,
-        saved_features.get("featureVisibilityManualRules"),
-        mode=request.get("mode") or (ui.get("mode") if isinstance(ui := session.get("ui"), Mapping) else None),
-        catalog=catalog if has_catalog else None,
-        legacy=None if legacy is None else {**legacy, "records": rule_records},
-        records=rule_records,
-    )
-    if isinstance(config, Mapping) and hash_rules.rules is not config.get("rules"):
-        config = {**config, "rules": hash_rules.rules}
-        migrated["config"] = config
-    if hash_rules.feature_visibility_manual_rules is not saved_features.get(
-        "featureVisibilityManualRules"
-    ):
-        migrated["features"] = {
-            **migrated["features"],
-            "featureVisibilityManualRules": hash_rules.feature_visibility_manual_rules,
-        }
-    unmapped = hash_rules.unmapped_count
+    unmapped = 0
+    if version <= DRAWN_HASH_RULE_SESSION_MAX_VERSION:
+        # A Session before 31 has no request: its Linear cards give the records.
+        rule_records = (
+            _promoted_request_records(request)
+            if request
+            else _legacy_linear_request_records(session.get("files"))
+        )
+        ui = session.get("ui")
+        hash_rules = migrate_session_hash_rules(
+            config.get("rules") if isinstance(config, Mapping) else None,
+            mode=request.get("mode") or (ui.get("mode") if isinstance(ui, Mapping) else None),
+            catalog=catalog if has_catalog else None,
+            legacy=None if legacy is None else {**legacy, "records": rule_records},
+            records=rule_records,
+        )
+        if isinstance(config, Mapping) and hash_rules.rules is not config.get("rules"):
+            config = {**config, "rules": hash_rules.rules}
+            migrated["config"] = config
+        unmapped = hash_rules.unmapped_count
     moved = 0
     if CURRENT_AUTHORITY_SESSION_MIN_VERSION <= version < MODE_SCOPED_SESSION_MIN_VERSION:
         mode = _diagram_mode(request.get("mode"))
@@ -3981,7 +3972,6 @@ def migrate_session_flat_draft(
             draft_sets, mode=request.get("mode"), catalog=catalog, records=request.get("records")
         )
         moved = targets.migrated_count
-        unmapped += targets.unmapped_count
         if moved:
             migrated["config"] = {
                 **(config if isinstance(config, Mapping) else {}),
@@ -5212,9 +5202,10 @@ def build_session_json(
     if source_version is not None and source_version < MODE_SCOPED_SESSION_MIN_VERSION:
         from .session_migration import log_session_draft_migration
 
-        migration = migrate_session_flat_draft(payload)
+        # The migrations read the version of the Session they migrate.
+        migration = migrate_session_flat_draft({**payload, "version": source_version})
         log_session_draft_migration(migration, source_version)
-        payload = migration.session
+        payload = {**migration.session, "version": CURRENT_SESSION_VERSION}
     config = payload.get("config")
     if not isinstance(config, dict):
         config = dict(config) if isinstance(config, Mapping) else {}

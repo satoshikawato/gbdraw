@@ -330,12 +330,12 @@ test('OV-21: an annotation of a selected Circular feature stays out of Linear re
 // to the feature's source identity only when its record is drawn untransformed
 // and the hash names one feature (feature_1); a hash of two CDS at the same
 // coordinates (feature_2) stays. feature_3 names TESTB_0006 of the
-// reverse-complemented record by its source hash, which main never matched
-// there: it names no drawn feature, so Load keeps it and reports it, and
-// since hash= names the source hash (release D-39) the next Generate draws
-// it. The next Generate and the CLI replay of the same Session draw the same
-// annotations, and feature_1 stays on its feature after a later crop.
-test('R-7: a Session 44 hash annotation of one untransformed feature moves to its identity without changing the figure', async ({ page }, testInfo) => {
+// reverse-complemented record by its source hash, which main wrote but never
+// matched there: Load keeps it without a notice, and since hash= names the
+// source hash (release D-39) the next Generate draws it. The next Generate and
+// the CLI replay of the same Session draw the same annotations, and feature_1
+// stays on its feature after a later crop.
+test('R-7: a Session 44 hash annotation of one untransformed feature moves to its identity, and Generate draws the source-hash annotation main left out', async ({ page }, testInfo) => {
   test.setTimeout(360_000);
   const SESSION = 'tests/fixtures/sessions/selected-feature-annotations.v44.gbdraw-session.json.gz';
   const dialogs = [];
@@ -346,10 +346,7 @@ test('R-7: a Session 44 hash annotation of one untransformed feature moves to it
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180_000 });
   await settle(page);
   expect(dialogs).toEqual(['Session loaded successfully! 1 annotation(s) from an older Session named a feature by '
-    + 'hash=. Each now names that feature by its source, so it stays on the feature when the crop or orientation changes. '
-    + '1 hash= rule(s) or annotation target(s) from an older Session could not be matched to a feature of its saved '
-    + 'diagram, which crops or reverse-complements a record. hash= now names a feature by its hash in the source record, '
-    + 'so each may now match another feature or none.']);
+    + 'hash=. Each now names that feature by its source, so it stays on the feature when the crop or orientation changes.']);
   const testa = await page.evaluate(async () => {
     const { getCommittedCanonicalRenderRequest } = await import('/gbdraw/web/js/services/config.js');
     return getCommittedCanonicalRenderRequest().records[0].recordKey;

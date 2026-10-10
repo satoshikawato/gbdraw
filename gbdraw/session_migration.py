@@ -19,6 +19,7 @@ from gbdraw.session_io import (
     SessionDraftMigration,
     _project_web_file_binding,
     empty_protein_identity_manifest,
+    has_hash_color_rules,
     migrate_legacy_linear_comparison_draft_for_current_writer,
     migrate_session_flat_draft,
     mode_split_palette_colors,
@@ -237,25 +238,30 @@ def legacy_source_reads(request: Mapping[str, Any]) -> tuple[LegacySourceRead, .
 def read_legacy_source_features(
     session: Mapping[str, Any], resource_paths: Mapping[str, Path]
 ) -> dict[str, list[dict[str, Any]]] | None:
-    """Read a catalog-less Session's sources again for its rendered-ID edits.
+    """Read a catalog-less Session's sources again for its rendered-ID edits
+    and its ``hash`` color rules.
 
     The twin of Web Load's source read (``extractSessionSourceFeatures``) with
     the reads of :func:`legacy_source_reads`: ``extractedFeatures`` and
     ``biologicalFeatures`` of every source, each named by its source hash and,
     for Linear, its input (``fileIdx``). None when the Session saved a catalog
-    or no rendered-ID edit, or a source cannot be read; the edit migration then
-    uses the saved feature metadata. The Web's last fallback, the features of
-    the saved SVG (its recovery plan), is not read.
+    or neither a rendered-ID edit nor a ``hash`` color rule, or a source cannot
+    be read; the migrations then use the saved feature metadata. The Web's last
+    fallback, the features of the saved SVG (its recovery plan), is not read.
     """
 
     from gbdraw.web_support.feature_metadata import extract_features_from_genbank_payload
 
     features = session.get("features")
+    config = session.get("config")
     editor_state = session.get("editorState")
-    if not isinstance(features, Mapping) or not any(
-        isinstance(features.get(field), Mapping) and features[field]
-        for field in RETIRED_RENDERED_ID_FEATURE_FIELDS
-    ):
+    if not (
+        isinstance(features, Mapping)
+        and any(
+            isinstance(features.get(field), Mapping) and features[field]
+            for field in RETIRED_RENDERED_ID_FEATURE_FIELDS
+        )
+    ) and not (isinstance(config, Mapping) and has_hash_color_rules(config.get("rules"))):
         return None
     if isinstance(editor_state, Mapping) and isinstance(editor_state.get("featureCatalog"), Mapping):
         return None

@@ -24,7 +24,6 @@ from gbdraw.analysis.protein_colinearity import (
     validate_legacy_protein_raw_candidate_envelope,
     validate_protein_raw_entry_references,
 )
-from gbdraw.annotations.models import FeatureSpan
 from gbdraw.core.record_metadata import _iter_source_features, _source_feature_index
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.ids import compute_feature_hash
@@ -37,9 +36,11 @@ from gbdraw.layout.similarity_alignment import (
 )
 from gbdraw.session_drawings import SessionDrawingArtifacts, drawing_draft_config
 from gbdraw.session_io import (
+    DRAWN_HASH_RULE_SESSION_MAX_VERSION,
+    DrawnFeature,
     classify_raw_losat_cache_entry,
     empty_protein_identity_manifest,
-    source_hash_of_drawn_selector,
+    source_hash_selector_value,
     unmapped_hash_selector_warning,
 )
 
@@ -601,10 +602,10 @@ def _mapping_items(value: object) -> tuple[Mapping[str, Any], ...]:
     return tuple(item for item in value if isinstance(item, Mapping))
 
 
-def _drawn_source_hashes(
-    record: Any, provenance: ResolvedRecordProvenance
-) -> dict[str, set[str]]:
-    """The source hashes of the features of a planned record, by drawn hash.
+def _drawn_features(
+    record: Any, provenance: ResolvedRecordProvenance, ordinal: int
+) -> list[DrawnFeature]:
+    """The features of a planned record, the ``ordinal``-th of its Result.
 
     Release 0.13.0 and Sessions up to 44 hashed the drawn feature, so a cropped
     or reverse-complemented record saved hashes of its drawn coordinates; the
@@ -616,17 +617,17 @@ def _drawn_source_hashes(
         entry.source_feature_index: entry.stable_feature_id
         for entry in provenance.source_feature_catalog or ()
     }
-    sources: dict[str, set[str]] = {}
+    drawn: list[DrawnFeature] = []
     # A feature's source index, or its ordinal in an untransformed record, as
     # build_source_feature_catalog reads it.
-    for ordinal, feature in enumerate(_iter_source_features(record.features)):
+    for position, feature in enumerate(_iter_source_features(record.features)):
         index = _source_feature_index(feature)
-        index = ordinal if index is None else index
+        index = position if index is None else index
         if index in catalog:
-            sources.setdefault(compute_feature_hash(feature, record_id=record.id), set()).add(
-                catalog[index]
+            drawn.append(
+                (catalog[index], compute_feature_hash(feature, record_id=record.id), index, ordinal)
             )
-    return sources
+    return drawn
 
 
 def _legacy_display_frame_feature_id(
@@ -649,7 +650,11 @@ def _legacy_display_frame_feature_id(
             for entry in provenance.source_feature_catalog or ()
         ):
             return feature_id
-        matches = _drawn_source_hashes(record, provenance).get(feature_id, set())
+        matches = {
+            source
+            for source, drawn_hash, _, _ in _drawn_features(record, provenance, 0)
+            if drawn_hash == feature_id
+        }
         return next(iter(matches)) if len(matches) == 1 else feature_id
     return feature_id
 
@@ -1168,9 +1173,11 @@ def _main_display_frame_rows_to_search_frame(
     return replace(request, options=replace(request.options, linear_comparisons=converted))
 
 
-_MAIN_DRAWN_HASH_SESSION_VERSION = 44
-# The (qualifier, value) columns of the tables that hold `hash` rows.
-_HASH_TABLE_COLUMNS = {"color": (1, 2), "visibility": (2, 3), "label": (2, 3)}
+# The (qualifier, value) columns of the request tables whose `hash` rows a
+# Web writer of a Session 44 or older filled with drawn hashes: the color
+# table (from the specific color rules) and the label override table (from
+# the label text edits of features without a unique qualifier).
+_HASH_TABLE_COLUMNS = {"color": (1, 2), "label": (2, 3)}
 
 
 def _main_drawn_hash_selectors_to_source(
@@ -1178,35 +1185,39 @@ def _main_drawn_hash_selectors_to_source(
     request: DiagramRequest,
     drawing: SessionDrawingArtifacts,
 ) -> tuple[DiagramRequest, int]:
-    """Name the ``hash`` selectors of a Session 44 or older by source hash (S6, S7).
+    """Name the ``hash`` rows of the color and label override tables of a
+    Session 44 or older by source hash (S6).
 
-    Such a Session matched ``hash=`` against the drawn feature, so on a cropped
-    or reverse-complemented record its color, Feature visibility, and label
-    override rows and its ``hash=`` annotation targets carry drawn hashes
-    (OV-401, release D-39). Each value that names features drawn with its
-    hash (:func:`gbdraw.session_io.source_hash_of_drawn_selector`) gets their
-    source hash; a table file gets a copy beside it. Returns the request and
-    the number of other ``hash`` values, which stay as saved. A request with no
-    transformed record is returned as is.
+    The Web writer of such a Session filled those rows with drawn hashes
+    (rendered IDs in the label override table), which it matched against the
+    drawn feature, so on a cropped or reverse-complemented record they are not
+    the source hashes ``hash=`` names now (OV-401, release D-39). Each value
+    that names features drawn with its hash
+    (:func:`gbdraw.session_io.source_hash_selector_value`) gets their source
+    hash; a table file gets a copy beside it. Returns the request and the
+    number of values that name features of several source hashes, which stay
+    as saved. A request with no record whose drawn hashes differ is returned
+    as is.
     """
 
-    if drawing.version > _MAIN_DRAWN_HASH_SESSION_VERSION:
+    if drawing.version > DRAWN_HASH_RULE_SESSION_MAX_VERSION:
         return request, 0
     drawn = [
-        _drawn_source_hashes(record, provenance)
-        for record, provenance in zip(plan.records, plan.provenance, strict=True)
+        feature
+        for ordinal, (record, provenance) in enumerate(
+            zip(plan.records, plan.provenance, strict=True), start=1
+        )
+        for feature in _drawn_features(record, provenance, ordinal)
     ]
-    if all(sources == {hash_} for by_hash in drawn for hash_, sources in by_hash.items()):
+    if all(source == drawn_hash for source, drawn_hash, _, _ in drawn):
         return request, 0
     unmapped = 0
 
     def source_value(value: object) -> str:
         nonlocal unmapped
-        resolved = source_hash_of_drawn_selector(value, drawn)
-        if resolved is None:
-            unmapped += 1
-            return str(value)
-        return resolved
+        resolved, source_count = source_hash_selector_value(value, drawn)
+        unmapped += source_count > 1
+        return str(value) if resolved is None else resolved
 
     def table_text(text: str, table: str) -> str:
         qualifier_column, value_column = _HASH_TABLE_COLUMNS[table]
@@ -1249,17 +1260,6 @@ def _main_drawn_hash_selectors_to_source(
         ]
         return migrated
 
-    def target(annotation_target: Any) -> Any:
-        if not isinstance(annotation_target, FeatureSpan):
-            return annotation_target
-        selectors = tuple(
-            replace(selector, value=source_value(selector.value))
-            if selector.key == "hash"
-            else selector
-            for selector in annotation_target.selectors
-        )
-        return replace(annotation_target, selectors=selectors)
-
     options = request.options
     changes: dict[str, Any] = {}
     colors = options.colors
@@ -1270,32 +1270,12 @@ def _main_drawn_hash_selectors_to_source(
             changes["colors"] = replace(
                 colors, color_table=color_table, color_table_file=color_table_file
             )
-    for field_name, file_name, table in (
-        ("feature_visibility_table", "feature_visibility_table_file", "visibility"),
-        ("label_override_table", "label_override_file", "label"),
-    ):
-        frame = getattr(options, field_name, None)
-        migrated_frame = table_frame(frame, "qualifier")
-        if migrated_frame is not frame:
-            changes[field_name] = migrated_frame
-        path = getattr(options, file_name, None)
-        migrated_path = table_file(path, table)
-        if migrated_path != path:
-            changes[file_name] = migrated_path
-    annotations = options.annotations
-    if annotations is not None and annotations.sets:
-        sets = tuple(
-            replace(
-                annotation_set,
-                annotations=tuple(
-                    replace(annotation, target=target(annotation.target))
-                    for annotation in annotation_set.annotations
-                ),
-            )
-            for annotation_set in annotations.sets
-        )
-        if sets != annotations.sets:
-            changes["annotations"] = replace(annotations, sets=sets)
+    label_table = table_frame(options.label_override_table, "qualifier")
+    if label_table is not options.label_override_table:
+        changes["label_override_table"] = label_table
+    label_file = table_file(options.label_override_file, "label")
+    if label_file != options.label_override_file:
+        changes["label_override_file"] = label_file
     if not changes:
         return request, unmapped
     # Each request type takes its own options type, which mypy cannot pair.

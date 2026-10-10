@@ -67,6 +67,7 @@ from gbdraw.session_io import (
     migrate_session_annotation_targets,
     migrate_session_feature_edits,
     migrate_session_hash_rules,
+    source_hash_selector_value,
 )
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 
@@ -1844,7 +1845,6 @@ def test_hash_annotation_targets_migrate_to_the_vectors_shared_with_the_web_read
     assert {
         "annotationSets": migration.annotation_sets,
         "migratedCount": migration.migrated_count,
-        "unmappedCount": migration.unmapped_count,
     } == case["expected"]
     assert source == case["input"]
 
@@ -1915,12 +1915,8 @@ def test_session_44_hash_annotation_targets_move_in_the_cli_sidecar(
         for record in caplog.records
         if record.name == session_migration.__name__
     ] == [
-        # feature_3 names TESTB_0006 by its source hash, which main wrote
-        # although main matched hash= in the reverse-complemented record.
-        "WARNING: 1 hash= rule(s) or annotation target(s) from Session version 44 "
-        "could not be matched to a feature of its saved diagram, which crops or "
-        "reverse-complements a record. hash= now names a feature by its hash in "
-        "the source record, so each may now match another feature or none.",
+        # feature_3 names TESTB_0006 by its source hash, which main wrote: it
+        # matches that feature now, without a reader or a warning.
         "INFO: 1 annotation(s) from Session version 44 named a feature by hash=; "
         "in the written Session each names that feature by its source.",
     ]
@@ -1928,10 +1924,27 @@ def test_session_44_hash_annotation_targets_move_in_the_cli_sidecar(
 
 _HASH_RULE_VECTORS = json.loads(
     (Path(__file__).parent / "fixtures" / "hash-rule-migration-vectors.json").read_text(encoding="utf-8")
-)["cases"]
+)
 
 
-@pytest.mark.parametrize("case", _HASH_RULE_VECTORS, ids=[case["name"] for case in _HASH_RULE_VECTORS])
+@pytest.mark.parametrize(
+    "case",
+    _HASH_RULE_VECTORS["selectorCases"],
+    ids=[case["name"] for case in _HASH_RULE_VECTORS["selectorCases"]],
+)
+def test_hash_selector_values_read_the_vectors_shared_with_the_web_reader(case: dict[str, Any]) -> None:
+    # One mapper serves the Session draft and the CLI replay of a request;
+    # tests/web/feature-edit-migration.test.mjs checks sourceHashSelectorValue.
+    drawn = [tuple(feature) for feature in _HASH_RULE_VECTORS["drawnFeatures"]]
+
+    value, source_count = source_hash_selector_value(case["value"], drawn)
+
+    assert {"value": value, "sourceCount": source_count} == case["expected"]
+
+
+@pytest.mark.parametrize(
+    "case", _HASH_RULE_VECTORS["cases"], ids=[case["name"] for case in _HASH_RULE_VECTORS["cases"]]
+)
 def test_hash_rules_migrate_to_the_vectors_shared_with_the_web_reader(case: dict[str, Any]) -> None:
     # tests/web/feature-edit-migration.test.mjs checks the same vectors against
     # migrateSessionHashRules.
@@ -1939,24 +1952,23 @@ def test_hash_rules_migrate_to_the_vectors_shared_with_the_web_reader(case: dict
 
     migration = migrate_session_hash_rules(
         source["rules"],
-        source["featureVisibilityManualRules"],
         mode=source["mode"],
         catalog=source["catalog"],
+        legacy=source.get("legacy"),
         records=source["records"],
     )
 
-    assert {
-        "rules": migration.rules,
-        "featureVisibilityManualRules": migration.feature_visibility_manual_rules,
-        "unmappedCount": migration.unmapped_count,
-    } == case["expected"]
+    assert {"rules": migration.rules, "unmappedCount": migration.unmapped_count} == case["expected"]
     assert source == case["input"]
 
+
 _UNMAPPED_HASH_WARNING = (
-    "WARNING: {count} hash= rule(s) or annotation target(s) from Session version {version} "
-    "could not be matched to a feature of its saved diagram, which crops or "
-    "reverse-complements a record. hash= now names a feature by its hash in the source "
-    "record, so each may now match another feature or none."
+    "WARNING: {count} hash= value(s) from Session version {version} could not be renamed "
+    "to the hash of a feature in its source record: the saved diagram drew a "
+    "cropped or reverse-complemented record, and the value names features of "
+    "several source hashes there, or the sources were not read again. hash= now "
+    "names a feature by its hash in the source record, so each may now match "
+    "another feature or none."
 )
 
 
@@ -1975,9 +1987,34 @@ def test_session_44_drawn_hash_color_rule_replays_on_its_reverse_complemented_fe
     svg = (tmp_path / "replay.svg").read_text(encoding="utf-8")
     fills = re.findall(r'<path [^>]*data-gbdraw-feature-id="fcecf4036_record_2"[^>]*fill="([^"]+)"', svg)
     assert fills and set(fills) == {"#c83366"}
-    # Its Feature visibility rows name source hashes, which main never matched
-    # on the reverse-complemented record: they are kept and reported.
-    assert _UNMAPPED_HASH_WARNING.format(count=2, version=44) in caplog.messages
+    # Its Feature visibility rows name source hashes, which main wrote: they
+    # match those features now, without a reader or a warning.
+    assert not [message for message in caplog.messages if "could not be renamed" in message]
+
+
+def test_session_44_request_tables_name_drawn_hash_rows_by_source_hash(tmp_path: Path) -> None:
+    # main filled the color table from the specific color rules (drawn hash
+    # ffb26b768) and the label override table from the label text edit of the
+    # reverse-complemented tRNA, which has no unique qualifier (rendered ID
+    # f64320c02_record_2); its Feature visibility table names source hashes
+    # (feature-edits.provenance.json). The replay renames only the drawn ones.
+    fixture = Path(__file__).parent / "fixtures" / "sessions" / "feature-edits-crop-rc.v44.gbdraw-session.json.gz"
+    document = load_session_document(fixture)
+
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        request = session_to_request(materialized)
+        adapted = adapt_session_request(request, session_drawing_artifacts(document))
+        options = adapted.request.options
+
+    def hash_rows(frame: Any, qualifier: str) -> list[str]:
+        assert frame is not None
+        return list(frame.loc[frame[qualifier] == "hash", "value"])
+
+    assert options.colors is not None
+    assert hash_rows(options.colors.color_table, "qualifier_key") == ["fcecf4036"]
+    assert hash_rows(options.label_override_table, "qualifier") == ["^f88047061$"]
+    assert hash_rows(options.feature_visibility_table, "qualifier") == ["^fb5977f81$", "^f88047061$"]
+    assert adapted.migration_report.warnings == ()
 
 
 def test_session_30_rendered_id_color_rule_is_reported_in_the_cli_sidecar(
