@@ -1044,7 +1044,14 @@ class LinearRequestPlan:
         losatp_cache: LosatpCacheManager | None = None,
         protein_extraction: ProteinExtractionResult | None = None,
     ) -> LinearDiagramBuildResult:
-        kwargs: dict[str, Any] = {"options": self.request.options}
+        # The request keeps its comparison rows in the search frame; only the
+        # drawing reads them in the drawn record views (OV-399).
+        options = (
+            project_source_bound_comparisons(self.request.options, self.records, self.provenance)
+            if self.provenance
+            else self.request.options
+        )
+        kwargs: dict[str, Any] = {"options": options}
         if self.layout is not None:
             kwargs["layout"] = self.layout
         if losatp_cache is not None:
@@ -1066,7 +1073,6 @@ class LinearRequestPlan:
             raise ValidationError(
                 "The Linear diagram builder returned an unsupported result."
             )
-        options = self.request.options
         return LinearDiagramBuildResult(
             drawing=built,
             metadata=LinearDiagramMetadata(
@@ -1855,7 +1861,6 @@ def plan_linear_request(
         resolved_options, losat_cache_entries = _resolve_nucleotide_losat(
             resolved_options, collection, resolved_layout
         )
-        resolved_options = project_source_bound_comparisons(resolved_options, collection)
         materialized_request = (
             unresolved_request
             if _is_materialized_exact_one_request(unresolved_request)

@@ -12,7 +12,6 @@ import { adoptCurrentSessionResources } from './session-resource-backing.js';
 import {
   IMPORTED_COMPARISON_DISPOSITIONS, classifyImportedComparisonIntent, inheritCommittedComparisonIntent
 } from './imported-comparison-intent.js';
-import { defaultFeatureRendering } from '../utils/feature-rendering.js';
 const CURRENT_VERSION = 46, CURRENT_REQUEST_SCHEMA = 9, ACCEPTED_REQUEST_SCHEMAS = new Set([CURRENT_REQUEST_SCHEMA]), HISTORICAL_VERSIONS = new Set([31, 32, 33, 39]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
 const ARTIFACT_FIELDS = ['results', 'editorState', 'orthogroupState', 'runMetadata', 'losatCache', 'losatDerivedCache', 'proteinIdentityManifest'];
 // The top-level homes of the flat draft that Session 46 moved into `modes`.
@@ -205,16 +204,12 @@ const rebuildIntent = async (session, owners) => {
   if (isObject(session.renderRequest.diagramOptions?.config) && !cliConfig) {
     rebuilt.renderRequest.diagramOptions.config = clone(session.renderRequest.diagramOptions.config); delete rebuilt.renderRequest.diagramOptions.configOverrides;
   }
-  // The CLI omits feature renderings it leaves at their defaults; the Web
-  // request states them (repeat_region underlay), so defaults compare as absent.
+  // Request equivalence compares feature renderings stated at their defaults
+  // as absent (OV-398).
   const comparable = (request) => {
     if (!cliConfig) return request;
     const diagramOptions = Object.fromEntries(Object.entries(request.diagramOptions)
       .filter(([key]) => key !== 'config' && key !== 'configOverrides'));
-    const featureShapes = Object.fromEntries(Object.entries(diagramOptions.featureShapes || {})
-      .filter(([type, rendering]) => rendering !== defaultFeatureRendering(type)));
-    if (Object.keys(featureShapes).length) diagramOptions.featureShapes = featureShapes;
-    else delete diagramOptions.featureShapes;
     return { ...request, diagramOptions };
   };
   return { config, features, layout, projection, rebuilt, equivalence: await owners.assertRequestsEquivalent({ expectedRequest: comparable(renderRequest),

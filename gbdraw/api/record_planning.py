@@ -221,13 +221,17 @@ class ResolvedRecordCollection:
 
 
 def project_source_bound_comparisons(
-    options: LinearDiagramOptions, collection: ResolvedRecordCollection,
+    options: LinearDiagramOptions,
+    records: Sequence[SeqRecord],
+    provenance: Sequence[ResolvedRecordProvenance],
 ) -> LinearDiagramOptions:
-    """Reproject existing source-bound evidence into the requested record views.
+    """Reproject existing source-bound evidence into the drawn record views.
 
     View hashes must match this source/crop's current or opposite orientation.
     Source identities, scores and block membership remain unchanged. Coordinates
     are record-local; the existing renderer alone applies a circular display cut.
+    The diagram build calls this; a planned request keeps the rows it was given,
+    so a Session saved from it keeps the search frame (OV-399).
     """
     frames = [comparison.matches for comparison in options.linear_comparisons or ()]
     frames.extend(options.protein_comparisons or ())
@@ -236,7 +240,7 @@ def project_source_bound_comparisons(
     if not any(not frame.empty and required <= set(frame.columns) for frame in frames):
         return options
     bindings = []
-    for record, provenance in zip(collection.records, collection.provenance, strict=True):
+    for record, item in zip(records, provenance, strict=True):
         current: dict[int, str]
         opposite: dict[int, str]
         current, opposite = {}, {}
@@ -253,7 +257,7 @@ def project_source_bound_comparisons(
                     record_id=record.id,
                 )
         source = {feature.source_feature_index: feature.stable_feature_id
-                  for feature in provenance.source_feature_catalog or ()}
+                  for feature in item.source_feature_catalog or ()}
         bindings.append((source, current, opposite, len(record)))
 
     def project(frame: pd.DataFrame, query_index: int, subject_index: int) -> pd.DataFrame:

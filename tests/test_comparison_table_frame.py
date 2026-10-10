@@ -313,3 +313,65 @@ def test_cli_session_output_with_a_reversed_record_replays_the_cli_ribbons(tmp_p
     assert len(fresh) == 1
     assert _ribbon_spans(replayed) == fresh
     assert replayed == (tmp_path / "fresh.svg").read_text(encoding="utf-8")
+
+
+@pytest.mark.linear
+def test_cli_session_replay_keeps_feature_bound_rows_of_a_reversed_record_in_the_search_frame(
+    tmp_path: Path,
+) -> None:
+    # OV-399: the replay re-saved the feature-bound rows of a reversed record
+    # in the displayed frame with *_view_feature_svg_id columns, while the Web
+    # app and the Session contract keep them in the search frame.
+    import base64
+
+    import pandas as pd
+
+    from gbdraw.api.options import LinearDiagramOptions
+    from gbdraw.api.request_render import plan_linear_request
+    from gbdraw.api.requests import GenBankInputSource, LinearDiagramRequest, RecordInput, RecordPresentation
+    from gbdraw.linear_comparison import LinearComparison
+    from gbdraw.session import save_session_document
+    from gbdraw.session_io import load_session
+
+    inputs = []
+    for key, strand in (("query", 1), ("subject", -1)):
+        record = SeqRecord(Seq(_X[:200]), id=key, name=key, annotations={"molecule_type": "DNA"})
+        record.features = [SeqFeature(SimpleLocation(30, 60, strand=strand), type="CDS")]
+        path = tmp_path / f"{key}.gb"
+        SeqIO.write(record, path, "genbank")
+        inputs.append(RecordInput(GenBankInputSource(path), record_key=key))
+    plan = plan_linear_request(LinearDiagramRequest(records=tuple(inputs)))
+    row: dict[str, object] = {
+        "query": "query", "subject": "subject", "identity": 99.0, "alignment_length": 30,
+        "mismatches": 0, "gap_opens": 0, "qstart": 31, "qend": 60, "sstart": 60, "send": 31,
+        "evalue": 1e-20, "bitscore": 50.0,
+    }
+    for role, provenance in zip(("query", "subject"), plan.provenance, strict=True):
+        source = provenance.source_feature_catalog[0]
+        row[f"{role}_feature_index"] = str(source.source_feature_index)
+        row[f"{role}_feature_svg_id"] = source.stable_feature_id
+    request = LinearDiagramRequest(
+        records=(inputs[0], RecordInput(GenBankInputSource(tmp_path / "subject.gb"), record_key="subject",
+                                        presentation=RecordPresentation(reverse_complement=True))),
+        options=LinearDiagramOptions(linear_comparisons=(LinearComparison(0, 1, pd.DataFrame([row])),)),
+    )
+
+    def comparison_table(session: Path) -> bytes:
+        payload = load_session(session)
+        (item,) = [item for item in payload["renderRequest"]["comparisons"] if "resourceId" in item]
+        return base64.b64decode(payload["resources"][item["resourceId"]]["data"])
+
+    source = save_session_document(tmp_path / "source.gbdraw-session.json", request)
+    del source
+    sidecar = tmp_path / "resaved.gbdraw-session.json"
+    linear_cli.linear_main([
+        "--session", str(tmp_path / "source.gbdraw-session.json"), "-o", str(tmp_path / "replayed"),
+        "-f", "svg", "--session_output", str(sidecar),
+    ])
+    stored = comparison_table(tmp_path / "source.gbdraw-session.json")
+    assert b"_view_feature_svg_id" not in stored
+    assert comparison_table(sidecar) == stored
+    linear_cli.linear_main(["--session", str(sidecar), "-o", str(tmp_path / "resaved"), "-f", "svg"])
+    replayed = (tmp_path / "replayed.svg").read_text(encoding="utf-8")
+    assert len(_ribbon_spans(replayed)) == 1
+    assert _ribbon_spans((tmp_path / "resaved.svg").read_text(encoding="utf-8")) == _ribbon_spans(replayed)

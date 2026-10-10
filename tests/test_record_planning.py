@@ -725,9 +725,14 @@ def test_display_unset_preserves_external_crop_source_length(crop_rc, reverse, r
 @pytest.mark.parametrize("query_reverse,subject_reverse", [(True, False), (False, True), (True, True)])
 @pytest.mark.parametrize("cropped", [False, True])
 def test_source_bound_comparison_direction_projection_round_trip(tmp_path, query_reverse, subject_reverse, cropped):
-    """Saved evidence reprojects without analysis and preserves its source binding."""
+    """Saved evidence reprojects without analysis and preserves its source binding.
+
+    The planned request keeps the rows it was given, so a saved Session stays in
+    the search frame; the build projects them into the drawn views (OV-399).
+    """
     from dataclasses import replace
     import pandas as pd
+    from gbdraw.api.record_planning import project_source_bound_comparisons
     from gbdraw.api.request_render import plan_linear_request
     from gbdraw.features.ids import compute_feature_hash
     from gbdraw.linear_comparison import LinearComparison
@@ -759,7 +764,10 @@ def test_source_bound_comparison_direction_projection_round_trip(tmp_path, query
         presentation=RecordPresentation(reverse_complement=reverse if not item.region else False))
         for item, reverse in zip(inputs, (query_reverse, subject_reverse), strict=True)))
     after = plan_linear_request(reversed_request)
-    projected = after.request.options.linear_comparisons[0].matches
+    assert after.request.options.linear_comparisons[0].matches is evidence
+    projected = project_source_bound_comparisons(
+        after.request.options, after.records, after.provenance
+    ).linear_comparisons[0].matches
     assert evidence.to_dict("records") == [row]
     for role, prefix, record, reverse in zip(("query", "subject"), ("q", "s"), after.records,
                                             (query_reverse, subject_reverse), strict=True):
@@ -770,17 +778,20 @@ def test_source_bound_comparison_direction_projection_round_trip(tmp_path, query
             assert projected.iloc[0][key] == (len(record) + 1 - row[key] if reverse else row[key])
     assert projected.iloc[0].bitscore == row["bitscore"]
     assert projected.iloc[0].collinearity_orientation == ("plus" if query_reverse != subject_reverse else "minus")
-    restored = plan_linear_request(replace(baseline, options=after.request.options))
-    pd.testing.assert_frame_equal(restored.request.options.linear_comparisons[0].matches, evidence)
+    restored = project_source_bound_comparisons(
+        replace(options, linear_comparisons=(LinearComparison(0, 1, projected),)),
+        before.records, before.provenance,
+    )
+    pd.testing.assert_frame_equal(restored.linear_comparisons[0].matches, evidence)
     corrupted = evidence.copy(deep=True)
     corrupted.at[0, "query_view_feature_svg_id"] = "fnot-source-bound"
     with pytest.raises(ValidationError, match="source/crop binding"):
         plan_linear_request(replace(reversed_request, options=replace(options,
-            linear_comparisons=(LinearComparison(0, 1, corrupted),))))
+            linear_comparisons=(LinearComparison(0, 1, corrupted),)))).build()
     corrupted.at[0, "query_feature_svg_id"] = "fwrong-source"
     with pytest.raises(ValidationError, match="source feature ID"):
         plan_linear_request(replace(reversed_request, options=replace(options,
-            linear_comparisons=(LinearComparison(0, 1, corrupted),))))
+            linear_comparisons=(LinearComparison(0, 1, corrupted),)))).build()
 
 
 _PLANNING_EXAMPLE = Path(__file__).resolve().parents[1] / "examples" / "MellatMJNV.gb"
