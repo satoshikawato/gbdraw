@@ -204,8 +204,8 @@ const rebuildIntent = async (session, owners) => {
   if (isObject(session.renderRequest.diagramOptions?.config) && !cliConfig) {
     rebuilt.renderRequest.diagramOptions.config = clone(session.renderRequest.diagramOptions.config); delete rebuilt.renderRequest.diagramOptions.configOverrides;
   }
-  // Request equivalence compares feature renderings stated at their defaults
-  // as absent (OV-398).
+  // A CLI-written request compares without its resolved configuration;
+  // defaults it leaves unstated compare as absent in the equivalence (OV-398).
   const comparable = (request) => {
     if (!cliConfig) return request;
     const diagramOptions = Object.fromEntries(Object.entries(request.diagramOptions)

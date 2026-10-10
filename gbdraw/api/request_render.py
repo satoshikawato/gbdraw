@@ -1861,6 +1861,9 @@ def plan_linear_request(
         resolved_options, losat_cache_entries = _resolve_nucleotide_losat(
             resolved_options, collection, resolved_layout
         )
+        # Check the source bindings now, so a Session writer rejects them; the
+        # request keeps the rows as given and the build projects them (OV-399).
+        project_source_bound_comparisons(resolved_options, collection.records, collection.provenance)
         materialized_request = (
             unresolved_request
             if _is_materialized_exact_one_request(unresolved_request)
@@ -2102,14 +2105,35 @@ def _resolve_similarity_alignment_reference(
     assert metadata is not None  # a missing result has no orthogroups
     records = _reference_record_inputs(request, analysis_plan, reference)
     layout = request.layout or LinearMultiRecordOptions()
+    # The build drew the comparisons; the request keeps the planned ones as
+    # given and stores the analysis rows in the search frame (OV-399).
+    planned = analysis_plan.request.options
+    given = tuple(planned.linear_comparisons or ())
+    analysis_rows = project_source_bound_comparisons(
+        replace(
+            planned,
+            protein_comparisons=(
+                None if planned.protein_comparisons is not None or metadata.protein_comparisons is None
+                else tuple(metadata.protein_comparisons)
+            ),
+            linear_comparisons=tuple(metadata.linear_comparisons or ())[len(given):],
+        ),
+        analysis_plan.records,
+        analysis_plan.provenance,
+        search_frame=True,
+    )
     resolved = replace(
         request,
         records=records,
         options=replace(
             request.options,
             losat_search=_resolved_losat_search(request.options.losat_search),
-            protein_comparisons=metadata.protein_comparisons,
-            linear_comparisons=metadata.linear_comparisons,
+            protein_comparisons=(
+                planned.protein_comparisons
+                if planned.protein_comparisons is not None
+                else analysis_rows.protein_comparisons
+            ),
+            linear_comparisons=(*given, *(analysis_rows.linear_comparisons or ())),
             orthogroups=metadata.orthogroups,
             collinearity_blocks=metadata.collinearity_result,
         ),

@@ -224,14 +224,18 @@ def project_source_bound_comparisons(
     options: LinearDiagramOptions,
     records: Sequence[SeqRecord],
     provenance: Sequence[ResolvedRecordProvenance],
+    *,
+    search_frame: bool = False,
 ) -> LinearDiagramOptions:
     """Reproject existing source-bound evidence into the drawn record views.
 
-    View hashes must match this source/crop's current or opposite orientation.
-    Source identities, scores and block membership remain unchanged. Coordinates
-    are record-local; the existing renderer alone applies a circular display cut.
-    The diagram build calls this; a planned request keeps the rows it was given,
-    so a Session saved from it keeps the search frame (OV-399).
+    View hashes must match this source/crop's current or opposite orientation;
+    each row's view IDs tell which frame it is in. Source identities, scores and
+    block membership remain unchanged. Coordinates are record-local; the
+    existing renderer alone applies a circular display cut. The diagram build
+    calls this; a planned request keeps the rows it was given, so a Session
+    saved from it keeps the search frame (OV-399). ``search_frame`` projects
+    rows of the drawn ``records`` back into each record's search frame.
     """
     frames = [comparison.matches for comparison in options.linear_comparisons or ()]
     frames.extend(options.protein_comparisons or ())
@@ -258,6 +262,8 @@ def project_source_bound_comparisons(
                 )
         source = {feature.source_feature_index: feature.stable_feature_id
                   for feature in item.source_feature_catalog or ()}
+        if search_frame and _read_coord_map(record)[1] == -1:
+            current, opposite = opposite, current
         bindings.append((source, current, opposite, len(record)))
 
     def project(frame: pd.DataFrame, query_index: int, subject_index: int) -> pd.DataFrame:

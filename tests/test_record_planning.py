@@ -33,7 +33,7 @@ from gbdraw.api.requests import (
     RenderOutputRequest,
 )
 from gbdraw.circular import _circular_cli_record_cardinality
-from gbdraw.exceptions import ValidationError
+from gbdraw.exceptions import GbdrawError, ValidationError
 from gbdraw.io.record_select import parse_record_selector
 from gbdraw.io.regions import parse_region_spec
 from gbdraw.linear import _linear_cli_record_cardinality, linear_main
@@ -783,15 +783,19 @@ def test_source_bound_comparison_direction_projection_round_trip(tmp_path, query
         before.records, before.provenance,
     )
     pd.testing.assert_frame_equal(restored.linear_comparisons[0].matches, evidence)
+    # Planning checks the bindings, so a Session writer rejects them (review 2).
     corrupted = evidence.copy(deep=True)
     corrupted.at[0, "query_view_feature_svg_id"] = "fnot-source-bound"
     with pytest.raises(ValidationError, match="source/crop binding"):
         plan_linear_request(replace(reversed_request, options=replace(options,
-            linear_comparisons=(LinearComparison(0, 1, corrupted),)))).build()
+            linear_comparisons=(LinearComparison(0, 1, corrupted),))))
     corrupted.at[0, "query_feature_svg_id"] = "fwrong-source"
+    corrupted_request = replace(reversed_request, options=replace(options,
+        linear_comparisons=(LinearComparison(0, 1, corrupted),)))
     with pytest.raises(ValidationError, match="source feature ID"):
-        plan_linear_request(replace(reversed_request, options=replace(options,
-            linear_comparisons=(LinearComparison(0, 1, corrupted),)))).build()
+        plan_linear_request(corrupted_request)
+    with pytest.raises(GbdrawError, match="source feature ID"):
+        build_session_document(corrupted_request)
 
 
 _PLANNING_EXAMPLE = Path(__file__).resolve().parents[1] / "examples" / "MellatMJNV.gb"

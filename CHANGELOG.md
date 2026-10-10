@@ -14,7 +14,8 @@ write-up of a release.
 
 - Sessions (CLI and Python): a Session saved from a Linear diagram with a
   reverse-complemented record now stores that record's feature-bound comparison
-  rows (saved LOSATP rows) in the search frame, as the web app does. Before,
+  rows (saved or fresh LOSATP rows) in the search frame, as the web app does,
+  also with `--similarity_alignment_feature`. Before,
   `gbdraw linear --session ... --session_output` and Python Session saves wrote
   them after the reverse complement with extra `*_view_feature_svg_id` columns;
   the drawing was the same (OV-399).

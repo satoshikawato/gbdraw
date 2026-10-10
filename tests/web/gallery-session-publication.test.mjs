@@ -254,6 +254,21 @@ for (const [shape, equivalent] of [['arrow', true], ['rectangle', false]]) {
     actualResources: lambdaPrepared.session.resources
   })).equivalent, equivalent, shape);
 }
+// With one changed rendering, the CLI states only that one and the Web draft
+// states it beside every default (review 3).
+const { DEFAULT_FEATURE_RENDERINGS } = await import('../../gbdraw/web/js/utils/feature-rendering.js');
+for (const [webShape, equivalent] of [['arrow', true], ['rectangle', false]]) {
+  const cliShapes = structuredClone(lambdaPrepared.session.renderRequest);
+  cliShapes.diagramOptions.featureShapes = { misc_feature: 'arrow' };
+  const webShapes = structuredClone(lambdaPrepared.session.renderRequest);
+  webShapes.diagramOptions.featureShapes = { ...DEFAULT_FEATURE_RENDERINGS, misc_feature: webShape };
+  assert.equal((await compareCanonicalRenderRequests({
+    expectedRequest: cliShapes,
+    expectedResources: lambdaPrepared.session.resources,
+    actualRequest: webShapes,
+    actualResources: lambdaPrepared.session.resources
+  })).equivalent, equivalent, `misc_feature ${webShape}`);
+}
 
 const ungeneratedDraft = structuredClone(lambda);
 ungeneratedDraft.config.adv.arrow_shaft_width_ratio = 0.5;
