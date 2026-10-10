@@ -25,6 +25,7 @@ import {
  * @property {readonly string[]} [requiredLabelFeatureIds]
  * @property {readonly string[]} [optionalLabelFeatureIds]
  * @property {{ featureIds: readonly string[], report: (error: unknown) => void }} [reportedLabelBinding]
+ * @property {import('./result-paint-record.js').EditorPaintState} [drawnPaint] The editor state a label rerender drew from.
  */
 
 /**

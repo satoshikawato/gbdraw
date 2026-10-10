@@ -104,3 +104,23 @@ test('a failed display leaves the Result behind on every paint domain', () => {
   assert.equal(again.legendOrder, before.legendOrder);
   assert.equal(again.labels, after.labels);
 });
+
+// OV-346: a label rerender draws the editor state it started from. An edit
+// made while it ran is not in its bytes: the displayed Result lacks its fills
+// and visibility until they are shown, and another Result shows every domain
+// that changed since when it is displayed.
+test('a commit drawn from an earlier editor state leaves the edits made meanwhile to be shown', () => {
+  const started = paint('started');
+  const edited = { ...started, visibility: 'visibility edited meanwhile' };
+  const record = createResultPaintRecord();
+  record.commit(['a', 'b'], 'a', edited, { drawn: started });
+  assert.deepEqual(record.lacking('a'), { colors: started.colors, visibility: started.visibility });
+  record.shown('a', edited, edited);
+  assert.equal(record.lacking('a'), null, 'shown once bound');
+  assert.deepEqual(changed(record.display('b', edited), edited), { colors: false, visibility: true, strokes: false },
+    'the other Result shows the visibility edited meanwhile');
+
+  const unchanged = createResultPaintRecord();
+  unchanged.commit(['a', 'b'], 'a', started, { drawn: started });
+  assert.equal(unchanged.lacking('a'), null, 'no edit while it ran');
+});

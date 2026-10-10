@@ -16,12 +16,12 @@
 /** @typedef {{ opening: Readonly<ArtifactSlot> | null, stashed: Readonly<ArtifactSlot> | null }} LoadedArtifactSlots */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS } from './candidate-render.js';
-import { createResultPaintRecord } from './result-paint-record.js';
+import { createResultPaintRecord, editorPaintState } from './result-paint-record.js';
 import {
   countUnresolvedFeatureEdits, displayedLegendRowContext, featureDrawnContext, removeUnresolvedFeatureEdits,
   requestFeatureVisibilityRules
 } from '../services/feature-visibility.js';
-import { drawnBlockStroke, drawsPythonLegendRow, isLegendOrderEdited, legendStructureEdited } from '../services/legend-svg.js';
+import { drawnBlockStroke, drawsPythonLegendRow, legendStructureEdited } from '../services/legend-svg.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
@@ -2772,8 +2772,9 @@ export const createAppSetup = () => {
         featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
       }
     },
-    afterReady() {
+    afterReady(context) {
       previewFeatureSearch.handleMountedResultReady();
+      showEditsMadeWhileDrawn(context);
     }
   });
   const {
@@ -3328,41 +3329,24 @@ export const createAppSetup = () => {
   // label intent remains (an undone or replaced Label TSV import).
   let labelProjectionResultIdentity = '';
   /** @param {DrawingState} drawing @returns {EditorPaintState} */
-  const currentEditorProjectionState = (drawing) => ({
-    colors: [
-      toRaw(appliedPaletteColors.value),
-      JSON.stringify([drawing.manualSpecificRules, drawing.featureColorOverrides, drawing.legendColorOverrides])
-    ],
-    visibility: JSON.stringify([
-      Object.values(drawing.featureOverrides).map((row) => [row.recordKey, row.biologicalFeatureId, row.featureVisibility]),
-      drawing.featureVisibilityManualRules
-    ]),
-    // A deleted row strokes no feature (OV-293).
-    strokes: JSON.stringify([
-      drawing.featureStrokeOverrides, drawing.legendStrokeOverrides,
-      drawing.deletedLegendEntries.value.map((entry) => entry.originalCaption || entry.caption)
-    ]),
-    labels: JSON.stringify([
-      Object.values(drawing.featureOverrides).map((row) => [
-        row.recordKey, row.biologicalFeatureId, row.labelVisibility, row.labelText, row.labelSourceText
-      ]),
-      drawing.labelTextBulkOverrides
-    ]),
-    // An edited Legend order, or '' for the default order (D-08).
-    legendOrder: isLegendOrderEdited(drawing.legendEntries.value, originalLegendOrder.value)
-      ? JSON.stringify(drawing.legendEntries.value.map((entry) => entry.caption))
-      : ''
-  });
+  const currentEditorProjectionState = (drawing) => editorPaintState(state, drawing);
   const sameColors = (left, right) => left[0] === right[0] && left[1] === right[1];
   /** @param {DrawingState} drawing */
   const rememberCommittedEditorState = (drawing, context) => {
     const identities = liveResultIdentities();
+    const current = currentEditorProjectionState(drawing);
+    // A label rerender's Results show the editor state it drew from; the
+    // edits made while it ran are shown on the displayed Result once it is
+    // bound (`afterReady`, OV-346), and on another Result when displayed.
+    const drawn = context.bindingOptions.drawnPaint || current;
+    if (drawn.labels !== current.labels) labelProjectionResultIdentity = context.resultIdentity;
     // A loaded Session and a History restore keep each Result's bytes as
     // they were saved or kept, a batch Result not displayed since the last
     // edits without them (also a Session older than 40, whose strokes
     // reached only the mounted Result).
-    resultPaintRecord.commit(identities, context.resultIdentity, currentEditorProjectionState(drawing), {
-      restored: context.phase === 'session-load' || Boolean(context.bindingOptions.trustedRestore)
+    resultPaintRecord.commit(identities, context.resultIdentity, current, {
+      restored: context.phase === 'session-load' || Boolean(context.bindingOptions.trustedRestore),
+      drawn
     });
     [...departedResultIntent.keys()].forEach((identity) => {
       if (!identities.includes(identity)) departedResultIntent.delete(identity);
@@ -3616,6 +3600,15 @@ export const createAppSetup = () => {
       if (resultPaintRecord.lacking(identity) === lacking) resultPaintRecord.shown(identity, current, current);
     } catch (error) {
       console.error('Editor edits could not be shown on the displayed Result.', normalizeUserFacingError(error));
+    }
+  };
+
+  // A label rerender's displayed Result, once bound, shows the fills and
+  // visibility of the edits made while it ran (OV-346).
+  /** @param {{ resultIdentity: string, bindingOptions: Readonly<import('./preview-runtime.js').PreviewBindingOptions> }} context */
+  const showEditsMadeWhileDrawn = (context) => {
+    if (context.bindingOptions.drawnPaint && resultPaintRecord.lacking(context.resultIdentity)) {
+      void showDeclinedPaint(context.resultIdentity);
     }
   };
 
