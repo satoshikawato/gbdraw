@@ -10,10 +10,10 @@
 // use in tests/web/helpers/live-generate-parity-steps.cjs.
 const { test, expect } = require('@playwright/test');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
-const { expectLiveEqualsGenerate, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
+const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 const {
   open, generate, popupEdit, addVisibilityRule, appAction, addColorRule, history, FL1_OFF,
-  legendRowColor, FL1_ALPHA
+  legendRowColor, FL1_ALPHA, renameRow
 } = require('./helpers/live-generate-parity-steps.cjs');
 
 test.describe.configure({ retries: 0 });
@@ -558,6 +558,121 @@ test('each allowed difference names its scope and cites its decision', () => {
     expect(entry.reason.trim() && entry.decision.trim(), entry.id).toBeTruthy();
   }
   expect(new Set(entries.map(({ id }) => id)).size).toBe(entries.length);
+});
+
+// OV-287, OV-289, OV-290 (R-04, D-05): Reset Settings clears the editor
+// edits, and the displayed Result shows the reset draft as the next Generate
+// draws it, one case per edit domain. The Legend list (caption and the color
+// the editor shows) equals the list after that Generate. A Reset before the
+// first Generate puts the draft at the default settings, so the Reset under
+// test changes no setting that only Generate draws.
+const resetSettings = (page) => evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.resetSettings(); })
+  .then(() => settleLive(page));
+const legendList = (page) => page.evaluate(() => {
+  const app = window.__GBDRAW_APP__;
+  return app.legendEntries.map((entry) => ({ caption: entry.caption, color: app.legendEntryColor(entry) }));
+});
+const deleteLegendRow = (page, caption) => evaluateWithRetainedPromise(page, async (row) => {
+  const app = window.__GBDRAW_APP__;
+  await app.deleteLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === row));
+}, caption).then(() => settleLive(page));
+const RESET_CASES = [
+  {
+    domain: 'a Legend row stroke (OV-287)',
+    edit: (page) => legendRowStrokeColor(page, 'CDS', '#e63946'),
+    // Undo shows the edit again and Redo the reset draft, on the Result.
+    undoRedo: true
+  },
+  {
+    domain: 'a Legend row color (U5 review L2)',
+    edit: (page) => legendRowColor(page, 'CDS', '#7b2cbf')
+  },
+  {
+    domain: 'a deleted Legend row (OV-289)',
+    edit: (page) => deleteLegendRow(page, 'GC content')
+  },
+  {
+    // Generate does not draw a row the editor added; the deleted row stays gone.
+    domain: 'a Legend row added in the editor and deleted',
+    edit: async (page) => { await legendRowAdd(page, 'Manual row', '#118833'); await deleteLegendRow(page, 'Manual row'); },
+    sameDrawing: true
+  },
+  {
+    // The next two: Generate after Reset draws neither the added row nor the new caption.
+    domain: 'a Legend row added in the editor',
+    edit: (page) => legendRowAdd(page, 'Manual row', '#118833')
+  },
+  {
+    domain: 'a Legend row renamed',
+    edit: async (page) => { await renameRow(page, 'CDS', 'Coding'); await settleLive(page); }
+  },
+  {
+    // A popup "this feature only" color draws its own Legend row; Reset
+    // removes its rule, and the rule owner asks for the rerender (OV-43).
+    domain: 'a feature fill, this feature only, with its own Legend row (OV-290)',
+    edit: (page) => popupEdit(page, 'FL1', { fill: '#2a9d8f' })
+  },
+  {
+    domain: 'a feature hidden (OV-290)',
+    edit: (page) => popupEdit(page, 'FL2', { visibility: 'off' })
+  },
+  {
+    // The Result Generate drew lacks the feature, so Reset asks for the rerender.
+    domain: 'a feature a visibility rule hid at Generate',
+    edit: async (page) => { await addVisibilityRule(page, FL1_OFF); await generate(page); }
+  },
+  {
+    domain: 'a label text with Label visibility On (OV-290)',
+    edit: (page) => popupEdit(page, 'FL1', { labelText: 'FL1-X', labelVisibility: 'on' })
+  }
+];
+for (const { domain, edit, undoRedo, sameDrawing } of RESET_CASES) {
+  test(`Reset Settings after ${domain} shows what Generate draws`, async ({ page }) => {
+    test.setTimeout(120_000);
+    await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+    await resetSettings(page);
+    await generate(page);
+    const drawn = await semanticSnapshot(page);
+    await edit(page);
+    const edited = await semanticSnapshot(page);
+    if (sameDrawing) expect(edited, 'the edit leaves the drawing as Generate drew it').toEqual(drawn);
+    else expect(edited, 'the edit shows on the Result').not.toEqual(drawn);
+    await resetSettings(page);
+    if (undoRedo) {
+      const reset = await semanticSnapshot(page);
+      await history(page, 'undo');
+      expect(await semanticSnapshot(page), 'Undo of Reset Settings').toEqual(edited);
+      await history(page, 'redo');
+      expect(await semanticSnapshot(page), 'Redo of Reset Settings').toEqual(reset);
+    }
+    const listed = await legendList(page);
+    await expectLiveEqualsGenerate(page, { label: `Reset Settings after ${domain}` });
+    expect(listed, 'the Legend list after Reset Settings').toEqual(await legendList(page));
+  });
+}
+
+// A Reset that changes the palette: the palette watcher shows the default
+// palette's fills, and Reset projects the other domains.
+test('Reset Settings after a palette change and a Legend row stroke shows what Generate draws', async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await resetSettings(page);
+  const palette = await page.evaluate(() => window.__GBDRAW_APP__.paletteNames
+    .find((name) => name !== window.__GBDRAW_APP__.selectedPalette));
+  await page.locator('summary[aria-label="Colors"]').click();
+  await page.getByRole('combobox', { name: 'Palette', exact: true }).selectOption(palette);
+  await settleLive(page);
+  await generate(page);
+  const drawn = await semanticSnapshot(page);
+  await legendRowStrokeColor(page, 'CDS', '#e63946');
+  await resetSettings(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.selectedPalette), 'Reset returns to the default palette')
+    .not.toBe(palette);
+  const reset = await semanticSnapshot(page);
+  expect(reset.features, 'the default palette shows on the features').not.toEqual(drawn.features);
+  const listed = await legendList(page);
+  await expectLiveEqualsGenerate(page, { label: 'Reset Settings after a palette change' });
+  expect(listed, 'the Legend list after Reset Settings').toEqual(await legendList(page));
 });
 
 for (const { edit, states, setup, run, knownMismatch } of CASES) {

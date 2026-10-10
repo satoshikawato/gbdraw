@@ -2149,6 +2149,55 @@ assert.equal(
   1
 );
 
+// OV-278: a Session without a Web draft (CLI, Python, Gallery) selects a
+// non-first record of a shared GenBank file by record ID and gives it a display
+// start. Load projects the start into a draft whose selector is '#1' (the
+// projection does not read the file); Generate draws the record from that
+// start once its File card lists the file's records.
+{
+  const record = (id) => [
+    `LOCUS       ${id}                  60 bp    DNA     circular UNK 01-JAN-1980`,
+    'DEFINITION  fixture.', `ACCESSION   ${id}`, `VERSION     ${id}.1`, 'FEATURES             Location/Qualifiers',
+    'ORIGIN', `        1 ${'atgcatgcat '.repeat(6).trim()}`, '//', ''
+  ].join('\n');
+  const text = record('AAA') + record('BBB');
+  const shared = {
+    kind: 'genbank', name: 'two.gb', type: 'text/plain', size: text.length, lastModified: 0,
+    encoding: 'base64', data: Buffer.from(text).toString('base64')
+  };
+  const selected = (recordKey, id, gridRow, startCoordinate) => ({
+    recordKey, cardinality: 'exactly_one', source: { kind: 'genbank', resourceId: 'shared' },
+    selector: { kind: 'recordId', value: id }, region: null,
+    presentation: { label: null, subtitle: null, reverseComplement: false, gridRow, gridColumn: 1 },
+    display: { isCircular: null, startCoordinate }
+  });
+  const projected = projectCanonicalSessionRequest({
+    renderRequest: {
+      schema: CANONICAL_REQUEST_SCHEMA, mode: 'linear', grouping: 'single',
+      records: [selected('record-1', 'AAA.1', 1, 7), selected('record-2', 'BBB.1', 2, 11)],
+      diagramOptions: { featurePlacements: [], featureOverrides: [] }, output: { prefix: 'ov278' }
+    },
+    resources: { shared },
+    initializeCliInputs: true
+  });
+  const filesData = { linearSeqs: projected.files.linearSeqs, linearComparisons: [] };
+  // Each File card lists every record of its file.
+  const rows = filesData.linearSeqs.flatMap((seq) => ['AAA.1', 'BBB.1'].map((recordId, index) => ({
+    key: JSON.stringify([seq.uid, `#${index + 1}`]), scope: 'linear', sourceUid: seq.uid,
+    selector: `#${index + 1}`, recordId, recordLength: 60, detectedTopology: 'circular', reverse: false, cropped: false
+  })));
+  const loaded = { ...stateForCanonicalProjection(projected), recordDisplayDrafts: structuredClone(projected.config.recordDisplayDrafts) };
+  const generated = buildDrawingRenderRequest({
+    state: loaded, drawing: loaded, filesData, recordDisplayRows: rows,
+    comparisonPlanSnapshot: comparisonSnapshotForState(loaded, filesData)
+  });
+  assert.deepEqual(
+    generated.renderRequest.records.map((entry) => [entry.selector.value, entry.display.startCoordinate]),
+    [['AAA.1', 7], ['BBB.1', 11]],
+    'OV-278: Load then Generate keeps the display start of a record selected by ID'
+  );
+}
+
 const committedBeforeProjection = structuredClone(unchangedOneSource);
 const collectionRecord = unchangedOneSource.renderRequest.records[0];
 const collectionMembers = [1, 2].map((index) => ({

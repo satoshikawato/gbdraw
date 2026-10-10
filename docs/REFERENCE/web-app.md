@@ -110,7 +110,7 @@ settings. The app does not show a separate always-on application status.
 
 | Operation label | When the Result changes |
 |---|---|
-| **Applies on Generate** | A successful **Generate Diagram** applies crop, row layout, Definition Lock, scale label sizes, track slots, **Species**, **Strain**, plot title and record-label settings, the legend position, swatch size, and font size, and the global block, line, axis, and scale stroke colors and widths. |
+| **Applies on Generate** | A successful **Generate Diagram** applies crop, row layout, Definition Lock, scale label sizes, track slots, **Species**, **Strain**, plot title and record-label settings, the legend position, swatch size, and font size, the Linear comparison **Result filters** (**Bitscore**, **E-value**, **Minimum identity**, **Minimum length**), and the global block, line, axis, and scale stroke colors and widths. |
 | **Live edit** | Feature color, label text, and visibility, including **Feature Visibility** rules, update the current Result directly; geometry changes may rerender automatically. A label rerender uses the settings of the last Generate plus the current feature, label, color, and legend edits. Legend text, order, stroke, and removal, and stroke edits on selected features, are live. Palette selection is live when **Instant Preview** is on. |
 | **Apply required** | Alignment choices stay in the review draft until **Apply** succeeds. |
 

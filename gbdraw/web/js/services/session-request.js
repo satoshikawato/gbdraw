@@ -167,7 +167,7 @@ import { sha256Hex } from './byte-utils.js';
 import { cloneJsonData } from './json-clone.js';
 import { isCanonicalResourceReferenceField } from './canonical-resource-references.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
-import { recordDisplayKey, requestedRecordTransform } from './record-display-model.js';
+import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } from './record-display-model.js';
 
 /** @import { SessionResourceSource } from './session-resources.js' */
 
@@ -2570,7 +2570,7 @@ const projectCanonicalRenderInput = ({
   /** @type {Record<string, any>} */
   const webFiles = {};
   const recordPlan = buildRecords({ state, drawing, filesData, resources });
-  const drafts = drawing.recordDisplayDrafts || [];
+  const drafts = bindRecordDisplayDrafts(drawing.recordDisplayDrafts || [], recordDisplayRows);
   const sourceInputIndexes = [];
   const records = recordPlan.records.flatMap((record, index) => {
     const sourceUid = state.mode.value === 'linear'

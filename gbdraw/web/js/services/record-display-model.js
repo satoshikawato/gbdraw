@@ -34,6 +34,34 @@ export const reconcileRecordDisplayDrafts = (drafts, discoveredRows, replacedSou
     && keys.has(recordDisplayKey(draft)));
 };
 
+// OV-278: a draft projected from a request that selects its record by ID (a
+// CLI, Python or Gallery Session, which has no Web draft) has the selector
+// '#1' whatever the record's place, because the projection does not read the
+// file. Once the source's rows are known, it belongs to the row of its source
+// with its record ID; a request selects only an ID that is unique in its file
+// (`buildDisambiguatedRecordEntries`). Returns `drafts` when no draft moves.
+/**
+ * @template {Array<{ sourceUid: string, selector: string, recordId: string }>} Drafts
+ * @param {Drafts} drafts
+ * @param {Array<{ key: string, sourceUid: string, selector: string, recordId: string }>} rows
+ * @returns {Drafts}
+ */
+export const bindRecordDisplayDrafts = (drafts, rows) => {
+  const taken = new Set(drafts.map(recordDisplayKey));
+  let moved = false;
+  const bound = drafts.map((draft) => {
+    const sourceRows = rows.filter((row) => row.sourceUid === draft.sourceUid);
+    if (!draft.recordId || sourceRows.some((row) => row.selector === draft.selector
+      && row.recordId === draft.recordId)) return draft;
+    const named = sourceRows.filter((row) => row.recordId === draft.recordId);
+    if (named.length !== 1 || taken.has(named[0].key)) return draft;
+    taken.add(named[0].key);
+    moved = true;
+    return { ...draft, selector: named[0].selector };
+  });
+  return moved ? /** @type {Drafts} */ (bound) : drafts;
+};
+
 export const parseRecordDisplayStart = (value) => {
   if (value === null || (typeof value === 'string' && !value.trim())) return null;
   if (!['string', 'number'].includes(typeof value)) throw new Error('Display start must be an integer.');

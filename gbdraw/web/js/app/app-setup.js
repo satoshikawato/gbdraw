@@ -95,7 +95,7 @@ import { createFeatureEditor } from './feature-editor.js';
 import { PAIRWISE_MATCH_SELECTOR } from './pairwise-match-popup.js';
 import { createFeatureSelection } from './feature-selection.js';
 import { createPreviewFeatureSearch } from './feature-search/preview-actions.js';
-import { createSvgStyles } from './svg-styles.js';
+import { createSvgStyles, paletteColorsEqual } from './svg-styles.js';
 import { createLegendManager } from './legend.js';
 import { createPaletteLoader } from './palettes.js';
 import { afterPaint, createRunAnalysis } from './run-analysis.js';
@@ -1282,18 +1282,29 @@ export const createAppSetup = () => {
       if (drafts) specificRuleRestorePorts.restoreSpecificRulePatternDrafts(drafts);
     }
   };
-  /** @param {DrawingState} drawing */
-  const restoreRuleEdits = async (drawing, restore, ...args) => {
+  // A restore, or Reset Settings, that rewrites the rules: the rule owner
+  // follows the rules `write` replaced.
+  /**
+   * @template T
+   * @param {DrawingState} drawing
+   * @param {() => Promise<T>} write
+   * @returns {Promise<T>}
+   */
+  const followRuleEdits = async (drawing, write) => {
     const previousRules = drawing.manualSpecificRules.map((rule) => ({ ...rule }));
     specificRuleRestorePorts.retainRulesForRestore(previousRules);
     try {
-      const restored = await restoreWithSpecificRuleDrafts(restore, ...args);
+      const written = await write();
       specificRuleRestorePorts.followRestoredSpecificRules(previousRules);
-      return restored;
+      return written;
     } finally {
       specificRuleRestorePorts.retainRulesForRestore([]);
     }
   };
+  /** @param {DrawingState} drawing */
+  const restoreRuleEdits = (drawing, restore, ...args) => followRuleEdits(
+    drawing, () => restoreWithSpecificRuleDrafts(restore, ...args)
+  );
   const history = createHistoryManager(/** @type {any} */ ({
     buildIntent: historySnapshots.buildHistoryIntent,
     applyIntent: (...args) => {
@@ -4186,8 +4197,31 @@ export const createAppSetup = () => {
     );
     if (!proceed) return false;
 
-    return history.runUndoableCheckpoint('Reset settings', async () => {
+    // OV-287, OV-289, OV-290 (PD-OI-066): the displayed Result shows the
+    // reset draft as the next Generate draws it. The Legend editor's Restore
+    // all and Reset all strokes show the deleted rows and the strokes before
+    // the reset clears what they read; the editor projection then shows the
+    // fills, Legend colors, visibility and labels, the rule owner follows the
+    // removed rules (a changed Legend source asks for the rerender, as their
+    // Undo does), and the Legend list follows the Result.
+    return history.runUndoableCheckpoint('Reset settings', () => followRuleEdits(state.activeDrawing(), async () => {
       featureActions.clearSpecificRulePatternDrafts();
+      const shown = Boolean(svgContainer.value?.querySelector?.('svg'));
+      // Each Legend owner runs only when there is an edit to undo, so a Reset
+      // without one rewrites no Result and resets the draft at once.
+      const active = state.activeDrawing();
+      // Generate draws again the rows it drew (a row added in the editor and
+      // deleted stays gone).
+      const generated = new Set(originalLegendOrder.value);
+      const deleted = active.deletedLegendEntries.value.flatMap(
+        (/** @type {{ caption?: string, originalCaption?: string }} */ entry, /** @type {number} */ index) => (
+          generated.has(entry.originalCaption || entry.caption) ? [index] : [])
+      );
+      if (shown && deleted.length > 0) await restoreDeletedLegendEntries(deleted);
+      if (shown && Object.keys({ ...active.legendStrokeOverrides, ...active.featureStrokeOverrides }).length > 0) {
+        resetAllStrokes();
+      }
+      const palette = { ...appliedPaletteColors.value };
       resetSettingsState(state);
       // Linear records return to their File defaults and inferred definitions;
       // Files, record selections, File defaults, and depth stay. The mutation
@@ -4207,8 +4241,18 @@ export const createAppSetup = () => {
       depthTrackUiCounts.circular = 1;
       ensureDepthTrackConfigCount(state.drawings.circular, activeDepthTrackCount('circular'));
       ensureDepthTrackConfigCount(drawing, activeDepthTrackCount('linear'));
+      if (shown) {
+        // A Reset that changes the palette leaves the fills to the palette watcher.
+        await projectMountedEditorIntent({
+          colors: paletteColorsEqual(appliedPaletteColors.value, palette),
+          visibility: true,
+          rerender: true,
+          labels: true
+        });
+        legendActions.extractLegendEntries();
+      }
       return true;
-    });
+    }));
   };
 
   const resetLayout = () => {
