@@ -464,6 +464,40 @@ assert.rejects(
   assert.equal(kept.length, source.length);
 }
 
+// A Session the Web app saves keeps each imported table file as its input
+// binding, while its request reads the table that Generate wrote from the
+// draft: the Default colors rows that differ from the palette, or the rules
+// left after an edit. Publication rebuilds from the request's tables, not
+// from the imported files (OV-367).
+{
+  const source = await loadSession('BGC0000708-BGC0000713.gbdraw-session.json');
+  const tsvResource = (kind, name, text) => ({ kind, name, type: 'text/tab-separated-values',
+    size: Buffer.byteLength(text), lastModified: 0, encoding: 'base64', data: Buffer.from(text, 'utf8').toString('base64') });
+  const binding = (resourceId, name) => ({ resourceId, name, type: 'text/tab-separated-values', lastModified: 0 });
+  const tableText = (session, ref) => Buffer.from(session.resources[ref.resourceId].data, 'base64').toString('utf8');
+  const generatedDefaultColors = 'CDS\t#d3d3d3\nrRNA\t#71ee7d\ntRNA\t#e8b441\ntmRNA\t#ded44e\n'
+    + 'skew_high\t#6dded3\nskew_low\t#ad72e3\npairwise_match_min\t#FFE7E7\npairwise_match_max\t#FF7272\n';
+  const savedDefaultColors = structuredClone(source);
+  savedDefaultColors.resources['resource-0001'] = source.resources['colors-default-colors-file'];
+  savedDefaultColors.resources['colors-default-colors-file'] = tsvResource('colors-default-colors-file',
+    'colors-default-colors-file-default-colors.tsv', generatedDefaultColors);
+  savedDefaultColors.webFiles.bindings = { schema: 2, c_gb: null, d_color: binding('resource-0001', 'colors-default-colors.tsv') };
+  const sourceColors = source.renderRequest.diagramOptions.colors;
+  const importedRules = `${tableText(source, sourceColors.colorTable || sourceColors.colorTableFile)}CDS\tgene\tneoU\t#000000\tRemoved after import\n`;
+  const savedRules = structuredClone(source);
+  savedRules.resources['resource-0002'] = tsvResource('colors-color-table-file', 'resource-0002-specific-colors.tsv', importedRules);
+  savedRules.webFiles.bindings = { schema: 2, c_gb: null, t_color: binding('resource-0002', 'specific-colors.tsv') };
+  for (const [name, saved] of Object.entries({ savedDefaultColors, savedRules })) {
+    const { session, equivalence } = await prepareGallerySessionForPublication(saved);
+    assert.deepEqual(equivalence.differences, [], name);
+    const { colors } = session.renderRequest.diagramOptions;
+    for (const [field, alias] of [['defaultColorsFile', 'defaultColors'], ['colorTable', 'colorTableFile']]) {
+      const committed = saved.renderRequest.diagramOptions.colors;
+      assert.equal(tableText(session, colors[field] || colors[alias]), tableText(saved, committed[field] || committed[alias]), `${name} ${field}`);
+    }
+  }
+}
+
 // A Session the CLI writes publishes as the Gallery entry of its command: a
 // Circular batch request with one output per record (OV-267), the resolved
 // default colors and the editor tables the CLI stores beside the files it read

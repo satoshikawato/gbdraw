@@ -168,8 +168,10 @@ LAMBDA_BASIC_COMMAND = (
 
 BGC_COMMAND = (
     "gbdraw linear --losat losatp --losatp_mode similarity_groups "
-    "--similarity_alignment_feature CAG38695.1 -f interactive_svg "
+    "--similarity_alignment_feature CAF33315.1 -f interactive_svg "
     "--gbk BGC0000708.gbk BGC0000709.gbk BGC0000711.gbk BGC0000712.gbk BGC0000713.gbk "
+    "--reverse_complement 0 --reverse_complement 0 --reverse_complement 0 "
+    "--reverse_complement 0 --reverse_complement 1 "
     "-k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p orange "
     "-d BGC0000708-BGC0000713_default_colors.tsv "
     "-t BGC0000708-BGC0000713_specific_colors.tsv "
@@ -180,6 +182,7 @@ BGC_COMMAND = (
     "--keep_definition_left_aligned --identity 30 --block_stroke_width 2 "
     "--block_stroke_color '#262626' --line_stroke_width 2 --axis_stroke_width 5 "
     "--legend_box_size 20 --legend_font_size 20 --label_font_size 18 --feature_height 75 "
+    "--arrow_shaft_width_ratio 0.6 "
     "--ruler_label_font_size 20 --definition_line_style name:size=20,weight=bold "
     "--definition_line_style subtitle:size=20 "
     "--definition_line_style 'accession:size=20,color=#7b7c7d' "
@@ -395,8 +398,10 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
             "Five aminoglycoside biosynthetic gene clusters from MIBiG (lividomycin, two neomycin, "
             "paromomycin, and ribostamycin), colored by antiSMASH gene kind and linked by LOSATP "
             "similarity groups at 30% identity or more. The records are aligned on the group of "
-            "<i>livE</i> from the lividomycin cluster, which is also the only record with gene "
-            "labels. A run of core biosynthetic genes links through all five clusters, while "
+            "the ABC transporter <i>neoU</i> from the first neomycin cluster; the lividomycin "
+            "cluster has two members of that group, and its <i>livU</i> is the anchor. Only the "
+            "lividomycin cluster shows gene labels. A run of core biosynthetic genes links "
+            "through all five clusters, while "
             "regulatory genes appear only in the two neomycin clusters; the links show protein "
             "similarity, not phylogenetic orthology."
         ),
@@ -515,6 +520,21 @@ def _session_feature_sources(session: dict[str, Any]) -> list[str]:
             if not isinstance(binding, dict):
                 continue
             add_name(binding.get("name"))
+
+    # A Web-saved Session has no cliInvocation: name each record's source
+    # resources from webFiles.resourceOriginalNames, in record order.
+    web_files = session.get("webFiles")
+    original_names = web_files.get("resourceOriginalNames") if isinstance(web_files, dict) else None
+    render_request = session.get("renderRequest")
+    records = render_request.get("records") if isinstance(render_request, dict) else None
+    if isinstance(original_names, dict) and isinstance(records, list):
+        for record in records:
+            source = record.get("source") if isinstance(record, dict) else None
+            if not isinstance(source, dict):
+                continue
+            for key, resource_id in source.items():
+                if key.endswith("esourceId") and isinstance(resource_id, str):
+                    add_name(original_names.get(resource_id))
 
     files = session.get("files")
     if isinstance(files, dict):

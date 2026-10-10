@@ -2207,6 +2207,68 @@ def test_refresh_sets_every_stored_output_prefix() -> None:
     assert refresh_gallery_sessions_module._set_output_prefix(session, "card-id") == 0
 
 
+def test_refresh_resolves_web_default_colors_over_their_palette() -> None:
+    # The Web stores the Default colors rows that differ from the palette; the
+    # CLI replay stores them resolved over it, and `finalize` compares the two
+    # (OV-375). A resolved table is left as it is.
+    import tomllib
+
+    rows = "CDS\t#d3d3d3\nskew_low\t#ad72e3\n"
+    resource = {
+        "kind": "colors-default-colors-file",
+        "size": len(rows),
+        "encoding": "base64",
+        "data": base64.b64encode(rows.encode()).decode(),
+    }
+    session = {
+        "renderRequest": {
+            "diagramOptions": {
+                "colors": {
+                    "defaultColors": None,
+                    "defaultColorsPalette": "orange",
+                    "defaultColorsFile": {"resourceId": "colors-default-colors-file", "representation": "file"},
+                }
+            }
+        },
+        "resources": {"colors-default-colors-file": resource},
+    }
+    palettes = tomllib.loads(Path("gbdraw/data/color_palettes.toml").read_text(encoding="utf-8"))
+
+    assert refresh_gallery_sessions_module._resolve_default_colors(session) == 1
+    text = base64.b64decode(resource["data"]).decode()
+    assert dict(line.split("\t") for line in text.splitlines()) == {
+        **palettes["orange"],
+        "CDS": "#d3d3d3",
+        "skew_low": "#ad72e3",
+    }
+    assert resource["size"] == len(text.encode())
+    assert refresh_gallery_sessions_module._resolve_default_colors(session) == 0
+    assert refresh_gallery_sessions_module._resolve_default_colors({"renderRequest": {"diagramOptions": {}}}) == 0
+
+
+def test_refresh_stores_one_record_sources_as_exactly_one() -> None:
+    # The Web writes `all` for a Linear GenBank file without selector; the CLI
+    # replay materializes a one-record file as `exactly_one`, and `finalize`
+    # compares the two (OV-376). A file with more records keeps `all`.
+    one = Path("tests/test_inputs/NC_001416.gb").read_bytes()
+
+    def record(index: int) -> dict[str, object]:
+        return {"recordKey": f"record-{index}", "cardinality": "all", "selector": None, "region": None,
+                "source": {"kind": "genbank", "resourceId": f"record-{index}-genbank"}}
+
+    session = {
+        "renderRequest": {"mode": "linear", "records": [record(1), record(2), {**record(3), "selector": {"kind": "recordIndex", "index": 0}}]},
+        "resources": {
+            f"record-{index}-genbank": {"encoding": "base64", "data": base64.b64encode(payload).decode()}
+            for index, payload in ((1, one), (2, one + one), (3, one))
+        },
+    }
+
+    assert refresh_gallery_sessions_module._materialize_one_record_sources(session) == 1
+    assert [entry["cardinality"] for entry in session["renderRequest"]["records"]] == ["exactly_one", "all", "all"]
+    assert refresh_gallery_sessions_module._materialize_one_record_sources(session) == 0
+
+
 def _write_invocation(tmp_path: Path, args: list[str], bindings: list[dict[str, object]]) -> Path:
     path = tmp_path / "session.json"
     path.write_text(
@@ -2310,4 +2372,29 @@ def test_declared_command_invocation_keeps_its_declared_inputs(tmp_path: Path) -
         "/elsewhere/in.gbk",
         "-o",
         "card-id",
+    ]
+
+
+def test_feature_sources_of_a_web_saved_session_come_from_its_record_resources() -> None:
+    # A Web-saved Session has no cliInvocation; its input names live in
+    # webFiles.resourceOriginalNames, keyed by each record's source resource.
+    session = {
+        "renderRequest": {
+            "records": [
+                {"recordKey": "record-1", "source": {"kind": "genbank", "resourceId": "record-1-genbank"}},
+                {"recordKey": "record-2", "source": {"kind": "genbank", "resourceId": "record-2-genbank"}},
+            ]
+        },
+        "webFiles": {
+            "resourceOriginalNames": {
+                "colors-default-colors-file": "colors-default-colors.tsv",
+                "record-2-genbank": "second.gbk",
+                "record-1-genbank": "first.gbk",
+            }
+        },
+    }
+
+    assert gallery_assets_module._session_feature_sources(session) == [
+        "first.gbk",
+        "second.gbk",
     ]
