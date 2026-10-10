@@ -186,7 +186,10 @@ export const createRulePreparation = ({
     legendStrokes: (drawing) => drawing.legendStrokeOverrides || {},
     featureColors: (drawing) => drawing.featureColorOverrides || {},
     featureVisibility: (drawing) => Object.values(drawing.featureOverrides || {})
-      .map((row) => [row.recordKey, row.biologicalFeatureId, row.featureVisibility])
+      .map((row) => [row.recordKey, row.biologicalFeatureId, row.featureVisibility]),
+    // The visibility rules a request carries: a rerender drawn from older rules
+    // is not admitted and runs again (OV-330), as for the per-feature rows.
+    visibilityRules: () => visibilityRules()
   };
   const drawingInputs = Object.entries(drawingInputReaders).map(([key, read]) => (
     /** @type {[string, { value: string }]} */ ([key, computed(() => JSON.stringify(read(state.activeDrawing())))])

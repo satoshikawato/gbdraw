@@ -531,4 +531,27 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
   assert.equal(follows.length, followCount + 1);
 }
 
+// OV-330: the label rerender admits its Result only while the rule
+// preparation's inputs are those it drew from (`shouldAdmit`). A rerender
+// asked for by a rule that hid a feature, and drawn before the next edit of
+// that rule showed it again, must not be admitted: the rerun draws the rule
+// as edited. A row a request does not carry (no value yet) changes nothing.
+{
+  const rulesState = {
+    extractedFeatures: ref([]),
+    featureVisibilityManualRules: [],
+    featureOverrides: {},
+    manualSpecificRules: []
+  };
+  const preparation = rulePreparationFor(rulesState);
+  const empty = preparation.snapshot();
+  rulesState.featureVisibilityManualRules.push({ recordId: '*', featureType: '*', qualifier: 'product', value: '', action: 'off' });
+  assert.equal(preparation.isCurrent(empty), true);
+  rulesState.featureVisibilityManualRules[0] = { ...rulesState.featureVisibilityManualRules[0], featureType: 'CDS', qualifier: 'locus_tag', value: '^FL1$' };
+  assert.equal(preparation.isCurrent(empty), false);
+  const hiding = preparation.snapshot();
+  rulesState.featureVisibilityManualRules[0] = { ...rulesState.featureVisibilityManualRules[0], action: 'show' };
+  assert.equal(preparation.isCurrent(hiding), false);
+}
+
 console.log('feature visibility action tests passed');
