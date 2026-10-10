@@ -65,13 +65,16 @@ export const parseColorTable = (text, { legacyRows = false } = {}) => {
 
   for (const [index, line] of lines.entries()) {
     if (!line.trim() || line.trim().startsWith('#') || line.trim().startsWith('[')) continue;
-    const cells = tableCells(line, 2, index + 1, repairs,
-      ([key, color]) => key && (isColorHeader(key, color) || normalizeDefaultColor(color)));
+    const cells = tableCells(line, 2, index + 1, repairs, ([key, color]) => key && color);
     if (!cells) continue;
     const [key, color] = cells;
     if (isColorHeader(key, color) || !key || !color) continue;
     const normalized = normalizeDefaultColor(color);
-    if (!normalized) throw diagnosticError('TABLE_INVALID', { row: index + 1, field: 'color', reason: 'COLOR' });
+    if (!normalized) {
+      // A Sessions 31-39 table (`repairs`) lists the row instead of failing Load.
+      if (repairs) { repairs.push({ row: index + 1, repair: 'invalid' }); continue; }
+      throw diagnosticError('TABLE_INVALID', { row: index + 1, field: 'color', reason: 'COLOR' });
+    }
     colors[key] = normalized;
     count++;
   }

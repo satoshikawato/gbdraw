@@ -90,7 +90,7 @@ const REASONS = Object.freeze({
   DEPTH_SERIES: 'Select an existing Depth TSV or remove the slot.',
   DEPTH_SERIES_SOURCE: 'Attach a Depth TSV to this series, or remove the series.',
   BOTH_ENDPOINTS: 'Supply both region endpoints or leave both empty.', SPECIFIC_COLUMNS: 'Supply four or five tab-separated columns.',
-  COLOR: 'Use none, a supported named color, or a hex color with 3 or 6 digits. Default colors and configuration colors also accept transparent, rgb(), and hsl().',
+  COLOR: 'Use none, a supported named color, or a hex color with 3 or 6 digits. Feature type rows of a Default colors table and configuration colors other than conservation also accept transparent, rgb(), and hsl(); comparison gradient colors take #RGB or #RRGGBB.',
   // Output Prefix (gbdraw/api/requests.py RenderOutputRequest).
   FILENAME: 'Use one file name without a folder: no / \\ : * ? " < > | or control characters, no trailing dot, and not a Windows device name such as CON or NUL.',
   FILENAME_LENGTH: 'Use at most 200 bytes in UTF-8, for example 200 ASCII characters.',

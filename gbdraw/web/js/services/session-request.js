@@ -3601,9 +3601,11 @@ export const legacyTableRowsNotice = (repairs) => {
         .map(({ row }) => row);
       const joined = rows('joined');
       const dropped = rows('dropped');
+      const invalid = rows('invalid');
       return [
         joined.length ? `${SESSION_TABLE_LABELS[table]}: ${lineList(joined)} had extra cells, joined into the last column with one space.` : '',
-        dropped.length ? `${SESSION_TABLE_LABELS[table]}: ${lineList(dropped)} lacked a required column and ${dropped.length === 1 ? 'was' : 'were'} dropped.` : ''
+        dropped.length ? `${SESSION_TABLE_LABELS[table]}: ${lineList(dropped)} lacked a required column and ${dropped.length === 1 ? 'was' : 'were'} dropped.` : '',
+        invalid.length ? `${SESSION_TABLE_LABELS[table]}: ${lineList(invalid)} had a color the table does not accept and ${invalid.length === 1 ? 'was' : 'were'} dropped.` : ''
       ].filter(Boolean);
     })].join(' ');
 };

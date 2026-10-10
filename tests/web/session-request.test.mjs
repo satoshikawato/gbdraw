@@ -5502,10 +5502,12 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
     + 'Label whitelist: line 1 had extra cells, joined into the last column with one space.');
   assert.equal(legacyTableRowsNotice([
     ...[3, 4, 5, 6, 7, 9, 12].map((row) => ({ table: 'qualifier-priority', row, repair: 'dropped' })),
-    { table: 'label-whitelist', row: 2, repair: 'dropped' }
+    { table: 'label-whitelist', row: 2, repair: 'dropped' },
+    { table: 'default-colors', row: 4, repair: 'invalid' }
   ]), 'Some table rows of this older Session were read as the current version writes them. '
     + 'Qualifier priority: lines 3, 4, 5, 6, 7, and 2 more lacked a required column and were dropped. '
-    + 'Label whitelist: line 2 lacked a required column and was dropped.');
+    + 'Label whitelist: line 2 lacked a required column and was dropped. '
+    + 'Default colors: line 4 had a color the table does not accept and was dropped.');
   assert.equal(legacyTableRowsNotice([]), '');
   const sessionTableFailure = (document, repairLegacyTableRows) => {
     try {
@@ -5524,7 +5526,7 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
     actions: ['select-input']
   });
   const COLOR_GUIDANCE = 'Use none, a supported named color, or a hex color with 3 or 6 digits. '
-    + 'Default colors and configuration colors also accept transparent, rgb(), and hsl().';
+    + 'Feature type rows of a Default colors table and configuration colors other than conservation also accept transparent, rgb(), and hsl(); comparison gradient colors take #RGB or #RRGGBB.';
   // A Specific colors row with an invalid color still fails Load, naming the table.
   const specificColors = structuredClone(session);
   const text = 'CDS\tproduct\tkinase\tnot-a-color\n';

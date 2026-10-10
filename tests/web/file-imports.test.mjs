@@ -300,11 +300,13 @@ for (const [name, parse, text, read, expected, repairs, valid] of [
     [{ row: 2, repair: 'joined' }, { row: 3, repair: 'dropped' }, { row: 4, repair: 'dropped' }, { row: 5, repair: 'dropped' }],
     'CDS\tgene,product'],
   ['Default colors', parseColorTable,
-    'feature_type\tcolor\nCDS\t#54bcf8\ntRNA\tred\t\nrRNA\n\tblue\n',
+    'feature_type\tcolor\nCDS\t#54bcf8\ntRNA\tred\t\nrRNA\n\tblue\nmisc_feature\tcurrentColor\n',
     (parsed) => parsed.colors,
-    // A color name reads as its CSS hex, as in the browser (OV-160).
+    // A color name reads as its CSS hex, as in the browser (OV-160); a color outside
+    // the Default colors domain (OV-272) is dropped and listed instead of failing Load.
     { CDS: '#54bcf8', tRNA: '#FF0000' },
-    [{ row: 3, repair: 'joined' }, { row: 4, repair: 'dropped' }, { row: 5, repair: 'dropped' }], 'CDS\t#54bcf8']
+    [{ row: 3, repair: 'joined' }, { row: 4, repair: 'dropped' }, { row: 5, repair: 'dropped' }, { row: 6, repair: 'invalid' }],
+    'CDS\t#54bcf8']
 ]) {
   const parsed = parse(text, { legacyRows: true });
   assert.deepEqual(read(parsed), expected, `${name}: legacy rows`);

@@ -15,12 +15,14 @@ write-up of a release.
 - Default colors (CLI, Python API, and web app): the web app's **Override File (-d)**
   import accepts the documented Default colors forms, including `rgb()`, `rgba()`,
   `hsl()`, and `hsla()` rows that it dropped before (OV-302), and rejects any other
-  value with its line number. A color name outside the color-name table that
-  `gbdraw` uses, such as the system color `ButtonFace`, is no longer turned into a
-  hex color by the browser anywhere in the web app; it stays as written (OV-272).
-  Compatibility: the CLI and the Python API no longer accept `currentColor` and
-  `inherit` as a `-d` color or as a color in a configuration override. Through
-  0.13.0 they accepted both without documenting them.
+  value with its line number. The web app no longer asks the browser to resolve a
+  color name outside the color-name table that `gbdraw` uses, such as the system
+  color `ButtonFace`: where it needs a hex color it shows its default swatch, and
+  **Generate Diagram** reports the invalid color (OV-272). Compatibility: the CLI
+  and the Python API no longer accept `currentColor` and `inherit` as a user color
+  (`-d` rows, configuration override colors, depth track colors, and the CLI stroke
+  and label color options). Through 0.13.0 they accepted both without documenting
+  them.
 - Sessions (web app): a Linear Session that the Python API saved from a CLI LOSATP
   comparison loads with the comparison plan the CLI drew, so the next **Generate
   Diagram** draws the same comparison. Before, the web app took the file bindings
