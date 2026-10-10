@@ -71,7 +71,7 @@ export const readArtifact = (dir) => {
   return result;
 };
 
-const cell = (text) => String(text ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+const cell = (text) => String(text ?? '').replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\n/g, ' ');
 
 // Markdown: one row per audit job, then the capabilities no journey covers.
 export const renderSummary = ({ jobs, artifacts, artifactsDir, runUrl }) => {

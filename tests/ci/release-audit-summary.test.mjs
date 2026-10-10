@@ -43,7 +43,8 @@ test('the summary lists each audit job with its artifact link and the uncovered 
   mkdirSync(join(journeys, 'journeys'), { recursive: true });
   writeFileSync(join(journeys, 'report.json'), JSON.stringify({ stats: { unexpected: 0 } }));
   writeFileSync(join(journeys, 'journeys', 'coverage.json'), JSON.stringify({
-    changed: ['web-runtime', 'packaging'], uncovered: ['packaging'], uncoveredPaths: { packaging: ['pyproject.toml'] }
+    changed: ['web-runtime', 'packaging', 'full'], uncovered: ['packaging', 'full'],
+    uncoveredPaths: { packaging: ['pyproject.toml'], full: ['odd\\|name'] }
   }));
   const markdown = renderSummary({
     jobs: [
@@ -61,6 +62,7 @@ test('the summary lists each audit job with its artifact link and the uncovered 
   assert.doesNotMatch(markdown, /Core|\| summary \|/);
   assert.match(markdown, /Uncovered by the user journeys \(hand look with a time limit, or an Owner waiver\): packaging/);
   assert.match(markdown, /\| packaging \| `pyproject\.toml` \|/);
+  assert.ok(markdown.includes('| full | `odd\\\\\\|name` |'), 'backslash and pipe are both escaped');
 });
 
 test('promotion audit jobs run only on the release-tier dispatch and stay outside every gate', () => {
