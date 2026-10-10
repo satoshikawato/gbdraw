@@ -8,6 +8,7 @@
 /** @import { LegacyResultSvgTransform } from '../services/config.js' */
 /** @import { ArtifactSlot } from '../services/artifact-slot.js' */
 /** @import { GalleryExample } from '../services/gallery-examples.js' */
+/** @import { LinearComparisonPlan } from '../services/linear-comparisons.js' */
 /** @typedef {{ opening: Readonly<ArtifactSlot> | null, stashed: Readonly<ArtifactSlot> | null }} LoadedArtifactSlots */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan } from './candidate-render.js';
@@ -167,6 +168,7 @@ import {
   createLinearComparisonEdge,
   linearComparisonEdgeKey,
   materializeResolvedEdgesAsSelectedPlan,
+  missingUploadPairsToResolve,
   normalizeLinearComparisonPlan,
   plainTextLinearRecordLabel,
   reconcileLinearComparisonPlan
@@ -893,6 +895,31 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(drawing, next);
     await focusLinearComparisonPair(linearComparisonEdgeKey(queryUid, subjectUid));
   };
+  /**
+   * An omitted edge stays in the plan only to retain its file or LOSAT filename.
+   * @param {LinearComparisonPlan} next
+   * @param {number} index
+   */
+  const omitPlanEdge = (next, index) => {
+    if (index < 0) return;
+    const edge = next.edges[index];
+    edge.included = false;
+    if (!edge.file && !String(edge.losatFilename || '').trim()) next.edges.splice(index, 1);
+  };
+  /**
+   * Sets the pairs to No comparison as one plan replacement: a pair's radio,
+   * and the pairs of the BLAST TSV missing dialog (D-54).
+   * @param {DrawingState} drawing
+   * @param {string[]} edgeKeys
+   */
+  const omitLinearComparisonPairs = (drawing, edgeKeys) => {
+    const next = selectedPlanForEdit(drawing);
+    edgeKeys.forEach((edgeKey) => {
+      const pair = linearComparisonPairForEdgeKey(edgeKey);
+      if (pair) omitPlanEdge(next, findEdgeIndexForPair(next.edges, pair));
+    });
+    replaceLinearComparisonPlan(drawing, next);
+  };
   const omitLinearComparison = (id) => {
     const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
@@ -900,9 +927,7 @@ export const createAppSetup = () => {
     const next = selectedPlanForEdit(drawing);
     const index = findEdgeIndex(next.edges, id);
     if (index < 0) return;
-    const edge = next.edges[index];
-    edge.included = false;
-    if (!edge.file && !String(edge.losatFilename || '').trim()) next.edges.splice(index, 1);
+    omitPlanEdge(next, index);
     replaceLinearComparisonPlan(drawing, next);
   };
   const clearSelectedLinearComparisons = () => {
@@ -1069,18 +1094,11 @@ export const createAppSetup = () => {
     if (sessionBusy) return sessionBusy;
     const pair = linearComparisonPairForEdgeKey(edgeKey);
     if (!pair) return;
-    const next = selectedPlanForEdit(drawing);
-    const index = findEdgeIndexForPair(next.edges, pair);
     if (action === 'none') {
-      if (index >= 0) {
-        next.edges[index].included = false;
-        if (!next.edges[index].file && !String(next.edges[index].losatFilename || '').trim()) {
-          next.edges.splice(index, 1);
-        }
-      }
-      replaceLinearComparisonPlan(drawing, next);
+      omitLinearComparisonPairs(drawing, [edgeKey]);
       return;
     }
+    const next = selectedPlanForEdit(drawing);
     upsertSelectedComparison(next, {
       id: pair.edgeId,
       queryUid: pair.queryUid,
@@ -3811,6 +3829,14 @@ export const createAppSetup = () => {
           if (mode.value === 'linear') await focusLinearComparisonIssue();
           return { status: 'error', error: errorLog.value };
         }
+        const missingBlastTsvPairs = comparisonExecution.mode === 'draft'
+          ? missingUploadPairsToResolve(comparisonPlanSnapshot)
+          : [];
+        if (missingBlastTsvPairs.length) {
+          missingBlastTsvDialog.pairs = missingBlastTsvPairs;
+          missingBlastTsvDialog.show = true;
+          return { status: 'blocked', reason: 'missing-blast-tsv' };
+        }
         return { status: 'ready', comparisonPlanSnapshot, comparisonExecution };
       },
       afterGenerate: async (result) => {
@@ -3921,6 +3947,34 @@ export const createAppSetup = () => {
   });
   recordDragAlignmentPorts.beforeRecordDrag = similarityAlignmentActions.beforeRecordDrag;
   recordDragAlignmentPorts.afterRecordDrag = similarityAlignmentActions.afterRecordDrag;
+  // D-54: Generate asks about Upload pairs without a file. Choose opens the first
+  // pair's file chooser; No comparison is one History step, then Generate.
+  const missingBlastTsvDialog = reactive({ show: false, pairs: /** @type {ReturnType<typeof missingUploadPairsToResolve>} */ ([]) });
+  const closeMissingBlastTsvDialog = () => { missingBlastTsvDialog.show = false; };
+  const setMissingBlastTsvPairsToNone = dialogChoice.withHistory(
+    () => 'Set pairs to No comparison',
+    () => {
+      omitLinearComparisonPairs(state.drawings.linear, missingBlastTsvDialog.pairs.map((entry) => entry.edgeKey));
+      dialogChoice.closeAfterChoice(closeMissingBlastTsvDialog);
+      return true;
+    },
+    closeMissingBlastTsvDialog
+  );
+  /** @param {'choose' | 'none' | 'cancel'} choice */
+  const resolveMissingBlastTsv = async (choice) => {
+    if (choice !== 'choose') {
+      return await setMissingBlastTsvPairsToNone(choice) === true ? runAnalysis() : undefined;
+    }
+    if (dialogChoice.pending.value) return undefined;
+    closeMissingBlastTsvDialog();
+    // The file chooser opens inside the click that chose it.
+    void openLinearComparisonDisclosure('selected-pairs');
+    const uploader = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('[data-linear-comparison-pair-upload]')])
+      .find((element) => element.dataset.linearComparisonPairUpload === missingBlastTsvDialog.pairs[0]?.edgeKey);
+    /** @type {HTMLElement | null | undefined} */ (uploader?.querySelector('[role="button"]'))?.focus();
+    /** @type {HTMLInputElement | null | undefined} */ (uploader?.querySelector('input[type="file"]'))?.click();
+    return undefined;
+  };
   const similarityAlignmentCanvasHover = ref(null);
   similarityAlignmentPorts.refreshCanvas = () => {
     if (!similarityAlignmentActions.dialogOpen.value
@@ -5374,6 +5428,8 @@ export const createAppSetup = () => {
     sessionSavePending,
     semanticMutationAvailable,
     dialogChoicePending,
+    missingBlastTsvDialog,
+    resolveMissingBlastTsv,
     sessionSaveAvailable,
     sessionLoadAvailable,
     sessionBusyReason,

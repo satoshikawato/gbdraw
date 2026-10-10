@@ -7699,6 +7699,20 @@
                 <button type="button" data-history-ignore @click="resolveSessionReplacement('load')" class="btn btn-primary btn-sm">{{ sessionReplaceDialog.actionLabel }}</button>
             </div>
         </choice-dialog>
+        <!-- D-54: Generate asks about pairs set to Upload BLAST TSV without a file -->
+        <choice-dialog v-if="missingBlastTsvDialog.show" :busy="dialogChoicePending" labelledby="missing-blast-tsv-title" describedby="missing-blast-tsv-description"
+             @cancel="resolveMissingBlastTsv('cancel')" @keydown.tab="trapDialogFocus"
+             class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
+            <h2 id="missing-blast-tsv-title" class="text-base font-bold text-slate-800">BLAST TSV missing</h2>
+            <p id="missing-blast-tsv-description" class="mt-2 text-sm leading-relaxed text-slate-600">
+                These pairs are set to Upload BLAST TSV but have no file: {{ missingBlastTsvDialog.pairs.map((pair) => pair.label).join(', ') }}.
+            </p>
+            <div class="mt-4 flex flex-col gap-2">
+                <button type="button" data-history-ignore @click="resolveMissingBlastTsv('choose')" class="btn btn-primary btn-sm">Choose BLAST TSV for {{ missingBlastTsvDialog.pairs[0]?.label }}…</button>
+                <button type="button" data-history-managed :disabled="!semanticMutationAvailable" @click="resolveMissingBlastTsv('none')" class="btn btn-secondary btn-sm">Set to No comparison and Generate</button>
+                <button type="button" data-history-ignore @click="resolveMissingBlastTsv('cancel')" class="btn btn-secondary btn-sm">Cancel</button>
+            </div>
+        </choice-dialog>
         <!-- UJ-06: the Gallery examples this origin serves -->
         <choice-dialog v-if="exampleChooserOpen" labelledby="example-chooser-title" describedby="example-chooser-description"
              @cancel="closeExampleChooser" @keydown.tab="trapDialogFocus"

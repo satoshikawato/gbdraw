@@ -12,6 +12,13 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Comparison (web app): **Generate Diagram** in Linear mode with pairs set to
+  **Upload BLAST TSV** but without a file opens the **BLAST TSV missing** dialog
+  instead of failing. It lists the pairs and offers **Choose BLAST TSV for
+  #i → #j…**, which opens the first pair's file chooser, **Set to No comparison
+  and Generate**, one undoable step, and **Cancel**. Before, Generate failed with
+  "Choose a BLAST TSV for this pair, or set the pair to No comparison or Run
+  LOSAT." Another problem in the same pair plan still reports its own error.
 - Sessions (web app): **Generate Diagram** on a loaded Linear Session whose saved
   comparison waits for **Inherit saved comparison**, **Replace with current
   controls**, or **Clear comparison** now says "Choose how to handle the saved

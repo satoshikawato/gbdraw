@@ -553,7 +553,12 @@ Open the initially closed **Selected pairs (N)** disclosure to change a pair's
 source, bind an uploaded table, omit a pair, or add a non-adjacent pair. Pair
 editors are not inserted between record cards. An uploaded edge participates
 only when it has an active file; an omitted edge draws no link and starts no
-search.
+search. When **Generate Diagram** finds pairs set to **Upload BLAST TSV**
+without a file, the **BLAST TSV missing** dialog lists them: **Choose BLAST TSV
+for #i → #j…** opens the first pair's file chooser (then select **Generate
+Diagram** again), and **Set to No comparison and Generate** sets every listed
+pair to **No comparison** as one undoable step and generates. Any other problem
+in the pair plan is reported as an error instead.
 
 **Settings** shows only controls used by the active LOSAT program and, for
 LOSATP, its presentation. LOSATN shows **LOSATN task**. TLOSATX keeps each record's

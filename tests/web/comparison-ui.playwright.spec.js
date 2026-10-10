@@ -568,18 +568,46 @@ test('imported comparison resolutions are explicit and create one History entry 
   const invalidReplacement = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     await app.setLinearComparisonGlobalAction('losat');
-    app.setLinearComparisonGapAction(app.linearComparisonResolution.edges[0].edgeKey, 'upload');
+    app.setLinearComparisonLosatMode('blastp');
+    app.setLinearComparisonLosatpMode('collinear');
+    app.setLinearComparisonGapAction(app.linearComparisonResolution.edges[0].edgeKey, 'losat');
     const undoBefore = window.__GBDRAW_HISTORY__.getUndoCount();
     const result = await app.runAnalysis();
     return { status: result?.status, code: app.errorLog?.code, context: app.errorLog?.context,
       undoAdded: window.__GBDRAW_HISTORY__.getUndoCount() - undoBefore };
   });
   expect(invalidReplacement).toMatchObject({
-    status: 'error', code: 'COMPARISON_INPUT', undoAdded: 0,
-    context: { reason: 'BLAST_TSV_REQUIRED', queryRecordIndex: 0, subjectRecordIndex: 1 }
+    status: 'error', code: 'COMPARISON_INPUT', undoAdded: 0, context: { reason: 'LOSAT_PLAN' }
   });
   await expect(page.getByRole('region', { name: 'Result Preview' }))
     .toContainText('Last Successful Result');
+  await expect(resolution).toContainText('Selected action: REPLACE');
+
+  // D-54 after Replace: an Upload pair without a file asks first. Setting it
+  // to No comparison leaves the replacement empty, which is refused.
+  const missingTsvDialog = page.getByRole('dialog', { name: 'BLAST TSV missing' });
+  const missingTsv = await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearComparisonLosatMode('blastn');
+    await app.setLinearComparisonGlobalAction('losat');
+    const [first, ...rest] = app.linearComparisonResolution.edges.map((edge) => edge.edgeKey);
+    app.setLinearComparisonGapAction(first, 'upload');
+    rest.forEach((edgeKey) => app.setLinearComparisonGapAction(edgeKey, 'none'));
+    const undoBefore = window.__GBDRAW_HISTORY__.getUndoCount();
+    const result = await app.runAnalysis();
+    return { result, undoAdded: window.__GBDRAW_HISTORY__.getUndoCount() - undoBefore };
+  });
+  expect(missingTsv).toEqual({ result: { status: 'blocked', reason: 'missing-blast-tsv' }, undoAdded: 0 });
+  await expect(missingTsvDialog).toContainText('These pairs are set to Upload BLAST TSV but have no file: #1 → #2.');
+  const setToNone = await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    const undoBefore = window.__GBDRAW_HISTORY__.getUndoCount();
+    const result = await app.resolveMissingBlastTsv('none');
+    return { status: result?.status, code: app.errorLog?.code,
+      undoAdded: window.__GBDRAW_HISTORY__.getUndoCount() - undoBefore };
+  });
+  expect(setToNone).toEqual({ status: 'error', code: 'COMPARISON_REPLACEMENT_EMPTY', undoAdded: 1 });
+  await expect(missingTsvDialog).toHaveCount(0);
   await expect(resolution).toContainText('Selected action: REPLACE');
 
   await setIntent(
@@ -1195,11 +1223,11 @@ test('structured comparison errors open and focus their owning disclosure', asyn
   test.setTimeout(300000);
   await openLinear(page);
 
-  const configureRecords = async () => page.evaluate((records) => {
+  const configureRecords = async (records) => page.evaluate((contents) => {
     const app = window.__GBDRAW_APP__;
     app.lInputType = 'gb';
-    if (app.linearSeqs.length < 2) app.addLinearSeq();
-    records.forEach((content, index) => app.setLinearSeqPrimaryFile(
+    while (app.linearSeqs.length < contents.length) app.addLinearSeq();
+    contents.forEach((content, index) => app.setLinearSeqPrimaryFile(
       index,
       'gb',
       new File([content], `error-record-${index + 1}.gbk`, {
@@ -1207,9 +1235,11 @@ test('structured comparison errors open and focus their owning disclosure', asyn
         lastModified: index + 1
       })
     ));
-  }, [makeGenbank('ErrorA'), makeGenbank('ErrorB', 'gct')]);
+  }, records);
 
-  await configureRecords();
+  // D-54: an Upload pair without a file asks at Generate instead of failing;
+  // Choose opens its disclosure and its file chooser.
+  await configureRecords([makeGenbank('ErrorA'), makeGenbank('ErrorB', 'gct')]);
   const missingUpload = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     await app.setLinearComparisonGlobalAction('losat');
@@ -1219,43 +1249,52 @@ test('structured comparison errors open and focus their owning disclosure', asyn
     const result = await app.runAnalysis();
     return {
       result,
+      errorCode: app.errorLog?.code ?? null,
       issueCodes: app.linearComparisonResolution.errors.map((issue) => issue.code),
       edgeKey
     };
   });
-  expect(missingUpload.result.status).toBe('error');
-  expect(missingUpload.issueCodes).toContain('missing-upload');
-  await expect(selectedPairs(page)).toHaveAttribute('open', '');
+  expect(missingUpload.result).toEqual({ status: 'blocked', reason: 'missing-blast-tsv' });
+  expect(missingUpload.errorCode).toBeNull();
+  expect(missingUpload.issueCodes).toEqual(['missing-upload']);
   await expect(comparisonCard(page).getByRole('status')).toContainText('comparison issue');
+  const missingTsvDialog = page.getByRole('dialog', { name: 'BLAST TSV missing' });
+  const chooserOpened = page.waitForEvent('filechooser');
+  await missingTsvDialog.getByRole('button', { name: 'Choose BLAST TSV for #1 → #2…' }).click();
+  await chooserOpened;
+  await expect(selectedPairs(page)).toHaveAttribute('open', '');
   const missingPair = page.locator(`[data-edge-key="${missingUpload.edgeKey}"]`);
-  await expect(missingPair.locator('[data-linear-comparison-pair-upload]')).toContainText(
-    'BLAST TSV'
-  );
   expect(await missingPair.evaluate((element) => (
     element.contains(document.activeElement)
     && Boolean(document.activeElement?.closest('[data-linear-comparison-pair-upload]'))
   ))).toBe(true);
 
+  // Another issue keeps its typed error and focus, even with an Upload pair
+  // without a file: No comparison would not let the run succeed.
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.getByRole('button', { name: 'Linear', exact: true }).click();
-  await configureRecords();
+  await configureRecords([makeGenbank('ErrorA'), makeGenbank('ErrorB', 'gct'), makeGenbank('ErrorC', 'gga')]);
   const selectedCollinear = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     await app.setLinearComparisonGlobalAction('losat');
     app.setLinearComparisonLosatMode('blastp');
     app.setLinearComparisonLosatpMode('collinear');
-    const edgeKey = app.linearComparisonResolution.edges[0].edgeKey;
-    app.setLinearComparisonGapAction(edgeKey, 'losat');
+    const [losatEdgeKey, uploadEdgeKey] = app.linearComparisonResolution.edges.map((edge) => edge.edgeKey);
+    app.setLinearComparisonGapAction(losatEdgeKey, 'losat');
+    app.setLinearComparisonGapAction(uploadEdgeKey, 'upload');
     document.querySelector('[data-linear-comparison-disclosure="settings"]')?.removeAttribute('open');
     const result = await app.runAnalysis();
     return {
       result,
+      reason: app.errorLog?.context?.reason,
       issueCodes: app.linearComparisonResolution.errors.map((issue) => issue.code)
     };
   });
   expect(selectedCollinear.result.status).toBe('error');
-  expect(selectedCollinear.issueCodes).toContain('selected-losat-requires-pairwise');
+  expect(selectedCollinear.reason).toBe('LOSAT_PLAN');
+  expect(selectedCollinear.issueCodes).toEqual(['selected-losat-requires-pairwise', 'missing-upload']);
+  await expect(missingTsvDialog).toHaveCount(0);
   await expect(comparisonSettings(page)).toHaveAttribute('open', '');
   await expect(page.getByRole('combobox', { name: 'LOSATP mode' })).toBeFocused();
 });
@@ -1367,8 +1406,8 @@ test('uploaded BLAST IDs bind to endpoint records and malformed or contradictory
     .toContainText('Pair: #1 to #2. Column 1. A table row names another displayed record in this column. Swap the query and subject columns');
 });
 
-// CI-06: removing the BLAST TSV of an Upload pair names the pair's missing
-// file instead of an unrecognized failure.
+// CI-06, D-54: removing the BLAST TSV of an Upload pair names the pair at
+// Generate, in the BLAST TSV missing dialog, and keeps the Result.
 test('removing the BLAST TSV of an Upload pair names the missing file at Generate', async ({ page }) => {
   test.setTimeout(300000);
   const { hit, generateWithTable } = await prepareUploadedTablePair(page);
@@ -1377,15 +1416,110 @@ test('removing the BLAST TSV of an Upload pair names the missing file at Generat
   await page.evaluate(() => document.querySelectorAll('details').forEach((details) => { details.open = true; }));
   await page.getByRole('group', { name: 'BLAST TSV for #1 to #2 selection' })
     .getByRole('button', { name: 'Remove' }).click();
-  const failed = await evaluateWithRetainedPromise(page, async () => {
+  const blocked = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const result = await app.runAnalysis();
-    return { status: result?.status, code: app.errorLog?.code, context: app.errorLog?.context };
+    return { result, code: app.errorLog?.code ?? null,
+      content: String(app.results?.[app.selectedResultIndex]?.content || '') };
   });
-  expect(failed).toEqual({ status: 'error', code: 'COMPARISON_INPUT',
-    context: { reason: 'BLAST_TSV_REQUIRED', queryRecordIndex: 0, subjectRecordIndex: 1 } });
-  await expect(page.getByRole('alert', { name: 'Generation Error' }))
-    .toContainText('Pair: #1 to #2. Choose a BLAST TSV for this pair, or set the pair to No comparison or Run LOSAT.');
+  expect(blocked).toEqual({ result: { status: 'blocked', reason: 'missing-blast-tsv' }, code: null,
+    content: drawn.content });
+  const dialog = page.getByRole('dialog', { name: 'BLAST TSV missing' });
+  await expect(dialog).toContainText('These pairs are set to Upload BLAST TSV but have no file: #1 → #2.');
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole('alert', { name: 'Generation Error' })).toHaveCount(0);
+});
+
+// D-54: Generate with pairs set to Upload BLAST TSV but without a file asks
+// first: choose the first pair's file, set the pairs to No comparison and
+// Generate as one History entry, or Cancel.
+test('Generate asks how to resolve Upload pairs without a BLAST TSV', async ({ page }) => {
+  test.setTimeout(300000);
+  await openLinear(page);
+  const edgeCount = await page.evaluate(async (records) => {
+    const app = window.__GBDRAW_APP__;
+    while (app.linearSeqs.length < 3) app.addLinearSeq();
+    records.forEach((content, index) => app.setLinearSeqPrimaryFile(
+      index,
+      'gb',
+      new File([content], `tsv-dialog-${index + 1}.gbk`, { type: 'text/plain', lastModified: index + 1 })
+    ));
+    Object.assign(app.form, {
+      legend: 'none', show_gc: false, show_skew: false, show_depth: false, show_labels_linear: 'none'
+    });
+    await app.setLinearComparisonGlobalAction('losat');
+    const edgeKeys = app.linearComparisonResolution.edges.map((edge) => edge.edgeKey);
+    edgeKeys.forEach((edgeKey) => app.setLinearComparisonGapAction(edgeKey, 'upload'));
+    return edgeKeys.length;
+  }, [makeGenbank('TsvA', 'atg'), makeGenbank('TsvB', 'gct'), makeGenbank('TsvC', 'gga')]);
+  expect(edgeCount).toBe(2);
+  const dialog = page.getByRole('dialog', { name: 'BLAST TSV missing' });
+  const generate = page.getByRole('button', { name: 'Generate Diagram' });
+  const alert = page.getByRole('alert', { name: 'Generation Error' });
+  const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  const resultCount = () => page.evaluate(() => window.__GBDRAW_APP__.results.length);
+  const pairSources = () => page.evaluate(() => window.__GBDRAW_APP__.linearComparisonResolution.edges
+    .map((edge) => `#${edge.queryIndex + 1} → #${edge.subjectIndex + 1}: ${edge.source}`));
+
+  // Cancel closes the dialog and changes nothing.
+  const beforeCancel = await undoCount();
+  await generate.click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText(
+    'These pairs are set to Upload BLAST TSV but have no file: #1 → #2, #2 → #3.'
+  );
+  await expect(dialog.getByRole('button')).toHaveText([
+    'Choose BLAST TSV for #1 → #2…', 'Set to No comparison and Generate', 'Cancel'
+  ]);
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(alert).toHaveCount(0);
+  expect(await undoCount()).toBe(beforeCancel);
+  expect(await resultCount()).toBe(0);
+  expect(await pairSources()).toEqual(['#1 → #2: upload', '#2 → #3: upload']);
+
+  // Choose opens the first pair's file chooser in the panel and does not generate.
+  await selectedPairs(page).evaluate((details) => { details.open = false; });
+  await generate.click();
+  await expect(dialog).toBeVisible();
+  const chooserOpened = page.waitForEvent('filechooser');
+  await dialog.getByRole('button', { name: 'Choose BLAST TSV for #1 → #2…' }).click();
+  const chooser = await chooserOpened;
+  await expect(dialog).toHaveCount(0);
+  await expect(selectedPairs(page)).toHaveAttribute('open', '');
+  expect(await chooser.element().getAttribute('aria-label')).toBe('BLAST TSV for #1 to #2');
+  expect(await undoCount()).toBe(beforeCancel);
+  expect(await resultCount()).toBe(0);
+  await chooser.setFiles({
+    name: 'pair-1-2.tsv',
+    mimeType: 'text/tab-separated-values',
+    buffer: Buffer.from('TsvA\tTsvB\t95\t80\t4\t0\t1\t80\t5\t84\t1e-40\t160\n')
+  });
+  await expect(page.getByRole('group', { name: 'BLAST TSV for #1 to #2 selection' }))
+    .toContainText('pair-1-2.tsv');
+
+  // The next Generate names only the pair still without a file. Set to No
+  // comparison records one History entry, then Generate draws the other pair.
+  await generate.click();
+  await expect(dialog).toContainText('These pairs are set to Upload BLAST TSV but have no file: #2 → #3.');
+  const beforeNone = await undoCount();
+  await dialog.getByRole('button', { name: 'Set to No comparison and Generate' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect.poll(resultCount, { timeout: 180000 }).toBe(1);
+  await expect(alert).toHaveCount(0);
+  expect(await page.evaluate(async () => {
+    const { getCommittedCanonicalRenderRequest } = await import('/gbdraw/web/js/services/config.js');
+    return getCommittedCanonicalRenderRequest().comparisons
+      .map((comparison) => [comparison.kind, comparison.queryRecordIndex, comparison.subjectRecordIndex]);
+  })).toEqual([['nucleotideBlast', 0, 1]]);
+  expect(await pairSources()).toEqual(['#1 → #2: upload']);
+  expect(await undoCount()).toBe(beforeNone + 2);
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel()))
+    .toBe('Set pairs to No comparison');
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  expect(await pairSources()).toEqual(['#1 → #2: upload', '#2 → #3: upload']);
 });
 
 test('unmatched uploaded table IDs show a notice that follows the Result through Save and Load', async ({ page }) => {
