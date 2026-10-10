@@ -134,7 +134,7 @@
     },
     {
       "title": "Configure browser LOSAT",
-      "body": "In Comparison, choose Run LOSAT, open Settings, set LOSAT Mode to LOSATP, and set LOSATP mode to Similarity groups. Runtime controls are under Advanced comparison and layout.",
+      "body": "In Comparison, choose Run LOSAT, open Settings, set LOSAT Mode to LOSATP, and set LOSATP mode to Similarity groups. The runtime controls are in the same Settings panel, under Runtime and reproducibility.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -214,25 +214,25 @@
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-03-02-runtime-reproducibility.webp",
             "alt": "Runtime and reproducibility controls showing Auto execution, Safe total threads, and automatic parallel runs and threads per run.",
-            "caption": "Open Advanced comparison and layout to review the LOSAT runtime and reproducibility controls."
+            "caption": "Review the LOSAT runtime and reproducibility controls at the end of Comparison › Settings."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
             "viewport": {"width": 1600, "height": 1100},
-            "openDetails": ["Advanced comparison and layout"],
+            "openDetails": ["Settings"],
             "actions": [
               {
                 "type": "evaluate",
-                "script": "async () => { const app = window.__GBDRAW_APP__; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('orthogroup'); app.losat.executionMode = 'auto'; app.losat.totalThreadBudget = 'safe'; app.losat.parallelWorkers = undefined; app.losat.threadsPerJob = 'auto'; }"
+                "script": "async () => { const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('orthogroup'); app.losatExecution.executionMode = 'auto'; app.losatExecution.totalThreadBudget = 'safe'; app.losatExecution.parallelWorkers = undefined; app.losatExecution.threadsPerJob = 'auto'; }"
               },
               {
                 "type": "waitForFunction",
-                "script": "() => Array.from(document.querySelectorAll('[data-linear-advanced-comparison] section')).some((section) => section.textContent.includes('Runtime and reproducibility'))"
+                "script": "() => Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).some((section) => section.textContent.includes('Runtime and reproducibility'))"
               },
               {
                 "type": "evaluate",
-                "script": "const section = Array.from(document.querySelectorAll('[data-linear-advanced-comparison] section')).find((node) => node.textContent.includes('Runtime and reproducibility')); if (!section) throw new Error('Runtime and reproducibility section was not found.'); section.dataset.capture = 'bgc-losat-runtime'; section.scrollIntoView({ block: 'center' });"
+                "script": "const section = Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).find((node) => node.textContent.includes('Runtime and reproducibility')); if (!section) throw new Error('Runtime and reproducibility section was not found.'); section.dataset.capture = 'bgc-losat-runtime'; section.scrollIntoView({ block: 'center' });"
               }
             ],
             "selector": "[data-capture='bgc-losat-runtime']",
@@ -241,15 +241,15 @@
               "mode": "linear",
               "linearComparisonPlan.mode": "adjacent",
               "linearComparisonPlan.defaultSource": "losat",
-              "losat.executionMode": "auto",
-              "losat.totalThreadBudget": "safe",
-              "losat.threadsPerJob": "auto"
+              "losatExecution.executionMode": "auto",
+              "losatExecution.totalThreadBudget": "safe",
+              "losatExecution.threadsPerJob": "auto"
             },
             "visibleText": ["Runtime and reproducibility", "Parallel runs"],
             "visibleControls": [
-              {"label": "Execution", "value": "auto"},
-              {"label": "Total threads", "value": "safe"},
-              {"label": "Threads per run", "value": "auto"}
+              {"selector": "[data-capture='bgc-losat-runtime'] select[aria-label='LOSAT execution']", "value": "auto"},
+              {"selector": "[data-capture='bgc-losat-runtime'] select[aria-label='LOSAT total threads']", "value": "safe"},
+              {"selector": "[data-capture='bgc-losat-runtime'] select[aria-label='LOSAT threads per run']", "value": "auto"}
             ]
           }
         },
@@ -386,12 +386,13 @@
       ]
     },
     {
-      "title": "Set the comparison layout",
-      "body": "Keep features in the middle of each axis before the first generation.",
+      "title": "Set the comparison layout and arrow shape",
+      "body": "Before the first generation, keep features in the middle of each axis and narrow the arrow shafts. A Shaft Width Ratio of 0.6 draws each shaft at 60% of the feature height, so the arrowheads stay visible on short genes and at Gallery thumbnail size.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
-          ["Track Layout", "Middle"]
+          ["Track Layout", "Middle"],
+          ["Features › Arrow Geometry › Shaft Width Ratio", "0.6"]
         ]
       },
       "operations": [
@@ -417,6 +418,41 @@
               "label": "Track Layout"
             },
             "openDetails": ["Layout"]
+          }
+        },
+        {
+          "dataDependent": true,
+          "title": "Arrow shaft width",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-04-04-arrow-shaft-width.webp",
+            "alt": "Features card Arrow Geometry controls with Head Length Ratio left at Auto and Shaft Width Ratio set to 0.6.",
+            "caption": "Open Features, then enter 0.6 in Arrow Geometry › Shaft Width Ratio; leave Head Length Ratio at Auto."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {"width": 1600, "height": 1100},
+            "openDetails": ["Features"],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const input = document.querySelector('input[aria-label=\"Arrow shaft width ratio\"]'); const box = input?.closest('.rounded'); if (!input || !box || !box.textContent.includes('Arrow Geometry')) throw new Error('Arrow Geometry controls were not found.'); box.dataset.capture = 'bgc-arrow-geometry'; box.scrollIntoView({ block: 'center' });"
+              }
+            ],
+            "selector": "[data-capture='bgc-arrow-geometry']",
+            "highlightSelector": "input[aria-label='Arrow shaft width ratio']",
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "linear",
+              "adv.arrow_shaft_width_ratio": 0.6
+            },
+            "visibleText": ["Arrow Geometry", "Head Length Ratio", "Shaft Width Ratio"],
+            "visibleControls": [
+              {
+                "selector": "input[aria-label='Arrow shaft width ratio']",
+                "value": "0.6"
+              }
+            ]
           }
         }
       ]
@@ -673,16 +709,17 @@
       ]
     },
     {
-      "title": "Generate and align to og_1",
-      "body": "Click Generate Diagram to create the initial comparison. In the preview, click the livE CDS assigned to og_1 and choose Align…; resolved targets align immediately using cached LOSATP results. Choose Review alignment options… first to inspect or change anchors, choose Skip, or select one of Keep current directions, All selected arrows right →, All selected arrows left ←, or Custom. Direction choices include the exact reference and selected anchors with known direction; source strands stay unchanged. Reset alignment… offers positions only or positions plus the latest Align’s actual direction changes. Both scopes consume the evidence; use Undo before choosing the other scope. See the Web alignment reference for scope, excluded records, later manual edits and retry. Ambiguity opens that review automatically.",
+      "title": "Generate and align on og_6",
+      "body": "Click Generate Diagram to create the initial comparison. In the preview, click the neoU CDS of BGC0000709 (record 2), which belongs to similarity group og_6, and choose Review alignment options…. The Select alignment anchors dialog lists one anchor choice per target record. BGC0000708 has two og_6 members: livU (CAG38700.1), the representative member with a reciprocal best hit, is selected and marked Recommended; the transport protein CAG38692.1 near the left end of the cluster is the other candidate. Keep livU, leave Alignment direction at Keep current directions, and click Apply. Apply regenerates the preview, so you do not need to click Generate Diagram again. Align… applies the same recommended anchors without the review.",
+      "note": "Choose Skip in a record card to leave that record where it is. The other direction choices are All selected arrows right →, All selected arrows left ←, and Custom; they include the exact reference and selected anchors with known direction, and source strands stay unchanged. Reset alignment… offers positions only or positions plus the latest Align’s actual direction changes. Both scopes consume the evidence; use Undo before choosing the other scope. See the Web alignment reference for scope, excluded records, later manual edits and retry. Ambiguity opens that review automatically.",
       "operations": [
         {
-          "title": "Align the og_1 feature",
+          "title": "Review the og_6 feature",
           "dataDependent": true,
           "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-08-01-align-og1.webp",
-            "alt": "The livE feature in og_1 beside its feature popup with Align… and Review alignment options… available.",
-            "caption": "Click the livE CDS in og_1, then choose Align… for resolved automatic alignment or Review alignment options… to inspect choices first."
+            "src": "./media/BGC0000708-BGC0000713/manual-08-01-align-og6.webp",
+            "alt": "The neoU feature of BGC0000709 in og_6 beside its feature popup with Align… and Review alignment options… available.",
+            "caption": "Click the neoU CDS of BGC0000709 in og_6, then choose Review alignment options…."
           },
           "capture": {
             "source": "webapp",
@@ -694,56 +731,255 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.35; if (app.canvasPan) { app.canvasPan.x = -900; app.canvasPan.y = -40; } }"
-              },
-              {
-                "type": "wait",
-                "ms": 500
+                "script": "async () => { document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview'; app.zoom = 1.35; const frame = () => new Promise((resolve) => setTimeout(() => requestAnimationFrame(resolve), 300)); await frame(); for (let i = 0; i < 6; i += 1) { const rect = document.querySelector('[data-gbdraw-feature-id=\\'f94b7f30b_record_2\\']')?.getBoundingClientRect(); if (!rect) throw new Error('Pan target [data-gbdraw-feature-id=\\'f94b7f30b_record_2\\'] was not found.'); const dx = 470 - rect.left; const dy = 360 - rect.top; if (Math.abs(dx) < 1 && Math.abs(dy) < 1) break; app.canvasPan.x += dx; app.canvasPan.y += dy; await frame(); } }"
               },
               {
                 "type": "click",
-                "selector": "[data-gbdraw-feature-id='fed46a3a6_record_1']"
+                "selector": "[data-gbdraw-feature-id='f94b7f30b_record_2']",
+                "force": true
               },
               {
                 "type": "waitForSelector",
                 "selector": ".feature-popup"
               },
               {
+                "type": "waitForFunction",
+                "script": "() => { const app = window.__GBDRAW_APP__; const text = document.querySelector('.feature-popup')?.textContent || ''; return app?.clickedFeature?.svg_id === 'f94b7f30b_record_2' && text.includes('neoU') && text.includes('Align'); }"
+              },
+              {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; const target = document.querySelector(\"[data-gbdraw-feature-id='fed46a3a6_record_1']\"); const rect = target?.getBoundingClientRect(); if (app?.clickedFeature) app.clickedFeature.activeTab = 'edit'; if (app?.featurePopupSize) app.featurePopupSize.width = 500; if (app?.clickedFeaturePos && rect) { app.clickedFeaturePos.x = Math.min(window.innerWidth - 524, rect.right + 16); app.clickedFeaturePos.y = Math.max(24, rect.top - 80); }"
+                "script": "const app = window.__GBDRAW_APP__; const rect = document.querySelector(\"[data-gbdraw-feature-id='f94b7f30b_record_2']\")?.getBoundingClientRect(); if (app?.clickedFeature) app.clickedFeature.activeTab = 'edit'; if (app?.featurePopupSize) app.featurePopupSize.width = 500; if (app?.clickedFeaturePos && rect) { app.clickedFeaturePos.x = Math.min(window.innerWidth - 524, rect.right + 16); app.clickedFeaturePos.y = Math.max(24, rect.top - 80); }"
               },
               {
                 "type": "wait",
                 "ms": 250
               },
               {
-                "type": "waitForFunction",
-                "script": "() => { const app = window.__GBDRAW_APP__; const text = document.querySelector('.feature-popup')?.textContent || ''; return app?.clickedFeature?.svg_id === 'fed46a3a6_record_1' && text.includes('livE') && text.includes('Align'); }"
-              },
-              {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.feature-popup'); const similarity = popup?.querySelector('[data-feature-popup-group=\"similarity\"]'); const actions = similarity?.querySelector(':scope > .grid.grid-cols-2'); if (!popup || !similarity || !actions) throw new Error('Compact Align popup controls not found.'); const body = popup.querySelector('.feature-popup-body'); if (body) body.scrollTop += similarity.getBoundingClientRect().top - body.getBoundingClientRect().top; popup.children[0]?.querySelector('.min-w-0')?.setAttribute('data-capture', 'align-popup-identity'); similarity.firstElementChild?.setAttribute('data-capture', 'align-popup-group-heading'); actions.setAttribute('data-capture', 'align-popup-actions');"
+                "script": "const popup = document.querySelector('.feature-popup'); const similarity = popup?.querySelector('[data-feature-popup-group=\"similarity\"]'); const actions = similarity?.querySelector(':scope > .grid.grid-cols-2'); if (!popup || !similarity || !actions) throw new Error('Compact Align popup controls not found.'); const body = popup.querySelector('.feature-popup-body'); if (body) body.scrollTop += similarity.getBoundingClientRect().top - body.getBoundingClientRect().top; popup.children[0]?.querySelector('.min-w-0')?.setAttribute('data-capture', 'align-popup-identity'); similarity.firstElementChild?.setAttribute('data-capture', 'align-popup-group-heading'); actions.setAttribute('data-capture', 'align-popup-actions'); document.activeElement?.blur();"
               }
             ],
-            "clipSelectors": ["[data-gbdraw-feature-id='fed46a3a6_record_1']", "[data-capture='align-popup-identity']", "[data-capture='align-popup-group-heading']", "[data-capture='align-popup-actions']"],
-            "highlightSelector": "[data-gbdraw-feature-id='fed46a3a6_record_1']",
+            "clipSelectors": [
+              "[data-gbdraw-feature-id='f94b7f30b_record_2']",
+              "[data-capture='align-popup-identity']",
+              "[data-capture='align-popup-group-heading']",
+              "[data-capture='align-popup-actions']"
+            ],
+            "highlightSelector": "[data-gbdraw-feature-id='f94b7f30b_record_2']",
             "cropPadding": {
               "top": 24,
               "right": 24,
-              "bottom": 24,
+              "bottom": 12,
               "left": 24
             },
             "waitForSelector": ".feature-popup",
-            "assertAppState": {"mode": "linear", "linearSeqs.length": 5, "clickedFeature.feat.gene": "livE"},
-            "visibleText": ["livE", "Align…", "Review alignment options…"]
+            "assertAppState": {
+              "mode": "linear",
+              "linearSeqs.length": 5,
+              "clickedFeature.feat.gene": "neoU"
+            },
+            "visibleText": [
+              "neoU",
+              "og_6",
+              "Align…",
+              "Review alignment options…"
+            ]
+          }
+        },
+        {
+          "title": "Anchor candidates for BGC0000708",
+          "dataDependent": true,
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-08-02-anchor-candidates.webp",
+            "alt": "Select alignment anchors card for BGC0000708 with two og_6 candidates: the transport protein CAG38692.1 and livU CAG38700.1, which is selected and marked Recommended.",
+            "caption": "BGC0000708 has two og_6 members; keep the selected, Recommended livU · CAG38700.1."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 1100
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "async () => { document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview'; app.zoom = 1.35; const frame = () => new Promise((resolve) => setTimeout(() => requestAnimationFrame(resolve), 300)); await frame(); for (let i = 0; i < 6; i += 1) { const rect = document.querySelector('[data-gbdraw-feature-id=\\'f94b7f30b_record_2\\']')?.getBoundingClientRect(); if (!rect) throw new Error('Pan target [data-gbdraw-feature-id=\\'f94b7f30b_record_2\\'] was not found.'); const dx = 470 - rect.left; const dy = 360 - rect.top; if (Math.abs(dx) < 1 && Math.abs(dy) < 1) break; app.canvasPan.x += dx; app.canvasPan.y += dy; await frame(); } }"
+              },
+              {
+                "type": "click",
+                "selector": "[data-gbdraw-feature-id='f94b7f30b_record_2']",
+                "force": true
+              },
+              {
+                "type": "waitForSelector",
+                "selector": ".feature-popup"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => { const app = window.__GBDRAW_APP__; const text = document.querySelector('.feature-popup')?.textContent || ''; return app?.clickedFeature?.svg_id === 'f94b7f30b_record_2' && text.includes('neoU') && text.includes('Align'); }"
+              },
+              {
+                "type": "click",
+                "selector": "[data-similarity-alignment-popup-review]"
+              },
+              {
+                "type": "waitForFunction",
+                "timeout": 300000,
+                "script": "() => { const app = window.__GBDRAW_APP__; return Boolean(app?.similarityAlignmentDraft && !app.similarityAlignmentBusy && document.querySelector(\"[data-similarity-alignment-dialog] [data-alignment-record-key='record-1']\")); }"
+              },
+              {
+                "type": "evaluate",
+                "script": "document.querySelector(\"[data-similarity-alignment-dialog] [data-alignment-record-key='record-1']\").scrollIntoView({ block: 'center' });"
+              },
+              {
+                "type": "wait",
+                "ms": 250
+              }
+            ],
+            "selector": "[data-similarity-alignment-dialog] [data-alignment-record-key='record-1']",
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "linear",
+              "similarityAlignmentDraft.rows.length": 4,
+              "similarityAlignmentDraft.rows.0.recordKey": "record-1",
+              "similarityAlignmentDraft.rows.0.candidates.length": 2,
+              "similarityAlignmentDraft.rows.0.choice.kind": "select",
+              "similarityAlignmentDraft.intent.mode": "keep"
+            },
+            "visibleText": [
+              "BGC0000708",
+              "transport protein · CAG38692.1",
+              "livU · CAG38700.1",
+              "Recommended"
+            ],
+            "visibleControls": [
+              {
+                "selector": "[data-alignment-record-key='record-1'] input[aria-label^='Select livU']",
+                "checked": true
+              }
+            ]
+          }
+        },
+        {
+          "title": "Alignment direction",
+          "dataDependent": true,
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-08-03-alignment-direction.webp",
+            "alt": "Alignment direction choices with Keep current directions selected.",
+            "caption": "Leave Alignment direction at Keep current directions, then click Apply."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 1100
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "async () => { document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview'; app.zoom = 1.35; const frame = () => new Promise((resolve) => setTimeout(() => requestAnimationFrame(resolve), 300)); await frame(); for (let i = 0; i < 6; i += 1) { const rect = document.querySelector('[data-gbdraw-feature-id=\\'f94b7f30b_record_2\\']')?.getBoundingClientRect(); if (!rect) throw new Error('Pan target [data-gbdraw-feature-id=\\'f94b7f30b_record_2\\'] was not found.'); const dx = 470 - rect.left; const dy = 360 - rect.top; if (Math.abs(dx) < 1 && Math.abs(dy) < 1) break; app.canvasPan.x += dx; app.canvasPan.y += dy; await frame(); } }"
+              },
+              {
+                "type": "click",
+                "selector": "[data-gbdraw-feature-id='f94b7f30b_record_2']",
+                "force": true
+              },
+              {
+                "type": "waitForSelector",
+                "selector": ".feature-popup"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => { const app = window.__GBDRAW_APP__; const text = document.querySelector('.feature-popup')?.textContent || ''; return app?.clickedFeature?.svg_id === 'f94b7f30b_record_2' && text.includes('neoU') && text.includes('Align'); }"
+              },
+              {
+                "type": "click",
+                "selector": "[data-similarity-alignment-popup-review]"
+              },
+              {
+                "type": "waitForFunction",
+                "timeout": 300000,
+                "script": "() => { const app = window.__GBDRAW_APP__; return Boolean(app?.similarityAlignmentDraft && !app.similarityAlignmentBusy && document.querySelector(\"[data-similarity-alignment-dialog] [data-alignment-record-key='record-1']\")); }"
+              },
+              {
+                "type": "evaluate",
+                "script": "const fieldset = document.querySelector('[data-similarity-alignment-direction-mode]'); const options = fieldset?.querySelector(':scope > div'); const scope = document.getElementById('alignment-direction-scope'); if (!fieldset || !options || !scope) throw new Error('Alignment direction controls not found.'); fieldset.querySelector('legend')?.setAttribute('data-capture', 'align-direction-legend'); options.setAttribute('data-capture', 'align-direction-options'); scope.setAttribute('data-capture', 'align-direction-scope'); fieldset.scrollIntoView({ block: 'center' });"
+              },
+              {
+                "type": "wait",
+                "ms": 250
+              }
+            ],
+            "clipSelectors": [
+              "[data-capture='align-direction-legend']",
+              "[data-capture='align-direction-options']",
+              "[data-capture='align-direction-scope']"
+            ],
+            "cropPadding": {"top": 12, "right": 12, "bottom": 4, "left": 12},
+            "assertAppState": {
+              "mode": "linear",
+              "similarityAlignmentDraft.rows.length": 4,
+              "similarityAlignmentDraft.rows.0.recordKey": "record-1",
+              "similarityAlignmentDraft.rows.0.candidates.length": 2,
+              "similarityAlignmentDraft.rows.0.choice.kind": "select",
+              "similarityAlignmentDraft.intent.mode": "keep"
+            },
+            "visibleText": [
+              "Alignment direction",
+              "Keep current directions",
+              "All selected arrows right",
+              "All selected arrows left",
+              "Custom"
+            ],
+            "visibleControls": [
+              {
+                "selector": "input[name='alignment-direction-mode'][value='keep']",
+                "checked": true
+              }
+            ]
           }
         },
         {
           "title": "Final aligned preview",
+          "dataDependent": true,
           "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-08-01-bgc-preview.webp",
-            "alt": "Final og_1-aligned aminoglycoside BGC comparison with five rows, curved similarity-group matches, rotated first-record labels, and a bottom legend.",
-            "caption": "The final og_1-aligned result has five BGC rows, curved matches, rotated first-record labels, and a bottom legend."
+            "src": "./media/BGC0000708-BGC0000713/manual-08-04-aligned-preview.webp",
+            "alt": "Final og_6-aligned aminoglycoside BGC comparison with five rows, narrowed arrow shafts, curved similarity-group matches, rotated first-record labels, and a bottom legend.",
+            "caption": "The final og_6-aligned result lines up livU, neoU, and their partners and keeps the core links nearly vertical."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {
+              "width": 1600,
+              "height": 1000
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg || !content.includes('og_6') || !content.includes('Core biosynthetic genes') || app?.form?.legend !== 'bottom') throw new Error('Restored BGC SVG does not match the completed tutorial figure.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = 1100; const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture', 'bgc-final-preview');"
+              }
+            ],
+            "selector": "[data-capture='bgc-final-preview']",
+            "cropPadding": {
+              "top": 12,
+              "right": 12,
+              "bottom": 12,
+              "left": 12
+            },
+            "assertAppState": {
+              "mode": "linear",
+              "linearSeqs.length": 5,
+              "form.legend": "bottom",
+              "adv.arrow_shaft_width_ratio": 0.6
+            },
+            "visibleText": [
+              "Streptomyces lividus",
+              "Core biosynthetic genes",
+              "Pairwise match identity"
+            ]
           }
         }
       ]
@@ -751,6 +987,7 @@
     {
       "title": "Inspect a similarity-group ribbon",
       "body": "Click a pairwise match ribbon to inspect the gbdraw group ID, member count, record coverage, and member table.",
+      "note": "og_18 has six members in five records: BGC0000713 contributes two, racL and racM, which together correspond to the NeoA-family protein that is one gene in the other clusters. The member table lists both.",
       "operations": [
         {
           "media": {
@@ -768,7 +1005,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.4; if (app.canvasPan) { app.canvasPan.x = -1984; app.canvasPan.y = -410; } }"
+                "script": "async () => { document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview'; app.zoom = 1.4; const frame = () => new Promise((resolve) => setTimeout(() => requestAnimationFrame(resolve), 300)); await frame(); for (let i = 0; i < 6; i += 1) { const rect = document.querySelector('path[data-gbdraw-pairwise-match-id=\\'comparison3_match1\\']')?.getBoundingClientRect(); if (!rect) throw new Error('Pan target path[data-gbdraw-pairwise-match-id=\\'comparison3_match1\\'] was not found.'); const dx = 420 - rect.left; const dy = 380 - rect.top; if (Math.abs(dx) < 1 && Math.abs(dy) < 1) break; app.canvasPan.x += dx; app.canvasPan.y += dy; await frame(); } }"
               },
               {
                 "type": "wait",
@@ -837,7 +1074,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.35; if (app.canvasPan) { app.canvasPan.x = -980; app.canvasPan.y = -40; } }"
+                "script": "async () => { document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview'; app.zoom = 1.35; const frame = () => new Promise((resolve) => setTimeout(() => requestAnimationFrame(resolve), 300)); await frame(); for (let i = 0; i < 6; i += 1) { const rect = document.querySelector('[data-gbdraw-feature-id=\\'fed46a3a6_record_1\\']')?.getBoundingClientRect(); if (!rect) throw new Error('Pan target [data-gbdraw-feature-id=\\'fed46a3a6_record_1\\'] was not found.'); const dx = 420 - rect.left; const dy = 320 - rect.top; if (Math.abs(dx) < 1 && Math.abs(dy) < 1) break; app.canvasPan.x += dx; app.canvasPan.y += dy; await frame(); } }"
               },
               {
                 "type": "wait",
@@ -873,7 +1110,7 @@
               },
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.feature-popup'); const leaf = (key) => Array.from(popup?.querySelectorAll('*') || []).find((node) => node.children.length === 0 && node.textContent?.trim() === key); const geneRow = leaf('gene')?.closest('.border-b'); const geneKindRow = leaf('gene_kind')?.closest('.border-b'); if (!popup || !geneRow || !geneKindRow) throw new Error('Compact qualifier rows not found.'); popup.children[0]?.setAttribute('data-capture', 'qualifier-popup-header'); popup.children[1]?.setAttribute('data-capture', 'qualifier-popup-tabs'); geneRow.setAttribute('data-capture', 'qualifier-gene-row'); geneKindRow.setAttribute('data-capture', 'qualifier-gene-kind-row');"
+                "script": "const popup = document.querySelector('.feature-popup'); const leaf = (key) => Array.from(popup?.querySelectorAll('*') || []).find((node) => node.children.length === 0 && node.textContent?.trim() === key); const geneRow = leaf('gene')?.closest('.border-b'); const geneKindRow = leaf('gene_kind')?.closest('.border-b'); if (!popup || !geneRow || !geneKindRow) throw new Error('Compact qualifier rows not found.'); popup.children[0]?.setAttribute('data-capture', 'qualifier-popup-header'); popup.children[1]?.setAttribute('data-capture', 'qualifier-popup-tabs'); geneRow.setAttribute('data-capture', 'qualifier-gene-row'); geneKindRow.setAttribute('data-capture', 'qualifier-gene-kind-row'); document.activeElement?.blur();"
               }
             ],
             "clipSelectors": ["[data-gbdraw-feature-id='fed46a3a6_record_1']", "[data-capture='qualifier-popup-header']", "[data-capture='qualifier-popup-tabs']", "[data-capture='qualifier-gene-row']", "[data-capture='qualifier-gene-kind-row']"],
@@ -937,7 +1174,7 @@
   "troubleshooting": [
     {
       "title": "The rows do not line up like the Gallery figure",
-      "body": "Check the input order and the alignment to gbdraw group og_1."
+      "body": "Check the input order and the alignment to gbdraw group og_6: neoU of BGC0000709 is the exact reference, and BGC0000708 keeps livU (CAG38700.1), not the transport protein CAG38692.1."
     },
     {
       "title": "Core genes are not red",

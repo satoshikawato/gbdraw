@@ -12,6 +12,24 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Gallery: the aminoglycoside BGC example draws its arrows with **Shaft Width
+  Ratio** 0.6 and aligns its records on similarity group og_6 (neoU of
+  BGC0000709) instead of og_1. Its tutorial adds the **Features › Arrow Geometry
+  › Shaft Width Ratio** step and walks through **Review alignment options…**,
+  where BGC0000708 has two og_6 members and keeps the recommended livU. The
+  tutorial no longer asks you to reverse-complement BGC0000713, which the
+  example has not done since July 2026 (OV-365).
+- Gallery tutorials: the BGC, Hepatoplasmataceae, and majanivirus tutorials now
+  say that the LOSAT runtime controls are under **Comparison › Settings ›
+  Runtime and reproducibility**, not under **Advanced comparison and layout**
+  (OV-366).
+- Gallery publication (maintainer tooling): `tools/refresh_gallery_sessions.py`
+  publishes a Session that the web app saved. It rebuilds the request from the
+  request's own color, whitelist, and priority tables rather than from the
+  files bound to those inputs (OV-367). It stores Default colors as the CLI
+  replay resolves them (OV-375) and one-record GenBank sources as `exactly_one`
+  (OV-376). It also names the example's GenBank files in `examples.json` when
+  the Session has no CLI invocation (OV-397).
 - Comparison (web app): **Generate Diagram** in Linear mode with pairs set to
   **Upload BLAST TSV** but without a file opens the **BLAST TSV missing** dialog
   instead of failing. It lists the pairs and offers **Choose BLAST TSV for

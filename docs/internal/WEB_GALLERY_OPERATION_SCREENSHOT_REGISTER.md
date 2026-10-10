@@ -15,6 +15,36 @@ The BGC Gallery Session has not reverse-complemented BGC0000713 since
 | `BGC0000708-BGC0000713` | `manual-04-02-reverse-bgc0000713.webp` | Delete | None; the step and its table row and column are removed | Deleted |
 | `BGC0000708-BGC0000713` | `manual-04-04-pairwise-style-curve.webp` | Delete | None; no step referenced it | Deleted |
 
+## BGC og_6 alignment and arrow shaft width (Gallery revision 2026-10-10)
+
+The BGC Gallery Session now uses Shaft Width Ratio 0.6 and aligns on og_6
+(neoU of BGC0000709, livU kept for BGC0000708). Preview recipes compute their
+pan from the target's rectangle, so a layout change no longer leaves a stale
+fixed offset. The anchors-dialog crops show the current **Select alignment
+anchors** dialog; the dialog redesign recaptures `manual-08-02` and
+`manual-08-03`.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `BGC0000708-BGC0000713` | `manual-04-04-arrow-shaft-width.webp` | Add | Exact BGC Session; **Features** open; **Arrow Geometry** box with Head Length Ratio at Auto and Shaft Width Ratio 0.6 highlighted | Captured at DSF 3; accepted |
+| `BGC0000708-BGC0000713` | `manual-08-01-align-og1.webp` → `manual-08-01-align-og6.webp` | Replace | Clicked neoU of BGC0000709 (og_6) beside the popup with **Align…** and **Review alignment options…** | Captured at DSF 3; accepted |
+| `BGC0000708-BGC0000713` | `manual-08-02-anchor-candidates.webp` | Add | **Review alignment options…** open; the BGC0000708 card with the transport protein CAG38692.1 and the selected, **Recommended** livU CAG38700.1 | Captured at DSF 3; accepted |
+| `BGC0000708-BGC0000713` | `manual-08-03-alignment-direction.webp` | Add | Same dialog; **Alignment direction** with **Keep current directions** selected | Captured at DSF 3; accepted |
+| `BGC0000708-BGC0000713` | `manual-08-01-bgc-preview.webp` → `manual-08-04-aligned-preview.webp` | Replace | The old image had no capture recipe; the new one is the restored Session's preview at fixed width, preview controls hidden | Captured at DSF 3; accepted |
+| `BGC0000708-BGC0000713` | `manual-09-01-orthogroup-popup.webp`, `manual-10-01-feature-popup.webp` | Recapture; recipe corrected | Pans computed from the og_18 ribbon and the livE feature rectangles | Captured at DSF 3; accepted |
+
+## LOSAT runtime controls under Comparison Settings (OV-366)
+
+The runtime controls moved from **Advanced comparison and layout** into
+**Comparison › Settings**; the recipes waited for a section that no longer
+exists there. They also set the drawing's retired `losat.*` execution fields
+instead of the app-level `losatExecution`.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `BGC0000708-BGC0000713`, `hepatoplasmataceae_collinear`, `hepatoplasmataceae_orthogroup` | `manual-03-02-runtime-reproducibility.webp` | Recapture; recipe and text corrected | Open **Settings**; **Runtime and reproducibility** section; Auto execution, Safe total threads, Auto threads per run | Captured at DSF 3; accepted |
+| `majanivirus_orthogroup` | `manual-03-03-runtime-reproducibility.webp` | Recapture; recipe and text corrected | Same section with 32 threads per run | Captured at DSF 3; accepted |
+
 ## Comparison pressed state and Align help-tip (GUI remediation S07)
 
 The removed **Current: …** status line and the always-on Align paragraph were

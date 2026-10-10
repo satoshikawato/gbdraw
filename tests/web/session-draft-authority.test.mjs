@@ -375,6 +375,8 @@ const divergentSlice = divergentSession.modes.linear;
 divergentSlice.ui ||= {};
 // This test isolates comparison draft behavior from the unreleased schema-1 Gallery plan.
 divergentSession.renderRequest.layout.similarityAlignment = null;
+// The Reset evidence of an Align binds that plan, so it goes with it.
+if (divergentSession.editorState) divergentSession.editorState.alignmentResetReceipt = null;
 const committedComparisonCount = divergentSession.renderRequest.comparisons.length;
 assert.ok(committedComparisonCount > 0);
 divergentSlice.config.linearComparisonPlan = {

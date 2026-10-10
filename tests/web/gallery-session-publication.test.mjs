@@ -436,7 +436,8 @@ assert.rejects(
   savedDefaultColors.resources['colors-default-colors-file'] = tsvResource('colors-default-colors-file',
     'colors-default-colors-file-default-colors.tsv', generatedDefaultColors);
   savedDefaultColors.webFiles.bindings = { schema: 2, c_gb: null, d_color: binding('resource-0001', 'colors-default-colors.tsv') };
-  const importedRules = `${tableText(source, source.renderRequest.diagramOptions.colors.colorTable)}CDS\tgene\tneoU\t#000000\tRemoved after import\n`;
+  const sourceColors = source.renderRequest.diagramOptions.colors;
+  const importedRules = `${tableText(source, sourceColors.colorTable || sourceColors.colorTableFile)}CDS\tgene\tneoU\t#000000\tRemoved after import\n`;
   const savedRules = structuredClone(source);
   savedRules.resources['resource-0002'] = tsvResource('colors-color-table-file', 'resource-0002-specific-colors.tsv', importedRules);
   savedRules.webFiles.bindings = { schema: 2, c_gb: null, t_color: binding('resource-0002', 'specific-colors.tsv') };

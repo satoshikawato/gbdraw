@@ -102,7 +102,7 @@
     },
     {
       "title": "Use browser LOSAT",
-      "body": "In Comparison, choose Run LOSAT. Open Advanced comparison and layout when you need to review the browser runtime controls.",
+      "body": "In Comparison, choose Run LOSAT. Open Settings when you need to review the browser runtime controls under Runtime and reproducibility.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -153,25 +153,25 @@
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-03-02-runtime-reproducibility.webp",
             "alt": "Runtime and reproducibility controls showing Auto execution, Safe total threads, and automatic run allocation.",
-            "caption": "Open Advanced comparison and layout to review the execution and thread allocation used by browser LOSAT."
+            "caption": "Open Comparison › Settings to review the execution and thread allocation used by browser LOSAT."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
             "viewport": {"width": 1600, "height": 1100},
-            "openDetails": ["Advanced comparison and layout"],
+            "openDetails": ["Settings"],
             "actions": [
               {
                 "type": "evaluate",
-                "script": "async () => { const app = window.__GBDRAW_APP__; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('orthogroup'); app.losat.executionMode = 'auto'; app.losat.totalThreadBudget = 'safe'; app.losat.parallelWorkers = undefined; app.losat.threadsPerJob = 'auto'; }"
+                "script": "async () => { const app = window.__GBDRAW_APP__; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('orthogroup'); app.losatExecution.executionMode = 'auto'; app.losatExecution.totalThreadBudget = 'safe'; app.losatExecution.parallelWorkers = undefined; app.losatExecution.threadsPerJob = 'auto'; }"
               },
               {
                 "type": "waitForFunction",
-                "script": "() => Array.from(document.querySelectorAll('[data-linear-advanced-comparison] section')).some((section) => section.textContent.includes('Runtime and reproducibility'))"
+                "script": "() => Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).some((section) => section.textContent.includes('Runtime and reproducibility'))"
               },
               {
                 "type": "evaluate",
-                "script": "const section = Array.from(document.querySelectorAll('[data-linear-advanced-comparison] section')).find((node) => node.textContent.includes('Runtime and reproducibility')); if (!section) throw new Error('Runtime and reproducibility section was not found.'); section.dataset.capture = 'hep-orthogroup-runtime'; section.scrollIntoView({ block: 'center' });"
+                "script": "const section = Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).find((node) => node.textContent.includes('Runtime and reproducibility')); if (!section) throw new Error('Runtime and reproducibility section was not found.'); section.dataset.capture = 'hep-orthogroup-runtime'; section.scrollIntoView({ block: 'center' });"
               }
             ],
             "selector": "[data-capture='hep-orthogroup-runtime']",
@@ -180,15 +180,15 @@
               "mode": "linear",
               "linearComparisonPlan.mode": "adjacent",
               "linearComparisonPlan.defaultSource": "losat",
-              "losat.executionMode": "auto",
-              "losat.totalThreadBudget": "safe",
-              "losat.threadsPerJob": "auto"
+              "losatExecution.executionMode": "auto",
+              "losatExecution.totalThreadBudget": "safe",
+              "losatExecution.threadsPerJob": "auto"
             },
             "visibleText": ["Runtime and reproducibility", "Parallel runs"],
             "visibleControls": [
-              {"label": "Execution", "value": "auto"},
-              {"label": "Total threads", "value": "safe"},
-              {"label": "Threads per run", "value": "auto"}
+              {"selector": "[data-capture='hep-orthogroup-runtime'] select[aria-label='LOSAT execution']", "value": "auto"},
+              {"selector": "[data-capture='hep-orthogroup-runtime'] select[aria-label='LOSAT total threads']", "value": "safe"},
+              {"selector": "[data-capture='hep-orthogroup-runtime'] select[aria-label='LOSAT threads per run']", "value": "auto"}
             ]
           }
         }
