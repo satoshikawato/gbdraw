@@ -545,11 +545,13 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
   };
   const preparation = rulePreparationFor(rulesState);
   const empty = preparation.snapshot();
-  rulesState.featureVisibilityManualRules.push({ recordId: '*', featureType: '*', qualifier: 'product', value: '', action: 'off' });
+  // Stored rows carry an id; a row without one gets a new id on every read.
+  rulesState.featureVisibilityManualRules.push({ id: 'feature-visibility-rule-1', recordId: '*', featureType: '*', qualifier: 'product', value: '', action: 'off' });
   assert.equal(preparation.isCurrent(empty), true);
   rulesState.featureVisibilityManualRules[0] = { ...rulesState.featureVisibilityManualRules[0], featureType: 'CDS', qualifier: 'locus_tag', value: '^FL1$' };
   assert.equal(preparation.isCurrent(empty), false);
   const hiding = preparation.snapshot();
+  assert.equal(preparation.isCurrent(hiding), true);
   rulesState.featureVisibilityManualRules[0] = { ...rulesState.featureVisibilityManualRules[0], action: 'show' };
   assert.equal(preparation.isCurrent(hiding), false);
 }
