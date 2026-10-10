@@ -20,6 +20,7 @@ from Bio.SeqFeature import SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.api import enrich_svg
+from gbdraw.render.interactive_svg import InteractiveSvgContext
 from gbdraw.api.options import LinearDiagramOptions, LinearOutputOptions
 from gbdraw.api.request_render import render_request
 from gbdraw.api.requests import (
@@ -204,6 +205,45 @@ def test_catalog_row_swapped_within_a_record_is_rejected(tmp_path: Path, case: s
             result_name=item["resultName"],
             feature_catalog=catalog,
         )
+
+
+@pytest.mark.parametrize("reverse_b", (False, True), ids=("plain", "reverse"))
+def test_feature_metadata_swapped_within_a_record_is_rejected(
+    tmp_path: Path, reverse_b: bool
+) -> None:
+    """Feature metadata binds to the SVG by one hash, as the catalog does.
+
+    The metadata path (``InteractiveSvgContext(features=...)``) once accepted
+    a stable ID in the drawn frame beside the source frame, so two features of
+    one record could trade identities, in a plain record too.
+    """
+
+    paths = _write_records(tmp_path)
+    prefix = tmp_path / "out"
+    linear_main([
+        "--gbk", *map(str, paths),
+        *(["--reverse_complement", "0", "--reverse_complement", "1"] if reverse_b else []),
+        "-f", "svg", "-o", str(prefix),
+    ])
+    plain = prefix.with_suffix(".svg").read_text(encoding="utf-8")
+    rows = [
+        {
+            "svg_id": element.get("data-gbdraw-feature-id"),
+            "stable_feature_id": element.get("data-gbdraw-stable-feature-id"),
+            "record_index": int(element.get("data-gbdraw-feature-id")[-1]) - 1,
+        }
+        for element in _feature_elements(plain)
+    ]
+    enrich_svg(plain, InteractiveSvgContext(features=rows))
+    for record in ("_record_1", "_record_2"):
+        swapped = [dict(row) for row in rows]
+        first, second = [row for row in swapped if row["svg_id"].endswith(record)]
+        first["stable_feature_id"], second["stable_feature_id"] = (
+            second["stable_feature_id"],
+            first["stable_feature_id"],
+        )
+        with pytest.raises(GbdrawError):
+            enrich_svg(plain, InteractiveSvgContext(features=swapped))
 
 
 @pytest.mark.parametrize("transform", ("reverse", "crop", "crop-reverse"))
