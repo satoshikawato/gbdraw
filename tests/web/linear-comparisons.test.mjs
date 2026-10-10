@@ -21,6 +21,7 @@ const {
   createLinearComparisonEdge,
   linearComparisonEdgeKey,
   materializeResolvedEdgesAsSelectedPlan,
+  missingUploadPairsToResolve,
   normalizeLinearComparisonPlan,
   plainTextLinearRecordLabel,
   reconcileLinearComparisonPlan,
@@ -358,6 +359,40 @@ const selectedUploadOnly = resolveLinearComparisonPlan({
   blastpMode: 'collinear'
 });
 assert.equal(selectedUploadOnly.valid, true);
+
+// D-54: Generate asks about the pairs set to Upload BLAST TSV without a file
+// only when they are the draft's only issues. Any other issue comes first, so
+// the run and the panel report its typed error instead.
+const uploadEdge = (queryUid, subjectUid, extra = {}) => createLinearComparisonEdge({
+  queryUid, subjectUid, source: 'upload', ...extra
+});
+const missingUploadsOnly = resolveLinearComparisonPlan({
+  plan: {
+    mode: 'selected', defaultSource: 'upload',
+    edges: [
+      uploadEdge('a', 'b'),
+      uploadEdge('b', 'c', { file: file('bc.tsv'), fileActive: true }),
+      uploadEdge('c', 'd', { file: retained, fileActive: false })
+    ]
+  },
+  sequences
+});
+assert.deepEqual(missingUploadPairsToResolve(missingUploadsOnly), [
+  { edgeKey: linearComparisonEdgeKey('a', 'b'), queryIndex: 0, subjectIndex: 1, label: '#1 → #2' },
+  { edgeKey: linearComparisonEdgeKey('c', 'd'), queryIndex: 2, subjectIndex: 3, label: '#3 → #4' }
+]);
+const missingUploadAndTopology = resolveLinearComparisonPlan({
+  plan: {
+    mode: 'selected', defaultSource: 'upload',
+    edges: [uploadEdge('a', 'b'), createLinearComparisonEdge({ queryUid: 'b', subjectUid: 'd', source: 'losat' })]
+  },
+  sequences
+});
+assert.deepEqual(missingUploadAndTopology.errors.map((issue) => issue.code), ['non-adjacent', 'missing-upload']);
+assert.equal(missingUploadAndTopology.error, missingUploadAndTopology.errors[0].message);
+assert.deepEqual(missingUploadPairsToResolve(missingUploadAndTopology), []);
+assert.deepEqual(missingUploadPairsToResolve(selectedUploadOnly), []);
+assert.deepEqual(missingUploadPairsToResolve(null), []);
 
 for (const program of ['blastn', 'tblastx', 'blastp']) {
   const resolution = resolveLinearComparisonPlan({

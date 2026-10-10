@@ -441,7 +441,12 @@ export const resolveLinearComparisonPlan = ({
     source: normalizeSource(edge.source),
     ordinal
   }));
-  const frozenIssues = Object.freeze(issues.map((issue) => Object.freeze(issue)));
+  // A missing upload comes last (D-54): Generate asks about it only when nothing
+  // else blocks the run; otherwise the run and the panel report the other issue.
+  const frozenIssues = Object.freeze([
+    ...issues.filter((issue) => issue.code !== 'missing-upload'),
+    ...issues.filter((issue) => issue.code === 'missing-upload')
+  ].map((issue) => Object.freeze(issue)));
   const frozenEdges = Object.freeze(edges);
   const hasAnalysisIntent = sequenceList.length > 1
     && normalized.mode === LINEAR_COMPARISON_MODES.ADJACENT
@@ -463,6 +468,26 @@ export const resolveLinearComparisonPlan = ({
     hasLosatIntent,
     hasUploadIntent
   });
+};
+
+/**
+ * The pairs set to Upload BLAST TSV without an active file, when they are the
+ * draft's only issues: Generate asks to choose a file or set them to No
+ * comparison (D-54). Any other issue keeps its typed error, since setting the
+ * pairs to No comparison would not let the run succeed.
+ * @param {LinearComparisonResolution | null | undefined} resolution
+ * @returns {{ edgeKey: string, queryIndex: number, subjectIndex: number, label: string }[]}
+ */
+export const missingUploadPairsToResolve = (resolution) => {
+  const issues = resolution?.errors || [];
+  if (issues.some((issue) => issue.code !== 'missing-upload')) return [];
+  const missing = new Set(issues.map((issue) => issue.edgeKey));
+  return (resolution?.edges || []).filter((edge) => missing.has(edge.edgeKey)).map((edge) => ({
+    edgeKey: edge.edgeKey,
+    queryIndex: edge.queryIndex,
+    subjectIndex: edge.subjectIndex,
+    label: `#${edge.queryIndex + 1} → #${edge.subjectIndex + 1}`
+  }));
 };
 
 export const hasLinearComparisonIntent = (resolution) => Boolean(resolution?.hasComparisonIntent);
