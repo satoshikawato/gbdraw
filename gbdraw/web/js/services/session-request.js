@@ -5191,8 +5191,8 @@ const publicationBytes = async (resource, id) => {
   throw new Error(`Canonical request resource '${id}' has no decodable payload.`);
 };
 const TSV_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
-// The tables a CLI Session stores with a header; the file the CLI read, which
-// the rebuild uses, may have none (OV-266). Each compares by kind and rows
+// The tables a CLI Session stores with a header; the files the Web writes have
+// none (OV-266, OV-367). Each compares by kind and rows
 // without the header; default colors compare as a set, the others keep their
 // rule order.
 const PUBLICATION_TABLES = Object.freeze({
