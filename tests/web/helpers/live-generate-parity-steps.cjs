@@ -125,7 +125,7 @@ const appAction = async (page, name, ...args) => {
 };
 
 const addColorRule = async (page, rule) => {
-  await page.evaluate((fields) => {
+  await evaluateWithRetainedPromise(page, (fields) => {
     const app = window.__GBDRAW_APP__;
     Object.assign(app.newSpecRule, fields);
     return app.addSpecificRule();
