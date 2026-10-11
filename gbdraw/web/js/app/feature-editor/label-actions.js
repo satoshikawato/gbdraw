@@ -1405,16 +1405,21 @@ export const createFeatureLabelActions = ({
         ))
       });
       if (state.sessionOperationAvailability?.()) return state.sessionOperationAvailability();
-      if (revision !== labelImportRevision || input.files?.[0] !== file
-        || (svgContainer.value?.querySelector('svg') || null) !== sourceSvg) return;
-      // OV-447 (Owner 2026-10-11): an edit of the label intent made while the
-      // table was evaluated stays; the load is declined and says so.
-      if (labelIntent !== labelIntentSignature(drawing)) {
-        window.alert(`Loaded ${rows.length} row(s). Not applied: a label or feature visibility edit was made while the `
-          + 'table loaded. The edit was kept. Load the table again.');
+      if (revision !== labelImportRevision || input.files?.[0] !== file) return;
+      // OV-447, OV-449 (Owner decisions): the table was evaluated against a
+      // state that changed meanwhile, so the load is declined and names the
+      // change. An edit of the label intent stays; it is named first, since
+      // it also redraws the diagram and makes the rule preparation stale.
+      const changed = labelIntent !== labelIntentSignature(drawing)
+        ? 'a label or feature visibility edit was made while the table loaded. The edit was kept'
+        : (svgContainer.value?.querySelector('svg') || null) !== sourceSvg
+          ? 'the displayed diagram changed while the table loaded'
+          : !rulePreparation.isCurrent(before)
+            ? "colors, color rules, the Legend, or the diagram's inputs changed while the table loaded" : '';
+      if (changed) {
+        window.alert(`Loaded ${rows.length} row(s). Not applied: ${changed}. Load the table again.`);
         return;
       }
-      if (!rulePreparation.isCurrent(before)) return;
       if (!svg) {
         window.alert(`Loaded ${rows.length} row(s). No diagram is currently displayed.`);
         return;
