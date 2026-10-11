@@ -907,12 +907,22 @@ def capture_bgc_losatp(
         )
 
         if download_member_fasta:
-            group_row = popup.get_by_role("row").filter(has_text="og_1").first
-            expect(group_row).to_be_visible()
-            group_row.click()
-            fasta_button = page.get_by_title(
-                "Download all member amino-acid FASTA", exact=True
+            # The gene-pair table is closed; selecting a group shows its
+            # members, and the group's Copy menu holds the FASTA downloads.
+            popup.locator("[data-collinear-gene-pairs] > summary").click()
+            group_button = popup.get_by_title(
+                "Show the members of og_1", exact=True
             ).first
+            expect(group_button).to_be_visible()
+            group_button.click()
+            group_view = popup.locator("[data-match-group]")
+            expect(group_view).to_have_count(1)
+            group_view.locator("details.action-menu > summary").filter(
+                has_text="Copy"
+            ).first.click()
+            fasta_button = group_view.get_by_role(
+                "button", name="Download aa FASTA", exact=True
+            )
             expect(fasta_button).to_be_enabled()
             fasta_path, suggested = _download_text_button(
                 page,

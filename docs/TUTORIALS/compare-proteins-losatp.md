@@ -159,8 +159,11 @@ comparison between sequence 1 and sequence 2, set **Raw LOSAT filename** to
 
 ### Step 6: Inspect a group
 
-Select a comparison ribbon. The popup reports the group ID, display name,
-member count, record coverage, RBH seeds, paths, and every member protein.
+Select a comparison ribbon. The popup is titled with the group's display name and
+ID, states how many genes the group has in how many records, and lists every
+member protein. **Copy** copies or downloads the group's FASTA; the **FASTA**
+menu on a row does the same for one member. **Technical details** holds the RBH
+seeds, group paths, and computed description.
 
 ![LOSATP similarity-group popup with member details](../images/t-gui-04/06-match-popup.png)
 

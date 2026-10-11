@@ -201,7 +201,7 @@ def capture_gui_interactive_handoff(
         ).inner_text()
         if "COX1" not in searchable_text:
             raise AssertionError("COX1 search did not open the matching feature")
-        if "location" not in popup_text.casefold():
+        if re.search(r"\d+\.\.\d+", popup_text) is None:
             raise AssertionError("COX1 popup is missing its location")
         screenshot_bytes[GUI_INTERACTIVE_HANDOFF_SCREENSHOT_NAMES[3]] = (
             capture_screenshot(

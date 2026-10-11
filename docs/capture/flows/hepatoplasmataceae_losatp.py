@@ -392,9 +392,9 @@ def _cache_state(page: Page) -> dict[str, Any]:
             globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__ || null,
           threading: window.__GBDRAW_APP__?.losatThreadingStatus || null,
           scheduling: {
-            totalThreads: String(window.__GBDRAW_APP__?.losat?.totalThreadBudget || ''),
-            parallelRuns: String(window.__GBDRAW_APP__?.losat?.parallelWorkers || ''),
-            threadsPerRun: String(window.__GBDRAW_APP__?.losat?.threadsPerJob || '')
+            totalThreads: String(window.__GBDRAW_APP__?.losatExecution?.totalThreadBudget || ''),
+            parallelRuns: String(window.__GBDRAW_APP__?.losatExecution?.parallelWorkers || ''),
+            threadsPerRun: String(window.__GBDRAW_APP__?.losatExecution?.threadsPerJob || '')
           },
           cache: (window.__GBDRAW_APP__?.losatCacheInfo || []).map((entry) => ({
             key: String(entry?.key || ''),
@@ -962,61 +962,43 @@ def _move_popup_opposite_match(page: Page, popup: Any, first_match: Any) -> None
             "The Pairwise match popup geometrically covers the selected match"
         )
 
-    fasta_buttons = popup.get_by_role("button", name=re.compile(r"FASTA"))
-    expect(fasta_buttons).to_have_count(3)
-    for index in range(3):
-        button = fasta_buttons.nth(index)
-        expect(button).to_be_visible()
-        button_box = _require_bounding_box(button, f"FASTA button {index + 1}")
-        if not _box_is_inside(button_box, moved_popup_box):
-            raise AssertionError(
-                f"FASTA button {index + 1} is clipped from the popup top view"
-            )
+    fasta_menu = _fasta_menu_toggle(popup)
+    expect(fasta_menu).to_be_visible()
+    menu_box = _require_bounding_box(fasta_menu, "FASTA menu")
+    if not _box_is_inside(menu_box, moved_popup_box):
+        raise AssertionError("The FASTA menu is clipped from the popup top view")
 
 
-def _scroll_popup_to_collinearity_details(page: Page, popup: Any) -> None:
-    content = popup.get_by_role(
-        "region", name="Pairwise match details content", exact=True
-    )
-    expect(content).to_be_visible()
-    before = content.evaluate(
-        """
-        (node) => ({
-          scrollTop: Number(node.scrollTop),
-          maxScroll: Number(node.scrollHeight - node.clientHeight)
-        })
-        """
-    )
-    if before["maxScroll"] <= 0:
-        raise AssertionError("The Pairwise match details have no scrollable content")
-    content.hover()
-    page.mouse.wheel(0, before["maxScroll"])
+def _fasta_menu_toggle(popup: Any) -> Any:
+    """The popup's one FASTA menu (a details element whose summary opens it)."""
+
+    toggle = popup.locator("details.action-menu > summary").filter(has_text="FASTA")
+    expect(toggle).to_have_count(1)
+    return toggle
+
+
+def _open_collinearity_details(page: Page, popup: Any) -> None:
+    """Open the closed Details disclosure and scroll it into view."""
+
+    details = popup.locator("[data-collinear-details]")
+    expect(details).to_have_count(1)
+    details.locator("> summary").click()
+    expect(details).to_have_attribute("open", "")
+    rows = details.locator("dt")
+    expect(rows.first).to_be_visible()
+    rows.last.scroll_into_view_if_needed()
     page.wait_for_timeout(150)
-    after = content.evaluate(
-        """
-        (node) => ({
-          scrollTop: Number(node.scrollTop),
-          maxScroll: Number(node.scrollHeight - node.clientHeight)
-        })
-        """
-    )
-    if (
-        after["scrollTop"] <= before["scrollTop"]
-        or after["scrollTop"] < after["maxScroll"] - 2
-    ):
-        raise AssertionError(
-            "The visible popup scroll did not reach the Collinearity details: "
-            f"before={before!r}; after={after!r}"
-        )
+    expect(rows.last).to_be_visible()
 
 
 def _download_collinear_envelopes(
     page: Page, popup: Any, download_dir: Path
 ) -> dict[str, Any]:
-    buttons = popup.get_by_role("button", name=re.compile(r"FASTA"))
-    expect(buttons).to_have_count(3)
+    _fasta_menu_toggle(popup).click()
+    both_spans = popup.get_by_role("button", name="Download both spans", exact=True)
+    expect(both_spans).to_be_enabled()
     with page.expect_download(timeout=ACTION_TIMEOUT_MS) as info:
-        buttons.last.click()
+        both_spans.click()
     download = info.value
     if download.failure() is not None:
         raise AssertionError(f"Browser download failed: {download.failure()}")
@@ -1169,7 +1151,7 @@ def capture_hepatoplasmataceae_collinear(
         )
 
         fasta_report = _download_collinear_envelopes(page, popup, download_dir)
-        _scroll_popup_to_collinearity_details(page, popup)
+        _open_collinearity_details(page, popup)
         page.get_by_role(
             "button", name="Close match popup", exact=True
         ).click()
