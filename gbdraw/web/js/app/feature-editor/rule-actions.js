@@ -272,10 +272,10 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   // OV-444 (OV-443, OV-445): this owner is the one writer of the rule table,
   // and every write goes through one line (`queueRuleWrite`), in the order it
   // was made. A write builds its next table from the table at its turn
-  // (`SpecificRuleBuild`), so no write is lost to another. A pattern edit that
-  // a newer pattern edit, a keystroke, a drawer close, or a row move or
-  // removal cancelled leaves the line at once (`releaseCancelledWrites`); no
-  // other write cancels a pending one.
+  // (`SpecificRuleBuild`), so no write is lost to another. Only a pending
+  // pattern edit can be cancelled: by any newer write, a keystroke, or a
+  // drawer close. Its draft stays, and it leaves the line at once
+  // (`releaseCancelledWrites`), so no write waits for a cancelled one (OV-448).
   /** @type {Promise<unknown>} */
   let writeLine = Promise.resolve();
   // The rule writes applied so far: a run whose preparation one of them made
@@ -286,12 +286,13 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   /**
    * @template T
    * @param {() => Promise<T>} write Runs at the write's turn.
-   * @param {() => boolean} [cancelled] Whether the write was cancelled before it ended.
+   * @param {() => boolean} [cancelled] Of a pattern edit: whether it was cancelled before it ended.
    * @returns {Promise<T>}
    */
-  const queueRuleWrite = (write, cancelled = () => false) => {
+  const queueRuleWrite = (write, cancelled) => {
+    if (!cancelled) patternDrafts.suspend();
     const turn = writeLine.then(write);
-    const entry = { cancelled, leave: () => {} };
+    const entry = { cancelled: cancelled || (() => false), leave: () => {} };
     writeLine = Promise.all([writeLine, new Promise((resolve) => { entry.leave = () => resolve(undefined); })]);
     cancellableWrites.add(entry);
     const settle = () => { cancellableWrites.delete(entry); entry.leave(); };
@@ -484,6 +485,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     if (busy) return busy;
     if (!drawing.manualSpecificRules.includes(row) || !isPatternEditAvailable()
       || (state.generatedMode?.value && state.mode?.value !== state.generatedMode.value)) return false;
+    patternDrafts.suspend();
     const token = patternDrafts.begin(row, value);
     return queueRuleWrite(async () => {
       const snapshot = rulePreparation.snapshot();
@@ -527,7 +529,6 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const row = drawing.manualSpecificRules[index];
-    patternDrafts.suspend();
     return commitPrepared(drawing, (current) => {
       const rows = [...current];
       const from = rows.indexOf(row);
@@ -961,7 +962,6 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     canEditFeatureColor,
     clearAllSpecificRules: () => {
       const drawing = state.activeDrawing();
-      patternDrafts.suspend();
       return commitPrepared(drawing, () => [], 'Clear specific color rules');
     },
     commitSpecificRules,
@@ -996,7 +996,6 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     removeSpecificRule: (index) => {
       const drawing = state.activeDrawing();
       const row = drawing.manualSpecificRules[index];
-      patternDrafts.suspend();
       return commitPrepared(drawing, (current) => (current.includes(row) ? current.filter(rule => rule !== row) : null),
         'Remove specific color rule');
     },

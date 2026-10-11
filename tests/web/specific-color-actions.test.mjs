@@ -697,6 +697,7 @@ for (const [kind, edit] of Object.entries(ruleEdits)) {
     assert.deepEqual(table(),[...edit.table,added]);
     assert.deepEqual(s.transactions,['Add specific color rule',edit.label]);
   }));
+  if (kind === 'pattern') continue;
   test(`an Add made while a ${kind} edit is pending applies after it (OV-443)`, () => withDocument(async () => {
     const {s,held,table}=queuedRuleWrites();
     const [edited,release]=await held(edit.run(s));
@@ -705,6 +706,30 @@ for (const [kind, edit] of Object.entries(ruleEdits)) {
     assert.deepEqual(await Promise.all([edited,add]),[true,true]);
     assert.deepEqual(table(),[...edit.table,added]);
     assert.deepEqual(s.transactions,[edit.label,'Add specific color rule']);
+  }));
+}
+// OV-448: a pending pattern edit is the one write a newer write cancels. Its
+// draft stays, and the newer write does not wait for it, however long its
+// evaluation takes.
+const afterHeldPattern={
+  add:{run:s=>s.actions.addSpecificRule(),label:'Add specific color rule',table:['b #445566 ','zz #778899 ',added]},
+  color:{run:s=>s.actions.setSpecificRuleField(1,'color','#000000'),label:'Edit specific color rule',table:['b #445566 ','zz #000000 ']},
+  move:ruleEdits.move,
+  remove:{run:s=>s.actions.removeSpecificRule(1),label:'Remove specific color rule',table:['b #445566 ']},
+  clear:{run:s=>s.actions.clearAllSpecificRules(),label:'Clear specific color rules',table:[]}
+};
+for (const [kind, later] of Object.entries(afterHeldPattern)) {
+  test(`a later ${kind} does not wait for a held pattern edit, which stays as a draft (OV-448)`, () => withDocument(async () => {
+    const {s,held,table}=queuedRuleWrites();
+    const row=s.state.manualSpecificRules[0];
+    const [edited,release]=await held(ruleEdits.pattern.run(s));
+    assert.equal(await later.run(s),true,'while the pattern edit is still held');
+    assert.deepEqual(table(),later.table);
+    release();
+    assert.equal(await edited,false);
+    assert.deepEqual(table(),later.table);
+    assert.deepEqual(s.transactions,[later.label]);
+    if (kind !== 'clear') assert.deepEqual([s.actions.specificRulePattern(row),s.actions.specificRulePatternDraft(row).pending],['b|c',false]);
   }));
 }
 
