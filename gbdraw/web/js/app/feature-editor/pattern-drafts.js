@@ -10,11 +10,12 @@ const specificRuleRevision = (rule) => JSON.stringify([
  * @property {() => Record<string, any>[]} rules The canonical Color-rule rows of the shown mode's drawing
  *   (their owner is rule-actions).
  * @property {(value?: any) => { value: any }} ref Vue `ref`
- * @property {() => void} invalidate Tells the rule owner a displayed pattern changed.
+ * @property {() => void} changed Tells the rule owner a draft changed, after the change, so the
+ *   owner releases the pattern commits it cancelled.
  */
 
 /** @param {SpecificRulePatternDraftsOptions} options */
-export const createSpecificRulePatternDrafts = ({ rules, ref, invalidate }) => {
+export const createSpecificRulePatternDrafts = ({ rules, ref, changed }) => {
   const drafts = ref(new Map());
   const fieldIds = new WeakMap();
   let nextFieldId = 0;
@@ -30,12 +31,9 @@ export const createSpecificRulePatternDrafts = ({ rules, ref, invalidate }) => {
     if (!rules().includes(row)) return null;
     const valueText = String(value ?? '');
     if (get(row)?.text === valueText) return get(row);
-    invalidate();
-    if (valueText === row.val) {
-      drafts.value.delete(row);
-      return null;
-    }
-    drafts.value.set(row, { text: valueText, revision: ++revision, pending: false, error: null });
+    if (valueText === row.val) drafts.value.delete(row);
+    else drafts.value.set(row, { text: valueText, revision: ++revision, pending: false, error: null });
+    changed();
     return get(row);
   };
   const begin = (row, value) => {
@@ -45,20 +43,21 @@ export const createSpecificRulePatternDrafts = ({ rules, ref, invalidate }) => {
     draft.revision = ++revision;
     draft.pending = true;
     draft.error = null;
+    changed();
     return draft.revision;
   };
   const isCurrent = (row, token) => rules().includes(row) && get(row)?.revision === token;
   const suspend = () => {
-    invalidate();
     for (const draft of drafts.value.values()) {
       if (!draft.pending) continue;
       draft.revision = ++revision;
       draft.pending = false;
     }
+    changed();
   };
   const revert = (row) => {
-    invalidate();
     drafts.value.delete(row);
+    changed();
   };
   const clear = () => {
     suspend();

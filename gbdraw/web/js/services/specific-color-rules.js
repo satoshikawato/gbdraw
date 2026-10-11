@@ -256,6 +256,15 @@ const uniqueLegendKey = (reserved, preferred) => {
  */
 
 /**
+ * How a rule table write (rule-actions.js) builds the next table from the one at its turn (OV-444);
+ * a row returned as it is or as `revise(row, patch)` keeps its identity. Null writes nothing.
+ * @callback SpecificRuleBuild
+ * @param {readonly SpecificColorRule[]} current
+ * @param {(row: SpecificColorRule, patch: Partial<SpecificColorRule>) => SpecificColorRule} revise
+ * @returns {Partial<SpecificColorRule>[] | null}
+ */
+
+/**
  * Returns rule -> the key of the Legend row Generate draws for that rule.
  * @param {Partial<SpecificColorRule>[]} [rules]
  * @param {RendererLegendRow[]} [rendererRows]
