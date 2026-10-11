@@ -549,8 +549,9 @@ and font size. Opening or closing these native disclosures is not saved.
 **Show Coordinate Scale** controls coordinate ticks and labels while retaining
 the record axes. **Ruler on Axis** uses each record axis as its ruler only when
 the scale is visible, **Ruler (Ticks)** is selected, and **Track Layout** is
-**Above** or **Below**. Titles, record definitions, and legends do not change
-biological coordinates.
+**Above** or **Below**. Its ticks and labels then follow the axis color
+unless **Scale Line Color** or **Ruler Label Color** is set. Titles, record
+definitions, and legends do not change biological coordinates.
 
 ## Browser defaults
 

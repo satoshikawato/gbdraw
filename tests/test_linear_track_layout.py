@@ -1349,6 +1349,121 @@ def test_linear_ruler_on_axis_defaults_tick_and_label_colors_to_axis(tmp_path: P
     assert label_match.group(1) == axis_match.group(1)
 
 
+def _axis_ruler_colors(svg_content: str) -> tuple[str, set[str], set[str]]:
+    """Return the main-axis stroke and the ruler tick strokes and label fills."""
+
+    root = ET.fromstring(svg_content)
+    axis_strokes: list[str] = []
+    tick_strokes: set[str] = set()
+    label_fills: set[str] = set()
+    for element in root.iter():
+        tag = element.tag.rsplit("}", 1)[-1]
+        if tag == "line":
+            if (
+                element.attrib.get("x1") == "0"
+                and element.attrib.get("y1") == "0"
+                and element.attrib.get("y2") == "0"
+            ):
+                axis_strokes.append(element.attrib["stroke"])
+            elif _is_ruler_tick_y2(float(element.attrib.get("y2", "nan"))):
+                tick_strokes.add(element.attrib["stroke"])
+        elif (
+            tag == "text"
+            and "data-definition-line-kind" not in element.attrib
+            and re.search(r"\d\s*(?:bp|kbp|Mbp)$", element.text or "")
+        ):
+            label_fills.add(element.attrib["fill"])
+    assert axis_strokes, "main axis line not found"
+    return axis_strokes[0], tick_strokes, label_fills
+
+
+_API_AXIS_RULER_OVERRIDES = {
+    "canvas.linear.track_layout": "above",
+    "objects.scale.style": "ruler",
+    "objects.scale.interval": 50000,
+    "canvas.linear.ruler_on_axis": True,
+}
+
+
+@pytest.mark.linear
+def test_api_ruler_on_axis_defaults_tick_and_label_colors_to_axis() -> None:
+    from gbdraw.api.diagram import build_linear_diagram
+    from gbdraw.api.options import LinearDiagramOptions
+
+    record = SeqIO.read(str(INPUT_GBK), "genbank")
+    drawing = build_linear_diagram(
+        [record],
+        options=LinearDiagramOptions(config_overrides=dict(_API_AXIS_RULER_OVERRIDES)),
+    )
+
+    axis_color, tick_colors, label_colors = _axis_ruler_colors(drawing.tostring())
+    assert axis_color == "dimgray"
+    assert tick_colors == {"dimgray"}
+    assert label_colors == {"dimgray"}
+
+
+@pytest.mark.linear
+def test_api_ruler_on_axis_follows_an_explicit_axis_color_and_keeps_explicit_ruler_colors() -> None:
+    from gbdraw.api.diagram import build_linear_diagram
+    from gbdraw.api.options import LinearDiagramOptions
+
+    record = SeqIO.read(str(INPUT_GBK), "genbank")
+    followed = build_linear_diagram(
+        [record],
+        options=LinearDiagramOptions(
+            config_overrides={
+                **_API_AXIS_RULER_OVERRIDES,
+                "objects.axis.linear.stroke_color": "#336699",
+            }
+        ),
+    )
+    explicit = build_linear_diagram(
+        [record],
+        options=LinearDiagramOptions(
+            config_overrides={
+                **_API_AXIS_RULER_OVERRIDES,
+                "objects.scale.stroke_color": "red",
+                "objects.scale.label_color": "blue",
+            }
+        ),
+    )
+
+    assert _axis_ruler_colors(followed.tostring()) == ("#336699", {"#336699"}, {"#336699"})
+    assert _axis_ruler_colors(explicit.tostring()) == ("dimgray", {"red"}, {"blue"})
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize(
+    "inactive",
+    [
+        {"objects.scale.show": False},
+        {"objects.scale.style": "bar"},
+        {"canvas.linear.track_layout": "middle"},
+    ],
+)
+def test_config_overrides_derive_ruler_colors_only_when_the_axis_ruler_applies(
+    inactive: dict[str, object],
+) -> None:
+    base = load_config_toml("gbdraw.data", "config.toml")
+    active = modify_config_dict(
+        base,
+        {**_API_AXIS_RULER_OVERRIDES, "objects.axis.linear.stroke_color": "dimgray"},
+    )
+    ignored = modify_config_dict(
+        base,
+        {
+            **_API_AXIS_RULER_OVERRIDES,
+            "objects.axis.linear.stroke_color": "dimgray",
+            **inactive,
+        },
+    )
+
+    assert active["objects"]["scale"]["stroke_color"] == "dimgray"
+    assert active["objects"]["scale"]["label_color"] == "dimgray"
+    assert ignored["objects"]["scale"]["stroke_color"] == "black"
+    assert ignored["objects"]["scale"]["label_color"] == "black"
+
+
 @pytest.mark.linear
 def test_linear_ruler_on_axis_defaults_label_font_size_to_long_ruler_value(tmp_path: Path) -> None:
     returncode, stdout, stderr, output_svg = _run_linear(

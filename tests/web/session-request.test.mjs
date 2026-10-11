@@ -2542,6 +2542,15 @@ assert.equal(
   ],
   'dimgray'
 );
+// Unset ruler colors stay out of the request: the shared config-override
+// owner (gbdraw/config/modify.py) makes them follow the axis color.
+for (const path of ['objects.scale.stroke_color', 'objects.scale.label_color']) {
+  assert.equal(
+    Object.hasOwn(rulerAxisCanonical.renderRequest.diagramOptions.configOverrides, path),
+    false,
+    path
+  );
+}
 state.form.show_scale = false;
 const hiddenRulerAxisCanonical = buildCanonicalRenderRequest({
   state,
