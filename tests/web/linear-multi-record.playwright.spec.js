@@ -538,18 +538,14 @@ const openLinearSelectedPairs = async (page) => {
   return details;
 };
 
-const openLinearAdvancedComparison = async (page) => {
-  const details = page.locator(
-    'details[data-linear-comparison-disclosure="advanced"]'
-  );
-  await expect(details).toHaveCount(1);
+// The Raw LOSAT filename sits in a closed "File name" disclosure of its pair row.
+const openRawFilename = async (rawResult) => {
+  const details = rawResult.locator('details');
   if (!await details.evaluate((element) => element.open)) {
-    await details.locator(':scope > summary').press('Enter');
+    await details.locator('summary').click();
   }
   await expect(details).toHaveAttribute('open', '');
-  return details;
 };
-
 const expectExactEdgeKeys = async (container, expectedKeys) => {
   const pairs = container.locator('fieldset[data-edge-key]');
   await expect(pairs).toHaveCount(expectedKeys.length);
@@ -1358,7 +1354,7 @@ test('No comparison completes a real render without touching dormant comparison 
     draft: [['dormant-none-edge', true, true, true, 'dormant-comparison.tsv', 'dormant-losat-name.tsv']],
     skipped: [0, 0, 0], cacheSize: 1, losatRuntimeUrls: [], comparisonSvgNodes: 0
   });
-  await expect(page.getByText('Raw LOSAT results', { exact: true })).not.toBeVisible();
+  await expect(page.getByText('Raw LOSAT results', { exact: true })).toHaveCount(0);
 
   await openLinearSelectedPairs(page);
   const dormantPair = linearComparisonPair(page, dormantEdgeKey);
@@ -1375,7 +1371,6 @@ test('No comparison completes a real render without touching dormant comparison 
   })).toHaveCount(0);
   await expect(dormantPair).toContainText('Retained, inactive BLAST TSV: dormant-comparison.tsv');
 
-  await openLinearAdvancedComparison(page);
   const dormantRawResult = page.locator(`[data-linear-raw-result="${dormantEdgeKey}"]`);
   await expect(dormantRawResult).toContainText(
     'Retained, inactive filename: dormant-losat-name.tsv'
@@ -1406,12 +1401,14 @@ test('No comparison completes a real render without touching dormant comparison 
   await dormantRawResult.getByRole('button', {
     name: 'Reuse Raw LOSAT filename for #1 to #2'
   }).click();
+  await openRawFilename(dormantRawResult);
   await expect(dormantRawResult.getByRole('textbox', {
     name: 'Raw LOSAT filename for #1 to #2'
   })).toHaveValue('dormant-losat-name.tsv');
+  // Save Raw LOSAT TSV appears only once the result is cached.
   await expect(dormantRawResult.getByRole('button', {
     name: 'Save Raw LOSAT TSV for #1 to #2'
-  })).toBeDisabled();
+  })).toHaveCount(0);
 });
 
 test('Automatic Linear renders every record from one GenBank source and survives session reload', async ({ page }) => {
@@ -1957,7 +1954,6 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
     [`${uidB}->${uidC}`, 1, 2, 0]
   ]]);
   await openLinearSelectedPairs(page);
-  await openLinearAdvancedComparison(page);
   const uploadPair = linearComparisonPair(page, `${uidA}->${uidB}`);
   const losatPair = linearComparisonPair(page, `${uidB}->${uidC}`);
   const losatRawResult = page.locator(
@@ -1985,6 +1981,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
     element.closest('[data-linear-comparison-boundary]')
       ?.dataset.linearComparisonBoundary
   ))).toBe('2->3');
+  await openRawFilename(losatRawResult);
   await expect(losatRawResult.getByRole('textbox', {
     name: 'Raw LOSAT filename for #3 to #1'
   })).toHaveValue('selected-b-to-c.tsv');
@@ -2122,12 +2119,12 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
     'Selected pairs (2)'
   );
   await openLinearSelectedPairs(page);
-  await openLinearAdvancedComparison(page);
   const restoredUploadPair = linearComparisonPair(page, `${uidA}->${uidB}`);
   const restoredLosatRawResult = page.locator(
     `[data-linear-raw-result="${uidB}->${uidC}"]`
   );
   await expect(restoredUploadPair).toContainText('mixed-a-to-b.tsv');
+  await openRawFilename(restoredLosatRawResult);
   await expect(restoredLosatRawResult.getByRole('textbox', {
     name: 'Raw LOSAT filename for #3 to #1'
   })).toHaveValue('selected-b-to-c.tsv');
@@ -2186,11 +2183,10 @@ test('Existing Gallery session restores edge-owned raw LOSAT cache', async ({ pa
     ]
   });
   await openLinearSelectedPairs(page);
-  await openLinearAdvancedComparison(page);
   const firstRawResult = page.locator(
     '[data-linear-raw-result="record-1->record-2"]'
   );
-  await expect(firstRawResult).toContainText('Raw result ready');
+  // Save Raw LOSAT TSV is shown only for a cached result.
   await expect(firstRawResult.getByRole('button', {
     name: 'Save Raw LOSAT TSV for #1 to #2'
   })).toBeEnabled();
