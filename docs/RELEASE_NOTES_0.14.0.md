@@ -24,6 +24,7 @@ published packages, and [Installation](./INSTALL.md) explains each install route
   preview over blank space and comparison ribbons alike.
 - Draw from Python with `draw_circular()` and `draw_linear()`, which return a
   `Diagram` you can save in any format.
+- Choose which records of a multi-record file are drawn (**Choose records…**, **Draw this record**).
 - Install from a wheel or source package that includes the local web app's
   palettes and browser files.
 
@@ -42,8 +43,33 @@ the rich feature popup are shared by both modes. **Reset Settings** resets both
 modes, and one **Undo** restores both.
 
 **Load Session** asks **Replace the current work?** before it replaces unsaved
-changes. On gbdraw.app, **Load an example** opens any Gallery example; `gbdraw
-gui` has no Gallery and no such button.
+changes. On gbdraw.app, **Load an example** opens any Gallery example, and the **Load
+example** button in the header does the same after a Result is shown; `gbdraw
+gui` has no Gallery and no such buttons. The Gallery examples were rebuilt: the
+Vibrio chromosomes start at their replication initiator, and the aminoglycoside
+BGC example draws gene arrows with Shaft Width Ratio 0.6 and aligns the clusters
+on the neoU similarity group. The majanivirus example keeps its rows centered
+and reverse-complements record 6 (LvMJNV) with that record's **Reverse complement**
+setting, so its links to the neighboring genomes no longer cross.
+
+In Linear mode, **Generate Diagram** with a pair set to **Upload BLAST TSV**
+but no file opens a **BLAST TSV missing** dialog. It offers **Choose BLAST TSV
+for #i → #j…**, **Set to No comparison and Generate**, or **Cancel**.
+
+Choose which records of a file are drawn. Each Linear record card has **Draw
+this record**, and a file with several records has **Choose records…**, a list
+that searches and sorts by file order, record ID, or length and turns records
+on or off in bulk. **Choose records…** also sits beside **Record** in Circular,
+where Multi-Record Canvas and separate diagrams draw the records that are on. A
+record that is off is left out of Generate, comparisons, row layout, and the
+Legend, keeps its settings (also in a saved Session), and returns in its place
+when turned on; **Delete settings** removes its card settings, feature edits
+and Feature placements, annotations that target it, and comparison pairs that
+name it. LOSAT keeps the whole subject file as its E-value database. After an
+upload, a file with more than 20 records opens the list, and turning off the
+last drawn record of a file asks whether to remove the file. In 0.13.0, a
+Linear File card drew every record or the one record named in Record ID, and
+Multi-Record Canvas drew every record.
 
 Each change of a checkbox, radio button, or button is one **Undo** step. Undo
 and Redo are unavailable while Generate runs, and the header says why. Error
@@ -52,6 +78,9 @@ involved. A value gbdraw cannot use, such as a GC window of 0, is reported
 instead of being replaced by a default without notice. Every visible control
 has an accessible name, every **?** tip is a **Help** button that opens on
 hover, focus, click, or tap, and **Escape** closes only the top layer.
+
+Large Sessions (thousands of features) open popups and apply color choices in
+seconds instead of freezing the page.
 
 Dragging the preview now follows the pointer over blank space and over
 comparison ribbons, also in large diagrams. Pan, zoom, **Fit**, and **Reset**
@@ -121,8 +150,18 @@ In **Search features**, **All** no longer searches nucleotide or amino-acid
 sequences or `/translation` values. Locations are shown and searched as
 1-based INSDC locations, with every part of a split location. In the Legend
 editor, removed rows are listed under **Deleted items** with **Restore** and
-**Restore all**, and added, renamed, and reordered rows keep their place
-through Generate and **Save Session**.
+**Restore all**, and renamed and reordered rows keep their place through
+Generate and **Save Session**.
+
+Editor edits (stroke, fill, palette, color rule, feature visibility,
+Legend rename, recolor, delete, Restore, and sort) show on the displayed Result
+as the next **Generate Diagram** draws them, also after Undo, Redo, a Result
+switch, **Reset Settings**, and **Load Session**. **Reset Settings** returns
+Legend renames to the default captions. Renaming a Legend row onto a deleted
+row's caption opens the **Legend Name Conflict** dialog. A Default colors value that
+differs from the selected palette counts as your color, as `-d` does over `-p`
+on the command line: switching the palette or pressing Default colors **Reset**
+asks before it discards your colors.
 
 In Linear mode, **Arrange in rows** puts every record selected from a source
 file on that file's row, in file and record order. Row spacing follows the
@@ -142,27 +181,33 @@ To line up records on one reference feature, choose **Align…** in the feature
 popup or in the Similarity Groups drawer. When each record has one clear
 anchor, gbdraw applies the alignment at once and keeps each record's
 direction. When the choice is ambiguous, or when you choose **Review alignment
-options…**, a review palette opens:
+options…**, the **Review alignment** dialog opens with one card per record:
 
-- Each target record shows its suggested anchor and the reason. Replace it, or
-  choose **Skip**.
-- Choose the directions: **Keep current directions**, **All selected arrows
-  right →**, **All selected arrows left ←**, or **Custom**.
+- A record with several candidates lists them with how each links to the
+  reference, marks one **Recommended**, and offers **Skip**. A record with one
+  candidate shows a compact card with a **Skip** checkbox.
+- **Arrow direction** offers **Keep as is**, **All right →**, **All left ←**,
+  or **Custom**. Each card shows its arrow before and after Align.
 
-When several anchors fit equally, gbdraw suggests a unique representative or
+When several anchors fit equally, gbdraw recommends a unique representative or
 the first stable candidate. This is a convenience, not a biological judgement.
 Reversing a record reverses the whole record; the +/− strands in your source
 file do not change. A record whose anchor is unknown, skipped, missing, or
-unusable keeps its direction, and the palette says why.
+unusable keeps its direction, and its card says why.
 
-Choices in the palette run no search. **Apply** checks the plan once. If the
+Choices in the dialog run no search. **Apply** checks the plan once. If the
 final directions or reference position differ from the preview, the preview
 refreshes and you apply again. If Apply fails, your choices and the previous
 Result stay.
 
 The alignment is saved with every anchor and **Skip** choice. A record's
 direction is its **Reverse complement** setting. Generate, reordering
-records, and a manual **Reverse complement** keep the alignment. **Reset alignment…** moves records back
+records, and a manual **Reverse complement** keep the alignment. Changing a
+pair's source or file, the comparison program, or the LOSATP mode clears it,
+except that choosing **Upload BLAST TSV** for a pair keeps it until a file is
+chosen. Result filters such as **Minimum identity** keep it, even when they
+change the Similarity Groups.
+**Reset alignment…** moves records back
 to where they were just before the latest Align, and can also undo the
 direction changes that Align made; its preview lists later manual edits that
 this reset replaces. Each Align can be reset once: to try the other kind of
@@ -238,6 +283,11 @@ label text for individual features. To set the display of several records, use
 a records table. The [command-line reference](./REFERENCE/command-line.md)
 has a rotation and placement example you can run, and links to the full
 option list.
+
+`gbdraw render --session FILE` draws the diagrams saved in a Session;
+`--list_drawings` lists them and `--drawing ID` picks one. In Python,
+`SessionDocument.drawings` lists them and `render_session_drawings()` draws
+several at once.
 
 The command line and Python now run LOSAT themselves, without BLAST+ or the
 web app:
@@ -364,11 +414,29 @@ internal function `gbdraw.render.export.save_figure` now warns with
    keep editing, use **Save Session**. Compare output only between runs of the
    same gbdraw version: SVG bytes and text measurements can differ between
    versions.
+6. For cropped or reverse-complemented records, SVG feature IDs
+   (`data-gbdraw-feature-id`, element `id`, `data-gbdraw-stable-feature-id`) and
+   `hash=` selectors now use the feature's hash in its source record, as for
+   untransformed records. In 0.13.0 they used the hash after the crop or reverse
+   complement. Scripts that match those IDs, and TSV tables or CLI options with
+   `hash=` rows written for such records, need the new values. Loading or
+   upgrading a Session saved before 0.14.0 renames its **This feature only**
+   color rules on cropped or reverse-complemented records to the source-record
+   hash. `--session` replay of a Session 31–44 renames the same rules, and the
+   label text edits in its label override table. A Session 27–30 replayed with
+   `--session` keeps these rules as saved and warns. Other saved `hash=` values
+   load as saved, and every value that cannot be renamed is reported.
 
 Some command-line input that 0.13 accepted now stops the run with a message:
 
 - `--window`, `--step`, `--depth_window`, and `--depth_step` must be positive,
   and `--scale_interval` must be greater than 0.
+- `currentColor`, `inherit`, `url(#id)` and other paint references, `icc-color()`,
+  and an empty color (in a configuration override or a color option such as
+  `--depth_color ""`) are no longer accepted as colors in the CLI and Python.
+- Font sizes must be greater than 0 and stroke widths 0 or greater.
+- In the Specific colors table (`-t`), `None`, `NA`, and `null` are values, not
+  blanks, and hex colors with alpha are rejected.
 - `-n`/`--nt` takes two letters from A, C, G, T, and U (U counts as T).
 - A missing, unreadable, or malformed `-b` file, or more `-b` files than
   adjacent record pairs, is an error.
@@ -380,6 +448,10 @@ Some command-line input that 0.13 accepted now stops the run with a message:
   value. In the styling tables, a row with more columns than the table has is
   an error that names the file and line. The feature override and feature
   placement tables are unchanged.
+
+In the web app, **Override File (-d)** import checks Default colors the same
+way, and **Load Session** drops a stored Legend entry color outside that set and
+names the entry in the Load notice.
 
 Some older figures can change:
 
@@ -400,6 +472,9 @@ Some older figures can change:
   frame starts at the first base, and its first codon is a start codon of its
   `transl_table`, as in INSDC `/translation`.
   This changes **Copy aa FASTA**, interactive SVG metadata, and LOSATP input.
+- A Circular comparison ring without `--conservation_labels` is labelled with its
+  file name without the last extension (`NC_002333.2.fna` draws `NC_002333.2`),
+  as in the web app. A saved Session keeps its labels.
 - On the command line and in Python, the color name `seashell` is `#FFF5EE`; it
   was drawn as seagreen.
 - With separate strands and overlap resolution on, an Auto feature with no
@@ -442,5 +517,38 @@ each export format needs.
   input, no scored inference or ranking by support count, and no automatic
   selection across several steps.
 - The hosted Gallery is not included in local installs.
+
+## Known issues
+
+- Coloring several selected features at once in the feature popup, or renaming a
+  palette row in the Legend editor, adds one Specific color rule per feature
+  instead of one rule for the group, so the rules table and the Session can grow
+  large.
+- After a palette switch, or **Apply to all** on a palette Legend row, a color
+  rule in the row's earlier color can show as one Legend row until the next
+  **Generate Diagram**, which draws two.
+- The command line and the browser can differ in the last digits of collinear
+  support scores. The figure is unchanged.
+- **Run Info** and the Session record no LOSAT version for comparisons the web
+  app runs; the browser build of LOSAT carries no version number.
+- In the web app, the LOSATP comparison of a Session saved from Python with
+  listed `pairs` cannot be edited; **Inherit saved comparison** reuses it as saved.
+- A Session 31 to 39 whose Label whitelist has a row with a blank keyword loads
+  in the web app, but replaying it on the command line fails.
+- A feature popup can cover header buttons such as **Undo**; close it to reach them.
+- Similarity Groups assignment reasons and path IDs can differ between the web app
+  and the command line for a reverse-complemented record, because inference depends
+  on the order of LOSAT hits. The drawn diagram is the same.
+- A Session that `gbdraw circular` saves for a batch or grid with a cropped or
+  reverse-complemented record stores that record as drawn, so replaying it gives its
+  features different IDs than the original render. The drawing is the same.
+- After you load a Session saved by 0.13.0, its Result keeps the 0.13.0 feature IDs
+  on cropped or reverse-complemented records until you click **Generate Diagram**. Colors
+  are unaffected. An SVG downloaded before **Generate Diagram** carries the old IDs.
+- A label whitelist row that **Whitelist only** saved before 0.14.0, for a feature
+  without a unique qualifier, names the feature by its old drawn ID. On a cropped
+  or reverse-complemented record it no longer matches that feature, and its label
+  is no longer whitelisted. Use **Whitelist only** on the feature again to add a
+  row that matches.
 
 [Documentation home](./DOCS.md) | [Beta history](./RELEASE_NOTES_0.14.0b0.md)
