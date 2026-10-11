@@ -79,7 +79,7 @@ const REASONS = Object.freeze({
   LOSAT_OPTION_PROGRAM: 'Use only the options of the selected LOSAT program.',
   LOSAT_PLAN: 'Choose record pairs that the LOSAT search can run: two or more records, LOSAT rows only with a LOSAT program, and LOSATP Pairwise for selected pairs.',
   // A Selected plan with a LOSATP mode that compares every adjacent pair (UX-C05).
-  SELECTED_PAIRS_NEED_PAIRWISE: 'Similarity groups and Collinear blocks compare every adjacent pair with LOSAT. Choose Run LOSAT for all pairs, or choose Pairwise matches.',
+  SELECTED_PAIRS_NEED_PAIRWISE: 'A pair that does not run LOSAT stops Similarity groups and Collinear blocks, which compare every adjacent pair with LOSAT. Choose Run LOSAT for all pairs, or choose Pairwise matches.',
   LOSAT_TASK: 'Choose a LOSATN task that the selected LOSAT runtime supports.',
   RING_LOSAT_PROGRAM: 'Choose LOSATN or TLOSATX for similarity rings.',
   RING_LOSAT_INPUT: 'Give one comparison sequence file per ring, without BLAST tables, and use the displayed records as the subject.',

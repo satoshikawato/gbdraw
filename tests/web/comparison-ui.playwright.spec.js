@@ -1320,6 +1320,8 @@ test('structured comparison errors open and focus their owning disclosure', asyn
   });
   expect(selectedCollinear.result.status).toBe('error');
   expect(selectedCollinear.reason).toBe('SELECTED_PAIRS_NEED_PAIRWISE');
+  // The Generate error names the pair whose source breaks the LOSATP mode.
+  await expect(page.getByRole('alert', { name: 'Generation Error' })).toContainText('Pair: #2 to #3. A pair that does not run LOSAT');
   expect(selectedCollinear.issueCodes).toEqual(['selected-losat-requires-pairwise', 'missing-upload']);
   await expect(missingTsvDialog).toHaveCount(0);
   await expect(comparisonSettings(page)).toHaveAttribute('open', '');
