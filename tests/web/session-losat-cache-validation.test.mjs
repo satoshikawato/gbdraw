@@ -1127,7 +1127,7 @@ test('a Session that repeats a raw LOSAT cache key is rejected with a classified
   assert.equal(result.status, 'error');
   assert.equal(result.error.code, 'INPUT_INVALID');
   assert.deepEqual(result.error.context, { field: 'schema', reason: 'FIELDS' });
-  assert.match(result.error.summary, /supported Session file/);
+  assert.match(result.error.summary, /not a gbdraw Session this version can read/);
   assert.deepEqual(alerts, []);
 });
 
@@ -1225,7 +1225,7 @@ for (const unsupportedVersion of [34, 35, 36, 37, 38]) {
     assert.equal(result.status, 'error');
     assert.equal(result.error.code, 'INPUT_INVALID');
     assert.deepEqual(result.error.context, {field:'schema',reason:'FIELDS'});
-    assert.match(result.error.summary, /supported Session file/);
+    assert.match(result.error.summary, /not a gbdraw Session this version can read/);
     assert.deepEqual(state.errorLog.value, result.error);
     assert.deepEqual(alerts, []);
     assert.equal(event.target.value, '');

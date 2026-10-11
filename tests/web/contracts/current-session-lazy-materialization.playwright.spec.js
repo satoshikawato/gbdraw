@@ -1520,7 +1520,7 @@ test('preflight and lazy-access failures preserve the committed preview', async 
 
   const rejected = await loadSyntheticSession(page, 'invalid-size');
   expect(rejected.status).toBe('error');
-  expect(rejected.message).toContain('Load a supported Session file or recreate it with the current writer.');
+  expect(rejected.message).toContain('This file is not a gbdraw Session this version can read.');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
     code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'RESOURCE_SIZE' }
   });

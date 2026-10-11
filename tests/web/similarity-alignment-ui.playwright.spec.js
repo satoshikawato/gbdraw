@@ -2226,7 +2226,7 @@ test('@pr-smoke native Python engine error reaches Align review and retains choi
   await failNextNativeRender(page);
   await applyAndSettle(page,dialog);
   const alert=dialog.getByRole('alert',{name:'Alignment error'});
-  await expect(alert).toContainText('Python regular expression is invalid');
+  await expect(alert).toContainText('Not a valid regular expression');
   expect(await page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentError)).toMatchObject({code:'REGEX_SYNTAX',operation:'align',stage:'rule-validation',context:{position:1,positionUnit:'python-character'}});
   const after=await artifactSnapshot(page);
   // Observer invalidation can advance revision; both History stacks and every

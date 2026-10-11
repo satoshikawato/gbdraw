@@ -71,4 +71,45 @@ const inspectSafeDetails = async (page, alert, expected) => {
   expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize().width);
   expect(await alert.textContent()).not.toMatch(/PRIVATE_|Traceback|stdout|stderr|😀|<svg/);
 };
-module.exports = { failNextNativeRender, inspectSafeDetails };
+
+// The compact error beside a field has no Details disclosure: Copy details for a
+// bug report shows the safe diagnostics it copies (UX-C04, PD-OI-046).
+const inspectCompactDetails = async (page, alert, expected) => {
+  await expect(alert.locator('details')).toHaveCount(0);
+  await expect(alert.getByRole('button', { name: 'Copy diagnostics', exact: true })).toHaveCount(0);
+  await expect(alert.getByRole('textbox', { name: 'Safe diagnostics' })).toHaveCount(0);
+  await page.evaluate(() => {
+    window.__S03_COPIED__ = [];
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+      writeText: async text => { window.__S03_COPIED__.push(text); }
+    } });
+  });
+  const copy = alert.getByRole('button', { name: 'Copy details for a bug report', exact: true });
+  await copy.scrollIntoViewIfNeeded();
+  await copy.focus();
+  await copy.press('Enter');
+  const diagnostics = alert.getByRole('textbox', { name: 'Safe diagnostics' });
+  await expect(diagnostics).toBeVisible();
+  await expect(diagnostics).toHaveAttribute('readonly', '');
+  const text = await diagnostics.inputValue();
+  expect(text.length).toBeLessThanOrEqual(4012);
+  expect(text).toContain(`Code: ${expected.code}`);
+  expect(text).toContain(`Operation: ${expected.operation}`);
+  expect(text).toContain(`Stage: ${expected.stage}`);
+  expect(text).not.toMatch(/PRIVATE_|Traceback|stdout|stderr|😀|<svg/);
+  await expect(alert.getByRole('status')).toHaveText('Diagnostics copied.');
+  expect(await page.evaluate(() => window.__S03_COPIED__)).toEqual([text]);
+  await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined }));
+  await copy.press('Enter');
+  await expect(alert.getByRole('status')).toContainText('copy manually');
+  await expect(diagnostics).toHaveValue(text);
+  await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true,
+    value: { writeText: async () => { throw new Error('PRIVATE_CLIPBOARD_SENTINEL'); } } }));
+  await copy.press('Enter');
+  await expect(alert.getByRole('status')).toContainText('copy manually');
+  const box = await copy.boundingBox();
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize().width);
+  expect(await alert.textContent()).not.toMatch(/PRIVATE_|Traceback|stdout|stderr|😀|<svg/);
+};
+module.exports = { failNextNativeRender, inspectSafeDetails, inspectCompactDetails };

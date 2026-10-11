@@ -256,7 +256,9 @@ test('failed session loading clears pending state and preserves the prior sessio
   await expect(loadButton).toBeEnabled();
   await expect(sessionInput).toHaveValue('');
   expect(dialogs).toEqual([]);
-  await expect(page.getByRole('alert', { name: 'Operation error' })).toContainText('Use valid JSON.');
+  await expect(page.getByRole('alert', { name: 'Session not loaded' })).toContainText(
+    'This file is not a gbdraw Session: it is not valid JSON. The current settings and Results are unchanged.'
+  );
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
     // The Session import Worker's actual stage (X-01, SE-09).
     code: 'INPUT_INVALID', stage: 'parse', context: { field: 'schema', reason: 'JSON_FORMAT' }
@@ -270,7 +272,9 @@ test('failed session loading clears pending state and preserves the prior sessio
     && window.__GBDRAW_APP__?.sessionImportPending === false
   ));
   expect(dialogs).toEqual([]);
-  await expect(page.getByRole('alert', { name: 'Operation error' })).toContainText('Use valid JSON.');
+  await expect(page.getByRole('alert', { name: 'Session not loaded' })).toContainText(
+    'This file is not a gbdraw Session: it is not valid JSON. The current settings and Results are unchanged.'
+  );
   expect(await importSnapshot(page)).toEqual(before);
   await expect(sessionInput).toHaveValue('');
 });
@@ -323,7 +327,7 @@ test('a 0.13.0 Gallery Session loads, and its Custom Track Slots turned on name 
     adv.circular_track_slots_enabled = true;
   }));
   expect(dialogs).toHaveLength(1);
-  await expect(page.getByRole('alert', { name: 'Operation error' })).toContainText(
+  await expect(page.getByRole('alert', { name: 'Session not loaded' })).toContainText(
     'The track settings are invalid. Track row 1. Field: spacing. Custom Track Slots no longer read this field.'
   );
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({

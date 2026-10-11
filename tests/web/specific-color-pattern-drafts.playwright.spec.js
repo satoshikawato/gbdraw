@@ -3,7 +3,7 @@ const { join } = require('node:path');
 const { readFileSync, writeFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise, openApp, reveal, generateAndWaitForResult, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
-const { inspectSafeDetails } = require('./helpers/operation-error.cjs');
+const { inspectCompactDetails } = require('./helpers/operation-error.cjs');
 
 const fixture = mode => join(process.cwd(), 'gbdraw/web/gallery/sessions', mode === 'linear'
   ? 'lambda_basic_linear.gbdraw-session.json' : 'HmmtDNA_basic_circular.gbdraw-session.json');
@@ -65,15 +65,18 @@ for (const mode of ['circular', 'linear']) for (const width of [1600, 390]) {
     const described = await field.getAttribute('aria-describedby');
     expect(described).toBe(await status(page).getAttribute('id'));
     await expect(status(page)).toContainText('Not applied');
-    await expect(status(page)).toContainText('last accepted rule');
-    await expect(status(page)).toContainText('current Result');
+    // The rule for Save, Generate and Export sits in the help tip beside "Not applied".
+    const policyId = await status(page).locator('.help-tip-trigger').getAttribute('aria-describedby');
+    await expect(page.locator(`[id="${policyId}"]`)).toContainText('last accepted rule');
+    await expect(page.locator(`[id="${policyId}"]`)).toContainText('current Result');
     expect(await snapshot(page)).toEqual(before);
     const error = (await draft(page)).draft.error;
     expect(error).toMatchObject({ code: 'REGEX_SYNTAX', stage: 'rule-validation', context: { position: 1, positionUnit: 'python-character' } });
-    await inspectSafeDetails(page, status(page).getByRole('alert', { name: 'Rule error' }), error);
+    await inspectCompactDetails(page, status(page).getByRole('alert', { name: 'Rule error' }), error);
     await page.screenshot({ path: info.outputPath('rejected-field.png') });
-    const retry = status(page).getByRole('button', { name: 'Retry', exact: true });
-    await retry.scrollIntoViewIfNeeded(); await retry.focus(); await retry.press('Enter');
+    // A syntax error offers no Retry (the same text fails again); editing the field commits it again.
+    await expect(status(page).getByRole('button', { name: 'Retry', exact: true })).toHaveCount(0);
+    await field.dispatchEvent('change');
     await expect.poll(async () => (await draft(page))?.draft?.pending).toBe(false);
     expect(await snapshot(page)).toEqual(before);
     const afterRetry = await getDiagramWorkerActivity(page);
