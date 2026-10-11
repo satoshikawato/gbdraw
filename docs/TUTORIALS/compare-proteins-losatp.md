@@ -176,10 +176,10 @@ the preview, inspect it and select **Apply** again. Features and labels reverse
 with the record; biological source strands stay unchanged.
 
 Open **Editor**, select **Similarity groups**, then choose **Reset alignment…**
-in **Active plan**. **Reset positions** is selected by default and
-would keep the new reference direction. Select **Reset positions and alignment
-direction changes**, inspect the listed reference and select **Reset** to
-restore its pre-Align direction and positions. The plan is cleared. **Undo**
+on the **Aligned to livA in …** line. **Positions only** is selected by default
+and would keep the new reference direction. Select **Positions and directions
+(1 record)**, inspect the listed reference and select **Reset positions and
+directions** to restore its pre-Align direction and positions. The plan is cleared. **Undo**
 restores the aligned artifact and its search results; reopen Reset to try the other
 scope. After either successful Reset, Undo is required before another scope.
 Combined Reset also replaces subsequent manual direction edits on the listed

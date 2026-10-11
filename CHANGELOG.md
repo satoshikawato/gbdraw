@@ -48,6 +48,27 @@ write-up of a release.
   **Recommended** chip stays on the recommended candidate after you choose
   another. Behaviour is unchanged: choices stay local until **Apply**, which
   validates, regenerates, and commits in one step.
+- Similarity alignment (web app): the **Reset alignment** dialog says "Undo
+  the latest Align." and offers **Positions only** and **Positions and
+  directions (N records)**. The reason a scope is unavailable sits under it.
+  The per-record list, one line each (current → restored direction), appears
+  only when the directions scope is selected, and the primary button names the
+  scope (**Reset positions** or **Reset positions and directions**).
+  Behaviour is unchanged.
+- Similarity groups (web app): in the Editor's **Similarity groups** tab the
+  active alignment is one line ("Aligned to neoU in BGC0000709" with **Reset
+  alignment…**) that opens to show the reference and records. Group rows have
+  two lines (name, "5 genes · 5 records"), renamed groups carry an **Edited**
+  badge, and the selected group's detail and **Align…** buttons scroll in one
+  region under the list. The exact-reference options name the record and the
+  gene instead of the record key and feature hash. **Reset Rename** is now
+  **Reset name** beside the group's ID; it still restores the name and the
+  description.
+- Similarity groups (web app): the disabled **Similarity groups** tab, for
+  example in Circular, says in its tooltip that Similarity groups appear after
+  a Linear comparison with Similarity groups turned on (D-24). The group's
+  **Display name** and **Description** fields are now named by their labels
+  for assistive technology (OV-427).
 - Similarity groups (web app): member tables in the feature popup, ribbon
   popup, and Similarity Groups drawer name each record in plain text, as the
   diagram heading does. Before, a definition with markup such as

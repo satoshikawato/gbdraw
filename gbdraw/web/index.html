@@ -6926,8 +6926,10 @@
                             <i class="ph ph-paint-brush" aria-hidden="true"></i>
                             <span>Features</span>
                         </button>
+                        <!-- The title is the tooltip and the accessible description of the disabled tab (D-24). -->
                         <button @click="openRightDrawerTab('orthogroups')" :aria-pressed="rightDrawerTab === 'orthogroups'" aria-controls="right-drawer-panel-orthogroups"
                                 :disabled="!isRightDrawerTabAvailable('orthogroups')"
+                                :title="isRightDrawerTabAvailable('orthogroups') ? null : 'Similarity groups appear after a Linear comparison with Similarity groups turned on.'"
                                 :class="[
                                   'text-xs rounded px-2 py-1.5 flex items-center justify-center gap-1',
                                   rightDrawerTab === 'orthogroups' ? 'bg-emerald-100 text-emerald-700 font-semibold' : 'text-slate-500 hover:bg-slate-100',
@@ -7113,61 +7115,54 @@
                     </div>
 
                     <div v-show="rightDrawerTab === 'orthogroups'" id="right-drawer-panel-orthogroups" class="flex-1 min-h-0 flex flex-col overflow-y-auto">
-                        <div class="px-4 py-2 border-b border-slate-100 bg-white shrink-0 space-y-2">
-                            <div class="flex items-center justify-between text-xs">
-                                <span class="font-semibold text-slate-600">{{ orthogroupCount }} similarity groups</span>
-                                <span class="text-[10px] text-slate-500 truncate max-w-[180px]"
-                                      :title="similarityAlignmentPlanInspector?.groupId || ''">
-                                    {{ similarityAlignmentPlanInspector ? `Active: ${similarityAlignmentPlanInspector.groupId}` : 'No active plan' }}
-                                </span>
-                            </div>
-                            <div class="grid grid-cols-[1fr_120px] gap-2">
+                        <div class="px-3 py-2 border-b border-slate-100 bg-white shrink-0 space-y-2">
+                            <div class="text-xs font-semibold text-slate-600">{{ orthogroupCount }} similarity groups</div>
+                            <div class="grid grid-cols-[1fr_9rem] gap-2">
                                 <input v-model="orthogroupSearch" data-history-ignore placeholder="Search similarity groups..." aria-label="Search similarity groups" class="form-input text-xs w-full">
                                 <select v-model="orthogroupSortMode" data-history-ignore aria-label="Sort similarity groups" class="form-select text-xs w-full">
-                                    <option value="id">ID</option>
-                                    <option value="name">Name</option>
-                                    <option value="member_count">Members</option>
-                                    <option value="record_coverage">Coverage</option>
+                                    <option value="id">Sort by ID</option>
+                                    <option value="name">Sort by name</option>
+                                    <option value="member_count">Most genes first</option>
+                                    <option value="record_coverage">Most records first</option>
                                 </select>
                             </div>
-                            <details v-if="similarityAlignmentPlanInspector"
-                                     open
-                                     data-similarity-alignment-plan-inspector
-                                     class="rounded border border-blue-100 bg-blue-50 p-2">
-                                <summary aria-label="Active similarity alignment plan">
-                                    Active plan · {{ similarityAlignmentPlanInspector.modeLabel }}
-                                </summary>
-                                <div class="mt-2 space-y-2 text-[10px] text-slate-600">
-                                    <div class="flex justify-end">
-                                        <button type="button"
-                                                data-history-managed
-                                                data-similarity-alignment-reset
-                                                @click="openSimilarityAlignmentReset"
-                                                :disabled="['resolving', 'applying'].includes(similarityAlignmentStatus)"
-                                                class="btn btn-secondary px-2 py-1 text-[10px]">
-                                            Reset alignment…
-                                        </button>
-                                    </div>
-                                    <div>
-                                        <span class="font-semibold text-slate-700">Exact reference:</span> <span class="break-all">{{ similarityAlignmentPlanInspector.reference.recordLabel }} · {{ similarityAlignmentPlanInspector.reference.label }}</span>
-                                    </div>
-                                    <div class="max-h-32 overflow-auto rounded border border-blue-100 bg-white custom-scrollbar">
-                                        <div v-for="record in similarityAlignmentPlanInspector.records"
-                                             :key="`alignment-plan-${record.recordKey}`"
-                                             :data-alignment-record-key="record.recordKey"
-                                             class="grid grid-cols-[minmax(0,1fr)_auto] gap-2 border-b border-slate-100 px-2 py-1.5 last:border-b-0">
-                                            <div class="min-w-0">
-                                                <div class="truncate font-medium" :title="record.recordLabel">{{ record.recordLabel }}</div>
-                                                <div class="truncate" :title="record.anchorLabel">{{ record.anchorLabel }}</div>
-                                                <div class="text-slate-500">{{ record.rationaleLabel }}</div>
-                                            </div>
-                                            <span v-if="record.reversedFromSource"
-                                                  class="self-start rounded bg-indigo-100 px-1.5 py-0.5 font-bold text-indigo-700"
-                                                  :aria-label="`${record.recordLabel} reversed relative to source`">rev</span>
+                            <!-- The active plan is one line; its reference and records open on demand. -->
+                            <div v-if="similarityAlignmentPlanInspector"
+                                 data-similarity-alignment-plan-inspector
+                                 class="relative rounded border border-blue-200 bg-blue-50">
+                                <details>
+                                    <summary class="!mb-0 min-h-[2rem] py-1 pl-2 pr-[7.5rem] text-xs !font-medium !text-slate-700">
+                                        <span class="min-w-0">{{ similarityAlignmentPlanInspector.summary }}</span>
+                                    </summary>
+                                    <div class="space-y-2 border-t border-blue-100 px-2 py-2 text-[11px] text-slate-600">
+                                        <div>
+                                            <span class="font-semibold text-slate-700">Exact reference:</span> <span class="break-words">{{ similarityAlignmentPlanInspector.reference.recordLabel }} · {{ similarityAlignmentPlanInspector.reference.label }}</span>
                                         </div>
+                                        <ul aria-label="Aligned records" class="divide-y divide-slate-100 rounded border border-blue-100 bg-white">
+                                            <li v-for="record in similarityAlignmentPlanInspector.records"
+                                                :key="`alignment-plan-${record.recordKey}`"
+                                                :data-alignment-record-key="record.recordKey"
+                                                class="flex items-start gap-2 px-2 py-1">
+                                                <div class="min-w-0 flex-1">
+                                                    <div class="truncate font-medium text-slate-700" :title="record.recordLabel">{{ record.recordLabel }}</div>
+                                                    <div class="truncate" :title="`${record.anchorLabel} · ${record.rationaleLabel}`">{{ record.anchorLabel }} <span class="text-slate-500">· {{ record.rationaleLabel }}</span></div>
+                                                </div>
+                                                <span v-if="record.reversedFromSource"
+                                                      class="shrink-0 rounded bg-indigo-100 px-1.5 py-0.5 font-bold text-indigo-700"
+                                                      :aria-label="`${record.recordLabel} reversed relative to source`">rev</span>
+                                            </li>
+                                        </ul>
                                     </div>
-                                </div>
-                            </details>
+                                </details>
+                                <button type="button"
+                                        data-history-managed
+                                        data-similarity-alignment-reset
+                                        @click="openSimilarityAlignmentReset"
+                                        :disabled="['resolving', 'applying'].includes(similarityAlignmentStatus)"
+                                        class="btn btn-secondary absolute right-1 top-1 px-2 py-0.5 text-[11px]">
+                                    Reset alignment…
+                                </button>
+                            </div>
                             <div v-if="similarityAlignmentRepair"
                                  data-similarity-alignment-repair
                                  role="alert"
@@ -7194,67 +7189,62 @@
                             <span class="min-w-0">Saved names waiting for their original members: {{ orthogroupDormantNames.join(', ') }}</span>
                             <button type="button" @click="clearOrthogroupDormantOverrides" class="btn btn-secondary px-2 py-1 text-[10px]" :disabled="!semanticMutationAvailable">Clear</button>
                         </div>
-                        <div class="h-48 min-h-[64px] overflow-y-auto border-b border-slate-100 custom-scrollbar">
+                        <!-- The list and the selected group's detail share the free height; each scrolls on its own. -->
+                        <div data-similarity-group-list class="flex-[2_1_0%] min-h-[6rem] overflow-y-auto border-b border-slate-200 custom-scrollbar">
                             <button v-for="row in orthogroupRows"
                                     :key="row.id"
                                     v-memo="[row, selectedOrthogroup && selectedOrthogroup.id === row.id]"
+                                    :data-similarity-group-row="row.id"
+                                    :aria-current="selectedOrthogroup && selectedOrthogroup.id === row.id ? 'true' : null"
                                     @click="selectOrthogroup(row.group.id)"
                                     :class="[
-                                      'w-full text-left px-3 py-2 border-b border-slate-100 hover:bg-emerald-50 transition-colors',
-                                      selectedOrthogroup && selectedOrthogroup.id === row.id ? 'bg-emerald-50' : 'bg-white'
+                                      'w-full text-left px-3 py-1.5 border-b border-l-4 border-b-slate-100 hover:bg-emerald-50 transition-colors',
+                                      selectedOrthogroup && selectedOrthogroup.id === row.id ? 'bg-emerald-50 border-l-emerald-500' : 'bg-white border-l-transparent'
                                     ]">
-                                <div class="flex items-start gap-2">
-                                    <div class="min-w-0 flex-1">
-                                        <div class="text-xs font-semibold text-slate-700 truncate">{{ row.name }}</div>
-                                        <div class="text-[10px] text-slate-500 truncate">{{ row.scopeLabel }}</div>
-                                        <div class="text-[10px] font-mono text-slate-500">{{ row.id }}</div>
-                                    </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="min-w-0 flex-1 truncate text-xs font-semibold text-slate-700" :title="row.name">{{ row.name }}</span>
+                                    <span v-if="row.name !== row.id" class="shrink-0 font-mono text-[10px] text-slate-500">{{ row.id }}</span>
+                                    <span v-if="row.renamed" class="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">Edited</span>
                                 </div>
-                                <div class="mt-1 flex items-center gap-2 text-[10px] text-slate-500">
-                                    <span>{{ row.memberCount }} members</span>
-                                    <span>{{ row.recordCount }} records</span>
-                                    <span v-if="row.renamed" class="text-blue-600 font-medium">Edited</span>
-                                </div>
+                                <div class="truncate text-[11px] text-slate-500">{{ row.countsLabel }}<template v-if="row.scopeLabel"> · {{ row.scopeLabel }}</template></div>
                             </button>
                             <div v-if="filteredOrthogroups.length === 0" class="p-4 text-center text-slate-500 text-xs">No similarity groups found</div>
                         </div>
 
-                        <div v-if="selectedOrthogroup" class="flex-1 min-h-[96px] overflow-y-auto p-4 space-y-4 custom-scrollbar">
+                        <div v-if="selectedOrthogroup" data-similarity-group-detail class="flex-[3_1_0%] min-h-[9rem] overflow-y-auto p-3 space-y-4 custom-scrollbar">
                             <div class="space-y-2">
-                                <div class="flex items-center justify-between">
-                                    <span class="text-[10px] font-mono text-slate-500">{{ selectedOrthogroup.id }}</span>
-                                    <span v-if="isOrthogroupRenamed(selectedOrthogroup)" class="text-[10px] text-blue-600 font-medium">Edited</span>
+                                <div class="flex items-center gap-2">
+                                    <span class="shrink-0 font-mono text-[11px] text-slate-500">{{ selectedOrthogroup.id }}</span>
+                                    <span class="min-w-0 truncate text-[11px] text-slate-500" :title="orthogroupScopeLabel(selectedOrthogroup)">{{ orthogroupScopeLabel(selectedOrthogroup) }}</span>
+                                    <span v-if="isOrthogroupRenamed(selectedOrthogroup)" class="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">Edited</span>
+                                    <button type="button"
+                                            @click="resetOrthogroupRename(selectedOrthogroup.id)"
+                                            :disabled="!semanticMutationAvailable || !isOrthogroupRenamed(selectedOrthogroup)"
+                                            title="Restore the group's original name and description"
+                                            class="ml-auto shrink-0 rounded px-1.5 py-0.5 text-[11px] text-blue-700 hover:bg-blue-50 disabled:text-slate-400 disabled:hover:bg-transparent">
+                                        Reset name
+                                    </button>
                                 </div>
-                                <div class="text-[10px] font-medium text-slate-500">{{ orthogroupScopeLabel(selectedOrthogroup) }}</div>
                                 <div>
-                                    <label class="text-xs font-medium text-slate-500 block mb-1">Display name</label>
-                                    <input type="text"
+                                    <label for="similarity-group-display-name" class="text-xs font-medium text-slate-500 block mb-1">Display name</label>
+                                    <input id="similarity-group-display-name"
+                                           type="text"
                                            :value="resolveOrthogroupName(selectedOrthogroup)"
                                            @input="setOrthogroupNameOverride(selectedOrthogroup.id, $event.target.value)"
                                            placeholder="Rename this similarity group"
                                            class="form-input text-sm w-full">
                                 </div>
                                 <div>
-                                    <label class="text-xs font-medium text-slate-500 block mb-1">Description</label>
-                                    <textarea :value="resolveOrthogroupDescription(selectedOrthogroup)"
+                                    <label for="similarity-group-description" class="text-xs font-medium text-slate-500 block mb-1">Description</label>
+                                    <textarea id="similarity-group-description"
+                                              :value="resolveOrthogroupDescription(selectedOrthogroup)"
                                               @input="setOrthogroupDescriptionOverride(selectedOrthogroup.id, $event.target.value)"
-                                              rows="3"
+                                              rows="2"
                                               class="form-input text-xs w-full resize-none"></textarea>
                                 </div>
                             </div>
 
-                            <div class="grid grid-cols-2 gap-2 text-xs text-slate-600">
-                                <div class="bg-slate-50 border border-slate-100 rounded p-2">
-                                    <div class="text-[10px] text-slate-500">Members</div>
-                                    <div class="font-semibold">{{ selectedOrthogroup.member_count || (selectedOrthogroup.members ? selectedOrthogroup.members.length : 0) }}</div>
-                                </div>
-                                <div class="bg-slate-50 border border-slate-100 rounded p-2">
-                                    <div class="text-[10px] text-slate-500">Record coverage</div>
-                                    <div class="font-semibold">{{ selectedOrthogroup.record_coverage_count || 0 }}</div>
-                                </div>
-                            </div>
-
-                            <div class="rounded border border-blue-100 bg-blue-50 p-3 space-y-2">
+                            <section class="rounded border border-blue-100 bg-blue-50 p-3 space-y-2" aria-label="Align records to this group">
                                 <label for="similarity-alignment-reference" class="block text-xs font-semibold text-slate-700">
                                     Exact reference record and feature
                                 </label>
@@ -7275,10 +7265,32 @@
                                 <p id="similarity-alignment-drawer-reason" class="ui-hint">
                                     {{ similarityAlignmentDrawerDisabledReason(selectedOrthogroup.id) || 'The selected exact feature will remain fixed as the reference.' }}
                                 </p>
-                            </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <button type="button"
+                                            data-history-managed
+                                            @click="startSimilarityAlignmentFromDrawer(selectedOrthogroup.id, $event)"
+                                            :disabled="Boolean(similarityAlignmentDrawerDisabledReason(selectedOrthogroup.id)) || similarityAlignmentBusy"
+                                            :aria-busy="similarityAlignmentBusy"
+                                            aria-describedby="similarity-alignment-drawer-reason"
+                                            title="Align to the selected exact feature"
+                                            class="min-w-0 text-xs px-2 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded flex items-center justify-center gap-1">
+                                        <i class="ph ph-arrows-left-right" aria-hidden="true"></i>
+                                        {{ similarityAlignmentStatus === 'resolving' ? 'Resolving…' : similarityAlignmentStatus === 'applying' ? 'Applying…' : 'Align…' }}
+                                    </button>
+                                    <button type="button"
+                                            data-history-managed
+                                            data-similarity-alignment-drawer-review
+                                            @click="startSimilarityAlignmentFromDrawer(selectedOrthogroup.id, $event, 'review')"
+                                            :disabled="Boolean(similarityAlignmentDrawerDisabledReason(selectedOrthogroup.id)) || similarityAlignmentBusy"
+                                            :aria-busy="similarityAlignmentBusy"
+                                            aria-describedby="similarity-alignment-drawer-reason"
+                                            title="Review alignment options for the selected exact feature"
+                                            class="min-w-0 text-xs leading-tight px-2 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 disabled:text-slate-400 disabled:cursor-not-allowed">Review alignment options…</button>
+                                </div>
+                            </section>
 
-                            <div>
-                                <div class="text-xs font-semibold text-slate-600 mb-2">Candidates</div>
+                            <details>
+                                <summary class="text-xs !text-slate-600">Name suggestions ({{ (selectedOrthogroup.nameCandidates || []).length }})</summary>
                                 <div class="space-y-1">
                                     <div v-for="candidate in (selectedOrthogroup.nameCandidates || [])"
                                          :key="`${selectedOrthogroup.id}-${candidate.source}-${candidate.text}`"
@@ -7288,12 +7300,12 @@
                                             <span class="text-[10px] text-slate-500">{{ candidate.source }}</span>
                                         </div>
                                         <div class="text-[10px] text-slate-500">
-                                            {{ candidate.memberCount }} members · {{ candidate.recordCoverageCount }} records · score {{ Number(candidate.score || 0).toFixed(1) }}
+                                            {{ candidate.memberCount }} {{ Number(candidate.memberCount) === 1 ? 'gene' : 'genes' }} · {{ candidate.recordCoverageCount }} {{ Number(candidate.recordCoverageCount) === 1 ? 'record' : 'records' }} · score {{ Number(candidate.score || 0).toFixed(1) }}
                                         </div>
                                     </div>
-                                    <div v-if="!(selectedOrthogroup.nameCandidates || []).length" class="text-xs text-slate-500">No candidates</div>
+                                    <div v-if="!(selectedOrthogroup.nameCandidates || []).length" class="text-xs text-slate-500">No suggestions</div>
                                 </div>
-                            </div>
+                            </details>
 
                             <div>
                                 <div class="mb-2 space-y-2">
@@ -7354,116 +7366,79 @@
                                         </button>
                                     </div>
                                 </div>
-                                <div class="border border-slate-100 rounded overflow-auto custom-scrollbar">
-                                    <table class="min-w-[52rem] text-[10px] text-slate-600">
-                                        <thead class="sticky top-0 bg-slate-50 text-slate-500 uppercase">
-                                            <tr>
-                                                <th class="px-2 py-1 text-left font-semibold">Record</th>
-                                                <th class="px-2 py-1 text-left font-semibold">Coordinates (+/-)</th>
-                                                <th class="px-2 py-1 text-left font-semibold">Protein ID</th>
-                                                <th class="px-2 py-1 text-left font-semibold">Product / note</th>
-                                                <th class="px-2 py-1 text-left font-semibold">Seq</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <template v-for="recordGroup in selectedOrthogroupMembersByRecord"
-                                                      :key="`${selectedOrthogroup.id}-${recordGroup.recordIndex}`">
-                                                <tr v-for="member in recordGroup.members"
-                                                    :key="`${member.featureSvgId}-${member.proteinId}`"
-                                                    class="border-t border-slate-100">
-                                                    <td class="px-2 py-1 font-mono whitespace-nowrap">{{ member.recordId || recordGroup.recordLabel }}</td>
-                                                    <td class="px-2 py-1 font-mono whitespace-nowrap">
-                                                        {{ Number(member.start) + 1 }}..{{ member.end }}
-                                                        <span v-if="member.strand">({{ member.strand }})</span>
-                                                    </td>
-                                                    <td class="px-2 py-1 font-mono whitespace-nowrap">{{ member.displayProteinId || '' }}</td>
-                                                    <td class="px-2 py-1 min-w-[10rem]">{{ member.product || member.note || '' }}</td>
-                                                    <td class="px-2 py-1 whitespace-nowrap">
-                                                        <div class="grid grid-cols-2 gap-1 w-24">
-                                                            <button type="button"
-                                                                    @click="copyOrthogroupMemberSequence(member, 'nt', selectedOrthogroup)"
-                                                                    :disabled="!hasOrthogroupMemberSequence(member, 'nt')"
-                                                                    :class="[
-                                                                      'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
-                                                                      hasOrthogroupMemberSequence(member, 'nt') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                                                                    ]"
-                                                                    title="Copy nucleotide FASTA"
-                                                                    aria-live="polite"
-                                                                    aria-atomic="true">
-                                                                <i class="ph ph-copy" aria-hidden="true"></i><span>{{ orthogroupCopyFeedbackLabel(selectedOrthogroup, 'nt', 'nt', member) }}</span>
-                                                            </button>
-                                                            <button type="button"
-                                                                    @click="downloadOrthogroupMemberSequence(member, 'nt', selectedOrthogroup)"
-                                                                    :disabled="!hasOrthogroupMemberSequence(member, 'nt')"
-                                                                    :class="[
-                                                                      'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
-                                                                      hasOrthogroupMemberSequence(member, 'nt') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                                                                    ]"
-                                                                    title="Download nucleotide FASTA">
-                                                                <i class="ph ph-download-simple" aria-hidden="true"></i><span>nt</span>
-                                                            </button>
-                                                            <button type="button"
-                                                                    @click="copyOrthogroupMemberSequence(member, 'aa', selectedOrthogroup)"
-                                                                    :disabled="!hasOrthogroupMemberSequence(member, 'aa')"
-                                                                    :class="[
-                                                                      'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
-                                                                      hasOrthogroupMemberSequence(member, 'aa') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                                                                    ]"
-                                                                    title="Copy amino-acid FASTA"
-                                                                    aria-live="polite"
-                                                                    aria-atomic="true">
-                                                                <i class="ph ph-copy" aria-hidden="true"></i><span>{{ orthogroupCopyFeedbackLabel(selectedOrthogroup, 'aa', 'aa', member) }}</span>
-                                                            </button>
-                                                            <button type="button"
-                                                                    @click="downloadOrthogroupMemberSequence(member, 'aa', selectedOrthogroup)"
-                                                                    :disabled="!hasOrthogroupMemberSequence(member, 'aa')"
-                                                                    :class="[
-                                                                      'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
-                                                                      hasOrthogroupMemberSequence(member, 'aa') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                                                                    ]"
-                                                                    title="Download amino-acid FASTA">
-                                                                <i class="ph ph-download-simple" aria-hidden="true"></i><span>aa</span>
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            </template>
-                                        </tbody>
-                                    </table>
-                                </div>
+                                <!-- One block per member, so the drawer needs no horizontal scroll. -->
+                                <ul aria-label="Members" class="divide-y divide-slate-100 rounded border border-slate-100 text-[11px] text-slate-600">
+                                    <template v-for="recordGroup in selectedOrthogroupMembersByRecord"
+                                              :key="`${selectedOrthogroup.id}-${recordGroup.recordIndex}`">
+                                        <li v-for="member in recordGroup.members"
+                                            :key="`${member.featureSvgId}-${member.proteinId}`"
+                                            class="space-y-1 px-2 py-1.5">
+                                            <div class="font-semibold text-slate-700 break-words">{{ member.recordId || recordGroup.recordLabel }}</div>
+                                            <div class="break-words">
+                                                <span class="font-mono">{{ (Number(member.start) + 1).toLocaleString('en-US') }}..{{ Number(member.end).toLocaleString('en-US') }}<template v-if="member.strand"> ({{ member.strand }})</template></span><template v-if="member.displayProteinId"> · <span class="font-mono">{{ member.displayProteinId }}</span></template><template v-if="member.product || member.note"> · {{ member.product || member.note }}</template>
+                                            </div>
+                                            <div class="grid grid-cols-4 gap-1">
+                                                <button type="button"
+                                                        @click="copyOrthogroupMemberSequence(member, 'nt', selectedOrthogroup)"
+                                                        :disabled="!hasOrthogroupMemberSequence(member, 'nt')"
+                                                        :class="[
+                                                          'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
+                                                          hasOrthogroupMemberSequence(member, 'nt') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                                        ]"
+                                                        title="Copy nucleotide FASTA"
+                                                        aria-live="polite"
+                                                        aria-atomic="true">
+                                                    <i class="ph ph-copy" aria-hidden="true"></i><span>{{ orthogroupCopyFeedbackLabel(selectedOrthogroup, 'nt', 'nt', member) }}</span>
+                                                </button>
+                                                <button type="button"
+                                                        @click="downloadOrthogroupMemberSequence(member, 'nt', selectedOrthogroup)"
+                                                        :disabled="!hasOrthogroupMemberSequence(member, 'nt')"
+                                                        :class="[
+                                                          'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
+                                                          hasOrthogroupMemberSequence(member, 'nt') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                                        ]"
+                                                        title="Download nucleotide FASTA">
+                                                    <i class="ph ph-download-simple" aria-hidden="true"></i><span>nt</span>
+                                                </button>
+                                                <button type="button"
+                                                        @click="copyOrthogroupMemberSequence(member, 'aa', selectedOrthogroup)"
+                                                        :disabled="!hasOrthogroupMemberSequence(member, 'aa')"
+                                                        :class="[
+                                                          'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
+                                                          hasOrthogroupMemberSequence(member, 'aa') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                                        ]"
+                                                        title="Copy amino-acid FASTA"
+                                                        aria-live="polite"
+                                                        aria-atomic="true">
+                                                    <i class="ph ph-copy" aria-hidden="true"></i><span>{{ orthogroupCopyFeedbackLabel(selectedOrthogroup, 'aa', 'aa', member) }}</span>
+                                                </button>
+                                                <button type="button"
+                                                        @click="downloadOrthogroupMemberSequence(member, 'aa', selectedOrthogroup)"
+                                                        :disabled="!hasOrthogroupMemberSequence(member, 'aa')"
+                                                        :class="[
+                                                          'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
+                                                          hasOrthogroupMemberSequence(member, 'aa') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                                        ]"
+                                                        title="Download amino-acid FASTA">
+                                                    <i class="ph ph-download-simple" aria-hidden="true"></i><span>aa</span>
+                                                </button>
+                                            </div>
+                                        </li>
+                                    </template>
+                                </ul>
                             </div>
                         </div>
 
-                        <div v-if="selectedOrthogroup" class="px-3 py-2 border-t border-slate-200 bg-slate-50 shrink-0 grid grid-cols-2 gap-2">
-                            <button @click="highlightOrthogroupById(selectedOrthogroup.id)" class="text-xs px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded flex items-center justify-center gap-1">
-                                <i class="ph ph-target" aria-hidden="true"></i> Highlight
-                            </button>
-                            <button @click="clearOrthogroupHighlight" class="text-xs px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded flex items-center justify-center gap-1">
-                                <i class="ph ph-eraser" aria-hidden="true"></i> Clear
-                            </button>
-                            <button type="button"
-                                    data-history-managed
-                                    @click="startSimilarityAlignmentFromDrawer(selectedOrthogroup.id, $event)"
-                                    :disabled="Boolean(similarityAlignmentDrawerDisabledReason(selectedOrthogroup.id)) || similarityAlignmentBusy"
-                                    :aria-busy="similarityAlignmentBusy"
-                                    aria-describedby="similarity-alignment-drawer-reason"
-                                    title="Align to the selected exact feature"
-                                    class="min-w-0 text-xs px-2 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded flex items-center justify-center gap-1">
-                                <i class="ph ph-arrows-left-right" aria-hidden="true"></i>
-                                {{ similarityAlignmentStatus === 'resolving' ? 'Resolving…' : similarityAlignmentStatus === 'applying' ? 'Applying…' : 'Align…' }}
-                            </button>
-                            <button type="button"
-                                    data-history-managed
-                                    data-similarity-alignment-drawer-review
-                                    @click="startSimilarityAlignmentFromDrawer(selectedOrthogroup.id, $event, 'review')"
-                                    :disabled="Boolean(similarityAlignmentDrawerDisabledReason(selectedOrthogroup.id)) || similarityAlignmentBusy"
-                                    :aria-busy="similarityAlignmentBusy"
-                                    aria-describedby="similarity-alignment-drawer-reason"
-                                    title="Review alignment options for the selected exact feature"
-                                    class="min-w-0 text-xs leading-tight px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 disabled:text-slate-400 disabled:cursor-not-allowed">Review alignment options…</button>
-                            <button @click="resetOrthogroupRename(selectedOrthogroup.id)" class="text-xs px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded flex items-center justify-center gap-1" :disabled="!semanticMutationAvailable">
-                                <i class="ph ph-text-aa" aria-hidden="true"></i> Reset Rename
-                            </button>
+                        <div v-if="selectedOrthogroup" data-similarity-group-actions class="px-3 py-2 border-t border-slate-200 bg-slate-50 shrink-0">
+                            <div class="mb-1.5 truncate text-[11px] text-slate-500">Selected group: <span class="font-semibold text-slate-700">{{ resolveOrthogroupName(selectedOrthogroup) }}</span></div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button @click="highlightOrthogroupById(selectedOrthogroup.id)" class="text-xs px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded flex items-center justify-center gap-1">
+                                    <i class="ph ph-target" aria-hidden="true"></i> Highlight
+                                </button>
+                                <button @click="clearOrthogroupHighlight" class="text-xs px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded flex items-center justify-center gap-1">
+                                    <i class="ph ph-eraser" aria-hidden="true"></i> Clear
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -7779,32 +7754,43 @@
                  class="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-md flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
             <header class="shrink-0 border-b border-slate-200 p-4">
                 <h2 id="similarity-alignment-reset-title" tabindex="-1" class="font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">Reset alignment</h2>
+                <p id="alignment-reset-description" class="mt-1 text-sm text-slate-600">Undo the latest Align.</p>
             </header>
-            <div class="min-h-0 flex-1 overflow-y-auto p-4 text-xs custom-scrollbar">
-                <p id="alignment-reset-description">Restore positions immediately before the latest successful Align. Both scopes consume that alignment and its restoration evidence. To choose the other scope afterward, Undo Reset first.</p>
-                <fieldset class="mt-3 space-y-3" aria-describedby="alignment-reset-direction-reason alignment-reset-scope">
-                    <legend class="font-semibold">Reset scope</legend>
-                    <label class="flex items-start gap-2"><input type="radio" name="alignment-reset-scope" v-model="similarityAlignmentResetScope" value="positions" :disabled="similarityAlignmentBusy">Reset positions</label>
-                    <label class="flex items-start gap-2"><input type="radio" name="alignment-reset-scope" v-model="similarityAlignmentResetScope" value="positions-and-directions" :disabled="similarityAlignmentBusy || Boolean(similarityAlignmentResetPreview.disabledReason)">Reset positions and alignment direction changes</label>
+            <div class="min-h-0 flex-1 overflow-y-auto p-4 text-sm custom-scrollbar">
+                <fieldset class="space-y-2">
+                    <legend class="sr-only">Reset scope</legend>
+                    <div class="flex items-start gap-2 rounded-lg border border-slate-200 p-3">
+                        <input id="alignment-reset-positions" type="radio" name="alignment-reset-scope" v-model="similarityAlignmentResetScope" value="positions" :disabled="similarityAlignmentBusy" class="mt-0.5">
+                        <label for="alignment-reset-positions" class="font-semibold text-slate-800">Positions only</label>
+                    </div>
+                    <div class="rounded-lg border border-slate-200 p-3" :class="similarityAlignmentResetPreview.disabledReason ? 'bg-slate-50' : ''">
+                        <div class="flex items-start gap-2">
+                            <input id="alignment-reset-directions" type="radio" name="alignment-reset-scope" v-model="similarityAlignmentResetScope" value="positions-and-directions"
+                                   :disabled="similarityAlignmentBusy || Boolean(similarityAlignmentResetPreview.disabledReason)"
+                                   :aria-describedby="similarityAlignmentResetPreview.disabledReason ? 'alignment-reset-direction-reason' : null"
+                                   class="mt-0.5">
+                            <label for="alignment-reset-directions" class="font-semibold" :class="similarityAlignmentResetPreview.disabledReason ? 'text-slate-500' : 'text-slate-800'">{{ similarityAlignmentResetPreview.directionsLabel }}</label>
+                        </div>
+                        <!-- The reason sits under the radio it disables (PD-OI-029: an explicit reason, never a guess). -->
+                        <p v-if="similarityAlignmentResetPreview.disabledReason" id="alignment-reset-direction-reason" class="mt-1 pl-6 text-xs text-amber-800">{{ similarityAlignmentResetPreview.disabledReason }}</p>
+                        <div v-else-if="similarityAlignmentResetScope === 'positions-and-directions'" class="mt-2 pl-6 text-xs">
+                            <p class="text-slate-500">Record direction, current → restored (relative to the source file)</p>
+                            <ul aria-label="Alignment direction restoration targets" class="mt-1 space-y-0.5">
+                                <li v-for="target in similarityAlignmentResetPreview.targets" :key="target.recordKey" class="flex items-baseline gap-2 text-slate-800">
+                                    <strong class="min-w-0 truncate" :title="target.label">{{ target.name }}:</strong>
+                                    <span class="shrink-0">{{ target.current ? 'reverse' : 'forward' }} → {{ target.restored ? 'reverse' : 'forward' }}<span v-if="target.laterManualEdit" class="text-amber-800"> · changed after Align</span></span>
+                                </li>
+                            </ul>
+                            <p class="mt-2 text-slate-600">Direction changes you made after Align on these records are replaced.</p>
+                        </div>
+                    </div>
                 </fieldset>
-                <p id="alignment-reset-direction-reason" class="mt-2 text-amber-800">{{ similarityAlignmentResetPreview.disabledReason }}</p>
-                <p id="alignment-reset-scope" role="status" aria-live="polite" aria-atomic="true" class="mt-3">
-                    {{ similarityAlignmentResetScope === 'positions' ? 'Positions only: all current directions stay unchanged.' : 'Positions and directions: restore only the records listed below; later manual direction edits on these records are replaced.' }}
-                </p>
-                <p class="mt-3">{{ similarityAlignmentResetPreview.targets.length }} records changed direction in the latest Align. Only combined Reset restores their directions.</p>
-                <ul aria-label="Alignment direction restoration targets" class="mt-2 space-y-3">
-                    <li v-for="target in similarityAlignmentResetPreview.targets" :key="target.recordKey" class="break-words">
-                        <strong>{{ target.label }}</strong>: current {{ target.current ? 'reverse' : 'forward' }}; restored {{ target.restored ? 'reverse' : 'forward' }} relative to source.
-                        <span v-if="target.laterManualEdit">This record was manually changed after Align; combined Reset replaces that direction edit.</span>
-                        <span v-else>Combined Reset restores this record's direction before the latest Align.</span>
-                    </li>
-                </ul>
             </div>
             <footer class="shrink-0 border-t border-slate-200 bg-slate-50 p-4">
                 <operation-error v-if="similarityAlignmentError" :error="similarityAlignmentError" :recovery="generationFailureRecovery" tabindex="-1" data-similarity-alignment-reset-error class="mb-2 text-xs text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-700"></operation-error>
                 <div class="flex justify-end gap-2">
                     <button type="button" @click="cancelSimilarityAlignmentReset" :disabled="similarityAlignmentBusy" class="btn btn-secondary">Cancel</button>
-                    <button type="button" @click="applySimilarityAlignmentReset" :disabled="!semanticMutationAvailable || (similarityAlignmentBusy)" aria-describedby="alignment-reset-scope" class="btn btn-primary">{{ similarityAlignmentBusy ? 'Resetting…' : 'Reset' }}</button>
+                    <button type="button" @click="applySimilarityAlignmentReset" :disabled="!semanticMutationAvailable || (similarityAlignmentBusy)" class="btn btn-primary">{{ similarityAlignmentBusy ? 'Resetting…' : similarityAlignmentResetScope === 'positions-and-directions' ? 'Reset positions and directions' : 'Reset positions' }}</button>
                 </div>
             </footer>
         </section>

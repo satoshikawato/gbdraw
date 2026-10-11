@@ -547,12 +547,17 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     const drawing = state.drawings.linear;
     // Renamed markers depend on description override keys, not their text.
     Reflect.ownKeys(drawing.orthogroupDescriptionOverrides);
+    /** @type {(count: string, noun: string) => string} */
+    const counted = (count, noun) => `${count} ${count === '1' ? noun : `${noun}s`}`;
     return filteredOrthogroups.value.map((group) => ({
       group, id: group.id,
       name: resolveOrthogroupName(group),
-      scopeLabel: orthogroupScopeLabel(group),
-      memberCount: toDisplayString(group.member_count || (group.members ? group.members.length : 0)),
-      recordCount: toDisplayString(group.record_coverage_count || 0),
+      // Only a scope other than the usual cross-record group is worth a word on the row.
+      scopeLabel: orthogroupScope(group) === 'global' ? '' : orthogroupScopeLabel(group),
+      countsLabel: [
+        counted(toDisplayString(group.member_count || (group.members ? group.members.length : 0)), 'gene'),
+        counted(toDisplayString(group.record_coverage_count || 0), 'record')
+      ].join(' · '),
       renamed: isOrthogroupRenamed(group)
     }));
   });
