@@ -925,6 +925,8 @@ const anchorsAgree = (left, right) => {
  * @property {any} translations
  */
 
+/** @typedef {ReturnType<typeof anchorFromSource>} AnchorIdentity */
+
 /**
  * What `captureArtifact` records to tell whether a draft's source artifact changed.
  * @typedef {object} AlignmentArtifactStamp
@@ -1574,17 +1576,43 @@ export const createSimilarityAlignmentActions = ({
     }
     // The plan is Linear draft state: only a Linear request draws it.
     if (state.mode.value !== 'linear') return { status: 'ok' };
-    const group = getOrthogroupById(plan.groupId);
-    if (!group) {
-      // A saved Result can retain its exact plan after comparison groups have
-      // left the editor catalog. The typed render still validates every anchor.
-      if (sameKeyedPlan(plan, currentRequest()?.layout?.similarityAlignment)) {
-        repair.value = null;
-        return { status: 'ok' };
-      }
-      return markStaleReference('The saved Similarity Group is no longer available.');
+    // A plan names anchor features, not group membership (PD-OI-028, OV-341):
+    // it is stale only when an anchor feature no longer resolves in the shown
+    // Result. Without a feature catalog, only the exact plan that Result drew
+    // counts as resolved.
+    const catalogAnchors = catalogBiologicalFeatures(state.featureCatalog?.value).map((/** @type {object} */ feature) => {
+      try { return anchorFromSource(feature, 'Feature catalog entry'); } catch (_error) { return null; }
+    }).filter(Boolean);
+    const drawnPlan = sameKeyedPlan(plan, currentRequest()?.layout?.similarityAlignment);
+    /** @type {{ recordKey: string, status: string, anchor: AnchorIdentity | null }[]} */
+    const decisions = plan.records;
+    const resolves = (/** @type {AnchorIdentity | null} */ anchor) => (catalogAnchors.length
+      ? catalogAnchors.filter((/** @type {AnchorIdentity | null} */ candidate) => anchorsAgree(candidate, anchor)).length === 1
+      : drawnPlan);
+    if (!resolves(plan.reference)) {
+      return markStaleReference('The alignment reference feature is no longer found in its record.');
     }
-    const members = getEnrichedOrthogroupMembers(group);
+    const goneRecordKeys = new Set(decisions
+      .filter(({ status, anchor }) => status === 'aligned' && !resolves(anchor))
+      .map(({ recordKey }) => recordKey));
+    const group = getOrthogroupById(plan.groupId);
+    const members = group ? getEnrichedOrthogroupMembers(group) : [];
+    const currentAnchors = members.map((member) => {
+      try { return anchorFromSource(member, 'Current Similarity Group member'); } catch (_error) { return null; }
+    }).filter(Boolean);
+    const inGroup = (/** @type {AnchorIdentity | null} */ anchor) => currentAnchors.filter((candidate) => anchorsAgree(candidate, anchor)).length === 1;
+    // A comparison setting regrouped the plan's group, or the group left the
+    // catalog: the typed render still validates every anchor.
+    const regrouped = !inGroup(plan.reference) || decisions.some(
+      ({ status, anchor }) => status === 'aligned' && !inGroup(anchor));
+    if (regrouped && goneRecordKeys.size === 0) {
+      repair.value = null;
+      return { status: 'ok' };
+    }
+    // Target repair offers this group's members, so it needs the reference there.
+    if (!inGroup(plan.reference)) {
+      return markStaleReference('An aligned target feature is no longer found in its record.');
+    }
     let request;
     try {
       request = buildHelperRequest({
@@ -1601,19 +1629,8 @@ export const createSimilarityAlignmentActions = ({
       return markStaleReference(cause?.message || cause);
     }
     setReviewNames(request, members, currentRequest());
-    const currentAnchors = members.map((member) => {
-      try { return anchorFromSource(member, 'Current Similarity Group member'); } catch (_error) { return null; }
-    }).filter(Boolean);
-    const staleRecordKeys = new Set(
-      plan.records
-        .filter(({ status, anchor }) => (
-          status === 'aligned'
-          && !currentAnchors.some((candidate) => anchorsAgree(candidate, anchor))
-        ))
-        .map(({ recordKey }) => recordKey)
-    );
-    if (staleRecordKeys.size > 0) {
-      return prepareStaleTargetRepair(plan, request, staleRecordKeys, expectedActionId);
+    if (goneRecordKeys.size > 0) {
+      return prepareStaleTargetRepair(plan, request, goneRecordKeys, expectedActionId);
     }
     try {
       const helper = await runHelperOperation(resolveOperation, { request });

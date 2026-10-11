@@ -821,6 +821,9 @@ test('missing saved reference blocks regeneration while preserving plan and Resu
   assert.equal(fixture.state.results.value, previous);
   assert.equal(fixture.state.similarityAlignmentPlan.value, plan);
   assert.equal(fixture.actions.repair.value.kind, 'reference');
+  // OV-342: nothing was clicked, so the notice names the missing reference.
+  assert.equal(fixture.actions.notice.value,
+    'Alignment needs repair: The alignment reference feature is no longer found in its record.');
 });
 
 // E1: the plan is Linear draft state; a Circular Generate does not draw it, so
@@ -853,9 +856,58 @@ test('a committed schema-2 plan regenerates after its transient groups leave the
   assert.equal(fixture.state.similarityAlignmentPlan.value, plan);
   fixture.actions.retainForStableReorder(['c', 'a', 'b']);
   assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
-  committed.layout.similarityAlignment.records[1].anchor.biologicalFeatureId = 'different';
+  // A target feature that left its record still blocks (OV-341).
+  fixture.state.featureCatalog.value.items[0].biologicalFeatures = [reference, targetC];
   assert.deepEqual(await fixture.actions.validateBeforeGenerate(),
     { status: 'blocked', reason: 'stale-reference' });
+  assert.equal(fixture.actions.notice.value,
+    'Alignment needs repair: An aligned target feature is no longer found in its record.');
+});
+
+// OV-341 (Owner decision D-46 = A): a plan names anchor features, not group
+// membership. A comparison setting that regroups keeps the plan while every
+// anchor feature still resolves in the shown Result.
+test('a regrouped Similarity Group keeps the plan while its anchors resolve (OV-341)', async () => {
+  const fixture = create();
+  await startReview(fixture);
+  await fixture.actions.applyDraft();
+  const plan = fixture.state.similarityAlignmentPlan.value;
+  const calls = fixture.helperCalls.length;
+  // The reference left the plan's group; its feature is still in record a.
+  fixture.currentGroup.members = [targetA, targetC];
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
+  // A no-edit Generate after that one succeeds as well.
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
+  // A target left the group instead.
+  fixture.currentGroup.members = [reference, targetC];
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
+  assert.equal(fixture.helperCalls.length, calls);
+  assert.equal(fixture.state.similarityAlignmentPlan.value, plan);
+  assert.equal(fixture.actions.repair.value, null);
+  assert.equal(fixture.actions.notice.value, '');
+
+  // A Session-loaded plan that the shown Result did not draw, whose group is gone.
+  const loaded = create({ getCommittedRequest: () => renderRequest });
+  await startReview(loaded);
+  await loaded.actions.applyDraft();
+  loaded.state.similarityAlignmentPlan.value = structuredClone(plan);
+  loaded.currentGroup.id = 'no-longer-in-catalog';
+  assert.deepEqual(await loaded.actions.validateBeforeGenerate(), { status: 'ok' });
+});
+
+test('a regrouped plan whose reference feature is gone names it in the repair notice (OV-342)', async () => {
+  const fixture = create();
+  await startReview(fixture);
+  await fixture.actions.applyDraft();
+  const previous = fixture.state.results.value;
+  fixture.currentGroup.members = [targetA, targetC];
+  fixture.state.featureCatalog.value.items[0].biologicalFeatures = [targetA, targetC];
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(),
+    { status: 'blocked', reason: 'stale-reference' });
+  assert.equal(fixture.actions.notice.value,
+    'Alignment needs repair: The alignment reference feature is no longer found in its record.');
+  assert.equal(fixture.actions.repair.value.kind, 'reference');
+  assert.equal(fixture.state.results.value, previous);
 });
 
 test('candidate labels retain biological metadata and displayed record names', async () => {
