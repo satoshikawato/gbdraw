@@ -366,6 +366,11 @@ for (const viewport of [{ width: 1600, height: 1000 }, { width: 1280, height: 80
         const box = tab.getBoundingClientRect();
         return tab.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2));
       })), 'the three drawer tabs are reachable').toEqual([true, true, true]);
+      // OV-505: so is the drawer's toggle, which sticks out of the drawer's left edge.
+      expect(await page.locator('.drawer-toggle').evaluate((toggle) => {
+        const box = toggle.getBoundingClientRect();
+        return toggle.contains(document.elementFromPoint(box.left + 4, box.top + box.height / 2));
+      }), 'the drawer toggle is reachable').toBe(true);
 
       // The next row's Edit is reachable: a click opens that feature, beside the drawer again.
       await drawer.getByRole('button', { name: 'Edit', exact: true }).nth(1).click();

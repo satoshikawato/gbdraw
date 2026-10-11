@@ -5321,14 +5321,23 @@ export const createAppSetup = () => {
     }
   });
 
-  // OV-503: Edit in the Editor drawer's list opens the popup beside the drawer.
-  // Without an event the popup is centred.
+  // OV-503: Edit in the Editor drawer's list opens the popup beside the drawer
+  // and the toggle on the drawer's edge (OV-505). Without an event the popup
+  // is centred.
   /** @param {{ clientX?: number, clientY?: number, currentTarget?: EventTarget | null } | null} [event] */
-  const openFeatureEditorFromList = (feat, event = null) => openFeatureEditorForFeature(feat, event && {
-    clientX: event.clientX,
-    clientY: event.clientY,
-    panel: event.currentTarget instanceof Element ? event.currentTarget.closest('.right-drawer')?.getBoundingClientRect() : null
-  });
+  const openFeatureEditorFromList = (feat, event = null) => {
+    const drawer = event?.currentTarget instanceof Element ? event.currentTarget.closest('.right-drawer') : null;
+    const rects = [drawer, drawer?.parentElement?.querySelector(':scope > .drawer-toggle')]
+      .flatMap((element) => (element ? [element.getBoundingClientRect()] : []));
+    return openFeatureEditorForFeature(feat, event && {
+      clientX: event.clientX,
+      clientY: event.clientY,
+      panel: rects.length ? {
+        left: Math.min(...rects.map((rect) => rect.left)), top: Math.min(...rects.map((rect) => rect.top)),
+        right: Math.max(...rects.map((rect) => rect.right)), bottom: Math.max(...rects.map((rect) => rect.bottom))
+      } : null
+    });
+  };
 
   const getCircularRecordOrderLabel = (selector) => {
     const normalized = String(selector || '').trim();
