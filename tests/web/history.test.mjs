@@ -2787,6 +2787,30 @@ for (const previousSuppressed of [false, true]) {
     assert.equal(await h.history.hasChangesSinceSavePoint(), false);
   }
 
+  // A checkpoint or an artifact replacement that ends without committing
+  // leaves its writes in no step, and they are not the running action's.
+  {
+    const h = await createActionHarness();
+    const load = h.heldLoad(() => {});
+    await tick();
+    await h.history.runUndoableCheckpoint('Change uploaded file', async () => { h.intent.table = 'declined'; return false; },
+      { shouldCommit: (result) => result !== false });
+    load.release();
+    await load.done;
+    assert.equal(h.history.getUndoCount(), 0, 'a declined checkpoint is in no step');
+    assert.equal(await h.history.hasChangesSinceSavePoint(), false);
+  }
+  {
+    const h = await createActionHarness(withResult);
+    const load = h.heldLoad(() => {});
+    await tick();
+    await h.history.runUndoableArtifactReplacement('Generate diagram', async () => { h.intent.color = 'partial'; return { status: 'cancelled' }; },
+      { shouldCommit: (result) => result.status === 'ok' });
+    load.release();
+    await load.done;
+    assert.equal(h.history.getUndoCount(), 0, 'a Generate that is not committed is in no step');
+  }
+
   // OV-464: a call that joins commits under the step name of the action it
   // belongs to (the one started on the step with its label), also when a
   // later action has renamed the step. Here: a popup recolor from a color
@@ -2834,6 +2858,32 @@ for (const previousSuppressed of [false, true]) {
     assert.deepEqual(h.intent, START);
     await h.redoAll();
     assert.deepEqual(h.intent, { label: 'reset', table: 'applied', color: 'blue' });
+  }
+
+  // Two actions started with the same label on one step: a joining call
+  // belongs to the first of them, whichever rule write arrives first.
+  for (const order of [[0, 1], [1, 0]]) {
+    const g = await createActionHarness();
+    const ruleAction2 = (_, label, write) => {
+      const prepared = hold();
+      const done = g.history.runUndoable(label, async () => {
+        await prepared.held;
+        await g.history.runUndoable(label, write, { joinsOpenStep: true });
+      });
+      return { done, release: prepared.release };
+    };
+    await g.history.begin('Change color', { source: 'input-adapter', owner: { tagName: 'INPUT' } });
+    const one = ruleAction2(null, 'Change feature color', () => { g.intent.color = 'blue'; });
+    await tick();
+    await g.history.begin('Change color', { source: 'input-adapter', owner: { tagName: 'INPUT' } });
+    const two = ruleAction2(null, 'Change feature color', () => { g.intent.table = 'two'; });
+    await tick();
+    for (const index of order) {
+      [one, two][index].release();
+      await [one, two][index].done;
+    }
+    assert.equal(g.history.mutationPending(), false);
+    assert.deepEqual(await g.undoAll(), ['Change feature color', 'Change color']);
   }
 
   // Three overlapping actions: every write is in a step under the name of

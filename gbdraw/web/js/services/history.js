@@ -278,9 +278,10 @@ export const createHistoryManager = ({
   let currentCheckpointSignature = '';
   let currentFileIds = new Set();
   // OV-463: advanced where the intent changes outside the intent steps: an
-  // artifact replacement commits (the last recorded intent is not refreshed)
-  // or a baseline replaces the stacks. An action's later write is recorded
-  // from the last recorded intent only within the generation of its step.
+  // artifact replacement commits or ends without committing (the last
+  // recorded intent is not refreshed) or a baseline replaces the stacks. An
+  // action's later write is recorded from the last recorded intent only
+  // within the generation of its step.
   let intentGeneration = 0;
   let totalEntryBytes = 0;
   // OV-112: adjacent artifact replacements name one artifact (entry k's `after`
@@ -882,6 +883,7 @@ export const createHistoryManager = ({
           && !options.shouldCommit(result)
         ) {
           if (tx) tx.closed = true;
+          intentGeneration += 1;
           releaseUnreferencedFiles();
           return result;
         }
@@ -889,6 +891,7 @@ export const createHistoryManager = ({
         return result;
       } catch (error) {
         if (tx) tx.closed = true;
+        intentGeneration += 1;
         releaseUnreferencedFiles();
         throw error;
       } finally {
@@ -1136,6 +1139,7 @@ export const createHistoryManager = ({
         && !options.shouldCommit(result)
       ) {
         if (transaction) transaction.closed = true;
+        intentGeneration += 1;
         releaseUnreferencedFiles();
         touch();
         return result;
