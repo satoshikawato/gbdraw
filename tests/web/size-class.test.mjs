@@ -15,10 +15,10 @@ const packagedThresholds = () => {
 };
 
 test('the Web size class uses the packaged short/long boundary', () => {
-  const thresholds = packagedThresholds();
-  assert.deepEqual(thresholds, { circular: 100000, linear: 100000 });
-  assert.equal(sizeClassForRecordLengths([3000, 99_999]), 'short');
-  assert.equal(sizeClassForRecordLengths([3000, 100_000]), 'long');
+  const { circular } = packagedThresholds();
+  assert.equal(circular, 100000);
+  assert.equal(sizeClassForRecordLengths([3000, circular - 1]), 'short');
+  assert.equal(sizeClassForRecordLengths([3000, circular]), 'long');
   assert.equal(sizeClassForRecordLengths([]), null);
 });
 

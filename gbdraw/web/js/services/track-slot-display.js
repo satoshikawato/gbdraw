@@ -13,7 +13,8 @@ const roundDisplayNumber = (value, digits = 1) => {
 
 export const isManualSlotValue = (value) => normalizeOptionalText(value) !== null;
 
-// The packaged labels.length_threshold of gbdraw/data/config.toml (both modes).
+// The packaged labels.length_threshold.circular of gbdraw/data/config.toml; only
+// Circular surfaces read the size class here.
 const SIZE_CLASS_THRESHOLD_BP = 100000;
 
 /**
