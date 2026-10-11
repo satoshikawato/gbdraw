@@ -35,7 +35,9 @@ write-up of a release.
   disabled toggle.
 - Web app popups: feature and match popups open inside the window beside the
   clicked item instead of clipped at the bottom right (OV-371), and a popup no
-  longer covers the header buttons when opened or dragged (OV-384).
+  longer covers the header buttons when opened or dragged (OV-384). A popup
+  opened with **Edit** in the Editor's Features list opens beside the Editor
+  when the window has room there (OV-503).
 - Web app on a phone: the docked Editor uses most of the space between the
   canvas and the Generate bar (about 400 px instead of 200 px at 390x844).
 - Web app: a click on a Legend row or a record definition in the preview opens

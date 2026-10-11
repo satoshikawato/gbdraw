@@ -31,8 +31,13 @@ const popupViewportTop = () => {
  * @typedef {{ top: number, bottom: number, left: number, right: number }} PopupBounds
  * @typedef {{ x: number, y: number, maxHeight: number }} PopupPlacement
  * A clicked point, and the rectangle of the clicked item when the popup must
- * not cover more than the point (a Circular center definition).
- * @typedef {{ x: number, y: number, avoid?: PopupBounds | null }} PopupAnchor
+ * not cover more than the point (a Circular center definition). `panel` is
+ * the rectangle of the panel that holds the clicked control (the Editor
+ * drawer, OV-503): the popup opens beside the whole panel when it can.
+ * @typedef {{ x: number, y: number, avoid?: PopupBounds | null, panel?: PopupBounds | null }} PopupAnchor
+ * Where a popup was opened from: the pointer event's point, and the panel of
+ * a `PopupAnchor` when a control inside one opened the popup.
+ * @typedef {{ clientX?: number, clientY?: number, panel?: PopupBounds | null }} PopupOrigin
  */
 
 /** @returns {PopupBounds} */
@@ -55,6 +60,8 @@ const clamp = (/** @type {number} */ value, /** @type {number} */ min, /** @type
  * height (its content, at most the bounds); `maxHeight` keeps a popup placed
  * above the point from growing over it. Without a point it is centred. With
  * `point.avoid`, the popup stays beside, below, or above that whole rectangle.
+ * With `point.panel`, it lies beside the panel when the bounds have room there;
+ * without that room the panel changes nothing.
  * @param {{
  *   point: PopupAnchor | null,
  *   width: number,
@@ -81,10 +88,12 @@ export const placePopupNearPoint = ({ point, width, height, bounds, minHeight = 
     top: Math.min(py, point.avoid?.top ?? py), bottom: Math.max(py, point.avoid?.bottom ?? py)
   };
   const besideY = clamp(py - h / 2, top, bottom - h);
-  const rightX = Math.max(left, avoid.right + gap);
-  if (rightX + w <= right) return at(rightX, besideY);
-  const leftX = Math.min(right - w, avoid.left - gap - w);
-  if (leftX >= left) return at(leftX, besideY);
+  for (const keep of point.panel ? [point.panel, avoid] : [avoid]) {
+    const rightX = Math.max(left, keep.right + gap);
+    if (rightX + w <= right) return at(rightX, besideY);
+    const leftX = Math.min(right - w, keep.left - gap - w);
+    if (leftX >= left) return at(leftX, besideY);
+  }
   const x = clamp(px - w / 2, left, right - w);
   const belowY = Math.max(top, avoid.bottom + gap);
   const aboveEnd = Math.min(bottom, avoid.top - gap);

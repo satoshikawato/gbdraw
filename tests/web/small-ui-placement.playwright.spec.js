@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { load, seeds } = require('./helpers/mode-transition.cjs');
+const { load, popup: openFromFeatureList, seeds } = require('./helpers/mode-transition.cjs');
 
 // Small UI fixes from the 2026-10-05 re-audit: panel wording that states what a
 // preset or the rule order does (FL-11, FL-12), and two overlays that must not
@@ -282,6 +282,16 @@ test('OV-384 the feature popup never covers the header buttons', async ({ browse
   }
 });
 
+const expectInsideWindow = async (page, popup, name) => {
+  const box = await popup.boundingBox();
+  const header = await page.locator('header.app-header').boundingBox();
+  const { width, height } = page.viewportSize();
+  expect(box.y, `${name}: below the header`).toBeGreaterThanOrEqual(header.y + header.height);
+  expect(box.y + box.height, `${name}: above the window bottom`).toBeLessThanOrEqual(height);
+  expect(box.x, `${name}: inside the window`).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width, `${name}: inside the window`).toBeLessThanOrEqual(width);
+};
+
 // OV-496: on a one-column page the notice banner lies below the sidebar, far
 // under the window while the page is scrolled above the Result. It was still
 // read as the popups' top limit, so a popup dragged or opened there left the
@@ -291,14 +301,7 @@ test('OV-496 at 390x844 a popup stays inside the window, also with the Result sc
   const page = await load(browser, BGC, { width: 390, height: 844 });
   try {
     const featureSelector = `[data-gbdraw-feature-id="${LIVE}"]`;
-    const expectInside = async (popup, name) => {
-      const box = await popup.boundingBox();
-      const header = await page.locator('header.app-header').boundingBox();
-      expect(box.y, `${name}: below the header`).toBeGreaterThanOrEqual(header.y + header.height);
-      expect(box.y + box.height, `${name}: above the window bottom`).toBeLessThanOrEqual(844);
-      expect(box.x, `${name}: inside the window`).toBeGreaterThanOrEqual(0);
-      expect(box.x + box.width, `${name}: inside the window`).toBeLessThanOrEqual(390);
-    };
+    const expectInside = (popup, name) => expectInsideWindow(page, popup, name);
     const scrollAboveResult = async () => {
       await page.mouse.move(195, 40);
       await page.mouse.wheel(0, -100000);
@@ -334,6 +337,60 @@ test('OV-496 at 390x844 a popup stays inside the window, also with the Result sc
     await expectInside(legendPopup, 'Legend row popup opened by Enter');
     await legendPopup.getByRole('button', { name: 'Close popup', exact: true }).click();
     await expect(legendPopup).toHaveCount(0);
+  } finally {
+    await page.context().close();
+  }
+});
+
+// OV-503: Edit in the Editor drawer's Features list opened the feature popup
+// beside the clicked button, over the drawer's title, tabs, list search and
+// upper rows, so another tab or the next row was out of reach. With room
+// beside the drawer the popup opens there. A docked Editor (one column) has no
+// such room: the popup then opens as it does at any clicked point.
+for (const viewport of [{ width: 1600, height: 1000 }, { width: 1280, height: 800 }]) {
+  test(`OV-503 at ${viewport.width}x${viewport.height} a feature popup opened from the Features list leaves the Editor drawer uncovered`, async ({ browser }) => {
+    test.setTimeout(300000);
+    const page = await load(browser, seeds.circular, viewport);
+    try {
+      const drawer = page.locator('.right-drawer');
+      const featurePopup = page.locator('.feature-popup[role="dialog"]').first();
+      const expectBesideDrawer = async (name) => {
+        const [popupBox, drawerBox] = [await featurePopup.boundingBox(), await drawer.boundingBox()];
+        expect(popupBox.x + popupBox.width, `${name}: the popup ends left of the drawer`).toBeLessThanOrEqual(drawerBox.x);
+        await expectInsideWindow(page, featurePopup, name);
+        return popupBox;
+      };
+      const first = await openFromFeatureList(page);
+      await expectBesideDrawer('first row');
+      expect(await drawer.locator('button[aria-controls^="right-drawer-panel-"]').evaluateAll(tabs => tabs.map((tab) => {
+        const box = tab.getBoundingClientRect();
+        return tab.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2));
+      })), 'the three drawer tabs are reachable').toEqual([true, true, true]);
+
+      // The next row's Edit is reachable: a click opens that feature, beside the drawer again.
+      await drawer.getByRole('button', { name: 'Edit', exact: true }).nth(1).click();
+      await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.clickedFeature?.id)).not.toBe(first.id);
+      const opened = await expectBesideDrawer('next row');
+
+      // A popup the user drags over the drawer stays where it was put.
+      await page.mouse.move(opened.x + opened.width / 2, opened.y + 6);
+      await page.mouse.down();
+      await page.mouse.move(opened.x + opened.width / 2 + 120, opened.y + 6, { steps: 4 });
+      await page.mouse.up();
+      await featurePopup.getByRole('button', { name: 'Details', exact: true }).click();
+      expect((await featurePopup.boundingBox()).x, 'dragged popup').toBeCloseTo(opened.x + 120, 0);
+    } finally {
+      await page.context().close();
+    }
+  });
+}
+
+test('OV-503 at 390x844 a feature popup opened from the docked Features list stays inside the window', async ({ browser }) => {
+  test.setTimeout(300000);
+  const page = await load(browser, seeds.circular, { width: 390, height: 844 });
+  try {
+    await openFromFeatureList(page);
+    await expectInsideWindow(page, page.locator('.feature-popup[role="dialog"]').first(), 'feature popup opened from the docked list');
   } finally {
     await page.context().close();
   }

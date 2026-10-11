@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { DrawingState, PopupPosition } from '../../state.js' */
+/** @import { PopupOrigin } from '../../utils/popup-bounds.js' */
 import { resolveColorToHex } from '../../utils/color-utils.js';
 import { placePopupNearPoint, popupViewportBounds } from '../../utils/popup-bounds.js';
 import { reportRuleRunFailure, runWhenPrepared } from '../rule-matching.js';
@@ -227,10 +228,11 @@ export const createFeatureSvgActions = ({
 
   // OV-371: a popup opened at a clicked point is placed beside it with an
   // expected size; app-setup places it again with its rendered size. `avoid`
-  // is the clicked item's rectangle, which the popup leaves uncovered.
+  // is the clicked item's rectangle, which the popup leaves uncovered; the
+  // origin's `panel` is the panel it opens beside (OV-503).
   /**
    * @param {PopupPosition} pos
-   * @param {{ clientX?: number, clientY?: number } | null | undefined} eventLike
+   * @param {PopupOrigin | null | undefined} eventLike
    * @param {number} width
    * @param {DOMRect | null} [avoid]
    */
@@ -238,7 +240,8 @@ export const createFeatureSvgActions = ({
     const anchor = Number.isFinite(eventLike?.clientX) && Number.isFinite(eventLike?.clientY)
       ? {
           x: Number(eventLike?.clientX), y: Number(eventLike?.clientY),
-          avoid: avoid && { left: avoid.left, top: avoid.top, right: avoid.right, bottom: avoid.bottom }
+          avoid: avoid && { left: avoid.left, top: avoid.top, right: avoid.right, bottom: avoid.bottom },
+          panel: eventLike?.panel
         }
       : null;
     Object.assign(pos, placePopupNearPoint({ point: anchor, width, height: 520, bounds: popupViewportBounds() }), { anchor });
@@ -496,7 +499,7 @@ export const createFeatureSvgActions = ({
   /**
    * @param {DrawingState} drawing
    * @param {Record<string, any>} feat
-   * @param {{ clientX: number, clientY: number } | null} [eventLike]
+   * @param {PopupOrigin | null} [eventLike]
    */
   const openPreparedFeatureEditor = (drawing, feat, eventLike = null) => {
     if (!feat) return null;
@@ -543,7 +546,7 @@ export const createFeatureSvgActions = ({
   // The popup states whether the feature is drawn (resolveFeatureDrawn).
   /**
    * @param {Record<string, any>} feat
-   * @param {{ clientX: number, clientY: number } | null} [eventLike]
+   * @param {PopupOrigin | null} [eventLike]
    */
   const openFeatureEditorForFeature = (feat, eventLike = null) => {
     const drawing = state.activeDrawing();

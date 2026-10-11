@@ -64,6 +64,32 @@ test('a popup leaves the clicked item rectangle uncovered', () => {
   assert.equal(left.x, 700 - 12 - 400);
 });
 
+// OV-503: a control inside the Editor drawer opens the popup beside the whole
+// drawer. Where the bounds have no room beside it, the popup opens as it does
+// without a panel.
+test('a popup opens beside the panel that holds the clicked control when the bounds have room', () => {
+  const request = { width: 720, height: 520, bounds: desktop };
+  const panel = { left: 1223, right: 1583, top: 176, bottom: 955 };
+  assert.deepEqual(placePopupNearPoint({ ...request, point: { x: 1562, y: 393, panel } }), { x: 491, y: 133, maxHeight: 823 });
+  // A click made with the keyboard has no point of its own.
+  assert.equal(placePopupNearPoint({ ...request, point: { x: 0, y: 0, panel } }).x, 491);
+  // A panel on the left edge: the popup lies right of it.
+  assert.equal(placePopupNearPoint({ ...request, point: { x: 40, y: 393, panel: { ...panel, left: 0, right: 360 } } }).x, 372);
+
+  const cases = [
+    // A window narrower than the popup and the drawer together.
+    [{ ...desktop, right: 1100 }, { x: 1062, y: 427 }, { left: 723, right: 1083, top: 210, bottom: 755 }],
+    // The docked Editor of a one-column page, as wide as the window.
+    [{ top: 135, bottom: 844, left: 0, right: 390 }, { x: 360, y: 420 }, { left: 9, right: 381, top: 205, bottom: 601 }]
+  ];
+  for (const [bounds, point, docked] of cases) {
+    assert.deepEqual(
+      placePopupNearPoint({ ...request, bounds, point: { ...point, panel: docked } }),
+      placePopupNearPoint({ ...request, bounds, point })
+    );
+  }
+});
+
 // OV-496: the notice banner is a top limit only where it is a banner above the
 // popups. On a one-column page it lies below the sidebar: in the lower half of
 // the window, or far under it while the page is scrolled above the Result.

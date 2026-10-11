@@ -5321,9 +5321,14 @@ export const createAppSetup = () => {
     }
   });
 
-  const openFeatureEditorFromList = (feat, event) => {
-    return openFeatureEditorForFeature(feat, event);
-  };
+  // OV-503: Edit in the Editor drawer's list opens the popup beside the drawer.
+  // Without an event the popup is centred.
+  /** @param {{ clientX?: number, clientY?: number, currentTarget?: EventTarget | null } | null} [event] */
+  const openFeatureEditorFromList = (feat, event = null) => openFeatureEditorForFeature(feat, event && {
+    clientX: event.clientX,
+    clientY: event.clientY,
+    panel: event.currentTarget instanceof Element ? event.currentTarget.closest('.right-drawer')?.getBoundingClientRect() : null
+  });
 
   const getCircularRecordOrderLabel = (selector) => {
     const normalized = String(selector || '').trim();

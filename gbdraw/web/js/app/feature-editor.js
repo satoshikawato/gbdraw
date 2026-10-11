@@ -154,7 +154,7 @@ export const createFeatureEditor = ({
     projectFeatureEdits, showNotice
   });
   /** @param {Record<string, any>} feat
-   *  @param {{ clientX: number, clientY: number } | null} [eventLike] */
+   *  @param {import('../utils/popup-bounds.js').PopupOrigin | null} [eventLike] */
   const openFeatureEditorForFeature = (feat, eventLike = null) => {
     return featureSvgActions.openFeatureEditorForFeature(feat, eventLike);
   };

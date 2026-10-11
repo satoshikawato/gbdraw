@@ -918,7 +918,9 @@ rules; the toolbar shows **Preparing feature details…** meanwhile, and **Save
 Session** and **Load Session** stay available. The popup opens inside the
 window below the app header, beside the clicked feature or match when there is
 room, else below or above it; on a narrow screen it may cover the clicked
-point. Dragging it keeps its title bar below the header, so header buttons such
+point. Opened with **Edit** in the Editor's Features list, it opens beside the
+Editor when the window has room there, so the Editor's tabs and list stay
+reachable. Dragging it keeps its title bar below the header, so header buttons such
 as **Undo** stay reachable. The popup header shows the gene name (or the label
 when the feature has no gene), the product on up to two lines when it differs,
 and `<record ID> · <location> (<strand>)` with thousands separators; parts of a
