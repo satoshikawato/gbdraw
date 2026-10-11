@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { LinearComparisonResolution } from '../services/linear-comparisons.js' */
+/** @import { LinearComparisonIssue, LinearComparisonResolution, LinearComparisonResolvedEdge } from '../services/linear-comparisons.js' */
 import {
   LINEAR_COMPARISON_MODES,
   LINEAR_COMPARISON_SOURCES,
@@ -96,6 +96,7 @@ const LOSATP_MODES = Object.freeze([
 const LOSAT_MODE_BY_KEY = new Map(LOSAT_MODES.map((mode) => [mode.key, mode]));
 const LOSATP_MODE_BY_KEY = new Map(LOSATP_MODES.map((mode) => [mode.key, mode]));
 
+/** @type {Readonly<Record<string, Readonly<{ disclosureKey: string, focusTargetKey: string }>>>} */
 const ISSUE_ROUTES = Object.freeze({
   'missing-upload': Object.freeze({
     disclosureKey: LINEAR_COMPARISON_DISCLOSURE_KEYS.SELECTED_PAIRS,
@@ -356,6 +357,10 @@ const projectSettingsSectionKeys = ({
   return Object.freeze(keys);
 };
 
+/**
+ * @param {{ intentKey: string, planned: ReturnType<typeof plannedSources>, losatModeKey: string,
+ *   losatpModeKey: string, selectedTopology: boolean, dormantDraftCount: number }} input
+ */
 const projectSectionKeys = ({
   intentKey,
   planned,
@@ -403,6 +408,7 @@ const projectSectionKeys = ({
 // The Comparison card lists them once; the pair row of a pair issue
 // carries its short text. An action's accessible name adds its pair to the
 // visible label.
+/** @param {string} code @param {string} pairLabel */
 const issueActions = (code, pairLabel) => Object.freeze((code === 'missing-upload'
   ? [{ key: 'choose-file', label: 'Choose file', ariaLabel: pairLabel ? `Choose file for ${pairLabel}` : 'Choose file' }]
   : code === 'selected-losat-requires-pairwise'
@@ -416,6 +422,7 @@ const pairLabelOf = (edge) => (Number.isInteger(edge?.queryIndex) && Number.isIn
 // A Selected plan breaks the LOSATP mode: the text names the pairs set to
 // Upload BLAST TSV, or says that the pairs are set one by one when every one
 // of them runs LOSAT.
+/** @param {readonly LinearComparisonResolvedEdge[]} edges */
 const selectedPairsText = (edges) => {
   const uploads = edges.filter((edge) => edge?.source === LINEAR_COMPARISON_SOURCES.UPLOAD).map(pairLabelOf).filter(Boolean);
   const cause = uploads.length === 0 ? 'The pairs are set one by one in Selected pairs. '
@@ -423,6 +430,7 @@ const selectedPairsText = (edges) => {
   return `${cause}Similarity groups and Collinear blocks compare every adjacent pair with LOSAT.`;
 };
 
+/** @param {readonly LinearComparisonIssue[] | undefined} errors @param {readonly LinearComparisonResolvedEdge[]} edges */
 const projectIssues = (errors, edges) => {
   const edgeList = Array.isArray(edges) ? edges : [];
   const edgeByKey = new Map(edgeList.map((edge) => [String(edge?.edgeKey || ''), edge]));
@@ -449,7 +457,10 @@ const projectIssues = (errors, edges) => {
   }));
 };
 
+/** @typedef {ReturnType<typeof projectIssues>[number]} LinearComparisonUiIssue An entry of the Comparison card's issue list. */
+
 // Each pair row shows every issue of its pair.
+/** @param {readonly LinearComparisonUiIssue[]} issues */
 const projectPairIssueText = (issues) => {
   /** @type {Record<string, string>} */
   const texts = {};

@@ -365,6 +365,7 @@ export const FileUploader = {
 // (OV-436). The tooltip and the text hold the whole name.
 export const RecordName = {
   props: { prefix: { type: String, default: '' }, name: { type: String, default: '' }, detail: { type: String, default: '' } },
+  /** @param {{ prefix: string, name: string, detail: string }} props */
   setup(props) {
     const title = computed(() => [props.prefix, [props.name, props.detail].filter(Boolean).join(' · ')].filter(Boolean).join(' '));
     return { title };

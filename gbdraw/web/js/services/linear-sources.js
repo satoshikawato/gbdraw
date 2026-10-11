@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { LinearSeq } from '../state.js' */
 import { getSessionResourceSource } from './file-content-cache.js';
 import { depthFileSlotsFromValue } from './depth-track-state.js';
 import { resolveDisambiguatedRecordSelection } from './record-options.js';
@@ -160,14 +161,18 @@ export const resolveLinearRecordEffectiveDefinition = (sequence, source = null) 
 // accession or file name. A File that supplies several records adds each
 // record's accession, so two chromosomes of one genome stay apart. The
 // diagram's own record headings are not changed.
-/** @returns {Map<string, { definition: string, name: string, accession: string, label: string }>} */
+/** @typedef {{ sequence: Partial<LinearSeq> }} LinearSourceRecord An entry of a File's `records`. */
+/**
+ * @param {readonly Partial<LinearSeq>[]} sequences
+ * @returns {Map<string, { definition: string, name: string, accession: string, label: string }>}
+ */
 export const linearRecordNames = (sequences) => {
   const names = new Map();
-  const plain = (value) => (String(value ?? '').trim() ? plainTextLinearRecordLabel(value) : '');
+  const plain = (/** @type {unknown} */ value) => (String(value ?? '').trim() ? plainTextLinearRecordLabel(value) : '');
   groupLinearSourceRecords(sequences).forEach((source) => {
-    const definitions = source.records.map(({ sequence }) => plain(resolveLinearRecordEffectiveDefinition(sequence, source)));
+    const definitions = source.records.map((/** @type {LinearSourceRecord} */ { sequence }) => plain(resolveLinearRecordEffectiveDefinition(sequence, source)));
     const fileDefinition = definitions.find(Boolean) || '';
-    source.records.forEach(({ sequence }, position) => {
+    source.records.forEach((/** @type {LinearSourceRecord} */ { sequence }, /** @type {number} */ position) => {
       const recordId = String(sequence?.region_record_id ?? '').trim();
       const definition = definitions[position] || fileDefinition;
       const name = definition || recordId || plain(sequence?.gb?.name || sequence?.gff?.name || sequence?.fasta?.name);

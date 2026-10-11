@@ -12,7 +12,8 @@
 /** @import { ArtifactSlot } from '../services/artifact-slot.js' */
 /** @import { LegendRowContext } from '../services/specific-color-rules.js' */
 /** @import { GalleryExample } from '../services/gallery-examples.js' */
-/** @import { LinearComparisonPlan } from '../services/linear-comparisons.js' */
+/** @import { LinearComparisonIssue, LinearComparisonPlan } from '../services/linear-comparisons.js' */
+/** @import { LinearComparisonUiIssue } from './comparison-ui.js' */
 /** @import { LinearSourceRemovalPlan } from '../services/linear-sources.js' */
 /** @import { RecordDrawKey, RecordSettingsOwner, RecordEditData } from '../services/record-draw-selection.js' */
 /** @import { RecordListRequest, RecordSelectionMode, RecordSource } from './record-selection.js' */
@@ -762,8 +763,10 @@ export const createAppSetup = () => {
   };
   // Every panel names a record the same way (OV-436).
   const linearRecordNameMap = computed(() => linearRecordNames(linearSeqs));
+  /** @param {string} uid */
   const linearComparisonRecordLabel = (uid) => linearRecordNameMap.value.get(uid)?.label || 'Record';
   // The parts <record-name> lays out: the name shrinks, the accession stays whole.
+  /** @param {string} uid */
   const linearComparisonRecordName = (uid) => {
     const entry = linearRecordNameMap.value.get(uid);
     return { name: entry?.name || 'Record', detail: entry?.accession || '' };
@@ -827,6 +830,7 @@ export const createAppSetup = () => {
 
   // An action of an entry in the Comparison card's issue list; a
   // setting it changes is one Undo step.
+  /** @param {LinearComparisonUiIssue} issue @param {string} actionKey */
   const runLinearComparisonIssueAction = (issue, actionKey) => {
     if (actionKey === 'all-losat') return setLinearComparisonGlobalAction('losat');
     if (actionKey === 'pairwise') {
@@ -4277,7 +4281,8 @@ export const createAppSetup = () => {
   // Generate asks about Upload pairs without a file: each pair's row
   // takes its own file; Skip sets the pairs still without one to No comparison
   // in one History step, then Generates.
-  const missingBlastTsvDialog = reactive({ show: false, pairs: /** @type {ReturnType<typeof missingUploadPairsToResolve>} */ ([]) });
+  /** @type {{ show: boolean, pairs: ReturnType<typeof missingUploadPairsToResolve> }} */
+  const missingBlastTsvDialog = reactive({ show: false, pairs: [] });
   const closeMissingBlastTsvDialog = () => { missingBlastTsvDialog.show = false; };
   const setMissingBlastTsvPairsToNone = dialogChoice.withHistory(
     () => 'Set pairs to No comparison',
@@ -4293,7 +4298,7 @@ export const createAppSetup = () => {
   );
   // The dialog's rows: the pairs it opened with, each with its file as it is now.
   const missingBlastTsvRows = computed(() => {
-    const missing = new Set((state.drawings.linear.linearComparisonResolution.value?.errors || [])
+    const missing = new Set(/** @type {readonly LinearComparisonIssue[]} */ (state.drawings.linear.linearComparisonResolution.value?.errors || [])
       .filter((issue) => issue.code === 'missing-upload').map((issue) => issue.edgeKey));
     return missingBlastTsvDialog.pairs.map((pair) => {
       const found = linearComparisonPairForEdgeKey(pair.edgeKey);

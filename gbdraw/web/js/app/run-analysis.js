@@ -2269,6 +2269,7 @@ export const createRunAnalysis = ({
         processingStatus.value = String(message || '');
       }
     };
+    /** @param {Parameters<typeof diagramProgressMessage>[0]} progress */
     const onDiagramProgress = (progress) => {
       const message = diagramProgressMessage(progress);
       if (message) setProcessingStatus(message);

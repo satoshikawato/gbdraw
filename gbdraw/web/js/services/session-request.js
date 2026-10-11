@@ -172,6 +172,7 @@ import { recordStructuralMetric } from './runtime-test-hooks.js';
 import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } from './record-display-model.js';
 
 /** @import { SessionResourceSource } from './session-resources.js' */
+/** @import { LinearComparisonResolvedEdge } from './linear-comparisons.js' */
 
 // The drawing a request reads its settings and edits from: a `DrawingState`
 // (state.js), Generate's drawing with the rules it admits, or a Gallery
@@ -2010,9 +2011,9 @@ export const requireLinearComparisonPlanSnapshot = (snapshot) => {
   const issue = Array.isArray(snapshot.errors) ? snapshot.errors[0] : null;
   if (issue || String(snapshot.error || '').trim()) {
     // A LOSATP-mode issue names the first Upload pair, when the plan has one.
-    const edge = snapshot.edges.find((item) => item?.id && item.id === issue?.edgeId)
+    const edge = snapshot.edges.find((/** @type {LinearComparisonResolvedEdge} */ item) => item?.id && item.id === issue?.edgeId)
       || (issue?.code === 'selected-losat-requires-pairwise'
-        ? snapshot.edges.find((item) => item?.source === 'upload') : undefined);
+        ? snapshot.edges.find((/** @type {LinearComparisonResolvedEdge} */ item) => item?.source === 'upload') : undefined);
     throw diagnosticError('COMPARISON_INPUT', {
       reason: PLAN_ISSUE_REASONS[issue?.code] || 'PAIR_TOPOLOGY',
       queryRecordIndex: edge?.queryIndex, subjectRecordIndex: edge?.subjectIndex
