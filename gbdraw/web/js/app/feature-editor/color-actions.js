@@ -128,6 +128,10 @@ export const createFeatureColorActions = ({
     getLegendRowRules,
     runWithRuleMatches
   } = ruleActions;
+  // This owner's rule writes are part of its caller's History step (a popup,
+  // Features panel, or dialog action): they join it and keep its name.
+  /** @type {ColorActionsRuleActions['commitSpecificRules']} */
+  const commitRuleWrite = (build, label, options) => ruleActions.commitSpecificRules(build, label, { ...options, joinsOpenStep: true });
   const getEffectiveLegendCaption = (feature) => effectiveLegendCaptions()(feature);
   const normalizeCaption = (value) => String(value || '').trim();
   const normalizeCaptionKey = (value) => normalizeCaption(value).toLowerCase();
@@ -863,7 +867,7 @@ export const createFeatureColorActions = ({
       const retireOld = features.length > 0 && getFeaturesForLegendCaption(oldCaption)
         .every(feature => selected.has(feature.svg_id));
       const oldEntry = findLegendEntryByCaption(drawing, oldCaption);
-      return ruleActions.commitSpecificRules(rules, 'Rename legend item', {
+      return commitRuleWrite(rules, 'Rename legend item', {
         drawing,
         previousLegendIntents: retireOld && oldEntry ? [{ caption: oldCaption, color: oldEntry.color }] : [],
         // OV-158 (Owner decision 2026-10-07): a renamed row keeps its place;
@@ -1076,7 +1080,7 @@ export const createFeatureColorActions = ({
     const replacesExistingGroup = existingEntry && contributors.length > 0
       && features.every(feature => captionsMatch(captionOf(feature), caption))
       && contributors.every(feature => selectedIds.has(feature.svg_id));
-    return ruleActions.commitSpecificRules((current) => featureRuleCandidate(current, features, color, normalizeCaption(caption), options), 'Change feature color', {
+    return commitRuleWrite((current) => featureRuleCandidate(current, features, color, normalizeCaption(caption), options), 'Change feature color', {
       drawing,
       previousLegendIntents: replacesExistingGroup
         ? [{ caption: existingEntry.caption, color: existingEntry.color }] : [],
@@ -1119,7 +1123,7 @@ export const createFeatureColorActions = ({
       extractedFeatures.value.filter(feature => specificMatches.matchesAny(feature) === true)
     );
     const rowRuleSet = new Set(rowRules);
-    return ruleActions.commitSpecificRules((current, revise) => current.filter(rule => !(rowRuleSet.has(rule) && coveredExactly(rule)))
+    return commitRuleWrite((current, revise) => current.filter(rule => !(rowRuleSet.has(rule) && coveredExactly(rule)))
       .map(rule => (rowRuleSet.has(rule) ? revise(rule, { color }) : rule)), 'Change legend color', { drawing });
   };
 
@@ -1305,7 +1309,7 @@ export const createFeatureColorActions = ({
     }
 
     if (choice === 'rule') {
-      if (matchingRule) await ruleActions.commitSpecificRules((current, revise) => current.map(rule => (rule === matchingRule
+      if (matchingRule) await commitRuleWrite((current, revise) => current.map(rule => (rule === matchingRule
         ? revise(rule, { color }) : rule)), 'Change specific color rule', { drawing });
     } else if (choice === 'caption') {
       const targetLegendName = normalizeCaption(legendName) || normalizeCaption(getEffectiveLegendCaption(feat));
@@ -1565,7 +1569,7 @@ export const createFeatureColorActions = ({
       }
       return rules;
     };
-    const applied = await ruleActions.commitSpecificRules(reset, 'Reset feature color', { drawing });
+    const applied = await commitRuleWrite(reset, 'Reset feature color', { drawing });
     if (applied) clickedFeature.value = null;
     return applied;
   };
@@ -1720,7 +1724,7 @@ export const createFeatureColorActions = ({
     if (sessionBusy) return sessionBusy;
     if (!feature) return false;
     if (value === null) {
-      return ruleActions.commitSpecificRules((current) => current.filter(rule => !hashRuleTargetsFeatureExactly(rule, feature)), 'Reset feature color', { drawing });
+      return commitRuleWrite((current) => current.filter(rule => !hashRuleTargetsFeatureExactly(rule, feature)), 'Reset feature color', { drawing });
     }
     if (String(value).trim().toLowerCase() === 'none') {
       return applyColorToFeatureGroup(drawing, [feature], normalizeCaption(customCaption || getEffectiveLegendCaption(feature) || feature.type), 'none');

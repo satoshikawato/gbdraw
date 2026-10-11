@@ -342,6 +342,66 @@ test('a label TSV that matches no label keeps the label edits and records no Und
   await expect(notice.locator('p')).toHaveText('Loaded 1 row(s). Applied to 1 label(s).');
 });
 
+// OV-460: an edit made while Load Label TSV is still loading applies at once
+// and is its own Undo step under its own name; what the load then writes is a
+// step under the load's name, and Undo then Redo keeps both.
+test('an edit made while a label TSV loads and the load are two Undo steps', async ({ page }) => {
+  test.setTimeout(240000);
+  await session(page);
+  // The record controls are editable once the saved source is inspected.
+  await (await reveal(page.getByLabel('Multi-Record Canvas', { exact: true }))).uncheck();
+  await page.locator('[data-circular-inspect]').click();
+  await openPresentation(page);
+  await expect(page.getByLabel('Circular record label', { exact: true })).toBeEnabled({ timeout: 180000 });
+  const outcome = await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    const history = window.__GBDRAW_HISTORY__;
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const read = () => ({
+      label: app.labelTextBulkOverrides['tRNA-Phe'] ?? null,
+      topology: state.activeDrawing().recordDisplayDrafts[0]?.topologyOverride ?? null,
+      undoLabel: history.undoLabel()
+    });
+    const settle = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const file = new File(['*\t*\tlabel\t^tRNA-Phe$\tMyLabel\n'], 'labels.tsv');
+    const bytes = await file.arrayBuffer();
+    let release;
+    let signalStarted;
+    const started = new Promise((resolve) => { signalStarted = resolve; });
+    const held = new Promise((resolve) => { release = resolve; });
+    file.arrayBuffer = async () => { signalStarted(); await held; return bytes; };
+    const undoCount = history.getUndoCount();
+    const start = read();
+    const load = app.loadLabelOverrideTable({ target: { files: [file], value: 'labels.tsv' } });
+    await started;
+    // A record topology draft applies on Generate: it changes neither the
+    // label edits, the diagram, nor the rule inputs, so the load still applies.
+    const rows = app.recordDisplayControls.allRows;
+    await app.recordDisplayControls.setTopology((rows.value ?? rows)[0], false);
+    const duringLoad = { ...read(), steps: history.getUndoCount() - undoCount };
+    release();
+    await load;
+    await settle();
+    const loaded = { ...read(), steps: history.getUndoCount() - undoCount };
+    await history.undo();
+    await settle();
+    const loadUndone = read();
+    await history.undo();
+    await settle();
+    const bothUndone = { ...read(), steps: history.getUndoCount() - undoCount };
+    await history.redo();
+    await history.redo();
+    await settle();
+    return { start, duringLoad, loaded, loadUndone, bothUndone, redone: read() };
+  });
+  expect(outcome.start).toMatchObject({ label: null, topology: null });
+  expect(outcome.duringLoad).toEqual({ label: null, topology: false, undoLabel: 'Change record topology', steps: 1 });
+  expect(outcome.loaded).toEqual({ label: 'MyLabel', topology: false, undoLabel: 'Load label edits', steps: 2 });
+  expect(outcome.loadUndone).toEqual({ label: null, topology: false, undoLabel: 'Change record topology' });
+  expect(outcome.bothUndone).toEqual({ ...outcome.start, steps: 0 });
+  expect(outcome.redone).toEqual({ label: 'MyLabel', topology: false, undoLabel: 'Load label edits' });
+});
+
 test('invalid annotation coordinates preserve the draft and the last successful diagram', async ({ page }) => {
   test.setTimeout(180000);
   await session(page);

@@ -65,6 +65,7 @@ export const runRecordDiscoveryWatcher = async ({
  * @property {(options?: { pan?: any, resetZoom?: boolean }) => void} [resetPreviewViewport] The preview owner's viewport reset.
  * @property {() => void} resetRightDrawer The right drawer owner's reset.
  * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
+ * @property {() => void} closeHiddenLabelTextDialog The label owner's port: closes the Label Not Shown dialog as Cancel.
  * @property {(options?: { rerender?: boolean }) => void} clearLabelBuildNotices The label owner's port.
  * @property {WatchersPreviewRuntime} previewRuntime The preview owner's mounted-Result binding.
  * @property {(() => Promise<any>) | null} [preparePaletteDefinitions] The palette loader's load of the browser palette definitions.
@@ -88,6 +89,7 @@ export const setupWatchers = ({
   resetRightDrawer,
   // R13: the label owner's ports (app/feature-editor/label-actions.js).
   closeLabelTextScopeDialog,
+  closeHiddenLabelTextDialog,
   clearLabelBuildNotices,
   previewRuntime,
   preparePaletteDefinitions = null
@@ -115,7 +117,6 @@ export const setupWatchers = ({
     isFeatureDrawerMounted,
     clickedPairwiseMatch,
     clickedLabel,
-    hiddenLabelTextDialog,
     files,
     paletteInstantPreviewEnabled,
     semanticFileWatchersSuppressed,
@@ -328,9 +329,7 @@ export const setupWatchers = ({
     clickedPairwiseMatch.value = null;
     clickedLabel.value = null;
     closeLabelTextScopeDialog();
-    hiddenLabelTextDialog.show = false;
-    hiddenLabelTextDialog.featureId = '';
-    hiddenLabelTextDialog.reason = '';
+    closeHiddenLabelTextDialog();
     resetRightDrawer();
     linearReorderNotice.value = '';
   };

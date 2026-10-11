@@ -305,8 +305,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   const releaseCancelledWrites = () => cancellableWrites.forEach(entry => entry.cancelled() && entry.leave());
   /**
    * `drawing` is the drawing of the action (default: the shown mode's at the
-   * call); `isCurrent` is read from the write's turn on.
-   * @typedef {{ drawing?: DrawingState, isCurrent?: () => boolean, afterCommit?: (intents: Record<string, any>[]) => void, previousLegendIntents?: Record<string, any>[], legendPlacement?: LegendPlacement | null }} CommitSpecificRulesOptions
+   * call); `isCurrent` is read from the write's turn on. `joinsOpenStep`: the
+   * write is part of its caller's open History step and keeps that step's name.
+   * @typedef {{ drawing?: DrawingState, isCurrent?: () => boolean, afterCommit?: (intents: Record<string, any>[]) => void, previousLegendIntents?: Record<string, any>[], legendPlacement?: LegendPlacement | null, joinsOpenStep?: boolean }} CommitSpecificRulesOptions
    */
   /**
    * The write port of the rule table (R13): other owners pass how the next
@@ -386,7 +387,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
    * @param {string} label
    * @param {CommitSpecificRulesOptions} [options]
    */
-  const commitOnce = async (drawing, rules, sourceRows, label, { isCurrent = () => true, afterCommit = () => {}, previousLegendIntents = [], legendPlacement = null } = {}) => {
+  const commitOnce = async (drawing, rules, sourceRows, label, { isCurrent = () => true, afterCommit = () => {}, previousLegendIntents = [], legendPlacement = null, joinsOpenStep = false } = {}) => {
     const candidate = await prepareRules(rules);
     if (!candidate) return false;
     const current = () => !state.sessionOperationAvailability?.() && isCurrent()
@@ -436,7 +437,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       // is an operation of the one compile (OV-146).
       projectPaletteAndRules({ prepareRules: false, legendRows });
       return legend.diff;
-    });
+    }, { joinsOpenStep });
     if (applied) { appliedWrites += 1; rulePreparation.notifyChanges(candidate); }
     if (applied && redrawsLegend) ports.requestAutomaticRerender();
     return applied;
