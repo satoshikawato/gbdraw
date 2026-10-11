@@ -322,6 +322,51 @@ test('the record-definition view lists the facts of the displayed Result', () =>
   assert.equal(circular.facts.some((fact) => fact.label === 'Alignment'), false);
 });
 
+// OV-502: the first definition line is the organism only by default. A Circular
+// Record label drawn there is named as one, and a definition that draws the
+// record's ID alone (Multi-Record Canvas) has no such fact.
+test('the record popup names the definition line the Result drew', () => {
+  const circularLines = (/** @type {string[]} */ lines) => new FakeElement({}, {
+    children: lines.map((line) => new FakeElement({ tag: 'text' }, { text: line }))
+  });
+  const item = { kind: 'record-definition', recordIndex: 0, recordId: 'NC_012920.1' };
+  const labelled = openView(createPopup({
+    mode: 'circular',
+    requestRecords: [{ recordKey: 'uid-1', presentation: { label: '<i>Human</i> mitochondrion' } }],
+    definitionGroup: circularLines(['Human mitochondrion', 'NC_012920.1', '16,569 bp', '44.36% GC'])
+  }), item);
+  assert.deepEqual(labelled.facts.slice(0, 3), [
+    { label: 'Accession', value: 'NC_012920.1' },
+    { label: 'Record label', value: 'Human mitochondrion' },
+    { label: 'Length', value: '16,569 bp' }
+  ]);
+  assert.equal(labelled.title, 'Human mitochondrion');
+
+  const idOnly = openView(createPopup({
+    mode: 'circular',
+    requestRecords: [{ recordKey: 'uid-1', presentation: {} }],
+    definitionGroup: circularLines(['NC_012920.1', '16,569 bp', '44.36% GC'])
+  }), item);
+  assert.deepEqual(idOnly.facts.slice(0, 2), [
+    { label: 'Accession', value: 'NC_012920.1' },
+    { label: 'Length', value: '16,569 bp' }
+  ]);
+  assert.equal(idOnly.title, 'NC_012920.1');
+  assert.equal(idOnly.subtitle, '');
+
+  const linear = openView(createPopup({
+    requestRecords: [{ recordKey: 'uid-1', presentation: { label: 'Typed name' } }],
+    recordRows: [{ scope: 'linear', sourceUid: 'uid-1', recordId: 'R1', canonicalRecordKey: 'uid-1' }],
+    definitionGroup: new FakeElement({}, {
+      children: [
+        new FakeElement({ 'data-definition-line-kind': 'name' }, { text: 'Typed name' }),
+        new FakeElement({ 'data-definition-line-kind': 'accession' }, { text: 'R1' })
+      ]
+    })
+  }), { kind: 'record-definition', recordIndex: 0, recordId: 'R1' });
+  assert.deepEqual(linear.facts[1], { label: 'Organism', value: 'Typed name' });
+});
+
 test('a Circular definition without line kinds reads its name, accession, and length lines', () => {
   const definitionGroup = new FakeElement({}, {
     children: ['Homo sapiens', 'mitochondrion', 'NC_012920.1', '16,569 bp', '44.36% GC']
