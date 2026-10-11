@@ -6,6 +6,9 @@
 // the app footer (`[data-app-footer]`) when they are on screen, else the viewport. The
 // feature and match popups, their drags and resizes, their first placement,
 // and the alignment palette read these limits.
+// OV-496: the notice is a limit only while it ends in the upper half of the
+// area under the header. On a one-column page it lies below the sidebar, lower
+// in the window or far under it; a popup may then cover it.
 /** @returns {number} */
 const popupViewportBottom = () => {
   const viewportBottom = Math.max(1, window.innerHeight || 1);
@@ -17,10 +20,11 @@ const popupViewportBottom = () => {
 
 /** @returns {number} */
 const popupViewportTop = () => {
-  const bottoms = ['header.app-header', '[data-app-notice]']
-    .map((selector) => document.querySelector(selector)?.getBoundingClientRect().bottom)
-    .filter(/** @returns {bottom is number} */ (bottom) => typeof bottom === 'number' && bottom > 0);
-  return bottoms.length ? Math.min(Math.max(...bottoms), popupViewportBottom() - 1) : 0;
+  const bottom = popupViewportBottom();
+  const bottomOf = (/** @type {string} */ selector) => document.querySelector(selector)?.getBoundingClientRect().bottom ?? 0;
+  const header = Math.min(Math.max(0, bottomOf('header.app-header')), bottom - 1);
+  const notice = bottomOf('[data-app-notice]');
+  return notice > header && notice <= (header + bottom) / 2 ? notice : header;
 };
 
 /**

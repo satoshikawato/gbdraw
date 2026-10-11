@@ -189,22 +189,25 @@ test('feature and match popups stay above the footer when opened low or dragged 
 const BGC = 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json';
 const LIVE = 'fed46a3a6_record_1';
 
-// Clicks the first visible point of an SVG element, as a pointer would.
-const clickShape = (page, selector) => page.locator(selector).first().evaluate((element) => {
+// The first visible point of an SVG element, where a pointer would reach it.
+const visiblePoint = (page, selector) => page.locator(selector).first().evaluate((element) => {
   const box = element.getBoundingClientRect();
   const steps = [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8, 0.1, 0.9];
   for (const fy of steps) {
     for (const fx of steps) {
       const [x, y] = [box.left + box.width * fx, box.top + box.height * fy];
       const hit = document.elementFromPoint(x, y);
-      if (hit === element || element.contains(hit)) {
-        element.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: x, clientY: y }));
-        return { x, y };
-      }
+      if (hit === element || element.contains(hit)) return { x, y };
     }
   }
   throw new Error('no visible point');
 });
+
+const clickShape = async (page, selector) => {
+  const point = await visiblePoint(page, selector);
+  await page.locator(selector).first().dispatchEvent('click', { clientX: point.x, clientY: point.y });
+  return point;
+};
 
 const popupBounds = (page, popup, bodySelector) => popup.evaluate((element, selector) => {
   const box = element.getBoundingClientRect();
@@ -274,6 +277,63 @@ test('OV-384 the feature popup never covers the header buttons', async ({ browse
     await page.mouse.up();
     expect((await popup.boundingBox()).y, 'dragged up').toBeGreaterThanOrEqual(await headerBottom());
     expect(await undoReachable(), 'Undo reachable with the popup dragged up').toBe(true);
+  } finally {
+    await page.context().close();
+  }
+});
+
+// OV-496: on a one-column page the notice banner lies below the sidebar, far
+// under the window while the page is scrolled above the Result. It was still
+// read as the popups' top limit, so a popup dragged or opened there left the
+// window.
+test('OV-496 at 390x844 a popup stays inside the window, also with the Result scrolled away', async ({ browser }) => {
+  test.setTimeout(300000);
+  const page = await load(browser, BGC, { width: 390, height: 844 });
+  try {
+    const featureSelector = `[data-gbdraw-feature-id="${LIVE}"]`;
+    const expectInside = async (popup, name) => {
+      const box = await popup.boundingBox();
+      const header = await page.locator('header.app-header').boundingBox();
+      expect(box.y, `${name}: below the header`).toBeGreaterThanOrEqual(header.y + header.height);
+      expect(box.y + box.height, `${name}: above the window bottom`).toBeLessThanOrEqual(844);
+      expect(box.x, `${name}: inside the window`).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width, `${name}: inside the window`).toBeLessThanOrEqual(390);
+    };
+    const scrollAboveResult = async () => {
+      await page.mouse.move(195, 40);
+      await page.mouse.wheel(0, -100000);
+      await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+      expect((await page.locator('[data-app-notice]').boundingBox()).y, 'the notice is below the window').toBeGreaterThan(844);
+    };
+
+    // A tap on a feature that is in view.
+    await page.locator(featureSelector).first().evaluate(element => element.scrollIntoView({ block: 'center', inline: 'center' }));
+    const tapped = await visiblePoint(page, featureSelector);
+    await page.mouse.click(tapped.x, tapped.y);
+    const featurePopup = page.locator('.feature-popup[role="dialog"]').first();
+    await expect(featurePopup).toBeVisible({ timeout: 180000 });
+    await expectInside(featurePopup, 'feature popup opened by a tap');
+
+    // The page scrolled back to the sidebar, then the popup dragged by its top edge.
+    await scrollAboveResult();
+    const box = await featurePopup.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + 6);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2, box.y + 26, { steps: 4 });
+    await page.mouse.up();
+    await expectInside(featurePopup, 'feature popup dragged with the Result scrolled away');
+    await featurePopup.getByRole('button', { name: 'Close feature popup', exact: true }).click();
+    await expect(featurePopup).toHaveCount(0);
+
+    // Enter on a focused Legend row after the page was scrolled away from it.
+    await page.locator('.gbdraw-preview-surface g[data-legend-key="Core biosynthetic genes"]').first().focus();
+    await scrollAboveResult();
+    await page.keyboard.press('Enter');
+    const legendPopup = page.locator('.pairwise-match-popup[role="dialog"]');
+    await expect(legendPopup).toBeVisible();
+    await expectInside(legendPopup, 'Legend row popup opened by Enter');
+    await legendPopup.getByRole('button', { name: 'Close popup', exact: true }).click();
+    await expect(legendPopup).toHaveCount(0);
   } finally {
     await page.context().close();
   }

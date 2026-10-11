@@ -164,7 +164,7 @@ names the file. **Load Session** accepts `.gbdraw-session.json` and
 and lists any warnings about older Session content. Dismiss the notice with its
 close button; the next notice replaces it. Generate keeps it, since it describes
 the loaded Session; **Reset Settings** and a switch between Circular and Linear
-clear it. Popups open below the notice, so it stays readable. On gbdraw.app, **Load example** in the header
+clear it. Popups open below the notice while it is in the upper half of the window, so it stays readable. On gbdraw.app, **Load example** in the header
 and **Load an example** in the empty Preview list the Gallery examples and load
 the chosen one's Session, asking first when the current work has unsaved
 changes. The local `gbdraw gui` ships no Gallery and shows neither button.

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { placePopupNearPoint } from '../../gbdraw/web/js/utils/popup-bounds.js';
+import { placePopupNearPoint, popupViewportBounds } from '../../gbdraw/web/js/utils/popup-bounds.js';
 
 // OV-371 and OV-384: the first placement of a popup opened at a clicked point.
 const desktop = { top: 56, bottom: 968, left: 0, right: 1600 };
@@ -62,4 +62,32 @@ test('a popup leaves the clicked item rectangle uncovered', () => {
   const narrow = { ...desktop, right: 1200 };
   const left = placePopupNearPoint({ point: { x: 880, y: 500, avoid }, width: 400, height: 500, bounds: narrow });
   assert.equal(left.x, 700 - 12 - 400);
+});
+
+// OV-496: the notice banner is a top limit only where it is a banner above the
+// popups. On a one-column page it lies below the sidebar: in the lower half of
+// the window, or far under it while the page is scrolled above the Result.
+test('the notice limits the popup top only while it ends in the upper half under the header', () => {
+  const boundsWith = (noticeBottom) => {
+    const bottoms = { 'header.app-header': 135, '[data-app-notice]': noticeBottom };
+    Object.assign(globalThis, {
+      window: { innerWidth: 390, innerHeight: 844 },
+      document: {
+        querySelector: (selector) => (
+          typeof bottoms[selector] === 'number' ? { getBoundingClientRect: () => ({ top: 0, bottom: bottoms[selector] }) } : null
+        )
+      }
+    });
+    try {
+      return popupViewportBounds();
+    } finally {
+      Reflect.deleteProperty(globalThis, 'window');
+      Reflect.deleteProperty(globalThis, 'document');
+    }
+  };
+  assert.deepEqual(boundsWith(193), { top: 193, bottom: 844, left: 0, right: 390 });
+  assert.equal(boundsWith(489).top, 489);
+  for (const noticeBottom of [undefined, -2, 100, 490, 700, 843, 4924]) {
+    assert.equal(boundsWith(noticeBottom).top, 135, `notice bottom ${noticeBottom}`);
+  }
 });
