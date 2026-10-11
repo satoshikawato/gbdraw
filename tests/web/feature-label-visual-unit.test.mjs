@@ -357,12 +357,7 @@ const loadedLabelSvg = () => new DOMParser().parseFromString([
 for (const [hidden, hide, options] of [
   ['Reset label edits', (actions) => actions.resetAllLabelTextOverrides()],
   ['a Load Label TSV that applies', async (actions, state) => {
-    globalThis.window = { alert: () => {} };
-    try {
-      await actions.loadLabelOverrideTable({ target: { files: [{ text: async () => '*\tCDS\tlabel\t^alpha$\tLOADED\n' }], value: 'labels.tsv' } });
-    } finally {
-      delete globalThis.window;
-    }
+    await actions.loadLabelOverrideTable({ target: { files: [{ text: async () => '*\tCDS\tlabel\t^alpha$\tLOADED\n' }], value: 'labels.tsv' } });
     assert.equal(rowOf(state, 'fa').labelText, 'LOADED', 'the table was applied');
   }, {
     svg: loadedLabelSvg(), featureId: 'fa', rulePreparation: { snapshot: () => ({}), isCurrent: () => true },
