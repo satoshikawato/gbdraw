@@ -186,11 +186,12 @@ const getPreviewRecordEntries = (state) => {
   return records;
 };
 
-const getPreviewLengthParam = (state) => {
+/** @param {DrawingState} drawing the Circular drawing */
+const getPreviewLengthParam = (state, drawing) => {
   const lengths = getPreviewRecordEntries(state)
     .map((entry) => Number(entry?.record_length ?? entry?.length ?? 0))
     .filter((value) => Number.isFinite(value) && value > 0);
-  return sizeClassForRecordLengths('circular', lengths) || 'long';
+  return sizeClassForRecordLengths('circular', lengths, drawing) || 'long';
 };
 
 /** @param {DrawingState} drawing */
@@ -474,7 +475,7 @@ export const estimateCircularConservationLayoutWarning = (state, drawing) => {
   if (entries.length <= 0) return '';
 
   const preset = normalizeCircularTrackPreset(drawing?.form?.track_type);
-  const lengthParam = getPreviewLengthParam(state);
+  const lengthParam = getPreviewLengthParam(state, drawing);
   const axisRadius = PREVIEW_RADIUS_PX;
   const defaultSpacing = previewSpacingPx();
   const lane = laneDirectionForPreset(preset);
@@ -1617,7 +1618,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   /** @param {DrawingState} drawing */
   const estimateCircularSlotGeometry = (drawing, slot, slotIndex) => {
     const preset = normalizeCircularTrackPreset(drawing.form.track_type);
-    const lengthParam = getPreviewLengthParam(state);
+    const lengthParam = getPreviewLengthParam(state, drawing);
     const renderer = String(slot?.renderer || '').trim();
     const widthPx = previewWidthPxForRenderer(renderer, lengthParam);
     const spacingPx = previewSpacingPx();
@@ -1680,7 +1681,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   const circularTrackPresetSummary = () => {
     const drawing = state.drawings.circular;
     const preset = normalizeCircularTrackPreset(drawing.form.track_type);
-    const lengthParam = getPreviewLengthParam(state);
+    const lengthParam = getPreviewLengthParam(state, drawing);
     const lane = laneDirectionForPreset(preset);
     const slotLike = (id, renderer) => ({ id, renderer });
     /** @type {string[]} */

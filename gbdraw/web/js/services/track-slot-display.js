@@ -22,15 +22,35 @@ export const isManualSlotValue = (value) => normalizeOptionalText(value) !== nul
 const SIZE_CLASS_THRESHOLD_BP = MODE_PROFILE_DATA.autoSizes.sizeClassThresholdBp;
 
 /**
- * The size class that picks the short or long Auto sizes of a diagram mode:
- * that of the longest record.
+ * What the size class reads from a drawing: the configuration values its
+ * Session stored that the Web does not manage, by dotted config path.
+ * @typedef {object} SizeClassDrawing
+ * @property {Readonly<Record<string, unknown>>} unmanagedConfigOverrides
+ */
+
+/**
+ * The short/long boundary the next Generate of a drawing uses: the
+ * labels.length_threshold its Session stored, otherwise the packaged one.
+ * @param {'circular' | 'linear'} mode
+ * @param {SizeClassDrawing} drawing the drawing of that mode
+ * @returns {number}
+ */
+const sizeClassThresholdBp = (mode, drawing) => {
+  const stored = drawing.unmanagedConfigOverrides[`labels.length_threshold.${mode}`];
+  return typeof stored === 'number' ? stored : SIZE_CLASS_THRESHOLD_BP[mode];
+};
+
+/**
+ * The size class that picks the short or long Auto sizes of a drawing: that
+ * of the longest record.
  * @param {'circular' | 'linear'} mode
  * @param {number[]} recordLengths
+ * @param {SizeClassDrawing} drawing the drawing of that mode
  * @returns {'short' | 'long' | null} null when no length is known
  */
-export const sizeClassForRecordLengths = (mode, recordLengths) => {
+export const sizeClassForRecordLengths = (mode, recordLengths, drawing) => {
   if (recordLengths.length === 0) return null;
-  return Math.max(...recordLengths) < SIZE_CLASS_THRESHOLD_BP[mode] ? 'short' : 'long';
+  return Math.max(...recordLengths) < sizeClassThresholdBp(mode, drawing) ? 'short' : 'long';
 };
 
 /**
