@@ -845,7 +845,7 @@
               },
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; const rect = document.querySelector(\"[data-gbdraw-feature-id='f94b7f30b_record_2']\")?.getBoundingClientRect(); if (app?.clickedFeature) app.clickedFeature.activeTab = 'edit'; if (app?.featurePopupSize) app.featurePopupSize.width = 500; if (app?.clickedFeaturePos && rect) { app.clickedFeaturePos.x = Math.min(window.innerWidth - 524, rect.right + 16); app.clickedFeaturePos.y = Math.max(24, rect.top - 80); }"
+                "script": "const app = window.__GBDRAW_APP__; const rect = document.querySelector(\"[data-gbdraw-feature-id='f94b7f30b_record_2']\")?.getBoundingClientRect(); const popup = document.querySelector('.feature-popup'); if (!app?.clickedFeature || !popup || !rect) throw new Error('neoU feature popup is unavailable.'); app.clickedFeature.activeTab = 'edit'; popup.style.width = '500px'; if (app.clickedFeaturePos) { app.clickedFeaturePos.x = Math.min(window.innerWidth - 524, rect.right + 16); app.clickedFeaturePos.y = Math.max(24, rect.top - 80); }"
               },
               {
                 "type": "wait",
@@ -853,12 +853,12 @@
               },
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.feature-popup'); const similarity = popup?.querySelector('[data-feature-popup-group=\"similarity\"]'); const actions = similarity?.querySelector(':scope > .grid.grid-cols-2'); if (!popup || !similarity || !actions) throw new Error('Compact Align popup controls not found.'); popup.querySelectorAll('[data-feature-popup-group=\"appearance\"], [data-feature-popup-group=\"layout\"]').forEach((section) => section.style.setProperty('display', 'none', 'important')); similarity.style.setProperty('border-top', '0'); similarity.style.setProperty('padding-top', '0'); popup.children[0]?.querySelector('.min-w-0')?.setAttribute('data-capture', 'align-popup-identity'); similarity.firstElementChild?.setAttribute('data-capture', 'align-popup-group-heading'); actions.setAttribute('data-capture', 'align-popup-actions'); document.activeElement?.blur();"
+                "script": "const popup = document.querySelector('.feature-popup'); const similarity = popup?.querySelector('[data-feature-popup-group=\"similarity\"]'); const actions = similarity?.querySelector(':scope > .grid.grid-cols-2'); if (!popup || !similarity || !actions) throw new Error('Compact Align popup controls not found.'); popup.querySelectorAll('[data-feature-popup-group=\"appearance\"], [data-feature-popup-group=\"layout\"]').forEach((section) => section.style.setProperty('display', 'none', 'important')); similarity.style.setProperty('border-top', '0'); similarity.style.setProperty('padding-top', '0'); popup.children[0]?.setAttribute('data-capture', 'align-popup-header'); similarity.firstElementChild?.setAttribute('data-capture', 'align-popup-group-heading'); actions.setAttribute('data-capture', 'align-popup-actions'); document.activeElement?.blur(); if (popup.getBoundingClientRect().right > window.innerWidth) throw new Error('The Align popup does not fit the window.');"
               }
             ],
             "clipSelectors": [
               "[data-gbdraw-feature-id='f94b7f30b_record_2']",
-              "[data-capture='align-popup-identity']",
+              "[data-capture='align-popup-header']",
               "[data-capture='align-popup-group-heading']",
               "[data-capture='align-popup-actions']"
             ],
