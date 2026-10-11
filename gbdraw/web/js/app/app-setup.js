@@ -4584,10 +4584,10 @@ export const createAppSetup = () => {
       items: [
         'Colors, color rules, and the palette',
         'Labels, Feature visibility, and Feature placements',
-        'Legend names and order, and Region Annotations',
-        'Record labels, regions, and comparison settings'
+        'Legend names, deleted Legend rows, and Region Annotations',
+        'Linear record definitions, subtitles, regions, reverse complement, and alignment'
       ],
-      note: 'Uploaded files and the records you chose to draw stay. Undo brings the settings back.',
+      note: 'Uploaded files, the records you chose, File defaults, and Depth files stay. Undo brings the settings back.',
       actions: [{ id: 'reset', label: 'Reset all settings', tone: 'danger' }],
       cancelLabel: 'Keep settings'
     });

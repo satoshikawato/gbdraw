@@ -822,20 +822,28 @@
             border-color: #1d4ed8;
             color: #ffffff;
         }
+        /* UX-B10: the count and the active match share one readable line under the controls. */
+        .preview-feature-search .gfs-status-line {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: baseline;
+            min-width: 0;
+            margin-top: 6px;
+            font-size: 12px;
+            line-height: 1.3;
+        }
         .preview-feature-search .gfs-count {
-            margin-left: auto;
-            color: #475569;
+            flex: none;
+            color: #1e293b;
             font-weight: 700;
             white-space: nowrap;
         }
         .preview-feature-search .gfs-match-detail {
             display: block;
             min-width: 0;
-            margin-top: 5px;
             overflow: hidden;
             color: #334155;
-            font-size: 12px;
-            line-height: 1.3;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
@@ -854,7 +862,9 @@
             color: #991b1b;
         }
         .preview-feature-search.is-invalid .gfs-count {
+            flex: 1 1 auto;
             color: #b91c1c;
+            white-space: normal;
         }
         .preview-feature-search.is-invalid .gfs-button--search {
             box-shadow: none;
@@ -1522,7 +1532,7 @@
             .btn-secondary { @apply border hover:bg-slate-50; color: var(--ui-text-2); background-color: var(--ui-surface); border-color: var(--ui-line-strong); }
             .btn-danger { @apply border border-red-200 bg-white text-red-600 hover:bg-red-50; }
             .btn-sm { @apply px-2 py-1 text-xs; }
-            .app-notice { @apply flex shrink-0 items-start gap-2 rounded border px-3 py-2 text-xs; }
+            .app-notice { @apply flex shrink-0 items-start gap-2 rounded border px-3 py-2 text-sm; }
             .app-notice > i { @apply mt-0.5 shrink-0 text-sm; }
             .app-notice.is-info { @apply border-blue-200 bg-blue-50 text-blue-900; }
             .app-notice.is-warning { @apply border-amber-200 bg-amber-50 text-amber-900; }
@@ -5369,10 +5379,10 @@
                                     class="gfs-button gfs-button--clear"
                                     title="Clear search"
                                     aria-label="Clear search">Clear</button>
-                            <span class="gfs-count" role="status" aria-label="Feature search status">{{ previewFeatureSearchStatusText }}</span>
                         </div>
-                        <div v-if="previewFeatureSearchActiveDetail" class="gfs-match-detail" :title="previewFeatureSearchActiveDetail">
-                            {{ previewFeatureSearchActiveDetail }}
+                        <div v-show="previewFeatureSearchStatusText || previewFeatureSearchActiveDetail" class="gfs-status-line">
+                            <span class="gfs-count" role="status" aria-label="Feature search status">{{ previewFeatureSearchStatusText }}</span>
+                            <span v-if="previewFeatureSearchActiveDetail" class="gfs-match-detail" :title="previewFeatureSearchActiveDetail">{{ previewFeatureSearchActiveDetail }}</span>
                         </div>
                     </div>
 

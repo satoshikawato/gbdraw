@@ -12,6 +12,22 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Web app: confirmations use the app's own dialog with named buttons instead of
+  the browser's OK/Cancel box: **Reset Settings** lists what it resets, and a
+  risky color rule pattern, a repeated or large Session download, a large
+  reproducibility download, and hiding a GC track of a custom stack each name
+  their action. Load Session, Save Session, and table imports and exports report
+  in a dismissible notice above the Result instead of a browser alert; Session
+  warnings show as a list.
+- Web app: the feature-edit choice dialogs (color and stroke scope, label
+  visibility, label text scope, Legend name, palette colors, Feature placement
+  reset) show one primary choice, group the shared scopes, and name each option
+  by its outcome; a Legend name conflict shows the name **Keep both** gives.
+- Web app: feature search fits one row, shows **Qualifier key** only for
+  qualifier search, labels the regex toggle **Regular expression**, and shows a
+  match count only after a search. **Reset Layout** is unavailable until
+  something moved, and **Canvas padding** fields show their unit (px).
+
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
 - Added circular-record display-start rotation and manual feature lane placement.
