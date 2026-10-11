@@ -32,20 +32,24 @@ export const createLegendSortActions = ({ state, showLegendStructure }) => {
   /** @param {DrawingState} drawing */
   const getVisibleLegendOrder = (drawing) => drawing.legendEntries.value.map((entry) => entry.caption).filter(Boolean);
 
-  const moveLegendEntryUp = (idx) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
-    if (sessionBusy) return sessionBusy;
-    if (idx <= 0) return;
-    swapLegendEntries(idx, idx - 1);
-  };
-
-  const moveLegendEntryDown = (idx) => {
+  // Moves the row at `from` to `to` (the Legend panel's arrows, its drag
+  // handle, and the handle's arrow keys).
+  /** @param {number} from @param {number} to */
+  const moveLegendEntry = (from, to) => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    if (idx >= drawing.legendEntries.value.length - 1) return;
-    swapLegendEntries(idx, idx + 1);
+    const currentOrder = getVisibleLegendOrder(drawing);
+    if (from === to || from < 0 || to < 0 || from >= currentOrder.length || to >= currentOrder.length) return;
+    const nextOrder = [...currentOrder];
+    nextOrder.splice(to, 0, ...nextOrder.splice(from, 1));
+    applyLegendEntryOrder(drawing, nextOrder);
   };
+
+  /** @param {number} idx */
+  const moveLegendEntryUp = (idx) => moveLegendEntry(idx, idx - 1);
+  /** @param {number} idx */
+  const moveLegendEntryDown = (idx) => moveLegendEntry(idx, idx + 1);
 
   const sortLegendEntries = (direction = 'asc') => {
     const drawing = state.activeDrawing();
@@ -94,23 +98,11 @@ export const createLegendSortActions = ({ state, showLegendStructure }) => {
     applyLegendEntryOrder(drawing, sortedOrder);
   };
 
-  const swapLegendEntries = (idx1, idx2) => {
-    const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
-    if (sessionBusy) return sessionBusy;
-    const currentOrder = getVisibleLegendOrder(drawing);
-    if (idx1 < 0 || idx2 < 0 || idx1 >= currentOrder.length || idx2 >= currentOrder.length) return;
-
-    const nextOrder = [...currentOrder];
-    [nextOrder[idx1], nextOrder[idx2]] = [nextOrder[idx2], nextOrder[idx1]];
-    applyLegendEntryOrder(drawing, nextOrder);
-  };
-
   return {
+    moveLegendEntry,
     moveLegendEntryDown,
     moveLegendEntryUp,
     sortLegendEntries,
-    sortLegendEntriesByDefault,
-    swapLegendEntries
+    sortLegendEntriesByDefault
   };
 };

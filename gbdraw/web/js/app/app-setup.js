@@ -24,12 +24,14 @@ import {
   countUnresolvedFeatureEdits, displayedLegendRowContext, featureDrawnContext, removeUnresolvedFeatureEdits,
   requestFeatureVisibilityRules
 } from '../services/feature-visibility.js';
-import { drawnBlockStroke, drawsPythonLegendRow, legendStructureEdited } from '../services/legend-svg.js';
+import { drawnBlockStroke, drawsPythonLegendRow, legendEntryKey, legendStructureEdited } from '../services/legend-svg.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
 import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from './record-display-options.js';
+import { createPreviewItemPopup } from './preview-item-popup.js';
+import { legendRowRules } from '../services/specific-color-rules.js';
 import { isCurrentFeature } from '../services/feature-identity.js';
 import {
   createFeatureRecordRotationAction,
@@ -453,6 +455,7 @@ export const createAppSetup = () => {
     visibleFeatureRows,
     featureRecordPickerVisible,
     featureListTopSpacerPx,
+    featureListExpandedId,
     featureListBottomSpacerPx,
     labelSearch,
     editableLabels,
@@ -2824,6 +2827,7 @@ export const createAppSetup = () => {
         phase: context.phase,
         rootGeneration: context.rootGeneration
       });
+      featureActions.preparePreviewItemAffordances({ root: context.root });
     },
     synchronizeLabelEditor(context) {
       const drawing = state.activeDrawing();
@@ -3223,6 +3227,7 @@ export const createAppSetup = () => {
     legendRowHasRules,
     updateLegendEntryColor,
     deleteLegendEntry,
+    moveLegendEntry,
     moveLegendEntryUp,
     moveLegendEntryDown,
     sortLegendEntries,
@@ -3909,6 +3914,59 @@ export const createAppSetup = () => {
       : handleFeatureColorScopeChoiceWithHistory(choice, ...rest)
   );
   const handleLegendNameCommitWithHistory = undoableAction('Rename legend item', handleLegendNameCommit);
+  // The Legend tab's grip reorders a row by drag or by the Up and Down arrow
+  // keys; neither is a click, so each move records its own History step.
+  const moveLegendEntryWithHistory = undoableAction('Move legend item', moveLegendEntry);
+  const legendReorder = reactive({ from: /** @type {number | null} */ (null), over: /** @type {number | null} */ (null) });
+  /** @param {number} from @param {number} to @param {boolean} [refocus] */
+  const reorderLegendEntry = (from, to, refocus = false) => {
+    const count = state.activeDrawing().legendEntries.value.length;
+    if (from === to || to < 0 || to >= count) return;
+    moveLegendEntryWithHistory(from, to);
+    if (refocus) {
+      nextTick(() => {
+        const handle = document.querySelector(`[data-legend-reorder-handle="${to}"]`);
+        if (handle instanceof HTMLElement) handle.focus();
+      });
+    }
+  };
+  /** @param {KeyboardEvent} event @param {number} index */
+  const handleLegendReorderKey = (event, index) => {
+    const step = event.key === 'ArrowUp' ? -1 : (event.key === 'ArrowDown' ? 1 : 0);
+    if (!step) return;
+    event.preventDefault();
+    reorderLegendEntry(index, index + step, true);
+  };
+  /** @param {DragEvent} event @param {number} index */
+  const startLegendReorder = (event, index) => {
+    legendReorder.from = index;
+    legendReorder.over = index;
+    const row = event.target instanceof Element ? event.target.closest('[data-legend-drawer-row]') : null;
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', String(index));
+      if (row) event.dataTransfer.setDragImage(row, 12, 12);
+    }
+  };
+  /** @param {DragEvent} event @param {number} index */
+  const overLegendReorder = (event, index) => {
+    if (legendReorder.from === null) return;
+    event.preventDefault();
+    legendReorder.over = index;
+  };
+  /** @param {DragEvent} event @param {number} index */
+  const dropLegendReorder = (event, index) => {
+    const from = legendReorder.from;
+    if (from === null) return;
+    event.preventDefault();
+    legendReorder.from = null;
+    legendReorder.over = null;
+    reorderLegendEntry(from, index);
+  };
+  const endLegendReorder = () => {
+    legendReorder.from = null;
+    legendReorder.over = null;
+  };
   // R15-3 (OV-285): the Merge of a rename onto a deleted row's caption is the
   // Restore of that row (by its Python key), then the merge, in one History
   // checkpoint: the merge's rule commit joins it, so one Undo returns both.
@@ -5193,6 +5251,25 @@ export const createAppSetup = () => {
       || (selection.status === 'unspecified' && entries.length === 1);
   });
 
+  // The legend-entry and record-definition popups (match popup frame): views
+  // of the displayed Result and the settings; their edits are the Legend
+  // panel's and the sidebar's.
+  const previewItemPopup = createPreviewItemPopup({
+    state,
+    computed,
+    readLegendEntryColor: legendEntryColor,
+    readLegendRowRules: (entry) => legendRowRules(legendEntryKey(entry), displayedLegendRowContext(state, state.activeDrawing())),
+    countLegendCaptionFeatures: featureActions.countLegendCaptionFeatures,
+    getCommittedRequest: getCommittedCanonicalRenderRequest,
+    readAlignmentInspector: () => similarityAlignmentActions.activePlanInspector.value,
+    readCircularReverseAvailable: () => circularSingleRecordPresentationEnabled.value,
+    runUndoable: history.runUndoable,
+    sessionBusy: sessionOperationAvailability,
+    // The popup sits outside the app root that records the Legend panel's text
+    // edits, so its rename records its own step.
+    renameLegendRow: undoableAction('Rename legend item', renameLegendEntry)
+  });
+
   const circularRecordSelectionEnabled = computed(() => semanticMutationAvailable.value
     && mode.value === 'circular'
     && !state.activeDrawing().form.multi_record_canvas && circularRecordDiscoveryState.value.status === 'ready');
@@ -6459,6 +6536,7 @@ export const createAppSetup = () => {
     visibleFeatureRows,
     featureRecordPickerVisible,
     featureListTopSpacerPx,
+    featureListExpandedId,
     featureListBottomSpacerPx,
     isFeatureDrawerMounted,
     featureListScrollRef,
@@ -6569,6 +6647,10 @@ export const createAppSetup = () => {
     openFeatureEditorFromList,
     legendEntries: drawingMember('legendEntries'),
     legendEntryColor,
+    previewItemView: previewItemPopup.view,
+    setPreviewRecordField: previewItemPopup.setRecordField,
+    showPreviewRecordSettings: previewItemPopup.showRecordSettings,
+    renameLegendEntryInPopup: previewItemPopup.renameLegendRow,
     deletedLegendEntryColor,
     updateLegendEntryColor: updateLegendEntryColorShown,
     renameLegendEntry,
@@ -6585,6 +6667,12 @@ export const createAppSetup = () => {
     restoreAllDeletedLegendEntries: () => restoreLegendItems('Restore legend items', () => restoreDeletedLegendEntries(null)),
     moveLegendEntryUp,
     moveLegendEntryDown,
+    legendReorder,
+    handleLegendReorderKey,
+    startLegendReorder,
+    overLegendReorder,
+    dropLegendReorder,
+    endLegendReorder,
     sortLegendEntries,
     sortLegendEntriesByDefault,
     resetLegendPosition: undoableAction('Reset legend position', resetLegendPosition),

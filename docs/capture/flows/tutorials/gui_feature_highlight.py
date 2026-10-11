@@ -340,6 +340,7 @@ def _load_label_overrides(page: Page, path: Path) -> None:
     expect(drawer).to_have_attribute("aria-hidden", "false")
     drawer.locator("button").filter(has_text="Features").click()
     page.once("dialog", lambda dialog: dialog.accept())
+    drawer.locator("details.action-menu", has_text="Import / export").locator("summary").click()
     with page.expect_file_chooser() as chooser:
         drawer.get_by_role("button", name="Load Label TSV", exact=True).click()
     chooser.value.set_files(path)

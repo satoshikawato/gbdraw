@@ -108,8 +108,15 @@ const draftRows = (page) => page.evaluate(async () => {
     row.biologicalFeatureId, row.featureVisibility, row.labelVisibility, row.labelText]).sort();
 });
 
+// The table actions sit in the Features tab's Import / export menu.
+const openTableMenu = async (page) => {
+  const menu = page.locator('.right-drawer details.action-menu', { hasText: 'Import / export' });
+  if (!await menu.evaluate((element) => element.open)) await menu.locator('summary').click();
+};
+
 const exportTable = async (page, file) => {
   await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('features'));
+  await openTableMenu(page);
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: 60_000 }),
     page.getByRole('button', { name: 'Export Feature Edits TSV', exact: true }).click()
@@ -121,6 +128,7 @@ const exportTable = async (page, file) => {
 const loadTable = async (page, file, alerts) => {
   const expected = alerts.length + 1;
   await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('features'));
+  await openTableMenu(page);
   const [chooser] = await Promise.all([
     page.waitForEvent('filechooser'),
     page.getByRole('button', { name: 'Load Feature Edits TSV', exact: true }).click()
@@ -253,6 +261,7 @@ test('Load Feature Edits TSV counts rows that name no record or feature and reje
   page.on('dialog', (dialog) => alerts.push(dialog.message()));
   await openLinear(page);
   await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('features'));
+  await openTableMenu(page);
   await page.getByRole('button', { name: 'Export Feature Edits TSV', exact: true }).click();
   await expect.poll(() => alerts.at(-1)).toBe('No feature edits to export.');
 
@@ -274,6 +283,7 @@ test('Load Feature Edits TSV counts rows that name no record or feature and reje
   const malformed = testInfo.outputPath('malformed.tsv');
   writeFileSync(malformed, `${HEADER}\n#2\thash=${target.identity}\thidden\t\t\n`);
   await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('features'));
+  await openTableMenu(page);
   const [chooser] = await Promise.all([
     page.waitForEvent('filechooser'),
     page.getByRole('button', { name: 'Load Feature Edits TSV', exact: true }).click()

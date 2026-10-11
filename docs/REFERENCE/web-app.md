@@ -919,6 +919,24 @@ the RBH seeds, group paths, and computed description. Sequence
 downloads are available only when the required source sequence and metadata
 are present.
 
+With **Layout edit** off, a click on a Legend row in the preview, or Enter
+while it has keyboard focus, opens the legend-entry popup. It shows the caption,
+the number of features drawn with it (**Counting features…** until the color
+rules are matched), the color, and where the color comes from: the color rule
+or rules that draw the row, the feature type's default color, or colors set on
+individual features. **Color** and **Caption** edit the row as the Legend tab
+does, with the same **Merge**, **Suffix**, or **Cancel** choice for a caption
+another row uses, and **Remove from legend** moves the row to the Legend tab's
+**Deleted items**. A click on a record definition (the Linear record label on
+the left, or the Circular center text) opens the record popup. It lists the
+**Accession**, **Organism**, **Length**, **Reversed**, **Display start**, and
+**Region** of the displayed Result and, in Linear, its **Alignment**. Its
+definition text fields and **Reverse complement** write the same settings as
+the record's sidebar fields and apply on Generate; **Open record settings**
+opens and focuses those fields. Each edit is one **Undo** step. With **Layout
+edit** on, a press on these items drags them instead. The comparison legend
+opens no popup.
+
 Ctrl-click selects features for bulk color, legend-caption, visibility, and
 stroke edits. Use the visible **Apply** action to make an edit part of the
 editor state. Renaming a legend entry, with or without features, to the caption of another
@@ -977,7 +995,17 @@ The Features list and **Search features** list the displayed Result's features
 of the types selected in **Features** at the last Generate, every feature the
 Result draws (for example by a color rule), and every feature with its own
 **Feature visibility**, also while it is hidden. A hidden feature stays listed,
-so it can be shown again. Each row's **Visibility** checkbox shows whether the
+so it can be shown again. Each row shows the fill color, the label when the
+feature has one, the product, the location, the **Visibility** checkbox, and
+**Edit**, which opens the feature popup. Selecting the product expands the row
+to its feature type and, for a labelled feature, its label text field. **Import
+/ export** under the list holds **Export Label TSV**, **Load Label TSV**, and
+**Reset Label Edits** under **Labels**, and the Feature Edits TSV actions under
+**Features**. The Legend tab lists one row per entry: a grip, the swatch, the
+caption, stroke options, and remove. Drag a row by its grip, or focus the grip
+and press the Up or Down arrow, to move it; each move is one **Undo** step.
+**Reset position** and **Reset strokes** sit with the sort buttons above the
+rows. Each row's **Visibility** checkbox shows whether the
 feature is drawn; checking it sets the feature's **Feature visibility** to
 **On**, which beats the feature types and the visibility rules, and unchecking
 it sets **Off**. To return a feature to **Default**, use its popup. **Edit** and

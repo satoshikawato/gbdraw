@@ -766,18 +766,36 @@ const filteredFeatures = computed(() => {
   return features;
 });
 
-// The height of a Features list row (`h-[83px]` in index.html): three lines,
-// the last with the Visibility checkbox (R-5).
-const FEATURE_ROW_HEIGHT_PX = 83;
+// The height of a compact Features list row (`h-[36px]` in index.html), and
+// the extra height of the one row expanded to edit (`h-[44px]`).
+const FEATURE_ROW_HEIGHT_PX = 36;
+const FEATURE_ROW_EXPANDED_EXTRA_PX = 44;
 const FEATURE_LIST_OVERSCAN = 8;
 const featureListScrollTop = ref(0);
 const featureListViewportHeight = ref(520);
+const featureListExpandedId = ref(null);
 const isFeatureDrawerMounted = computed(
   () => Boolean(svgContent.value && showRightDrawer.value && rightDrawerTab.value === 'features')
 );
+const featureListExpandedIndex = computed(() => (
+  featureListExpandedId.value === null
+    ? -1
+    : filteredFeatures.value.findIndex((feature) => feature.id === featureListExpandedId.value)
+));
+/** @param {number} index */
+const featureListRowTop = (index) => (
+  index * FEATURE_ROW_HEIGHT_PX
+  + (featureListExpandedIndex.value >= 0 && index > featureListExpandedIndex.value ? FEATURE_ROW_EXPANDED_EXTRA_PX : 0)
+);
 const featureListStartIndex = computed(() => {
   if (!isFeatureDrawerMounted.value) return 0;
-  return Math.max(0, Math.floor(featureListScrollTop.value / FEATURE_ROW_HEIGHT_PX) - FEATURE_LIST_OVERSCAN);
+  const top = featureListScrollTop.value;
+  const expanded = featureListExpandedIndex.value;
+  let index = Math.floor(top / FEATURE_ROW_HEIGHT_PX);
+  if (expanded >= 0 && index > expanded) {
+    index = Math.max(expanded, Math.floor((top - FEATURE_ROW_EXPANDED_EXTRA_PX) / FEATURE_ROW_HEIGHT_PX));
+  }
+  return Math.max(0, index - FEATURE_LIST_OVERSCAN);
 });
 const featureListEndIndex = computed(() => {
   if (!isFeatureDrawerMounted.value) return 0;
@@ -788,9 +806,9 @@ const visibleFeatureRows = computed(() => {
   if (!isFeatureDrawerMounted.value) return [];
   return filteredFeatures.value.slice(featureListStartIndex.value, featureListEndIndex.value);
 });
-const featureListTopSpacerPx = computed(() => featureListStartIndex.value * FEATURE_ROW_HEIGHT_PX);
+const featureListTopSpacerPx = computed(() => featureListRowTop(featureListStartIndex.value));
 const featureListBottomSpacerPx = computed(
-  () => Math.max(0, (filteredFeatures.value.length - featureListEndIndex.value) * FEATURE_ROW_HEIGHT_PX)
+  () => Math.max(0, featureListRowTop(filteredFeatures.value.length) - featureListRowTop(featureListEndIndex.value))
 );
 const featureEditorStatusText = computed(() => {
   const count = Number(featureEditorStatus.summaryCount || extractedFeatures.value.length || 0);
@@ -1115,6 +1133,7 @@ export const state = {
   previewFeatureSearchRenderedCount,
   featureListScrollTop,
   featureListViewportHeight,
+  featureListExpandedId,
   isFeatureDrawerMounted,
   visibleFeatureRows,
   featureRecordPickerVisible,

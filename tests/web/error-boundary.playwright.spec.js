@@ -322,7 +322,8 @@ test('Label TSV retry retains its real reselect input and accepted History', asy
   await page.waitForFunction(()=>!window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.extractedFeatures.length);
   await page.evaluate(()=>window.__GBDRAW_APP__.openRightDrawerTab('features'));
   const before=await page.evaluate(()=>({svg:window.__GBDRAW_APP__.svgContent,history:window.__GBDRAW_HISTORY__.getUndoCount()}));
-  // The Features list has two TSV file inputs (Label TSV, feature edits TSV); its button opens this one.
+  // The Features list has two TSV file inputs (Label TSV, feature edits TSV); its menu item opens this one.
+  await page.locator('.right-drawer details.action-menu',{hasText:'Import / export'}).locator('summary').click();
   const picker=page.waitForEvent('filechooser');
   await page.getByRole('button',{name:'Load Label TSV',exact:true}).click();
   await (await picker).setFiles({name:'PRIVATE_LABEL_SENTINEL.tsv',mimeType:'text/plain',buffer:Buffer.from('*\tCDS\tproduct\t(?<enzyme>NADH)\tPRIVATE_LABEL_SENTINEL\n')});
