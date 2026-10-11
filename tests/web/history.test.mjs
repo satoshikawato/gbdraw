@@ -2433,3 +2433,184 @@ for (const previousSuppressed of [false, true]) {
   assert.equal(history.getUndoCount(),0);
   assert.equal(history.getRedoCount(),0);
 }
+
+// OV-460: a joined action, a drag end, or a settlement can commit an action's
+// transaction while its `fn` still awaits. What `fn` writes afterwards is
+// recorded as a step under the action's label, so Undo then Redo keeps it.
+{
+  const START = { label: 'alpha', table: null, color: 'red' };
+  const hold = () => {
+    let release;
+    const held = new Promise((resolve) => { release = resolve; });
+    return { held, release };
+  };
+  const tick = () => new Promise((resolve) => setImmediate(resolve));
+  const createActionHarness = async () => {
+    const harness = { intent: structuredClone(START), restoreHeld: null };
+    harness.history = createHistoryManager({
+      buildIntent: () => structuredClone(harness.intent),
+      applyIntent: async (restored) => {
+        await harness.restoreHeld;
+        harness.intent = structuredClone(restored);
+      },
+      buildCheckpoint: () => structuredClone(harness.intent),
+      applyCheckpoint: (checkpoint) => { harness.intent = structuredClone(checkpoint); }
+    });
+    await harness.history.initializeIntentBaseline();
+    harness.undoAll = async () => {
+      const labels = [];
+      while (harness.history.canUndo()) {
+        labels.push(harness.history.undoLabel());
+        await harness.history.undo();
+      }
+      return labels;
+    };
+    harness.redoAll = async () => { while (harness.history.canRedo()) await harness.history.redo(); };
+    // Load Label TSV while Python evaluates the table: the action awaits, then writes.
+    harness.heldLoad = (write = () => { harness.intent.table = 'applied'; }) => {
+      const { held, release } = hold();
+      const done = harness.history.runUndoable('Load label edits', async () => {
+        await held;
+        write();
+      });
+      return { done, release };
+    };
+    return harness;
+  };
+
+  // A second edit joins the open transaction and commits it; the load then writes.
+  {
+    const h = await createActionHarness();
+    const load = h.heldLoad();
+    await tick();
+    await h.history.runUndoable('Change label text', () => { h.intent.label = 'EDITED'; });
+    load.release();
+    await load.done;
+    assert.equal(h.history.mutationPending(), false);
+    assert.equal(h.history.getUndoCount(), 2, 'the later write is a step');
+    assert.equal(h.history.undoLabel(), 'Load label edits', 'the remainder carries the action\'s label');
+    await h.undoAll();
+    assert.deepEqual(h.intent, START);
+    await h.redoAll();
+    assert.deepEqual(h.intent, { label: 'EDITED', table: 'applied', color: 'red' }, 'Redo keeps both writes');
+  }
+
+  // The same when the load writes nothing afterwards: no step and no bookkeeping.
+  {
+    const h = await createActionHarness();
+    const load = h.heldLoad(() => {});
+    await tick();
+    await h.history.runUndoable('Change label text', () => { h.intent.label = 'EDITED'; });
+    const revision = h.history.revision.value;
+    load.release();
+    await load.done;
+    assert.equal(h.history.getUndoCount(), 1);
+    assert.equal(h.history.revision.value, revision);
+    await h.undoAll();
+    assert.deepEqual(h.intent, START);
+    await h.redoAll();
+    assert.deepEqual(h.intent, { label: 'EDITED', table: null, color: 'red' });
+  }
+
+  // OV-461: a drag joins the running action's transaction and commits it at
+  // the drag end; the action's later write is no longer lost.
+  {
+    const h = await createActionHarness();
+    const load = h.heldLoad();
+    await tick();
+    const drag = await h.history.begin('Move legend', { source: 'legend-drag', owner: Symbol('Move legend') });
+    h.intent.color = 'blue';
+    await h.history.commit(drag);
+    load.release();
+    await load.done;
+    assert.equal(h.history.getUndoCount(), 2);
+    assert.equal(h.history.undoLabel(), 'Load label edits');
+    await h.undoAll();
+    assert.deepEqual(h.intent, START);
+    await h.redoAll();
+    assert.deepEqual(h.intent, { label: 'alpha', table: 'applied', color: 'blue' });
+  }
+
+  // The remainder is recorded while a control's transaction is open: that
+  // transaction continues from the remainder, so no change is in two steps.
+  {
+    const h = await createActionHarness();
+    const load = h.heldLoad();
+    await tick();
+    await h.history.runUndoable('Change label text', () => { h.intent.label = 'EDITED'; });
+    const typing = await h.history.begin('Change setting', { source: 'input-adapter', owner: { tagName: 'INPUT' } });
+    h.intent.color = 'bl';
+    load.release();
+    await load.done;
+    h.intent.color = 'blue';
+    await h.history.commit(typing);
+    assert.equal(h.history.getUndoCount(), 3);
+    assert.equal(h.history.undoLabel(), 'Change setting');
+    await h.history.undo();
+    assert.deepEqual(h.intent, { label: 'EDITED', table: 'applied', color: 'bl' }, 'the control step holds only what followed the remainder');
+    assert.equal(h.history.undoLabel(), 'Load label edits');
+    await h.history.undo();
+    assert.deepEqual(h.intent, { label: 'EDITED', table: null, color: 'red' });
+    await h.undoAll();
+    assert.deepEqual(h.intent, START);
+    await h.redoAll();
+    assert.deepEqual(h.intent, { label: 'EDITED', table: 'applied', color: 'blue' });
+  }
+
+  // A cancelled transaction has no remainder (a Session replacement resets the baseline).
+  {
+    const h = await createActionHarness();
+    const load = h.heldLoad();
+    await tick();
+    await h.history.initializeIntentBaseline();
+    load.release();
+    await load.done;
+    assert.equal(h.history.getUndoCount(), 0);
+    assert.equal(h.history.mutationPending(), false);
+  }
+
+  // A checkpoint settles the load's transaction and is still open when the
+  // load writes: the checkpoint's step holds the write, as before.
+  {
+    const h = await createActionHarness();
+    const load = h.heldLoad();
+    const imported = hold();
+    await tick();
+    const colors = h.history.runUndoableCheckpoint('Import specific colors', async () => {
+      h.intent.color = 'blue';
+      await imported.held;
+    });
+    await tick();
+    load.release();
+    await load.done;
+    imported.release();
+    await colors;
+    assert.deepEqual(await h.undoAll(), ['Import specific colors']);
+    assert.deepEqual(h.intent, START);
+    await h.redoAll();
+    assert.deepEqual(h.intent, { label: 'alpha', table: 'applied', color: 'blue' });
+  }
+
+  // An Undo that is being applied owns the stacks: the load ends meanwhile
+  // and records nothing, so the Undo pops the step it restored.
+  {
+    const h = await createActionHarness();
+    const load = h.heldLoad();
+    const restore = hold();
+    await tick();
+    await h.history.runUndoable('Change label text', () => { h.intent.label = 'EDITED'; });
+    h.restoreHeld = restore.held;
+    const undo = h.history.undo();
+    await tick();
+    load.release();
+    await load.done;
+    restore.release();
+    await undo;
+    h.restoreHeld = null;
+    assert.deepEqual([h.history.getUndoCount(), h.history.getRedoCount()], [0, 1]);
+    assert.deepEqual(h.intent, START);
+    await h.redoAll();
+    assert.deepEqual(h.intent, { label: 'EDITED', table: null, color: 'red' });
+  }
+  console.log('history action remainder tests passed');
+}

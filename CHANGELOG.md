@@ -203,6 +203,13 @@ write-up of a release.
   captures an intermediate tutorial state by replay. A capture's
   `replayThrough` loads the example Session, clicks **Reset Settings**, then
   performs the `replay` actions of the tutorial steps up to the named one.
+- Web: In Colors › SPECIFIC RULES, color rule changes made in quick succession
+  are all kept, each as its own Undo step. This covers **Add**, color and
+  caption edits, Move, Remove, a popup or Legend recolor, a rules TSV import
+  and a preset. Before, a change made while an earlier one was still being
+  applied could be silently dropped. A pattern edit that is still being
+  applied when another change is made stays in its field as an unapplied
+  draft, as before (OV-445, OV-443, OV-444, OV-448, #1006).
 - Gallery publication (maintainer tooling): `tools/refresh_gallery_sessions.py`
   publishes a Session that the web app saved. It rebuilds the request from the
   request's own color, whitelist, and priority tables rather than from the
