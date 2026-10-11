@@ -8104,7 +8104,7 @@
     </div>
     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
       <label class="flex items-center gap-1.5">Display start <input ref="start" data-history-managed type="number" min="1" :max="row.recordLength" :value="surface.displayStart" :disabled="!controlAvailable || !surface.startEnabled" @change="setStart($event)" :aria-label="`Display start ${row.recordId} ${row.selector}`" class="form-input form-input-compact w-24"></label>
-      <button v-if="draft.startCoordinate != null" data-history-managed type="button" :disabled="!controlAvailable" @click="$refs.start.focus(); controller.resetStart(row)" class="ml-auto text-[10px] text-blue-600">Reset start</button>
+      <button v-if="draft.startCoordinate != null" data-history-managed type="button" :disabled="!controlAvailable" @click="($refs.start.disabled ? $refs.topology : $refs.start).focus(); controller.resetStart(row)" class="ml-auto text-[10px] text-blue-600">Reset start</button>
     </div>
     <div v-if="error" role="alert" class="text-red-600">{{ error }}</div>
     <div v-if="!surface.startEnabled" class="ui-hint">{{ surface.disabledReason }}</div>

@@ -2791,7 +2791,7 @@ test('Region annotation IDs accept continuous typing without losing focus', asyn
   });
 
   await page.locator('summary[aria-label="Region Annotations"]').press('Enter');
-  const idInput = page.getByPlaceholder('annotation_id');
+  const idInput = page.getByLabel('Annotation id', { exact: true });
   await idInput.selectText();
   await idInput.pressSequentially('Repeat');
 

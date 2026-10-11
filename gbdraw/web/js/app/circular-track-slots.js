@@ -1676,7 +1676,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     isManualSlotValue(circularSlotManualValue(slot, field))
   );
 
-  // UX-C10: what the preset draws where, in words; the radius ratios stay
+  // What the preset draws where, in words; the radius ratios stay
   // with the slot fields' Auto values.
   const circularTrackPresetSummary = () => {
     const drawing = state.drawings.circular;

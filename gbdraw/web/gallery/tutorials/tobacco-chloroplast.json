@@ -227,7 +227,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; const file = app?.files?.t_color; if (!file) throw new Error('Specific color table was not restored.'); app.files.t_color = new File([file], 'chloroplast_specific_table.tsv', { type: file.type, lastModified: file.lastModified }); const label = Array.from(document.querySelectorAll('label')).find((node) => node.textContent.trim() === 'Specific rules file'); const root = label?.parentElement?.parentElement; if (!root) throw new Error('Specific Table uploader not found.'); root.dataset.capture = 'chloroplast-specific-table';"
+                "script": "const app = window.__GBDRAW_APP__; const file = app?.files?.t_color; if (!file) throw new Error('Specific color table was not restored.'); app.files.t_color = new File([file], 'chloroplast_specific_table.tsv', { type: file.type, lastModified: file.lastModified }); const label = Array.from(document.querySelectorAll('label')).find((node) => node.textContent.trim() === 'Specific rules file'); const root = label?.parentElement?.parentElement; if (!root) throw new Error('Specific rules file uploader not found.'); root.dataset.capture = 'chloroplast-specific-table';"
               }
             ],
             "selector": "[data-capture='chloroplast-specific-table']",

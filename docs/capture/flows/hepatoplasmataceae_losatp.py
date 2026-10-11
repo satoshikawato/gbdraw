@@ -132,16 +132,13 @@ def _set_source_inputs(page: Page) -> None:
         selector = page.get_by_label(
             f"Record selector for sequence {index}", exact=True
         )
+        # The select is enabled, and lists the record, only once the file's
+        # records have been read.
         expect(selector).to_be_enabled(timeout=PYTHON_OPERATION_TIMEOUT_MS)
         expect(selector).to_contain_text(
             fixture[3], timeout=PYTHON_OPERATION_TIMEOUT_MS
         )
         expect(selector).to_have_value("")
-        expect(
-            page.get_by_role(
-                "group", name=f"Linear sequence {index}", exact=True
-            )
-        ).not_to_contain_text("Loading records...")
         expect(
             page.get_by_label(f"Region start for sequence {index}", exact=True)
         ).to_have_value("")

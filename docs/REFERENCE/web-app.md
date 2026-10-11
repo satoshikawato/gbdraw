@@ -987,9 +987,10 @@ feature is drawn. When other edits name a feature that the source does not
 have, the notice above the diagram offers **Remove N unmatched feature edits**.
 
 **Region Annotations → Selected features** makes one annotation per selected
-feature that names the source feature the same way; the editor shows it as
-**Selected feature:** and the feature's caption. Generate draws it on that
-feature after crop, reverse complement, record order, or record copy changes.
+feature that names the source feature the same way; its row shows the
+feature's caption, and its target kind reads **Selected feature**. Generate
+draws it on that feature after crop, reverse complement, record order, or
+record copy changes.
 When the feature is not drawn, for example outside the crop, Generate skips
 the annotation and reports it in the annotation notice; the annotation stays.
 The annotation belongs to the annotation set of the mode the feature was

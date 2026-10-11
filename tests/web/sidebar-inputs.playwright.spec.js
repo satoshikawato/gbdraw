@@ -31,6 +31,24 @@ test('OV-374: Display start shows the current start after Inspect', async ({ pag
   await page.keyboard.press('Enter');
   await expect(start).toBeFocused();
   await expect(start).toHaveValue('1');
+
+  // Clearing the field requests no start, also when none was requested, so
+  // it shows the current start again.
+  await start.fill('');
+  await start.press('Tab');
+  await expect(start).toHaveValue('1');
+
+  // With Circular record off the start field is disabled; Reset start then
+  // moves the keyboard focus to that checkbox instead of dropping it.
+  await start.fill('100');
+  await start.press('Tab');
+  const topology = page.getByLabel(/^Circular record NC_012920\.1/);
+  await topology.uncheck();
+  await expect(start).toBeDisabled();
+  await reset.focus();
+  await page.keyboard.press('Enter');
+  await expect(reset).toHaveCount(0);
+  await expect(topology).toBeFocused();
 });
 
 // OV-373: a single-record Circular Session shows its annotation records as a
@@ -61,6 +79,28 @@ test('a color edited under More colors stays there and keeps focus', async ({ pa
   await page.keyboard.press('ArrowUp');
   await expect(more.getByLabel('tmRNA feature color mode')).toHaveValue('none');
   await expect(more.getByLabel('tmRNA feature color mode')).toBeFocused();
+});
+
+// A Default colors file replaces the color table, so a type it colors joins
+// the user's colors in the first list, as a color added by hand does.
+test('a color from a Default colors file leaves More colors', async ({ page }) => {
+  test.setTimeout(240000);
+  await openApp(page);
+  await loadSession(page, 'HmmtDNA_ATskew.gbdraw-session.json');
+  await page.locator('summary[aria-label="Colors"]').click();
+  const more = page.locator('[data-default-colors-more]');
+  await more.locator('summary').click();
+  await expect(more.getByLabel('tmRNA feature color mode')).toBeVisible();
+  await page.getByLabel('Default colors file', { exact: true }).setInputFiles({
+    name: 'colors.tsv', mimeType: 'text/plain', buffer: Buffer.from('tmRNA\t#ff0000\n')
+  });
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.waitForAuxiliaryFileImport(app.files.d_color);
+  });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.currentColors.tmRNA)).toBe('#ff0000');
+  await expect(more.getByLabel('tmRNA feature color mode')).toHaveCount(0);
+  await expect(page.getByLabel('tmRNA feature color mode')).toBeVisible();
 });
 
 // OV-379: a loaded Linear Session has not read its records; the record select

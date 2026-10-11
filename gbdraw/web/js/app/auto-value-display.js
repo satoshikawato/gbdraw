@@ -115,7 +115,7 @@ const formatFactor = (value) => {
 
 const withAuto = (text) => (String(text || '').trim() ? `${text} (auto)` : '');
 
-// UX-C13: an Auto value that depends on genome size shows the value for the
+// An Auto value that depends on genome size shows the value for the
 // current genome; before its length is known, it says so instead of listing
 // the short- and long-genome values side by side.
 /** @param {string | null} [activeLength] */

@@ -5878,11 +5878,12 @@ export const createAppSetup = () => {
     })
     : computed(() => state.activeDrawing()[key]));
 
-  // UX-C03: the default colors of the feature types the shown figure draws,
+  // The default colors of the feature types the shown figure draws,
   // and the user's own default colors, come first; the others wait under More.
   // The values are read untracked, so editing a color never moves it to the
   // other grid; the grouping follows the drawn types, the palette, the keys,
-  // and a replaced color table (Reset, palette change, Session load).
+  // and a replaced color table (Reset, palette change, Session load, an
+  // imported Default colors file).
   const defaultColorGroups = computed(() => {
     const drawing = state.activeDrawing();
     /** @type {Record<string, string>} */

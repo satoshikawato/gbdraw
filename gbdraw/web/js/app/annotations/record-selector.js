@@ -144,7 +144,7 @@ export const createAnnotationRecordSelector = ({ getCatalog }) => {
     if (!parsed.selector) return Boolean(current.requiresSelection);
     return !resolvedRecord(current, annotation);
   };
-  // A single-record input needs no record select (UX-C09): the row names
+  // A single-record input needs no record select: the row names
   // its record in a caption, and only several records or a missing target
   // show the select.
   const showsSelect = (annotation) => {

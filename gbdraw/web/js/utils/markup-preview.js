@@ -1,6 +1,6 @@
 // @ts-check
 // Record and title text may carry <i>…</i> markup, which the diagram draws in
-// italics (UX-C06, UX-C15). A field shows a preview of that text so the raw
+// italics. A field shows a preview of that text so the raw
 // tags are not the only reading; any other markup stays literal text.
 
 /** @typedef {{ text: string, italic: boolean }} MarkupSegment */
