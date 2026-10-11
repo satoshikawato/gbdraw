@@ -432,6 +432,9 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
   ).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Layout › Separate Strands Off' }).first()).toBeVisible();
   await expect(
+    tutorialPanel.getByRole('row', { name: 'Features › Arrow Geometry › Head Length Ratio 0.64' }).first()
+  ).toBeVisible();
+  await expect(
     tutorialPanel.getByRole('row', { name: 'Features › Arrow Geometry › Shaft Width Ratio 0.6' }).first()
   ).toBeVisible();
   await expect(

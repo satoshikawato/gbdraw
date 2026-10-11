@@ -1510,7 +1510,7 @@
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-09-02-preview-labels.webp",
             "alt": "Colored, aligned preview with rotated gene labels (livE to livZ) above the BGC0000708 row.",
-            "caption": "Gene names label the first row. The wide arrow shafts hide the heads of short genes."
+            "caption": "Gene names label the first row. The arrows are still full-width blocks on two strand lanes."
           },
           "capture": {
             "source": "webapp",
@@ -1553,13 +1553,17 @@
     },
     {
       "title": "Finish the figure",
-      "body": "Narrow the arrow shafts to 60% of the feature height (Shaft Width Ratio 0.6), so arrowheads stay visible on short genes and at thumbnail size. Turn off Separate Strands so each cluster reads as one row of arrows, and enlarge the features, strokes, and text for a figure that is read at a reduced size. Add the ruler scale and the plot title, and click Generate Diagram. Generate keeps the og_6 alignment and reuses the LOSAT results.",
+      "body": "Shape the arrows first: Shaft Width Ratio 0.6 narrows the shafts to 60% of the feature height so that the arrowheads stand out, and Head Length Ratio 0.64 shortens the heads so that more of the short genes keep a shaft. Turn off Separate Strands so each cluster reads as one row of arrows. The size rows fix the sizes of the published figure, which Auto would otherwise choose from the length of the longest cluster: Feature Height, Label Font Size, the legend swatch, and the definition lines become slightly smaller than their Auto values, Line Stroke Width becomes thinner, and Block Stroke Width, Axis Stroke Width, the ruler label size, and the legend font size repeat their current Auto values. The two stroke colors darken the feature outlines and the axis. Add the ruler scale and the plot title, and click Generate Diagram. Generate keeps the og_6 alignment and reuses the LOSAT results.",
       "table": {
         "columns": [
           "Setting",
           "Value"
         ],
         "rows": [
+          [
+            "Features › Arrow Geometry › Head Length Ratio",
+            "0.64"
+          ],
           [
             "Features › Arrow Geometry › Shaft Width Ratio",
             "0.6"
@@ -1638,6 +1642,11 @@
         {
           "type": "evaluate",
           "script": "document.querySelectorAll('summary[aria-label=\"Features\"], summary[aria-label=\"Layout\"], summary[aria-label=\"Axis & Scale\"], summary[aria-label=\"Labels\"], summary[aria-label=\"Legend settings\"], summary[aria-label=\"Titles and Record Labels\"]').forEach((summary) => { summary.closest('details').open = true; });"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Arrow head length ratio\"]",
+          "value": 0.64
         },
         {
           "type": "fill",
@@ -1763,11 +1772,11 @@
       "operations": [
         {
           "dataDependent": true,
-          "title": "Arrow shaft width",
+          "title": "Arrow geometry",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-10-01-arrow-shaft-width.webp",
-            "alt": "Features card Arrow Geometry controls with Head Length Ratio left at Auto and Shaft Width Ratio set to 0.6.",
-            "caption": "Enter 0.6 in Arrow Geometry › Shaft Width Ratio; leave Head Length Ratio at Auto."
+            "alt": "Features card Arrow Geometry controls with Head Length Ratio set to 0.64 and Shaft Width Ratio set to 0.6.",
+            "caption": "Enter 0.64 in Arrow Geometry › Head Length Ratio and 0.6 in Shaft Width Ratio."
           },
           "capture": {
             "source": "webapp",
@@ -1786,10 +1795,11 @@
               }
             ],
             "selector": "[data-capture='bgc-arrow-geometry']",
-            "highlightSelector": "input[aria-label='Arrow shaft width ratio']",
+            "highlightSelector": "input[aria-label='Arrow head length ratio'], input[aria-label='Arrow shaft width ratio']",
             "cropPadding": 14,
             "assertAppState": {
               "mode": "linear",
+              "adv.arrow_head_length_ratio": 0.64,
               "adv.arrow_shaft_width_ratio": 0.6
             },
             "visibleText": [
@@ -1798,6 +1808,10 @@
               "Shaft Width Ratio"
             ],
             "visibleControls": [
+              {
+                "selector": "input[aria-label='Arrow head length ratio']",
+                "value": "0.64"
+              },
               {
                 "selector": "input[aria-label='Arrow shaft width ratio']",
                 "value": "0.6"
@@ -1937,6 +1951,7 @@
             "assertAppState": {
               "mode": "linear",
               "linearSeqs.length": 5,
+              "adv.arrow_head_length_ratio": 0.64,
               "adv.arrow_shaft_width_ratio": 0.6,
               "form.separate_strands": false,
               "form.scale_style": "ruler"
@@ -1989,6 +2004,10 @@
               [
                 "Labels",
                 "First Record Only; CDS qualifier priority gene; Above Feature; rotation 45; font size 18"
+              ],
+              [
+                "Features › Arrow Geometry › Head Length Ratio",
+                "0.64"
               ],
               [
                 "Features › Arrow Geometry › Shaft Width Ratio",

@@ -340,6 +340,29 @@ def test_bgc_session_holds_the_mibig_files_with_record_reverse_complement() -> N
         assert base64.b64decode(resource["data"]) == (data_dir / name).read_bytes(), name
 
 
+def test_bgc_finish_step_types_the_arrow_geometry_of_the_published_figure() -> None:
+    """The published figure fixes both arrow ratios, so the reader's last step types both.
+
+    Left at Auto, the head length follows the size class of the longest cluster.
+    """
+
+    sample = load_ready_examples("BGC0000708-BGC0000713")[0]
+    session_path = resolve_gallery_reference(str(sample["session"]))
+    assert session_path is not None
+    session = json.loads(session_path.read_text(encoding="utf-8"))
+    published = session["renderRequest"]["diagramOptions"]["configOverrides"]
+    step = _load_tutorial(sample)["manualSteps"][9]
+    typed = {action["selector"]: action["value"] for action in step["replay"] if action["type"] == "fill"}
+    finished = step["operations"][-1]
+    for name, label in (("head_length_ratio", "Head Length Ratio"), ("shaft_width_ratio", "Shaft Width Ratio")):
+        value = published[f"objects.features.arrow_geometry.{name}"]
+        row = [f"Features › Arrow Geometry › {label}", str(value)]
+        assert typed[f'input[aria-label="Arrow {label.lower()}"]'] == value
+        assert row in step["table"]["rows"]
+        assert row in finished["table"]["rows"]
+        assert finished["capture"]["assertAppState"][f"adv.arrow_{name}"] == value
+
+
 def test_vibrio_capture_keeps_publication_comparisons_active() -> None:
     sample = load_ready_examples("vibrio-harveyi-group-collinear")[0]
     session_path = resolve_gallery_reference(str(sample["session"]))
