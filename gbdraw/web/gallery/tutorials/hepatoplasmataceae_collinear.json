@@ -487,13 +487,13 @@
     },
     {
       "title": "Inspect collinear blocks",
-      "body": "Click a curved block ribbon between adjacent genomes to inspect its two records, intervals, orientation, and gbdraw group count. Orientation + identity colors separate forward and reverse blocks while retaining identity information.",
+      "body": "Click a curved block ribbon between adjacent genomes to inspect its two records, intervals, orientation, and gene-pair count. Orientation + identity colors separate forward and reverse blocks while retaining identity information.",
       "operations": [
         {
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-07-01-collinear-block-popup.webp",
             "alt": "Zoomed Hepatoplasmataceae collinear crop with the highlighted collinear block ribbon and popup.",
-            "caption": "The highlighted block_0024 ribbon remains visible beside its compact plus-orientation summary covering 15 gbdraw similarity groups."
+            "caption": "The highlighted block ribbon remains visible beside its compact summary: both record intervals, same orientation, 44% identity, and 15 gene pairs."
           },
           "capture": {
             "source": "webapp",
@@ -531,15 +531,15 @@
               {"type": "wait", "ms": 250},
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.pairwise-match-popup'); const sections = Array.from(popup?.querySelectorAll('.pairwise-match-popup-section') || []); const titleOf = (section) => String(section?.querySelector('.pairwise-match-popup-section-title')?.textContent || '').replace(/\\s+/g, ' ').trim(); const summary = sections.find((section) => titleOf(section) === 'Summary'); const covered = sections.find((section) => titleOf(section) === 'Similarity groups covered' && section.querySelector('.pairwise-match-popup-row')); const summaryTitle = summary?.querySelector('.pairwise-match-popup-section-title'); const summaryRows = Array.from(summary?.querySelectorAll('.pairwise-match-popup-row') || []).slice(0, 5); const coveredTitle = covered?.querySelector('.pairwise-match-popup-section-title'); const coveredRow = covered?.querySelector('.pairwise-match-popup-row'); if (!popup || !summaryTitle || summaryRows.length !== 5 || !coveredTitle || !coveredRow) throw new Error('Compact collinear summary not found.'); popup.children[0]?.setAttribute('data-capture', 'collinear-popup-header'); summaryTitle.setAttribute('data-capture', 'collinear-summary-title'); summaryRows.forEach((row, index) => row.setAttribute('data-capture', `collinear-summary-row-${index + 1}`)); coveredTitle.setAttribute('data-capture', 'collinear-covered-title'); coveredRow.setAttribute('data-capture', 'collinear-covered-row');"
+                "script": "const popup = document.querySelector('.pairwise-match-popup'); const summary = popup?.querySelector('[data-collinear-summary]'); const pairs = popup?.querySelector('[data-collinear-gene-pairs]'); if (!popup || !summary || !pairs) throw new Error('Compact collinear summary not found.'); popup.children[0]?.setAttribute('data-capture', 'collinear-popup-header'); summary.setAttribute('data-capture', 'collinear-summary'); pairs.setAttribute('data-capture', 'collinear-gene-pairs'); document.activeElement?.blur();"
               }
             ],
             "highlightSelector": "[data-gbdraw-pairwise-match-id='comparison1_match1']",
-            "clipSelectors": ["[data-gbdraw-pairwise-match-id='comparison1_match1']", "[data-capture='collinear-popup-header']", "[data-capture='collinear-summary-title']", "[data-capture^='collinear-summary-row-']", "[data-capture='collinear-covered-title']", "[data-capture='collinear-covered-row']"],
+            "clipSelectors": ["[data-gbdraw-pairwise-match-id='comparison1_match1']", "[data-capture='collinear-popup-header']", "[data-capture='collinear-summary']", "[data-capture='collinear-gene-pairs']"],
             "cropPadding": {
               "top": 16,
               "right": 24,
-              "bottom": 18,
+              "bottom": 4,
               "left": 18
             },
             "waitForSelector": ".pairwise-match-popup"
@@ -591,7 +591,7 @@
               {"type": "wait", "ms": 250},
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.feature-popup'); const text = String(popup?.textContent || '').replace(/\\s+/g, ' ').toLowerCase(); for (const expected of ['chromosomal replication initiator protein dnaa', 'ap027078.1', 'cds', '101..1513 (+)', 'og_1', 'bdu67348.1']) { if (!text.includes(expected)) throw new Error(`Feature popup is missing: ${expected}`); } const labels = ['Record ID', 'Feature type', 'Location', 'Similarity group ID', 'Protein ID']; const detailRows = Array.from(popup?.querySelectorAll('.feature-popup-body .border-b') || []); const rows = labels.map((label) => detailRows.find((row) => row.firstElementChild?.textContent?.trim() === label)); if (rows.some((row) => !row)) throw new Error('Compact DnaA detail rows not found.'); popup.children[0]?.setAttribute('data-capture', 'dnaa-popup-header'); popup.children[1]?.setAttribute('data-capture', 'dnaa-popup-tabs'); rows.forEach((row, index) => row.setAttribute('data-capture', `dnaa-popup-row-${index + 1}`));"
+                "script": "const popup = document.querySelector('.feature-popup'); const text = String(popup?.textContent || '').replace(/\\s+/g, ' ').toLowerCase(); for (const expected of ['chromosomal replication initiator protein dnaa', 'ap027078.1', 'cds', '101..1513 (+)', 'og_1', 'bdu67348.1']) { if (!text.includes(expected)) throw new Error(`Feature popup is missing: ${expected}`); } const labels = ['Record ID', 'Feature type', 'Location', 'Similarity group ID', 'Protein ID']; const detailRows = Array.from(popup?.querySelectorAll('.feature-popup-body .border-b') || []); const rows = labels.map((label) => detailRows.find((row) => row.firstElementChild?.textContent?.trim() === label)); if (rows.some((row) => !row)) throw new Error('Compact DnaA detail rows not found.'); popup.children[0]?.setAttribute('data-capture', 'dnaa-popup-header'); popup.children[1]?.setAttribute('data-capture', 'dnaa-popup-tabs'); rows.forEach((row, index) => row.setAttribute('data-capture', `dnaa-popup-row-${index + 1}`)); document.activeElement?.blur();"
               }
             ],
             "highlightSelector": "[data-gbdraw-stable-feature-id='fe826bac7']",
