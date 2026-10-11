@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { trackLegendRows } from '../../gbdraw/web/js/services/track-legend-rows.js';
 import { fixture } from './helpers/svg-style-fixture.mjs';
 
 test('depth OFF and ON publish parent visibility at the style owner', () => {
@@ -15,10 +14,9 @@ test('depth OFF and ON publish parent visibility at the style owner', () => {
 // colors of the request that drew it, whichever mode is shown; the track slots
 // of neither drawing reach it before Generate (R1).
 test('a palette keeps the skew slot colors of the request that drew the displayed Result (OV-108)', () => {
-  const trackRows = trackLegendRows({ mode: 'circular', diagramOptions: { dinucleotide: 'GC', tracks: { circularTrackSlots: [
+  const { actions, state, skewFills } = fixture({ default: '#d3d3d3', skew_high: '#abcdef', skew_low: '#fedcba' }, [], { slots: [
     { id: 'gc_skew', renderer: 'dinucleotide_skew', enabled: true, params: { positive_color: '#112233', negative_color: '#445566' } }
-  ] } } });
-  const { actions, state, skewFills } = fixture({ default: '#d3d3d3', skew_high: '#abcdef', skew_low: '#fedcba' }, [], { trackRows });
+  ] });
   const draft = (mode, colors) => ({ ...state.drawings.circular, adv: {
     [`${mode}_track_slots_enabled`]: true,
     [`${mode}_track_slots`]: [{ id: 'gc_skew', renderer: 'dinucleotide_skew', params: colors }]

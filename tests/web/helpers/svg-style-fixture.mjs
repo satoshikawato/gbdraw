@@ -4,11 +4,13 @@ import { createSvgStyles } from '../../../gbdraw/web/js/app/svg-styles.js';
 import { createPreviewRuntime } from '../../../gbdraw/web/js/app/preview-runtime.js';
 import { serializeCleanSvg } from '../../../gbdraw/web/js/services/svg-serialization.js';
 import { withDrawings } from './drawing-state.mjs';
+import { drawnTracks } from '../../../gbdraw/web/js/services/track-legend-rows.js';
 
 const ref = value => ({ value });
 globalThis.XMLSerializer = class { serializeToString(svg) { return svg.snapshot(); } };
-// `trackRows`: the track rows of the request that drew the Result (services/track-legend-rows.js).
-export const fixture = (colors, rules, { trackRows = new Map() } = {}) => {
+// `slots`: the Circular track slots of the request that drew the Result (services/track-legend-rows.js).
+export const fixture = (colors, rules, { slots = ['gc_skew:dinucleotide_skew'] } = {}) => {
+  const tracks = drawnTracks({ mode: 'circular', diagramOptions: { dinucleotide: 'GC', tracks: { circularTrackSlots: slots } } });
   const attrs = { id: 'f1', 'data-gbdraw-feature-id': 'f1', 'data-gbdraw-feature-part': 'block', fill: '#000000' };
   const feature = { svg_id: 'f1', type: 'unlisted_type', start: 1, end: 10, qualifiers: { gene: ['sample'] } };
   const path = { getAttribute: key => attrs[key] ?? null, setAttribute: (key, value) => { attrs[key] = value; } };
@@ -35,6 +37,6 @@ export const fixture = (colors, rules, { trackRows = new Map() } = {}) => {
   // Style edits commit through the app's preview runtime (R1).
   const previewRuntime = createPreviewRuntime({ state, serializeSvg: serializeCleanSvg });
   const actions = createSvgStyles({ state, watch() {}, nextTick: fn => fn(),
-    commitActiveResultEdit: previewRuntime.commitActiveResultEdit, readTrackLegendRows: () => trackRows });
+    commitActiveResultEdit: previewRuntime.commitActiveResultEdit, readDrawnTracks: () => tracks });
   return { actions, state, attrs, depthAttrs, skewFills, ready };
 };

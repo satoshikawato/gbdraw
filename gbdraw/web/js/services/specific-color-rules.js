@@ -230,7 +230,7 @@ export const ruleCommitLegendRows = (context) => {
 
 // Python's `_unique_legend_key` (gbdraw/legend/table.py).
 /** @param {ReadonlySet<string>} reserved @param {string} preferred @returns {string} */
-export const uniqueLegendKey = (reserved, preferred) => {
+const uniqueLegendKey = (reserved, preferred) => {
   if (!reserved.has(preferred)) return preferred;
   let suffix = 2;
   while (reserved.has(`${preferred} (${suffix})`)) suffix += 1;

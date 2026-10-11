@@ -1,7 +1,6 @@
 // @ts-check
 /** @import { DrawingState } from '../state.js' */
-/** @import { TrackLegendRow } from '../services/track-legend-rows.js' */
-/** @import { PythonLegendKey } from '../services/legend-svg.js' */
+/** @import { DrawnTrack } from '../services/track-legend-rows.js' */
 import {
   appliedFeatureColors,
   estimateColorFactor,
@@ -47,8 +46,8 @@ const paletteColorKeysEqual = (left, right, keys) => keys.every(
  * @property {(options?: { recolor?: Record<string, any>, prepareRules?: boolean }) => boolean | Promise<boolean>} projectPaletteAndRules
  *   The root's projection of the palette and the rules (R3), which prepares the
  *   rule matches, paints the tracks through this owner, and shows the fills.
- * @property {() => ReadonlyMap<PythonLegendKey, TrackLegendRow>} readTrackLegendRows
- *   The track rows of the request that drew the displayed Result (`trackLegendRows`).
+ * @property {() => readonly DrawnTrack[]} readDrawnTracks
+ *   The tracks of the request that drew the displayed Result (`drawnTracks`).
  */
 
 /** @param {SvgStylesOptions} options */
@@ -61,7 +60,7 @@ export const createSvgStyles = ({
   // R13: the composition root's projection of the palette and the rules (R3),
   // which prepares the rule matches and paints the tracks through this owner.
   projectPaletteAndRules,
-  readTrackLegendRows
+  readDrawnTracks
 }) => {
   const {
     svgContent,
@@ -88,11 +87,13 @@ export const createSvgStyles = ({
     return updated;
   };
 
-  // The palette styles the tracks of the displayed Result. A skew track takes
+  // The palette styles the tracks of the displayed Result. A content track
+  // takes the palette's gc_content: no slot gives it a color. A skew track takes
   // the colors of the slot that drew it, as its Legend rows do (`skewTrackColor`,
   // OV-484): the slots of the request that drew the Result, of its own mode
-  // (OV-108), never the draft's, which apply on Generate (R1, OV-488). Feature
-  // and Legend row fills are editor operations (`projectPaletteAndRules`).
+  // (OV-108), never the draft's, which apply on Generate (R1, OV-488); a skew
+  // track that request names no slot for keeps its drawn colors. Feature and
+  // Legend row fills are editor operations (`projectPaletteAndRules`).
   const applyPaletteToSvg = ({
     recolorPairwise = false,
     recolorCollinear = false
@@ -128,13 +129,13 @@ export const createSvgStyles = ({
       ['dinucleotide_skew']
     );
     if (skewGroups.length > 0) {
-      const trackRows = [...readTrackLegendRows().values()];
+      const tracks = readDrawnTracks();
       skewGroups.forEach((/** @type {Element} */ skewGroup) => {
         const slotId = String(skewGroup.getAttribute('data-gbdraw-slot-id') || '').trim() || null;
         // The drawn paths of a skew track: the positive side, then the negative.
         const sideColors = [
-          skewTrackColor(trackRows, slotId, 'skew_high', colors),
-          skewTrackColor(trackRows, slotId, 'skew_low', colors)
+          skewTrackColor(tracks, slotId, 'positive', colors),
+          skewTrackColor(tracks, slotId, 'negative', colors)
         ];
         let pathIndex = 0;
         skewGroup.querySelectorAll('path').forEach((path) => {

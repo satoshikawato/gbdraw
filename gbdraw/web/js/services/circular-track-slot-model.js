@@ -20,6 +20,17 @@ const SUPPORTED_RENDERERS = [
   'spacer'
 ];
 
+// The renderer names a spec string may use (gbdraw/tracks/circular.py `_RENDERER_ALIASES`; OV-489).
+/** @type {Readonly<Record<string, string>>} */
+const RENDERER_ALIASES = Object.freeze({
+  gc_content: 'dinucleotide_content',
+  content: 'dinucleotide_content',
+  gc_skew: 'dinucleotide_skew',
+  skew: 'dinucleotide_skew',
+  conservation: 'sequence_conservation',
+  circular_comparison: 'sequence_conservation'
+});
+
 export const DEFAULT_SLOT_IDS = {
   features: 'features',
   ticks: 'ticks',
@@ -770,9 +781,10 @@ export const parseCircularTrackSlotSpec = (spec, index = 0, defaultNt = 'GC', pr
   const atIndex = text.indexOf('@');
   const head = (atIndex < 0 ? text : text.slice(0, atIndex)).trim();
   const separatorIndex = head.indexOf(':');
+  const renderer = (separatorIndex < 0 ? head : head.slice(separatorIndex + 1)).trim().toLowerCase();
   const source = {
     id: separatorIndex < 0 ? '' : head.slice(0, separatorIndex).trim(),
-    renderer: separatorIndex < 0 ? head : head.slice(separatorIndex + 1).trim(),
+    renderer: RENDERER_ALIASES[renderer] || renderer,
     enabled: true,
     params: {}
   };

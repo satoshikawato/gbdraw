@@ -96,7 +96,7 @@ const setup = ({
   const dialogChoice = createDialogChoice({ mutationPending: history.mutationPending, runUndoable: history.runUndoable, ref });
   // app-setup.js: the palette owner's ports (D-15).
   const palette = createResultsManager({ state, closeAfterDialogChoice: dialogChoice.closeAfterChoice });
-  const actions = createFeatureColorActions({ readTrackLegendRows: () => new Map(),
+  const actions = createFeatureColorActions({ readDrawnTracks: () => [],
     state, nextTick: async () => {}, onLegendGeometryChanged: () => {}, extractLegendEntries: () => {},
     getFeatureElements: () => [], getFeatureFillElements: () => [],
     closeAfterDialogChoice: dialogChoice.closeAfterChoice,

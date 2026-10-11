@@ -1,27 +1,30 @@
 // OV-484: a track's Legend row shows the color of the track slot that draws
 // it. The Legend panel, the live compile and the palette's track painter read
-// it from the track rows of the request that drew the Result
+// it from the tracks of the request that drew the Result
 // (services/track-legend-rows.js), never from the shape of the row's caption.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 import { compileDirectEditorMutationPlan, draftLegendPanelColors } from '../../gbdraw/web/js/app/candidate-render.js';
+import { drawnTracks, skewTrackColor, trackLegendRows, trackRowColor } from '../../gbdraw/web/js/services/track-legend-rows.js';
 import { fixture as paintFixture } from './helpers/svg-style-fixture.mjs';
 
 const readJson = (path) => JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8'));
 const HMMT_AT_SKEW = readJson('../../gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json');
-const trackRowsOf = async (request) => (await import('../../gbdraw/web/js/services/track-legend-rows.js')).trackLegendRows(request);
+const requestOf = ({ mode, dinucleotide, slots }) => ({
+  mode, diagramOptions: { dinucleotide, tracks: mode === 'linear' ? { linearTrackSlots: slots } : { circularTrackSlots: slots } }
+});
 
-// The track rows of the HmmtDNA_ATskew Gallery Session, written out: the AT
-// skew slot has its own colors, and a second GC skew slot repeats the label.
-const trackRow = (key, slotId, paletteKey, ownColor = null) => [key, { key, slotId, paletteKey, ownColor }];
-const TRACK_ROWS = new Map([
-  trackRow('GC content', 'gc_content', 'gc_content'),
-  trackRow('GC skew (+)', 'gc_skew', 'skew_high'), trackRow('GC skew (-)', 'gc_skew', 'skew_low'),
-  trackRow('AT skew (+)', 'a_skew_2', 'skew_high', '#deaf6e'), trackRow('AT skew (-)', 'a_skew_2', 'skew_low', '#7294e3'),
-  trackRow('GC skew (+) (2)', 'gc_skew_3', 'skew_high'), trackRow('GC skew (-) (2)', 'gc_skew_3', 'skew_low', '#ff00ff')
-]);
+// The slots of the HmmtDNA_ATskew Gallery Session (its AT skew slot has its
+// own colors) and a second GC skew slot that repeats the label, with the rows
+// Python draws for them.
+const SLOTS = [
+  'gc_content:dinucleotide_content', 'gc_skew:dinucleotide_skew',
+  'a_skew_2:dinucleotide_skew@nt=AT,positive_color=#deaf6e,negative_color=#7294e3,legend_label=AT skew',
+  'gc_skew_3:dinucleotide_skew@negative_color=#ff00ff'
+];
+const TRACKS = drawnTracks(requestOf({ mode: 'circular', dinucleotide: 'GC', slots: SLOTS }));
 const DRAWN = [
   ['CDS', '#84b9ec'], ['GC content', '#8daf38'], ['GC skew (+)', '#f6a8f1'], ['GC skew (-)', '#bd96df'],
   ['AT skew (+)', '#deaf6e'], ['AT skew (-)', '#7294e3'], ['GC skew (+) (2)', '#f6a8f1'], ['GC skew (-) (2)', '#ff00ff']
@@ -37,12 +40,12 @@ const trackColors = (pairs) => pairs.filter(([key]) => key !== 'CDS');
 test('the Legend panel shows a skew slot\'s own colors on its rows (OV-484)', () => {
   const { legendEntries, originalLegendOrder, pythonRows } = legendState();
   const panel = draftLegendPanelColors({
-    legendEntries, originalLegendOrder, legendColorOverrides: {}, rules: [], pythonRows, paletteColors: PALETTE, trackRows: TRACK_ROWS
+    legendEntries, originalLegendOrder, legendColorOverrides: {}, rules: [], pythonRows, paletteColors: PALETTE, drawnTracks: TRACKS
   });
   assert.deepEqual(trackColors([...panel.listed]), trackColors(DRAWN), 'each track row shows the color Python drew it in');
 });
 
-const liveLegendFills = (paletteColors, trackRows = TRACK_ROWS) => {
+const liveLegendFills = (paletteColors, tracks = TRACKS) => {
   const { legendEntries, originalLegendOrder, pythonRows } = legendState();
   const operations = compileDirectEditorMutationPlan({
     catalogAdmission: {
@@ -50,7 +53,7 @@ const liveLegendFills = (paletteColors, trackRows = TRACK_ROWS) => {
       renderedFeaturesByResult: [new Map()]
     },
     legendEntries, originalLegendOrder,
-    livePreview: { domains: ['legendFills'], paletteColors, drawnContext: null, pythonRows, features: [], trackRows }
+    livePreview: { domains: ['legendFills'], paletteColors, drawnContext: null, pythonRows, features: [], drawnTracks: tracks }
   }).operationsByResult[0];
   return operations.legendFills.map(({ caption, color }) => [caption, color]);
 };
@@ -65,58 +68,94 @@ test('a live palette edit leaves the rows of a skew slot with its own colors, an
 });
 
 test('a row the request draws no track for takes no palette color from its caption', () => {
-  assert.deepEqual(trackColors(liveLegendFills({ ...PALETTE, skew_high: '#112233' }, new Map())), []);
+  assert.deepEqual(trackColors(liveLegendFills({ ...PALETTE, skew_high: '#112233' }, [])), []);
 });
 
-test('the track rows of the HmmtDNA_ATskew Gallery Session name the slot and the own colors of each row', async () => {
-  const rows = await trackRowsOf(HMMT_AT_SKEW.renderRequest);
-  const read = (key) => { const row = rows.get(key); return row && [row.slotId, row.paletteKey, row.ownColor]; };
-  assert.deepEqual(read('GC content'), ['gc_content', 'gc_content', null]);
-  assert.deepEqual(read('GC skew (+)'), ['gc_skew', 'skew_high', null]);
-  assert.deepEqual(read('AT skew (+)'), ['a_skew_2', 'skew_high', '#deaf6e']);
-  assert.deepEqual(read('AT skew (-)'), ['a_skew_2', 'skew_low', '#7294e3']);
+test('the tracks of the HmmtDNA_ATskew Gallery Session name the slot and the own colors of each track', () => {
+  assert.deepEqual(drawnTracks(HMMT_AT_SKEW.renderRequest), [
+    { slotId: 'gc_content', kind: 'content', label: 'GC content', positiveColor: null, negativeColor: null },
+    { slotId: 'gc_skew', kind: 'skew', label: 'GC skew', positiveColor: null, negativeColor: null },
+    { slotId: 'a_skew_2', kind: 'skew', label: 'AT skew', positiveColor: '#deaf6e', negativeColor: '#7294e3' }
+  ]);
 });
 
-// The slot rows Python draws (tests/test_legend_row_facts.py runs the same
-// vectors through Python's Legend table).
-test('the track rows read from a request\'s slots are Python\'s, with Python\'s fills', async () => {
-  const { trackRowColor } = await import('../../gbdraw/web/js/services/track-legend-rows.js');
-  for (const { name, mode, dinucleotide, palette, slots, rows: expected } of readJson('../fixtures/legend_track_slot_rows.json').cases) {
-    const tracks = mode === 'linear' ? { linearTrackSlots: slots } : { circularTrackSlots: slots };
-    const rows = await trackRowsOf({ mode, diagramOptions: { dinucleotide, tracks } });
-    for (const [key, paletteKey, slotId, fill] of expected) {
-      const row = rows.get(key);
-      assert.ok(row, `${name}: ${key}`);
-      assert.deepEqual([row.paletteKey, row.slotId, trackRowColor(row, palette)], [paletteKey, slotId, fill], `${name}: ${key}`);
-    }
-  }
-});
+// The rows Python draws for a request's slot entries (tests/test_legend_row_facts.py
+// runs the same vectors through Python's slot parsers and Legend table). The
+// Web app reads the whole table of the Result: each key's palette key, slot
+// and fill, and no track for a row whose palette key the vector leaves null.
+const readRows = (tracks, expected, palette) => {
+  const rows = trackLegendRows(tracks, expected.map(([key]) => key));
+  assert.equal(rows.size, expected.filter(([, paletteKey]) => paletteKey).length, 'no key beside the rows of the Result');
+  return expected.map(([key, , , fill]) => {
+    const row = rows.get(key);
+    return row ? [key, row.paletteKey, row.slotId, trackRowColor(row, palette)] : [key, null, null, fill];
+  });
+};
+
+for (const { name, palette, rows: expected, ...request } of readJson('../fixtures/legend_track_slot_rows.json').cases) {
+  test(`track rows of slot entries are Python's: ${name}`, () => {
+    assert.deepEqual(readRows(drawnTracks(requestOf(request)), expected, palette), expected);
+  });
+}
 
 // The rows of a request without explicit slots (Python's `_generated_legend_fills`).
-test('the track rows of a request without slots are Python\'s default rows', async () => {
-  for (const { name, dinucleotide, rows: expected } of readJson('../fixtures/legend_generated_rows.json').cases) {
+test('the track rows of a request without slots are Python\'s default rows', () => {
+  const trackKeys = ['gc_content', 'skew_high', 'skew_low'];
+  for (const { name, dinucleotide, rows } of readJson('../fixtures/legend_generated_rows.json').cases) {
+    const expected = rows.map(([key, paletteKey]) => [key, trackKeys.includes(paletteKey) ? paletteKey : null, null, '']);
     for (const mode of ['circular', 'linear']) {
-      const rows = await trackRowsOf({ mode, diagramOptions: { dinucleotide, tracks: { circularTrackSlots: null, linearTrackSlots: null } } });
-      for (const [key, paletteKey] of expected.filter(([, palette]) => ['gc_content', 'skew_high', 'skew_low'].includes(palette))) {
-        assert.deepEqual([rows.get(key)?.paletteKey, rows.get(key)?.slotId], [paletteKey, null], `${name} (${mode}): ${key}`);
-      }
-      assert.equal(rows.has('Depth'), false, 'no palette key colors Depth');
+      assert.deepEqual(readRows(drawnTracks(requestOf({ mode, dinucleotide, slots: null })), expected, {}), expected, `${name} (${mode})`);
     }
   }
-  assert.equal((await trackRowsOf(null)).size, 0, 'no request, no track rows');
-  const olderSchema = await trackRowsOf({ mode: 'circular', diagramOptions: {} });
-  assert.deepEqual([...olderSchema.keys()], ['GC content', 'GC content (+)', 'GC content (-)', 'GC skew', 'GC skew (+)', 'GC skew (-)']);
+});
+
+// What the tracks read of a request is checked: a request of an older schema
+// may lack `tracks`, and a value that is no request names no track.
+test('a request without tracks draws the default tracks, and a value that is no request names none', () => {
+  const defaults = [
+    { slotId: null, kind: 'content', label: 'GC content', positiveColor: null, negativeColor: null },
+    { slotId: null, kind: 'skew', label: 'GC skew', positiveColor: null, negativeColor: null }
+  ];
+  assert.deepEqual(drawnTracks({ mode: 'circular', diagramOptions: {} }), defaults);
+  assert.deepEqual(drawnTracks({ mode: 'linear', diagramOptions: { tracks: { linearTrackSlots: null } } }), defaults);
+  for (const [reason, value] of [
+    ['no request', null], ['no diagramOptions', { mode: 'circular' }], ['an unknown mode', { mode: 'grid', diagramOptions: {} }],
+    ['tracks that is no object', { mode: 'circular', diagramOptions: { tracks: [] } }],
+    ['slots that are no list', { mode: 'circular', diagramOptions: { tracks: { circularTrackSlots: 'gc_skew:dinucleotide_skew' } } }],
+    ['a slot entry that is no spec', { mode: 'circular', diagramOptions: { tracks: { circularTrackSlots: [7] } } }],
+    ['a slot the parser rejects', { mode: 'linear', diagramOptions: { tracks: { linearTrackSlots: ['gc_skew:unknown_renderer'] } } }]
+  ]) {
+    assert.deepEqual(drawnTracks(value), [], reason);
+  }
+});
+
+// A user may delete a Legend row: the rows that are left keep their tracks.
+test('the rows left after a Legend row is deleted keep their slots', () => {
+  const rows = trackLegendRows(TRACKS, ['GC content', 'GC skew (-)', 'AT skew (+)', 'AT skew (-)', 'GC skew (-) (2)']);
+  assert.deepEqual([...rows.values()].map(({ key, slotId }) => [key, slotId]), [
+    ['GC content', 'gc_content'], ['GC skew (-)', 'gc_skew'], ['GC skew (-) (2)', 'gc_skew_3'], ['AT skew (+)', 'a_skew_2'], ['AT skew (-)', 'a_skew_2']
+  ]);
 });
 
 // OV-488: track slots apply on Generate (R1), so the palette paints a skew
 // track with the colors of the slot that drew it, not with the draft's.
 test('a palette edit paints a skew track with the colors of the slot that drew it, not the draft\'s (OV-488)', () => {
-  const drawn = new Map([...TRACK_ROWS].map(([key, row]) => [key, row.slotId === 'gc_skew' && row.paletteKey === 'skew_high' ? { ...row, ownColor: '#112233' } : row]));
-  const { actions, state, skewFills } = paintFixture({ default: '#d3d3d3', skew_high: '#abcdef', skew_low: '#fedcba' }, [], { trackRows: drawn });
+  const { actions, state, skewFills } = paintFixture({ default: '#d3d3d3', skew_high: '#abcdef', skew_low: '#fedcba' }, [], {
+    slots: ['gc_skew:dinucleotide_skew@positive_color=#112233']
+  });
   state.drawings.circular.adv.circular_track_slots_enabled = true;
   state.drawings.circular.adv.circular_track_slots = [
     { id: 'gc_skew', renderer: 'dinucleotide_skew', params: { positive_color: '#00aa00', negative_color: '#445566' } }
   ];
   actions.applyPaletteToSvg();
   assert.deepEqual(skewFills, ['#112233', '#fedcba']);
+});
+
+// No color is better than another slot's: a skew track the request names no
+// slot for keeps the colors it was drawn in.
+test('a palette edit leaves a skew track the request names no slot for', () => {
+  assert.equal(skewTrackColor(TRACKS, 'unknown_slot', 'positive', PALETTE), '');
+  const { actions, skewFills } = paintFixture({ default: '#d3d3d3', skew_high: '#abcdef', skew_low: '#fedcba' }, [], { slots: ['other:dinucleotide_skew'] });
+  actions.applyPaletteToSvg();
+  assert.deepEqual(skewFills, ['#6dded3', '#ad72e3']);
 });

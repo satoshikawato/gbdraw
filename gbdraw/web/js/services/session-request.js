@@ -4797,7 +4797,7 @@ export const projectCanonicalSessionRequest = ({
     : [];
   const projectedLinearTrackSlots = renderRequest.mode === 'linear'
     ? migrateLinearTrackSlotsToCurrentSchema(
-        parseLinearTrackSlotSpecs(tracks.linearTrackSlots),
+        parseLinearTrackSlotSpecs(tracks.linearTrackSlots, options.dinucleotide || 'GC'),
         linearTrackSlotSchemaVersion
       )
     : [];

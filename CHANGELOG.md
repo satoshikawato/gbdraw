@@ -63,6 +63,10 @@ write-up of a release.
   The Legend rows of a second skew track with the same label now follow a live
   palette change, and a palette change no longer applies a track slot color
   that still waits for Generate (OV-488).
+  A Session written by the CLI or the Python API now loads a Circular track
+  slot whose renderer is named by an alias (`content`, `skew`) as that track,
+  not as a skew track (OV-489), and a Linear content or skew slot without a
+  dinucleotide with the Session's dinucleotide, not GC (OV-490).
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
