@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 import math
 from numbers import Integral, Real
 from types import MappingProxyType
 from typing import Literal, Mapping, cast
 
+from gbdraw.config.models.canvas import linear_axis_ruler_applies
+from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
 
 
@@ -187,12 +190,29 @@ def resolve_mode_profile_overrides(
     if (
         profile.mode == "linear"
         and explicit.get("canvas.linear.ruler_on_axis") is True
-        and explicit.get("objects.scale.show", True) is True
         and "objects.axis.linear.stroke_color" not in explicit
     ):
-        resolved["objects.axis.linear.stroke_color"] = profile.linear_ruler_axis_color
+        # A fresh request starts from the packaged config, so its values
+        # decide the leaves the request leaves unset.
+        decisive = {**_packaged_axis_ruler_leaves(), **explicit}
+        if linear_axis_ruler_applies(
+            show_scale=decisive["objects.scale.show"],
+            scale_style=decisive["objects.scale.style"],
+            track_layout=decisive["canvas.linear.track_layout"],
+        ):
+            resolved["objects.axis.linear.stroke_color"] = profile.linear_ruler_axis_color
     resolved.update(explicit)
     return resolved
+
+
+@lru_cache(maxsize=1)
+def _packaged_axis_ruler_leaves() -> dict[str, object]:
+    raw = load_config_toml("gbdraw.data", "config.toml")
+    return {
+        "objects.scale.show": raw["objects"]["scale"]["show"],
+        "objects.scale.style": raw["objects"]["scale"]["style"],
+        "canvas.linear.track_layout": raw["canvas"]["linear"]["track_layout"],
+    }
 
 
 def _camel_threshold_name(name: str) -> str:
