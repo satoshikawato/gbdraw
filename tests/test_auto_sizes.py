@@ -51,10 +51,10 @@ def test_size_class_threshold(length: int, expected: str) -> None:
     assert determine_length_parameter(length, 100_000) == expected
 
 
-@pytest.mark.parametrize("mode", ["circular", "linear"])
-def test_packaged_size_class_boundary_is_100_kb(cfg: GbdrawConfig, mode: DiagramMode) -> None:
-    assert DrawnExtent(mode, (99_999,)).size_class(cfg) == "short"
-    assert DrawnExtent(mode, (100_000,)).size_class(cfg) == "long"
+@pytest.mark.parametrize(("mode", "boundary"), [("circular", 75_000), ("linear", 100_000)])
+def test_packaged_size_class_boundary(cfg: GbdrawConfig, mode: DiagramMode, boundary: int) -> None:
+    assert DrawnExtent(mode, (boundary - 1,)).size_class(cfg) == "short"
+    assert DrawnExtent(mode, (boundary,)).size_class(cfg) == "long"
 
 
 @pytest.mark.parametrize(
@@ -177,7 +177,7 @@ def test_linear_label_font_takes_the_largest_size_over_the_records(cfg: GbdrawCo
 
 def test_drawn_extent_size_class_follows_the_longest_record(cfg: GbdrawConfig) -> None:
     assert DrawnExtent("linear", (99_999, 3_000)).size_class(cfg) == "short"
-    assert DrawnExtent("circular", (3_000, 100_000)).size_class(cfg) == "long"
+    assert DrawnExtent("circular", (3_000, 75_000)).size_class(cfg) == "long"
 
 
 def test_drawn_extent_rejects_an_empty_or_unknown_extent() -> None:

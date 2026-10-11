@@ -142,9 +142,9 @@
       }
     },
     {
-      "name": "100 kb boundary: 99,999 bp is short",
+      "name": "Circular 75 kb boundary: 74,999 bp is short",
       "mode": "circular",
-      "recordLengths": [99999],
+      "recordLengths": [74999],
       "expected": {
         "labels.font_size": 14,
         "circularSlot.features.width": 37.05,
@@ -152,12 +152,32 @@
       }
     },
     {
-      "name": "100 kb boundary: 100,000 bp is long",
+      "name": "Circular 75 kb boundary: 75,000 bp is long",
       "mode": "circular",
-      "recordLengths": [100000],
+      "recordLengths": [75000],
       "expected": {
         "labels.font_size": 8,
         "circularSlot.features.width": 18.525,
+        "objects.scale.interval": 10000
+      }
+    },
+    {
+      "name": "Linear 100 kb boundary: 99,999 bp is short",
+      "mode": "linear",
+      "recordLengths": [99999],
+      "expected": {
+        "labels.font_size.linear": 24,
+        "canvas.linear.default_cds_height": 80,
+        "objects.scale.interval": 10000
+      }
+    },
+    {
+      "name": "Linear 100 kb boundary: 100,000 bp is long",
+      "mode": "linear",
+      "recordLengths": [100000],
+      "expected": {
+        "labels.font_size.linear": 5,
+        "canvas.linear.default_cds_height": 20,
         "objects.scale.interval": 10000
       }
     }

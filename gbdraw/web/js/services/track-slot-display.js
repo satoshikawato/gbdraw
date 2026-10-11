@@ -13,18 +13,19 @@ const roundDisplayNumber = (value, digits = 1) => {
 
 export const isManualSlotValue = (value) => normalizeOptionalText(value) !== null;
 
-// The packaged labels.length_threshold.circular of gbdraw/data/config.toml; only
-// Circular surfaces read the size class here.
-const SIZE_CLASS_THRESHOLD_BP = 100000;
+// The packaged labels.length_threshold of gbdraw/data/config.toml.
+const SIZE_CLASS_THRESHOLD_BP = Object.freeze({ circular: 75000, linear: 100000 });
 
 /**
- * The size class that picks the short or long Auto sizes: that of the longest record.
+ * The size class that picks the short or long Auto sizes of a diagram mode:
+ * that of the longest record.
+ * @param {'circular' | 'linear'} mode
  * @param {number[]} recordLengths
  * @returns {'short' | 'long' | null} null when no length is known
  */
-export const sizeClassForRecordLengths = (recordLengths) => {
+export const sizeClassForRecordLengths = (mode, recordLengths) => {
   if (recordLengths.length === 0) return null;
-  return Math.max(...recordLengths) < SIZE_CLASS_THRESHOLD_BP ? 'short' : 'long';
+  return Math.max(...recordLengths) < SIZE_CLASS_THRESHOLD_BP[mode] ? 'short' : 'long';
 };
 
 /**

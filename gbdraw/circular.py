@@ -237,7 +237,7 @@ def _get_args(
         type=str)
     parser.add_argument(
         '--axis_stroke_width',
-        help='Axis stroke width (optional; float; default: 3 pt for genomes < 100 kb, 1 pt for genomes >= 100 kb)',
+        help='Axis stroke width (optional; float; default: 3 pt for genomes < 75 kb, 1 pt for genomes >= 75 kb)',
         type=float)
     parser.add_argument(
         '--line_stroke_color',
@@ -245,7 +245,7 @@ def _get_args(
         type=str)
     parser.add_argument(
         '--line_stroke_width',
-        help='Line stroke width (optional; float; default: 5 pt for genomes < 100 kb, 1 pt for genomes >= 100 kb)',
+        help='Line stroke width (optional; float; default: 5 pt for genomes < 75 kb, 1 pt for genomes >= 75 kb)',
         type=float)
     parser.add_argument(
         '--definition_font_size',
@@ -269,7 +269,7 @@ def _get_args(
         type=float)
     parser.add_argument(
         '--label_font_size',
-        help='Label font size (optional; default: 14 (pt) for genomes < 100 kb, 8 for genomes >= 100 kb)',
+        help='Label font size (optional; default: 14 (pt) for genomes < 75 kb, 8 for genomes >= 75 kb)',
         type=float)
     _add_format_arg(parser)
     _add_gc_skew_toggle_args(

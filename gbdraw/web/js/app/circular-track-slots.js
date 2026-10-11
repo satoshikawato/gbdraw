@@ -190,7 +190,7 @@ const getPreviewLengthParam = (state) => {
   const lengths = getPreviewRecordEntries(state)
     .map((entry) => Number(entry?.record_length ?? entry?.length ?? 0))
     .filter((value) => Number.isFinite(value) && value > 0);
-  return sizeClassForRecordLengths(lengths) || 'long';
+  return sizeClassForRecordLengths('circular', lengths) || 'long';
 };
 
 /** @param {DrawingState} drawing */

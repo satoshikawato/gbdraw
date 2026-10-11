@@ -231,7 +231,7 @@ repeat = ["rpt_family"]
 feature = ["note"]
 
 [labels.length_threshold]
-  circular = 100000
+  circular = 75000
   linear = 100000
 [labels.font_size]
   short = 14

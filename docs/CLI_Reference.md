@@ -246,17 +246,18 @@ options:
                         Block stroke color (str; default: "gray")
   --block_stroke_width BLOCK_STROKE_WIDTH
                         Block stroke width (optional; float; default: 2 pt for
-                        genomes < 100 kb, 0 pt for genomes >= 100 kb)
+                        genomes shorter than the short/long boundary (75 kb
+                        circular, 100 kb linear), 0 pt otherwise)
   --axis_stroke_color AXIS_STROKE_COLOR
                         Axis stroke color (str; default: "gray")
   --axis_stroke_width AXIS_STROKE_WIDTH
                         Axis stroke width (optional; float; default: 3 pt for
-                        genomes < 100 kb, 1 pt for genomes >= 100 kb)
+                        genomes < 75 kb, 1 pt for genomes >= 75 kb)
   --line_stroke_color LINE_STROKE_COLOR
                         Line stroke color (str; default: "gray")
   --line_stroke_width LINE_STROKE_WIDTH
                         Line stroke width (optional; float; default: 5 pt for
-                        genomes < 100 kb, 1 pt for genomes >= 100 kb)
+                        genomes < 75 kb, 1 pt for genomes >= 75 kb)
   --definition_font_size DEFINITION_FONT_SIZE
                         Definition font size (optional; default: 18)
   --plot_title PLOT_TITLE
@@ -274,7 +275,7 @@ options:
                         track packing (in px; must be >= 0).
   --label_font_size LABEL_FONT_SIZE
                         Label font size (optional; default: 14 (pt) for
-                        genomes < 100 kb, 8 for genomes >= 100 kb)
+                        genomes < 75 kb, 8 for genomes >= 75 kb)
   -f, --format FORMAT   Comma-separated list of output file formats (svg,
                         interactive_svg, png, pdf, eps, ps; default: svg;
                         png/pdf/eps/ps require CairoSVG).
@@ -554,11 +555,13 @@ options:
                         ratio of base radius; must be > 0).
   --legend_box_size LEGEND_BOX_SIZE
                         Legend box size (optional; float; default: 24 (pixels,
-                        96 dpi) for genomes < 100 kb, 20 for genomes >= 100
-                        kb).
+                        96 dpi) for genomes shorter than the short/long
+                        boundary (75 kb circular, 100 kb linear), 20
+                        otherwise).
   --legend_font_size LEGEND_FONT_SIZE
                         Legend font size (optional; float; default: 20 (pt)
-                        for genomes < 100 kb, 16 for genomes >= 100 kb).
+                        for genomes shorter than the short/long boundary (75
+                        kb circular, 100 kb linear), 16 otherwise).
   --session SESSION     Regenerate a diagram from a plain or gzip-compressed
                         gbdraw GUI session JSON file.
   --drawing ID          With --session, the drawing to render, by ID or name
@@ -1226,7 +1229,8 @@ options:
                         Block stroke color (str; default: "gray")
   --block_stroke_width BLOCK_STROKE_WIDTH
                         Block stroke width (optional; float; default: 2 pt for
-                        genomes < 100 kb, 0 pt for genomes >= 100 kb)
+                        genomes shorter than the short/long boundary (75 kb
+                        circular, 100 kb linear), 0 pt otherwise)
   --axis_stroke_color AXIS_STROKE_COLOR
                         Axis stroke color (str; default: auto: "lightgray", or
                         "dimgray" with --ruler_on_axis)
@@ -1380,11 +1384,13 @@ options:
                         optional
   --legend_box_size LEGEND_BOX_SIZE
                         Legend box size (optional; float; default: 24 (pixels,
-                        96 dpi) for genomes < 100 kb, 20 for genomes >= 100
-                        kb).
+                        96 dpi) for genomes shorter than the short/long
+                        boundary (75 kb circular, 100 kb linear), 20
+                        otherwise).
   --legend_font_size LEGEND_FONT_SIZE
                         Legend font size (optional; float; default: 20 (pt)
-                        for genomes < 100 kb, 16 for genomes >= 100 kb).
+                        for genomes shorter than the short/long boundary (75
+                        kb circular, 100 kb linear), 16 otherwise).
   --normalize_length    Normalize record length (experimental; default:
                         False).
   --region REGION       Crop a region (repeatable). Format: record_id:start-

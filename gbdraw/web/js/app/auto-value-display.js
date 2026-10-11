@@ -146,7 +146,7 @@ const circularRecordLengths = (state) => {
     .filter((value) => Number.isFinite(value) && value > 0);
 };
 
-const activeCircularLengthParam = (state) => sizeClassForRecordLengths(circularRecordLengths(state));
+const activeCircularLengthParam = (state) => sizeClassForRecordLengths('circular', circularRecordLengths(state));
 
 const activeLengthParam = (state) => {
   const mode = String(state?.mode?.value || state?.mode || 'circular');

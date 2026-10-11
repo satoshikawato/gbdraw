@@ -14,21 +14,23 @@ const packagedThresholds = () => {
   );
 };
 
-test('the Web size class uses the packaged short/long boundary', () => {
-  const { circular } = packagedThresholds();
-  assert.equal(circular, 100000);
-  assert.equal(sizeClassForRecordLengths([3000, circular - 1]), 'short');
-  assert.equal(sizeClassForRecordLengths([3000, circular]), 'long');
-  assert.equal(sizeClassForRecordLengths([]), null);
+test('the Web size class uses the packaged short/long boundary of each mode', () => {
+  const thresholds = packagedThresholds();
+  assert.deepEqual(thresholds, { circular: 75000, linear: 100000 });
+  for (const [mode, boundary] of Object.entries(thresholds)) {
+    assert.equal(sizeClassForRecordLengths(mode, [3000, boundary - 1]), 'short', mode);
+    assert.equal(sizeClassForRecordLengths(mode, [3000, boundary]), 'long', mode);
+    assert.equal(sizeClassForRecordLengths(mode, []), null, mode);
+  }
 });
 
-test('a Circular record under 100 kb shows the short Auto sizes', () => {
+test('a Circular record under 75 kb shows the short Auto sizes', () => {
   const autoTextFor = (recordLength) => createAutoValueDisplay(withDrawings({
     mode: { value: 'circular' },
     circularRecordList: { value: [{ record_length: recordLength }] },
     form: {},
     adv: {}
   })).autoValueText('labelFontSize');
-  assert.equal(autoTextFor(99_999), '14 px (auto)');
-  assert.equal(autoTextFor(100_000), '8 px (auto)');
+  assert.equal(autoTextFor(74_999), '14 px (auto)');
+  assert.equal(autoTextFor(75_000), '8 px (auto)');
 });
