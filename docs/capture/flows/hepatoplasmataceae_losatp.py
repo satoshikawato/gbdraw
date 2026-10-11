@@ -595,7 +595,11 @@ def _assert_input_capture_framing(page: Page) -> None:
 
 
 def _frame_collinear_settings(settings: Any) -> None:
-    """Show LOSATP, Collinear blocks, inference, hit limits, and scope together."""
+    """Show LOSATP, Collinear blocks, inference, and scope together.
+
+    Search limits (Max target seqs, Member hits per protein) sit below the
+    result filters, so they are outside this frame.
+    """
 
     losat_mode = settings.get_by_role("group", name="LOSAT Mode", exact=True)
     evidence_scope = settings.get_by_label("Collinear search between", exact=True)
@@ -610,14 +614,6 @@ def _frame_collinear_settings(settings: Any) -> None:
         (
             "LOSATP mode",
             settings.get_by_role("combobox", name="LOSATP mode", exact=True),
-        ),
-        (
-            "Max target seqs",
-            settings.get_by_label("LOSATP Max target seqs", exact=True),
-        ),
-        (
-            "Member hits per protein",
-            settings.get_by_label("Member hits per protein", exact=True),
         ),
         (
             "orthogroup inference",
