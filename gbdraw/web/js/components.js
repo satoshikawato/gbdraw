@@ -182,6 +182,41 @@ export const AutoValueField = {
   `
 };
 
+/**
+ * One item of an action menu. `live` announces a label that changes after the
+ * action (Copied!, Copy failed).
+ * @typedef {{ label: string, title?: string, icon?: string, disabled?: boolean, live?: boolean, run: () => unknown }} ActionMenuItem
+ */
+
+// A disclosure that holds a group of secondary actions, such as the copy and
+// FASTA actions of the similarity popups (UX-B01..B03). The items open in
+// place, inside the popup's scroll area, so no item is clipped.
+export const ActionMenu = {
+  props: {
+    label: { type: String, required: true },
+    icon: { type: String, default: '' },
+    title: { type: String, default: '' },
+    /** @type {{ type: ArrayConstructor, default: () => ActionMenuItem[] }} */
+    items: { type: Array, default: () => [] }
+  },
+  template: `
+    <details class="action-menu" data-nodrag="true">
+      <summary class="action-menu-toggle" :title="title || label">
+        <i v-if="icon" :class="['ph', icon]" aria-hidden="true"></i><span>{{ label }}</span>
+        <i class="ph ph-caret-down action-menu-caret" aria-hidden="true"></i>
+      </summary>
+      <div class="action-menu-items">
+        <button v-for="(item, index) in items" :key="index + '-' + item.label" type="button" class="action-menu-item"
+                :disabled="item.disabled" :title="item.title || item.label"
+                :aria-live="item.live ? 'polite' : null" :aria-atomic="item.live ? 'true' : null"
+                @click="item.run()">
+          <i v-if="item.icon" :class="['ph', item.icon]" aria-hidden="true"></i><span>{{ item.label }}</span>
+        </button>
+      </div>
+    </details>
+  `
+};
+
 export const ColorValueControl = {
   props: {
     modelValue: { default: null },

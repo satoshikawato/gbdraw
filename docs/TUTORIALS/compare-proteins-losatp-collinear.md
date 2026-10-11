@@ -174,17 +174,17 @@ individual block boundaries while retaining their orientation colors.
 ### Step 5: Inspect and export a block
 
 Focus the first visible ribbon and press **Enter**. Drag the popup by its header
-to the opposite top corner so it does not cover the selected ribbon. The top of
-the popup shows the query and subject spans and three FASTA downloads,
-including **Both spans FASTA**.
+to the opposite top corner so it does not cover the selected ribbon. The popup
+summarizes the query and subject intervals, orientation, identity, and gene-pair
+count, with **Copy** and a **FASTA** menu for the block spans.
 
-![Selected Collinear ribbon beside a nonoverlapping query and subject span popup](../images/t-gui-08/05-block-popup.png)
+![Selected Collinear ribbon beside a nonoverlapping popup with the block summary and FASTA menu](../images/t-gui-08/05-block-popup.png)
 
-Use **Both spans FASTA**. The browser names the download from its generated
+Open the **FASTA** menu and choose **Download both spans**. The browser names the download from its generated
 match ID, for example `comparison1_match1_both.fna`; rename that file to
 `collinear_members.fasta`. It must contain two non-empty nucleotide records,
-one from each endpoint genome. Then scroll within the popup to inspect its
-orientation, covered Similarity groups, and anchors. Close the popup, then
+one from each endpoint genome. Then open **Details** in the popup to inspect the
+block ID, kind, color mode, score, and anchors. Close the popup, then
 select **SVG** to save `losatp_collinear.svg`.
 
 ### Variant: use all-record evidence

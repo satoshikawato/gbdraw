@@ -447,7 +447,7 @@
         {"path": "docs/images/t-gui-08/03-collinear-settings.png", "reason": "Show the LOSATP button selected in LOSAT Mode and Collinear blocks selected in LOSATP mode with orthogroup inference, unbounded Max target seqs, and Adjacent pairs evidence for this Gallery reproduction.", "alt": "LOSATP selected with Collinear blocks and Adjacent pairs evidence"},
         {"path": "docs/images/t-gui-08/04-collinear-result.png", "reason": "Verify 500 freshly computed match elements and orientation colors.", "alt": "Fresh LOSATP Collinear result across five Hepatoplasmataceae records"},
         {"path": "docs/images/t-gui-08/04-collinear-detail.png", "reason": "Show Pairwise match 1 wholly inside Result Preview at 80% zoom.", "alt": "Pairwise match 1 visible inside the 80% Collinear Result Preview"},
-        {"path": "docs/images/t-gui-08/05-block-popup.png", "reason": "Show the selected ribbon beside the nonoverlapping popup and its Both spans FASTA action.", "alt": "Selected Collinear ribbon beside a nonoverlapping query and subject span popup"}
+        {"path": "docs/images/t-gui-08/05-block-popup.png", "reason": "Show the selected ribbon beside the nonoverlapping popup with its block summary and FASTA menu.", "alt": "Selected Collinear ribbon beside a nonoverlapping popup with the block summary and FASTA menu"}
       ],
       "sources": [],
       "destination": "docs/TUTORIALS/compare-proteins-losatp-collinear.md#in-the-web-app",
@@ -970,7 +970,7 @@
         {"path": "docs/images/h-gui-08/collinear-settings.png", "reason": "Show the LOSATP button selected in LOSAT Mode and Collinear blocks selected in LOSATP mode with orthogroup inference, unbounded Max target seqs, and All records evidence.", "alt": "LOSATP selected with Collinear blocks and All records evidence"},
         {"path": "docs/images/h-gui-08/collinear-result.png", "reason": "Verify ordered blocks across the five complete genomes.", "alt": "Five complete Hepatoplasmataceae genomes connected by collinear protein-match blocks"},
         {"path": "docs/images/h-gui-08/collinear-detail.png", "reason": "Show Pairwise match 1 wholly inside Result Preview at 80% zoom.", "alt": "Pairwise match 1 visible inside the Hepatoplasmataceae Collinear Result Preview"},
-        {"path": "docs/images/h-gui-08/block-popup.png", "reason": "Show the selected ribbon beside the nonoverlapping popup and its Both spans FASTA action.", "alt": "Selected Hepatoplasmataceae Collinear ribbon beside a nonoverlapping span popup"}
+        {"path": "docs/images/h-gui-08/block-popup.png", "reason": "Show the selected ribbon beside the nonoverlapping popup with its block summary and FASTA menu.", "alt": "Selected Hepatoplasmataceae Collinear ribbon beside a nonoverlapping block popup"}
       ],
       "sources": [],
       "status": {"implementation": "verified", "review": "approved"}

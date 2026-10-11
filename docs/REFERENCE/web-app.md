@@ -751,8 +751,8 @@ A reversal acts on the whole record: features, labels, annotations, quantitative
 tracks and comparison endpoints follow its display transform, while text stays
 readable. Source bytes, feature identity and biological +/− strands are unchanged.
 Unselected inparalogs keep their membership and links while following their
-record's transform. **rev** in the Active plan inspector reports direction
-relative to the source.
+record's transform. **rev** in the active alignment line's record list reports
+direction relative to the source.
 
 Align keeps the exact reference feature center at its immediate pre-Align
 logical canvas x and aligns target centers there. Every record's logical y is
@@ -799,15 +799,19 @@ A stale reference requires **Reselect** or **Clear**; a stale target requires
 
 ### Reset positions or directions
 
-Open **Editor → Similarity groups**, choose **Reset alignment…** in
-**Active plan**, inspect the preview and select one scope:
+Open **Editor → Similarity groups**. While an alignment is active, one line at
+the top names it (**Aligned to** *feature* **in** *record*); open the line to
+see the exact reference and each record's anchor. Choose **Reset alignment…** on
+that line and select one scope. The primary button names the chosen scope.
 
 | Scope | Positions | Directions |
 | --- | --- | --- |
-| **Reset positions** (default) | Restore the positions immediately before the latest successful Align. | Keep all current directions. |
-| **Reset positions and alignment direction changes** | Restore the same immediate pre-Align positions. | Restore the absolute pre-Align direction only for records that this Align actually reversed. |
+| **Positions only** (default, **Reset positions**) | Restore the positions immediately before the latest successful Align. | Keep all current directions. |
+| **Positions and directions (N records)** (**Reset positions and directions**) | Restore the same immediate pre-Align positions. | Restore the absolute pre-Align direction only for records that this Align actually reversed. |
 
-Combined Reset lists affected names, count and current → restored directions.
+Selecting the directions scope lists the affected records, one line each with
+current → restored direction relative to the source file; the count is in the
+scope's label.
 It includes the reference only if that Align reversed it. On those listed
 records, later manual direction edits are also replaced, as the preview warns;
 manual Reverse on a record that Align did not change is preserved. Reset does
@@ -817,7 +821,7 @@ Either scope uses up the active plan and the positions and directions saved
 before the Align. After positions-only Reset, use **Undo** before choosing
 combined Reset; the saved values cannot be used twice. An empty
 direction-change list means this Align changed no directions, so combined Reset
-is disabled. A supported older Session without trusted saved directions
+is disabled; the reason appears under that scope. A supported older Session without trusted saved directions
 behaves differently: restoring directions is unavailable, but positions-only
 Reset still works. gbdraw does not guess missing directions.
 **Save Session** followed by a fresh **Load Session** keeps valid saved
@@ -871,7 +875,12 @@ Result** holds **Fill Color**, **Stroke**, **Label text** with **Label
 visibility** and **Apply Label**, **Feature visibility**, and **Legend name**.
 **Layout · applies on Generate** holds **Feature placement** and record
 rotation. The **Similarity group** section follows when the feature belongs to
-one. The simple
+one: one line with the group ID, its name, and **N genes in M records**, then
+**Show in editor** and **Align…**, with **Review alignment options…** under
+**Align…**. **More** holds **Highlight**, **Clear highlight**, and the copy and
+download of all member nucleotide or amino-acid FASTA; **N genes** opens the
+member table, where each row's **FASTA** menu copies or downloads that member.
+The simple
 popup shows the same controls in the same order without tabs.
 
 The feature list, feature popup, hover summary, and the feature sections of
@@ -881,8 +890,17 @@ report endpoints and the match details. A Linear match interval is in input-file
 coordinates, as in the feature popup; for a cropped record the popup also shows
 the **Query table interval** or **Subject table interval** (the search-frame
 coordinates of the table row). Match FASTA headers use the same input-file
-`coords=` and `strand=`;
-Similarity-group and Collinear popups add member or anchor context. Sequence
+`coords=` and `strand=`.
+A collinear block popup leads with both spans and their lengths, the
+orientation, the rounded identity, and the number of gene pairs, with **Copy**
+for that summary and a **FASTA** menu for the spans; a cropped record adds
+**Table coordinates**. **N gene pairs** opens one table of query gene, subject
+gene, and group; choosing a group lists its members. **Details** holds the
+block ID, kind, color mode, score, anchors, and how block envelopes relate to
+anchors. A similarity-group ribbon popup is titled with the group name and its
+ID, states **N genes in M records**, and lists the members with one **Copy**
+menu for the group and a **FASTA** menu per member; **Technical details** holds
+the RBH seeds, group paths, and computed description. Sequence
 downloads are available only when the required source sequence and metadata
 are present.
 
@@ -1032,6 +1050,21 @@ On a narrow preview, the same **Editor** sits below the canvas.
 Its content scrolls independently, while its header, Close action, and tabs stay
 reachable. **Close** and **Escape** only hide the Editor and keep the selected tab; when focus was inside the Editor, it returns to the Editor toggle. On short screens, scroll the page and Editor content to reach all controls;
 on wide previews the Editor stays beside the canvas.
+
+The Editor's **Similarity groups** tab lists each group in two lines: its name
+(with its ID when the name differs) and its gene and record counts. Renamed
+groups carry an **Edited** badge. The list scrolls to the selected group, also
+when a new alignment selects its group. The selected group's name, description,
+**Exact reference record and feature** (offered as record and gene names, with
+the location only to tell two same-named features apart), **Align…**, name
+suggestions and members scroll together below the list. **Description** holds
+only a description you wrote; the computed one is under **Name suggestions**.
+As in the popups, one **Copy** menu copies or downloads all member FASTA and
+each member's **FASTA** menu copies or downloads that member. **Highlight** and
+**Clear** act on the group named above them. Without Similarity groups, for
+example in Circular, the tab stays visible but disabled, and its tooltip says
+that Similarity groups appear after a Linear comparison with Similarity groups
+turned on.
 
 Feature search stays in its own row above the canvas, and the zoom and layout
 controls stay in a row below it. Open or close **Editor** without moving the

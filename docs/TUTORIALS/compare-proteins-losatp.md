@@ -159,8 +159,11 @@ comparison between sequence 1 and sequence 2, set **Raw LOSAT filename** to
 
 ### Step 6: Inspect a group
 
-Select a comparison ribbon. The popup reports the group ID, display name,
-member count, record coverage, RBH seeds, paths, and every member protein.
+Select a comparison ribbon. The popup is titled with the group's display name and
+ID, states how many genes the group has in how many records, and lists every
+member protein. **Copy** copies or downloads the group's FASTA; the **FASTA**
+menu on a row does the same for one member. **Technical details** holds the RBH
+seeds, group paths, and computed description.
 
 ![LOSATP similarity-group popup with member details](../images/t-gui-04/06-match-popup.png)
 
@@ -176,10 +179,10 @@ the preview, inspect it and select **Apply** again. Features and labels reverse
 with the record; biological source strands stay unchanged.
 
 Open **Editor**, select **Similarity groups**, then choose **Reset alignment…**
-in **Active plan**. **Reset positions** is selected by default and
-would keep the new reference direction. Select **Reset positions and alignment
-direction changes**, inspect the listed reference and select **Reset** to
-restore its pre-Align direction and positions. The plan is cleared. **Undo**
+on the **Aligned to livA in …** line. **Positions only** is selected by default
+and would keep the new reference direction. Select **Positions and directions
+(1 record)**, inspect the listed reference and select **Reset positions and
+directions** to restore its pre-Align direction and positions. The plan is cleared. **Undo**
 restores the aligned artifact and its search results; reopen Reset to try the other
 scope. After either successful Reset, Undo is required before another scope.
 Combined Reset also replaces subsequent manual direction edits on the listed

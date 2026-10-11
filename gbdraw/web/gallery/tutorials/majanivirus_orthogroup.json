@@ -505,13 +505,13 @@
     },
     {
       "title": "Inspect a similarity-group ribbon",
-      "body": "Click a pairwise match ribbon to inspect the gbdraw group ID, annotation-derived display name, member count, and record coverage. The table below the summary lists all member proteins.",
+      "body": "Click a pairwise match ribbon to inspect the gbdraw group ID, annotation-derived display name, and the count of genes and records. The table below lists the member proteins.",
       "operations": [
         {
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-08-01-orthogroup-popup.webp",
             "alt": "Selected og_31 pairwise ribbon beside the similarity-group popup for wsv360-like protein.",
-            "caption": "Click the highlighted og_31 ribbon; the compact popup summary shows wsv360-like protein with 9 members across all 9 records."
+            "caption": "Click the highlighted og_31 ribbon; the popup shows wsv360-like protein, 9 genes in 9 records, and the first rows of the member table."
           },
           "capture": {
             "source": "webapp",
@@ -551,15 +551,15 @@
               },
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.pairwise-match-popup'); const section = popup?.querySelector('.pairwise-match-popup-section'); const title = section?.querySelector('.pairwise-match-popup-section-title'); const rows = Array.from(section?.querySelectorAll('.pairwise-match-popup-row') || []).slice(0, 4); if (!popup || !title || rows.length !== 4) throw new Error('Compact og_31 summary not found.'); popup.children[0]?.setAttribute('data-capture', 'og31-popup-header'); title.setAttribute('data-capture', 'og31-popup-summary-title'); rows.forEach((row, index) => row.setAttribute('data-capture', `og31-popup-summary-row-${index + 1}`));"
+                "script": "const popup = document.querySelector('.pairwise-match-popup'); const count = popup?.querySelector('[data-match-group-count]'); const rows = Array.from(popup?.querySelectorAll('[data-match-group] tbody tr') || []); const lastShown = rows[Math.min(rows.length, 4) - 1]?.querySelector('td'); if (!popup || !count || !lastShown) throw new Error('Compact og_31 member table not found.'); popup.children[0]?.setAttribute('data-capture', 'og31-popup-header'); count.setAttribute('data-capture', 'og31-popup-count'); lastShown.setAttribute('data-capture', 'og31-popup-member-row'); document.activeElement?.blur();"
               }
             ],
-            "clipSelectors": ["path[data-gbdraw-pairwise-match-id='comparison1_match1']", "[data-capture='og31-popup-header']", "[data-capture='og31-popup-summary-title']", "[data-capture^='og31-popup-summary-row-']"],
+            "clipSelectors": ["path[data-gbdraw-pairwise-match-id='comparison1_match1']", "[data-capture='og31-popup-header']", "[data-capture='og31-popup-count']", "[data-capture='og31-popup-member-row']"],
             "highlightSelector": "path[data-gbdraw-pairwise-match-id='comparison1_match1']",
             "cropPadding": {
               "top": 24,
               "right": 24,
-              "bottom": 24,
+              "bottom": 2,
               "left": 24
             },
             "waitForSelector": ".pairwise-match-popup"

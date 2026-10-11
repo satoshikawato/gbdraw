@@ -48,15 +48,64 @@ write-up of a release.
   **Recommended** chip stays on the recommended candidate after you choose
   another. Behaviour is unchanged: choices stay local until **Apply**, which
   validates, regenerates, and commits in one step.
+- Similarity alignment (web app): the **Reset alignment** dialog says "Undo
+  the latest Align." and offers **Positions only** and **Positions and
+  directions (N records)**. The reason a scope is unavailable sits under it.
+  The per-record list, one line each (current → restored direction), appears
+  only when the directions scope is selected, and the primary button names the
+  scope (**Reset positions** or **Reset positions and directions**).
+  Behaviour is unchanged.
+- Similarity groups (web app): in the Editor's **Similarity groups** tab the
+  active alignment is one line ("Aligned to neoU in BGC0000709" with **Reset
+  alignment…**) that opens to show the reference and records. Group rows have
+  two lines (name, "5 genes · 5 records"), renamed groups carry an **Edited**
+  badge, and the selected group's detail and **Align…** buttons scroll in one
+  region under the list. The exact-reference options name the record and the
+  gene instead of the record key and feature hash. **Reset Rename** is now
+  **Reset name** beside the group's ID; it still restores the name and the
+  description. As in the popups, one **Copy** menu holds the group's FASTA
+  copy and download, each member has a **FASTA** menu instead of four
+  buttons, **Description** shows only a description you wrote (the computed
+  one is under **Name suggestions**), and the list scrolls to the group that
+  a new alignment selects.
+- Similarity groups (web app): the disabled **Similarity groups** tab, for
+  example in Circular, says in its tooltip that Similarity groups appear after
+  a Linear comparison with Similarity groups turned on. The group's
+  **Display name** and **Description** fields are now named by their labels
+  for assistive technology (OV-427).
 - Similarity groups (web app): member tables in the feature popup, ribbon
   popup, and Similarity Groups drawer name each record in plain text, as the
   diagram heading does. Before, a definition with markup such as
   `<i>Streptomyces</i>` showed the tags, and a File default definition was
   ignored (OV-369).
-- Collinear blocks (web app): the **Similarity groups covered** table of a
-  collinear ribbon fills every column again. Before, a ribbon without a
-  collinear group scope looked its groups up only among scoped collinear groups
-  and showed only the group IDs (OV-370).
+- Collinear blocks (web app): a collinear ribbon pairs its genes by group and
+  shows each group's members again. Before, a ribbon without a collinear group
+  scope looked its groups up only among scoped collinear groups and showed only
+  the group IDs (OV-370).
+- Collinear blocks (web app): the block popup leads with one line: both spans
+  with their lengths in kb, the orientation, the identity rounded to a whole
+  percent, and the number of gene pairs, with **Copy** for that line and one
+  **FASTA** menu for the spans. **N gene pairs** opens one table of query gene,
+  subject gene, and group, replacing the separate group and Query/Subject
+  tables. Block ID, kind, color mode, score, anchors, the exact identity, the
+  aligned length in aa, and the note on block envelopes are under **Details**.
+- Similarity groups (web app): a group ribbon popup is titled with the group
+  name, shows the group ID as a badge and one **N genes in M records** line, and
+  lists the members with one **Copy** menu for the group and a **FASTA** menu
+  per member. RBH seeds, group paths, and a computed description are under
+  **Technical details**; a description you wrote stays under the name. A
+  member's role and confidence are shown only when they are not anchor and
+  high.
+- Feature popup (web app): the **Similarity group** section is one line (group
+  ID, name, **N genes in M records**) with **Show in editor** and **Align…**;
+  **Review alignment options…** is a link under **Align…**. **Highlight**,
+  **Clear highlight**, and the group's FASTA copy and download are under
+  **More**, and the member table opens from **N genes**. The **Current
+  member** line and the consensus sentence are gone; the current member's row
+  is marked in the table.
+- Pairwise match popup (web app): a LOSATP pairwise ribbon whose genes are in
+  no similarity group no longer shows a **Similarity group** section holding
+  the query's product as its name (OV-420).
 - Similarity alignment (web app): while an alignment is active, including one
   loaded from a Session, the Similarity Groups drawer selects its group and
   preselects its exact reference, so **Align…** and **Review alignment

@@ -155,6 +155,23 @@ const featureView = (anchor, displayFacts, fallback = '') => {
 const catalogBiologicalFeatures = (catalog) => (Array.isArray(catalog?.items) ? catalog.items : [])
   .flatMap((item) => (Array.isArray(item?.biologicalFeatures) ? item.biologicalFeatures : []));
 
+// The catalog facts of an anchor's feature, so names come from the drawn features.
+/** @param {unknown} catalog */
+const catalogFeatureFacts = (catalog) => {
+  const features = new Map();
+  catalogBiologicalFeatures(catalog).forEach((feature) => {
+    const key = `${feature?.recordKey}\0${feature?.biologicalFeatureId}`;
+    if (!features.has(key)) features.set(key, feature);
+  });
+  return (/** @type {{ recordKey?: string, biologicalFeatureId?: string }} */ anchor) => (
+    features.get(`${anchor.recordKey}\0${anchor.biologicalFeatureId}`)
+  );
+};
+
+// A record's name for one-line summaries: its accession, else its definition.
+/** @param {{ name?: string, detail?: string } | undefined} names */
+const shortRecordName = (names) => names?.detail || names?.name || '';
+
 /**
  * The one catalog feature that a plan anchor names, or null when none or
  * several match. Generate validation and Reset share this lookup.
@@ -327,28 +344,26 @@ const inspectActivePlan = (plan, { linearSeqs = [], catalog = null, request = nu
     (Array.isArray(linearSeqs) ? linearSeqs : [])
       .map((record) => [String(record?.uid || ''), Boolean(record.region_reverse)])
   );
-  const features = new Map();
-  catalogBiologicalFeatures(catalog).forEach((feature) => {
-    const key = `${feature?.recordKey}\0${feature?.biologicalFeatureId}`;
-    if (!features.has(key)) features.set(key, feature);
-  });
-  const nameOf = (anchor) => featureNameParts(anchor,
-    features.get(`${anchor.recordKey}\0${anchor.biologicalFeatureId}`) || {}).label;
+  const factsOf = catalogFeatureFacts(catalog);
+  const nameOf = (anchor) => featureNameParts(anchor, factsOf(anchor) || {});
   const names = recordNames({ recordKeys: plan.records.map(({ recordKey }) => recordKey),
     request, linearSeqs, catalog });
+  const reference = nameOf(plan.reference);
+  const referenceRecord = names.get(plan.reference.recordKey);
   return deepFreeze({
     groupId: plan.groupId,
-    modeLabel: 'Align',
+    // The collapsed inspector line: what the alignment holds fixed.
+    summary: `Aligned to ${reference.name} in ${shortRecordName(referenceRecord)}`,
     reference: {
       ...plan.reference,
-      label: nameOf(plan.reference),
-      recordLabel: names.get(plan.reference.recordKey)?.label
+      label: reference.label,
+      recordLabel: referenceRecord?.label
     },
     records: plan.records.map((decision) => {
       return {
         recordKey: decision.recordKey,
         recordLabel: names.get(decision.recordKey)?.label,
-        anchorLabel: decision.anchor ? nameOf(decision.anchor) : 'Skip',
+        anchorLabel: decision.anchor ? nameOf(decision.anchor).label : 'Skip',
         status: decision.status,
         rationale: decision.rationale,
         rationaleLabel: rationaleLabels[decision.rationale] || decision.rationale,
@@ -1343,20 +1358,35 @@ export const createSimilarityAlignmentActions = ({
     return { status: 'canceled' };
   };
 
+  // Record and feature names of the committed request, shared by the drawer
+  // reference options and the Reset preview; record keys and hashes stay binding-only.
+  const committedNames = computed(() => {
+    const request = currentRequest();
+    const catalog = state.featureCatalog?.value;
+    return {
+      records: recordNames({ recordKeys: (request?.records || []).map(({ recordKey }) => recordKey),
+        request, linearSeqs: state.linearSeqs, catalog }),
+      factsOf: catalogFeatureFacts(catalog)
+    };
+  });
+
   const drawerReferenceOptions = (groupId) => {
     const id = String(groupId || '').trim();
     const group = getOrthogroupById(id);
     if (!group) return [];
+    const { records, factsOf } = committedNames.value;
     // `filter(Boolean)` drops the members whose anchor does not resolve (the `null` results).
-    const candidates = /** @type {{ anchor: ReturnType<typeof anchorFromSource>, canonicalKey: string, key: string, label: string }[]} */ (getEnrichedOrthogroupMembers(group).map((member) => {
+    const candidates = /** @type {{ anchor: ReturnType<typeof anchorFromSource>, canonicalKey: string, key: string, label: string, location: string }[]} */ (getEnrichedOrthogroupMembers(group).map((member) => {
       try {
         const anchor = anchorFromSource(member, 'Drawer reference');
+        const record = shortRecordName(records.get(anchor.recordKey)) || 'Unavailable record';
         return {
           anchor,
           canonicalKey: `${anchor.recordKey}\0${anchor.biologicalFeatureId}`,
           key: anchorKey(anchor),
-          label: `${anchor.recordKey} · ${anchor.biologicalFeatureId} · `
-            + `${Number(member?.start) + 1}..${Number(member?.end)} `
+          label: `${record} · ${featureNameParts(anchor, factsOf(anchor) || member).name}`,
+          location: `${(Number(member?.start) + 1).toLocaleString('en-US')}..`
+            + `${Number(member?.end).toLocaleString('en-US')} `
             + `(${strandLabel(strandValue(member?.strand, 'Drawer reference strand'))})`
         };
       } catch (_error) {
@@ -1367,9 +1397,13 @@ export const createSimilarityAlignmentActions = ({
     candidates.forEach(({ canonicalKey }) => {
       counts.set(canonicalKey, (counts.get(canonicalKey) || 0) + 1);
     });
-    return candidates
-      .filter(({ canonicalKey }) => counts.get(canonicalKey) === 1)
-      .map(({ canonicalKey: _canonicalKey, ...candidate }) => candidate);
+    const unique = candidates.filter(({ canonicalKey }) => counts.get(canonicalKey) === 1);
+    // Two features with the same record and name (inparalogs) also show their location.
+    const labels = new Map();
+    unique.forEach(({ label }) => labels.set(label, (labels.get(label) || 0) + 1));
+    return unique.map(({ canonicalKey: _canonicalKey, location, ...candidate }) => (
+      labels.get(candidate.label) > 1 ? { ...candidate, label: `${candidate.label} · ${location}` } : candidate
+    ));
   };
 
   // OV-381: a new plan (Apply, Session load, Undo) selects its own group in the
@@ -1418,17 +1452,22 @@ export const createSimilarityAlignmentActions = ({
   const resetPreview = computed(() => {
     const receipt = state.similarityAlignmentResetReceipt.value;
     const request = currentRequest();
-    const names = recordNames({ recordKeys: (request?.records || []).map(({ recordKey }) => recordKey),
-      request, linearSeqs: state.linearSeqs, catalog: state.featureCatalog?.value });
+    const names = committedNames.value.records;
     const targets = (receipt?.directions || []).map(delta => {
       const record = request?.records.find(({recordKey}) => recordKey === delta.recordKey);
-      return {recordKey: delta.recordKey, label: names.get(delta.recordKey)?.label || 'Unavailable record',
+      const recordName = names.get(delta.recordKey);
+      return {recordKey: delta.recordKey, label: recordName?.label || 'Unavailable record',
+        name: shortRecordName(recordName) || 'Unavailable record',
         current: baseReverseComplement(record), restored: delta.before,
         laterManualEdit: baseReverseComplement(record) !== delta.after};
     });
-    return { targets, disabledReason: !receipt
-      ? 'This Session has no historical alignment direction evidence. Reset positions is available.'
-      : !targets.length ? 'The latest Align made no direction changes. Reset positions is available.' : '' };
+    const count = targets.length;
+    return { targets,
+      directionsLabel: count ? `Positions and directions (${count} ${count === 1 ? 'record' : 'records'})`
+        : 'Positions and directions',
+      disabledReason: !receipt
+        ? 'Not available: this Session does not record which directions the latest Align changed.'
+        : !count ? 'Not available: the latest Align did not change any record direction.' : '' };
   });
   const resetAlignment = async (scope = 'positions') => {
     if (!state.similarityAlignmentPlan?.value) return {status:'noop'};

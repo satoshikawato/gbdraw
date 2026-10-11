@@ -361,7 +361,7 @@ test('Gallery renders the Hepatoplasmataceae orthogroup tutorial and media', asy
     )
   ).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Minimum Identity 0' })).toBeVisible();
-  await expect(page.getByText('gbdraw group ID, display name, member count')).toBeVisible();
+  await expect(page.getByText('gbdraw group ID, display name, and the count of genes and records')).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
   await expect(mediaImages).toHaveCount(11);
   await expect(tutorialPanel.locator('img[src$="manual-02-01-upload-row-context.webp"]')).toHaveCount(1);

@@ -645,38 +645,33 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         );
         const payload = buildMatchPopupPayload(element, popupOptions);
 
-        const sectionTitles = payload.sections.map((section) => section.title);
-        assert(!sectionTitles.includes('Alignment'), `Alignment section leaked: ${{JSON.stringify(sectionTitles)}}`);
-        assert(!sectionTitles.includes('Similarity group'), `Single-group section leaked: ${{JSON.stringify(sectionTitles)}}`);
-        assert(sectionTitles.includes('Similarity groups covered'), `Block group section missing: ${{JSON.stringify(sectionTitles)}}`);
-        assert(sectionTitles.includes('Query'), `Query section missing: ${{JSON.stringify(sectionTitles)}}`);
-        assert(sectionTitles.includes('Subject'), `Subject section missing: ${{JSON.stringify(sectionTitles)}}`);
-        assert(!sectionTitles.includes('Query feature'), `Old Query feature title leaked: ${{JSON.stringify(sectionTitles)}}`);
-        assert(!sectionTitles.includes('Subject feature'), `Old Subject feature title leaked: ${{JSON.stringify(sectionTitles)}}`);
-
-        const labels = payload.sections.flatMap((section) => section.rows.map((row) => row.label));
-        for (const forbidden of ['Match ID', 'Unit ID', 'Query unit', 'Subject unit']) {{
-          assert(!labels.includes(forbidden), `${{forbidden}} leaked: ${{JSON.stringify(labels)}}`);
+        // UX-B01: a collinear block leads with one summary and lists its genes
+        // as pairs (query gene | subject gene | group); no row sections remain.
+        assert(payload.sections.length === 0, `Row sections leaked: ${{JSON.stringify(payload.sections)}}`);
+        assert(!payload.group, `Single-group view leaked: ${{JSON.stringify(payload.group)}}`);
+        const block = payload.block;
+        assert(block, 'Collinear block view missing');
+        const detailLabels = block.detailRows.map((row) => row.label);
+        for (const forbidden of ['Match ID', 'Unit ID', 'Query unit', 'Subject unit', 'Similarity group ID']) {{
+          assert(!detailLabels.includes(forbidden), `${{forbidden}} leaked: ${{JSON.stringify(detailLabels)}}`);
         }}
-        assert(!labels.includes('Similarity group ID'), `Long block similarity group ID leaked: ${{JSON.stringify(labels)}}`);
-        assert(labels.includes('Number of similarity groups covered'), `Similarity-group count missing: ${{JSON.stringify(labels)}}`);
-
-        const query = payload.sections.find((section) => section.title === 'Query');
-        const subject = payload.sections.find((section) => section.title === 'Subject');
-        assert(rowValue(query, 'Protein ID') === 'WP_000001.1; WP_000002.1', JSON.stringify(query.rows));
-        assert(!rowValue(query, 'Protein ID').includes('p_record_a_'), JSON.stringify(query.rows));
-        assert(rowValue(subject, 'Protein ID') === 'SLOCUS_001; SLOCUS_002', JSON.stringify(subject.rows));
-        assert(!rowValue(subject, 'Protein ID').includes('gbd_r0002_cds000001'), JSON.stringify(subject.rows));
-        assert(query.featureRows.length === 2, JSON.stringify(query.featureRows));
-        assert(query.featureRows.every((row) => row.canOpen), JSON.stringify(query.featureRows));
-        assert(query.featureRows.map((row) => row.label).join(',') === 'WP_000001.1,WP_000002.1', JSON.stringify(query.featureRows));
-        assert(query.featureRows[0].subLabel === 'qlocus1 / qgene1', JSON.stringify(query.featureRows[0]));
-        assert(query.featureRows[0].record === 'record_a', JSON.stringify(query.featureRows[0]));
-        assert(query.featureRows[0].product === 'query product 1', JSON.stringify(query.featureRows[0]));
-        assert(subject.featureRows.length === 2, JSON.stringify(subject.featureRows));
-        assert(subject.featureRows.map((row) => row.label).join(',') === 'SLOCUS_001,SLOCUS_002', JSON.stringify(subject.featureRows));
-        assert(subject.featureRows[0].subLabel === 'subject display 1', JSON.stringify(subject.featureRows[0]));
-        assert(subject.featureRows[0].feature.svg_id === 'fs1', JSON.stringify(subject.featureRows[0]));
+        assert(block.pairCount === 2 && block.pairsLabel === '2 gene pairs', JSON.stringify(block));
+        assert(block.summaryText.startsWith('Collinear block: '), block.summaryText);
+        const queryRows = block.genePairs.map((pair) => pair.query);
+        const subjectRows = block.genePairs.map((pair) => pair.subject);
+        assert(queryRows.length === 2, JSON.stringify(queryRows));
+        assert(queryRows.every((row) => row.canOpen), JSON.stringify(queryRows));
+        assert(queryRows.map((row) => row.label).join(',') === 'WP_000001.1,WP_000002.1', JSON.stringify(queryRows));
+        assert(queryRows.every((row) => !`${{row.label}} ${{row.proteinId}} ${{row.copyText}}`.includes('p_record_a_')), JSON.stringify(queryRows));
+        assert(queryRows[0].subLabel === 'qlocus1 / qgene1', JSON.stringify(queryRows[0]));
+        assert(queryRows[0].record === 'record_a', JSON.stringify(queryRows[0]));
+        assert(queryRows[0].product === 'query product 1', JSON.stringify(queryRows[0]));
+        assert(subjectRows.length === 2, JSON.stringify(subjectRows));
+        assert(subjectRows.map((row) => row.label).join(',') === 'SLOCUS_001,SLOCUS_002', JSON.stringify(subjectRows));
+        assert(subjectRows.every((row) => !`${{row.label}} ${{row.proteinId}} ${{row.copyText}}`.includes('gbd_r0002_cds000001')), JSON.stringify(subjectRows));
+        assert(subjectRows[0].subLabel === 'subject display 1', JSON.stringify(subjectRows[0]));
+        assert(subjectRows[0].feature.svg_id === 'fs1', JSON.stringify(subjectRows[0]));
+        assert(block.genePairs.map((pair) => pair.group.id).join(',') === 'og_1,og_2', JSON.stringify(block.genePairs));
 
         const duplicateAttrs = new Map(Object.entries({{
           'data-gbdraw-pairwise-match-id': 'comparison3_match4',
@@ -715,10 +710,10 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
             }}
           }}]])
         }});
-        const duplicateQuery = duplicatePayload.sections.find((section) => section.title === 'Query');
-        assert(duplicateQuery.featureRows[0].label === 'BDV02135.1', JSON.stringify(duplicateQuery.featureRows[0]));
-        assert(duplicateQuery.featureRows[0].subLabel === 'HPAVJP_0240', JSON.stringify(duplicateQuery.featureRows[0]));
-        assert(!duplicateQuery.featureRows[0].subLabel.includes(' / HPAVJP_0240'), JSON.stringify(duplicateQuery.featureRows[0]));
+        const duplicateQuery = duplicatePayload.block.genePairs[0].query;
+        assert(duplicateQuery.label === 'BDV02135.1', JSON.stringify(duplicateQuery));
+        assert(duplicateQuery.subLabel === 'HPAVJP_0240', JSON.stringify(duplicateQuery));
+        assert(!duplicateQuery.subLabel.includes(' / HPAVJP_0240'), JSON.stringify(duplicateQuery));
 
         const runtimeOnlyHandle = 'h_aaaaaaaaaaaaaaaaaaaaaaaaaa';
         const runtimeOnlyAttrs = new Map(Object.entries({{
@@ -737,15 +732,11 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         assert(runtimeOnlyQuery, JSON.stringify(runtimeOnlyPayload.sections));
         assert(!JSON.stringify(runtimeOnlyQuery).includes(runtimeOnlyHandle), JSON.stringify(runtimeOnlyQuery));
 
-        const blockOgSection = payload.sections.find((section) => section.title === 'Similarity groups covered');
-        assert(rowValue(blockOgSection, 'Number of similarity groups covered') === '2', JSON.stringify(blockOgSection.rows));
         assert(payload.blockOrthogroupCount === 2, JSON.stringify(payload));
         assert(payload.blockOrthogroups.length === 2, JSON.stringify(payload.blockOrthogroups));
         assert(payload.blockOrthogroups[0].id === 'og_1', JSON.stringify(payload.blockOrthogroups));
         assert(payload.blockOrthogroups[0].displayName === 'orthogroup display', JSON.stringify(payload.blockOrthogroups[0]));
-        assert(payload.blockOrthogroups[0].queryMember === 'WP_000001.1', JSON.stringify(payload.blockOrthogroups[0]));
-        assert(payload.blockOrthogroups[0].subjectMember === 'SLOCUS_001', JSON.stringify(payload.blockOrthogroups[0]));
-        assert(payload.blockOrthogroups[0].detailRows.some((row) => row.label === 'Similarity group ID' && row.value === 'og_1'), JSON.stringify(payload.blockOrthogroups[0].detailRows));
+        assert(payload.blockOrthogroups[0].technicalRows.some((row) => row.label === 'Similarity group ID' && row.value === 'og_1'), JSON.stringify(payload.blockOrthogroups[0].technicalRows));
         const reverseMember = payload.blockOrthogroups[0].memberRows.find((row) => row.proteinId === 'CAG34720.1');
         assert(reverseMember && reverseMember.aaFasta.includes('MG'), JSON.stringify(payload.blockOrthogroups[0].memberRows));
         assert(reverseMember.canOpen, JSON.stringify(reverseMember));
@@ -767,8 +758,6 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         popupOptions.orthogroups[0].members[2].recordIndex = 4;
         featureLookup.delete('source-space-stable-id');
         assert(payload.blockOrthogroups[1].id === 'og_2', JSON.stringify(payload.blockOrthogroups));
-        assert(payload.blockOrthogroups[1].queryMember === 'WP_000002.1', JSON.stringify(payload.blockOrthogroups[1]));
-        assert(payload.blockOrthogroups[1].subjectMember === 'SLOCUS_002', JSON.stringify(payload.blockOrthogroups[1]));
 
         const hoverLabels = buildPairwiseMatchHoverRows(payload).map((row) => row.label);
         assert(hoverLabels.includes('Identity'), JSON.stringify(hoverLabels));

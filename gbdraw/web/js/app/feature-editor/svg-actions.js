@@ -324,7 +324,7 @@ export const createFeatureSvgActions = ({
     const proteinId = resolveFeatureProteinId(feat, member);
     const rows = [
       { key: 'orthogroup_id', label: 'Similarity group ID', value: feat?.orthogroupId || feat?.orthogroup_id },
-      { key: 'orthogroup_members', label: 'Members', value: feat?.orthogroupMemberCount || feat?.orthogroup_member_count },
+      { key: 'orthogroup_members', label: 'Group genes', value: feat?.orthogroupMemberCount || feat?.orthogroup_member_count },
       { key: 'orthogroup_coverage', label: 'Record coverage', value: feat?.orthogroupRecordCoverage || feat?.orthogroup_record_coverage },
       { key: 'protein_id', label: 'Protein ID', value: proteinId }
     ];

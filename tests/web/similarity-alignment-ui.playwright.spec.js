@@ -83,9 +83,7 @@ test('alignment canvas guide and candidates stay transient and share palette cho
   }
   const drawer = page.locator('.right-drawer');
   await drawer.getByRole('button', { name: 'Similarity groups' }).click();
-  await drawer.locator('button').filter({
-    has: page.locator('.font-mono', { hasText: /^og_1$/ })
-  }).click();
+  await drawer.locator('[data-similarity-group-row="og_1"]').click();
   const referenceSelect = drawer.getByLabel('Exact reference record and feature');
   const referenceKey = await page.evaluate(() => (
     window.__GBDRAW_APP__.similarityAlignmentDrawerReferenceOptions('og_1')
@@ -302,9 +300,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   }
   const drawer = page.locator('.right-drawer');
   await drawer.getByRole('button', { name: 'Similarity groups' }).click();
-  await drawer.locator('button').filter({
-    has: page.locator('.font-mono', { hasText: /^og_1$/ })
-  }).click();
+  await drawer.locator('[data-similarity-group-row="og_1"]').click();
 
   const align = drawer.getByRole('button', { name: 'Align…', exact: true });
   const drawerReview = drawer.getByRole('button', { name: 'Review alignment options…' });
@@ -608,7 +604,11 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await similarityTab.click();
   const inspector = drawer.locator('[data-similarity-alignment-plan-inspector]');
   await expect(inspector).toBeVisible();
-  await expect(inspector).toContainText('Exact reference:');
+  // UX-B06: one line until opened; the reference and each record's rationale are inside.
+  await expect(inspector.locator('summary')).toContainText(/^Aligned to .+ in .+$/);
+  await expect(inspector.getByText('Exact reference:')).toBeHidden();
+  await inspector.locator('summary').click();
+  await expect(inspector.getByText('Exact reference:')).toBeVisible();
   await expect(inspector).toContainText('Selected by user');
   await expect(inspector).toContainText('Exact reference');
   await page.screenshot({ path: testInfo.outputPath('narrow-final.png'), fullPage: true });
@@ -707,7 +707,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
     () => window.__GBDRAW_HISTORY__.getUndoCount()
   );
   await freshPage.locator('[data-similarity-alignment-reset]').click();
-  await freshPage.getByRole('dialog',{name:'Reset alignment',exact:true}).getByRole('button',{name:'Reset',exact:true}).click();
+  await freshPage.getByRole('dialog',{name:'Reset alignment',exact:true}).getByRole('button',{name:'Reset positions',exact:true}).click();
   await expect.poll(() => freshPage.evaluate(async () => {
     const { state } = await import('./js/state.js');
     return {
@@ -744,9 +744,7 @@ const openAlignmentFromDrawer = async (page) => {
   }
   const drawer = page.locator('.right-drawer');
   await drawer.getByRole('button', { name: 'Similarity groups' }).click();
-  await drawer.locator('button').filter({
-    has: page.locator('.font-mono', { hasText: /^og_1$/ })
-  }).click();
+  await drawer.locator('[data-similarity-group-row="og_1"]').click();
   const reference = await page.evaluate(() => (
     window.__GBDRAW_APP__.similarityAlignmentDrawerReferenceOptions('og_1')
       .find(({ anchor }) => anchor.recordKey === 'record_b')?.key || ''
@@ -914,9 +912,7 @@ test('one usable member applies directly through one Worker resolve and one Hist
   }
   const drawer = page.locator('.right-drawer');
   await drawer.getByRole('button', { name: 'Similarity groups' }).click();
-  await drawer.locator('button').filter({
-    has: page.locator('.font-mono', { hasText: /^og_1$/ })
-  }).click();
+  await drawer.locator('[data-similarity-group-row="og_1"]').click();
   const reference = await page.evaluate(() => (
     window.__GBDRAW_APP__.similarityAlignmentDrawerReferenceOptions('og_1')
       .find(({ anchor }) => anchor.recordKey === 'record_b')?.key || ''
@@ -1072,9 +1068,7 @@ test('one usable member applies directly through one Worker resolve and one Hist
   }
   const similarityTab = drawer.getByRole('button', { name: 'Similarity groups' });
   await similarityTab.click();
-  await drawer.locator('button').filter({
-    has: page.locator('.font-mono', { hasText: /^og_1$/ })
-  }).click();
+  await drawer.locator('[data-similarity-group-row="og_1"]').click();
   await drawer.getByLabel('Exact reference record and feature').selectOption(reference);
   const committed = await artifactSnapshot(page);
   const priorLayout = await page.evaluate(() => {
@@ -1502,7 +1496,12 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   expect(manual.receipt).toEqual(applied.receipt);
   await page.evaluate(()=>window.__GBDRAW_APP__.openSimilarityAlignmentReset());
   const resetReview=page.getByRole('dialog',{name:'Reset alignment',exact:true});
-  await expect(resetReview).toContainText('This record was manually changed after Align');
+  // The targets show only for the directions scope, one line per record.
+  await expect(resetReview.getByRole('list', { name: 'Alignment direction restoration targets' })).toHaveCount(0);
+  await resetReview.getByRole('radio', { name: /^Positions and directions \(\d+ records\)$/ }).check();
+  await expect(resetReview.getByRole('button', { name: 'Reset positions and directions', exact: true })).toBeVisible();
+  await expect(resetReview).toContainText('changed after Align');
+  await expect(resetReview).toContainText('Direction changes you made after Align on these records are replaced.');
   expect(manual.receipt.directions.length).toBeGreaterThan(1);
   const restorationTargets = resetReview.getByRole('list', { name: 'Alignment direction restoration targets' });
   await expect(restorationTargets.getByRole('listitem')).toHaveCount(manual.receipt.directions.length);
@@ -1510,7 +1509,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   await restorationTargets.getByRole('listitem').last().scrollIntoViewIfNeeded();
   await expect(restorationTargets.getByRole('listitem').last()).toBeVisible();
   expect(await resetReview.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
-  const resetFooter = await resetReview.getByRole('button', { name: 'Reset', exact: true }).boundingBox();
+  const resetFooter = await resetReview.getByRole('button', { name: 'Reset positions and directions', exact: true }).boundingBox();
   expect(resetFooter.y + resetFooter.height).toBeLessThanOrEqual(740);
   await resetReview.screenshot({ path: testInfo.outputPath('reset-targets-390.png') });
   await page.setViewportSize({ width: 1600, height: 1000 });
@@ -1808,7 +1807,7 @@ const openDirectionReview = async page => {
   if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) await page.locator('.drawer-toggle').click();
   const drawer = page.locator('.right-drawer');
   await drawer.getByRole('button', { name: 'Similarity groups' }).click();
-  await drawer.locator('button').filter({ has: page.locator('.font-mono', { hasText: /^group$/ }) }).click();
+  await drawer.locator('[data-similarity-group-row="group"]').click();
   const key = await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDrawerReferenceOptions('group')
     .find(({ anchor }) => anchor.recordKey === 'record-1').key);
   await drawer.getByLabel('Exact reference record and feature').selectOption(key);
@@ -1853,26 +1852,33 @@ test('minority reference, source strands and Reset scopes have truthful accessib
   const resetButton = page.locator('[data-similarity-alignment-reset]');
   await resetButton.click();
   const reset = page.getByRole('dialog', { name: 'Reset alignment', exact: true });
-  const positions = reset.getByRole('radio', { name: 'Reset positions', exact: true });
-  const combined = reset.getByRole('radio', { name: 'Reset positions and alignment direction changes', exact: true });
+  const positions = reset.getByRole('radio', { name: 'Positions only', exact: true });
+  const combined = reset.getByRole('radio', { name: /^Positions and directions/ });
+  const resetPositions = reset.getByRole('button', { name: 'Reset positions', exact: true });
+  const resetBoth = reset.getByRole('button', { name: 'Reset positions and directions', exact: true });
   await expect(reset.getByRole('heading')).toBeFocused();
+  await expect(reset).toHaveAccessibleDescription('Undo the latest Align.');
   await expect(positions).toBeChecked();
-  await expect(reset.getByRole('list', { name: 'Alignment direction restoration targets' })).toContainText('ref');
-  await expect(reset.getByRole('list')).toContainText('current reverse; restored forward');
+  await expect(combined).toHaveAccessibleName('Positions and directions (1 record)');
+  // UX-A01: the targets and their disclosure appear with the directions scope only.
+  await expect(reset.getByRole('list', { name: 'Alignment direction restoration targets' })).toHaveCount(0);
+  await expect(resetPositions).toBeVisible();
   await positions.focus(); await page.keyboard.press('ArrowDown');
   await expect(combined).toBeChecked(); await expect(positions).not.toBeChecked();
-  await expect(reset.locator('#alignment-reset-scope')).toHaveAttribute('aria-live', 'polite');
-  await expect(reset.locator('#alignment-reset-scope')).toContainText('later manual direction edits');
+  await expect(reset.getByRole('list', { name: 'Alignment direction restoration targets' })).toContainText('ref');
+  await expect(reset.getByRole('list')).toContainText('reverse → forward');
+  await expect(reset).toContainText('Direction changes you made after Align on these records are replaced.');
+  await expect(resetBoth).toBeVisible(); await expect(resetPositions).toHaveCount(0);
   for (const height of [740, 844]) {
     await page.setViewportSize({ width: 390, height });
-    await expect(reset.getByRole('button', { name: 'Reset', exact: true })).toBeVisible();
+    await expect(resetBoth).toBeVisible();
     await reset.getByRole('list').scrollIntoViewIfNeeded();
     expect(await reset.evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true);
     await reset.screenshot({ path: testInfo.outputPath(`reset-390-${height}.png`) });
   }
   await combined.press('Escape'); await expect(reset).toBeHidden(); await expect(resetButton).toBeFocused();
   await resetButton.press('Enter'); await expect(positions).toBeChecked();
-  await reset.getByRole('button', { name: 'Reset', exact: true }).press('Enter');
+  await resetPositions.press('Enter');
   await expect(reset).toBeHidden({ timeout: 180000 });
   await expect(resetButton).toHaveCount(0); await expect(page.locator('.drawer-toggle')).toBeFocused();
   const consumed = await artifactSnapshot(page);
@@ -1883,7 +1889,7 @@ test('minority reference, source strands and Reset scopes have truthful accessib
   await expect.poll(() => artifactSnapshot(page)).toEqual({ ...aligned, history: [aligned.history[0], 1, expect.any(Number)] });
   expect((await artifactSnapshot(page)).history[2]).toBeGreaterThan(aligned.history[2]);
   await resetButton.click(); await combined.check();
-  await reset.getByRole('button', { name: 'Reset', exact: true }).press('Enter');
+  await resetBoth.press('Enter');
   await expect(reset).toBeHidden({ timeout: 180000 });
   const restored = await artifactSnapshot(page);
   expect(restored.session.renderRequest.records).toEqual(initial.session.renderRequest.records);
@@ -1906,7 +1912,8 @@ test('minority reference, source strands and Reset scopes have truthful accessib
   expect((await artifactSnapshot(page)).receipt.directions).toEqual([]);
   await resetButton.click();
   await expect(combined).toBeDisabled(); await expect(positions).toBeEnabled();
-  await expect(reset.locator('#alignment-reset-direction-reason')).toContainText('latest Align made no direction changes');
+  await expect(combined).toHaveAccessibleName('Positions and directions');
+  await expect(combined).toHaveAccessibleDescription('Not available: the latest Align did not change any record direction.');
   await reset.getByRole('button', { name: 'Cancel', exact: true }).press('Enter');
   // A Session with an Align plan but no Reset receipt (PD-OI-028); the Gallery Session ships an empty one.
   const historical = JSON.parse(readFileSync('gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json', 'utf8'));
@@ -1916,7 +1923,7 @@ test('minority reference, source strands and Reset scopes have truthful accessib
   await page.locator('.right-drawer').getByRole('button', { name: 'Similarity groups' }).click();
   await resetButton.click();
   await expect(combined).toBeDisabled(); await expect(positions).toBeEnabled();
-  await expect(reset.locator('#alignment-reset-direction-reason')).toContainText('no historical alignment direction evidence');
+  await expect(combined).toHaveAccessibleDescription(/does not record which directions the latest Align changed/);
   await positions.focus(); await page.keyboard.press('ArrowDown'); await expect(positions).toBeChecked();
   await positions.press('Escape'); await expect(reset).toBeHidden(); await expect(resetButton).toBeFocused();
 });
@@ -2060,7 +2067,7 @@ for(const entry of ['resolved explicit','multiple target ambiguity','automatic r
     await page.evaluate(async()=>{const app=window.__GBDRAW_APP__;app.openRightDrawerTab('orthogroups');app.selectedOrthogroupId='og_1';app.losatExecution.executionMode='serial';await window.Vue.nextTick()});
     const drawer=page.locator('.right-drawer');
     const reference=drawer.getByLabel('Exact reference record and feature');
-    if(!await reference.isVisible())await drawer.locator('button').filter({has:page.locator('.font-mono',{hasText:/^og_1$/})}).first().click();
+    if(!await reference.isVisible())await drawer.locator('[data-similarity-group-row="og_1"]').click();
     const key=await page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentDrawerReferenceOptions('og_1').find(option=>option.anchor.recordKey==='record-1').key);
     await reference.selectOption(key);
     let before=await artifactSnapshot(page);
@@ -2314,4 +2321,45 @@ test('choosing Upload BLAST TSV without a file keeps a loaded alignment and the 
   await expect(page.locator('#similarity-alignment-drawer-reason'))
     .not.toContainText('Select an exact reference');
   await expect(page.locator('button[title="Align to the selected exact feature"]')).toBeEnabled();
+});
+
+test('the drawer list scrolls to the group a new alignment plan selects', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, readFileSync(
+    'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'
+  ), 'BGC0000708-BGC0000713.gbdraw-session.json');
+  const groupId = await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return state.similarityAlignmentPlan.value?.groupId || '';
+  });
+  expect(groupId).toBeTruthy();
+  const list = page.locator('[data-similarity-group-list]');
+  const planRow = list.locator(`[data-similarity-group-row="${groupId}"]`);
+  const rowInView = (row) => row.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const view = element.closest('[data-similarity-group-list]').getBoundingClientRect();
+    return box.top >= view.top - 1 && box.bottom <= view.bottom + 1;
+  });
+
+  // The Session's plan selected its group before the drawer opened.
+  await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('orthogroups'));
+  await expect(planRow).toHaveAttribute('aria-current', 'true');
+  await expect.poll(() => rowInView(planRow)).toBe(true);
+
+  // With the drawer open, the user picks the first group and the list is back at
+  // the top; the next plan (the same plan replaced, as Undo or a reorder does)
+  // selects its group again and the list follows it.
+  const firstRow = list.locator('[data-similarity-group-row]').first();
+  await list.evaluate((element) => { element.scrollTop = 0; });
+  await firstRow.click();
+  await expect(firstRow).toHaveAttribute('aria-current', 'true');
+  await expect.poll(() => rowInView(planRow)).toBe(false);
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    state.similarityAlignmentPlan.value = { ...state.similarityAlignmentPlan.value };
+  });
+  await expect(planRow).toHaveAttribute('aria-current', 'true');
+  await expect.poll(() => rowInView(planRow)).toBe(true);
 });

@@ -597,7 +597,7 @@ test('active schema-2 plan validates on regeneration and supports Reset and stab
   const fixture = create();
   await startReview(fixture);
   await fixture.actions.applyDraft();
-  assert.equal(fixture.actions.activePlanInspector.value.modeLabel, 'Align');
+  assert.equal(fixture.actions.activePlanInspector.value.summary, 'Aligned to gene-clicked in Record 1');
   const calls = fixture.helperCalls.length;
   assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
   assert.equal(fixture.helperCalls.length, calls + 1);
@@ -995,8 +995,9 @@ test('a changed final source binding rejects corrections without committing anyt
   assert.equal(f.history.getUndoCount(),0);assert.equal(f.generationCalls.length,0);assert.equal(f.state.similarityAlignmentResetReceipt.value,null);
 });
 test('empty modern evidence and missing historical evidence disable combined Reset with different reasons',async()=>{
-  const f=create();await startAlign(f);assert.match(f.actions.resetPreview.value.disabledReason,/no direction changes/);
-  f.state.similarityAlignmentResetReceipt.value=null;assert.match(f.actions.resetPreview.value.disabledReason,/historical/);
+  const f=create();await startAlign(f);assert.match(f.actions.resetPreview.value.disabledReason,/did not change any record direction/);
+  assert.equal(f.actions.resetPreview.value.directionsLabel,'Positions and directions');
+  f.state.similarityAlignmentResetReceipt.value=null;assert.match(f.actions.resetPreview.value.disabledReason,/does not record which directions/);
   assert.equal((await f.actions.resetAlignment('positions-and-directions')).status,'rejected');
   assert.equal((await f.actions.resetAlignment()).status,'ok');
 });
@@ -1032,6 +1033,8 @@ test('Align A then B resets to B before, including reference and only affected l
   f.generationCalls.at(-1).canonical.renderRequest.records[0].presentation.label='<i>Exact displayed record</i>';
   f.state.linearSeqs[0].definition='Source-only name';
   assert.equal(f.actions.resetPreview.value.targets[0].label,'Exact displayed record');
+  assert.equal(f.actions.resetPreview.value.targets[0].name,'Exact displayed record');
+  assert.equal(f.actions.resetPreview.value.directionsLabel,'Positions and directions (2 records)');
   assert.equal(f.actions.resetPreview.value.targets[0].laterManualEdit,true);
   assert.equal((await f.actions.resetAlignment('positions-and-directions')).status,'ok');
   assert.deepEqual(f.state.linearSeqs.map(row=>row.region_reverse),[...afterA.slice(0,2),true]);
@@ -1112,4 +1115,22 @@ test('Review and the active-plan inspector use names, never internal keys or has
     ['Genome B · Record 2', 'gene-target-a · target-a'],
     ['Genome B · Record 3', 'CDS 41..60 bp']
   ]);
+});
+
+// UX-B06: the drawer reference options name the record and the gene, not the
+// record key and the feature hash; the active plan is one line.
+test('drawer reference options and the active-plan line use record and gene names', async () => {
+  const inparalog = { ...member('a', 'twin', 9, '-'), gene: 'gene-clicked' };
+  const fixture = create({ members: [reference, inparalog, targetA, targetC] });
+  Object.assign(fixture.state.linearSeqs[0], { definition: 'Genome A', accession: 'ACC-A' });
+  fixture.state.linearSeqs[1].definition = 'Genome B';
+  assert.deepEqual(fixture.actions.drawerReferenceOptions('og-1').map(({ label }) => label), [
+    'ACC-A · gene-clicked · 51..70 (+)',
+    'ACC-A · gene-clicked · 101..120 (-)',
+    'Genome B · gene-target-a',
+    'Record 3 · gene-target-c'
+  ]);
+  await startReview(fixture);
+  await fixture.actions.applyDraft();
+  assert.equal(fixture.actions.activePlanInspector.value.summary, 'Aligned to gene-clicked in ACC-A');
 });
