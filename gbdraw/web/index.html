@@ -340,6 +340,20 @@
             overflow-wrap: anywhere;
             white-space: pre-wrap;
         }
+        .preview-item-popup {
+            width: min(400px, calc(100vw - 24px));
+        }
+        .preview-item-heading {
+            margin-bottom: 0.25rem;
+            color: #475569;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+        .preview-layout-off .gbdraw-preview-surface [data-gbdraw-preview-item] {
+            cursor: pointer;
+        }
         .pairwise-match-feature-list {
             max-height: 18rem;
             overflow: auto;
@@ -6093,17 +6107,25 @@
                     </div>
 
                     <!-- Pairwise Match Popup -->
+                    <!-- The same frame shows a legend entry or a record definition (previewItem). -->
                     <div v-if="clickedPairwiseMatch"
                          ref="pairwiseMatchPopupRef"
                          @mousedown="startPairwiseMatchPopupDrag"
                          role="dialog"
-                         aria-label="Pairwise match details"
+                         :aria-label="previewItemView ? previewItemView.dialogLabel : 'Pairwise match details'"
                          class="fixed z-50 feature-popup pairwise-match-popup custom-scrollbar bg-white rounded-xl shadow-2xl border border-slate-200 p-4"
+                         :class="{ 'preview-item-popup': clickedPairwiseMatch.previewItem }"
                          :style="pairwiseMatchPopupStyle">
                         <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100 cursor-move">
-                            <div class="w-4 h-4 shrink-0 rounded mt-1 border border-slate-200"
-                                 :style="{ backgroundColor: clickedPairwiseMatch.fill || '#94a3b8' }"></div>
-                            <div class="min-w-0">
+                            <div v-if="!previewItemView || previewItemView.kind === 'legend-entry'"
+                                 class="w-4 h-4 shrink-0 rounded mt-1 border border-slate-200"
+                                 :style="{ backgroundColor: (previewItemView && previewItemView.color) || clickedPairwiseMatch.fill || '#94a3b8' }"></div>
+                            <i v-else class="ph ph-text-aa text-slate-500 mt-1 shrink-0" aria-hidden="true"></i>
+                            <div v-if="previewItemView" class="min-w-0">
+                                <div class="text-base font-bold text-slate-700 line-clamp-2 break-words" data-match-popup-title>{{ previewItemView.title }}</div>
+                                <div v-if="previewItemView.subtitle" class="text-xs text-slate-500 mt-0.5 break-words" data-preview-item-subtitle>{{ previewItemView.subtitle }}</div>
+                            </div>
+                            <div v-else class="min-w-0">
                                 <div class="text-base font-bold text-slate-700 line-clamp-2 break-words" data-match-popup-title>{{ clickedPairwiseMatch.matchKind === 'orthogroup' && clickedPairwiseMatch.group ? clickedPairwiseMatch.group.title : clickedPairwiseMatch.title }}</div>
                                 <span v-if="clickedPairwiseMatch.matchKind === 'orthogroup' && clickedPairwiseMatch.group?.badge"
                                       class="match-popup-badge mt-0.5">{{ clickedPairwiseMatch.group.badge }}</span>
@@ -6113,17 +6135,91 @@
                             </div>
                             <button @click="clickedPairwiseMatch = null"
                                     class="text-slate-500 hover:text-slate-600 ml-auto text-xl"
-                                    aria-label="Close match popup"
+                                    :aria-label="clickedPairwiseMatch.previewItem ? 'Close popup' : 'Close match popup'"
                                     data-nodrag="true">
                                 <i class="ph ph-x" aria-hidden="true"></i>
                             </button>
                         </div>
                         <div class="pairwise-match-popup-body custom-scrollbar"
                              role="region"
-                             aria-label="Pairwise match details content"
+                             :aria-label="previewItemView ? `${previewItemView.dialogLabel} content` : 'Pairwise match details content'"
                              tabindex="0"
                              data-nodrag="true">
-                            <template v-if="clickedPairwiseMatch.block">
+                            <template v-if="clickedPairwiseMatch.previewItem">
+                                <!-- Legend entry: its color and where the color comes from, its caption, and Remove from legend.
+                                     Each control calls the Legend panel's operation. -->
+                                <div v-if="previewItemView && previewItemView.kind === 'legend-entry'" :key="`legend-popup-${previewItemView.identity}`" v-dialog-focus class="space-y-3" data-preview-item-popup="legend-entry">
+                                    <section aria-labelledby="preview-legend-color-heading">
+                                        <h3 id="preview-legend-color-heading" tabindex="-1" data-dialog-initial-focus class="preview-item-heading">Color</h3>
+                                        <div class="flex items-center gap-2">
+                                            <input type="color" :value="previewItemView.color"
+                                                   @change="updateLegendEntryColor(previewItemView.index, $event.target.value)"
+                                                   :aria-label="`Color of ${previewItemView.caption}`"
+                                                   :disabled="!semanticMutationAvailable"
+                                                   class="h-7 w-10 cursor-pointer rounded border border-slate-300 p-0">
+                                            <span class="match-mono">{{ previewItemView.color }}</span>
+                                        </div>
+                                        <p class="match-muted mt-1" data-preview-legend-color-source>{{ previewItemView.colorSource }}</p>
+                                        <ul v-if="previewItemView.ruleLines.length" class="mt-1 space-y-0.5 text-xs text-slate-700">
+                                            <li v-for="line in previewItemView.ruleLines" :key="line" class="match-mono">{{ line }}</li>
+                                        </ul>
+                                    </section>
+                                    <section>
+                                        <label for="preview-legend-caption" class="preview-item-heading block">Caption</label>
+                                        <input id="preview-legend-caption" type="text" :value="previewItemView.caption"
+                                               @change="renameLegendEntryInPopup(previewItemView.index, $event.target.value)"
+                                               @keydown.enter="$event.target.blur()"
+                                               :disabled="!semanticMutationAvailable"
+                                               class="form-input w-full text-xs">
+                                    </section>
+                                    <div class="match-actions">
+                                        <button type="button" class="match-action" :disabled="!semanticMutationAvailable"
+                                                @click="deleteLegendEntry(previewItemView.index); clickedPairwiseMatch = null"
+                                                title="Remove this entry from the legend. Restore it in the Editor's Legend tab.">
+                                            <i class="ph ph-eye-slash" aria-hidden="true"></i> Remove from legend
+                                        </button>
+                                    </div>
+                                </div>
+                                <!-- Record definition: what the Result draws, then the settings the sidebar edits (they apply on Generate). -->
+                                <div v-else-if="previewItemView && previewItemView.kind === 'record-definition'" :key="`record-popup-${previewItemView.identity}`" v-dialog-focus class="space-y-3" data-preview-item-popup="record-definition">
+                                    <dl class="match-detail-rows" tabindex="-1" data-dialog-initial-focus aria-label="Record facts">
+                                        <template v-for="fact in previewItemView.facts" :key="fact.label">
+                                            <dt>{{ fact.label }}</dt>
+                                            <dd>{{ fact.value }}</dd>
+                                        </template>
+                                    </dl>
+                                    <section v-if="previewItemView.draft" class="space-y-2 border-t border-slate-100 pt-3">
+                                        <h3 class="preview-item-heading">Definition text <span class="font-normal normal-case text-slate-500">· applies on Generate</span></h3>
+                                        <label class="block text-xs text-slate-600">{{ previewItemView.draft.nameLabel }}
+                                            <input type="text" :value="previewItemView.draft.name"
+                                                   @change="setPreviewRecordField(previewItemView, 'name', $event.target.value)"
+                                                   @keydown.enter="$event.target.blur()"
+                                                   :disabled="!semanticMutationAvailable"
+                                                   class="form-input mt-0.5 w-full text-xs">
+                                        </label>
+                                        <label class="block text-xs text-slate-600">{{ previewItemView.draft.subtitleLabel }}
+                                            <input type="text" :value="previewItemView.draft.subtitle"
+                                                   @change="setPreviewRecordField(previewItemView, 'subtitle', $event.target.value)"
+                                                   @keydown.enter="$event.target.blur()"
+                                                   :disabled="!semanticMutationAvailable"
+                                                   class="form-input mt-0.5 w-full text-xs">
+                                        </label>
+                                        <label class="flex items-center gap-2 text-xs text-slate-700">
+                                            <input type="checkbox" :checked="previewItemView.draft.reverse"
+                                                   @change="setPreviewRecordField(previewItemView, 'reverse', $event.target.checked)"
+                                                   :disabled="!semanticMutationAvailable || !previewItemView.draft.reverseAvailable"
+                                                   class="form-checkbox"> Reverse complement
+                                        </label>
+                                    </section>
+                                    <div class="match-actions">
+                                        <button type="button" class="match-link" @click="showPreviewRecordSettings(previewItemView)">
+                                            Open record settings
+                                        </button>
+                                    </div>
+                                </div>
+                                <p v-else class="match-muted">This item is no longer in the diagram.</p>
+                            </template>
+                            <template v-else-if="clickedPairwiseMatch.block">
                                 <!-- UX-B01: one readable summary of the block, then the gene pairs and the block facts, both closed. -->
                                 <section class="match-lead" data-collinear-summary>
                                     <div><span class="font-semibold">{{ clickedPairwiseMatch.block.query.recordId }}</span> {{ clickedPairwiseMatch.block.query.intervalText }}<span v-if="clickedPairwiseMatch.block.query.lengthText" class="match-muted"> ({{ clickedPairwiseMatch.block.query.lengthText }})</span></div>

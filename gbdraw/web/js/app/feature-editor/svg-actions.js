@@ -19,7 +19,8 @@ import { buildFeatureSequenceFastas } from '../../services/feature-sequence-fast
 import { getFeatureOverride } from '../../services/feature-override-identity.js';
 import { featureIdentityKeyOf, featureOverrideValue } from '../../services/feature-placement.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
-import { COMPARISON_LEGEND_SELECTOR } from '../../services/legend-svg.js';
+import { COMPARISON_LEGEND_SELECTOR, legendEntryKey } from '../../services/legend-svg.js';
+import { PREVIEW_ITEM_SELECTOR, previewItemTarget } from '../preview-item-popup.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import {
   featureIdentity,
@@ -786,6 +787,46 @@ export const createFeatureSvgActions = ({
     return payload;
   };
 
+  // A Legend row or a record definition opens its popup in the match popup
+  // frame while Layout edit is off; with it on, a press drags them. A Legend
+  // row opens only when the drawing lists it (not a track-data row).
+  /** @param {{ element: Element, item: import('../preview-item-popup.js').PreviewItem }} target @param {{ clientX?: number, clientY?: number }} eventLike */
+  const openPreviewItemPopup = ({ element, item }, eventLike) => {
+    if (!clickedPairwiseMatch || !clickedPairwiseMatchPos || state.layoutRepositionMode?.value) return false;
+    if (item.kind === 'legend-entry') {
+      /** @type {import('../../state.js').LegendEntry[]} */
+      const entries = state.activeDrawing().legendEntries.value || [];
+      const { key } = item;
+      const entry = entries.find((row) => legendEntryKey(row) === key || String(row.caption) === key);
+      if (!entry) return false;
+      // The popup follows the row by its key, which a rename keeps.
+      item = { kind: 'legend-entry', key: legendEntryKey(entry) };
+    }
+    const rect = element.getBoundingClientRect();
+    const anchor = Number.isFinite(eventLike?.clientX)
+      ? eventLike
+      : { clientX: rect.left + rect.width / 2, clientY: rect.bottom };
+    hideHoverSummary();
+    clickedFeature.value = null;
+    // A Legend row's feature count reads the rule matches: the popup opens at
+    // once and counts when they are prepared.
+    const opened = { previewItem: item, matchesReady: item.kind !== 'legend-entry' };
+    clickedPairwiseMatch.value = opened;
+    const popupPosition = getPopupPosition(anchor, 400, 460);
+    clickedPairwiseMatchPos.x = popupPosition.x;
+    clickedPairwiseMatchPos.y = popupPosition.y;
+    if (item.kind === 'legend-entry') {
+      const openedKey = item.key;
+      reportRuleRunFailure(state, 'feature-extraction', () => runWhenPrepared(
+        state, () => [prepareDrawnFeatureMatches({ strict: true, view: true })], () => {
+          const current = clickedPairwiseMatch.value;
+          if (current?.previewItem?.kind === 'legend-entry' && current.previewItem.key === openedKey) current.matchesReady = true;
+        }
+      ));
+    }
+    return true;
+  };
+
   /** @param {{ root?: Element | null, phase?: string, rootGeneration?: number }} [options] */
   const attachSvgFeatureHandlers = ({
     root = null,
@@ -1441,6 +1482,12 @@ export const createFeatureSvgActions = ({
           openPairwiseMatchPopup(matchEl, e, ensureFeatureLookup());
           return;
         }
+        const previewItem = previewItemTarget(e.target, svg);
+        if (previewItem && openPreviewItemPopup(previewItem, e)) {
+          e.stopPropagation();
+          e.preventDefault();
+          return;
+        }
         if (isBackgroundPreviewClick(e.target, svg)) {
           featureSelection?.clearFeatureSelection?.({ clearStatus: true });
           if (clickedFeature.value) clickedFeature.value = null;
@@ -1451,10 +1498,17 @@ export const createFeatureSvgActions = ({
       const handleKeyDown = (e) => {
         if (e.key !== 'Enter' && e.key !== ' ') return;
         const matchEl = getPairwiseMatchTarget(e.target, svg);
-        if (!matchEl) return;
-        e.stopPropagation();
-        e.preventDefault();
-        openPairwiseMatchPopup(matchEl, e, ensureFeatureLookup());
+        if (matchEl) {
+          e.stopPropagation();
+          e.preventDefault();
+          openPairwiseMatchPopup(matchEl, e, ensureFeatureLookup());
+          return;
+        }
+        const previewItem = previewItemTarget(e.target, svg);
+        if (previewItem && openPreviewItemPopup(previewItem, {})) {
+          e.stopPropagation();
+          e.preventDefault();
+        }
       };
 
       const handlePointerDown = (e) => {
@@ -1605,6 +1659,22 @@ export const createFeatureSvgActions = ({
     return true;
   };
 
+  // Legend rows and record definitions are buttons that open their popup;
+  // an export strips these attributes (stripTransientPreviewState).
+  /** @param {{ root?: Element | null }} [options] */
+  const preparePreviewItemAffordances = ({ root = null } = {}) => {
+    const svg = root || delegatedFeatureHandlers?.svg || null;
+    if (!svg) return false;
+    svg.querySelectorAll(PREVIEW_ITEM_SELECTOR).forEach((element) => {
+      if (element.closest(COMPARISON_LEGEND_SELECTOR)) return;
+      element.setAttribute('data-gbdraw-preview-item', '');
+      element.setAttribute('role', 'button');
+      element.setAttribute('tabindex', '0');
+      element.setAttribute('aria-haspopup', 'dialog');
+    });
+    return true;
+  };
+
   return {
     attachSvgFeatureHandlers,
     getFeatureElements,
@@ -1615,6 +1685,7 @@ export const createFeatureSvgActions = ({
     showAlignmentOverlay,
     clearAlignmentOverlay,
     preparePairwiseInteractionAffordances,
+    preparePreviewItemAffordances,
     dispose
   };
 };

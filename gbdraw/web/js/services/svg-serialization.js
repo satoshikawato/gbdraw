@@ -76,6 +76,9 @@ export const stripTransientPreviewState = (svg, { stripCursor = true } = {}) => 
         element.removeAttribute('tabindex');
         element.removeAttribute('aria-label');
       });
+    svg.querySelectorAll('[data-gbdraw-preview-item]').forEach((element) => {
+      ['data-gbdraw-preview-item', 'role', 'tabindex', 'aria-haspopup'].forEach((name) => element.removeAttribute(name));
+    });
   }
 };
 

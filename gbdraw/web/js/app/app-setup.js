@@ -24,12 +24,14 @@ import {
   countUnresolvedFeatureEdits, displayedLegendRowContext, featureDrawnContext, removeUnresolvedFeatureEdits,
   requestFeatureVisibilityRules
 } from '../services/feature-visibility.js';
-import { drawnBlockStroke, drawsPythonLegendRow, legendStructureEdited } from '../services/legend-svg.js';
+import { drawnBlockStroke, drawsPythonLegendRow, legendEntryKey, legendStructureEdited } from '../services/legend-svg.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
 import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
 import { createRecordDisplayControls } from './record-display-options.js';
+import { createPreviewItemPopup } from './preview-item-popup.js';
+import { legendRowRules } from '../services/specific-color-rules.js';
 import { isCurrentFeature } from '../services/feature-identity.js';
 import {
   createFeatureRecordRotationAction,
@@ -2824,6 +2826,7 @@ export const createAppSetup = () => {
         phase: context.phase,
         rootGeneration: context.rootGeneration
       });
+      featureActions.preparePreviewItemAffordances({ root: context.root });
     },
     synchronizeLabelEditor(context) {
       const drawing = state.activeDrawing();
@@ -3898,6 +3901,9 @@ export const createAppSetup = () => {
       : handleFeatureColorScopeChoiceWithHistory(choice, ...rest)
   );
   const handleLegendNameCommitWithHistory = undoableAction('Rename legend item', handleLegendNameCommit);
+  // The legend-entry popup sits outside the app root that records the Legend
+  // panel's text edits, so its rename records its own step.
+  const renameLegendEntryInPopup = undoableAction('Rename legend item', renameLegendEntry);
   // R15-3 (OV-285): the Merge of a rename onto a deleted row's caption is the
   // Restore of that row (by its Python key), then the merge, in one History
   // checkpoint: the merge's rule commit joins it, so one Undo returns both.
@@ -5178,6 +5184,22 @@ export const createAppSetup = () => {
     const selection = resolveDisambiguatedRecordSelection(entries, drawing.form.circular_record_selector);
     return selection.status === 'resolved'
       || (selection.status === 'unspecified' && entries.length === 1);
+  });
+
+  // The legend-entry and record-definition popups (match popup frame): views
+  // of the displayed Result and the settings; their edits are the Legend
+  // panel's and the sidebar's.
+  const previewItemPopup = createPreviewItemPopup({
+    state,
+    computed,
+    readLegendEntryColor: legendEntryColor,
+    readLegendRowRules: (entry) => legendRowRules(legendEntryKey(entry), displayedLegendRowContext(state, state.activeDrawing())),
+    countLegendCaptionFeatures: featureActions.countLegendCaptionFeatures,
+    getCommittedRequest: getCommittedCanonicalRenderRequest,
+    readAlignmentInspector: () => similarityAlignmentActions.activePlanInspector.value,
+    readCircularReverseAvailable: () => circularSingleRecordPresentationEnabled.value,
+    runUndoable: history.runUndoable,
+    sessionBusy: sessionOperationAvailability
   });
 
   const circularRecordSelectionEnabled = computed(() => semanticMutationAvailable.value
@@ -6552,6 +6574,10 @@ export const createAppSetup = () => {
     openFeatureEditorFromList,
     legendEntries: drawingMember('legendEntries'),
     legendEntryColor,
+    previewItemView: previewItemPopup.view,
+    setPreviewRecordField: previewItemPopup.setRecordField,
+    showPreviewRecordSettings: previewItemPopup.showRecordSettings,
+    renameLegendEntryInPopup,
     deletedLegendEntryColor,
     updateLegendEntryColor: updateLegendEntryColorShown,
     renameLegendEntry,

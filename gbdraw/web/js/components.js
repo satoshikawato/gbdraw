@@ -10,7 +10,7 @@ import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidan
 
 const { ref, reactive, computed, nextTick, watch, useId, onMounted } = window.Vue;
 
-/** @typedef {{ element: HTMLElement, returnFocus: HTMLElement | null }} FocusScope */
+/** @typedef {{ element: HTMLElement, returnFocus: HTMLElement | SVGElement | null }} FocusScope */
 /** @type {FocusScope[]} */
 const focusScopes = [];
 
@@ -23,7 +23,9 @@ export const dialogFocus = {
   /** @param {HTMLElement} element */
   beforeMount(element) {
     const active = document.activeElement;
-    focusScopes.push({ element, returnFocus: active instanceof HTMLElement && active !== document.body ? active : null });
+    // An SVG opener (a preview Legend row or record definition) takes focus back too.
+    const opener = active instanceof HTMLElement || active instanceof SVGElement ? active : null;
+    focusScopes.push({ element, returnFocus: opener !== document.body ? opener : null });
   },
   /** @param {HTMLElement} element */
   mounted(element) {
