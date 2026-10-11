@@ -4466,8 +4466,9 @@ export const createAppSetup = () => {
   /** @type {HTMLElement | null} */
   let similarityAlignmentReturnFocus = null;
   const similarityAlignmentPaletteRef = ref(null);
-  /** @type {{ x: number | null, y: number | null }} */
-  const similarityAlignmentPalettePosition = reactive({ x: null, y: null });
+  // The floating panel's place and height limit; null until it is placed.
+  /** @type {{ x: number | null, y: number | null, maxHeight: number | null }} */
+  const similarityAlignmentPalettePosition = reactive({ x: null, y: null, maxHeight: null });
   const similarityAlignmentCompact = ref(false);
   const syncSimilarityAlignmentCompact = () => {
     const preview = document.querySelector('[aria-label="Result Preview"]');
@@ -4496,7 +4497,11 @@ export const createAppSetup = () => {
     const maxX = Math.max(margin, window.innerWidth - palette.offsetWidth - margin);
     const { top, bottom } = popupViewportBounds();
     const minY = top + margin;
-    const maxY = Math.max(minY, bottom - palette.offsetHeight - margin);
+    // OV-498: the panel is at most as tall as the popup area, so its footer
+    // (Cancel, Apply) stays in the window and its rows scroll.
+    const maxHeight = Math.max(0, bottom - margin - minY);
+    similarityAlignmentPalettePosition.maxHeight = maxHeight;
+    const maxY = Math.max(minY, bottom - Math.min(palette.offsetHeight, maxHeight) - margin);
     similarityAlignmentPalettePosition.x = Math.min(
       Math.max(similarityAlignmentPalettePosition.x ?? maxX, margin), maxX
     );
@@ -4507,7 +4512,8 @@ export const createAppSetup = () => {
   const similarityAlignmentPaletteStyle = computed(() => similarityAlignmentCompact.value ? {} : ({
     left: similarityAlignmentPalettePosition.x === null ? undefined : `${similarityAlignmentPalettePosition.x}px`,
     right: similarityAlignmentPalettePosition.x === null ? undefined : 'auto',
-    top: similarityAlignmentPalettePosition.y === null ? undefined : `${similarityAlignmentPalettePosition.y}px`
+    top: similarityAlignmentPalettePosition.y === null ? undefined : `${similarityAlignmentPalettePosition.y}px`,
+    maxHeight: similarityAlignmentPalettePosition.maxHeight === null ? undefined : `${similarityAlignmentPalettePosition.maxHeight}px`
   }));
   const moveSimilarityAlignmentPalette = (event) => {
     if (!similarityAlignmentPaletteDrag) return;
@@ -4573,8 +4579,7 @@ export const createAppSetup = () => {
     }
     if (open) return;
     stopSimilarityAlignmentPaletteDrag();
-    similarityAlignmentPalettePosition.x = null;
-    similarityAlignmentPalettePosition.y = null;
+    Object.assign(similarityAlignmentPalettePosition, { x: null, y: null, maxHeight: null });
     void restoreSimilarityAlignmentFocus();
   });
   onMounted(() => {
