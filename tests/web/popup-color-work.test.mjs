@@ -107,8 +107,9 @@ const setup = ({
     },
     ruleActions: {
       runWithRuleMatches: (rules, commit) => runWhenPrepared(state, () => [preparation.prepare(rules)], commit),
-      commitSpecificRules: async (rules) => {
+      commitSpecificRules: async (build) => {
         stages.push('commitSpecificRules');
+        const rules = build(manualSpecificRules, (row, patch) => ({ ...row, ...patch }));
         if (!await commit()) return false;
         manualSpecificRules.splice(0, manualSpecificRules.length, ...rules);
         return true;

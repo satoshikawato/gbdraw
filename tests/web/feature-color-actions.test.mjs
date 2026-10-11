@@ -159,7 +159,9 @@ const actions = createFeatureColorActions({
       preparedRuleSets.push(rules.map((rule) => `${rule.feat}|${rule.qual}|${rule.val}`));
       return runWithRuleMatchesForActions(rules, commit);
     },
-    commitSpecificRules: async (rules, _label, {afterCommit = () => {}, previousLegendIntents = []} = {}) => {
+    commitSpecificRules: async (build, _label, {afterCommit = () => {}, previousLegendIntents = []} = {}) => {
+      const rules = build(manualSpecificRules, (row, patch) => ({ ...row, ...patch }));
+      if (!rules) return false;
       committedLegendIntents.push(previousLegendIntents);
       const preparation = createRulePreparation({state:withDrawings({extractedFeatures,biologicalFeatures,manualSpecificRules}),evaluate:evaluatePythonRules});
       const candidate = await preparation.prepareCandidate(rules);
@@ -824,8 +826,8 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     nextTick: async () => {},
     ruleActions: {
       runWithRuleMatches: runWithRuleMatchesOf(resetPreparation, { extractedFeatures: resetFeatures, biologicalFeatures: resetFeatures, manualSpecificRules: resetRules }),
-      commitSpecificRules: async (rules) => {
-        committed.push(rules.map((rule) => ({ ...rule })));
+      commitSpecificRules: async (next) => {
+        committed.push(next(resetRules, (row, patch) => ({ ...row, ...patch })).map((rule) => ({ ...rule })));
         return true;
       },
       effectiveLegendCaptions: () => (feature) => feature.type,
@@ -899,7 +901,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       nextTick: async () => {},
       ruleActions: {
         runWithRuleMatches: runWithRuleMatchesOf(createRulePreparation({ state: withDrawings(renameState), evaluate: evaluatePythonRules }), renameState),
-        commitSpecificRules: async (nextRules) => { committed.push(nextRules.map((rule) => ({ ...rule }))); return true; },
+        commitSpecificRules: async (next) => { committed.push(next(rules, (row, patch) => ({ ...row, ...patch })).map((rule) => ({ ...rule }))); return true; },
         effectiveLegendCaptions: () => (feature) => feature.legendCaption || rules.find((rule) => rule.feat === feature.type)?.cap || feature.type,
         // Python's rows of the displayed Result: the listed rows as Python drew them.
         getLegendRowRules: (caption) => legendRowRules(caption, {
