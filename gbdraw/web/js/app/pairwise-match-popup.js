@@ -1769,8 +1769,8 @@ export const buildMatchPopupPayload = (
   addRow(alignmentRows, 'Render role', attr(element, 'data-render-role'));
   addRow(alignmentRows, 'RBH seed', attr(element, 'data-rbh-orthogroup-id'));
   addRow(alignmentRows, 'Group path ID', attr(element, 'data-ortholog-path-id'));
-  addRow(alignmentRows, 'Query members', attr(element, 'data-query-orthogroup-member-count'));
-  addRow(alignmentRows, 'Subject members', attr(element, 'data-subject-orthogroup-member-count'));
+  addRow(alignmentRows, 'Query group genes', attr(element, 'data-query-orthogroup-member-count'));
+  addRow(alignmentRows, 'Subject group genes', attr(element, 'data-subject-orthogroup-member-count'));
   addRow(alignmentRows, 'Query member role', attr(element, 'data-query-orthogroup-role'));
   addRow(alignmentRows, 'Subject member role', attr(element, 'data-subject-orthogroup-role'));
   addRow(alignmentRows, 'Query confidence', attr(element, 'data-query-orthogroup-confidence'));
@@ -1846,7 +1846,7 @@ const formatPairwiseMatchHoverRows = ({
     addFirst('Kind', matchKind);
     addFirst('Similarity group', orthogroupId);
     addFirst('Display name', displayName);
-    addFirst('Members', memberCount);
+    addFirst('Genes', memberCount);
     return rows.slice(0, 6);
   }
   addFirst('Kind', matchKind);

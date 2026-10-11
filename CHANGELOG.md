@@ -63,7 +63,11 @@ write-up of a release.
   region under the list. The exact-reference options name the record and the
   gene instead of the record key and feature hash. **Reset Rename** is now
   **Reset name** beside the group's ID; it still restores the name and the
-  description.
+  description. As in the popups, one **Copy** menu holds the group's FASTA
+  copy and download, each member has a **FASTA** menu instead of four
+  buttons, **Description** shows only a description you wrote (the computed
+  one is under **Name suggestions**), and the list scrolls to the group that
+  a new alignment selects.
 - Similarity groups (web app): the disabled **Similarity groups** tab, for
   example in Circular, says in its tooltip that Similarity groups appear after
   a Linear comparison with Similarity groups turned on (D-24). The group's
@@ -96,7 +100,7 @@ write-up of a release.
   ID, name, **N genes in M records**) with **Show in editor** and **Align…**;
   **Review alignment options…** is a link under **Align…**. **Highlight**,
   **Clear highlight**, and the group's FASTA copy and download are under
-  **More**, and the member table opens from **N members**. The **Current
+  **More**, and the member table opens from **N genes**. The **Current
   member** line and the consensus sentence are gone; the current member's row
   is marked in the table.
 - Pairwise match popup (web app): a LOSATP pairwise ribbon whose genes are in

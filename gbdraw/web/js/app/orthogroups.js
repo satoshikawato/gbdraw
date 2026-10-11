@@ -32,7 +32,7 @@ import {
 
 export { resolveUniqueOrthogroupMemberForFeature } from '../services/feature-identity.js';
 
-const { computed, reactive, watch, toDisplayString } = window.Vue;
+const { computed, nextTick, reactive, watch, toDisplayString } = window.Vue;
 
 const COPY_FEEDBACK_DURATION_MS = 1500;
 const COPY_FEEDBACK_LABELS = Object.freeze({
@@ -436,6 +436,18 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
       [orthogroups, selectedOrthogroupId, clickedFeature, showRightDrawer, rightDrawerTab].filter(Boolean),
       clearCopyFeedback,
       { flush: 'sync' }
+    );
+    // The open Similarity groups list shows the selected group's row, whoever
+    // selected it: a new alignment plan (D-40), Show in editor, or the user.
+    // The tab panel's v-show applies after post watchers, hence nextTick.
+    watch(
+      () => [selectedOrthogroupId.value, showRightDrawer?.value && rightDrawerTab?.value === 'orthogroups'],
+      async ([id, listShown]) => {
+        if (!id || !listShown || typeof document === 'undefined') return;
+        await nextTick();
+        document.querySelector(`[data-similarity-group-row="${CSS.escape(String(id))}"]`)
+          ?.scrollIntoView({ block: 'nearest' });
+      }
     );
   }
 

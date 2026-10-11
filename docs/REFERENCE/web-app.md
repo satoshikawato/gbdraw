@@ -875,7 +875,7 @@ rotation. The **Similarity group** section follows when the feature belongs to
 one: one line with the group ID, its name, and **N genes in M records**, then
 **Show in editor** and **Align…**, with **Review alignment options…** under
 **Align…**. **More** holds **Highlight**, **Clear highlight**, and the copy and
-download of all member nucleotide or amino-acid FASTA; **N members** opens the
+download of all member nucleotide or amino-acid FASTA; **N genes** opens the
 member table, where each row's **FASTA** menu copies or downloads that member.
 The simple
 popup shows the same controls in the same order without tabs.
@@ -1050,10 +1050,14 @@ on wide previews the Editor stays beside the canvas.
 
 The Editor's **Similarity groups** tab lists each group in two lines: its name
 (with its ID when the name differs) and its gene and record counts. Renamed
-groups carry an **Edited** badge. The selected group's name, description,
+groups carry an **Edited** badge. The list scrolls to the selected group, also
+when a new alignment selects its group. The selected group's name, description,
 **Exact reference record and feature** (offered as record and gene names, with
 the location only to tell two same-named features apart), **Align…**, name
-suggestions and members scroll together below the list; **Highlight** and
+suggestions and members scroll together below the list. **Description** holds
+only a description you wrote; the computed one is under **Name suggestions**.
+As in the popups, one **Copy** menu copies or downloads all member FASTA and
+each member's **FASTA** menu copies or downloads that member. **Highlight** and
 **Clear** act on the group named above them. Without Similarity groups, for
 example in Circular, the tab stays visible but disabled, and its tooltip says
 that Similarity groups appear after a Linear comparison with Similarity groups

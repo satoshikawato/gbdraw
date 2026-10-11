@@ -858,7 +858,7 @@ def _capture_bgc_popups(
         )
         page.wait_for_timeout(250)
         group_text = group_popup.inner_text()
-        for token in ("Similarity group", "og_1", "members", "genes in"):
+        for token in ("Similarity group", "og_1", "5 genes", "genes in"):
             if token.casefold() not in group_text.casefold():
                 raise AssertionError(
                     f"Similarity-group feature popup is missing {token!r}: "

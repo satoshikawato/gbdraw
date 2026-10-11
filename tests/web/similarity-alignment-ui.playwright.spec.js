@@ -2322,3 +2322,44 @@ test('choosing Upload BLAST TSV without a file keeps a loaded alignment and the 
     .not.toContainText('Select an exact reference');
   await expect(page.locator('button[title="Align to the selected exact feature"]')).toBeEnabled();
 });
+
+test('the drawer list scrolls to the group a new alignment plan selects', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, readFileSync(
+    'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'
+  ), 'BGC0000708-BGC0000713.gbdraw-session.json');
+  const groupId = await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return state.similarityAlignmentPlan.value?.groupId || '';
+  });
+  expect(groupId).toBeTruthy();
+  const list = page.locator('[data-similarity-group-list]');
+  const planRow = list.locator(`[data-similarity-group-row="${groupId}"]`);
+  const rowInView = (row) => row.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const view = element.closest('[data-similarity-group-list]').getBoundingClientRect();
+    return box.top >= view.top - 1 && box.bottom <= view.bottom + 1;
+  });
+
+  // The Session's plan selected its group before the drawer opened.
+  await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('orthogroups'));
+  await expect(planRow).toHaveAttribute('aria-current', 'true');
+  await expect.poll(() => rowInView(planRow)).toBe(true);
+
+  // With the drawer open, the user picks the first group and the list is back at
+  // the top; the next plan (the same plan replaced, as Undo or a reorder does)
+  // selects its group again and the list follows it.
+  const firstRow = list.locator('[data-similarity-group-row]').first();
+  await list.evaluate((element) => { element.scrollTop = 0; });
+  await firstRow.click();
+  await expect(firstRow).toHaveAttribute('aria-current', 'true');
+  await expect.poll(() => rowInView(planRow)).toBe(false);
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    state.similarityAlignmentPlan.value = { ...state.similarityAlignmentPlan.value };
+  });
+  await expect(planRow).toHaveAttribute('aria-current', 'true');
+  await expect.poll(() => rowInView(planRow)).toBe(true);
+});

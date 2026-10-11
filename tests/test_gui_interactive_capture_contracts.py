@@ -154,7 +154,7 @@ def test_h_gui_13_persists_real_edits_and_keeps_group_semantics_distinct() -> No
         'field="orthogroup"',
         "use_regex=True",
         "expected_matches=5",
-        '"Similarity group", "og_1", "members", "genes in"',
+        '"Similarity group", "og_1", "5 genes", "genes in"',
         '"23 similarity groups", "og_1", "5 genes · 5 records"',
         '{"text": group_text, "groupId": "og_1", "members": 5}',
         "_assert_closed_right_drawer_contract(page)",
