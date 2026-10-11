@@ -108,8 +108,8 @@ LAYOUT_RESULT_CAPTURES = {
         "visible_text": {"Vibrio nigripulchritudo", "AP024087.1", "AP024088.1", "pVNTG1", "pVNTG4", "GC content", "GC skew (+)"},
     },
     "vibrio-harveyi-group-collinear": {
-        "src": "./media/vibrio-harveyi-group-collinear/manual-08-01-collinear-overview.webp",
-        "selector": "svg[data-capture-vibrio-overview='true']",
+        "src": "./media/vibrio-harveyi-group-collinear/manual-10-01-collinear-overview.webp",
+        "selector": "svg[data-capture-vibrio-preview='true']",
         "viewport": {"width": 1800, "height": 1100},
         "state": {
             "mode": "linear",
@@ -186,7 +186,7 @@ LOSATP_MODE_CAPTURES = {
         "state": "orthogroup",
     },
     "vibrio-harveyi-group-collinear": {
-        "src": "./media/vibrio-harveyi-group-collinear/manual-04-01-search-method-collinear.webp",
+        "src": "./media/vibrio-harveyi-group-collinear/manual-05-02-search-method-collinear.webp",
         "selected": "Collinear blocks",
         "state": "collinear",
     },
@@ -412,16 +412,61 @@ def test_vibrio_capture_keeps_publication_comparisons_active() -> None:
         operation["capture"]
         for _, operation in iter_operation_contexts(sample, tutorial)
         if operation.get("media", {}).get("src", "").startswith(
-            "./media/vibrio-harveyi-group-collinear/manual-04-"
+            "./media/vibrio-harveyi-group-collinear/manual-05-"
         )
+        and "replayThrough" not in operation["capture"]
     ]
-    assert comparison_captures
+    assert len(comparison_captures) == 4
     for capture in comparison_captures:
         scripts = " ".join(
             action.get("script", "") for action in capture.get("actions", [])
         )
         assert "setLinearComparisonGlobalAction('losat')" in scripts
         assert capture["assertAppState"]["linearComparisonPlan.mode"] == "adjacent"
+
+
+def test_vibrio_previews_replay_each_generate_step() -> None:
+    """Every Generate step shows its own replayed preview; LOSAT is set up once (D-01, D-02, D-07)."""
+
+    sample = load_ready_examples("vibrio-harveyi-group-collinear")[0]
+    tutorial = _load_tutorial(sample)
+    steps = tutorial["manualSteps"]
+    generate_steps = [
+        index
+        for index, step in enumerate(steps, start=1)
+        if any(action["type"] == "generate" for action in step.get("replay", []))
+    ]
+    assert generate_steps == [4, 5, 8, 10]
+
+    losat_steps = [
+        index
+        for index, step in enumerate(steps, start=1)
+        if any("Run LOSAT" in action.get("selector", "") for action in step.get("replay", []))
+    ]
+    assert losat_steps == [5]
+
+    # File defaults are filled one File at a time; no step adds a slot during replay.
+    assert [action["selector"] for action in steps[1]["replay"]] == [
+        "input[aria-label='Default definition for file 1']",
+        "input[aria-label='Default subtitle for file 1']",
+    ]
+    assert [action["selector"] for action in steps[2]["replay"]] == [
+        "input[aria-label='Default definition for file 2']",
+        "input[aria-label='Default subtitle for file 2']",
+    ]
+
+    for index in generate_steps:
+        previews = [
+            operation["capture"]
+            for operation in steps[index - 1]["operations"]
+            if operation["capture"].get("selector") == "svg[data-capture-vibrio-preview='true']"
+        ]
+        assert len(previews) == 1, index
+        capture = previews[0]
+        assert capture["replayThrough"] == index
+        assert capture["session"] == sample["session"]
+        scripts = " ".join(action.get("script", "") for action in capture["actions"])
+        assert "(D-07)" in scripts
 
 
 @pytest.mark.parametrize("example_id", LAYOUT_RESULT_CAPTURES)

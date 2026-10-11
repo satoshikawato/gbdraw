@@ -271,30 +271,42 @@ test('Gallery renders the two-species Vibrio multi-record tutorial and media', a
     })
   ).toBeVisible();
   await expect(tutorialPanel.locator('.tutorial-summary i').first()).toHaveText('Vibrio');
-  await expect(tutorialPanel.getByRole('row', { name: /1.*NC_004603\.1.*1.*1/ })).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: /4.*NC_022359\.1.*2.*2/ })).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: 'CDS Rectangle' })).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: 'Evidence scope Adjacent pairs' })).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: 'Plot Title Blank' })).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: 'Definition line: Organism / strain 18; Bold' })).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: 'Definition line: Subtitle / title 16; Normal' })).toBeVisible();
+  // One File at a time with File defaults (D-03); the tables show the text to type, markup included.
+  // Progressive previews follow each Generate (D-01).
+  await expect(
+    tutorialPanel.getByRole('row', { name: /^1 GCF_000196095\.1 <i>Vibrio parahaemolyticus<\/i> RIMD 2210633 NC_004603\.1, NC_004605\.1$/ })
+  ).toBeVisible();
+  await expect(
+    tutorialPanel.getByRole('row', { name: /^2 GCF_000354175\.2 <i>Vibrio alginolyticus<\/i> NBRC 15630 NC_022349\.1, NC_022359\.1$/ })
+  ).toBeVisible();
+  await expect(tutorialPanel.getByText('Auto hides Accession and Length / Coordinates')).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'LOSATP mode Collinear blocks' })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'Diagonal drift 2' })).toBeVisible();
+  await expect(tutorialPanel.getByText('Generate reuses the LOSAT results, so only the drawing changes.')).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', { name: /NC_022359\.1 product RctB WP_005374502\.1 430,232/ })
   ).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'Layout Track Layout Above' })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'Titles & Record Labels Name / Species style Size 18, Bold' })).toBeVisible();
   await expect(tutorialPanel.getByText('Few blocks cross from chromosome I')).toBeVisible();
   await expect(tutorialPanel.getByText("Check Display start in each record's Record options in its File card.")).toBeVisible();
 
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(15);
-  await expect(tutorialPanel.locator('img[src$="manual-02-01-record-row.webp"]')).toHaveCount(1);
-  await expect(tutorialPanel.locator('img[src$="manual-03-01-record-layout.webp"]')).toHaveCount(1);
-  await expect(tutorialPanel.locator('img[src$="manual-04-03-adjacent-pairs.webp"]')).toHaveCount(1);
-  await expect(tutorialPanel.locator('img[src$="manual-05-01-rectangle-features.webp"]')).toHaveCount(1);
-  for (const name of ['search-dnaa', 'rotate-start', 'search-rctb']) {
-    await expect(tutorialPanel.locator(`img[src*="manual-03-1"][src$="${name}.webp"]`)).toHaveCount(1);
+  await expect(mediaImages).toHaveCount(16);
+  for (const name of [
+    'manual-02-01-file1-defaults',
+    'manual-03-01-file2-defaults',
+    'manual-04-01-default-preview',
+    'manual-05-05-unrotated-blocks',
+    'manual-06-01-search-dnaa',
+    'manual-06-02-rotate-start',
+    'manual-07-01-search-rctb',
+    'manual-08-01-rotated-blocks',
+    'manual-09-01-rectangle-features',
+    'manual-10-01-collinear-overview'
+  ]) {
+    await expect(tutorialPanel.locator(`img[src$="vibrio-harveyi-group-collinear/${name}.webp"]`)).toHaveCount(1);
   }
-  await expect(tutorialPanel.locator('img[src$="manual-08-01-collinear-overview.webp"]')).toHaveCount(1);
-  await expect(tutorialPanel.locator('img[src$="manual-07-01-bottom-title.webp"]')).toHaveCount(0);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
     const image = mediaImages.nth(idx);
     await image.scrollIntoViewIfNeeded();
