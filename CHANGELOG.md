@@ -23,6 +23,44 @@ write-up of a release.
   compatibility, and installation availability. Publication dates are recorded
   in [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases).
 
+- Raised the short/long size boundary of the Auto sizes: Linear diagrams now
+  use 100 kb and Circular diagrams 75 kb; both used 50 kb. A record of 50 kb
+  has too few features for the long styles, which are sized for whole genomes.
+  Circular uses 75 kb, not 100 kb, because the short label size overprints
+  outer labels on denser records near 100 kb. Only Auto sizes change; set a
+  size explicitly to keep the previous look. What changes:
+  - A Linear diagram whose longest record is 50,000 to 99,999 bp now gets the
+    short styles (larger labels, features, strokes, and legend).
+  - A Linear diagram with records of both size classes now sizes its labels
+    like its features, by the longest record in the label scope
+    (`--show_labels`): with `--show_labels all`, a record under 100 kb beside
+    one of 100 kb or longer gets the long label size (5 pt). Before, one
+    record under 50 kb in the scope made every label 24 pt on 20 px features
+    (OV-482). With the scope limited to a short record, as with
+    `--show_labels first`, the labels keep the short size; a label filter
+    such as a whitelist does not change the scope. A Session saved earlier
+    is drawn by this rule too and keeps its stored boundary.
+  - A Circular record of 50,000 to 74,999 bp drawn alone or beside shorter
+    records now gets the short styles.
+  - A Circular Multi-Record Canvas with records of both size classes now
+    takes every Auto size of every record, and of the legend, from the long
+    class (OV-492). A record of 50,000 to 74,999 bp beside one of 75 kb or
+    longer is drawn as before. A record under 50 kb beside a long one
+    changes: its label leader lines are 0.5 px wide like the long ones
+    (OV-483; they were 1.5 px beside the 8 pt long label font), and its
+    labels sit at the long class's distances. When that record is the first
+    one, the legend changes too: 16 px text and 20 px swatches, where the
+    first record's class gave 20 px and 24 px. Before, such a canvas copied a
+    fixed list of long sizes to its short records and left their other sizes
+    short. A Session saved earlier is drawn by this rule too and keeps its
+    stored boundary.
+  - A Session that stores its whole configuration, such as one written by
+    `--session_output`, keeps the boundary it was saved with. In the Web app,
+    the Auto values beside the size fields and the Circular track preview
+    follow that boundary, as Generate does.
+  - The aminoglycoside BGC Gallery figure is unchanged. Its tutorial now
+    types Head Length Ratio 0.64 in the last step, and its intermediate
+    previews show the short Auto sizes.
 - Web Comparison card (Linear): **Settings** lists the mode, the result filters
   and the appearance first, then **Search limits** and **Performance** (formerly
   **Runtime and reproducibility**). **Selected pairs** shows each pair as one row

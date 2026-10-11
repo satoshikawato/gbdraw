@@ -212,7 +212,6 @@ def _capture_circular_core_geometry(
         canvas_config,
         *,
         radius_override=None,
-        tick_track_channel_override=None,
         label_side="legacy",
         tick_side="legacy",
         tick_length_px=None,
@@ -227,7 +226,6 @@ def _capture_circular_core_geometry(
                 len(gb_record.seq),
                 str(canvas_config.profile.config.canvas.circular.track_type),
                 bool(canvas_config.profile.strandedness),
-                tick_track_channel_override=tick_track_channel_override,
                 length_threshold=int(canvas_config.profile.config.labels.length_threshold.circular),
             )
             width_px = center * (max(float(tick_min_ratio), float(tick_max_ratio)) - min(float(tick_min_ratio), float(tick_max_ratio)))
@@ -1097,7 +1095,6 @@ def test_default_preset_tick_draw_uses_resolved_tick_options(
         canvas_config,
         *,
         radius_override=None,
-        tick_track_channel_override=None,
         label_side="legacy",
         tick_side="legacy",
         tick_length_px=None,
@@ -2255,7 +2252,6 @@ def test_slot_mode_tick_radius_does_not_move_axis(monkeypatch: pytest.MonkeyPatc
         canvas_config,
         *,
         radius_override=None,
-        tick_track_channel_override=None,
         label_side="legacy",
         tick_side="legacy",
         tick_length_px=None,

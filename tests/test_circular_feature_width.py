@@ -1034,7 +1034,6 @@ def test_feature_width_75_auto_repositions_ticks_outside_feature_band_when_overl
         captured["tick_label_side"] = kwargs.get("label_side")
         captured["tick_side"] = kwargs.get("tick_side")
         captured["tick_length_px"] = kwargs.get("tick_length_px")
-        captured["tick_track_channel_override"] = kwargs.get("tick_track_channel_override")
         return canvas
 
     monkeypatch.setattr(circular_assemble_module, "add_axis_group_on_canvas", fake_add_axis_group_on_canvas)
@@ -1091,7 +1090,7 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
     cfg = GbdrawConfig.from_dict(config_dict)
     base_radius = float(cfg.canvas.circular.radius)
     base_track_ratio = float(cfg.canvas.circular.track_ratio)
-    length_param = "short" if len(record.seq) < 50000 else "long"
+    length_param = "short" if len(record.seq) < int(cfg.labels.length_threshold.circular) else "long"
     default_ratio_factor = float(cfg.canvas.circular.track_ratio_factors[length_param][0])
 
     color_table, default_colors = preprocess_color_tables(None, load_default_colors("", "default"))
@@ -1124,7 +1123,6 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
         captured["tick_label_side"] = kwargs.get("label_side")
         captured["tick_side"] = kwargs.get("tick_side")
         captured["tick_length_px"] = kwargs.get("tick_length_px")
-        captured["tick_track_channel_override"] = kwargs.get("tick_track_channel_override")
         return canvas
 
     fake_add_gc_content_group_on_canvas = make_numeric_track_capture(captured, width_key='gc_width', norm_key='gc_norm')
@@ -1284,7 +1282,7 @@ def test_middle_resolve_overlaps_repositions_gc_and_skew_away_from_tick_label_an
         float(tick_layout.label_band_px.outer_px),
     )
 
-    length_param = "short" if len(record.seq) < 50000 else "long"
+    length_param = "short" if len(record.seq) < int(cfg.labels.length_threshold.circular) else "long"
 
     default_gc_center = base_radius * float(cfg.canvas.circular.track_dict[length_param]["middle"]["2"])
     default_gc_width = base_radius * base_track_ratio * float(cfg.canvas.circular.track_ratio_factors[length_param][1])
@@ -1327,7 +1325,7 @@ def test_tuckin_resolve_overlaps_repositions_core_tracks_away_from_feature_band_
     cfg = GbdrawConfig.from_dict(config_dict)
     base_radius = float(cfg.canvas.circular.radius)
     base_track_ratio = float(cfg.canvas.circular.track_ratio)
-    length_param = "short" if len(record.seq) < 50000 else "long"
+    length_param = "short" if len(record.seq) < int(cfg.labels.length_threshold.circular) else "long"
     default_ratio_factor = float(cfg.canvas.circular.track_ratio_factors[length_param][0])
 
     color_table, default_colors = preprocess_color_tables(None, load_default_colors("", "default"))

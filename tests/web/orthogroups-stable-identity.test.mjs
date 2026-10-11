@@ -48,6 +48,8 @@ for (const name of ['linear-comparisons', 'linear-sources', 'file-content-cache'
   'byte-utils', 'depth-file-codec', 'depth-track-state', 'track-slot-display', 'record-options']) {
   await copyModule(`gbdraw/web/js/services/${name}.js`, `services/${name}.js`);
 }
+// track-slot-display.js reads the generated size-class boundaries.
+await copyModule('gbdraw/web/js/mode-profiles.generated.js', 'mode-profiles.generated.js');
 await copyModule('gbdraw/web/js/utils/clipboard.js', 'utils/clipboard.js');
 await copyModule('gbdraw/web/js/utils/download-names.js', 'utils/download-names.js');
 const standaloneSource = await readFile(

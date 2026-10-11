@@ -533,9 +533,8 @@ def test_linear_auto_label_font_size_resolves_once_per_diagram() -> None:
         profile=LinearRenderProfile(cfg),
         legend="none",
     )
-    short_font_size = cfg.labels.font_size.linear.for_length_param("short")
-    long_font_size = cfg.labels.font_size.linear.for_length_param("long")
-    expected_font_size = max(short_font_size, long_font_size)
+    # The labels follow the size class of the longest record in the label scope, as the features do.
+    expected_font_size = cfg.labels.font_size.linear.for_length_param("long")
     assert canvas_config.length_param == "long"
     svg_content = assemble_linear_diagram_from_records(
         records,
@@ -550,8 +549,53 @@ def test_linear_auto_label_font_size_resolves_once_per_diagram() -> None:
     )
     assert set(font_sizes) == {"linear_short_auto_label", "linear_long_auto_label"}
     assert all(size == pytest.approx(expected_font_size) for size in font_sizes.values())
-    assert len(set(font_sizes.values())) == 1
-    assert all(size > long_font_size for size in font_sizes.values())
+
+
+@pytest.mark.linear
+def test_linear_labels_of_a_short_record_beside_a_long_one_use_the_long_size(
+    gbdraw_runner, examples_dir: Path, test_inputs_dir: Path, tmp_path: Path
+) -> None:
+    """OV-482: 306,008 bp beside 50,466 bp drew short-class labels on long-class features."""
+    returncode, output, svg_path = gbdraw_runner.run(
+        "linear",
+        [examples_dir / "MjeNMV.gb", test_inputs_dir / "BGC0000709.gbk"],
+        "mixed_size_classes",
+        tmp_path,
+        extra_args=["--show_labels", "all"],
+    )
+    assert returncode == 0, output
+    cfg = GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
+    label_font_sizes = {
+        float(element.attrib["font-size"])
+        for element in ET.parse(svg_path).getroot().iter()
+        if element.tag.endswith("}text") and "data-label-feature-id" in element.attrib
+    }
+    assert label_font_sizes == {cfg.labels.font_size.linear.long}
+
+
+@pytest.mark.linear
+def test_linear_label_filter_does_not_narrow_the_label_scope(
+    gbdraw_runner, examples_dir: Path, test_inputs_dir: Path, tmp_path: Path
+) -> None:
+    """The label scope is `--show_labels`: a whitelist that leaves labels only on the short record keeps the long size."""
+    whitelist = tmp_path / "whitelist.tsv"
+    whitelist.write_text("CDS\tproduct\ttransport protein\n", encoding="utf-8")
+    returncode, output, svg_path = gbdraw_runner.run(
+        "linear",
+        [examples_dir / "MjeNMV.gb", test_inputs_dir / "BGC0000708.gbk"],
+        "whitelist_on_short_record",
+        tmp_path,
+        extra_args=["--show_labels", "all", "--label_whitelist", str(whitelist)],
+    )
+    assert returncode == 0, output
+    cfg = GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
+    labels = [
+        element
+        for element in ET.parse(svg_path).getroot().iter()
+        if element.tag.endswith("}text") and "data-label-feature-id" in element.attrib
+    ]
+    assert {"".join(label.itertext()).strip() for label in labels} == {"transport protein"}
+    assert {float(label.attrib["font-size"]) for label in labels} == {cfg.labels.font_size.linear.long}
 
 
 @pytest.mark.linear

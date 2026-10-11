@@ -21,6 +21,7 @@ import {
   formatRadiusFactorAuto,
   isManualSlotValue,
   normalizeOptionalText,
+  sizeClassForRecordLengths,
   tickAnchorRadiusFactor
 } from '../services/track-slot-display.js';
 import { featureSlotEdits } from './track-slot-edits.js';
@@ -106,7 +107,6 @@ const PRESET_LABELS = {
   middle: 'Middle',
   spreadout: 'Spreadout'
 };
-const PREVIEW_LENGTH_THRESHOLD_BP = 50000;
 const PREVIEW_RADIUS_PX = 390;
 const PREVIEW_TRACK_RATIO = 0.19;
 const PREVIEW_TRACK_DICT = {
@@ -186,12 +186,12 @@ const getPreviewRecordEntries = (state) => {
   return records;
 };
 
-const getPreviewLengthParam = (state) => {
+/** @param {DrawingState} drawing the Circular drawing */
+const getPreviewLengthParam = (state, drawing) => {
   const lengths = getPreviewRecordEntries(state)
     .map((entry) => Number(entry?.record_length ?? entry?.length ?? 0))
     .filter((value) => Number.isFinite(value) && value > 0);
-  if (lengths.length === 0) return 'long';
-  return Math.max(...lengths) < PREVIEW_LENGTH_THRESHOLD_BP ? 'short' : 'long';
+  return sizeClassForRecordLengths('circular', lengths, drawing) || 'long';
 };
 
 /** @param {DrawingState} drawing */
@@ -475,7 +475,7 @@ export const estimateCircularConservationLayoutWarning = (state, drawing) => {
   if (entries.length <= 0) return '';
 
   const preset = normalizeCircularTrackPreset(drawing?.form?.track_type);
-  const lengthParam = getPreviewLengthParam(state);
+  const lengthParam = getPreviewLengthParam(state, drawing);
   const axisRadius = PREVIEW_RADIUS_PX;
   const defaultSpacing = previewSpacingPx();
   const lane = laneDirectionForPreset(preset);
@@ -1618,7 +1618,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   /** @param {DrawingState} drawing */
   const estimateCircularSlotGeometry = (drawing, slot, slotIndex) => {
     const preset = normalizeCircularTrackPreset(drawing.form.track_type);
-    const lengthParam = getPreviewLengthParam(state);
+    const lengthParam = getPreviewLengthParam(state, drawing);
     const renderer = String(slot?.renderer || '').trim();
     const widthPx = previewWidthPxForRenderer(renderer, lengthParam);
     const spacingPx = previewSpacingPx();
@@ -1681,7 +1681,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   const circularTrackPresetSummary = () => {
     const drawing = state.drawings.circular;
     const preset = normalizeCircularTrackPreset(drawing.form.track_type);
-    const lengthParam = getPreviewLengthParam(state);
+    const lengthParam = getPreviewLengthParam(state, drawing);
     const lane = laneDirectionForPreset(preset);
     const slotLike = (id, renderer) => ({ id, renderer });
     /** @type {string[]} */
