@@ -5748,9 +5748,11 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     var technicalRows = rows.filter(function (row) {
       return row[0] !== 'Display name' && row[0] !== 'Description';
     });
+    // A similarity-group ribbon popup is titled with the group already.
+    var titled = section && section.title === 'Summary';
     return '<div class="gfi-group-head" data-gfi-group="true">' +
-      '<div class="gfi-group-name">' + escapeHtml(name || 'Similarity group') +
-      (id && name !== id ? '<span class="gfi-badge">' + escapeHtml(id) + '</span>' : '') + '</div>' +
+      (titled ? '' : '<div class="gfi-group-name">' + escapeHtml(name || 'Similarity group') +
+        (id && name !== id ? '<span class="gfi-badge">' + escapeHtml(id) + '</span>' : '') + '</div>') +
       (description ? '<div class="gfi-group-description">' + escapeHtml(description) + '</div>' : '') +
       '<div class="gfi-group-count" data-gfi-group-count="true">' +
       escapeHtml(groupCountText(value('Members') || memberRows.length, value('Record coverage'))) + '</div>' +
