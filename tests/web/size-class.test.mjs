@@ -4,7 +4,13 @@ import test from 'node:test';
 
 import { createAutoValueDisplay } from '../../gbdraw/web/js/app/auto-value-display.js';
 import { sizeClassForRecordLengths } from '../../gbdraw/web/js/services/track-slot-display.js';
-import { withDrawings } from './helpers/drawing-state.mjs';
+import { withDrawings as withFixtureDrawings } from './helpers/drawing-state.mjs';
+
+// Every drawing holds the settings its Session preserved (state.js); a case
+// that keeps a boundary passes its own.
+const withDrawings = (/** @type {Record<string, unknown>} */ fixture) => (
+  withFixtureDrawings({ unmanagedConfigOverrides: {}, ...fixture })
+);
 
 test('the Web size class uses the packaged short/long boundary of each mode', () => {
   // The boundaries reach the Web through mode-profiles.generated.js (labels.length_threshold).
@@ -25,8 +31,7 @@ test('the Circular label font note follows the shared Auto size vectors, mixed s
       mode: { value: 'circular' },
       circularRecordList: { value: entry.recordLengths.map((record_length) => ({ record_length })) },
       form: {},
-      adv: {},
-      unmanagedConfigOverrides: {}
+      adv: {}
     }));
     assert.equal(display.autoValueText('labelFontSize'), `${entry.expected['labels.font_size']} px (auto)`, entry.name);
   }
