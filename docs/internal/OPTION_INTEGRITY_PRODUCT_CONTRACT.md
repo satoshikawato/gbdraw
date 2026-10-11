@@ -548,6 +548,13 @@ Status: active Product authority
   - Reply 2, to the question 「回転ボタンと合わせて、この内容でよいか確認をお願いします。」
     asked with the receipt fields recorded below for the three records:
     「変えていいです。」
+  - Reply 3, to the question 「受領の文面に、私の書き間違いが 1 か所あります。確認をお願いします。」
+    asked with one corrected sentence of the `PD-OI-061` receipt: 「承認します。」
+    The sentence Reply 2 was asked with said that **Merge** kept its name.
+    Before this revision that button read
+    `Merge into existing "<name>" and adopt its color`, so the `Choice` field
+    of the receipt below carries the corrected sentence in its place. No other
+    field of any receipt differs from the text Reply 2 confirmed.
   - `PD-OI-085`: the rotation buttons **Apply on Generate** and **Apply and
     regenerate** are named **Apply when I Generate** and **Apply now**. The
     record title and the concern key keep their wording.
@@ -3111,7 +3118,7 @@ Decision date: 2026-09-30
   terms. The runtime that shows the new names merges with it (static Product
   Contract co-change).
 - Receipt SHA-256 (scenario revision `3`; UTF-8, excluding the final newline):
-  `49700940a1fd4c44418edbee246c8a2000e30fce3600b4f1875e92b2f47730bc`.
+  `eb19efb8436cfee30d6955f19fc9b50433c24b5112ef20a7088d4a988a3f5da2`.
 - Acceptance contracts: `OIC-006`. These obligations and the complete
   selected outcome are jointly required; their citation does not claim
   completed dependent-runtime checks.
@@ -3149,7 +3156,7 @@ Scenario revision `3` receipt, confirmed by `satoshikawato` on `2026-10-11`:
 PRODUCT_DECISION
 Concern: web.legend.rename-collision
 Scenario revision: 3
-Choice: Legend Name Conflict choice "Suffix" -> "Keep both: name it "<name 2>"" (shows the resulting name); "Merge" stays as "Merge into "<name>"".
+Choice: Legend Name Conflict choice "Suffix" -> "Keep both: name it "<name 2>"" (shows the resulting name); "Merge" は `Merge into existing "<name>" and adopt its color` から `Merge into "<name>"` に変える（引き継ぐ色はボタンの色見本で示す）。選択肢と効果は変えない。
 Rationale: UX-A10 (show what the suffix is).
 Must preserve: Options and effects unchanged.
 May retire: the old visible labels only.
@@ -3162,7 +3169,7 @@ Decision date: 2026-10-11
 {
   "concern": "web.legend.rename-collision",
   "scenarioRevision": 3,
-  "choice": "Legend Name Conflict choice \"Suffix\" -> \"Keep both: name it \"<name 2>\"\" (shows the resulting name); \"Merge\" stays as \"Merge into \"<name>\"\".",
+  "choice": "Legend Name Conflict choice \"Suffix\" -> \"Keep both: name it \"<name 2>\"\" (shows the resulting name); \"Merge\" は `Merge into existing \"<name>\" and adopt its color` から `Merge into \"<name>\"` に変える（引き継ぐ色はボタンの色見本で示す）。選択肢と効果は変えない。",
   "rationale": "UX-A10 (show what the suffix is).",
   "mustPreserve": "Options and effects unchanged.",
   "mayRetire": "the old visible labels only.",
