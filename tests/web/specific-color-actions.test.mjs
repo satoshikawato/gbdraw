@@ -13,7 +13,7 @@ import { setFeatureVisibilityOverride } from '../../gbdraw/web/js/services/featu
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
-const setup = (evaluate = evaluatePythonRules) => {
+const setup = (evaluate = evaluatePythonRules, options = {}) => {
   const state = {
     manualSpecificRules: [], extractedFeatures: { value: [
       { type: 'CDS', svg_id: 'a', qualifiers: { gene: ['a'] } },
@@ -60,7 +60,7 @@ const setup = (evaluate = evaluatePythonRules) => {
       state.legendEntries.value=intents;
       state.results.value=[{name:'figure',content:'after'}];
     } };
-  }, projectPaletteAndRules:()=>true, ports:{requestAutomaticRerender:()=>{rerenders+=1;return true;}}, nextTick:async()=>{}, watch});
+  }, projectPaletteAndRules:()=>true, ports:{requestAutomaticRerender:()=>{rerenders+=1;return true;}}, nextTick:async()=>{}, watch, ...options});
   return {state,actions,preparation,notices,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents, rerenders:()=>rerenders, setRerendering};
 };
 // Review 3 (OV-262 in the Features drawer): with the type's default color
@@ -644,8 +644,8 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
 // Add, or an edit made while an Add is pending, waits for it and applies to
 // the table that holds its rule; an Add waits for a pending edit the same way.
 // Each write is its own History step (R11).
-const queuedRuleWrites = () => {
-  const s=setup();
+const queuedRuleWrites = (options) => {
+  const s=setup(undefined, options);
   s.state.errorLog={value:null};
   s.state.manualSpecificRules.push(
     {feat:'CDS',qual:'gene',val:'b',color:'#445566',cap:''},
@@ -687,6 +687,21 @@ for (const second of ['a', 'b']) {
     assert.equal(s.state.newSpecRule.val,'','the pattern of the last Add is cleared');
   }));
 }
+// An Add whose pattern may match slowly asks first. Its write takes its turn
+// at the answer, so it also applies to the table an earlier Add wrote.
+test('an Add that asks about a slow pattern applies after a pending Add, to the table with its rule', () => withDocument(async () => {
+  let answer;
+  const {s,held,table}=queuedRuleWrites({askChoice:()=>new Promise(resolve=>{answer=resolve;})});
+  const [first,release]=await held(s.actions.addSpecificRule());
+  s.state.newSpecRule.val='(a+)+';
+  const asked=s.actions.addSpecificRule();
+  assert.deepEqual(table(),['b #445566 ','zz #778899 '],'nothing is written before the answer');
+  answer('add');
+  release();
+  assert.deepEqual(await Promise.all([first,asked]),[true,true]);
+  assert.deepEqual(table(),['b #445566 ','zz #778899 ',added,'(a+)+ #112233 Shared']);
+  assert.deepEqual(s.transactions,['Add specific color rule','Add specific color rule']);
+}));
 for (const [kind, edit] of Object.entries(ruleEdits)) {
   test(`a ${kind} edit made while an Add is pending applies after it, to the table with its rule (OV-443)`, () => withDocument(async () => {
     const {s,held,table}=queuedRuleWrites();

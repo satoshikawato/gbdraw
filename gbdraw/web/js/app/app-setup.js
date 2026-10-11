@@ -1,6 +1,6 @@
 // @ts-check
 /** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
-/** @import { DrawingState, LegendEntry, LinearSeq } from '../state.js' */
+/** @import { DrawingState, LegendEntry, LinearSeq, PopupPosition } from '../state.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { EditorPaintState } from './result-paint-record.js' */
 /** @import { FeatureEditorOptions } from './feature-editor.js' */
@@ -4757,6 +4757,12 @@ export const createAppSetup = () => {
   };
 
   // A popup's size limits at its position, inside the popup bounds.
+  /**
+   * @param {number} left
+   * @param {number} top
+   * @param {number} desiredMinWidth
+   * @param {number} desiredMinHeight
+   */
   const popupConstraints = (left, top, desiredMinWidth, desiredMinHeight) => {
     const bounds = popupViewportBounds();
     const availableWidth = Math.max(1, bounds.right - (FEATURE_POPUP_MARGIN * 2));
@@ -4780,6 +4786,11 @@ export const createAppSetup = () => {
     left, top, PAIRWISE_MATCH_POPUP_MIN_WIDTH, PAIRWISE_MATCH_POPUP_MIN_HEIGHT
   );
 
+  /**
+   * @param {PopupPosition} pos
+   * @param {{ width: number, height: number }} size
+   * @param {{ maxHeight: number }} constraints
+   */
   const popupStyle = (pos, size, constraints) => ({
     top: `${pos.y}px`,
     left: `${pos.x}px`,
@@ -4792,6 +4803,11 @@ export const createAppSetup = () => {
 
   // OV-371: a popup opened at a clicked point was placed with an expected
   // size; once rendered it is placed again with its own size and content height.
+  /**
+   * @param {PopupPosition} pos
+   * @param {HTMLElement | null} element
+   * @param {string} bodySelector
+   */
   const placeRenderedPopup = (pos, element, bodySelector) => {
     const point = pos.anchor;
     pos.anchor = null;
@@ -4804,6 +4820,12 @@ export const createAppSetup = () => {
   watch(clickedPairwiseMatch, () => placeRenderedPopup(clickedPairwiseMatchPos, pairwiseMatchPopupRef.value, '.pairwise-match-popup-body'), { flush: 'post' });
 
   // A drag keeps the popup inside the popup bounds (OV-384: below the header).
+  /**
+   * @param {PopupPosition} pos
+   * @param {HTMLElement | null} element
+   * @param {number} x
+   * @param {number} y
+   */
   const dragPopupTo = (pos, element, x, y) => {
     const bounds = popupViewportBounds();
     const margin = FEATURE_POPUP_MARGIN;
