@@ -1576,7 +1576,7 @@
             .group-heading { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ui-muted); }
             .input-label { @apply flex items-center gap-1; margin-bottom: 3px; font-size: 12px; font-weight: 500; line-height: 1.3; color: var(--ui-text-2); }
             .ui-hint { font-size: 11px; line-height: 1.45; color: var(--ui-muted); }
-            .markup-preview { @apply mt-0.5 truncate text-slate-600; font-size: 11px; }
+            .markup-preview { @apply mt-0.5 text-slate-600; font-size: 11px; overflow-wrap: anywhere; }
             /* One marker for settings that the next Generate applies. */
             .apply-note { @apply inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-1.5 py-px font-medium leading-4 text-slate-500; font-size: 11px; }
 
@@ -4104,7 +4104,7 @@
                                     <auto-value-field :visible="autoValueVisible(form.plot_title, 'plotTitle')" :text="autoValueText('plotTitle')">
                                         <input type="text" v-model="form.plot_title" class="form-input form-input-compact auto-value-input" aria-label="Plot Title" aria-describedby="help-title-text" :placeholder="mode === 'circular' ? '' : 'Optional plot title'" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
-                                    <markup-preview :text="form.plot_title" class="!whitespace-normal !overflow-visible"></markup-preview>
+                                    <markup-preview :text="form.plot_title"></markup-preview>
                                 </div>
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
