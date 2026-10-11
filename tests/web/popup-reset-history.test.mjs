@@ -59,8 +59,9 @@ test('a popup fill reset without a dialog commits inside its History step', asyn
     ruleActions: {
       runWithRuleMatches: (rules, commit) => runWhenPrepared(state, () => [preparation.prepare(rules)], commit),
       // The rule owner's commit lands after its own preparation (a later task).
-      commitSpecificRules: async (rules) => {
+      commitSpecificRules: async (build) => {
         stages.push('commitSpecificRules');
+        const rules = build(manualSpecificRules, (row, patch) => ({ ...row, ...patch }));
         await new Promise((resolve) => setTimeout(resolve, 0));
         manualSpecificRules.splice(0, manualSpecificRules.length, ...rules);
         return true;

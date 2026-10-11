@@ -95,19 +95,20 @@ export const reportRuleRunFailure = (state, operation, run) => {
 
 // Runs `commit` once the matches it reads are prepared (`preparations`, the
 // color rule matches first): at once when they are, after them when the color
-// matches are still current, and not while a session operation runs. A failed
-// color preparation rejects (`reportRuleRunFailure`).
+// matches are still current (else `stale` answers), and not while a session
+// operation runs. A failed color preparation rejects (`reportRuleRunFailure`).
 /**
  * @param {Record<string, any>} state App state (state.js; not yet typed).
  * @param {() => (boolean | Promise<any>)[]} preparations
  * @param {() => any} commit
+ * @param {() => unknown} [stale]
  */
-export const runWhenPrepared = (state, preparations, commit) => {
+export const runWhenPrepared = (state, preparations, commit, stale = () => undefined) => {
   if (state.sessionOperationAvailability?.()) return state.sessionOperationAvailability();
   const prepared = preparations();
   if (prepared.every((value) => value === true)) return commit();
   return Promise.all(prepared).then(([current]) =>
-    state.sessionOperationAvailability?.() || (current ? commit() : undefined));
+    state.sessionOperationAvailability?.() || (current ? commit() : stale()));
 };
 
 /**
