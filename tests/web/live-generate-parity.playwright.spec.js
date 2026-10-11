@@ -150,6 +150,21 @@ const CASES = [
     setup: async (page) => { await popupEdit(page, 'TESTA_0005', { fill: '#c83366' }); await generate(page); },
     run: (page) => popupEdit(page, 'TESTA_0005', { fill: '#123456' })
   },
+  // OV-344: a This feature only color on a hidden feature of the second
+  // Result, in the caption and color of a rule only the first Result draws.
+  // Generate draws no row for it on the second Result.
+  {
+    kind: 'feature color',
+    edit: 'Feature color (popup, this feature only) of a hidden feature, like a rule only another Result draws',
+    states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'unbound' },
+    setup: async (page) => {
+      await popupEdit(page, 'TESTA_0002', { fill: '#7b2cbf' });
+      await generate(page);
+      await showResult(page, 1);
+      await popupEdit(page, 'TESTB_0001', { visibility: 'off' });
+    },
+    run: (page) => popupEdit(page, 'TESTB_0001', { fill: '#7b2cbf' })
+  },
   {
     kind: 'undo',
     edit: 'Undo of a Feature Visibility rule add',
