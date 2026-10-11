@@ -895,6 +895,20 @@ test('a regrouped Similarity Group keeps the plan while its anchors resolve (OV-
   assert.deepEqual(await loaded.actions.validateBeforeGenerate(), { status: 'ok' });
 });
 
+// An older Session's Result can have no feature catalog, and its committed
+// request need not carry the plan. The client cannot check anchors then, so
+// the typed render validates them (OV-341, #997 CI).
+test('without a feature catalog the plan is not blocked as stale', async () => {
+  const fixture = create({ getCommittedRequest: () => renderRequest });
+  await startReview(fixture);
+  await fixture.actions.applyDraft();
+  fixture.state.featureCatalog.value = null;
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
+  fixture.currentGroup.id = 'no-longer-in-catalog';
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
+  assert.equal(fixture.actions.repair.value, null);
+});
+
 test('a gone target next to a regrouped target blocks without a helper call (OV-342)', async () => {
   const fixture = create();
   await startReview(fixture);

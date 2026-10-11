@@ -57,15 +57,6 @@ const nullableInteger = (value, path) => {
 
 const sameJson = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 
-const sameKeyedPlan = (left, right) => {
-  if (left?.schema !== 2 || right?.schema !== 2 ||
-      !Array.isArray(left.records) || !Array.isArray(right.records)) return false;
-  const keyed = (plan) => ({ ...plan, records: [...plan.records].sort(
-    (a, b) => String(a?.recordKey || '').localeCompare(String(b?.recordKey || ''))
-  ) });
-  return sameJson(keyed(left), keyed(right));
-};
-
 const anchorKey = (anchor) => JSON.stringify(anchor);
 
 const strandLabel = (strand) => (
@@ -1591,15 +1582,13 @@ export const createSimilarityAlignmentActions = ({
     if (state.mode.value !== 'linear') return { status: 'ok' };
     // A plan names anchor features, not group membership (PD-OI-028, OV-341):
     // it is stale only when an anchor feature no longer resolves in the shown
-    // Result. Without a feature catalog, only the exact plan that Result drew
-    // counts as resolved.
+    // Result's feature catalog. A Result without a catalog (an older Session)
+    // cannot be checked here; the typed render validates every anchor.
     const catalogFeatures = catalogBiologicalFeatures(state.featureCatalog?.value);
-    const drawnPlan = sameKeyedPlan(plan, currentRequest()?.layout?.similarityAlignment);
     /** @type {{ recordKey: string, status: string, anchor: AnchorIdentity | null }[]} */
     const decisions = plan.records;
-    const resolves = (/** @type {AnchorIdentity | null} */ anchor) => (catalogFeatures.length
-      ? uniqueCatalogFeature(catalogFeatures, anchor) !== null
-      : drawnPlan);
+    const resolves = (/** @type {AnchorIdentity | null} */ anchor) => (
+      !catalogFeatures.length || uniqueCatalogFeature(catalogFeatures, anchor) !== null);
     if (!resolves(plan.reference)) {
       return markStaleReference('The alignment reference feature is no longer found in its record.');
     }
