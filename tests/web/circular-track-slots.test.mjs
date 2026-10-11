@@ -171,6 +171,19 @@ test('the track preview uses the short/long boundary the Circular drawing keeps'
   assert.equal(featureWidthNote({ 'labels.length_threshold.circular': 50_000 }), '≈ 18.5 px (estimate)');
 });
 
+// OV-487: Python draws a content or skew slot without a dinucleotide with the
+// drawing's, so the closed disclosure names that one, not GC.
+test('the slot options summary names the dinucleotide the slot is drawn with', () => {
+  const state = createState();
+  state.adv.nt = 'AT';
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
+  const summary = (renderer, params) => editor.circularTrackSlotOptionsSummary({ id: 'slot', renderer, params });
+  assert.equal(summary('dinucleotide_skew', {}), 'AT · legend label, gaps, colors');
+  assert.equal(summary('dinucleotide_content', { nt: ' ' }), 'AT · legend label, gaps');
+  assert.equal(summary('dinucleotide_content', { nt: 'gc' }), 'GC · legend label, gaps');
+  assert.equal(summary('features', {}), 'Gaps');
+});
+
 test('Circular placement actions preserve the Axis boundary and radial sides', () => {
   const state = createState({
     slots: [

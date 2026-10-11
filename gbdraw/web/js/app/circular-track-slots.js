@@ -606,11 +606,12 @@ export const createCircularTrackSlotEditor = ({
     if (details.open) openSlotOptions.add(String(slot?.id));
     else openSlotOptions.delete(String(slot?.id));
   };
-  // What the closed disclosure holds; a GC or AT track names its dinucleotide.
+  // What the closed disclosure holds; a GC or AT track names its dinucleotide,
+  // which is the drawing's where the slot sets none (OV-487).
   /** @param {{ renderer?: unknown, params?: { nt?: unknown } } | null | undefined} slot */
   const circularTrackSlotOptionsSummary = (slot) => {
     if (slot?.renderer !== 'dinucleotide_content' && slot?.renderer !== 'dinucleotide_skew') return 'Gaps';
-    const nt = String(slot?.params?.nt || '').trim().toUpperCase() || 'GC';
+    const nt = normalizeNt(slot?.params?.nt, normalizeNt(state.drawings.circular.adv.nt));
     return `${nt} · legend label, gaps${slot.renderer === 'dinucleotide_skew' ? ', colors' : ''}`;
   };
   let nextEditorKey = 1;
