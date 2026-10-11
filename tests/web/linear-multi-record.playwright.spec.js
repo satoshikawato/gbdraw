@@ -2099,9 +2099,10 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
       losatMode: 'blastn',
       losatpMode: 'collinear',
       filterSummary: expect.stringContaining('E-value <= '),
+      // The Settings disclosure's display order: Performance comes last.
       settings: [
-        'losat-mode', 'losat-runtime', 'blastn-task',
-        'result-filters', 'comparison-appearance'
+        'losat-mode', 'blastn-task',
+        'result-filters', 'comparison-appearance', 'losat-runtime'
       ]
     }
   });
