@@ -14,6 +14,8 @@
 // GX-01, GX-12: a pending Session operation disables every settings control, and a
 // disabled field looks disabled.
 // UI-08: an upload zone whose file failed inspection does not look ready.
+// Loader (Owner decision 2026-10-11): every loading place draws the logo in one stroke;
+// its finished frame is the logo, black, and white on the filled Generate button.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
@@ -411,4 +413,110 @@ test('an upload zone whose file failed inspection does not look ready (UI-08)', 
   const linearZone = page.getByRole('button', { name: 'Choose GenBank / DDBJ File', exact: true }).first();
   await expect(linearZone).toHaveClass(/\bfailed\b/, { timeout: 120_000 });
   await expect(linearZone.locator('.ph-check-circle')).toHaveCount(0);
+});
+
+// Loader (Owner decision 2026-10-11). The boot splash stays up while app.js is blocked.
+const openBootSplash = async (page) => {
+  await page.route('**/js/app.js*', (route) => route.abort());
+  await page.goto('/gbdraw/web/index.html');
+  return page.locator('#app-boot-splash .gbdraw-loader');
+};
+
+test('the loader\'s finished frame is the logo asset (reduced motion)', async ({ browser }) => {
+  const context = await browser.newContext({ reducedMotion: 'reduce' });
+  const page = await context.newPage();
+  const loader = await openBootSplash(page);
+  await expect(loader).toBeVisible();
+  expect(await loader.evaluate((element) => element.getAnimations().length)).toBe(0);
+  await page.evaluate(() => {
+    const loader = document.querySelector('#app-boot-splash .gbdraw-loader');
+    Object.assign(loader.style, { width: '128px', height: '128px' });
+    const logo = Object.assign(document.createElement('img'), { src: './assets/gbdraw-logo.svg', id: 'reference-logo' });
+    Object.assign(logo.style, { width: '128px', height: '128px' });
+    loader.after(logo);
+  });
+  await expect.poll(() => page.evaluate(() => document.getElementById('reference-logo').complete)).toBe(true);
+  const shots = [await loader.screenshot(), await page.locator('#reference-logo').screenshot()]
+    .map((png) => `data:image/png;base64,${png.toString('base64')}`);
+  const scratch = await context.newPage();
+  const { inked, differing } = await scratch.evaluate(async (sources) => {
+    const dark = await Promise.all(sources.map(async (source) => {
+      const image = new Image();
+      image.src = source;
+      await image.decode();
+      const canvas = Object.assign(document.createElement('canvas'), { width: image.width, height: image.height });
+      const context = canvas.getContext('2d');
+      context.drawImage(image, 0, 0);
+      const { data } = context.getImageData(0, 0, image.width, image.height);
+      return Array.from({ length: data.length / 4 }, (_, index) => data[index * 4] < 128);
+    }));
+    return {
+      inked: dark[1].filter(Boolean).length,
+      differing: dark[0].filter((value, index) => value !== dark[1][index]).length
+    };
+  }, shots);
+  expect(inked).toBeGreaterThan(1000);
+  expect(differing / inked).toBeLessThan(0.01);
+  await context.close();
+});
+
+test('the loader draws, holds, and erases the logo stroke in a 2.22 s loop', async ({ page }) => {
+  const loader = await openBootSplash(page);
+  await expect(loader).toBeVisible();
+  const frame = (time) => loader.evaluate((element, time) => {
+    const [animation] = element.getAnimations();
+    animation.pause();
+    animation.currentTime = time;
+    return [...element.querySelectorAll('.gbdraw-loader-pen')]
+      .map((pen) => getComputedStyle(pen).strokeDasharray.split(',').map((value) => parseFloat(value)));
+  }, time);
+  expect(await loader.evaluate((element) => element.getAnimations()
+    .map((animation) => animation.effect.getTiming()))).toEqual([expect.objectContaining({ duration: 2220, iterations: Infinity })]);
+  // [pen A, pen B] as `0 gap dash rest`: pen A covers 0-132.782 of the stroke, pen B
+  // starts at 124.169, so halfway through the draw (344.523 / 2) pen B shows 48.093.
+  expect(await frame(0)).toEqual([[0, 0, 0, 134], [0, 0, 0, 222]]);
+  const half = await frame(450);
+  expect(half[0]).toEqual([0, 0, 132.782, 134]);
+  expect(half[1][2]).toBeCloseTo(48.093, 1);
+  expect(await frame(1000)).toEqual([[0, 0, 132.782, 134], [0, 0, 220.354, 222]]);
+  const erasing = await frame(1600);
+  expect(erasing[0]).toEqual([0, 132.782, 0, 134]);
+  expect(erasing[1][1]).toBeGreaterThan(0);
+  expect(await frame(2100)).toEqual([[0, 132.782, 0, 134], [0, 220.354, 0, 222]]);
+});
+
+test('every Vue loading place shows the loader: black, white on the Generate button', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openApp(page);
+  const loaders = () => page.evaluate(() => [...document.querySelectorAll('#app .gbdraw-loader')]
+    .filter((loader) => loader.checkVisibility())
+    .map((loader) => ({
+      place: loader.closest('button')
+        ? loader.closest('button').getAttribute('aria-label') || loader.closest('button').textContent.trim()
+        : loader.nextElementSibling?.textContent.trim(),
+      color: getComputedStyle(loader).color,
+      ariaHidden: loader.getAttribute('aria-hidden'),
+      masks: [...loader.querySelectorAll('g[mask]')].map((group) => group.getAttribute('mask'))
+    })));
+  const set = (flags) => page.evaluate((flags) => Object.assign(window.__GBDRAW_APP__, flags), flags);
+  const black = 'rgb(0, 0, 0)';
+  try {
+    await set({ sessionSavePending: true, exampleSessionPending: true });
+    await expect.poll(loaders).toEqual([
+      expect.objectContaining({ place: 'Save Session', color: black, ariaHidden: 'true' }),
+      expect.objectContaining({ place: 'Load example', color: black }),
+      expect.objectContaining({ place: 'Load an example', color: black })
+    ]);
+    await set({ sessionSavePending: false, exampleSessionPending: false, processing: true, generationCancelRequested: true });
+    await expect.poll(loaders).toEqual([
+      expect.objectContaining({ place: 'Generating Diagram...', color: black }),
+      expect.objectContaining({ place: 'Canceling...', color: black }),
+      expect.objectContaining({ place: 'Generate Diagram', color: 'rgb(255, 255, 255)' })
+    ]);
+    // Each instance masks with its own ids.
+    const masks = (await loaders()).flatMap((loader) => loader.masks);
+    expect(new Set(masks).size).toBe(masks.length);
+  } finally {
+    await set({ sessionSavePending: false, exampleSessionPending: false, processing: false, generationCancelRequested: false });
+  }
 });
