@@ -690,6 +690,11 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
     moveLinearTrackSlotToPlacement(drawing, index, 'overlay');
   };
 
+  // The dinucleotide of the Linear drawing: what a content or skew slot that
+  // sets none draws with. The placeholders of a slot's fields name it from here.
+  /** @returns {string} */
+  const linearDrawingDinucleotide = () => normalizeNt(state.drawings.linear.adv.nt);
+
   const updateLinearTrackSlotRenderer = (slot, renderer = slot?.renderer) => {
     const drawing = state.drawings.linear;
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -704,7 +709,7 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
       slot.params.track_index = normalizeTrackIndex(slot.params.track_index) ?? 0;
     }
     if (slot.renderer === 'dinucleotide_content' || slot.renderer === 'dinucleotide_skew') {
-      slot.params.nt = normalizeNt(slot.params.nt, drawing.adv.nt);
+      slot.params.nt = normalizeNt(slot.params.nt, linearDrawingDinucleotide());
     }
     if (slot.renderer === 'annotations') {
       slot.side = slot.side === 'overlay' ? 'overlay' : 'above';
@@ -821,10 +826,9 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
   };
 
   const linearTrackSlotLegendLabelPlaceholder = (slot) => {
-    const drawing = state.drawings.linear;
     const renderer = normalizeRenderer(slot?.renderer);
     if (renderer === 'dinucleotide_content' || renderer === 'dinucleotide_skew') {
-      const nt = normalizeNt(slot?.params?.nt ?? slot?.params?.dinucleotide, drawing.adv.nt);
+      const nt = normalizeNt(slot?.params?.nt ?? slot?.params?.dinucleotide, linearDrawingDinucleotide());
       return renderer === 'dinucleotide_content' ? `${nt} content` : `${nt} skew`;
     }
     if (renderer === 'depth') return 'Depth';
@@ -1092,6 +1096,7 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
     linearTrackSlotDisplayLabel: (slot) => linearTrackRendererLabel(slot?.renderer),
     linearTrackSlotDisplayMeta: (slot) => buildLinearTrackSlotSpec(slot),
     linearTrackSlotLegendLabelPlaceholder,
+    linearDrawingDinucleotide,
     linearTrackSlotPlacementLabel,
     linearTrackSlotUsesPresetGeometry
   };

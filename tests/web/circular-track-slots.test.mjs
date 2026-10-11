@@ -184,6 +184,17 @@ test('the slot options summary names the dinucleotide the slot is drawn with', (
   assert.equal(summary('features', {}), 'Gaps');
 });
 
+// The default tracks draw the drawing's dinucleotide, so the preset summary
+// names it too.
+test('the preset summary names the default tracks by the dinucleotide of the drawing', () => {
+  const state = createState();
+  state.form.suppress_skew = false;
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
+  assert.match(editor.circularTrackPresetSummary().detail, /GC content, GC skew inside$/);
+  state.adv.nt = ' at ';
+  assert.match(editor.circularTrackPresetSummary().detail, /AT content, AT skew inside$/);
+});
+
 test('Circular placement actions preserve the Axis boundary and radial sides', () => {
   const state = createState({
     slots: [

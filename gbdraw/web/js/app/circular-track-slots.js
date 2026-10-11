@@ -606,12 +606,16 @@ export const createCircularTrackSlotEditor = ({
     if (details.open) openSlotOptions.add(String(slot?.id));
     else openSlotOptions.delete(String(slot?.id));
   };
-  // What the closed disclosure holds; a GC or AT track names its dinucleotide,
-  // which is the drawing's where the slot sets none (OV-487).
+  // The dinucleotide of the Circular drawing: what the default tracks draw, and
+  // a content or skew slot that sets none (OV-487). The slot summary, the
+  // preset summary, and the placeholders of a slot's fields name it from here.
+  /** @returns {string} */
+  const circularDrawingDinucleotide = () => normalizeNt(state.drawings.circular.adv.nt);
+  // What the closed disclosure holds; a GC or AT track names its dinucleotide.
   /** @param {{ renderer?: unknown, params?: { nt?: unknown } } | null | undefined} slot */
   const circularTrackSlotOptionsSummary = (slot) => {
     if (slot?.renderer !== 'dinucleotide_content' && slot?.renderer !== 'dinucleotide_skew') return 'Gaps';
-    const nt = normalizeNt(slot?.params?.nt, normalizeNt(state.drawings.circular.adv.nt));
+    const nt = normalizeNt(slot?.params?.nt, circularDrawingDinucleotide());
     return `${nt} · legend label, gaps${slot.renderer === 'dinucleotide_skew' ? ', colors' : ''}`;
   };
   let nextEditorKey = 1;
@@ -1294,7 +1298,7 @@ export const createCircularTrackSlotEditor = ({
     } else if (renderer === 'features') {
       slot.params.lane_direction = laneDirectionForSide(slot.side);
     } else if (renderer === 'dinucleotide_content' || renderer === 'dinucleotide_skew') {
-      slot.params.nt = normalizeNt(slot.params.nt, normalizeNt(drawing.adv.nt));
+      slot.params.nt = normalizeNt(slot.params.nt, circularDrawingDinucleotide());
     } else if (renderer === 'annotations') {
       slot.side = slot.side === 'overlay' ? 'overlay' : 'outside';
       slot.params.set_id = String(slot.params.set_id || drawing.annotationSets?.[0]?.id || '');
@@ -1517,10 +1521,9 @@ export const createCircularTrackSlotEditor = ({
     return '';
   };
   const circularTrackSlotLegendLabelPlaceholder = (slot) => {
-    const drawing = state.drawings.circular;
     const renderer = String(slot?.renderer || '').trim();
     if (renderer === 'dinucleotide_content' || renderer === 'dinucleotide_skew') {
-      const nt = normalizeNt(slot?.params?.nt ?? slot?.params?.dinucleotide, normalizeNt(drawing.adv.nt));
+      const nt = normalizeNt(slot?.params?.nt ?? slot?.params?.dinucleotide, circularDrawingDinucleotide());
       return renderer === 'dinucleotide_content' ? `${nt} content` : `${nt} skew`;
     }
     if (renderer === 'depth') return 'Depth';
@@ -1702,6 +1705,7 @@ export const createCircularTrackSlotEditor = ({
     const preset = normalizeCircularTrackPreset(drawing.form.track_type);
     const lengthParam = getPreviewLengthParam(state, drawing);
     const lane = laneDirectionForPreset(preset);
+    const nt = circularDrawingDinucleotide();
     const slotLike = (id, renderer) => ({ id, renderer });
     /** @type {string[]} */
     const inside = [];
@@ -1715,10 +1719,10 @@ export const createCircularTrackSlotEditor = ({
       place('depth', getPresetRadiusRatio(slotLike('depth', 'depth'), 'depth', preset, lengthParam, drawing));
     }
     if (!Boolean(drawing.form.suppress_gc)) {
-      place('GC content', getPresetRadiusRatio(slotLike('gc_content', 'dinucleotide_content'), 'dinucleotide_content', preset, lengthParam, drawing));
+      place(`${nt} content`, getPresetRadiusRatio(slotLike('gc_content', 'dinucleotide_content'), 'dinucleotide_content', preset, lengthParam, drawing));
     }
     if (!Boolean(drawing.form.suppress_skew)) {
-      place('GC skew', getPresetRadiusRatio(slotLike('gc_skew', 'dinucleotide_skew'), 'dinucleotide_skew', preset, lengthParam, drawing));
+      place(`${nt} skew`, getPresetRadiusRatio(slotLike('gc_skew', 'dinucleotide_skew'), 'dinucleotide_skew', preset, lengthParam, drawing));
     }
     return {
       label: formatPresetName(preset),
@@ -1747,6 +1751,7 @@ export const createCircularTrackSlotEditor = ({
     circularTrackSlotOptionsOpen,
     setCircularTrackSlotOptionsOpen,
     circularTrackSlotOptionsSummary,
+    circularDrawingDinucleotide,
     circularTrackRendererLabel,
     normalizeCircularTrackSlots: normalizeSlotsInPlace,
     syncCircularConservationSlots,

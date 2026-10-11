@@ -80,7 +80,10 @@ write-up of a release.
   track (OV-489), and a slot object, also with `skew` or `gc_skew`, stopped
   the Load (OV-491). A Linear content or skew slot without a dinucleotide (a
   CLI or Python API Session) now loads, and shows in the Source recipe, with
-  the Session's dinucleotide, not GC (OV-490).
+  the Session's dinucleotide, not GC (OV-490). In a drawing with a dinucleotide
+  other than GC, the empty dinucleotide field of a Custom Track Slots row and
+  the Circular preset summary said GC; both now name the drawing's dinucleotide
+  (OV-497).
 - Raised the short/long size boundary of the Auto sizes: Linear diagrams now
   use 100 kb and Circular diagrams 75 kb; both used 50 kb. A record of 50 kb
   has too few features for the long styles, which are sized for whole genomes.
