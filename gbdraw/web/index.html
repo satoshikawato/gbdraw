@@ -135,16 +135,9 @@
             height: 2.5rem;
             width: auto;
         }
-        #app-boot-splash .boot-spinner {
+        #app-boot-splash .gbdraw-loader {
             width: 2rem;
             height: 2rem;
-            border: 3px solid #dbeafe;
-            border-top-color: #2563eb;
-            border-radius: 9999px;
-            animation: app-boot-spin 0.8s linear infinite;
-        }
-        @keyframes app-boot-spin {
-            to { transform: rotate(360deg); }
         }
         #app-boot-splash .boot-title {
             font-size: 1.25rem;
@@ -162,6 +155,54 @@
         }
         #app:not([v-cloak]) + #app-boot-splash {
             display: none;
+        }
+        /* Loading indicator (Owner decision 2026-10-11): the logo drawn in one stroke, as markup in
+           #gbdraw-loader-template and the boot splash. Two mask pens reveal the filled
+           logo paths: pen A the right half, pen B the left half and the bar. The pen
+           interval [from, to] runs along the combined stroke in user units: pen A covers
+           0-132.782, pen B starts at 124.169, the stroke ends at 344.523. Each pen's
+           pathLength fixes those units. The viewBox crops the logo's empty margin.
+           Loop 2.22 s: draw 0.9 s, hold 0.26 s, erase
+           0.9 s from the start, rest 0.16 s. */
+        @property --gbdraw-loader-from { syntax: '<number>'; inherits: true; initial-value: 0; }
+        @property --gbdraw-loader-to { syntax: '<number>'; inherits: true; initial-value: 344.523; }
+        :where(.gbdraw-loader) { width: 1em; height: 1em; }
+        .gbdraw-loader {
+            display: inline-block;
+            flex: none;
+            vertical-align: -0.125em;
+            color: #000;
+            fill: currentColor;
+            /* A hairline stroke in the fill color closes the antialiasing seam where
+               the two logo parts meet at the top of the ring; the pens override it. */
+            stroke: currentColor;
+            stroke-width: 0.35;
+            --gbdraw-loader-from: 0;
+            --gbdraw-loader-to: 344.523;
+            animation: gbdraw-loader-stroke 2.22s infinite;
+        }
+        /* On a filled button the loader takes the button's text color. */
+        .gbdraw-loader.gbdraw-loader-on-fill { color: inherit; }
+        .gbdraw-loader-pen { fill: none; stroke: #fff; stroke-width: 14; }
+        .gbdraw-loader-pen-a {
+            --gbdraw-loader-a: clamp(0, var(--gbdraw-loader-from), 132.782);
+            --gbdraw-loader-b: clamp(0, var(--gbdraw-loader-to), 132.782);
+            stroke-dasharray: 0 calc(var(--gbdraw-loader-a) * 1px) calc((var(--gbdraw-loader-b) - var(--gbdraw-loader-a)) * 1px) 134px;
+        }
+        .gbdraw-loader-pen-b {
+            --gbdraw-loader-a: clamp(0, var(--gbdraw-loader-from) - 124.169, 220.354);
+            --gbdraw-loader-b: clamp(0, var(--gbdraw-loader-to) - 124.169, 220.354);
+            stroke-dasharray: 0 calc(var(--gbdraw-loader-a) * 1px) calc((var(--gbdraw-loader-b) - var(--gbdraw-loader-a)) * 1px) 222px;
+        }
+        @keyframes gbdraw-loader-stroke {
+            0% { --gbdraw-loader-from: 0; --gbdraw-loader-to: 0; animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1); }
+            40.5405% { --gbdraw-loader-from: 0; --gbdraw-loader-to: 344.523; animation-timing-function: linear; }
+            52.2523% { --gbdraw-loader-from: 0; --gbdraw-loader-to: 344.523; animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1); }
+            92.7928% { --gbdraw-loader-from: 344.523; --gbdraw-loader-to: 344.523; }
+            100% { --gbdraw-loader-from: 344.523; --gbdraw-loader-to: 344.523; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .gbdraw-loader { animation: none; }
         }
         .track-slot-geometry-grid {
             display: grid;
@@ -1555,13 +1596,13 @@
 <div id="app" v-cloak class="h-screen flex flex-col relative">
 
     <div v-if="processing" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
-        <div class="animate-spin w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full mb-6"></div>
+        <gbdraw-loader class="w-16 h-16 mb-6"></gbdraw-loader>
         <h3 class="text-xl font-bold text-slate-800 animate-pulse">Generating Diagram...</h3>
         <p data-generation-progress role="status" aria-live="polite" aria-atomic="true" class="text-xs text-slate-500 mt-3 font-mono" v-text="processingStatus"></p>
         <button @click="cancelGeneration"
                 :disabled="generationCancelRequested"
                 class="btn mt-6 px-5 py-2 text-sm bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-wait flex items-center gap-2">
-            <i :class="generationCancelRequested ? 'ph ph-spinner animate-spin' : 'ph ph-x-circle'" aria-hidden="true"></i>
+            <gbdraw-loader v-if="generationCancelRequested"></gbdraw-loader><i v-else class="ph ph-x-circle" aria-hidden="true"></i>
             <span v-text="generationCancelRequested ? 'Canceling...' : 'Cancel'"></span>
         </button>
     </div>
@@ -1588,14 +1629,14 @@
                         <i class="ph ph-arrow-clockwise" aria-hidden="true"></i> Reset Settings
                     </button>
                     <button data-history-ignore @click="saveSessionWithTitle" :disabled="!sessionSaveAvailable" :aria-busy="sessionSavePending" class="app-config-button disabled:opacity-40 disabled:cursor-wait" title="Save the current Result and settings draft without generating" aria-label="Save Session" aria-describedby="session-save-help">
-                        <i :class="sessionSavePending ? 'ph ph-spinner animate-spin' : 'ph ph-archive'" aria-hidden="true"></i> Save Session
+                        <gbdraw-loader v-if="sessionSavePending"></gbdraw-loader><i v-else class="ph ph-archive" aria-hidden="true"></i> Save Session
                     </button>
                     <button data-history-managed @click="openSessionFilePicker" :disabled="!sessionLoadAvailable" :aria-busy="sessionImportPending" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" title="Load Session" aria-label="Load Session">
                         <i class="ph ph-archive-tray" aria-hidden="true"></i> Load Session
                     </button>
                     <!-- D-07: Load example stays here once a Result replaces the empty Preview. -->
                     <button v-if="galleryExamples.length" data-history-managed @click="openExampleChooser" :disabled="!sessionLoadAvailable || exampleSessionPending" :aria-busy="exampleSessionPending" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" title="Open a finished Gallery example as a Session" aria-label="Load example" aria-haspopup="dialog">
-                        <i :class="exampleSessionPending ? 'ph ph-spinner animate-spin' : 'ph ph-play-circle'" aria-hidden="true"></i> Load example
+                        <gbdraw-loader v-if="exampleSessionPending"></gbdraw-loader><i v-else class="ph ph-play-circle" aria-hidden="true"></i> Load example
                     </button>
                     <input data-history-managed type="file" ref="sessionInput" accept=".json,.gz,application/json,application/gzip" class="hidden" @change="importSession">
                     <span v-if="sessionBusyReason && !sessionSavePending && !sessionImportPending" data-session-busy-reason role="status" aria-live="polite" class="text-[10px] text-amber-700">{{ sessionBusyReason }}</span>
@@ -5103,7 +5144,7 @@
             <button data-history-managed type="button" aria-label="Generate Diagram" @click="runAnalysis" :disabled="!semanticMutationAvailable || (processing)"
                 class="btn w-full py-4 text-lg relative overflow-hidden group text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 border-b-4 border-blue-800 active:border-b-0 active:translate-y-1 active:shadow-none transition-all">
                 <span v-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl" aria-hidden="true"></i> Generate Diagram</span>
-                <span v-else class="flex items-center justify-center gap-2"><i class="ph ph-spinner animate-spin text-xl" aria-hidden="true"></i> {{ generationCancelRequested ? 'Canceling...' : 'Processing...' }}</span>
+                <span v-else class="flex items-center justify-center gap-2"><gbdraw-loader class="gbdraw-loader-on-fill text-xl"></gbdraw-loader> {{ generationCancelRequested ? 'Canceling...' : 'Processing...' }}</span>
             </button>
             </div>
             </div>
@@ -7047,7 +7088,7 @@
                         </div>
                         <div ref="featureListScrollRef" class="flex-grow min-h-[64px] overflow-y-auto custom-scrollbar" @scroll="handleFeatureListScroll">
                             <div v-if="featureExtractionPending && extractedFeatures.length === 0" class="p-4 text-center text-slate-500 text-xs">
-                                <i class="ph ph-circle-notch animate-spin" aria-hidden="true"></i> Preparing features...
+                                <gbdraw-loader></gbdraw-loader> Preparing features...
                             </div>
                             <div v-if="featureListTopSpacerPx > 0" :style="{ height: `${featureListTopSpacerPx}px` }" aria-hidden="true"></div>
                             <div v-for="feat in visibleFeatureRows" :key="feat.id" @click="openFeatureEditorFromList(feat, $event)" data-feature-list-row class="px-3 py-2 h-[83px] overflow-hidden border-b border-slate-100 text-xs hover:bg-blue-50 cursor-pointer transition-colors space-y-1">
@@ -7107,7 +7148,7 @@
                                     <span>Auto Reflow</span>
                                 </label>
                                 <span v-if="labelReflowProcessing" class="text-[10px] text-blue-600 flex items-center gap-1" aria-live="polite">
-                                    <i class="ph ph-circle-notch animate-spin" aria-hidden="true"></i>
+                                    <gbdraw-loader></gbdraw-loader>
                                     Reflowing label placement...
                                 </span>
                             </div>
@@ -7412,7 +7453,7 @@
                 <template v-if="galleryExamples.length">
                     <button type="button" data-history-managed @click="openExampleChooser" :disabled="!sessionLoadAvailable || exampleSessionPending" :aria-busy="exampleSessionPending"
                             class="btn btn-secondary btn-sm mt-4" aria-haspopup="dialog" aria-describedby="example-session-help">
-                        <i :class="exampleSessionPending ? 'ph ph-spinner animate-spin' : 'ph ph-play-circle'" aria-hidden="true"></i> Load an example
+                        <gbdraw-loader v-if="exampleSessionPending"></gbdraw-loader><i v-else class="ph ph-play-circle" aria-hidden="true"></i> Load an example
                     </button>
                     <p id="example-session-help" class="ui-hint mt-2">Opens a finished Gallery example as a Session.</p>
                 </template>
@@ -7930,7 +7971,12 @@
 <div id="app-boot-splash" role="status" aria-live="polite">
     <div class="boot-card">
         <img src="./assets/gbdraw-logo-title.png" alt="gbdraw" class="boot-logo">
-        <div class="boot-spinner" aria-hidden="true"></div>
+        <svg class="gbdraw-loader" viewBox="12.7 13.1 115.2 109.2" aria-hidden="true" focusable="false">
+            <mask id="gbdraw-loader-boot-a"><path class="gbdraw-loader-pen gbdraw-loader-pen-a" pathLength="132.782" d="M 92.398 110.009 A 49.333 48.883 0 0 0 63.431 18.978"/></mask>
+            <mask id="gbdraw-loader-boot-b"><path class="gbdraw-loader-pen gbdraw-loader-pen-b" pathLength="220.354" d="M 72.031 18.978 A 49.333 48.883 0 1 0 67.731 116.558 L 129.5 116.557"/></mask>
+            <g mask="url(#gbdraw-loader-boot-a)"><path transform="matrix(-1,0,0,1,135.46331,2.057498)" d="m 67.732299,11.443229 c -30.079258,0 -54.625089,24.290851 -54.625089,54.173954 0,13.704239 5.172481,26.222963 13.663249,35.771457 h 15.75356 C 31.125119,93.518214 23.69106,80.448212 23.69106,65.617183 c 0,-24.110799 19.629436,-43.591654 44.041239,-43.591654 z"/></g>
+            <g mask="url(#gbdraw-loader-boot-b)"><path transform="matrix(-1,0,0,1,135.46331,2.057498)" d="m 67.732299,11.443229 v 10.5823 c 24.411803,0 44.041241,19.480855 44.041241,43.591654 0,24.1108 -19.629438,43.590107 -44.041241,43.590107 v 0 H 7.930782 v 10.58333 h 59.81547 v 0 c 30.072856,-0.008 54.611138,-24.294982 54.611138,-54.173437 0,-29.883103 -24.545833,-54.173954 -54.625091,-54.173954 z"/></g>
+        </svg>
         <div>
             <div class="boot-title">Initializing gbdraw...</div>
             <div class="boot-subtitle">Loading the browser application.</div>
@@ -8043,6 +8089,15 @@
             <slot></slot>
         </div>
     </script>
+
+<script type="text/x-template" id="gbdraw-loader-template">
+    <svg class="gbdraw-loader" viewBox="12.7 13.1 115.2 109.2" aria-hidden="true" focusable="false">
+        <mask :id="ids.a"><path class="gbdraw-loader-pen gbdraw-loader-pen-a" pathLength="132.782" d="M 92.398 110.009 A 49.333 48.883 0 0 0 63.431 18.978"/></mask>
+        <mask :id="ids.b"><path class="gbdraw-loader-pen gbdraw-loader-pen-b" pathLength="220.354" d="M 72.031 18.978 A 49.333 48.883 0 1 0 67.731 116.558 L 129.5 116.557"/></mask>
+        <g :mask="`url(#${ids.a})`"><path transform="matrix(-1,0,0,1,135.46331,2.057498)" d="m 67.732299,11.443229 c -30.079258,0 -54.625089,24.290851 -54.625089,54.173954 0,13.704239 5.172481,26.222963 13.663249,35.771457 h 15.75356 C 31.125119,93.518214 23.69106,80.448212 23.69106,65.617183 c 0,-24.110799 19.629436,-43.591654 44.041239,-43.591654 z"/></g>
+        <g :mask="`url(#${ids.b})`"><path transform="matrix(-1,0,0,1,135.46331,2.057498)" d="m 67.732299,11.443229 v 10.5823 c 24.411803,0 44.041241,19.480855 44.041241,43.591654 0,24.1108 -19.629438,43.590107 -44.041241,43.590107 v 0 H 7.930782 v 10.58333 h 59.81547 v 0 c 30.072856,-0.008 54.611138,-24.294982 54.611138,-54.173437 0,-29.883103 -24.545833,-54.173954 -54.625091,-54.173954 z"/></g>
+    </svg>
+</script>
 
 <script type="text/x-template" id="help-tip-template">
     <span class="help-tip inline-block align-text-bottom">
