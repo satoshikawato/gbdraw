@@ -543,8 +543,8 @@ each export format needs.
   reverse-complemented record stores that record as drawn, so replaying it gives its
   features different IDs than the original render. The drawing is the same.
 - After you load a Session saved by 0.13.0, its Result keeps the 0.13.0 feature IDs
-  on cropped or reverse-complemented records until you click **Generate**. Colors
-  are unaffected. An SVG downloaded before **Generate** carries the old IDs.
+  on cropped or reverse-complemented records until you click **Generate Diagram**. Colors
+  are unaffected. An SVG downloaded before **Generate Diagram** carries the old IDs.
 - A label whitelist row that **Whitelist only** saved before 0.14.0, for a feature
   without a unique qualifier, names the feature by its old drawn ID. On a cropped
   or reverse-complemented record it no longer matches that feature, and its label

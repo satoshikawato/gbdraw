@@ -86,9 +86,9 @@ S2 とオーケストレーターがレビュー中に記録した。リリー�
 | ID | 内容・状態 |
 |---|---|
 | OV-384 | feature popup（z-50）が左上のヘッダボタン（z-40）に重なり、#986 の Load example ボタンがあると Undo が popup の下になる。0.14.0 には含めない。既知の問題として、popup を閉じてから操作する旨をリリースノートに書く |
-| OV-401 | 逆向きに alignment された record の stable feature ID が 2 つの frame（biological と drawn）で別の owner により作られ、validator が drawn hash を biological ID とだけ比べていた。c388ccc6（main にあり、どのタグにもなし）からの回帰で 0.13.0 は影響なし。影響は Python の `enrich_svg(..., feature_catalog=)` と Gallery の asset tool のみ。**0.14.0 で修正**（biological ID か同じ行の `drawnSelector.hash` を受け付ける。PR 番号は FINDINGS に記載なし）。重複する builder の除去は identity contract の変更なので、タグの後（D-37） |
-| OV-412 | Web の interactive SVG export が、crop または逆向きの record で `data-gbdraw-stable-feature-id` に biological ID でなく drawn hash を書く。**未修正**: タグの後、既知の問題（D-37） |
-| OV-413 | Gallery 公開の比較が、CLI replay の書く LOSAT の真偽値セル `True`/`False` を受け付けない（保守用ツールのみ）。「majanivirus PR」で修正済み（PR 番号は FINDINGS に記載なし） |
+| OV-401 | 逆向きに alignment された record の stable feature ID が 2 つの frame（biological と drawn）で別の owner により作られ、validator が drawn hash を biological ID とだけ比べていた。c388ccc6（main にあり、どのタグにもなし）からの回帰で 0.13.0 は影響なし。影響は Python の `enrich_svg(..., feature_catalog=)` と Gallery の asset tool のみ。**修正済み**: #994（`0cb214fa`）。Owner の route A（D-39）で、feature hash を source record から 1 か所で作り、drawer はそれを使う。validator は厳密なまま |
+| OV-412 | Web の interactive SVG export が、crop または逆向きの record で `data-gbdraw-stable-feature-id` に biological ID でなく drawn hash を書いた。**修正済み**: #994（`0cb214fa`）。D-39 により D-37 の既知の問題は取り消し |
+| OV-413 | Gallery 公開の比較が、CLI replay の書く LOSAT の真偽値セル `True`/`False` を受け付けない（保守用ツールのみ）。**修正済み**: #994（`0cb214fa`） |
 | CI | リリース後（`test.yml` は governance）: Playwright に `actionTimeout` を設定し、覆われた click が test timeout まで待たないようにする（#986 の shard 4 が 10 分の retry 3 回で 45 分を使った） |
 
 ## 問題がなかった範囲

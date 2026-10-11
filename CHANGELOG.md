@@ -14,6 +14,15 @@ write-up of a release.
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
+- Added circular-record display-start rotation and manual feature lane placement.
+- Improved Run Info / Exact replay, Save Session resource preservation, preview
+  navigation, and Generate processing-stage feedback.
+- Includes the beta's package-root Python API and current session/request
+  compatibility, plus isolated wheel/sdist installation and local GUI packaging fixes.
+- See the [full release notes](./docs/RELEASE_NOTES_0.14.0.md) for migration,
+  compatibility, and installation availability. Publication dates are recorded
+  in [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases).
+
 - SVG feature IDs: a feature of a cropped or reverse-complemented record
   (`--region`, `--reverse_complement`, **Reverse complement**, or a direction
   chosen in **Review alignment options…**) is now drawn with its source-record
@@ -41,15 +50,6 @@ write-up of a release.
   (LC738872.1) reverse-complemented with its record's **Reverse complement**
   setting, so its links to the neighboring genomes no longer cross. The rows stay
   centered, and the Gallery command adds `--reverse_complement 1` for that record.
-- Added circular-record display-start rotation and manual feature lane placement.
-- Improved Run Info / Exact replay, Save Session resource preservation, preview
-  navigation, and Generate processing-stage feedback.
-- Includes the beta's package-root Python API and current session/request
-  compatibility, plus isolated wheel/sdist installation and local GUI packaging fixes.
-- See the [full release notes](./docs/RELEASE_NOTES_0.14.0.md) for migration,
-  compatibility, and installation availability. Publication dates are recorded
-  in [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases).
-
 - Records (web app): choose which records of a file to draw. Linear record cards
   gain **Draw this record**, and a File with several records gains **Choose
   records…**, a list that searches and sorts by file order, record ID, or length
@@ -104,7 +104,7 @@ write-up of a release.
   before choosing its file keeps the active alignment, because the pair has no
   new data yet. Before, the alignment was cleared at once with "Alignment
   cleared: comparison configuration changed." Choosing a file, another
-  program, or another mode still clears it (OV-380).
+  program, or another LOSATP mode still clears it (OV-380).
 - Similarity alignment (web app): a Result filter or grouping setting that
   moves the alignment reference or a target out of its Similarity Group (for
   example a higher **Minimum identity**) keeps the alignment, and every later
