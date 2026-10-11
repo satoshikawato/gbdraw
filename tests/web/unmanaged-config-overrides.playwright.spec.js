@@ -22,16 +22,14 @@ const sourceSession = JSON.parse(readFileSync(join(
 const unmanagedPath = 'objects.gc_content.percent_background_opacity';
 
 const loadSessionPayload = async (page, payload) => {
-  const dialogPromise = page.waitForEvent('dialog', { timeout: 180000 });
   await page.locator('input[accept^=".json,"]').first().setInputFiles({
     name: 'unmanaged-config.gbdraw-session.json',
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(payload))
   });
-  const dialog = await dialogPromise;
-  const message = dialog.message();
-  await dialog.accept();
-  return message;
+  const notice = page.locator('[data-app-notice]');
+  await expect(notice).toContainText('Session loaded', { timeout: 180000 });
+  return notice.innerText();
 };
 
 const readSessionDownload = async (download) => {
@@ -68,8 +66,8 @@ test('GUI-unmanaged config survives disclosure, Generate, save/reload, reset, an
     'objects.gc_content.mode'
   ] = 'percent';
 
-  expect(await loadSessionPayload(page, preservedSession)).toBe(
-    'Session loaded successfully!'
+  expect(await loadSessionPayload(page, preservedSession)).toContain(
+    'Session loaded: unmanaged-config.gbdraw-session.json'
   );
   const disclosure = page.locator('[data-unmanaged-config-override]');
   await expect(disclosure).toHaveCount(1);
@@ -100,11 +98,8 @@ test('GUI-unmanaged config survives disclosure, Generate, save/reload, reset, an
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  const reloadDialog = page.waitForEvent('dialog', { timeout: 180000 });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(saved.path);
-  const loaded = await reloadDialog;
-  expect(loaded.message()).toBe('Session loaded successfully!');
-  await loaded.accept();
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 180000 });
   await expect(disclosure).toContainText(unmanagedPath);
 
   await disclosure.getByRole('button', { name: `Reset preserved setting ${unmanagedPath}` })

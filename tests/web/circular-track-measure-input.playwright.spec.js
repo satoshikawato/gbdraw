@@ -28,12 +28,11 @@ const prepare = async page => {
   await openApp(page);
 };
 const load = async (page, file = fixture, accepted = true) => {
-  const before = dialogs.get(page).length;
   const readyBefore = await page.evaluate(() => window.__C619_EVENTS__.filter(event => event.name === 'interactiveReady').length);
   const input = page.locator(sessionInput);
   await input.setInputFiles(file);
   if (accepted) {
-    await expect.poll(() => dialogs.get(page).length, { timeout: 180_000 }).toBeGreaterThan(before);
+    await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 180_000 });
   } else {
     // Rejected Load reports an operation alert and clears the input at the
     // import owner's finally boundary before the preserved state is compared.
@@ -47,8 +46,7 @@ const load = async (page, file = fixture, accepted = true) => {
     !window.__GBDRAW_APP__.sessionImportPending
     && (!accepted || window.__C619_EVENTS__.filter(event => event.name === 'interactiveReady').length > readyBefore)
   ), { readyBefore, accepted });
-  const messages = dialogs.get(page).slice(before);
-  expect(messages.some(message => message === 'Session loaded successfully!')).toBe(accepted);
+  if (!accepted) await expect(page.locator('[data-app-notice]')).not.toContainText('Session loaded');
 };
 const openPanel = async page => {
   const button = page.locator('button[aria-controls="circular-custom-track-slots-panel"]');
@@ -343,6 +341,7 @@ test('Auto preference is transient across input, Clear, History, panel remount, 
   await expect(unitControl(page, 'features', 'Width')).toHaveValue('factor');
   await selectUnit(page, 'px', 'features');
   await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+  await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
   await openPanel(page);
   await expect(unitControl(page, 'features', 'Width')).toHaveValue('factor');
   const finalActivity = await workerCounts(page);

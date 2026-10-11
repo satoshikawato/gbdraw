@@ -264,11 +264,8 @@ test('frozen v39 session is admitted once with usable composition geometry', asy
   const input = page.locator(
     'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
   );
-  const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
   await input.setInputFiles(frozenV39Session);
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120000 });
 
   await page.waitForFunction(() => {
     const app = window.__GBDRAW_APP__;

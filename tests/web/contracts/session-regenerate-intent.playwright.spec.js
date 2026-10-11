@@ -1579,7 +1579,7 @@ test('loaded current preview supports direct edits before the first Generate', a
   await expect(colorScopeHeading).toBeVisible();
   const colorScopeDialog = colorScopeHeading.locator('..');
   const captionScopeButton = colorScopeDialog.getByRole('button').filter({
-    hasText: `Apply to all "${target.fillLegendCaption}"`
+    hasText: `Legend item "${target.fillLegendCaption}"`
   }).last();
   await expect(captionScopeButton).toBeVisible();
   await captionScopeButton.click();

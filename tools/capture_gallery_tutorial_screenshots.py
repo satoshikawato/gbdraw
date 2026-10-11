@@ -550,13 +550,14 @@ def wait_for_app_shell(page) -> None:
 
 
 def load_web_app_session(page, session_path: Path) -> None:
-    with page.expect_event("dialog", timeout=180_000) as dialog_info:
-        page.locator('input[accept^=".json,"]').set_input_files(str(session_path))
-    dialog = dialog_info.value
-    message = dialog.message
-    dialog.accept()
-    if message != "Session loaded successfully!":
-        raise RuntimeError(f"Could not load capture session: {message}")
+    page.locator('input[accept^=".json,"]').set_input_files(str(session_path))
+    # A loaded Session shows the notice `Session loaded: <file name>`.
+    try:
+        page.locator("[data-app-notice]").filter(has_text="Session loaded").wait_for(
+            state="visible", timeout=180_000
+        )
+    except Exception as error:
+        raise RuntimeError(f"Could not load capture session: {error}") from error
     page.wait_for_function(
         """
         () => {

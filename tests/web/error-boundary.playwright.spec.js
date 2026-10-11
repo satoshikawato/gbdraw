@@ -254,7 +254,7 @@ test('@pr-smoke live and downloaded standalone search retain JavaScript regex an
   const query=page.getByRole('searchbox',{name:'Search features',exact:true});
   await page.getByRole('combobox',{name:'Search field',exact:true}).selectOption('qualifier-value');
   await page.getByRole('textbox',{name:'Qualifier key',exact:true}).fill('product');
-  const regex=page.getByRole('checkbox',{name:'Regex (JavaScript, i)',exact:true});
+  const regex=page.getByRole('checkbox',{name:'Regular expression',exact:true});
   await regex.check(); await query.fill('(?<enzyme>nadh)'); await query.press('Enter');
   const targets=await page.evaluate(()=>[...window.__GBDRAW_APP__.previewFeatureSearchMatches].sort());
   expect(targets).toHaveLength(7);

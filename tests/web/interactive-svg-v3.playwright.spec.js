@@ -699,11 +699,8 @@ const installRecordReadCounter = (page) => page.addInitScript(() => {
 });
 
 const loadSessionFile = async (page, sessionPath) => {
-  const dialogPromise = page.waitForEvent('dialog');
   await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending))
     .toBe(false);
 };
@@ -758,9 +755,7 @@ test('Linear Record actions rotate a circular record of a loaded Session without
   page
 }) => {
   test.setTimeout(240000);
-  page.on('dialog', (dialog) => {
-    if (dialog.message() !== 'Session loaded successfully!') dialog.dismiss();
-  });
+  page.on('dialog', (dialog) => dialog.dismiss());
   await installRecordReadCounter(page);
   await installDiagramRequestObserver(page);
   await openApp(page);
@@ -829,9 +824,7 @@ test('Linear Record actions rotate a multi-record File of a loaded CLI Session w
   page
 }, testInfo) => {
   test.setTimeout(300000);
-  page.on('dialog', (dialog) => {
-    if (dialog.message() !== 'Session loaded successfully!') dialog.dismiss();
-  });
+  page.on('dialog', (dialog) => dialog.dismiss());
   const session = await writeCliSession(testInfo, 'linear', {
     'cli-single.gbk': makeCircularRecord('cli_single', 'single_gene', 41, 125),
     'cli-multi.gbk': makeCircularRecord('cli_multi_a', 'multi_a_gene', 61, 150)
@@ -862,9 +855,7 @@ test('Linear CLI Session that draws some records of a file loads and generates o
   page
 }, testInfo) => {
   test.setTimeout(300000);
-  page.on('dialog', (dialog) => {
-    if (dialog.message() !== 'Session loaded successfully!') dialog.dismiss();
-  });
+  page.on('dialog', (dialog) => dialog.dismiss());
   const session = await writeCliSession(testInfo, 'linear', {
     'cli-single.gbk': makeCircularRecord('cli_single', 'single_gene', 41, 125),
     'cli-multi.gbk': makeCircularRecord('cli_multi_a', 'multi_a_gene', 61, 150)
@@ -907,9 +898,7 @@ test('Linear CLI Session keeps --region and --reverse_complement through Load an
   page
 }, testInfo) => {
   test.setTimeout(300000);
-  page.on('dialog', (dialog) => {
-    if (dialog.message() !== 'Session loaded successfully!') dialog.dismiss();
-  });
+  page.on('dialog', (dialog) => dialog.dismiss());
   const session = await writeCliSession(testInfo, 'linear', {
     'cli-cropped.gbk': makeCircularRecord('cli_cropped', 'cropped_gene', 61, 150),
     'cli-reversed.gbk': makeCircularRecord('cli_reversed', 'reversed_gene', 41, 125)

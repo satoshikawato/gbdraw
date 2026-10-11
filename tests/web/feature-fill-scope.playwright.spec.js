@@ -415,7 +415,7 @@ test('a popup scope dialog opens ready and keeps focus while its choice applies'
       return app.selectedFeatureIds.size;
     });
     expect(selected).toBeGreaterThan(0);
-    await scope.getByRole('button').filter({ hasText: 'Apply to all "tRNA"' }).last().click();
+    await scope.getByRole('button').filter({ hasText: 'Legend item "tRNA"' }).last().click();
     await expect(scope.getByRole('status')).toHaveText('Applying an edit…');
     const whileBusy = await focusIn();
     // W1: no control is enabled, so Tab and Shift+Tab keep focus on the panel.

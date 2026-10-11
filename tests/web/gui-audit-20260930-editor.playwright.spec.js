@@ -302,8 +302,8 @@ test('changing the Linear legend position after a legend-free Generate raises no
     await settle(page);
     expect(pageErrors).toEqual([]);
     // Reset Settings also restores a legend side on the legend-free Result.
-    await page.evaluate(() => { window.confirm = () => true; });
     await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+    await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
     await settle(page);
     expect(await page.evaluate(() => window.__GBDRAW_APP__.form.legend)).not.toBe('left');
     expect(pageErrors).toEqual([]);
@@ -1227,7 +1227,7 @@ test('Label visibility On for an underlay feature is kept without a label until 
   expect(await labelOnFacts(page)).toEqual(before);
 
   await startLabelOn(page, repeat, 'RPT_FORCED');
-  await answerLabelOn(page, 'Label Cannot Be Drawn', 'Keep without label');
+  await answerLabelOn(page, 'Label Cannot Be Drawn', 'Keep Label On');
   expect(await labelOnFacts(page)).toEqual({
     ...before,
     undo: before.undo + 1,
@@ -1276,7 +1276,7 @@ test('Label visibility On that does not fit with Embedded Only asks after the re
   expect(await labelState()).toMatchObject({ reflowError: null, labels: initialLabels });
 
   await startLabelOn(page, fl1, longText);
-  await answerLabelOn(page, 'Label Does Not Fit', 'Keep without label');
+  await answerLabelOn(page, 'Label Does Not Fit', 'Keep Label On');
   expect(await labelOnFacts(page)).toEqual({
     ...before,
     undo: before.undo + 1,

@@ -733,7 +733,7 @@ const installResponsivenessProbe = (page, { trackLifecycle = false } = {}) => pa
   { shouldTrackLifecycle: trackLifecycle }
 );
 
-const loadExactSession = async (page, dialogs, { browserFetch = false } = {}) => {
+const loadExactSession = async (page, { browserFetch = false } = {}) => {
   if (browserFetch) {
     await page.evaluate(async () => {
       const response = await fetch(
@@ -773,7 +773,7 @@ const loadExactSession = async (page, dialogs, { browserFetch = false } = {}) =>
   await page.evaluate(() => new Promise((resolveFrame) => (
     requestAnimationFrame(() => requestAnimationFrame(resolveFrame))
   )));
-  expect(dialogs).toContain('Session loaded successfully!');
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
 };
 
 const openExactApp = async (page, { structural = false } = {}) => {
@@ -1080,11 +1080,9 @@ const collectWarmResponsivenessSample = async ({
   });
   const page = await context.newPage();
   page.setDefaultTimeout(INTERACTION_TIMEOUT_MS);
-  const dialogs = [];
   const pageErrors = [];
   const consoleErrors = [];
   page.on('dialog', async (dialog) => {
-    dialogs.push(dialog.message());
     await dialog.accept();
   });
   page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
@@ -1095,7 +1093,7 @@ const collectWarmResponsivenessSample = async ({
   try {
     await installResponsivenessProbe(page, { trackLifecycle });
     await openExactApp(page);
-    await loadExactSession(page, dialogs, { browserFetch: true });
+    await loadExactSession(page, { browserFetch: true });
     await ensureDenseRegionVisible(page);
     const geometry = await readGeometry(page);
     await warmOrdinaryFeatureHover(page, geometry);
@@ -1224,11 +1222,9 @@ test.describe('Structural Contract', () => {
         await page.setViewportSize({ width: 1440, height: 1000 });
         expect(fixtureSha).toBe(EXPECTED_FIXTURE_SHA);
 
-        const dialogs = [];
         const pageErrors = [];
         const consoleErrors = [];
         page.on('dialog', async (dialog) => {
-          dialogs.push(dialog.message());
           await dialog.accept();
         });
         page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
@@ -1238,7 +1234,7 @@ test.describe('Structural Contract', () => {
 
         await installInteractionProbe(page);
         await openExactApp(page, { structural: true });
-        await loadExactSession(page, dialogs);
+        await loadExactSession(page);
         await ensureDenseRegionVisible(page);
         const geometry = await readGeometry(page);
         const loadWorker = workerTotals(await getDiagramWorkerActivity(page));

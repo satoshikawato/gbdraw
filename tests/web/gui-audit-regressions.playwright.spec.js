@@ -89,13 +89,13 @@ test('selected D-loop without gene or locus_tag generates a feature annotation',
   await expect(page.locator('.origin-top svg [data-gbdraw-annotation-id="feature_1"]')).toHaveCount(1);
 });
 
-test('label search includes live edits and reports the initial rendered feature count', async ({ page }) => {
+test('label search includes live edits and shows no match status before a search', async ({ page }) => {
   test.setTimeout(180000);
   await session(page);
   await page.getByRole('button', { name: 'Toggle layout edit mode' }).click();
   await expect(page.getByRole('button', { name: 'Toggle layout edit mode' })).toHaveAttribute('aria-pressed', 'true');
   const status = page.getByRole('status', { name: 'Feature search status' });
-  await expect(status).toHaveText('0 / 37 features');
+  await expect(status).toHaveText('');
   const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
   await search.fill('tRNA');
   await search.press('Enter');
@@ -107,9 +107,9 @@ test('label search includes live edits and reports the initial rendered feature 
   await page.getByRole('combobox', { name: 'Search field', exact: true }).selectOption('label');
   await search.fill('AUDIT_RENAMED_FEATURE');
   await search.press('Enter');
-  await expect(status).toHaveText('1 / 1 features');
+  await expect(status).toHaveText('1 of 1 match');
   await generateAndWaitForResult(page);
-  await expect(status).toHaveText('1 / 1 features');
+  await expect(status).toHaveText('1 of 1 match');
 });
 
 test('similarity group names and descriptions survive temporary mode changes', async ({ page }) => {
@@ -322,8 +322,7 @@ test('a delayed label TSV cannot replace the labels from a newer upload', async 
 test('a label TSV that matches no label keeps the label edits and records no Undo step', async ({ page }) => {
   test.setTimeout(180000);
   await session(page);
-  const alerts = [];
-  page.on('dialog', (dialog) => alerts.push(dialog.message()));
+  const notice = page.locator('[data-app-notice]');
   const importTsv = (tsv) => evaluateWithRetainedPromise(page, async (text) => {
     const app = window.__GBDRAW_APP__;
     await app.loadLabelOverrideTable({ target: { files: [new File([text], 'labels.tsv')], value: 'labels.tsv' } });
@@ -333,14 +332,13 @@ test('a label TSV that matches no label keeps the label edits and records no Und
   }, tsv);
   const edited = await importTsv('*\t*\tlabel\t^tRNA-Phe$\tMyLabel\n');
   expect(edited).toMatchObject({ bulk: { 'tRNA-Phe': 'MyLabel' }, undoLabel: 'Load label edits' });
+  await expect(notice.locator('p')).toHaveText('Loaded 1 row(s). Applied to 1 label(s).');
   expect(await importTsv('*\t*\tproduct\t^no such product$\tZZ\n')).toEqual(edited);
+  await expect(notice.locator('p')).toHaveText('Loaded 1 row(s). Not applied; the existing label edits were kept.');
+  await expect(notice.locator('li')).toHaveText(['No row matched a label of the diagram.']);
   const replaced = await importTsv('*\t*\tlabel\t^tRNA-Val$\tOther\n');
   expect(replaced).toEqual({ bulk: { 'tRNA-Val': 'Other' }, undoCount: edited.undoCount + 1, undoLabel: 'Load label edits' });
-  expect(alerts).toEqual([
-    'Loaded 1 row(s). Applied to 1 label(s).',
-    'Loaded 1 row(s). Not applied: no row matched a label of the diagram. The existing label edits were kept.',
-    'Loaded 1 row(s). Applied to 1 label(s).'
-  ]);
+  await expect(notice.locator('p')).toHaveText('Loaded 1 row(s). Applied to 1 label(s).');
 });
 
 test('invalid annotation coordinates preserve the draft and the last successful diagram', async ({ page }) => {

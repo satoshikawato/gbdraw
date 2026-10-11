@@ -22,18 +22,11 @@ const sessionInput = 'input[accept^=".json,"]';
 const readSession = async file => JSON.parse(gunzipSync(await fs.readFile(file)));
 
 const load = async (page, file) => {
-  const dialogs = [];
-  const accept = async dialog => { dialogs.push(dialog.message()); await dialog.accept(); };
-  page.on('dialog', accept);
-  try {
-    await page.locator(sessionInput).setInputFiles(file);
-    await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
-    const error = await page.evaluate(() => window.__GBDRAW_APP__.errorLog);
-    expect(error, `Load ${path.basename(file)} failed`).toBeNull();
-    expect(dialogs).toContain('Session loaded successfully!');
-  } finally {
-    page.off('dialog', accept);
-  }
+  await page.locator(sessionInput).setInputFiles(file);
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
+  const error = await page.evaluate(() => window.__GBDRAW_APP__.errorLog);
+  expect(error, `Load ${path.basename(file)} failed`).toBeNull();
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
 };
 
 const save = async (page, file) => {

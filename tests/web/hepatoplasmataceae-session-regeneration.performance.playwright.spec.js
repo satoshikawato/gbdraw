@@ -287,7 +287,7 @@ const deriveContractMetrics = (snapshot, beforeWorker, afterWorker) => {
   };
 };
 
-const loadSessionThroughUi = async (page, dialogMessages) => {
+const loadSessionThroughUi = async (page) => {
   await resetProbe(page, 'session-load');
   const chooserPromise = page.waitForEvent('filechooser', { timeout: OPERATION_TIMEOUT_MS });
   await page.getByRole('button', { name: 'Load Session', exact: true }).click();
@@ -301,7 +301,7 @@ const loadSessionThroughUi = async (page, dialogMessages) => {
   await page.evaluate(() => new Promise((resolveFrame) => (
     requestAnimationFrame(() => requestAnimationFrame(resolveFrame))
   )));
-  expect(dialogMessages).toContain('Session loaded successfully!');
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
 };
 
 const inspectSavedPreview = (page) => page.evaluate(async () => {
@@ -586,7 +586,6 @@ test('exact saved Session regenerates twice with bounded work and fresh readines
     contextClosures: 0,
     pageErrors: []
   };
-  const dialogMessages = [];
   const evidence = {
     repositorySha,
     fixtureSha,
@@ -605,14 +604,13 @@ test('exact saved Session regenerates twice with bounded work and fresh readines
   context.on('close', () => { terminal.contextClosures += 1; });
   page.on('pageerror', (error) => terminal.pageErrors.push(String(error?.message || error)));
   page.on('dialog', async (dialog) => {
-    dialogMessages.push(dialog.message());
     await dialog.accept();
   });
 
   await installRuntimeProbe(page);
   try {
     await openApp(page);
-    await loadSessionThroughUi(page, dialogMessages);
+    await loadSessionThroughUi(page);
     const savedProbe = await probeSnapshot(page);
     const savedWorker = await getDiagramWorkerActivity(page);
     const saved = await inspectSavedPreview(page);

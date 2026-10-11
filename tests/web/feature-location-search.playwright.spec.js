@@ -78,11 +78,11 @@ test('feature list, popup, hover, and Location search use 1-based INSDC location
     await search.press('Enter');
   };
   await find('location', '300');
-  await expect(status).toHaveText('0 / 0 features');
+  await expect(status).toHaveText('No matches');
   await find('location', '1..200');
-  await expect(status).toHaveText('1 / 1 features');
+  await expect(status).toHaveText('1 of 1 match');
   await find('all', 'CYTB');
-  await expect(status).toHaveText('1 / 1 features');
+  await expect(status).toHaveText('1 of 1 match');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.previewFeatureSearchMatches))
     .toEqual([ids.LOC_0003]);
   await find('nucleotide', 'CYTB');
