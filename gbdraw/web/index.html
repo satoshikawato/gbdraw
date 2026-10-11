@@ -1491,7 +1491,7 @@
             padding: 0.375rem 0.5rem;
             white-space: normal;
         }
-        /* A pair's source as one segmented row of three radios (UX-C02). */
+        /* A pair's source as one segmented row of three radios. */
         .linear-pair-source {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2510,13 +2510,13 @@
                                 <button type="button" aria-label="Use uploaded BLAST TSV for all adjacent pairs" :aria-pressed="linearComparisonGlobalAction === 'upload'" @click="setLinearComparisonGlobalAction('upload')" :class="linearComparisonGlobalAction === 'upload' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm" :disabled="!semanticMutationAvailable">Upload BLAST TSV</button>
                             </div>
                             <p v-if="!canRunLinearLosat" class="ui-hint">Run LOSAT requires at least 2 loaded sequences.</p>
-                            <!-- The pressed action shows the intent; only Custom needs a badge. Screen readers hear the issue count here (UX-C05); without the badge the row takes no space. -->
+                            <!-- The pressed action shows the intent; only Custom needs a badge. Screen readers hear the issue count here; without the badge the row takes no space. -->
                             <div :class="linearComparisonUi.intentKey === 'custom' ? 'flex min-w-0 flex-wrap items-center gap-1.5' : 'sr-only'" role="status" aria-live="polite" data-linear-comparison-status>
                                 <span v-if="linearComparisonUi.intentKey === 'custom'" class="rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700">Custom</span>
                                 <span v-if="linearComparisonUi.issues.length" class="sr-only">{{ linearComparisonUi.issues.length }} {{ linearComparisonUi.issues.length === 1 ? 'issue' : 'issues' }} to fix before Generate</span>
                             </div>
                             <p v-if="linearComparisonUi.emptyPlanNotice" data-linear-comparison-empty-notice class="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] leading-snug text-amber-800">{{ linearComparisonUi.emptyPlanNotice }}</p>
-                            <!-- UX-C05: every issue once, worded at its cause, with the action that fixes it. -->
+                            <!-- Every issue once, worded at its cause, with the action that fixes it. -->
                             <div v-if="linearComparisonUi.issues.length" data-linear-comparison-issues role="group" aria-label="Comparison issues" class="rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[10px] leading-snug text-red-800">
                                 <p class="font-semibold">Fix before Generate</p>
                                 <ul class="mt-1 space-y-1.5">
@@ -2738,7 +2738,7 @@
                             </summary>
                             <div class="min-w-0 space-y-2 pt-2">
                                 <template v-for="displayRow in linearComparisonTimeline.rows" :key="`linear-comparison-row-${displayRow.row}`">
-                                <!-- UX-C02: one pair list. A boundary with one pair needs no heading; each pair is a row with its source,
+                                <!-- One pair list. A boundary with one pair needs no heading; each pair is a row with its source,
                                      its file, its issue and, after LOSAT ran, its raw result. -->
                                 <section
                                     v-if="displayRow.boundaryAfter"
@@ -5282,7 +5282,7 @@
                     <p class="font-semibold">Comparison table rows were placed by position.</p>
                     <p v-for="(warning, index) in comparisonWarnings" :key="index">{{ warning.message }}</p>
                 </div>
-                <!-- While the Generate error card shows, its recovery line is this notice (UX-C05). -->
+                <!-- While the Generate error card shows, its recovery line is this notice. -->
                 <div v-if="failedGeneratePreservedResult && (failedGeneratePreservedResult === 'current' || !(errorDisplay && (errorDisplay.operation === 'generate' || errorDisplay.operation === 'align')))"
                      role="status"
                      class="-mx-4 border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0">
@@ -7841,7 +7841,7 @@
                 <button type="button" data-history-ignore @click="resolveSessionReplacement('load')" class="btn btn-primary btn-sm">{{ sessionReplaceDialog.actionLabel }}</button>
             </div>
         </choice-dialog>
-        <!-- Generate asks about pairs set to Upload BLAST TSV without a file: one row per pair (UX-A06) -->
+        <!-- Generate asks about pairs set to Upload BLAST TSV without a file: one row per pair -->
         <choice-dialog v-if="missingBlastTsvDialog.show" :busy="dialogChoicePending" labelledby="missing-blast-tsv-title" describedby="missing-blast-tsv-description"
              @cancel="resolveMissingBlastTsv('cancel')" @keydown.tab="trapDialogFocus"
              class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
@@ -8069,7 +8069,7 @@
             <input :id="fieldId(rule)" :disabled="!available" :value="patternText(rule)" @input="$emit('edit-pattern', rule, $event.target.value)" @change="$emit('retry-pattern', rule)" :aria-label="`Color rule ${i + 1} pattern`" :aria-describedby="patternDraft(rule) ? `${fieldId(rule)}-status` : undefined" :aria-invalid="patternDraft(rule)?.error?.code === 'REGEX_SYNTAX' ? 'true' : undefined" :aria-busy="patternDraft(rule)?.pending ? 'true' : undefined" placeholder="Python regex" data-history-ignore :class="patternDraft(rule)?.error?.code === 'REGEX_SYNTAX' ? 'border-red-500' : ''" class="form-input form-input-compact col-span-7 font-mono">
             <input :value="rule.cap" @change="$emit('set-field', i, 'cap', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} legend caption`" placeholder="Legend Caption" class="form-input form-input-compact col-span-5" :disabled="!available">
         </div>
-        <!-- UX-C04: the pattern's state under its field, once; the rule for what Save, Generate and Export use sits in the help tip. -->
+        <!-- The pattern's state under its field, once; the rule for what Save, Generate and Export use sits in the help tip. -->
         <div v-if="patternDraft(rule)" :id="`${fieldId(rule)}-status`" class="space-y-0.5 break-words text-[10px] leading-snug" data-color-rule-pattern-status data-history-ignore>
             <div class="flex items-center gap-1 text-amber-800">
                 <p role="status" aria-live="polite" class="font-semibold">Not applied<span v-if="patternDraft(rule).pending"> — Checking color rule…</span></p>

@@ -1327,7 +1327,7 @@ test('structured comparison errors open and focus their owning disclosure', asyn
   await expect(comparisonSettings(page)).toHaveAttribute('open', '');
   await expect(page.getByRole('combobox', { name: 'LOSATP mode' })).toBeFocused();
 
-  // UX-C05: the issue names the pair whose source broke the LOSATP mode, the
+  // The issue names the pair whose source broke the LOSATP mode, the
   // status region counts the issues, and Show in Comparison reaches the cause.
   const issues = comparisonCard(page).getByRole('group', { name: 'Comparison issues' });
   await expect(issues.locator('[data-linear-comparison-issue="selected-losat-requires-pairwise"]'))

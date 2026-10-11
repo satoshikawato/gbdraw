@@ -191,7 +191,7 @@ def test_linear_input_comparison_and_generate_controls_follow_semantic_dom_order
     assert "linearResolvedLosatEdges" not in index
     assert ">Adjacent gaps</" not in index
     assert ">Selected pairs and retained drafts</" not in index
-    # UX-C02: each pair row holds its own Raw LOSAT result; no second list follows Advanced.
+    # Each pair row holds its own Raw LOSAT result; no second list follows Advanced.
     assert ">Raw LOSAT results</div>" not in index
     raw_result = index.index(':data-linear-raw-result="pair.edgeKey"')
     assert timeline < raw_result < basic

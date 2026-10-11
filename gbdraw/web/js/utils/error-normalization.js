@@ -78,7 +78,7 @@ const REASONS = Object.freeze({
   SEARCH_FRAME: 'Use comparison coordinates within the selected and cropped record, counted on its source strand.',
   LOSAT_OPTION_PROGRAM: 'Use only the options of the selected LOSAT program.',
   LOSAT_PLAN: 'Choose record pairs that the LOSAT search can run: two or more records, LOSAT rows only with a LOSAT program, and LOSATP Pairwise for selected pairs.',
-  // A Selected plan with a LOSATP mode that compares every adjacent pair (UX-C05).
+  // A Selected plan with a LOSATP mode that compares every adjacent pair.
   SELECTED_PAIRS_NEED_PAIRWISE: 'Similarity groups and Collinear blocks compare every adjacent pair with LOSAT, so they do not run on pairs set one by one in Selected pairs. Choose Run LOSAT for all pairs, or choose Pairwise matches.',
   LOSAT_TASK: 'Choose a LOSATN task that the selected LOSAT runtime supports.',
   RING_LOSAT_PROGRAM: 'Choose LOSATN or TLOSATX for similarity rings.',
@@ -528,7 +528,7 @@ export const normalizeUserFacingError = (value, {
   const exception = result.context.exceptionType ? ` Python exception: ${result.context.exceptionType}.` : '';
   const schemaGuidance = result.code === 'INPUT_INVALID' && result.context.field === 'schema'
     ? ' Load a supported Session file or recreate it with the current writer.' : '';
-  // A file chosen in Load Session that is not JSON is not a Session (UX-C04);
+  // A file chosen in Load Session that is not JSON is not a Session;
   // every other Session reason keeps its correction.
   const notASession = result.operation === 'session-load' && result.code === 'INPUT_INVALID'
     && result.context.field === 'schema' && result.context.reason === 'JSON_FORMAT'
@@ -591,7 +591,7 @@ export const operationErrorTitle = (operation) => ({
 }[operation] || 'Operation error');
 export const generationRecoveryGuidance = (recovery) => ({
   'no-result': 'No successful Result is available yet. Correct the cause and retry.',
-  // The one notice that the shown Result is the last successful one (PD-OI-016, UX-C05).
+  // The one notice that the shown Result is the last successful one (PD-OI-016).
   preserved: 'Showing the last successful Result; your changes were not applied.',
   restored: 'Showing the last successful Result again; your changes were not applied. Correct the cause and retry.',
   'restore-failed': 'Restoration could not complete. Save a Session if available, then reload before retrying.'

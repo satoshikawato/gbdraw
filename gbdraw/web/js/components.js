@@ -395,7 +395,7 @@ export const RecordDisplayControl = {
 };
 
 // `compact` shows the error beside its field: the summary and a small Details
-// disclosure with the same diagnostics and Copy (UX-C04, PD-OI-046).
+// disclosure with the same diagnostics and Copy (PD-OI-046).
 export const OperationError = {
   template: '#operation-error-template',
   props: { error: { type: null, default: null }, recovery: { type: null, default: null }, compact: Boolean },

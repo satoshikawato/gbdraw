@@ -399,8 +399,8 @@ const projectSectionKeys = ({
   });
 };
 
-// One entry per issue, worded at its cause, with the actions that fix it
-// (UX-C05). The Comparison card lists them once; the pair row of a pair issue
+// One entry per issue, worded at its cause, with the actions that fix it.
+// The Comparison card lists them once; the pair row of a pair issue
 // carries its short text. An action's accessible name adds its pair to the
 // visible label.
 const issueActions = (code, pairLabel) => Object.freeze((code === 'missing-upload'
@@ -415,7 +415,7 @@ const pairLabelOf = (edge) => (Number.isInteger(edge?.queryIndex) && Number.isIn
 
 // A Selected plan breaks the LOSATP mode: the text names the pairs set to
 // Upload BLAST TSV, or says that the pairs are set one by one when every one
-// of them runs LOSAT (UX-C05).
+// of them runs LOSAT.
 const selectedPairsText = (edges) => {
   const uploads = edges.filter((edge) => edge?.source === LINEAR_COMPARISON_SOURCES.UPLOAD).map(pairLabelOf).filter(Boolean);
   const cause = uploads.length === 0 ? 'The pairs are set one by one in Selected pairs. '

@@ -20,10 +20,10 @@ const source = { code: 'REGEX_SYNTAX', operation: 'evaluateRules', stage: 'rule-
 const normalized = normalizeUserFacingError(source);
 assert.deepEqual(roundtrip(source), normalized);
 assert.deepEqual(normalizeUserFacingError(normalized), normalized);
-// People count characters from one; the context keeps Python's zero-based index (UX-C04).
+// People count characters from one; the context keeps Python's zero-based index.
 assert.match(normalized.summary, /^Not a valid regular expression\..* At character 2\.$/);
 assert.equal(normalized.context.position, 1);
-// A file chosen in Load Session that is not JSON says so, without "Field: schema" (UX-C04).
+// A file chosen in Load Session that is not JSON says so, without "Field: schema".
 const notSession = normalizeUserFacingError({ code: 'INPUT_INVALID', stage: 'parse', context: { field: 'schema', reason: 'JSON_FORMAT' } },
   { operation: 'session-load' });
 assert.equal(notSession.summary, 'This file is not a gbdraw Session: it is not valid JSON.');

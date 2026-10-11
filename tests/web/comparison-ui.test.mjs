@@ -159,7 +159,7 @@ test('adjacent upload summary uses only resolver-active uploads', () => {
     key: 'upload', losat: 0, upload: 2, label: '2 upload'
   });
   assert.equal(projection.topologyPairLabel, '2 adjacent pairs');
-  // UX-C05: the pair rows and the issue list say which upload pairs lack a file.
+  // The pair rows and the issue list say which upload pairs lack a file.
   assert(!projection.sectionKeys.settings.includes('upload-readiness'));
   assert(!projection.sectionKeys.settings.includes('losat-mode'));
 });
@@ -428,7 +428,7 @@ test('retained dormant draft count does not become an active pair count', () => 
   assert.equal(dormant.activePairCount, 0);
   assert.equal(dormant.retainedDormantDraftCount, 1);
   assert.deepEqual(dormant.sectionKeys.selectedPairs, ['pair-editor', 'retained-drafts']);
-  // UX-C02: a retained Raw LOSAT filename sits in its pair row, not in a second list.
+  // A retained Raw LOSAT filename sits in its pair row, not in a second list.
   assert(!dormant.sectionKeys.advanced.includes('raw-results'));
 
   const activeUploadPlan = {
@@ -484,7 +484,7 @@ test('structured resolver issue codes project one issue list with focus targets 
     filters: linearDefaults
   });
 
-  // UX-C05: one list entry per routed issue, with its text and the actions that fix it.
+  // One list entry per routed issue, with its text and the actions that fix it.
   assert.equal(projection.issues.length, 7);
   const missing = projection.issues.find((issue) => issue.issueCode === 'missing-upload');
   assert.deepEqual(
@@ -515,7 +515,7 @@ test('structured resolver issue codes project one issue list with focus targets 
   assert(!projection.issues.some((target) => target.issueCode === 'unowned-error'));
 });
 
-test('a pair issue names its pair once in the list and marks the pair row (UX-C05)', () => {
+test('a pair issue names its pair once in the list and marks the pair row', () => {
   const projection = projectLinearComparisonUi({
     plan: { mode: 'selected', defaultSource: 'upload', edges: [createLinearComparisonEdge({ id: 'p', queryUid: 'a', subjectUid: 'b', source: 'upload' })] },
     resolution: {
@@ -531,7 +531,7 @@ test('a pair issue names its pair once in the list and marks the pair row (UX-C0
     [['Choose file', 'Choose file for #1 → #2']]);
 });
 
-test('the LOSATP-mode issue names the pairs set to Upload BLAST TSV (UX-C05)', () => {
+test('the LOSATP-mode issue names the pairs set to Upload BLAST TSV', () => {
   const projection = projectLinearComparisonUi({
     plan: { mode: 'selected', defaultSource: 'losat', edges: [] },
     resolution: {

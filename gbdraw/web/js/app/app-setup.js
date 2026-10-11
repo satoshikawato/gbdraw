@@ -812,7 +812,7 @@ export const createAppSetup = () => {
     return true;
   };
 
-  // The one way to choose a pair's BLAST TSV outside its row (UX-A06, UX-C05):
+  // The one way to choose a pair's BLAST TSV outside its row:
   // the pair's own uploader opens its file chooser inside the click, so the
   // file takes the uploader's availability check and History step.
   /** @param {string} edgeKey @param {{ focus?: boolean }} [options] */
@@ -825,7 +825,7 @@ export const createAppSetup = () => {
     return Boolean(uploader);
   };
 
-  // An action of an entry in the Comparison card's issue list (UX-C05); a
+  // An action of an entry in the Comparison card's issue list; a
   // setting it changes is one Undo step.
   const runLinearComparisonIssueAction = (issue, actionKey) => {
     if (actionKey === 'all-losat') return setLinearComparisonGlobalAction('losat');
@@ -836,7 +836,7 @@ export const createAppSetup = () => {
     return focusLinearComparisonIssue(issue);
   };
 
-  // The Generate error's "Show in Comparison" (UX-C05): the first issue's
+  // The Generate error's "Show in Comparison": the first issue's
   // control, the Execution setting for a LOSAT runtime failure, or the
   // Comparison card when the cause has no control.
   const showLinearComparisonCause = async () => {
@@ -4274,7 +4274,7 @@ export const createAppSetup = () => {
   });
   recordDragAlignmentPorts.beforeRecordDrag = similarityAlignmentActions.beforeRecordDrag;
   recordDragAlignmentPorts.afterRecordDrag = similarityAlignmentActions.afterRecordDrag;
-  // Generate asks about Upload pairs without a file (UX-A06): each pair's row
+  // Generate asks about Upload pairs without a file: each pair's row
   // takes its own file; Skip sets the pairs still without one to No comparison
   // in one History step, then Generates.
   const missingBlastTsvDialog = reactive({ show: false, pairs: /** @type {ReturnType<typeof missingUploadPairsToResolve>} */ ([]) });
