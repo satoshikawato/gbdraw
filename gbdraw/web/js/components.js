@@ -101,6 +101,18 @@ const helpTipName = (tip) => {
   return name ? `Help: ${name}` : 'Help';
 };
 
+// Loading indicator (Owner decision 2026-10-11): the logo drawn in one stroke. The markup and the
+// motion live in index.html (#gbdraw-loader-template and the .gbdraw-loader
+// styles); each instance gets its own mask ids. The boot splash holds a static
+// copy of the same markup because it renders before Vue mounts.
+export const GbdrawLoader = {
+  template: '#gbdraw-loader-template',
+  setup() {
+    const id = `gbdraw-loader-${useId()}`;
+    return { ids: { a: `${id}-a`, b: `${id}-b` } };
+  }
+};
+
 // Every tip is a disclosure button (PD-OI-057). One text source feeds the
 // visible tooltip and the accessible description, identified by `id` or an
 // automatic id; the control that a tip explains references that id through
