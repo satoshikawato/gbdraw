@@ -207,6 +207,8 @@ class LabelDrawer:
             )
             rotation_deg = float(label.get("rotation_deg", 0.0))
             label_path.rotate(rotation_deg, center=(start_x, start_y))
+            if label.get("text_fill"):  # study prototype G: label text in the feature colour
+                label_path["fill"] = str(label["text_fill"])
             group.add(label_path)
             return group
 

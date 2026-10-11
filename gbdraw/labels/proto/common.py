@@ -59,6 +59,8 @@ class Ctx:
     options: dict[str, str] = field(default_factory=dict)
     dropped: list[str] = field(default_factory=list)   # texts of labels the design gave up on
     notes: dict[str, Any] = field(default_factory=dict)
+    radial_layout: Any = None   # CircularRadialLayout (inner tracks, ticks, title radius); used by design G
+    feature_colors: dict[str, Any] = field(default_factory=dict)   # stable_id -> feature colour; used by design G
 
     @classmethod
     def build(cls, items, *, total_length, radius, gap, font_size, arc_x_radius, arc_y_radius, options):

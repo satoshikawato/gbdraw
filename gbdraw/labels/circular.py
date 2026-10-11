@@ -4794,7 +4794,7 @@ def _prepare_label_list_today(
                     inner_labels.append(label_entry)
 
     _proto_design = _proto_design_from_env()
-    if _proto_design and _proto_design[0] in "BCDE" and not _PROTO_STATE["bypass"]:
+    if _proto_design and _proto_design[0] in "BCDEFGH" and not _PROTO_STATE["bypass"]:
         from .proto import run_design
 
         _arc = cfg.labels
@@ -4808,6 +4808,8 @@ def _prepare_label_list_today(
             font_size=float(font_size),
             arc_x_radius=float(radius) * _arc.arc_x_radius_factor[track_type][strands][length_param] * _off.x_radius_offset,
             arc_y_radius=float(radius) * _arc.arc_y_radius_factor[track_type][strands][length_param] * _off.y_radius_offset,
+            radial_layout=radial_layout,
+            feature_colors={str(k): getattr(f, "color", None) for k, f in feature_dict.items()},
         )
     if profile.label_placement == "radial":
         outer_reserved_radius_px = 0.0
