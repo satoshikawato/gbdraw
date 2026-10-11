@@ -1390,13 +1390,13 @@ export const createCircularTrackSlotEditor = ({
   /** @param {CircularSuppressToggleEvent} [event] */
   const setCircularGcSuppressed = (checked, event = null) => {
     const drawing = state.drawings.circular;
-    setCircularSuppressControl(drawing, 'gc_content', checked, event);
+    return setCircularSuppressControl(drawing, 'gc_content', checked, event);
   };
 
   /** @param {CircularSuppressToggleEvent} [event] */
   const setCircularSkewSuppressed = (checked, event = null) => {
     const drawing = state.drawings.circular;
-    setCircularSuppressControl(drawing, 'gc_skew', checked, event);
+    return setCircularSuppressControl(drawing, 'gc_skew', checked, event);
   };
 
   const setCircularTrackSlotEnabled = (slot, enabled) => {

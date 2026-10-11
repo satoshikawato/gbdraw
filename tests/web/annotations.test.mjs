@@ -225,19 +225,16 @@ test('selected annotations name each feature by its source identity', () => {
   ]);
   // A Result without a feature catalog (a Session before 40) has no identities.
   assert.equal(featureTargetsFromSelection([{ selector: { hash: 'f1234' }, locus_tag: 'A_1' }]), null);
-  const alerts = [];
-  const originalWindow = globalThis.window;
-  globalThis.window = { alert: (message) => alerts.push(message) };
-  try {
-    const legacy = createAnnotationEditor({ state: withDrawings({ annotationSets: [], selectedFeatures: [{ locus_tag: 'A_1' }] }) });
-    const set = legacy.addAnnotationSet();
-    assert.deepEqual(legacy.addSelectedFeatures(set), []);
-    assert.deepEqual(set.annotations, []);
-    assert.deepEqual(alerts, ['Generate the diagram again to annotate the selected features.']);
-  } finally {
-    if (originalWindow === undefined) delete globalThis.window;
-    else globalThis.window = originalWindow;
-  }
+  // The panel notice says why, not a native alert (UX-A07).
+  const notices = [];
+  const legacy = createAnnotationEditor({
+    state: withDrawings({ annotationSets: [], selectedFeatures: [{ locus_tag: 'A_1' }] }),
+    onImportNotice: (notice) => notices.push(notice)
+  });
+  const set = legacy.addAnnotationSet();
+  assert.deepEqual(legacy.addSelectedFeatures(set), []);
+  assert.deepEqual(set.annotations, []);
+  assert.deepEqual(notices, ['Generate the diagram again to annotate the selected features.']);
 });
 
 // Design Q4 6.4: the table writes a selected feature in its current placement.
@@ -753,20 +750,22 @@ test('an import that would remove every set asks first, and Cancel keeps the set
   const state = { annotationSets: [createAnnotationSet({ id: 'kept', annotations: [
     { id: 'old', target: coordinateTarget({ start: 1, end: 3 }), mark: 'band' }
   ] })] };
-  const editor = createAnnotationEditor({ state: withDrawings(state), onImportNotice: () => {} });
+  // The app's choice dialog asks (UX-A07); the stub answers in turn.
+  const questions = [];
+  const answers = ['cancel', 'remove'];
+  const askChoice = async (request) => { questions.push(request); return answers.shift(); };
+  const editor = createAnnotationEditor({ state: withDrawings(state), onImportNotice: () => {}, askChoice });
   const before = JSON.stringify(state);
-  const canceled = editor.importAnnotationTable('');
-  assert.deepEqual({ ...editor.annotationReplaceAllDialog }, { show: true, setCount: 1 });
-  editor.handleAnnotationReplaceAllChoice('cancel');
-  await canceled;
-  assert.equal(editor.annotationReplaceAllDialog.show, false);
+  await editor.importAnnotationTable('');
+  assert.equal(questions.length, 1);
+  assert.equal(questions[0].title, 'Remove all annotation sets?');
+  assert.deepEqual(questions[0].actions.map((action) => action.id), ['remove']);
+  assert.match(questions[0].description, /removes all 1 annotation set\./);
   assert.equal(JSON.stringify(state), before);
-  const removed = editor.importAnnotationTable('');
-  editor.handleAnnotationReplaceAllChoice('remove');
-  await removed;
+  await editor.importAnnotationTable('');
   assert.deepEqual(state.annotationSets, []);
   await editor.importAnnotationTable('');
-  assert.equal(editor.annotationReplaceAllDialog.show, false, 'no set to remove: no question');
+  assert.equal(questions.length, 2, 'no set to remove: no question');
 });
 
 test('an annotation bound to an OFF record stays in the draft and leaves the request (record selection)', () => {

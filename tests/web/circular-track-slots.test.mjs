@@ -411,13 +411,13 @@ test('un-hiding GC while the custom stack is off restores the row the hide disab
   assert.deepEqual(gcRows(state), [{ id: 'gc_content', enabled: true, marked: false }]);
 });
 
-test('a GC row the user disabled stays disabled across Hide and un-hide', () => {
+test('a GC row the user disabled stays disabled across Hide and un-hide', async () => {
   const state = createState({
     slots: [featureSlot(), spacerSlot(), { ...gcSlot(), enabled: false }, { ...gcSlot(), id: 'gc_content_2' }]
   });
-  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state), askChoice: async () => 'hide' });
 
-  editor.setCircularGcSuppressed(true);
+  await editor.setCircularGcSuppressed(true);
   assert.deepEqual(gcRows(state), [
     { id: 'gc_content', enabled: false, marked: false },
     { id: 'gc_content_2', enabled: false, marked: true }

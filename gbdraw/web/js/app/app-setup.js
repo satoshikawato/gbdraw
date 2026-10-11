@@ -3119,6 +3119,8 @@ export const createAppSetup = () => {
   // what the load changed as a list (UX-C12).
   const importSession = async (event) => {
     const name = String(event?.target?.files?.[0]?.name || '');
+    // The notice of an earlier operation does not stand for this load.
+    if (name) noticeBanner.dismiss();
     const result = await loadSessionFromFile(event);
     if (result?.status === 'ok') {
       showNotice({ text: name ? `Session loaded: ${name}` : 'Session loaded.', items: result.warnings || [] });
