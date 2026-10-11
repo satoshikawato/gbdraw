@@ -208,12 +208,20 @@ except that choosing **Upload BLAST TSV** for a pair keeps it until a file is
 chosen. Result filters such as **Minimum identity** keep it, even when they
 change the Similarity Groups.
 **Reset alignment…** moves records back
-to where they were just before the latest Align, and can also undo the
-direction changes that Align made; its preview lists later manual edits that
-this reset replaces. Each Align can be reset once: to try the other kind of
+to where they were just before the latest Align. Choose **Positions and
+directions** to also undo the direction changes that Align made; it lists the
+records it restores and marks later manual direction edits that this reset
+replaces. Each Align can be reset once: to try the other kind of
 reset, use **Undo** first. Saving and loading a Session keeps what Reset needs.
 When an older Session lacks it, or when Align changed no direction, the dialog
 says which. **Undo** and **Redo** restore the whole Result.
+
+The feature popup's **Similarity group** section and the similarity-group and
+collinear-block ribbon popups now lead with one summary line, and so does the
+Editor's **Similarity groups** tab while an alignment is active. Each member
+has a **FASTA** menu, the group's FASTA copy and download are in one **Copy**
+menu (**More** in the feature popup), and **Reset Rename** is now **Reset
+name**.
 
 In Python, pass the resolved plan in a typed request. On the command line,
 `--similarity_alignment_feature` takes an exact reference feature only when

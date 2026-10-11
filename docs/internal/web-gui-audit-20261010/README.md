@@ -1,13 +1,15 @@
-# Web GUI リリース前監査 — dev 11a199b6 / 0cb214fa / 8f4cffb7（2026-10-10〜11）
+# Web GUI リリース前監査 — dev 11a199b6 / 0cb214fa / 8f4cffb7 / ebd27cc5 / 1517afde（2026-10-10〜11）
 
-対象は `origin/dev` の `11a199b6`（run 1）、`0cb214fa`（run 2）、`8f4cffb7`（run 3）。release tier の `Tests`（`workflow_dispatch`、`tier=release`）run 38045602906（seed 38045602906）、run 38086450007（seed 38086450007）、run 38110730283（seed 38110730283）の結果をまとめる。run 2 と run 3 は「run 2 の結果」「run 3 の結果」に書く。
+対象は `origin/dev` の `11a199b6`（run 1）、`0cb214fa`（run 2）、`8f4cffb7`（run 3）、`ebd27cc5`（run 4）、`1517afde`（run 5）。release tier の `Tests`（`workflow_dispatch`、`tier=release`）run 38045602906、38086450007、38110730283、38115888893、38119476099 の結果をまとめる（seed はそれぞれの run ID）。run 2 以降は「run 2 の結果」以下の節に書く。
 
 **件数**
 
 - run 1（`11a199b6`）: 固有の問題 7 件（P2 1、P3 6）。すべて修正済みか、テストのみで扱いが決まっている（下記）。
 - run 2（`0cb214fa`）: 49 ジョブのうち 40 success、4 failure（原因は 3 件）、5 skipped（PR 専用ジョブ）。見つかったのは OV-340（P3）、OV-341（P2）、OV-342（P3）、OV-343（P3）の 4 件。OV-340 と OV-343 は #996（`4f708885`）で修正した。OV-341 は Owner が A（KEEP_ANCHOR_PLAN）を選び（D-46）、OV-342 とともに #997（`8f4cffb7`）で修正した。
 - run 3（`8f4cffb7`）: 49 ジョブのうち 44 success、0 failure、5 skipped。新しい問題は 0 件。recipes 40/40、journey 7 本すべて成功、sweep と random walk の finding 0。
-- 合計: 固有の問題 11 件（P2 2、P3 9）。すべて修正済みか、テストのみで扱いが決まっている。run 1 と run 2 で修正した項目は run 3 でもすべて直ったままである。
+- run 4（`ebd27cc5`、run 3 の head に #999 と #1000 を加えたもの）: 49 ジョブのうち 43 success、1 failure、5 skipped。random walk が OV-344（P2）を見つけた。#1001（`1517afde`）で修正した。
+- run 5（`1517afde`）: 49 ジョブのうち 44 success、0 failure、5 skipped。新しい問題は 0 件。昇格の証拠はこの run による。
+- 合計: 固有の問題 12 件（P2 3、P3 9）。すべて修正済みか、テストのみで扱いが決まっている。
 
 **run 1 の詳細（以下の節）。** run 1 が見つけた固有の問題は 7 件（P2 1、P3 6）。OV-330 は当初 P1（暫定）としたが、原因調査で P2（製品）と P3（テストのみ）に分かれた。製品コードの修正は 3 件（OV-330、OV-334、OV-337）で、いずれも dev にマージ済み。残りはテスト oracle、CI 設定、スクリーンショット手順の修正である。
 
@@ -115,6 +117,7 @@ S2 とオーケストレーターがレビュー中に記録した。リリー�
 - `deploy_web.yml` の `npm run test:web:vibrio-generate` は dev では動かない。release tier の `Tests` dispatch の側で走る。
 - OV-325 の Gallery 公開側（上記）。
 - 画面の目視は contact sheet のレビューだけで、2026-09-30 のような領域別の手動操作は行っていない。
+- #999 で再設計した similarity の popup、Reset alignment dialog、Similarity groups タブは、どの journey も開かない。#999 自身の Playwright spec（`similarity-alignment-ui.playwright.spec.js` など）は PR の CI と run 5 の Playwright shard で、node test は PR の CI と run 5 の Browser job で通っている。
 
 ## 証拠と再現方法
 
@@ -182,3 +185,32 @@ run 38110730283（`Tests`、`workflow_dispatch`、`tier=release`）を dev `8f4c
 - 新しい問題: なし。
 
 レビューは `evidence/rt3-review.md`、`evidence/rt3-journeys.md`（montage は `evidence/rt3-montage/`）、ログは `logs/rt3/`。
+
+## run 4 の結果
+
+run 38115888893（`Tests`、`workflow_dispatch`、`tier=release`）を dev `ebd27cc5` に対して実行した。seed 38115888893。run 3（`8f4cffb7`）からの追加は #999（similarity の popup、Reset alignment dialog、Editor の Similarity groups タブの再設計。Gallery と docs の画像も更新。Owner の auto-merge で dev に入り、0.14.0 に含める。D-47）と #1000（リリース文書）の 2 件。#999 は Web のコードを変えるので、run 3 の証拠は引き継げない。
+
+- 49 ジョブのうち 43 success、1 failure、5 skipped。summary job の表は `logs/rt4/job-summary.log`。
+- journey J1..J7、recipes 40/40、sweep 4 本: すべて成功、finding 0。
+- random walk（seed 38115888893）: 失敗。OV-344。
+
+### P2（1 件）
+
+| ID | 症状 | 原因・状態 |
+|---|---|---|
+| OV-344 | fixture "Circular, two-Result batch"、step 16。Result 1 で TESTA_0002 に **This feature only** の色を付け（"duplicate protein" の hash rule ができる）、Generate し、Result 2 を表示して TESTB_0001 を Off にし、同じ色を **This feature only** で付けると、live の Result 2 に "duplicate protein" の Legend 行が出る。Generate はこの行を描かない（"legend duplicate protein drawn: live true, generated false"） | `app/feature-editor/rule-actions.js` の `candidateLegendIntents` が、rule の確定で足す行の候補を batch のすべての Result の feature から選び、除くのは feature 単位の Off だけだった。同じ関数の caption の選択は表示中の Result が描く feature（`displayedLegendRowContext`）を使っており、2 通りに求めていた。`8f4cffb7` でも同じ seed で再現し、#999 とは無関係（run 3 の seed はこの経路を通らなかった）。PD-OI-066（live の Result は次の Generate と一致する）により Generate が正しい。重大度 P2（Generate で直る表示の誤り）。**修正**: #1001（`1517afde`）。両方の step で表示中の Result の feature を使う。unit test と `live-generate-parity` の case を追加 |
+
+## run 5 の結果
+
+run 38119476099（`Tests`、`workflow_dispatch`、`tier=release`）を dev `1517afde` に対して実行した。seed 38119476099。run 4（`ebd27cc5`）からの追加は #1001（OV-344）の 1 件。
+
+- 49 ジョブのうち 44 success、0 failure、5 skipped。summary job 114415007900。
+- journey J1..J7: すべて成功（7 本、失敗 0、244.2 s）。
+- random walk（seed 38119476099）: 成功、finding 0。
+- recipes 40/40。sweep 4 本: finding 0（`sweep-parity` は circular HmmtDNA 0 DIFF/32、linear MJNV 0 DIFF/26）。
+- どの journey も対応づけていない capability は `packaging` と `full`（run 1 から変わらない）。
+- dev への push（`1517afde`）の `Tests`、`Gallery publication`、CodeQL も成功。
+- contact sheet: run 3 から新しい異常はない。J6 の step 03〜05 にも repair の通知は出ない（match 数 77 → 37）。#999 で変わった画面（feature popup の Similarity group 部分、ribbon popup、Reset alignment dialog、Similarity groups タブ）を開く journey はなく、写っているのは J4 の Editor のタブ列だけである（run 3 と同じ）。J3 は run 4 と run 5 の両方で、Session の Load と Generate のすべての step が run 3 の約 1.4 倍かかった（例: v30 BGC の Generate 14.6 s → 22.3 s）。BGC 以外の HmmtDNA でも同じ比率で遅く、同じ run 5 の J1、J5、J6 の Generate は run 3 より速いため、性能の後退ではなく runner の差と判断した。
+- 新しい問題: なし。
+
+レビューは `evidence/rt4-review.md`、`evidence/rt5-review.md`、`evidence/rt5-journeys.md`（montage は `evidence/rt5-montage/`）、ログは `logs/rt4/`、`logs/rt5/`。
