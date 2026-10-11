@@ -370,8 +370,8 @@ export const RecordDisplayControl = {
   }
 };
 
-// `compact` shows the error beside its field: the summary and a Copy details
-// button that first shows the diagnostics it copies (UX-C04, PD-OI-046).
+// `compact` shows the error beside its field: the summary and a small Details
+// disclosure with the same diagnostics and Copy (UX-C04, PD-OI-046).
 export const OperationError = {
   template: '#operation-error-template',
   props: { error: { type: null, default: null }, recovery: { type: null, default: null }, compact: Boolean },
@@ -384,12 +384,9 @@ export const OperationError = {
     const details = ref(null);
     const diagnosticText = ref(null);
     const copyStatus = ref('');
-    // Compact only: the diagnostics are shown once Copy details is chosen.
-    const manualCopy = ref(false);
     watch(() => props.error, () => {
       if (details.value) details.value.open = false;
       copyStatus.value = '';
-      manualCopy.value = false;
     }, { flush: 'sync' });
     const selectDiagnostics = () => {
       diagnosticText.value?.focus();
@@ -398,8 +395,7 @@ export const OperationError = {
     const copyDiagnostics = async () => {
       const displayed = props.error;
       const text = diagnostics.value;
-      if (props.compact) manualCopy.value = true;
-      if (!(props.compact || details.value?.open) || !text) return;
+      if (!details.value?.open || !text) return;
       try {
         if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
         await navigator.clipboard.writeText(text);
@@ -409,7 +405,7 @@ export const OperationError = {
         copyStatus.value = 'Clipboard unavailable. Select diagnostics and copy manually.';
       }
     };
-    return { model, title, recoveryText, diagnostics, details, diagnosticText, copyStatus, manualCopy,
+    return { model, title, recoveryText, diagnostics, details, diagnosticText, copyStatus,
       copyDiagnostics, selectDiagnostics };
   }
 };

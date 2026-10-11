@@ -213,7 +213,7 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
       blastpMode: 'orthogroup',
       losatKey: 'blastn',
       losatpKey: 'orthogroup',
-      settings: ['losat-mode', 'losat-runtime', 'blastn-task', 'result-filters', 'comparison-appearance'],
+      settings: ['losat-mode', 'blastn-task', 'result-filters', 'comparison-appearance', 'losat-runtime'],
       absent: [
         'losatp-mode', 'record-genetic-codes', 'blastp-max-hits',
         'member-hits', 'collinear-primary'
@@ -224,7 +224,7 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
       blastpMode: 'orthogroup',
       losatKey: 'tblastx',
       losatpKey: 'orthogroup',
-      settings: ['losat-mode', 'losat-runtime', 'record-genetic-codes', 'result-filters', 'comparison-appearance'],
+      settings: ['losat-mode', 'record-genetic-codes', 'result-filters', 'comparison-appearance', 'losat-runtime'],
       absent: [
         'losatp-mode', 'blastn-task', 'blastp-max-hits',
         'member-hits', 'collinear-primary'
@@ -236,8 +236,8 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
       losatKey: 'blastp',
       losatpKey: 'pairwise',
       settings: [
-        'losat-mode', 'losat-runtime', 'losatp-mode', 'losatp-candidate', 'blastp-max-hits',
-        'result-filters', 'comparison-appearance'
+        'losat-mode', 'losatp-mode', 'blastp-max-hits',
+        'result-filters', 'comparison-appearance', 'losatp-candidate', 'losat-runtime'
       ],
       absent: ['blastn-task', 'record-genetic-codes', 'member-hits', 'collinear-primary']
     },
@@ -247,8 +247,8 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
       losatKey: 'blastp',
       losatpKey: 'orthogroup',
       settings: [
-        'losat-mode', 'losat-runtime', 'losatp-mode', 'losatp-candidate', 'member-hits',
-        'result-filters', 'comparison-appearance'
+        'losat-mode', 'losatp-mode',
+        'result-filters', 'comparison-appearance', 'losatp-candidate', 'member-hits', 'losat-runtime'
       ],
       absent: ['blastn-task', 'record-genetic-codes', 'blastp-max-hits', 'collinear-primary']
     },
@@ -258,8 +258,8 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
       losatKey: 'blastp',
       losatpKey: 'collinear',
       settings: [
-        'losat-mode', 'losat-runtime', 'losatp-mode', 'losatp-candidate', 'member-hits', 'collinear-primary',
-        'result-filters', 'comparison-appearance'
+        'losat-mode', 'losatp-mode', 'collinear-primary',
+        'result-filters', 'comparison-appearance', 'losatp-candidate', 'member-hits', 'losat-runtime'
       ],
       absent: [
         'blastn-task', 'record-genetic-codes', 'blastp-max-hits'
@@ -490,7 +490,7 @@ test('structured resolver issue codes project one issue list with focus targets 
   assert.deepEqual(
     { ...missing, actions: missing.actions.map((action) => action.key) },
     {
-      key: 'missing-upload-a->b',
+      key: '0-missing-upload',
       issueCode: 'missing-upload',
       disclosureKey: 'selected-pairs',
       focusTargetKey: 'pair-upload',
@@ -498,9 +498,10 @@ test('structured resolver issue codes project one issue list with focus targets 
       edgeKey: 'a->b',
       text: 'wording must not route missing-upload',
       pairText: '',
-      actions: ['show']
+      actions: ['choose-file']
     }
   );
+  assert.equal(missing.actions[0].ariaLabel, 'Choose file');
   const topology = projection.issues.find((issue) => issue.issueCode === 'selected-losat-requires-pairwise');
   assert.equal(topology.disclosureKey, 'settings');
   assert.equal(topology.focusTargetKey, 'losatp-mode');
@@ -525,6 +526,34 @@ test('a pair issue names its pair once in the list and marks the pair row (UX-C0
   });
   assert.equal(projection.issues[0].text, '#1 → #2: No BLAST file.');
   assert.deepEqual(projection.pairIssueText, { 'a->b': 'No BLAST file' });
+  // The action's accessible name carries its pair (repeated buttons stay distinct).
+  assert.deepEqual(projection.issues[0].actions.map(({ label, ariaLabel }) => [label, ariaLabel]),
+    [['Choose file', 'Choose file for #1 → #2']]);
+});
+
+test('the LOSATP-mode issue names the pairs set to Upload BLAST TSV (UX-C05)', () => {
+  const projection = projectLinearComparisonUi({
+    plan: { mode: 'selected', defaultSource: 'losat', edges: [] },
+    resolution: {
+      edges: [
+        { id: 'p', edgeKey: 'a->b', queryIndex: 0, subjectIndex: 1, source: 'upload' },
+        { id: 'q', edgeKey: 'b->c', queryIndex: 1, subjectIndex: 2, source: 'losat' }
+      ],
+      errors: [
+        { code: 'selected-losat-requires-pairwise', edgeId: '', edgeKey: '', message: 'unused' },
+        { code: 'missing-upload', edgeId: 'p', edgeKey: 'a->b', message: 'unused' },
+        { code: 'duplicate', edgeId: 'p', edgeKey: 'a->b', message: 'Duplicate pair' }
+      ]
+    },
+    losatProgram: 'blastp',
+    blastpMode: 'collinear',
+    filters: linearDefaults
+  });
+  assert.equal(projection.issues[0].text, 'Pair #1 → #2 is set to Upload BLAST TSV, so not every pair runs LOSAT. '
+    + 'Similarity groups and Collinear blocks compare every adjacent pair with LOSAT.');
+  // Every issue of a pair reaches its row, and list keys stay distinct.
+  assert.deepEqual(projection.pairIssueText, { 'a->b': 'No BLAST file; Duplicate pair' });
+  assert.equal(new Set(projection.issues.map((issue) => issue.key)).size, 3);
 });
 
 test('projection does not mutate plan, resolution, filters, or retained file references', () => {

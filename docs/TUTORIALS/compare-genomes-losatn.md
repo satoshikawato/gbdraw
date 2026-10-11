@@ -73,9 +73,9 @@ Select **Generate Diagram**. The first result should contain two annotated recor
 
 In **Comparison**, select **Run LOSAT** explicitly. Open **Settings**, choose
 the **LOSATN** button in **LOSAT Mode**, and set **LOSATN task**, **Match height**,
-and the **Runtime and reproducibility** values. Open **Basic** and set **Output
-Prefix**. Finally, continue past **Generate Diagram**, open **Advanced
-comparison and layout**, and set the raw result value.
+and the **Performance** values. Open **Basic** and set **Output Prefix**.
+Finally, open **Selected pairs**, open **File name** in the pair from sequence
+1 to sequence 2, and set the raw result name.
 
 | Section | Control | Value |
 | --- | --- | --- |
@@ -83,11 +83,11 @@ comparison and layout**, and set the raw result value.
 | Settings | LOSATN task | `megablast` |
 | Settings / Comparison appearance | Match height | `120` |
 | Basic | Output Prefix | `lambda-de3-losatn` |
-| Settings / Runtime and reproducibility | Execution | Serial |
-| Settings / Runtime and reproducibility | Total threads | 1 |
-| Settings / Runtime and reproducibility | Parallel runs | 1 run |
-| Settings / Runtime and reproducibility | Threads per run | Fixed at 1 |
-| Advanced comparison and layout / Raw LOSAT results | Raw LOSAT filename | `lambda-de3.losatn.tsv` |
+| Settings / Performance | Execution | Serial |
+| Settings / Performance | Total threads | 1 |
+| Settings / Performance | Parallel runs | 1 run |
+| Settings / Performance | Threads per run | Fixed at 1 |
+| Selected pairs / File name | Raw LOSAT filename | `lambda-de3.losatn.tsv` |
 
 ![LOSATN selected in LOSAT Mode with megablast and result filters](../images/t-gui-03/03-losatn-settings.png)
 
@@ -102,8 +102,8 @@ Select **Generate Diagram** again. LOSATN runs in the browser, and the result sh
 
 *The longest match covers 21,232 aligned bases at 99.981% identity.*
 
-Open **Advanced comparison and layout** and find **Raw LOSAT results**. In the
-pair from sequence 1 to sequence 2, select **Save Raw LOSAT TSV**. The browser
+Open **Selected pairs**. In the pair from sequence 1 to sequence 2, select
+**Save Raw LOSAT TSV**; it appears once the raw result is ready. The browser
 saves `lambda-de3.losatn.tsv`. Then select **SVG** in the **Result Preview**
 toolbar to save `lambda-de3-losatn.svg`.
 

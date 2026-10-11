@@ -130,9 +130,9 @@ test('GUI-unmanaged config survives disclosure, Generate, save/reload, reset, an
     return await window.__GBDRAW_APP__.importSession({ target: { files: [file], value: 'selected' } });
   }, rejectedSession);
   expect(outcome).toMatchObject({ status: 'error', error: {
-    code: 'INPUT_INVALID', operation: 'session-load', stage: 'helper', context: { field: 'configOverrides', reason: 'UNKNOWN_CONFIG_PATH' }
+    code: 'INPUT_INVALID', operation: 'validateConfigOverrides', stage: 'helper', context: { field: 'configOverrides', reason: 'UNKNOWN_CONFIG_PATH' }
   } });
-  await expect(page.getByRole('alert', { name: 'Session not loaded' }))
+  await expect(page.getByRole('alert', { name: 'Operation error' }))
     .toContainText('Remove unknown configuration overrides or use a supported setting.');
   expect(JSON.stringify(outcome.error)).not.toContain('objects.gc_content.unknown');
   await expect(disclosure).toHaveCount(0);

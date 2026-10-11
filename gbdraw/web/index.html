@@ -135,16 +135,31 @@
             height: 2.5rem;
             width: auto;
         }
-        #app-boot-splash .boot-spinner {
-            width: 2rem;
-            height: 2rem;
-            border: 3px solid #dbeafe;
-            border-top-color: #2563eb;
-            border-radius: 9999px;
-            animation: app-boot-spin 0.8s linear infinite;
+        /* The one spinner of the boot splash and Generate: the gbdraw logo with
+           a light running around its circle; still when motion is reduced (Q9). */
+        .gbdraw-spinner {
+            position: relative;
+            display: block;
+            width: 2.5rem;
+            height: 2.5rem;
+            overflow: hidden;
+            background: #bfdbfe;
+            -webkit-mask: url("./assets/gbdraw-logo.svg") center / contain no-repeat;
+            mask: url("./assets/gbdraw-logo.svg") center / contain no-repeat;
         }
+        .gbdraw-spinner::before {
+            content: "";
+            position: absolute;
+            inset: -25%;
+            background: conic-gradient(from 0deg, transparent 0 50%, #2563eb 92%, transparent 100%);
+            animation: app-boot-spin 1.1s linear infinite;
+        }
+        .gbdraw-spinner-lg { width: 4rem; height: 4rem; }
         @keyframes app-boot-spin {
             to { transform: rotate(360deg); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .gbdraw-spinner::before { animation: none; background: #2563eb; }
         }
         #app-boot-splash .boot-title {
             font-size: 1.25rem;
@@ -1581,7 +1596,7 @@
 <div id="app" v-cloak class="h-screen flex flex-col relative">
 
     <div v-if="processing" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
-        <div class="animate-spin w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full mb-6"></div>
+        <span class="gbdraw-spinner gbdraw-spinner-lg mb-6" aria-hidden="true"></span>
         <h3 class="text-xl font-bold text-slate-800 animate-pulse">Generating Diagram...</h3>
         <p data-generation-progress role="status" aria-live="polite" aria-atomic="true" class="text-xs text-slate-500 mt-3 font-mono" v-text="processingStatus"></p>
         <button @click="cancelGeneration"
@@ -2465,9 +2480,10 @@
                                 <button type="button" aria-label="Use uploaded BLAST TSV for all adjacent pairs" :aria-pressed="linearComparisonGlobalAction === 'upload'" @click="setLinearComparisonGlobalAction('upload')" :class="linearComparisonGlobalAction === 'upload' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm" :disabled="!semanticMutationAvailable">Upload BLAST TSV</button>
                             </div>
                             <p v-if="!canRunLinearLosat" class="ui-hint">Run LOSAT requires at least 2 loaded sequences.</p>
-                            <!-- The pressed action shows the intent; only Custom needs a badge. -->
+                            <!-- The pressed action shows the intent; only Custom needs a badge. Screen readers hear the issue count here (UX-C05). -->
                             <div class="flex min-w-0 flex-wrap items-center gap-1.5 empty:hidden" role="status" aria-live="polite" data-linear-comparison-status>
                                 <span v-if="linearComparisonUi.intentKey === 'custom'" class="rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700">Custom</span>
+                                <span v-if="linearComparisonUi.issues.length" class="sr-only">{{ linearComparisonUi.issues.length }} {{ linearComparisonUi.issues.length === 1 ? 'issue' : 'issues' }} to fix before Generate</span>
                             </div>
                             <p v-if="linearComparisonUi.emptyPlanNotice" data-linear-comparison-empty-notice class="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] leading-snug text-amber-800">{{ linearComparisonUi.emptyPlanNotice }}</p>
                             <!-- UX-C05: every issue once, worded at its cause, with the action that fixes it. -->
@@ -2477,7 +2493,7 @@
                                     <li v-for="issue in linearComparisonUi.issues" :key="issue.key" :data-linear-comparison-issue="issue.issueCode">
                                         <span>{{ issue.text }}</span>
                                         <span class="ml-1 inline-flex flex-wrap gap-x-2">
-                                            <button v-for="action in issue.actions" :key="action.key" type="button" data-history-ignore class="font-semibold text-blue-700 underline disabled:opacity-40" @click="runLinearComparisonIssueAction(issue, action.key)" :disabled="action.key !== 'show' && !semanticMutationAvailable">{{ action.label }}</button>
+                                            <button v-for="action in issue.actions" :key="action.key" type="button" data-history-ignore :aria-label="action.ariaLabel" class="font-semibold text-blue-700 underline disabled:opacity-40" @click="runLinearComparisonIssueAction(issue, action.key)" :disabled="action.key !== 'show' && !semanticMutationAvailable">{{ action.label }}</button>
                                         </span>
                                     </li>
                                 </ul>
@@ -2569,8 +2585,8 @@
                                             <input type="number" min="1" step="1" v-model.number="losat.blastp.collinearMinAnchors" aria-label="Collinear minimum block genes" aria-describedby="help-comparison-min-block-genes" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                         </div>
                                         <div>
-                                            <label class="linear-primary-label mb-1">Evidence scope</label>
-                                            <select v-model="losat.blastp.collinearSearchScope" aria-label="Collinear evidence scope" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                            <label class="linear-primary-label mb-1">Search between</label>
+                                            <select v-model="losat.blastp.collinearSearchScope" aria-label="Collinear search between" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                                 <option value="adjacent">Adjacent pairs</option>
                                                 <option value="all">All records</option>
                                             </select>
@@ -2647,7 +2663,7 @@
                                         <div class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                                             <div>
                                                 <span class="linear-primary-label mb-1">Execution <help-tip id="help-comparison-execution" text="Auto chooses threaded LOSAT only when browser support and workload allow it."></help-tip></span>
-                                                <select v-model="losatExecution.executionMode" aria-label="LOSAT execution" aria-describedby="help-comparison-execution" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                                <select v-model="losatExecution.executionMode" aria-label="LOSAT execution" aria-describedby="help-comparison-execution" data-comparison-focus="losat-execution" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                                     <option value="auto">Auto ({{ losatEffectiveExecutionMode }})</option>
                                                     <option value="serial">Serial</option>
                                                     <option value="threaded">{{ losatThreadedOptionLabel }}</option>
@@ -2754,7 +2770,7 @@
                                                 class="btn btn-secondary px-1.5 py-0.5 text-[10px]"
                                             ><i class="ph ph-download-simple" aria-hidden="true"></i> Save Raw LOSAT TSV</button>
                                             <details class="linear-pair-file-name min-w-0 flex-1">
-                                                <summary class="text-[10px] font-normal text-slate-500">File name</summary>
+                                                <summary class="text-[10px] font-normal text-slate-500" :aria-label="`Raw LOSAT file name for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}`">File name</summary>
                                                 <label class="linear-primary-label block" :for="`linear-raw-name-${pair.edgeKey}`">Raw LOSAT filename</label>
                                                 <input
                                                     :id="`linear-raw-name-${pair.edgeKey}`"
@@ -7808,8 +7824,7 @@
                         <span class="block truncate text-xs text-slate-500" :title="row.records">{{ row.records }}</span>
                         <span class="block truncate text-xs" :class="row.missing ? 'text-red-700' : 'text-green-700'">{{ row.missing ? 'No file' : row.fileName }}</span>
                     </span>
-                    <input type="file" class="hidden" data-history-managed accept=".tsv,.tab,.txt,.out,.blast,text/tab-separated-values,text/plain,text/*" :aria-label="`BLAST TSV for ${row.label}`" @change="chooseMissingBlastTsvFile(row.edgeKey, $event)">
-                    <button type="button" data-history-ignore :disabled="!semanticMutationAvailable" @click="$event.currentTarget.previousElementSibling.click()" :aria-label="`Choose BLAST TSV for ${row.label}`" class="btn btn-secondary btn-sm shrink-0">{{ row.missing ? 'Choose file…' : 'Change…' }}</button>
+                    <button type="button" data-history-ignore :disabled="!semanticMutationAvailable" @click="chooseLinearComparisonPairFile(row.edgeKey)" :aria-label="`Choose BLAST TSV for ${row.label}`" class="btn btn-secondary btn-sm shrink-0">{{ row.missing ? 'Choose file…' : 'Change…' }}</button>
                 </li>
             </ul>
             <div class="mt-4 flex flex-wrap justify-end gap-2">
@@ -7950,7 +7965,7 @@
 <div id="app-boot-splash" role="status" aria-live="polite">
     <div class="boot-card">
         <img src="./assets/gbdraw-logo-title.png" alt="gbdraw" class="boot-logo">
-        <div class="boot-spinner" aria-hidden="true"></div>
+        <span class="gbdraw-spinner" aria-hidden="true"></span>
         <div>
             <div class="boot-title">Initializing gbdraw...</div>
             <div class="boot-subtitle">Loading the browser application.</div>
@@ -8026,7 +8041,7 @@
             </div>
             <operation-error v-if="patternDraft(rule).error" compact :error="patternDraft(rule).error"></operation-error>
             <div class="flex flex-wrap gap-3">
-                <button v-if="patternDraft(rule).error?.code !== 'REGEX_SYNTAX'" type="button" @click="$emit('retry-pattern', rule)" :disabled="!available || patternDraft(rule).pending" class="font-semibold text-blue-700 underline disabled:opacity-40">Retry</button>
+                <button type="button" @click="$emit('retry-pattern', rule)" :disabled="!available || patternDraft(rule).pending" class="font-semibold text-blue-700 underline disabled:opacity-40">Retry</button>
                 <button type="button" :disabled="!available" @pointerdown.prevent @click="$emit('revert-pattern', rule, $event.currentTarget.closest('[data-color-rule-row]').querySelector('input[data-history-ignore]'))" class="font-semibold text-blue-700 underline disabled:opacity-40">Revert</button>
             </div>
         </div>
@@ -8052,10 +8067,15 @@
     <script type="text/x-template" id="operation-error-template">
         <div v-if="model && compact" role="alert" :aria-label="title" class="min-w-0 break-words text-[11px] leading-snug text-red-700">
             <p>{{ model.summary }}</p>
-            <slot></slot>
-            <button type="button" @click="copyDiagnostics" class="mt-0.5 text-[10px] text-slate-500 underline hover:text-slate-700">Copy details for a bug report</button>
-            <textarea v-if="manualCopy" ref="diagnosticText" :value="diagnostics" readonly aria-label="Safe diagnostics" rows="4" class="mt-1 w-full min-w-0 resize-y rounded border border-red-100 bg-white p-1 font-mono text-[10px] text-red-800" data-history-ignore></textarea>
-            <p role="status" aria-live="polite" class="text-[10px] text-slate-500">{{ copyStatus }}</p>
+            <details ref="details" class="mt-0.5">
+                <summary class="cursor-pointer text-[10px] font-semibold text-slate-600">Details</summary>
+                <textarea ref="diagnosticText" :value="diagnostics" readonly aria-label="Safe diagnostics" rows="4" class="mt-1 w-full min-w-0 resize-y rounded border border-red-100 bg-white p-1 font-mono text-[10px] text-red-800" data-history-ignore></textarea>
+                <div class="flex flex-wrap gap-3 text-[10px]">
+                    <button type="button" @click="copyDiagnostics" class="font-semibold text-blue-700 underline">Copy diagnostics</button>
+                    <button type="button" @click="selectDiagnostics" class="font-semibold text-blue-700 underline">Select diagnostics</button>
+                </div>
+                <p role="status" aria-live="polite" class="text-[10px] text-slate-600">{{ copyStatus }}</p>
+            </details>
         </div>
         <div v-else-if="model" role="alert" :aria-label="title" class="min-w-0 break-words">
             <p class="font-bold text-red-700">{{ title }}</p>

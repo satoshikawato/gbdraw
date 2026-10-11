@@ -352,7 +352,7 @@ def _configure_losatp(
             "orientation_identity"
         )
         settings.get_by_label(
-            "Collinear evidence scope", exact=True
+            "Collinear search between", exact=True
         ).select_option("adjacent")
 
     advanced = open_linear_comparison_disclosure(

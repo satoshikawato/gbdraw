@@ -1,7 +1,7 @@
 // @ts-check
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
-import { resolveLinearRecordEffectiveDefinition } from '../services/linear-sources.js';
+import { linearRecordNames } from '../services/linear-sources.js';
 import { canonicalRecordReverseComplement } from '../services/record-display-model.js';
 import { drawnLinearSequences } from '../services/record-draw-selection.js';
 import { validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
@@ -205,12 +205,13 @@ const recordNames = ({ recordKeys, request = null, linearSeqs = [], catalog = nu
     const id = displayText(feature?.record_id, feature?.recordId);
     if (key && id && !accessions.has(key)) accessions.set(key, id);
   });
+  // A record without its own Definition takes its File's, as in every panel (OV-436).
+  const fileNames = linearRecordNames(Array.isArray(linearSeqs) ? linearSeqs : []);
   const parts = recordKeys.map((recordKey, index) => {
     const record = request?.records?.find((entry) => entry?.recordKey === recordKey);
     const sequence = (Array.isArray(linearSeqs) ? linearSeqs : [])
       .find((entry) => String(entry?.uid || '') === recordKey);
-    const definition = displayText(record?.presentation?.label,
-      sequence ? resolveLinearRecordEffectiveDefinition(sequence) : '');
+    const definition = displayText(record?.presentation?.label, fileNames.get(recordKey)?.definition);
     const name = definition ? plainTextLinearRecordLabel(definition) : '';
     const accession = displayText(sequence?.accession, accessions.get(recordKey));
     const fileName = displayText(sequence?.gb?.name, sequence?.gff?.name);

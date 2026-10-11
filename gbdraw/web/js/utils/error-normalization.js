@@ -528,11 +528,11 @@ export const normalizeUserFacingError = (value, {
   const exception = result.context.exceptionType ? ` Python exception: ${result.context.exceptionType}.` : '';
   const schemaGuidance = result.code === 'INPUT_INVALID' && result.context.field === 'schema'
     ? ' Load a supported Session file or recreate it with the current writer.' : '';
-  // A file chosen in Load Session that is not a Session says so (UX-C04).
-  const notASession = result.operation === 'session-load' && result.context.field === 'schema'
-    && result.code === 'INPUT_INVALID'
-    ? `This file is not a gbdraw Session${result.context.reason === 'JSON_FORMAT' ? ': it is not valid JSON' : ' this version can read'}. The current settings and Results are unchanged.`
-    : '';
+  // A file chosen in Load Session that is not JSON is not a Session (UX-C04);
+  // every other Session reason keeps its correction.
+  const notASession = result.operation === 'session-load' && result.code === 'INPUT_INVALID'
+    && result.context.field === 'schema' && result.context.reason === 'JSON_FORMAT'
+    ? 'This file is not a gbdraw Session: it is not valid JSON.' : '';
   const continuation = result.operation === 'align' && result.context.field === 'direction'
     && result.context.reason === 'SOURCE_VIEW_CONFLICT' ? ' Review the updated preview and Apply again.' : '';
   result.summary = (notASession || `${message}${locators}${field}${guidance ? ` ${guidance}` : ''}${band}${position}${columns}${count}${exception}${continuation}${schemaGuidance}`)

@@ -26,7 +26,11 @@ assert.equal(normalized.context.position, 1);
 // A file chosen in Load Session that is not JSON says so, without "Field: schema" (UX-C04).
 const notSession = normalizeUserFacingError({ code: 'INPUT_INVALID', stage: 'parse', context: { field: 'schema', reason: 'JSON_FORMAT' } },
   { operation: 'session-load' });
-assert.equal(notSession.summary, 'This file is not a gbdraw Session: it is not valid JSON. The current settings and Results are unchanged.');
+assert.equal(notSession.summary, 'This file is not a gbdraw Session: it is not valid JSON.');
+// Every other Session reason keeps its known correction.
+const obsoleteSlots = normalizeUserFacingError({ code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'TRACK_SCHEMA' } },
+  { operation: 'session-load' });
+assert.match(obsoleteSlots.summary, /Recreate Custom Track Slots with the current schema\..*Load a supported Session file/);
 assert.equal(operationErrorTitle('session-load'), 'Session not loaded');
 assert.equal(normalized.context.row, 2);
 assert.deepEqual(normalized.actions, ['edit-pattern', 'retry']);

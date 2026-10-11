@@ -274,7 +274,7 @@ test('Gallery renders the two-species Vibrio multi-record tutorial and media', a
   await expect(tutorialPanel.getByRole('row', { name: /1.*NC_004603\.1.*1.*1/ })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: /4.*NC_022359\.1.*2.*2/ })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'CDS Rectangle' })).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: 'Evidence scope Adjacent pairs' })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'Search between Adjacent pairs' })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Plot Title Blank' })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Definition line: Organism / strain 18; Bold' })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Definition line: Subtitle / title 16; Normal' })).toBeVisible();
@@ -360,7 +360,7 @@ test('Gallery renders the Hepatoplasmataceae orthogroup tutorial and media', asy
       'gbdraw builds its similarity groups from searches across all record pairs, then draws links between adjacent displayed records.'
     )
   ).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: 'Minimum Identity 0' })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'Min identity (%) 0' })).toBeVisible();
   await expect(page.getByText('gbdraw group ID, display name, and the count of genes and records')).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
   await expect(mediaImages).toHaveCount(11);

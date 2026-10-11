@@ -402,7 +402,7 @@ def test_bgc_flow_pins_gallery_presentation_and_losatp_values() -> None:
         '"Linear comparison minimum alignment length", exact=True',
         'settings.get_by_label("Collinear max unit gap", exact=True).fill("1")',
         '"Collinear minimum block genes", exact=True',
-        '"Collinear evidence scope", exact=True',
+        '"Collinear search between", exact=True',
         '"orientation_identity"',
         'match_style.select_option("curve")',
         'losatp_mode.select_option(mode)',
@@ -525,7 +525,7 @@ def test_hepatoplasmataceae_collinear_guards_pin_evidence_and_span_fasta() -> No
         'losatp_mode.select_option("pairwise")',
         'match_style.select_option("curve")',
         'losatp_mode.select_option("collinear")',
-        'settings.get_by_label("Collinear evidence scope", exact=True).select_option(',
+        'settings.get_by_label("Collinear search between", exact=True).select_option(',
         '"Advanced comparison and layout"',
         'if evidence_scope not in {"all", "adjacent"}',
         'name="Infer orthogroups with self-comparisons", exact=True',
@@ -681,7 +681,8 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
     assert "| Separate Strands | Off |" in tutorial
     assert "23 stable\ngroups and 77 displayed group links" in tutorial
     assert "comparison between sequence 1 and sequence 2" in tutorial
-    assert "Raw LOSAT results" in tutorial
+    assert "Raw LOSAT results" not in tutorial
+    assert "open **File name**, set **Raw LOSAT filename**" in tutorial
     assert chapter_for("T-GUI-04")["screenshots"][2]["alt"] == (
         "LOSATP selected with Similarity groups and result filters"
     )
@@ -729,7 +730,7 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
         "popup.scrolled_to_details=true",
     } <= set(gallery_chapter["execution"]["assertions"])
     assert "does not load a Gallery session" in gallery_collinear
-    assert "Evidence scope | Adjacent pairs" in gallery_collinear
+    assert "Search between | Adjacent pairs" in gallery_collinear
     assert "Infer orthogroups with self-comparisons | Selected" in gallery_collinear
     assert "Max target seqs | Blank (**Unbounded**)" in gallery_collinear
     assert "Advanced comparison and layout | Execution" not in gallery_collinear

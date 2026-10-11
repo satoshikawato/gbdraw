@@ -257,7 +257,7 @@ test('failed session loading clears pending state and preserves the prior sessio
   await expect(sessionInput).toHaveValue('');
   expect(dialogs).toEqual([]);
   await expect(page.getByRole('alert', { name: 'Session not loaded' })).toContainText(
-    'This file is not a gbdraw Session: it is not valid JSON. The current settings and Results are unchanged.'
+    'This file is not a gbdraw Session: it is not valid JSON.'
   );
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
     // The Session import Worker's actual stage (X-01, SE-09).
@@ -273,7 +273,7 @@ test('failed session loading clears pending state and preserves the prior sessio
   ));
   expect(dialogs).toEqual([]);
   await expect(page.getByRole('alert', { name: 'Session not loaded' })).toContainText(
-    'This file is not a gbdraw Session: it is not valid JSON. The current settings and Results are unchanged.'
+    'This file is not a gbdraw Session: it is not valid JSON.'
   );
   expect(await importSnapshot(page)).toEqual(before);
   await expect(sessionInput).toHaveValue('');

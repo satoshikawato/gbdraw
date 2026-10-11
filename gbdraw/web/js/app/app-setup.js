@@ -74,6 +74,7 @@ import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import { cloneJsonData } from '../services/json-clone.js';
 import {
   groupLinearSourceRecords,
+  linearRecordNames,
   isPristineLinearSource,
   linearSourceHasPrimaryInput,
   linearSourceDepthStatus,
@@ -180,7 +181,6 @@ import {
   materializeResolvedEdgesAsSelectedPlan,
   missingUploadPairsToResolve,
   normalizeLinearComparisonPlan,
-  plainTextLinearRecordLabel,
   reconcileLinearComparisonPlan,
   resolveLinearComparisonPlan
 } from '../services/linear-comparisons.js';
@@ -760,17 +760,9 @@ export const createAppSetup = () => {
     }
     return null;
   };
-  const linearComparisonRecordLabel = (uid) => {
-    const sequence = linearSeqs.find((entry) => entry.uid === uid);
-    return plainTextLinearRecordLabel(
-      sequence?.definition ||
-      sequence?.region_record_id ||
-      sequence?.gb?.name ||
-      sequence?.gff?.name ||
-      sequence?.fasta?.name ||
-      'Record'
-    );
-  };
+  // Every panel names a record the same way (OV-436).
+  const linearRecordNameMap = computed(() => linearRecordNames(linearSeqs));
+  const linearComparisonRecordLabel = (uid) => linearRecordNameMap.value.get(uid)?.label || 'Record';
   const openLinearComparisonDisclosure = async (disclosureKey) => {
     if (!disclosureKey) return null;
     const details = /** @type {HTMLDetailsElement[]} */ ([...document.querySelectorAll('[data-linear-comparison-disclosure]')])
@@ -791,6 +783,7 @@ export const createAppSetup = () => {
     /** @type {HTMLElement | null | undefined} */ (container?.querySelector('input, select, button'))?.focus();
   };
 
+  /** @param {{ disclosureKey: string, focusTargetKey: string, edgeKey?: string, edgeId?: string } | null | undefined} target */
   const focusLinearComparisonIssue = async (target = linearComparisonUi.value.issues[0]) => {
     if (!target) return false;
     const details = await openLinearComparisonDisclosure(target.disclosureKey);
@@ -814,17 +807,38 @@ export const createAppSetup = () => {
     return true;
   };
 
-  // An action of an entry in the Comparison card's issue list (UX-C05).
+  // The one way to choose a pair's BLAST TSV outside its row (UX-A06, UX-C05):
+  // the pair's own uploader opens its file chooser inside the click, so the
+  // file takes the uploader's availability check and History step.
+  /** @param {string} edgeKey @param {{ focus?: boolean }} [options] */
+  const chooseLinearComparisonPairFile = (edgeKey, { focus = false } = {}) => {
+    void openLinearComparisonDisclosure('selected-pairs');
+    const uploader = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('[data-linear-comparison-pair-upload]')])
+      .find((element) => element.dataset.linearComparisonPairUpload === edgeKey);
+    if (focus) /** @type {HTMLElement | null | undefined} */ (uploader?.querySelector('[role="button"]'))?.focus();
+    /** @type {HTMLInputElement | null | undefined} */ (uploader?.querySelector('input[type="file"]'))?.click();
+    return Boolean(uploader);
+  };
+
+  // An action of an entry in the Comparison card's issue list (UX-C05); a
+  // setting it changes is one Undo step.
   const runLinearComparisonIssueAction = (issue, actionKey) => {
     if (actionKey === 'all-losat') return setLinearComparisonGlobalAction('losat');
-    if (actionKey === 'pairwise') return setLinearComparisonLosatpMode('pairwise');
+    if (actionKey === 'pairwise') {
+      return history.runUndoable('Change setting', () => setLinearComparisonLosatpMode('pairwise'));
+    }
+    if (actionKey === 'choose-file' && chooseLinearComparisonPairFile(issue.edgeKey, { focus: true })) return true;
     return focusLinearComparisonIssue(issue);
   };
 
   // The Generate error's "Show in Comparison" (UX-C05): the first issue's
-  // control, or the Comparison card when the cause has no control.
+  // control, the Execution setting for a LOSAT runtime failure, or the
+  // Comparison card when the cause has no control.
   const showLinearComparisonCause = async () => {
-    if (await focusLinearComparisonIssue()) return;
+    const code = normalizeUserFacingError(errorLog.value)?.code;
+    const runtimeCause = code === 'LOSAT_THREADING_UNAVAILABLE' || code === 'LOSAT_RUNTIME'
+      ? { disclosureKey: 'settings', focusTargetKey: 'losat-execution' } : null;
+    if (await focusLinearComparisonIssue(linearComparisonUi.value.issues[0] || runtimeCause)) return;
     const card = /** @type {HTMLElement | null} */ (document.querySelector('[data-linear-comparison-card]'));
     card?.scrollIntoView({ block: 'nearest' });
     /** @type {HTMLElement | null | undefined} */ (card?.querySelector('button:not([disabled])'))?.focus();
@@ -4282,14 +4296,6 @@ export const createAppSetup = () => {
         fileName: found?.draft?.fileActive ? String(found.draft.file?.name || '') : '', missing: missing.has(pair.edgeKey) };
     });
   });
-  /** @param {string} edgeKey @param {Event} event */
-  const chooseMissingBlastTsvFile = (edgeKey, event) => {
-    const input = /** @type {HTMLInputElement} */ (event.target);
-    const file = input.files?.[0];
-    input.value = '';
-    if (!file) return undefined;
-    return history.runUndoable('Change uploaded file', () => setLinearComparisonCardFile(edgeKey, file));
-  };
   /** @param {'generate' | 'none' | 'cancel'} choice */
   const resolveMissingBlastTsv = async (choice) => {
     if (choice === 'generate') {
@@ -5918,7 +5924,7 @@ export const createAppSetup = () => {
     dialogChoicePending,
     missingBlastTsvDialog,
     missingBlastTsvRows,
-    chooseMissingBlastTsvFile,
+    chooseLinearComparisonPairFile,
     showLinearComparisonCause,
     runLinearComparisonIssueAction,
     resolveMissingBlastTsv,

@@ -265,7 +265,7 @@ def _configure_all_record_collinear(
     settings.get_by_label("Collinear color mode", exact=True).select_option(
         "orientation_identity"
     )
-    settings.get_by_label("Collinear evidence scope", exact=True).select_option(
+    settings.get_by_label("Collinear search between", exact=True).select_option(
         evidence_scope
     )
     settings.get_by_label(
@@ -598,7 +598,7 @@ def _frame_collinear_settings(settings: Any) -> None:
     """Show LOSATP, Collinear blocks, inference, hit limits, and scope together."""
 
     losat_mode = settings.get_by_role("group", name="LOSAT Mode", exact=True)
-    evidence_scope = settings.get_by_label("Collinear evidence scope", exact=True)
+    evidence_scope = settings.get_by_label("Collinear search between", exact=True)
     settings_pane = _center_span_in_scroll_pane(
         losat_mode, evidence_scope, include_first_heading=True
     )
@@ -627,7 +627,7 @@ def _frame_collinear_settings(settings: Any) -> None:
                 exact=True,
             ),
         ),
-        ("Evidence scope", evidence_scope),
+        ("Search between", evidence_scope),
     ):
         _assert_box_unclipped(
             name, _require_bounding_box(locator, name), settings_pane

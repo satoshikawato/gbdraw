@@ -134,7 +134,7 @@
     },
     {
       "title": "Configure browser LOSAT",
-      "body": "In Comparison, choose Run LOSAT, open Settings, set LOSAT Mode to LOSATP, and set LOSATP mode to Similarity groups. The runtime controls are in the same Settings panel, under Runtime and reproducibility.",
+      "body": "In Comparison, choose Run LOSAT, open Settings, set LOSAT Mode to LOSATP, and set LOSATP mode to Similarity groups. The runtime controls are in the same Settings panel, under Performance.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -146,8 +146,8 @@
           ["LOSATP mode", "Similarity groups"],
           ["Bitscore", "50"],
           ["E-value", "0.01"],
-          ["Minimum Identity", "30"],
-          ["Minimum Length", "0"]
+          ["Min identity (%)", "30"],
+          ["Min length", "0"]
         ]
       },
       "note": "The five records contain related biosynthetic gene clusters. Similarity groups uses retained protein-search hits to form visualization groups across them and draws links between group members; it does not infer phylogeny-based orthology.",
@@ -203,18 +203,18 @@
               {"label": "LOSATP mode", "value": "Similarity groups"},
               {"label": "Bitscore", "value": 50},
               {"label": "E-value", "value": "0.01"},
-              {"label": "Minimum identity", "value": 30},
-              {"label": "Minimum length", "value": 0}
+              {"label": "Min identity (%)", "value": 30},
+              {"label": "Min length", "value": 0}
             ]
           }
         },
         {
           "dataDependent": true,
-          "title": "Runtime and reproducibility",
+          "title": "Performance",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-03-02-runtime-reproducibility.webp",
-            "alt": "Runtime and reproducibility controls showing Auto execution, Safe total threads, and automatic parallel runs and threads per run.",
-            "caption": "Review the LOSAT runtime and reproducibility controls at the end of Comparison › Settings."
+            "alt": "Performance controls showing Auto execution, Safe total threads, and automatic parallel runs and threads per run.",
+            "caption": "Review the LOSAT Performance controls at the end of Comparison › Settings."
           },
           "capture": {
             "source": "webapp",
@@ -228,11 +228,11 @@
               },
               {
                 "type": "waitForFunction",
-                "script": "() => Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).some((section) => section.textContent.includes('Runtime and reproducibility'))"
+                "script": "() => Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).some((section) => section.textContent.includes('Performance'))"
               },
               {
                 "type": "evaluate",
-                "script": "const section = Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).find((node) => node.textContent.includes('Runtime and reproducibility')); if (!section) throw new Error('Runtime and reproducibility section was not found.'); section.dataset.capture = 'bgc-losat-runtime'; section.scrollIntoView({ block: 'center' });"
+                "script": "const section = Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).find((node) => node.textContent.includes('Performance')); if (!section) throw new Error('Performance section was not found.'); section.dataset.capture = 'bgc-losat-runtime'; section.scrollIntoView({ block: 'center' });"
               }
             ],
             "selector": "[data-capture='bgc-losat-runtime']",
@@ -245,7 +245,7 @@
               "losatExecution.totalThreadBudget": "safe",
               "losatExecution.threadsPerJob": "auto"
             },
-            "visibleText": ["Runtime and reproducibility", "Parallel runs"],
+            "visibleText": ["Performance", "Parallel runs"],
             "visibleControls": [
               {"selector": "[data-capture='bgc-losat-runtime'] select[aria-label='LOSAT execution']", "value": "auto"},
               {"selector": "[data-capture='bgc-losat-runtime'] select[aria-label='LOSAT total threads']", "value": "safe"},
@@ -305,11 +305,11 @@
         },
         {
           "dataDependent": true,
-          "title": "First comparison boundary",
+          "title": "First pair",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-03-03-first-comparison-boundary.webp",
             "alt": "Selected pairs editor for sequence 1 to sequence 2 with Run LOSAT selected.",
-            "caption": "Open Selected pairs to inspect or override the source assigned to the sequence 1 to sequence 2 boundary."
+            "caption": "Open Selected pairs to inspect or override the source of pair #1 → #2."
           },
           "capture": {
             "source": "webapp",

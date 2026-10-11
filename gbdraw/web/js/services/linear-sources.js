@@ -2,6 +2,7 @@
 import { getSessionResourceSource } from './file-content-cache.js';
 import { depthFileSlotsFromValue } from './depth-track-state.js';
 import { resolveDisambiguatedRecordSelection } from './record-options.js';
+import { plainTextLinearRecordLabel } from './linear-comparisons.js';
 
 // A composite backing carries `descriptors` and no single `descriptor`.
 const sourceFileIdentity = (file) => (
@@ -152,6 +153,29 @@ export const resolveLinearRecordEffectiveDefinition = (sequence, source = null) 
   if (own) return sequence.definition;
   const fileDef = String(sequence?.file_definition ?? (source ? getLinearSourceDefaultDefinition(source) : '')).trim();
   return fileDef || String(sequence?.inferred_definition ?? '').trim();
+};
+
+// How panels and lists name each record (OV-436): its drawn Definition as
+// plain text, else the Definition another record of its File draws, else its
+// accession or file name. A File that supplies several records adds each
+// record's accession, so two chromosomes of one genome stay apart. The
+// diagram's own record headings are not changed.
+/** @returns {Map<string, { definition: string, name: string, accession: string, label: string }>} */
+export const linearRecordNames = (sequences) => {
+  const names = new Map();
+  const plain = (value) => (String(value ?? '').trim() ? plainTextLinearRecordLabel(value) : '');
+  groupLinearSourceRecords(sequences).forEach((source) => {
+    const definitions = source.records.map(({ sequence }) => plain(resolveLinearRecordEffectiveDefinition(sequence, source)));
+    const fileDefinition = definitions.find(Boolean) || '';
+    source.records.forEach(({ sequence }, position) => {
+      const recordId = String(sequence?.region_record_id ?? '').trim();
+      const definition = definitions[position] || fileDefinition;
+      const name = definition || recordId || plain(sequence?.gb?.name || sequence?.gff?.name || sequence?.fasta?.name);
+      const accession = source.records.length > 1 && recordId !== name ? recordId : '';
+      names.set(String(sequence?.uid ?? ''), { definition, name, accession, label: [name, accession].filter(Boolean).join(' · ') || 'Record' });
+    });
+  });
+  return names;
 };
 
 // The definition inferred from the record a row selects; an automatic selector

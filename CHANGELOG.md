@@ -18,15 +18,21 @@ write-up of a release.
   with its source, file, problem and **Save Raw LOSAT TSV**; the separate **Raw
   LOSAT results** list in **Advanced comparison and layout** is gone. Pair-plan
   problems appear once, in a **Fix before Generate** list with an action each.
+  The Collinear **Evidence scope** setting is now **Search between**.
 - Web errors appear once, at their cause: a failed Generate no longer repeats the
   "last successful result" notice, a Linear comparison error offers **Show in
   Comparison**, an invalid colour-rule pattern shows its cause under the field,
-  and a file that is not a Session shows **Session not loaded** with the reason.
+  and a failed Session load shows **Session not loaded** with the reason.
 - **BLAST TSV missing** lists one row per pair with its own **Choose file…**,
   then **Generate** or **Skip these comparisons and Generate**.
-- The first Generate shows each runtime preparation step ("step 2 of 5, ...").
+- The first Generate shows each runtime preparation step ("step 2 of 5, ...");
+  the start-up and Generate spinners show the gbdraw logo.
 - Fixed: a Session load error raised in Circular stayed on screen after switching
   to Linear (OV-372).
+- Fixed: the records of one multi-record File were named differently in
+  **Record Layout**, **Selected pairs** and the other panels (one by its
+  definition, the next by its accession); each now shows the File's definition
+  plus its accession (OV-436).
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 

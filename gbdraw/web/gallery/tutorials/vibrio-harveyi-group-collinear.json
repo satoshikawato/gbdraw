@@ -541,7 +541,7 @@
     },
     {
       "title": "Run LOSATP in Collinear blocks mode",
-      "body": "In Comparison, choose Run LOSAT. In Settings, set LOSAT Mode to LOSATP, LOSATP mode to Collinear blocks, Color mode to Orientation + identity, and Evidence scope to Adjacent pairs. Diagonal drift is under Advanced comparison and layout.",
+      "body": "In Comparison, choose Run LOSAT. In Settings, set LOSAT Mode to LOSATP, LOSATP mode to Collinear blocks, Color mode to Orientation + identity, and Search between to Adjacent pairs. Diagonal drift is under Advanced comparison and layout.",
       "table": {
         "columns": [
           "Setting",
@@ -565,7 +565,7 @@
             "3"
           ],
           [
-            "Evidence scope",
+            "Search between",
             "Adjacent pairs"
           ],
           [
@@ -581,11 +581,11 @@
             "1e-2"
           ],
           [
-            "Minimum Identity",
+            "Min identity (%)",
             "0"
           ],
           [
-            "Minimum Length",
+            "Min length",
             "0"
           ]
         ]
@@ -774,11 +774,11 @@
         },
         {
           "dataDependent": true,
-          "title": "Adjacent-pair evidence scope",
+          "title": "Search between adjacent pairs",
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-04-03-adjacent-pairs.webp",
-            "alt": "Vibrio Comparison Settings with the Evidence scope menu open and Adjacent pairs highlighted.",
-            "caption": "Open Evidence scope in Settings and choose the highlighted Adjacent pairs option."
+            "alt": "Vibrio Comparison Settings with the Search between menu open and Adjacent pairs highlighted.",
+            "caption": "Open Search between in Settings and choose the highlighted Adjacent pairs option."
           },
           "capture": {
             "source": "webapp",
@@ -796,7 +796,7 @@
                 "Adjacent pairs",
                 "All records"
               ],
-              "label": "Evidence scope"
+              "label": "Search between"
             },
             "openDetails": [
               "Settings"
@@ -817,7 +817,7 @@
             },
             "visibleControls": [
               {
-                "label": "Evidence scope",
+                "label": "Search between",
                 "value": "Adjacent pairs"
               }
             ]

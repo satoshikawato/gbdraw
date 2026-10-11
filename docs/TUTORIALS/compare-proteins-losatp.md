@@ -84,12 +84,12 @@ reproducibility** values.
 | Settings / Comparison appearance | Match style | Curve |
 | Settings / Result filters | Bitscore | `50` |
 | Settings / Result filters | E-value | `0.01` |
-| Settings / Result filters | Minimum identity | `30` |
-| Settings / Result filters | Minimum length | `0` |
-| Settings / Runtime and reproducibility | Execution | Serial |
-| Settings / Runtime and reproducibility | Total threads | `1` |
-| Settings / Runtime and reproducibility | Parallel runs | `1 run` |
-| Settings / Runtime and reproducibility | Threads per run | `1` |
+| Settings / Result filters | Min identity (%) | `30` |
+| Settings / Result filters | Min length | `0` |
+| Settings / Performance | Execution | Serial |
+| Settings / Performance | Total threads | `1` |
+| Settings / Performance | Parallel runs | `1 run` |
+| Settings / Performance | Threads per run | `1` |
 | Layout | Separate Strands | Off |
 | Basic | Output Prefix | `bgc_losatp_groups` |
 
@@ -151,9 +151,9 @@ Interactive SVG Gallery.
 
 ![Five whole BGC records aligned to similarity group og_1](../images/t-gui-04/05-comparison-result.png)
 
-Open **Advanced comparison and layout** and find **Raw LOSAT results**. In the
-comparison between sequence 1 and sequence 2, set **Raw LOSAT filename** to
-`bgc_losatp_groups.tsv` and select **Save Raw LOSAT TSV**. The file contains
+Open **Selected pairs**. In the comparison between sequence 1 and sequence 2,
+open **File name**, set **Raw LOSAT filename** to `bgc_losatp_groups.tsv`, and
+select **Save Raw LOSAT TSV**. The file contains
 232 twelve-column rows. Select **SVG** after alignment to save
 `bgc_losatp_groups.svg`.
 

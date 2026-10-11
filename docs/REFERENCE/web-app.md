@@ -110,7 +110,7 @@ settings. The app does not show a separate always-on application status.
 
 | Operation label | When the Result changes |
 |---|---|
-| **Applies on Generate** | A successful **Generate Diagram** applies crop, row layout, Definition Lock, scale label sizes, track slots, **Species**, **Strain**, plot title and record-label settings, the legend position, swatch size, and font size, the Linear comparison **Result filters** (**Bitscore**, **E-value**, **Minimum identity**, **Minimum length**), and the global block, line, axis, and scale stroke colors and widths. |
+| **Applies on Generate** | A successful **Generate Diagram** applies crop, row layout, Definition Lock, scale label sizes, track slots, **Species**, **Strain**, plot title and record-label settings, the legend position, swatch size, and font size, the Linear comparison **Result filters** (**Bitscore**, **E-value**, **Min identity (%)**, **Min length**), and the global block, line, axis, and scale stroke colors and widths. |
 | **Live edit** | Feature color, label text, and visibility, including **Feature Visibility** rules, update the current Result directly; geometry changes may rerender automatically. A label rerender uses the settings of the last Generate plus the current feature, label, color, and legend edits. Legend text, order, stroke, and removal, and stroke edits on selected features, are live. Palette selection is live when **Instant Preview** is on. |
 | **Apply required** | Alignment choices stay in the review draft until **Apply** succeeds. |
 
@@ -178,8 +178,10 @@ A plain Session file larger than 200 MiB, or a gzip Session that expands beyond
 512 MiB, is rejected. Save needs browser gzip compression. Load needs Web
 Workers and, for `.gz` files, gzip decompression. A rejected or failed Save or
 Load shows its error and keeps the current Result, settings, and Undo history.
-A file that is not a Session shows **Session not loaded** with the reason, for
-example that the file is not valid JSON. An error of one diagram mode is cleared
+A failed Load shows its reason and correction under **Session not loaded**,
+unless a more specific step names the error: for example, that the file is not
+valid JSON, or that Custom Track Slots must be recreated with the current
+schema. An error of one diagram mode is cleared
 when you switch to the other mode, except an error that names the other mode's
 Result.
 
@@ -207,7 +209,10 @@ not loaded**, or an export error. When Generate fails, the error says once that
 the last successful Result is shown and the changes were not applied. A Linear
 comparison error offers **Show in Comparison**, which focuses the control of
 the first issue. The summary stays visible. **Details** is optional and initially closed;
-it can be opened with the keyboard. **Copy diagnostics** copies only the safe
+it can be opened with the keyboard. An error shown beside its own field, such
+as an invalid Color rule pattern, is compact: the summary under the field and a
+small **Details** disclosure with the same diagnostics and buttons, followed by
+the field's **Retry** and **Revert**. **Copy diagnostics** copies only the safe
 information displayed there, after an explicit action. If Clipboard access is
 unavailable or rejected, **Select diagnostics** selects the text for manual
 copying; the cause and recovery controls stay available.
@@ -652,11 +657,12 @@ An older Session that did not save the field keeps its former Ribbon appearance.
 A Curve or Ribbon saved explicitly stays as saved.
 
 Similarity groups always runs an all-vs-all protein search across
-the loaded records and has no **Evidence scope** selector. Collinear blocks uses
-**Evidence scope**. Fresh pages and **Reset Settings** default that control to
-**Adjacent pairs**. A session that explicitly saved **All records** restores
-that value. **Evidence scope** controls how far the search expands, not which record
-pairs get displayed links.
+the loaded records and has no **Search between** selector. Collinear blocks
+uses **Search between** to choose the record pairs that LOSATP searches:
+**Adjacent pairs** or **All records**. Fresh pages and **Reset Settings**
+default it to **Adjacent pairs**. A session that explicitly saved **All
+records** restores that value. **Search between** controls how far the search
+expands, not which record pairs get displayed links.
 
 **Advanced comparison and layout** is closed by default. It holds **Record Layout**, cache controls,
 and advanced Collinear search details. Each pair's raw result file is in its
@@ -671,9 +677,9 @@ Circular mode, **Reference gencode** applies to the displayed subject. Each
 comparison row's **Comparison gencode** control applies to that comparison
 sequence, which the search passes as its query.
 
-The common Linear filters are **Bitscore**, **E-value**, **Minimum identity**,
-and **Minimum length**. Collinear settings include **Max unit gap**, **Min
-block genes**, **Diagonal drift**, **Merge conflicts**, **Evidence scope**
+The common Linear filters are **Bitscore**, **E-value**, **Min identity (%)**,
+and **Min length**. Collinear settings include **Max unit gap**, **Min
+block genes**, **Diagonal drift**, **Merge conflicts**, **Search between**
 (**Adjacent pairs** or **All records**), and **Color mode** (**Average
 identity**, **Orientation**, or **Orientation + identity**). Scientific
 meanings and limits belong to the comparison reference below.
@@ -1205,7 +1211,7 @@ Python matching semantics for live preparation and Generate. This differs from
 Feature Search and Interactive SVG search. TSV columns and pattern semantics
 are specified in [Input formats and TSV schemas](input-formats-and-tsv-schemas.md#styling-tables).
 
-A rejected edit to an existing Color rule's pattern stays visible in that field as **Not applied**, with its cause under the field, **Revert**, and **Copy details for a bug report**. **Retry** is offered when the failure was not in the pattern itself. A syntax error names the character position counted from one.
+A rejected edit to an existing Color rule's pattern stays visible in that field as **Not applied**, with its cause, a compact **Details** disclosure, **Retry**, and **Revert** under the field. A syntax error names the character position counted from one.
 The displayed text is a temporary draft; the accepted rule, Result and History
 remain unchanged. Syntax errors are distinguished from runtime initialization
 or preparation failures. Correcting the text and applying it, or a successful

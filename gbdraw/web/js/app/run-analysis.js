@@ -189,7 +189,6 @@ const DEFAULT_LINEAR_BLAST_FILTERS = Object.freeze(
   comparisonFiltersForMode('linear')
 );
 
-
 const DIAGRAM_PROGRESS_MESSAGES = Object.freeze({
   'preparing-runtime': 'Preparing diagram runtime (first use)...',
   'preparing-resources': 'Preparing diagram input resources...',
