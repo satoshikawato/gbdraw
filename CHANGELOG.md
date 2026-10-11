@@ -205,6 +205,26 @@ write-up of a release.
   say that the LOSAT runtime controls are under **Comparison › Settings ›
   Runtime and reproducibility**, not under **Advanced comparison and layout**
   (OV-366).
+- Gallery tutorials: the BGC and *Vibrio harveyi* group tutorials now teach in
+  stages. The reader adds one file at a time and fills its **File defaults**,
+  clicks **Generate Diagram** with the web app's defaults, then changes only
+  what the preview shows is wrong and generates again. Each intermediate
+  preview is shown. LOSAT runs once, and later Generates reuse its results.
+- Gallery: the aminoglycoside BGC example's Session is rebuilt in the web app
+  from the five MIBiG files. BGC0000713 is the original record with **Reverse
+  complement** on, so its popup coordinates are those of the source file. The
+  figure now draws what its command gives: the orange palette's blue identity
+  ribbons and CDS default #dddddd.
+- Linear ruler (Python API and web app): with **Ruler on Axis** active, the
+  ruler's ticks and labels follow the axis color unless **Scale Line Color**
+  or **Ruler Label Color** is set, as the CLI already drew them; before, they
+  were black (OV-440). When **Ruler on Axis** is ticked but does not apply
+  (**Bar** scale style or **Middle** track layout), the axis keeps the plain
+  Linear color instead of the ruler's darker one, as in the CLI (OV-442).
+- Gallery tooling (maintainer): `tools/capture_gallery_tutorial_screenshots.py`
+  captures an intermediate tutorial state by replay. A capture's
+  `replayThrough` loads the example Session, clicks **Reset Settings**, then
+  performs the `replay` actions of the tutorial steps up to the named one.
 - Gallery publication (maintainer tooling): `tools/refresh_gallery_sessions.py`
   publishes a Session that the web app saved. It rebuilds the request from the
   request's own color, whitelist, and priority tables rather than from the

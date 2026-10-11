@@ -225,7 +225,7 @@ import {
   getDepthTrackLabelFromFile,
   isDepthTrackAutoLabel
 } from './depth-tracks.js';
-import { comparisonProfileDefault } from '../mode-profiles.js';
+import { comparisonProfileDefault, linearAxisRulerApplies } from '../mode-profiles.js';
 import {
   IMPORTED_COMPARISON_ACTIONS,
   IMPORTED_COMPARISON_DISPOSITIONS,
@@ -4967,14 +4967,7 @@ export const createAppSetup = () => {
   });
 
   const canUseLinearRulerOnAxis = computed(
-    () => {
-      const drawing = state.activeDrawing();
-      return (
-        drawing.form.show_scale !== false &&
-        drawing.form.scale_style === 'ruler' &&
-        ['above', 'below'].includes(drawing.form.linear_track_layout)
-      );
-    }
+    () => linearAxisRulerApplies(state.activeDrawing().form)
   );
 
   const canUseCircularScaleStyling = computed(

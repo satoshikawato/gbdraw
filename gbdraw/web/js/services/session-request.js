@@ -98,6 +98,7 @@ import {
   comparisonFiltersForMode,
   effectiveLinearAxisColor,
   isModeProfileDefault,
+  linearAxisRulerApplies,
   MODE_DEFAULT_FEATURE_TYPES,
   modeProfile,
   resolveComparisonThresholds,
@@ -1239,8 +1240,7 @@ const buildConfigOverrides = (
     ? null
     : effectiveLinearAxisColor({
         axisColor: adv.axis_stroke_color,
-        rulerOnAxis:
-          form.show_scale !== false && Boolean(form.linear_ruler_on_axis),
+        rulerOnAxis: Boolean(form.linear_ruler_on_axis) && linearAxisRulerApplies(form),
         managed: linearAxisManaged
       });
   const overrides = {

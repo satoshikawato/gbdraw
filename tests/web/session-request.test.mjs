@@ -2535,13 +2535,51 @@ assert.equal(
   'lightgray'
 );
 state.form.linear_ruler_on_axis = true;
-const rulerAxisCanonical = buildCanonicalRenderRequest({ state, filesData: linearFilesData });
+// Ruler on Axis with Bar scale or Middle layout is ignored, so the axis keeps
+// the plain Linear color (as in the CLI and the Python API).
+const ignoredRulerAxisCanonical = buildCanonicalRenderRequest({ state, filesData: linearFilesData });
+assert.equal(
+  ignoredRulerAxisCanonical.renderRequest.diagramOptions.configOverrides[
+    'objects.axis.linear.stroke_color'
+  ],
+  'lightgray'
+);
+const rulerAxisColorFor = (layout, style) => {
+  state.form.linear_track_layout = layout;
+  state.form.scale_style = style;
+  try {
+    return buildCanonicalRenderRequestRaw({
+      state,
+      filesData: linearFilesData,
+      comparisonPlanSnapshot: comparisonSnapshotForState(state, linearFilesData)
+    });
+  } finally {
+    state.form.linear_track_layout = 'middle';
+    state.form.scale_style = 'bar';
+  }
+};
+assert.equal(
+  rulerAxisColorFor('above', 'bar').renderRequest.diagramOptions.configOverrides[
+    'objects.axis.linear.stroke_color'
+  ],
+  'lightgray'
+);
+const rulerAxisCanonical = rulerAxisColorFor('above', 'ruler');
 assert.equal(
   rulerAxisCanonical.renderRequest.diagramOptions.configOverrides[
     'objects.axis.linear.stroke_color'
   ],
   'dimgray'
 );
+// Unset ruler colors stay out of the request: the shared config-override
+// owner (gbdraw/config/modify.py) makes them follow the axis color.
+for (const path of ['objects.scale.stroke_color', 'objects.scale.label_color']) {
+  assert.equal(
+    Object.hasOwn(rulerAxisCanonical.renderRequest.diagramOptions.configOverrides, path),
+    false,
+    path
+  );
+}
 state.form.show_scale = false;
 const hiddenRulerAxisCanonical = buildCanonicalRenderRequest({
   state,
@@ -5239,7 +5277,7 @@ assert.deepEqual(resolvedProteinMarker.pairs, []);
 
 assert.equal(characterizedRequests.length, 83);
 assert.equal(createHash('sha256').update(JSON.stringify(characterizedRequests)).digest('hex'),
-  '11e0b868a984674442a573877db42bd4e1f83202a44b6c4fe92223d2bdfb4e1c',
+  'b654f731b14f0317193a9cdb21cfba7e2431011189b41d897a7003ffc6dcdeb8',
   'Extraction preserves the 83 characterized request meanings, including topology, tracks and typed comparisons');
 
 const projectSessionIndex = process.argv.indexOf('--project-session');
