@@ -1,6 +1,6 @@
 # Web Gallery operation screenshot register
 
-Last updated: 2026-10-11
+Last updated: 2026-10-12
 
 This register records task-specific decisions for Gallery operation media.
 Capture metadata remains the executable source of truth in each tutorial JSON.
@@ -366,3 +366,22 @@ capture validation proves the visible control or selected value is stale.
 - The HmmtDNA feature-highlight result uses `Middle`, strand separation off,
   70%, and gene labels for all 13 mitochondrial CDS features, including
   `COX1`.
+
+## Compact sidebar input cards (Gallery revision 2026-10-12)
+
+The Web sidebar's File cards, Record options, Colors, and slot rows were
+compacted. The File card's defaults block now reads **Names for all records in
+this file**, and the tutorial text, `visibleText`, alt text, and captions follow
+that label. Media were recaptured only where the surface visibly changed;
+captures that differ from the committed bytes by noise only keep the committed
+bytes.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `BGC0000708-BGC0000713`, `vibrio-harveyi-group-collinear` | `manual-02-01-file1-defaults.webp`, `manual-03-01-file5-defaults.webp` (Vibrio: `manual-03-01-file2-defaults.webp`) | Recapture | Replay through the step; File card with **Names for all records in this file** and the rendered taxon-name preview line | Recaptured at DSF 3; compared by eye |
+| `BGC0000708-BGC0000713` | `manual-06-01-reverse-bgc0000713.webp` | Recapture | File 5 card from its header through the compact **Record options** (record header, **Using file default** names, **Reverse complement**) | Recaptured at DSF 3; compared by eye |
+| `BGC0000708-BGC0000713` | `manual-08-01-specific-rules-all.webp` | Recapture; scroll corrected | **SPECIFIC RULES** heading scrolled to `block: 'start'` with a 120 px scroll margin so the app header does not cover the **TSV** / **Clear All** row; the four rule rows are opened | No app-header overlap; visually accepted |
+| `BGC0000708-BGC0000713` | `manual-10-03-plot-title.webp` | Recapture | **Titles & Record Labels** card; Plot Title with its markup preview line | Recaptured at DSF 3; compared by eye |
+| `BGC0000708-BGC0000713` | `manual-05-01-comparison-settings.webp`, `manual-09-01-show-labels-first.webp`, `manual-10-01-arrow-shaft-width.webp`, `manual-10-02-scale-style-ruler.webp`; Vibrio `manual-09-01-rectangle-features.webp`, `manual-09-02-linear-layout.webp` | Keep | Surfaces without a visible change | Recapture differed by noise only |
+| `BGC0000708-BGC0000713` | `manual-06-01-reverse-bgc0000713.webp` (record wait) | Recipe corrected | The wait for the record-5 select proves the records were read: the select `Record selector for sequence 5` is enabled and lists `BGC0000713` | The old wait on the absence of "Loading records" proved nothing |
+| `HmmtDNA_ATskew` | `manual-06-01-at-skew-slot-context.webp` | Recapture; recipe corrected | Exact mitochondrial session; custom stack enabled; the capture opens the slot's `[data-track-slot-more='a_skew_2']` disclosure; `assertAppState` (slot 3 id, renderer, nt, legend label, both colors) and six `visibleControls` (id, renderer, dinucleotide AT, legend label AT skew, both colors) | Data-dependent; recaptured 810x2319; disclosure open, both swatches inside the highlight |
