@@ -179,18 +179,20 @@ const buildRecordDefinitionView = ({
   scope, recordIndex, recordId, drawn, record, draft, editHint, alignment, alignmentShown
 }) => {
   const accession = text(drawn.accession) || text(recordId);
-  const label = plain(record?.presentation?.label);
-  const name = text(drawn.name) || label;
-  // OV-502: the first definition line is the organism unless the Result drew a
-  // Circular Record label there. A definition that draws the record's ID alone
-  // (Multi-Record Canvas) has no name: the Accession fact says it.
+  // The heading is the first name line the Result draws; a Result without a
+  // definition is named by the request's label.
+  const name = text(drawn.name)
+    || (Object.values(drawn).some(Boolean) ? '' : plain(record?.presentation?.label));
   const named = Boolean(name) && name !== accession;
   const reversed = Boolean(record?.presentation?.reverseComplement);
   const start = positive(record?.display?.startCoordinate);
   /** @type {PreviewItemFact[]} */
   const facts = [
     { label: 'Accession', value: accession || '—' },
-    ...(named ? [{ label: scope === 'circular' && name === label ? 'Record label' : 'Organism', value: name }] : []),
+    // OV-502: only a Linear definition marks which line is the record's name.
+    // A Circular definition's name lines may be an organism, a strain, a
+    // replicon or a Record label, wrapped or not: they are the heading only.
+    ...(scope === 'linear' && named ? [{ label: 'Organism', value: name }] : []),
     { label: 'Length', value: text(drawn.length) || '—' },
     { label: 'Reverse complement', value: reversed ? 'Yes' : 'No' },
     { label: 'Display start', value: start == null ? 'Record start' : NUMBER.format(start) },

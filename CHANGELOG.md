@@ -41,9 +41,10 @@ write-up of a release.
 - Web app: a click on a Legend row or a record definition in the preview opens
   a popup while Layout edit is off. The Legend item popup shows the feature
   count and the rule behind the color, and edits the color and legend name or
-  removes the row. The record popup lists the accession, organism, length,
-  reverse complement, display start, region, and alignment, and edits the definition
-  text and Reverse complement, which apply on Generate.
+  removes the row. The record popup lists the accession, length, reverse
+  complement, display start, and region, in Linear also the organism line and the
+  alignment, and edits the definition text and Reverse complement, which apply
+  on Generate.
 - Web app: the Editor's Features list uses one compact row per feature that
   expands to its label text field; the label and feature-edit TSV actions move
   into one **Import / export** menu. The Legend tab reorders rows by a drag

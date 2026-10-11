@@ -975,12 +975,13 @@ individual features. **Color** and **Legend name** edit the row as the Legend
 tab does, with the same **Merge into "<name>"**, **Keep both**, or **Cancel**
 choice for a name another row uses, and **Remove from legend** moves the row to the Legend tab's
 **Deleted items**. A click on a record definition (the Linear record label on
-the left, or the Circular center text) opens the record popup. It lists the
-**Accession**, **Organism**, **Length**, **Reverse complement**, **Display start**, and
-**Region** of the displayed Result and, in Linear, its **Alignment**. The
-**Organism** row is named **Record label** when the Result drew a Circular
-Record label there, and is left out when the definition draws only the record's
-ID, as on a Multi-Record Canvas. Its
+the left, or the Circular center text) opens the record popup. Its heading
+shows the name lines of the definition as the Result draws them. It lists the
+**Accession**, **Length**, **Reverse complement**, **Display start**, and
+**Region** of the displayed Result and, in Linear, its **Organism** line and its
+**Alignment**. A Circular definition does not say whether a name line is an
+organism, a strain, a replicon, or a Record label, so the popup lists none of
+them as a fact. Its
 definition text fields and **Reverse complement** write the settings the
 Result's definition comes from and apply on Generate: in Linear, the record's
 File card fields; in Circular, **Record label** and **Subtitle** when one record
