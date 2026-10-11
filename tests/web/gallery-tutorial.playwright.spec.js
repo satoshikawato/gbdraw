@@ -422,7 +422,7 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
       name: 'Reverse complement BGC0000713 only'
     })
   ).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: 'Track Layout Middle' })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'Track Layout Features on axis' })).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', { name: 'Features › Arrow Geometry › Shaft Width Ratio 0.6' })
   ).toBeVisible();

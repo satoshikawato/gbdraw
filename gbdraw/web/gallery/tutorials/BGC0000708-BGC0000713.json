@@ -106,7 +106,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const expected = ['BGC0000708.gbk', 'BGC0000709.gbk', 'BGC0000711.gbk', 'BGC0000712.gbk', 'BGC0000713.gbk']; const names = (app?.linearSeqs || []).map((seq) => seq.gb?.name || ''); if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error('BGC GenBank order was not restored.'); const seq = app.linearSeqs[0]; seq.definition = '<i>Streptomyces lividus</i> CBS 844.73'; seq.record_subtitle = 'Lividomycin biosynthetic gene cluster'; const row = document.querySelector('[data-linear-record-card=\"record-1\"]'); const options = row?.querySelector('[data-linear-record-options=\"record-1\"]'); if (!row || !options) throw new Error('BGC Linear input row 1 was not found.'); options.open = true; const fieldInput = (labelText) => { const label = Array.from(row.querySelectorAll('div')).find((node) => node.textContent?.trim() === labelText && node.nextElementSibling?.matches('input[type=\"text\"]')); const input = label?.nextElementSibling; if (!input) throw new Error(`BGC ${labelText} input was not found.`); return input; }; fieldInput('Organism / strain (optional)').dataset.capture = 'bgc-organism-input'; fieldInput('Subtitle / title (optional)').dataset.capture = 'bgc-subtitle-input'; row.dataset.capture = 'bgc-record-row'; row.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const expected = ['BGC0000708.gbk', 'BGC0000709.gbk', 'BGC0000711.gbk', 'BGC0000712.gbk', 'BGC0000713.gbk']; const names = (app?.linearSeqs || []).map((seq) => seq.gb?.name || ''); if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error('BGC GenBank order was not restored.'); const seq = app.linearSeqs[0]; seq.definition = '<i>Streptomyces lividus</i> CBS 844.73'; seq.record_subtitle = 'Lividomycin biosynthetic gene cluster'; const row = document.querySelector('[data-linear-record-card=\"record-1\"]'); const options = row?.querySelector('[data-linear-record-options=\"record-1\"]'); if (!row || !options) throw new Error('BGC Linear input row 1 was not found.'); options.open = true; const fieldInput = (labelText) => { const label = Array.from(row.querySelectorAll('div')).find((node) => node.textContent?.trim() === labelText && node.nextElementSibling?.matches('input[type=\"text\"]')); const input = label?.nextElementSibling; if (!input) throw new Error(`BGC ${labelText} input was not found.`); return input; }; fieldInput('Organism / strain (optional)').dataset.capture = 'bgc-organism-input'; fieldInput('Subtitle / title (optional)').dataset.capture = 'bgc-subtitle-input'; const fileCard = row.closest('[data-linear-source-card]'); if (!fileCard) throw new Error('Linear file card was not found.'); fileCard.dataset.capture = 'bgc-record-row'; fileCard.scrollIntoView({ block: 'center' });"
               },
               {"type": "evaluate", "script": "window.__GBDRAW_APP__.sidebarWidth = 600;"}
             ],
@@ -183,8 +183,8 @@
               "linearComparisonPlan.defaultSource": "losat",
               "losatProgram": "blastp",
               "losat.blastp.mode": "orthogroup",
-              "losat.executionMode": "auto",
-              "losat.totalThreadBudget": "safe",
+              "losatExecution.executionMode": "auto",
+              "losatExecution.totalThreadBudget": "safe",
               "adv.min_bitscore": 50,
               "adv.evalue": "0.01",
               "adv.identity": 30,
@@ -392,7 +392,7 @@
         "columns": ["Setting", "Value"],
         "rows": [
           ["Reverse complement", "BGC0000713 only"],
-          ["Track Layout", "Middle"],
+          ["Track Layout", "Features on axis"],
           ["Features › Arrow Geometry › Shaft Width Ratio", "0.6"]
         ]
       },
@@ -436,21 +436,21 @@
           "title": "Track layout selector",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-04-03-track-layout-middle.webp",
-            "alt": "Linear Layout card with the Track Layout menu open and the Middle option highlighted.",
-            "caption": "Open Track Layout in the Layout card and choose the highlighted Middle option."
+            "alt": "Linear Layout card with the Track Layout menu open and the Features on axis option highlighted.",
+            "caption": "Open Track Layout in the Layout card and choose the highlighted Features on axis option."
           },
           "capture": {
             "source": "webapp",
             "crop": "openSelect",
             "cropPadding": {
               "top": 54,
-              "right": 80,
+              "right": 16,
               "bottom": 24,
-              "left": 80
+              "left": 16
             },
             "openSelect": {
-              "selectedLabel": "Middle",
-              "options": ["Above", "Middle", "Below"],
+              "selectedLabel": "Features on axis",
+              "options": ["Above", "Features on axis", "Below"],
               "label": "Track Layout"
             },
             "openDetails": ["Layout"]
@@ -524,9 +524,9 @@
             "crop": "openSelect",
             "cropPadding": {
               "top": 54,
-              "right": 80,
+              "right": 16,
               "bottom": 24,
-              "left": 80
+              "left": 16
             },
             "openSelect": {
               "selectedLabel": "First Record Only",
@@ -560,14 +560,15 @@
             "crop": "openSelect",
             "cropPadding": {
               "top": 145,
-              "right": 130,
+              "right": 16,
               "bottom": 24,
-              "left": 80
+              "left": 16
             },
             "openSelect": {
               "selectedLabel": "Ruler (Ticks)",
               "options": ["Bar (Simple)", "Ruler (Ticks)"],
-              "label": "Scale Style"
+              "label": "Scale Style",
+              "selector": "select[aria-label='Linear scale style']"
             },
             "openDetails": ["Axis & Scale"],
             "assertAppState": {
@@ -581,7 +582,7 @@
                 "checked": true
               },
               {
-                "label": "Scale Style",
+                "selector": "select[aria-label='Linear scale style']",
                 "value": "Ruler (Ticks)"
               }
             ]
@@ -599,9 +600,9 @@
             "crop": "openSelect",
             "cropPadding": {
               "top": 54,
-              "right": 80,
+              "right": 16,
               "bottom": 24,
-              "left": 80
+              "left": 16
             },
             "openSelect": {
               "selector": "#legend-position",
@@ -680,7 +681,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const section = document.querySelector('section[aria-labelledby=\"record-label-settings-heading\"]'); const accession = section?.querySelector('select[aria-label=\"Accession visibility\"]')?.closest('.rounded'); const length = section?.querySelector('select[aria-label=\"Length / Coordinates visibility\"]')?.closest('.rounded'); const heading = section?.querySelector('#record-label-settings-heading'); const defaultSize = Array.from(section?.querySelectorAll('label') || []).find((node) => node.textContent.includes('Default font size'))?.closest('div'); if (!heading || !defaultSize || !accession || !length) throw new Error('BGC Record Labels controls not found.'); heading.setAttribute('data-capture', 'bgc-record-label-heading'); defaultSize.setAttribute('data-capture', 'bgc-record-label-default'); accession.setAttribute('data-capture', 'bgc-record-label-accession'); length.setAttribute('data-capture', 'bgc-record-label-length'); accession.scrollIntoView({ block: 'center' });"
+                "script": "const section = document.querySelector('section[aria-labelledby=\"record-label-settings-heading\"]'); const accession = section?.querySelector('select[aria-label=\"Accession visibility\"]')?.closest('.rounded'); const length = section?.querySelector('select[aria-label=\"Length / Coordinates visibility\"]')?.closest('.rounded'); const heading = section?.querySelector('#record-label-settings-heading'); const defaultSize = Array.from(section?.querySelectorAll('span.input-label') || []).find((node) => node.textContent.includes('Default font size'))?.closest('div'); if (!heading || !defaultSize || !accession || !length) throw new Error('BGC Record Labels controls not found.'); heading.setAttribute('data-capture', 'bgc-record-label-heading'); defaultSize.setAttribute('data-capture', 'bgc-record-label-default'); accession.setAttribute('data-capture', 'bgc-record-label-accession'); length.setAttribute('data-capture', 'bgc-record-label-length'); accession.scrollIntoView({ block: 'center' });"
               }
             ],
             "clipSelectors": ["[data-capture='bgc-record-label-heading']", "[data-capture='bgc-record-label-default']", "[data-capture='bgc-record-label-accession']", "[data-capture='bgc-record-label-length']"],
@@ -716,8 +717,8 @@
         {
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-07-01-specific-rules-all.webp",
-            "alt": "SPECIFIC RULES (-t) controls showing four CDS gene_kind rules for biosynthetic$, biosynthetic-additional, transport, and regulatory categories.",
-            "caption": "Enter all four antiSMASH gene_kind rules in the SPECIFIC RULES (-t) controls before clicking Generate Diagram."
+            "alt": "SPECIFIC RULES controls showing four CDS gene_kind rules for biosynthetic$, biosynthetic-additional, transport, and regulatory categories.",
+            "caption": "Enter all four antiSMASH gene_kind rules in the SPECIFIC RULES controls before clicking Generate Diagram."
           },
           "capture": {
             "source": "webapp",
@@ -730,7 +731,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 420; const heading = Array.from(document.querySelectorAll('h4')).find((node) => node.textContent?.includes('SPECIFIC RULES')); const header = heading?.parentElement; const rows = header?.nextElementSibling; if (!header || !rows) throw new Error('BGC specific-rules rows not found.'); header.setAttribute('data-capture', 'bgc-specific-rules-header'); rows.setAttribute('data-capture', 'bgc-specific-rules-rows'); rows.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 420; document.querySelectorAll('[data-color-rule-editor]').forEach((editor) => { editor.open = true; }); const heading = Array.from(document.querySelectorAll('h4')).find((node) => node.textContent?.includes('SPECIFIC RULES')); const header = heading?.parentElement; const rows = header?.parentElement?.querySelector('[data-color-rule-row]')?.parentElement; if (!header || !rows) throw new Error('BGC specific-rules rows not found.'); header.setAttribute('data-capture', 'bgc-specific-rules-header'); rows.setAttribute('data-capture', 'bgc-specific-rules-rows'); rows.scrollIntoView({ block: 'center' });"
               }
             ],
             "clipSelectors": ["[data-capture='bgc-specific-rules-header']", "[data-capture='bgc-specific-rules-rows']"],

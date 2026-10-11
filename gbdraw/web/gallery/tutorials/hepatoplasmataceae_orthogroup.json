@@ -84,7 +84,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const expected = ['AP027078.gb', 'AP027131.gb', 'AP027133.gb', 'AP027132.gb', 'NZ_CP006932.gb']; const names = (app?.linearSeqs || []).map((seq) => seq.gb?.name || ''); if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error('Hepatoplasmataceae GenBank order was not restored.'); const row = document.querySelector('[data-linear-record-card=\"record-1\"]'); const options = row?.querySelector('[data-linear-record-options=\"record-1\"]'); if (!row || !options) throw new Error('Hepatoplasmataceae Linear input row 1 was not found.'); options.open = true; row.dataset.capture = 'hepatoplasmataceae-record-row'; row.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const expected = ['AP027078.gb', 'AP027131.gb', 'AP027133.gb', 'AP027132.gb', 'NZ_CP006932.gb']; const names = (app?.linearSeqs || []).map((seq) => seq.gb?.name || ''); if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error('Hepatoplasmataceae GenBank order was not restored.'); const row = document.querySelector('[data-linear-record-card=\"record-1\"]'); const options = row?.querySelector('[data-linear-record-options=\"record-1\"]'); if (!row || !options) throw new Error('Hepatoplasmataceae Linear input row 1 was not found.'); options.open = true; const fileCard = row.closest('[data-linear-source-card]'); if (!fileCard) throw new Error('Linear file card was not found.'); fileCard.dataset.capture = 'hepatoplasmataceae-record-row'; fileCard.scrollIntoView({ block: 'center' });"
               }
             ],
             "selector": "[data-capture='hepatoplasmataceae-record-row']",
@@ -319,11 +319,11 @@
     },
     {
       "title": "Set the diagram layout",
-      "body": "Use the ajisai palette, a Middle track layout, and a ruler. Center the records, separate the strands, and show GC content and GC skew.",
+      "body": "Use the ajisai palette, the Features on axis track layout, and a ruler. Center the records, separate the strands, and show GC content and GC skew.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
-          ["Track Layout", "Middle"],
+          ["Track Layout", "Features on axis"],
           ["Align to Center", "On"],
           ["Separate Strands", "On"],
           ["Show Coordinate Scale", "On"],
@@ -359,14 +359,15 @@
             "crop": "openSelect",
             "cropPadding": {
               "top": 145,
-              "right": 130,
+              "right": 16,
               "bottom": 24,
-              "left": 80
+              "left": 16
             },
             "openSelect": {
               "selectedLabel": "Ruler (Ticks)",
               "options": ["Bar (Simple)", "Ruler (Ticks)"],
-              "label": "Scale Style"
+              "label": "Scale Style",
+              "selector": "select[aria-label='Linear scale style']"
             },
             "openDetails": ["Axis & Scale"],
             "assertAppState": {
@@ -380,7 +381,7 @@
                 "checked": true
               },
               {
-                "label": "Scale Style",
+                "selector": "select[aria-label='Linear scale style']",
                 "value": "Ruler (Ticks)"
               }
             ]
@@ -389,8 +390,8 @@
         {
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-05-02-layout-overview.webp",
-            "alt": "Layout card with Middle track layout and the center alignment, separate strands, GC content, and GC skew options selected.",
-            "caption": "Set Track Layout to Middle and select Align to Center, Separate Strands, Show GC Content, and Show GC Skew."
+            "alt": "Layout card with the Features on axis track layout and the center alignment, separate strands, GC content, and GC skew options selected.",
+            "caption": "Set Track Layout to Features on axis and select Align to Center, Separate Strands, Show GC Content, and Show GC Skew."
           },
           "capture": {
             "source": "webapp",

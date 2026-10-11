@@ -77,7 +77,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; const file = app?.files?.c_gb; if (!file) throw new Error('Circular GenBank file was not restored.'); app.files.c_gb = new File([file], 'NC_001879.gbk', { type: file.type, lastModified: file.lastModified });"
+                "script": "const app = window.__GBDRAW_APP__; const file = app?.files?.c_gb; if (!file) throw new Error('Circular GenBank file was not restored.'); if (file.name !== 'NC_001879.gbk') throw new Error('Circular GenBank file has an unexpected name.');"
               },
               {
                 "type": "waitForFunction",
@@ -146,7 +146,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('summary')?.textContent?.includes('Layout')); const summary = card?.querySelector('summary'); const options = Array.from(card?.querySelectorAll('label') || []).find((node) => node.textContent.includes('Separate Strands'))?.closest('.grid'); if (!summary || !options) throw new Error('Circular layout options not found.'); summary.dataset.capture = 'chloroplast-layout-summary'; options.dataset.capture = 'chloroplast-layout-options';"
+                "script": "const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('summary')?.textContent?.includes('Layout')); const summary = card?.querySelector('summary'); const options = Array.from(card?.querySelectorAll('label') || []).find((node) => node.textContent.includes('Separate Strands'))?.closest('[data-layout-options]'); if (!summary || !options) throw new Error('Circular layout options not found.'); summary.dataset.capture = 'chloroplast-layout-summary'; options.dataset.capture = 'chloroplast-layout-options'; card.scrollIntoView({ block: 'start' });"
               }
             ],
             "clipSelectors": ["[data-capture='chloroplast-layout-summary']", "[data-capture='chloroplast-layout-options']"],
@@ -165,9 +165,9 @@
             "crop": "openSelect",
             "cropPadding": {
               "top": 54,
-              "right": 80,
+              "right": 16,
               "bottom": 24,
-              "left": 80
+              "left": 16
             },
             "openSelect": {
               "selectedLabel": "Both (Out + Inner)",
@@ -189,14 +189,15 @@
             "crop": "openSelect",
             "cropPadding": {
               "top": 54,
-              "right": 80,
+              "right": 16,
               "bottom": 24,
-              "left": 80
+              "left": 16
             },
             "openSelect": {
               "selectedLabel": "Radial",
               "options": ["Horizontal", "Radial"],
-              "label": "Circular Label Placement"
+              "label": "Circular Label Placement",
+              "selector": "select[aria-label='Circular Label Placement']"
             },
             "openDetails": ["Labels"]
           }
@@ -205,11 +206,11 @@
     },
     {
       "title": "Load the color and label tables",
-      "body": "Open Colors and upload chloroplast_specific_table.tsv as Specific Table (-t). Open Labels and upload qualifier_priority.tsv as Priority File (TSV).",
+      "body": "Open Colors and upload chloroplast_specific_table.tsv as the Specific rules file. Open Labels and upload qualifier_priority.tsv as Priority File (TSV).",
       "table": {
         "columns": ["File", "UI control", "Purpose"],
         "rows": [
-          ["chloroplast_specific_table.tsv", "Colors → Specific Table (-t)", "Color chloroplast gene groups and build the legend"],
+          ["chloroplast_specific_table.tsv", "Colors → Specific rules file", "Color chloroplast gene groups and build the legend"],
           ["qualifier_priority.tsv", "Labels → Priority File (TSV)", "Use gene before old_locus_tag for CDS labels"]
         ]
       },
@@ -217,8 +218,8 @@
         {
           "media": {
             "src": "./media/tobacco-chloroplast/manual-05-01-specific-color-table.webp",
-            "alt": "Specific Table uploader in the Colors card with chloroplast_specific_table.tsv selected.",
-            "caption": "Upload chloroplast_specific_table.tsv as Specific Table (-t)."
+            "alt": "Specific rules file uploader in the Colors card with chloroplast_specific_table.tsv selected.",
+            "caption": "Upload chloroplast_specific_table.tsv as the Specific rules file."
           },
           "capture": {
             "source": "webapp",
@@ -226,7 +227,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; const file = app?.files?.t_color; if (!file) throw new Error('Specific color table was not restored.'); app.files.t_color = new File([file], 'chloroplast_specific_table.tsv', { type: file.type, lastModified: file.lastModified }); const label = Array.from(document.querySelectorAll('label')).find((node) => node.textContent.trim() === 'Specific Table (-t)'); const root = label?.parentElement?.parentElement; if (!root) throw new Error('Specific Table uploader not found.'); root.dataset.capture = 'chloroplast-specific-table';"
+                "script": "const app = window.__GBDRAW_APP__; const file = app?.files?.t_color; if (!file) throw new Error('Specific color table was not restored.'); app.files.t_color = new File([file], 'chloroplast_specific_table.tsv', { type: file.type, lastModified: file.lastModified }); const label = Array.from(document.querySelectorAll('label')).find((node) => node.textContent.trim() === 'Specific rules file'); const root = label?.parentElement?.parentElement; if (!root) throw new Error('Specific Table uploader not found.'); root.dataset.capture = 'chloroplast-specific-table';"
               }
             ],
             "selector": "[data-capture='chloroplast-specific-table']",
@@ -296,14 +297,13 @@
               "annotationSets.0.annotations.2.id": "ssc",
               "annotationSets.0.annotations.3.id": "ira"
             },
-            "visibleText": ["Download TSV"],
+            "visibleText": ["Download TSV", "Record: NC_001879.2"],
             "visibleControls": [
               {"selector": "input[aria-label='Annotation set id']", "value": "plastome_regions"},
-              {"selector": "select[aria-label='Annotation target record']", "nth": 0, "value": "#1 · NC_001879.2 · 155,943 bp"},
-              {"selector": "input[placeholder='annotation_id']", "nth": 0, "value": "lsc"},
-              {"selector": "input[placeholder='annotation_id']", "nth": 1, "value": "irb"},
-              {"selector": "input[placeholder='annotation_id']", "nth": 2, "value": "ssc"},
-              {"selector": "input[placeholder='annotation_id']", "nth": 3, "value": "ira"}
+              {"selector": "input[aria-label='Annotation id']", "nth": 0, "value": "lsc"},
+              {"selector": "input[aria-label='Annotation id']", "nth": 1, "value": "irb"},
+              {"selector": "input[aria-label='Annotation id']", "nth": 2, "value": "ssc"},
+              {"selector": "input[aria-label='Annotation id']", "nth": 3, "value": "ira"}
             ],
             "actions": [
               {

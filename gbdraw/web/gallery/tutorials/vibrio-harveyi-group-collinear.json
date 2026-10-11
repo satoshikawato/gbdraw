@@ -1066,9 +1066,9 @@
             "crop": "openSelect",
             "cropPadding": {
               "top": 54,
-              "right": 80,
+              "right": 16,
               "bottom": 24,
-              "left": 80
+              "left": 16
             },
             "openSelect": {
               "selector": "#legend-position",
