@@ -8,6 +8,12 @@ const deepFreeze = (value) => {
 };
 
 export const MODE_PROFILE_DATA = deepFreeze({
+  "autoSizes": {
+    "sizeClassThresholdBp": {
+      "circular": 75000,
+      "linear": 100000
+    }
+  },
   "comparisonDomains": {
     "alignmentLength": {
       "integer": true,

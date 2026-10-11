@@ -1,4 +1,6 @@
 // @ts-check
+import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
+
 export const normalizeOptionalText = (value) => {
   const text = String(value ?? '').trim();
   return text.length > 0 ? text : null;
@@ -13,8 +15,11 @@ const roundDisplayNumber = (value, digits = 1) => {
 
 export const isManualSlotValue = (value) => normalizeOptionalText(value) !== null;
 
-// The packaged labels.length_threshold of gbdraw/data/config.toml.
-const SIZE_CLASS_THRESHOLD_BP = Object.freeze({ circular: 75000, linear: 100000 });
+/**
+ * The packaged labels.length_threshold of gbdraw/data/config.toml, by diagram mode.
+ * @type {Readonly<Record<'circular' | 'linear', number>>}
+ */
+const SIZE_CLASS_THRESHOLD_BP = MODE_PROFILE_DATA.autoSizes.sizeClassThresholdBp;
 
 /**
  * The size class that picks the short or long Auto sizes of a diagram mode:

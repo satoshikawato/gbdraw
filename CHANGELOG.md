@@ -12,16 +12,27 @@ write-up of a release.
 
 ## [Unreleased]
 
-- Raised the short/long size boundary of the Auto sizes from 50 kb: Linear
-  diagrams now use 100 kb and Circular diagrams 75 kb. A record of 50 kb has too
-  few features for the long styles, which are sized for whole genomes. Only
-  Auto sizes change, and only for a Linear diagram whose longest record is
-  50,000 to 99,999 bp or a Circular record of 50,000 to 74,999 bp: these now
-  get the short styles (larger labels, features, strokes, and legend). Circular
-  stays at 75 kb because the short label size overprints outer labels on denser
-  records near 100 kb. Set the sizes explicitly to keep the previous look. A
-  Session that stores its whole configuration, such as one written by
-  `--session_output`, keeps the boundary it was saved with.
+- Raised the short/long size boundary of the Auto sizes: Linear diagrams now
+  use 100 kb and Circular diagrams 75 kb; both used 50 kb. A record of 50 kb
+  has too few features for the long styles, which are sized for whole genomes.
+  Circular uses 75 kb, not 100 kb, because the short label size overprints
+  outer labels on denser records near 100 kb. Only Auto sizes change; set a
+  size explicitly to keep the previous look. What changes:
+  - A Linear diagram whose longest record is 50,000 to 99,999 bp now gets the
+    short styles (larger labels, features, strokes, and legend).
+  - A Linear diagram whose label scope (`--show_labels`) holds a record of
+    50,000 to 99,999 bp beside a record of 100 kb or longer now draws every
+    label at the short size (24 pt) while the features keep the long sizes,
+    as it already did for a record under 50 kb.
+  - A Circular record of 50,000 to 74,999 bp drawn alone or beside shorter
+    records now gets the short styles.
+  - On a Circular Multi-Record Canvas, a record of 50,000 to 74,999 bp beside
+    one of 75 kb or longer keeps the long feature, track, and label font
+    sizes, but its label leader lines are now 1.5 px wide, its outer labels
+    move slightly, and the legend takes the short sizes (20 px text) when
+    that record is the first one.
+  - A Session that stores its whole configuration, such as one written by
+    `--session_output`, keeps the boundary it was saved with.
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 

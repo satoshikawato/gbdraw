@@ -1091,7 +1091,7 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
     cfg = GbdrawConfig.from_dict(config_dict)
     base_radius = float(cfg.canvas.circular.radius)
     base_track_ratio = float(cfg.canvas.circular.track_ratio)
-    length_param = "short" if len(record.seq) < 50000 else "long"
+    length_param = "short" if len(record.seq) < int(cfg.labels.length_threshold.circular) else "long"
     default_ratio_factor = float(cfg.canvas.circular.track_ratio_factors[length_param][0])
 
     color_table, default_colors = preprocess_color_tables(None, load_default_colors("", "default"))
@@ -1284,7 +1284,7 @@ def test_middle_resolve_overlaps_repositions_gc_and_skew_away_from_tick_label_an
         float(tick_layout.label_band_px.outer_px),
     )
 
-    length_param = "short" if len(record.seq) < 50000 else "long"
+    length_param = "short" if len(record.seq) < int(cfg.labels.length_threshold.circular) else "long"
 
     default_gc_center = base_radius * float(cfg.canvas.circular.track_dict[length_param]["middle"]["2"])
     default_gc_width = base_radius * base_track_ratio * float(cfg.canvas.circular.track_ratio_factors[length_param][1])
@@ -1327,7 +1327,7 @@ def test_tuckin_resolve_overlaps_repositions_core_tracks_away_from_feature_band_
     cfg = GbdrawConfig.from_dict(config_dict)
     base_radius = float(cfg.canvas.circular.radius)
     base_track_ratio = float(cfg.canvas.circular.track_ratio)
-    length_param = "short" if len(record.seq) < 50000 else "long"
+    length_param = "short" if len(record.seq) < int(cfg.labels.length_threshold.circular) else "long"
     default_ratio_factor = float(cfg.canvas.circular.track_ratio_factors[length_param][0])
 
     color_table, default_colors = preprocess_color_tables(None, load_default_colors("", "default"))

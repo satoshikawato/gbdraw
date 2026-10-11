@@ -1050,18 +1050,19 @@ def test_multi_record_mixed_lengths_force_long_tick_channel_for_short_record(
     assert captured_tick_label_sides[20_000] == "inside"
     assert captured_tick_label_sides[120_000] == "inside"
 
+    length_threshold = int(apply_config_overrides(None, None).labels.length_threshold.circular)
     default_short_tick_bounds = get_circular_tick_path_ratio_bounds(
         20_000,
         "tuckin",
         False,
-        length_threshold=100_000,
+        length_threshold=length_threshold,
     )
     forced_long_tick_bounds = get_circular_tick_path_ratio_bounds(
         20_000,
         "tuckin",
         False,
         tick_track_channel_override="long",
-        length_threshold=100_000,
+        length_threshold=length_threshold,
     )
     assert default_short_tick_bounds[1] >= 0.98
     assert forced_long_tick_bounds[1] < 1.0
