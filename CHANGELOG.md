@@ -142,8 +142,9 @@ write-up of a release.
 - Similarity alignment (web app): while an alignment is active, including one
   loaded from a Session, the Similarity Groups drawer selects its group and
   preselects its exact reference, so **Align…** and **Review alignment
-  options…** work from the drawer at once. Before, the drawer showed the reference in **Active plan**
-  but kept both buttons disabled until you chose the same reference again.
+  options…** work from the drawer at once. Before, the drawer showed the
+  active alignment's reference but kept both buttons disabled until you chose
+  the same reference again.
   A new alignment, an Undo, or a Session load replaces an earlier drawer
   group and reference choice with the new plan's (OV-381).
 - Similarity alignment (web app): an Undo that restores a cleared alignment
