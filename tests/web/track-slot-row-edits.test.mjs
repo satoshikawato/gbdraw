@@ -215,6 +215,71 @@ test('circular: Hide GC Skew disables only the GC skew rows and names them in th
   assert.equal(kept.slots().every((slot) => slot.enabled), true);
 });
 
+// The question is asked before any History step (app-setup.js gives the editor
+// History's `runUndoable` and the app's one choice prompt): the chosen hide is
+// one step recorded at the answer, and Keep records none. A hide chosen while
+// another action is still running applies at once as its own step, and what
+// that action writes afterwards is a step under its name (OV-460).
+test('circular: a hide that asks is one History step recorded at the answer, also while another action runs', async () => {
+  const { createChoicePrompt } = await import(pathToFileURL(join(tempRoot, 'app', 'app-messages.js')));
+  const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
+  const state = Object.assign(circularState(ROWS.circular()), { loaded: 0 });
+  const { ask, resolve } = createChoicePrompt({ reactive: (value) => value });
+  const history = createHistoryManager({
+    buildIntent: () => structuredClone({ hide: state.form.suppress_skew, slots: state.adv.circular_track_slots, loaded: state.loaded }),
+    applyIntent: (intent) => {
+      state.form.suppress_skew = intent.hide;
+      state.adv.circular_track_slots.splice(0, Infinity, ...structuredClone(intent.slots));
+      state.loaded = intent.loaded;
+    },
+    buildCheckpoint: () => ({}), applyCheckpoint: () => {}
+  });
+  const editor = createCircularTrackSlotEditor({ state, askChoice: ask, runUndoable: history.runUndoable });
+  const read = () => [state.form.suppress_skew, state.adv.circular_track_slots.find((slot) => slot.id === 'gc_skew').enabled, state.loaded];
+  const steps = () => [history.getUndoCount(), history.undoLabel()];
+  const tick = () => new Promise((settle) => setImmediate(settle));
+  await history.initializeIntentBaseline();
+  /** @param {string} choice */
+  const hide = async (choice) => {
+    const asked = editor.setCircularSkewSuppressed(true);
+    await tick();
+    assert.deepEqual(read().slice(0, 2), [false, true], 'nothing is written before the answer');
+    resolve(choice);
+    return asked;
+  };
+
+  const asking = editor.setCircularSkewSuppressed(true);
+  await tick();
+  assert.equal(history.mutationPending(), false, 'no step is open while the question is asked');
+  resolve('cancel');
+  assert.equal(await asking, false);
+  assert.deepEqual([read(), history.getUndoCount()], [[false, true, 0], 0]);
+
+  await hide('hide');
+  assert.deepEqual([read(), steps()], [[true, false, 0], [1, 'Hide GC Skew']]);
+  await history.undo();
+  assert.deepEqual(read(), [false, true, 0]);
+  await history.redo();
+  assert.deepEqual(read(), [true, false, 0]);
+  await history.undo();
+
+  let release;
+  const held = new Promise((settle) => { release = settle; });
+  const load = history.runUndoable('Load label edits', async () => { await held; state.loaded = 1; });
+  await tick();
+  await hide('hide');
+  assert.deepEqual([read(), steps(), history.mutationPending()], [[true, false, 0], [1, 'Hide GC Skew'], false]);
+  release();
+  await load;
+  assert.deepEqual([read(), steps()], [[true, false, 1], [2, 'Load label edits']]);
+  await history.undo();
+  await history.undo();
+  assert.deepEqual(read(), [false, true, 0]);
+  await history.redo();
+  await history.redo();
+  assert.deepEqual(read(), [true, false, 1]);
+});
+
 // TK-07: `1.5` or `-1` became track index 1 without a message.
 test('circular: an invalid Depth track index stays visible with a field error and the row keeps its index', async () => {
   const context = vm.createContext({ console });

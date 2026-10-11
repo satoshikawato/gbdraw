@@ -713,6 +713,43 @@ test('an Add that asks about a slow pattern applies after a pending Add, to the 
   assert.deepEqual(table(),['b #445566 ','zz #778899 ',added,'(a+)+ #112233 Shared']);
   assert.deepEqual(s.transactions,['Add specific color rule','Add specific color rule']);
 }));
+// The question is asked before the Add's History step (the real manager): the
+// step is recorded once, at the answer, under the Add's name, and "Edit
+// pattern" records none. An edit made while the question is asked is a step
+// of its own, before the Add's.
+test('an Add that asks about a slow pattern is one History step recorded at the answer; Edit pattern records none', () => withDocument(async () => {
+  let answer;
+  const s=setup(undefined,{askChoice:()=>new Promise(resolve=>{answer=resolve;}),createHistory:state=>createHistoryManager({
+    buildIntent:()=>structuredClone({rules:state.manualSpecificRules}),
+    applyIntent:({rules})=>{state.manualSpecificRules.splice(0,Infinity,...structuredClone(rules));},
+    buildCheckpoint:()=>({}),applyCheckpoint:()=>{}})});
+  s.state.errorLog={value:null};
+  s.state.manualSpecificRules.push({feat:'CDS',qual:'gene',val:'b',color:'#445566',cap:''});
+  Object.assign(s.state.newSpecRule,{val:'(a+)+',cap:''});
+  const table=()=>s.state.manualSpecificRules.map(rule=>`${rule.val} ${rule.color}`);
+  await s.history.initializeIntentBaseline();
+  const ask=async()=>{
+    const asked=s.actions.addSpecificRule();
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(s.history.mutationPending(),false,'no step is open while the question is asked');
+    return [asked];
+  };
+  let [asked]=await ask();
+  answer('cancel');
+  await asked;
+  assert.deepEqual([table(),s.history.getUndoCount()],[['b #445566'],0]);
+
+  [asked]=await ask();
+  assert.equal(await s.actions.setSpecificRuleField(0,'color','#000000'),true);
+  assert.deepEqual([s.history.getUndoCount(),s.history.undoLabel()],[1,'Edit specific color rule']);
+  answer('add');
+  assert.equal(await asked,true);
+  assert.deepEqual([table(),s.history.getUndoCount(),s.history.undoLabel()],[['b #000000','(a+)+ #112233'],2,'Add specific color rule']);
+  await s.history.undo();
+  assert.deepEqual([table(),s.history.undoLabel()],[['b #000000'],'Edit specific color rule']);
+  await s.history.redo();
+  assert.deepEqual(table(),['b #000000','(a+)+ #112233']);
+}));
 for (const [kind, edit] of Object.entries(ruleEdits)) {
   test(`a ${kind} edit made while an Add is pending applies after it, to the table with its rule (OV-443)`, () => withDocument(async () => {
     const {s,held,table}=queuedRuleWrites();
