@@ -343,14 +343,6 @@
         .preview-item-popup {
             width: min(400px, calc(100vw - 24px));
         }
-        .preview-item-heading {
-            margin-bottom: 0.25rem;
-            color: #475569;
-            font-size: 11px;
-            font-weight: 700;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-        }
         .preview-layout-off .gbdraw-preview-surface [data-gbdraw-preview-item] {
             cursor: pointer;
         }
@@ -5827,7 +5819,7 @@
                             </div>
                         </section>
                         <section v-if="clickedFeature.orthogroupId" aria-labelledby="feature-popup-similarity-heading" class="space-y-2 border-t border-slate-100 pt-3" data-feature-popup-group="similarity">
-                            <h3 id="feature-popup-similarity-heading" class="text-xs font-bold text-slate-600 uppercase tracking-wider">Similarity group</h3>
+                            <h3 id="feature-popup-similarity-heading" class="feature-popup-heading">Similarity group</h3>
                             <!-- UX-B03: one summary row, the primary actions, then secondary actions and members on demand. -->
                             <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1" data-similarity-summary>
                                 <span class="match-popup-badge">{{ clickedFeature.orthogroupId }}</span>
@@ -6179,11 +6171,11 @@
                              tabindex="0"
                              data-nodrag="true">
                             <template v-if="clickedPairwiseMatch.previewItem">
-                                <!-- Legend entry: its color and where the color comes from, its caption, and Remove from legend.
+                                <!-- Legend entry: its color and where the color comes from, its legend name, and Remove from legend.
                                      Each control calls the Legend panel's operation. -->
                                 <div v-if="previewItemView && previewItemView.kind === 'legend-entry'" :key="`legend-popup-${previewItemView.identity}`" v-dialog-focus class="space-y-3" data-preview-item-popup="legend-entry">
                                     <section aria-labelledby="preview-legend-color-heading">
-                                        <h3 id="preview-legend-color-heading" tabindex="-1" data-dialog-initial-focus class="preview-item-heading">Color</h3>
+                                        <h3 id="preview-legend-color-heading" tabindex="-1" data-dialog-initial-focus class="feature-popup-heading">Color</h3>
                                         <div class="flex items-center gap-2">
                                             <input type="color" :value="previewItemView.color"
                                                    @change="updateLegendEntryColor(previewItemView.index, $event.target.value)"
@@ -6198,7 +6190,7 @@
                                         </ul>
                                     </section>
                                     <section>
-                                        <label for="preview-legend-caption" class="preview-item-heading block">Caption</label>
+                                        <label for="preview-legend-caption" class="feature-popup-heading block">Legend name</label>
                                         <input id="preview-legend-caption" type="text" :value="previewItemView.caption"
                                                @change="renameLegendEntryInPopup(previewItemView.index, $event.target.value)"
                                                @keydown.enter="$event.target.blur()"
@@ -6208,7 +6200,7 @@
                                     <div class="match-actions">
                                         <button type="button" class="match-action" :disabled="!semanticMutationAvailable"
                                                 @click="deleteLegendEntry(previewItemView.index); clickedPairwiseMatch = null"
-                                                title="Remove this entry from the legend. Restore it in the Editor's Legend tab.">
+                                                title="Remove this entry from the legend. Restore it under Deleted items in the Editor's Legend tab.">
                                             <i class="ph ph-eye-slash" aria-hidden="true"></i> Remove from legend
                                         </button>
                                     </div>
@@ -6222,7 +6214,7 @@
                                         </template>
                                     </dl>
                                     <section v-if="previewItemView.draft" class="space-y-2 border-t border-slate-100 pt-3">
-                                        <h3 class="preview-item-heading">Definition text <span class="font-normal normal-case text-slate-500">· applies on Generate</span></h3>
+                                        <h3 class="feature-popup-heading">Definition text <span class="ui-hint font-normal normal-case tracking-normal">Applies on Generate</span></h3>
                                         <label class="block text-xs text-slate-600">{{ previewItemView.draft.nameLabel }}
                                             <input type="text" :value="previewItemView.draft.name"
                                                    @change="setPreviewRecordField(previewItemView, 'name', $event.target.value)"
@@ -6246,7 +6238,7 @@
                                     </section>
                                     <div class="match-actions">
                                         <button type="button" class="match-link" @click="showPreviewRecordSettings(previewItemView)">
-                                            Open record settings
+                                            Show in settings
                                         </button>
                                     </div>
                                 </div>
@@ -7115,7 +7107,7 @@
                                     <button :aria-label="`Stroke options for ${entry.caption}`" data-history-ignore :aria-expanded="isLegendStrokeOptionsOpen(entry.caption) ? 'true' : 'false'" @click="toggleLegendStrokeOptions(entry.caption)" class="text-slate-400 hover:text-slate-600 shrink-0 p-0.5" :title="isLegendStrokeOptionsOpen(entry.caption) ? 'Hide stroke options' : 'Show stroke options'">
                                         <i class="ph text-xs" :class="isLegendStrokeOptionsOpen(entry.caption) ? 'ph-caret-up' : 'ph-sliders-horizontal'" aria-hidden="true"></i>
                                     </button>
-                                    <button :aria-label="`Remove ${entry.caption}`" @click="deleteLegendEntry(idx)" class="text-red-400 hover:text-red-600 shrink-0" title="Remove entry" :disabled="!semanticMutationAvailable">
+                                    <button :aria-label="`Remove ${entry.caption}`" @click="deleteLegendEntry(idx)" class="text-red-400 hover:text-red-600 shrink-0" title="Remove from legend" :disabled="!semanticMutationAvailable">
                                         <i class="ph ph-trash text-sm" aria-hidden="true"></i>
                                     </button>
                                 </div>
@@ -7203,7 +7195,7 @@
                                                class="w-3 h-3 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
                                         <i :class="['ph text-sm', featureListState(feat).drawn ? 'ph-eye' : 'ph-eye-slash text-slate-300']" aria-hidden="true"></i>
                                     </label>
-                                    <button type="button" data-history-ignore aria-label="Edit" @click="openFeatureEditorFromList(feat, $event)"
+                                    <button type="button" data-history-ignore aria-label="Edit" @click.stop="openFeatureEditorFromList(feat, $event)"
                                             class="shrink-0 p-0.5 rounded text-slate-500 hover:text-blue-700 hover:bg-white" title="Open feature details">
                                         <i class="ph ph-pencil-simple text-sm" aria-hidden="true"></i>
                                     </button>

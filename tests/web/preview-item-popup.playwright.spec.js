@@ -12,20 +12,49 @@ const undoCount = (page) => page.evaluate(() => window.__GBDRAW_HISTORY__.getUnd
 const popup = (page) => page.locator('.preview-item-popup[role="dialog"]');
 const legendRow = (page, key) => page.locator(`.gbdraw-preview-surface g[data-legend-key="${key}"]`).first();
 
+// Clicks the centre of `locator` and returns the clicked point.
+const clickCentre = async (locator) => {
+  await locator.scrollIntoViewIfNeeded();
+  const box = await locator.boundingBox();
+  await locator.click({ position: { x: box.width / 2, y: box.height / 2 } });
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+};
+
+// The popups open as the feature popup does (OV-371, OV-384): inside the
+// window, below the app header, and beside the clicked point.
+const expectPlacedBeside = async (page, point) => {
+  await expect.poll(async () => {
+    const box = await popup(page).boundingBox();
+    const limits = await page.evaluate(() => ({
+      top: document.querySelector('header.app-header').getBoundingClientRect().bottom,
+      bottom: Math.min(window.innerHeight, document.querySelector('[data-app-footer]')?.getBoundingClientRect().top ?? Infinity),
+      right: window.innerWidth
+    }));
+    const covers = point.x >= box.x && point.x <= box.x + box.width && point.y >= box.y && point.y <= box.y + box.height;
+    return {
+      belowHeader: box.y >= limits.top - 0.5,
+      aboveBottom: box.y + box.height <= limits.bottom + 0.5,
+      insideWidth: box.x >= -0.5 && box.x + box.width <= limits.right + 0.5,
+      coversPoint: covers
+    };
+  }).toEqual({ belowHeader: true, aboveBottom: true, insideWidth: true, coversPoint: false });
+};
+
 test('a Legend row opens its popup; rename, remove, keyboard, and Layout edit', async ({ page }) => {
   test.setTimeout(300_000);
   await openFresh(page);
   await loadSessionFile(page, HMMT_SESSION);
 
-  await legendRow(page, 'tRNA').locator('path').first().click();
+  const legendPoint = await clickCentre(legendRow(page, 'tRNA').locator('path').first());
   const dialog = page.getByRole('dialog', { name: 'Legend entry: tRNA', exact: true });
   await expect(dialog).toBeVisible();
+  await expectPlacedBeside(page, legendPoint);
   await expect(dialog.locator('[data-preview-legend-color-source]')).toHaveText('Default color of tRNA features');
 
   // Rename: one History step, shown in the Legend panel's rows.
   const before = await undoCount(page);
-  await dialog.getByLabel('Caption', { exact: true }).fill('Transfer RNA');
-  await dialog.getByLabel('Caption', { exact: true }).press('Enter');
+  await dialog.getByLabel('Legend name', { exact: true }).fill('Transfer RNA');
+  await dialog.getByLabel('Legend name', { exact: true }).press('Enter');
   await settle(page);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption)))
     .toContain('Transfer RNA');
@@ -68,9 +97,10 @@ test('a record definition opens its popup; its edits write the record settings',
   await openFresh(page);
   await loadSessionFile(page, LINEAR_SESSION);
 
-  await page.locator('.gbdraw-preview-surface [data-gbdraw-role^="record-definition"] text').first().click();
+  const recordPoint = await clickCentre(page.locator('.gbdraw-preview-surface [data-gbdraw-role^="record-definition"] text').first());
   const dialog = popup(page);
   await expect(dialog).toBeVisible();
+  await expectPlacedBeside(page, recordPoint);
   await expect(dialog).toHaveAttribute('aria-label', /^Record /);
   await expect(dialog.locator('dl')).toContainText('Accession');
   await expect(dialog.locator('dl')).toContainText('Whole record');

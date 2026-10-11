@@ -179,7 +179,7 @@ export const buildRecordDefinitionView = ({
     { label: 'Accession', value: accession || '—' },
     { label: 'Organism', value: organism || '—' },
     { label: 'Length', value: text(drawn.length) || '—' },
-    { label: 'Reversed', value: reversed ? 'Yes' : 'No' },
+    { label: 'Reverse complement', value: reversed ? 'Yes' : 'No' },
     { label: 'Display start', value: start == null ? 'Record start' : NUMBER.format(start) },
     { label: 'Region', value: regionText(record?.region) }
   ];
@@ -325,7 +325,7 @@ export const createPreviewItemPopup = ({
     const key = RECORD_FIELDS[recordView.scope][field];
     const next = field === 'reverse' ? Boolean(value) : String(value ?? '');
     if (target[key] === next) return null;
-    return runUndoable(field === 'reverse' ? 'Change record orientation' : 'Edit record definition', () => {
+    return runUndoable(field === 'reverse' ? 'Change Reverse complement' : 'Edit record definition', () => {
       target[key] = next;
     });
   };

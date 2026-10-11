@@ -29,7 +29,7 @@ write-up of a release.
   canvas and the Generate bar (about 400 px instead of 200 px at 390x844).
 - Web app: a click on a Legend row or a record definition in the preview opens
   a popup while Layout edit is off. The legend-entry popup shows the feature
-  count and the rule behind the color, and edits the color and caption or
+  count and the rule behind the color, and edits the color and legend name or
   removes the row. The record popup lists the accession, organism, length,
   orientation, display start, region, and alignment, and edits the definition
   text and Reverse complement, which apply on Generate.

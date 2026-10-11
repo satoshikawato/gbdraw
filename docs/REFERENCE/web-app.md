@@ -920,22 +920,23 @@ downloads are available only when the required source sequence and metadata
 are present.
 
 With **Layout edit** off, a click on a Legend row in the preview, or Enter
-while it has keyboard focus, opens the legend-entry popup. It shows the caption,
+while it has keyboard focus, opens the legend-entry popup. It shows the legend name,
 the number of features drawn with it (**Counting features…** until the color
 rules are matched), the color, and where the color comes from: the color rule
 or rules that draw the row, the feature type's default color, or colors set on
-individual features. **Color** and **Caption** edit the row as the Legend tab
-does, with the same **Merge**, **Suffix**, or **Cancel** choice for a caption
+individual features. **Color** and **Legend name** edit the row as the Legend
+tab does, with the same **Merge**, **Suffix**, or **Cancel** choice for a name
 another row uses, and **Remove from legend** moves the row to the Legend tab's
 **Deleted items**. A click on a record definition (the Linear record label on
 the left, or the Circular center text) opens the record popup. It lists the
-**Accession**, **Organism**, **Length**, **Reversed**, **Display start**, and
+**Accession**, **Organism**, **Length**, **Reverse complement**, **Display start**, and
 **Region** of the displayed Result and, in Linear, its **Alignment**. Its
 definition text fields and **Reverse complement** write the same settings as
-the record's sidebar fields and apply on Generate; **Open record settings**
+the record's sidebar fields and apply on Generate; **Show in settings**
 opens and focuses those fields. Each edit is one **Undo** step. With **Layout
 edit** on, a press on these items drags them instead. The comparison legend
-opens no popup.
+opens no popup. Both popups open beside the clicked item and stay below the
+app header, as the feature popup does.
 
 Ctrl-click selects features for bulk color, legend-caption, visibility, and
 stroke edits. Use the visible **Apply** action to make an edit part of the

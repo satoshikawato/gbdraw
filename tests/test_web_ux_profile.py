@@ -305,7 +305,7 @@ def test_losatn_tutorial_controls_and_match_popup_are_accessible() -> None:
     assert ':data-testid="testId || undefined"' in index
     assert "'testId'" in components
     assert 'role="dialog"' in index
-    assert 'aria-label="Pairwise match details"' in index
+    assert ": 'Pairwise match details'\"" in index
     assert "element.setAttribute('role', 'button')" in svg_actions
     assert "element.setAttribute('tabindex', '0')" in svg_actions
     assert "`Pairwise match ${index + 1}`" in svg_actions

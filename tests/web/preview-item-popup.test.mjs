@@ -112,7 +112,7 @@ test('the record-definition view lists the facts of the displayed Result', () =>
     { label: 'Accession', value: 'BGC0000708' },
     { label: 'Organism', value: 'Streptomyces sp.' },
     { label: 'Length', value: '28,450 bp' },
-    { label: 'Reversed', value: 'Yes' },
+    { label: 'Reverse complement', value: 'Yes' },
     { label: 'Display start', value: '1,200' },
     { label: 'Region', value: '10..2,000' },
     { label: 'Alignment', value: 'Aligned on neoU' }
@@ -195,7 +195,7 @@ test('a record edit writes the sidebar setting as one History step', () => {
   linear.popup.setRecordField(view, 'reverse', true);
   assert.equal(linear.sequence.definition, 'New name');
   assert.equal(linear.sequence.region_reverse, true);
-  assert.deepEqual(linear.steps, ['Edit record definition', 'Change record orientation']);
+  assert.deepEqual(linear.steps, ['Edit record definition', 'Change Reverse complement']);
 
   const circular = createPopup({ mode: 'circular' });
   circular.state.clickedPairwiseMatch.value = { previewItem: { kind: 'record-definition', recordIndex: 0, recordId: 'R1' } };
