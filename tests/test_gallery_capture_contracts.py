@@ -166,7 +166,7 @@ LINEAR_COMPARISON_PANEL_EXAMPLES = {
 
 LOSATP_MODE_CAPTURES = {
     "BGC0000708-BGC0000713": {
-        "src": "./media/BGC0000708-BGC0000713/manual-03-02-select-losatp-orthogroups.webp",
+        "src": "./media/BGC0000708-BGC0000713/manual-05-02-select-losatp-orthogroups.webp",
         "selected": "Similarity groups",
         "state": "orthogroup",
     },
@@ -190,40 +190,6 @@ LOSATP_MODE_CAPTURES = {
         "selected": "Collinear blocks",
         "state": "collinear",
     },
-}
-
-
-FIRST_COMPARISON_BOUNDARY_CAPTURE = {
-    "src": "./media/BGC0000708-BGC0000713/manual-03-03-first-comparison-boundary.webp",
-    "selector": "[data-edge-key='record-1->record-2']",
-    "viewport": {"width": 1600, "height": 1100},
-    "state": {
-        "mode": "linear",
-        "linearSeqs.0.uid": "record-1",
-        "linearSeqs.1.uid": "record-2",
-        "linearComparisonResolution.edges.0.edgeKey": "record-1->record-2",
-        "linearComparisonResolution.edges.0.source": "losat",
-    },
-    "visible_text": {
-        "#1",
-        "Streptomyces lividus CBS 844.73",
-        "#2",
-        "Streptomyces fradiae ATCC 10745",
-        "Run LOSAT",
-    },
-}
-
-
-FIRST_RAW_RESULT_CAPTURE = {
-    "src": "./media/BGC0000708-BGC0000713/manual-03-04-first-raw-result.webp",
-    "selector": "[data-linear-raw-result='record-1->record-2']",
-    "viewport": {"width": 1600, "height": 1100},
-    "state": {
-        "mode": "linear",
-        "linearComparisonResolution.edges.0.edgeKey": "record-1->record-2",
-        "linearComparisonResolution.edges.0.source": "losat",
-    },
-    "visible_text": {"Raw LOSAT filename", "Raw result", "Save Raw LOSAT TSV"},
 }
 
 
@@ -321,78 +287,57 @@ def test_linear_comparison_tutorials_do_not_use_the_retired_search_method_api() 
         assert '"label": "Search method"' not in serialized
 
 
-def test_first_linear_comparison_boundary_has_an_exact_capture_contract() -> None:
+def test_bgc_previews_replay_the_reader_steps_through_their_own_generate() -> None:
+    """D-01/D-08: each BGC preview is the result of the reader's own steps from the MIBiG files."""
+
     sample = load_ready_examples("BGC0000708-BGC0000713")[0]
     tutorial = _load_tutorial(sample)
-    matches = [
-        operation
-        for _, operation in iter_operation_contexts(sample, tutorial)
-        if operation.get("media", {}).get("src")
-        == FIRST_COMPARISON_BOUNDARY_CAPTURE["src"]
-    ]
+    steps = tutorial["manualSteps"]
+    generate_steps = set()
+    for number, step in enumerate(steps, start=1):
+        types = [action["type"] for action in step.get("replay", [])]
+        if "generate" in types:
+            generate_steps.add(number)
+            assert types[-1] == "generate", number
+    # Step 7 regenerates through Apply in the Review alignment dialog, not Generate Diagram.
+    assert generate_steps == {4, 5, 6, 8, 9, 10}
+    assert any("similarity-alignment-apply-reason" in action.get("selector", "") for action in steps[6]["replay"])
 
-    assert len(matches) == 1
-    operation = matches[0]
-    capture = operation["capture"]
-    expected = FIRST_COMPARISON_BOUNDARY_CAPTURE
-    assert operation["dataDependent"] is True
-    assert capture["source"] == "webapp"
-    assert capture["session"] == sample["session"]
-    assert capture["selector"] == expected["selector"]
-    assert capture["waitForSelector"] == expected["selector"]
-    assert capture["viewport"] == expected["viewport"]
-    assert capture["cropPadding"] == {
-        "top": 0,
-        "right": 24,
-        "bottom": 12,
-        "left": 12,
+    previews = {
+        number: operation["capture"]
+        for number, step in enumerate(steps, start=1)
+        for operation in step.get("operations", [])
+        if operation.get("capture", {}).get("selector") == "[data-capture='bgc-preview']"
     }
-    assert expected["state"].items() <= capture["assertAppState"].items()
-    assert expected["visible_text"] <= set(capture["visibleText"])
-    assert capture["openDetails"] == ["Selected pairs"]
-    assert capture["visibleControls"] == [
-        {
-            "selector": (
-                "[data-edge-key='record-1->record-2'] "
-                "input[type='radio']:checked"
-            ),
-            "checked": True,
-        },
-    ]
+    assert set(previews) == generate_steps | {7}
+    for number, capture in previews.items():
+        assert capture["replayThrough"] == number
+        assert capture["session"] == sample["session"]
+        assert capture["assertAppState"]["linearSeqs.length"] == 5
+    assert previews[5]["assertAppState"]["linearSeqs.4.region_reverse"] is False
+    assert previews[6]["assertAppState"]["linearSeqs.4.region_reverse"] is True
 
 
-def test_first_raw_result_has_an_exact_advanced_capture_contract() -> None:
+def test_bgc_session_holds_the_mibig_files_with_record_reverse_complement() -> None:
+    """D-08: the Session stores the original BGC0000713.gbk and reverses it per record."""
+
     sample = load_ready_examples("BGC0000708-BGC0000713")[0]
-    tutorial = _load_tutorial(sample)
-    expected = FIRST_RAW_RESULT_CAPTURE
-    matches = [
-        operation
-        for _, operation in iter_operation_contexts(sample, tutorial)
-        if operation.get("media", {}).get("src") == expected["src"]
+    session_path = resolve_gallery_reference(str(sample["session"]))
+    assert session_path is not None
+    session = json.loads(session_path.read_text(encoding="utf-8"))
+    records = session["renderRequest"]["records"]
+    assert [record["presentation"]["reverseComplement"] for record in records] == [
+        False,
+        False,
+        False,
+        False,
+        True,
     ]
-
-    assert len(matches) == 1
-    operation = matches[0]
-    capture = operation["capture"]
-    assert operation["dataDependent"] is True
-    assert capture["source"] == "webapp"
-    assert capture["session"] == sample["session"]
-    assert capture["selector"] == expected["selector"]
-    assert capture["waitForSelector"] == expected["selector"]
-    assert capture["viewport"] == expected["viewport"]
-    assert capture["cropPadding"] == 14
-    assert capture["openDetails"] == ["Advanced comparison and layout"]
-    assert expected["state"].items() <= capture["assertAppState"].items()
-    assert expected["visible_text"] <= set(capture["visibleText"])
-    assert capture["visibleControls"] == [
-        {
-            "selector": (
-                "[data-linear-raw-result='record-1->record-2'] "
-                "input[aria-label='Raw LOSAT filename for #1 to #2']"
-            ),
-            "value": "",
-        }
-    ]
+    data_dir = Path("gbdraw/web/tutorial-data/aminoglycoside-bgc-five")
+    for record, name in zip(records, sorted(path.name for path in data_dir.glob("*.gbk")), strict=True):
+        resource = session["resources"][record["source"]["resourceId"]]
+        assert resource["name"].endswith(name), (resource["name"], name)
+        assert base64.b64decode(resource["data"]) == (data_dir / name).read_bytes(), name
 
 
 def test_vibrio_capture_keeps_publication_comparisons_active() -> None:
