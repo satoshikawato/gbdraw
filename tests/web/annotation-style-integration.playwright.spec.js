@@ -104,7 +104,7 @@ for (const width of [1440, 390]) {
           return { ids, auxiliary, known, colors, setId: sets[0].id };
         });
         const annotationPanel = page.locator('details').filter({ has: page.locator('summary[aria-label="Region Annotations"]') });
-        if (await annotationPanel.getAttribute('open') === null) await annotationPanel.locator('summary').press('Enter');
+        if (await annotationPanel.getAttribute('open') === null) await annotationPanel.locator(':scope > summary').press('Enter');
         const picker = page.waitForEvent('filechooser');
         await annotationPanel.getByRole('button', { name: 'Import TSV', exact: true }).press('Enter');
         await (await picker).setFiles({ name: 'integration-annotations.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from(input.auxiliary) });

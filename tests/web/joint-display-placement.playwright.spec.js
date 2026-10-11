@@ -241,8 +241,11 @@ for (const mode of ['circular', 'linear']) {
     if (mode === 'linear') expect(committed.records.map((record) => record.presentation.gridRow)).toEqual([1, 1]);
     await upload.setInputFiles({ name: 'same.gbk', mimeType: 'text/plain', buffer: Buffer.from((source + source).replace('chosen protein', 'replacement protein')) });
     if (mode === 'linear') await expandLinearRecordControls(page);
-    await expect(first).toHaveValue('');
-    await expect(second).toHaveValue('');
+    // The requested starts left with the replaced source: each field shows the
+    // current start (OV-374) and no Reset start is offered.
+    await expect(first).toHaveValue('1');
+    await expect(second).toHaveValue('1');
+    await expect(page.getByRole('button', { name: 'Reset start', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: /^Undo/ }).first().click();
     if (mode === 'linear') await expandLinearRecordControls(page);
     await expect(first).toHaveValue('71');
@@ -354,7 +357,9 @@ test('paired GFF/FASTA replacement keeps placements; Generate applies survivors 
   const placements = () => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.activeDrawing().featurePlacementOverrides).length);
   const before = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
   await upload.setInputFiles({ name: 'same.fa', mimeType: 'text/plain', buffer: Buffer.from(fasta.replace('ACGT', 'TCGT')) });
-  await expect(start).toHaveValue('');
+  // The requested start left with the replaced source (OV-374: the field shows the current start).
+  await expect(start).toHaveValue('1');
+  await expect(page.getByRole('button', { name: 'Reset start', exact: true })).toHaveCount(0);
   expect(await placements()).toBe(1);
   await page.getByRole('button', { name: /^Undo/ }).first().click();
   await expect(start).toHaveValue('71');
