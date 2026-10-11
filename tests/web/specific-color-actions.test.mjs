@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import {
   diffLegendIntents, generatedLegendRow, legendRowRules, ruleCommitLegendRows, ruleLegendCaptions
 } from '../../gbdraw/web/js/services/specific-color-rules.js';
-import { recordRuleMatches, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
+import { recordRuleMatches, recordVisibilityMatch, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
 import { setFeatureVisibilityOverride } from '../../gbdraw/web/js/services/feature-visibility.js';
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
 import { withDrawings } from './helpers/drawing-state.mjs';
@@ -398,6 +398,31 @@ test('a rule commit owns no type row of the displayed Result for a feature it do
   const rule = { feat: 'CDS', qual: 'locus_tag', val: '^(FL2|A2)$', color: '#2266aa', cap: 'Group' };
   assert.equal(await s.actions.commitSpecificRules([rule]), true);
   assert.deepEqual(s.previousIntents(), [], 'Python keeps the CDS row of the displayed Result');
+});
+
+// OV-344: the rows a rule commit draws are those of the displayed Result. A
+// rule whose features only another batch Result draws, or that a Feature
+// visibility rule hides, draws no row on it, as Generate draws none.
+test('a rule commit draws no row for a rule that only features the displayed Result does not draw match (OV-344)', async () => {
+  const s = setup();
+  const shown = { type: 'CDS', svg_id: 'b1', qualifiers: { locus_tag: ['B1'] } };
+  const ruleHidden = { type: 'CDS', svg_id: 'b2', qualifiers: { locus_tag: ['B2'] } };
+  const otherResult = { type: 'CDS', svg_id: 'a2', qualifiers: { locus_tag: ['A2'] } };
+  s.state.extractedFeatures.value = [otherResult, shown, ruleHidden];
+  s.state.results.value = [{ name: 'A', content: 'a' }, { name: 'B', content: 'b' }];
+  const hideB2 = { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '^B2$', action: 'off' };
+  s.state.featureVisibilityManualRules = [hideB2];
+  // Python's matches of the visibility rule (R4).
+  [shown, ruleHidden, otherResult].forEach((feature) => recordVisibilityMatch(feature, hideB2, { matches: feature === ruleHidden }));
+  s.state.displayedResultMetadata = () => ({ renderedFeatureIdentities: { renderedIds: new Set(['b1', 'b2']) } });
+  let intents = null;
+  s.setLegendPreparation(async (next) => { intents = next; });
+  assert.equal(await s.actions.commitSpecificRules([
+    { feat: 'CDS', qual: 'locus_tag', val: '^A2$', color: '#7b2cbf', cap: 'other Result' },
+    { feat: 'CDS', qual: 'locus_tag', val: '^B2$', color: '#264653', cap: 'hidden' },
+    { feat: 'CDS', qual: 'locus_tag', val: '^B1$', color: '#c83366', cap: 'shown' }
+  ]), true);
+  assert.deepEqual(intents, [{ caption: 'shown', color: '#c83366' }]);
 });
 
 // L1: a rule captioned with a track's row (Python's own rows,

@@ -114,7 +114,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   const editSpecificRuleFailure = () => {
     if (canEditSpecificRuleFailure.value) ruleFailure.value.input.focus();
   };
-  // The legend rows the candidate rules draw on rendered features, and the rows
+  // The legend rows the candidate rules draw on the features the displayed
+  // Result draws (OV-344: not on another batch Result's features or a hidden
+  // feature, where Generate draws no row), and the rows
   // the commit retires: those the current rules draw (so it retires the row
   // Generate drew), the listed rows of the Python rows the rules take (by key,
   // `takenKeys`, with the caption and the swatch they show, OV-310), and
@@ -123,12 +125,11 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   // the rows of current rules that no candidate rule names, drawn or not.
   /** @param {DrawingState} drawing */
   const candidateLegendIntents = (drawing, candidateRules, retiredLegendIntents) => {
-    const rendered = (extractedFeatures.value || []).filter(feature =>
-      featureOverrideValue(drawing.featureOverrides, feature, 'featureVisibility') !== 'off');
+    const displayed = displayedLegendRowContext(state, drawing);
     const candidateMatches = ruleMatcher(candidateRules);
-    const used = new Set(rendered.map(feature => candidateMatches.first(feature)).filter(Boolean));
+    const used = new Set([...displayed.features].map(feature => candidateMatches.first(feature)).filter(Boolean));
     const { rendererRows, takenKeys } = ruleCommitLegendRows({
-      ...displayedLegendRowContext(state, drawing),
+      ...displayed,
       rules: [...drawing.manualSpecificRules, ...candidateRules,
         ...retiredLegendIntents.map(intent => ({ cap: intent?.caption, color: intent?.color }))]
     });
