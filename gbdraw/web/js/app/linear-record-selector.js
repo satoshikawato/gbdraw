@@ -5,6 +5,9 @@ import { buildDisambiguatedRecordEntries, formatRecordLength } from '../services
 
 export const AUTOMATIC_RECORD_OPTION_LABEL = 'Automatic (no explicit selector)';
 export const RECORDS_LOADING_LABEL = 'Loading records...';
+// OV-379: a File whose records no read has started for (a loaded Session
+// defers discovery) is not inspected; it is not loading.
+export const RECORDS_NOT_INSPECTED_LABEL = 'Not inspected';
 export const RECORD_FILE_REQUIRED_LABEL = 'Upload a sequence file first';
 export const RECORD_READ_ERROR_LABEL = 'Records could not be loaded';
 
@@ -104,7 +107,7 @@ export const createLinearRecordSelector = ({
     ) {
       return {
         ...emptySelectorState(),
-        status: primaryFile && (inputType !== 'gff' || pairedFile) ? 'loading' : 'idle',
+        status: primaryFile && (inputType !== 'gff' || pairedFile) ? 'deferred' : 'idle',
         inputType,
         primaryFile,
         pairedFile
@@ -259,9 +262,11 @@ export const createLinearRecordSelector = ({
 
     const label = selectorState.status === 'loading'
       ? RECORDS_LOADING_LABEL
-      : selectorState.status === 'error'
-        ? RECORD_READ_ERROR_LABEL
-        : RECORD_FILE_REQUIRED_LABEL;
+      : selectorState.status === 'deferred'
+        ? RECORDS_NOT_INSPECTED_LABEL
+        : selectorState.status === 'error'
+          ? RECORD_READ_ERROR_LABEL
+          : RECORD_FILE_REQUIRED_LABEL;
     return [{
       value: currentValue,
       label,

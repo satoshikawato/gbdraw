@@ -87,6 +87,7 @@
     "tests/web/session-operation-consistency.playwright.spec.js": 8,
     "tests/web/session-save-lifecycle.playwright.spec.js": 1,
     "tests/web/settings-only-session.playwright.spec.js": 4,
+    "tests/web/sidebar-inputs.playwright.spec.js": 1.5,
     "tests/web/similarity-alignment-ui.playwright.spec.js": 15,
     "tests/web/small-ui-placement.playwright.spec.js": 0.94,
     "tests/web/source-legend-reconciliation.playwright.spec.js": 2,
@@ -166,7 +167,8 @@
       "tests/web/live-generate-parity-track-data.playwright.spec.js",
       "tests/web/mode-transition-editor-state.playwright.spec.js",
       "tests/web/python-rule-parity.playwright.spec.js",
-      "tests/web/session-loading-feedback.playwright.spec.js"
+      "tests/web/session-loading-feedback.playwright.spec.js",
+      "tests/web/sidebar-inputs.playwright.spec.js"
     ],
     [
       "tests/web/circular-multi-record-default.playwright.spec.js",

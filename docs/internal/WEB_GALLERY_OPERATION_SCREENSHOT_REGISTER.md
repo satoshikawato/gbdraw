@@ -382,3 +382,39 @@ capture validation proves the visible control or selected value is stale.
 - The HmmtDNA feature-highlight result uses `Middle`, strand separation off,
   70%, and gene labels for all 13 mitochondrial CDS features, including
   `COX1`.
+
+## Compact sidebar input cards (Gallery revision 2026-10-12)
+
+The Web sidebar's File cards, Record options, Colors, and slot rows were
+compacted. The File card's defaults block now reads **Names for all records in
+this file**, and the tutorial text, `visibleText`, alt text, and captions follow
+that label. Media were recaptured only where the surface visibly changed;
+captures that differ from the committed bytes by noise only keep the committed
+bytes.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `BGC0000708-BGC0000713`, `vibrio-harveyi-group-collinear` | `manual-02-01-file1-defaults.webp`, `manual-03-01-file5-defaults.webp` (Vibrio: `manual-03-01-file2-defaults.webp`) | Recapture | Replay through the step; File card with **Names for all records in this file** and the rendered taxon-name preview line | Recaptured at DSF 3; compared by eye |
+| `BGC0000708-BGC0000713` | `manual-06-01-reverse-bgc0000713.webp` | Recapture | File 5 card from its header through the compact **Record options** (record header, **Using file default** names, **Reverse complement**) | Recaptured at DSF 3; compared by eye |
+| `BGC0000708-BGC0000713` | `manual-08-01-specific-rules-all.webp` | Recapture; scroll corrected | **SPECIFIC RULES** heading scrolled to `block: 'start'` with a 120 px scroll margin so the app header does not cover the **TSV** / **Clear All** row; the four rule rows are opened | No app-header overlap; visually accepted |
+| `BGC0000708-BGC0000713` | `manual-10-03-plot-title.webp` | Recapture | **Titles & Record Labels** card; Plot Title with its markup preview line | Recaptured at DSF 3; compared by eye |
+| `BGC0000708-BGC0000713` | `manual-05-01-comparison-settings.webp`, `manual-09-01-show-labels-first.webp`, `manual-10-01-arrow-shaft-width.webp`, `manual-10-02-scale-style-ruler.webp`; Vibrio `manual-09-01-rectangle-features.webp`, `manual-09-02-linear-layout.webp` | Keep | Surfaces without a visible change | Recapture differed by noise only |
+| `BGC0000708-BGC0000713` | `manual-06-01-reverse-bgc0000713.webp` (record wait) | Recipe corrected | The wait for the record-5 select proves the records were read: the select `Record selector for sequence 5` is enabled and lists `BGC0000713` | The old wait on the absence of "Loading records" proved nothing |
+| `HmmtDNA_ATskew` | `manual-06-01-at-skew-slot-context.webp` | Recapture; recipe corrected | Exact mitochondrial session; custom stack enabled; the capture opens the slot's `[data-track-slot-more='a_skew_2']` disclosure; `assertAppState` (slot 3 id, renderer, nt, legend label, both colors) and six `visibleControls` (id, renderer, dinucleotide AT, legend label AT skew, both colors) | Data-dependent; recaptured 810x2319; disclosure open, both swatches inside the highlight |
+
+## Short/long size boundary: BGC previews and step 10 (Gallery revision 2026-10-12)
+
+Linear Auto sizes use the short styles for a longest record under 100 kb (it
+was 50 kb), so the previews that replay the reader's steps from the Web
+defaults now draw the five clusters (longest 50,466 bp) with the short sizes.
+The published figure does not change: its Session fixes Head Length Ratio
+0.64, and step 10 types that value. The step 10 replay gives the published
+SVG byte for byte, so the finished-figure and popup captures keep their bytes.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `BGC0000708-BGC0000713` | `manual-04-01-preview-defaults.webp`, `manual-05-03-preview-losatp.webp`, `manual-06-02-preview-reversed.webp`, `manual-07-04-preview-aligned.webp`, `manual-08-02-preview-colors.webp`, `manual-09-02-preview-labels.webp` | Recapture | Replay through the step, recipes unchanged; short Auto sizes (80 px features on two strand lanes, 24 px definition lines) | Recaptured at DSF 3; each compared with the previous image side by side |
+| `BGC0000708-BGC0000713` | `manual-07-01-align-og6.webp` | Recapture | Replay through step 6, recipe unchanged; the highlighted neoU arrow is drawn at the short feature height beside the same popup | Recaptured at DSF 3, same 2502x792 crop |
+| `BGC0000708-BGC0000713` | `manual-10-01-arrow-shaft-width.webp` | Recapture; contract extended | Final Session; **Arrow Geometry** box with Head Length Ratio 0.64 and Shaft Width Ratio 0.6, both highlighted; `assertAppState` and `visibleControls` name both ratios | Recaptured at DSF 3, same 1422x315 crop |
+| `BGC0000708-BGC0000713` | `manual-09-02-preview-labels.webp` caption; step 10 text, replay, and both tables | Text | The caption no longer says that the shafts hide the heads of short genes; step 10 has the Head Length Ratio row and says what each group of rows does against the Auto values the reader sees | Tables checked against the Auto notes read after the step 9 replay |
+| `BGC0000708-BGC0000713` | `manual-10-04-preview-final.webp`, `manual-11-01-orthogroup-popup.webp`, `manual-12-01-feature-popup.webp` | Keep | The pinned Session and the step 10 replay draw the published figure | Not recaptured |

@@ -93,6 +93,10 @@ const expectExplicitAtControls = async (page) => {
   await openCustomTrackSlots(page);
   const group = page.getByRole('group', { name: `Circular track slot ${AT_SLOT_ID}` });
   await expect(group).toBeVisible();
+  // The dinucleotide, legend label, and skew colors sit under the row's disclosure, which names the colors as custom.
+  const more = group.locator('[data-track-slot-more]');
+  await expect(more.locator(':scope > summary')).toContainText('custom colors');
+  await more.evaluate((details) => { details.open = true; });
   await expect(group.getByLabel('Track dinucleotide')).toHaveValue('AT');
   await expect(group.getByLabel('Track legend label')).toHaveValue('AT skew');
   await expect(group.locator('input[type="color"][title="Positive skew color"]'))

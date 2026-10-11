@@ -46,10 +46,10 @@ def _resolve_linear_diagram_label_font_size(
     canvas_config: LinearCanvasConfigurator,
     profile: LinearRenderProfile,
 ) -> float:
-    """Resolve one readable auto label size for all labels drawn in a linear diagram.
+    """Resolve one auto label size for all labels drawn in a linear diagram.
 
-    The records in the label display scope set the size. With no record in
-    scope, labels shown by per-feature overrides use the size of all records.
+    The longest record in the label display scope sets the size. With no record
+    in scope, labels shown by per-feature overrides use the size of all records.
     """
 
     cfg = profile.config

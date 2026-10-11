@@ -104,7 +104,7 @@ for (const width of [1440, 390]) {
           return { ids, auxiliary, known, colors, setId: sets[0].id };
         });
         const annotationPanel = page.locator('details').filter({ has: page.locator('summary[aria-label="Region Annotations"]') });
-        if (await annotationPanel.getAttribute('open') === null) await annotationPanel.locator('summary').press('Enter');
+        if (await annotationPanel.getAttribute('open') === null) await annotationPanel.locator(':scope > summary').press('Enter');
         const picker = page.waitForEvent('filechooser');
         await annotationPanel.getByRole('button', { name: 'Import TSV', exact: true }).press('Enter');
         await (await picker).setFiles({ name: 'integration-annotations.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from(input.auxiliary) });
@@ -117,7 +117,7 @@ for (const width of [1440, 390]) {
         expect(await notice.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
         await page.screenshot({ path: testInfo.outputPath('auxiliary-notice.png') });
         expect((await inspect(page, mode)).runs).toBe(source.runs);
-        const colorInput = page.getByLabel('Specific Table (-t)', { exact: true });
+        const colorInput = page.getByLabel('Specific rules file', { exact: true });
         await reveal(colorInput);
         const beforeImport = await inspect(page, mode);
         const originalColorFile = await colorFile(page);
@@ -151,6 +151,8 @@ for (const width of [1440, 390]) {
           }, input.setId);
         }
         const row = page.locator(`[data-capture="${mode}-track-slot-gc_content"]`);
+        // Circular gaps sit under the row's Gaps disclosure.
+        if (mode === 'circular') await row.locator('[data-track-slot-more] > summary').click();
         const titles = mode === 'linear' ? ['Height', 'Spacing'] : ['Inner gap', 'Outer gap'];
         for (const title of titles) { const field = row.getByTitle(title, { exact: true }); await field.fill('10 PX'); await field.press('Tab'); }
         await generate(page);

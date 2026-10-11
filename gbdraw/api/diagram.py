@@ -1259,119 +1259,23 @@ def _resolve_multi_record_grid_gap_px(max_record_radius_px: float, *, gap_ratio:
     return float(_MULTI_RECORD_GRID_GAP_PX)
 
 
-def _has_mixed_short_and_long_records(
-    record_lengths: Sequence[int],
-    *,
-    length_threshold: int,
-) -> bool:
-    """Return whether record lengths span both short and long buckets."""
-    threshold = int(length_threshold)
-    size_classes = {
-        determine_length_parameter(int(record_length), threshold)
-        for record_length in record_lengths
-    }
-    return len(size_classes) > 1
-
-
 def _harmonize_multi_record_circular_style_cfg(
     cfg: GbdrawConfig,
     *,
     record_lengths: Sequence[int],
 ) -> GbdrawConfig:
-    """Harmonize short-record feature/axis style to long settings for mixed multi-record canvases."""
-    if not _has_mixed_short_and_long_records(
-        record_lengths,
-        length_threshold=cfg.labels.length_threshold.circular,
-    ):
+    """Give a canvas with short and long records one size class: long.
+
+    Every size-class-dependent value of a record is read through
+    ``labels.length_threshold.circular``, so the canvas config classes every
+    record as long instead of copying long values over short ones.
+    """
+    threshold = int(cfg.labels.length_threshold.circular)
+    size_classes = {determine_length_parameter(int(length), threshold) for length in record_lengths}
+    if len(size_classes) < 2:
         return cfg
-
-    circular_cfg = cfg.canvas.circular
-    harmonized_track_ratio_factors = {
-        str(key): [float(value) for value in list(values)]
-        for key, values in circular_cfg.track_ratio_factors.items()
-    }
-    short_factors = list(harmonized_track_ratio_factors.get("short", []))
-    long_factors = list(harmonized_track_ratio_factors.get("long", []))
-    if short_factors and long_factors:
-        for factor_index in (0, 1, 2):
-            if factor_index < len(short_factors) and factor_index < len(long_factors):
-                short_factors[factor_index] = float(long_factors[factor_index])
-        harmonized_track_ratio_factors["short"] = short_factors
-
-    harmonized_track_dict: dict[str, dict[str, dict[str, float]]] = {
-        str(length_param): {
-            str(track_type): {
-                str(track_id): float(track_value)
-                for track_id, track_value in track_values.items()
-            }
-            for track_type, track_values in track_type_values.items()
-        }
-        for length_param, track_type_values in circular_cfg.track_dict.items()
-    }
-    short_track_dict = harmonized_track_dict.get("short")
-    long_track_dict = harmonized_track_dict.get("long")
-    if short_track_dict is not None and long_track_dict is not None:
-        for track_type, short_track_values in short_track_dict.items():
-            long_track_values = long_track_dict.get(str(track_type))
-            if long_track_values is None:
-                continue
-            for track_id in ("2", "3"):
-                if track_id in short_track_values and track_id in long_track_values:
-                    short_track_values[track_id] = float(long_track_values[track_id])
-
-    harmonized_features = replace(
-        cfg.objects.features,
-        block_stroke_width=replace(
-            cfg.objects.features.block_stroke_width,
-            short=float(cfg.objects.features.block_stroke_width.long),
-        ),
-        line_stroke_width=replace(
-            cfg.objects.features.line_stroke_width,
-            short=float(cfg.objects.features.line_stroke_width.long),
-        ),
-    )
-    harmonized_axis_circular = replace(
-        cfg.objects.axis.circular,
-        stroke_width=replace(
-            cfg.objects.axis.circular.stroke_width,
-            short=float(cfg.objects.axis.circular.stroke_width.long),
-        ),
-    )
-    harmonized_axis = replace(cfg.objects.axis, circular=harmonized_axis_circular)
-    harmonized_objects = replace(
-        cfg.objects,
-        features=harmonized_features,
-        axis=harmonized_axis,
-    )
-    harmonized_label_font_size = replace(
-        cfg.labels.font_size,
-        short=float(cfg.labels.font_size.long),
-    )
-    harmonized_labels = replace(
-        cfg.labels,
-        font_size=harmonized_label_font_size,
-    )
-    harmonized_circular = replace(
-        circular_cfg,
-        track_ratio_factors=harmonized_track_ratio_factors,
-        track_dict=harmonized_track_dict,
-    )
-    harmonized_canvas = replace(cfg.canvas, circular=harmonized_circular)
-    return replace(cfg, canvas=harmonized_canvas, objects=harmonized_objects, labels=harmonized_labels)
-
-
-def _resolve_multi_record_tick_track_channel_override(
-    record_lengths: Sequence[int],
-    *,
-    length_threshold: int,
-) -> Literal["long"] | None:
-    """Return tick ratio channel override for mixed short/long multi-record canvases."""
-    if _has_mixed_short_and_long_records(
-        record_lengths,
-        length_threshold=length_threshold,
-    ):
-        return "long"
-    return None
+    one_class = replace(cfg.labels.length_threshold, circular=0)
+    return replace(cfg, labels=replace(cfg.labels, length_threshold=one_class))
 
 
 def _scale_circular_cfg(cfg: GbdrawConfig, *, scale: float) -> GbdrawConfig:
@@ -2164,7 +2068,6 @@ def assemble_circular_diagram_from_record(
     identity: float = CIRCULAR_MODE_PROFILE.comparison.identity,
     alignment_length: int = CIRCULAR_MODE_PROFILE.comparison.alignment_length,
     _definition_profile: Literal["full", "record_summary", "shared_common"] = "full",
-    _tick_track_channel_override: Literal["short", "long"] | None = None,
     _precomputed_depth_df: DataFrame | None = None,
     _precomputed_depth_track_specs: Sequence[DepthTrackSpec] | None = None,
     _precomputed_depth_tracks: Sequence[DepthTrackData] | None = None,
@@ -2556,7 +2459,6 @@ def assemble_circular_diagram_from_record(
         definition_profile=effective_definition_profile,
         definition_group_id=_definition_group_id,
         center_reserved_radius=center_reserved_radius,
-        _tick_track_channel_override=_tick_track_channel_override,
         title_target=title_target,
         title_bounds=title_bounds,
         title_placement=title_placement,
@@ -2854,10 +2756,6 @@ def assemble_circular_diagram_from_records(
                 conservation_slots,
                 axis_index=circular_track_axis_index,
             )
-    tick_track_channel_override = _resolve_multi_record_tick_track_channel_override(
-        record_lengths,
-        length_threshold=cfg.labels.length_threshold.circular,
-    )
     record_scales = _resolve_multi_record_scales(
         record_lengths,
         mode=normalized_multi_record_size_mode,
@@ -2963,7 +2861,6 @@ def assemble_circular_diagram_from_records(
             identity=identity,
             alignment_length=alignment_length,
             _definition_profile=record_definition_profile,
-            _tick_track_channel_override=tick_track_channel_override,
             _precomputed_depth_tracks=(
                 record_depth_track_data[record_index]
                 if record_depth_track_data is not None

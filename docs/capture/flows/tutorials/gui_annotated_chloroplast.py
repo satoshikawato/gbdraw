@@ -199,7 +199,7 @@ def _configure_gallery_presentation(page: Page) -> None:
 
     colors = page.get_by_label("Colors", exact=True)
     toggle_disclosure(colors)
-    page.get_by_label("Specific Table (-t)", exact=True).set_input_files(
+    page.get_by_label("Specific rules file", exact=True).set_input_files(
         SPECIFIC_COLORS_PATH
     )
     toggle_disclosure(colors)
@@ -271,10 +271,14 @@ def _configure_gallery_slots(page: Page) -> tuple[dict[str, Any], ...]:
     annotation_slot = page.get_by_role(
         "group", name="Circular track slot annotations", exact=True
     )
-    annotation_slot.get_by_label(re.compile(r"Annotation set$")).select_option(
+    annotation_slot.get_by_label(
+        "Circular track slot annotations Annotation set", exact=True
+    ).select_option(
         "plastome_regions"
     )
-    annotation_slot.get_by_label(re.compile(r"Annotation placement$")).select_option(
+    annotation_slot.get_by_label(
+        "Circular track slot annotations Annotation placement", exact=True
+    ).select_option(
         "inside"
     )
     annotation_slot = page.get_by_role(
@@ -294,9 +298,11 @@ def _configure_gallery_slots(page: Page) -> tuple[dict[str, Any], ...]:
     annotation_slot.get_by_role("combobox", name="Circular track slot plastome_regions Width unit", exact=True).select_option("px")
     annotation_slot.get_by_role("textbox", name="Circular track slot plastome_regions Radius value", exact=True).fill("0.65")
     annotation_slot.get_by_role("combobox", name="Circular track slot plastome_regions Radius unit", exact=True).select_option("factor")
-    annotation_slot.get_by_title("Inner gap", exact=True).fill("1")
+    open_ancestor_details(annotation_slot.get_by_title("Inner gap", exact=True)).fill("1")
     annotation_slot.get_by_title("Outer gap", exact=True).fill("1")
-    annotation_slot.get_by_label(re.compile(r"Show annotation labels$")).check()
+    annotation_slot.get_by_label(
+        "Circular track slot plastome_regions Show annotation labels", exact=True
+    ).check()
     annotation_slot.locator(
         'select:has(option[value="compress"])'
     ).select_option("compress")

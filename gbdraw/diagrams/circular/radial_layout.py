@@ -421,7 +421,6 @@ def _tick_layout_from_params(
     anchor_radius_px: float,
     width_px: float,
     explicit_width: bool,
-    tick_track_channel_override: str | None = None,
 ) -> CircularTickLayout:
     base_radius = float(canvas_config.radius)
     tick_preset = normalize_circular_track_preset(str(params.get("preset", params.get("track_preset", "tuckin"))))
@@ -442,7 +441,6 @@ def _tick_layout_from_params(
             size="large",
             track_type=tick_preset,
             strandedness=canvas_config.profile.strandedness,
-            tick_track_channel_override=tick_track_channel_override,
             tick_side=tick_side,
             tick_length_px=tick_length_px,
             length_reference_radius_px=base_radius,
@@ -460,7 +458,6 @@ def _tick_layout_from_params(
         font_family=str(cfg.objects.text.font_family),
         dpi=int(canvas_config.dpi),
         manual_interval=cfg.objects.scale.interval,
-        tick_track_channel_override=tick_track_channel_override,
         label_side=label_side,
         tick_side=tick_side,
         tick_length_px=tick_length_px,
@@ -609,7 +606,6 @@ def _measure_radial_slot(
     canvas_config: CircularCanvasConfigurator,
     cfg: GbdrawConfig,
     total_length: int,
-    tick_track_channel_override: str | None,
     depth_config: DepthConfigurator | None,
     compressed: bool = False,
 ) -> CircularResolvedSlot:
@@ -669,7 +665,6 @@ def _measure_radial_slot(
             anchor_radius_px=anchor_radius_px,
             width_px=resolved_width,
             explicit_width=bool(intent.explicit_width),
-            tick_track_channel_override=tick_track_channel_override,
         )
         return CircularResolvedSlot(
             slot_index=int(intent.slot_index),
@@ -795,7 +790,6 @@ def _place_outside_auto(
     canvas_config: CircularCanvasConfigurator,
     cfg: GbdrawConfig,
     total_length: int,
-    tick_track_channel_override: str | None,
     depth_config: DepthConfigurator | None,
 ) -> CircularResolvedSlot:
     for width_px, compressed in _candidate_widths(intent):
@@ -810,7 +804,6 @@ def _place_outside_auto(
                 canvas_config=canvas_config,
                 cfg=cfg,
                 total_length=total_length,
-                tick_track_channel_override=tick_track_channel_override,
                 depth_config=depth_config,
                 compressed=compressed,
             )
@@ -875,7 +868,6 @@ def _try_measure_inside_interval(
     canvas_config: CircularCanvasConfigurator,
     cfg: GbdrawConfig,
     total_length: int,
-    tick_track_channel_override: str | None,
     depth_config: DepthConfigurator | None,
     compressed: bool,
     packing_inner_px: float = 0.0,
@@ -914,7 +906,6 @@ def _try_measure_inside_interval(
                 canvas_config=canvas_config,
                 cfg=cfg,
                 total_length=total_length,
-                tick_track_channel_override=tick_track_channel_override,
                 depth_config=depth_config,
                 compressed=compressed,
             )
@@ -953,7 +944,6 @@ def _place_inside_auto(
     canvas_config: CircularCanvasConfigurator,
     cfg: GbdrawConfig,
     total_length: int,
-    tick_track_channel_override: str | None,
     depth_config: DepthConfigurator | None,
 ) -> CircularResolvedSlot:
     for width_px, compressed in _candidate_widths(intent):
@@ -968,7 +958,6 @@ def _place_inside_auto(
             canvas_config=canvas_config,
             cfg=cfg,
             total_length=total_length,
-            tick_track_channel_override=tick_track_channel_override,
             depth_config=depth_config,
         )
         if resolved is not None:
@@ -992,7 +981,6 @@ def _place_inside_auto_fixed_width(
     canvas_config: CircularCanvasConfigurator,
     cfg: GbdrawConfig,
     total_length: int,
-    tick_track_channel_override: str | None,
     depth_config: DepthConfigurator | None,
 ) -> CircularResolvedSlot | None:
     outer_limit = max(0.0, float(placement_window.outer_px))
@@ -1013,7 +1001,6 @@ def _place_inside_auto_fixed_width(
             canvas_config=canvas_config,
             cfg=cfg,
             total_length=total_length,
-            tick_track_channel_override=tick_track_channel_override,
             depth_config=depth_config,
             compressed=compressed,
             packing_inner_px=float(placement_window.inner_px),
@@ -1037,7 +1024,6 @@ def _measure_anchored_inside(
     canvas_config: CircularCanvasConfigurator,
     cfg: GbdrawConfig,
     total_length: int,
-    tick_track_channel_override: str | None,
     depth_config: DepthConfigurator | None,
 ) -> CircularResolvedSlot | None:
     """A pinned row at ``width_px`` on its radius, or ``None`` when it leaves the window or overlaps."""
@@ -1051,7 +1037,6 @@ def _measure_anchored_inside(
         canvas_config=canvas_config,
         cfg=cfg,
         total_length=total_length,
-        tick_track_channel_override=tick_track_channel_override,
         depth_config=depth_config,
         compressed=compressed,
     )
@@ -1331,7 +1316,6 @@ def _place_inside_auto_stack_group(
     canvas_config: CircularCanvasConfigurator,
     cfg: GbdrawConfig,
     total_length: int,
-    tick_track_channel_override: str | None,
     depth_config: DepthConfigurator | None,
 ) -> tuple[CircularResolvedSlot, ...]:
     failure: _RadialSlotIntent | None = None
@@ -1354,7 +1338,6 @@ def _place_inside_auto_stack_group(
                 canvas_config=canvas_config,
                 cfg=cfg,
                 total_length=total_length,
-                tick_track_channel_override=tick_track_channel_override,
                 depth_config=depth_config,
             )
             if resolved is None:
@@ -1400,7 +1383,6 @@ def _place_outside_auto_stack_group(
     canvas_config: CircularCanvasConfigurator,
     cfg: GbdrawConfig,
     total_length: int,
-    tick_track_channel_override: str | None,
     depth_config: DepthConfigurator | None,
 ) -> tuple[CircularResolvedSlot, ...]:
     """Place ``intents``, given from the axis outward, from the window's inner edge."""
@@ -1418,7 +1400,6 @@ def _place_outside_auto_stack_group(
             canvas_config=canvas_config,
             cfg=cfg,
             total_length=total_length,
-            tick_track_channel_override=tick_track_channel_override,
             depth_config=depth_config,
         )
         resolved_group.append(resolved)
@@ -1546,7 +1527,6 @@ def _try_place_preferred_numeric_group_at_anchors(
     canvas_config: CircularCanvasConfigurator,
     cfg: GbdrawConfig,
     total_length: int,
-    tick_track_channel_override: str | None,
     depth_config: DepthConfigurator | None,
 ) -> tuple[CircularResolvedSlot, ...] | None:
     resolved_group = tuple(
@@ -1559,7 +1539,6 @@ def _try_place_preferred_numeric_group_at_anchors(
             canvas_config=canvas_config,
             cfg=cfg,
             total_length=total_length,
-            tick_track_channel_override=tick_track_channel_override,
             depth_config=depth_config,
             compressed=False,
         )
@@ -1586,7 +1565,6 @@ def _place_inside_auto_group_with_width_scale(
     canvas_config: CircularCanvasConfigurator,
     cfg: GbdrawConfig,
     total_length: int,
-    tick_track_channel_override: str | None,
     depth_config: DepthConfigurator | None,
 ) -> tuple[CircularResolvedSlot, ...] | None:
     working_occupied = list(occupied)
@@ -1606,7 +1584,6 @@ def _place_inside_auto_group_with_width_scale(
             canvas_config=canvas_config,
             cfg=cfg,
             total_length=total_length,
-            tick_track_channel_override=tick_track_channel_override,
             depth_config=depth_config,
         )
         if resolved is None:
@@ -1639,7 +1616,6 @@ def _place_preferred_numeric_group(
     canvas_config: CircularCanvasConfigurator,
     cfg: GbdrawConfig,
     total_length: int,
-    tick_track_channel_override: str | None,
     depth_config: DepthConfigurator | None,
 ) -> tuple[CircularResolvedSlot, ...]:
     anchored = _try_place_preferred_numeric_group_at_anchors(
@@ -1651,7 +1627,6 @@ def _place_preferred_numeric_group(
         canvas_config=canvas_config,
         cfg=cfg,
         total_length=total_length,
-        tick_track_channel_override=tick_track_channel_override,
         depth_config=depth_config,
     )
     if anchored is not None:
@@ -1668,7 +1643,6 @@ def _place_preferred_numeric_group(
             canvas_config=canvas_config,
             cfg=cfg,
             total_length=total_length,
-            tick_track_channel_override=tick_track_channel_override,
             depth_config=depth_config,
         )
         if placed is not None:
@@ -1754,7 +1728,6 @@ def _minimum_future_inside_width_px(
     canvas_config: CircularCanvasConfigurator,
     cfg: GbdrawConfig,
     total_length: int,
-    tick_track_channel_override: str | None,
     feature_dict: Mapping[str, Any] | None,
     depth_config: DepthConfigurator | None,
 ) -> float:
@@ -1775,7 +1748,6 @@ def _minimum_future_inside_width_px(
             canvas_config=canvas_config,
             cfg=cfg,
             total_length=int(total_length),
-            tick_track_channel_override=tick_track_channel_override,
             depth_config=depth_config,
             compressed=width < float(intent.width_px) - LAYOUT_EPSILON,
         )
@@ -1798,7 +1770,6 @@ def _future_unresolved_inside_span_px(
     canvas_config: CircularCanvasConfigurator,
     cfg: GbdrawConfig,
     total_length: int,
-    tick_track_channel_override: str | None,
     feature_dict: Mapping[str, Any] | None,
     depth_config: DepthConfigurator | None,
     resolved_by_index: Mapping[int, CircularResolvedSlot],
@@ -1816,7 +1787,6 @@ def _future_unresolved_inside_span_px(
             canvas_config=canvas_config,
             cfg=cfg,
             total_length=total_length,
-            tick_track_channel_override=tick_track_channel_override,
             feature_dict=feature_dict,
             depth_config=depth_config,
         )
@@ -1858,7 +1828,6 @@ def _inside_placement_window(
     canvas_config: CircularCanvasConfigurator,
     cfg: GbdrawConfig,
     total_length: int,
-    tick_track_channel_override: str | None,
     feature_dict: Mapping[str, Any] | None,
     depth_config: DepthConfigurator | None,
     resolved_by_index: Mapping[int, CircularResolvedSlot],
@@ -1899,7 +1868,6 @@ def _inside_placement_window(
         canvas_config=canvas_config,
         cfg=cfg,
         total_length=total_length,
-        tick_track_channel_override=tick_track_channel_override,
         feature_dict=feature_dict,
         depth_config=depth_config,
         resolved_by_index=resolved_by_index,
@@ -1953,7 +1921,6 @@ class _RadialLayoutInputs(TypedDict):
     canvas_config: CircularCanvasConfigurator
     slots: Sequence[CircularTrackSlot]
     feature_dict: Mapping[str, Any] | None
-    tick_track_channel_override: str | None
     preferred_anchor_slot_ids: Collection[str]
     depth_config: DepthConfigurator | None
     center_reserved_radius_explicit: bool
@@ -1967,7 +1934,6 @@ def resolve_circular_radial_layout(
     slots: Sequence[CircularTrackSlot],
     feature_dict: Mapping[str, Any] | None = None,
     definition_reserved_radius_px: float | None = None,
-    tick_track_channel_override: str | None = None,
     preferred_anchor_slot_ids: Collection[str] = (),
     depth_config: DepthConfigurator | None = None,
     center_reserved_radius_explicit: bool = False,
@@ -1985,7 +1951,6 @@ def resolve_circular_radial_layout(
         canvas_config=canvas_config,
         slots=slots,
         feature_dict=feature_dict,
-        tick_track_channel_override=tick_track_channel_override,
         preferred_anchor_slot_ids=preferred_anchor_slot_ids,
         depth_config=depth_config,
         center_reserved_radius_explicit=center_reserved_radius_explicit,
@@ -2026,7 +1991,6 @@ def _resolve_circular_radial_layout(
     slots: Sequence[CircularTrackSlot],
     feature_dict: Mapping[str, Any] | None = None,
     definition_reserved_radius_px: float | None = None,
-    tick_track_channel_override: str | None = None,
     preferred_anchor_slot_ids: Collection[str] = (),
     depth_config: DepthConfigurator | None = None,
     center_reserved_radius_explicit: bool = False,
@@ -2078,7 +2042,6 @@ def _resolve_circular_radial_layout(
             canvas_config=canvas_config,
             cfg=cfg,
             total_length=int(total_length),
-            tick_track_channel_override=tick_track_channel_override,
             depth_config=depth_config,
         )
         if _anchored_inside(intent):
@@ -2152,7 +2115,6 @@ def _resolve_circular_radial_layout(
                 canvas_config=canvas_config,
                 cfg=cfg,
                 total_length=int(total_length),
-                tick_track_channel_override=tick_track_channel_override,
                 depth_config=depth_config,
             )
             for group_intent, group_resolved in zip(outside_group, resolved_group):
@@ -2189,7 +2151,6 @@ def _resolve_circular_radial_layout(
                 canvas_config=canvas_config,
                 cfg=cfg,
                 total_length=int(total_length),
-                tick_track_channel_override=tick_track_channel_override,
                 depth_config=depth_config,
             )
         else:
@@ -2212,7 +2173,6 @@ def _resolve_circular_radial_layout(
                     canvas_config=canvas_config,
                     cfg=cfg,
                     total_length=int(total_length),
-                    tick_track_channel_override=tick_track_channel_override,
                     feature_dict=feature_dict,
                     depth_config=depth_config,
                     resolved_by_index=resolved_by_index,
@@ -2227,7 +2187,6 @@ def _resolve_circular_radial_layout(
                     canvas_config=canvas_config,
                     cfg=cfg,
                     total_length=int(total_length),
-                    tick_track_channel_override=tick_track_channel_override,
                     depth_config=depth_config,
                 )
                 for group_intent, group_resolved in zip(movable_group, resolved_group):
@@ -2255,7 +2214,6 @@ def _resolve_circular_radial_layout(
                     canvas_config=canvas_config,
                     cfg=cfg,
                     total_length=int(total_length),
-                    tick_track_channel_override=tick_track_channel_override,
                     feature_dict=feature_dict,
                     depth_config=depth_config,
                     resolved_by_index=resolved_by_index,
@@ -2270,7 +2228,6 @@ def _resolve_circular_radial_layout(
                     canvas_config=canvas_config,
                     cfg=cfg,
                     total_length=int(total_length),
-                    tick_track_channel_override=tick_track_channel_override,
                     depth_config=depth_config,
                 )
                 for group_intent, group_resolved in zip(preferred_group, resolved_group):
@@ -2298,7 +2255,6 @@ def _resolve_circular_radial_layout(
                 canvas_config=canvas_config,
                 cfg=cfg,
                 total_length=int(total_length),
-                tick_track_channel_override=tick_track_channel_override,
                 feature_dict=feature_dict,
                 depth_config=depth_config,
                 resolved_by_index=resolved_by_index,
@@ -2314,7 +2270,6 @@ def _resolve_circular_radial_layout(
                         canvas_config=canvas_config,
                         cfg=cfg,
                         total_length=int(total_length),
-                        tick_track_channel_override=tick_track_channel_override,
                         depth_config=depth_config,
                     )
                 except ValidationError:
@@ -2336,7 +2291,6 @@ def _resolve_circular_radial_layout(
                         canvas_config=canvas_config,
                         cfg=cfg,
                         total_length=int(total_length),
-                        tick_track_channel_override=tick_track_channel_override,
                         feature_dict=feature_dict,
                         depth_config=depth_config,
                         resolved_by_index=resolved_by_index,
@@ -2350,7 +2304,6 @@ def _resolve_circular_radial_layout(
                         canvas_config=canvas_config,
                         cfg=cfg,
                         total_length=int(total_length),
-                        tick_track_channel_override=tick_track_channel_override,
                         depth_config=depth_config,
                     )
                     inside_group = fallback_group
@@ -2370,7 +2323,6 @@ def _resolve_circular_radial_layout(
                 canvas_config=canvas_config,
                 cfg=cfg,
                 total_length=int(total_length),
-                tick_track_channel_override=tick_track_channel_override,
                 depth_config=depth_config,
             )
 

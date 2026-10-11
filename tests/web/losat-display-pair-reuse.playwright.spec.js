@@ -219,7 +219,7 @@ const openCollinearGrid = async (page, sessionPath) => {
     ({ row, canonicalRow, canonicalColumn }) => [row, canonicalRow, canonicalColumn]
   )), { timeout: 60000 }).toEqual([[1, 1, 1], [1, 1, 2], [2, 2, 1]]);
   await chooseLosatp(page, 'collinear');
-  await page.getByRole('combobox', { name: 'Collinear evidence scope' }).selectOption('all');
+  await page.getByRole('combobox', { name: 'Collinear search between' }).selectOption('all');
 };
 
 test('Turning off a CLI grid reconverts LOSATP Collinear blocks and draws the fresh ribbons', async ({ page, browser }, testInfo) => {

@@ -86,9 +86,9 @@
             "crop": "openSelect",
             "cropPadding": {
               "top": 54,
-              "right": 80,
+              "right": 16,
               "bottom": 24,
-              "left": 80
+              "left": 16
             },
             "openSelect": {
               "selectedLabel": "Middle",
@@ -117,9 +117,9 @@
             "crop": "openSelect",
             "cropPadding": {
               "top": 54,
-              "right": 80,
+              "right": 16,
               "bottom": 24,
-              "left": 80
+              "left": 16
             },
             "openSelect": {
               "selectedLabel": "Out",
@@ -142,9 +142,9 @@
             "crop": "openSelect",
             "cropPadding": {
               "top": 54,
-              "right": 80,
+              "right": 16,
               "bottom": 24,
-              "left": 80
+              "left": 16
             },
             "openSelect": {
               "selector": "#legend-position",
@@ -231,7 +231,7 @@
     },
     {
       "title": "Add the AT skew track",
-      "body": "Add another Dinucleotide skew row inside the axis and use it for AT skew rather than the default GC skew.",
+      "body": "Add another Dinucleotide skew row inside the axis and use it for AT skew rather than the default GC skew. The dinucleotide, legend label, and color fields are under the row's disclosure, the line below Width and Radius.",
       "table": {
         "columns": ["Slot setting", "Value"],
         "rows": [
@@ -246,15 +246,17 @@
       },
       "operations": [
         {
+          "dataDependent": true,
           "title": "Add AT skew slot",
-          "body": "Set the added dinucleotide skew slot to AT, label it AT skew, and keep the two custom colors.",
+          "body": "Open the disclosure of the added dinucleotide skew slot, set dinucleotide to AT and legend label to AT skew, and choose the two colors.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-06-01-at-skew-slot-context.webp",
-            "alt": "Custom circular track slot a_skew_2 set to dinucleotide AT with AT skew legend colors.",
-            "caption": "Set the added dinucleotide skew slot to AT and label it AT skew."
+            "alt": "Custom circular track slot a_skew_2 with its disclosure open: dinucleotide AT, legend label AT skew, and custom positive and negative colors.",
+            "caption": "Open the a_skew_2 row's disclosure, then set dinucleotide to AT, legend label to AT skew, and the two colors."
           },
           "capture": {
             "source": "webapp",
+            "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
             "viewport": {"width": 1280, "height": 1100},
             "selector": "[data-capture='circular-track-slot-a_skew_2']",
             "highlightSelector": "[data-capture='circular-track-slot-a_skew_2']",
@@ -264,6 +266,8 @@
                 "type": "evaluate",
                 "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 320;"
               },
+              {"type": "click", "selector": "[data-track-slot-more='a_skew_2']:not([open]) > summary"},
+              {"type": "waitForSelector", "selector": "[data-track-slot-more='a_skew_2'][open]"},
               {"type": "evaluate", "script": "document.querySelector(\"[data-capture='circular-track-slot-a_skew_2']\")?.scrollIntoView({ block: 'center' });"}
             ],
             "cropPadding": {
@@ -273,7 +277,25 @@
               "left": 8
             },
             "openDetails": ["Layout"],
-            "waitForSelector": "[data-capture='circular-track-slot-a_skew_2']"
+            "waitForSelector": "[data-capture='circular-track-slot-a_skew_2']",
+            "assertAppState": {
+              "mode": "circular",
+              "adv.circular_track_slots_enabled": true,
+              "adv.circular_track_slots.3.id": "a_skew_2",
+              "adv.circular_track_slots.3.renderer": "dinucleotide_skew",
+              "adv.circular_track_slots.3.params.nt": "AT",
+              "adv.circular_track_slots.3.params.legend_label": "AT skew",
+              "adv.circular_track_slots.3.params.positive_color": "#deaf6e",
+              "adv.circular_track_slots.3.params.negative_color": "#7294e3"
+            },
+            "visibleControls": [
+              {"selector": "[aria-label='Circular track slot id a_skew_2']", "value": "a_skew_2"},
+              {"selector": "[aria-label='Circular track renderer a_skew_2']", "value": "Dinucleotide skew"},
+              {"selector": "[aria-label='Circular track slot a_skew_2 Track dinucleotide']", "value": "AT"},
+              {"selector": "[aria-label='Circular track slot a_skew_2 Track legend label']", "value": "AT skew"},
+              {"selector": "[aria-label='Circular track slot a_skew_2 Positive skew color']", "value": "#deaf6e"},
+              {"selector": "[aria-label='Circular track slot a_skew_2 Negative skew color']", "value": "#7294e3"}
+            ]
           }
         }
       ]

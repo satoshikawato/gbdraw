@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { LinearComparisonResolution } from '../services/linear-comparisons.js' */
+/** @import { LinearComparisonIssue, LinearComparisonResolution, LinearComparisonResolvedEdge } from '../services/linear-comparisons.js' */
 import {
   LINEAR_COMPARISON_MODES,
   LINEAR_COMPARISON_SOURCES,
@@ -43,7 +43,6 @@ const LINEAR_COMPARISON_SECTION_KEYS = Object.freeze({
     BLASTP_MAX_HITS: 'blastp-max-hits',
     MEMBER_HITS: 'member-hits',
     COLLINEAR_PRIMARY: 'collinear-primary',
-    UPLOAD_READINESS: 'upload-readiness',
     RESULT_FILTERS: 'result-filters',
     COMPARISON_APPEARANCE: 'comparison-appearance'
   }),
@@ -54,7 +53,6 @@ const LINEAR_COMPARISON_SECTION_KEYS = Object.freeze({
   ADVANCED: Object.freeze({
     RECORD_LAYOUT: 'record-layout',
     LOSAT_CACHE: 'losat-cache',
-    RAW_RESULTS: 'raw-results',
     COLLINEAR_DETAILS: 'collinear-details'
   })
 });
@@ -98,6 +96,7 @@ const LOSATP_MODES = Object.freeze([
 const LOSAT_MODE_BY_KEY = new Map(LOSAT_MODES.map((mode) => [mode.key, mode]));
 const LOSATP_MODE_BY_KEY = new Map(LOSATP_MODES.map((mode) => [mode.key, mode]));
 
+/** @type {Readonly<Record<string, Readonly<{ disclosureKey: string, focusTargetKey: string }>>>} */
 const ISSUE_ROUTES = Object.freeze({
   'missing-upload': Object.freeze({
     disclosureKey: LINEAR_COMPARISON_DISCLOSURE_KEYS.SELECTED_PAIRS,
@@ -251,20 +250,6 @@ const retainedDormantDraftCount = (plan, activeEdges) => {
   }).length;
 };
 
-const retainedRawResultDraftCount = (plan, activeEdges) => {
-  const activeById = new Map(activeEdges.map((edge) => [String(edge?.id || ''), edge]));
-  return plan.edges.filter((draft) => {
-    const retainedName = String(draft.losatFilename || '').trim();
-    if (!retainedName) return false;
-    const active = activeById.get(String(draft.id || ''));
-    return !(
-      active?.source === LINEAR_COMPARISON_SOURCES.LOSAT &&
-      draft.losatFilenameActive === true &&
-      String(active.losatFilename || '') === retainedName
-    );
-  }).length;
-};
-
 const valuesEquivalent = (left, right) => {
   const leftNumber = Number(left);
   const rightNumber = Number(right);
@@ -337,11 +322,15 @@ const projectSettingsSectionKeys = ({
 }) => {
   if (intentKey === LINEAR_COMPARISON_INTENT_KEYS.NONE) return Object.freeze([]);
 
+  // In the order the Settings disclosure shows them: search limits and
+  // Performance come after the result filters and appearance.
   const keys = [];
+  const searchLimits = [];
   if (planned.hasLosat) {
-    keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.LOSAT_MODE, LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.LOSAT_RUNTIME);
+    keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.LOSAT_MODE);
     if (losatModeKey === LINEAR_COMPARISON_LOSAT_MODE_KEYS.LOSATP) {
-      keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.LOSATP_MODE, LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.LOSATP_CANDIDATE);
+      keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.LOSATP_MODE);
+      searchLimits.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.LOSATP_CANDIDATE);
     }
     if (losatModeKey === LINEAR_COMPARISON_LOSAT_MODE_KEYS.LOSATN) {
       keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.BLASTN_TASK);
@@ -353,30 +342,32 @@ const projectSettingsSectionKeys = ({
       !selectedTopology &&
       losatpModeKey === LINEAR_COMPARISON_LOSATP_MODE_KEYS.SIMILARITY_GROUPS
     ) {
-      keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.MEMBER_HITS);
+      searchLimits.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.MEMBER_HITS);
     } else if (!selectedTopology && losatpModeKey === LINEAR_COMPARISON_LOSATP_MODE_KEYS.COLLINEAR_BLOCKS) {
-      keys.push(
-        LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.MEMBER_HITS,
-        LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.COLLINEAR_PRIMARY
-      );
+      keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.COLLINEAR_PRIMARY);
+      searchLimits.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.MEMBER_HITS);
     }
   }
-  if (planned.hasUpload) {
-    keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.UPLOAD_READINESS);
-  }
-  keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.RESULT_FILTERS);
-  keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.COMPARISON_APPEARANCE);
+  keys.push(
+    LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.RESULT_FILTERS,
+    LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.COMPARISON_APPEARANCE,
+    ...searchLimits
+  );
+  if (planned.hasLosat) keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.LOSAT_RUNTIME);
   return Object.freeze(keys);
 };
 
+/**
+ * @param {{ intentKey: string, planned: ReturnType<typeof plannedSources>, losatModeKey: string,
+ *   losatpModeKey: string, selectedTopology: boolean, dormantDraftCount: number }} input
+ */
 const projectSectionKeys = ({
   intentKey,
   planned,
   losatModeKey,
   losatpModeKey,
   selectedTopology,
-  dormantDraftCount,
-  dormantRawResultDraftCount
+  dormantDraftCount
 }) => {
   const settings = projectSettingsSectionKeys({
     intentKey,
@@ -398,9 +389,6 @@ const projectSectionKeys = ({
   if (planned.hasLosat) {
     advanced.push(LINEAR_COMPARISON_SECTION_KEYS.ADVANCED.LOSAT_CACHE);
   }
-  if (planned.hasLosat || dormantRawResultDraftCount > 0) {
-    advanced.push(LINEAR_COMPARISON_SECTION_KEYS.ADVANCED.RAW_RESULTS);
-  }
   if (
     planned.hasLosat &&
     !selectedTopology &&
@@ -416,34 +404,71 @@ const projectSectionKeys = ({
   });
 };
 
-const projectErrorRouting = (errors) => {
-  const targets = Object.freeze((Array.isArray(errors) ? errors : []).flatMap((issue) => {
+// One entry per issue, worded at its cause, with the actions that fix it.
+// The Comparison card lists them once; the pair row of a pair issue
+// carries its short text. An action's accessible name adds its pair to the
+// visible label.
+/** @param {string} code @param {string} pairLabel */
+const issueActions = (code, pairLabel) => Object.freeze((code === 'missing-upload'
+  ? [{ key: 'choose-file', label: 'Choose file', ariaLabel: pairLabel ? `Choose file for ${pairLabel}` : 'Choose file' }]
+  : code === 'selected-losat-requires-pairwise'
+    ? [{ key: 'all-losat', label: 'Run LOSAT for all pairs' }, { key: 'pairwise', label: 'Use Pairwise matches' }]
+    : [{ key: 'show', label: 'Show pair', ariaLabel: pairLabel ? `Show pair ${pairLabel}` : 'Show pair' }]
+).map((action) => Object.freeze({ ariaLabel: action.label, ...action })));
+
+const pairLabelOf = (edge) => (Number.isInteger(edge?.queryIndex) && Number.isInteger(edge?.subjectIndex)
+  ? `#${edge.queryIndex + 1} → #${edge.subjectIndex + 1}` : '');
+
+// A Selected plan breaks the LOSATP mode: the text names the pairs set to
+// Upload BLAST TSV, or says that the pairs are set one by one when every one
+// of them runs LOSAT.
+/** @param {readonly LinearComparisonResolvedEdge[]} edges */
+const selectedPairsText = (edges) => {
+  const uploads = edges.filter((edge) => edge?.source === LINEAR_COMPARISON_SOURCES.UPLOAD).map(pairLabelOf).filter(Boolean);
+  const cause = uploads.length === 0 ? 'The pairs are set one by one in Selected pairs. '
+    : `${uploads.length === 1 ? 'Pair' : 'Pairs'} ${uploads.join(', ')} ${uploads.length === 1 ? 'is' : 'are'} set to Upload BLAST TSV, so not every pair runs LOSAT. `;
+  return `${cause}Similarity groups and Collinear blocks compare every adjacent pair with LOSAT.`;
+};
+
+/** @param {readonly LinearComparisonIssue[] | undefined} errors @param {readonly LinearComparisonResolvedEdge[]} edges */
+const projectIssues = (errors, edges) => {
+  const edgeList = Array.isArray(edges) ? edges : [];
+  const edgeByKey = new Map(edgeList.map((edge) => [String(edge?.edgeKey || ''), edge]));
+  return Object.freeze((Array.isArray(errors) ? errors : []).flatMap((issue, index) => {
     const code = String(issue?.code || '').trim();
     const route = ISSUE_ROUTES[code];
     if (!route) return [];
+    const edgeKey = String(issue?.edgeKey || '');
+    const pairLabel = pairLabelOf(edgeByKey.get(edgeKey));
+    const pairText = code === 'missing-upload' ? 'No BLAST file' : String(issue?.message || '');
+    const text = code === 'selected-losat-requires-pairwise' ? selectedPairsText(edgeList)
+      : pairLabel ? `${pairLabel}: ${pairText}.`.replace(/\.\.$/, '.') : String(issue?.message || '');
     return [Object.freeze({
+      key: `${index}-${code}`,
       issueCode: code,
       disclosureKey: route.disclosureKey,
       focusTargetKey: route.focusTargetKey,
       edgeId: String(issue?.edgeId || ''),
-      edgeKey: String(issue?.edgeKey || '')
+      edgeKey,
+      text,
+      pairText: pairLabel ? pairText : '',
+      actions: issueActions(code, pairLabel)
     })];
   }));
-  const disclosureKeys = Object.freeze([
-    ...new Set(targets.map((target) => target.disclosureKey))
-  ]);
-  const count = targets.length;
-  return Object.freeze({
-    badge: count === 0
-      ? null
-      : Object.freeze({
-        count,
-        label: `${count} comparison issue${count === 1 ? '' : 's'}`
-      }),
-    primaryDisclosureKey: targets[0]?.disclosureKey || null,
-    disclosureKeys,
-    targets
-  });
+};
+
+/** @typedef {ReturnType<typeof projectIssues>[number]} LinearComparisonUiIssue An entry of the Comparison card's issue list. */
+
+// Each pair row shows every issue of its pair.
+/** @param {readonly LinearComparisonUiIssue[]} issues */
+const projectPairIssueText = (issues) => {
+  /** @type {Record<string, string>} */
+  const texts = {};
+  for (const issue of issues) {
+    if (!issue.edgeKey || !issue.pairText) continue;
+    texts[issue.edgeKey] = texts[issue.edgeKey] ? `${texts[issue.edgeKey]}; ${issue.pairText}` : issue.pairText;
+  }
+  return Object.freeze(texts);
 };
 
 const projectTopology = (plan, activePairCount) => {
@@ -549,7 +574,6 @@ export const projectLinearComparisonUi = ({
   const sourceBreakdown = projectSourceBreakdown(activeEdges);
   const activePairCount = activeEdges.length;
   const dormantDraftCount = retainedDormantDraftCount(normalizedPlan, activeEdges);
-  const dormantRawResultDraftCount = retainedRawResultDraftCount(normalizedPlan, activeEdges);
   const topology = projectTopology(normalizedPlan, activePairCount);
   const filterSummary = projectFilterSummary(filters);
   const sectionKeys = projectSectionKeys({
@@ -558,10 +582,9 @@ export const projectLinearComparisonUi = ({
     losatModeKey,
     losatpModeKey,
     selectedTopology,
-    dormantDraftCount,
-    dormantRawResultDraftCount
+    dormantDraftCount
   });
-  const errorRouting = projectErrorRouting(resolution?.errors);
+  const issues = projectIssues(resolution?.errors, activeEdges);
 
   return Object.freeze({
     intentKey,
@@ -580,11 +603,8 @@ export const projectLinearComparisonUi = ({
     filterSummary: filterSummary.text,
     filterSummaryIsDefault: filterSummary.isDefault,
     retainedDormantDraftCount: dormantDraftCount,
-    retainedRawResultDraftCount: dormantRawResultDraftCount,
     sectionKeys,
-    errorBadge: errorRouting.badge,
-    errorDisclosureKey: errorRouting.primaryDisclosureKey,
-    errorDisclosureKeys: errorRouting.disclosureKeys,
-    errorTargets: errorRouting.targets
+    issues,
+    pairIssueText: projectPairIssueText(issues)
   });
 };

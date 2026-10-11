@@ -46,7 +46,7 @@
     },
     {
       "title": "Add the first assembly",
-      "body": "Upload the GCF_000196095.1 GBFF as File 1. The File lists its two chromosomes as records. Under File defaults, enter the species in Organism / strain and the strain in Subtitle / title; both records use these values.",
+      "body": "Upload the GCF_000196095.1 GBFF as File 1. The File lists its two chromosomes as records. Under Names for all records in this file, enter the species in Organism / strain and the strain in Subtitle / title; both records use these values.",
       "table": {
         "columns": [
           "File",
@@ -82,8 +82,8 @@
           "dataDependent": true,
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-02-01-file1-defaults.webp",
-            "alt": "File 1 card with the GCF_000196095.1 GBFF, two records, and File defaults set to Vibrio parahaemolyticus and RIMD 2210633.",
-            "caption": "Upload the RIMD 2210633 GBFF as File 1 and fill its File defaults."
+            "alt": "File 1 card with the GCF_000196095.1 GBFF, two records, and names for all records set to Vibrio parahaemolyticus and RIMD 2210633.",
+            "caption": "Upload the RIMD 2210633 GBFF as File 1 and fill in the names for all its records."
           },
           "capture": {
             "source": "webapp",
@@ -113,7 +113,7 @@
             },
             "visibleText": [
               "File 1",
-              "File defaults (applied to all records)",
+              "Names for all records in this file",
               "Number of records: 2"
             ],
             "visibleControls": [
@@ -132,7 +132,7 @@
     },
     {
       "title": "Add the second assembly",
-      "body": "Click Add sequence, upload the GCF_000354175.2 GBFF as File 2, and fill its File defaults the same way.",
+      "body": "Click Add sequence, upload the GCF_000354175.2 GBFF as File 2, and fill in the names for all its records the same way.",
       "table": {
         "columns": [
           "File",
@@ -168,8 +168,8 @@
           "dataDependent": true,
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-03-01-file2-defaults.webp",
-            "alt": "File 2 card with the GCF_000354175.2 GBFF, two records, and File defaults set to Vibrio alginolyticus and NBRC 15630, above the Add sequence button.",
-            "caption": "Add sequence opens File 2; upload the NBRC 15630 GBFF and fill its File defaults."
+            "alt": "File 2 card with the GCF_000354175.2 GBFF, two records, and names for all records set to Vibrio alginolyticus and NBRC 15630, above the Add sequence button.",
+            "caption": "Add sequence opens File 2; upload the NBRC 15630 GBFF and fill in the names for all its records."
           },
           "capture": {
             "source": "webapp",
@@ -200,7 +200,7 @@
             },
             "visibleText": [
               "File 2",
-              "File defaults (applied to all records)",
+              "Names for all records in this file",
               "Number of records: 2"
             ],
             "visibleControls": [
@@ -313,7 +313,7 @@
           ]
         ]
       },
-      "note": "Evidence scope stays at Adjacent pairs: every chromosome in one row is compared with every chromosome in the next row, four pairs here. LOSAT runs only in this step; the later Generates reuse its results.",
+      "note": "Search between stays at Adjacent pairs: every chromosome in one row is compared with every chromosome in the next row, four pairs here. LOSAT runs only in this step; the later Generates reuse its results.",
       "replay": [
         {
           "type": "click",

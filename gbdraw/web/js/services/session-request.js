@@ -173,6 +173,7 @@ import { recordStructuralMetric } from './runtime-test-hooks.js';
 import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } from './record-display-model.js';
 
 /** @import { SessionResourceSource } from './session-resources.js' */
+/** @import { LinearComparisonResolvedEdge } from './linear-comparisons.js' */
 
 // The drawing a request reads its settings and edits from: a `DrawingState`
 // (state.js), Generate's drawing with the rules it admits, or a Gallery
@@ -2001,7 +2002,7 @@ const generatedProteinSettings = (drawing, losatExecution, baseline = {}) => {
 
 // The correction of a resolver issue the comparison panel reports (CI-06).
 const PLAN_ISSUE_REASONS = Object.freeze({
-  'missing-upload': 'BLAST_TSV_REQUIRED', 'selected-losat-requires-pairwise': 'LOSAT_PLAN'
+  'missing-upload': 'BLAST_TSV_REQUIRED', 'selected-losat-requires-pairwise': 'SELECTED_PAIRS_NEED_PAIRWISE'
 });
 
 export const requireLinearComparisonPlanSnapshot = (snapshot) => {
@@ -2010,7 +2011,10 @@ export const requireLinearComparisonPlanSnapshot = (snapshot) => {
   }
   const issue = Array.isArray(snapshot.errors) ? snapshot.errors[0] : null;
   if (issue || String(snapshot.error || '').trim()) {
-    const edge = snapshot.edges.find((item) => item?.id && item.id === issue?.edgeId);
+    // A LOSATP-mode issue names the first Upload pair, when the plan has one.
+    const edge = snapshot.edges.find((/** @type {LinearComparisonResolvedEdge} */ item) => item?.id && item.id === issue?.edgeId)
+      || (issue?.code === 'selected-losat-requires-pairwise'
+        ? snapshot.edges.find((/** @type {LinearComparisonResolvedEdge} */ item) => item?.source === 'upload') : undefined);
     throw diagnosticError('COMPARISON_INPUT', {
       reason: PLAN_ISSUE_REASONS[issue?.code] || 'PAIR_TOPOLOGY',
       queryRecordIndex: edge?.queryIndex, subjectRecordIndex: edge?.subjectIndex

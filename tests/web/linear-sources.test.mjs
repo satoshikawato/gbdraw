@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   groupLinearSourceRecords,
   isPristineLinearSource,
+  linearRecordNames,
   linearSourceHasPrimaryInput,
   linearSourceDepthStatus,
   losatSearchSequences,
@@ -481,4 +482,28 @@ test('LOSAT FASTA extraction reports a region beyond the record as a region fail
   // (parseRegionText, like parse_region_spec), so the ORDER reason has no input here.
   assert.equal((await extract('31-2000')).canonicalLength, 30);
   assert.equal((await extract('2-1')).fasta, '>TINY.1\nGT\n');
+});
+
+// OV-436: two chromosomes of one File were named "Vibrio parahaemolyticus" and
+// "NC_004605.1" because only the first drew a Definition.
+test('every record of a File is named by the File definition plus its accession', () => {
+  const vp = { name: 'vp.gb' };
+  const va = { name: 'va.gb' };
+  const card = (uid, gb, definition, region_record_id) => ({ ...sourceRecord(uid, gb), definition, region_record_id });
+  const sequences = [
+    card('r1', vp, '<i>Vibrio parahaemolyticus</i>', 'NC_004603.1'),
+    card('r2', vp, '', 'NC_004605.1'),
+    card('r3', va, '', 'NC_022349.1'),
+    card('r4', { name: 'single.gb' }, '', '')
+  ];
+  const before = JSON.stringify(sequences);
+  const labels = [...linearRecordNames(sequences).values()].map(({ label }) => label);
+  assert.deepEqual(labels, [
+    'Vibrio parahaemolyticus · NC_004603.1',
+    'Vibrio parahaemolyticus · NC_004605.1',
+    'NC_022349.1',
+    'single.gb'
+  ]);
+  // The cards (and the diagram headings they draw) are not changed.
+  assert.equal(JSON.stringify(sequences), before);
 });

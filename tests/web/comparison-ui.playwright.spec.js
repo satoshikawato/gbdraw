@@ -385,7 +385,7 @@ test('uploader, comparison commands, and native summaries work from the keyboard
   await expect(losatpButton).toHaveAttribute('aria-pressed', 'true');
   await settingsSummary.click();
 
-  const selectedSummary = selectedPairs(page).locator('summary');
+  const selectedSummary = selectedPairs(page).locator(':scope > summary');
   await page.keyboard.press('Tab');
   await selectedSummary.focus();
   await expectKeyboardFocusIndicator(selectedSummary);
@@ -574,7 +574,7 @@ test('imported comparison resolutions are explicit and create one History entry 
       undoAdded: window.__GBDRAW_HISTORY__.getUndoCount() - undoBefore };
   });
   expect(invalidReplacement).toMatchObject({
-    status: 'error', code: 'COMPARISON_INPUT', undoAdded: 0, context: { reason: 'LOSAT_PLAN' }
+    status: 'error', code: 'COMPARISON_INPUT', undoAdded: 0, context: { reason: 'SELECTED_PAIRS_NEED_PAIRWISE' }
   });
   await expect(page.getByRole('region', { name: 'Result Preview' }))
     .toContainText('Last Successful Result');
@@ -595,7 +595,8 @@ test('imported comparison resolutions are explicit and create one History entry 
     return { result, undoAdded: window.__GBDRAW_HISTORY__.getUndoCount() - undoBefore };
   });
   expect(missingTsv).toEqual({ result: { status: 'blocked', reason: 'missing-blast-tsv' }, undoAdded: 0 });
-  await expect(missingTsvDialog).toContainText('These pairs are set to Upload BLAST TSV but have no file: #1 → #2.');
+  await expect(missingTsvDialog.locator('[data-missing-blast-tsv-row]')).toHaveText([/#1 → #2/]);
+  await expect(missingTsvDialog).toContainText('No file');
   const setToNone = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const undoBefore = window.__GBDRAW_HISTORY__.getUndoCount();
@@ -796,7 +797,7 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
       .toBe(value);
     if (value === 'collinear') {
       const scope = page.getByRole('combobox', {
-        name: 'Collinear evidence scope'
+        name: 'Collinear search between'
       });
       await expect(scope).toHaveValue('adjacent');
       await expect(scope.locator('option:checked')).toHaveText('Adjacent pairs');
@@ -844,8 +845,23 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
   )).toHaveAttribute('aria-pressed', 'true');
   await expect(losatpMode).toHaveValue('pairwise');
 
-  await comparisonSettings(page).getByRole('button', {
-    name: 'Use all adjacent LOSAT'
+  // The disabled options say why; the one way out is the command that compares every pair.
+  await expect(losatpMode.locator('option[value="orthogroup"]')).toHaveText('Similarity groups (all pairs only)');
+  await expect(comparisonCard(page).locator('[data-linear-comparison-issues]')).toHaveCount(0);
+  // The command needs loaded sequences to compare.
+  await page.evaluate((contents) => {
+    const app = window.__GBDRAW_APP__;
+    app.linearSeqs.forEach((_, index) => app.setLinearSeqPrimaryFile(
+      index,
+      'gb',
+      new File([contents[index % contents.length]], `mixed-record-${index + 1}.gbk`, {
+        type: 'text/plain',
+        lastModified: index + 1
+      })
+    ));
+  }, [makeGenbank('MixedA'), makeGenbank('MixedB', 'gct')]);
+  await comparisonCommands(page).getByRole('button', {
+    name: 'Run LOSAT for all adjacent pairs', exact: true
   }).click();
   await expect(comparisonCommands(page).getByRole('button', {
     name: 'Run LOSAT for all adjacent pairs', exact: true
@@ -1032,7 +1048,7 @@ test('comparison controls drive appearance and current Session round trips', { t
   await memberHits.fill('11');
   await inference.check();
   await advanced.locator('summary').click();
-  await page.getByRole('combobox', { name: 'Collinear evidence scope' }).selectOption('all');
+  await page.getByRole('combobox', { name: 'Collinear search between' }).selectOption('all');
   await page.getByRole('combobox', { name: 'Collinear color mode' })
     .selectOption('orientation_identity');
   await page.getByRole('combobox', { name: 'Collinear unit mode' }).selectOption('locus');
@@ -1248,11 +1264,22 @@ test('structured comparison errors open and focus their owning disclosure', asyn
   expect(missingUpload.result).toEqual({ status: 'blocked', reason: 'missing-blast-tsv' });
   expect(missingUpload.errorCode).toBeNull();
   expect(missingUpload.issueCodes).toEqual(['missing-upload']);
-  await expect(comparisonCard(page).getByRole('status')).toContainText('comparison issue');
+  // The one issue list names the pair and offers the action that fixes it.
+  const missingIssue = comparisonCard(page).getByRole('group', { name: 'Comparison issues' })
+    .locator('[data-linear-comparison-issue="missing-upload"]');
+  await expect(missingIssue).toContainText('#1 → #2: No BLAST file.');
   const missingTsvDialog = page.getByRole('dialog', { name: 'BLAST TSV missing' });
-  const chooserOpened = page.waitForEvent('filechooser');
-  await missingTsvDialog.getByRole('button', { name: 'Choose BLAST TSV for #1 → #2…' }).click();
-  await chooserOpened;
+  const rowChooserOpened = page.waitForEvent('filechooser');
+  await missingTsvDialog.getByRole('button', { name: 'Choose BLAST TSV for #1 → #2' }).click();
+  // The dialog opens the pair's own uploader (one file path with its History step).
+  expect(await (await rowChooserOpened).element().getAttribute('aria-label')).toBe('BLAST TSV for #1 to #2');
+  await missingTsvDialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(missingTsvDialog).toHaveCount(0);
+  // Choose file in the issue opens the pair's file chooser, the Selected pairs
+  // disclosure, and focuses the pair's file control; its name carries the pair.
+  const issueChooserOpened = page.waitForEvent('filechooser');
+  await missingIssue.getByRole('button', { name: 'Choose file for #1 → #2', exact: true }).click();
+  expect(await (await issueChooserOpened).element().getAttribute('aria-label')).toBe('BLAST TSV for #1 to #2');
   await expect(selectedPairs(page)).toHaveAttribute('open', '');
   const missingPair = page.locator(`[data-edge-key="${missingUpload.edgeKey}"]`);
   expect(await missingPair.evaluate((element) => (
@@ -1283,11 +1310,54 @@ test('structured comparison errors open and focus their owning disclosure', asyn
     };
   });
   expect(selectedCollinear.result.status).toBe('error');
-  expect(selectedCollinear.reason).toBe('LOSAT_PLAN');
+  expect(selectedCollinear.reason).toBe('SELECTED_PAIRS_NEED_PAIRWISE');
+  // The Generate error names the pair whose source breaks the LOSATP mode.
+  await expect(page.getByRole('alert', { name: 'Generation Error' })).toContainText('Pair: #2 to #3. Similarity groups and Collinear blocks compare every adjacent pair with LOSAT, so they do not run on pairs set one by one in Selected pairs.');
   expect(selectedCollinear.issueCodes).toEqual(['selected-losat-requires-pairwise', 'missing-upload']);
   await expect(missingTsvDialog).toHaveCount(0);
   await expect(comparisonSettings(page)).toHaveAttribute('open', '');
   await expect(page.getByRole('combobox', { name: 'LOSATP mode' })).toBeFocused();
+
+  // The issue names the pair whose source broke the LOSATP mode, the
+  // status region counts the issues, and Show in Comparison reaches the cause.
+  const issues = comparisonCard(page).getByRole('group', { name: 'Comparison issues' });
+  await expect(issues.locator('[data-linear-comparison-issue="selected-losat-requires-pairwise"]'))
+    .toContainText('Pair #2 → #3 is set to Upload BLAST TSV, so not every pair runs LOSAT.');
+  await expect(comparisonCard(page).locator('[data-linear-comparison-status]'))
+    .toContainText('2 issues to fix before Generate');
+  await comparisonSettings(page).evaluate((details) => { details.open = false; });
+  await page.getByRole('alert', { name: 'Generation Error' })
+    .getByRole('button', { name: 'Show in Comparison', exact: true }).click();
+  await expect(comparisonSettings(page)).toHaveAttribute('open', '');
+  await expect(page.getByRole('combobox', { name: 'LOSATP mode' })).toBeFocused();
+
+  // Each setting the issue list changes is one Undo step that restores it.
+  const history = () => page.evaluate(() => ({ count: window.__GBDRAW_HISTORY__.getUndoCount(),
+    label: window.__GBDRAW_HISTORY__.undoLabel(), mode: window.__GBDRAW_APP__.linearComparisonUi.activeLosatpModeKey,
+    plan: window.__GBDRAW_APP__.linearComparisonPlan.mode }));
+  const settled = () => expect.poll(() => page.evaluate(() => !window.__GBDRAW_HISTORY__.mutationPending())).toBe(true);
+  const before = await history();
+  await issues.getByRole('button', { name: 'Use Pairwise matches', exact: true }).click();
+  await settled();
+  expect(await history()).toEqual({ count: before.count + 1, label: 'Change setting', mode: 'pairwise', plan: 'selected' });
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  expect(await history()).toEqual(before);
+  await issues.getByRole('button', { name: 'Run LOSAT for all pairs', exact: true }).click();
+  await settled();
+  expect(await history()).toEqual({ count: before.count + 1, label: 'Change comparisons', mode: 'collinear', plan: 'adjacent' });
+  // A LOSAT runtime failure has no pair issue: Show in Comparison opens
+  // Settings at Execution.
+  await expect(issues).toHaveCount(0);
+  for (const code of ['LOSAT_THREADING_UNAVAILABLE', 'LOSAT_RUNTIME']) {
+    await comparisonSettings(page).evaluate((details) => { details.open = false; });
+    await page.evaluate((errorCode) => { window.__GBDRAW_APP__.errorLog = { code: errorCode, stage: 'comparison' }; }, code);
+    await page.getByRole('button', { name: 'Show in Comparison', exact: true }).click();
+    await expect(comparisonSettings(page)).toHaveAttribute('open', '');
+    await expect(page.getByRole('combobox', { name: 'LOSAT execution' })).toBeFocused();
+  }
+  await page.evaluate(() => { window.__GBDRAW_APP__.errorLog = null; });
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  expect(await history()).toEqual(before);
 });
 
 // Two uploaded GenBank records joined by one uploaded-table comparison (CO-06).
@@ -1416,7 +1486,8 @@ test('removing the BLAST TSV of an Upload pair names the missing file at Generat
   expect(blocked).toEqual({ result: { status: 'blocked', reason: 'missing-blast-tsv' }, code: null,
     content: drawn.content });
   const dialog = page.getByRole('dialog', { name: 'BLAST TSV missing' });
-  await expect(dialog).toContainText('These pairs are set to Upload BLAST TSV but have no file: #1 → #2.');
+  await expect(dialog.locator('[data-missing-blast-tsv-row]')).toHaveText([/#1 → #2/]);
+  await expect(dialog).toContainText('No file');
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   await expect(page.getByRole('alert', { name: 'Generation Error' })).toHaveCount(0);
@@ -1428,11 +1499,11 @@ test('removing the BLAST TSV of an Upload pair names the missing file at Generat
     .getByRole('button', { name: 'Remove' }).click();
   await page.getByRole('alert', { name: 'Generation Error' })
     .getByRole('button', { name: 'Retry Generate' }).click();
-  await expect(dialog).toContainText('These pairs are set to Upload BLAST TSV but have no file: #1 → #2.');
+  await expect(dialog.locator('[data-missing-blast-tsv-row]')).toHaveText([/#1 → #2/]);
 });
 
 // D-54: Generate with pairs set to Upload BLAST TSV but without a file asks
-// first: choose the first pair's file, set the pairs to No comparison and
+// first: one row per pair to choose its file, skip these comparisons and
 // Generate as one History entry, or Cancel.
 test('Generate asks how to resolve Upload pairs without a BLAST TSV', async ({ page }) => {
   test.setTimeout(300000);
@@ -1466,11 +1537,9 @@ test('Generate asks how to resolve Upload pairs without a BLAST TSV', async ({ p
   const beforeCancel = await undoCount();
   await generate.click();
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText(
-    'These pairs are set to Upload BLAST TSV but have no file: #1 → #2, #2 → #3.'
-  );
+  await expect(dialog.locator('[data-missing-blast-tsv-row]')).toHaveText([/#1 → #2.*No file/, /#2 → #3.*No file/]);
   await expect(dialog.getByRole('button')).toHaveText([
-    'Choose BLAST TSV for #1 → #2…', 'Set to No comparison and Generate', 'Cancel'
+    'Choose file…', 'Choose file…', 'Cancel', 'Skip these comparisons and Generate'
   ]);
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toHaveCount(0);
@@ -1479,10 +1548,10 @@ test('Generate asks how to resolve Upload pairs without a BLAST TSV', async ({ p
   expect(await resultCount()).toBe(0);
   expect(await pairSources()).toEqual(['#1 → #2: upload', '#2 → #3: upload']);
 
-  // Set to No comparison and Generate sets both listed pairs to No comparison
+  // Skip these comparisons and Generate sets both listed pairs to No comparison
   // as one History step, then Generate succeeds; Undo restores both pairs.
   await generate.click();
-  await expect(dialog).toContainText('have no file: #1 → #2, #2 → #3.');
+  await expect(dialog.locator('[data-missing-blast-tsv-row]')).toHaveCount(2);
   const bothToNone = await evaluateWithRetainedPromise(page, async () => {
     const history = window.__GBDRAW_HISTORY__;
     const undoBefore = history.getUndoCount();
@@ -1504,37 +1573,47 @@ test('Generate asks how to resolve Upload pairs without a BLAST TSV', async ({ p
   expect(await pairSources()).toEqual(['#1 → #2: upload', '#2 → #3: upload']);
   expect(await undoCount()).toBe(beforeCancel);
 
-  // Choose opens the first pair's file chooser in the panel and does not generate.
-  await selectedPairs(page).evaluate((details) => { details.open = false; });
+  // Choose file… in a row picks that pair's file in the dialog and does not generate.
   await generate.click();
   await expect(dialog).toBeVisible();
   const chooserOpened = page.waitForEvent('filechooser');
-  await dialog.getByRole('button', { name: 'Choose BLAST TSV for #1 → #2…' }).click();
+  await dialog.getByRole('button', { name: 'Choose BLAST TSV for #1 → #2' }).click();
   const chooser = await chooserOpened;
-  await expect(dialog).toHaveCount(0);
-  await expect(selectedPairs(page)).toHaveAttribute('open', '');
   expect(await chooser.element().getAttribute('aria-label')).toBe('BLAST TSV for #1 to #2');
-  expect(await undoCount()).toBe(beforeCancel);
   expect(await resultCount()).toBe(0);
+  const beforeChoose = await undoCount();
   await chooser.setFiles({
     name: 'pair-1-2.tsv',
     mimeType: 'text/tab-separated-values',
     buffer: Buffer.from('TsvA\tTsvB\t95\t80\t4\t0\t1\t80\t5\t84\t1e-40\t160\n')
   });
+  const rows = dialog.locator('[data-missing-blast-tsv-row]');
+  await expect(rows).toHaveText([/#1 → #2.*pair-1-2\.tsv.*Change…/, /#2 → #3.*No file.*Choose file…/]);
+  // The chosen file is one Undo step, the same as a file chosen in the pair row.
+  await expect.poll(() => page.evaluate(() => !window.__GBDRAW_HISTORY__.mutationPending()
+    && window.__GBDRAW_HISTORY__.undoLabel())).toBe('Change uploaded file');
+  expect(await undoCount()).toBe(beforeChoose + 1);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  await expect(rows).toHaveText([/#1 → #2.*No file/, /#2 → #3.*No file/]);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
+  await expect(rows).toHaveText([/#1 → #2.*pair-1-2\.tsv.*Change…/, /#2 → #3.*No file.*Choose file…/]);
+  await expect(dialog).toBeVisible();
+  expect(await resultCount()).toBe(0);
+  await selectedPairs(page).evaluate((details) => { details.open = true; });
   await expect(page.getByRole('group', { name: 'BLAST TSV for #1 to #2 selection' }))
     .toContainText('pair-1-2.tsv');
 
-  // The next Generate names only the pair still without a file. The button
-  // reads the pairs when it is pressed: a pair that got its file while the
-  // dialog was open (as Undo can do) is kept, and Generate draws both pairs.
-  await generate.click();
-  await expect(dialog).toContainText('These pairs are set to Upload BLAST TSV but have no file: #2 → #3.');
+  // The dialog reads the pairs as they are now: a pair that got its file while
+  // it was open (as Undo can do) counts, and with every pair filled the Skip
+  // button gives way to Generate, which draws both pairs.
+  await expect(dialog.getByRole('button', { name: 'Skip these comparisons and Generate' })).toBeVisible();
   await page.evaluate((text) => {
     const app = window.__GBDRAW_APP__;
     app.setLinearComparisonCardFile(app.linearComparisonResolution.edges[1].edgeKey,
       new File([text], 'pair-2-3.tsv', { type: 'text/tab-separated-values' }));
   }, 'TsvB\tTsvC\t95\t80\t4\t0\t1\t80\t5\t84\t1e-40\t160\n');
-  await dialog.getByRole('button', { name: 'Set to No comparison and Generate' }).click();
+  await expect(dialog.getByRole('button', { name: 'Skip these comparisons and Generate' })).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Generate', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => (
     !window.__GBDRAW_APP__.processing && !window.__GBDRAW_HISTORY__.mutationPending()
@@ -1721,4 +1800,58 @@ test('a loaded Session 44 keeps the Collinear Max target seqs through a LOSATP m
   expect((await linearBlastp()).mode).toBe('orthogroup');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.setLinearComparisonLosatpMode('collinear'))).toBe(true);
   expect(await linearBlastp()).toEqual({ mode: 'collinear', candidateLimit: 7 });
+});
+
+// OV-436: the two chromosomes of one genome File were listed as
+// "Vibrio parahaemolyticus" and "NC_004605.1"; every panel now names each
+// record by its File's definition plus its accession.
+test('Record Layout and Selected pairs name every record of a multi-record File the same way', async ({ page }) => {
+  test.setTimeout(240000);
+  page.on('dialog', (dialog) => dialog.accept());
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await page.locator('input[accept^=".json,"]').setInputFiles(
+    'gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz'
+  );
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
+    && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180000 });
+  const definitions = await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((sequence) => sequence.definition));
+  await page.locator('details[data-linear-comparison-disclosure="advanced"]').evaluate((details) => { details.open = true; });
+  const layoutNames = page.locator('[data-linear-record-layout-name]');
+  await expect(layoutNames).toHaveText([
+    /^#1 Vibrio parahaemolyticus · NC_004603\.1/,
+    /^#2 Vibrio parahaemolyticus · NC_004605\.1/,
+    /^#3 Vibrio alginolyticus · NC_022349\.1/,
+    /^#4 Vibrio alginolyticus · NC_022359\.1/
+  ]);
+  await selectedPairs(page).evaluate((details) => { details.open = true; });
+  const pairRow = selectedPairs(page).locator('[data-linear-comparison-pair-row]').first();
+  await expect(pairRow.locator('legend'))
+    .toHaveText('#1 → #3 Vibrio parahaemolyticus · NC_004603.1 → Vibrio alginolyticus · NC_022349.1');
+  // Source and target each take a line of their own.
+  await expect(pairRow.locator('[data-linear-comparison-pair-names] > div')).toHaveText([
+    '#1 Vibrio parahaemolyticus · NC_004603.1',
+    '→ #3 Vibrio alginolyticus · NC_022349.1'
+  ]);
+  // At the default 320 px sidebar the name shrinks, never the accession: each
+  // accession is whole and inside its row.
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.sidebarWidth)).toBe(320);
+  const accessionGeometry = (row) => row.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return [...element.querySelectorAll('[data-record-name-detail]')].map((detail) => {
+      const rect = detail.getBoundingClientRect();
+      return { text: detail.textContent, whole: detail.scrollWidth <= detail.clientWidth + 1,
+        inside: rect.width > 0 && rect.left >= box.left - 1 && rect.right <= box.right + 1 };
+    });
+  });
+  for (const [row, accessions] of [
+    [layoutNames.nth(0), [' · NC_004603.1']],
+    [layoutNames.nth(1), [' · NC_004605.1']],
+    [pairRow, [' · NC_004603.1', ' · NC_022349.1']]
+  ]) {
+    expect(await accessionGeometry(row)).toEqual(accessions.map((text) => ({ text, whole: true, inside: true })));
+  }
+  // The records' own Definitions (the diagram headings) are unchanged.
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((sequence) => sequence.definition)))
+    .toEqual(definitions);
 });

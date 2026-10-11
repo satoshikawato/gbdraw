@@ -56,9 +56,9 @@ for(const width of [1440,390]) {
         return {ids,text:original+'\n'+ids.slice(0,2).map((id,i)=>['CDS','hash',id,['#112233','#445566'][i],'Color group'].join('\t')).join('\n')+'\n'};
       });
       const before=await inspect(page);
-      const input=page.getByLabel('Specific Table (-t)',{exact:true});
+      const input=page.getByLabel('Specific rules file',{exact:true});
       await reveal(input);
-      const picker=page.getByRole('button',{name:'Choose Specific Table (-t)',exact:true});
+      const picker=page.getByRole('button',{name:'Choose Specific rules file',exact:true});
       await picker.scrollIntoViewIfNeeded();
       await expect(picker).toBeVisible();
       const chooser=page.waitForEvent('filechooser');

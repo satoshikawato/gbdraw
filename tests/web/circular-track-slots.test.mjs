@@ -24,6 +24,11 @@ await cp(
   join(tempRoot, 'services', 'conservation-series.js')
 );
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
+// track-slot-display.js reads the generated size-class boundaries.
+await cp(
+  join(repoRoot, 'gbdraw', 'web', 'js', 'mode-profiles.generated.js'),
+  join(tempRoot, 'mode-profiles.generated.js')
+);
 // The track-slot leaves the slot editors import.
 for (const leaf of ['depth-track-state.js', 'track-slot-display.js', 'track-slot-validation.js', 'circular-track-slot-model.js']) {
   await cp(
@@ -148,6 +153,23 @@ const createState = ({
 const slotSides = (state) => Object.fromEntries(
   state.adv.circular_track_slots.map((slot) => [slot.id, slot.side])
 );
+
+// The preview estimates a row with the size class Generate will use: 60,000 bp
+// is short by the packaged Circular boundary and long by a boundary of 50 kb
+// that the drawing keeps from its Session.
+test('the track preview uses the short/long boundary the Circular drawing keeps', () => {
+  const featureWidthNote = (unmanagedConfigOverrides) => {
+    const state = {
+      ...createState(),
+      circularRecordList: { value: [{ record_length: 60_000 }] },
+      unmanagedConfigOverrides
+    };
+    const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
+    return editor.circularTrackSlotGeometryAutoText(state.adv.circular_track_slots[0], 0, 'width');
+  };
+  assert.equal(featureWidthNote({}), '≈ 37 px (estimate)');
+  assert.equal(featureWidthNote({ 'labels.length_threshold.circular': 50_000 }), '≈ 18.5 px (estimate)');
+});
 
 test('Circular placement actions preserve the Axis boundary and radial sides', () => {
   const state = createState({

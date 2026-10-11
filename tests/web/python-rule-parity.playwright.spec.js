@@ -132,7 +132,7 @@ test('Session preview stays lazy and saved Python rules remain editable and rege
   test.setTimeout(180000);
   page.on('dialog', dialog => dialog.accept());
   await loadSession(page);
-  await page.getByLabel('Specific Table (-t)', { exact: true }).setInputFiles({ name: 'python.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\tproduct\t(?P<enzyme>NADH)\t#f01234\t\n') });
+  await page.getByLabel('Specific rules file', { exact: true }).setInputFiles({ name: 'python.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\tproduct\t(?P<enzyme>NADH)\t#f01234\t\n') });
   await page.evaluate(async () => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files.t_color); });
   expect(await fills(page)).toHaveLength(7);
   const download = page.waitForEvent('download');
@@ -219,7 +219,7 @@ test('invalid color TSV preserves the selected file, preview, rules and History'
   const messages = [];
   page.on('dialog', async dialog => { messages.push(dialog.message()); await dialog.accept(); });
   await loadSession(page);
-  const upload = page.getByLabel('Specific Table (-t)', { exact: true });
+  const upload = page.getByLabel('Specific rules file', { exact: true });
   await upload.setInputFiles({ name: 'valid.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\tproduct\t(?i)NADH\t#f01234\t\n') });
   await waitForColorTableImport(page);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(1);

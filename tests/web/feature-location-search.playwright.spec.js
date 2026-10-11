@@ -219,7 +219,7 @@ test('a none Specific Table color survives Generate, Save, and Load', async ({ p
   await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(FIXTURE);
   const table = testInfo.outputPath('none-color.tsv');
   fs.writeFileSync(table, 'CDS\tproduct\tduplicate\tNONE\thollow\n');
-  await page.getByLabel('Specific Table (-t)', { exact: true }).setInputFiles(table);
+  await page.getByLabel('Specific rules file', { exact: true }).setInputFiles(table);
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     await app.waitForAuxiliaryFileImport(app.files.t_color);

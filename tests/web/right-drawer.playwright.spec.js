@@ -1339,7 +1339,7 @@ test('compact Editor reconciles availability and restores its tab after failed S
     });
     return { status: result.status, error: result.error };
   });
-  expect(failure).toMatchObject({ status: 'error', error: { code: 'UNKNOWN', operation: 'unknown', stage: 'request-validation' } });
+  expect(failure).toMatchObject({ status: 'error', error: { code: 'UNKNOWN', operation: 'session-load', stage: 'request-validation' } });
   expect(JSON.stringify(failure)).not.toContain('S05 Session rollback probe');
   expect(await page.evaluate(() => ({
     open: window.__GBDRAW_APP__.showRightDrawer, tab: window.__GBDRAW_APP__.rightDrawerTab

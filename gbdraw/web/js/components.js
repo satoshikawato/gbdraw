@@ -7,6 +7,7 @@ import {
 } from './utils/color-utils.js';
 
 import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidance } from './utils/error-normalization.js';
+import { italicSegments } from './utils/markup-preview.js';
 
 const { ref, reactive, computed, nextTick, watch, useId, onMounted } = window.Vue;
 
@@ -371,6 +372,19 @@ export const FileUploader = {
   }
 };
 
+// A record's name in a narrow row: the name shrinks with an ellipsis and its
+// detail (the accession) never does, so records of one File stay distinct
+// (OV-436). The tooltip and the text hold the whole name.
+export const RecordName = {
+  props: { prefix: { type: String, default: '' }, name: { type: String, default: '' }, detail: { type: String, default: '' } },
+  /** @param {{ prefix: string, name: string, detail: string }} props */
+  setup(props) {
+    const title = computed(() => [props.prefix, [props.name, props.detail].filter(Boolean).join(' · ')].filter(Boolean).join(' '));
+    return { title };
+  },
+  template: `<span class="record-name" :title="title"><span v-if="prefix" class="record-name-part">{{ prefix + ' ' }}</span><span class="record-name-main">{{ name }}</span><span v-if="detail" class="record-name-part" data-record-name-detail>{{ ' · ' + detail }}</span></span>`
+};
+
 export const RecordDisplayControl = {
   template: '#record-display-control-template',
   props: ['row', 'controller'],
@@ -385,17 +399,21 @@ export const RecordDisplayControl = {
         error.value = '';
       } catch (failure) {
         error.value = failure.message;
-        event.target.value = props.controller.draftFor(props.row).startCoordinate ?? '';
       }
+      // The field shows the model's start after every change: a rejected value
+      // goes back, and a cleared field shows the current start (OV-421).
+      event.target.value = props.controller.surfaceFor(props.row).displayStart ?? '';
     };
     return { error, setStart, controlAvailable: computed(() => !state.sessionOperationAvailability()), draft: computed(() => props.controller.draftFor(props.row)),
       surface: computed(() => props.controller.surfaceFor(props.row)) };
   }
 };
 
+// `compact` shows the error beside its field: the summary and a small Details
+// disclosure with the same diagnostics and Copy (PD-OI-046).
 export const OperationError = {
   template: '#operation-error-template',
-  props: ['error', 'recovery'],
+  props: { error: { type: null, default: null }, recovery: { type: null, default: null }, compact: Boolean },
   setup(props) {
     const model = computed(() => normalizeUserFacingError(props.error));
     const title = computed(() => operationErrorTitle(model.value?.operation));
@@ -436,7 +454,18 @@ export const OperationError = {
 // actions; a row emits them with the arguments it passed before.
 export const SpecificRuleRows = {
   template: '#specific-rule-rows-template',
-  components: { OperationError },
+  components: { OperationError, HelpTip },
   props: ['rules', 'featureKeys', 'available', 'patternText', 'patternDraft', 'fieldId'],
   emits: ['set-field', 'move-up', 'move-down', 'remove', 'edit-pattern', 'retry-pattern', 'revert-pattern']
+};
+
+// The preview of record or title text with italic markup, shown under its
+// field; nothing when the text has no markup.
+export const MarkupPreview = {
+  props: ['text'],
+  template: `<p v-if="segments.length" class="markup-preview" :title="segments.map((part) => part.text).join('')" data-markup-preview><span class="sr-only">Preview: </span><span v-for="(part, index) in segments" :key="index" :class="{ italic: part.italic }">{{ part.text }}</span></p>`,
+  /** @param {{ text?: string | null }} props */
+  setup(props) {
+    return { segments: computed(() => italicSegments(props.text)) };
+  }
 };

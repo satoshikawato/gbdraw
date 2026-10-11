@@ -53,7 +53,9 @@ for (const mode of ['circular', 'linear']) {
     ]);
     await generateAndWaitForResult(page);
     expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBeGreaterThan(0);
-    await expect(page.getByRole('button', { name: 'Reset start', exact: true })).toHaveCount(mode === 'circular' ? 2 : 1);
+    // Each drawn record has its Display start; Reset start shows only beside a requested start.
+    await expect(page.getByRole('spinbutton', { name: /^Display start/ })).toHaveCount(mode === 'circular' ? 2 : 1);
+    await expect(page.getByRole('button', { name: 'Reset start', exact: true })).toHaveCount(0);
     // OV-212 (PD-OI-087): the feature-based start is only in the feature popup.
     await expect(page.getByRole('button', { name: /^Use selected feature/ })).toHaveCount(0);
     await expect(page.getByRole('spinbutton', { name: 'Display start same #1', exact: true })).toBeEnabled();
@@ -104,7 +106,7 @@ test('native upload automatically inspects one, two, duplicate and DDBJ records 
     await uploadNative(page, text, name);
     await waitStatus(page, 'ready');
     expect((await snapshot(page)).rows).toEqual(expected);
-    await expect(page.getByRole('button', { name: 'Load record rotation controls' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Inspect records' })).toHaveCount(0);
     await expect(page.getByRole('spinbutton', { name: /^Display start/ })).toHaveCount(expected.length);
     await assertDiagramWorkerIdle(page);
   }

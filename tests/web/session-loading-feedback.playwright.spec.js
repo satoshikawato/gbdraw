@@ -259,7 +259,9 @@ test('failed session loading clears pending state and preserves the prior sessio
   await expect(sessionInput).toHaveValue('');
   expect(dialogs).toEqual([]);
   await expect(page.locator('[data-app-notice]', { hasText: 'Session loaded' })).toHaveCount(0);
-  await expect(page.getByRole('alert', { name: 'Operation error' })).toContainText('Use valid JSON.');
+  await expect(page.getByRole('alert', { name: 'Session not loaded' })).toContainText(
+    'This file is not a gbdraw Session: it is not valid JSON.'
+  );
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
     // The Session import Worker's actual stage (X-01, SE-09).
     code: 'INPUT_INVALID', stage: 'parse', context: { field: 'schema', reason: 'JSON_FORMAT' }
@@ -274,9 +276,28 @@ test('failed session loading clears pending state and preserves the prior sessio
   ));
   expect(dialogs).toEqual([]);
   await expect(page.locator('[data-app-notice]', { hasText: 'Session loaded' })).toHaveCount(0);
-  await expect(page.getByRole('alert', { name: 'Operation error' })).toContainText('Use valid JSON.');
+  await expect(page.getByRole('alert', { name: 'Session not loaded' })).toContainText(
+    'This file is not a gbdraw Session: it is not valid JSON.'
+  );
   expect(await importSnapshot(page)).toEqual(before);
   await expect(sessionInput).toHaveValue('');
+});
+
+// OV-372: a Session load error raised in Circular named a file the other mode
+// never saw; it stayed on screen after the switch to Linear.
+test('a Session load error does not follow a switch to the other diagram mode', async ({ page }) => {
+  test.setTimeout(120_000);
+  await openApp(page);
+  await page.locator(sessionInputSelector).setInputFiles({
+    name: 'not-a-session.gbdraw-session.json', mimeType: 'application/json', buffer: Buffer.from('{not valid JSON')
+  });
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending === false
+    && window.__GBDRAW_APP__?.errorLog !== null);
+  await expect(page.locator('.result-pane [role="alert"]')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
+  await expect(page.locator('.result-pane [role="alert"]')).toHaveCount(0);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
 });
 
 test('a 0.13.0 Gallery Session loads, and its Custom Track Slots turned on name the obsolete field', async ({
@@ -311,7 +332,7 @@ test('a 0.13.0 Gallery Session loads, and its Custom Track Slots turned on name 
   }));
   expect(dialogs).toEqual([]);
   await expect(page.locator('[data-app-notice]', { hasText: 'Session loaded' })).toHaveCount(0);
-  await expect(page.getByRole('alert', { name: 'Operation error' })).toContainText(
+  await expect(page.getByRole('alert', { name: 'Session not loaded' })).toContainText(
     'The track settings are invalid. Track row 1. Field: spacing. Custom Track Slots no longer read this field.'
   );
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({

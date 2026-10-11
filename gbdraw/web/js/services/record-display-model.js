@@ -140,18 +140,24 @@ export const validateRecordDisplayDrafts = (drafts, { scoped = false } = {}) => 
   return drafts;
 };
 
+/** @param {{ topologyOverride?: boolean | null, startCoordinate?: number | null }} [draft] the row's requested display */
 export const recordDisplaySurface = (row, draft = {}, { cropped = false, reverse = false } = {}) => {
   const override = draft.topologyOverride ?? null;
   if (override !== null && typeof override !== 'boolean') throw new Error('Topology override must be boolean or null.');
   const effectiveCircular = override ?? row.detectedTopology === 'circular';
   const lengthKnown = Number.isSafeInteger(row.recordLength) && row.recordLength > 0;
+  const startEnabled = effectiveCircular && lengthKnown && !cropped;
+  const currentStart = reverse ? (lengthKnown ? row.recordLength : null) : 1;
   return {
     effectiveCircular,
-    startEnabled: effectiveCircular && lengthKnown && !cropped,
+    startEnabled,
     disabledReason: cropped ? 'Display start is unavailable for a cropped record.'
       : !lengthKnown ? 'Record length is unavailable.'
         : !effectiveCircular ? 'Display start requires a circular record.' : '',
-    currentStart: reverse ? (lengthKnown ? row.recordLength : null) : 1
+    currentStart,
+    // OV-374: the Display start field shows the requested start, kept while
+    // the field is disabled, or else the current one; never an empty field.
+    displayStart: draft.startCoordinate ?? currentStart
   };
 };
 

@@ -12,7 +12,8 @@
 /** @import { ArtifactSlot } from '../services/artifact-slot.js' */
 /** @import { LegendRowContext } from '../services/specific-color-rules.js' */
 /** @import { GalleryExample } from '../services/gallery-examples.js' */
-/** @import { LinearComparisonPlan } from '../services/linear-comparisons.js' */
+/** @import { LinearComparisonIssue, LinearComparisonPlan } from '../services/linear-comparisons.js' */
+/** @import { LinearComparisonUiIssue } from './comparison-ui.js' */
 /** @import { LinearSourceRemovalPlan } from '../services/linear-sources.js' */
 /** @import { RecordDrawKey, RecordSettingsOwner, RecordEditData } from '../services/record-draw-selection.js' */
 /** @import { RecordListRequest, RecordSelectionMode, RecordSource } from './record-selection.js' */
@@ -78,6 +79,7 @@ import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import { cloneJsonData } from '../services/json-clone.js';
 import {
   groupLinearSourceRecords,
+  linearRecordNames,
   isPristineLinearSource,
   linearSourceHasPrimaryInput,
   linearSourceDepthStatus,
@@ -105,7 +107,7 @@ import {
   recordStructuralMetric
 } from '../services/runtime-test-hooks.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
-import { appliedFeatureColors, colorValueMode, normalizeOptionalHexColor, toNativeColorInputValue } from '../utils/color-utils.js';
+import { appliedFeatureColors, COMPARISON_COLOR_KEYS, colorValueMode, normalizeOptionalHexColor, toNativeColorInputValue } from '../utils/color-utils.js';
 import { createFeatureEditor } from './feature-editor.js';
 import { PAIRWISE_MATCH_SELECTOR, groupCountText } from './pairwise-match-popup.js';
 import { createFeatureSelection } from './feature-selection.js';
@@ -154,7 +156,7 @@ import { validateAnnotationRecordTargets } from './annotations/validation.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import { createLosatSettings } from './losat-settings.js';
 import { createAutoValueDisplay } from './auto-value-display.js';
-import { createLinearRecordSelector } from './linear-record-selector.js';
+import { createLinearRecordSelector, RECORDS_NOT_INSPECTED_LABEL } from './linear-record-selector.js';
 import { createLinearTypographyController } from './linear-typography.js';
 import {
   buildDisambiguatedRecordEntries,
@@ -185,7 +187,6 @@ import {
   materializeResolvedEdgesAsSelectedPlan,
   missingUploadPairsToResolve,
   normalizeLinearComparisonPlan,
-  plainTextLinearRecordLabel,
   reconcileLinearComparisonPlan,
   resolveLinearComparisonPlan
 } from '../services/linear-comparisons.js';
@@ -766,16 +767,15 @@ export const createAppSetup = () => {
     }
     return null;
   };
-  const linearComparisonRecordLabel = (uid) => {
-    const sequence = linearSeqs.find((entry) => entry.uid === uid);
-    return plainTextLinearRecordLabel(
-      sequence?.definition ||
-      sequence?.region_record_id ||
-      sequence?.gb?.name ||
-      sequence?.gff?.name ||
-      sequence?.fasta?.name ||
-      'Record'
-    );
+  // Every panel names a record the same way (OV-436).
+  const linearRecordNameMap = computed(() => linearRecordNames(linearSeqs));
+  /** @param {string} uid */
+  const linearComparisonRecordLabel = (uid) => linearRecordNameMap.value.get(uid)?.label || 'Record';
+  // The parts <record-name> lays out: the name shrinks, the accession stays whole.
+  /** @param {string} uid */
+  const linearComparisonRecordName = (uid) => {
+    const entry = linearRecordNameMap.value.get(uid);
+    return { name: entry?.name || 'Record', detail: entry?.accession || '' };
   };
   const openLinearComparisonDisclosure = async (disclosureKey) => {
     if (!disclosureKey) return null;
@@ -797,8 +797,8 @@ export const createAppSetup = () => {
     /** @type {HTMLElement | null | undefined} */ (container?.querySelector('input, select, button'))?.focus();
   };
 
-  const focusLinearComparisonIssue = async () => {
-    const target = linearComparisonUi.value.errorTargets[0];
+  /** @param {{ disclosureKey: string, focusTargetKey: string, edgeKey?: string, edgeId?: string } | null | undefined} target */
+  const focusLinearComparisonIssue = async (target = linearComparisonUi.value.issues[0]) => {
     if (!target) return false;
     const details = await openLinearComparisonDisclosure(target.disclosureKey);
     /** @type {HTMLElement | null} */
@@ -819,6 +819,44 @@ export const createAppSetup = () => {
       : marked?.querySelector?.('input, select, button, [tabindex]');
     /** @type {HTMLElement | null | undefined} */ (focusable || container?.querySelector?.('input, select, button, [tabindex]'))?.focus();
     return true;
+  };
+
+  // The one way to choose a pair's BLAST TSV outside its row:
+  // the pair's own uploader opens its file chooser inside the click, so the
+  // file takes the uploader's availability check and History step.
+  /** @param {string} edgeKey @param {{ focus?: boolean }} [options] */
+  const chooseLinearComparisonPairFile = (edgeKey, { focus = false } = {}) => {
+    void openLinearComparisonDisclosure('selected-pairs');
+    const uploader = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('[data-linear-comparison-pair-upload]')])
+      .find((element) => element.dataset.linearComparisonPairUpload === edgeKey);
+    if (focus) /** @type {HTMLElement | null | undefined} */ (uploader?.querySelector('[role="button"]'))?.focus();
+    /** @type {HTMLInputElement | null | undefined} */ (uploader?.querySelector('input[type="file"]'))?.click();
+    return Boolean(uploader);
+  };
+
+  // An action of an entry in the Comparison card's issue list; a
+  // setting it changes is one Undo step.
+  /** @param {LinearComparisonUiIssue} issue @param {string} actionKey */
+  const runLinearComparisonIssueAction = (issue, actionKey) => {
+    if (actionKey === 'all-losat') return setLinearComparisonGlobalAction('losat');
+    if (actionKey === 'pairwise') {
+      return history.runUndoable('Change setting', () => setLinearComparisonLosatpMode('pairwise'));
+    }
+    if (actionKey === 'choose-file' && chooseLinearComparisonPairFile(issue.edgeKey, { focus: true })) return true;
+    return focusLinearComparisonIssue(issue);
+  };
+
+  // The Generate error's "Show in Comparison": the first issue's
+  // control, the Execution setting for a LOSAT runtime failure, or the
+  // Comparison card when the cause has no control.
+  const showLinearComparisonCause = async () => {
+    const code = normalizeUserFacingError(errorLog.value)?.code;
+    const runtimeCause = code === 'LOSAT_THREADING_UNAVAILABLE' || code === 'LOSAT_RUNTIME'
+      ? { disclosureKey: 'settings', focusTargetKey: 'losat-execution' } : null;
+    if (await focusLinearComparisonIssue(linearComparisonUi.value.issues[0] || runtimeCause)) return;
+    const card = /** @type {HTMLElement | null} */ (document.querySelector('[data-linear-comparison-card]'));
+    card?.scrollIntoView({ block: 'nearest' });
+    /** @type {HTMLElement | null | undefined} */ (card?.querySelector('button:not([disabled])'))?.focus();
   };
 
   const setLinearComparisonGlobalAction = async (action) => {
@@ -1825,7 +1863,20 @@ export const createAppSetup = () => {
     state, state.drawings.circular
   ));
   const losatSettings = createLosatSettings({ state });
-  const autoValueDisplay = createAutoValueDisplay(state);
+  // Auto values follow the longest record the next Linear Generate draws, once
+  // every drawn record is read and none is cropped; until then they name their rule.
+  const autoValueDisplay = createAutoValueDisplay(state, {
+    linearRecordLengths: () => {
+      const lengths = state.drawings.linear.drawnLinearSeqs.value.map((seq) => {
+        if (String(seq.region_start ?? '').trim() || String(seq.region_end ?? '').trim()) return NaN;
+        const records = linearRecordSelector.recordsFor(seq);
+        const selection = resolveDisambiguatedRecordSelection(records, seq.region_record_id);
+        const record = selection.record || (selection.status === 'unspecified' && records.length === 1 ? records[0] : null);
+        return Number(record?.recordLength);
+      });
+      return lengths.length && lengths.every((length) => length > 0) ? lengths : [];
+    }
+  });
   const depthTrackDefaultColors = [
     '#4A90E2',
     '#E45756',
@@ -3817,6 +3868,11 @@ export const createAppSetup = () => {
     noticeBanner.dismiss();
     previewFeatureSearch.switchModeSearch(previousMode, nextMode);
     failedGeneratePreservedResult.value = false;
+    // OV-372: an operation error belongs to the mode it was raised in, except
+    // one that names the arriving mode's Result (PD-OI-079).
+    if (errorLog.value && normalizeUserFacingError(errorLog.value)?.context?.diagramMode !== nextMode) {
+      errorLog.value = null;
+    }
     // 5. Presentation: the arriving Result is shown as a selection.
     previewRuntime.presentSelectedResult({ modeArrival: true });
     return true;
@@ -4345,9 +4401,11 @@ export const createAppSetup = () => {
   });
   recordDragAlignmentPorts.beforeRecordDrag = similarityAlignmentActions.beforeRecordDrag;
   recordDragAlignmentPorts.afterRecordDrag = similarityAlignmentActions.afterRecordDrag;
-  // D-54: Generate asks about Upload pairs without a file. Choose opens the first
-  // pair's file chooser; No comparison is one History step, then Generate.
-  const missingBlastTsvDialog = reactive({ show: false, pairs: /** @type {ReturnType<typeof missingUploadPairsToResolve>} */ ([]) });
+  // Generate asks about Upload pairs without a file: each pair's row
+  // takes its own file; Skip sets the pairs still without one to No comparison
+  // in one History step, then Generates.
+  /** @type {{ show: boolean, pairs: ReturnType<typeof missingUploadPairsToResolve> }} */
+  const missingBlastTsvDialog = reactive({ show: false, pairs: [] });
   const closeMissingBlastTsvDialog = () => { missingBlastTsvDialog.show = false; };
   const setMissingBlastTsvPairsToNone = dialogChoice.withHistory(
     () => 'Set pairs to No comparison',
@@ -4361,20 +4419,24 @@ export const createAppSetup = () => {
     },
     closeMissingBlastTsvDialog
   );
-  /** @param {'choose' | 'none' | 'cancel'} choice */
+  // The dialog's rows: the pairs it opened with, each with its file as it is now.
+  const missingBlastTsvRows = computed(() => {
+    const missing = new Set(/** @type {readonly LinearComparisonIssue[]} */ (state.drawings.linear.linearComparisonResolution.value?.errors || [])
+      .filter((issue) => issue.code === 'missing-upload').map((issue) => issue.edgeKey));
+    return missingBlastTsvDialog.pairs.map((pair) => {
+      const found = linearComparisonPairForEdgeKey(pair.edgeKey);
+      return { ...pair, queryUid: found?.queryUid || '', subjectUid: found?.subjectUid || '',
+        fileName: found?.draft?.fileActive ? String(found.draft.file?.name || '') : '', missing: missing.has(pair.edgeKey) };
+    });
+  });
+  /** @param {'generate' | 'none' | 'cancel'} choice */
   const resolveMissingBlastTsv = async (choice) => {
-    if (choice !== 'choose') {
-      return await setMissingBlastTsvPairsToNone(choice) === true ? runAnalysis() : undefined;
+    if (choice === 'generate') {
+      if (dialogChoice.pending.value) return undefined;
+      closeMissingBlastTsvDialog();
+      return runAnalysis();
     }
-    if (dialogChoice.pending.value) return undefined;
-    closeMissingBlastTsvDialog();
-    // The file chooser opens inside the click that chose it.
-    void openLinearComparisonDisclosure('selected-pairs');
-    const uploader = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('[data-linear-comparison-pair-upload]')])
-      .find((element) => element.dataset.linearComparisonPairUpload === missingBlastTsvDialog.pairs[0]?.edgeKey);
-    /** @type {HTMLElement | null | undefined} */ (uploader?.querySelector('[role="button"]'))?.focus();
-    /** @type {HTMLInputElement | null | undefined} */ (uploader?.querySelector('input[type="file"]'))?.click();
-    return undefined;
+    return await setMissingBlastTsvPairsToNone(choice) === true ? runAnalysis() : undefined;
   };
   const similarityAlignmentCanvasHover = ref(null);
   similarityAlignmentPorts.refreshCanvas = () => {
@@ -5294,9 +5356,12 @@ export const createAppSetup = () => {
     // Without an inspected catalog the saved selector is unverified, not missing.
     const inspected = circularRecordDiscoveryState.value.status === 'ready';
     const drawnCount = circularDrawnRecordCount.value;
-    const automaticLabel = entries.length > 1 || drawing.adv.circular_grouping_intent === 'batch'
-      ? (drawnCount < entries.length ? `${drawnCount} of ${entries.length} records (separate diagrams)` : 'All records (separate diagrams)')
-      : 'Automatic (only record)';
+    // OV-379: a source whose records are not read says so, as the Linear select does.
+    const automaticLabel = circularRecordDiscoveryState.value.status === 'deferred'
+      ? RECORDS_NOT_INSPECTED_LABEL
+      : entries.length > 1 || drawing.adv.circular_grouping_intent === 'batch'
+        ? (drawnCount < entries.length ? `${drawnCount} of ${entries.length} records (separate diagrams)` : 'All records (separate diagrams)')
+        : 'Automatic (only record)';
     return [
       { value: '', label: automaticLabel, synthetic: false },
       ...(current && selection.status !== 'resolved'
@@ -6050,7 +6115,33 @@ export const createAppSetup = () => {
     })
     : computed(() => state.activeDrawing()[key]));
 
+  // The default colors of the feature types the shown figure draws,
+  // and the user's own default colors, come first; the others wait under More.
+  // The values are read untracked, so editing a color never moves it to the
+  // other grid; the grouping follows the drawn types, the palette, the keys,
+  // and a replaced color table (Reset, palette change, Session load, an
+  // imported Default colors file).
+  const defaultColorGroups = computed(() => {
+    const drawing = state.activeDrawing();
+    /** @type {Record<string, string>} */
+    const colors = drawing.currentColors.value || {};
+    const keys = Object.keys(colors);
+    const drawn = new Set((state.extractedFeatures.value || [])
+      .map((/** @type {{ type?: string }} */ feature) => String(feature?.type || '')));
+    if (!drawn.size) return { primary: keys, more: /** @type {string[]} */ ([]) };
+    const circular = mode.value === 'circular';
+    if (circular ? !drawing.form.suppress_gc : drawing.form.show_gc) drawn.add('gc_content');
+    if (circular ? !drawing.form.suppress_skew : drawing.form.show_skew) ['skew_high', 'skew_low'].forEach((key) => drawn.add(key));
+    if (!circular && state.linearSeqs.length > 1 && linearComparisonGlobalAction.value !== 'none') {
+      COMPARISON_COLOR_KEYS.forEach((key) => drawn.add(key));
+    }
+    resultsManager.userDefaultColorRows(drawing, toRaw(colors)).forEach(([key]) => drawn.add(key));
+    const primary = keys.filter((key) => key === 'default' || drawn.has(key));
+    return { primary, more: keys.filter((key) => !drawn.has(key) && key !== 'default') };
+  });
+
   return {
+    defaultColorGroups,
     recordDisplayControls,
     featureRecordRotationDraft: featureRecordRotation.draft,
     recordActionsExpanded,
@@ -6073,6 +6164,10 @@ export const createAppSetup = () => {
     semanticMutationAvailable,
     dialogChoicePending,
     missingBlastTsvDialog,
+    missingBlastTsvRows,
+    chooseLinearComparisonPairFile,
+    showLinearComparisonCause,
+    runLinearComparisonIssueAction,
     resolveMissingBlastTsv,
     sessionSaveAvailable,
     sessionLoadAvailable,
@@ -6161,8 +6256,9 @@ export const createAppSetup = () => {
     setAnnotationRecord: annotationEditor.setRecordValue,
     annotationRecordRequired: annotationEditor.recordIsRequired,
     annotationRecordMissing: annotationEditor.recordIsMissing,
-    annotationRecordDisabled: annotationEditor.recordIsDisabled,
     annotationRecordMissingMessage: annotationEditor.recordMissingMessage,
+    annotationRecordShowsSelect: annotationEditor.recordShowsSelect,
+    annotationRecordCaption: annotationEditor.recordCaptionFor,
     circularConservationLayoutWarning,
     circularConservationFastaInput,
     circularConservationSeriesRows,
@@ -6219,6 +6315,7 @@ export const createAppSetup = () => {
     hasActiveLinearUploadIntent: drawingMember('hasActiveLinearUploadIntent'),
     linearComparisonTimeline,
     linearComparisonRecordLabel,
+    linearComparisonRecordName,
     linearLosatCacheInfoByEdgeKey,
     linearLayoutTokens,
     syncLinearRecordLayout,
@@ -6301,6 +6398,9 @@ export const createAppSetup = () => {
     toggleLinearTrackSlotsPanel,
     circularTrackRenderers: circularTrackSlotEditor.circularTrackRenderers,
     circularTrackSlotEditorKey: circularTrackSlotEditor.circularTrackSlotEditorKey,
+    circularTrackSlotOptionsOpen: circularTrackSlotEditor.circularTrackSlotOptionsOpen,
+    setCircularTrackSlotOptionsOpen: circularTrackSlotEditor.setCircularTrackSlotOptionsOpen,
+    circularTrackSlotOptionsSummary: circularTrackSlotEditor.circularTrackSlotOptionsSummary,
     updateCircularTrackSlotMeasure: circularTrackSlotEditor.updateCircularTrackSlotMeasure,
     circularTrackRendererLabel: circularTrackSlotEditor.circularTrackRendererLabel,
     resetCircularTrackSlotsFromSimpleControls: circularTrackSlotEditor.resetCircularTrackSlotsFromSimpleControls,

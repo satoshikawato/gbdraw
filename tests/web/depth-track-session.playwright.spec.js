@@ -1396,14 +1396,9 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
   await expect(
     page.getByRole('heading', { name: 'Last Successful Result', exact: true })
   ).toBeVisible();
-  const preservedResultNotice = page.getByRole('status').filter({
-    hasText: /Showing the last successful result\.\s*Current changes were not applied\./
-  });
-  await expect(preservedResultNotice).toHaveCount(1);
-  await expect(preservedResultNotice.getByText('Showing the last successful result.', { exact: true }))
-    .toBeVisible();
-  await expect(preservedResultNotice.getByText('Current changes were not applied.', { exact: true }))
-    .toBeVisible();
+  // The error card says the Result was kept; the separate amber strip is hidden while it shows.
+  await expect(generationError).toContainText('Showing the last successful Result; your changes were not applied.');
+  await expect(page.getByText('Showing the last successful result.', { exact: true })).toHaveCount(0);
   await expect(svgExport).toBeEnabled();
 
   const successfulRetry = await evaluateWithRetainedPromise(page, async () => {
@@ -1557,7 +1552,7 @@ test('Session preflight rejects invalid canonical data without resetting live st
   const expectSchemaRejection = async (count, reason) => {
     await expect.poll(() => page.evaluate(() => window.__SESSION_REJECTIONS__)).toBe(count);
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending)).toBe(false);
-    await expect(page.getByRole('alert', { name: 'Operation error' }))
+    await expect(page.getByRole('alert', { name: 'Session not loaded' }))
       .toContainText('Load a supported Session file or recreate it with the current writer.');
     expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
       code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason }
@@ -2519,11 +2514,11 @@ ORIGIN
     buffer: Buffer.from(JSON.stringify(session))
   });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending)).toBe(false);
-  await expect(page.getByRole('alert', { name: 'Operation error' })).toBeVisible();
+  await expect(page.getByRole('alert', { name: 'Session not loaded' })).toBeVisible();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
-    code: 'UNKNOWN', operation: 'unknown', stage: 'request-validation'
+    code: 'UNKNOWN', operation: 'session-load', stage: 'request-validation'
   });
-  await expect(page.getByRole('alert', { name: 'Operation error' })).not.toContainText('Injected session commit failure');
+  await expect(page.getByRole('alert', { name: 'Session not loaded' })).not.toContainText('Injected session commit failure');
   expect(dialogs).toEqual([]);
   await expect(page.locator('[data-app-notice]', { hasText: 'Session loaded' })).toHaveCount(0);
   expect(await page.evaluate(() => ({

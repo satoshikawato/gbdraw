@@ -17,7 +17,7 @@
     },
     {
       "title": "Set a legend caption",
-      "body": "Legend Caption is optional. When provided, it becomes the figure legend label for matching features. Use a concise biological name rather than the raw qualifier value."
+      "body": "Legend caption is optional. When provided, it becomes the figure legend label for matching features. Use a concise biological name rather than the raw qualifier value."
     },
     {
       "title": "Example rules",

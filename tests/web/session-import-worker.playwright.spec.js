@@ -78,16 +78,16 @@ test('unsafe keys, malformed JSON/gzip, fatal UTF-8 and Worker crash preserve th
   for (const [index, buffer] of [Buffer.from('{"nested":{"__proto__":{}}}'), Buffer.from('{private broken'),
     Buffer.from([0xff]), Buffer.from([0x1f, 0x8b, 1, 2, 3]), gzipSync(Buffer.from([0xc3]))].entries()) {
     await load(page, buffer);
-    const alert = page.getByRole('alert', { name: 'Operation error' });
+    const alert = page.getByRole('alert', { name: 'Session not loaded' });
     await expect(alert).toBeVisible();
     const error = await page.evaluate(() => window.__GBDRAW_APP__.errorLog);
     // X-01 (SE-09): the Worker's final diagnostic reaches the panel unchanged.
     expect(error).toMatchObject(index === 0
-      ? { code: 'UNKNOWN', operation: 'unknown', stage: 'request-validation' }
+      ? { code: 'UNKNOWN', operation: 'session-load', stage: 'request-validation' }
       : index === 1
-        ? { code: 'INPUT_INVALID', operation: 'unknown', stage: 'parse', context: { field: 'schema', reason: 'JSON_FORMAT' } }
+        ? { code: 'INPUT_INVALID', operation: 'session-load', stage: 'parse', context: { field: 'schema', reason: 'JSON_FORMAT' } }
         // Bytes that are not UTF-8 or not valid gzip fail while the Worker reads them.
-        : { code: 'INPUT_UNREADABLE', operation: 'unknown', stage: 'read', context: { field: 'schema' } });
+        : { code: 'INPUT_UNREADABLE', operation: 'session-load', stage: 'read', context: { field: 'schema' } });
     expect(JSON.stringify(error)).not.toMatch(/private broken|__proto__|Traceback/);
     expect(dialogs).toEqual([]);
     await expect(page.locator('[data-app-notice]', { hasText: 'Session loaded' })).toHaveCount(0);
@@ -97,10 +97,10 @@ test('unsafe keys, malformed JSON/gzip, fatal UTF-8 and Worker crash preserve th
     contentType: 'text/javascript', body: 'throw new Error("controlled Worker crash")'
   }));
   await load(page, baseline);
-  await expect(page.getByRole('alert', { name: 'Operation error' })).toBeVisible();
+  await expect(page.getByRole('alert', { name: 'Session not loaded' })).toBeVisible();
   // A crashed import Worker leaves no import path: a transport failure.
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
-    code: 'SESSION_IMPORT_UNAVAILABLE', operation: 'unknown', stage: 'transport'
+    code: 'SESSION_IMPORT_UNAVAILABLE', operation: 'session-load', stage: 'transport'
   });
   expect(dialogs).toEqual([]);
   await expect(page.locator('[data-app-notice]', { hasText: 'Session loaded' })).toHaveCount(0);

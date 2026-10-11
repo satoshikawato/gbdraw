@@ -128,13 +128,9 @@ def linear_tick_interval(length: int) -> int:
 
 
 def linear_label_font_size(record_lengths: Sequence[int], cfg: GbdrawConfig) -> float:
-    """Return the Auto Linear label font: the largest size over the labelled records."""
-    threshold = int(cfg.labels.length_threshold.linear)
-    return max(
-        cfg.labels.font_size.linear.for_length_param(
-            determine_length_parameter(record_length, threshold)
-        )
-        for record_length in record_lengths
+    """Return the Auto Linear label font: that of the size class of the longest record in the label scope."""
+    return cfg.labels.font_size.linear.for_length_param(
+        determine_length_parameter(max(record_lengths), int(cfg.labels.length_threshold.linear))
     )
 
 

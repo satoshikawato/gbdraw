@@ -101,12 +101,18 @@ test('Generate reports real cold/warm stages and preserves the successful Result
   }, text);
   await setInput(source);
   await generate(page).click();
-  await expect(status(page)).toHaveText('Preparing diagram runtime (first use)...');
+  // First use names the step the runtime is on (no percentages); the plain text shows only before the first step.
+  const runtimeStatus = /^Preparing diagram runtime \(first use\)(\.\.\.|: step [1-5] of 5, [A-Za-z ]+\.\.\.)$/;
+  await expect(status(page)).toHaveText(runtimeStatus);
   await expect(generate(page)).toBeDisabled();
   await screenshot(page, testInfo, 'cold-runtime-visible');
   await awaitSuccess(page);
   const cold = await record(page, testInfo, 'cold');
   expectRenderStages(cold);
+  const coldRuntime = cold.statuses.map(entry => entry.value).filter(value => value.startsWith('Preparing diagram runtime'));
+  expect(coldRuntime.length).toBeGreaterThan(0);
+  expect(coldRuntime.every(value => runtimeStatus.test(value) && !value.includes('%'))).toBe(true);
+  expect(coldRuntime.some(value => /: step \d of 5, /.test(value))).toBe(true);
   expect(cold.workers.constructions).toBe(1);
   expect(await keepCommitted(page, 'coldCommitted')).toBe(true);
 
@@ -115,7 +121,7 @@ test('Generate reports real cold/warm stages and preserves the successful Result
   await awaitSuccess(page);
   const warm = await record(page, testInfo, 'warm');
   expectRenderStages(warm);
-  expect(warm.statuses.map(entry => entry.value)).not.toContain('Preparing diagram runtime (first use)...');
+  expect(warm.statuses.map(entry => entry.value).filter(value => value.startsWith('Preparing diagram runtime'))).toEqual([]);
   expect(warm.workers.constructions).toBe(1);
 
   await page.evaluate(async () => {

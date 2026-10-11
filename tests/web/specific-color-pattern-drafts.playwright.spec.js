@@ -65,8 +65,10 @@ for (const mode of ['circular', 'linear']) for (const width of [1600, 390]) {
     const described = await field.getAttribute('aria-describedby');
     expect(described).toBe(await status(page).getAttribute('id'));
     await expect(status(page)).toContainText('Not applied');
-    await expect(status(page)).toContainText('last accepted rule');
-    await expect(status(page)).toContainText('current Result');
+    // The rule for Save, Generate and Export sits in the help tip beside "Not applied".
+    const policyId = await status(page).locator('.help-tip-trigger').getAttribute('aria-describedby');
+    await expect(page.locator(`[id="${policyId}"]`)).toContainText('last accepted rule');
+    await expect(page.locator(`[id="${policyId}"]`)).toContainText('current Result');
     expect(await snapshot(page)).toEqual(before);
     const error = (await draft(page)).draft.error;
     expect(error).toMatchObject({ code: 'REGEX_SYNTAX', stage: 'rule-validation', context: { position: 1, positionUnit: 'python-character' } });

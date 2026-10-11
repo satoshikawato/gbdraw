@@ -334,7 +334,7 @@ test('a Linear legend side change leaves the Result unchanged until Generate app
     for (const details of await position.locator('xpath=ancestor::details').all()) {
       if (await details.getAttribute('open') === null) await details.locator(':scope > summary').press('Enter');
     }
-    await expect(page.getByText('Applies on Generate: legend position, swatch size, and font size.')).toBeVisible();
+    await expect(page.locator('[data-applies-on-generate="legend"]')).toBeVisible();
     await position.selectOption('top');
     await settle(page);
     expect(await read()).toEqual(before);
