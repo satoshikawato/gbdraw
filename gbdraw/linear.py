@@ -9,14 +9,20 @@ import math
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Mapping, Optional, Sequence
+from typing import Literal, Optional, Sequence, cast
 from .config.toml import load_config_toml
 from .render.export import parse_formats
 from .api.request_render import (
     CurrentRequestArtifacts,
+    RequestRenderResult,
+    diagram_request_output_paths,
     render_request,
 )
-from .api.session_compat import render_session_compatible_request
+from .api.session_compat import (
+    SessionCompatibleRequestRenderResult,
+    render_session_compatible_request,
+)
+from .features.overrides import log_feature_identity_notices
 from .api.record_planning import (
     depth_track_inputs_from_cli,
     record_input_manifest_from_paths,
@@ -58,7 +64,7 @@ from .analysis.protein_colinearity import (
     hydrate_protein_losat_tsv,
     is_protein_losat_cache_entry,
 )
-from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
+from .config.modify import modify_config_dict
 from .config.models.objects import normalize_pairwise_match_style
 from .features.shapes import parse_feature_shape_overrides
 from .exceptions import ValidationError
@@ -96,8 +102,8 @@ from .cli_utils.common import (
 )
 from .cli_utils.session import (
     DiagramRunResult,
+    SessionCliRequest,
     add_session_args,
-    diagram_request_output_paths,
     make_rendered_svg,
     parse_session_pre_args,
     preflight_session_sidecar_if_requested,
@@ -109,7 +115,9 @@ from .render.track_slot_metadata import (
     collect_track_slot_geometry_records,
 )
 from .render.output_paths import preflight_output_paths
-from .session_io import load_session, session_to_cli_args
+from .session import SessionDocument, load_session_document, session_drawing_artifacts
+from .session_drawings import SessionDrawingArtifacts
+from .session_io import session_to_cli_args
 from .cli_utils.losat_output import (
     parse_positive_int as _parse_positive_int,
     write_losat_output_files,
@@ -242,7 +250,7 @@ def _parse_linear_multi_record_position(value: str) -> str:
     return str(value).strip()
 
 
-def _get_args(args) -> argparse.Namespace:
+def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     """
     Parses command-line arguments for generating linear genome diagrams.
 
@@ -800,7 +808,7 @@ def _get_args(args) -> argparse.Namespace:
         type=str)
     parser.add_argument(
         '--scale_interval',
-        help='Manual tick interval for "ruler" scale style (in bp). Overrides automatic calculation; optional',
+        help='Manual tick interval for "ruler" scale style (in bp; must be > 0). Overrides automatic calculation; optional',
         type=int)
     _add_legend_size_args(parser)
     parser.add_argument(
@@ -945,6 +953,10 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--gc_content_large_tick_interval must be > 0")
     if args.gc_content_small_tick_interval is not None and args.gc_content_small_tick_interval <= 0:
         parser.error("--gc_content_small_tick_interval must be > 0")
+    if args.scale_interval is not None and args.scale_interval <= 0:
+        if not _legacy_session:
+            parser.error("--scale_interval must be > 0")
+        args.scale_interval = None  # D-04: a released legacy Session drew <= 0 as automatic.
     if args.linear_track_order and args.linear_track_slot:
         parser.error("--linear_track_order cannot be combined with --linear_track_slot")
     if args.linear_track_axis_index is not None and not (args.linear_track_order or args.linear_track_slot):
@@ -995,6 +1007,41 @@ def _get_args(args) -> argparse.Namespace:
     return args
 
 
+def replay_legacy_session(
+    document: SessionDocument,
+    session_request: SessionCliRequest,
+) -> None:
+    """Replay a Session 27-30, which has no canonical request, through CLI arguments."""
+
+    with TemporaryDirectory(prefix="gbdraw-session-") as temp_dir:
+        # Each caller loaded this document from a file and is its only holder;
+        # the replay reads the parsed payload in place.
+        session = document._data
+        run_spec = session_to_cli_args(
+            session,
+            mode="linear",
+            temp_dir=Path(temp_dir),
+            output_override=session_request.output,
+            format_override=session_request.format,
+        )
+        args = _get_args(list(run_spec.args), _legacy_session=True)
+        args.overwrite = session_request.overwrite
+        args.save_session = session_request.save_session
+        args.session_output = session_request.session_output
+        args._gbdraw_source_session = (
+            session_drawing_artifacts(document) if document.drawings else None
+        )
+        run_result = run_linear_from_namespace(args)
+        save_session_sidecar_if_requested(
+            save_session=session_request.save_session,
+            session_output=session_request.session_output,
+            output_prefix=args.output,
+            run_result=run_result,
+            source_session=session,
+            cli_invocation_args=run_spec.cli_invocation_args,
+            file_bindings=run_spec.file_bindings,
+            overwrite=session_request.overwrite,
+        )
 
 
 def linear_main(cmd_args) -> None:
@@ -1022,44 +1069,23 @@ def linear_main(cmd_args) -> None:
     """
     session_request = parse_session_pre_args(cmd_args, mode="linear")
     if session_request is not None:
-        with TemporaryDirectory(prefix="gbdraw-session-") as temp_dir:
-            session = load_session(session_request.session_path)
-            if render_canonical_session_if_present(
-                session,
-                mode="linear",
-                output_override=session_request.output,
-                format_override=session_request.format,
-                overwrite=session_request.overwrite,
-                save_session=session_request.save_session,
-                session_output=session_request.session_output,
-            ):
-                return
-            run_spec = session_to_cli_args(
-                session,
-                mode="linear",
-                temp_dir=Path(temp_dir),
-                output_override=session_request.output,
-                format_override=session_request.format,
-            )
-            args = _get_args(list(run_spec.args))
-            args.overwrite = session_request.overwrite
-            args.save_session = session_request.save_session
-            args.session_output = session_request.session_output
-            args._gbdraw_source_session = session
-            run_result = run_linear_from_namespace(args)
-            save_session_sidecar_if_requested(
-                save_session=session_request.save_session,
-                session_output=session_request.session_output,
-                output_prefix=args.output,
-                run_result=run_result,
-                source_session=session,
-                cli_invocation_args=run_spec.cli_invocation_args,
-                file_bindings=run_spec.file_bindings,
-                overwrite=session_request.overwrite,
-            )
+        document = load_session_document(session_request.session_path)
+        if not render_canonical_session_if_present(
+            document,
+            mode="linear",
+            drawing=session_request.drawings[0] if session_request.drawings else None,
+            output_override=session_request.output,
+            format_override=session_request.format,
+            overwrite=session_request.overwrite,
+            save_session=session_request.save_session,
+            session_output=session_request.session_output,
+        ):
+            if session_request.drawings:
+                document.drawing(session_request.drawings[0], mode="linear")
+            replay_legacy_session(document, session_request)
         return
 
-    args: argparse.Namespace = _get_args(cmd_args)
+    args = _get_args(cmd_args)
     run_result = run_linear_from_namespace(args)
     _write_losat_output_dir(
         args.losat_output_dir,
@@ -1105,7 +1131,8 @@ def _losatp_raw_output_text(run_result: DiagramRunResult) -> str:
 def _nucleotide_output_files(run_result: DiagramRunResult) -> list[tuple[str, str]]:
     """Per-edge raw TSVs and a ``--comparisons_table`` manifest (design 3.7)."""
 
-    request = run_result.canonical_request
+    # A Linear run result always carries its Linear request.
+    request = cast(LinearDiagramRequest, run_result.canonical_request)
     comparisons = [
         comparison
         for comparison in getattr(request.options, "linear_comparisons", None) or ()
@@ -1231,7 +1258,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     """Run linear rendering from an already parsed argparse namespace."""
 
     source_session = getattr(args, "_gbdraw_source_session", None)
-    if not isinstance(source_session, Mapping):
+    if not isinstance(source_session, SessionDrawingArtifacts):
         source_session = None
     out_file_prefix: str = args.output
     blast_files: list[str] | None = args.blast
@@ -1307,7 +1334,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     bitscore: float = args.bitscore
     identity: float = args.identity
     alignment_length: int = args.alignment_length
-    pairwise_match_style: str = args.pairwise_match_style
+    pairwise_match_style: Literal["ribbon", "curve"] = args.pairwise_match_style
     show_labels: str = args.show_labels
     label_whitelist: str = args.label_whitelist
     label_blacklist: str = args.label_blacklist
@@ -1611,11 +1638,15 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             annotations=annotation_options,
             output=LinearOutputOptions(
                 legend=legend,
-                plot_title_position=plot_title_position,
+                # argparse restricts --plot_title_position to the Linear choices.
+                plot_title_position=cast(
+                    'Literal["center", "top", "bottom"]', plot_title_position
+                ),
             ),
             selected_features_set=tuple(selected_features_set),
             feature_visibility_table_file=feature_table_path or None,
             feature_placement_table_file=args.feature_placement_table,
+            feature_override_table_file=args.feature_override_table,
             label_whitelist_file=label_whitelist or None,
             qualifier_priority_file=qualifier_priority_path or None,
             label_override_file=label_table_path or None,
@@ -1676,14 +1707,19 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         session_output_path=session_output_path,
         overwrite=bool(args.overwrite),
     )
+    render_result: RequestRenderResult
     legacy_protein_raw_candidates = None
     legacy_protein_derived_evidence = None
     include_feature_catalog = bool(args.save_session or args.session_output)
     if source_session is not None:
-        render_result = render_session_compatible_request(
-            canonical_request,
-            source_session,
-            include_feature_catalog=include_feature_catalog,
+        # A Linear request renders to one session-compatible result, never a batch.
+        render_result = cast(
+            SessionCompatibleRequestRenderResult,
+            render_session_compatible_request(
+                canonical_request,
+                source_session,
+                include_feature_catalog=include_feature_catalog,
+            ),
         )
         legacy_protein_raw_candidates = (
             render_result.legacy_protein_raw_candidates
@@ -1693,10 +1729,14 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         )
     else:
         try:
-            render_result = render_request(
-                canonical_request,
-                artifacts=CurrentRequestArtifacts(),
-                include_feature_catalog=include_feature_catalog,
+            # A Linear request renders to one result, never a batch.
+            render_result = cast(
+                RequestRenderResult,
+                render_request(
+                    canonical_request,
+                    artifacts=CurrentRequestArtifacts(),
+                    include_feature_catalog=include_feature_catalog,
+                ),
             )
         except SimilarityAlignmentReferenceError as exc:
             raise ValidationError(f"--similarity_alignment_feature {exc.detail}") from exc
@@ -1704,6 +1744,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         logger.warning("%s: %s/%s record #%s (%s): %s", warning.code,
             warning.set_id, warning.annotation_id, warning.record_index + 1,
             warning.record_id, warning.message)
+    log_feature_identity_notices(render_result.feature_identity_notices)
     canvas = render_result.drawing
     interactive_context = render_result.interactive_context
     rendered_svg = make_rendered_svg(out_file_prefix, request_path.name)

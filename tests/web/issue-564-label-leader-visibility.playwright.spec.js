@@ -31,7 +31,7 @@ const inspectUnit = (page, featureId) => page.evaluate((targetId) => {
   return {
     mounted: collect(mounted),
     result: collect(result),
-    override: app.labelVisibilityOverrides[targetId]
+    override: ((feature) => app.featureOverrides[JSON.stringify([feature?.record_key, feature?.biological_feature_id])]?.labelVisibility ?? undefined)(app.extractedFeatures.find((item) => item.svg_id === targetId))
   };
 }, featureId);
 
@@ -57,7 +57,7 @@ const findCurrentLabelTarget = (page, { leaderCount = null, embedded = false } =
   }, { requiredLeaders: leaderCount, requireEmbedded: embedded })
 );
 
-const setVisibility = (page, featureId, mode) => page.evaluate(async ({ targetId, nextMode }) => {
+const setVisibility = (page, featureId, mode) => evaluateWithRetainedPromise(page, async ({ targetId, nextMode }) => {
   const app = window.__GBDRAW_APP__;
   const feature = app.extractedFeatures.find((candidate) => candidate.svg_id === targetId);
   if (!feature) throw new Error(`Feature ${targetId} is unavailable.`);
@@ -241,7 +241,7 @@ test('fresh Circular two-segment leader visibility is atomic without forced rege
   }
 });
 
-const prepareLegacyTarget = (page) => page.evaluate(async () => {
+const prepareLegacyTarget = (page) => evaluateWithRetainedPromise(page, async () => {
   const app = window.__GBDRAW_APP__;
   app.syncLabelEditor();
   const entry = app.editableLabels.find((candidate) => candidate.kind === 'regular'
@@ -280,7 +280,7 @@ test('tracked metadata-free Session refreshes once and never exposes a partial v
       return {
         mounted: document.querySelector('.origin-top svg').outerHTML,
         result: app.results[app.selectedResultIndex].content,
-        override: app.labelVisibilityOverrides[app.clickedFeature.svg_id],
+        override: ((feature) => app.featureOverrides[JSON.stringify([feature?.record_key, feature?.biological_feature_id])]?.labelVisibility ?? undefined)(app.extractedFeatures.find((item) => item.svg_id === app.clickedFeature.svg_id)),
         forceSeq: state.labelReflowForceRequestSeq.value
       };
     });
@@ -303,7 +303,7 @@ test('tracked metadata-free Session refreshes once and never exposes a partial v
         markerCount: document.querySelectorAll(
           '.origin-top text[data-gbdraw-label-binding-schema="1"]'
         ).length,
-        override: app.labelVisibilityOverrides[targetId],
+        override: ((feature) => app.featureOverrides[JSON.stringify([feature?.record_key, feature?.biological_feature_id])]?.labelVisibility ?? undefined)(app.extractedFeatures.find((item) => item.svg_id === targetId)),
         parts: parts.map((element) => ({
           tag: element.localName,
           display: element.getAttribute('display')
@@ -339,7 +339,7 @@ test('metadata-free refresh failure retains the old visual and canonical overrid
       window.__GBDRAW_APP__.autoLabelReflowEnabled = false;
       window.__GBDRAW_APP__.clickedFeature.labelVisibility = 'off';
     });
-    await page.evaluate(() => window.__GBDRAW_APP__.updateClickedFeatureLabelText());
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.updateClickedFeatureLabelText());
     await expect.poll(() => page.evaluate(() => ({
       processing: window.__GBDRAW_APP__.labelReflowProcessing,
       error: window.__GBDRAW_APP__.labelReflowLastError?.summary ?? null
@@ -353,7 +353,7 @@ test('metadata-free refresh failure retains the old visual and canonical overrid
       return {
         mounted: document.querySelector('.origin-top svg').outerHTML,
         result: app.results[app.selectedResultIndex].content,
-        override: app.labelVisibilityOverrides[targetId],
+        override: ((feature) => app.featureOverrides[JSON.stringify([feature?.record_key, feature?.biological_feature_id])]?.labelVisibility ?? undefined)(app.extractedFeatures.find((item) => item.svg_id === targetId)),
         forceSeq: state.labelReflowForceRequestSeq.value
       };
     }, legacy.featureId);
@@ -410,7 +410,7 @@ test('same label text in two Linear records changes only the selected exact iden
     await openApp(page);
     await page.evaluate(async ({ first, second }) => {
       const app = window.__GBDRAW_APP__;
-      app.mode = 'linear';
+      app.setDiagramMode('linear');
       app.lInputType = 'gb';
       app.addLinearSeq();
       [first, second].forEach((content, index) => app.setLinearSeqPrimaryFile(

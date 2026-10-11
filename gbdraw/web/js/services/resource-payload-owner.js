@@ -1,3 +1,4 @@
+// @ts-check
 const payloadOwners = new WeakMap();
 
 const objectKey = (value) => (

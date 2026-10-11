@@ -4,8 +4,8 @@
 
 These are command templates for common tasks. Supply the required inputs from
 one working directory and verify record identifiers before adapting a
-template. For version-pinned, clean-directory workflows, use the [CLI
-Tutorials](./TUTORIALS/CLI/README.md). The [command-line technical
+template. For version-pinned, clean-directory workflows, use the
+[Tutorials](./TUTORIALS/README.md). The [command-line technical
 documentation](./REFERENCE/command-line.md) describes exact option behavior.
 
 ## Contents
@@ -337,8 +337,8 @@ not infer phylogeny-based orthogroups. Do not combine `--losat` with
 `-b/--blast`. The [comparison technical
 documentation](./REFERENCE/comparison-programs-thresholds-and-results.md)
 defines all three modes. Complete projects cover [Similarity
-groups](./TUTORIALS/CLI/compare-proteins-losatp.md) and [Collinear
-blocks](./TUTORIALS/CLI/compare-proteins-losatp-collinear.md).
+groups](./TUTORIALS/compare-proteins-losatp.md#on-the-command-line) and [Collinear
+blocks](./TUTORIALS/compare-proteins-losatp-collinear.md#on-the-command-line).
 
 ### Filter BLAST ribbons
 

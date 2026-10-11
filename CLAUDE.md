@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+@AGENTS.md
+
+`AGENTS.md`, imported above, holds the rules every agent follows: branching,
+pull-request base and contents, when not to auto-merge, workspace cleanup, and
+browser checks.
+
 ## Project Overview
 
 **gbdraw** is a Python bioinformatics tool for creating publication-quality genome diagrams from microbial genomes and organelles. It generates circular and linear visualizations of genomic features (CDS, tRNA, regulatory elements, etc.) with optional GC content/skew plots and BLAST comparison tracks.
@@ -29,7 +35,7 @@ pytest tests/test_output_comparison.py::TestGenerateReferences --update-referenc
 pytest tests/test_regression.py -v
 
 # Run a single test by name
-pytest tests/ -v -k "test_circular_basic"
+pytest tests/ -v -k "circular_basic"
 
 # Run tests by marker
 pytest tests/ -v -m "circular"
@@ -40,6 +46,10 @@ pytest tests/ --cov=gbdraw --cov-report=html
 
 # Check code formatting (ruff)
 ruff check gbdraw/
+
+# Type-check gbdraw/ with the pinned mypy and compare with the type-debt baseline
+pytest tests/test_type_check_ratchet.py
+mypy  # full error list
 
 # Install in development mode
 pip install -e ".[dev]"
@@ -59,15 +69,24 @@ gbdraw linear --gbk genome1.gb genome2.gb -b blast.txt -o comparison
 gbdraw gui  # Launch web UI
 ```
 
-### Browser / Playwright Checks
+Browser and Playwright availability checks are in `AGENTS.md`.
 
-- Do not treat missing repo-local `node_modules/`, `package.json`, or `@playwright/test` as proof that browser testing is unavailable. This environment may provide Playwright through Python/conda.
-- Check both installations when web UI verification matters:
-  - `command -v playwright && playwright --version`
-  - `python -c "from playwright.sync_api import sync_playwright; print('python playwright ok')"`
-- JavaScript Playwright specs in `tests/web/*.playwright.spec.js` require Node's `@playwright/test`; verify with `node -e "console.log(require.resolve('@playwright/test'))"`.
-- If `@playwright/test` is missing, run an equivalent targeted browser check with Python Playwright instead of skipping browser verification.
-- In Codex/agent sandboxes, Chromium can fail with `sandbox_host_linux.cc ... Operation not permitted`. Rerun the same local browser check with the required sandbox escalation before declaring Playwright unavailable.
+## Agent skills and subagents
+
+- Project skills live in `.claude/skills/` and subagent definitions in
+  `.claude/agents/`. A skill describes a procedure; selecting one never widens
+  the task's scope or adds surfaces to it.
+- Run test suites whose output is long (Playwright, the full pytest suite)
+  through `.claude/scripts/run_quiet.py`, which keeps the full log in a file
+  and prints a short summary with the exit status preserved.
+
+## Compact instructions
+
+When compacting, keep: the task goal and its done criteria; open PR numbers
+with head SHAs and CI state; branch and worktree paths; Owner decisions and
+Owner-delegated choices not yet written to a file; bug IDs assigned in this
+session; and the path of the task's `STATE.md`. Drop file contents, command
+output, and passing test logs that can be read again.
 
 ## Project Structure
 
@@ -200,9 +219,26 @@ The `gbdraw/render/` module has a two-tier architecture:
 
 ### Patterns
 - Frozen dataclasses for configuration models
-- `type: ignore` comments for BioPython (missing type stubs)
 - Factory methods (`.from_dict()`) for config parsing
 - `NamedTuple` for immutable data structures
+
+### Type checking
+- mypy, pinned in the `typecheck` extra and configured in `[tool.mypy]`,
+  checks `gbdraw/` except `gbdraw/web/`. Third-party packages are `Any` to it,
+  so their imports need no `# type: ignore`.
+- A file's type debt is its mypy errors plus its `# type: ignore` comments.
+  `TYPE_DEBT_BASELINE` in `tests/test_type_check_ratchet.py` only goes down:
+  lower or remove a file's entry when its debt falls. A file without an
+  entry, including a new file, has no debt. Fix the type, use
+  `typing.cast`, or fix the code instead of adding `# type: ignore`. Raising
+  an entry or relaxing `[tool.mypy]` needs the Owner's approval.
+- Class-body annotations are runtime data. `get_type_hints` reads dataclass
+  fields in `gbdraw/config/modify.py` (config overrides) and
+  `gbdraw/session_request_codec.py` (canonical request validation), and
+  `tests/test_public_contract.py` hashes the signatures of `gbdraw.__all__`.
+  Treat a change to either as a code change, and use only names importable at
+  run time in them, not names imported under `TYPE_CHECKING`.
+- Plan: `docs/internal/PYTHON_TYPE_CHECK_RATCHET_PLAN_2026-10-06.md`.
 
 ## Key Configuration Files
 
@@ -237,8 +273,9 @@ Tests compare generated SVG against `tests/reference_outputs/` files.
 
 - **Python versions tested:** 3.10, 3.11, 3.12
 - **Lint job:** Uses Ruff 0.15.12 and blocks CI on lint failures
-- **CairoSVG:** The Python matrix installs the `dev` extra and required system packages (`libcairo2-dev`, `libpango1.0-dev` on Ubuntu)
-- **Slow tests:** Only run on push to main branch
+- **Type check:** `Core PR` and `Core` install the `typecheck` extra and run `tests/test_type_check_ratchet.py` (mypy 2.4.0) with the other core tests
+- **CairoSVG:** The Core jobs install the `export` extra (`cairosvg`) with `typecheck`; no workflow installs extra system packages
+- **Slow tests:** Run only in release acceptance (a `workflow_dispatch` of Tests on `dev` with the release profile), not on pull requests or ordinary pushes
 
 ## Dependencies
 
@@ -307,6 +344,8 @@ normal test runs do not write to `tests/reference_outputs/`.
 - Main docs: `docs/DOCS.md`
 - Canonical tutorial index: `docs/TUTORIALS/README.md`
 - Current documentation plan:
+  `docs/internal/DOCUMENTATION_RESTRUCTURE_PLAN_2026-10-09.md`, which keeps
+  the routes and evidence architecture of
   `docs/internal/DOCUMENTATION_SIMPLIFICATION_IMPLEMENTATION_PLAN_2026-08-09.md`
 - CLI Reference: `docs/CLI_Reference.md`
 - **Web app development:** See `gbdraw/web/CLAUDE.md` for web-specific guidance

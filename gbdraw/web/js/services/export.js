@@ -1,6 +1,11 @@
+// @ts-check
 import { setDpiInPng } from '../utils/png.js';
-import { stripPreviewFeatureSearchClasses } from '../app/feature-search/preview-svg.js';
-import { ensureSvgDefs, stripTransientPreviewState } from './svg-serialization.js';
+import {
+  ensureSvgDefs,
+  stripPreviewFeatureSearchClasses,
+  stripTransientPreviewState
+} from './svg-serialization.js';
+import { stripResultBaseAttributes } from './result-paint-bases.js';
 import { downloadBlob } from './text-download.js';
 import { preparePdfFonts } from './pdf-fonts.js';
 
@@ -15,7 +20,9 @@ const SVG2PDF_SCRIPT_URL = new URL(
   import.meta.url
 );
 
+/** @type {Promise<typeof import('./standalone-interactivity.js')> | null} */
 let standaloneInteractivityPromise = null;
+/** @type {Promise<void> | null} */
 let pdfLibrariesPromise = null;
 
 const loadStandaloneInteractivity = () => {
@@ -59,6 +66,15 @@ const loadPdfLibraries = () => {
   return pdfLibrariesPromise;
 };
 
+/**
+ * @typedef {object} ExportSnapshot The captured preview an export action reads.
+ * @property {string} name
+ * @property {SVGSVGElement | null} [svg]
+ * @property {string} [svgContent]
+ * @property {unknown} [interactivity]
+ * @property {number | string} [dpi]
+ */
+
 const getDownloadName = (snapshot, extension) => {
   const baseName = snapshot.name;
   if (!extension) return baseName;
@@ -84,6 +100,7 @@ const getCurrentSvgClone = (snapshot) => {
   }
   stripTransientPreviewState(clone);
   stripPreviewFeatureSearchClasses(clone);
+  stripResultBaseAttributes(clone);
   return clone;
 };
 
@@ -217,28 +234,33 @@ const flattenTextPathsForPdf = (svg) => {
   });
 };
 
-const normalizeTextBaselinesForPdf = (svg) => {
+// Reads and writes run in separate phases: interleaving them forces a layout per text.
+export const normalizeTextBaselinesForPdf = (svg) => {
+  const pending = [];
   svg.querySelectorAll('text').forEach((textEl) => {
     const baseline = textEl.getAttribute('dominant-baseline');
     if (!baseline || baseline === 'alphabetic' || baseline === 'auto') return;
-
-    let before;
     try {
-      before = textEl.getBBox();
+      pending.push({ textEl, baseline, before: textEl.getBBox() });
     } catch (error) {
-      return;
+      // Text without a measurable box keeps its baseline.
     }
+  });
 
-    textEl.setAttribute('dominant-baseline', 'alphabetic');
+  pending.forEach(({ textEl }) => textEl.setAttribute('dominant-baseline', 'alphabetic'));
 
-    let after;
+  const measured = [];
+  const unmeasurable = [];
+  pending.forEach((entry) => {
     try {
-      after = textEl.getBBox();
+      measured.push({ ...entry, after: entry.textEl.getBBox() });
     } catch (error) {
-      textEl.setAttribute('dominant-baseline', baseline);
-      return;
+      unmeasurable.push(entry);
     }
+  });
+  unmeasurable.forEach(({ textEl, baseline }) => textEl.setAttribute('dominant-baseline', baseline));
 
+  measured.forEach(({ textEl, before, after }) => {
     const dy = before.y - after.y;
     if (!Number.isFinite(dy) || Math.abs(dy) < 0.01) {
       textEl.removeAttribute('dominant-baseline');
@@ -305,16 +327,19 @@ const downloadSvgString = (svgString, filename) => {
   downloadBlob(new Blob([svgString], { type: 'image/svg+xml' }), filename);
 };
 
+/** @param {ExportSnapshot} snapshot */
 export const downloadSVG = (snapshot) => {
   const svgString = getCurrentSvgString(snapshot);
   downloadSvgString(svgString, getDownloadName(snapshot, 'svg'));
 };
 
+/** @param {ExportSnapshot} snapshot */
 export const downloadInteractiveSVG = async (snapshot) => {
   const svgString = await getInteractiveSvgString(snapshot);
   downloadSvgString(svgString, getDownloadName(snapshot, 'interactive.svg'));
 };
 
+/** @param {ExportSnapshot} snapshot */
 export const downloadPNG = async (snapshot) => {
   const filename = getDownloadName(snapshot, 'png');
   const svgString = getCurrentSvgString(snapshot);
@@ -327,7 +352,8 @@ export const downloadPNG = async (snapshot) => {
     throw new Error('The current SVG has no usable dimensions for PNG export.');
   }
   const canvas = document.createElement('canvas');
-  const dpi = parseInt(snapshot.dpi, 10);
+  // The Web sets a number (default 300) or a string; parseInt accepts both.
+  const dpi = parseInt(/** @type {string} */ (snapshot.dpi), 10);
   if (!Number.isFinite(dpi) || dpi <= 0) {
     throw new Error('The selected PNG DPI is invalid.');
   }
@@ -366,6 +392,14 @@ export const downloadPNG = async (snapshot) => {
   }
 };
 
+/**
+ * @typedef {{ loadPdfFont?: (filename: string) => Promise<string> | string }} PdfExportOptions
+ */
+
+/**
+ * @param {ExportSnapshot} snapshot
+ * @param {PdfExportOptions} [options]
+ */
 export const downloadPDF = async (snapshot, { loadPdfFont } = {}) => {
   const filename = getDownloadName(snapshot, 'pdf');
   const svgString = getCurrentSvgString(snapshot);

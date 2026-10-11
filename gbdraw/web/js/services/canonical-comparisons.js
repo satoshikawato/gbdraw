@@ -1,3 +1,4 @@
+// @ts-check
 const RESOURCE_BACKED_CANONICAL_COMPARISON_KINDS = new Set([
   'precomputedProteinComparison',
   'orthogroupResult',

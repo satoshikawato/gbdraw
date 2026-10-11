@@ -6,13 +6,10 @@ from collections import Counter
 from collections.abc import Sequence
 from typing import Any
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
 
 from gbdraw.exceptions import ValidationError
-from gbdraw.features.ids import (
-    compute_feature_object_hash,
-    make_linear_rendered_feature_id,
-)
+from gbdraw.features.ids import make_linear_rendered_feature_id
 from gbdraw.features.objects import FeatureObject
 from gbdraw.svg.ids import instance_svg_id
 
@@ -85,7 +82,7 @@ def merge_feature_underlays(
         record_index = int(indices[local_index])
         record_length = len(record.seq)
         stable_ids = [
-            compute_feature_object_hash(feature) or str(feature.feature_id)
+            feature.feature_hash or str(feature.feature_id)
             for feature in features
         ]
         stable_id_counts = Counter(stable_ids)
@@ -163,13 +160,17 @@ def feature_underlay_anchor_slot_id(slots: Sequence[object]) -> str:
         if bool(getattr(slot, "enabled", True))
         and str(getattr(slot, "renderer", "")).strip().lower() == "features"
     ]
+    # The record has features drawn as underlays, so the plan needs one
+    # Features row to draw them on (the Web relies on this check, TK-13).
     if not feature_slots:
         raise ValidationError(
-            "Visible feature underlays require an enabled features track slot."
+            "Visible feature underlays require an enabled features track slot.",
+            diagnostic={"code": "TRACK_INVALID", "reason": "FEATURES_COUNT"},
         )
     if len(feature_slots) != 1:
         raise ValidationError(
-            "Visible feature underlays require exactly one enabled features track slot."
+            "Visible feature underlays require exactly one enabled features track slot.",
+            diagnostic={"code": "TRACK_INVALID", "reason": "FEATURES_COUNT"},
         )
     return str(getattr(feature_slots[0], "id"))
 

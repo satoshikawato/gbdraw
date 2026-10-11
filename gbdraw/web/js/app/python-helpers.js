@@ -1,3 +1,4 @@
+// @ts-check
 export const PYTHON_HELPERS = `
 import warnings
 warnings.simplefilter('ignore', SyntaxWarning)
@@ -17,6 +18,7 @@ from gbdraw.web_support.rule_matching import evaluate_rules_json
 from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
 from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment_json
 from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
+from gbdraw.web_support.feature_override_table import read_feature_override_table_json
 
 _WEB_LOSATP_FILTERED_HIT_CACHE = {}
 _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE = {}
@@ -167,7 +169,6 @@ def run_canonical_request_wrapper(
                 "interactiveContextCacheMissCount",
                 "interactiveContextBuildCount",
                 "interactiveFeatureTraversalCount",
-                "selectorSafetyScopeBuildCount",
                 "preparedInputCacheEvictionCount",
                 "preparedInputCacheRetainedBytes",
                 "preparedInputCacheMutationViolationCount",
@@ -426,8 +427,9 @@ def _web_feature_view_hash_parts(record, source_feature_position):
         (),
     )
 
-def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None):
+def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, source_feature_catalogs=None):
     from Bio import SeqIO
+    from gbdraw.features.source import build_source_feature_catalog
     from gbdraw.io.record_select import parse_record_selector, reverse_records, select_record
     from gbdraw.io.regions import apply_region_specs, parse_region_specs
 
@@ -438,6 +440,8 @@ def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_s
         if not records:
             raise ValueError("No records found")
         records = select_record(records, selector) if selector is not None else [records[0]]
+        if source_feature_catalogs is not None:
+            source_feature_catalogs.extend(build_source_feature_catalog(record) for record in records)
         records = reverse_records(records, reverse)
     elif fmt == "gff":
         if not fasta_path:
@@ -450,6 +454,7 @@ def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_s
             keep_all_features=True,
             record_selectors=[_normalize_web_record_selector(record_selector) or ""],
             reverse_flags=[reverse],
+            source_feature_catalogs=source_feature_catalogs,
         )
         records = records[:1]
     else:
@@ -522,8 +527,12 @@ def _serialize_cds_protein(protein, record=None, view_hash_parts_index=None):
         "coord_length": len(record.seq) if record is not None else 0,
     }
 
-def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, record_index=None, record_instance_key=None, feature_visibility_table_path=None):
-    """Extract CDS proteins and coordinate metadata for LOSATP blastp."""
+def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, record_index=None, record_instance_key=None, feature_visibility_table_path=None, feature_overrides_json=None):
+    """Extract CDS proteins and coordinate metadata for LOSATP blastp.
+
+    feature_overrides_json holds this record's canonical featureOverrides rows;
+    the shared resolver binds them as Generate does (R4).
+    """
     try:
         from gbdraw.analysis.protein_colinearity import (
             extract_protein_identity_manifest,
@@ -531,6 +540,8 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
         )
         from gbdraw.features.visibility import compile_feature_visibility_rules, read_feature_visibility_file
 
+        override_rows = [] if _is_blank_or_js_nullish(feature_overrides_json) else json.loads(feature_overrides_json)
+        source_feature_catalogs = [] if override_rows else None
         record = _load_single_linear_record_for_proteins(
             path,
             fmt,
@@ -538,6 +549,7 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
             region_spec=region_spec,
             record_selector=record_selector,
             reverse_flag=reverse_flag,
+            source_feature_catalogs=source_feature_catalogs,
         )
         feature_visibility_rules = None
         if not _is_blank_or_js_nullish(feature_visibility_table_path):
@@ -550,6 +562,24 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
             stable_record_key = f"record-{record_index_offset + 1}"
         normalized_selector = _normalize_web_record_selector(record_selector) or None
         normalized_region = None if _is_blank_or_js_nullish(region_spec) else str(region_spec)
+        feature_overrides = None
+        if override_rows:
+            from gbdraw.features.overrides import FeatureOverride
+            from gbdraw.features.placement import resolve_record_feature_inputs
+
+            resolution = resolve_record_feature_inputs(
+                records=[record],
+                record_keys=[str(stable_record_key)],
+                source_catalogs=source_feature_catalogs[:1],
+                placements=(),
+                mode="linear",
+                feature_overrides=[FeatureOverride.from_mapping(row) for row in override_rows],
+                selected_features=(),
+                feature_visibility_rules=None,
+                specific_color_rules={},
+                feature_shapes=None,
+            )
+            feature_overrides = [resolution.records[0].overrides]
         result = extract_protein_identity_manifest(
             [record],
             record_instance_keys=[str(stable_record_key)],
@@ -558,6 +588,7 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
             regions=[normalized_region],
             record_index_offset=record_index_offset,
             feature_visibility_rules=feature_visibility_rules,
+            feature_overrides=feature_overrides,
         )
         proteins = result.proteins_by_record[0] if result.proteins_by_record else []
         if not proteins:
@@ -1580,7 +1611,12 @@ def list_sequence_records(path, format):
             return json.dumps({'error': serialize_web_error(ValueError(f'Unsupported format: {format}'), operation='listSequenceRecords', stage="helper")})
         records = list(SeqIO.parse(path, format_map[format]))
         if not records:
-            return json.dumps({'error': serialize_web_error(ValueError('No records found'), operation='listSequenceRecords', stage="helper")})
+            missing = ValueError('No records found')
+            if format == "genbank":
+                from gbdraw.exceptions import ValidationError
+                from gbdraw.io.genome import genbank_absence_diagnostic
+                missing = ValidationError('No records found', diagnostic=genbank_absence_diagnostic(path))
+            return json.dumps({'error': serialize_web_error(missing, operation='listSequenceRecords', stage="helper")})
         payload = []
         for idx, record in enumerate(records):
             organism = ""
@@ -1641,22 +1677,6 @@ def measure_legend_text_json(caption, font_family="Arial", font_size=14, config_
     except Exception as error:
         return json.dumps({'error': serialize_web_error(error, operation='measureLegendText', stage="helper")})
 
-def generate_legend_entry_svg(caption, color, y_offset, rect_size=14, font_size=14, font_family="Arial", x_offset=0, stroke_color="black", stroke_width=0.5):
-    """Generate SVG elements for a single legend entry"""
-    from xml.sax.saxutils import escape as xml_escape
-
-    # Create color rectangle path with proper stroke (matching original legend entries)
-    half = rect_size / 2
-    rect_d = f"M 0,{-half} L {rect_size},{-half} L {rect_size},{half} L 0,{half} z"
-    rect_svg = f'<path d="{rect_d}" fill="{color}" stroke="{stroke_color}" stroke-width="{stroke_width}" transform="translate({x_offset}, {y_offset})"/>'
-
-    # Create text element
-    x_margin = (22 / 14) * rect_size
-    safe_caption = xml_escape(str(caption))
-    text_svg = f'<text font-size="{font_size}" font-family="{font_family}" dominant-baseline="central" text-anchor="start" transform="translate({x_offset + x_margin}, {y_offset})">{safe_caption}</text>'
-
-    return json.dumps({"rect": rect_svg, "text": text_svg})
-
 def extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None, include_biological_features=False):
     """Extract feature info from GenBank file for UI display."""
     return extract_features_from_genbank_json(
@@ -1699,8 +1719,8 @@ _WEB_JSON_HELPERS = {
     "list_sequence_records": (list_sequence_records, "listSequenceRecords"),
     "list_gff_fasta_records": (list_gff_fasta_records, "listGffFastaRecords"),
     "read_comparison_sequence_json": (read_comparison_sequence_json, "readComparisonSequence"),
+    "read_feature_override_table_json": (read_feature_override_table_json, "readFeatureOverrideTable"),
     "measure_legend_text_json": (measure_legend_text_json, "measureLegendText"),
-    "generate_legend_entry_svg": (generate_legend_entry_svg, "generateLegendEntrySvg"),
     "extract_features_from_genbank": (extract_features_from_genbank, "feature-extraction"),
     "extract_features_from_gff_fasta": (extract_features_from_gff_fasta, "feature-extraction"),
 }

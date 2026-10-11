@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, List, Union
 
 from Bio.Data.CodonTable import unambiguous_dna_by_id
@@ -10,18 +11,13 @@ from Bio.Seq import Seq
 from Bio.SeqFeature import ExactPosition
 from Bio.SeqRecord import SeqRecord
 
+from ..features.overrides import feature_override_lookup
 from ..features.visibility import should_render_feature
 from .record_metadata import _source_feature_anchor_profile
 
 
-def create_dict_for_sequence_lengths(records: list[SeqRecord]) -> dict[str, int]:
+def create_dict_for_sequence_lengths(records: Sequence[SeqRecord]) -> dict[str, int]:
     return {record.id: len(record.seq) for record in records}
-
-
-def determine_length_parameter(record_length: int, length_threshold: int) -> str:
-    if record_length < length_threshold:
-        return "short"
-    return "long"
 
 
 def check_feature_presence(
@@ -29,6 +25,7 @@ def check_feature_presence(
     features_list: List[str],
     feature_visibility_rules=None,
     specific_color_rules=None,
+    record_features=(),
 ) -> list[str]:
     if isinstance(records, SeqRecord):
         records = [records]
@@ -36,7 +33,10 @@ def check_feature_presence(
     features_present: list[str] = []
     seen_feature_types: set[str] = set()
 
-    for record in records:
+    for index, record in enumerate(records):
+        override_of = feature_override_lookup(
+            record, record_features[index].overrides if record_features else None
+        )
         for feature in record.features:
             if not should_render_feature(
                 feature,
@@ -44,6 +44,7 @@ def check_feature_presence(
                 feature_visibility_rules=feature_visibility_rules,
                 record_id=record.id,
                 specific_color_rules=specific_color_rules,
+                feature_override=override_of(feature),
             ):
                 continue
             if feature.type in seen_feature_types:
@@ -160,7 +161,6 @@ def translate_cds(
 __all__ = [
     "check_feature_presence",
     "create_dict_for_sequence_lengths",
-    "determine_length_parameter",
     "get_coordinates_of_longest_segment",
     "translate_cds",
 ]

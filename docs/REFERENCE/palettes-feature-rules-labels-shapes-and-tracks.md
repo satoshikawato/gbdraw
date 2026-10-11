@@ -1,4 +1,4 @@
-[Documentation home](../DOCS.md) | [Tutorials](../TUTORIALS/README.md) | [Technical documentation](README.md) | [Palette Explorer](../PALETTE_EXPLORER.md) | [FAQ](../FAQ.md)
+[Documentation home](../DOCS.md) | [Tutorials](../TUTORIALS/README.md) | [Technical documentation](README.md) | [Palette Explorer](https://gbdraw.app/gallery/palettes/) | [FAQ](../FAQ.md)
 
 # Palettes, feature rules, labels, shapes, tracks, and layout
 
@@ -21,17 +21,17 @@ the shown orientation and endpoint mapping but leaves the source record
 unchanged.
 
 Simple controls assemble a track stack from enabled features, coordinate
-ticks, GC content, skew, and depth. An explicit slot list is authoritative.
+ticks, GC content, skew, and depth. An explicit slot list overrides these simple controls.
 Turning a custom stack off preserves it for later use; resetting settings
 rebuilds the simple stack.
 
 Circular slots can sit outside, on, or inside the feature axis. Linear slots
 are ordered around an axis boundary, with above, below, and overlay placement
 where the renderer supports it. Slot order controls placement. It does not
-change which depth series, annotation set, or comparison evidence a renderer
+change which depth series, annotation set, or comparison results a renderer
 uses.
 
-Coordinate rulers belong to the genome axis. Numeric tracks own their own axes
+Coordinate rulers belong to the genome axis. Numeric tracks draw their own axes
 and ticks. Hiding the coordinate scale therefore leaves the record axis and
 quantitative axes available. Plot titles, record definitions, and legends are
 placed against visible diagram bounds after record-local layout; moving a
@@ -44,8 +44,7 @@ title on the same side, and 16 px around the final figure. These distances are
 renderer defaults, not user settings. Titles center on the primary diagram.
 Corner legends remain overlays and use 8 px of obstacle clearance. Current Web
 SVGs store composition metadata as schema 1; the editor reapplies automatic
-placement before a saved drag offset. Supported older SVGs enter the editor
-through one explicit legacy adapter.
+placement before a saved drag offset. The editor converts supported older SVGs when it opens them.
 
 The exact surface controls are listed in the [Web app](web-app.md),
 [command-line](command-line.md), and [Python API](python-api.md) pages.
@@ -54,9 +53,9 @@ The exact surface controls are listed in the [Web app](web-app.md),
 
 | Renderer | Content | Main constraint |
 |---|---|---|
-| `features` | Genomic feature glyphs and labels | Owns the feature axis or overlay anchor. |
+| `features` | Genomic feature glyphs and labels | Provides the feature axis or overlay anchor. |
 | `ticks` | Genome-coordinate ticks and labels | Follows mode and coordinate-scale settings. |
-| `dinucleotide_content` | GC percentage, deviation from the mean, or the configured base-pair content | Can own a percentage axis and ticks. |
+| `dinucleotide_content` | GC percentage, deviation from the mean, or the configured base-pair content | Can draw its own percentage axis and ticks. |
 | `dinucleotide_skew` | Signed skew for the configured base pair | Requires record sequence. |
 | `depth` | One logical numeric depth series | Requires a mapped source for each record that has data. |
 | `annotations` | One named annotation set | Requires `set_id`; an overlay also requires a drawable anchor. |
@@ -64,9 +63,20 @@ The exact surface controls are listed in the [Web app](web-app.md),
 Circular slots use side, radius or width, gaps, z-order, and renderer
 parameters. In the Web app, Width and Radius use numeric fields with px/×R
 selectors; R is the base circle radius. A unit change preserves the number,
-and blank means Auto. See [Circular track Width and Radius](web-app.md#circular-track-width-and-radius)
+and blank means Auto. An inside `gc_content`, `gc_skew`, or `depth` row with a
+blank Radius is placed as in the default stack of the selected preset: at the
+preset's radius for that row when it fits, otherwise packed below the row
+above it, so a custom stack that repeats the default stack draws the same
+figure. A slot with a radius is drawn at that radius, and the
+other rows on its side keep the stack order around it: rows before it are
+placed farther from the center, rows after it closer. When the inside rows do
+not fit, numeric rows with an Auto width are compressed together as in an Auto
+stack, a row with a radius included (centred on it); an explicit width is kept. Two adjacent
+rows on one side keep the larger of their facing gaps, the inner row's outer
+gap (`outer_gap_px`) or the outer row's inner gap (`inner_gap_px`); a gap that
+is not set may shrink with compressed rows, to no less than 1 px. See [Circular track Width and Radius](web-app.md#circular-track-width-and-radius)
 for input, History, Session and Generate behavior. Linear slots use order,
-side or overlay ownership, reserved height,
+side or overlay placement, reserved height,
 spacing, and an axis boundary. A feature slot's reserved band and the feature
 glyph height are different settings. Invalid anchor chains, missing logical
 depth indices, and contradictory overlay order are rejected.
@@ -110,7 +120,7 @@ table fields and mark types.
 The default `overflow=error` rejects a track that needs more than its reserved
 extent. For line, bracket, and band slots, it also rejects explicit-lane
 collisions. A highlight-only slot ignores explicit lanes, flattens its marks
-into lane 0, and retains overlaps during lane assignment. `overflow=compress`
+into lane 0, and keeps overlaps during lane assignment. `overflow=compress`
 permits explicit-lane collisions and, only for an overfull multi-lane track,
 reduces the gaps between lanes; it still fails when the fixed lane bands and
 padding cannot fit. `overflow=clip` permits explicit-lane collisions and clips
@@ -131,8 +141,15 @@ Presentation rules do not edit the input annotation. Their order is:
 5. Shape, stroke, overlap, title, definition, and legend settings affect only
    the drawing.
 
+When several specific-color rules match one feature, the first match wins.
+Rules are tried by qualifier key, in the order the keys appear on the feature,
+and then by row order within one key; the row order of rules with different
+qualifier keys has no effect. The Web app's **Move rule up** and **Move rule
+down** therefore change the result only between rules with the same qualifier
+key, and the CLI orders the rules the same way.
+
 A partial default-color table changes only the listed feature types. Omitted
-feature types retain their values from the selected palette.
+feature types keep their values from the selected palette.
 
 The generated feature legend reflects which specific color rules actually match
 features in the diagram. Default-colored CDS are captioned `CDS` when no specific
@@ -140,7 +157,7 @@ CDS rule is used. When a specific CDS rule is used and default-colored CDS remai
 the legend contains the specific caption and `other proteins` for the remainder.
 An unused rule does not change `CDS`; removing the used rule and regenerating
 restores it. Other feature types use `other <feature type>s` for the same remainder
-(for example, `other genes`). This contract also applies to Web regeneration after
+(for example, `other genes`). The same rule applies to Web regeneration after
 a **This feature only** color edit creates a specific rule: the default caption
 changes because its category now contains only the remaining members.
 
@@ -155,17 +172,35 @@ label override cannot restore a label removed by the active filter. Exact-match
 regular expressions should be anchored when a broader qualifier match would be
 unsafe.
 
+A per-feature override is a label-override row whose qualifier is `hash`. It
+decides one feature's label before the label filters and the label display
+scope (`--show_labels` or `--labels`, `labels.linear.scope`,
+`labels.circular.scope`). Non-empty text shows the label, also on a record or
+with a scope that otherwise draws no labels. Empty text hides it. No label
+is drawn in three cases: the feature is hidden, the feature is drawn as
+`underlay`, or, with `labels.rendering = "embedded_only"`, the label does not
+fit inside its feature. Such a row shows a label only once one of these
+changes. The Web
+feature popup writes these rows for **Label visibility** **On** and **Off**. A
+label text edit uses `locus_tag`, `gene`, or `record_location` when one of them
+identifies the feature, and falls back to `hash` only when none does.
+
 Feature visibility actions are `show`, `off`, and `exclude_matching`.
 `exclude_matching` keeps the feature visible but removes it from protein-search
 input; `off` removes the glyph, its label, and the search input. The first matching
 visibility rule wins.
+
+A [feature override table](input-formats-and-tsv-schemas.md#feature-override-table)
+row (`--feature_override_table`, or typed `feature_overrides`) names one feature
+by its source identity and decides its Feature visibility, Label visibility,
+and label text before the visibility and label tables.
 
 Supported feature renderings include directional `arrow`, nondirectional
 `rectangle`, and full-band `underlay`. Underlays require an enabled feature
 anchor and render behind foreground glyphs. Block strokes, connector strokes,
 fill, width, visibility, and overlap resolution are separate controls.
 Overlap resolution may add drawing lanes but does not crop a feature or change
-comparison evidence. Separate-strand placement and overlap resolution can be enabled together in
+comparison results. Separate-strand placement and overlap resolution can be enabled together in
 both modes. Undefined-strand features share the nominal negative pool with
 negative-strand features during automatic allocation.
 
@@ -176,8 +211,19 @@ the chosen scope; otherwise they remain feature-specific rules. The full
 editor behavior is in [Preview, search, and
 editor](web-app.md#preview-search-and-editor).
 
-The [Palette Explorer](../PALETTE_EXPLORER.md) shows current palette names and
-swatches. The schemas for default-color, specific-color, qualifier-priority,
+The [Palette Explorer](https://gbdraw.app/gallery/palettes/) applies any
+built-in palette to one fixed Circular diagram, so only the colors change. The
+palette tokens and semantic colors come from
+[`gbdraw/data/color_palettes.toml`](../../gbdraw/data/color_palettes.toml), and
+the generated [color palette reference](../../examples/color_palette_examples.md)
+lists every palette with representative Circular and Linear figures.
+
+Palette names describe appearance, not a guaranteed accessibility grade. Check
+contrast against the final background and at final print size. Do not rely on
+color alone for a biological distinction; combine it with labels, order, track
+position, feature shape, stroke, or another redundant cue.
+
+The schemas for default-color, specific-color, qualifier-priority,
 label-filter, label-override, and visibility tables are in [Input formats and
 TSV schemas](input-formats-and-tsv-schemas.md#styling-tables).
 
@@ -202,7 +248,8 @@ when strands are separate, or one lane from the shared Main lane when combined.
 Moving one feature leaves the other features' nominal lanes in place.
 Custom slots determine
 availability from their final geometry; a preset name cannot override that
-geometry. Unsupported directions fail with a reason.
+geometry. An unsupported direction fails with a reason that names the feature
+and the lanes that accept it; Auto and Main are available in every slot.
 
 | Request | Resolver off | Resolver on |
 |---|---|---|
@@ -220,8 +267,10 @@ In the Web Feature Editor choose **Feature placement**, or use **Selected featur
 placements** for a selection. Auto deletes the override; Undo/Redo restores the
 requested state. Apply rotation, placement or tolerance changes with **Generate
 Diagram**. They are drafts until generation succeeds; the previous Result remains
-available. A source replacement invalidates its old binding. Known invisible
-features can be dormant; an unknown or stale feature cannot.
+available. A source replacement breaks its link to the old source. Known invisible
+features can be dormant; an unknown or stale feature cannot. Placements stay
+with the mode in which they were made: a Generate in the other mode ignores
+them, and they apply again after you switch back.
 
 Lane 2 and higher, arbitrary pixel dragging, per-exon placement, annotation-lane
 placement and a general label-collision redesign are outside this feature.

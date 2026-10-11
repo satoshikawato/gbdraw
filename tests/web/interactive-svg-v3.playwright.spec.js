@@ -1,9 +1,14 @@
 const fs = require('node:fs');
+const { execFile } = require('node:child_process');
 const { join } = require('node:path');
 const { pathToFileURL } = require('node:url');
+const { promisify } = require('node:util');
 const { gunzipSync } = require('node:zlib');
 const { test, expect } = require('@playwright/test');
 const {
+  CURRENT_FEATURE_CATALOG_SCHEMA,
+  CURRENT_REQUEST_SCHEMA,
+  CURRENT_SESSION_VERSION,
   evaluateWithRetainedPromise,
   generateAndWaitForResult,
   openApp,
@@ -31,6 +36,15 @@ const installDiagramRequestObserver = (page) => page.addInitScript(() => {
     }
   });
 });
+
+const ROTATE_RECORD = 'Rotate record using this feature';
+
+// Custom position: "Record starts at <reference> shifted by <offset> bp".
+const chooseCustomPosition = async (actions, reference, offset) => {
+  await actions.getByRole('radio', { name: 'Custom position', exact: true }).check();
+  await actions.getByLabel('Record starts at', { exact: true }).selectOption(reference);
+  await actions.getByLabel('Shifted by (bp)', { exact: true }).fill(String(offset));
+};
 
 const makeCircularRecord = (recordId, gene, start, end) => `LOCUS       ${recordId.padEnd(24)} 360 bp    DNA     circular UNA 01-JAN-2000
 DEFINITION  feature popup record rotation acceptance.
@@ -94,7 +108,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   });
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    app.adv.rich_feature_popup = true;
+    app.richFeaturePopup = true;
     app.form.prefix = 'UNRELATED_PENDING_PREFIX';
   });
 
@@ -102,25 +116,29 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   await search.fill('tRNA');
   await search.press('Enter');
   await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
-  const disclosure = page.getByRole('button', { name: /Record actions · Rotate record/ });
+  const layout = page.getByRole('region', { name: 'Layout · applies on Generate' });
+  await expect(layout.getByLabel('Feature placement', { exact: true })).toBeVisible();
+  const disclosure = layout.getByRole('button', { name: ROTATE_RECORD, exact: true });
   await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
   await disclosure.click();
-  const actions = page.getByRole('region', { name: 'Record actions' });
+  const actions = page.getByRole('region', { name: ROTATE_RECORD, exact: true });
   await expect(actions).toBeVisible();
-  await expect(actions).toContainText('Coordinates refer to the original record.');
-  await expect(actions.getByLabel('Record rotation anchor')).toHaveValue('five-prime');
-  await expect(actions.getByLabel('Record rotation signed offset')).toHaveValue('0');
+  await expect(actions.getByRole('radio', { name: 'Start of the record', exact: true })).toBeChecked();
+  await expect(actions.getByRole('button', { name: 'About these coordinates', exact: true })).toBeVisible();
+  await expect(actions.locator('[data-record-rotation-preview]'))
+    .toContainText(/^NC_012920\.1 will start at [\d,]+ · orientation unchanged/);
+  await expect(actions.getByLabel('Record starts at', { exact: true })).toHaveCount(0);
 
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
     .toBe(before.history);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.svgContent)).toBe(before.svg);
-  await actions.getByLabel('Record rotation anchor').selectOption('midpoint');
-  await actions.getByLabel('Record rotation signed offset').fill('2');
+  await chooseCustomPosition(actions, 'midpoint', 2);
   await disclosure.click();
   await expect(actions).toBeHidden();
   await disclosure.click();
-  await expect(actions.getByLabel('Record rotation anchor')).toHaveValue('midpoint');
-  await expect(actions.getByLabel('Record rotation signed offset')).toHaveValue('2');
+  await expect(actions.getByRole('radio', { name: 'Custom position', exact: true })).toBeChecked();
+  await expect(actions.getByLabel('Record starts at', { exact: true })).toHaveValue('midpoint');
+  await expect(actions.getByLabel('Shifted by (bp)', { exact: true })).toHaveValue('2');
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
     .toBe(before.history);
   expect(await page.evaluate(async () => (
@@ -174,7 +192,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
     };
   });
   expect(committed).toMatchObject({
-    schema: 8,
+    schema: CURRENT_REQUEST_SCHEMA,
     startCoordinate: expectedStart,
     prefix: before.prefix,
     history: before.history + 1
@@ -193,11 +211,11 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   expect(transformedSvg).not.toBe(before.svg);
 
   await page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.svgContent)).toBe(before.svg);
   expect(await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
-    return state.recordDisplayDrafts.length;
+    return state.activeDrawing().recordDisplayDrafts.length;
   })).toBe(0);
   expect(await page.evaluate(async () => (
     (await import('/gbdraw/web/js/services/config.js')).getCommittedCanonicalRenderRequest()
@@ -206,11 +224,11 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
     .toBe('UNRELATED_PENDING_PREFIX');
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
     .toBe(before.history);
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.svgContent)).toBe(transformedSvg);
   expect(await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
-    return state.recordDisplayDrafts[0];
+    return state.activeDrawing().recordDisplayDrafts[0];
   })).toMatchObject({
     startCoordinate: expectedStart,
     anchorIntent: {
@@ -229,7 +247,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
     .toBe(before.history + 1);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.evaluate(() => { window.__GBDRAW_APP__.adv.rich_feature_popup = false; });
+  await page.evaluate(() => { window.__GBDRAW_APP__.richFeaturePopup = false; });
   await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
   const simplePopup = page.locator('.feature-popup--simple');
   await expect(simplePopup).toBeVisible();
@@ -237,22 +255,41 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   expect(bounds.x).toBeGreaterThanOrEqual(0);
   expect(bounds.x + bounds.width).toBeLessThanOrEqual(390);
 
-  const simpleDisclosure = simplePopup.getByRole('button', { name: /Record actions · Rotate record/ });
+  const simpleDisclosure = simplePopup.getByRole('button', { name: ROTATE_RECORD, exact: true });
   await expect(simpleDisclosure).toHaveAttribute('aria-expanded', 'false');
   await simpleDisclosure.focus();
   await page.keyboard.press('Enter');
-  const simpleActions = simplePopup.getByRole('region', { name: 'Record actions' });
-  const anchor = simpleActions.getByLabel('Record rotation anchor');
-  await anchor.focus();
-  await anchor.press('Enter');
-  await anchor.press('ArrowDown');
-  await anchor.press('Enter');
-  await expect(anchor).toHaveValue('midpoint');
-  const offset = simpleActions.getByLabel('Record rotation signed offset');
-  await offset.focus();
+  const simpleActions = simplePopup.getByRole('region', { name: ROTATE_RECORD, exact: true });
+  // The position radio group: Tab enters at the checked choice, arrows move it.
+  const startChoice = simpleActions.getByRole('radio', { name: 'Start of the record', exact: true });
+  await expect(startChoice).toBeChecked();
+  await simpleDisclosure.focus();
+  await page.keyboard.press('Tab');
+  await expect(startChoice).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(simpleActions.getByRole('radio', { name: 'End of the record', exact: true })).toBeChecked();
+  await page.keyboard.press('ArrowDown');
+  await expect(simpleActions.getByRole('radio', { name: 'Custom position', exact: true })).toBeChecked();
+  const reference = simpleActions.getByLabel('Record starts at', { exact: true });
+  await page.keyboard.press('Tab');
+  await expect(reference).toBeFocused();
+  await reference.press('Enter');
+  await reference.press('ArrowDown');
+  await reference.press('Enter');
+  await expect(reference).toHaveValue('midpoint');
+  const offset = simpleActions.getByLabel('Shifted by (bp)', { exact: true });
+  await page.keyboard.press('Tab');
+  await expect(offset).toBeFocused();
   await page.keyboard.press('ControlOrMeta+A');
   await page.keyboard.type('-3');
   await expect(offset).toHaveValue('-3');
+  for (const control of [simpleDisclosure, reference, offset,
+    simpleActions.getByRole('button', { name: 'Apply on Generate', exact: true }),
+    simpleActions.getByRole('button', { name: 'Apply and regenerate', exact: true })]) {
+    const box = await control.boundingBox();
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
+  }
   const cancel = simpleActions.getByRole('button', { name: 'Cancel', exact: true });
   await cancel.focus();
   await page.keyboard.press('Enter');
@@ -261,7 +298,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   await expect(simpleActions).toBeHidden();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.svgContent)).toBe(transformedSvg);
   await simpleDisclosure.click();
-  const staleActions = simplePopup.getByRole('region', { name: 'Record actions' });
+  const staleActions = simplePopup.getByRole('region', { name: ROTATE_RECORD, exact: true });
   const staleBefore = await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
     const target = window.__GBDRAW_APP__.featureRecordRotationDraft.identity;
@@ -277,11 +314,15 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
     return {
       svg: window.__GBDRAW_APP__.svgContent,
       history: window.__GBDRAW_HISTORY__.getUndoCount(),
-      drafts: JSON.stringify(state.recordDisplayDrafts)
+      drafts: JSON.stringify(state.activeDrawing().recordDisplayDrafts)
     };
   });
   await staleActions.getByRole('button', { name: 'Apply and regenerate' }).click();
-  await expect(staleActions.locator('[aria-live="polite"]')).toContainText(
+  // One reason source: the reason line states it once; the status line does not repeat it.
+  await expect(staleActions.locator('#feature-record-rotation-reason')).toContainText(
+    'no longer present'
+  );
+  await expect(staleActions.locator('[aria-live="polite"]')).not.toContainText(
     'no longer present'
   );
   expect(await page.evaluate(async () => {
@@ -289,7 +330,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
     return {
       svg: window.__GBDRAW_APP__.svgContent,
       history: window.__GBDRAW_HISTORY__.getUndoCount(),
-      drafts: JSON.stringify(state.recordDisplayDrafts)
+      drafts: JSON.stringify(state.activeDrawing().recordDisplayDrafts)
     };
   })).toEqual(staleBefore);
   await page.evaluate(async () => {
@@ -307,10 +348,10 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   });
   const savedPath = await (await pendingSave).path();
   const saved = JSON.parse(gunzipSync(fs.readFileSync(savedPath)));
-  expect(saved.version).toBe(44);
-  expect(saved.renderRequest.schema).toBe(8);
+  expect(saved.version).toBe(CURRENT_SESSION_VERSION);
+  expect(saved.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
   expect(saved.renderRequest.records[0].display.startCoordinate).toBe(expectedStart);
-  expect(saved.config.recordDisplayDrafts[0].anchorIntent).toMatchObject({
+  expect(saved.modes[saved.ui.mode].config.recordDisplayDrafts[0].anchorIntent).toMatchObject({
     schema: 1,
     placement: 'anchor',
     anchor: 'midpoint',
@@ -325,7 +366,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   expect(await page.evaluate(() => window.__GBDRAW_APP__.svgContent)).toBe(transformedSvg);
   expect(await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
-    return state.recordDisplayDrafts[0];
+    return state.activeDrawing().recordDisplayDrafts[0];
   })).toMatchObject({
     startCoordinate: expectedStart,
     anchorIntent: {
@@ -365,11 +406,10 @@ test('same-file record rotation keeps chromosome targets independent', async ({ 
     await search.fill(query);
     await search.press('Enter');
     await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
-    await page.getByRole('button', { name: /Record actions · Rotate record/ }).click();
-    const actions = page.getByRole('region', { name: 'Record actions' });
+    await page.getByRole('button', { name: ROTATE_RECORD, exact: true }).click();
+    const actions = page.getByRole('region', { name: ROTATE_RECORD, exact: true });
     await expect(actions).toBeVisible();
-    await actions.getByLabel('Record rotation anchor').selectOption(anchor);
-    await actions.getByLabel('Record rotation signed offset').fill(String(offset));
+    await chooseCustomPosition(actions, anchor, offset);
     const draft = await page.evaluate(() => ({
       identity: { ...window.__GBDRAW_APP__.featureRecordRotationDraft.identity },
       startCoordinate: window.__GBDRAW_APP__.featureRecordRotationDraft.startCoordinate
@@ -427,6 +467,150 @@ test('same-file record rotation keeps chromosome targets independent', async ({ 
   expect(chromosomeII.snapshot.biological).toEqual(baseline.biological);
 });
 
+// PD-OI-085: Apply on Generate stages a record rotation in the record display
+// draft; one Generate Diagram applies every staged record, and Apply and
+// regenerate stays target-only (PD-OI-032 item 4).
+test('Apply on Generate stages rotations that one Generate applies together', async ({ page }) => {
+  test.setTimeout(300000);
+  await page.addInitScript(() => {
+    window.__ROTATION_HISTORY_COMMITS__ = [];
+    window.__GBDRAW_TEST_HOOKS__ = {
+      onHistoryDiagnostic: (event) => {
+        if (event.type === 'commit' && event.created) {
+          window.__ROTATION_HISTORY_COMMITS__.push({ scope: event.scope, label: event.label });
+        }
+      }
+    };
+  });
+  await installDiagramRequestObserver(page);
+  await openApp(page);
+  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({
+    name: 'two-chromosomes.gbk',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(
+      makeCircularRecord('chromosome_I', 'dnaA', 21, 105)
+      + makeCircularRecord('chromosome_II', 'parB', 151, 225)
+    )
+  });
+  await generateAndWaitForResult(page);
+  const snapshot = () => page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    return {
+      runs: window.__GBDRAW_DIAGRAM_RUNS__.length,
+      svg: window.__GBDRAW_APP__.svgContent,
+      history: window.__GBDRAW_HISTORY__.getUndoCount(),
+      drafts: Object.fromEntries(state.activeDrawing().recordDisplayDrafts
+        .map(({ recordId, startCoordinate }) => [recordId, startCoordinate]))
+    };
+  });
+  const lastStarts = () => page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.at(-1).records
+    .map((record) => record.display.startCoordinate)
+    .sort((a, b) => a - b));
+  const pendingNotice = page.getByText(
+    'Record rotation, feature placement, or tolerance has changes pending Generate.'
+  );
+  const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
+  const openRotation = async (query) => {
+    await search.fill(query);
+    await search.press('Enter');
+    await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
+    const disclosure = page.getByRole('button', { name: ROTATE_RECORD, exact: true });
+    await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+    await disclosure.click();
+    const actions = page.getByRole('region', { name: ROTATE_RECORD, exact: true });
+    await expect(actions).toBeVisible();
+    return actions;
+  };
+  const closePopup = () => page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
+  const before = await snapshot();
+  const initialStarts = await lastStarts();
+  expect(initialStarts).toEqual([null, null]);
+  await expect(pendingNotice).toHaveCount(0);
+
+  // Stage chromosome I at the start of dnaA (21) and chromosome II after parB (226).
+  let actions = await openRotation('dnaA');
+  await expect(actions.locator('[data-record-rotation-preview]'))
+    .toHaveText('chromosome_I will start at 21 · orientation unchanged');
+  await actions.getByRole('button', { name: 'Apply on Generate', exact: true }).click();
+  await expect(actions.locator('[aria-live="polite"]'))
+    .toHaveText('Record rotation will apply on the next Generate Diagram.');
+  await expect(actions.locator('[data-record-rotation-pending]'))
+    .toHaveText('Pending for Generate: chromosome_I will start at 21 · orientation unchanged');
+  await expect(actions.locator('[data-record-rotation-preview]')).toHaveCount(0);
+  await closePopup();
+  actions = await openRotation('parB');
+  await expect(actions.locator('[data-record-rotation-pending]')).toHaveCount(0);
+  await actions.getByRole('radio', { name: 'End of the record', exact: true }).check();
+  await actions.getByRole('button', { name: 'Apply on Generate', exact: true }).click();
+  await expect(actions.locator('[data-record-rotation-pending]'))
+    .toHaveText('Pending for Generate: chromosome_II will start at 226 · orientation unchanged');
+  const staged = await snapshot();
+  expect(staged).toMatchObject({ runs: before.runs, svg: before.svg, history: before.history + 2 });
+  expect(staged.drafts).toEqual({ chromosome_I: 21, chromosome_II: 226 });
+  expect(await page.evaluate(() => window.__ROTATION_HISTORY_COMMITS__.slice(-2))).toEqual([
+    { scope: 'intent', label: 'Rotate record to feature on Generate' },
+    { scope: 'intent', label: 'Rotate record to feature on Generate' }
+  ]);
+  await expect(pendingNotice).toBeVisible();
+
+  // One Undo removes only the last staged record; Redo stages it again.
+  // History restore closes the popup; reopening shows the current draft.
+  await actions.getByRole('button', { name: 'Apply on Generate', exact: true }).focus();
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect.poll(async () => (await snapshot()).drafts).toEqual({ chromosome_I: 21 });
+  actions = await openRotation('parB');
+  await expect(actions.locator('[data-record-rotation-pending]')).toHaveCount(0);
+  await expect(actions.locator('[data-record-rotation-preview]'))
+    .toHaveText('chromosome_II will start at 151 · orientation unchanged');
+  await page.keyboard.press('ControlOrMeta+Shift+z');
+  await expect.poll(async () => (await snapshot()).drafts).toEqual(staged.drafts);
+  expect(await snapshot()).toEqual(staged);
+  await page.keyboard.press('Escape');
+  await expect(actions).toBeHidden();
+
+  // Reopening shows the staged values.
+  for (const [query, expected] of [
+    ['dnaA', 'Pending for Generate: chromosome_I will start at 21 · orientation unchanged'],
+    ['parB', 'Pending for Generate: chromosome_II will start at 226 · orientation unchanged']
+  ]) {
+    actions = await openRotation(query);
+    await expect(actions.locator('[data-record-rotation-pending]')).toHaveText(expected);
+    await closePopup();
+  }
+
+  // One Generate Diagram applies both staged records.
+  await generateAndWaitForResult(page);
+  const generated = await snapshot();
+  expect(generated.runs).toBe(before.runs + 1);
+  expect(generated.svg).not.toBe(before.svg);
+  expect(await lastStarts()).toEqual([21, 226]);
+  await expect(pendingNotice).toHaveCount(0);
+  actions = await openRotation('dnaA');
+  await expect(actions.locator('[data-record-rotation-pending]')).toHaveCount(0);
+  await closePopup();
+
+  // Stage chromosome II again, then Apply and regenerate chromosome I only:
+  // the staged chromosome II stays staged and is not drawn.
+  actions = await openRotation('parB');
+  await actions.getByRole('button', { name: 'Apply on Generate', exact: true }).click();
+  await expect(actions.locator('[data-record-rotation-pending]'))
+    .toHaveText('Pending for Generate: chromosome_II will start at 151 · orientation unchanged');
+  await closePopup();
+  actions = await openRotation('dnaA');
+  await actions.getByRole('radio', { name: 'End of the record', exact: true }).check();
+  await actions.getByRole('button', { name: 'Apply and regenerate', exact: true }).click();
+  await expect(actions.locator('[aria-live="polite"]')).toHaveText(
+    'Record rotation applied and regenerated.', { timeout: 240000 }
+  );
+  expect(await lastStarts()).toEqual([106, 226]);
+  expect((await snapshot()).drafts).toEqual({ chromosome_I: 106, chromosome_II: 151 });
+  await expect(pendingNotice).toBeVisible();
+  await closePopup();
+  actions = await openRotation('parB');
+  await expect(actions.locator('[data-record-rotation-pending]'))
+    .toHaveText('Pending for Generate: chromosome_II will start at 151 · orientation unchanged');
+});
+
 test('both modes record rotation resolves the same circular source anchor', async ({ browser }) => {
   test.setTimeout(300000);
   const source = makeCircularRecord('shared_anchor', 'anchor_gene', 41, 125);
@@ -452,10 +636,9 @@ test('both modes record rotation resolves the same circular source anchor', asyn
     await search.fill('anchor_gene');
     await search.press('Enter');
     await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
-    await page.getByRole('button', { name: /Record actions · Rotate record/ }).click();
-    const actions = page.getByRole('region', { name: 'Record actions' });
-    await actions.getByLabel('Record rotation anchor').selectOption('midpoint');
-    await actions.getByLabel('Record rotation signed offset').fill('-11');
+    await page.getByRole('button', { name: ROTATE_RECORD, exact: true }).click();
+    const actions = page.getByRole('region', { name: ROTATE_RECORD, exact: true });
+    await chooseCustomPosition(actions, 'midpoint', -11);
     const expected = await page.evaluate(() => ({
       identity: { ...window.__GBDRAW_APP__.featureRecordRotationDraft.identity },
       startCoordinate: window.__GBDRAW_APP__.featureRecordRotationDraft.startCoordinate
@@ -471,7 +654,7 @@ test('both modes record rotation resolves the same circular source anchor', asyn
       const { state } = await import('/gbdraw/web/js/state.js');
       const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
       const record = request.records.find((entry) => entry.recordKey === recordKey);
-      const draft = state.recordDisplayDrafts.find((entry) => (
+      const draft = state.activeDrawing().recordDisplayDrafts.find((entry) => (
         entry.anchorIntent?.recordKey === recordKey
       ));
       return {
@@ -481,7 +664,7 @@ test('both modes record rotation resolves the same circular source anchor', asyn
         svg: window.__GBDRAW_APP__.svgContent
       };
     }, expected.identity.recordKey);
-    expect(accepted.schema).toBe(8);
+    expect(accepted.schema).toBe(CURRENT_REQUEST_SCHEMA);
     expect(accepted.startCoordinate).toBe(expected.startCoordinate);
     expect(accepted.anchorIntent).toMatchObject({
       schema: 1,
@@ -502,18 +685,306 @@ test('both modes record rotation resolves the same circular source anchor', asyn
   expect(linear.anchorIntent.offsetBp).toBe(circular.anchorIntent.offsetBp);
 });
 
-test('browser export embeds the exact selected schema-4 item and expands references', async ({
+// Session Load reads no record bytes (776a2f93). Opening Record actions is the
+// explicit record action that reads them, so no Generate is needed.
+const installRecordReadCounter = (page) => page.addInitScript(() => {
+  window.__GBDRAW_RECORD_RESOURCE_READS__ = 0;
+  window.__GBDRAW_TEST_HOOKS__ = {
+    onStructuralMetric(metric) {
+      if (metric.name === 'resourceByteReadCount') {
+        window.__GBDRAW_RECORD_RESOURCE_READS__ += metric.value;
+      }
+    }
+  };
+});
+
+const loadSessionFile = async (page, sessionPath) => {
+  const dialogPromise = page.waitForEvent('dialog');
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
+  const dialog = await dialogPromise;
+  expect(dialog.message()).toBe('Session loaded successfully!');
+  await dialog.accept();
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending))
+    .toBe(false);
+};
+
+const openLoadedRecordActions = async (page, { query, recordId, reads = 1 }) => {
+  const recordReads = () => page.evaluate(() => window.__GBDRAW_RECORD_RESOURCE_READS__);
+  const undoCount = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  expect(await recordReads()).toBe(0);
+  await page.evaluate(() => { window.__GBDRAW_APP__.richFeaturePopup = true; });
+  const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
+  await search.fill(query);
+  await search.press('Enter');
+  await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
+  const disclosure = page.getByRole('button', { name: ROTATE_RECORD, exact: true });
+  await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+  expect(await recordReads()).toBe(0);
+
+  await disclosure.click();
+  const actions = page.getByRole('region', { name: ROTATE_RECORD, exact: true });
+  // Start of the record (default) on a forward record: the feature's leftmost
+  // source base becomes display base 1, whatever its strand.
+  const expectedStart = await page.evaluate(() => {
+    const parts = window.__GBDRAW_APP__.featureRecordRotationDraft.feature.location_parts;
+    return parts.length === 1 ? parts[0].start + 1 : null;
+  });
+  expect(expectedStart).toBeGreaterThan(0);
+  await expect(actions.locator('[data-record-rotation-preview]')).toHaveText(
+    `${recordId} will start at ${expectedStart.toLocaleString('en-US')} · orientation unchanged`
+  );
+  await expect(actions.getByRole('button', { name: 'Apply and regenerate' })).toBeEnabled();
+  await expect(actions.getByRole('radio', { name: 'End of the record', exact: true })).toBeEnabled();
+  await expect(actions).not.toContainText('stale or ambiguous');
+  await expect(actions).not.toContainText('Unavailable');
+  expect(await recordReads()).toBe(reads);
+  expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length)).toBe(0);
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoCount);
+  return { actions, expectedStart };
+};
+
+test('Circular Record actions read a loaded Gallery Session without Generate', async ({ page }) => {
+  test.setTimeout(180000);
+  await installRecordReadCounter(page);
+  await installDiagramRequestObserver(page);
+  await openApp(page);
+  await loadSessionFile(page, join(
+    process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'
+  ));
+  await openLoadedRecordActions(page, { query: 'tRNA', recordId: 'NC_012920.1' });
+});
+
+test('Linear Record actions rotate a circular record of a loaded Session without Generate', async ({
+  page
+}) => {
+  test.setTimeout(240000);
+  page.on('dialog', (dialog) => {
+    if (dialog.message() !== 'Session loaded successfully!') dialog.dismiss();
+  });
+  await installRecordReadCounter(page);
+  await installDiagramRequestObserver(page);
+  await openApp(page);
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await page.getByTestId('linear-genbank-1').setInputFiles({
+    name: 'loaded-linear.gbk',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(makeCircularRecord('loaded_linear', 'loaded_gene', 41, 125))
+  });
+  await generateAndWaitForResult(page);
+  const pendingSave = page.waitForEvent('download');
+  await evaluateWithRetainedPromise(page, async () => {
+    window.__GBDRAW_APP__.sessionTitle = 'record-actions-after-load';
+    await window.__GBDRAW_APP__.saveSessionWithTitle();
+  });
+  const savedPath = await (await pendingSave).path();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForAppShell(page);
+  await loadSessionFile(page, savedPath);
+
+  const { actions, expectedStart } = await openLoadedRecordActions(page, {
+    query: 'loaded_gene', recordId: 'loaded_linear'
+  });
+  await actions.getByRole('button', { name: 'Apply and regenerate' }).click();
+  await expect(actions.locator('[aria-live="polite"]')).toContainText(
+    'Record rotation applied and regenerated.', { timeout: 240000 }
+  );
+  const request = await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.at(-1));
+  expect(request.mode).toBe('linear');
+  expect(request.records.map((record) => record.display.startCoordinate)).toEqual([expectedStart]);
+});
+
+// `gbdraw ... --session_output` binds its input files for the Web draft, and
+// its request draws each record from those same files, with its crop and
+// orientation.
+const writeCliSession = async (testInfo, mode, inputs, args = []) => {
+  const paths = Object.entries(inputs).map(([name, text]) => {
+    const path = testInfo.outputPath(name);
+    fs.writeFileSync(path, text);
+    return path;
+  });
+  const prefix = testInfo.outputPath(`cli-${mode}`);
+  const session = `${prefix}.gbdraw-session.json`;
+  await promisify(execFile)('python', [
+    '-m', 'gbdraw.cli', mode, '--gbk', ...paths, ...args, '-o', prefix, '-f', 'svg',
+    '--session_output', session
+  ], { cwd: testInfo.outputDir, env: { ...process.env, PYTHONPATH: process.cwd() }, timeout: 300000 });
+  return session;
+};
+
+test('Circular Record actions read a loaded CLI Session without Generate', async ({
+  page
+}, testInfo) => {
+  test.setTimeout(240000);
+  const session = await writeCliSession(testInfo, 'circular', {
+    'cli-circular.gbk': makeCircularRecord('cli_circular', 'cli_gene', 41, 125)
+  });
+  await installRecordReadCounter(page);
+  await installDiagramRequestObserver(page);
+  await openApp(page);
+  await loadSessionFile(page, session);
+  await openLoadedRecordActions(page, { query: 'cli_gene', recordId: 'cli_circular' });
+});
+
+test('Linear Record actions rotate a multi-record File of a loaded CLI Session without Generate', async ({
+  page
+}, testInfo) => {
+  test.setTimeout(300000);
+  page.on('dialog', (dialog) => {
+    if (dialog.message() !== 'Session loaded successfully!') dialog.dismiss();
+  });
+  const session = await writeCliSession(testInfo, 'linear', {
+    'cli-single.gbk': makeCircularRecord('cli_single', 'single_gene', 41, 125),
+    'cli-multi.gbk': makeCircularRecord('cli_multi_a', 'multi_a_gene', 61, 150)
+      + makeCircularRecord('cli_multi_b', 'multi_b_gene', 101, 200)
+  });
+  await installRecordReadCounter(page);
+  await installDiagramRequestObserver(page);
+  await openApp(page);
+  await loadSessionFile(page, session);
+
+  const { actions, expectedStart } = await openLoadedRecordActions(page, {
+    query: 'multi_b_gene', recordId: 'cli_multi_b', reads: 2
+  });
+  await actions.getByRole('button', { name: 'Apply and regenerate' }).click();
+  await expect(actions.locator('[aria-live="polite"]')).toContainText(
+    'Record rotation applied and regenerated.', { timeout: 240000 }
+  );
+  const request = await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.at(-1));
+  expect(request.mode).toBe('linear');
+  expect(request.records.map((record) => record.display.startCoordinate))
+    .toEqual([null, null, expectedStart]);
+});
+
+// One original file stays one File holding its records; record selection
+// decides what is drawn. A CLI Session that draws some records of a file
+// selects them on the bound file.
+test('Linear CLI Session that draws some records of a file loads and generates only those records', async ({
+  page
+}, testInfo) => {
+  test.setTimeout(300000);
+  page.on('dialog', (dialog) => {
+    if (dialog.message() !== 'Session loaded successfully!') dialog.dismiss();
+  });
+  const session = await writeCliSession(testInfo, 'linear', {
+    'cli-single.gbk': makeCircularRecord('cli_single', 'single_gene', 41, 125),
+    'cli-multi.gbk': makeCircularRecord('cli_multi_a', 'multi_a_gene', 61, 150)
+      + makeCircularRecord('cli_multi_b', 'multi_b_gene', 101, 200)
+  }, ['--record_id', '', '--record_id', 'cli_multi_b']);
+  await installRecordReadCounter(page);
+  await installDiagramRequestObserver(page);
+  await openApp(page);
+  await loadSessionFile(page, session);
+  const linearRows = () => page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    return state.linearSeqs.map((seq) => [seq.uid, seq.gb?.name, seq.region_record_id]);
+  });
+  await expect(page.locator('[data-linear-source-records]')).toHaveCount(2);
+  expect(await linearRows()).toEqual([
+    ['record-1', 'cli-single.gbk', ''],
+    ['record-2', 'cli-multi.gbk', 'cli_multi_b']
+  ]);
+
+  await openLoadedRecordActions(page, { query: 'multi_b_gene', recordId: 'cli_multi_b', reads: 2 });
+  await page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
+
+  await generateAndWaitForResult(page);
+  const request = await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.at(-1));
+  expect(request.records.map((record) => [record.recordKey, record.selector])).toEqual([
+    ['record-1', null],
+    ['record-2', { kind: 'recordId', value: 'cli_multi_b' }]
+  ]);
+  expect(await linearRows()).toHaveLength(2);
+  const drawnRecordIds = (content) => [...new Set(
+    [...content.matchAll(/data-gbdraw-record-id="([^"]+)"/g)].map((match) => match[1])
+  )];
+  const cliSvg = fs.readFileSync(testInfo.outputPath('cli-linear.svg'), 'utf8');
+  expect(drawnRecordIds(cliSvg)).toEqual(['cli_single', 'cli_multi_b']);
+  expect(drawnRecordIds(await page.evaluate(() => window.__GBDRAW_APP__.svgContent)))
+    .toEqual(drawnRecordIds(cliSvg));
+});
+
+test('Linear CLI Session keeps --region and --reverse_complement through Load and Generate', async ({
+  page
+}, testInfo) => {
+  test.setTimeout(300000);
+  page.on('dialog', (dialog) => {
+    if (dialog.message() !== 'Session loaded successfully!') dialog.dismiss();
+  });
+  const session = await writeCliSession(testInfo, 'linear', {
+    'cli-cropped.gbk': makeCircularRecord('cli_cropped', 'cropped_gene', 61, 150),
+    'cli-reversed.gbk': makeCircularRecord('cli_reversed', 'reversed_gene', 41, 125)
+  }, ['--region', 'cli_cropped:21-300', '--reverse_complement', '0', '--reverse_complement', '1']);
+  await installDiagramRequestObserver(page);
+  await openApp(page);
+  await loadSessionFile(page, session);
+  await page.evaluate(() => { window.__GBDRAW_APP__.richFeaturePopup = true; });
+  const openRecordActions = async (query) => {
+    const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
+    await search.fill(query);
+    await search.press('Enter');
+    await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
+    await page.getByRole('button', { name: ROTATE_RECORD, exact: true }).click();
+    return page.getByRole('region', { name: ROTATE_RECORD, exact: true });
+  };
+  const closePopup = () => page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
+
+  // The reversed record is its bound input file reverse-complemented, so its
+  // rotation is available without Generate.
+  const reversed = await openRecordActions('reversed_gene');
+  await expect(reversed.locator('[data-record-rotation-preview]'))
+    .toContainText('cli_reversed will start at');
+  await expect(reversed.getByRole('button', { name: 'Apply and regenerate' })).toBeEnabled();
+  await closePopup();
+  // A cropped record cannot rotate, and says so (PD-OI-032 item 7).
+  const cropped = await openRecordActions('cropped_gene');
+  await expect(cropped.locator('#feature-record-rotation-reason'))
+    .toHaveText('Record rotation is unavailable for a cropped record.');
+  await expect(cropped.getByRole('button', { name: 'Apply and regenerate' })).toBeDisabled();
+  await closePopup();
+  expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length)).toBe(0);
+
+  await generateAndWaitForResult(page);
+  const request = await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.at(-1));
+  expect(request.records.map((record) => [record.region, record.presentation.reverseComplement]))
+    .toEqual([
+      [{ selector: null, start: 21, end: 300, reverseComplement: false }, false],
+      [null, true]
+    ]);
+  // Generate draws what the CLI drew, with its source coordinates.
+  const semantics = (content) => {
+    const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
+    const rounded = (value) => String(value || '').replace(/-?\d+\.\d+/g, (number) => Number(number).toFixed(3));
+    return {
+      records: [...svg.querySelectorAll('[data-gbdraw-record-source-start]')].map((element) => [
+        'record-id', 'record-source-start', 'record-source-end', 'record-source-step'
+      ].map((name) => element.getAttribute(`data-gbdraw-${name}`))),
+      features: [...svg.querySelectorAll('[data-gbdraw-feature-id]')].map((element) => [
+        element.getAttribute('data-gbdraw-feature-id'), rounded(element.getAttribute('d'))
+      ]),
+      text: [...svg.querySelectorAll('text')].map((element) => element.textContent)
+    };
+  };
+  const cliSvg = fs.readFileSync(testInfo.outputPath('cli-linear.svg'), 'utf8');
+  const generated = await page.evaluate(semantics, await page.evaluate(() => window.__GBDRAW_APP__.svgContent));
+  expect(generated).toEqual(await page.evaluate(semantics, cliSvg));
+  expect(generated.records.map((record) => record.slice(1))).toEqual([
+    ['21', '300', '1'],
+    ['1', '360', '-1']
+  ]);
+});
+
+test('browser export embeds the exact selected current-schema item and expands references', async ({
   page
 }, testInfo) => {
   await page.goto('/');
   const origin = new URL(page.url()).origin;
-  const exported = await page.evaluate(async ({ origin }) => {
+  const exported = await page.evaluate(async ({ origin, catalogSchema }) => {
     const { enrichSvgWithStandaloneInteractivity } = await import(
       `${origin}/gbdraw/web/js/services/standalone-interactivity.js`
     );
     const fullNote = `${'x'.repeat(49)}😀tail`;
     const catalog = {
-      schema: 4,
+      schema: catalogSchema,
       items: [{
         resultIndex: 0,
         resultName: 'diagram.svg',
@@ -696,10 +1167,10 @@ test('browser export embeds the exact selected schema-4 item and expands referen
       sourceGroup: catalog.items[0].orthogroups[0],
       svgText: new XMLSerializer().serializeToString(svg)
     };
-  }, { origin });
+  }, { origin, catalogSchema: CURRENT_FEATURE_CATALOG_SCHEMA });
 
   expect(exported.enriched).toBe(true);
-  expect(exported.embedded.schema).toBe(4);
+  expect(exported.embedded.schema).toBe(CURRENT_FEATURE_CATALOG_SCHEMA);
   expect(exported.embedded.items).toHaveLength(1);
   expect(exported.embedded.items[0].features[0].displayLabel)
     .toBe('Edited visible label');
@@ -711,7 +1182,7 @@ test('browser export embeds the exact selected schema-4 item and expands referen
   expect(exported.sourceDisplayLabel).toBeUndefined();
   expect(exported.sourceGroup.display_name).toBeUndefined();
   expect(exported.sourceGroup.description).toBe('Original group description');
-  expect(exported.schema).toBe('4');
+  expect(exported.schema).toBe(String(CURRENT_FEATURE_CATALOG_SCHEMA));
   expect(exported.resultIndex).toBe('0');
   expect(exported.resultName).toBe('diagram.svg');
   expect(exported.svgText.match(/data-gbdraw-interactive-feature="true"/g)).toHaveLength(2);
@@ -997,12 +1468,12 @@ test('standalone rejects conflicting compact provenance markers', async ({
 }, testInfo) => {
   await page.goto('/');
   const origin = new URL(page.url()).origin;
-  const variants = await page.evaluate(async ({ origin }) => {
+  const variants = await page.evaluate(async ({ origin, catalogSchema }) => {
     const { enrichSvgWithStandaloneInteractivity } = await import(
       `${origin}/gbdraw/web/js/services/standalone-interactivity.js`
     );
     const makeCatalog = () => ({
-      schema: 4,
+      schema: catalogSchema,
       items: [{
         resultIndex: 0,
         resultName: 'invalid.svg',
@@ -1097,7 +1568,7 @@ test('standalone rejects conflicting compact provenance markers', async ({
         svgText: new XMLSerializer().serializeToString(svg)
       };
     });
-  }, { origin });
+  }, { origin, catalogSchema: CURRENT_FEATURE_CATALOG_SCHEMA });
 
   await page.addInitScript(() => {
     window.__expandedInvalidFeature = false;
@@ -1137,7 +1608,7 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
     url: '/gbdraw/web/vendor/dompurify/purify.min.js'
   });
 
-  const exported = await page.evaluate(async ({ origin }) => {
+  const exported = await page.evaluate(async ({ origin, catalogSchema }) => {
     const { state } = await import(`${origin}/gbdraw/web/js/state.js`);
     const { downloadInteractiveSVG } = await import(
       `${origin}/gbdraw/web/js/services/export.js`
@@ -1146,7 +1617,7 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
       `${origin}/gbdraw/web/js/services/svg-serialization.js`
     );
     const catalog = {
-      schema: 4,
+      schema: catalogSchema,
       items: [{
         resultIndex: 0,
         resultName: 'live.svg',
@@ -1190,9 +1661,17 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
     state.selectedResultIndex.value = 0;
     state.svgContainer.value = container;
     state.featureCatalog.value = catalog;
-    state.labelTextFeatureOverrides['rendered-a'] = 'Live feature label';
-    state.orthogroupNameOverrides['group-a'] = 'Live group name';
-    state.orthogroupDescriptionOverrides['group-a'] = 'Live description';
+    state.activeDrawing().featureOverrides[JSON.stringify([state.generatedMode.value, 'record-a', 'biological-a'])] = {
+      scope: state.generatedMode.value,
+      recordKey: 'record-a',
+      biologicalFeatureId: 'biological-a',
+      featureVisibility: null,
+      labelVisibility: null,
+      labelText: 'Live feature label',
+      labelSourceText: null
+    };
+    state.activeDrawing().orthogroupNameOverrides['group-a'] = 'Live group name';
+    state.activeDrawing().orthogroupDescriptionOverrides['group-a'] = 'Live description';
 
     let downloadedBlob = null;
     const originalCreateObjectURL = URL.createObjectURL;
@@ -1219,7 +1698,7 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
       URL.revokeObjectURL = originalRevokeObjectURL;
       HTMLAnchorElement.prototype.click = originalClick;
     }
-  }, { origin });
+  }, { origin, catalogSchema: CURRENT_FEATURE_CATALOG_SCHEMA });
 
   expect(exported.embedded.items[0].features[0].displayLabel)
     .toBe('Live feature label');

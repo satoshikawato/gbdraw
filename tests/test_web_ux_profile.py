@@ -166,7 +166,11 @@ def test_linear_input_comparison_and_generate_controls_follow_semantic_dom_order
     basic = index.index('<div class="card basic-settings">')
     generate = index.index('<div class="generate-bar')
     advanced = index.index("data-linear-advanced-comparison")
-    assert record_list < add_action < comparison < timeline < basic < generate < advanced
+    # UI-12 (Owner decision 2026-10-07): Generate is the last settings Tab stop.
+    about = index.index("About & Citation</summary>")
+    settings_end = index.index("<!-- Resize Handle -->")
+    assert record_list < add_action < comparison < timeline < basic < advanced
+    assert about < generate < settings_end
     assert index.count('aria-label="Generate Diagram" @click="runAnalysis"') == 1
 
     first_record_uploader = index.index('label="GenBank / DDBJ File"', record_list)

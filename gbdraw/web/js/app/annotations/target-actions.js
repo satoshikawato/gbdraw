@@ -1,13 +1,23 @@
-import { isUnspecifiedRecordSelectorValue } from '../record-options.js';
+// @ts-check
+import { isUnspecifiedRecordSelectorValue } from '../../services/record-options.js';
+import { featureIdentityKeyOf } from '../../services/feature-placement.js';
+
+/**
+ * @import { AnnotationRecordSelector } from '../../services/annotation-state.js'
+ */
 
 const cleanNullable = (value) => {
   const text = String(value ?? '').trim();
   return text || null;
 };
 
+/**
+ * @param {any} value A table cell, a record ID, or `#<n>`.
+ * @returns {{ selector: AnnotationRecordSelector | null, error: string }}
+ */
 export const parseAnnotationRecordSelectorValue = (value) => {
   const text = cleanNullable(value);
-  if (isUnspecifiedRecordSelectorValue(text)) {
+  if (text === null || isUnspecifiedRecordSelectorValue(text)) {
     return { selector: null, error: '' };
   }
   if (!text.startsWith('#')) {
@@ -35,6 +45,11 @@ export const isSafeRecordIdSelector = (value) => {
   return !parsed.error && parsed.selector?.kind === 'recordId';
 };
 
+/**
+ * @param {any} recordId
+ * @param {any} recordIndex
+ * @returns {AnnotationRecordSelector | null}
+ */
 export const annotationRecordSelector = (recordId, recordIndex) => {
   const id = cleanNullable(recordId);
   if (id && isSafeRecordIdSelector(id)) return { kind: 'recordId', value: id };
@@ -59,6 +74,9 @@ export const annotationRecordSelectorFromValue = (value) => {
   return parsed.selector;
 };
 
+/**
+ * @param {{ start: any, end: any, recordId?: string | null, recordIndex?: number | null, coordinateSpace?: string }} params
+ */
 export const coordinateTarget = ({ start, end, recordId = null, recordIndex = null, coordinateSpace = 'source' }) => ({
   kind: 'coordinateSpan',
   record: annotationRecordSelector(recordId, recordIndex),
@@ -80,6 +98,9 @@ const parseFeatureSelector = (value) => {
     : { key: null, value: text };
 };
 
+/**
+ * @param {{ selector?: any, selectors?: any[] | null, recordId?: string | null, recordIndex?: number | null, extent?: string, circularPath?: string }} params
+ */
 export const featureTarget = ({ selector, selectors = null, recordId = null, recordIndex = null, extent = 'outer_bounds', circularPath = 'shortest' }) => ({
   kind: 'featureSpan',
   record: annotationRecordSelector(recordId, recordIndex),
@@ -88,20 +109,19 @@ export const featureTarget = ({ selector, selectors = null, recordId = null, rec
   circularPath: ['forward', 'reverse'].includes(circularPath) ? circularPath : 'shortest'
 });
 
-export const featureTargetsFromSelection = (features, options = {}) => (
-  (Array.isArray(features) ? features : []).map((feature) => {
-    const qualifier = feature?.qualifiers || {};
-    const first = (value) => Array.isArray(value) ? value[0] : value;
-    const locusTag = first(qualifier.locus_tag ?? feature?.locus_tag);
-    const gene = first(qualifier.gene ?? feature?.gene);
-    const hash = feature?.selector?.hash || feature?.stable_feature_id || feature?.stable_svg_id;
-    const selector = hash ? `hash=${hash}` : (locusTag ? `locus_tag=${locusTag}` : (gene ? `gene=${gene}` : ''));
-    if (!selector) throw new Error('The selected feature has no stable annotation selector.');
-    return featureTarget({
-      ...options,
-      selector,
-      recordId: options.recordId ?? feature?.record_id ?? null,
-      recordIndex: options.recordIndex ?? feature?.record_index ?? feature?.record_idx ?? feature?.fileIdx ?? null
-    });
-  })
-);
+// A selected feature is named by its original-source identity, which Python
+// resolves after crop, reverse complement, reordering, and duplication (design
+// Q4, OV-03); the target is of the drawing of the Result's mode (R2). Null when
+// a selected feature has none: a Result without a feature catalog (a Session
+// before 40 until Generate).
+export const featureTargetsFromSelection = (features) => {
+  const selected = Array.isArray(features) ? features : [];
+  if (!selected.every((feature) => featureIdentityKeyOf(feature))) return null;
+  return selected.map((feature) => ({
+    kind: 'featureIdentity',
+    recordKey: feature.record_key ?? feature.recordKey,
+    biologicalFeatureId: feature.biological_feature_id ?? feature.biologicalFeatureId,
+    envelope: 'outer_bounds',
+    circularPath: 'shortest'
+  }));
+};

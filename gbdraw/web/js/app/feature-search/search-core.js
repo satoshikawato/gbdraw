@@ -1,9 +1,10 @@
+// @ts-check
 import {
   formatFeatureLocation,
   isInternalProteinDisplayId,
   resolveDisplayProteinId,
   resolveInternalProteinId
-} from '../feature-utils.js';
+} from '../../services/feature-utils.js';
 import { resolveUniqueOrthogroupMemberForFeature } from '../../services/feature-identity.js';
 
 const RICH_FEATURE_SEARCH_FIELD_IDS = Object.freeze([
@@ -453,6 +454,28 @@ const preparedItemsForField = (feature, field, popupMode, orthogroupsById) => (
   featureSearchItems(feature, field, '', { popupMode, orthogroupsById }).map(prepareSearchItem)
 );
 
+/**
+ * The prepared index that `buildFeatureSearchIndex` returns and
+ * `runFeatureSearch` reads.
+ * @typedef {object} FeatureSearchIndex
+ * @property {string} popupMode
+ * @property {string[]} featureOrder
+ * @property {Map<string, { feature: Record<string, any>, itemsByField: Map<string, any[]>, qualifierValuesByKey: Map<string, any[]> }>} byId
+ * @property {Map<string, string[]>} qualifierFeatureIdsByKey
+ * @property {Map<string, any>} orthogroupsById
+ */
+
+/**
+ * @typedef {object} BuildFeatureSearchIndexOptions
+ * @property {Record<string, any>[]} [features]
+ * @property {string} [popupMode]
+ * @property {Record<string, any>[]} [orthogroups]
+ */
+
+/**
+ * @param {BuildFeatureSearchIndexOptions} [options]
+ * @returns {FeatureSearchIndex}
+ */
 export const buildFeatureSearchIndex = ({
   features = [],
   popupMode = 'rich',
@@ -465,7 +488,8 @@ export const buildFeatureSearchIndex = ({
   const qualifierFeatureIdsByKey = new Map();
 
   (Array.isArray(features) ? features : []).forEach((feature) => {
-    const svgId = String(feature?.svg_id || '').trim();
+    // A feature the Result does not draw is found by its `search_id` (R-5).
+    const svgId = String(feature?.search_id || feature?.svg_id || '').trim();
     if (!svgId || byId.has(svgId)) return;
     const qualifiers = getFeatureQualifiers(feature);
     const qualifierValuesByKey = new Map();
@@ -522,6 +546,23 @@ const preparedFeatureSearchMatches = (document, matcher, field, qualifierKey) =>
   return details;
 };
 
+/**
+ * @typedef {object} RunFeatureSearchOptions
+ * @property {Record<string, any>[]} [features]
+ * @property {Iterable<string> | null} [renderedFeatureIds]
+ * @property {string} [query]
+ * @property {string} [field]
+ * @property {string} [qualifierKey]
+ * @property {boolean} [useRegex]
+ * @property {string} [popupMode]
+ * @property {Record<string, any>[]} [orthogroups]
+ * @property {FeatureSearchIndex | null} [searchIndex]
+ * @property {string} [previousActiveId]
+ */
+
+/**
+ * @param {RunFeatureSearchOptions} [options]
+ */
 export const runFeatureSearch = ({
   features,
   renderedFeatureIds,
@@ -603,11 +644,25 @@ const searchMatchSnippet = (value, matchText) => {
   return `${start > 0 ? '...' : ''}${text.slice(start, end)}${end < text.length ? '...' : ''}`;
 };
 
-export const formatSearchMatchDetail = (detail) => {
+const formatSearchMatchDetail = (detail) => {
   if (!detail) return '';
   const label = collapseWhitespace(detail.label);
   const snippet = searchMatchSnippet(detail.value, detail.match);
   if (!label && !snippet) return '';
   if (!snippet) return label;
   return label ? `${label}: ${snippet}` : snippet;
+};
+
+// The line under the search row. The record comes first so that a truncated
+// line still says which record the active match is on (OV-211).
+/**
+ * @param {Record<string, any> | null | undefined} feature
+ * @param {Record<string, any>[] | null | undefined} details
+ * @returns {string}
+ */
+export const formatSearchMatchLine = (feature, details) => {
+  const detailText = details?.length ? formatSearchMatchDetail(details[0]) : '';
+  if (!detailText) return '';
+  const recordId = String(feature?.record_id || '');
+  return `${recordId ? `Record ${recordId} · ` : ''}Matched ${detailText}`;
 };

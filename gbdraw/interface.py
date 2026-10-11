@@ -8,11 +8,11 @@ from functools import wraps
 from inspect import Parameter, signature
 from os import PathLike
 from pathlib import Path
-from typing import Literal, Mapping, Sequence, TypeAlias
+from typing import Literal, Mapping, Sequence, TypeAlias, cast
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
-from svgwrite import Drawing  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame
+from svgwrite import Drawing
 
 from gbdraw.analysis.collinearity import (
     CollinearityAnchorMode,
@@ -65,6 +65,7 @@ from gbdraw.api.requests import (
 )
 from gbdraw.api.render import render_to_bytes
 from gbdraw.exceptions import ExportError, ValidationError
+from gbdraw.features.overrides import FeatureIdentityNotice
 from gbdraw.features.placement import FeaturePlacementOverride
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.layout.similarity_alignment import (
@@ -531,18 +532,22 @@ def _circular_options_init(
     _CIRCULAR_OPTIONS_GENERATED_INIT(*bound.args, **bound.kwargs)
 
 
-_circular_options_init.__signature__ = _CIRCULAR_OPTIONS_INIT_SIGNATURE.replace(  # type: ignore[attr-defined]
-    parameters=(
-        *_CIRCULAR_OPTIONS_INIT_SIGNATURE.parameters.values(),
-        Parameter(
-            "conservation",
-            kind=Parameter.KEYWORD_ONLY,
-            default=None,
-            annotation=ComparisonRingOptions | None,
+setattr(
+    _circular_options_init,
+    "__signature__",
+    _CIRCULAR_OPTIONS_INIT_SIGNATURE.replace(
+        parameters=(
+            *_CIRCULAR_OPTIONS_INIT_SIGNATURE.parameters.values(),
+            Parameter(
+                "conservation",
+                kind=Parameter.KEYWORD_ONLY,
+                default=None,
+                annotation=ComparisonRingOptions | None,
+            ),
         ),
     ),
 )
-CircularOptions.__init__ = _circular_options_init  # type: ignore[method-assign]
+setattr(CircularOptions, "__init__", _circular_options_init)
 
 
 @dataclass(frozen=True)
@@ -583,6 +588,7 @@ class Diagram:
         mode: Literal["circular", "linear"],
         records: Sequence[SeqRecord],
         annotation_warnings: tuple[ResolutionWarning, ...] = (),
+        feature_identity_notices: tuple[FeatureIdentityNotice, ...] = (),
         interactive_context: (
             InteractiveSvgContext
             | Callable[[], InteractiveSvgContext]
@@ -594,11 +600,17 @@ class Diagram:
         self.records = tuple(records)
         self._interactive_context = interactive_context
         self._annotation_warnings = tuple(annotation_warnings)
+        self._feature_identity_notices = tuple(feature_identity_notices)
 
     @property
     def annotation_warnings(self) -> tuple[ResolutionWarning, ...]:
         """Structured notices belonging to this successfully prepared diagram."""
         return self._annotation_warnings
+
+    @property
+    def feature_identity_notices(self) -> tuple[FeatureIdentityNotice, ...]:
+        """Feature edits by source identity that this diagram does not draw."""
+        return self._feature_identity_notices
 
     def _resolve_interactive_context(self) -> InteractiveSvgContext | None:
         if callable(self._interactive_context):
@@ -808,6 +820,7 @@ def _base_options(options: _CommonOptions, *, record_count: int, mode: Literal["
         name="default color table",
     )
     visibility_table, visibility_file = _source(features.visibility, name="feature visibility")
+    placements: Sequence[FeaturePlacementOverride]
     placement_table, placement_file, placements = None, None, ()
     if isinstance(features.placements, (DataFrame, str, PathLike)):
         placement_table, placement_file = _source(features.placements, name="feature placement")
@@ -872,7 +885,10 @@ def _circular_options(
     )
     values["output"] = _CircularOutputOptions(
         legend=options.legend,
-        plot_title_position=options.title.position,
+        # CircularOptions.__post_init__ rejects "center".
+        plot_title_position=cast(
+            'Literal["none", "top", "bottom"] | None', options.title.position
+        ),
     )
     comparison_rings = options.comparison_rings
     assert comparison_rings is not None
@@ -929,6 +945,7 @@ def _ring_losat_values(comparison_rings: ComparisonRingOptions) -> dict[str, obj
 
     tracks = tuple(comparison_rings.tracks)
     program = comparison_rings.losat
+    assert program is not None  # the only caller checks comparison_rings.losat
     sequences: list[str] = []
     for index, track in enumerate(tracks, start=1):
         if track.source is not None:
@@ -961,8 +978,13 @@ def _ring_losat_values(comparison_rings: ComparisonRingOptions) -> dict[str, obj
     colors = [track.color for track in tracks]
     values: dict[str, object] = {
         "losat_search": _LosatSearchOptions(
-            program=program,  # type: ignore[arg-type]
-            losatn_task=comparison_rings.losatn_task if program == "losatn" else None,
+            program=program,
+            # LosatSearchOptions.__post_init__ validates the task.
+            losatn_task=(
+                cast(LosatnTask, comparison_rings.losatn_task)
+                if program == "losatn"
+                else None
+            ),
             record_gencodes=(
                 (comparison_rings.reference_gencode,) if program == "tlosatx" else ()
             ),
@@ -1033,7 +1055,10 @@ def _linear_options(
     )
     values["output"] = _LinearOutputOptions(
         legend=options.legend,
-        plot_title_position=options.title.position,
+        # LinearOptions.__post_init__ rejects "none".
+        plot_title_position=cast(
+            'Literal["center", "top", "bottom"] | None', options.title.position
+        ),
     )
     comparisons = options.comparisons
     values.update(
@@ -1073,7 +1098,10 @@ def _interactive_context(
             elif isinstance(source, Sequence) and not isinstance(source, (str, bytes, PathLike)):
                 comparison_sequence_records.append(list(source))
             else:
-                comparison_sequence_records.append(list(read_comparison_sequence_records(source)))
+                # Only a str or PathLike path remains after the Sequence branch above.
+                comparison_sequence_records.append(
+                    list(read_comparison_sequence_records(cast("str | PathLike[str]", source)))
+                )
     context = _build_prepared_interactive_context(
         prepared,
         comparison_sequence_records=comparison_sequence_records,
@@ -1130,9 +1158,12 @@ def draw_circular(
             layout=layout._legacy() if layout is not None else None,
         )
     )
+    # A CircularDiagramRequest plans a single diagram, never a batch.
+    assert isinstance(prepared, _PreparedDiagramRequest)
     return Diagram(
         prepared.drawing,
         annotation_warnings=prepared.annotation_warnings,
+        feature_identity_notices=prepared.feature_identity_notices,
         mode="circular",
         records=normalized,
         interactive_context=lambda: _interactive_context(
@@ -1178,9 +1209,12 @@ def draw_linear(
             similarity_alignment=similarity_alignment,
         )
     )
+    # A CircularDiagramRequest plans a single diagram, never a batch.
+    assert isinstance(prepared, _PreparedDiagramRequest)
     return Diagram(
         prepared.drawing,
         annotation_warnings=prepared.annotation_warnings,
+        feature_identity_notices=prepared.feature_identity_notices,
         mode="linear",
         records=normalized,
         interactive_context=lambda: _interactive_context(

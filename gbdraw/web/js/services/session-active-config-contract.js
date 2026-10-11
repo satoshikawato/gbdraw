@@ -1,17 +1,55 @@
+// @ts-check
+/** @import { FeaturePlacementDraft } from './feature-placement.js' */
 import { adoptCurrentSessionResources, createSessionResourceFileView, readSessionResourceBytes } from './session-resource-backing.js';
 import { sha256Hex, textToBytes } from './byte-utils.js';
-import { canonicalRecordReverseComplement } from '../app/record-display-options.js';
-import { createDefaultLinearDefinitionLineStyles } from '../app/definition-line-style-state.js'; import { CIRCULAR_TRACK_RENDERERS, createDefaultCircularTrackSlots } from '../app/circular-track-slots.js';
-import { LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION, LINEAR_TRACK_RENDERERS, LINEAR_TRACK_SLOT_SCHEMA_VERSION, createDefaultLinearTrackSlots } from '../app/linear-track-slots.js'; import { validateTrackSlotBindingInvariants } from '../app/track-slot-validation.js';
-import { requireCurrentCircularMultiRecordSizeMode, requireCurrentCollinearAnchorMode, requireCurrentCollinearColorMode, requireCurrentCollinearMaxConflicts, requireCurrentCollinearMaxDiagonalDrift, requireCurrentCollinearMaxParalogLinks, requireCurrentCollinearMaxUnitGap, requireCurrentCollinearMergeOrientation, requireCurrentCollinearMinAnchors, requireCurrentCollinearInferOrthogroups, requireCurrentCollinearSearchScope, requireCurrentCollinearUnitMode, requireCurrentLinearLabelPlacement, requireCurrentLinearTrackLayout, requireCurrentOrthogroupMemberMaxHits, requireCurrentOrthogroupMembershipMode, requireCurrentProteinBlastpCandidateLimit, requireCurrentProteinBlastpMaxHits, requireCurrentProteinBlastpMode, requireCurrentWebStateFieldNames } from '../app/current-option-values.js'; import { DEFAULT_ARROW_SHAFT_WIDTH_RATIO, createDefaultFeatureRenderings } from '../utils/feature-rendering.js';
+import { canonicalRecordReverseComplement } from './record-display-model.js';
+import { createDefaultLinearDefinitionLineStyles } from './definition-line-style-state.js'; import { CIRCULAR_TRACK_RENDERERS, createDefaultCircularTrackSlots } from './circular-track-slot-model.js';
+import { LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION, LINEAR_TRACK_RENDERERS, LINEAR_TRACK_SLOT_SCHEMA_VERSION, createDefaultLinearTrackSlots } from './linear-track-slot-model.js'; import { validateTrackSlotBindingInvariants } from './track-slot-validation.js';
+import { requireCurrentCircularMultiRecordSizeMode, requireCurrentCollinearAnchorMode, requireCurrentCollinearColorMode, requireCurrentCollinearMaxConflicts, requireCurrentCollinearMaxDiagonalDrift, requireCurrentCollinearMaxParalogLinks, requireCurrentCollinearMaxUnitGap, requireCurrentCollinearMergeOrientation, requireCurrentCollinearMinAnchors, requireCurrentCollinearInferOrthogroups, requireCurrentCollinearSearchScope, requireCurrentCollinearUnitMode, requireCurrentLinearLabelPlacement, requireCurrentLinearTrackLayout, requireCurrentOrthogroupMemberMaxHits, requireCurrentOrthogroupMembershipMode, requireCurrentProteinBlastpCandidateLimit, requireCurrentProteinBlastpMaxHits, requireCurrentProteinBlastpMode, requireCurrentWebStateFieldNames } from './current-option-values.js'; import { DEFAULT_ARROW_SHAFT_WIDTH_RATIO, createDefaultFeatureRenderings } from '../utils/feature-rendering.js';
 import { MODE_DEFAULT_FEATURE_TYPES, comparisonStateForMode, managedAdvStateForMode, trackDefaultsForMode } from '../mode-profiles.js'; import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import { assertSafeObjectKeys } from './safe-object-keys.js';
-import { validateRecordDisplayDrafts } from '../app/record-display-options.js';
-import { requireLinearLabelVisibilityMode } from '../app/linear-label-visibility.js';
+import { diagnosticError } from '../utils/error-normalization.js';
+import { validateRecordDisplayDrafts } from './record-display-model.js';
+import { isRecordDrawKey } from './record-draw-selection.js';
+import { requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
 import { canonicalFeaturePlacements } from './feature-placement.js';
+import { validateScopedFeaturePlacements } from './feature-edit-migration.js';
 const circularTracks = trackDefaultsForMode('circular'), linearTracks = trackDefaultsForMode('linear');
 export const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4, LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value), has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+/**
+ * The Session's active Web configuration (`config` of the stored Session) in
+ * its current writer format: the domains of `CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS`
+ * plus the compatibility field `colorsAreOverrides`. `form` and `adv` are
+ * required; the option fields inside them belong to Python (R7) and stay
+ * `Record<string, any>`. A reader takes unvalidated data and returns this type.
+ * @typedef {object} ActiveWebConfig
+ * @property {Record<string, any>} form
+ * @property {Record<string, any>} adv
+ * @property {Record<string, any>} [losat]
+ * @property {Record<string, any>} [cliOptions]
+ * @property {Record<string, any>} [colors]
+ * @property {string} [palette]
+ * @property {boolean} [paletteInstantPreviewEnabled]
+ * @property {Array<Record<string, any>>} [rules]
+ * @property {Array<Record<string, any>>} [qualifierPriorityRules]
+ * @property {string} [filterMode] `None`, `Whitelist`, or `Blacklist`.
+ * @property {Array<Record<string, any>>} [whitelist]
+ * @property {string} [blacklistText]
+ * @property {string} [losatProgram]
+ * @property {Record<string, any>} [circularConservation]
+ * @property {Array<Record<string, any>>} [annotationSets]
+ * @property {Array<Record<string, any>>} [recordDisplayDrafts]
+ * @property {FeaturePlacementDraft} [featurePlacementOverrides]
+ * @property {Record<string, any>} [modeProfiles]
+ * @property {Record<string, any>} [unmanagedConfigOverrides]
+ * @property {Record<string, any>} [linearRecordLayout]
+ * @property {Record<string, any>} [linearComparisonPlan]
+ * @property {Record<string, any>} [importedComparisonResolution]
+ * @property {Record<string, any>} [webEdits]
+ * @property {boolean} [colorsAreOverrides]
+ */
+
 export const createDefaultForm = () => ({
   prefix: '', species: '', strain: '', plot_title: '', track_type: 'tuckin', linear_track_layout: 'middle', show_scale: true, scale_style: 'bar',
   linear_ruler_on_axis: false, labels_mode: 'none', show_labels_linear: 'none', multi_record_canvas: WEB_UX_PROFILE.circular.gridByDefault,
@@ -20,8 +58,12 @@ export const createDefaultForm = () => ({
   separate_strands: WEB_UX_PROFILE.separateStrands, suppress_gc: !circularTracks.gc, suppress_skew: !circularTracks.skew, align_center: false,
   keep_definition_left_aligned: true, show_gc: linearTracks.gc, show_skew: linearTracks.skew, show_depth: false, normalize_length: false
 });
+/**
+ * @param {string} [mode] `circular` or `linear`.
+ * @returns {Record<string, any>}
+ */
 export const createDefaultAdv = (mode = 'circular') => ({
-  rich_feature_popup: true, features: [...MODE_DEFAULT_FEATURE_TYPES], feature_shapes: createDefaultFeatureRenderings(), arrow_head_length_ratio: null,
+  features: [...MODE_DEFAULT_FEATURE_TYPES], feature_shapes: createDefaultFeatureRenderings(), arrow_head_length_ratio: null,
   arrow_shaft_width_ratio: DEFAULT_ARROW_SHAFT_WIDTH_RATIO, window_size: null, step_size: null, nt: 'GC', def_font_size: null,
   circular_definition_interval: null, label_font_size: null, circular_label_spacing: null, linear_label_spacing: null, label_rendering: 'auto',
   circular_label_placement: 'horizontal', label_placement: 'auto', label_rotation: null, block_stroke_width: null, block_stroke_color: null,
@@ -47,8 +89,12 @@ export const createDefaultLosatpHitLimits = () => ({
   orthogroup: { candidateLimit: null, orthogroupMemberMaxHits: null },
   collinear: { candidateLimit: 5, orthogroupMemberMaxHits: 5 }
 });
+// How LOSAT runs: one app-level setting for both drawings (Session `ui.losatExecution`).
+export const createDefaultLosatExecution = () => ({
+  executionMode: 'threaded', totalThreadBudget: 'safe', threadsPerJob: 'auto', parallelWorkers: undefined
+});
 export const createDefaultLosat = () => ({
-  outfmt: '6', parallelWorkers: undefined, executionMode: 'threaded', totalThreadBudget: 'safe', threadsPerJob: 'auto',
+  outfmt: '6',
   blastn: { task: 'megablast' }, blastp: { mode: 'orthogroup', hitLimitsByMode: createDefaultLosatpHitLimits(), maxHits: 5, candidateLimit: null, orthogroupMembershipMode: 'anchor_core_v1',
     orthogroupMemberMaxHits: null, collinearInferOrthogroups: false, collinearMinAnchors: 1, collinearMaxUnitGap: 0, collinearMaxDiagonalDrift: 0,
     collinearMaxConflictsInMergeGap: 1, collinearMaxParalogLinksPerOrthogroup: 2, collinearColorMode: 'orientation',
@@ -59,15 +105,32 @@ export const createDefaultCircularConservation = () => ({ enabled: false, source
 export const CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS = Object.freeze([
   'form', 'adv', 'losat', 'cliOptions', 'colors', 'palette', 'paletteInstantPreviewEnabled', 'rules',
   'qualifierPriorityRules', 'filterMode', 'whitelist', 'blacklistText', 'losatProgram', 'circularConservation',
-  'annotationSets', 'recordDisplayDrafts', 'featurePlacementOverrides', 'modeProfiles', 'unmanagedConfigOverrides',
+  'annotationSets', 'recordDisplayDrafts', 'recordsOff', 'featurePlacementOverrides', 'modeProfiles', 'unmanagedConfigOverrides',
   'linearRecordLayout', 'linearComparisonPlan', 'importedComparisonResolution', 'webEdits'
 ]);
+// The `config` keys the CLI writer of Sessions 40 and 41 derived from its
+// options; a Web draft of those Sessions always has `annotationSets`,
+// `linearComparisonPlan` and `webEdits` too (OV-269, `_CLI_WRITER_CONFIG_DOMAINS`
+// in gbdraw/session_io.py).
+const CLI_WRITER_CONFIG_DOMAINS = new Set(['form', 'adv', 'losat', 'cliOptions', 'colors', 'palette', 'rules',
+  'qualifierPriorityRules', 'filterMode', 'whitelist', 'blacklistText', 'losatProgram', 'circularConservation']);
+/**
+ * A Session 40 or 41 the CLI wrote holds a `config` derived from its options,
+ * no Web draft: Load reads its tables from the request.
+ * @param {Record<string, any>} session
+ * @returns {boolean}
+ */
+export const holdsCliWriterConfig = (session) => [40, 41].includes(session?.version)
+  && session.cliInvocation?.generatedBy === 'gbdraw' && isObject(session.config)
+  && Object.keys(session.config).every((key) => CLI_WRITER_CONFIG_DOMAINS.has(key));
 export const CURRENT_WRITER_FORM_FIELDS = Object.freeze([...Object.keys(createDefaultForm()), 'legend']);
-export const CURRENT_WRITER_ADV_FIELDS = Object.freeze([...Object.keys(createDefaultAdv()), 'plot_title_position', 'losatProgram']);
+// `rich_feature_popup` is read from a Session 40-44 draft only: Session 46
+// keeps the app preference in `ui.richFeaturePopup`.
+export const CURRENT_WRITER_ADV_FIELDS = Object.freeze([...Object.keys(createDefaultAdv()), 'plot_title_position', 'losatProgram', 'rich_feature_popup']);
 const DOMAIN_SHAPES = Object.freeze({ form: 'object', adv: 'object', losat: 'object', cliOptions: 'object', colors: 'object',
   circularConservation: 'object', modeProfiles: 'object', linearRecordLayout: 'object', linearComparisonPlan: 'object', webEdits: 'object',
   importedComparisonResolution: 'object', unmanagedConfigOverrides: 'object',
-  recordDisplayDrafts: 'array', featurePlacementOverrides: 'object', rules: 'array', qualifierPriorityRules: 'array', whitelist: 'array', annotationSets: 'array', palette: 'string', filterMode: 'string', blacklistText: 'string',
+  recordDisplayDrafts: 'array', recordsOff: 'array', featurePlacementOverrides: 'object', rules: 'array', qualifierPriorityRules: 'array', whitelist: 'array', annotationSets: 'array', palette: 'string', filterMode: 'string', blacklistText: 'string',
   losatProgram: 'string', paletteInstantPreviewEnabled: 'boolean' });
 const ROW_FIELDS = { rules: ['feat', 'qual', 'val', 'color', 'cap', 'fromFile'],
   qualifierPriorityRules: ['feat', 'order'], whitelist: ['feat', 'qual', 'key'],
@@ -101,29 +164,38 @@ const validateCollections = (config) => {
     assertRows(set.annotations, ANNOTATION_FIELDS, `config.annotationSets[${index}].annotations`);
   });
 };
-const obsoleteCircularSlotPath = (slots) => {
+const obsoleteCircularSlotField = (slots) => {
   if (!Array.isArray(slots)) return null;
-  for (const [index, slot] of slots.entries()) {
+  for (const [slotIndex, slot] of slots.entries()) {
     if (!isObject(slot)) continue;
-    const field = [...OBSOLETE_SLOT_KEYS].find((key) => has(slot, key));
-    if (field) return `circular_track_slots[${index}].${field}`;
-    if (!isObject(slot.params)) continue;
-    const param = [...OBSOLETE_SLOT_PARAM_KEYS].find((key) => has(slot.params, key));
-    if (param) return `circular_track_slots[${index}].params.${param}`;
+    const field = [...OBSOLETE_SLOT_KEYS].find((key) => has(slot, key))
+      ?? (isObject(slot.params) ? [...OBSOLETE_SLOT_PARAM_KEYS].find((key) => has(slot.params, key)) : undefined);
+    if (field) return { field, slotIndex };
   }
   return null;
 };
+/**
+ * @param {Record<string, any>} [config] The active configuration.
+ * @param {{ depthTrackCount?: number | null }} [options]
+ * @returns {void}
+ */
 export const validateImportedCircularTrackSlots = (config = {}, { depthTrackCount = null } = {}) => {
   const adv = isObject(config) ? config.adv : null;
   if (!isObject(adv) || !has(adv, 'circular_track_slots')) return;
   if (adv.circular_track_slots_schema_version !== CIRCULAR_TRACK_SLOT_SCHEMA_VERSION)
     throw new Error(`Custom Track Slots use an obsolete schema. Recreate the slots with schema version ${CIRCULAR_TRACK_SLOT_SCHEMA_VERSION}.`);
-  const obsolete = obsoleteCircularSlotPath(adv.circular_track_slots);
-  if (obsolete) throw new Error(`Custom Track Slots use obsolete field '${obsolete}'. Use slot-level radius, width, inner_gap_px, outer_gap_px, side, and z fields.`);
+  // Any value and either enablement: readers drop only the lossless legacy null.
+  const obsolete = obsoleteCircularSlotField(adv.circular_track_slots);
+  if (obsolete) throw diagnosticError('TRACK_INVALID', { ...obsolete, reason: 'OBSOLETE_TRACK_FIELD' });
   validateTrackSlotBindingInvariants(adv.circular_track_slots, { modeLabel: 'Circular', layoutKind: 'circular',
     supportedRenderers: CIRCULAR_TRACK_RENDERERS, supportedSides: ['inside', 'outside', 'overlay'],
     anchorlessRenderers: ['ticks', 'spacer'], depthTrackCount });
 };
+/**
+ * @param {Record<string, any>} [config] The active configuration.
+ * @param {{ depthTrackCount?: number | null }} [options]
+ * @returns {void}
+ */
 export const validateImportedLinearTrackSlots = (config = {}, { depthTrackCount = null } = {}) => {
   const adv = isObject(config) ? config.adv : null;
   if (!isObject(adv) || !has(adv, 'linear_track_slots')) return;
@@ -134,7 +206,14 @@ export const validateImportedLinearTrackSlots = (config = {}, { depthTrackCount 
     supportedRenderers: LINEAR_TRACK_RENDERERS, supportedSides: ['above', 'below', 'overlay'],
     anchorlessRenderers: ['spacer'], depthTrackCount });
 };
-export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config }) => {
+/**
+ * Throws when `storedConfig` is not a current-writer active configuration:
+ * a Session 46 slice of `mode`, or (`scopedDrafts`) the flat draft of a
+ * Session 41-44, whose record display and placement rows name their mode.
+ * @param {{ mode: string, storedConfig: Record<string, any>, scopedDrafts?: boolean }} input
+ * @returns {void}
+ */
+export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, scopedDrafts = false }) => {
   if (!['circular', 'linear'].includes(mode)) throw new Error(`Current session active configuration has unsupported mode: ${String(mode)}.`);
   if (!isObject(config)) throw new Error('Current session is missing its active Web configuration.');
   assertSafeObjectKeys(config, 'Current session active configuration');
@@ -143,9 +222,19 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config }
   if (unknownDomains.length)
     throw new Error(`Current session active configuration contains unknown domain(s): ${unknownDomains.join(', ')}.`);
   if (!isObject(config.form) || !isObject(config.adv)) throw new Error('Current session is missing its active form or advanced settings.');
+  // A list of Linear card uids or Circular source selectors `#N`, once each, as
+  // Python reads it; that a Linear uid names a bound card is checked with the
+  // bindings (session-authority.js).
+  if (has(config, 'recordsOff') && (!Array.isArray(config.recordsOff)
+    || new Set(config.recordsOff).size !== config.recordsOff.length
+    || !config.recordsOff.every((/** @type {unknown} */ key) => isRecordDrawKey(/** @type {'circular' | 'linear'} */ (mode), key))))
+    throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
   validateDomainShapes(config); validateCollections(config); requireCurrentWebStateFieldNames(config);
-  if (has(config, 'recordDisplayDrafts')) validateRecordDisplayDrafts(config.recordDisplayDrafts);
-  if (has(config, 'featurePlacementOverrides')) canonicalFeaturePlacements(config.featurePlacementOverrides, mode);
+  if (has(config, 'recordDisplayDrafts')) validateRecordDisplayDrafts(config.recordDisplayDrafts, { scoped: scopedDrafts });
+  if (has(config, 'featurePlacementOverrides')) {
+    if (scopedDrafts) validateScopedFeaturePlacements(config.featurePlacementOverrides);
+    else canonicalFeaturePlacements(config.featurePlacementOverrides, mode);
+  }
   if (has(config.adv, 'feature_overlap_tolerance_bp') && (!Number.isSafeInteger(config.adv.feature_overlap_tolerance_bp)
     || config.adv.feature_overlap_tolerance_bp < 0)) throw new Error('Feature overlap tolerance must be a non-negative integer.');
   assertFields(config.form, new Set(CURRENT_WRITER_FORM_FIELDS), 'config.form'); assertFields(config.adv, new Set(CURRENT_WRITER_ADV_FIELDS), 'config.adv');
@@ -154,11 +243,12 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config }
   if (has(config.form, 'linear_track_layout')) requireCurrentLinearTrackLayout(config.form.linear_track_layout);
   if (has(config.adv, 'label_placement')) requireCurrentLinearLabelPlacement(config.adv.label_placement);
   if (has(config.adv, 'multi_record_size_mode')) requireCurrentCircularMultiRecordSizeMode(config.adv.multi_record_size_mode);
-  requireLinearLabelVisibilityMode(
+  // A Session 46 slice may omit a field: it reads that mode's default (plan 4.1).
+  if (has(config.adv, 'linear_accession_visibility')) requireLinearLabelVisibilityMode(
     config.adv.linear_accession_visibility,
     'Linear Accession visibility'
   );
-  requireLinearLabelVisibilityMode(
+  if (has(config.adv, 'linear_length_visibility')) requireLinearLabelVisibilityMode(
     config.adv.linear_length_visibility,
     'Linear Length / Coordinates visibility'
   );
@@ -217,6 +307,27 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config }
   validateImportedCircularTrackSlots(config); validateImportedLinearTrackSlots(config);
 };
 
+const linearTypographyValuesMatch = (adv = {}) => (
+  Object.is(adv.scale_font_size, adv.ruler_label_font_size)
+);
+
+/**
+ * @param {{
+ *   adv: Record<string, any>,
+ *   linked: any,
+ *   ui?: { linearTypographyLinked?: boolean }
+ * }} options
+ */
+export const reconcileImportedLinearTypographyLink = ({ adv, linked, ui = {} }) => {
+  if (!linked || typeof linked !== 'object' || !('value' in linked)) return false;
+  // Omission takes the fresh linked default; unequal values still open unlinked.
+  linked.value = (
+    (ui.linearTypographyLinked ?? true) === true
+    && linearTypographyValuesMatch(adv)
+  );
+  return linked.value;
+};
+
 // Artifact metadata admission is shared by Session, History and Align/Reset.
 // The binding deliberately excludes current orientation, translations, labels and
 // row order: manual Reverse, style and stable reorder do not rewrite history.
@@ -227,7 +338,8 @@ const sortedValue = (value) => Array.isArray(value)
 
 export const validateAlignmentResetReceiptShape = (receipt, request) => {
   if (receipt === null || receipt === undefined) return null;
-  const invalid = () => { throw new Error('Alignment reset receipt is malformed or stale.'); };
+  // A malformed or stale receipt (OV-115, OV-130) is one user-facing failure.
+  const invalid = () => { throw diagnosticError('ALIGNMENT_RESET_EVIDENCE'); };
   if (!isObject(receipt)
     || Object.keys(receipt).sort().join(',') !== 'binding,directions,referenceDeltaX'
     || !/^[0-9a-f]{64}$/.test(receipt.binding)
@@ -289,7 +401,7 @@ const resetBinding = async (canonical) => {
 export const validateSimilarityAlignmentResetReceipt = async (receipt, canonical) => {
   const validated = validateAlignmentResetReceiptShape(receipt, canonical?.renderRequest);
   if (validated && validated.binding !== await resetBinding(canonical)) {
-    throw new Error('Alignment reset receipt source or plan binding changed.');
+    throw diagnosticError('ALIGNMENT_RESET_EVIDENCE');
   }
   return validated;
 };

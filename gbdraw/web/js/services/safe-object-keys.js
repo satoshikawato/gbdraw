@@ -1,3 +1,4 @@
+// @ts-check
 const UNSAFE_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 function* safeObjectKeySteps(value, path) {

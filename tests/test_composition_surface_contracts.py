@@ -27,8 +27,14 @@ from gbdraw.api import (
     render_to_bytes,
     save_figure_to,
 )
+import gbdraw.api.diagram as api_diagram
 from gbdraw.api.diagram import build_circular_diagram, build_linear_diagram
+from gbdraw.configurators import LegendDrawingConfigurator
+import gbdraw.diagrams.circular.assemble as circular_assemble
+import gbdraw.diagrams.linear.assemble as linear_assemble
 from gbdraw.exceptions import ValidationError
+from gbdraw.layout.composition import plan_composition
+from gbdraw.layout.spatial import Aabb
 from gbdraw.render.composition import (
     COMPOSITION_METADATA_ATTRIBUTE,
     COMPOSITION_ROLE_ATTRIBUTE,
@@ -201,7 +207,7 @@ def test_circular_legend_values_cross_current_schema_and_reach_composition(
     encoded, replay = _round_trip_request(request, tmp_path)
 
     assert isinstance(request.options.output, CircularOutputOptions)
-    assert encoded.payload["schema"] == 8
+    assert encoded.payload["schema"] == CANONICAL_REQUEST_SCHEMA
     assert encoded.payload["diagramOptions"]["output"]["legend"] == legend
     assert isinstance(replay.options.output, CircularOutputOptions)
     assert replay.options.output.legend == legend
@@ -223,7 +229,7 @@ def test_linear_legend_values_cross_current_schema_and_reach_composition(
     encoded, replay = _round_trip_request(request, tmp_path)
 
     assert isinstance(request.options.output, LinearOutputOptions)
-    assert encoded.payload["schema"] == 8
+    assert encoded.payload["schema"] == CANONICAL_REQUEST_SCHEMA
     assert encoded.payload["diagramOptions"]["output"]["legend"] == legend
     assert isinstance(replay.options.output, LinearOutputOptions)
     assert replay.options.output.legend == legend
@@ -393,9 +399,72 @@ def test_linear_cli_rejects_circular_corner_legend_before_rendering(
     assert not svg_path.exists()
 
 
+@pytest.mark.parametrize(
+    ("mode", "legend", "record_count"),
+    (
+        ("circular", "right", 1),
+        ("circular", "upper_right", 1),
+        ("circular", "bottom", 2),
+        ("linear", "right", 1),
+        ("linear", "bottom", 1),
+    ),
+)
+def test_legend_reflow_carries_the_exact_python_layout_inputs(
+    mode: Literal["circular", "linear"],
+    legend: str,
+    record_count: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    measured: list[float] = []
+    primaries: list[Aabb] = []
+    measure_legend = LegendDrawingConfigurator.measure_legend
+
+    def spy_measure_legend(self, legend_table, *, placement, wrap_width):
+        measurement = measure_legend(
+            self, legend_table, placement=placement, wrap_width=wrap_width
+        )
+        if legend_table:
+            measured.append(measurement.wrap_width)
+        return measurement
+
+    def spy_plan_composition(request):
+        primaries.append(request.primary.local_bounds)
+        return plan_composition(request)
+
+    monkeypatch.setattr(LegendDrawingConfigurator, "measure_legend", spy_measure_legend)
+    for module in (circular_assemble, linear_assemble, api_diagram):
+        monkeypatch.setattr(module, "plan_composition", spy_plan_composition)
+
+    request = _request(mode, legend=legend, title_position="bottom")
+    if record_count > 1:
+        assert isinstance(request, CircularDiagramRequest)
+        request = CircularDiagramRequest(
+            records=tuple(
+                RecordInput(source=InMemoryRecordSource(_record()))
+                for _ in range(record_count)
+            ),
+            options=request.options,
+        )
+    reflow = _composition(_build_root(request))["legendReflow"]
+    assert isinstance(reflow, dict)
+
+    # The last measurement and plan are the ones the drawing was composed with.
+    primary = primaries[-1]
+    assert reflow["wrapWidth"] == measured[-1]
+    assert reflow["primaryLocalBounds"] == {
+        "minX": primary.min_x,
+        "minY": primary.min_y,
+        "maxX": primary.max_x,
+        "maxY": primary.max_y,
+    }
+    assert reflow["fontFile"] == "LiberationSans-Regular"
+    assert reflow["dpi"] == 96
+    assert reflow["fontSize"] > 0.0
+
+
 def test_current_request_schema_and_session_envelope_versions() -> None:
-    assert CANONICAL_REQUEST_SCHEMA == 8
-    assert CURRENT_SESSION_VERSION == 44
+    assert CANONICAL_REQUEST_SCHEMA == 9
+    assert CURRENT_SESSION_VERSION == 46
 
 
 @pytest.mark.parametrize("mode", ("circular", "linear"))

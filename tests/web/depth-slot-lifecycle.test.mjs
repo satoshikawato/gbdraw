@@ -8,18 +8,32 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const repoRoot = process.cwd();
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-depth-slot-lifecycle-'));
 for (const directory of ['app', 'utils']) {
   await cp(join(repoRoot, 'gbdraw', 'web', 'js', directory), join(tempRoot, directory), { recursive: true });
 }
-// circular-track-slots.js reports through the dependency-free wording owner.
+// circular-track-slots.js reads the conservation-series row helpers.
 await cp(
-  join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'error-normalization.js'),
-  join(tempRoot, 'services', 'error-normalization.js')
+  join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'conservation-series.js'),
+  join(tempRoot, 'services', 'conservation-series.js')
+);
+// linear-track-slots.js reads the current option values.
+await cp(
+  join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'current-option-values.js'),
+  join(tempRoot, 'services', 'current-option-values.js')
 );
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
+// The track-slot leaves the slot editors import.
+for (const leaf of ['depth-track-state.js', 'track-slot-display.js', 'track-slot-validation.js',
+  'circular-track-slot-model.js', 'linear-track-slot-model.js']) {
+  await cp(
+    join(repoRoot, 'gbdraw', 'web', 'js', 'services', leaf),
+    join(tempRoot, 'services', leaf)
+  );
+}
 
 const { createCircularTrackSlotEditor } = await import(pathToFileURL(join(tempRoot, 'app', 'circular-track-slots.js')));
 const { createLinearTrackSlotEditor } = await import(pathToFileURL(join(tempRoot, 'app', 'linear-track-slots.js')));
@@ -70,7 +84,7 @@ const MODES = {
         annotationSets: [],
         circularRecordList: { value: [] }
       };
-      const editor = createCircularTrackSlotEditor({ state });
+      const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
       editor.normalizeCircularTrackSlots();
       return {
         state,
@@ -102,7 +116,7 @@ const MODES = {
         linearSeqs: [{ depth: sourceRow(sourced, width) }],
         annotationSets: []
       };
-      const editor = createLinearTrackSlotEditor({ state });
+      const editor = createLinearTrackSlotEditor({ state: withDrawings(state) });
       editor.normalizeLinearTrackSlots();
       return {
         state,
@@ -177,3 +191,20 @@ for (const [mode, adapter] of Object.entries(MODES)) {
     });
   }
 }
+
+// TK-08: a row's Depth legend label is the series name (setDepthTrackLegendLabelForSlot
+// renames the series), so its help and the series card's say so and give the
+// default a blank produces (Depth, or Depth N with several series, as
+// gbdraw/analysis/depth_tracks.py names them).
+test('Depth legend label help says it renames the series and what a blank gives (TK-08)', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(join(repoRoot, 'gbdraw', 'web', 'index.html'), 'utf8');
+  const tips = [...html.matchAll(/<help-tip :id="`help-(?:circular|linear)-(?:slot-depth-legend-label|depth-legend-title)-\$\{[a-z.]+\}`" text="([^"]*)"/g)]
+    .map((match) => match[1]);
+  assert.equal(tips.length, 4);
+  for (const text of tips) {
+    assert.match(text, /Leave blank for the default name: Depth, or Depth N when there are several series\.$/);
+    assert.doesNotMatch(text, /this enabled Depth slot|logical series title/);
+  }
+  assert.equal(tips.filter((text) => text.includes('renames the series everywhere')).length, 2);
+});

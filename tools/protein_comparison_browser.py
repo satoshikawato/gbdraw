@@ -86,7 +86,7 @@ def run_browser(root, payload, expected_keys, samples):
                     }
                     runs.push({kind: i === 0 ? 'cold-including-worker-init' : 'warm', elapsedMs});
                   }
-                  const {prepareLosatSourceBatches} = await import('/gbdraw/web/js/app/linear-sources.js');
+                  const {prepareLosatSourceBatches} = await import('/gbdraw/web/js/services/linear-sources.js');
                   const hashText = async value => Array.from(new Uint8Array(await crypto.subtle.digest(
                     'SHA-256', new TextEncoder().encode(value))), b => b.toString(16).padStart(2, '0')).join('');
                   const files = [new File(['source A'], 'A.gb'), new File(['source B'], 'B.gb')];

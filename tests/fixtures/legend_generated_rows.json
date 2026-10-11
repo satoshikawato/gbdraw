@@ -1,0 +1,48 @@
+{
+  "description": "The Legend rows Python's renderer draws by itself (gbdraw/legend/table.py::_generated_legend_fills) for some legend inputs, each with the palette key of its fill ('' when no palette key colors it, as for Depth). Python's answer is the keys, in order (tests/test_legend_row_facts.py); the Web app's is the palette key it reads from each key (services/specific-color-rules.js::generatedLegendRow), with every key a track row or a row of a present feature type (tests/web/specific-color-actions.test.mjs). The Web app leaves these rows out of a rule's rows (OV-307) and colors them from the palette live (candidate-render.js::draftLegendRowColors).",
+  "cases": [
+    {
+      "name": "feature types, an other row, GC content, a two-color skew and depth",
+      "features_present": ["CDS", "tRNA", "repeat_region"],
+      "feature_specific_colors": { "tRNA": [["Group", "#ff0000"]] },
+      "used_color_rules": [["Group", "#ff0000"]],
+      "default_used_features": ["tRNA"],
+      "dinucleotide": "GC",
+      "gc": ["#a0a0a0", "#a0a0a0"],
+      "skew": ["#111111", "#222222"],
+      "depth": "#333333",
+      "show_gc": true,
+      "show_skew": true,
+      "show_depth": true,
+      "rows": [
+        ["CDS", "CDS"],
+        ["other tRNAs", "tRNA"],
+        ["repeat_region", "repeat_region"],
+        ["Depth", ""],
+        ["GC content", "gc_content"],
+        ["GC skew (+)", "skew_high"],
+        ["GC skew (-)", "skew_low"]
+      ]
+    },
+    {
+      "name": "another dinucleotide, a two-color content, a one-color skew and other proteins",
+      "features_present": ["CDS"],
+      "feature_specific_colors": { "CDS": [["Group", "#ff0000"]] },
+      "used_color_rules": [["Group", "#ff0000"]],
+      "default_used_features": ["CDS"],
+      "dinucleotide": "AT",
+      "gc": ["#a0a0a0", "#b0b0b0"],
+      "skew": ["#111111", "#111111"],
+      "depth": "#333333",
+      "show_gc": true,
+      "show_skew": true,
+      "show_depth": false,
+      "rows": [
+        ["other proteins", "CDS"],
+        ["AT content (+)", "gc_content"],
+        ["AT content (-)", "gc_content"],
+        ["AT skew", "skew_high"]
+      ]
+    }
+  ]
+}

@@ -1,8 +1,11 @@
+// @ts-check
+/** @import { LinearComparisonResolution } from '../services/linear-comparisons.js' */
 import {
   LINEAR_COMPARISON_MODES,
   LINEAR_COMPARISON_SOURCES,
+  linearComparisonEdgeKey,
   normalizeLinearComparisonPlan
-} from './linear-comparisons.js';
+} from '../services/linear-comparisons.js';
 import { comparisonStateForMode } from '../mode-profiles.js';
 
 const LINEAR_COMPARISON_INTENT_KEYS = Object.freeze({
@@ -56,6 +59,9 @@ const LINEAR_COMPARISON_SECTION_KEYS = Object.freeze({
   })
 });
 
+/** @typedef {Readonly<{ key: string, label: string, adjacentOnly?: boolean }>} ComparisonModeEntry */
+
+/** @type {readonly ComparisonModeEntry[]} */
 const LOSAT_MODES = Object.freeze([
   Object.freeze({
     key: LINEAR_COMPARISON_LOSAT_MODE_KEYS.LOSATN,
@@ -71,6 +77,7 @@ const LOSAT_MODES = Object.freeze([
   })
 ]);
 
+/** @type {readonly ComparisonModeEntry[]} */
 const LOSATP_MODES = Object.freeze([
   Object.freeze({
     key: LINEAR_COMPARISON_LOSATP_MODE_KEYS.SIMILARITY_GROUPS,
@@ -122,6 +129,13 @@ const ISSUE_ROUTES = Object.freeze({
   })
 });
 
+// Why an All adjacent pairs plan that resolves no pair draws no comparison (CI-07a, CI-07b).
+/** @type {Readonly<Record<string, string>>} */
+const EMPTY_PLAN_NOTICES = Object.freeze({
+  [LINEAR_COMPARISON_INTENT_KEYS.LOSAT]: 'No record pair to compare. Records on the same Linear row are not compared: give each record its own row under Advanced comparison and layout (Record Layout), or add a sequence.',
+  [LINEAR_COMPARISON_INTENT_KEYS.UPLOAD]: 'No pair has a BLAST TSV yet, so Generate draws no comparison. Choose a file for a pair under Selected pairs.'
+});
+
 const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 
 const pluralizedPairs = (count, qualifier) => (
@@ -140,12 +154,35 @@ const normalizeBlastpMode = (value) => {
     : 'orthogroup';
 };
 
-const intentKeyForPlan = (plan) => {
+// A Selected plan whose included pairs are exactly the adjacent pairs, all
+// uploads, is the Upload intent: uploading the table of a pair makes it
+// Selected (UJ-05). Selected LOSAT stays Custom, because the Selected
+// topology limits the LOSATP modes.
+/**
+ * @param {ReturnType<typeof normalizeLinearComparisonPlan>} plan
+ * @param {readonly string[]} adjacentEdgeKeys
+ */
+const isAdjacentUploadPlan = (plan, adjacentEdgeKeys) => {
+  const included = plan.edges.filter((edge) => edge.included === true);
+  const keys = new Set(included.map((edge) => linearComparisonEdgeKey(edge.queryUid, edge.subjectUid)));
+  const adjacent = new Set(adjacentEdgeKeys);
+  return adjacent.size > 0 && keys.size === included.length && keys.size === adjacent.size
+    && [...keys].every((key) => adjacent.has(key))
+    && included.every((edge) => edge.source === LINEAR_COMPARISON_SOURCES.UPLOAD);
+};
+
+/**
+ * @param {ReturnType<typeof normalizeLinearComparisonPlan>} plan
+ * @param {readonly string[]} adjacentEdgeKeys
+ */
+const intentKeyForPlan = (plan, adjacentEdgeKeys) => {
   if (plan.mode === LINEAR_COMPARISON_MODES.NONE) {
     return LINEAR_COMPARISON_INTENT_KEYS.NONE;
   }
   if (plan.mode === LINEAR_COMPARISON_MODES.SELECTED) {
-    return LINEAR_COMPARISON_INTENT_KEYS.CUSTOM;
+    return isAdjacentUploadPlan(plan, adjacentEdgeKeys)
+      ? LINEAR_COMPARISON_INTENT_KEYS.UPLOAD
+      : LINEAR_COMPARISON_INTENT_KEYS.CUSTOM;
   }
   return plan.defaultSource === LINEAR_COMPARISON_SOURCES.UPLOAD
     ? LINEAR_COMPARISON_INTENT_KEYS.UPLOAD
@@ -356,6 +393,7 @@ const projectSectionKeys = ({
     selectedPairs.push(LINEAR_COMPARISON_SECTION_KEYS.SELECTED_PAIRS.RETAINED_DRAFTS);
   }
 
+  /** @type {string[]} */
   const advanced = [LINEAR_COMPARISON_SECTION_KEYS.ADVANCED.RECORD_LAYOUT];
   if (planned.hasLosat) {
     advanced.push(LINEAR_COMPARISON_SECTION_KEYS.ADVANCED.LOSAT_CACHE);
@@ -480,22 +518,34 @@ export const projectLinearComparisonLosatpModeSelection = ({
   });
 };
 
+/**
+ * @param {{
+ *   plan?: Record<string, any>,
+ *   resolution?: Partial<LinearComparisonResolution>,
+ *   adjacentEdgeKeys?: readonly string[],
+ *   losatProgram?: string,
+ *   blastpMode?: string,
+ *   filters?: Record<string, any>
+ * }} [options]
+ */
 export const projectLinearComparisonUi = ({
   plan = {},
   resolution = {},
+  adjacentEdgeKeys = [],
   losatProgram = 'blastn',
   blastpMode = 'orthogroup',
   filters = {}
 } = {}) => {
   const normalizedPlan = normalizeLinearComparisonPlan(plan);
   const activeEdges = Array.isArray(resolution?.edges) ? resolution.edges : [];
-  const intentKey = intentKeyForPlan(normalizedPlan);
+  const intentKey = intentKeyForPlan(normalizedPlan, adjacentEdgeKeys);
   const planned = plannedSources(normalizedPlan);
   const selectedTopology = normalizedPlan.mode === LINEAR_COMPARISON_MODES.SELECTED;
   const losatModeKey = normalizeLosatProgram(losatProgram);
   const losatpModeKey = normalizeBlastpMode(blastpMode);
-  const losatModeLabel = LOSAT_MODE_BY_KEY.get(losatModeKey).label;
-  const losatpModeLabel = LOSATP_MODE_BY_KEY.get(losatpModeKey).label;
+  // normalizeLosatProgram and normalizeBlastpMode return only keys of these two tables.
+  const losatModeLabel = /** @type {ComparisonModeEntry} */ (LOSAT_MODE_BY_KEY.get(losatModeKey)).label;
+  const losatpModeLabel = /** @type {ComparisonModeEntry} */ (LOSATP_MODE_BY_KEY.get(losatpModeKey)).label;
   const sourceBreakdown = projectSourceBreakdown(activeEdges);
   const activePairCount = activeEdges.length;
   const dormantDraftCount = retainedDormantDraftCount(normalizedPlan, activeEdges);
@@ -526,6 +576,7 @@ export const projectLinearComparisonUi = ({
     activeLosatpModeKey: losatpModeKey,
     activeLosatpModeLabel: losatpModeLabel,
     losatpModes: projectLosatpModes(normalizedPlan, losatpModeKey),
+    emptyPlanNotice: activePairCount === 0 ? EMPTY_PLAN_NOTICES[intentKey] || '' : '',
     filterSummary: filterSummary.text,
     filterSummaryIsDefault: filterSummary.isDefault,
     retainedDormantDraftCount: dormantDraftCount,

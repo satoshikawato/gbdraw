@@ -286,14 +286,26 @@ def test_public_markdown_local_targets_exist() -> None:
     assert missing == []
 
 
+def _web_gallery_artifacts() -> set[str]:
+    """SVGs and thumbnails that tools/prepare_interactive_gallery_assets.py writes."""
+    from tools.prepare_interactive_gallery_assets import EXAMPLES
+
+    return {
+        path.relative_to(PROJECT_ROOT).as_posix()
+        for example in EXAMPLES
+        for path in (example.gallery_svg_path, example.thumbnail_path)
+    }
+
+
 def test_public_figures_have_reproduction_inventory_coverage() -> None:
     references = _local_image_references()
     manifest_paths = {spec.output_path for spec in _figure_specs().values()}
     scenario_paths = _documentation_scenario_artifacts()
+    gallery_paths = _web_gallery_artifacts()
     manual_paths = set(MANUALLY_MANAGED_FIGURES)
     retained_unreferenced = set(UNREFERENCED_FIGURE_RETENTION)
 
-    assert references - manifest_paths - scenario_paths - manual_paths == set()
+    assert references - manifest_paths - scenario_paths - gallery_paths - manual_paths == set()
     assert retained_unreferenced <= manifest_paths - references
     assert all(reason.strip() for reason in MANUALLY_MANAGED_FIGURES.values())
     assert all(reason.strip() for reason in UNREFERENCED_FIGURE_RETENTION.values())
@@ -506,7 +518,9 @@ def test_gallery_session_arrow_geometry_variants_only_change_feature_paths(
             reproduced_arrow_geometry_variants[
                 "tutorial_9_arrow_geometry_linear"
             ],
-            152,
+            # The BGC Session draws shaft 0.6; the variant draws 0.5. Features
+            # short enough to be drawn as a head only have no shaft to change.
+            118,
         ),
     )
     for source_path, variant_path, expected_changed_paths in pairs:

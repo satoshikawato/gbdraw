@@ -18,6 +18,7 @@ from gbdraw.api import (
     session_to_request,
 )
 from gbdraw.api.session_compat import build_session_compatible_request_diagram
+from gbdraw.session import session_drawing_artifacts
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 from tools.prepare_interactive_gallery_assets import EXAMPLES, GallerySessionExample
 
@@ -64,7 +65,7 @@ def gallery_sessions(
 def _request(session: dict[str, object]) -> dict[str, object]:
     request = session["renderRequest"]
     assert isinstance(request, dict)
-    assert request["schema"] in {5, 6, 7, CANONICAL_REQUEST_SCHEMA}
+    assert request["schema"] in {5, 6, 7, 8, CANONICAL_REQUEST_SCHEMA}
     return request
 
 
@@ -93,7 +94,7 @@ def test_lambda_basic_linear_gallery_session_opts_out_of_comparisons(
 ) -> None:
     _, session = gallery_sessions["lambda_basic_linear"]
 
-    plan = session["config"]["linearComparisonPlan"]
+    plan = session["modes"]["linear"]["config"]["linearComparisonPlan"]
     assert plan["mode"] == "none"
     assert plan["edges"] == []
     assert _request(session)["comparisons"] == []
@@ -254,7 +255,7 @@ def _materialized_track_geometry(example_id: str) -> dict[str, Any]:
         ) as materialized:
             prepared = build_session_compatible_request_diagram(
                 session_to_request(materialized),
-                document.to_dict(),
+                session_drawing_artifacts(document),
             )
     geometry = getattr(prepared.drawing, "_gbdraw_track_slot_geometry", None)
     assert isinstance(geometry, dict)
@@ -477,7 +478,8 @@ def test_majanivirus_gallery_session_keeps_record_labels_and_color_rules(
         "Metapenaeus joyneri majanivirus",
     )
     captions = {"WSSV-like proteins", "BIRP", "tyrosine recombinase"}
-    expected_colors = {"#89d1fa", "yellow", "red"}
+    # A web-saved Session spells named colors in hex.
+    expected_colors = ({"#89d1fa"}, {"yellow", "#ffff00"}, {"red", "#ff0000"})
 
     _example, session = gallery_sessions["majanivirus_orthogroup"]
     request = _request(session)
@@ -494,7 +496,7 @@ def test_majanivirus_gallery_session_keeps_record_labels_and_color_rules(
     rules_ref = _option_resource_ref(colors, "colorTableFile", "colorTable")
     rules = _resource_text(session, rules_ref)
     assert all(caption in rules for caption in captions)
-    assert all(color in rules for color in expected_colors)
+    assert all(any(color in rules for color in spellings) for spellings in expected_colors)
 
     for location, root in gallery_visual_roots("majanivirus_orthogroup", False):
         texts = set(_texts(root))
@@ -506,7 +508,7 @@ def test_majanivirus_gallery_session_keeps_record_labels_and_color_rules(
         ]
         assert set(expected_labels) <= texts, location
         assert captions <= texts, location
-        assert expected_colors <= fills, location
+        assert all(spellings & fills for spellings in expected_colors), location
         assert len(definitions) == 9, location
 
 

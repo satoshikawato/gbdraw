@@ -27,6 +27,7 @@ import {
   validateProductImpactMap
 } from './web-product-impact-evaluation.mjs';
 import { literalImportSpecifiers, maskJavaScript } from './web-change-source.mjs';
+import { detectWebOwnerGraph, summarizeWebOwnerGraph } from './web-owner-graph-detectors.mjs';
 import {
   classifyWebChangeContext,
   isPullRequestEvent
@@ -377,10 +378,25 @@ const productImpactEvaluationPath = 'tools/web-product-impact-evaluation.mjs';
 const productImpactDecisionSourcePath = 'tools/web-product-impact-decision-source.mjs';
 const productImpactFixturePath = 'tests/web/product-impact-ratchet-fixtures.test.mjs';
 const trustedWorkflowPath = '.github/workflows/web-base-policy.yml';
+// The Web design rules (the numbered rules in gbdraw/web/CLAUDE.md) and the registry that
+// names their guard tests and in-test allowlists are authority: a runtime
+// change may not amend them in the same diff (WEB_CHANGE_POLICY.md "Design-rule
+// co-change").
+const webDesignRulesPath = 'gbdraw/web/CLAUDE.md';
+const designRuleGuardRegistryPath = 'tools/web-design-rule-guards.json';
+// The owner-graph registry (tools/web-owner-graph.json, implementation plan
+// Phase B2) is authority; its detectors are checker implementation and report
+// only until a rule references them.
+const ownerGraphRegistryPath = 'tools/web-owner-graph.json';
+const ownerGraphDetectorsPath = 'tools/web-owner-graph-detectors.mjs';
 const guardPaths = new Set([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
   productImpactPolicyPath,
   productContractAuthorityPath,
+  webDesignRulesPath,
+  designRuleGuardRegistryPath,
+  ownerGraphRegistryPath,
+  ownerGraphDetectorsPath,
   '.github/pull_request_template.md',
   'tools/check-web-change-budget.mjs',
   'tools/web-architecture-detectors.mjs',
@@ -410,6 +426,7 @@ const changedGuards = [...changed.keys()].filter((path) => guardPaths.has(path))
 const checkerImplementationPaths = new Set([
   'tools/check-web-change-budget.mjs',
   'tools/web-architecture-detectors.mjs',
+  ownerGraphDetectorsPath,
   'tools/web-architecture-evaluation.mjs',
   productImpactEvaluationPath,
   productImpactDecisionSourcePath,
@@ -421,6 +438,9 @@ const authorityPaths = new Set([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
   productImpactPolicyPath,
   productContractAuthorityPath,
+  webDesignRulesPath,
+  designRuleGuardRegistryPath,
+  ownerGraphRegistryPath,
   'docs/internal/WEB_CHANGE_POLICY.md',
   architectureRulesPath,
   acceptedViolationsPath,
@@ -450,6 +470,237 @@ const narrowAuthorityBundlePaths = new Set([
   productImpactMapPath,
   productDecisionAuthorityPath
 ]);
+
+// Design-rule guard registry (tools/web-design-rule-guards.json), read from the
+// trusted base. Each rule names its guard tests and the allowlist or baseline
+// literals inside them. An allowlist may only contract in a diff that also
+// changes production runtime files; an expansion needs an authority-only PR.
+// Absent registry: inert (only the path pre-registration above applies).
+const DESIGN_RULE_ALLOWLIST_KINDS = new Set(['count', 'count-map', 'set', 'writer-map']);
+const parseDesignRuleGuardRegistry = (source) => {
+  const errors = [];
+  if (source === null) return { registry: null, errors };
+  let parsed;
+  try {
+    parsed = JSON.parse(source);
+  } catch (error) {
+    return { registry: null, errors: [`${designRuleGuardRegistryPath}: invalid JSON (${error.message})`] };
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { registry: null, errors: [`${designRuleGuardRegistryPath}: expected an object`] };
+  }
+  if (parsed.schemaVersion !== 1) {
+    errors.push(`${designRuleGuardRegistryPath}: schemaVersion must be 1`);
+  }
+  if (parsed.rulesPath !== webDesignRulesPath) {
+    errors.push(`${designRuleGuardRegistryPath}: rulesPath must be ${webDesignRulesPath}`);
+  }
+  const rules = Array.isArray(parsed.rules) ? parsed.rules : null;
+  if (!rules) errors.push(`${designRuleGuardRegistryPath}: rules must be an array`);
+  const seenIds = new Set();
+  (rules || []).forEach((rule, index) => {
+    const location = `${designRuleGuardRegistryPath}: rules[${index}]`;
+    if (!rule || typeof rule !== 'object') {
+      errors.push(`${location}: expected an object`);
+      return;
+    }
+    if (typeof rule.id !== 'string' || !/^R\d+$/.test(rule.id)) errors.push(`${location}.id: expected R<n>`);
+    else if (seenIds.has(rule.id)) errors.push(`${location}.id: duplicate ${rule.id}`);
+    else seenIds.add(rule.id);
+    if (typeof rule.heading !== 'string' || !rule.heading.trim()) errors.push(`${location}.heading: expected text`);
+    if (!Array.isArray(rule.guards) || rule.guards.some((path) => typeof path !== 'string' || !path)) {
+      errors.push(`${location}.guards: expected an array of paths`);
+    }
+    if (!Array.isArray(rule.allowlists)) {
+      errors.push(`${location}.allowlists: expected an array`);
+      return;
+    }
+    rule.allowlists.forEach((entry, entryIndex) => {
+      const entryLocation = `${location}.allowlists[${entryIndex}]`;
+      if (!entry || typeof entry !== 'object') {
+        errors.push(`${entryLocation}: expected an object`);
+        return;
+      }
+      if (typeof entry.path !== 'string' || !entry.path) errors.push(`${entryLocation}.path: expected a path`);
+      if (typeof entry.symbol !== 'string' || !/^[A-Za-z_$][\w$]*$/.test(entry.symbol)) {
+        errors.push(`${entryLocation}.symbol: expected an identifier`);
+      }
+      if (!DESIGN_RULE_ALLOWLIST_KINDS.has(entry.kind)) {
+        errors.push(`${entryLocation}.kind: expected one of ${[...DESIGN_RULE_ALLOWLIST_KINDS].join(', ')}`);
+      }
+    });
+  });
+  return { registry: errors.length ? null : parsed, errors };
+};
+
+// Reads `const SYMBOL = <literal>` from a test source without executing it:
+// a number, an array or `new Set([...])` of strings, or an object literal of
+// numbers or of nested string maps. Returns null when the literal is absent
+// or not one of those shapes.
+const matchingBracketEnd = (text, openIndex) => {
+  const pairs = { '[': ']', '{': '}', '(': ')' };
+  const stack = [];
+  let quote = null;
+  for (let index = openIndex; index < text.length; index++) {
+    const character = text[index];
+    if (quote) {
+      if (character === '\\') index++;
+      else if (character === quote) quote = null;
+      continue;
+    }
+    if (character === "'" || character === '"' || character === '`') {
+      quote = character;
+      continue;
+    }
+    if (character === '/' && text[index + 1] === '/') {
+      index = text.indexOf('\n', index);
+      if (index < 0) return -1;
+      continue;
+    }
+    if (character === '/' && text[index + 1] === '*') {
+      index = text.indexOf('*/', index) + 1;
+      if (index < 1) return -1;
+      continue;
+    }
+    if (pairs[character]) stack.push(pairs[character]);
+    else if (character === ']' || character === '}' || character === ')') {
+      if (stack.pop() !== character) return -1;
+      if (!stack.length) return index;
+    }
+  }
+  return -1;
+};
+const literalToJson = (literal) => {
+  let out = '';
+  let quote = null;
+  for (let index = 0; index < literal.length; index++) {
+    const character = literal[index];
+    if (quote) {
+      if (character === '\\') {
+        out += character + (literal[index + 1] ?? '');
+        index++;
+      } else if (character === quote) {
+        out += '"';
+        quote = null;
+      } else out += character === '"' ? '\\"' : character;
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      out += '"';
+      continue;
+    }
+    if (character === '/' && literal[index + 1] === '/') {
+      const end = literal.indexOf('\n', index);
+      index = end < 0 ? literal.length : end;
+      continue;
+    }
+    if (character === '/' && literal[index + 1] === '*') {
+      index = literal.indexOf('*/', index) + 1;
+      continue;
+    }
+    out += character;
+  }
+  return out
+    .replace(/([{,]\s*)([A-Za-z_$][\w$]*)\s*:/g, '$1"$2":')
+    .replace(/,(\s*[\]}])/g, '$1');
+};
+const readAllowlistLiteral = (source, symbol) => {
+  if (source === null) return { status: 'absent', value: null };
+  const masked = maskJavaScript(source);
+  const escapedSymbol = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const declaration = new RegExp(`^[ \\t]*(?:export\\s+)?const\\s+${escapedSymbol}\\s*=\\s*`, 'm');
+  const match = masked.match(declaration);
+  if (!match) return { status: 'missing', value: null };
+  const start = match.index + match[0].length;
+  const rest = source.slice(start);
+  const numberMatch = rest.match(/^(\d+)\s*;/);
+  if (numberMatch) return { status: 'ok', value: Number(numberMatch[1]) };
+  const setMatch = rest.match(/^new\s+Set\s*\(\s*/);
+  const literalStart = start + (setMatch ? setMatch[0].length : 0);
+  const opener = source[literalStart];
+  if (opener !== '[' && opener !== '{') return { status: 'unreadable', value: null };
+  const end = matchingBracketEnd(source, literalStart);
+  if (end < 0) return { status: 'unreadable', value: null };
+  try {
+    return { status: 'ok', value: JSON.parse(literalToJson(source.slice(literalStart, end + 1))) };
+  } catch (_error) {
+    return { status: 'unreadable', value: null };
+  }
+};
+const isStringList = (value) => Array.isArray(value) && value.every((item) => typeof item === 'string');
+const isCountMap = (value) => value && typeof value === 'object' && !Array.isArray(value)
+  && Object.values(value).every((item) => Number.isInteger(item) && item >= 0);
+const isWriterMap = (value) => value && typeof value === 'object' && !Array.isArray(value)
+  && Object.values(value).every((inner) => inner && typeof inner === 'object' && !Array.isArray(inner)
+    && Object.values(inner).every((item) => typeof item === 'string'));
+// 'contraction' | 'unchanged' | 'expansion' | 'unreadable'
+const classifyAllowlistDelta = (kind, before, after) => {
+  if (kind === 'count') {
+    if (!Number.isInteger(before) || !Number.isInteger(after)) return 'unreadable';
+    return after < before ? 'contraction' : after === before ? 'unchanged' : 'expansion';
+  }
+  if (kind === 'set') {
+    if (!isStringList(before) || !isStringList(after)) return 'unreadable';
+    const baseSet = new Set(before);
+    if (after.some((item) => !baseSet.has(item))) return 'expansion';
+    return new Set(after).size < baseSet.size ? 'contraction' : 'unchanged';
+  }
+  if (kind === 'count-map') {
+    if (!isCountMap(before) || !isCountMap(after)) return 'unreadable';
+    let contracted = false;
+    for (const [key, value] of Object.entries(after)) {
+      if (!(key in before) || value > before[key]) return 'expansion';
+      if (value < before[key]) contracted = true;
+    }
+    if (Object.keys(after).length < Object.keys(before).length) contracted = true;
+    return contracted ? 'contraction' : 'unchanged';
+  }
+  if (kind === 'writer-map') {
+    if (!isWriterMap(before) || !isWriterMap(after)) return 'unreadable';
+    let contracted = false;
+    for (const [path, inner] of Object.entries(after)) {
+      if (!(path in before)) return 'expansion';
+      for (const [name, category] of Object.entries(inner)) {
+        if (!(name in before[path]) || before[path][name] !== category) return 'expansion';
+      }
+      if (Object.keys(inner).length < Object.keys(before[path]).length) contracted = true;
+    }
+    if (Object.keys(after).length < Object.keys(before).length) contracted = true;
+    return contracted ? 'contraction' : 'unchanged';
+  }
+  return 'unreadable';
+};
+const designRuleRegistryEvaluation = parseDesignRuleGuardRegistry(
+  readRevisionFile(base, designRuleGuardRegistryPath)
+);
+const designRuleGuardRegistry = designRuleRegistryEvaluation.registry;
+const designRuleRegistryErrors = designRuleRegistryEvaluation.errors;
+const designRuleAllowlistChanges = [];
+if (designRuleGuardRegistry) {
+  designRuleGuardRegistry.rules.forEach((rule) => {
+    rule.allowlists.forEach(({ path, symbol, kind }) => {
+      if (!changed.has(path)) return;
+      const before = readAllowlistLiteral(readRevisionFile(base, path), symbol);
+      const after = readAllowlistLiteral(readHeadFile(path), symbol);
+      const subject = `${rule.id} ${path}#${symbol}`;
+      let direction;
+      if (before.status !== 'ok') direction = `unreadable in the trusted base (${before.status})`;
+      else if (after.status === 'absent' || after.status === 'missing') direction = 'contraction';
+      else if (after.status !== 'ok') direction = 'unreadable';
+      else direction = classifyAllowlistDelta(kind, before.value, after.value);
+      designRuleAllowlistChanges.push({ subject, direction, kind });
+    });
+  });
+}
+const designRuleAllowlistExpansions = designRuleAllowlistChanges
+  .filter(({ direction }) => direction !== 'contraction' && direction !== 'unchanged')
+  .map(({ subject, direction }) => `${subject} (${direction})`)
+  .sort();
+const designRuleAllowlistContractions = designRuleAllowlistChanges
+  .filter(({ direction }) => direction === 'contraction')
+  .map(({ subject }) => subject)
+  .sort();
 const baseAcceptedViolationsSource = readRevisionFile(base, acceptedViolationsPath);
 const candidateAcceptedViolationsSource = readHeadFile(acceptedViolationsPath);
 const acceptedViolationAuthorityErrors = [];
@@ -519,6 +770,46 @@ const baseProductionSources = new Map(
         ?? ''
   ])
 );
+
+// Owner-graph report (implementation plan Phase B1): report only. The
+// registry, when present, is read from the trusted base; the detectors run on
+// the base and the head sources.
+const readOwnerGraphRegistry = () => {
+  const source = readRevisionFile(base, ownerGraphRegistryPath);
+  if (source === null) return { registry: null, error: null };
+  try {
+    const parsed = JSON.parse(source);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? { registry: parsed, error: null }
+      : { registry: null, error: `${ownerGraphRegistryPath}: expected an object` };
+  } catch (error) {
+    return { registry: null, error: `${ownerGraphRegistryPath}: invalid JSON (${error.message})` };
+  }
+};
+const ownerGraphRegistryEvaluation = readOwnerGraphRegistry();
+const ownerGraphReport = (() => {
+  try {
+    const registry = ownerGraphRegistryEvaluation.registry;
+    const headResults = detectWebOwnerGraph(allProductionSources, registry);
+    const baseResults = detectWebOwnerGraph(baseProductionSources, registry);
+    const subjectDelta = (id) => {
+      const before = new Set(baseResults[id].subjects);
+      const after = new Set(headResults[id].subjects);
+      return {
+        added: [...after].filter((subject) => !before.has(subject)).sort(),
+        removed: [...before].filter((subject) => !after.has(subject)).sort()
+      };
+    };
+    return {
+      error: null,
+      head: summarizeWebOwnerGraph(headResults),
+      base: summarizeWebOwnerGraph(baseResults),
+      deltas: Object.fromEntries(Object.keys(headResults).map((id) => [id, subjectDelta(id)]))
+    };
+  } catch (error) {
+    return { error: error?.message || String(error), head: null, base: null, deltas: {} };
+  }
+})();
 
 const sourceInventory = (sources) => {
   const inventory = {
@@ -1449,6 +1740,15 @@ if (architectureAuthorityDelta.changes.length) {
     + `(${architectureAuthorityDelta.changes.length} change(s))`
   );
 }
+if (designRuleAllowlistExpansions.length) {
+  reviewReasons.push(
+    'Governance and authority: registered design-rule allowlists expanded '
+    + `(${designRuleAllowlistExpansions.join(', ')})`
+  );
+}
+if (designRuleRegistryErrors.length) {
+  reviewReasons.push('Governance and authority: required authority input is malformed');
+}
 if (changedArchitectureSignals.length) {
   reviewReasons.push(
     `Architecture-bearing signals: deterministic inventories changed (${changedArchitectureSignals.join(', ')})`
@@ -1537,6 +1837,15 @@ if (
 if (changedCheckerImplementations.length && changedAuthorities.length) {
   blockingViolations.push(
     'Web checker/source parser and authority policy/workflow files changed together'
+  );
+}
+blockingViolations.push(...designRuleRegistryErrors.map((error) => (
+  `trusted design-rule guard registry: ${error}`
+)));
+if (productionPaths.length && designRuleAllowlistExpansions.length) {
+  blockingViolations.push(
+    'design-rule.co-change: a registered design-rule allowlist expanded alongside production runtime files '
+    + `(${designRuleAllowlistExpansions.join(', ')})`
   );
 }
 if (unapprovedCapabilities.length) {
@@ -2168,6 +2477,32 @@ const report = [
   '## Guard files touched',
   '',
   ...list(changedGuards),
+  '',
+  '## Design-rule guard allowlists',
+  '',
+  `- Registry: ${designRuleGuardRegistry
+    ? `${designRuleGuardRegistry.rules.length} rule(s) from the trusted base`
+    : designRuleRegistryErrors.length ? 'malformed' : 'absent (inert)'}`,
+  ...designRuleAllowlistContractions.map((subject) => `- contraction: ${subject}`),
+  ...designRuleAllowlistExpansions.map((subject) => `- expansion: ${subject}`),
+  '## Owner graph (report)',
+  '',
+  ...(ownerGraphReport.error
+    ? [`- Detector error: ${ownerGraphReport.error}`]
+    : [
+      `- Registry: ${ownerGraphRegistryEvaluation.registry
+        ? `${ownerGraphRegistryPath} from the trusted base`
+        : ownerGraphRegistryEvaluation.error ? `malformed (${ownerGraphRegistryEvaluation.error})` : 'defaults (registry absent)'}`,
+      ...['injectionEdges', 'forwardClosures', 'stateBackdoors', 'wholeObjectPorts', 'triggerSites', 'triggerModules']
+        .map((key) => `- ${key}: ${ownerGraphReport.base[key]} -> ${ownerGraphReport.head[key]}`),
+      ...Object.keys(ownerGraphReport.head.projectionShapes).map((domain) => (
+        `- shapes:${domain}: ${ownerGraphReport.base.projectionShapes[domain] ?? 0} -> ${ownerGraphReport.head.projectionShapes[domain]}`
+      )),
+      ...Object.entries(ownerGraphReport.deltas).flatMap(([id, { added, removed }]) => [
+        ...added.map((subject) => `- ${id}: NEW ${subject}`),
+        ...removed.map((subject) => `- ${id}: REMOVED ${subject}`)
+      ])
+    ]),
   ''
 ].join('\n');
 
@@ -2185,7 +2520,7 @@ if (changeContext.isPromotion || changeContext.errors.length) {
       blockingViolations: [
         `Web policy evaluation failed closed: ${errorMessage}`
       ],
-      reviewReasons: /tools\/web-(?:change-policy|architecture-(?:rules|violations))\.json/.test(
+      reviewReasons: /tools\/web-(?:change-policy|architecture-(?:rules|violations)|design-rule-guards)\.json/.test(
         errorMessage
       ) || /tools\/web-product-(?:impact-map|decisions)\.json/.test(errorMessage)
         ? ['Governance and authority: required authority input is malformed']

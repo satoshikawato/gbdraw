@@ -1,3 +1,4 @@
+// @ts-check
 export const IMPORTED_COMPARISON_DISPOSITIONS = Object.freeze({
   EDITABLE: 'EDITABLE',
   PRESERVED_READ_ONLY: 'PRESERVED_READ_ONLY',
@@ -162,7 +163,7 @@ const rowsAreEditable = (records, comparisons) => {
   return comparisons.every((comparison) => {
     const query = Number(comparison.queryRecordIndex);
     const subject = Number(comparison.subjectRecordIndex);
-    return Math.abs(rowPosition.get(rows[query]) - rowPosition.get(rows[subject])) === 1;
+    return Math.abs((rowPosition.get(rows[query]) ?? NaN) - (rowPosition.get(rows[subject]) ?? NaN)) === 1;
   });
 };
 
@@ -201,6 +202,7 @@ const generatedPipelineIsProjectable = ({ records, comparisons, pipeline }) => {
   return true;
 };
 
+/** @param {{ renderRequest?: Record<string, any>, resources?: Record<string, any> }} [input] */
 export const classifyImportedComparisonIntent = ({
   renderRequest,
   resources = {}
@@ -255,6 +257,7 @@ export const classifyImportedComparisonIntent = ({
     return decision('The saved comparison has no available records.');
   }
 
+  /** @type {Record<string, any> | null} */
   let pipeline = null;
   const singletonKinds = new Set();
   for (const comparison of comparisons) {
@@ -318,7 +321,7 @@ export const classifyImportedComparisonIntent = ({
 export const restoreImportedComparisonIntent = (
   target,
   classification,
-  storedResolution = null
+  storedResolution = /** @type {{ action?: unknown } | null} */ (null)
 ) => {
   Object.assign(target, createImportedComparisonIntentState(), classification || {});
   const storedAction = String(storedResolution?.action || '').trim().toUpperCase();
@@ -340,7 +343,7 @@ export const resolveImportedComparisonAction = ({
   draftResolution
 }) => {
   const requested = String(action || '').trim().toUpperCase();
-  if (!VALID_ACTIONS.has(requested)) {
+  if (!VALID_ACTIONS.has(/** @type {any} */ (requested))) {
     return { ok: false, message: 'Choose how to resolve the saved comparison.' };
   }
   if (
@@ -383,18 +386,24 @@ export const importedComparisonExecution = ({ intent, draftResolution }) => {
     return { ok: true, mode: 'clear' };
   }
   if (intent?.action === IMPORTED_COMPARISON_ACTIONS.REPLACE) {
-    if (draftResolution?.valid === true && draftResolution?.hasComparisonIntent === true) {
+    // An invalid draft (issues need an edge, so it has an intent) fails in the run
+    // with its own diagnostic, as an editable comparison does. An empty draft
+    // would clear the saved comparison instead.
+    if (draftResolution?.hasComparisonIntent === true) {
       return { ok: true, mode: 'draft' };
     }
     return {
       ok: false,
-      message: draftResolution?.error
-        || 'Set one complete, valid comparison before generating.'
+      message: 'Set one complete, valid comparison before generating.',
+      fallbackCode: 'COMPARISON_REPLACEMENT_EMPTY'
     };
   }
+  // A reason with its own diagnostic (a missing resource) keeps it; any other
+  // reason reports the pending choice instead of the unclassified fallback (OV-303).
   return {
     ok: false,
-    message: intent?.message || 'Choose how to resolve the saved comparison before generating.'
+    message: intent?.message || 'Choose how to resolve the saved comparison before generating.',
+    fallbackCode: 'COMPARISON_CHOICE_REQUIRED'
   };
 };
 

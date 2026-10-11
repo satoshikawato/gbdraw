@@ -4,7 +4,7 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
-from ....features.ids import make_linear_rendered_feature_id
+from ....features.ids import compute_feature_object_hash, make_linear_rendered_feature_id
 from ....layout.linear import VerticalBand
 from ....svg.ids import instance_svg_id
 from ...drawers.linear.features import FeatureDrawer
@@ -29,26 +29,30 @@ def build_linear_feature_dom_index(
     by_view_id: dict[tuple[int, str], tuple[str, ...]] = {}
     for record_index, feature_dict in enumerate(feature_dicts):
         features = list(feature_dict.values())
-        view_ids = [
+        stable_ids = [
             str(FeatureDrawer.get_feature_data_id(feature) or "")
             for feature in features
         ]
-        view_id_counts = Counter(view_id for view_id in view_ids if view_id)
+        stable_id_counts = Counter(stable_id for stable_id in stable_ids if stable_id)
         mutable_by_view_id: dict[str, list[str]] = {}
-        for feature, view_id in zip(features, view_ids, strict=True):
-            if not view_id:
+        for feature, stable_id in zip(features, stable_ids, strict=True):
+            if not stable_id:
                 continue
             rendered_id = make_linear_rendered_feature_id(
                 record_index=record_index,
-                stable_feature_id=view_id,
+                stable_feature_id=stable_id,
                 record_count=record_count,
             )
             if not rendered_id:
                 continue
             source_index = getattr(feature, "source_feature_index", None)
-            if view_id_counts[view_id] > 1 and source_index is not None:
+            if stable_id_counts[stable_id] > 1 and source_index is not None:
                 rendered_id = instance_svg_id(rendered_id, source_index)
-            mutable_by_view_id.setdefault(view_id, []).append(rendered_id)
+            # Comparison rows name a drawn feature by its drawn-location hash
+            # (`*_view_feature_svg_id`), which tells the row's frame.
+            view_id = compute_feature_object_hash(feature)
+            if view_id:
+                mutable_by_view_id.setdefault(view_id, []).append(rendered_id)
             if source_index is None:
                 continue
             key = (record_index, int(source_index))

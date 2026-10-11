@@ -16,8 +16,10 @@ on:
         type: boolean
 
 concurrency:
+  # As in Tests, a started dev push run is never canceled, so it leaves exact-SHA evidence:
+  # the newest later push waits, and GitHub cancels older waiting runs.
   group: gallery-publication-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 jobs:
   ci-impact:

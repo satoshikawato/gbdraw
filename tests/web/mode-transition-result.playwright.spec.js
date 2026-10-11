@@ -10,6 +10,12 @@ const color = async (page, value, index = 0) => {
   await page.getByText('This feature only', { exact: true }).click();
   await expect(page.getByText('This feature only', { exact: true })).toBeHidden({ timeout: 180000 });
   await closeEditor(page);
+  // "This feature only" adds a rule Legend row, so the automatic rerender
+  // draws the Result again (OV-43); read the Result after it settles.
+  await page.waitForFunction(() => {
+    const app = window.__GBDRAW_APP__;
+    return Boolean(app) && !app.processing && !app.labelReflowProcessing;
+  }, null, { timeout: 180000 });
   return target;
 };
 
@@ -37,20 +43,25 @@ for (const mode of ['circular', 'linear']) {
       const edited = await snapshot(page);
       expect(edited.result).toContain('#c83366');
       expect(edited.mounted).toContain('#c83366');
-      expect(edited.resultIdentity).toBe(original.resultIdentity);
+      // The rule Legend row is drawn by the automatic rerender, which gives the
+      // Result a new identity before any Generate (OV-43).
+      expect(edited.resultIdentity).not.toBe(original.resultIdentity);
       await page.evaluate(() => { window.__MODE_EDITED_ROOT__ = document.querySelector('.origin-top svg'); });
       await switchMode(page, mode === 'circular' ? 'linear' : 'circular');
+      // E1: the other mode keeps its own (empty) Result slot.
+      expect(await page.evaluate(() => ({ results: window.__GBDRAW_APP__.results.length,
+        svg: Boolean(document.querySelector('.origin-top svg')) }))).toEqual({ results: 0, svg: false });
       if (mode === 'circular') {
         const scale = page.getByLabel('Show Coordinate Scale (Linear)', { exact: true });
         for (const details of await scale.locator('xpath=ancestor::details').all()) {
           if (await details.getAttribute('open') === null) await details.locator(':scope > summary').press('Enter');
         }
         await scale.uncheck();
-        expect((await snapshot(page)).request).toEqual(edited.request);
       }
-      await agree(page, edited, testInfo, 'inactive');
       await switchMode(page, mode);
       const returned = await agree(page, edited, testInfo, 'returned');
+      // A draft edit in the other mode leaves this mode's committed request.
+      expect(returned.request).toEqual(edited.request);
       expect(returned.sameRoot).toBe(false);
       expect(returned.resultIdentity).toBe(edited.resultIdentity);
       expect(returned.generation).toBe(edited.generation);

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import base64
+import copy
 import gzip
 import json
 import re
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 from Bio import SeqIO
@@ -13,14 +15,16 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
+from gbdraw.session_io import CURRENT_FEATURE_CATALOG_SCHEMA
 from gbdraw.analysis.collinearity import (
     CollinearityAnchor,
     CollinearityBlock,
     CollinearityResult,
 )
 from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResult
+from gbdraw.circular import circular_main
 from gbdraw.linear import linear_main
-import gbdraw.cli_utils.session as cli_session_module
+import gbdraw.session_migration as session_migration
 from gbdraw.api.request_render import (
     CurrentRequestArtifacts,
     PreparedDiagramRequest,
@@ -30,6 +34,7 @@ from gbdraw.api.requests import (
     CircularBatchOutputPolicy,
     CircularBatchRequest,
     CircularDiagramRequest,
+    GenBankInputSource,
     InMemoryRecordSource,
     LinearDiagramRequest,
     RecordInput,
@@ -44,14 +49,26 @@ from gbdraw.api.session_compat import (
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.session import (
+    SessionConversionError,
+    SessionDocument,
+    SessionDrawingSpec,
     build_session_document,
     load_session_document,
     materialize_session,
     render_session,
     save_session_document,
+    session_drawing_artifacts,
     session_to_request,
+    upgrade_session_document,
 )
-from gbdraw.session_io import CURRENT_SESSION_VERSION
+from gbdraw.session_io import (
+    CURRENT_SESSION_VERSION,
+    migrate_persisted_web_state_field_names,
+    migrate_session_annotation_targets,
+    migrate_session_feature_edits,
+    migrate_session_hash_rules,
+    source_hash_selector_value,
+)
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 
 _RELEASED_SCHEMA_V2_SESSION = (
@@ -59,6 +76,12 @@ _RELEASED_SCHEMA_V2_SESSION = (
     / "fixtures"
     / "sessions"
     / "BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz"
+)
+_FEATURE_EDITS_V44_SESSION = (
+    Path(__file__).parent
+    / "fixtures"
+    / "sessions"
+    / "feature-edits-crop-rc.v44.gbdraw-session.json.gz"
 )
 _VERSION_39_SESSION = (
     Path(__file__).parent
@@ -114,8 +137,10 @@ def test_released_session_44_schema_7_catalog_4_is_typed_readable(
         assert isinstance(session_to_request(materialized), CircularDiagramRequest)
 
 
-def test_cli_writer_projects_released_web_config_to_session_44() -> None:
+def test_cli_writer_projects_released_web_config_to_session_46_mode_slices() -> None:
     source = {
+        "version": 41,
+        "ui": {"mode": "circular"},
         "config": {
             "adv": {
                 "linear_show_accession": True,
@@ -135,21 +160,36 @@ def test_cli_writer_projects_released_web_config_to_session_44() -> None:
     }
 
     adjunct, web_file_inventory = (
-        cli_session_module._project_session_adjunct_for_current_write(
+        session_migration.project_session_adjunct_for_current_write(
             source,
             source_version=41,
         )
     )
 
     assert web_file_inventory is None
-    assert adjunct["config"]["adv"] == {
+    assert "config" not in adjunct
+    circular = adjunct["modes"]["circular"]["config"]
+    linear = adjunct["modes"]["linear"]["config"]
+    # The renamed Linear-only fields go to the Linear slice.
+    assert linear["adv"] == {
         "linear_accession_visibility": "show",
         "linear_length_visibility": "hide",
     }
-    assert adjunct["config"]["recordDisplayDrafts"][0][
-        "reverseComplementOverride"
-    ] is None
-    assert adjunct["config"]["recordDisplayDrafts"][0]["anchorIntent"] is None
+    # A draft without a pairwise match style drew ribbons in its shown mode.
+    assert circular["adv"] == {"pairwise_match_style": "ribbon"}
+    # A record display row goes to the slice of its mode, without the mode.
+    assert circular["recordDisplayDrafts"] == [
+        {
+            "sourceUid": "source-1",
+            "selector": "#1",
+            "recordId": "record-1",
+            "topologyOverride": None,
+            "startCoordinate": 3,
+            "reverseComplementOverride": None,
+            "anchorIntent": None,
+        }
+    ]
+    assert linear["recordDisplayDrafts"] == []
     assert "reverseComplementOverride" not in source["config"][
         "recordDisplayDrafts"
     ][0]
@@ -244,7 +284,7 @@ def test_released_legacy_alignment_session_promotes_to_current_typed_state(
             (record.record_key, 0.0, 0.0)
             for record in request.records
         ]
-        adapted = adapt_session_request(request, document.to_dict())
+        adapted = adapt_session_request(request, session_drawing_artifacts(document))
         assert not hasattr(adapted.request.options, "align_orthogroup_feature")
         assert adapted.request.similarity_alignment == request.similarity_alignment
         save_session_document(current_path, request)
@@ -473,7 +513,7 @@ def test_session_adapter_passes_plain_prepared_request_to_current_renderer(
         fake_render,
     )
 
-    result = render_session_compatible_request(request, session_artifacts)
+    result = render_session_compatible_request(request, _drawing(session_artifacts))
 
     assert captured == [PreparedDiagramRequest]
     assert isinstance(result, SessionCompatibleRequestRenderResult)
@@ -492,6 +532,7 @@ def _released_canonical_session(
     payload = data["renderRequest"]
     assert isinstance(payload, dict)
     payload["schema"] = request_schema
+    payload["diagramOptions"].pop("featureOverrides", None)
     if request_schema < 7:
         for record in payload["records"]:
             record.pop("display", None)
@@ -508,6 +549,12 @@ def _released_canonical_session(
     if isinstance(nested_output, dict):
         nested_output["outputPrefix"] = "ignored-legacy-prefix"
     return data
+
+
+def _drawing(data: dict[str, Any] | SessionDocument):
+    """The only drawing of a validated Session, as the adapter reads it."""
+
+    return session_drawing_artifacts(load_session_document(data))
 
 
 def _released_cli_session(
@@ -655,14 +702,14 @@ def test_unresolved_session_batch_preflights_all_resolved_outputs(
     second_output = tmp_path / "diagram_2.svg"
     second_output.write_text("occupied", encoding="utf-8")
     monkeypatch.setattr(
-        "gbdraw.api.session_compat.build_request_plan_diagram",
+        "gbdraw.api.session_compat._build_request_plan_diagram",
         lambda _plan, **_kwargs: pytest.fail(
             "resolved session batch outputs must be preflighted before building"
         ),
     )
 
     with pytest.raises(ValidationError, match="already exist"):
-        render_session_compatible_request(request, session_artifacts)
+        render_session_compatible_request(request, _drawing(session_artifacts))
 
     assert not (tmp_path / "diagram_1.svg").exists()
     assert second_output.read_text(encoding="utf-8") == "occupied"
@@ -727,7 +774,7 @@ def test_feature_analysis_ids_fail_closed_across_protein_request_artifacts(
         ValidationError,
         match="no verified session artifact resolved",
     ):
-        adapt_session_request(request, session)
+        adapt_session_request(request, _drawing(session))
 
 
 @pytest.mark.parametrize("compound", [False, True], ids=["exact", "compound"])
@@ -768,7 +815,7 @@ def test_typed_protein_results_fail_closed_for_unresolved_analysis_ids(
         ValidationError,
         match="no verified session artifact resolved",
     ):
-        adapt_session_request(request, session)
+        adapt_session_request(request, _drawing(session))
 
 
 @pytest.mark.parametrize(
@@ -878,7 +925,7 @@ def test_released_schema_v2_fixture_promotes_to_current_typed_artifacts(
     with materialize_session(document, output_directory=tmp_path) as materialized:
         adapted = adapt_session_request(
             session_to_request(materialized),
-            document.to_dict(),
+            session_drawing_artifacts(document),
         )
 
     protein_entries = tuple(
@@ -900,7 +947,7 @@ def test_released_schema_v2_typed_alignment_survives_protein_artifact_promotion(
 
     with materialize_session(document, output_directory=tmp_path) as materialized:
         request = session_to_request(materialized)
-        adapted = adapt_session_request(request, document.to_dict())
+        adapted = adapt_session_request(request, session_drawing_artifacts(document))
 
     adapted_options = adapted.request.options
     assert adapted.request.similarity_alignment == request.similarity_alignment
@@ -933,14 +980,14 @@ def test_released_schema_v2_fixture_cli_sidecar_is_current_and_rerenders(
     payload = saved.to_dict()
     assert saved.version == CURRENT_SESSION_VERSION
     assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
-    assert "depth_tick_interval" not in payload["config"]["adv"]
-    assert all(
-        "tick_interval" not in track
-        for track in payload["config"]["adv"]["depth_tracks"]
-    )
+    assert "config" not in payload
+    for mode in ("circular", "linear"):
+        adv = payload["modes"][mode]["config"]["adv"]
+        assert "depth_tick_interval" not in adv
+        assert all("tick_interval" not in track for track in adv["depth_tracks"])
     assert (
         "collinearMaxGeneGap"
-        not in payload["config"]["losat"]["blastp"]
+        not in payload["modes"]["linear"]["config"]["losat"]["blastp"]
     )
 
     rerendered_prefix = tmp_path / "released-rerender"
@@ -1004,7 +1051,7 @@ def test_version_39_typed_replay_retains_dormant_comparison_resource(
         },
     }
     adjunct, web_file_inventory = (
-        cli_session_module._project_session_adjunct_for_current_write(
+        session_migration.project_session_adjunct_for_current_write(
             migration_source,
             source_version=39,
         )
@@ -1012,12 +1059,11 @@ def test_version_39_typed_replay_retains_dormant_comparison_resource(
 
     with materialize_session(source_document, output_directory=tmp_path) as materialized:
         rewritten = build_session_document(
-            session_to_request(materialized),
-            adjunct=adjunct,
+            drawings=[SessionDrawingSpec(session_to_request(materialized), state=adjunct)],
             web_file_inventory=web_file_inventory,
         ).to_dict()
 
-    assert rewritten["config"]["linearComparisonPlan"]["edges"] == [
+    assert rewritten["modes"]["linear"]["config"]["linearComparisonPlan"]["edges"] == [
         {
             "id": "dormant-v39-upload",
             "queryUid": record_uids[0],
@@ -1056,7 +1102,7 @@ def test_current_typed_replay_retains_web_only_conservation_fastas(
     ]
 
     adjunct, web_file_inventory = (
-        cli_session_module._project_session_adjunct_for_current_write(
+        session_migration.project_session_adjunct_for_current_write(
             source_payload,
             source_version=source_document.version,
         )
@@ -1065,14 +1111,13 @@ def test_current_typed_replay_retains_web_only_conservation_fastas(
 
     with materialize_session(source_document, output_directory=tmp_path) as materialized:
         rewritten = build_session_document(
-            session_to_request(materialized),
-            adjunct=adjunct,
+            drawings=[SessionDrawingSpec(session_to_request(materialized), state=adjunct)],
             web_file_inventory=web_file_inventory,
         ).to_dict()
 
     rewritten_web_files = rewritten["webFiles"]
     rewritten_resources = rewritten["resources"]
-    assert rewritten["editorState"]["featureCatalog"]["schema"] == 4
+    assert rewritten["editorState"]["featureCatalog"]["schema"] == CURRENT_FEATURE_CATALOG_SCHEMA
     assert all(
         "anchorProfile" in feature
         for item in rewritten["editorState"]["featureCatalog"]["items"]
@@ -1115,13 +1160,15 @@ def test_released_schema_v2_fixture_sidecar_collision_is_atomic(
     assert not output_prefix.with_suffix(".svg").exists()
 
 
-def test_session_adapter_rejects_unsupported_session_schema(tmp_path: Path) -> None:
+def test_session_adapter_reads_only_drawings_of_validated_sessions(tmp_path: Path) -> None:
     request = _linear_request(tmp_path)
-    data = build_session_document(request).to_dict()
-    data["version"] = 38
+    data: Any = build_session_document(request).to_dict()
 
-    with pytest.raises(ValidationError, match="Unsupported session version"):
+    with pytest.raises(ValidationError, match="drawing of a loaded SessionDocument"):
         adapt_session_request(request, data)
+    data["version"] = 38
+    with pytest.raises(ValidationError, match="Unsupported session version"):
+        load_session_document(data)
 
 
 def test_current_artifact_type_rejects_legacy_cache_schema() -> None:
@@ -1230,19 +1277,17 @@ def test_released_noncanonical_linear_cli_replay_promotes_current_sidecar(
     payload = saved.to_dict()
     assert saved.version == CURRENT_SESSION_VERSION
     assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
-    assert "depth_tick_interval" not in payload["config"]["adv"]
-    assert payload["config"]["adv"]["depth_large_tick_interval"] == 10
-    assert payload["config"]["adv"]["depth_tracks"] == [
-        {"large_tick_interval": 5}
-    ]
-    assert (
-        payload["config"]["losat"]["blastp"]["collinearMaxUnitGap"]
-        == 2
-    )
-    assert (
-        "collinearMaxGeneGap"
-        not in payload["config"]["losat"]["blastp"]
-    )
+    assert "config" not in payload
+    for mode in ("circular", "linear"):
+        adv = payload["modes"][mode]["config"]["adv"]
+        assert "depth_tick_interval" not in adv
+        assert adv["depth_large_tick_interval"] == 10
+        assert adv["depth_tracks"] == [{"large_tick_interval": 5}]
+        assert payload["modes"][mode]["config"]["form"] == {"prefix": "legacy"}
+    blastp = payload["modes"]["linear"]["config"]["losat"]["blastp"]
+    assert blastp["collinearMaxUnitGap"] == 2
+    assert "collinearMaxGeneGap" not in blastp
+    assert "losat" not in payload["modes"]["circular"]["config"]
 
     rerendered_prefix = tmp_path / "legacy-rerender"
     linear_main(
@@ -1265,3 +1310,764 @@ def test_main_schema1_binding_witness_reads_without_promotion():
     assert document.version == 41
     assert document.to_dict()['webFiles']['bindings']['schema'] == 1
     assert document.to_dict()['renderRequest']['schema'] == 7
+
+
+_PLACEMENT_VECTOR = json.loads(
+    (Path(__file__).parent / "fixtures" / "feature-placement-migration.json").read_text(
+        encoding="utf-8"
+    )
+)
+
+
+def test_session_41_44_placement_drafts_migrate_to_the_vector_shared_with_the_web_reader() -> None:
+    # tests/web/feature-edit-migration.test.mjs checks the same vector against
+    # migrateSessionFeaturePlacements.
+    source = {"featurePlacementOverrides": json.loads(json.dumps(_PLACEMENT_VECTOR["input"]))}
+
+    migrated = migrate_persisted_web_state_field_names(source)
+
+    assert migrated["featurePlacementOverrides"] == _PLACEMENT_VECTOR["expected"]
+    assert source["featurePlacementOverrides"] == _PLACEMENT_VECTOR["input"]
+    # A second pass leaves the scoped rows alone.
+    assert (
+        migrate_persisted_web_state_field_names(migrated)["featurePlacementOverrides"]
+        == _PLACEMENT_VECTOR["expected"]
+    )
+
+
+def test_cli_replay_validates_the_sidecar_drafts_before_it_renders(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = json.loads(gzip.decompress(_FEATURE_EDITS_V44_SESSION.read_bytes()))
+    session["config"]["featurePlacementOverrides"] = {
+        key: row
+        for key, row in _PLACEMENT_VECTOR["input"].items()
+        if row["placement"]["kind"] == "main" or row["placement"]["side"] in {"above", "below"}
+    }
+    source = tmp_path / "placements.v44.json"
+    source.write_text(json.dumps(session), encoding="utf-8")
+    split = session_migration.split_draft_into_modes
+
+    def split_without_scopes(draft: Any, **context: Any) -> dict[str, Any]:
+        # A split that puts every row in the Circular slice: the sidecar the
+        # CLI would write is invalid, so the run fails before any diagram exists.
+        result = split(draft, **context)
+        result["modes"]["circular"]["config"]["featurePlacementOverrides"] = {
+            key: row
+            for slice_ in result["modes"].values()
+            for key, row in slice_["config"]["featurePlacementOverrides"].items()
+        }
+        return result
+
+    monkeypatch.setattr(session_migration, "split_draft_into_modes", split_without_scopes)
+    sidecar = tmp_path / "out.gbdraw-session.json"
+
+    with pytest.raises(ValidationError):
+        linear_main(
+            [
+                "--session", str(source),
+                "--output", str(tmp_path / "diagram"),
+                "--format", "svg",
+                "--session_output", str(sidecar),
+            ]
+        )
+
+    assert not sidecar.exists()
+    assert not (tmp_path / "diagram.svg").exists()
+
+
+# Sessions saved by main (feature-placements.provenance.json): ND1 on a lane, ND2 Main.
+@pytest.mark.parametrize(
+    ("mode", "main", "lane_side"),
+    [("circular", circular_main, "outward"), ("linear", linear_main, "above")],
+)
+def test_session_44_placement_drafts_survive_the_cli_sidecar(
+    tmp_path: Path, mode: str, main: Any, lane_side: str
+) -> None:
+    fixture = (
+        Path(__file__).parent
+        / "fixtures"
+        / "sessions"
+        / f"feature-placements-{mode}.v44.gbdraw-session.json.gz"
+    )
+    source = json.loads(gzip.decompress(fixture.read_bytes()))
+    assert source["version"] == 44
+    record_key = source["renderRequest"]["records"][0]["recordKey"]
+    sidecar = tmp_path / "replay.gbdraw-session.json"
+
+    main(
+        [
+            "--session", str(fixture),
+            "--output", str(tmp_path / "replay"),
+            "--format", "svg",
+            "--session_output", str(sidecar),
+        ]
+    )
+
+    assert (tmp_path / "replay.svg").is_file()
+    saved = load_session_document(sidecar)
+    assert saved.version == CURRENT_SESSION_VERSION
+
+    def key(feature: str) -> str:
+        return json.dumps([record_key, feature], separators=(",", ":"))
+
+    lane = {
+        "recordKey": record_key,
+        "biologicalFeatureId": "f406d90f1",
+        "placement": {"kind": "lane", "side": lane_side, "level": 1},
+    }
+    main_row = {
+        "recordKey": record_key,
+        "biologicalFeatureId": "fbe3a7c0c",
+        "placement": {"kind": "main"},
+    }
+    # A lane keeps only its own mode's slice; Main reaches both.
+    other = "linear" if mode == "circular" else "circular"
+    modes = saved.to_dict()["modes"]
+    assert modes[mode]["config"]["featurePlacementOverrides"] == {
+        key("f406d90f1"): lane,
+        key("fbe3a7c0c"): main_row,
+    }
+    assert modes[other]["config"]["featurePlacementOverrides"] == {key("fbe3a7c0c"): main_row}
+    assert saved.to_dict()["renderRequest"]["diagramOptions"]["featurePlacements"] == [
+        lane,
+        main_row,
+    ]
+
+
+def _rename_resource(session: dict[str, Any], old: str, new: str) -> None:
+    """Give one resource another ID, as a Web or multi-drawing writer may."""
+
+    def rename(value: Any) -> Any:
+        if isinstance(value, list):
+            return [rename(item) for item in value]
+        if isinstance(value, dict):
+            return {
+                key: new if key.endswith("esourceId") and item == old else rename(item)
+                for key, item in value.items()
+            }
+        return value
+
+    session["renderRequest"] = rename(session["renderRequest"])
+    session["resources"] = {
+        new if resource_id == old else resource_id: entry
+        for resource_id, entry in session["resources"].items()
+    }
+
+
+def _python_session_with_renamed_ids(tmp_path: Path) -> dict[str, Any]:
+    request = CircularDiagramRequest(
+        records=(
+            RecordInput(
+                source=GenBankInputSource(
+                    Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
+                )
+            ),
+        ),
+        output=RenderOutputRequest(output_prefix="stored"),
+    )
+    session = build_session_document(request).to_dict()
+    _rename_resource(session, "record-1-genbank", "genbank-1")
+    return session
+
+
+def _gallery_session(_tmp_path: Path) -> dict[str, Any]:
+    # Written by the Web: its table resources keep their uploaded file names.
+    path = (
+        Path(__file__).parents[1]
+        / "gbdraw"
+        / "web"
+        / "gallery"
+        / "sessions"
+        / "tobacco-chloroplast.gbdraw-session.json"
+    )
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize(
+    "make_session",
+    [_python_session_with_renamed_ids, _gallery_session],
+    ids=["renamed-ids", "web-names"],
+)
+def test_cli_resave_keeps_the_ids_and_names_of_unchanged_resources(
+    tmp_path: Path, make_session: Any
+) -> None:
+    source = make_session(tmp_path)
+    assert source["renderRequest"]["mode"] == "circular"
+    source_path = tmp_path / "source.gbdraw-session.json"
+    source_path.write_text(json.dumps(source), encoding="utf-8")
+    sidecar = tmp_path / "resaved.gbdraw-session.json"
+
+    circular_main(
+        [
+            "--session", str(source_path),
+            "--output", str(tmp_path / "replay"),
+            "--format", "svg",
+            "--session_output", str(sidecar),
+        ]
+    )
+
+    saved = load_session_document(sidecar).to_dict()
+    # Every input's bytes are unchanged, so every resource keeps its ID,
+    # file name and metadata, and the request names the same resources.
+    assert saved["resources"] == source["resources"]
+    assert saved["renderRequest"]["records"][0]["source"] == (
+        source["renderRequest"]["records"][0]["source"]
+    )
+
+
+_FEATURE_EDIT_VECTORS = json.loads(
+    (Path(__file__).parent / "fixtures" / "feature-edit-migration-vectors.json").read_text(
+        encoding="utf-8"
+    )
+)["cases"]
+_MAIN_FEATURE_EDIT_VECTORS = {
+    case["fixture"]: case for case in _FEATURE_EDIT_VECTORS if "fixture" in case
+}
+
+
+@pytest.mark.parametrize(
+    "case", _FEATURE_EDIT_VECTORS, ids=[case["name"] for case in _FEATURE_EDIT_VECTORS]
+)
+def test_rendered_id_feature_edits_migrate_to_the_vectors_shared_with_the_web_reader(
+    case: dict[str, Any],
+) -> None:
+    # tests/web/feature-edit-migration.test.mjs checks the same vectors against
+    # migrateSessionFeatureEdits.
+    source = json.loads(json.dumps(case["input"]))
+
+    migration = migrate_session_feature_edits(
+        source["features"],
+        mode=source["mode"],
+        catalog=source["catalog"],
+        legacy=source.get("legacy"),
+    )
+
+    assert {
+        "features": migration.features,
+        "droppedCount": migration.dropped_count,
+        "narrowedVisibilityCount": migration.narrowed_visibility_count,
+    } == case["expected"]
+    assert source == case["input"]
+
+
+@pytest.mark.parametrize(
+    "fixture",
+    sorted(
+        fixture
+        for fixture, case in _MAIN_FEATURE_EDIT_VECTORS.items()
+        if case["input"]["catalog"] is not None
+    ),
+)
+def test_feature_edit_vectors_hold_the_maps_of_the_sessions_saved_by_main(
+    fixture: str,
+) -> None:
+    case = _MAIN_FEATURE_EDIT_VECTORS[fixture]
+    session = json.loads(gzip.decompress((Path(__file__).parent / "fixtures" / fixture).read_bytes()))
+    assert session["version"] == 44
+    assert case["input"]["features"] == session["features"]
+    assert case["input"]["mode"] == session["renderRequest"]["mode"]
+    # The vector keeps only the catalog fields the readers use: the full saved
+    # catalog gives the same result.
+    migration = migrate_session_feature_edits(
+        session["features"],
+        mode=session["renderRequest"]["mode"],
+        catalog=session["editorState"]["featureCatalog"],
+    )
+    assert migration.features == case["expected"]["features"]
+
+
+_LEGACY_FEATURE_FIELDS = ("fileIdx", "record_idx", "feature_index", "stable_feature_id", "svg_id")
+
+
+@pytest.mark.parametrize(
+    "fixture",
+    sorted(
+        fixture
+        for fixture, case in _MAIN_FEATURE_EDIT_VECTORS.items()
+        if case["input"]["catalog"] is None
+    ),
+)
+def test_feature_edit_vectors_hold_the_source_reads_of_sessions_31_39(
+    fixture: str, tmp_path: Path
+) -> None:
+    # A Session 31-39 saved no catalog: the CLI reads its sources again with the
+    # arguments Web Load uses (recorded from a Web Load of the fixture), and the
+    # features read are the vector's legacy input.
+    case = _MAIN_FEATURE_EDIT_VECTORS[fixture]
+    path = Path(__file__).parent / "fixtures" / fixture
+    session = json.loads(gzip.decompress(path.read_bytes()))
+    assert session["version"] == 33
+    source = case["input"]
+    assert source["features"] == {key: session["features"][key] for key in source["features"]}
+    assert source["mode"] == session["renderRequest"]["mode"]
+    assert [record["recordKey"] for record in source["legacy"]["records"]] == [
+        record["recordKey"] for record in session["renderRequest"]["records"]
+    ]
+    assert [
+        read._asdict()
+        for read in session_migration.legacy_source_reads(session["renderRequest"])
+    ] == [
+        {
+            "resource_id": read["resourceId"],
+            "region_spec": read["regionSpec"],
+            "record_selector": read["recordSelector"],
+            "reverse": read["reverse"],
+        }
+        for read in case["sourceReads"]
+    ]
+    with materialize_session(
+        load_session_document(path), output_directory=tmp_path, temporary_directory=tmp_path
+    ) as materialized:
+        read_again = session_migration.read_legacy_source_features(
+            session, materialized.resource_paths
+        )
+    assert read_again is not None
+
+    def projected(features: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [
+            {
+                **{field: feature[field] for field in _LEGACY_FEATURE_FIELDS if field in feature},
+                **(
+                    {"drawn_selector": {"hash": feature["drawn_selector"]["hash"]}}
+                    if "drawn_selector" in feature
+                    else {}
+                ),
+            }
+            for feature in features
+        ]
+
+    assert projected(read_again["extractedFeatures"]) == source["legacy"]["features"]
+    assert projected(read_again["biologicalFeatures"]) == source["legacy"]["biologicalFeatures"]
+
+
+@pytest.mark.parametrize(
+    "case",
+    json.loads(
+        (Path(__file__).parent / "fixtures" / "feature-edit-migration-vectors.json").read_text(encoding="utf-8")
+    )["sourceReadCases"],
+    ids=lambda case: case["name"],
+)
+def test_legacy_source_reads_match_the_reads_web_load_makes(case: dict[str, Any]) -> None:
+    # The same vectors pin the Web's derivation (tests/web/session-request.test.mjs).
+    assert [
+        read._asdict()
+        for read in session_migration.legacy_source_reads({"mode": "linear", "records": case["records"]})
+    ] == [
+        {
+            "resource_id": read["resourceId"],
+            "region_spec": read["regionSpec"],
+            "record_selector": read["recordSelector"],
+            "reverse": read["reverse"],
+        }
+        for read in case["sourceReads"]
+    ]
+
+
+def test_a_schema_2_linear_card_with_two_records_keys_its_edits_by_record(tmp_path: Path) -> None:
+    # OV-149 with OV-133: the CLI indexes the request records as Web Load
+    # promotes them. feature-edits-linear-crop-rc.v33 with a two-record GenBank
+    # file as its second card (no selector or region, so `all`): the edit of the
+    # third drawn record (TESTB, reverse-complemented; drawn hash f10b226a6)
+    # names TESTB's source feature f8d05c32c in record `<card>:2`.
+    session = json.loads(gzip.decompress(
+        (Path(__file__).parent / "fixtures" / "sessions" / "feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz")
+        .read_bytes()
+    ))
+    two_records = (Path(__file__).parent / "fixtures" / "web_batch_two_records.gb").read_bytes()
+    session["resources"]["record-2-genbank"].update(
+        data=base64.b64encode(two_records).decode("ascii"), size=len(two_records)
+    )
+    for field in ("featureVisibilityOverrides", "labelTextFeatureOverrides",
+                  "labelTextFeatureOverrideSources", "labelVisibilityOverrides"):
+        session["features"][field] = {}
+    session["features"]["featureVisibilityOverrides"] = {"f10b226a6_record_3": "off"}
+    card = session["renderRequest"]["records"][1]["recordKey"]
+
+    upgraded = upgrade_session_document(session, temporary_directory=tmp_path).document.to_dict()
+
+    assert list(upgraded["modes"]["linear"]["features"]["featureOverrides"]) == [
+        json.dumps([f"{card}:2", "f8d05c32c"], separators=(",", ":"))
+    ]
+
+
+@pytest.mark.parametrize("index", ["x", None, "missing"])
+def test_a_malformed_record_index_fails_the_upgrade_as_without_edits(
+    index: object, tmp_path: Path
+) -> None:
+    # The source reads run before the request decode; a record index that is
+    # not an integer must give the decode's error, edits or not.
+    session = json.loads(gzip.decompress(
+        (Path(__file__).parent / "fixtures" / "sessions" / "feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz")
+        .read_bytes()
+    ))
+    selector: dict[str, Any] = {"kind": "recordIndex"} if index == "missing" else {"kind": "recordIndex", "index": index}
+    session["renderRequest"]["records"][1]["selector"] = selector
+    without_edits = copy.deepcopy(session)
+    without_edits["features"] = {}
+
+    errors = []
+    for document in (session, without_edits):
+        with pytest.raises(SessionConversionError) as error:
+            upgrade_session_document(document, temporary_directory=tmp_path)
+        errors.append(str(error.value))
+    assert errors[0] == errors[1]
+
+
+# Sessions saved by main (feature-edits.provenance.json) with Feature visibility,
+# Label visibility, and label text edits keyed by rendered feature ID.
+@pytest.mark.parametrize(
+    ("fixture", "main"),
+    [
+        ("sessions/feature-edits-crop-rc.v44.gbdraw-session.json.gz", linear_main),
+        ("sessions/feature-edits-circular-copies.v44.gbdraw-session.json.gz", circular_main),
+    ],
+)
+def test_session_44_rendered_id_feature_edits_survive_the_cli_sidecar(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, fixture: str, main: Any
+) -> None:
+    case = _MAIN_FEATURE_EDIT_VECTORS[fixture]
+    sidecar = tmp_path / "replay.gbdraw-session.json"
+
+    main(
+        [
+            "--session", str(Path(__file__).parent / "fixtures" / fixture),
+            "--output", str(tmp_path / "replay"),
+            "--format", "svg",
+            "--session_output", str(sidecar),
+        ]
+    )
+
+    assert (tmp_path / "replay.svg").is_file()
+    saved = load_session_document(sidecar)
+    assert saved.version == CURRENT_SESSION_VERSION
+    # The edits become identity drafts in the slice of the Session diagram's
+    # mode (R1-3), as the Web app moves them on Load; shared edits reach both.
+    expected = case["expected"]["features"]
+    mode = saved.to_dict()["renderRequest"]["mode"]
+    other = "linear" if mode == "circular" else "circular"
+    modes = saved.to_dict()["modes"]
+    assert modes[mode]["features"]["featureOverrides"] == {
+        json.dumps([row["recordKey"], row["biologicalFeatureId"]], separators=(",", ":")): {
+            field: value for field, value in row.items() if field != "scope"
+        }
+        for row in expected["featureOverrides"].values()
+    }
+    assert modes[mode]["features"]["featureOverrides"]
+    assert modes[mode]["features"]["featureColorOverrides"] == expected["featureColorOverrides"]
+    assert {"featureOverrides", "featureColorOverrides"}.isdisjoint(modes[other].get("features", {}))
+    for shared in ("featureVisibilityManualRules", "labelOverrideRows", "labelTextBulkOverrides"):
+        assert modes[mode]["features"][shared] == modes[other]["features"][shared] == expected[shared]
+    narrowed = case["expected"]["narrowedVisibilityCount"]
+    assert [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == session_migration.__name__
+    ] == (
+        [
+            f"WARNING: {narrowed} Feature visibility edit(s) from Session version 44 "
+            "hid every feature with the same hash; in the written Session each "
+            "applies only to the feature that was edited."
+        ]
+        if narrowed
+        else []
+    )
+
+
+# OV-133: a Session 31-39 saved no catalog; the CLI re-save reads its sources
+# again, as Web Load does, so its rendered-ID edits are kept.
+@pytest.mark.parametrize(
+    ("fixture", "main"),
+    [
+        ("sessions/feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz", linear_main),
+        ("sessions/feature-edits-circular.v33.gbdraw-session.json.gz", circular_main),
+    ],
+)
+def test_session_33_rendered_id_feature_edits_survive_the_cli_sidecar(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, fixture: str, main: Any
+) -> None:
+    case = _MAIN_FEATURE_EDIT_VECTORS[fixture]
+    sidecar = tmp_path / "replay.gbdraw-session.json"
+
+    main(
+        [
+            "--session", str(Path(__file__).parent / "fixtures" / fixture),
+            "--output", str(tmp_path / "replay"),
+            "--format", "svg",
+            "--session_output", str(sidecar),
+        ]
+    )
+
+    saved = load_session_document(sidecar).to_dict()
+    mode = saved["renderRequest"]["mode"]
+    expected = case["expected"]["features"]["featureOverrides"]
+    assert expected and case["expected"]["droppedCount"] == 0
+    assert saved["modes"][mode]["features"]["featureOverrides"] == {
+        json.dumps([row["recordKey"], row["biologicalFeatureId"]], separators=(",", ":")): {
+            field: value for field, value in row.items() if field != "scope"
+        }
+        for row in expected.values()
+    }
+    assert not [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == session_migration.__name__ and "dropped" in record.getMessage()
+    ]
+
+
+_ANNOTATION_TARGET_VECTORS = json.loads(
+    (Path(__file__).parent / "fixtures" / "annotation-target-migration-vectors.json").read_text(
+        encoding="utf-8"
+    )
+)["cases"]
+_MAIN_ANNOTATION_TARGET_VECTOR = next(
+    case for case in _ANNOTATION_TARGET_VECTORS if "fixture" in case
+)
+
+
+@pytest.mark.parametrize(
+    "case", _ANNOTATION_TARGET_VECTORS, ids=[case["name"] for case in _ANNOTATION_TARGET_VECTORS]
+)
+def test_hash_annotation_targets_migrate_to_the_vectors_shared_with_the_web_reader(
+    case: dict[str, Any],
+) -> None:
+    # tests/web/feature-edit-migration.test.mjs checks the same vectors against
+    # migrateSessionAnnotationTargets.
+    source = json.loads(json.dumps(case["input"]))
+
+    migration = migrate_session_annotation_targets(
+        source["annotationSets"],
+        mode=source["mode"],
+        catalog=source["catalog"],
+        records=source["records"],
+    )
+
+    assert {
+        "annotationSets": migration.annotation_sets,
+        "migratedCount": migration.migrated_count,
+    } == case["expected"]
+    assert source == case["input"]
+
+
+def test_annotation_target_vector_holds_the_sets_of_the_session_saved_by_main() -> None:
+    case = _MAIN_ANNOTATION_TARGET_VECTOR
+    session = json.loads(
+        gzip.decompress((Path(__file__).parent / "fixtures" / case["fixture"]).read_bytes())
+    )
+    assert session["version"] == 44
+    assert case["input"]["annotationSets"] == session["config"]["annotationSets"]
+    assert case["input"]["mode"] == session["renderRequest"]["mode"]
+    assert case["input"]["records"] == session["renderRequest"]["records"]
+    # The vector keeps only the catalog fields the readers use: the full saved
+    # catalog gives the same result.
+    migration = migrate_session_annotation_targets(
+        session["config"]["annotationSets"],
+        mode=session["renderRequest"]["mode"],
+        catalog=session["editorState"]["featureCatalog"],
+        records=session["renderRequest"]["records"],
+    )
+    assert migration.annotation_sets == case["expected"]["annotationSets"]
+
+
+# The Session saved by main (selected-feature-annotations.provenance.json) with
+# three hash= annotation targets made from selected features.
+def test_session_44_hash_annotation_targets_move_in_the_cli_sidecar(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    case = _MAIN_ANNOTATION_TARGET_VECTOR
+    fixture = Path(__file__).parent / "fixtures" / case["fixture"]
+    source = json.loads(gzip.decompress(fixture.read_bytes()))
+    sidecar = tmp_path / "replay.gbdraw-session.json"
+    caplog.set_level("INFO", logger=session_migration.__name__)
+
+    linear_main(
+        [
+            "--session", str(fixture),
+            "--output", str(tmp_path / "replay"),
+            "--format", "svg",
+            "--session_output", str(sidecar),
+        ]
+    )
+
+    assert (tmp_path / "replay.svg").is_file()
+    saved = load_session_document(sidecar).to_dict()
+    assert saved["version"] == CURRENT_SESSION_VERSION
+    # The draft names the certain feature by its source identity, as the Web
+    # app moves it on Load; the other two targets stay as saved. Each target is
+    # bound to a Linear record, so the annotations stay in the Linear slice,
+    # whose rows name no mode.
+    expected_sets = copy.deepcopy(case["expected"]["annotationSets"])
+    for annotation_set in expected_sets:
+        for annotation in annotation_set["annotations"]:
+            annotation["target"].pop("scope", None)
+    assert saved["modes"]["linear"]["config"]["annotationSets"] == expected_sets
+    assert saved["modes"]["circular"]["config"]["annotationSets"] == [
+        {**annotation_set, "annotations": []} for annotation_set in expected_sets
+    ]
+    # The request is the one that drew the saved figure. As after a Web Load,
+    # it keeps the hash= targets until the next Generate sends the draft.
+    assert (
+        saved["renderRequest"]["diagramOptions"]["annotations"]
+        == source["renderRequest"]["diagramOptions"]["annotations"]
+    )
+    assert [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == session_migration.__name__
+    ] == [
+        # feature_3 names TESTB_0006 by its source hash, which main wrote: it
+        # matches that feature now, without a reader or a warning.
+        "INFO: 1 annotation(s) from Session version 44 named a feature by hash=; "
+        "in the written Session each names that feature by its source.",
+    ]
+
+
+_HASH_RULE_VECTORS = json.loads(
+    (Path(__file__).parent / "fixtures" / "hash-rule-migration-vectors.json").read_text(encoding="utf-8")
+)
+
+
+@pytest.mark.parametrize(
+    "case",
+    _HASH_RULE_VECTORS["selectorCases"],
+    ids=[case["name"] for case in _HASH_RULE_VECTORS["selectorCases"]],
+)
+def test_hash_selector_values_read_the_vectors_shared_with_the_web_reader(case: dict[str, Any]) -> None:
+    # One mapper serves the Session draft and the CLI replay of a request;
+    # tests/web/feature-edit-migration.test.mjs checks sourceHashSelectorValue.
+    drawn = [tuple(feature) for feature in _HASH_RULE_VECTORS["drawnFeatures"]]
+
+    value, source_count = source_hash_selector_value(case["value"], drawn)
+
+    assert {"value": value, "sourceCount": source_count} == case["expected"]
+
+
+@pytest.mark.parametrize(
+    "case", _HASH_RULE_VECTORS["cases"], ids=[case["name"] for case in _HASH_RULE_VECTORS["cases"]]
+)
+def test_hash_rules_migrate_to_the_vectors_shared_with_the_web_reader(case: dict[str, Any]) -> None:
+    # tests/web/feature-edit-migration.test.mjs checks the same vectors against
+    # migrateSessionHashRules.
+    source = json.loads(json.dumps(case["input"]))
+
+    migration = migrate_session_hash_rules(
+        source["rules"],
+        mode=source["mode"],
+        catalog=source["catalog"],
+        legacy=source.get("legacy"),
+        records=source["records"],
+    )
+
+    assert {"rules": migration.rules, "unmappedCount": migration.unmapped_count} == case["expected"]
+    assert source == case["input"]
+
+
+_UNMAPPED_HASH_WARNING = (
+    "WARNING: {count} hash= value(s) from Session version {version} could not be renamed "
+    "to the hash of a feature in its source record: the saved diagram drew a "
+    "cropped or reverse-complemented record, and the value names features of "
+    "several source hashes there, or the sources were not read again. hash= now "
+    "names a feature by its hash in the source record, so each may now match "
+    "another feature or none."
+)
+
+
+def test_session_44_drawn_hash_color_rule_replays_on_its_reverse_complemented_feature(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    # main matched hash= in the drawn record, so its color table names the
+    # reverse-complemented misc_feature of TESTB by its drawn hash ffb26b768
+    # (feature-edits.provenance.json). hash= names the source hash now, so the
+    # replay reads that row in the source frame (S6, release D-39).
+    fixture = Path(__file__).parent / "fixtures" / "sessions" / "feature-edits-crop-rc.v44.gbdraw-session.json.gz"
+    caplog.set_level("INFO")
+
+    linear_main(["--session", str(fixture), "--output", str(tmp_path / "replay"), "--format", "svg"])
+
+    svg = (tmp_path / "replay.svg").read_text(encoding="utf-8")
+    fills = re.findall(r'<path [^>]*data-gbdraw-feature-id="fcecf4036_record_2"[^>]*fill="([^"]+)"', svg)
+    assert fills and set(fills) == {"#c83366"}
+    # Its Feature visibility rows name source hashes, which main wrote: they
+    # match those features now, without a reader or a warning.
+    assert not [message for message in caplog.messages if "could not be renamed" in message]
+
+
+def test_session_44_request_tables_name_drawn_hash_rows_by_source_hash(tmp_path: Path) -> None:
+    # main filled the color table from the specific color rules (drawn hash
+    # ffb26b768) and the label override table from the label text edit of the
+    # reverse-complemented tRNA, which has no unique qualifier (rendered ID
+    # f64320c02_record_2); its Feature visibility table names source hashes
+    # (feature-edits.provenance.json). The replay renames only the drawn ones.
+    fixture = Path(__file__).parent / "fixtures" / "sessions" / "feature-edits-crop-rc.v44.gbdraw-session.json.gz"
+    document = load_session_document(fixture)
+
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        request = session_to_request(materialized)
+        adapted = adapt_session_request(request, session_drawing_artifacts(document))
+        options = adapted.request.options
+
+    def hash_rows(frame: Any, qualifier: str) -> list[str]:
+        assert frame is not None
+        return list(frame.loc[frame[qualifier] == "hash", "value"])
+
+    assert options.colors is not None
+    assert hash_rows(options.colors.color_table, "qualifier_key") == ["fcecf4036"]
+    assert hash_rows(options.label_override_table, "qualifier") == ["^f88047061$"]
+    assert hash_rows(options.feature_visibility_table, "qualifier") == ["^fb5977f81$", "^f88047061$"]
+    assert adapted.migration_report.warnings == ()
+
+
+def test_session_30_rendered_id_color_rule_is_reported_in_the_cli_sidecar(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    # Release 0.13.0 wrote a "This feature only" color rule with the rendered
+    # ID of the reverse-complemented TESTB_0006 (f2869b912_record_2,
+    # hash-color-rule-linear-rc.provenance.json). Web Load reads the sources
+    # again and names it by its source hash fbc76b20f (OV-416). The CLI does not
+    # read the sources of a Session before 31 again, so the written Session
+    # keeps the rule as saved and the replay reports it.
+    fixture = Path(__file__).parent / "fixtures" / "sessions" / "hash-color-rule-linear-rc.v30.gbdraw-session.json.gz"
+    source = json.loads(gzip.decompress(fixture.read_bytes()))
+    sidecar = tmp_path / "replay.gbdraw-session.json"
+    caplog.set_level("INFO")
+
+    linear_main(
+        [
+            "--session", str(fixture),
+            "--output", str(tmp_path / "replay"),
+            "--format", "svg",
+            "--session_output", str(sidecar),
+        ]
+    )
+
+    saved = load_session_document(sidecar).to_dict()
+    assert saved["modes"]["linear"]["config"]["rules"] == source["config"]["rules"]
+    assert _UNMAPPED_HASH_WARNING.format(count=1, version=30) in caplog.messages
+
+
+def test_cli_resave_keeps_an_empty_label_text_and_draws_no_label(tmp_path: Path) -> None:
+    # A row with an empty label text hides the label, as the Web app draws it.
+    # The canonical TSV round trip used to read the empty cell as a missing
+    # value, which replayed the label as the text "nan" (OV-138).
+    fixture = Path(__file__).parent / "fixtures" / "sessions" / "feature-edits-circular.v33.gbdraw-session.json.gz"
+    first = tmp_path / "first.gbdraw-session.json"
+    second = tmp_path / "second.gbdraw-session.json"
+
+    circular_main(
+        ["--session", str(fixture), "--output", str(tmp_path / "first"),
+         "--format", "svg", "--session_output", str(first)]
+    )
+    circular_main(
+        ["--session", str(first), "--output", str(tmp_path / "second"),
+         "--format", "svg", "--session_output", str(second)]
+    )
+
+    for sidecar in (first, second):
+        table = load_session_document(sidecar).to_dict()["resources"]["label-override-table"]
+        rows = base64.b64decode(table["data"]).decode("utf-8").splitlines()
+        assert rows[1].split("\t") == ["NC_012920.1", "CDS", "hash", "^f48b7bf2f$", ""]
+    first_svg = (tmp_path / "first.svg").read_text(encoding="utf-8")
+    second_svg = (tmp_path / "second.svg").read_text(encoding="utf-8")
+    assert ">nan<" not in second_svg
+    # The replay of the re-saved Session draws the figure the first replay drew.
+    assert second_svg == first_svg

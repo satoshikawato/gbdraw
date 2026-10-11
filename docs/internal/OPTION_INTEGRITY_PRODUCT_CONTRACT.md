@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `29`
+- Contract revision: `39`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -36,7 +36,8 @@ Status: active Product authority
   `PD-OI-066`, `PD-OI-067`, `PD-OI-068`, `PD-OI-069`, `PD-OI-070`,
   `PD-OI-071`, `PD-OI-072`, `PD-OI-073`, `PD-OI-074`, `PD-OI-075`,
   `PD-OI-076`, `PD-OI-077`, `PD-OI-078`, `PD-OI-079`, `PD-OI-080`,
-  `PD-OI-081`, `PD-OI-082`, `PD-OI-083`, and `PD-OI-084`
+  `PD-OI-081`, `PD-OI-082`, `PD-OI-083`, `PD-OI-084`, `PD-OI-085`,
+  `PD-OI-086`, `PD-OI-087`, `PD-OI-088`, `PD-OI-089`, `PD-OI-090`, and `PD-OI-091`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -268,6 +269,273 @@ Status: active Product authority
     `D-31`–`D-40` keep current behavior and receive no record. Earlier
     decisions retain their scope. This authority-only amendment contains no
     runtime; dependent implementation requires it merged into its base.
+- Revision 30 changes: `PD-OI-033` is replaced for scenario revision `2` and
+  `PD-OI-085` is added, from the Product Decision Owner `satoshikawato`'s
+  answers of `2026-10-04` recorded in section 1 of
+  [`POPUP_RECORD_ACTIONS_AND_VIBRIO_SESSION_PLAN_2026-10-04.md`](./POPUP_RECORD_ACTIONS_AND_VIBRIO_SESSION_PLAN_2026-10-04.md)
+  and its Appendix A.
+  - The Owner answered the plan's open questions: `OD-1` (move Record actions
+    from the top of the Edit tab into a Layout group): 「移しましょう。」
+    `OD-2` (name the staging button **Apply on Generate**) and `OD-3` (keep
+    **Apply and regenerate** target-only so staged changes on other records
+    stay pending): 「推奨通りでお願いします。」 `OD-4` (proceed):
+    「計画書をまとめた後、実装に移ってください。」
+  - `PD-OI-033` scenario revision `2` (`B / LAYOUT_GROUP_DISCLOSURE`) follows
+    from `OD-1`. `PD-OI-085` (`A / APPLY_ON_GENERATE`) follows from `OD-2` and
+    `OD-3`.
+  - The receipt fields restate those answers and the plan that was presented
+    in the same session. The Owner did not separately review the receipt
+    wording; the Owner's approval covers the answers quoted above and the
+    plan. Earlier decisions, including `PD-OI-032`, retain their scope. This
+    authority-only amendment contains no runtime; dependent runtime requires
+    it merged into its base.
+- Revision 31 changes: `PD-OI-018` is replaced for scenario revision `5`, from
+  the Product Decision Owner `satoshikawato`'s answer of `2026-10-04`, given in
+  that session through a multiple-choice question.
+  - The question: 「9/20 に承認した PD-OI-018 には「1つの File が複数の行にまたがるときは File を移動できない（custom layout 扱い）」と書かれています。CLI で書いたセッション（1レコード＝1行）を Load すると、このルールのため警告が出て並べ替えもできません。R9（#780）はルールを「各 File のレコードが連続した行にまとまり、別の File と行を共有していなければ、その行のまとまりごと移動できる」に広げる変更です。どうしますか？」
+  - The Owner selected 「ルールを広げる (Recommended)」, whose option text was: 「PD-OI-018 を revision 5 に改訂する PR を先に出し、そのあと #780 をマージします。CLI セッションでも警告が出ず、File を並べ替えられるようになります。複数の File が1行を共有するレイアウトや、File の行が交互に入り組んだレイアウトは、今までどおり custom 扱いです。」
+  - `PD-OI-018` scenario revision `5` (`C / CONSECUTIVE-FILE-ROW-BLOCKS`)
+    follows from that answer. Pull request `#780`
+    (`fix/web-linear-file-block-moves`) implements it.
+  - The receipt fields restate that answer and the option text. The Owner did
+    not separately review the receipt wording; the Owner's approval covers the
+    answer quoted above. Earlier decisions retain their scope. This
+    authority-only amendment contains no runtime; dependent runtime (`#780`)
+    requires it merged into its base.
+- Revision 32 changes: `PD-OI-061` is replaced for scenario revision `2`
+  (`B / MERGE-SAME-FEATURE-TYPE-ONLY`), from the Product Decision Owner
+  `satoshikawato`'s replies of `2026-10-06` while reviewing OV-62 (a Legend row
+  without features renamed onto a drawn row's caption).
+  - Reply 1, on the screenshot of the Merge, Suffix, and Cancel dialog for
+    GC content renamed onto `CDS`: 「それはマズいね。CDSとGC contentは全く別物じゃん。トラックとか、同じフィーチャートラックでも別タイプのフィーチャーの場合は混ぜちゃいけないよね基本的に。」
+  - Reply 2, selecting an option of the multiple-choice question
+    「Merge を出してよい条件」: 「同じ track の同じ feature type 同士だけ (Recommended)」
+  - Reply 3, on the full receipt text recorded below: 「OKです」
+  - The Owner approved the receipt text as written. Earlier decisions retain
+    their scope. This change is a static Product Contract co-change: the
+    runtime, tests, and documentation that implement it are in the same pull
+    request, and the Review is `REQUIRED`.
+- Revision 33 changes: `PD-OI-086` is added
+  (`A / ALL-DIAGRAM-SETTINGS-PER-MODE`), from the Product Decision Owner
+  `satoshikawato`'s reply of `2026-10-07` for OV-80, OV-82, and related
+  findings (settings and edits made in one diagram mode changed or failed the
+  other mode's diagram and Generate).
+  - The question, asked with the full receipt text recorded below: 「上の PD-OI-086 の文面を、このまま Product Contract に記録してよいですか？（Contract だけの PR として先に入れます。Review が必要で、自動 merge はしません）」
+  - The Owner's reply: 「OK、この文面で」
+  - The Owner approved the receipt text as written. The receipt text
+    incorporates the Owner's earlier answers of the same date.
+  - No other record changes. `PD-OI-061`, `PD-OI-062`, `PD-OI-063`, and
+    `PD-OI-084` retain their scope within each mode. `PD-OI-063` names no
+    mode and is read per mode: each mode carries its own Legend order, as
+    `PD-OI-052` already matches decoration deltas by mode. `PD-OI-002`
+    retains its scope within Linear. `PD-OI-044`, `PD-OI-066`, and
+    `PD-OI-070` are cited by the receipt and retain their scope.
+  - Outside this Contract, the receipt retires the scope of GUI remediation
+    S00 decision 2 of `2026-09-29`
+    ([`S00.md`](./gui-remediation-20260928/results/S00.md) section 11.4),
+    which made only `plot_title`, `plot_title_font_size`, and `def_font_size`
+    per mode. The receipt keeps the rule of S00 decisions 1 and 2 for old
+    Session values that were per mode.
+  - Earlier decisions retain their scope. This authority-only amendment
+    contains no runtime; dependent runtime (the OV-80 and OV-82
+    implementation) requires it merged into its base, and the Review is
+    `REQUIRED`.
+- Revision 34 changes: `PD-OI-087` is added
+  (`A / POPUP_ONLY_FEATURE_ROTATION`), from the Product Decision Owner
+  `satoshikawato`'s replies of `2026-10-08` for OV-212 (two routes set a
+  record's display start from a feature: the sidebar buttons need a Ctrl/⌘/Shift
+  selection, and their 5′ end splits a − strand feature across both ends of the
+  record).
+  - Reply 1, selecting option A of the OV-212 question: 「A（推奨） 2ボタンを廃止し、遺伝子を起点にした回転はポップアップに一本化する。数値欄と Reset start は残す。にします」
+  - Reply 2, on the proposed Rationale and Accepted residual risk wording
+    recorded below: 「案のとおり」
+  - Must preserve and May retire restate option A. The Owner adopted the
+    Rationale and Accepted residual risk as written.
+  - The receipt retires two controls that earlier receipts preserve as sidebar
+    operations: 「既存 sidebar 操作」 of `PD-OI-033` scenario revision `2`,
+    「sidebar の record display 操作とその意味」 of `PD-OI-085`, and
+    「既存sidebar workflow」 of `PD-OI-032`. It narrows those items by the two
+    buttons only; their other items and the other fields of those records
+    retain their scope.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 35 changes: `PD-OI-088` is added
+  (`B / DIALOG_FIRST_BUSY_CHOICE`), with the acceptance contract `OIC-028`,
+  from the Product Decision Owner `satoshikawato`'s replies of `2026-10-09`
+  for OV-225 (on a Session just loaded, a popup color pick waited about 6 s
+  for the Python runtime before its scope dialog opened, with no visible
+  status).
+  - Reply 1, selecting the recommended outcome of the OV-225 question (keep
+    the current order in the 0.14.0 performance pull request, and option (b),
+    dialog first with the dialog busy until its choice commits, as its own
+    change): 「OV-225 のダイアログの順序: 推奨:どおり」
+  - Reply 2, on the complete proposed receipt recorded below:
+    「OV-225: これでいいです」
+  - Reply 3 (`2026-10-09`), to the question whether the receipt covers the
+    same dialogs opened from the Features drawer color input, popup stroke
+    edits, and the Legend panel rename: 「F4: A」. The receipt and its SHA-256
+    are unchanged; `OIC-028` names these entrances.
+  - The receipt narrows no earlier record. It realizes, for these three
+    dialogs, the 「live edit適用中/失敗の通知」 that `PD-OI-037` scenario
+    revision `2` preserves.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 36 changes: `PD-OI-089` is added
+  (`A / USER_DEFAULT_COLORS_OVER_PALETTE`), with the acceptance contract
+  `OIC-029`, from the Product Decision Owner `satoshikawato`'s replies of
+  `2026-10-09` on palette changes and edited Default colors (a palette switch
+  or the Default colors Reset discarded the colors a user had edited without
+  asking, and popup Apply to all on a Legend row that no Specific color rule
+  draws wrote one hash rule per feature, so a feature that joined the row
+  later kept the palette color and formed a second row).
+  - Reply 1, the proposal (a palette change adds `-d` entries, and Apply to
+    all or a palette color that would overwrite an existing `-d` entry asks in
+    a dialog): 「-pを変えるというのは、-dにエントリを追加するという挙動として再定義するのがいいんじゃないかな？そのうえで、Apply to all CDSでもパレットから直接色を変えるのでも、それが既存の-dのエントリを上書きするものであれば、「設定上書き/消えちゃうけどどうしますか？」っていう選択肢のダイアログのポップアップを出すのがいいんじゃないかな？」
+  - Reply 2, accepting the refined direction (a user default color is a
+    Default colors value that differs from the selected palette's color;
+    Apply to all on such a row sets the default color; a palette switch and
+    the Default colors Reset ask before they discard user colors), in v0.14.0
+    as a separate pull request: 「OK、その方向で行きましょう。v0.14.0に入れる。別のPRにする。」
+  - Reply 3, on the open outcomes Q1-Q6, the complete proposed receipt
+    recorded below, and F4 (recorded in the Revision 35 entry):
+    「Q1=B Q2=B Q3=B Q4=A Q5=A Q6=A」「受領書: これでいい」「F4: A」
+  - Reply 4, withdrawing Q3 because its premise did not hold, and on the
+    Q2 line wording: 「Q3: A'」「Q2 文言: 推奨どおり」
+  - Q1=B: Apply to all on a palette row while a palette is queued sets the
+    type's color in the queued palette's colors and in the shown Result's
+    colors, so the Result shows it now.
+  - Q2=B: the scope dialog always shows one line under Apply to all on a
+    palette row: "Sets the <type> default color (<type> features without
+    their own color or rule, also hidden ones)." or, when the type has a user
+    default color, "Replaces your <type> default color ■ #hex." (Reply 4
+    replaced the approved "all <type> features", which overstated).
+  - Q3 is withdrawn: it assumed a Legend-tab fill color control for a palette
+    row, and the GUI has none, so nothing is built and `OIC-029` has no Q3
+    term; the receipt is recorded exactly as approved.
+  - Q4=A: Specific color rule rows that older Sessions saved for Apply to all
+    stay rule rows; nothing migrates them.
+  - Q5=A: switching back to the applied palette while another is queued asks
+    like any switch when user colors exist; the queued palette is dropped and
+    the kept colors apply now.
+  - Q6=A: dialog bodies name up to three keys.
+  - The receipt retires no item of an earlier record. The records its Must
+    preserve cites (`PD-OI-037`, `PD-OI-066`, `PD-OI-069`, `PD-OI-070`,
+    `PD-OI-086`, and `PD-OI-088`) retain their scope.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 37 changes: `PD-OI-090` is added
+  (`A / PROJECT-WITH-DRAWINGS`, concern `session.project-drawings`), with the
+  acceptance contract `OIC-030`, and replaces `PD-OI-086` in full;
+  `PD-OI-044` is replaced for scenario revision `2`
+  (`A / REVEAL_APPLICABLE_SINGLE_RECORD_CONTROLS`). Both come from the Product
+  Decision Owner `satoshikawato`'s replies of `2026-10-07` and `2026-10-08`
+  for the v0.15.0 multi-drawing project (one Session holds shared input files
+  and several drawings, each with its own settings, edits, History, and
+  Result).
+  - Replies (question text abbreviated, option labels as selected): R1-1
+    「Drawing tabは基本的にまっさらなものを新規作成がいいのでは。スタイルとか入力をコピーする場合はそういうexplicitな選択肢があるといいと思う。新規作成、複製、スタイルをコピー、みたいな複数の選択肢。そのうえで、たとえば既存のdrawingから特定のエントリーとか特定の領域を切り出して新規drawingにする場合は、スタイルを引き継ぐ（数mbのレコードから数十kbを切り出す場合は、フィーチャーの縦幅とかラベルのフォントサイズとかストロークの太さとかGC content/skeｗの幅とかを適宜気を利かせて変える必要があると思う）。」;
+    R1-2 「使った mode だけ (推奨)」; R1-3 「Result の drawing だけ」;
+    R1-4 「起動を認める (推奨)」; R2-1 「中身は1回保存、選択はdrawingごと (推奨)」;
+    R2-2 「その都度聞く (推奨)」; R2-3 「gbdraw render を追加 (推奨)」;
+    R2-4 「Contract だけの PR を先に (推奨)」; R3-1 「上部に drawing バー (推奨)」;
+    R3-2 「この 4 種類 (推奨)」; R3-3 「確認＋Undo で戻せる (推奨)」;
+    R4-1 「それは完全にregressionじゃん。ダメだよこれは。Session fileはすべてのResultを保存して。」;
+    R4-3 「切り出しも最初に」; R6-1 「v0.14.0 に入れる (推奨)」;
+    R7-1 「その record の見た目すべて (推奨)」; R7-2 「Auto が変わる値だけ戻す (推奨)」;
+    R7-3 「最初の版では扱わない (推奨)」; R11-1 「ボタン 3 つ (推奨)」 (Reset this
+    drawing / Reset all drawings / Cancel; replaces the checkbox wording of
+    R3-4 「表示中の drawing＋他も選べる (推奨)」); and the Owner's replies of
+    `2026-10-07` on the Reset dialog 「このモードだけか全部か選択可能にする」 and
+    「「現在の描画消えるけどいいですか？」ていうダイアログをつけて、すぐにリセット後の見た目にする（即時反映する）か、キャンセルする選択肢を与える」.
+  - The question asked with the full receipt texts recorded below:
+    「AUTHORITY-15 の受領書 2 通を承認しますか？ 対象は PD-OI-087 と PD-OI-044 rev 2。本文 owner/receipt-draft.r2.txt、owner/receipt-draft-pd-oi-044-rev2.r2.txt」
+    The Owner's reply (`2026-10-08`) selected 「承認 (推奨)」, whose option
+    text reads 「決定日は 2026-10-08。正式な記録（SHA と JSON）を作って見せる。Contract の PR は 0.14.0 のタグの後。」
+    The Owner approved the receipt texts as written.
+  - The question named the drawings receipt by its draft ID `PD-OI-087`, and
+    its draft acceptance contract was `OIC-028`. Revisions 34 and 35 took
+    those IDs first, so they are recorded as `PD-OI-090` and `OIC-030`. The
+    `PD-OI-090` receipt names no ID of its own and is recorded byte for byte
+    as approved. The `PD-OI-044` receipt names the drawings record twice; both
+    read `PD-OI-090` in place of `PD-OI-087`, no other character differs from
+    the approved text, and its SHA-256 below is that of the renumbered text.
+  - `PD-OI-086` is replaced in full: its record is removed from the active
+    Contract (Git history retains it) because `PD-OI-090` restates each of
+    its terms per drawing and changes four of them: one History in which a
+    mode switch is a step, Reset Settings resetting both modes, Session 27-44
+    Load without Python, and the limit of two diagrams. GUI remediation S00
+    decision 2
+    ([`S00.md`](./gui-remediation-20260928/results/S00.md) section 11.4) stays
+    retired; the rule of S00 decisions 1 and 2 for old Session values stays as
+    the migration rule in `PD-OI-090`.
+  - `PD-OI-044` changes only its Python clause: the preview-only Load without
+    Python holds for Sessions of version 46 and later; Sessions of version 27
+    to 44 are converted by Python once on Load.
+  - `PD-OI-089` cites `PD-OI-086` in its Must preserve for separate palettes
+    and colors in Circular and Linear. That item is read per drawing:
+    `PD-OI-090` keeps the palette and color rules of each drawing separately.
+    Its 「Session の形式」 is the Session format that `PD-OI-089` itself does
+    not change; the format change of `PD-OI-090` is outside that item.
+  - Persisted-format evidence: version 46 is the first-parent `dev` writer
+    since `acd35a17` (PR `#945`), which release `0.14.0` ships, and this
+    amendment merges only after the `0.14.0` tag; version 44 is the
+    first-parent `main` writer `fe6861f0`; release `0.13.0` writes 30.
+    Version 45 was development-only and is not read.
+  - Cited records retain their scope and are read per drawing: `PD-OI-002`,
+    `PD-OI-004` (LOSATP limits within a Linear drawing), `PD-OI-009`,
+    `PD-OI-016`, `PD-OI-018`, `PD-OI-019`, `PD-OI-020`, `PD-OI-027`,
+    `PD-OI-030`, `PD-OI-032`, `PD-OI-037`, `PD-OI-038`, `PD-OI-045`,
+    `PD-OI-046`, `PD-OI-052`, `PD-OI-061` to `PD-OI-066`, `PD-OI-070`,
+    `PD-OI-073`, `PD-OI-079`, and `PD-OI-089`. Earlier decisions retain their
+    scope. This authority-only amendment contains no runtime; dependent
+    runtime requires it merged into its base, and the Review is `REQUIRED`.
+- Revision 38 changes: `PD-OI-091` is added
+  (`A / RECORD-DRAW-ON-OFF`, concern `diagram-generation.record-draw-selection`).
+  It comes from the Product Decision Owner `satoshikawato`'s replies of
+  `2026-10-10` for drawing a chosen subset of a file's records in the Web app.
+  - Replies (question text abbreviated, option labels as selected): D-01
+    「特定のレコードだけ描画する機能をv0.14.0に絶対に入れなければならない。例えば100本以上コンティグがあるドラフトアセンブリとかだったら絶対に必要。」;
+    D-02 「個々のレコードのプルタブを開くとチェックを外して/入れて描画OFF/ONできるようにするほかに、レコードのリストをポップアップしてそこからチェックを外して/入れて描画OFF/ONできるようにする2ルートが必要」;
+    D-03 「範囲：Circular の Multi-Record Canvas の部分選択も 0.14.0 に入れる。」;
+    D-04 「アップロード直後の既定： レコード数が閾値（例：20）を超えたらピッカーを自動で開く」;
+    D-05 「外したレコードのカード設定: 外しても保持しよう。オプションで削除できるようにしよう。」 and
+    「Session には基本保存するけど、さっきの回答のように、完全削除するオプションもつける」;
+    D-06 「これはポップアップで質問して「ファイルごと消しますか？」って出すのがいいと思う」;
+    D-07 「P-1：推奨どおり」 (the LOSAT E-value database stays the whole subject source file);
+    D-08 「P-4: 推奨どおり」 (Delete settings also removes the record's feature edits, Feature placements, annotations that target it, and comparison pairs that name it);
+    D-09 「残りも推奨通り。」;
+    D-10 「一覧ではレコードのソートもできるようにしたい。IDとか、長さ順とか、オリジナルの順に戻すとか」.
+  - The question asked with the full receipt text recorded below was answered
+    by the Owner on `2026-10-10` with 「文面承認」. The Owner approved the
+    receipt text as written; it is recorded byte for byte.
+  - `PD-OI-010` accepted residual risk "Arbitrary multi-record subset editing
+    remains unavailable" and the exclusion of record-subset editing in
+    `PD-OI-044` scenario revision `2` `May retire` are retired by the
+    `PD-OI-091` `May retire`. Their texts are unchanged; the later record
+    controls where they differ, and Git history retains the approved receipts.
+  - `PD-OI-018` is not amended: the E-value database stays the whole subject
+    source file. `PD-OI-019`, `PD-OI-044`, `PD-OI-070`, and `PD-OI-090` keep
+    their scope and are read together with `PD-OI-091`. Session version `46`
+    is unchanged; the new field is optional.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 39 changes: `PD-OI-028` gains scenario revision `3`
+  (`A / KEEP_ANCHOR_PLAN`, regrouping comparison settings) from the Product
+  Decision Owner `satoshikawato`'s replies of `2026-10-11` for OV-341 (after a
+  Result filter such as **Minimum identity** regrouped the plan's Similarity
+  Group, every later Generate was blocked with a stale-reference repair).
+  - Reply 1, selecting the recommended outcome: 「A（推奨）整列を保つ」.
+  - Reply 2, on the complete receipt recorded below: 「下書きの文面を承認する」.
+    The receipt is recorded as approved.
+  - The scenario-revision-`2` receipt keeps its full scope; scenario revision
+    `3` adds the regrouping outcome and retires nothing.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -364,6 +632,24 @@ A test or historical implementation that contradicts an active decision is
 corrected. Passing evidence does not make incorrect behavior normative.
 
 ## Product Decision records
+
+Record requirement from 2026-10-05 (`gbdraw/web/CLAUDE.md` R13): a decision
+in which one editor domain follows another (a hidden feature hides its label,
+a label action shows its feature, a slot input routes through placement)
+names, in its Choice and in its receipt's `Must preserve` or `Normative
+outcome`, the **reaction owner** (the module that owns the reaction), the
+**channel** (`port`, `root-projection`, or `event`), and the **projection
+function**. Records accepted before this date keep their text; their reaction
+owners are recorded by the runtime pull requests of the owner-coupling plan
+(`docs/internal/WEB_OWNER_COUPLING_PREVENTION_IMPLEMENTATION_PLAN_2026-10-05.md`,
+Phase E): F-3 and `PD-OI-066` label-follows-feature → `app/feature-editor/visibility-actions.js`,
+`port` (`applyFeatureVisibilityToLabels`), `projectFeatureVisibility`;
+Owner Q2 show-feature-and-label → `app/feature-editor/visibility-actions.js`,
+`port` (`setFeatureVisibility`), `projectFeatureVisibility`; Owner Q3
+slot inputs → `app/feature-editor/placement-actions.js`, `port`
+(`changeTrackLayout`), the transition itself; E7 (#822) kept #805's direction,
+so placement remains the writer of the slot inputs.
+
 
 ### PD-OI-001: LOSATP raw-search limit fresh defaults
 
@@ -734,28 +1020,77 @@ corrected. Passing evidence does not make incorrect behavior normative.
 ### PD-OI-018: Complete Linear records, placement, and comparison scope
 
 - Concern key: `diagram-generation.linear-record-universe-and-search-scope`
-- Scenario revision: `4`
-- Supersedes: `PD-OI-018`, scenario revision `3` (`LINEAR-FILE-ROW-BLOCK`).
+- Scenario revision: `5`
+- Supersedes: `PD-OI-018`, scenario revision `4` (`B / FILE-DATABASE-WITHOUT-UNREQUESTED-SELF`).
 - Status: `ACCEPTED`
-- Selected outcome: `B / FILE-DATABASE-WITHOUT-UNREQUESTED-SELF`
-- Normative outcome: exactly the complete approved scenario revision `4`
+- Selected outcome: `C / CONSECUTIVE-FILE-ROW-BLOCKS`
+- Normative outcome: exactly the complete approved scenario revision `5`
+  `PRODUCT_DECISION` receipt and its JSON representation below, together with
+  the scenario revision `4` outcome and the scenario revision `3` outcome
+  retained below. The revision `5` receipt's Must preserve retains the revision
+  `4` receipt and its Must preserve (including items 1–7 of revision `3`). Its
+  May retire narrows revision `3` item 6's custom-layout paragraph and the
+  revision `3` JSON `customLayoutRule` only for a File whose records occupy
+  consecutive rows that no other File shares: such a File moves as one block of
+  rows. A File that shares a row with another File, or whose rows interleave
+  with another File's rows, stays custom and its move stays unavailable. The
+  other revision `3` and `4` terms remain in force.
+- Decision source: `satoshikawato`'s answer of `2026-10-04`, quoted verbatim in
+  the Revision 31 entry above. The receipt and JSON restate that answer and its
+  option text; the Owner did not separately review the receipt wording.
+  Dependent runtime (`#780`) requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `ae2b8a91a6c99c0eb2cc4d320bd4d461cbd05c2eb38e5d11c148f52e2702aab4`.
+- Acceptance contracts: `OIC-005`, `OIC-006`, `OIC-007`, `OIC-013`, `OIC-015`,
+  `OIC-018`.
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.linear-record-universe-and-search-scope
+Scenario revision: 5
+Supersedes: PD-OI-018, scenario revision 4
+Choice: C / CONSECUTIVE-FILE-ROW-BLOCKS
+Rationale: CLI で書いた Session は 1 record = 1 行で並ぶため、複数 record のファイルが複数の行にまたがり、Web で Load すると File の並べ替えができず custom layout の警告が出る。各 File の record が連続した行にまとまり、別の File と行を共有していなければ、その行のまとまりごと File を移動できるようにする。
+Must preserve: revision 4 の receipt とその Must preserve（revision 3 の item 1〜7 を含む）。File の移動はその File のすべての record を 1 つのまとまりとして動かし、File 内の record の相対的な行・列・順序と record に付いた設定を保つ。移動は 1 回で Undo できる draft 操作である。1 File = 1 行のレイアウトでの動作は変えない。複数の File が 1 行を共有するレイアウトと、File の行が別の File の行と入り組んだレイアウトでは、従来どおり移動できず、Record Layout へ案内する。止めた移動は File の順、行の割り当て、比較、cache、現在の Result を何も変えない。
+May retire: 1 つの File が複数の行にまたがるときは File を移動できないという制限（revision 3 の item 6 と customLayoutRule のうち、その File の行が連続していて別の File と共有されていない場合）。
+Accepted residual risk: 行のまとまりの並びが File カードの順と違うとき、最初の移動で File カードの順に並べ直される。Arrange in rows が OFF のときも、移動は表示されていない行の割り当てを書き換える（既存の動作）。
+Owner: satoshikawato
+Decision date: 2026-10-04
+```
+
+```json
+{
+  "concern": "diagram-generation.linear-record-universe-and-search-scope",
+  "scenarioRevision": 5,
+  "supersedes": "PD-OI-018, scenario revision 4",
+  "choice": "C / CONSECUTIVE-FILE-ROW-BLOCKS",
+  "rationale": "CLI で書いた Session は 1 record = 1 行で並ぶため、複数 record のファイルが複数の行にまたがり、Web で Load すると File の並べ替えができず custom layout の警告が出る。各 File の record が連続した行にまとまり、別の File と行を共有していなければ、その行のまとまりごと File を移動できるようにする。",
+  "mustPreserve": "revision 4 の receipt とその Must preserve（revision 3 の item 1〜7 を含む）。File の移動はその File のすべての record を 1 つのまとまりとして動かし、File 内の record の相対的な行・列・順序と record に付いた設定を保つ。移動は 1 回で Undo できる draft 操作である。1 File = 1 行のレイアウトでの動作は変えない。複数の File が 1 行を共有するレイアウトと、File の行が別の File の行と入り組んだレイアウトでは、従来どおり移動できず、Record Layout へ案内する。止めた移動は File の順、行の割り当て、比較、cache、現在の Result を何も変えない。",
+  "mayRetire": "1 つの File が複数の行にまたがるときは File を移動できないという制限（revision 3 の item 6 と customLayoutRule のうち、その File の行が連続していて別の File と共有されていない場合）。",
+  "acceptedResidualRisk": "行のまとまりの並びが File カードの順と違うとき、最初の移動で File カードの順に並べ直される。Arrange in rows が OFF のときも、移動は表示されていない行の割り当てを書き換える（既存の動作）。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-04"
+}
+```
+
+#### Retained scenario revision `4` outcome
+
+- Scenario revision `4` (`B / FILE-DATABASE-WITHOUT-UNREQUESTED-SELF`)
+  normative outcome, retained: exactly the scenario revision `4`
   `PRODUCT_DECISION` receipt and its JSON representation below, together with
   the scenario revision `3` outcome retained below. The revision `4` receipt's
   Must preserve retains items 1–7 of revision `3`; its May retire removes only
   the limitation of self-search exclusion to Collinear inference OFF and the
-  loss of links when unrequested self-hits fill Max target seqs. The other
-  revision `3` terms remain in force.
-- Decision source: the complete `D-19` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge
+  loss of links when unrequested self-hits fill Max target seqs.
+- Decision source (revision `4`): the complete `D-19` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge
   commit `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through
   the two Owner replies quoted verbatim in the Revision 29 entry above. The
   receipt and JSON reproduce all supplied fields without translation or
   additional terms. The CLI LOSAT database scope is unchanged (`D-40` in the
-  same Decision Pack). Dependent runtime requires this authority merged into
-  its base; this amendment supplies no runtime acceptance evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
+  same Decision Pack).
+- Receipt SHA-256 (revision `4`, UTF-8, excluding the final newline):
   `39df7d14e08db9cf2872da02436c49a11bb7e2d2105cf256dfe0a86fd0786dbb`.
-- Acceptance contracts: `OIC-005`, `OIC-006`, `OIC-007`, `OIC-013`, `OIC-015`,
-  `OIC-018`.
 
 ```text
 PRODUCT_DECISION
@@ -825,6 +1160,10 @@ Decision date: 2026-09-30
      Record identity, source association, selector, crop, reverse complement,
      definition, subtitle, depth binding, feature state, and within-File
      record order remain attached to the same record.
+
+     Scenario revision `5` narrows the custom-layout paragraph below: a File
+     whose records occupy consecutive rows that no other File shares is
+     movable as one block of rows.
 
      A normal layout has exactly one occupied row per File and no row shared
      by records from another File. When one File spans multiple rows or one row
@@ -918,6 +1257,8 @@ Decision date: 2026-09-30
 - File-row amendment source: The maintainer supplied the complete
   `PRODUCT_DECISION` response reproduced below on `2026-09-20`.
 - Owner and decision date: `satoshikawato`, `2026-09-20`.
+
+Scenario revision `5` narrows the `customLayoutRule` below in the same way: a File whose records occupy consecutive rows that no other File shares is movable as one block of rows.
 
 ```json
 {
@@ -1288,12 +1629,23 @@ Decision date: 2026-09-30
 ### PD-OI-028: Orientation-independent active alignment plan
 
 - Concern key: `diagram-generation.similarity-alignment.plan-lifecycle`
-- Scenario revision: `2`
-- Supersedes: `PD-OI-028`, scenario revision `1` (`A / PERSISTED_ACTIVE_ALIGNMENT_PLAN`).
+- Scenario revision: `3`
+- Supersedes: `PD-OI-028`, scenario revision `2`
+  (`A / ORIENTATION_INDEPENDENT_ACTIVE_PLAN`), only by adding the scenario-3
+  outcome for regrouping comparison settings; every scenario-2 term stays in
+  force. Scenario revision `2` superseded scenario revision `1`
+  (`A / PERSISTED_ACTIVE_ALIGNMENT_PLAN`).
 - Status: `ACCEPTED`
-- Selected outcome: `A / ORIENTATION_INDEPENDENT_ACTIVE_PLAN`
-- Normative outcome: exactly the approved `PRODUCT_DECISION` receipt below.
-- Decision source: The complete five `PRODUCT_DECISION` texts for the
+- Selected outcomes: `A / ORIENTATION_INDEPENDENT_ACTIVE_PLAN` (scenario
+  revision `2`) and `A / KEEP_ANCHOR_PLAN` (scenario revision `3`)
+- Normative outcome: exactly the two approved `PRODUCT_DECISION` receipts
+  below, read together.
+- Scenario of revision `3`: an active plan exists; the user changes a
+  Generate-time comparison setting (Bitscore, E-value, Minimum identity,
+  Minimum length, or a LOSATP grouping setting) so that a Generate regroups
+  and the plan's reference or a target is no longer a unique member of the
+  plan's Similarity Group; every anchor feature still exists in its record.
+- Decision source (scenario revision `2`): The complete five `PRODUCT_DECISION` texts for the
   record-owned orientation follow-up to issue `#586`, explicitly approved
   as written by `satoshikawato` on `2026-09-26`, with this concern's
   receipt reproduced below. This serialization adds no terms to the
@@ -1311,6 +1663,23 @@ Decision date: 2026-09-30
   "acceptedResidualRisk": "After a manual orientation change, the reversed record moves horizontally on the next generation so that its anchor stays aligned. A user who wanted the previous position uses Undo or Reset Align.",
   "owner": "satoshikawato",
   "decisionDate": "2026-09-26"
+}
+```
+
+Scenario revision `3` receipt, approved by `satoshikawato` on `2026-10-11`
+(OV-341):
+
+```json
+{
+  "concern": "diagram-generation.similarity-alignment.plan-lifecycle",
+  "scenarioRevision": 3,
+  "choice": "A / KEEP_ANCHOR_PLAN",
+  "rationale": "An alignment plan identifies anchor features, not groups (PD-OI-028); regrouping alone does not make it stale.",
+  "mustPreserve": "no anchor substitution; repair still blocks when an anchor feature is gone; a no-edit Generate after a successful Generate succeeds.",
+  "mayRetire": "none",
+  "acceptedResidualRisk": "the drawer's Active plan may name a group that no longer lists the reference until the user aligns again.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-11"
 }
 ```
 
@@ -1492,26 +1861,49 @@ Decision date: 2026-09-30
 ### PD-OI-033: Feature-popup record-actions presentation
 
 - Concern key: `web.feature-popup.record-actions-presentation`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-033`, scenario revision `1` (`A / EDIT_DISCLOSURE`).
 - Status: `ACCEPTED`
-- Selected outcome: `A / EDIT_DISCLOSURE`
-- Normative outcome: exactly the approved `PRODUCT_DECISION` receipt below.
-- Decision source: `satoshikawato` explicitly approved the exact text of all
-  three `PRODUCT_DECISION` receipts presented for issue `#581` on
-  `2026-09-24`. This serialization adds no terms to that approval and cannot
-  authorize dependent runtime until merged into its base.
+- Selected outcome: `B / LAYOUT_GROUP_DISCLOSURE`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Owner answers of `2026-10-04` quoted verbatim in the
+  Revision 30 entry above (`OD-1`, `OD-4`), and Appendix A of
+  [`POPUP_RECORD_ACTIONS_AND_VIBRIO_SESSION_PLAN_2026-10-04.md`](./POPUP_RECORD_ACTIONS_AND_VIBRIO_SESSION_PLAN_2026-10-04.md).
+  The receipt fields restate those answers and the plan presented in that
+  session; the Owner did not separately review the receipt wording. Dependent
+  runtime requires this authority merged into its base; this amendment supplies
+  no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `2abe2f6f57152e61eb0034d77f6f0a9ac734022fb352814e51512db9ecc61a13`.
+- Acceptance contracts: `OIC-021`, `OIC-024`. These obligations and the
+  complete selected outcome are jointly required; their citation does not claim
+  completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: web.feature-popup.record-actions-presentation
+Scenario revision: 2
+Choice: B / LAYOUT_GROUP_DISCLOSURE
+Rationale: popup の Edit を、現在の Result に反映する Appearance と、Generate で適用する Layout の 2 つに分ける。record 回転は Feature placement と同じ Layout グループの開閉セクションに置く。重複した表示と、同じ理由文の繰り返しをなくし、popup を読みやすくする。
+Must preserve: 開いた feature だけを対象とする回転、既存の anchor・offset・orientation・feature-end 操作、適用前 preview、操作できない理由の表示（1 か所）、rich と simple の両 popup での同じ操作、keyboard と 390 px での到達性、既存 sidebar 操作、成功時の一体的な Result と Undo/Redo、Cancel・失敗時の直前 Result と record transform、Feature placement の次回 Generate 適用、fill color・stroke・label・feature visibility・legend name・similarity group の操作。
+May retire: Edit タブ先頭の Record actions 配置、セクション内の重複見出し・Record と Feature の行・状態バッジ、同じ理由文の複数表示、ヘッダの fill color 入力（Fill Color と重複）、ヘッダの similarity group 行（Similarity group セクションと重複）、タブより上の Feature placement 配置とその個別注記、Edit 上部の「Live edit: …」説明文（グループ見出しで置き換える）。
+Accepted residual risk: record 回転は Edit の上部から下へ移るため、見つけにくくなる。Layout 見出しと開閉ボタンの名前で補い、keyboard と 390 px で到達できることを確認する。
+Owner: satoshikawato
+Decision date: 2026-10-04
+```
 
 ```json
 {
   "concern": "web.feature-popup.record-actions-presentation",
-  "scenarioRevision": 1,
-  "choice": "A / EDIT_DISCLOSURE",
-  "rationale": "通常のfeature確認・編集をすぐ始められる高さに保ちつつ、record回転をpopup内から見つけて使えるようにする。richとsimpleの両popupで同じ操作を提供する。",
-  "mustPreserve": "開いたfeatureだけを対象とする回転、既存のanchor・offset・orientation・feature-end操作、適用前preview、操作できない理由の表示、keyboardと390 pxでの到達性、既存sidebar操作、成功時の一体的なResultとUndo/Redo、Cancel・失敗時の直前Resultとrecord transform。",
-  "mayRetire": "featureを開くたびに回転フォームがタブより上へ自動展開する動作、およびフォーム内Cancelがfeature popup全体を閉じる動作。",
-  "acceptedResidualRisk": "専用Recordタブより操作の分類は目立ちにくい。Editの上部に明確な見出しと開閉ボタンを置き、狭い画面とkeyboardで到達できることを確認する。",
+  "scenarioRevision": 2,
+  "choice": "B / LAYOUT_GROUP_DISCLOSURE",
+  "rationale": "popup の Edit を、現在の Result に反映する Appearance と、Generate で適用する Layout の 2 つに分ける。record 回転は Feature placement と同じ Layout グループの開閉セクションに置く。重複した表示と、同じ理由文の繰り返しをなくし、popup を読みやすくする。",
+  "mustPreserve": "開いた feature だけを対象とする回転、既存の anchor・offset・orientation・feature-end 操作、適用前 preview、操作できない理由の表示（1 か所）、rich と simple の両 popup での同じ操作、keyboard と 390 px での到達性、既存 sidebar 操作、成功時の一体的な Result と Undo/Redo、Cancel・失敗時の直前 Result と record transform、Feature placement の次回 Generate 適用、fill color・stroke・label・feature visibility・legend name・similarity group の操作。",
+  "mayRetire": "Edit タブ先頭の Record actions 配置、セクション内の重複見出し・Record と Feature の行・状態バッジ、同じ理由文の複数表示、ヘッダの fill color 入力（Fill Color と重複）、ヘッダの similarity group 行（Similarity group セクションと重複）、タブより上の Feature placement 配置とその個別注記、Edit 上部の「Live edit: …」説明文（グループ見出しで置き換える）。",
+  "acceptedResidualRisk": "record 回転は Edit の上部から下へ移るため、見つけにくくなる。Layout 見出しと開閉ボタンの名前で補い、keyboard と 390 px で到達できることを確認する。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-24"
+  "decisionDate": "2026-10-04"
 }
 ```
 
@@ -1849,32 +2241,47 @@ Decision date: 2026-09-30
 ### PD-OI-044: Applicable Circular controls and truthful record discovery
 
 - Concern key: `diagram-generation.circular-transform-discoverability`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-044`, scenario revision `1` (`A / REVEAL_APPLICABLE_SINGLE_RECORD_CONTROLS`).
 - Status: `ACCEPTED`
 - Selected outcome: `A / REVEAL_APPLICABLE_SINGLE_RECORD_CONTROLS`
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt below.
-- Approval receipt: 「推奨案で承認します」, selecting this complete outcome,
-  approved by `satoshikawato` on `2026-09-26`.
-- Reviewed outcome SHA-256: `57debd7625f007c99849b8de5f992508b369b7a2277c01ed1ff51e7c95354d93`.
-- Decision source: the complete receipt in
-  `docs/internal/issue-597-input-session-implementation-20260926/decisions/02_RECORD_DISCOVERY.md`
-  at commit `51a786086dc2777e5fa375e5f94d8b7ac7deeedc` of
-  `fix/issue-597-input-session-20260926`. Its nine supplied fields are
-  reproduced below without translation or additional terms. The receipt
-  document is evidence of the human choice; this record is its static authority.
-  Dependent runtime requires this authority merged into its base.
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its JSON representation below.
+- Decision source: the Owner replies quoted verbatim in the Revision 37 entry
+  above (R1-4 and the receipt approval). The Owner approved the receipt text
+  below as written, except that its two references to the drawings record
+  carry the recorded ID `PD-OI-090` in place of the draft ID `PD-OI-087`.
+  Dependent runtime requires this authority merged into its base; this record
+  supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `8686bee1eff3bd7ce2507fc1be0d97c8332e1289639794c8a27d36d087c45576`.
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.circular-transform-discoverability
+Scenario revision: 2
+Supersedes: PD-OI-044, scenario revision 1
+Choice: A / REVEAL_APPLICABLE_SINGLE_RECORD_CONTROLS
+Rationale: source の探索状況と一件用 crop の適用条件を区別して示し、編集可能になった一件用 controls は selection の直後に見えるようにする。通常 upload の自動探索と保存済みプレビューの軽い閲覧を両立する。保存済みプレビューの軽い閲覧は、現在の形式（version 46 以降）の Session で保つ。version 27〜44 の Session は、Session を project と drawing の形式（version 47、PD-OI-090）へ移すために、Python が一度だけ読み込み時に変換する。
+Must preserve: valid native upload の自動 record discovery と Generate 前の rotation controls、既存 parser/helper 境界、exact source-bound identity、explicit single/grid/batch、fresh shared-canvas default、saved explicit choices、一件 crop と topology/start/reverse の適用条件、手動 close/expand、元の focus、keyboard/390 px、現在の形式（version 46 以降）の Session の preview-only Load の Python Worker 0、active draft と saved artifact の分離、失敗時の旧 Result、Retry/Replace/Remove/Inspect/Generate の継続。version 27〜44 の Session の Load でも、保存された図はすぐに示し、変換に失敗したときは何も変えない（PD-OI-045、PD-OI-046）。
+May retire: 適用可能になった一件用 section が常に collapsed で始まる挙動、valid fresh upload に manual Load が必須であるかのような prompt、実行中でない deferred discovery を loading と表す UI。全 record subset editing や複数 source support の選択は含まない。以前の形式（version 27〜44）の Session の Load で Python を起動しないこと。
+Accepted residual risk: applicable になった時に一件用 section が展開されて pane 高さが変わる。操作元の focus と scroll anchor を維持し、無関係な更新で再展開しない。科学的意味の変更、先頭 record の自動選択、grouping の自動切替、現在の形式（version 46 以降）の Session の preview-only Load による Python 初期化は受容しない。以前の形式（version 27〜44）の Session を開くときは、保存された図をすぐに示したうえで Python を一度起動して project の形式に移し、その間（約 8 秒）は編集を待つ（PD-OI-090）。新しい形式で保存し直すと起こらない。version 45 は開発版だけで、読まない。
+Owner: satoshikawato
+Decision date: 2026-10-08
+```
 
 ```json
 {
   "concern": "diagram-generation.circular-transform-discoverability",
-  "scenarioRevision": 1,
+  "scenarioRevision": 2,
+  "supersedes": "PD-OI-044, scenario revision 1",
   "choice": "A / REVEAL_APPLICABLE_SINGLE_RECORD_CONTROLS",
-  "rationale": "source の探索状況と一件用 crop の適用条件を区別して示し、編集可能になった一件用 controls は selection の直後に見えるようにする。通常 upload の自動探索と保存済みプレビューの軽い閲覧を両立する。",
-  "mustPreserve": "valid native upload の自動 record discovery と Generate 前の rotation controls、既存 parser/helper 境界、exact source-bound identity、explicit single/grid/batch、fresh shared-canvas default、saved explicit choices、一件 crop と topology/start/reverse の適用条件、手動 close/expand、元の focus、keyboard/390 px、preview-only Load の Python Worker 0、active draft と saved artifact の分離、失敗時の旧 Result、Retry/Replace/Remove/Inspect/Generate の継続。",
-  "mayRetire": "適用可能になった一件用 section が常に collapsed で始まる挙動、valid fresh upload に manual Load が必須であるかのような prompt、実行中でない deferred discovery を loading と表す UI。全 record subset editing や複数 source support の選択は含まない。",
-  "acceptedResidualRisk": "applicable になった時に一件用 section が展開されて pane 高さが変わる。操作元の focus と scroll anchor を維持し、無関係な更新で再展開しない。科学的意味の変更、先頭 record の自動選択、grouping の自動切替、preview-only Load による Python 初期化は受容しない。",
+  "rationale": "source の探索状況と一件用 crop の適用条件を区別して示し、編集可能になった一件用 controls は selection の直後に見えるようにする。通常 upload の自動探索と保存済みプレビューの軽い閲覧を両立する。保存済みプレビューの軽い閲覧は、現在の形式（version 46 以降）の Session で保つ。version 27〜44 の Session は、Session を project と drawing の形式（version 47、PD-OI-090）へ移すために、Python が一度だけ読み込み時に変換する。",
+  "mustPreserve": "valid native upload の自動 record discovery と Generate 前の rotation controls、既存 parser/helper 境界、exact source-bound identity、explicit single/grid/batch、fresh shared-canvas default、saved explicit choices、一件 crop と topology/start/reverse の適用条件、手動 close/expand、元の focus、keyboard/390 px、現在の形式（version 46 以降）の Session の preview-only Load の Python Worker 0、active draft と saved artifact の分離、失敗時の旧 Result、Retry/Replace/Remove/Inspect/Generate の継続。version 27〜44 の Session の Load でも、保存された図はすぐに示し、変換に失敗したときは何も変えない（PD-OI-045、PD-OI-046）。",
+  "mayRetire": "適用可能になった一件用 section が常に collapsed で始まる挙動、valid fresh upload に manual Load が必須であるかのような prompt、実行中でない deferred discovery を loading と表す UI。全 record subset editing や複数 source support の選択は含まない。以前の形式（version 27〜44）の Session の Load で Python を起動しないこと。",
+  "acceptedResidualRisk": "applicable になった時に一件用 section が展開されて pane 高さが変わる。操作元の focus と scroll anchor を維持し、無関係な更新で再展開しない。科学的意味の変更、先頭 record の自動選択、grouping の自動切替、現在の形式（version 46 以降）の Session の preview-only Load による Python 初期化は受容しない。以前の形式（version 27〜44）の Session を開くときは、保存された図をすぐに示したうえで Python を一度起動して project の形式に移し、その間（約 8 秒）は編集を待つ（PD-OI-090）。新しい形式で保存し直すと起こらない。version 45 は開発版だけで、読まない。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-26"
+  "decisionDate": "2026-10-08"
 }
 ```
 
@@ -2639,20 +3046,19 @@ Decision date: 2026-09-30
 ### PD-OI-061: Legend rename collisions for every entry
 
 - Concern key: `web.legend.rename-collision`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-061`, scenario revision `1` (`A / DIALOG-FOR-ALL-ENTRIES`).
 - Status: `ACCEPTED`
-- Selected outcome: `A / DIALOG-FOR-ALL-ENTRIES`
+- Selected outcome: `B / MERGE-SAME-FEATURE-TYPE-ONLY`
 - Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
   and its nine-field JSON representation below.
-- Decision source: the complete `D-06` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
-  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
-  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
-  JSON below reproduce all nine supplied fields without translation or
-  additional terms. This record does not supersede another decision.
-  Dependent runtime requires this authority merged into its base; this
-  amendment supplies no runtime acceptance evidence.
+- Decision source: the Owner replies of `2026-10-06` quoted verbatim in the
+  Revision 32 entry above. The Owner approved the receipt text below as
+  written ("OKです"). Dependent runtime (OV-62) is changed in the same pull
+  request, by the static Product Contract co-change route; this record supplies
+  no runtime acceptance evidence.
 - Receipt SHA-256 (UTF-8, excluding the final newline):
-  `286c9b269cf98ccbb7c385bf41fd24ecc1f991b636782fe507a03effbad209b9`.
+  `783436b02c70f043f89dc07b4bf8d56e0869e996507f72fedbbecd0301c8f322`.
 - Acceptance contracts: `OIC-006`. These obligations and the complete
   selected outcome are jointly required; their citation does not claim
   completed dependent-runtime checks.
@@ -2660,27 +3066,27 @@ Decision date: 2026-09-30
 ```text
 PRODUCT_DECISION
 Concern: web.legend.rename-collision
-Scenario revision: 1
-Choice: A / DIALOG-FOR-ALL-ENTRIES
-Rationale: 凡例の名前を既存の名前に変えたとき、feature の有無にかかわらず同じ Merge / Suffix / Cancel の選択を示す。原因の分からないエラーで止めない。
-Must preserve: 衝突しない rename の即時反映、feature のない項目の既存ダイアログ、衝突先が色ルールの caption のときの PD-OI-042 の区別、Undo/Redo、Generate と Session での保持。
-May retire: feature のある項目の衝突で、UNKNOWN のエラーを出して何もしない動作。
-Accepted residual risk: Merge を選ぶと 2 つの凡例項目が 1 つの色と名前にまとまる。
+Scenario revision: 2
+Choice: B / MERGE-SAME-FEATURE-TYPE-ONLY
+Rationale: 凡例の名前を既存の名前に変えたとき、Merge は両方の項目が同じ track の同じ feature type を表すときだけ示す。それ以外は Suffix と Cancel を示す。CDS と GC content のように別のものを 1 つの凡例項目にまとめない。
+Must preserve: 衝突しない rename の即時反映、すべての項目で衝突時に選択のダイアログを示すこと（原因の分からないエラーで止めない）、衝突先が色ルールの caption のときの PD-OI-042 の区別、Undo/Redo、Generate と Session での保持。
+May retire: feature のない項目や別の feature type の項目を、Merge で別の項目にまとめる動作。
+Accepted residual risk: 別の feature type の項目に同じ名前を付けたいときは、Suffix の付いた名前（例: "CDS (1)"）になる。描画が名付けた項目（例: "other proteins"）は、その feature type が分かるまで Suffix と Cancel だけを示す。
 Owner: satoshikawato
-Decision date: 2026-09-30
+Decision date: 2026-10-06
 ```
 
 ```json
 {
   "concern": "web.legend.rename-collision",
-  "scenarioRevision": 1,
-  "choice": "A / DIALOG-FOR-ALL-ENTRIES",
-  "rationale": "凡例の名前を既存の名前に変えたとき、feature の有無にかかわらず同じ Merge / Suffix / Cancel の選択を示す。原因の分からないエラーで止めない。",
-  "mustPreserve": "衝突しない rename の即時反映、feature のない項目の既存ダイアログ、衝突先が色ルールの caption のときの PD-OI-042 の区別、Undo/Redo、Generate と Session での保持。",
-  "mayRetire": "feature のある項目の衝突で、UNKNOWN のエラーを出して何もしない動作。",
-  "acceptedResidualRisk": "Merge を選ぶと 2 つの凡例項目が 1 つの色と名前にまとまる。",
+  "scenarioRevision": 2,
+  "choice": "B / MERGE-SAME-FEATURE-TYPE-ONLY",
+  "rationale": "凡例の名前を既存の名前に変えたとき、Merge は両方の項目が同じ track の同じ feature type を表すときだけ示す。それ以外は Suffix と Cancel を示す。CDS と GC content のように別のものを 1 つの凡例項目にまとめない。",
+  "mustPreserve": "衝突しない rename の即時反映、すべての項目で衝突時に選択のダイアログを示すこと（原因の分からないエラーで止めない）、衝突先が色ルールの caption のときの PD-OI-042 の区別、Undo/Redo、Generate と Session での保持。",
+  "mayRetire": "feature のない項目や別の feature type の項目を、Merge で別の項目にまとめる動作。",
+  "acceptedResidualRisk": "別の feature type の項目に同じ名前を付けたいときは、Suffix の付いた名前（例: \"CDS (1)\"）になる。描画が名付けた項目（例: \"other proteins\"）は、その feature type が分かるまで Suffix と Cancel だけを示す。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-30"
+  "decisionDate": "2026-10-06"
 }
 ```
 
@@ -3758,6 +4164,289 @@ Decision date: 2026-09-30
 }
 ```
 
+### PD-OI-085: Feature-popup record rotation Apply on Generate
+
+- Concern key: `web.feature-popup.record-rotation-apply-on-generate`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / APPLY_ON_GENERATE`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Owner answers of `2026-10-04` quoted verbatim in the
+  Revision 30 entry above (`OD-2`, `OD-3`, `OD-4`), and Appendix A of
+  [`POPUP_RECORD_ACTIONS_AND_VIBRIO_SESSION_PLAN_2026-10-04.md`](./POPUP_RECORD_ACTIONS_AND_VIBRIO_SESSION_PLAN_2026-10-04.md).
+  The receipt fields restate those answers and the plan presented in that
+  session; the Owner did not separately review the receipt wording. This record
+  does not supersede another decision; `PD-OI-032` retains its scope. Dependent
+  runtime requires this authority merged into its base; this amendment supplies
+  no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `38f89876744c098aa5695b570a0250c6f672272594aafc6c1e1e739b69712f40`.
+- Acceptance contracts: `OIC-021`, `OIC-024`. These obligations and the
+  complete selected outcome are jointly required; their citation does not claim
+  completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: web.feature-popup.record-rotation-apply-on-generate
+Scenario revision: 1
+Choice: A / APPLY_ON_GENERATE
+Rationale: Record actions に Apply on Generate を加える。開いた feature の record の表示開始位置と、指定したときの向きを、sidebar と同じ未適用の record display 設定に書き込むだけで、Result は再生成しない。Generate Diagram を 1 回押すと、予約したすべての record がまとめて描画される。複数 record の回転を予約してから一度に描画したいという要望（画像編集ソフトの「適用」と「OK」の区別）に応える。
+Must preserve: PD-OI-032 の対象特定・anchor・offset・orientation・feature-end・適用前 preview・理由表示。Apply and regenerate は最後の committed request から対象 record だけの candidate を作り、他の record の予約は予約のまま残す（PD-OI-032 item 4）。sidebar の record display 操作とその意味。Generate Diagram による未適用設定の一括適用。同じ record への再予約は後の値が有効。予約は 1 回の Undo/Redo で戻せる。popup を開き直すと予約済みの値が分かる。既存の pending Generate 通知のほかに、Result と Generate への常時 Pending/Applied 表示を加えない（PD-OI-037 revision 2）。
+May retire: none
+Accepted residual risk: 予約したまま Generate しないと、表示中の Result と設定がずれたままになる。既存の pending Generate 通知と popup での予約値表示で補う。
+Owner: satoshikawato
+Decision date: 2026-10-04
+```
+
+```json
+{
+  "concern": "web.feature-popup.record-rotation-apply-on-generate",
+  "scenarioRevision": 1,
+  "choice": "A / APPLY_ON_GENERATE",
+  "rationale": "Record actions に Apply on Generate を加える。開いた feature の record の表示開始位置と、指定したときの向きを、sidebar と同じ未適用の record display 設定に書き込むだけで、Result は再生成しない。Generate Diagram を 1 回押すと、予約したすべての record がまとめて描画される。複数 record の回転を予約してから一度に描画したいという要望（画像編集ソフトの「適用」と「OK」の区別）に応える。",
+  "mustPreserve": "PD-OI-032 の対象特定・anchor・offset・orientation・feature-end・適用前 preview・理由表示。Apply and regenerate は最後の committed request から対象 record だけの candidate を作り、他の record の予約は予約のまま残す（PD-OI-032 item 4）。sidebar の record display 操作とその意味。Generate Diagram による未適用設定の一括適用。同じ record への再予約は後の値が有効。予約は 1 回の Undo/Redo で戻せる。popup を開き直すと予約済みの値が分かる。既存の pending Generate 通知のほかに、Result と Generate への常時 Pending/Applied 表示を加えない（PD-OI-037 revision 2）。",
+  "mayRetire": "none",
+  "acceptedResidualRisk": "予約したまま Generate しないと、表示中の Result と設定がずれたままになる。既存の pending Generate 通知と popup での予約値表示で補う。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-04"
+}
+```
+
+### PD-OI-087: Feature-based display start only in the feature popup
+
+- Concern key: `web.record-display.feature-start-shortcuts`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / POPUP_ONLY_FEATURE_ROTATION`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Owner replies of `2026-10-08` quoted verbatim in the
+  Revision 34 entry above. The receipt and JSON below reproduce all nine
+  fields without translation or additional terms. This record does not
+  supersede another decision. It narrows the preserved sidebar operations of
+  `PD-OI-032`, `PD-OI-033` scenario revision `2`, and `PD-OI-085` by the two
+  retired buttons only, as the Revision 34 entry states. The runtime that
+  implements it merges with it (static Product Contract co-change).
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `91529d4e7a6d0729497d13bf8b552be59e4bac39b641e9aabfdcc13f3c06b6c1`.
+- Acceptance contracts: `OIC-021`. These obligations and the complete selected
+  outcome are jointly required.
+
+```text
+PRODUCT_DECISION
+Concern: web.record-display.feature-start-shortcuts
+Scenario revision: 1
+Choice: A / POPUP_ONLY_FEATURE_ROTATION
+Rationale: 遺伝子を起点にした回転の入口を、開いた遺伝子に効き、鎖の向きを正しく扱うポップアップの 1 か所にまとめる。
+Must preserve: sidebar の Display start 数値欄と Reset start。
+May retire: sidebar の「Use selected feature 5′ end」と「Use selected feature midpoint」の 2 ボタン。遺伝子を起点にした回転はポップアップ（Rotate record using this feature）に一本化する。
+Accepted residual risk: Ctrl/Shift で選択した遺伝子から、サイドバーで開始点を決める手段がなくなる。今後は遺伝子を開いて、ポップアップで操作する。
+Owner: satoshikawato
+Decision date: 2026-10-08
+```
+
+```json
+{
+  "concern": "web.record-display.feature-start-shortcuts",
+  "scenarioRevision": 1,
+  "choice": "A / POPUP_ONLY_FEATURE_ROTATION",
+  "rationale": "遺伝子を起点にした回転の入口を、開いた遺伝子に効き、鎖の向きを正しく扱うポップアップの 1 か所にまとめる。",
+  "mustPreserve": "sidebar の Display start 数値欄と Reset start。",
+  "mayRetire": "sidebar の「Use selected feature 5′ end」と「Use selected feature midpoint」の 2 ボタン。遺伝子を起点にした回転はポップアップ（Rotate record using this feature）に一本化する。",
+  "acceptedResidualRisk": "Ctrl/Shift で選択した遺伝子から、サイドバーで開始点を決める手段がなくなる。今後は遺伝子を開いて、ポップアップで操作する。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-08"
+}
+```
+
+### PD-OI-088: Popup dialog busy until its choice commits
+
+- Concern key: `web.popup-dialog-choice-application`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `B / DIALOG_FIRST_BUSY_CHOICE`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Owner replies of `2026-10-09` quoted verbatim in the
+  Revision 35 entry above. The receipt and JSON below reproduce all nine
+  fields without translation or additional terms. This record does not
+  supersede or narrow another decision. The runtime that implements it merges
+  with it (static Product Contract co-change).
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `b856d6da3f8f3c9b079284e6f542fde09b39d4ce19740aada5912053092264d3`.
+- Acceptance contracts: `OIC-028`. These obligations and the complete selected
+  outcome are jointly required.
+
+```text
+PRODUCT_DECISION
+Concern: web.popup-dialog-choice-application
+Scenario revision: 1
+Choice: B / DIALOG_FIRST_BUSY_CHOICE
+Rationale: 待ち時間を利用者が操作した場所（ダイアログ）に示し、適用中のもう一度のクリックが別の選択を始める競合をなくす。
+Must preserve: ポップアップの色・Legend 名・Reset fill color の各ダイアログの選択肢と結果、1 回の選択が History の 1 ステップであること、Cancel は History に記録しないこと、live edit 適用中/失敗の通知（PD-OI-037）。
+May retire: 色を選んでからダイアログが開くまでの待ち（追加する規則の準備は選択の後に行う）。選択の適用中に、そのダイアログの選択肢・Cancel・Escape・背景クリックで操作できること。
+Accepted residual risk: Session 読み込み直後の最初の選択では、ダイアログが数秒（手元で約 5〜6 s）「Applying an edit…」のまま操作できず、その間は取り消せない。
+Owner: satoshikawato
+Decision date: 2026-10-09
+```
+
+```json
+{
+  "concern": "web.popup-dialog-choice-application",
+  "scenarioRevision": 1,
+  "choice": "B / DIALOG_FIRST_BUSY_CHOICE",
+  "rationale": "待ち時間を利用者が操作した場所（ダイアログ）に示し、適用中のもう一度のクリックが別の選択を始める競合をなくす。",
+  "mustPreserve": "ポップアップの色・Legend 名・Reset fill color の各ダイアログの選択肢と結果、1 回の選択が History の 1 ステップであること、Cancel は History に記録しないこと、live edit 適用中/失敗の通知（PD-OI-037）。",
+  "mayRetire": "色を選んでからダイアログが開くまでの待ち（追加する規則の準備は選択の後に行う）。選択の適用中に、そのダイアログの選択肢・Cancel・Escape・背景クリックで操作できること。",
+  "acceptedResidualRisk": "Session 読み込み直後の最初の選択では、ダイアログが数秒（手元で約 5〜6 s）「Applying an edit…」のまま操作できず、その間は取り消せない。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-09"
+}
+```
+
+### PD-OI-089: Default colors a user edits win over the palette
+
+- Concern key: `web.default-colors-over-palette`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / USER_DEFAULT_COLORS_OVER_PALETTE`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Owner replies of `2026-10-09` quoted verbatim in the
+  Revision 36 entry above. The receipt and JSON below reproduce all nine
+  fields without translation or additional terms. This record does not
+  supersede or narrow another decision. The runtime that implements it merges
+  with it (static Product Contract co-change).
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `131d1bb0cacdcdc031387e6bff6c35672c4cb468a64220dba04dc70460e0ef78`.
+- Acceptance contracts: `OIC-029`. These obligations and the complete selected
+  outcome are jointly required.
+
+```text
+PRODUCT_DECISION
+Concern: web.default-colors-over-palette
+Scenario revision: 1
+Choice: A / USER_DEFAULT_COLORS_OVER_PALETTE
+Rationale: パレットは土台で、利用者が変えた既定の色（パレットの色と違う色）がその上に勝つ。CLI の -p と -d と同じ関係にし、パレットの切り替えや Reset で利用者の色が黙って消えたり、Apply to all で一部の feature だけが新しい色になって行が二つに分かれたりしないようにする。
+Must preserve: Default colors の一覧での直接の編集は確認なしに反映されること、Palette instant preview とキューの表示の正確さ（PD-OI-037、OIC-024）、即時の編集と次の Generate の一致（PD-OI-066）、Specific color rule が描く行の編集は rule を変えること、「This feature only」と label・source label の範囲は rule を書くこと（PD-OI-069）、ダイアログの選択は History の 1 ステップで Cancel は記録せず適用中は busy（PD-OI-088）、Circular と Linear で別々の palette と色（PD-OI-086）、Session の形式、Generate と Run Info の CLI recipe が -p とパレットと違う色だけの -d を書くこと、Reset Settings（PD-OI-070）。
+May retire: パレットを切り替えると利用者が変えた既定の色が確認なしに消える動作（キューから適用中のパレットに戻すと適用中の色に戻る動作を含む）。Default colors の Reset が確認なしに利用者の色を消す動作。Specific color rule が描かない Legend 行で Apply to all を選ぶと feature ごとの hash rule を書き、後から行に加わる feature がパレットの色のまま別の行になる動作。
+Accepted residual risk: 利用者の色は保存せず導出するので、新しいパレットの色と同じになった色はそれ以降パレットに従う。パレットの定義が版で変わると、以前の既定値と同じ色も利用者の色として数える。Specific color rule と既定の色の feature が同じ色で一つの行にあるときと、その型の feature が一つだけのとき（Apply to all が出ない）は、今までどおり rule を書く。Apply to all は画面にない（非表示や他の record・Result の）その型の feature の色も変える。
+Owner: satoshikawato
+Decision date: 2026-10-09
+```
+
+```json
+{
+  "concern": "web.default-colors-over-palette",
+  "scenarioRevision": 1,
+  "choice": "A / USER_DEFAULT_COLORS_OVER_PALETTE",
+  "rationale": "パレットは土台で、利用者が変えた既定の色（パレットの色と違う色）がその上に勝つ。CLI の -p と -d と同じ関係にし、パレットの切り替えや Reset で利用者の色が黙って消えたり、Apply to all で一部の feature だけが新しい色になって行が二つに分かれたりしないようにする。",
+  "mustPreserve": "Default colors の一覧での直接の編集は確認なしに反映されること、Palette instant preview とキューの表示の正確さ（PD-OI-037、OIC-024）、即時の編集と次の Generate の一致（PD-OI-066）、Specific color rule が描く行の編集は rule を変えること、「This feature only」と label・source label の範囲は rule を書くこと（PD-OI-069）、ダイアログの選択は History の 1 ステップで Cancel は記録せず適用中は busy（PD-OI-088）、Circular と Linear で別々の palette と色（PD-OI-086）、Session の形式、Generate と Run Info の CLI recipe が -p とパレットと違う色だけの -d を書くこと、Reset Settings（PD-OI-070）。",
+  "mayRetire": "パレットを切り替えると利用者が変えた既定の色が確認なしに消える動作（キューから適用中のパレットに戻すと適用中の色に戻る動作を含む）。Default colors の Reset が確認なしに利用者の色を消す動作。Specific color rule が描かない Legend 行で Apply to all を選ぶと feature ごとの hash rule を書き、後から行に加わる feature がパレットの色のまま別の行になる動作。",
+  "acceptedResidualRisk": "利用者の色は保存せず導出するので、新しいパレットの色と同じになった色はそれ以降パレットに従う。パレットの定義が版で変わると、以前の既定値と同じ色も利用者の色として数える。Specific color rule と既定の色の feature が同じ色で一つの行にあるときと、その型の feature が一つだけのとき（Apply to all が出ない）は、今までどおり rule を書く。Apply to all は画面にない（非表示や他の record・Result の）その型の feature の色も変える。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-09"
+}
+```
+
+### PD-OI-090: Project with drawings
+
+- Concern key: `session.project-drawings`
+- Scenario revision: `1`
+- Supersedes: `PD-OI-086`, scenario revision `1`
+  (`A / ALL-DIAGRAM-SETTINGS-PER-MODE`, concern `web.mode.scoped-settings`).
+  The record `PD-OI-086` is removed from the active Contract by this
+  amendment.
+- Status: `ACCEPTED`
+- Selected outcome: `A / PROJECT-WITH-DRAWINGS`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its JSON representation below.
+- Decision source: the Owner replies quoted verbatim in the Revision 37 entry
+  above. The Owner approved the receipt text below as written. The receipt
+  reproduces its fields without translation or additional terms. Dependent
+  runtime requires this authority merged into its base; this record supplies
+  no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `21aa8769f6e474cf72243c81c19805b12f41fa4400494d5b379e3f43f19150fb`.
+- Acceptance contracts: `OIC-004`, `OIC-005`, `OIC-006`, `OIC-013`,
+  `OIC-027`, `OIC-030`. These obligations and the complete selected outcome
+  are jointly required; their citation does not claim completed
+  dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: session.project-drawings
+Scenario revision: 1
+Supersedes: PD-OI-086, scenario revision 1 (web.mode.scoped-settings)
+Choice: A / PROJECT-WITH-DRAWINGS
+Rationale: 1 つの Session（project）に、共有の入力ファイルと複数の drawing（図）を持たせる。PD-OI-086 が Circular と Linear に分けた設定、凡例の編集、History、Result を、drawing ごとに持つ形へ広げる。ある図の編集や Generate が別の図の設定や Result を変えたり失敗させたりしないようにし（OV-80、OV-82、OV-104）、同じ mode の drawing も複数持てるようにして、同じゲノムの全体図と遺伝子クラスターの拡大図のように、同じ入力から複数の図を作れるようにする。Session の形式は Python が定め（読み、検証し、移行し、書く）、Web、CLI、Python API が同じ形式を使う。
+Must preserve: 〔構造〕Session は共有の入力ファイルと 1 つ以上の drawing を持つ。drawing は作るときに mode（Circular または Linear）を決め、あとから変えない。同じ mode の drawing を複数持てる。drawing の ID は作るときの種類から決まり（circular、linear、linear-2 …）、変わらない。Session の title、アプリの設定（Auto Reflow、PNG DPI、palette の Instant Preview など）、LOSAT の実行方法とスレッド数は drawing によらず 1 つ（PD-OI-020、OIC-015、OIC-016）。〔drawing ごとに持つもの〕図の設定（Depth、GC content と GC skew、ラベル、軸と目盛り、フォント、線、トラック、凡例と title の位置、比較の閾値、LOSAT の検索の設定を含むすべての設定）、palette と色ルール（「この feature だけ」の色を含む）、qualifier priority、label の表と filter、注釈セット、凡例の編集（色、線、名前の変更、項目の削除と追加、順序）、feature と label の編集、Feature placement、描く record と region と表示（crop、開始位置、向き）、canvas の余白、画面にない設定の上書き（PD-OI-009）、Depth の割り当て、History、Result。drawing どうしで共有するのは、入力ファイルの中身と、結果を変えない計算の cache だけ。Show Depth は、その drawing に最初の Depth ファイルが入ると On、最後のファイルがなくなると Off になり、他の drawing は変わらない。〔drawing bar と切り替え〕画面上部の drawing bar が Circular/Linear の切り替えのボタンに替わる。drawing の切り替えは移動であり、どの drawing の値も書き換えず、他の drawing へ写さず、既定に戻さず、Undo の step にもならない（PD-OI-002、PD-OI-065）。Generate と Session の保存・読み込みの間は切り替えられない（PD-OI-045）。新しい Session は Circular の drawing 1 つで始まり、Linear は空の Linear の drawing を作る案内の tab から作る。ファイル、設定の変更、編集、Result のどれもない drawing は保存しない。tab は Result があるかどうか以外の導出された状態を常時表示しない（PD-OI-037）。bar は 390 px の幅でも操作でき、Preview と Editor の条件を保つ（PD-OI-038、OIC-025）。〔Result と失敗の分離〕Generate は表示中の drawing の Result だけを置き換え、他の drawing の Result はそのまま残る。戻ると、その drawing の Result がドラッグや編集を保って表示される。ある drawing の編集、Generate、失敗、Cancel、Undo/Redo は、他の drawing の設定、凡例、History、Result を変えない（OIPC-C07、PD-OI-016）。Generate、即時の編集、Session の保存と読み込み、export は、その drawing の値だけを使い（PD-OI-066、OIC-027）、export は表示中の drawing の現在の Result を出す。〔作成〕「+ New drawing」から次の 4 種類を選べる。（1）新規 Circular または新規 Linear：まっさら（ファイルなし、その mode の既定値、凡例と feature の編集なし。PD-OI-019、OIC-004）。（2）複製：ファイル、設定、凡例と feature の編集、Result を写し、History は空から。（3）スタイルをコピーして新規：設定とスタイルを写し、ファイル、凡例の編集、feature ごとの編集は写さない。別の mode へは両方の mode にある設定だけを写す。（4）選んだ領域から新規：領域は feature、record 全体、座標のいずれかで選ぶ。同じファイルの同じ record の領域を、元の座標で 1 始まり、両端を含む範囲として描く。複数の record を選んだときは、record ごとの領域を 1 つの Linear の drawing に並べる。元の drawing のその record の見た目、つまり設定、palette と色ルール、label の規則、凡例の編集、領域の中の feature の編集と注釈、その record の Depth を引き継ぐ。Auto の値は新しい drawing の長さで決まる。自分で入れた値は、新しい長さと mode での Auto が元と同じときだけ残し、違うときは Auto に戻して作成の画面に示し、戻さないことも選べる。アップロードした比較表は写さず、作成の画面に示す。元の drawing は変わらない。〔入力ファイル〕入力ファイルの中身は project に 1 回だけ保存し、同じ内容のファイルは 1 つにまとめる。どのファイルのどの record と region を描くかは drawing ごとに選び、別の drawing は project にあるファイルを再 upload なしで選べる。Linear の File の順序は行の順序と一体で drawing ごとに持つ（PD-OI-018）。ある drawing でファイルを外したり置き換えたりしても、他の drawing の選択は変わらない（次の「すべての drawing」を選んだときを除く）。別の drawing も使う入力ファイルを置き換えるときは、「この drawing だけ / このファイルを使うすべての drawing」をその都度選ばせ、選んだ drawing の record を更新して古い source の record を残さない（反応の owner は app/drawing-list.js、channel は port の applyInputReplacementToDrawings、投影の関数は projectInputReplacement）。どの drawing も使わなくなったファイルは保存しない。〔Undo と削除〕Undo/Redo は表示中の drawing の操作と、drawing の追加、複製、名前の変更、並べ替え、削除を、新しい順に 1 操作 1 step で戻し、他の drawing の操作は戻さない。Result か編集のある drawing の削除は確認し、Undo で戻せる。最後の 1 つの drawing は削除できない。〔Reset〕Reset Settings は確認の dialog を出し、Reset this drawing / Reset all drawings / Cancel の 3 つのボタンから選ぶ。Reset this drawing は表示中の drawing の、Reset all drawings はすべての drawing の設定と編集を既定に戻す。編集（色、線、非表示、凡例、label）は表示中の図にすぐ反映し、Generate で反映する設定は次の Generate で変わる。表示していない drawing の図には、その drawing を次に表示したときに反映する。どちらでも入力ファイル、record の選択、ファイルの既定値、Depth の割り当て、Result は残る（PD-OI-070）。Cancel は何も変えず、履歴にも残さない。実行は 1 回の Undo で戻る。〔Save と Load〕Save Session は保存する全 drawing と、表示していた drawing を 1 つの整合した document として保存し、Load は全 drawing を一度に戻すか、何も変えない（変換に失敗したときも。PD-OI-045、PD-OI-046）。Load は各 drawing の保存された Result を Generate せずに示し、保存したときに表示していた drawing を開く。version 46 と 47 の Session の preview だけの Load は Python を起動しない（PD-OI-044 revision 2）。〔既存の決定〕PD-OI-002 と PD-OI-004 の LOSATP の上限（Similarity と Collinear の比較 mode ごと）は、Linear の drawing の中で今までどおり。PD-OI-052 の装飾の delta の照合は drawing をまたがない（同じ mode と record の drawing の間も）。PD-OI-061 の衝突の選択、PD-OI-062 の batch の投影、PD-OI-063 の凡例の順序、PD-OI-064 の余白、PD-OI-065 の label の override（「表示の変化」に drawing の切り替えを含む）、PD-OI-027 と PD-OI-032 の record の向きと回転と provenance は、それぞれの drawing の中で今までどおり。〔以前の Session の移行〕以前の Session は、読み込むときに一度だけ project に移し、保存された値は表示していなかった mode のものも消さない（OIPC-C05、OIPC-C06、S00 の判断 1）。version 46（0.14.0）は Python を起動せずに移し、mode ごとの設定、凡例の編集、feature の編集、Result をそれぞれの mode の drawing に入れる。Result のない mode の drawing は、使った形跡（その mode の入力ファイル、その mode を表示したままの保存、既定値とも他方の mode の値とも違うその mode の設定）があるときだけ作る。version 27〜44 は Python が移し、まず次の規則で mode ごとに分けてから、同じ規則で drawing にする。両方の mode で共有されていた設定は作るすべての drawing に写す。mode ごとだった値（mode profile、片方の mode 専用の設定、Circular と Linear で分かれていた設定、mode 付きの行）はその mode の drawing に入れ、mode profile にない他方の mode の値は既定値にする。mode を持たずに保存された title と font は、保存された Result の drawing だけに入れる。Show Depth はその drawing に Depth ファイルがあるときだけ On にする。凡例の編集と、保存された Result に結びついた feature ごとの編集は、保存された Result の drawing だけに入れる。record を選んだ注釈は、その record を選んだ drawing だけに入れる。version 45 は開発版だけで、読まない。以前の Session の再生は今までどおりで、drawing が 1 つの project は以前の Session と同じ図を描く。PD-OI-030 の旧 alignment、PD-OI-073 の main の Session の比較表の変換、PD-OI-079 の version 40 より前の Session は Result のある drawing を Generate してから Save する規則は、今までどおり。〔CLI と Python API〕gbdraw render は project の 1 つまたはすべての drawing を描き（--drawing ID、--list_drawings）、複数を描くときは出力ファイルの名前に drawing の ID を付けて互いに上書きしない。drawing が 1 つの mode は今までどおり gbdraw circular / gbdraw linear の --session で再生でき、同じ mode の drawing が複数あるときはエラーで候補を示して --drawing で選ばせる。Python API は drawing を選んで、またはすべてを描く。
+May retire: 図が Circular と Linear の 2 つに限られ、mode ごとに設定、凡例の編集、Result、入力ファイルを 1 組ずつ持つ形（PD-OI-086 と、version 46 の modes と otherModeResult。version 46 は読むだけ）。画面上部の Circular/Linear の切り替えのボタン（drawing の bar に置き換える）。両方の mode が 1 つの Undo の履歴を共有し、mode の切り替えが Undo の step になる動作。Reset Settings が確認の window.confirm 1 つで、表示していない mode の設定も既定に戻す動作。同じ内容の入力ファイルを mode ごとに別々に保存する動作。version 27〜44 の Session を Python を起動せずに読み込む動作（PD-OI-044 revision 1 と PD-OI-086 の範囲）。
+Accepted residual risk: 環状の record の原点をまたぐ領域は、最初の版では切り出せない（作成の画面で理由を示す）。Auto の大きさは record の長さの区分（50 kb など）で切り替わるため、区分の境をまたぐ領域では見た目が急に変わる。2 つの図を同じ設定にしたいときは、複製かスタイルのコピーを使うか、両方の drawing で設定する。以前の Session から作った他方の drawing に Result がなければ Generate が必要で、version 27〜44 の Session の凡例の編集は保存された Result の drawing だけに入る。version 27〜44 の Session で両方の mode に写した共有の値（Depth の最小・最大、window など）が、他方の mode のデータに合わないことがある。0.14.0 で他方の mode を表示も Generate もせず、ファイルも置かず、設定を一方の mode と同じにしていた Session では、その mode の drawing は作らない（スタイルをコピーして新規で作り直せる）。version 27〜44 の Session を開くときは、保存された図をすぐ示したうえで Python を一度起動して移し、その間（約 8 秒）は編集を待つ（新しい形式で保存し直すと起こらない）。新しい形式（version 47）で保存した Session は以前の版の gbdraw では読めない。drawing が増えると Session とメモリが大きくなる（Result と History は drawing ごと）。
+Owner: satoshikawato
+Decision date: 2026-10-08
+```
+
+```json
+{
+  "concern": "session.project-drawings",
+  "scenarioRevision": 1,
+  "supersedes": "PD-OI-086, scenario revision 1 (web.mode.scoped-settings)",
+  "choice": "A / PROJECT-WITH-DRAWINGS",
+  "rationale": "1 つの Session（project）に、共有の入力ファイルと複数の drawing（図）を持たせる。PD-OI-086 が Circular と Linear に分けた設定、凡例の編集、History、Result を、drawing ごとに持つ形へ広げる。ある図の編集や Generate が別の図の設定や Result を変えたり失敗させたりしないようにし（OV-80、OV-82、OV-104）、同じ mode の drawing も複数持てるようにして、同じゲノムの全体図と遺伝子クラスターの拡大図のように、同じ入力から複数の図を作れるようにする。Session の形式は Python が定め（読み、検証し、移行し、書く）、Web、CLI、Python API が同じ形式を使う。",
+  "mustPreserve": "〔構造〕Session は共有の入力ファイルと 1 つ以上の drawing を持つ。drawing は作るときに mode（Circular または Linear）を決め、あとから変えない。同じ mode の drawing を複数持てる。drawing の ID は作るときの種類から決まり（circular、linear、linear-2 …）、変わらない。Session の title、アプリの設定（Auto Reflow、PNG DPI、palette の Instant Preview など）、LOSAT の実行方法とスレッド数は drawing によらず 1 つ（PD-OI-020、OIC-015、OIC-016）。〔drawing ごとに持つもの〕図の設定（Depth、GC content と GC skew、ラベル、軸と目盛り、フォント、線、トラック、凡例と title の位置、比較の閾値、LOSAT の検索の設定を含むすべての設定）、palette と色ルール（「この feature だけ」の色を含む）、qualifier priority、label の表と filter、注釈セット、凡例の編集（色、線、名前の変更、項目の削除と追加、順序）、feature と label の編集、Feature placement、描く record と region と表示（crop、開始位置、向き）、canvas の余白、画面にない設定の上書き（PD-OI-009）、Depth の割り当て、History、Result。drawing どうしで共有するのは、入力ファイルの中身と、結果を変えない計算の cache だけ。Show Depth は、その drawing に最初の Depth ファイルが入ると On、最後のファイルがなくなると Off になり、他の drawing は変わらない。〔drawing bar と切り替え〕画面上部の drawing bar が Circular/Linear の切り替えのボタンに替わる。drawing の切り替えは移動であり、どの drawing の値も書き換えず、他の drawing へ写さず、既定に戻さず、Undo の step にもならない（PD-OI-002、PD-OI-065）。Generate と Session の保存・読み込みの間は切り替えられない（PD-OI-045）。新しい Session は Circular の drawing 1 つで始まり、Linear は空の Linear の drawing を作る案内の tab から作る。ファイル、設定の変更、編集、Result のどれもない drawing は保存しない。tab は Result があるかどうか以外の導出された状態を常時表示しない（PD-OI-037）。bar は 390 px の幅でも操作でき、Preview と Editor の条件を保つ（PD-OI-038、OIC-025）。〔Result と失敗の分離〕Generate は表示中の drawing の Result だけを置き換え、他の drawing の Result はそのまま残る。戻ると、その drawing の Result がドラッグや編集を保って表示される。ある drawing の編集、Generate、失敗、Cancel、Undo/Redo は、他の drawing の設定、凡例、History、Result を変えない（OIPC-C07、PD-OI-016）。Generate、即時の編集、Session の保存と読み込み、export は、その drawing の値だけを使い（PD-OI-066、OIC-027）、export は表示中の drawing の現在の Result を出す。〔作成〕「+ New drawing」から次の 4 種類を選べる。（1）新規 Circular または新規 Linear：まっさら（ファイルなし、その mode の既定値、凡例と feature の編集なし。PD-OI-019、OIC-004）。（2）複製：ファイル、設定、凡例と feature の編集、Result を写し、History は空から。（3）スタイルをコピーして新規：設定とスタイルを写し、ファイル、凡例の編集、feature ごとの編集は写さない。別の mode へは両方の mode にある設定だけを写す。（4）選んだ領域から新規：領域は feature、record 全体、座標のいずれかで選ぶ。同じファイルの同じ record の領域を、元の座標で 1 始まり、両端を含む範囲として描く。複数の record を選んだときは、record ごとの領域を 1 つの Linear の drawing に並べる。元の drawing のその record の見た目、つまり設定、palette と色ルール、label の規則、凡例の編集、領域の中の feature の編集と注釈、その record の Depth を引き継ぐ。Auto の値は新しい drawing の長さで決まる。自分で入れた値は、新しい長さと mode での Auto が元と同じときだけ残し、違うときは Auto に戻して作成の画面に示し、戻さないことも選べる。アップロードした比較表は写さず、作成の画面に示す。元の drawing は変わらない。〔入力ファイル〕入力ファイルの中身は project に 1 回だけ保存し、同じ内容のファイルは 1 つにまとめる。どのファイルのどの record と region を描くかは drawing ごとに選び、別の drawing は project にあるファイルを再 upload なしで選べる。Linear の File の順序は行の順序と一体で drawing ごとに持つ（PD-OI-018）。ある drawing でファイルを外したり置き換えたりしても、他の drawing の選択は変わらない（次の「すべての drawing」を選んだときを除く）。別の drawing も使う入力ファイルを置き換えるときは、「この drawing だけ / このファイルを使うすべての drawing」をその都度選ばせ、選んだ drawing の record を更新して古い source の record を残さない（反応の owner は app/drawing-list.js、channel は port の applyInputReplacementToDrawings、投影の関数は projectInputReplacement）。どの drawing も使わなくなったファイルは保存しない。〔Undo と削除〕Undo/Redo は表示中の drawing の操作と、drawing の追加、複製、名前の変更、並べ替え、削除を、新しい順に 1 操作 1 step で戻し、他の drawing の操作は戻さない。Result か編集のある drawing の削除は確認し、Undo で戻せる。最後の 1 つの drawing は削除できない。〔Reset〕Reset Settings は確認の dialog を出し、Reset this drawing / Reset all drawings / Cancel の 3 つのボタンから選ぶ。Reset this drawing は表示中の drawing の、Reset all drawings はすべての drawing の設定と編集を既定に戻す。編集（色、線、非表示、凡例、label）は表示中の図にすぐ反映し、Generate で反映する設定は次の Generate で変わる。表示していない drawing の図には、その drawing を次に表示したときに反映する。どちらでも入力ファイル、record の選択、ファイルの既定値、Depth の割り当て、Result は残る（PD-OI-070）。Cancel は何も変えず、履歴にも残さない。実行は 1 回の Undo で戻る。〔Save と Load〕Save Session は保存する全 drawing と、表示していた drawing を 1 つの整合した document として保存し、Load は全 drawing を一度に戻すか、何も変えない（変換に失敗したときも。PD-OI-045、PD-OI-046）。Load は各 drawing の保存された Result を Generate せずに示し、保存したときに表示していた drawing を開く。version 46 と 47 の Session の preview だけの Load は Python を起動しない（PD-OI-044 revision 2）。〔既存の決定〕PD-OI-002 と PD-OI-004 の LOSATP の上限（Similarity と Collinear の比較 mode ごと）は、Linear の drawing の中で今までどおり。PD-OI-052 の装飾の delta の照合は drawing をまたがない（同じ mode と record の drawing の間も）。PD-OI-061 の衝突の選択、PD-OI-062 の batch の投影、PD-OI-063 の凡例の順序、PD-OI-064 の余白、PD-OI-065 の label の override（「表示の変化」に drawing の切り替えを含む）、PD-OI-027 と PD-OI-032 の record の向きと回転と provenance は、それぞれの drawing の中で今までどおり。〔以前の Session の移行〕以前の Session は、読み込むときに一度だけ project に移し、保存された値は表示していなかった mode のものも消さない（OIPC-C05、OIPC-C06、S00 の判断 1）。version 46（0.14.0）は Python を起動せずに移し、mode ごとの設定、凡例の編集、feature の編集、Result をそれぞれの mode の drawing に入れる。Result のない mode の drawing は、使った形跡（その mode の入力ファイル、その mode を表示したままの保存、既定値とも他方の mode の値とも違うその mode の設定）があるときだけ作る。version 27〜44 は Python が移し、まず次の規則で mode ごとに分けてから、同じ規則で drawing にする。両方の mode で共有されていた設定は作るすべての drawing に写す。mode ごとだった値（mode profile、片方の mode 専用の設定、Circular と Linear で分かれていた設定、mode 付きの行）はその mode の drawing に入れ、mode profile にない他方の mode の値は既定値にする。mode を持たずに保存された title と font は、保存された Result の drawing だけに入れる。Show Depth はその drawing に Depth ファイルがあるときだけ On にする。凡例の編集と、保存された Result に結びついた feature ごとの編集は、保存された Result の drawing だけに入れる。record を選んだ注釈は、その record を選んだ drawing だけに入れる。version 45 は開発版だけで、読まない。以前の Session の再生は今までどおりで、drawing が 1 つの project は以前の Session と同じ図を描く。PD-OI-030 の旧 alignment、PD-OI-073 の main の Session の比較表の変換、PD-OI-079 の version 40 より前の Session は Result のある drawing を Generate してから Save する規則は、今までどおり。〔CLI と Python API〕gbdraw render は project の 1 つまたはすべての drawing を描き（--drawing ID、--list_drawings）、複数を描くときは出力ファイルの名前に drawing の ID を付けて互いに上書きしない。drawing が 1 つの mode は今までどおり gbdraw circular / gbdraw linear の --session で再生でき、同じ mode の drawing が複数あるときはエラーで候補を示して --drawing で選ばせる。Python API は drawing を選んで、またはすべてを描く。",
+  "mayRetire": "図が Circular と Linear の 2 つに限られ、mode ごとに設定、凡例の編集、Result、入力ファイルを 1 組ずつ持つ形（PD-OI-086 と、version 46 の modes と otherModeResult。version 46 は読むだけ）。画面上部の Circular/Linear の切り替えのボタン（drawing の bar に置き換える）。両方の mode が 1 つの Undo の履歴を共有し、mode の切り替えが Undo の step になる動作。Reset Settings が確認の window.confirm 1 つで、表示していない mode の設定も既定に戻す動作。同じ内容の入力ファイルを mode ごとに別々に保存する動作。version 27〜44 の Session を Python を起動せずに読み込む動作（PD-OI-044 revision 1 と PD-OI-086 の範囲）。",
+  "acceptedResidualRisk": "環状の record の原点をまたぐ領域は、最初の版では切り出せない（作成の画面で理由を示す）。Auto の大きさは record の長さの区分（50 kb など）で切り替わるため、区分の境をまたぐ領域では見た目が急に変わる。2 つの図を同じ設定にしたいときは、複製かスタイルのコピーを使うか、両方の drawing で設定する。以前の Session から作った他方の drawing に Result がなければ Generate が必要で、version 27〜44 の Session の凡例の編集は保存された Result の drawing だけに入る。version 27〜44 の Session で両方の mode に写した共有の値（Depth の最小・最大、window など）が、他方の mode のデータに合わないことがある。0.14.0 で他方の mode を表示も Generate もせず、ファイルも置かず、設定を一方の mode と同じにしていた Session では、その mode の drawing は作らない（スタイルをコピーして新規で作り直せる）。version 27〜44 の Session を開くときは、保存された図をすぐ示したうえで Python を一度起動して移し、その間（約 8 秒）は編集を待つ（新しい形式で保存し直すと起こらない）。新しい形式（version 47）で保存した Session は以前の版の gbdraw では読めない。drawing が増えると Session とメモリが大きくなる（Result と History は drawing ごと）。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-08"
+}
+```
+
+### PD-OI-091: Per-record draw ON/OFF
+
+- Concern key: `diagram-generation.record-draw-selection`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / RECORD-DRAW-ON-OFF`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its JSON representation below.
+- Decision source: the Owner replies quoted verbatim in the Revision 38 entry
+  above. The Owner approved the receipt text below as written. The receipt
+  reproduces its fields without translation or additional terms. Dependent
+  runtime requires this authority merged into its base, or merged together
+  with it through the reviewed static Product Contract co-change route; this
+  record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `3eba5a6876af4b5ab575ab586291516e42bc298e53ef61b80a29093e2d5f49d6`.
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.record-draw-selection
+Scenario revision: 1
+Choice: A / RECORD-DRAW-ON-OFF
+Rationale: 100 本以上のコンティグがあるドラフトアセンブリのように record の多いファイルから、見たい record だけを描けるようにする。0.13.0 の Web の Linear では record を 1 つ選んで描けたが、複数 record のファイルを record ごとの card に展開してから（#526）、record を外す方法がなくなった。CLI（--record_id、--records_table）と Python API はすでに一部の record だけを描ける。
+Must preserve: 〔状態〕record ごとの「描く／描かない（ON/OFF）」を drawing ごとに 1 つ持つ（PD-OI-090）。既定はすべて ON（PD-OI-019）。〔2 つの入口〕Linear の record の card の中の Draw this record のチェックと、ファイルの record の一覧（Choose records…）のチェックの 2 か所から切り替え、どちらも同じ状態を読み書きする。Circular は Record の select の横の一覧から切り替える。一覧は record ID で検索でき、長さを示し、ファイルの順（元の順。既定）、record ID の順（昇順と降順。数字は数として比べ、contig_2 は contig_10 より前）、長さの順（長い順と短い順）に並べ替えられる。並べ替えは一覧の表示だけで、描く順は変えない。表示中の行をまとめて ON または OFF にできる。変更はすぐ反映し、1 つの操作は 1 回の Undo で戻る。〔描画〕OFF の record は Generate に送らず、図、比較のペア（All adjacent pairs を含む）、行の配置、凡例、注釈から外れる。比較の画面には ON の record だけを示し、Record Layout と Circular の Record Order には OFF の record を灰色で示す。OFF の card は閉じた状態でも灰色と OFF の印で分かる。ON に戻すと、ファイルの中の元の位置（Linear の行、Circular の grid の位置）に戻る。Circular の Multi-Record Canvas と record ごとの別々の図は ON の record だけを描く。Record の select で 1 つの record を選んだときは、ON/OFF によらずその record を描く。ON の record が 1 つでも、All records は別々の図のままで、自動で 1 つの図に切り替えない（PD-OI-044）。ON/OFF を変えると、次の Generate まで比較の結果と Similarity alignment の計画は無効になる。〔LOSAT〕E-value の database は今までどおり subject 側の source ファイル全体で（PD-OI-018）、record を ON/OFF しても他の record の E-value は変わらない。ペアは ON の record どうしだけを作る。〔設定の保持と削除〕OFF の record の card の設定（Organism、Subtitle、Region、Reverse complement、LOSAT Gencode、開始位置）、feature の編集、注釈、比較のペア、行は残り、Session の保存と読み込みでも残る。Delete settings（OFF の card と一覧にある）は、その record の card の設定を既定に戻し、その record の feature の編集と Feature placement、その record を選んだ注釈、その record を含む比較のペアも消す。1 回の Undo で戻る。〔最後の record〕ファイルの最後の ON の record を OFF にしようとすると、Remove the whole file? と聞く。Remove File はそのファイルを外し（ほかにファイルがなければ空にする。Circular は GenBank、または GFF3 と FASTA の組を外す）、Cancel は何も変えない（まとめて OFF にする操作なら、その操作全体を取り消す）。〔upload〕record が 20 を超えるファイルを upload すると、すべて ON のまま一覧を自動で開く。複数のファイルなら 1 つずつ開く。Session の読み込み、取り消し、Undo では開かない。〔Reset と Session〕Reset Settings は ON/OFF を残す（PD-OI-070）。Session は drawing ごとに OFF の record を保存し、その項目のない Session（以前の Web、CLI、Gallery の Session）はすべて ON として読む。Session の version は 46 のまま。CLI の --session の再生は ON の record だけを描き、保存し直しても OFF の record とその設定を残す。あるファイルの record がすべて OFF の Session はそのまま読み込み、そのファイルは描かない。すべての record が OFF なら、Generate は Turn on at least one record to draw. と示す。
+May retire: 複数 record のファイルの全 record を必ず描く Web の Linear の動作（#526 以降）。Multi-Record Canvas と record ごとの別々の図が全 record を必ず描く動作。PD-OI-010 の受け入れた残余リスク（Arbitrary multi-record subset editing remains unavailable）と、PD-OI-044 revision 2 の May retire が record の一部を選ぶ編集を除外していること。
+Accepted residual risk: record が数百あると Linear の card が数百並び、画面が重くなることがある（#526 から変わらない）。OFF の record の設定は Session に残るので、Session が大きくなる（Delete settings で消せる）。CLI には ON/OFF の option はなく、--record_id と --records_table で同じ図を描く。
+Owner: satoshikawato
+Decision date: 2026-10-10
+```
+
+```json
+{
+  "concern": "diagram-generation.record-draw-selection",
+  "scenarioRevision": 1,
+  "choice": "A / RECORD-DRAW-ON-OFF",
+  "rationale": "100 本以上のコンティグがあるドラフトアセンブリのように record の多いファイルから、見たい record だけを描けるようにする。0.13.0 の Web の Linear では record を 1 つ選んで描けたが、複数 record のファイルを record ごとの card に展開してから（#526）、record を外す方法がなくなった。CLI（--record_id、--records_table）と Python API はすでに一部の record だけを描ける。",
+  "mustPreserve": "〔状態〕record ごとの「描く／描かない（ON/OFF）」を drawing ごとに 1 つ持つ（PD-OI-090）。既定はすべて ON（PD-OI-019）。〔2 つの入口〕Linear の record の card の中の Draw this record のチェックと、ファイルの record の一覧（Choose records…）のチェックの 2 か所から切り替え、どちらも同じ状態を読み書きする。Circular は Record の select の横の一覧から切り替える。一覧は record ID で検索でき、長さを示し、ファイルの順（元の順。既定）、record ID の順（昇順と降順。数字は数として比べ、contig_2 は contig_10 より前）、長さの順（長い順と短い順）に並べ替えられる。並べ替えは一覧の表示だけで、描く順は変えない。表示中の行をまとめて ON または OFF にできる。変更はすぐ反映し、1 つの操作は 1 回の Undo で戻る。〔描画〕OFF の record は Generate に送らず、図、比較のペア（All adjacent pairs を含む）、行の配置、凡例、注釈から外れる。比較の画面には ON の record だけを示し、Record Layout と Circular の Record Order には OFF の record を灰色で示す。OFF の card は閉じた状態でも灰色と OFF の印で分かる。ON に戻すと、ファイルの中の元の位置（Linear の行、Circular の grid の位置）に戻る。Circular の Multi-Record Canvas と record ごとの別々の図は ON の record だけを描く。Record の select で 1 つの record を選んだときは、ON/OFF によらずその record を描く。ON の record が 1 つでも、All records は別々の図のままで、自動で 1 つの図に切り替えない（PD-OI-044）。ON/OFF を変えると、次の Generate まで比較の結果と Similarity alignment の計画は無効になる。〔LOSAT〕E-value の database は今までどおり subject 側の source ファイル全体で（PD-OI-018）、record を ON/OFF しても他の record の E-value は変わらない。ペアは ON の record どうしだけを作る。〔設定の保持と削除〕OFF の record の card の設定（Organism、Subtitle、Region、Reverse complement、LOSAT Gencode、開始位置）、feature の編集、注釈、比較のペア、行は残り、Session の保存と読み込みでも残る。Delete settings（OFF の card と一覧にある）は、その record の card の設定を既定に戻し、その record の feature の編集と Feature placement、その record を選んだ注釈、その record を含む比較のペアも消す。1 回の Undo で戻る。〔最後の record〕ファイルの最後の ON の record を OFF にしようとすると、Remove the whole file? と聞く。Remove File はそのファイルを外し（ほかにファイルがなければ空にする。Circular は GenBank、または GFF3 と FASTA の組を外す）、Cancel は何も変えない（まとめて OFF にする操作なら、その操作全体を取り消す）。〔upload〕record が 20 を超えるファイルを upload すると、すべて ON のまま一覧を自動で開く。複数のファイルなら 1 つずつ開く。Session の読み込み、取り消し、Undo では開かない。〔Reset と Session〕Reset Settings は ON/OFF を残す（PD-OI-070）。Session は drawing ごとに OFF の record を保存し、その項目のない Session（以前の Web、CLI、Gallery の Session）はすべて ON として読む。Session の version は 46 のまま。CLI の --session の再生は ON の record だけを描き、保存し直しても OFF の record とその設定を残す。あるファイルの record がすべて OFF の Session はそのまま読み込み、そのファイルは描かない。すべての record が OFF なら、Generate は Turn on at least one record to draw. と示す。",
+  "mayRetire": "複数 record のファイルの全 record を必ず描く Web の Linear の動作（#526 以降）。Multi-Record Canvas と record ごとの別々の図が全 record を必ず描く動作。PD-OI-010 の受け入れた残余リスク（Arbitrary multi-record subset editing remains unavailable）と、PD-OI-044 revision 2 の May retire が record の一部を選ぶ編集を除外していること。",
+  "acceptedResidualRisk": "record が数百あると Linear の card が数百並び、画面が重くなることがある（#526 から変わらない）。OFF の record の設定は Session に残るので、Session が大きくなる（Delete settings で消せる）。CLI には ON/OFF の option はなく、--record_id と --records_table で同じ図を描く。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-10"
+}
+```
+
 ## Acceptance contract catalog
 
 | Contract | Required meaning |
@@ -3789,6 +4478,9 @@ Decision date: 2026-09-30
 | `OIC-025` | `PD-OI-038`: one SVG and Editor retain live commit/rerender, all tabs, availability, History/Session/Export, camera, keyboard, visibility-only Close/Escape, selected tab and Result recovery. At 390×844/740 the canvas uses the available full width and at least 200 px height; content scroll, reachable header/Close/toolbar, short-viewport/soft-keyboard access, and wide side drawer remain required. Pointer/keyboard/browser verification is required; duplicated Preview/SVG/editor is not accepted. |
 | `OIC-026` | `PD-OI-035` and `PD-OI-039`: identity, keyboard Select/Skip, non-rendered candidates, no position-only selection, desktop canvas, focus and transient overlay exclusion remain required with all PD-OI-031/034 outcomes. Compact review retains visible, operable canvas at full available width and at least 200 px height at 390×844/740, scrollable candidates and reachable Apply/Cancel, local no-Worker draft edits, atomic batch validation, failure/error/retry and artifact/orientation/History recovery. Narrow review closes Editor through its owner while retaining tab, disables reopening with a reason until review ends, then permits explicit reopen; wide drag remains. Browser verification must show presentation changes leave draft and Result unchanged. |
 | `OIC-027` | `PD-OI-066`: a live-edited Result agrees with a Result freshly generated from the same draft in the meaning (position, color, text, and visibility) of every edited element, including after Session load and export. Settings shown as Applies on Generate do not change the Result before Generate. A live edit that the Generate compiler cannot reproduce is shown as Applies on Generate instead. |
+| `OIC-028` | `PD-OI-088`: the color scope, Legend name, and Reset fill color dialogs, whether opened from the feature popup's fill color, the Features drawer color input, a popup stroke edit, or a Legend panel rename (Merge/Suffix), open from the saved rules before the rules a choice may add are prepared. A choice is one History step and Cancel records none. From a choice until its step ends, the dialog stays open, its choices and Cancel are disabled, it states that the edit is applying, and no second choice, Cancel, Escape, or backdrop click starts or closes anything; the dialog closes when the step ends. |
+| `OIC-029` | `PD-OI-089`: a user default color is a Default colors value that differs from the selected palette's color (case, named colors, and `#rgb` compared as one color; Auto is none). A palette switch with user colors opens one dialog: Keep my N colors (the new palette plus the user colors), Use the palette's colors, or Cancel (no change, no History step, the select shows the old palette); without user colors it switches as one step. Switching back to the applied palette while another is queued asks the same when user colors exist; the queued palette is dropped and the kept colors apply now. Default colors Reset with user colors asks first. Dialog bodies name up to three keys. Apply to all on a Legend row that no Specific color rule draws sets that feature type's default color as one History step and writes no Specific color rule; the scope dialog shows under it "Sets the <type> default color (<type> features without their own color or rule, also hidden ones)." or, when the type has a user color, "Replaces your <type> default color ■ #hex." While a palette is queued, that choice sets the color in the queued palette's colors and in the shown Result now. Generate and the Source recipe write `-p` and only the user colors as `-d`. |
+| `OIC-030` | `PD-OI-090`: an edit, Generate, failure, cancel, or Undo/Redo in one drawing leaves every other drawing's settings, Legend edits, History, and Result unchanged, and Reset all drawings is the only action that resets more than the shown drawing; a drawing switch writes no setting and is not an Undo step; Save and a fresh Load restore every saved drawing, its Result, and the drawing that was shown; each Session 27-44 fixture and each Session 46 fixture converts with no saved value lost and its first drawing renders as the old Session replays; a Session 46 or 47 preview-only Load starts no Python Worker; the Python and CLI replay and render one or all drawings with distinct output paths; a region drawing keeps the source coordinates and carries over exactly what `PD-OI-090` lists. |
 
 These new acceptance entries are obligations for dependent runtime work, not
 claims of completed runtime or browser verification by this authority amendment.

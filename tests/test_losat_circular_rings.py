@@ -6,6 +6,7 @@ import base64
 from contextlib import ExitStack
 import json
 from pathlib import Path
+import re
 
 import pytest
 
@@ -199,8 +200,8 @@ def test_saved_session_replays_without_losat(tmp_path: Path, monkeypatch: pytest
     assert [entry["args"] for entry in entries] == [["--query-gencode", "1", "--db-gencode", "1"]] * 2
     assert entries[0]["runtime"]["source"] == "explicit"
     labels = session["renderRequest"]["diagramOptions"]["conservationLabels"]
-    # Default labels: FASTA file name; GenBank DEFINITION.
-    assert labels == ["NC_002333.2.fna", "Drosophila melanogaster mitochondrion, complete genome"]
+    # Default labels: FASTA file name without the extension (D-03); GenBank DEFINITION.
+    assert labels == ["NC_002333.2", "Drosophila melanogaster mitochondrion, complete genome"]
 
     def no_runtime(*_args, **_kwargs):
         raise AssertionError("Session replay resolved a LOSAT runtime.")
@@ -268,7 +269,7 @@ def test_ring_files_with_one_basename_in_two_directories_save_and_replay(
         rings = ["--losat", "losatn", "--losat_bin", _fake_losat(tmp_path)[0]]
         expected = {"X.fna", "X.2.fna"}
     else:
-        # No --conservation_labels: each ring is labelled with its file name.
+        # No --conservation_labels: each ring is labelled with its file stem (D-03).
         rings = ["--conservation_blast", str(tmp_path / "a" / "ring.tsv"), str(tmp_path / "b" / "ring.tsv")]
         expected = {"X.fna", "X.2.fna", "ring.tsv", "ring.2.tsv"}
     prefix = tmp_path / "saved"
@@ -278,8 +279,8 @@ def test_ring_files_with_one_basename_in_two_directories_save_and_replay(
     session = _session(prefix)
     assert expected <= {resource["name"] for resource in session["resources"].values()}
     if not losat:
-        # The replay reads ring.2.tsv, so the file-name labels are stored.
-        assert session["renderRequest"]["diagramOptions"]["conservationLabels"] == ["ring.tsv", "ring.tsv"]
+        # The replay reads ring.2.tsv; the stored labels keep the drawn ones.
+        assert session["renderRequest"]["diagramOptions"]["conservationLabels"] == ["ring", "ring"]
 
     def no_runtime(*_args, **_kwargs):
         raise AssertionError("Session replay resolved a LOSAT runtime.")
@@ -435,3 +436,79 @@ def test_unresolved_ring_intent_is_never_encoded() -> None:
     )
     with pytest.raises(CanonicalRequestEncodingError, match="losatn ring search"):
         encode_canonical_request(request)
+
+
+# D-03: a precomputed table ring without a label is named by its file name
+# without the last extension, as in the Web; Sessions written before that
+# store no label for it and keep their full-file-name label on replay.
+PRECOMPUTED_TSV = FROZEN_TSVS[2]
+UNLABELLED_RING_SESSIONS = {
+    # main fe6861f0 CLI (Session 44) and release 0.13.0 CLI (Session 30), with the
+    # label their own runs drew (OV-202: not the replay's temporary file name);
+    # see tests/fixtures/sessions/precomputed-ring.provenance.json.
+    "main-v44": (
+        REPO_ROOT / "tests" / "fixtures" / "sessions" / "precomputed-ring-unlabelled-cli.v44.gbdraw-session.json.gz",
+        "caenorhabditis-human.tlosatx.tsv",
+    ),
+    "release-v30": (
+        REPO_ROOT / "tests" / "fixtures" / "sessions" / "precomputed-ring-unlabelled-cli.v30.gbdraw-session.json.gz",
+        "caenorhabditis-human.tlosatx.tsv",
+    ),
+}
+
+
+def _ring_label_texts(svg: bytes) -> set[str]:
+    return set(re.findall(r'data-track-label="([^"]*)"', svg.decode("utf-8")))
+
+
+@pytest.mark.circular
+def test_an_unlabelled_precomputed_ring_takes_the_file_stem(tmp_path: Path) -> None:
+    prefix = tmp_path / "fresh"
+    circular_main([
+        "--gbk", str(HUMAN), "--conservation_blast", str(PRECOMPUTED_TSV), "--conservation_reference", "subject",
+        "--save_session", "-o", str(prefix), "-f", "svg",
+    ])
+    assert _ring_label_texts(prefix.with_suffix(".svg").read_bytes()) == {"caenorhabditis-human.tlosatx"}
+    # The writer stores the label, so a Session never relies on the reader's default.
+    assert _session(prefix)["renderRequest"]["diagramOptions"]["conservationLabels"] == ["caenorhabditis-human.tlosatx"]
+
+    typed_prefix = "typed"
+    render_request(
+        CircularDiagramRequest(
+            records=(RecordInput(source=GenBankInputSource(path=str(HUMAN))),),
+            options=CircularDiagramOptions(
+                conservation_blast_files=[str(PRECOMPUTED_TSV)], conservation_reference="subject"
+            ),
+            output=RenderOutputRequest(output_prefix=typed_prefix, output_directory=tmp_path, formats=("svg",)),
+        )
+    )
+    assert _ring_label_texts((tmp_path / f"{typed_prefix}.svg").read_bytes()) == {"caenorhabditis-human.tlosatx"}
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("name", sorted(UNLABELLED_RING_SESSIONS))
+def test_a_session_without_a_precomputed_ring_label_keeps_the_file_name(
+    name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import gzip
+
+    monkeypatch.chdir(tmp_path)
+    fixture, drawn_label = UNLABELLED_RING_SESSIONS[name]
+    session = json.loads(gzip.decompress(fixture.read_bytes()))
+    labelled = json.loads(json.dumps(session))
+    if "renderRequest" in labelled:
+        assert "conservationLabels" not in labelled["renderRequest"]["diagramOptions"]
+        labelled["renderRequest"]["diagramOptions"]["conservationLabels"] = [drawn_label]
+    else:
+        args = labelled["cliInvocation"]["args"]
+        assert "--conservation_labels" not in args
+        index = args.index("-o")
+        labelled["cliInvocation"]["args"] = [*args[:index], "--conservation_labels", drawn_label, *args[index:]]
+    svgs = {}
+    for variant, document in (("stored", session), ("labelled", labelled)):
+        path = tmp_path / f"{variant}.gbdraw-session.json"
+        path.write_text(json.dumps(document), encoding="utf-8")
+        circular_main(["--session", str(path), "-o", variant, "-f", "svg"])
+        svgs[variant] = (tmp_path / f"{variant}.svg").read_bytes()
+    assert _ring_label_texts(svgs["stored"]) == {drawn_label}
+    assert svgs["stored"] == svgs["labelled"]

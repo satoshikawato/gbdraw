@@ -1,6 +1,7 @@
 // @ts-check
 // Playwright config for the manual audit sweeps in tools/audit/.
-// These sweeps are not CI checks. Run them with:
+// PR and push CI do not run these sweeps; the release-tier Tests dispatch does
+// (Promotion audit jobs). Run one locally with:
 //   GBDRAW_WEB_TEST_PORT=<port> npx playwright test -c tools/audit/playwright.audit.config.cjs <spec>
 const { resolve } = require('node:path');
 const { defineConfig, devices } = require('@playwright/test');

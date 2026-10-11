@@ -7,41 +7,46 @@ import { pathToFileURL } from 'node:url';
 
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-match-sequences-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
-await mkdir(join(tempDir, 'app'));
 await mkdir(join(tempDir, 'services'));
+await mkdir(join(tempDir, 'utils'));
 await writeFile(
-  join(tempDir, 'app', 'feature-utils.js'),
-  await readFile('gbdraw/web/js/app/feature-utils.js', 'utf8'),
+  join(tempDir, 'services', 'feature-utils.js'),
+  await readFile('gbdraw/web/js/services/feature-utils.js', 'utf8'),
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'app', 'feature-sequence-fasta.js'),
-  await readFile('gbdraw/web/js/app/feature-sequence-fasta.js', 'utf8'),
+  join(tempDir, 'services', 'feature-sequence-fasta.js'),
+  await readFile('gbdraw/web/js/services/feature-sequence-fasta.js', 'utf8'),
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'app', 'color-utils.js'),
-  await readFile('gbdraw/web/js/app/color-utils.js', 'utf8'),
+  join(tempDir, 'utils', 'color-utils.js'),
+  await readFile('gbdraw/web/js/utils/color-utils.js', 'utf8'),
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'app', 'genbank-header.js'),
-  await readFile('gbdraw/web/js/app/genbank-header.js', 'utf8'),
+  join(tempDir, 'utils', 'named-colors.js'),
+  await readFile('gbdraw/web/js/utils/named-colors.js', 'utf8'),
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'app', 'conservation-series.js'),
-  await readFile('gbdraw/web/js/app/conservation-series.js', 'utf8'),
+  join(tempDir, 'services', 'genbank-header.js'),
+  await readFile('gbdraw/web/js/services/genbank-header.js', 'utf8'),
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'app', 'match-sequences.js'),
-  await readFile('gbdraw/web/js/app/match-sequences.js', 'utf8'),
+  join(tempDir, 'services', 'conservation-series.js'),
+  await readFile('gbdraw/web/js/services/conservation-series.js', 'utf8'),
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'app', 'record-source-coordinates.js'),
-  await readFile('gbdraw/web/js/app/record-source-coordinates.js', 'utf8'),
+  join(tempDir, 'services', 'match-sequences.js'),
+  await readFile('gbdraw/web/js/services/match-sequences.js', 'utf8'),
+  'utf8'
+);
+await writeFile(
+  join(tempDir, 'services', 'record-source-coordinates.js'),
+  await readFile('gbdraw/web/js/services/record-source-coordinates.js', 'utf8'),
   'utf8'
 );
 await writeFile(
@@ -58,9 +63,9 @@ const {
   extractMatchedSpan,
   resolveCircularComparisonSequenceAvailability,
   reverseComplementNucleotide
-} = await import(pathToFileURL(join(tempDir, 'app', 'match-sequences.js')));
+} = await import(pathToFileURL(join(tempDir, 'services', 'match-sequences.js')));
 const { readRecordSourceSpan, recordSourceInterval } = await import(
-  pathToFileURL(join(tempDir, 'app', 'record-source-coordinates.js'))
+  pathToFileURL(join(tempDir, 'services', 'record-source-coordinates.js'))
 );
 
 const textFile = (value) => ({ text: async () => value });

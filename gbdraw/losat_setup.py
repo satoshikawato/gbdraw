@@ -15,12 +15,17 @@ import shutil
 import stat
 import struct
 import subprocess
+import sys
 import tarfile
 import tempfile
+from typing import IO, TYPE_CHECKING, cast
 from urllib.request import urlopen
 import zipfile
 
 from .exceptions import ValidationError
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 RELEASE_URL = "https://github.com/satoshikawato/LOSAT/releases/download"
@@ -151,7 +156,7 @@ def _installation_lock(path: Path):
     with path.open("a+b") as handle:
         handle.seek(0)
         try:
-            if os.name == "nt":
+            if sys.platform == "win32":
                 import msvcrt
                 if path.stat().st_size == 0:
                     handle.write(b"\0")
@@ -166,7 +171,7 @@ def _installation_lock(path: Path):
         try:
             yield
         finally:
-            if os.name == "nt":
+            if sys.platform == "win32":
                 handle.seek(0)
                 msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
             else:
@@ -176,6 +181,9 @@ def _installation_lock(path: Path):
 def _unpack_binary(archive: Path, destination: Path, identity: dict) -> None:
     root = identity["filename"].removesuffix(".tar.gz").removesuffix(".zip")
     expected = {f"{root}/{name}" for name in (identity["binary"], "LICENSE", "README.md", "RELEASE-METADATA.json")}
+    handle: zipfile.ZipFile | tarfile.TarFile
+    members: list[zipfile.ZipInfo] | list[tarfile.TarInfo]
+    open_member: Callable[[str], IO[bytes]]
     if archive.suffix == ".zip":
         handle = zipfile.ZipFile(archive)
         members = handle.infolist()
@@ -189,7 +197,8 @@ def _unpack_binary(archive: Path, destination: Path, identity: dict) -> None:
         names = [m.name for m in members]
         regular = all(m.isfile() for m in members)
         sizes = {m.name: m.size for m in members}
-        open_member = handle.extractfile
+        # extractfile returns None only for non-regular members; those are rejected below.
+        open_member = cast("Callable[[str], IO[bytes]]", handle.extractfile)
     with handle:
         if set(names) != expected or len(names) != len(expected) or not regular:
             raise ValueError("unexpected archive members or links")
@@ -226,8 +235,8 @@ def setup_losat() -> Path:
             installed = _verify_cache(directory, identity)
             if installed is not None:
                 return installed
-            with tempfile.TemporaryDirectory(prefix=f".{target}-", dir=parent) as temporary:
-                temporary = Path(temporary)
+            with tempfile.TemporaryDirectory(prefix=f".{target}-", dir=parent) as temporary_name:
+                temporary = Path(temporary_name)
                 archive = temporary / identity["filename"]
                 with urlopen(identity["url"], timeout=60) as response, archive.open("xb") as output:
                     if not response.geturl().startswith("https://"):

@@ -3,9 +3,9 @@
 
 from typing import Dict
 
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from pandas import DataFrame
 
-from gbdraw.config.models import RenderProfile  # type: ignore[reportMissingImports]
+from gbdraw.config.models import RenderProfile
 from gbdraw.core.color import (
     COLLINEAR_ORIENTATION_COLOR_KEYS,
     COLLINEAR_ORIENTATION_MIN_COLOR_KEYS,

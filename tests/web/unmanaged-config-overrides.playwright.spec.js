@@ -3,6 +3,7 @@ const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const {
+  CURRENT_SESSION_VERSION,
   evaluateWithRetainedPromise,
   generateAndWaitForResult,
   openApp,
@@ -87,14 +88,15 @@ test('GUI-unmanaged config survives disclosure, Generate, save/reload, reset, an
   const downloadPromise = page.waitForEvent('download', { timeout: 120000 });
   await evaluateWithRetainedPromise(page, async () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const saved = await readSessionDownload(await downloadPromise);
-  expect(saved.session.version).toBe(44);
-  expect(saved.session.config.unmanagedConfigOverrides).toEqual({
+  expect(saved.session.version).toBe(CURRENT_SESSION_VERSION);
+  const savedDraft = saved.session.modes[saved.session.ui.mode].config;
+  expect(savedDraft.unmanagedConfigOverrides).toEqual({
     [unmanagedPath]: 0.42
   });
   expect(
     saved.session.renderRequest.diagramOptions.configOverrides[unmanagedPath]
   ).toBe(0.42);
-  expect(saved.session.config.form.plot_title).toBe('Preserved overlay journey');
+  expect(savedDraft.form.plot_title).toBe('Preserved overlay journey');
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);

@@ -9,8 +9,9 @@ import pandas as pd
 import pytest
 from Bio.SeqFeature import FeatureLocation, SeqFeature
 
+from gbdraw.api.prepared import resolve_feature_inputs
 from gbdraw.exceptions import ValidationError
-from gbdraw.io.colors import read_color_table
+from gbdraw.io.colors import is_user_color, load_default_colors, read_color_table
 from gbdraw.labels.filtering import get_label_text, preprocess_label_filtering
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -19,6 +20,9 @@ SELECTOR_CASES = json.loads(
 )["cases"]
 COLOR_DOMAIN = json.loads(
     (FIXTURES / "specific_color_domain.json").read_text(encoding="utf-8")
+)
+DEFAULT_COLOR_DOMAIN = json.loads(
+    (FIXTURES / "default_color_domain.json").read_text(encoding="utf-8")
 )
 
 
@@ -74,3 +78,43 @@ def test_specific_color_table_rejects_colors_outside_the_shared_domain(
     with pytest.raises(ValidationError, match=r"line 2") as error:
         read_color_table(_write_table(tmp_path, entry["value"]))
     assert entry["value"] in str(error.value)
+
+
+@pytest.mark.parametrize("entry", DEFAULT_COLOR_DOMAIN["valid"], ids=lambda entry: entry["value"])
+def test_default_colors_accept_the_shared_domain(entry: dict) -> None:
+    assert is_user_color(entry["value"])
+
+
+@pytest.mark.parametrize("entry", DEFAULT_COLOR_DOMAIN["invalid"], ids=lambda entry: repr(entry["value"]))
+def test_default_colors_reject_colors_outside_the_shared_domain(entry: dict) -> None:
+    # OV-272: currentColor and inherit leave the domain as system colors did;
+    # D-38: so do svgwrite's paint references, icc-color(), and the empty value.
+    assert not is_user_color(entry["value"])
+
+
+def _resolve_default_colors(tmp_path: Path, color: str) -> object:
+    path = tmp_path / "default_colors.tsv"
+    path.write_text(f"tRNA\t#123456\nCDS\t{color}\n", encoding="utf-8")
+    defaults = load_default_colors(str(path))
+    resolve_feature_inputs(color_table=None, default_colors=defaults, feature_visibility_table=None)
+    return defaults.set_index("feature_type").at["CDS", "color"]
+
+
+def test_default_colors_file_reads_a_shared_valid_row(tmp_path: Path) -> None:
+    entry = next(item for item in DEFAULT_COLOR_DOMAIN["valid"] if item["value"].startswith("rgb("))
+    # OV-302: the Web import dropped this row; Python keeps it as written.
+    assert _resolve_default_colors(tmp_path, entry["value"]) == entry["normalized"]
+
+
+@pytest.mark.parametrize("cell", ["", "   "], ids=repr)
+def test_default_colors_file_keeps_the_built_in_color_for_a_blank_cell(tmp_path: Path, cell: str) -> None:
+    # A blank or whitespace-only cell is a missing color on both surfaces (the Web
+    # import skips it); it is not an empty user color (D-42, REVIEW-6 F1).
+    built_in = load_default_colors("").set_index("feature_type").at["CDS", "color"]
+    assert _resolve_default_colors(tmp_path, cell) == built_in
+
+
+def test_default_colors_file_rejects_a_shared_invalid_row(tmp_path: Path) -> None:
+    with pytest.raises(ValidationError, match="Invalid color 'currentColor' for feature type 'CDS'") as raised:
+        _resolve_default_colors(tmp_path, "currentColor")
+    assert raised.value.diagnostic == {"code": "TABLE_INVALID", "field": "color", "reason": "COLOR"}

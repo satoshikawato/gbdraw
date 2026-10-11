@@ -10,13 +10,14 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Hashable, Iterator, Mapping, MutableMapping
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.colors import normalize_specific_color_captions, preprocess_color_tables
 from gbdraw.features.source import SourceFeatureIdentity
 from gbdraw.features.visibility import compile_feature_visibility_rules
+from gbdraw.io.colors import check_user_color
 
 
 @dataclass(frozen=True)
@@ -34,7 +35,7 @@ class ResolvedFeatureInputs:
     color_table: DataFrame | None
     default_colors: DataFrame
     feature_visibility_table: DataFrame | None
-    feature_visibility_rules: list[dict[str, Any]]
+    feature_visibility_rules: list[dict[str, Any]] | None
     specific_color_rules: Mapping[str, Any]
     default_color_map: Mapping[str, str]
 
@@ -112,7 +113,6 @@ _CACHE_METRICS = (
     "interactiveContextCacheMissCount",
     "interactiveContextBuildCount",
     "interactiveFeatureTraversalCount",
-    "selectorSafetyScopeBuildCount",
     "preparedInputCacheEvictionCount",
     "preparedInputCacheRetainedBytes",
     "preparedInputCacheMutationViolationCount",
@@ -782,6 +782,23 @@ def prepared_record_membership(
     return tuple(membership)
 
 
+def _check_feature_colors(table: DataFrame | None, label: str, *, by_row: bool) -> None:
+    """Check every color of a -t/-d table once, whether it came from a file or a DataFrame.
+
+    Rows of the specific color table carry their position; default colors are
+    named by feature type (their rows merge the palette with the user's file).
+    """
+
+    if table is None or table.empty:
+        return
+    for row, (feature_type, color) in enumerate(zip(table["feature_type"], table["color"]), start=1):
+        check_user_color(
+            color,
+            where=f"for feature type {feature_type!r} in the {label}" + (f" (row {row})" if by_row else ""),
+            diagnostic={"code": "TABLE_INVALID", "field": "color", "reason": "COLOR", **({"row": row} if by_row else {})},
+        )
+
+
 def resolve_feature_inputs(
     *,
     color_table: DataFrame | None,
@@ -790,6 +807,8 @@ def resolve_feature_inputs(
 ) -> ResolvedFeatureInputs:
     """Compile already-loaded feature inputs into one reusable value."""
 
+    _check_feature_colors(color_table, "color table", by_row=True)
+    _check_feature_colors(default_colors, "default colors", by_row=False)
     color_table = normalize_specific_color_captions(color_table)
     specific_color_rules, default_color_map = preprocess_color_tables(
         color_table,

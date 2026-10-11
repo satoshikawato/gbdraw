@@ -153,7 +153,7 @@ def main():
               && document.editorState.featureCatalog===null && s.featureCatalog.value===null
               && !hasBiologicalSessionInputs({...s.files,linearSeqs:s.linearSeqs})
               && document.ui.mode===s.mode.value
-              && JSON.stringify(document.config)===JSON.stringify(buildConfigData());
+              && JSON.stringify(document.config)===JSON.stringify(buildConfigData(s.activeDrawing()));
           } catch {return false;}
         }''', document)
 

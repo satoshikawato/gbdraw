@@ -66,7 +66,7 @@ Unset `Thresholds` values resolve through the mode profile:
 
 E-value, bitscore, and identity must be finite and non-negative; identity is limited to `0`–`100`. Alignment length must be a non-negative integer.
 
-In `config` and `config_overrides`, font sizes must be greater than zero and stroke widths zero or greater; offsets, spacing, `track_axis_gap`, and label rotation keep their current ranges. When `config_overrides` sets `objects.definition.circular.font_size` without `objects.definition.circular.interval`, the interval becomes the font size plus 2, truncated to an integer, as with the command-line `--definition_font_size`. An invalid value raises `ValidationError` before rendering.
+In `config` and `config_overrides`, font sizes must be greater than zero, stroke widths zero or greater, and `objects.scale.interval` a positive integer or `None` (automatic; a Session that stores 0 or less draws the automatic interval); offsets, spacing, `track_axis_gap`, and label rotation keep their current ranges. When `config_overrides` sets `objects.definition.circular.font_size` without `objects.definition.circular.interval`, the interval becomes the font size plus 2, truncated to an integer, as with the command-line `--definition_font_size`. An invalid value raises `ValidationError` before rendering.
 
 ## Layout and track options
 
@@ -74,11 +74,11 @@ In `config` and `config_overrides`, font sizes must be greater than zero and str
 
 `LinearLayout` defaults to `record_gap=24.0` and automatic positions. Position strings identify a displayed record and its grid row, for example `#1@1`.
 
-`CircularTrackOptions` and `LinearTrackOptions` accept an ordered `slots` sequence and a zero-based `axis_index`. Circular tracks also accept `center_reserved_radius`. An explicit slot sequence is authoritative; the axis index must agree with the selected mode and slot types.
+`CircularTrackOptions` and `LinearTrackOptions` accept an ordered `slots` sequence and a zero-based `axis_index`. Circular tracks also accept `center_reserved_radius`. An explicit slot sequence is used as given; the axis index must agree with the selected mode and slot types.
 
 Package-root `CircularTrackOptions.slots` contains
 `gbdraw.api.CircularTrackSlot` values. This cross-namespace type is part of the
-public track contract.
+public track API.
 
 Each `DepthTrackOptions` represents one logical series. `source` is one path or `DataFrame` for one displayed record, or one path, `DataFrame`, or `None` per record. `label`, `color`, tick intervals, and tick font size default to `None`. `height` is supported only by Linear diagrams; Circular options reject it.
 
@@ -86,11 +86,11 @@ Each `DepthTrackOptions` represents one logical series. `source` is one path or 
 
 `CircularOptions.tracks` defaults to an empty `CircularTrackOptions`. `comparison_rings` defaults to an empty `ComparisonRingOptions`; `species` and `strain` default to `None`; `keep_full_definition_with_title` defaults to `False`. Circular title position accepts `None`, `none`, `top`, or `bottom`.
 
-`ComparisonRingOptions` defaults to no tracks, `reference="auto"`, and automatic ring width and gap. `reference` accepts `query`, `subject`, or `auto`. Without `losat`, every `ComparisonRingTrackOptions` requires `source`, a BLAST/LOSAT table path or `DataFrame`; its label, color, and comparison sequence source (FASTA, GenBank, or DDBJ) are optional. All tracks in one diagram must use the same source kind. If any ring has a label or color, every ring must provide that field.
+`ComparisonRingOptions` defaults to no tracks, `reference="auto"`, and automatic ring width and gap. `reference` accepts `query`, `subject`, or `auto`. Without `losat`, every `ComparisonRingTrackOptions` requires `source`, a BLAST/LOSAT table path or `DataFrame`; its label, color, and comparison sequence source (FASTA, GenBank, or DDBJ) are optional. A track without a label is labelled with the table's file name without the last extension, or `Conservation N` for a `DataFrame`. All tracks in one diagram must use the same source kind. If any ring has a label or color, every ring must provide that field.
 
-`ComparisonRingOptions(losat="losatn" | "tlosatx")` runs the ring searches: each track leaves `source` unset and names its comparison genome file with `comparison_sequence_source`, which is the query; the displayed records are the subject, and `reference` must stay `auto` or `subject`. `losatn_task` (default `megablast`) applies to LOSATN; `reference_gencode` and each track's `losat_gencode` (default 1) apply to TLOSATX. `losat_executable`, `ncbi_blast_executable`, and `threads` choose the runtime. The typed equivalent is `CircularDiagramOptions.losat_search` (`LosatSearchOptions` with `program` `losatn` or `tlosatx`; `losatp`, `pairs`, and the LOSATP fields are rejected), `conservation_sequence_files`, and `conservation_losat_gencodes`; the planner replaces them with `conservation_search_results` (`ConservationSearchResult` name and raw rows), which a Session stores as `conservationBlastFiles`.
+`ComparisonRingOptions(losat="losatn" | "tlosatx")` runs the ring searches: each track leaves `source` unset and names its comparison genome file with `comparison_sequence_source`, which is the query; the displayed records are the subject, and `reference` must stay `auto` or `subject`. `losatn_task` (default `megablast`) applies to LOSATN; `reference_gencode` and each track's `losat_gencode` (default 1) apply to TLOSATX. A track without `label` is labelled like the CLI ring: a GenBank or DDBJ file's DEFINITION (or organism), otherwise the file name without the last extension. `losat_executable`, `ncbi_blast_executable`, and `threads` choose the runtime. The typed equivalent is `CircularDiagramOptions.losat_search` (`LosatSearchOptions` with `program` `losatn` or `tlosatx`; `losatp`, `pairs`, and the LOSATP fields are rejected), `conservation_sequence_files`, and `conservation_losat_gencodes`; the planner replaces them with `conservation_search_results` (`ConservationSearchResult` name and raw rows), which a Session stores as `conservationBlastFiles`.
 
-`CircularOptions.comparison_rings` is the canonical field. The `conservation` constructor and attribute alias remains available for compatible code, but passing both names is an error.
+`CircularOptions.comparison_rings` is the current field name. The `conservation` constructor and attribute alias remains available for compatible code, but passing both names is an error.
 
 ## Linear options
 
@@ -125,12 +125,12 @@ the Similarity group of that exact protein ID or feature SVG ID, like the CLI
 accepted. See [Typed Linear Similarity Group
 alignment](#typed-linear-similarity-group-alignment).
 
-`LinearComparisonOptions(blast_files=...)` consumes prepared comparison TSV
+`LinearComparisonOptions(blast_files=...)` reads prepared comparison TSV
 files. Supplying those files does not start a nucleotide or protein search.
 
-## Canonical label overrides
+## Label override paths
 
-`config_overrides` uses canonical dotted leaf paths:
+`config_overrides` uses dotted leaf paths:
 
 | Path | Accepted values |
 |---|---|
@@ -167,8 +167,8 @@ Catch `gbdraw.exceptions.GbdrawError` for expected gbdraw failures and `Validati
 
 ## Related
 
-- [Draw and save your first genome diagram from Python](../TUTORIALS/PYTHON/first-genome-diagram.md)
-- [Python Tutorials](../TUTORIALS/PYTHON/README.md)
+- [Draw your first genome diagram from Python](../TUTORIALS/first-circular-genome-diagram.md#in-python)
+- [Tutorials](../TUTORIALS/README.md)
 - [Typed request reference](typed-requests.md)
 - [Session and request compatibility](session-and-request-compatibility.md)
 - [Output format and export reference](output-formats-and-export.md)
@@ -187,8 +187,10 @@ function. Set tolerance through the existing options' `config_overrides`, using
 
 The table columns are `record`, `feature_selector`, `placement`, and `level`.
 `main` and `auto` have no level; a supported directional target uses level 1.
-Auto removes the exact override. Unknown identities, ambiguous selectors,
-duplicate resolved identities and unsupported target directions fail explicitly.
+Auto removes the exact override. Ambiguous selectors, duplicate resolved
+identities and unsupported target directions fail explicitly. An exact
+placement whose feature the source does not have, or that a crop removes, does
+not fail: `Diagram.feature_identity_notices` lists it.
 
 ## Record display start
 
@@ -240,15 +242,15 @@ unique representative, or candidate 1 in stable identity order. A recommendation
 is a convenience heuristic, not biological proof; callers still submit an
 explicit Select or Skip. Selection never uses score, support count, viewport
 position, or multi-hop paths. A plan stores anchors and Select/Skip rationale.
-Record presentation or region state owns orientation. Callers can inspect each
+Orientation comes from record presentation or region settings. Callers can inspect each
 review candidate's `strand_relation` (`same`, `opposite`, or `unknown`) before
 changing a record's presentation. Collinear alignment controls, anchor TSV,
 scored inference, support-count ranking, and multi-hop automatic selection are
 unsupported.
 
-This executable, in-memory contract example renders no public showcase file.
+This example runs in memory and writes no file.
 In an integration, use actual group membership, current crop/display centers,
-displayed strands, and direct evidence; the two synthetic candidates here only
+displayed strands, and direct ortholog links; the two synthetic candidates here only
 show how the typed request and resolver fit together. Source feature identities
 come from the planned records, so they remain stable across record reorder.
 Save the block as `typed_similarity_alignment.py` and run
@@ -325,9 +327,9 @@ print(plan.records[1].rationale.value, relation.value,
 Current Session round trips preserve the exact plan and rationale, record
 orientation, and base translations. An active plan survives ordinary
 regeneration; Web **Reset alignment…** uses the immediate pre-align base and
-offers optional restoration of the directions actually changed by that Align.
-Supported old Sessions enter an isolated reader-only compatibility path and save only the
-current typed representation. See [Session and request compatibility](session-and-request-compatibility.md#similarity-alignment-request-ownership).
+can also restore the directions actually changed by that Align.
+Supported old Sessions are only read, and they save only the current typed
+representation. See [Session and request compatibility](session-and-request-compatibility.md#similarity-alignment-in-requests-and-sessions).
 
 ## Combined rotation and placement example
 

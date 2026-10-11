@@ -6,20 +6,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import NamedTuple, Sequence
+from typing import Any, Iterable, NamedTuple, Sequence
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame
 
-from ...analysis.protein_colinearity import OrthogroupResult, OrthogroupGraphResult  # type: ignore[reportMissingImports]
-from ...core.record_metadata import (
-    _mapped_feature_location_parts,
-    _read_coord_map,
-    _source_feature_index,
-    _source_feature_location_parts,
-)
+from ...analysis.protein_colinearity import OrthogroupResult, OrthogroupGraphResult
+from ...core.record_metadata import _source_feature_index
 from ...exceptions import ValidationError
-from ...features.ids import compute_feature_hash_from_location_parts
+from ...features.ids import compute_source_feature_hash
 
 
 @dataclass(frozen=True)
@@ -50,7 +45,7 @@ def _row_str(row: object, column: str) -> str:
 
 
 def _row_int(row: object, column: str, default: int = -1) -> int:
-    value = _row_value(row, column, default)
+    value: Any = _row_value(row, column, default)
     try:
         return int(value)
     except (TypeError, ValueError):
@@ -83,6 +78,7 @@ def _collect_label_members(
             continue
         for row in comparison.itertuples(index=False):
             for role in ("query", "subject"):
+                key: tuple[str, int, int | str]
                 member = _member_from_row(row, role)
                 if member is None or member.record_index < 0:
                     continue
@@ -161,9 +157,9 @@ def _features_by_source_index(record: SeqRecord) -> dict[int, object]:
     by_source_index: dict[int, object] = {}
     fallback_index = 0
 
-    def walk(features: object) -> None:
+    def walk(features: Iterable[object] | None) -> None:
         nonlocal fallback_index
-        for feature in features or ():  # type: ignore[union-attr]
+        for feature in features or ():
             source_index = _source_feature_index(feature)
             resolved_index = fallback_index if source_index is None else source_index
             fallback_index += 1
@@ -177,24 +173,6 @@ def _features_by_source_index(record: SeqRecord) -> dict[int, object]:
 
     walk(record.features)
     return by_source_index
-
-
-def _biological_feature_svg_id(record: SeqRecord, feature: object) -> str:
-    parts = _source_feature_location_parts(feature)
-    if parts is None:
-        coord_base, coord_step = _read_coord_map(record)
-        parts = _mapped_feature_location_parts(
-            feature,
-            coord_base=coord_base,
-            coord_step=coord_step,
-        )
-    if not parts:
-        return ""
-    return compute_feature_hash_from_location_parts(
-        str(getattr(feature, "type", "") or ""),
-        parts,
-        record_id=record.id,
-    )
 
 
 def _member_label_identity(
@@ -216,10 +194,10 @@ def _member_label_identity(
             raise ValidationError(
                 "Orthogroup member source feature index is absent from its record."
             )
-        biological_id = _biological_feature_svg_id(
-            records[member.record_index],
+        biological_id = compute_source_feature_hash(
             feature,
-        )
+            records[member.record_index],
+        ) or ""
         if member.feature_svg_id and biological_id != member.feature_svg_id:
             raise ValidationError(
                 "Orthogroup member source feature index conflicts with its stable feature ID."

@@ -23,6 +23,7 @@ from ..layout.record_coordinates import DisplayFragment
 
 
 if TYPE_CHECKING:
+    from .overrides import ResolvedFeatureOverride
     from .placement import FeaturePlacementAssignment
 
 
@@ -110,7 +111,7 @@ class FeatureObject:
         self.feature_id: str = feature_id
         # Accept both raw 6-tuples and FeatureLocationPart instances for compatibility.
         self.location: FeatureLocation = [
-            part if isinstance(part, FeatureLocationPart) else FeatureLocationPart(*part)  # type: ignore[arg-type]
+            part if isinstance(part, FeatureLocationPart) else FeatureLocationPart(*part)
             for part in (location or [])
         ]
         self.glyph_kind: FeatureGlyph = _resolve_glyph_kind(
@@ -127,6 +128,11 @@ class FeatureObject:
         self.placement: FeaturePlacementAssignment | None = None
         self.feature_track_id: int = 0
         self.source_feature_index: int | None = None
+        # The source-record feature hash that every SVG ID drawn for this
+        # feature starts with (`ids.compute_source_feature_hash`).
+        self.feature_hash: str | None = None
+        # The identity-addressed edits of this feature (features/overrides.py).
+        self.feature_override: ResolvedFeatureOverride | None = None
         self._feature_type: str = type
         # Frequently used derived attribute (historically added dynamically elsewhere)
         self.strand: Strand = self.location[0].strand if self.location else "undefined"

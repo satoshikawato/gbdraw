@@ -4,37 +4,48 @@
 // unclassified throw site, and a baseline is lowered as soon as a site is
 // migrated (the Python half is tests/test_web_error_producer_coverage.py).
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
-import { normalizeUserFacingError } from '../../gbdraw/web/js/services/error-normalization.js';
+import { normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
 
 const WEB_ROOT = new URL('../../gbdraw/web/js/', import.meta.url);
 const UNCLASSIFIED = new Set(['UNKNOWN', 'VALIDATION_UNCLASSIFIED']);
 const FILLS = ['', '0', '1', 'PRIVATE', '#1'];
 
 // Shrink-only: validation owner -> throw sites whose message normalizes to
-// UNKNOWN or VALIDATION_UNCLASSIFIED (mostly internal invariants today).
+// UNKNOWN or VALIDATION_UNCLASSIFIED (mostly internal invariants today). The
+// Result admission and preview binding owners are counted too, because a
+// failure there ends Generate (OV-13).
 const UNCLASSIFIED_THROW_BASELINE = {
   'app/annotations/table-codec.js': 13,
   'app/annotations/validation.js': 0,
   'app/annotations/record-catalog.js': 0,
-  'app/circular-track-slots.js': 2,
-  'app/current-option-values.js': 7,
-  'app/feature-metadata-extraction.js': 2,
-  'app/file-imports.js': 0,
+  'app/candidate-render.js': 3,
+  'app/circular-track-slots.js': 0,
+  'app/feature-editor/label-actions.js': 0,
   'app/legend-layout/decoration-continuity.js': 0,
-  'app/linear-track-slots.js': 34,
-  'app/record-display-options.js': 23,
-  'app/run-analysis.js': 18,
-  'app/track-slot-validation.js': 31,
-  'mode-profiles.js': 9,
+  'app/linear-track-slots.js': 0,
+  'app/preview-runtime.js': 7,
+  'app/record-display-options.js': 4,
+  'app/run-analysis.js': 17,
+  'mode-profiles.js': 2,
+  'services/circular-track-slot-model.js': 2,
   'services/config.js': 15,
+  'services/current-option-values.js': 7,
+  'services/feature-metadata-extraction.js': 2,
+  'services/file-imports.js': 0,
+  'services/linear-track-slot-model.js': 34,
+  'services/record-display-model.js': 13,
   'services/session-file.js': 6,
   'services/session-import-client.js': 0,
-  'services/session-request.js': 94,
+  'services/session-request.js': 89,
+  'services/svg-result-ingestion.js': 22,
+  'services/track-slot-validation.js': 31,
   'utils/feature-rendering.js': 3,
   'utils/optional-positive-number.js': 0
 };
+
+const fileExists = (file) => existsSync(new URL(file, WEB_ROOT));
 
 // Literal parts of the first argument of `throw new Error(`; null is a hole.
 const literalAt = (source, index) => {
@@ -91,6 +102,7 @@ const unclassifiedThrowSites = (file) => {
 
 test('JS validation throw sites normalize to a recognized diagnostic or shrink (G-G(2))', () => {
   for (const [file, baseline] of Object.entries(UNCLASSIFIED_THROW_BASELINE)) {
+    assert.ok(fileExists(file), `${file}: no such file; delete its key and register the moved file in an authority-only pull request`);
     const sites = unclassifiedThrowSites(file);
     assert.ok(sites.length <= baseline,
       `${file}: new unclassified throw sites; raise them with diagnosticError(code, context):\n${sites.join('\n')}`);
@@ -99,10 +111,10 @@ test('JS validation throw sites normalize to a recognized diagnostic or shrink (
 });
 
 // The message-classification tables in the JS wording owner (R6 ratchet).
-const NATIVE_VALIDATION_BASELINE = { exactMessages: 92, patterns: 20 };
+const NATIVE_VALIDATION_BASELINE = { exactMessages: 92, patterns: 19 };
 
 test('the JS message-classification tables only shrink (R6 ratchet)', async () => {
-  const source = readFileSync(new URL('services/error-normalization.js', WEB_ROOT), 'utf8');
+  const source = readFileSync(new URL('utils/error-normalization.js', WEB_ROOT), 'utf8');
   // The module has no imports, so a copy can expose its private table size.
   const probe = await import(`data:text/javascript,${encodeURIComponent(
     `${source}\nexport const nativeValidationSize = NATIVE_VALIDATIONS.size;`

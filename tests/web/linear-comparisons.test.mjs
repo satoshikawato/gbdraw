@@ -6,10 +6,10 @@ import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-linear-comparisons-'));
-await cp(
-  join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'linear-comparisons.js'),
-  join(tempRoot, 'linear-comparisons.js')
-);
+// The modules keep their js/ layout, so their relative imports resolve.
+for (const path of ['services/linear-comparisons.js', 'services/record-draw-selection.js', 'utils/download-names.js']) {
+  await cp(join(repoRoot, 'gbdraw', 'web', 'js', path), join(tempRoot, path));
+}
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 
 const {
@@ -17,16 +17,18 @@ const {
   adjacentRowPairs,
   buildLinearComparisonTimeline,
   buildPairwiseLosatJobSpecs,
+  canonicalGridDisplayPairs,
   createDefaultLinearComparisonPlan,
   createLinearComparisonEdge,
   linearComparisonEdgeKey,
   materializeResolvedEdgesAsSelectedPlan,
+  missingUploadPairsToResolve,
   normalizeLinearComparisonPlan,
   plainTextLinearRecordLabel,
   reconcileLinearComparisonPlan,
   resolveLinearComparisonPlan,
   validateLinearComparisonEdges
-} = await import(pathToFileURL(join(tempRoot, 'linear-comparisons.js')));
+} = await import(pathToFileURL(join(tempRoot, 'services', 'linear-comparisons.js')));
 
 assert.equal(plainTextLinearRecordLabel('Alpha <em>beta</em>'), 'Alpha beta');
 assert.equal(plainTextLinearRecordLabel('Alpha <scr<script>ipt>'), 'Alpha');
@@ -359,6 +361,40 @@ const selectedUploadOnly = resolveLinearComparisonPlan({
 });
 assert.equal(selectedUploadOnly.valid, true);
 
+// D-54: Generate asks about the pairs set to Upload BLAST TSV without a file
+// only when they are the draft's only issues. Any other issue comes first, so
+// the run and the panel report its typed error instead.
+const uploadEdge = (queryUid, subjectUid, extra = {}) => createLinearComparisonEdge({
+  queryUid, subjectUid, source: 'upload', ...extra
+});
+const missingUploadsOnly = resolveLinearComparisonPlan({
+  plan: {
+    mode: 'selected', defaultSource: 'upload',
+    edges: [
+      uploadEdge('a', 'b'),
+      uploadEdge('b', 'c', { file: file('bc.tsv'), fileActive: true }),
+      uploadEdge('c', 'd', { file: retained, fileActive: false })
+    ]
+  },
+  sequences
+});
+assert.deepEqual(missingUploadPairsToResolve(missingUploadsOnly), [
+  { edgeKey: linearComparisonEdgeKey('a', 'b'), queryIndex: 0, subjectIndex: 1, label: '#1 → #2' },
+  { edgeKey: linearComparisonEdgeKey('c', 'd'), queryIndex: 2, subjectIndex: 3, label: '#3 → #4' }
+]);
+const missingUploadAndTopology = resolveLinearComparisonPlan({
+  plan: {
+    mode: 'selected', defaultSource: 'upload',
+    edges: [uploadEdge('a', 'b'), createLinearComparisonEdge({ queryUid: 'b', subjectUid: 'd', source: 'losat' })]
+  },
+  sequences
+});
+assert.deepEqual(missingUploadAndTopology.errors.map((issue) => issue.code), ['non-adjacent', 'missing-upload']);
+assert.equal(missingUploadAndTopology.error, missingUploadAndTopology.errors[0].message);
+assert.deepEqual(missingUploadPairsToResolve(missingUploadAndTopology), []);
+assert.deepEqual(missingUploadPairsToResolve(selectedUploadOnly), []);
+assert.deepEqual(missingUploadPairsToResolve(null), []);
+
 for (const program of ['blastn', 'tblastx', 'blastp']) {
   const resolution = resolveLinearComparisonPlan({
     plan: selectedPlan,
@@ -645,4 +681,59 @@ for (const blastpMode of ['orthogroup', 'collinear']) {
   assert.equal(oneRow.hasComparisonIntent, true);
   assert.equal(oneRow.hasLosatIntent, true);
   assert.deepEqual(oneRow.edges, []);
+}
+
+{
+  // Record selection: OFF records leave the plan with their pairs (D-02, D-09).
+  const selectedPlan = {
+    mode: LINEAR_COMPARISON_MODES.SELECTED,
+    defaultSource: 'losat',
+    edges: [
+      createLinearComparisonEdge({ id: 'ac', queryUid: 'a', subjectUid: 'c', included: true, source: 'losat' }),
+      createLinearComparisonEdge({ id: 'bd', queryUid: 'b', subjectUid: 'd', included: true, source: 'losat' }),
+      createLinearComparisonEdge({ id: 'ag', queryUid: 'a', subjectUid: 'gone', included: true, source: 'losat' })
+    ]
+  };
+  const offB = resolveLinearComparisonPlan({ plan: selectedPlan, sequences, recordsOff: ['b'], layout: twoRows });
+  // The pair with an OFF endpoint is left out with no issue; a pair naming no card stays an issue.
+  assert.deepEqual(offB.edges.map((edge) => edge.edgeKey), [
+    linearComparisonEdgeKey('a', 'c'), linearComparisonEdgeKey('a', 'gone')
+  ]);
+  assert.deepEqual(offB.errors.map((issue) => issue.code), ['missing-uid']);
+  // Indexes are positions in the drawn list a, c, d.
+  assert.deepEqual([offB.edges[0].queryIndex, offB.edges[0].subjectIndex], [0, 1]);
+
+  const adjacentPlan = { mode: LINEAR_COMPARISON_MODES.ADJACENT, defaultSource: 'losat', edges: [] };
+  const threeRows = [{ uid: 'a', row: 1 }, { uid: 'b', row: 2 }, { uid: 'c', row: 3 }, { uid: 'd', row: 4 }];
+  const adjacent = resolveLinearComparisonPlan({ plan: adjacentPlan, sequences, recordsOff: ['b'], layout: threeRows });
+  // Row 2 is empty, so rows 1 and 3 are adjacent, as Python compacts the rows.
+  assert.deepEqual(adjacent.edges.map((edge) => [edge.queryUid, edge.subjectUid, edge.queryIndex, edge.subjectIndex]), [
+    ['a', 'c', 0, 1], ['c', 'd', 1, 2]
+  ]);
+  assert.equal(adjacent.valid, true);
+
+  const timeline = buildLinearComparisonTimeline({
+    sequences, recordsOff: ['b'], layout: twoRows, plan: selectedPlan, resolution: offB
+  });
+  assert.deepEqual(timeline.rows.map((row) => row.records.map((record) => record.uid)), [['a'], ['c', 'd']]);
+  assert.deepEqual(timeline.rows[0].boundaryAfter.pairs.map((pair) => pair.edgeKey), [linearComparisonEdgeKey('a', 'c')]);
+  // The OFF record's pair b->d is not unplaced; only the pair naming no card is.
+  assert.deepEqual(timeline.unplacedDrafts.map(({ draft }) => draft.id), ['ag']);
+}
+
+{
+  // Review F2: a CLI Session's row grid with its middle row turned OFF.
+  // The drawn rows 1 and 3 are adjacent, as Python closes up the empty row.
+  const cell = (uid, row) => ({ uid, row, canonicalRow: row, canonicalColumn: 1, canonicalCardinality: 'exactly_one' });
+  const rows = [cell('a', 1), cell('b', 2), cell('c', 3), cell('d', 4)];
+  const drawn = [{ uid: 'a' }, { uid: 'c' }, { uid: 'd' }];
+  const displayed = canonicalGridDisplayPairs(drawn, rows);
+  assert.ok(displayed);
+  assert.equal(displayed(0, 1), true, 'rows 1 and 3 are adjacent once row 2 is OFF');
+  assert.equal(displayed(1, 2), true);
+  assert.equal(displayed(0, 2), false);
+  assert.equal(displayed(1, 0), false, 'a pair is displayed once, query before subject');
+  // A record without a canonical grid cell leaves the decision to the plan's edges.
+  assert.equal(canonicalGridDisplayPairs(drawn, [cell('a', 1), { uid: 'c', row: 3 }, cell('d', 4)]), null);
+  assert.equal(canonicalGridDisplayPairs([{ uid: 'a' }], rows), null);
 }

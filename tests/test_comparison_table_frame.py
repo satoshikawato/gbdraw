@@ -138,7 +138,10 @@ def test_row_outside_its_record_reports_a_comparison_diagnostic() -> None:
             [LinearComparison(0, 1, _frame((1, 10, 70, 90)))], _records(reverse_subject=False)
         )
     error = serialize_web_error(caught.value, operation="generate", stage="render")
-    assert (error["code"], error["context"]) == ("COMPARISON_INPUT", {"reason": "SEARCH_FRAME"})
+    # CI-04: the column of the first coordinate of the failing endpoint (sstart).
+    assert (error["code"], error["context"]) == ("COMPARISON_INPUT", {
+        "reason": "SEARCH_FRAME", "column": 9, "queryRecordIndex": 0, "subjectRecordIndex": 1,
+    })
 
 
 _SESSIONS = Path(__file__).parent / "fixtures" / "sessions"
@@ -200,10 +203,11 @@ def test_main_web_session_with_a_reversed_record_draws_the_ribbons_main_drew(tmp
 @pytest.mark.parametrize(
     ("fixture", "stored_row"),
     [
-        # Web Save with reversed R3c: the re-saved Session embeds R3c as its
-        # reverse complement, so the converted rows are written in its frame.
-        ("q-frame-main-web-upload.v42", "R2c\tR3c\t100.0\t1000\t0\t0\t2001\t3000\t3000\t2001\t0.0\t1847\n"),
-        ("q-frame-main-web-losatn.v42", "R2c\tR3c\t100.0\t1000\t0\t0\t2001\t3000\t3000\t2001\t0.0\t1847\n"),
+        # Web Save with reversed R3c: the re-saved Session keeps R3c's file
+        # with its reverse complement, so the converted rows stay in the
+        # search frame.
+        ("q-frame-main-web-upload.v42", "R2c\tR3c\t100.0\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847\n"),
+        ("q-frame-main-web-losatn.v42", "R2c\tR3c\t100.0\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847\n"),
         # CLI -b sidecar without a reversed record: the table bytes are kept.
         ("se06-main-linear-blast-cli.v42", "R2c\tR3c\t100.000\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847\n"),
     ],
@@ -284,22 +288,125 @@ def test_table_text_rewrite_maps_reversed_endpoints_only() -> None:
 
 @pytest.mark.linear
 def test_cli_session_output_with_a_reversed_record_replays_the_cli_ribbons(tmp_path: Path) -> None:
-    # The sidecar embeds the reverse-complemented record as a sequence, so the
-    # -b rows (search frame of the source record) are written in its frame.
+    # The sidecar keeps R3's file with its reverse complement, so the -b rows
+    # stay in the search frame of the source record.
+    import base64
+    import json
+
     r2 = _write_record(tmp_path, "R2", _X[:2000] + _Y)
     r3 = _write_record(tmp_path, "R3", _Y + _Z)
     sidecar = tmp_path / "fresh.gbdraw-session.json"
+    row = "R2\tR3\t100\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847"
     fresh = _render(
-        tmp_path, "fresh", [r2, r3], "R2\tR3\t100\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847",
+        tmp_path, "fresh", [r2, r3], row,
         "--reverse_complement", "0", "--reverse_complement", "1", "--session_output", str(sidecar),
     )
+    session = json.loads(sidecar.read_text(encoding="utf-8"))
+    comparison = session["renderRequest"]["comparisons"][0]
+    assert comparison["kind"] == "nucleotideBlast"
+    assert base64.b64decode(session["resources"][comparison["resourceId"]]["data"]) == (
+        (tmp_path / "fresh.tsv").read_bytes()
+    )
+    assert session["renderRequest"]["records"][1]["presentation"]["reverseComplement"] is True
     linear_cli.linear_main(["--session", str(sidecar), "-o", str(tmp_path / "replayed"), "-f", "svg"])
     replayed = (tmp_path / "replayed.svg").read_text(encoding="utf-8")
     assert len(fresh) == 1
     assert _ribbon_spans(replayed) == fresh
-    # The replay draws the same SVG; only the record source attributes differ,
-    # because the embedded reversed sequence is the replay's own source (D-22).
-    source_attributes = re.compile(r' data-gbdraw-record-source-(?:start|end|step)="[^"]*"')
-    assert source_attributes.sub("", replayed) == source_attributes.sub(
-        "", (tmp_path / "fresh.svg").read_text(encoding="utf-8")
+    assert replayed == (tmp_path / "fresh.svg").read_text(encoding="utf-8")
+
+
+def _bound_row_request(directory: Path):
+    """Two records with one CDS each, the subject reversed, and one
+    feature-bound comparison row in the search frame."""
+    import pandas as pd
+
+    from gbdraw.api.options import LinearDiagramOptions
+    from gbdraw.api.request_render import plan_linear_request
+    from gbdraw.api.requests import GenBankInputSource, LinearDiagramRequest, RecordInput, RecordPresentation
+    from gbdraw.linear_comparison import LinearComparison
+
+    inputs = []
+    for key, strand in (("query", 1), ("subject", -1)):
+        record = SeqRecord(Seq(_X[:200]), id=key, name=key, annotations={"molecule_type": "DNA"})
+        record.features = [SeqFeature(SimpleLocation(30, 60, strand=strand), type="CDS")]
+        path = directory / f"{key}.gb"
+        SeqIO.write(record, path, "genbank")
+        inputs.append(RecordInput(GenBankInputSource(path), record_key=key))
+    plan = plan_linear_request(LinearDiagramRequest(records=tuple(inputs)))
+    row: dict[str, object] = {
+        "query": "query", "subject": "subject", "identity": 99.0, "alignment_length": 30,
+        "mismatches": 0, "gap_opens": 0, "qstart": 31, "qend": 60, "sstart": 60, "send": 31,
+        "evalue": 1e-20, "bitscore": 50.0,
+    }
+    for role, provenance in zip(("query", "subject"), plan.provenance, strict=True):
+        source = provenance.source_feature_catalog[0]
+        row[f"{role}_feature_index"] = str(source.source_feature_index)
+        row[f"{role}_feature_svg_id"] = source.stable_feature_id
+    return LinearDiagramRequest(
+        records=(inputs[0], RecordInput(GenBankInputSource(directory / "subject.gb"), record_key="subject",
+                                        presentation=RecordPresentation(reverse_complement=True))),
+        options=LinearDiagramOptions(linear_comparisons=(LinearComparison(0, 1, pd.DataFrame([row])),)),
     )
+
+
+def _stored_comparison_table(session: Path) -> bytes:
+    import base64
+
+    from gbdraw.session_io import load_session
+
+    payload = load_session(session)
+    (item,) = [item for item in payload["renderRequest"]["comparisons"] if "resourceId" in item]
+    return base64.b64decode(payload["resources"][item["resourceId"]]["data"])
+
+
+def _replay(session: Path, prefix: Path, *extra: str) -> str:
+    linear_cli.linear_main(["--session", str(session), "-o", str(prefix), "-f", "svg", *extra])
+    return prefix.with_suffix(".svg").read_text(encoding="utf-8")
+
+
+@pytest.mark.linear
+def test_cli_session_replay_keeps_feature_bound_rows_of_a_reversed_record_in_the_search_frame(
+    tmp_path: Path,
+) -> None:
+    # OV-399: the replay re-saved the feature-bound rows of a reversed record
+    # in the displayed frame with *_view_feature_svg_id columns, while the Web
+    # app and the Session contract keep them in the search frame.
+    from gbdraw.session import save_session_document
+
+    source = tmp_path / "source.gbdraw-session.json"
+    save_session_document(source, _bound_row_request(tmp_path))
+    sidecar = tmp_path / "resaved.gbdraw-session.json"
+    replayed = _replay(source, tmp_path / "replayed", "--session_output", str(sidecar))
+    stored = _stored_comparison_table(source)
+    assert b"_view_feature_svg_id" not in stored
+    assert _stored_comparison_table(sidecar) == stored
+    assert len(_ribbon_spans(replayed)) == 1
+    assert _ribbon_spans(_replay(sidecar, tmp_path / "resaved")) == _ribbon_spans(replayed)
+
+
+@pytest.mark.linear
+def test_display_frame_bound_rows_of_a_main_session_draw_once_and_resave_as_stored(tmp_path: Path) -> None:
+    # Sessions written by the main CLI or Python store a reversed record's
+    # feature-bound rows in the drawn frame with view IDs. The planner reads
+    # each row's frame from its view IDs: no second flip, the same drawing,
+    # and a re-save keeps the rows as stored.
+    from dataclasses import replace
+
+    from gbdraw.api.record_planning import project_source_bound_comparisons
+    from gbdraw.api.request_render import plan_linear_request
+    from gbdraw.session import save_session_document
+
+    request = _bound_row_request(tmp_path)
+    plan = plan_linear_request(request)
+    drawn = project_source_bound_comparisons(plan.request.options, plan.records, plan.provenance)
+    (comparison,) = drawn.linear_comparisons
+    assert comparison.matches.loc[0, ["sstart", "send"]].tolist() == [141, 170]
+    search = tmp_path / "search.gbdraw-session.json"
+    display = tmp_path / "display.gbdraw-session.json"
+    save_session_document(search, request)
+    save_session_document(display, replace(request, options=drawn))
+    assert b"subject_view_feature_svg_id" in _stored_comparison_table(display)
+    sidecar = tmp_path / "display-resaved.gbdraw-session.json"
+    drawn_svg = _replay(display, tmp_path / "display", "--session_output", str(sidecar))
+    assert drawn_svg == _replay(search, tmp_path / "search")
+    assert _stored_comparison_table(sidecar) == _stored_comparison_table(display)

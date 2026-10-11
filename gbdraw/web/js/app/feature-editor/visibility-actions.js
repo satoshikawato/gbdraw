@@ -1,35 +1,73 @@
+// @ts-check
+/** @import { DrawingState } from '../../state.js' */
 import {
   applyFeatureVisibilityOverrideChanges,
   buildFeatureVisibilityChanges,
   createDefaultFeatureVisibilityRule,
-  deriveFeatureVisibilityRulesForBoundary,
-  exactRegexValue,
-  featureMatchesExactQualifier,
+  featureDrawnContext,
   featureVisibilityQualifierSuggestions,
   getFeatureVisibilityOverride,
   normalizeFeatureVisibilityRule,
   normalizeVisibilityMode,
   removeEditorQualifierFeatureVisibilityRule,
-  resolveEffectiveFeatureVisibility,
+  requestFeatureVisibilityRules,
+  resolveFeatureDrawn,
+  resultLegendSources,
+  sameLegendSources,
   serializeFeatureVisibilityRules,
   setFeatureVisibilityOverride,
   upsertEditorQualifierFeatureVisibilityRule,
-} from '../feature-visibility.js';
-import {
-  isInternalProteinDisplayId,
-  resolveDisplayProteinId
-} from '../feature-utils.js';
+} from '../../services/feature-visibility.js';
+import { isInternalProteinDisplayId } from '../../services/feature-utils.js';
 import { downloadTextFile } from '../../services/text-download.js';
+import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { resolveUniqueOrthogroupMemberForFeature } from '../../services/feature-identity.js';
+import { featureIdentityKeyOf } from '../../services/feature-placement.js';
+import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
 
-export const createFeatureVisibilityActions = ({ state, featureSvgActions, labelActions = null, previewRuntime = null }) => {
+/**
+ * The label owner's reaction the composition root registers once that owner exists.
+ * @typedef {object} VisibilityActionsPorts
+ * @property {(options?: { reflow?: boolean, rerender?: boolean, labels?: boolean }) => boolean} applyFeatureVisibilityToLabels
+ *   Projects the stored visibility overrides (`labels`: the whole label intent) onto the labels and queues the label reflow.
+ */
+
+/**
+ * @typedef {object} FeatureVisibilityActionsOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {(options: { domains: readonly string[] }) => boolean} showEditorIntent
+ *   The root's port of the editor intent onto the displayed Result (R13), which
+ *   compiles Feature visibility with `resolveFeatureDrawn`, as Generate draws it.
+ * @property {VisibilityActionsPorts} ports
+ * @property {(index: number) => any} selectResult The preview owner's selection of the Result a History command targets.
+ * @property {import('../rule-matching.js').RulePreparation | null} [rulePreparation]
+ * @property {() => ({ diagramOptions?: Record<string, any> } | null)} [getCommittedRequest]
+ *   The committed canonical request (Python owns the option fields, R7).
+ */
+
+// The paint domain this owner shows through the port.
+const VISIBILITY_DOMAINS = Object.freeze(['featureVisibility']);
+
+/** @param {FeatureVisibilityActionsOptions} options */
+export const createFeatureVisibilityActions = ({
+  state,
+  // R13: the root's port of the editor intent onto the displayed Result.
+  showEditorIntent,
+  // R13: the composition root registers `applyFeatureVisibilityToLabels` once
+  // the label owner exists; this owner only calls it.
+  ports,
+  selectResult,
+  rulePreparation = null,
+  getCommittedRequest = () => null
+}) => {
+  // The preview owner selects the Result a History command targets (R13).
+  if (typeof selectResult !== 'function') {
+    throw new Error('createFeatureVisibilityActions requires PreviewRuntime Result selection.');
+  }
   const {
     clickedFeature,
     extractedFeatures,
     orthogroups,
-    featureVisibilityManualRules,
-    featureVisibilityRules,
-    featureVisibilityOverrides,
     featureVisibilityScopeDialog,
     resultGenerationKey,
     results,
@@ -37,7 +75,6 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, label
     svgContainer
   } = state;
 
-  const { applyVisibilityPreviewChanges } = featureSvgActions;
   const ruleFields = new Set(['recordId', 'featureType', 'qualifier', 'value', 'action']);
 
   const normalizeText = (value) => String(value ?? '').trim();
@@ -121,13 +158,6 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, label
     });
   };
 
-  const getMatchingQualifierFeatures = ({ featureType, qualifier, value }) => {
-    if (!normalizeText(featureType) || !normalizeText(qualifier) || !normalizeText(value)) return [];
-    const selector = { featureType, qualifier, value: exactRegexValue(normalizeText(value)) };
-    return (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : [])
-      .filter((feat) => featureMatchesExactQualifier(feat, selector));
-  };
-
   const buildVisibilityScopes = (feat) => {
     const featureType = getFeatureType(feat);
     const scopes = [{
@@ -176,71 +206,99 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, label
     return scopes;
   };
 
-  // The label owner hides a hidden feature's label with it, as Generate does,
-  // and queues the label reflow unless the caller declines it (F-3).
-  const applyFeatureVisibilityToLabels = (reason = 'feature-visibility', options = {}) => (
-    labelActions?.applyFeatureVisibilityToLabels?.(reason, options) ?? false
+  // The one site that reaches the label owner (R13): it hides a hidden
+  // feature's label with it, as Generate does, and queues the label reflow
+  // unless the caller declines it (F-3); `rerender` asks for the automatic
+  // rerender, which draws a feature the Result does not draw (R-5).
+  const followLabels = (options) => ports.applyFeatureVisibilityToLabels(options);
+
+  // The visibility table holds rules only; per-feature edits are identity rows.
+  /** @param {DrawingState} drawing */
+  const visibilityRuleRows = (drawing) => (
+    Array.isArray(drawing.featureVisibilityRules?.value)
+      ? drawing.featureVisibilityRules.value
+      : drawing.featureVisibilityManualRules.map((rule) => normalizeFeatureVisibilityRule(rule))
   );
 
-  const boundaryFeatureVisibilityRules = () => (
-    Array.isArray(featureVisibilityRules?.value)
-      ? featureVisibilityRules.value
-      : deriveFeatureVisibilityRulesForBoundary(
-          featureVisibilityManualRules,
-          featureVisibilityOverrides,
-          state.featureVisibilitySelectorCache
-        )
-  );
-
-  const featureSvgId = (feature) => normalizeText(feature?.svg_id ?? feature?.svgId ?? feature?.id);
-
-  const collectAffectedFeatures = (scope, feat) => {
-    if (scope?.id === 'orthogroup') return uniqueFeaturesBySvgId(scope.features || []);
-    if (scope?.id === 'product' || scope?.id === 'protein_id') {
-      return uniqueFeaturesBySvgId(getMatchingQualifierFeatures(scope));
-    }
-    return featureSvgId(feat) ? [feat] : [];
+  const sameFeature = (left, right) => {
+    const key = featureIdentityKeyOf(left);
+    return Boolean(key) && key === featureIdentityKeyOf(right);
   };
 
-  const collectAffectedFeatureIds = (scope, feat) => (
-    collectAffectedFeatures(scope, feat).map(featureSvgId).filter(Boolean)
+  const isRuleScope = (scope) => scope?.id === 'product' || scope?.id === 'protein_id';
+
+  // OV-42 (Owner decision 2026-10-06, option A): whether a Result's Legend
+  // derives from other features than Python drew at the last render: the
+  // Legend source of the features each Result's catalog draws against the
+  // source of the features the resolver draws now, under the current rules.
+  // Python redraws the Legend in the automatic rerender.
+  const legendSourceChanged = (context) => !sameLegendSources(
+    resultLegendSources(state, context, { asRendered: true }),
+    resultLegendSources(state, context)
   );
 
-  const effectiveFeatureVisibility = (feature) => resolveEffectiveFeatureVisibility(
-    featureSvgId(feature), featureVisibilityOverrides, null, featureVisibilityManualRules, feature
-  );
+  // The live projection of what the label rerender and Generate draw (R3):
+  // the port shows the resolver's answer for every feature the displayed
+  // Result draws, and an unknown answer keeps Python's. A feature the Result
+  // does not draw and the resolver draws needs geometry the Result does not
+  // have, so the action asks for the rerender, which draws what Generate draws
+  // (R-5); so does an unknown answer for a feature the action names
+  // (`targeted`), and, unless the caller declines it (`legend`), a changed
+  // Legend source of any Result (OV-42). The resolver reads Python's rule
+  // matches, so an action prepares them first (`prepareDrawn`).
+  /** @param {DrawingState} drawing */
+  const needsRerenderFor = (drawing, features, { targeted = false, legend = true } = {}) => {
+    const context = featureDrawnContext(drawing, { diagramOptions: getCommittedRequest()?.diagramOptions });
+    const catalogFeatures = resultCatalogFeatures(state);
+    return features.some((feature) => {
+      if (!catalogFeatures || catalogFeatures.renderedByIdentity.has(stableFeatureOverrideKey(feature))) return false;
+      const drawn = resolveFeatureDrawn(feature, context);
+      return drawn === true || (targeted && drawn === null);
+    }) || (legend && legendSourceChanged(context));
+  };
+  // Every catalog feature of the displayed Result, as drawn where it is drawn.
+  const displayedFeatures = () => {
+    const catalogFeatures = resultCatalogFeatures(state);
+    return catalogFeatures
+      ? catalogFeatures.biological.map((feature) => (
+        catalogFeatures.renderedByIdentity.get(stableFeatureOverrideKey(feature)) || feature
+      ))
+      : uniqueFeaturesBySvgId(Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []);
+  };
+  // Shows the projection, unless the caller shows it in its own compile
+  // (`show: false`); returns whether the Result changed (or is to change) and
+  // whether the rerender must draw a feature or the Legend.
+  /**
+   * @param {DrawingState} drawing
+   * @param {Record<string, any>[]} features
+   * @param {{ targeted?: boolean, legend?: boolean, show?: boolean }} [projection]
+   */
+  const projectDrawn = (drawing, features, { show = true, ...projection } = {}) => ({
+    updated: show ? showEditorIntent({ domains: VISIBILITY_DOMAINS }) : true,
+    needsRerender: needsRerenderFor(drawing, features, projection)
+  });
+  // Also the reaction the popup and Label On ask this owner for: the matches
+  // `resolveFeatureDrawn` reads are this owner's read model (R13).
+  /**
+   * @param {{ strict?: boolean, view?: boolean }} [options]
+   * @returns {boolean | Promise<boolean | { error: any }>}
+   */
+  const prepareDrawn = (options) => rulePreparation?.prepareDrawn?.(options) ?? true;
 
-  const applyVisibilityPreviewForScope = (scope, feat, mode) => {
-    const changes = collectAffectedFeatures(scope, feat).map((feature) => {
-      const svgId = featureSvgId(feature);
-      const specificHashMode = (scope?.id === 'product' || scope?.id === 'protein_id')
-        ? featureVisibilityOverrides[svgId]
-        : '';
-      const effectiveMode = specificHashMode ||
-        (mode === 'default' ? effectiveFeatureVisibility(feature) : mode);
-      return { featureId: svgId, mode: effectiveMode };
-    }).filter((change) => change.featureId);
-    return applyVisibilityPreviewChanges(changes);
+  /** @param {DrawingState} drawing */
+  const updateClickedFeatureVisibilityFromRules = (drawing, features) => {
+    const clicked = clickedFeature.value?.feat;
+    if (!clicked || !features.some((feature) => sameFeature(feature, clicked))) return;
+    clickedFeature.value.featureVisibility = getFeatureVisibilityOverride(drawing.featureOverrides, clicked);
   };
 
-  const updateClickedFeatureVisibilityFromRules = (featureIds) => {
-    const clickedSvgId = normalizeText(clickedFeature.value?.svg_id);
-    if (!clickedSvgId || !featureIds.includes(clickedSvgId)) return;
-    clickedFeature.value.featureVisibility = getFeatureVisibilityOverride(featureVisibilityOverrides, clickedSvgId);
-  };
-
-  const cloneOverrides = () => ({ ...(featureVisibilityOverrides || {}) });
-
-  const resolveEffectiveWithOverrides = (featureId, overrides) =>
-    resolveEffectiveFeatureVisibility(featureId, overrides, null, featureVisibilityManualRules);
-
-  const nextFrame = () => new Promise((resolve) => {
+  const nextFrame = () => /** @type {Promise<void>} */ (new Promise((resolve) => {
     if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
       window.requestAnimationFrame(() => resolve());
     } else {
       setTimeout(resolve, 0);
     }
-  });
+  }));
 
   const ensureCommandTargetResult = async (resultIndex, generationKey) => {
     if (String(resultGenerationKey?.value ?? '') !== String(generationKey ?? '')) return false;
@@ -249,62 +307,41 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, label
     const resultCount = Array.isArray(results?.value) ? results.value.length : 0;
     if (targetIndex >= resultCount) return false;
     if (Number(selectedResultIndex?.value || 0) !== targetIndex) {
-      if (previewRuntime?.selectResult) {
-        previewRuntime.selectResult(targetIndex);
-      } else if (selectedResultIndex) {
-        selectedResultIndex.value = targetIndex;
-      }
+      selectResult(targetIndex);
       await nextFrame();
     }
     return Boolean(svgContainer?.value?.querySelector?.('svg'));
   };
 
   const buildSelectedFeaturesVisibilityCommand = (features, modeRaw) => {
-    const targetFeatures = uniqueFeaturesBySvgId(Array.isArray(features) ? features : []);
+    const drawing = state.activeDrawing();
+    const targetFeatures = uniqueFeaturesBySvgId(Array.isArray(features) ? features : [])
+      .filter((feature) => featureIdentityKeyOf(feature));
     if (targetFeatures.length === 0) return null;
 
-    const affectedFeatureIds = targetFeatures
-      .map((feature) => normalizeText(feature?.svg_id ?? feature?.svgId ?? feature?.id))
-      .filter(Boolean);
-    if (affectedFeatureIds.length === 0) return null;
-
-    const baseOverrides = cloneOverrides();
-    const rawChanges = buildFeatureVisibilityChanges(targetFeatures, modeRaw, baseOverrides);
-    if (rawChanges.length === 0) return null;
-    const afterOverrides = cloneOverrides();
-    applyFeatureVisibilityOverrideChanges(
-      afterOverrides,
-      rawChanges.map((change) => ({ featureId: change.featureId, mode: change.after }))
-    );
-    const changes = rawChanges.map((change) => ({
-      ...change,
-      beforeEffective: resolveEffectiveWithOverrides(change.featureId, baseOverrides),
-      afterEffective: resolveEffectiveWithOverrides(change.featureId, afterOverrides)
-    }));
+    const changes = buildFeatureVisibilityChanges(targetFeatures, modeRaw, drawing.featureOverrides);
+    if (changes.length === 0) return null;
+    const changedKeys = new Set(changes.map(featureIdentityKeyOf));
+    const changedFeatures = targetFeatures.filter((feature) => changedKeys.has(featureIdentityKeyOf(feature)));
     const commandResultIndex = Number(selectedResultIndex?.value || 0);
     const commandGenerationKey = String(resultGenerationKey?.value ?? '');
 
-    const applyChangeSet = async (direction, reason) => {
+    const applyChangeSet = async (direction) => {
       if (!(await ensureCommandTargetResult(commandResultIndex, commandGenerationKey))) return false;
+      await prepareDrawn();
       const useAfter = direction === 'apply';
       const overrideChanged = changes.some((change) => change.before !== change.after);
       applyFeatureVisibilityOverrideChanges(
-        featureVisibilityOverrides,
+        drawing.featureOverrides,
         changes.map((change) => ({
-          featureId: change.featureId,
+          ...change,
           mode: useAfter ? change.after : change.before
         }))
       );
-      const updated = applyVisibilityPreviewChanges(
-        changes.map((change) => ({
-          featureId: change.featureId,
-          mode: useAfter ? change.afterEffective : change.beforeEffective
-        })),
-        { reason }
-      );
+      const { updated, needsRerender } = projectDrawn(drawing, changedFeatures, { targeted: true });
       if (!updated && !overrideChanged) return false;
-      updateClickedFeatureVisibilityFromRules(affectedFeatureIds);
-      applyFeatureVisibilityToLabels(reason);
+      updateClickedFeatureVisibilityFromRules(drawing, targetFeatures);
+      followLabels({ rerender: needsRerender });
       return true;
     };
 
@@ -313,45 +350,109 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, label
       resultIndex: commandResultIndex,
       resultGenerationKey: commandGenerationKey,
       changes,
-      apply: () => applyChangeSet('apply', 'bulk-feature-visibility-apply'),
-      revert: () => applyChangeSet('revert', 'bulk-feature-visibility-undo'),
+      apply: () => applyChangeSet('apply'),
+      revert: () => applyChangeSet('revert'),
       estimateBytes: () => JSON.stringify({ resultIndex: commandResultIndex, resultGenerationKey: commandGenerationKey, changes }).length * 2
     };
   };
 
-  const applyFeatureVisibilityScope = (feat, modeRaw, scope) => {
+  const showClickedFeatureVisibility = (targetFeatures, mode) => {
+    const clicked = clickedFeature.value?.feat;
+    if (clicked && targetFeatures.some((feature) => sameFeature(feature, clicked))) {
+      clickedFeature.value.featureVisibility = mode;
+    }
+  };
+
+  // A feature or similarity-group scope: the identity rows of its features.
+  // Returns whether the rerender must draw one of them.
+  /** @param {DrawingState} drawing */
+  const applyFeatureVisibilityScope = (drawing, feat, modeRaw, scope) => {
     const nextMode = normalizeVisibilityMode(modeRaw);
-    const selectedScope = scope || { id: 'feature' };
-    const targetFeatures = selectedScope.id === 'orthogroup'
-      ? uniqueFeaturesBySvgId(selectedScope.features || [])
+    const targetFeatures = scope?.id === 'orthogroup'
+      ? uniqueFeaturesBySvgId(scope.features || [])
       : [feat];
+    targetFeatures.forEach((targetFeat) => {
+      setFeatureVisibilityOverride(drawing.featureOverrides, targetFeat, nextMode);
+    });
+    const { needsRerender } = projectDrawn(drawing, targetFeatures, { targeted: true });
+    showClickedFeatureVisibility(targetFeatures, nextMode);
+    return needsRerender;
+  };
 
-    if (selectedScope.id === 'product' || selectedScope.id === 'protein_id') {
-      const ruleInput = {
-        featureType: selectedScope.featureType,
-        qualifier: selectedScope.qualifier,
-        value: selectedScope.value,
-        label: selectedScope.label
-      };
-      if (nextMode === 'default') {
-        removeEditorQualifierFeatureVisibilityRule(featureVisibilityManualRules, ruleInput);
-      } else {
-        upsertEditorQualifierFeatureVisibilityRule(featureVisibilityManualRules, ruleInput, nextMode);
-      }
-    } else {
-      targetFeatures.forEach((targetFeat) => {
-        const svgId = normalizeText(targetFeat?.svg_id ?? targetFeat?.svgId ?? targetFeat?.id);
-        if (!svgId) return;
-        setFeatureVisibilityOverride(featureVisibilityOverrides, svgId, nextMode);
-      });
+  // The live projection of the visibility rules and edits onto every
+  // displayed feature (R3), with the same resolver as the visibility actions,
+  // so Undo and Redo of a scoped hide leave the preview as the action left it
+  // (FE-04). It prepares Python's matches first. A rule table that Generate
+  // rejects (an invalid regex) changes nothing, as a failed Generate keeps its
+  // Result, and reports Generate's error until a projection reads a table that
+  // Generate accepts. A later projection supersedes one that still waits for
+  // its matches. Resolves to `projectDrawn`'s answer, or null when it projects
+  // nothing.
+  let projectionRun = 0;
+  let ruleTableError = null;
+  /** @param {DrawingState} drawing */
+  const runProjection = async (drawing, { legend = true, show = true } = {}) => {
+    const run = ++projectionRun;
+    const prepared = /** @type {any} */ (await prepareDrawn());
+    if (run !== projectionRun) return null;
+    if (prepared?.error) {
+      if (!state.errorLog) return null;
+      state.errorLog.value = normalizeUserFacingError(prepared.error, { operation: 'evaluateRules', stage: 'rule-validation' });
+      ruleTableError = state.errorLog.value; // As the error log holds it (a reactive copy).
+      return null;
     }
+    if (ruleTableError && state.errorLog?.value === ruleTableError) state.errorLog.value = null;
+    ruleTableError = null;
+    return projectDrawn(drawing, displayedFeatures(), { legend, show });
+  };
 
-    applyVisibilityPreviewForScope(selectedScope, feat, nextMode);
-
-    const clickedSvgId = normalizeText(clickedFeature.value?.svg_id);
-    if (clickedSvgId && collectAffectedFeatureIds(selectedScope, feat).includes(clickedSvgId)) {
-      clickedFeature.value.featureVisibility = nextMode;
+  // The one projection of this domain (R3), which History apply, the display
+  // of a Result, and Load Feature Edits TSV call through
+  // `projectMountedEditorIntent`. The label of a feature it hides or shows
+  // follows the feature (F-3, OV-35). A History step or a loaded table
+  // (`rerender`) that draws a feature the Result does not draw, or changes a
+  // Legend source, reruns the rerender, as the action did; a Result display
+  // does not, so a feature Python does not draw cannot repeat it. A loaded
+  // table (`reflow`) also places the labels, as a visibility edit does. A
+  // caller that also projects the label intent (`labels`) has the label owner
+  // project it in the same follow, so the edit queues one label request.
+  // Returns whether the Result changed. A caller that shows the visibility in
+  // its own compile passes `show: false`.
+  const projectFeatureVisibility = async ({ rerender = false, reflow = false, show = true, labels = false } = {}) => {
+    const drawing = state.activeDrawing();
+    const projection = await runProjection(drawing, { legend: rerender, show });
+    const drawsMissing = rerender && Boolean(projection?.needsRerender);
+    if (labels || (projection && (projection.updated || reflow || drawsMissing))) {
+      followLabels({ reflow: reflow && Boolean(projection), rerender: drawsMissing, labels });
     }
+    return Boolean(projection?.updated);
+  };
+
+  // OV-19 (PD-OI-066, R10): the one transition of a visibility rule edit, from
+  // the Features panel or the popup's product and protein ID scopes. `edit`
+  // changes a copy of the rules; the transition writes it, then projects the
+  // rules and the labels of the features they hide or show, as the label
+  // rerender and Generate draw them; a rule that draws a feature the Result
+  // does not draw asks for the rerender (R-5). The draft keeps a rule that
+  // Generate rejects. An edit that leaves the rules Generate reads as they
+  // were (a rule added, or a field set before its value) projects nothing.
+  // A rerender that runs when the rules change may have read the old ones and
+  // is about to replace the Result this edit is decided against, so the edit
+  // asks for one more, which the running one coalesces (OV-330).
+  /** @param {DrawingState} drawing */
+  const editFeatureVisibilityRules = async (drawing, edit) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
+    const rules = [...drawing.featureVisibilityManualRules];
+    if (edit(rules) === false) return false;
+    const requested = JSON.stringify(requestFeatureVisibilityRules(drawing.featureVisibilityManualRules));
+    drawing.featureVisibilityManualRules.splice(0, drawing.featureVisibilityManualRules.length, ...rules);
+    if (JSON.stringify(requestFeatureVisibilityRules(rules)) === requested) return true;
+    const rerendering = Boolean(state.labelReflowProcessing?.value);
+    const projection = await runProjection(drawing);
+    const rerender = Boolean(projection?.needsRerender) || (Boolean(projection) && rerendering);
+    if (projection?.updated || rerender) followLabels({ rerender });
+    return true;
   };
 
   const clearFeatureVisibilityScopeDialog = ({ restorePrevious = false } = {}) => {
@@ -365,24 +466,34 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, label
     featureVisibilityScopeDialog.scopes = [];
   };
 
-  const setFeatureVisibility = (feat, modeRaw, options = {}) => {
+  /** @param {DrawingState} drawing */
+  const setFeatureVisibilityIn = (drawing, feat, modeRaw, options = {}) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const svgId = String(feat?.svg_id || '').trim();
-    if (!svgId) return false;
+    if (!featureIdentityKeyOf(feat)) return false;
 
     const triggerReflow = options.triggerReflow !== false;
     const scope = options.scope || { id: 'feature' };
     const nextMode = normalizeVisibilityMode(modeRaw);
-    const previousMode = getFeatureVisibilityOverride(featureVisibilityOverrides, svgId);
+    const previousMode = getFeatureVisibilityOverride(drawing.featureOverrides, feat);
 
-    applyFeatureVisibilityScope(feat, nextMode, scope);
+    const needsRerender = applyFeatureVisibilityScope(drawing, feat, nextMode, scope);
 
     if (previousMode !== nextMode) {
-      applyFeatureVisibilityToLabels('feature-visibility', { reflow: triggerReflow });
+      followLabels({ reflow: triggerReflow, rerender: needsRerender });
     }
 
     return previousMode !== nextMode;
+  };
+
+  /**
+   * @param {Record<string, any>} feat
+   * @param {string} modeRaw
+   * @param {Record<string, any>} [options]
+   */
+  const setFeatureVisibility = (feat, modeRaw, options = {}) => {
+    const drawing = state.activeDrawing();
+    return setFeatureVisibilityIn(drawing, feat, modeRaw, options);
   };
 
   const setSelectedFeaturesVisibility = async (features, modeRaw) => {
@@ -393,16 +504,18 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, label
     return command.apply();
   };
 
-  const updateClickedFeatureVisibility = (modeRaw) => {
+  const updateClickedFeatureVisibility = async (modeRaw) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value?.feat) return false;
     const feat = clickedFeature.value.feat;
     const scopes = buildVisibilityScopes(feat);
     const nextMode = normalizeVisibilityMode(modeRaw);
-    const previousMode = getFeatureVisibilityOverride(featureVisibilityOverrides, normalizeText(feat.svg_id));
+    const previousMode = getFeatureVisibilityOverride(drawing.featureOverrides, feat);
     if (scopes.length <= 1) {
-      return setFeatureVisibility(feat, nextMode, { triggerReflow: true, scope: scopes[0] });
+      await prepareDrawn();
+      return setFeatureVisibilityIn(drawing, feat, nextMode, { triggerReflow: true, scope: scopes[0] });
     }
     featureVisibilityScopeDialog.show = true;
     featureVisibilityScopeDialog.feat = feat;
@@ -412,7 +525,8 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, label
     return false;
   };
 
-  const handleFeatureVisibilityScopeChoice = (scopeId) => {
+  const handleFeatureVisibilityScopeChoice = async (scopeId) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (scopeId === 'cancel' || !featureVisibilityScopeDialog.show) {
@@ -427,50 +541,55 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, label
       return false;
     }
     const previousMode = featureVisibilityScopeDialog.previousMode;
-    applyFeatureVisibilityScope(feat, nextMode, scope);
     clearFeatureVisibilityScopeDialog();
-    if (previousMode !== nextMode) applyFeatureVisibilityToLabels();
+    if (isRuleScope(scope)) {
+      const ruleInput = { featureType: scope.featureType, qualifier: scope.qualifier, value: scope.value, label: scope.label };
+      await editFeatureVisibilityRules(drawing, (rules) => {
+        if (nextMode === 'default') removeEditorQualifierFeatureVisibilityRule(rules, ruleInput);
+        else upsertEditorQualifierFeatureVisibilityRule(rules, ruleInput, nextMode);
+      });
+      showClickedFeatureVisibility([feat], nextMode);
+      return previousMode !== nextMode;
+    }
+    await prepareDrawn();
+    const needsRerender = applyFeatureVisibilityScope(drawing, feat, nextMode, scope);
+    if (previousMode !== nextMode) followLabels({ rerender: needsRerender });
     return previousMode !== nextMode;
   };
 
-  const getFeatureVisibility = (feat) => {
-    const svgId = String(feat?.svg_id || '').trim();
-    if (!svgId) return 'default';
-    return getFeatureVisibilityOverride(featureVisibilityOverrides, svgId);
-  };
-
   const setFeatureVisibilityRuleField = (index, field, value) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
-    if (sessionBusy) return sessionBusy;
-    if (!ruleFields.has(field)) return;
-    const current = featureVisibilityManualRules[index];
-    if (!current) return;
-    const nextRule = normalizeFeatureVisibilityRule({ ...current, [field]: value });
-    featureVisibilityManualRules.splice(index, 1, nextRule);
+    const drawing = state.activeDrawing();
+    return editFeatureVisibilityRules(drawing, (rules) => {
+      if (!ruleFields.has(field) || !rules[index]) return false;
+      rules[index] = normalizeFeatureVisibilityRule({ ...rules[index], [field]: value });
+    });
   };
 
-  const moveFeatureVisibilityRule = (index, offset) => {
+  /** @param {DrawingState} drawing */
+  const moveFeatureVisibilityRule = (drawing, index, offset) => editFeatureVisibilityRules(drawing, (rules) => {
     const target = index + offset;
-    if (target < 0 || target >= featureVisibilityManualRules.length) return;
-    const [rule] = featureVisibilityManualRules.splice(index, 1);
-    featureVisibilityManualRules.splice(target, 0, rule);
-  };
+    if (!rules[index] || target < 0 || target >= rules.length) return false;
+    rules.splice(target, 0, ...rules.splice(index, 1));
+  });
 
   const addFeatureVisibilityRule = () => {
-    const sessionBusy = state.sessionOperationAvailability?.();
-    if (sessionBusy) return sessionBusy;
-    featureVisibilityManualRules.push(createDefaultFeatureVisibilityRule());
+    const drawing = state.activeDrawing();
+    return editFeatureVisibilityRules(drawing, (rules) => {
+      rules.push(createDefaultFeatureVisibilityRule());
+    });
   };
 
   const removeFeatureVisibilityRule = (index) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
-    if (sessionBusy) return sessionBusy;
-    if (index < 0 || index >= featureVisibilityManualRules.length) return;
-    featureVisibilityManualRules.splice(index, 1);
+    const drawing = state.activeDrawing();
+    return editFeatureVisibilityRules(drawing, (rules) => {
+      if (!rules[index]) return false;
+      rules.splice(index, 1);
+    });
   };
 
   const downloadFeatureVisibilityRulesTsv = () => {
-    const text = serializeFeatureVisibilityRules(boundaryFeatureVisibilityRules());
+    const drawing = state.activeDrawing();
+    const text = serializeFeatureVisibilityRules(visibilityRuleRows(drawing));
     if (!text.trim()) {
       alert('No valid feature visibility rules to export.');
       return;
@@ -490,24 +609,23 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, label
     return '';
   };
 
-  // Reconcile with the same resolver as the visibility action, so Undo and
-  // Redo of a scoped hide leave the preview as the action left it (FE-04).
-  const reconcileFeatureVisibility = () => applyVisibilityPreviewChanges(
-    uniqueFeaturesBySvgId(Array.isArray(extractedFeatures.value) ? extractedFeatures.value : [])
-      .map((feature) => ({ featureId: featureSvgId(feature), mode: effectiveFeatureVisibility(feature) }))
-  );
-
   return {
     addFeatureVisibilityRule,
     downloadFeatureVisibilityRulesTsv,
     featureVisibilityQualifierSuggestions,
     featureVisibilityRuleDetail,
     buildSelectedFeaturesVisibilityCommand,
-    getFeatureVisibility,
     handleFeatureVisibilityScopeChoice,
-    moveFeatureVisibilityRuleDown: (index) => moveFeatureVisibilityRule(index, 1),
-    moveFeatureVisibilityRuleUp: (index) => moveFeatureVisibilityRule(index, -1),
-    reconcileFeatureVisibility,
+    moveFeatureVisibilityRuleDown: (index) => {
+      const drawing = state.activeDrawing();
+      return moveFeatureVisibilityRule(drawing, index, 1);
+    },
+    moveFeatureVisibilityRuleUp: (index) => {
+      const drawing = state.activeDrawing();
+      return moveFeatureVisibilityRule(drawing, index, -1);
+    },
+    prepareDrawnFeatureMatches: prepareDrawn,
+    projectFeatureVisibility,
     removeFeatureVisibilityRule,
     setFeatureVisibility,
     setSelectedFeaturesVisibility,

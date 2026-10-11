@@ -52,7 +52,6 @@ DOCUMENTATION_PAGES = (
     REPO_ROOT / "docs" / "RELEASE_NOTES_0.14.0.md",
     REPO_ROOT / "docs" / "FAQ.md",
     REPO_ROOT / "docs" / "GALLERY.md",
-    REPO_ROOT / "docs" / "PALETTE_EXPLORER.md",
 )
 MARKDOWN_LINK_RE = re.compile(r"(?<!!)\[[^\]\n]+\]\(([^)\n]+)\)")
 
@@ -89,11 +88,11 @@ def test_session_reference_matches_current_implementation_constants() -> None:
     assert f"session version {CURRENT_SESSION_VERSION}" in source
     assert f"`renderRequest` schema {CANONICAL_REQUEST_SCHEMA}" in source
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
-        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44}
+        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46}
     )
-    assert SUPPORTED_CANONICAL_REQUEST_SCHEMAS == frozenset({1, 2, 5, 6, 7, 8})
-    assert "27–33, 39–42, and 44" in source
-    assert "1, 2, 5, 6, 7, and 8" in source
+    assert SUPPORTED_CANONICAL_REQUEST_SCHEMAS == frozenset({1, 2, 5, 6, 7, 8, 9})
+    assert "27–33, 39–42, 44, and 46" in source
+    assert "1, 2, 5, 6, 7, 8, and 9" in source
 
 
 def test_input_reference_lists_parser_owned_table_columns() -> None:
@@ -248,6 +247,31 @@ def test_release_reference_faq_and_gallery_local_links_resolve() -> None:
     assert missing == []
 
 
+def test_gallery_page_mirrors_the_web_gallery() -> None:
+    gallery = (REPO_ROOT / "docs" / "GALLERY.md").read_text(encoding="utf-8")
+    examples = sorted(
+        json.loads(
+            (REPO_ROOT / "gbdraw" / "web" / "gallery" / "examples.json").read_text(
+                encoding="utf-8"
+            )
+        ),
+        key=lambda example: example["displayOrder"],
+    )
+    headings = [
+        line.removeprefix("### ")
+        for line in gallery.split("## Web Gallery examples", 1)[1]
+        .split("\n## ", 1)[0]
+        .splitlines()
+        if line.startswith("### ")
+    ]
+
+    assert headings == [example["title"] for example in examples]
+    for example in examples:
+        assert example["description"] in gallery
+        assert f"https://gbdraw.app/gallery/#{example['id']}" in gallery
+        assert example["thumbnail"].removeprefix("./") in gallery
+
+
 def test_comparison_and_gallery_examples_use_whole_lambda_de3_and_five_bgcs() -> None:
     comparison = _read("comparison-programs-thresholds-and-results.md")
     gallery = (REPO_ROOT / "docs" / "GALLERY.md").read_text(encoding="utf-8")
@@ -269,14 +293,14 @@ def test_comparison_and_gallery_examples_use_whole_lambda_de3_and_five_bgcs() ->
         "recordsAreWholeCanonicalSources"
     ] is True
 
-    assert "BGC0000708, BGC0000709, BGC0000711, BGC0000712, and BGC0000713" in gallery
-    assert "LOSATP <em>Similarity groups</em>" in gallery
-    assert "phylogenetic orthology" in gallery
     bgc_example = next(
         example
         for example in gallery_examples
         if example["id"] == "BGC0000708-BGC0000713"
     )
+    assert "LOSATP similarity groups" in bgc_example["description"]
+    assert "not phylogenetic orthology" in bgc_example["description"]
+    assert bgc_example["description"] in gallery
     assert bgc_example["featureSources"] == [
         "BGC0000708.gbk",
         "BGC0000709.gbk",
@@ -284,4 +308,4 @@ def test_comparison_and_gallery_examples_use_whole_lambda_de3_and_five_bgcs() ->
         "BGC0000712.gbk",
         "BGC0000713.gbk",
     ]
-    assert bgc_example["workflow"] == "LOSATP similarity groups and color rules"
+    assert bgc_example["workflow"] == "Compare gene clusters by protein similarity"

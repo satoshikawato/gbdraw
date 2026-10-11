@@ -8,7 +8,7 @@ from Bio import SeqIO
 from PIL import Image
 
 from docs.capture.config import chapter_for
-from gbdraw.session_io import CURRENT_SESSION_VERSION
+from gbdraw.session_io import CURRENT_FEATURE_CATALOG_SCHEMA, CURRENT_SESSION_VERSION
 
 pytestmark = pytest.mark.recipe
 
@@ -149,13 +149,13 @@ def test_h_gui_13_persists_real_edits_and_keeps_group_semantics_distinct() -> No
         'mode="orthogroup"',
         "assert_gui_bgc_similarity_groups_svg",
         '[data-match-kind=\"orthogroup\"][data-orthogroup-id=\"og_1\"]',
-        '"Similarity group ID", "Members", "og_"',
+        '"genes in", "records", "og_"',
         'query=r"^og_1$"',
         'field="orthogroup"',
         "use_regex=True",
         "expected_matches=5",
-        '"Similarity group", "og_1", "Members", "Record coverage"',
-        '"23 similarity groups", "og_1", "5 members", "5 records"',
+        '"Similarity group", "og_1", "5 genes", "genes in"',
+        '"23 similarity groups", "og_1", "5 genes · 5 records"',
         '{"text": group_text, "groupId": "og_1", "members": 5}',
         "_assert_closed_right_drawer_contract(page)",
         "_assert_closed_drawer_does_not_reserve_canvas(page)",
@@ -172,10 +172,10 @@ def test_h_gui_13_persists_real_edits_and_keeps_group_semantics_distinct() -> No
 
 def test_h_gui_14_writes_current_gzip_session_and_uses_a_fresh_context() -> None:
     source = INTERACTIVE_FLOW.read_text(encoding="utf-8")
-    assert CURRENT_SESSION_VERSION == 44
+    assert CURRENT_SESSION_VERSION == 46
     for value in (
-        "CURRENT_SESSION_VERSION = 44",
-        "CURRENT_RENDER_REQUEST_SCHEMA = 8",
+        f"CURRENT_SESSION_VERSION = {CURRENT_SESSION_VERSION}",
+        "CURRENT_RENDER_REQUEST_SCHEMA = 9",
         'SESSION_FILENAME = f"{SESSION_TITLE}.gbdraw-session.json.gz"',
         'contents[:2] != b"\\x1f\\x8b"',
         'with gzip.open(path, "rt", encoding="utf-8")',
@@ -208,7 +208,7 @@ def test_h_gui_15_validates_every_actual_export() -> None:
         "assert_finished_circular_svg(report)",
         'root.attrib.get("data-gbdraw-interactive-svg") != "true"',
         "INTERACTIVE_ASSET_IDS.issubset(ids)",
-        'payload.get("schema") != 4',
+        f'payload.get("schema") != {CURRENT_FEATURE_CATALOG_SCHEMA}',
         'page.goto(path.resolve().as_uri(), wait_until="load")',
         'name="Expand feature search", exact=True',
         'fill("COX1")',

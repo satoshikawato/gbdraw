@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from svgwrite.container import Group
 
-from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ....config.models import GbdrawConfig
 from ....svg.text_path import generate_name_path, generate_text_path
 
 

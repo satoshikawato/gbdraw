@@ -1,9 +1,14 @@
 from __future__ import annotations
 
-from typing import NamedTuple
+from collections.abc import Iterable, Iterator
+from typing import TYPE_CHECKING, NamedTuple, TypeVar
 
-from Bio.SeqFeature import ExactPosition
+from Bio.SeqFeature import ExactPosition, SeqFeature
 from Bio.SeqRecord import SeqRecord
+
+if TYPE_CHECKING:
+    import numpy as np
+    from numpy.typing import NDArray
 
 
 _COORD_BASE_KEY = "gbdraw_coord_base"
@@ -11,6 +16,7 @@ _COORD_STEP_KEY = "gbdraw_coord_step"
 _SOURCE_FEATURE_INDEX_ATTR = "_gbdraw_source_feature_index"
 _SOURCE_FEATURE_PARTS_ATTR = "_gbdraw_source_feature_location_parts"
 _SOURCE_FEATURE_ANCHOR_PROFILE_ATTR = "_gbdraw_source_feature_anchor_profile"
+_SourceBase = TypeVar("_SourceBase", int, "NDArray[np.int64]")
 
 
 class _SourceFeatureAnchorProfile(NamedTuple):
@@ -20,14 +26,14 @@ class _SourceFeatureAnchorProfile(NamedTuple):
     strand: str
 
 
-def _iter_source_features(features: object):
+def _iter_source_features(features: Iterable[SeqFeature] | None) -> Iterator[SeqFeature]:
     """Yield top-level and nested source features in their original order."""
     for feature in features or ():
         yield feature
         yield from _iter_source_features(getattr(feature, "sub_features", None))
 
 
-def _feature_source_index_map(features: object) -> dict[int, int]:
+def _feature_source_index_map(features: Iterable[SeqFeature] | None) -> dict[int, int]:
     """Map nested feature objects to their flattened source-order ordinals."""
     return {id(feature): index for index, feature in enumerate(_iter_source_features(features))}
 
@@ -214,11 +220,24 @@ def _read_coord_map(record: object) -> tuple[int, int]:
     return base, (1 if step > 0 else -1)
 
 
-def _write_coord_map(record: object, *, base: int, step: int) -> None:
+def _source_to_local_index(
+    source: _SourceBase, coord_base: int, coord_step: int
+) -> _SourceBase:
+    """Return the 0-based local index of a 1-based source base.
+
+    This inverts the record coordinate map ``source = base + step * local``.
+    A numpy integer array of source bases is mapped elementwise. The result is
+    outside ``0..len(record) - 1`` when the base is outside a cropped record.
+    """
+
+    return (source - coord_base) * coord_step
+
+
+def _write_coord_map(record: SeqRecord, *, base: int, step: int) -> None:
     if getattr(record, "annotations", None) is None:
-        record.annotations = {}  # type: ignore[attr-defined]
-    record.annotations[_COORD_BASE_KEY] = int(base)  # type: ignore[attr-defined]
-    record.annotations[_COORD_STEP_KEY] = 1 if int(step) >= 0 else -1  # type: ignore[attr-defined]
+        record.annotations = {}
+    record.annotations[_COORD_BASE_KEY] = int(base)
+    record.annotations[_COORD_STEP_KEY] = 1 if int(step) >= 0 else -1
 
 
 def _absolute_display_interval(

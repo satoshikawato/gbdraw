@@ -1,13 +1,105 @@
+// @ts-check
 import { state } from './state.js';
 import {
   colorValueForMode,
   colorValueMode,
   toNativeColorInputValue
-} from './app/color-utils.js';
+} from './utils/color-utils.js';
 
-import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidance } from './services/error-normalization.js';
+import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidance } from './utils/error-normalization.js';
 
-const { ref, reactive, computed, nextTick, watch, useId } = window.Vue;
+const { ref, reactive, computed, nextTick, watch, useId, onMounted } = window.Vue;
+
+/** @typedef {{ element: HTMLElement, returnFocus: HTMLElement | null }} FocusScope */
+/** @type {FocusScope[]} */
+const focusScopes = [];
+
+// UI-02, UI-03: a dialog takes focus when it mounts (its element marked
+// data-dialog-initial-focus, else its first enabled button, else the dialog)
+// and, when it unmounts with focus inside it or lost, returns focus to the
+// element that had it before. A dialog that closes while it holds the return
+// target of a later one hands that one its own return target.
+export const dialogFocus = {
+  /** @param {HTMLElement} element */
+  beforeMount(element) {
+    const active = document.activeElement;
+    focusScopes.push({ element, returnFocus: active instanceof HTMLElement && active !== document.body ? active : null });
+  },
+  /** @param {HTMLElement} element */
+  mounted(element) {
+    const dialog = element.matches('[role="dialog"]') ? element : element.querySelector('[role="dialog"]');
+    const target = element.querySelector('[data-dialog-initial-focus]')
+      || dialog?.querySelector('button:not(:disabled)') || dialog;
+    if (target instanceof HTMLElement) target.focus({ preventScroll: true });
+  },
+  /** @param {HTMLElement} element */
+  beforeUnmount(element) {
+    const index = focusScopes.findIndex((scope) => scope.element === element);
+    if (index < 0) return;
+    const [{ returnFocus }] = focusScopes.splice(index, 1);
+    for (const scope of focusScopes) {
+      if (scope.returnFocus && element.contains(scope.returnFocus)) scope.returnFocus = returnFocus;
+    }
+    const active = document.activeElement;
+    if (active && active !== document.body && !element.contains(active)) return;
+    if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
+  }
+};
+
+// UI-02: a modal choice. The panel is the dialog, named by the heading and
+// described by the text that `labelledby` and `describedby` name. Escape and a
+// backdrop click emit `cancel`, which a use binds to its Cancel handler; a use
+// binds Tab to `trapDialogFocus`. While `busy` (a choice still applying), its
+// controls are disabled and it says so (D-12). Focus stays in it: the panel
+// takes focus before the controls are disabled, so Escape still reaches the
+// dialog, and the first enabled control gets it back if the dialog stays open.
+export const ChoiceDialog = {
+  template: '#choice-dialog-template',
+  props: {
+    labelledby: { type: String, required: true },
+    describedby: { type: String, default: null },
+    busy: { type: Boolean, default: false }
+  },
+  emits: ['cancel'],
+  /** @param {{ busy: boolean }} props */
+  setup(props) {
+    /** @type {{ value: HTMLElement | null }} */
+    const panel = ref(null);
+    const focusLost = () => !document.activeElement || document.activeElement === document.body;
+    watch(() => props.busy, async (busy) => {
+      const element = panel.value;
+      if (!element) return;
+      if (busy) {
+        if (focusLost() || element.contains(document.activeElement)) element.focus({ preventScroll: true });
+        return;
+      }
+      await nextTick();
+      if (element.isConnected && (focusLost() || document.activeElement === element)) {
+        /** @type {HTMLElement | null} */ (element.querySelector('button:not(:disabled)'))?.focus({ preventScroll: true });
+      }
+    });
+    return { panel };
+  }
+};
+
+/** @param {Node} node @returns {string} */
+const visibleText = (node) => {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent || '';
+  if (!(node instanceof Element) || node.matches('button, input, select, textarea, [hidden], [aria-hidden="true"]')) return '';
+  return Array.from(node.childNodes, visibleText).join(' ');
+};
+
+// R12 (UI-04): a tip is named after what it explains, "Help: <label>": the
+// author name or visible text of the element that holds it, after the name of
+// the row group it is in. `label` names a tip whose holder has no such text.
+/** @param {Element | null} tip */
+const helpTipName = (tip) => {
+  const holder = tip?.parentElement;
+  const group = holder?.closest('[role="group"][aria-label]')?.getAttribute('aria-label') || '';
+  const label = holder?.getAttribute('aria-label') || (holder ? visibleText(holder) : '');
+  const name = `${group} ${label}`.replace(/\s+/g, ' ').trim();
+  return name ? `Help: ${name}` : 'Help';
+};
 
 // Every tip is a disclosure button (PD-OI-057). One text source feeds the
 // visible tooltip and the accessible description, identified by `id` or an
@@ -24,6 +116,7 @@ export const HelpTip = {
   setup(props) {
     const automaticId = `help-tip-${useId()}`;
     const descriptionId = computed(() => props.id || automaticId);
+    const name = ref('Help');
     const hovered = ref(false);
     const keyboardFocus = ref(false);
     const pinned = ref(false);
@@ -74,7 +167,8 @@ export const HelpTip = {
       pinned.value = false;
     };
     const toggle = () => { pinned.value = !pinned.value; };
-    return { descriptionId, visible, style, trigger, onEnter, onLeave, onFocus, close, toggle };
+    onMounted(() => { name.value = helpTipName(trigger.value?.closest('.help-tip') || null); });
+    return { descriptionId, name, visible, style, trigger, onEnter, onLeave, onFocus, close, toggle };
   }
 };
 
@@ -85,6 +179,41 @@ export const AutoValueField = {
       <span v-if="visible" class="auto-value-placeholder">{{ text }}</span>
       <slot></slot>
     </div>
+  `
+};
+
+/**
+ * One item of an action menu. `live` announces a label that changes after the
+ * action (Copied!, Copy failed).
+ * @typedef {{ label: string, title?: string, icon?: string, disabled?: boolean, live?: boolean, run: () => unknown }} ActionMenuItem
+ */
+
+// A disclosure that holds a group of secondary actions, such as the copy and
+// FASTA actions of the similarity popups (UX-B01..B03). The items open in
+// place, inside the popup's scroll area, so no item is clipped.
+export const ActionMenu = {
+  props: {
+    label: { type: String, required: true },
+    icon: { type: String, default: '' },
+    title: { type: String, default: '' },
+    /** @type {{ type: ArrayConstructor, default: () => ActionMenuItem[] }} */
+    items: { type: Array, default: () => [] }
+  },
+  template: `
+    <details class="action-menu" data-nodrag="true">
+      <summary class="action-menu-toggle" :title="title || label">
+        <i v-if="icon" :class="['ph', icon]" aria-hidden="true"></i><span>{{ label }}</span>
+        <i class="ph ph-caret-down action-menu-caret" aria-hidden="true"></i>
+      </summary>
+      <div class="action-menu-items">
+        <button v-for="(item, index) in items" :key="index + '-' + item.label" type="button" class="action-menu-item"
+                :disabled="item.disabled" :title="item.title || item.label"
+                :aria-live="item.live ? 'polite' : null" :aria-atomic="item.live ? 'true' : null"
+                @click="item.run()">
+          <i v-if="item.icon" :class="['ph', item.icon]" aria-hidden="true"></i><span>{{ item.label }}</span>
+        </button>
+      </div>
+    </details>
   `
 };
 
@@ -149,9 +278,12 @@ export const ColorValueControl = {
   `
 };
 
+// `inspectionFailed` is the slot's existing inspection status, passed by the
+// parent that shows its message (for example "No records were found"): a
+// selected file whose inspection failed is not shown as ready (UI-08).
 export const FileUploader = {
   template: '#file-uploader-template',
-  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear', 'artifactHistory'],
+  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear', 'artifactHistory', 'inspectionFailed'],
   emits: ['update:modelValue', 'clearRequest'],
   setup(props, { emit }) {
     const input = ref(null);
@@ -274,4 +406,14 @@ export const OperationError = {
     return { model, title, recoveryText, diagnostics, details, diagnosticText, copyStatus,
       copyDiagnostics, selectDiagnostics };
   }
+};
+
+// The Specific color rules rows: a child of the root, so a root update that
+// leaves the rules unchanged renders no row (OV-251). The root keeps the
+// actions; a row emits them with the arguments it passed before.
+export const SpecificRuleRows = {
+  template: '#specific-rule-rows-template',
+  components: { OperationError },
+  props: ['rules', 'featureKeys', 'available', 'patternText', 'patternDraft', 'fieldId'],
+  emits: ['set-field', 'move-up', 'move-down', 'remove', 'edit-pattern', 'retry-pattern', 'revert-pattern']
 };

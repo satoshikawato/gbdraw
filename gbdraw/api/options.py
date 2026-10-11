@@ -7,13 +7,14 @@ import math
 from numbers import Integral, Real
 from pathlib import Path
 from types import MappingProxyType
-from typing import Literal, Mapping, Sequence, cast
+from typing import Any, Callable, Literal, Mapping, Sequence, TypeAlias, cast
 
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from pandas import DataFrame
 
+from gbdraw.features.overrides import FeatureOverride, normalize_feature_override_inputs
 from gbdraw.features.placement import FeaturePlacementOverride, normalize_feature_placements
 
-from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.collinearity import (
     CollinearityBlock,
     CollinearityAnchorMode,
     CollinearityColorMode,
@@ -24,27 +25,27 @@ from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
     normalize_collinearity_color_mode,
     normalize_collinearity_search_scope,
 )
-from gbdraw.analysis.collinearity_units import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.collinearity_units import (
     CollinearityUnitMode,
     normalize_collinearity_unit_mode,
 )
-from gbdraw.analysis.conservation import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.conservation import (
     ConservationSearchResult,
     normalize_conservation_reference,
 )
-from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.protein_colinearity import (
     OrthogroupResult,
     OrthogroupGraphResult,
     normalize_orthogroup_membership_mode,
 )
 from gbdraw.comparisons.losat_runtime import AUTOMATIC_LOSAT_BIN
-from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from gbdraw.config.models.objects import (  # type: ignore[reportMissingImports]
+from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models.objects import (
     normalize_pairwise_match_style,
 )
-from gbdraw.config.modify import validate_config_overrides  # type: ignore[reportMissingImports]
-from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
-from gbdraw.features.shapes import (  # type: ignore[reportMissingImports]
+from gbdraw.config.modify import validate_config_overrides
+from gbdraw.exceptions import ValidationError
+from gbdraw.features.shapes import (
     normalize_feature_shape_overrides,
 )
 from gbdraw.linear_comparison import LinearComparison
@@ -55,7 +56,7 @@ from gbdraw.mode_profiles import (
     resolve_mode_profile_overrides,
     validate_dinucleotide,
 )
-from gbdraw.tracks import (  # type: ignore[reportMissingImports]
+from gbdraw.tracks import (
     CircularTrackSlot,
     LinearTrackSlot,
     normalize_circular_track_slots_with_axis,
@@ -104,20 +105,22 @@ _MODE_CONFIG_OVERRIDE_PREFIXES: dict[DiagramMode, tuple[str, ...]] = {
 }
 
 
+def config_override_mode(path: str) -> DiagramMode | None:
+    """Return the only mode that draws config override ``path``; None when both do."""
+    for mode, prefixes in _MODE_CONFIG_OVERRIDE_PREFIXES.items():
+        if any(path == prefix or path.startswith(f"{prefix}.") for prefix in prefixes):
+            return mode
+    return None
+
+
 def _validate_mode_config_overrides(
     overrides: Mapping[str, object] | None,
     *,
     mode: DiagramMode,
 ) -> None:
     other_mode: DiagramMode = "linear" if mode == "circular" else "circular"
-    other_prefixes = _MODE_CONFIG_OVERRIDE_PREFIXES[other_mode]
     wrong_paths = sorted(
-        path
-        for path in (overrides or {})
-        if any(
-            path == prefix or path.startswith(f"{prefix}.")
-            for prefix in other_prefixes
-        )
+        path for path in (overrides or {}) if config_override_mode(path) == other_mode
     )
     if not wrong_paths:
         return
@@ -128,10 +131,16 @@ def _validate_mode_config_overrides(
         if all(path.startswith(f"labels.{other_mode}.") for path in wrong_paths)
         else f"{other_name} settings"
     )
+    # The Web names the first path and the mode that owns it (OV-130).
     raise ValidationError(
         f"{mode_name} config overrides cannot target {target}: "
         + ", ".join(wrong_paths)
-        + "."
+        + ".",
+        diagnostic={
+            "code": "MODE_SETTING",
+            "reason": "CIRCULAR_SETTING" if other_mode == "circular" else "LINEAR_SETTING",
+            "configPath": wrong_paths[0],
+        },
     )
 
 
@@ -146,7 +155,7 @@ class ColorOptions:
     default_colors_file: str | None = None
 
 
-_DepthTrackSource = str | Path | DataFrame
+_DepthTrackSource: TypeAlias = str | Path | DataFrame
 
 
 @dataclass(frozen=True)
@@ -241,7 +250,7 @@ def _validate_track_configuration(
                 f"{slots_field_name} must contain strings or "
                 f"{expected_type.__name__} values."
             )
-        parser = (
+        parser: Callable[[Sequence[Any]], Sequence[Any]] = (
             parse_circular_track_slots
             if mode == "circular"
             else parse_linear_track_slots
@@ -258,7 +267,7 @@ def _validate_track_configuration(
     if parsed_slots is None:
         raise ValidationError(f"{axis_field_name} requires {slots_field_name}.")
     normalized_axis_index = int(axis_index)
-    normalizer = (
+    normalizer: Callable[[Sequence[Any], int], object] = (
         normalize_circular_track_slots_with_axis
         if mode == "circular"
         else normalize_linear_track_slots_with_axis
@@ -909,10 +918,18 @@ class _ModeDiagramOptions:
     feature_placements: tuple[FeaturePlacementOverride, ...] = field(default=(), kw_only=True)
     feature_placement_table: DataFrame | None = field(default=None, kw_only=True)
     feature_placement_table_file: str | Path | None = field(default=None, kw_only=True)
+    feature_overrides: tuple[FeatureOverride, ...] = field(default=(), kw_only=True)
+    feature_override_table: DataFrame | None = field(default=None, kw_only=True)
+    feature_override_table_file: str | Path | None = field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
         placements = normalize_feature_placements(self.feature_placements)
         object.__setattr__(self, "feature_placements", placements)
+        object.__setattr__(self, "feature_overrides", normalize_feature_override_inputs(
+            self.feature_overrides,
+            table=self.feature_override_table,
+            table_file=self.feature_override_table_file,
+        ))
         if sum((bool(placements), self.feature_placement_table is not None,
                 self.feature_placement_table_file is not None)) > 1:
             raise ValidationError("Feature placement exact/table/file inputs are mutually exclusive.")
@@ -923,7 +940,7 @@ class _ModeDiagramOptions:
             or not str(self.feature_placement_table_file).strip()
         ):
             raise ValidationError("feature_placement_table_file must identify a file.")
-        nested_types = (
+        nested_types: tuple[tuple[str, object, type], ...] = (
             ("colors", self.colors, ColorOptions),
             ("annotations", self.annotations, AnnotationOptions),
         )

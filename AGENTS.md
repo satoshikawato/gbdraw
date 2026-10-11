@@ -3,7 +3,7 @@
 Guidance for automated agents working in this repository.
 
 ## Read First
-- コード1行増やすごとに技術負債が増えると心得よ。
+- コード1行増やすごとに技術負債が増えると心得よ。負債は行数ではなく、増えた変更点・分岐・重複で数える。
 - See `CLAUDE.md` for project-wide guidance.
 - If working on the web UI, also read `gbdraw/web/CLAUDE.md`.
 
@@ -19,6 +19,34 @@ Guidance for automated agents working in this repository.
   same-named remote work branch.
 - Never commit directly to, or push directly to, `main` or `dev` unless the user
   explicitly authorizes that exact direct target in the current request.
+- Open every pull request against `dev`. Open a pull request that depends on
+  another only after that one has merged, rebased onto `origin/dev`. Never merge
+  a pull request into another work branch; confirm `base` is `dev` before
+  enabling auto-merge or merging.
+- Before opening or merging a pull request, confirm that every file its
+  Changes section names is in its diff (`gh pr diff <n> --name-only`).
+- Do not enable auto-merge on, or merge, a pull request that expands authority
+  (Web design rule text that permits more, a guard registration removed, or an
+  entry added to a registered baseline or allowlist). Wait for the Owner's
+  approval.
+
+## Workspace Cleanup
+
+- GitHub deletes a pull request's head branch when the pull request merges.
+  Your local worktree and branch stay; remove them yourself.
+- When your pull request merges and you no longer need its worktree, run
+  `git status` in it, then `git worktree remove <path>` and
+  `git branch -D <branch>`. Keep the worktree while it holds uncommitted work
+  you still need.
+- Remove only the worktrees and branches you created. Merged or idle does not
+  mean unused: another agent may still work in its worktree. To clean up
+  across agents, ask each owner first.
+- Keep logs, evidence, scratch scripts, virtual environments, and backups in
+  one folder per task outside the repository, never inside `.worktrees/`.
+- When a task ends, delete its remaining worktrees, local branches, virtual
+  environments, caches, and backups. Keep its report and handoff notes. PR body
+  drafts and session logs need no archive. A backup script keeps at most three
+  snapshots.
 
 ## Project Summary
 
@@ -133,7 +161,7 @@ For changes affecting Web runtime or normative Web behavior contracts:
 ## Pull request communication
 
 - Before creating, changing, or reviewing PR wording,
-  read and apply `.agents/skills/write-clear-pull-request/SKILL.md`.
+  read and apply `.claude/skills/write-clear-pull-request/SKILL.md`.
 - Prepare the title and body file. Run
   `node tools/check-pr-language.mjs --title "<title>" --body-file <path>` once
   before `gh pr create`, using the same wording.

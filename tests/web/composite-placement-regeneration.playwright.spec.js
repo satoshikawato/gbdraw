@@ -16,7 +16,8 @@ const compositeSeed = async (testInfo) => {
   const output = testInfo.outputPath('two-source.gbdraw-session.json.gz');
   await fs.writeFile(input, JSON.stringify({ format: single.format, version: single.version,
     results: [], editorState: { featureCatalog: null }, ui: { ...single.ui, generatedMultiRecordCanvas: true },
-    config: { ...single.config, form: { ...single.config.form, multi_record_canvas: true } },
+    modes: { circular: { ...single.modes.circular, config: { ...single.modes.circular.config,
+      form: { ...single.modes.circular.config.form, multi_record_canvas: true } } } },
     renderRequest: { ...single.renderRequest, grouping: 'grid',
       records: [...single.renderRequest.records, second], layout: { multiRecordSizeMode: 'auto',
         multiRecordMinRadiusRatio: 0.55, multiRecordColumnGapRatio: 0.1, multiRecordRowGapRatio: 0.05,
@@ -69,7 +70,7 @@ for (const composite of [false, true]) {
     };
     const close = () => page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
     const open = async (feature) => {
-      await page.evaluate((feature) => window.__GBDRAW_APP__.openFeatureEditorFromList(feature), feature);
+      await evaluateWithRetainedPromise(page, (feature) => window.__GBDRAW_APP__.openFeatureEditorFromList(feature), feature);
       return page.getByLabel('Feature placement', { exact: true });
     };
     const check = async (stage, enabled = allPlacements, targets = null) => {
@@ -104,8 +105,8 @@ for (const composite of [false, true]) {
           resources: Object.fromEntries(Object.entries(session.resources).map(([id, descriptor]) => [id, { size: descriptor.size, name: descriptor.name }])),
           source: { name: state.files.c_gb.name, size: state.files.c_gb.size,
             components: binding?.descriptors?.map((part) => part.resourceId) || [] },
-          form: config.buildConfigData().form, geometry: state.trackSlotResolvedGeometry.value,
-          catalog: state.featureCatalog.value, placements: state.featurePlacementOverrides };
+          form: config.buildConfigData(state.activeDrawing()).form, geometry: state.trackSlotResolvedGeometry.value,
+          catalog: state.featureCatalog.value, placements: state.activeDrawing().featurePlacementOverrides };
       });
       await fs.writeFile(testInfo.outputPath(`${stage}.json`), JSON.stringify({ selected, enabled, ...state }, null, 2));
       return { ...state, recordOrder: selected.map((feature) => [feature.record_key, feature.record_id]) };
@@ -152,9 +153,14 @@ for (const composite of [false, true]) {
           await page.getByRole('checkbox', { name: 'Separate Strands', exact: true }).setChecked(separate);
           for (const preset of ['tuckin', 'spreadout', 'middle']) {
             await page.locator('#circular-track-preset').selectOption(preset);
+            if (!separate && preset === 'tuckin') {
+              // Q3: leaving Middle asks first, and Reset clears the outward intent (OV-09).
+              await page.getByRole('dialog', { name: 'Reset Feature placements?', exact: true })
+                .getByRole('button', { name: 'Reset 1 placement to Auto', exact: true }).click();
+            }
             const valid = preset === 'middle' ? allPlacements : ['auto', 'main'];
             await check(`P8-${separate}-${preset}-draft`, valid);
-            // Clear the now-unsupported outward intent through the existing Auto action.
+            // The existing Auto action keeps a cleared intent at Auto.
             const control = await open((await features())[0]);
             await control.selectOption('auto');
             await close();

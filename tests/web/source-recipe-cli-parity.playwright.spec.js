@@ -11,7 +11,7 @@ const { test, expect } = require('@playwright/test');
 const { spawnSync } = require('node:child_process');
 const { readFileSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
-const { generateAndWaitForResult, reveal } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, generateAndWaitForResult, reveal } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, openFresh, settle } = require('./helpers/audit-browser.cjs');
 
 test.describe.configure({ retries: 0 });
@@ -25,7 +25,8 @@ const replayEnv = { ...process.env };
 delete replayEnv.PYTHONPATH;
 delete replayEnv.PYTHONHOME;
 
-const setApp = (page, body) => page.evaluate(body);
+// A long page promise awaited inside page.evaluate can be collected by the inspector (OV-327).
+const setApp = (page, body) => evaluateWithRetainedPromise(page, body);
 const slotLabel = async (page, slot, text) => {
   const field = page.getByRole('group', { name: `Circular track slot ${slot}`, exact: true })
     .getByRole('textbox', { name: 'Track legend label' });

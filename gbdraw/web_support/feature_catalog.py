@@ -10,7 +10,7 @@ import math
 import re
 from types import MappingProxyType
 import xml.etree.ElementTree as ET
-from typing import Any
+from typing import Any, Iterable, TypeVar, cast
 
 from gbdraw.exceptions import GbdrawError
 from gbdraw.features.ids import disambiguate_feature_ids
@@ -33,8 +33,12 @@ from gbdraw.render.interactive_svg import (
     _validate_match_fragments,
 )
 
-FEATURE_CATALOG_SCHEMA = 4
+FEATURE_CATALOG_SCHEMA = 5
+# Schema 4 added source-anchor profiles; schema 5 adds each rendered feature's
+# drawn selector values (``drawnSelector``) for live rule matching.
+ANCHOR_FEATURE_CATALOG_SCHEMA = 4
 LEGACY_FEATURE_CATALOG_SCHEMA = 3
+_DRAWN_SELECTOR_FIELDS = frozenset({"hash", "location", "recordLocation"})
 
 _BIOLOGICAL_ALIAS_KEYS = {
     "id",
@@ -70,6 +74,7 @@ _BIOLOGICAL_REMOVED_KEYS = frozenset(
     | _ORTHOGROUP_FEATURE_KEYS
     | {
         "selector",
+        "drawn_selector",
         "nucleotide_fasta",
         "nucleotideFasta",
         "amino_acid_fasta",
@@ -142,6 +147,12 @@ def _text(value: object | None) -> str:
     return _first_text(value)
 
 
+def _compact_wire_mapping(value: Mapping[str, object]) -> dict[str, object]:
+    # _compact_wire_value returns a mapping (or None when empty) for a mapping.
+    compacted = cast("Mapping[str, object] | None", _compact_wire_value(value))
+    return dict(compacted or {})
+
+
 def _legacy_feature_strand(
     feature: Mapping[str, object],
     parts: Sequence[Mapping[str, object]],
@@ -160,11 +171,12 @@ def _legacy_feature_strand(
     return "unstranded"
 
 
-def _legacy_exact_coordinate(value: object) -> int | None:
+def _legacy_exact_coordinate(value: Any) -> int | None:
+    # Legacy payload values are arbitrary JSON; non-numeric ones raise TypeError.
     if isinstance(value, bool):
         return None
     try:
-        number = int(value)  # type: ignore[arg-type]
+        number = int(value)
     except (TypeError, ValueError, OverflowError):
         return None
     if isinstance(value, float) and not value.is_integer():
@@ -174,14 +186,46 @@ def _legacy_exact_coordinate(value: object) -> int | None:
     return number if abs(number) <= 9_007_199_254_740_991 else None
 
 
+_MISSING = object()
+
+
+def _valid_drawn_selector(value: object) -> bool:
+    """A drawn selector is null (unknown) or the three drawn values."""
+
+    if value is None:
+        return True
+    return (
+        isinstance(value, Mapping)
+        and set(value) == _DRAWN_SELECTOR_FIELDS
+        and all(item is None or (isinstance(item, str) and item) for item in value.values())
+    )
+
+
+def _drawn_selector(feature: Mapping[str, object] | None) -> dict[str, str | None] | None:
+    raw = feature.get("drawn_selector") if isinstance(feature, Mapping) else None
+    if not isinstance(raw, Mapping):
+        return None
+    return {field: (_text(raw.get(field)) or None) for field in ("hash", "location", "recordLocation")}
+
+
 def promote_legacy_feature_catalog(
     catalog: Mapping[str, object],
 ) -> dict[str, object]:
-    """Promote schema 3 with only safely inferred source-anchor metadata."""
+    """Promote schema 3 or 4 without inventing values.
 
-    if catalog.get("schema") != LEGACY_FEATURE_CATALOG_SCHEMA:
+    Schema 3 gains only safely inferred source-anchor metadata and source
+    feature indexes: its writer named a duplicated stable identity
+    ``<stableFeatureId>~<source feature index>`` and some writers stored no
+    index (OV-269). Rendered features of schema 3 and 4 gain
+    ``drawnSelector: None``: their drawn selector values are unknown until the
+    next Generate.
+    """
+
+    source_schema = catalog.get("schema")
+    if source_schema not in (LEGACY_FEATURE_CATALOG_SCHEMA, ANCHOR_FEATURE_CATALOG_SCHEMA):
         raise GbdrawError(
-            f"Feature catalog must use schema {LEGACY_FEATURE_CATALOG_SCHEMA}."
+            f"Feature catalog must use schema {LEGACY_FEATURE_CATALOG_SCHEMA} "
+            f"or {ANCHOR_FEATURE_CATALOG_SCHEMA}."
         )
     migrated = copy.deepcopy(dict(catalog))
     items = migrated.get("items")
@@ -191,6 +235,13 @@ def promote_legacy_feature_catalog(
     for item in items:
         if not isinstance(item, dict):
             raise GbdrawError("Feature catalog items must contain objects.")
+        # Item validation stays with select_feature_catalog_item.
+        rendered = item.get("features")
+        for feature in rendered if isinstance(rendered, list) else ():
+            if isinstance(feature, dict):
+                feature["drawnSelector"] = None
+        if source_schema == ANCHOR_FEATURE_CATALOG_SCHEMA:
+            continue
         features = item.get("biologicalFeatures")
         if not isinstance(features, list):
             raise GbdrawError(
@@ -201,6 +252,19 @@ def promote_legacy_feature_catalog(
                 raise GbdrawError(
                     "Feature catalog biologicalFeatures must contain objects."
                 )
+            stable_id = _text(feature.get("stableFeatureId"))
+            biological_id = _text(feature.get("biologicalFeatureId"))
+            suffix = (
+                biological_id[len(stable_id) + 1:]
+                if stable_id and biological_id.startswith(f"{stable_id}~")
+                else ""
+            )
+            if (
+                suffix.isascii()
+                and suffix.isdigit()
+                and _feature_source_index_status(feature) == (None, True)
+            ):
+                feature["sourceFeatureIndex"] = int(suffix)
             raw_parts = feature.get("location_parts", feature.get("locationParts"))
             parts = (
                 raw_parts
@@ -513,7 +577,7 @@ def _match_payload(
             for field, attribute in _MATCH_ATTRIBUTES.items()
         }
     )
-    return dict(_compact_wire_value(payload) or {})
+    return _compact_wire_mapping(payload)
 
 
 def _record_source_span(element: ET.Element) -> tuple[int, tuple[int, int, int]] | None:
@@ -542,7 +606,7 @@ def _record_source_interval_fields(
 ) -> dict[str, str]:
     """Source coordinates of a match on cropped or reversed records (PD-OI-076).
 
-    Mirrors ``recordSourceInterval`` in ``app/record-source-coordinates.js``,
+    Mirrors ``recordSourceInterval`` in ``services/record-source-coordinates.js``,
     which fills the same fields for Interactive SVGs built without a catalog.
     """
 
@@ -594,7 +658,7 @@ def _match_payloads(
             )
             payload.setdefault(f"{role}_feature_index", rendered.get("feature_index"))
         payload.update(_record_source_interval_fields(payload, record_source_spans))
-        payloads.append(dict(_compact_wire_value(payload) or {}))
+        payloads.append(_compact_wire_mapping(payload))
     return payloads
 
 
@@ -730,8 +794,9 @@ def _first_qualifier_value(value: object | None) -> str:
     if value is None:
         return ""
     value_type = type(value)
+    values: Iterable[object]
     if value_type is list or value_type is tuple:
-        values = value
+        values = cast("Iterable[object]", value)
     elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
         values = value
     else:
@@ -1012,8 +1077,10 @@ def _normalized_biological_features(
                 payload.get("protein_id")
                 or payload.get("proteinId")
                 or (
-                    payload.get("qualifiers", {}).get("protein_id")
-                    if isinstance(payload.get("qualifiers"), Mapping)
+                    payload_qualifiers.get("protein_id")
+                    if isinstance(
+                        payload_qualifiers := payload.get("qualifiers"), Mapping
+                    )
                     else None
                 )
             )
@@ -1074,6 +1141,9 @@ def _normalized_biological_features(
     return normalized, indexed
 
 
+_IndexKey = TypeVar("_IndexKey")
+
+
 class _BiologicalFeatureIndex:
     def __init__(
         self,
@@ -1113,8 +1183,8 @@ class _BiologicalFeatureIndex:
 
     @staticmethod
     def _add_unique(
-        index: dict[object, Mapping[str, object] | None],
-        key: object,
+        index: dict[_IndexKey, Mapping[str, object] | None],
+        key: _IndexKey,
         feature: Mapping[str, object],
     ) -> None:
         index[key] = None if key in index else feature
@@ -1330,6 +1400,7 @@ def _normalized_rendered_features(
                 "recordKey": record_key,
                 "biologicalFeatureId": biological_feature_id,
                 "fillColor": resolved.entry.fill,
+                "drawnSelector": _drawn_selector(resolved.feature),
             }
         )
         references_by_svg_id[svg_id] = reference
@@ -1431,8 +1502,8 @@ def _normalized_orthogroups(
                     for output_key, source_keys in member_specific_fields
                 },
             }
-            members.append(dict(_compact_wire_value(compact_member) or {}))
-        compact_group = dict(_compact_wire_value(payload) or {})
+            members.append(_compact_wire_mapping(compact_member))
+        compact_group = _compact_wire_mapping(payload)
         presentations = {
             presentation
             for presentation in (
@@ -1751,7 +1822,7 @@ def _normalized_matches(
                 "RenderedFeatureSvgId",
             ):
                 payload.pop(f"{role}{suffix}", None)
-        normalized.append(dict(_compact_wire_value(payload) or {}))
+        normalized.append(_compact_wire_mapping(payload))
     return normalized
 
 
@@ -1805,7 +1876,7 @@ def _normalized_annotations(
                 ),
             }
         )
-        annotations.append(dict(_compact_wire_value(payload) or {}))
+        annotations.append(_compact_wire_mapping(payload))
     return annotations
 
 
@@ -1819,7 +1890,7 @@ def _deduplicated_sequence_sources(
     for source in selected:
         if not isinstance(source, Mapping):
             continue
-        payload = dict(_compact_wire_value(dict(source)) or {})
+        payload = _compact_wire_mapping(dict(source))
         key = _text(payload.get("key"))
         if not key:
             raise GbdrawError(
@@ -1838,7 +1909,7 @@ def _deduplicated_sequence_sources(
     return normalized
 
 
-def _integer_or_none(value: object) -> int | None:
+def _integer_or_none(value: Any) -> int | None:
     try:
         number = float(value)
     except (TypeError, ValueError):
@@ -1848,30 +1919,20 @@ def _integer_or_none(value: object) -> int | None:
     return int(number)
 
 
+class _ComplementTable(dict[int, int]):
+    """Translate table that maps every unlisted character to ``N``."""
+
+    def __missing__(self, ordinal: int) -> int:
+        return ord("N")
+
+
+_COMPLEMENT_TABLE = _ComplementTable(
+    str.maketrans("ACGTURYSWKMBDHVN-", "TGCAAYRSWMKVHDBN-")
+)
+
+
 def _reverse_complement_sequence(sequence: str) -> str:
-    complements = {
-        "A": "T",
-        "C": "G",
-        "G": "C",
-        "T": "A",
-        "U": "A",
-        "R": "Y",
-        "Y": "R",
-        "S": "S",
-        "W": "W",
-        "K": "M",
-        "M": "K",
-        "B": "V",
-        "D": "H",
-        "H": "D",
-        "V": "B",
-        "N": "N",
-        "-": "-",
-    }
-    return "".join(
-        complements.get(base, "N")
-        for base in reversed("".join(sequence.split()).upper())
-    )
+    return "".join(sequence.split()).upper()[::-1].translate(_COMPLEMENT_TABLE)
 
 
 def _canonical_sequence_source(
@@ -2033,7 +2094,7 @@ def _reference_reconstructible_nucleotide_sequences(
 
 def build_feature_catalog_item(
     svg_source: str,
-    context: InteractiveSvgContext,
+    context: InteractiveSvgContext | None,
     *,
     result_index: int,
     result_name: str,
@@ -2092,8 +2153,8 @@ def build_feature_catalog_item(
             raise GbdrawError(
                 "Orthogroup comparison metadata has an invalid membership scope."
             )
-        for group_id in _sequence(match.get("orthogroup_ids")):
-            normalized_group_id = _text(group_id)
+        for listed_group_id in _sequence(match.get("orthogroup_ids")):
+            normalized_group_id = _text(listed_group_id)
             if not normalized_group_id or normalized_group_id in known_group_ids:
                 continue
             orthogroups.append(
@@ -2147,7 +2208,7 @@ def build_feature_catalog_item(
 def build_feature_catalog(
     items: Sequence[Mapping[str, object]],
 ) -> dict[str, object]:
-    """Wrap normalized logical-result items in the schema-4 envelope."""
+    """Wrap normalized logical-result items in the current schema envelope."""
 
     return {
         "schema": FEATURE_CATALOG_SCHEMA,
@@ -2168,7 +2229,11 @@ def select_feature_catalog_item(
     allowed_schemas = (
         {expected_schema}
         if expected_schema is not None
-        else {3, FEATURE_CATALOG_SCHEMA}
+        else {
+            LEGACY_FEATURE_CATALOG_SCHEMA,
+            ANCHOR_FEATURE_CATALOG_SCHEMA,
+            FEATURE_CATALOG_SCHEMA,
+        }
     )
     if (
         not isinstance(catalog, Mapping)
@@ -2177,7 +2242,7 @@ def select_feature_catalog_item(
         required = (
             str(expected_schema)
             if expected_schema is not None
-            else f"3 or {FEATURE_CATALOG_SCHEMA}"
+            else f"3, 4 or {FEATURE_CATALOG_SCHEMA}"
         )
         raise GbdrawError(
             f"Feature catalog must use schema {required}."
@@ -2350,7 +2415,8 @@ def select_feature_catalog_item(
                 or not _reconstruct_nucleotide_sequence(
                     feature,
                     source,
-                    source_sequence=canonical_sources[source_index],
+                    # source is not None only when source_index is an int.
+                    source_sequence=canonical_sources[cast(int, source_index)],
                 )
             ):
                 raise GbdrawError(
@@ -2391,6 +2457,13 @@ def select_feature_catalog_item(
             raise GbdrawError(
                 "Feature catalog contains an invalid rendered feature "
                 "reference."
+            )
+        if catalog_schema >= FEATURE_CATALOG_SCHEMA and not _valid_drawn_selector(
+            feature.get("drawnSelector", _MISSING)
+        ):
+            raise GbdrawError(
+                "Feature catalog contains an invalid rendered feature "
+                "drawn selector."
             )
         rendered_ids.add(svg_id)
 

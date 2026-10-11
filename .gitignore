@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+.mypy_cache/
 
 # --- Build Artifacts (Setup.py / Pip) ---
 build/
@@ -50,6 +51,8 @@ venv.bak/
 # --- IDE / Editor ---
 .vscode/
 .idea/
+.claude/settings.local.json
+CLAUDE.local.md
 *.swp
 
 # --- OS Generated ---
@@ -61,7 +64,7 @@ ehthumbs.db
 Thumbs.db
 desktop.ini
 /missing_inputs.json
-/_reproduced/missing_inputs.json
+/_reproduced/
 
 # --- Secrets ---
 *.pem

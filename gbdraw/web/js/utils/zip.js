@@ -1,3 +1,4 @@
+// @ts-check
 const CRC32_TABLE = (() => {
   const table = new Uint32Array(256);
   for (let i = 0; i < 256; i += 1) {
@@ -79,6 +80,14 @@ const uniqueZipPath = (name, usedNames) => {
 const writeUint16 = (view, offset, value) => view.setUint16(offset, value, true);
 const writeUint32 = (view, offset, value) => view.setUint32(offset, value >>> 0, true);
 
+/**
+ * @typedef {{ name?: string, data?: string | ArrayBuffer | ArrayBufferView | null }} ZipFileEntry
+ */
+
+/**
+ * @param {ZipFileEntry[] | null | undefined} files
+ * @returns {Blob}
+ */
 export const createZipBlob = (files) => {
   const localParts = [];
   const centralParts = [];

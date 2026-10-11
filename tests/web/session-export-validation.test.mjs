@@ -71,11 +71,11 @@ assert.equal(inputReads, 0);
 
 state.results.value = [];
 state.featureCatalog.value = null;
-state.adv.circular_track_slots_enabled = true;
-state.adv.circular_track_slots_axis_index = 0;
-state.adv.circular_track_slots.splice(
+state.activeDrawing().adv.circular_track_slots_enabled = true;
+state.activeDrawing().adv.circular_track_slots_axis_index = 0;
+state.activeDrawing().adv.circular_track_slots.splice(
   0,
-  state.adv.circular_track_slots.length,
+  state.activeDrawing().adv.circular_track_slots.length,
   {
     id: 'features',
     renderer: 'features',
@@ -91,6 +91,7 @@ state.adv.circular_track_slots.splice(
 );
 const committed = buildCanonicalRenderRequest({
   state,
+  drawing: state.activeDrawing(),
   filesData: {
     c_gb: {
       name: 'legacy.gbk',
@@ -103,7 +104,7 @@ const committed = buildCanonicalRenderRequest({
   }
 });
 adoptCanonicalRenderArtifacts(committed, { adoptOwnedRequest: true });
-state.adv.circular_track_slots[0].width = '16px';
+state.activeDrawing().adv.circular_track_slots[0].width = '16px';
 
 const retainedCircularFiles = {
   blasts: [{ name: 'retained-blast.tsv' }],
@@ -114,7 +115,7 @@ state.files.c_conservation_blasts = retainedCircularFiles.blasts;
 state.files.c_conservation_fastas = retainedCircularFiles.fastas;
 state.files.c_conservation_sequence_sources = retainedCircularFiles.sources;
 state.files.c_conservation_blasts_source = 'upload';
-Object.assign(state.circularConservation, {
+Object.assign(state.activeDrawing().circularConservation, {
   enabled: false,
   source: 'upload',
   reference: 'query',
@@ -122,9 +123,9 @@ Object.assign(state.circularConservation, {
   ring_width: 0.12,
   ring_gap: 0.03
 });
-state.circularConservation.series.splice(
+state.activeDrawing().circularConservation.series.splice(
   0,
-  state.circularConservation.series.length,
+  state.activeDrawing().circularConservation.series.length,
   { label: 'Retained', sourceIndex: 0 }
 );
 const failedAdoption = structuredClone(committed);
@@ -158,7 +159,7 @@ assert.equal(
   retainedCircularFiles.sources
 );
 assert.equal(state.files.c_conservation_blasts_source, 'upload');
-assert.deepEqual(state.circularConservation.series, [{
+assert.deepEqual(state.activeDrawing().circularConservation.series, [{
   label: 'Retained',
   sourceIndex: 0
 }]);
@@ -187,7 +188,7 @@ try {
   const session = JSON.parse(gunzipSync(
     Buffer.from(await saved.blob.arrayBuffer())
   ).toString('utf8'));
-  assert.equal(session.config.adv.circular_track_slots[0].width, '16px');
+  assert.equal(session.modes.circular.config.adv.circular_track_slots[0].width, '16px');
   assert.equal(
     session.renderRequest.diagramOptions.tracks.circularTrackSlots[0].width,
     null
@@ -310,3 +311,34 @@ assert.ok(inputReads > 0, 'saving must bind the active input file');
 assert.equal(compressionAttempts, 5);
 assert.equal(downloadedBlobs, 5);
 assert.ok(downloadedBlob instanceof Blob);
+
+// OV-325: Load of a Circular Session without a Web draft (CLI, Python) that
+// gives two records of one GenBank file, selected by record ID, a display start
+// projects both drafts on '#1'. Save writes each draft on its record's row
+// once the File card lists the file's records, instead of failing validation.
+{
+  const draft = (recordId, startCoordinate) => ({
+    sourceUid: 'circular', selector: '#1', recordId, startCoordinate,
+    topologyOverride: null, reverseComplementOverride: null, anchorIntent: null
+  });
+  const rows = ['NC_004603.1', 'NC_004605.1'].map((recordId, index) => ({
+    key: JSON.stringify(['circular', `#${index + 1}`]), scope: 'circular', sourceUid: 'circular',
+    selector: `#${index + 1}`, recordId, recordLength: 60, detectedTopology: 'circular'
+  }));
+  const drafts = state.drawings.circular.recordDisplayDrafts;
+  drafts.splice(0, drafts.length, draft('NC_004603.1', 1000), draft('NC_004605.1', 2000));
+  URL.createObjectURL = () => 'blob:ov325-session';
+  try {
+    const saved = await exportSession('ov325-cli-circular', { recordDisplayRows: { value: rows } });
+    assert.equal(saved.status, 'saved');
+    const session = JSON.parse(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())).toString('utf8'));
+    assert.deepEqual(
+      session.modes.circular.config.recordDisplayDrafts.map(({ selector, recordId, startCoordinate }) => [selector, recordId, startCoordinate]),
+      [['#1', 'NC_004603.1', 1000], ['#2', 'NC_004605.1', 2000]],
+      'OV-325: Save after Load writes each draft on its record'
+    );
+  } finally {
+    URL.createObjectURL = originalCreateObjectUrl;
+    drafts.splice(0, drafts.length);
+  }
+}

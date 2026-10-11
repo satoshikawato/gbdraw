@@ -1,7 +1,7 @@
 import { sendBoundedJson } from '../services/bounded-json-transport.js';
 import { PYTHON_HELPERS } from '../app/python-helpers.js';
 import { DIAGRAM_HELPER_OPERATIONS } from '../services/diagram-worker-protocol.js';
-import { normalizeUserFacingError } from '../services/error-normalization.js';
+import { normalizeUserFacingError } from '../utils/error-normalization.js';
 
 let runtimePromise = null;
 let runtime = null;
@@ -20,7 +20,7 @@ const sendAuxiliaryResult = async (type, requestId, result) => {
         auxiliaryAcknowledgement = { requestId, resolve };
         self.postMessage({ type, requestId, status: 'part', ...part }, transfers);
       });
-    }, [], { consume: true });
+    }, { consume: true });
     if (!wholeReply) self.postMessage({ type, requestId, ok: true });
   } finally {
     auxiliaryAcknowledgement = null;
@@ -270,6 +270,7 @@ const HELPER_FILE_NAMES = Object.freeze({
   fasta: 'source.fasta',
   pairs: 'pairs.json',
   visibility: 'feature-visibility.tsv',
+  featureOverrides: 'feature-overrides.tsv',
   rawTsv: 'raw-losatp.tsv'
 });
 
@@ -526,6 +527,20 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]);
     }
   },
+  // Load Feature Edits TSV: Python reads the table against the records of the
+  // committed request, staged as Generate stages them (design Q4 6.4, R4).
+  [DIAGRAM_HELPER_OPERATIONS.READ_FEATURE_OVERRIDE_TABLE]: {
+    keys: ['files', 'canonicalRequest', 'resourceManifest', 'stagedResources'],
+    fileRoles: ['featureOverrides'],
+    run: async (pyodide, payload, paths, operation, workspace) => callJsonHelper(
+      pyodide, 'read_feature_override_table_json', [
+        requireHelperFile(paths, 'featureOverrides', operation),
+        jsonArgument(payload.canonicalRequest, null),
+        jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
+        `${workspace}/output`
+      ]
+    )
+  },
   [DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES]: {
     keys: ['features', 'rules', 'kind'],
     fileRoles: [],
@@ -582,7 +597,8 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       'recordSelector',
       'reverseFlag',
       'recordIndex',
-      'recordInstanceKey'
+      'recordInstanceKey',
+      'featureOverrides'
     ],
     fileRoles: ['source', 'fasta', 'visibility'],
     run: (pyodide, payload, paths, operation) => {
@@ -600,7 +616,9 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         payload.reverseFlag ? '1' : '0',
         payload.recordIndex ?? null,
         payload.recordInstanceKey ?? null,
-        paths.get('visibility') || null
+        paths.get('visibility') || null,
+        // This record's canonical featureOverrides rows (design Q4, 3.3).
+        payload.featureOverrides == null ? null : JSON.stringify(payload.featureOverrides)
       ]);
     }
   },
@@ -787,35 +805,6 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         payload.fontSize ?? 14,
         jsonArgument(payload.config, null),
         jsonArgument(payload.configOverrides, {})
-      ]
-    )
-  },
-  [DIAGRAM_HELPER_OPERATIONS.GENERATE_LEGEND_ENTRY_SVG]: {
-    keys: [
-      'caption',
-      'color',
-      'yOffset',
-      'rectSize',
-      'fontSize',
-      'fontFamily',
-      'xOffset',
-      'strokeColor',
-      'strokeWidth'
-    ],
-    fileRoles: [],
-    run: (pyodide, payload) => callJsonHelper(
-      pyodide,
-      'generate_legend_entry_svg',
-      [
-        String(payload.caption || ''),
-        String(payload.color || ''),
-        payload.yOffset ?? 0,
-        payload.rectSize ?? 14,
-        payload.fontSize ?? 14,
-        String(payload.fontFamily || 'Arial'),
-        payload.xOffset ?? 0,
-        String(payload.strokeColor || 'black'),
-        payload.strokeWidth ?? 0.5
       ]
     )
   }

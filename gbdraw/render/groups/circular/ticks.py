@@ -1,14 +1,12 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
-from svgwrite.path import Path  # type: ignore[reportMissingImports]
-from svgwrite.text import Text  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from gbdraw.svg.elements import Group, Path, Text
 
-from ....canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
-from ....config.models import CircularRenderProfile  # type: ignore[reportMissingImports]
-from ....svg.circular_ticks import (  # type: ignore[reportMissingImports]
+from ....canvas import CircularCanvasConfigurator
+from ....config.models import CircularRenderProfile
+from ....svg.circular_ticks import (
     get_circular_tick_intervals,
     generate_circular_tick_paths,
     generate_circular_tick_labels,
@@ -42,7 +40,7 @@ class TickGroup:
         self.gb_record: SeqRecord = gb_record
         self.canvas_config: CircularCanvasConfigurator = canvas_config
         self.radius: float = float(radius) if radius is not None else self.canvas_config.radius
-        self.tick_group = Group(id=str(group_id or "tick"), debug=False)
+        self.tick_group = Group(id=str(group_id or "tick"))
         if slot_id:
             self.tick_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
             self.tick_group.attribs["data-gbdraw-slot-renderer"] = "ticks"
@@ -57,6 +55,7 @@ class TickGroup:
         self.manual_interval = cfg.objects.scale.interval
         self.font_family = cfg.objects.text.font_family
         self.track_type = str(track_preset or cfg.canvas.circular.track_type)
+        self.length_threshold = int(cfg.labels.length_threshold.circular)
         self.separate_strands = profile.strandedness
         normalized_tick_channel = str(tick_track_channel_override or "").strip().lower()
         self.tick_track_channel_override = (
@@ -93,6 +92,7 @@ class TickGroup:
             tick_length_px=self.tick_length_px,
             length_reference_radius_px=float(self.canvas_config.radius),
             record_transform=self.record_transform,
+            length_threshold=self.length_threshold,
         )
         ticks_large_nonzero: list[int] = [x for x in ticks_large if x != 0]
         tick_label_paths_large: list[Text] = generate_circular_tick_labels(
@@ -117,6 +117,8 @@ class TickGroup:
             group_identifier=str(self.tick_group.attribs.get("id", "tick")),
             record_identifier=str(self.gb_record.id),
             record_transform=self.record_transform,
+            tick_interval=self.tick_large,
+            length_threshold=self.length_threshold,
         )
         for tick_path_large in tick_paths_large:
             self.tick_group.add(tick_path_large)

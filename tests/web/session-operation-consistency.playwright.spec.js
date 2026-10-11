@@ -28,7 +28,7 @@ const capture = page => page.evaluate(async () => {
     results: state.results.value, file: state.files.c_gb,
     cache: state.losatCache.value, evidence: state.proteinIdentityManifest.value,
     undo: history.getUndoCount(), redo: history.getRedoCount(),
-    config: JSON.stringify(config.buildConfigData())
+    config: JSON.stringify(config.buildConfigData(state.activeDrawing()))
   };
 });
 const intact = page => page.evaluate(async () => {
@@ -45,7 +45,7 @@ const intact = page => page.evaluate(async () => {
     cache: before.cache === state.losatCache.value,
     evidence: before.evidence === state.proteinIdentityManifest.value,
     history: before.undo === history.getUndoCount() && before.redo === history.getRedoCount(),
-    config: before.config === JSON.stringify(config.buildConfigData())
+    config: before.config === JSON.stringify(config.buildConfigData(state.activeDrawing()))
   };
 });
 const expectIntact = async page => {
@@ -57,7 +57,7 @@ const expectIntact = async page => {
 // template assertion. Invalid arguments deliberately ensure busy wins admission.
 const blockedActions = [
   ['selectResult', [0]], ['setOptionalNumberInputValue', [null, 'label_rotation', '45', true]],
-  ['setMode', ['linear']], ['setCircularInputType', ['gff']],
+  ['setDiagramMode', ['linear']], ['setCircularInputType', ['gff']],
   ['runAnalysis', []], ['cancelGeneration', []],
   ['setLabelFilterMode', ['Whitelist']], ['addWhitelistRule', []],
   ['removeWhitelistRule', [0]], ['removePriorityRule', [0]], ['resetSettings', []], ['resetLayout', []],
@@ -72,7 +72,7 @@ const blockedActions = [
   ['addAnnotationSet', []], ['importAnnotationTableFile', []],
   ['addCustomColor', []], ['addFeature', []], ['setSpecificRuleField', [0, 'val', 'changed']],
   ['setFeatureVisibility', [null, 'hide']], ['resetAllLabelTextOverrides', []],
-  ['addNewLegendEntry', []], ['sortLegendEntries', []], ['resetAllStrokes', []],
+  ['deleteLegendEntry', [0]], ['sortLegendEntries', []], ['resetAllStrokes', []],
   ['resetCanvasPadding', []], ['editSessionTitle', []]
 ];
 
@@ -145,7 +145,7 @@ for (const operation of ['save', 'load']) {
       await download.saveAs(path);
       const saved = JSON.parse(gunzipSync(readFileSync(path)));
       expect(saved.ui.zoom).not.toBe(browsedZoom);
-      expect(saved.config).toEqual(JSON.parse(await page.evaluate(() => window.beforeSession.config)));
+      expect(saved.modes[saved.ui.mode].config).toEqual(JSON.parse(await page.evaluate(() => window.beforeSession.config)));
     }
     await expectIntact(page);
     await expect(page.getByRole('button', { name: 'Load Session', exact: true })).toBeEnabled();
@@ -226,7 +226,6 @@ test('Generate rejects Save and Load from processing publication through settlem
         };
       } else send.call(this, message, ...args);
     };
-    state.labelReflowForceRequestReason.value = 'session-operation-test';
     state.labelReflowForceRequestSeq.value += 1;
   });
   await page.waitForFunction(() => window.reflowRunHeld);
@@ -315,7 +314,7 @@ test('uncataloged multi-record draft Save prepares records privately without exp
   const download = page.waitForEvent('download');
   await page.evaluate(async text => {
     const app = window.__GBDRAW_APP__;
-    app.setMode('linear');
+    app.setDiagramMode('linear');
     app.sessionTitle = 'Private draft';
     app.linearSeqs[0].gb = new File([text, text], 'two-records.gb');
     window.draftSource = app.linearSeqs[0];

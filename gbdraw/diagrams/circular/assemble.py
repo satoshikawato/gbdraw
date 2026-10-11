@@ -17,27 +17,28 @@ from dataclasses import dataclass, replace
 from functools import lru_cache
 from typing import Any, Callable, Optional, Mapping, Sequence, cast
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
-from svgwrite import Drawing  # type: ignore[reportMissingImports]
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame
+from svgwrite import Drawing
+from svgwrite.container import Group
 
-from ...canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
-from ...analysis.conservation import (  # type: ignore[reportMissingImports]
+from ...auto_sizes import circular_track_width_px
+from ...canvas import CircularCanvasConfigurator
+from ...analysis.conservation import (
     ConservationTrack,
     conservation_track_gradient_colors,
 )
-from ...analysis.depth_tracks import (  # type: ignore[reportMissingImports]
+from ...analysis.depth_tracks import (
     DepthTrackData,
     depth_track_data_count,
     index_depth_track_row,
     sync_depth_track_legend_entries,
 )
-from ...config.models import (  # type: ignore[reportMissingImports]
+from ...config.models import (
     CircularRenderProfile,
     GbdrawConfig,
 )
-from ...configurators import (  # type: ignore[reportMissingImports]
+from ...configurators import (
     FeatureDrawingConfigurator,
     DepthConfigurator,
     GcContentConfigurator,
@@ -46,30 +47,30 @@ from ...configurators import (  # type: ignore[reportMissingImports]
     LegendMeasurement,
 )
 from ...configurators.gc import _slot_skew_config
-from ...core.sequence import check_feature_presence  # type: ignore[reportMissingImports]
+from ...core.sequence import check_feature_presence
 from ...core.text import calculate_bbox_dimensions, calculate_svg_bbox_dimensions
-from ...config.toml import load_config_toml  # type: ignore[reportMissingImports]
+from ...config.toml import load_config_toml
 from ...exceptions import ValidationError
-from ...features.colors import precompute_used_color_rules  # type: ignore[reportMissingImports]
-from ...features.factory import FeatureBuildResult, create_feature_layers  # type: ignore[reportMissingImports]
-from ...labels.circular import (  # type: ignore[reportMissingImports]
+from ...features.colors import precompute_used_color_rules
+from ...features.factory import FeatureBuildResult, create_feature_layers
+from ...labels.circular import (
     assign_leader_start_points,
     minimum_bbox_gap_px,
     prepare_label_list,
     x_overlap,
     y_overlap,
 )
-from ...labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
+from ...labels.filtering import preprocess_label_filtering
 from ...layout.record_coordinates import RecordDisplayTransform
-from ...layout.circular import (  # type: ignore[reportMissingImports]
+from ...layout.circular import (
     CircularFeatureLaneDirection,
     CircularRadialLayout,
     CircularRecordRenderContext,
     CircularResolvedSlot,
     CircularTickLayout,
 )
-from ...layout.circular_depth_axis import depth_axis_tick_font_size_px  # type: ignore[reportMissingImports]
-from ...layout.composition import (  # type: ignore[reportMissingImports]
+from ...layout.circular_depth_axis import depth_axis_tick_font_size_px
+from ...layout.composition import (
     CompositionItem,
     CompositionPlan,
     CompositionRequest,
@@ -78,9 +79,10 @@ from ...layout.composition import (  # type: ignore[reportMissingImports]
     TitlePlacement,
     plan_composition,
 )
-from ...layout.spatial import Aabb, union_aabbs  # type: ignore[reportMissingImports]
-from ...legend.table import _unique_legend_key, prepare_legend_table  # type: ignore[reportMissingImports]
-from ...tracks import (  # type: ignore[reportMissingImports]
+from ...layout.spatial import Aabb, union_aabbs
+from ...legend.row_facts import LegendRowFacts, attach_legend_row_facts
+from ...legend.table import _unique_legend_key, prepare_legend_table
+from ...tracks import (
     CircularTrackSlot,
     ScalarSpec,
     default_circular_track_slots,
@@ -103,7 +105,7 @@ from ...render.drawers.circular.annotations import draw_circular_annotation_trac
 from ...render.composition import apply_composition_plan
 from ...svg.ids import stable_svg_id, track_slot_svg_id
 from .positioning import _parse_svg_number as _svg_number, center_group_on_canvas
-from ...tracks.circular import tick_sides_for_tick_label_layout  # type: ignore[reportMissingImports]
+from ...tracks.circular import tick_sides_for_tick_label_layout
 from ...tracks.parsing import slot_dinucleotide
 
 from .builders import (
@@ -118,9 +120,9 @@ from .builders import (
     add_record_group_on_canvas,
     add_tick_group_on_canvas,
 )
-from ...render.groups.circular.definition import DefinitionGroup  # type: ignore[reportMissingImports]
-from .radial_layout import resolve_circular_radial_layout  # type: ignore[reportMissingImports]
-from .presets import (  # type: ignore[reportMissingImports]
+from ...render.groups.circular.definition import DefinitionGroup
+from .radial_layout import resolve_circular_radial_layout
+from .presets import (
     CircularPresetContext,
     circular_feature_lane_direction_for_preset,
     circular_radial_plan_for_preset,
@@ -316,6 +318,8 @@ def _prepare_circular_annotation_tracks(
     )
     if not bundle.set_ids and not bundle.annotations:
         return slots, bundle, {}
+    # The planner generates the slot list whenever annotations are present.
+    assert slots is not None
     relevant = tuple(item for item in bundle.annotations if item.record_index == record_index)
 
     record_lengths = {record_index: len(gb_record.seq)}
@@ -1503,13 +1507,13 @@ def _sync_legend_table_for_circular_slots(
                 }
     if conservation_tracks:
         if any(track.track_color for track in conservation_tracks):
-            for track in conservation_tracks:
+            for conservation_track in conservation_tracks:
                 min_color, max_color = conservation_track_gradient_colors(
-                    track.track_color,
+                    conservation_track.track_color,
                     default_min_color=cfg.objects.conservation.min_color,
                     default_max_color=cfg.objects.conservation.max_color,
                 )
-                out[_unique_legend_key(out, track.track_label)] = {
+                out[_unique_legend_key(out, conservation_track.track_label)] = {
                     "type": "gradient",
                     "min_color": min_color,
                     "max_color": max_color,
@@ -1562,7 +1566,10 @@ def _draw_resolved_circular_slot(
     """Draw one resolved circular slot."""
     cfg = render_context.profile.config
     renderer = str(resolved_slot.renderer)
-    norm_factor_override = float(resolved_slot.anchor_radius_px) / float(canvas_config.radius)
+    # Radial layout always resolves a radius; float(None) already failed here before.
+    anchor_radius_px = resolved_slot.anchor_radius_px
+    assert anchor_radius_px is not None
+    norm_factor_override = float(anchor_radius_px) / float(canvas_config.radius)
     if renderer == "spacer":
         return canvas
 
@@ -1600,10 +1607,11 @@ def _draw_resolved_circular_slot(
         return canvas
 
     if renderer == "features":
-        base_width = (
-            float(canvas_config.radius)
-            * float(canvas_config.track_ratio)
-            * float(cfg.canvas.circular.track_ratio_factors[str(canvas_config.length_param)][0])
+        base_width = circular_track_width_px(
+            "features",
+            radius=canvas_config.radius,
+            track_ratio=canvas_config.track_ratio,
+            factors=cfg.canvas.circular.track_ratio_factors[str(canvas_config.length_param)],
         )
         resolved_feature_width = float(resolved_slot.draw_width_px)
         if render_context.feature_layout is not None:
@@ -1633,12 +1641,12 @@ def _draw_resolved_circular_slot(
                 f"{int(resolved_slot.slot_index) + 1}_{resolved_slot.id}"
             )
         if use_feature_anchor_override or not math.isclose(
-            float(resolved_slot.anchor_radius_px),
+            float(anchor_radius_px),
             float(canvas_config.radius),
             rel_tol=1e-9,
             abs_tol=1e-9,
         ):
-            feature_kwargs["feature_anchor_radius_px"] = float(resolved_slot.anchor_radius_px)
+            feature_kwargs["feature_anchor_radius_px"] = float(anchor_radius_px)
         return add_record_group_on_canvas(
             canvas,
             gb_record,
@@ -1671,7 +1679,7 @@ def _draw_resolved_circular_slot(
         ).strip().lower()
         if label_side != "none" or tick_side != "none":
             tick_group_kwargs: dict[str, Any] = {
-                "radius_override": float(resolved_slot.anchor_radius_px),
+                "radius_override": float(anchor_radius_px),
             }
             if use_slot_tick_options or tick_layout is not None:
                 tick_group_kwargs["label_side"] = label_side
@@ -2124,7 +2132,7 @@ def add_record_on_circular_canvas(
         profile.resolve_overlaps,
         label_filtering,
         split_overlaps_by_strand=split_overlaps_by_strand,
-        placement_inputs=feature_config.placements[0] if feature_config.placements else None,
+        record_features=feature_config.record_features[0] if feature_config.record_features else None,
         placement_slot=(FeaturePlacementSlot(
             "circular", feature_lane_direction, profile.strandedness,
         ) if feature_slot is not None else None),
@@ -2267,14 +2275,20 @@ def add_record_on_circular_canvas(
                     stagnant_passes = 0
                 if stagnant_passes >= 2:
                     fixed_inside_slots = [
-                        slot.id
+                        slot
                         for slot in radial_layout.slots
                         if slot.side == "inside" and (slot.explicit_anchor or slot.explicit_width)
                     ]
-                    slot_context = ", ".join(fixed_inside_slots) or "center/feature interval"
+                    slot_context = ", ".join(slot.id for slot in fixed_inside_slots) or "center/feature interval"
                     raise ValidationError(
                         "radial inner labels cannot fit the fixed circular geometry: "
-                        f"slot={slot_context}, required_additional_px={required_growth:.3f}"
+                        f"slot={slot_context}, required_additional_px={required_growth:.3f}",
+                        # The Track row is the first fixed inside row, to move or unpin.
+                        diagnostic={
+                            "code": "TRACK_LAYOUT",
+                            "reason": "CANNOT_FIT",
+                            **({"slotIndex": int(fixed_inside_slots[0].slot_index)} if fixed_inside_slots else {}),
+                        },
                     )
                 previous_growth = required_growth
 
@@ -2289,10 +2303,13 @@ def add_record_on_circular_canvas(
                             ),
                             None,
                         )
+                        # Outside rows are not frozen: they stay beyond the enlarged
+                        # axis and the feature slot moved outside, in stack order.
                         if (
                             str(slot.renderer) != "features"
                             and resolved_slot is not None
                             and resolved_slot.anchor_radius_px is not None
+                            and resolved_slot.side != "outside"
                         ):
                             frozen_slots.append(
                                 replace(
@@ -2339,7 +2356,7 @@ def add_record_on_circular_canvas(
                             slot=FeaturePlacementSlot(
                                 "circular", feature_lane_direction, profile.strandedness,
                             ),
-                            placement_inputs=feature_config.placements[0] if feature_config.placements else None,
+                            record_features=feature_config.record_features[0] if feature_config.record_features else None,
                             resolve_overlaps=profile.resolve_overlaps,
                             tolerance_bp=profile.feature_overlap_tolerance_bp,
                             genome_length=len(gb_record.seq),
@@ -2798,6 +2815,7 @@ def build_circular_legend_table(
         feature_config.selected_features_set,
         feature_visibility_rules=feature_config.feature_visibility_rules,
         specific_color_rules=color_map,
+        record_features=feature_config.record_features,
     )
     used_color_rules, default_used_features = precompute_used_color_rules(
         records,
@@ -2805,6 +2823,7 @@ def build_circular_legend_table(
         default_color_map,
         set(feature_config.selected_features_set),
         feature_visibility_rules=feature_config.feature_visibility_rules,
+        record_features=feature_config.record_features,
     )
     singleton_depth = bool(
         profile.show_depth
@@ -2947,6 +2966,16 @@ def _assemble_circular_diagram_result(
             conservation_min_identity=conservation_min_identity,
         )
     canvas: Drawing = canvas_config.create_svg_canvas()
+    attach_legend_row_facts(
+        canvas,
+        LegendRowFacts(
+            records=[gb_record],
+            feature_config=feature_config,
+            gc_config=gc_config,
+            skew_config=skew_config,
+            legend_table=legend_table,
+        ),
+    )
     plot = add_record_on_circular_canvas(
         canvas,
         gb_record,

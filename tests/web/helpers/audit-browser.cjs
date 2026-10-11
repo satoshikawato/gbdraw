@@ -1,6 +1,6 @@
 // Shared browser steps for the Web GUI audit 2026-09-30 regression specs.
 const { expect } = require('@playwright/test');
-const { generateAndWaitForResult, openApp } = require('./app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = require('./app-lifecycle.cjs');
 
 const BATCH_FIXTURE = 'tests/fixtures/web_batch_two_records.gb';
 const HMMT = 'tests/test_inputs/HmmtDNA.gbk';
@@ -22,7 +22,7 @@ const settle = async (page) => {
   await page.waitForFunction(() => {
     const app = window.__GBDRAW_APP__;
     const history = window.__GBDRAW_HISTORY__;
-    return !app.processing && !app.sessionImportPending && !app.ruleMatchingPending
+    return !app.processing && !app.labelReflowProcessing && !app.sessionImportPending && !app.ruleMatchingPending
       && !history?.capturing?.value && !history?.restoring?.value;
   });
   await page.evaluate(() => new Promise((resolve) => (
@@ -107,13 +107,14 @@ const featurePresentation = (page, locusTags) => page.evaluate((tags) => {
 }, locusTags);
 
 const legendCaptions = (page, { source = 'mounted' } = {}) => page.evaluate(async (from) => {
-  const { getVisibleFeatureLegendGroup } = await import('/gbdraw/web/js/app/legend/utils.js');
+  const { getVisibleFeatureLegendGroup, legendRowShown } = await import('/gbdraw/web/js/services/legend-svg.js');
   const app = window.__GBDRAW_APP__;
   const root = from === 'mounted'
     ? app.svgContainer.querySelector('svg')
     : new DOMParser().parseFromString(app.results[app.selectedResultIndex].content, 'image/svg+xml').documentElement;
   const group = getVisibleFeatureLegendGroup(root);
-  const entries = [...(group?.querySelectorAll('g[data-legend-key]') || [])].map((entry) => {
+  // D-15-6 (2): a deleted row stays hidden in the stored Result; list the rows a user sees.
+  const entries = [...(group?.querySelectorAll('g[data-legend-key]') || [])].filter(legendRowShown).map((entry) => {
     const text = entry.querySelector('text');
     const match = String(text?.getAttribute('transform') || '').match(/translate\(\s*([-\d.e]+)[ ,]+([-\d.e]+)/);
     return { caption: text?.textContent || entry.getAttribute('data-legend-key'), x: match ? Number(match[1]) : 0, y: match ? Number(match[2]) : 0 };
@@ -125,8 +126,10 @@ const legendCaptions = (page, { source = 'mounted' } = {}) => page.evaluate(asyn
 
 // One feature edit through the editor actions the drawer controls call. A
 // color or visibility edit with a scope dialog takes `scope`/`visibilityScope`
-// (default: This feature only / the first scope, This feature).
-const editFeature = (page, locusTag, edit) => page.evaluate(async ({ tag, change }) => {
+// (default: This feature only / the first scope, This feature). The edit
+// awaits Python's rule matches and the projection, so it runs on the retained
+// path: Chromium can collect the promise a long page.evaluate awaits.
+const editFeature = (page, locusTag, edit) => evaluateWithRetainedPromise(page, async ({ tag, change }) => {
   const app = window.__GBDRAW_APP__;
   const feature = app.extractedFeatures.find((item) => item.locus_tag === tag);
   if (!feature) throw new Error(`no feature ${tag}`);
@@ -138,7 +141,12 @@ const editFeature = (page, locusTag, edit) => page.evaluate(async ({ tag, change
   if (change.labelText !== undefined || change.labelVisibility) {
     if (change.labelText !== undefined) app.clickedFeature.labelText = change.labelText;
     if (change.labelVisibility) app.clickedFeature.labelVisibility = change.labelVisibility;
-    await app.updateClickedFeatureLabelText();
+    // Label Not Shown keeps the Apply open until its choice (Keep hidden here).
+    let applying = true;
+    const applied = Promise.resolve(app.updateClickedFeatureLabelText()).finally(() => { applying = false; });
+    while (applying && !app.hiddenLabelTextDialog?.show) await new Promise((resolve) => setTimeout(resolve, 20));
+    if (app.hiddenLabelTextDialog?.show) await app.handleHiddenLabelTextChoice('text_only');
+    await applied;
   }
   if (change.visibility) {
     app.clickedFeature.featureVisibility = change.visibility;

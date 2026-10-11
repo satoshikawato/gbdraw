@@ -38,7 +38,7 @@ from gbdraw.render.interactive_context import build_interactive_svg_context
 
 @pytest.mark.parametrize(
     "name",
-    ["add_output_args", "add_stroke_args", "add_legend_args"],
+    ["add_output_args", "add_stroke_args", "add_legend_args", "calculate_window_step"],
 )
 def test_unused_cli_helper_exports_are_removed(name: str) -> None:
     assert not hasattr(cli_common, name)

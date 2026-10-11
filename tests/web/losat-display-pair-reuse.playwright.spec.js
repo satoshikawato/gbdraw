@@ -248,9 +248,10 @@ test('Turning off a CLI grid reconverts LOSATP Collinear blocks and draws the fr
   expect(rows.paths).toEqual(fresh.paths);
 });
 
-// PR5-B1: a CLI Session stores the records of one file in one resource with
-// index selectors, so the Web plans the same source-file searches and every
-// raw CLI search (same protein FASTA, same searchContext keys) is a cache hit.
+// PR5-B1: a CLI Session stores the records of one file in one resource named
+// after it with record-ID selectors, so the Web plans the same source-file
+// searches and every raw CLI search (same protein FASTA, same searchContext
+// keys) is a cache hit.
 const FAKE_CLI_LOSAT = `#!/usr/bin/env python3
 import sys
 args = sys.argv[1:]
@@ -315,8 +316,8 @@ test('The Web reuses every raw LOSATP search of a CLI Session over a multi-recor
   const session = JSON.parse(readFileSync(sessionPath, 'utf8'));
   expect(session.renderRequest.records.map((record) => [record.source.resourceId, record.selector]))
     .toEqual([
-      ['record-1-genbank', { kind: 'recordIndex', index: 0 }],
-      ['record-1-genbank', { kind: 'recordIndex', index: 1 }],
+      ['record-1-genbank', { kind: 'recordId', value: 'FileA1' }],
+      ['record-1-genbank', { kind: 'recordId', value: 'FileA2' }],
       ['record-3-genbank', null]
     ]);
   // Nine record-pair entries; the four between the files carry the file database.

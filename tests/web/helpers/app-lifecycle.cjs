@@ -1,4 +1,18 @@
+const { readFileSync } = require('node:fs');
+const { join } = require('node:path');
 const { expect } = require('@playwright/test');
+
+// The Web writer's current canonical request schema, read from its owner.
+const CURRENT_REQUEST_SCHEMA = Number(readFileSync(
+  join(__dirname, '..', '..', '..', 'gbdraw', 'web', 'js', 'services', 'session-request.js'), 'utf8'
+).match(/^export const CANONICAL_REQUEST_SCHEMA = (\d+);$/m)[1]);
+// The current Session writer version and feature catalog schema, from their owners.
+const CURRENT_SESSION_VERSION = Number(readFileSync(
+  join(__dirname, '..', '..', '..', 'gbdraw', 'session_io.py'), 'utf8'
+).match(/^CURRENT_SESSION_VERSION = (\d+)$/m)[1]);
+const CURRENT_FEATURE_CATALOG_SCHEMA = Number(readFileSync(
+  join(__dirname, '..', '..', '..', 'gbdraw', 'web', 'js', 'services', 'feature-catalog.js'), 'utf8'
+).match(/^export const FEATURE_CATALOG_SCHEMA = (\d+);$/m)[1]);
 
 const DEFAULT_APP_TIMEOUT_MS = 180_000;
 const pageDiagnostics = new WeakMap();
@@ -464,21 +478,26 @@ const generateAndWaitForResult = async (
 const snapshotUserOwnedState = (page) => page.evaluate(async () => {
   const { state } = await import('/gbdraw/web/js/state.js');
   const config = await import('/gbdraw/web/js/services/config.js');
-  const editor = config.buildEditorStateData();
+  const drawing = state.activeDrawing();
+  const editor = config.buildEditorStateData(drawing);
   delete editor.featureCatalog;
-  const features = config.buildFeatureStateData();
-  for (const key of ['extractedFeatures', 'biologicalFeatures', 'featureSelectorSafetyScope']) {
+  const features = config.buildFeatureStateData(drawing);
+  for (const key of ['extractedFeatures', 'biologicalFeatures']) {
     delete features[key];
   }
-  const orthogroups = config.buildOrthogroupStateData();
+  const orthogroups = config.buildOrthogroupStateData(drawing);
   orthogroups.groupCount = orthogroups.groups.length;
   delete orthogroups.groups;
+  const ui = config.buildUiStateData(drawing, { includePreviewNavigation: false });
+  // A drawing reads and saves only its own mode's layout slot (state.js,
+  // `modes.<mode>.ui.layoutPreferences`); the other mode's slot is never read.
+  ui.layoutPreferences = ui.layoutPreferences?.[state.mode.value];
   const history = window.__GBDRAW_HISTORY__;
   return JSON.parse(JSON.stringify({
     state: {
       mode: state.mode.value,
-      config: config.buildConfigData(),
-      ui: config.buildUiStateData({ includePreviewNavigation: false }),
+      config: config.buildConfigData(drawing),
+      ui,
       editor,
       features,
       orthogroups
@@ -567,6 +586,9 @@ const assertSingleWorkerRun = async (page) => {
 };
 
 module.exports = {
+  CURRENT_FEATURE_CATALOG_SCHEMA,
+  CURRENT_REQUEST_SCHEMA,
+  CURRENT_SESSION_VERSION,
   assertDiagramWorkerIdle,
   assertOperationHealth,
   readErrorSignature,

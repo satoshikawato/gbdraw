@@ -15,12 +15,14 @@ import {
   extname,
   isAbsolute,
   join,
+  posix,
   relative,
   resolve,
   sep
 } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { knownJobsFor } from '../../tools/ci-impact-policy.mjs';
 import {
   detectPrivilegedWebCapabilities,
   detectReportOnlySourceFacts,
@@ -78,11 +80,11 @@ const BASE_PLAYWRIGHT_CONFIG = readFileSync(
   'utf8'
 );
 const FUNCTIONAL_PLAYWRIGHT_CONFIG = readFileSync(
-  join(REPOSITORY_ROOT, 'playwright.functional.config.js'),
+  join(REPOSITORY_ROOT, 'tests/web/playwright/functional.config.js'),
   'utf8'
 );
 const PR_SMOKE_PLAYWRIGHT_CONFIG = readFileSync(
-  join(REPOSITORY_ROOT, 'playwright.pr-smoke.config.js'),
+  join(REPOSITORY_ROOT, 'tests/web/playwright/pr-smoke.config.js'),
   'utf8'
 );
 const WORKFLOW_NAMES = readdirSync(
@@ -228,6 +230,11 @@ const importersOf = (target) => [...directImports]
   .map(([owner]) => owner)
   .sort();
 
+const specifierFrom = (owner, target) => {
+  const specifier = posix.relative(posix.dirname(owner), target);
+  return specifier.startsWith('.') ? specifier : `./${specifier}`;
+};
+
 // These two request/Session callers may use the pure warning validator, not
 // rendered-identity collection. The metadata admission callers remain exact.
 const assertMetadataImportOwners = (sources) => {
@@ -251,7 +258,7 @@ const assertMetadataImportOwners = (sources) => {
     `${owner}: only the named pure warning validator is permitted`);
   }
   assert.deepEqual(identityCallers.sort(), [
-    'app/session-feature-metadata.js', 'services/svg-result-ingestion.js'
+    'services/session-feature-recovery.js', 'services/svg-result-ingestion.js'
   ]);
 };
 
@@ -358,22 +365,17 @@ test('Worker construction and the diagram-generation client have explicit owners
   assert.deepEqual(
     occurrenceOwners(/\brunFeatureExtraction\b/g),
     new Map([
-      ['app/feature-metadata-extraction.js', 2],
+      ['services/feature-metadata-extraction.js', 2],
       ['services/diagram-generation.js', 1],
       ['workers/diagram-generation-worker.js', 2]
     ])
   );
-  assert.deepEqual(importersOf('services/diagram-generation.js'), importersWithRetiringOwners(
-    'services/diagram-generation.js',
-    [
-      'app/app-setup.js',
-      'app/feature-metadata-extraction.js',
-      'app/legend/entry-actions.js',
-      'app/record-discovery.js',
-      'app/run-analysis.js'
-    ],
-    ['app/results.js']
-  ));
+  assert.deepEqual(importersOf('services/diagram-generation.js'), [
+    'app/app-setup.js',
+    'app/run-analysis.js',
+    'services/feature-metadata-extraction.js',
+    'services/record-discovery.js'
+  ]);
 });
 
 test('Pyodide initialization and helper execution are Worker-only', () => {
@@ -490,9 +492,9 @@ test('History intent and SVG admission have one production ownership path', () =
   assert.deepEqual(importersOf('services/svg-result-ingestion.js'), [
     'app/candidate-render.js',
     'app/preview-runtime.js',
-    'app/session-feature-metadata.js',
     'app/watchers.js',
     'services/config.js',
+    'services/session-feature-recovery.js',
     'state.js'
   ]);
   assertMetadataImportOwners(productionSources);
@@ -502,7 +504,7 @@ test('History intent and SVG admission have one production ownership path', () =
     ['app/svg-styles.js']
   ));
   assert.doesNotMatch(
-    productionSources.get('app/session-feature-metadata.js'),
+    productionSources.get('services/session-feature-recovery.js'),
     /DOMParser|parseFromString|result\?\.content/
   );
   assert.match(
@@ -523,12 +525,45 @@ test('History intent and SVG admission have one production ownership path', () =
   );
   assert.doesNotMatch(
     productionSources.get('app/app-setup.js'),
-    /normalizeLegacySvg|normalizeLegacyComposition/
+    /normalizeLegacySvg/
   );
+  // An older Session's Result gets the legacy composition once, in the
+  // admission transform of services/config.js after its legend entry groups
+  // (and, in the stroke form, before its strokes): services/config.js calls the
+  // composition root's transformLegacyResultSvg port (R13 layering plan D4 B1),
+  // and app/app-setup.js calls the owners, which stay in app/. In the
+  // stroke-free form (edit-unify U2a) the saved bytes show the strokes, the
+  // executor is the only writer of a live stroke edit, and no stroke
+  // projection or reapply is left anywhere.
+  const configSource = productionSources.get('services/config.js');
+  const setupSource = productionSources.get('app/app-setup.js');
+  const configImports = directImports.get('services/config.js');
+  const strokeFree = occurrenceOwners(
+    /\b(?:applyStrokeOverridesToSvg|reapplyStrokeOverrides|reconcileStrokeOverrides)\b/g
+  ).size === 0;
+  const legacyOwnerModules = [
+    'app/legend-layout/composition-actions.js',
+    ...(strokeFree ? [] : ['app/legend/stroke-actions.js'])
+  ];
+  const legacyCompositionCalls = occurrenceOwners(/\bnormalizeLegacyComposition\(svg,/g);
+  const legacyStrokeCalls = occurrenceOwners(/\bapplyStrokeOverridesToSvg\(\{/g);
+  const strokeCall = strokeFree ? '' : String.raw`[\s\S]+applyStrokeOverridesToSvg\(\{`;
+  assert.deepEqual(
+    occurrenceOwners(/\bexport const (?:normalizeLegacyComposition|applyStrokeOverridesToSvg)\b/g),
+    new Map(legacyOwnerModules.map((module) => [module, 1]))
+  );
+  assert.match(configSource, /normalizeLegacyLegendEntryGroups\(svg\)[\s\S]+transformLegacyResultSvg\(svg,/);
+  assert.deepEqual(legacyOwnerModules.filter((module) => configImports.has(module)), []);
+  assert.doesNotMatch(configSource, /\bnormalizeLegacyComposition\b|\bapplyStrokeOverridesToSvg\b/);
   assert.match(
-    productionSources.get('services/config.js'),
-    /normalizeLegacyLegendEntryGroups\(svg\)[\s\S]+normalizeLegacyComposition\(svg,/
+    setupSource,
+    new RegExp(String.raw`export const transformLegacyResultSvg\b[\s\S]+COMPOSITION_SCHEMA_ATTRIBUTE\) === null[\s\S]+COMPOSITION_METADATA_ATTRIBUTE\) === null[\s\S]+normalizeLegacyComposition\(svg,` + strokeCall)
   );
+  assert.deepEqual(legacyOwnerModules.filter((module) => !directImports.get('app/app-setup.js').has(module)), []);
+  assert.deepEqual(legacyCompositionCalls, new Map([['app/app-setup.js', 1]]));
+  assert.equal(legacyStrokeCalls.get('app/app-setup.js'), strokeFree ? undefined : 1);
+  assert.equal(legacyStrokeCalls.has('services/config.js'), false);
+  assert.deepEqual(occurrenceOwners(/\btransformLegacyResultSvg\(svg,/g), new Map([['services/config.js', 1]]));
   assert.deepEqual(occurrenceOwners(/\bbuildHistorySnapshot\b/g), new Map());
   assert.deepEqual(occurrenceOwners(/\bapplyHistorySnapshot\b/g), new Map());
 });
@@ -538,7 +573,9 @@ test('right drawer availability and transitions have one production owner', () =
     ...occurrenceOwners(/\b(?:showRightDrawer|rightDrawerTab)\.value\s*=(?!=)/g).keys()
   ];
 
-  assert.deepEqual(transitionOwners, ['app/right-drawer.js']);
+  // Exactly one module writes the drawer state: services/right-drawer-state.js
+  // (R13 layering slice S8). The controller stays in app/right-drawer.js.
+  assert.deepEqual(transitionOwners, ['services/right-drawer-state.js']);
   assert.deepEqual(
     occurrenceOwners(/\b(?:showFeaturePanel|showLegendPanel)\b/g),
     new Map()
@@ -826,8 +863,9 @@ test('shared privileged detectors preserve the characterized current-source fact
 });
 
 test('metadata validation callers cannot acquire identity or namespace access', () => {
+  const recovery = 'services/session-feature-recovery.js';
   const admission = new Map([
-    ['app/session-feature-metadata.js', "import { normalizeRenderedFeatureId } from '../services/session-feature-metadata.js';"],
+    [recovery, `import { normalizeRenderedFeatureId } from '${specifierFrom(recovery, 'services/session-feature-metadata.js')}';`],
     ['services/svg-result-ingestion.js', "import { collectRenderedFeatureIdentitiesFromSvgRoot } from './session-feature-metadata.js';"]
   ]);
   assertMetadataImportOwners(admission);
@@ -1307,6 +1345,56 @@ test('report-only source facts preserve the characterized masking behavior', () 
   });
 });
 
+test('source masking follows template expressions as code', () => {
+  const lines = (source) => source.split('\n');
+  const declarationsOf = (masked) => [...masked.matchAll(/^const\s+(\w+)/gm)].map(match => match[1]);
+
+  // A nested template inside `${ ... }` must not end the outer template early.
+  const nested = 'const a = `x ${ `y ${ 1 }` } z`;\nconst b = 2;\n';
+  assert.equal(maskJavaScript(nested).split('\n')[0].replace(/\s/g, ''), 'consta=1;');
+  assert.deepEqual(declarationsOf(maskJavaScript(nested)), ['a', 'b']);
+
+  // A quote inside a regex literal inside an expression does not open a string.
+  const regex = "const a = `${ s.replace(/'/g, '') }`;\nconst b = 2;\n";
+  assert.deepEqual(declarationsOf(maskJavaScript(regex)), ['a', 'b']);
+  assert.match(maskJavaScript(regex), /s\.replace\(/);
+
+  // Braces of object literals inside an expression do not end it early.
+  const braces = 'const a = `${ f({ k: { v: 1 } }) } tail`;\nconst b = 2;\n';
+  const bracesMasked = maskJavaScript(braces);
+  assert.deepEqual(declarationsOf(bracesMasked), ['a', 'b']);
+  assert.ok(!bracesMasked.includes('tail'));
+  assert.ok(bracesMasked.includes('f({ k: { v: 1 } })'));
+
+  // Comments inside an expression are comments, including a `}` or backtick.
+  const comment = 'const a = `${ f( // ` }\n  1) } tail`;\nconst b = `${ g(/* } ` */ 2) }`;\nconst c = 3;\n';
+  const commentMasked = maskJavaScript(comment, { strings: false });
+  assert.deepEqual(declarationsOf(commentMasked), ['a', 'b', 'c']);
+  assert.ok(!commentMasked.includes('// `'));
+  assert.ok(!commentMasked.includes('/* }'));
+  assert.deepEqual(declarationsOf(maskJavaScript(comment)), ['a', 'b', 'c']);
+
+  // Template text stays hidden under strings: true and visible otherwise.
+  assert.ok(!maskJavaScript('const a = `watch(cache) ${ 1 }`;').includes('watch'));
+  assert.ok(maskJavaScript('const a = `watch(cache) ${ 1 }`;', { strings: false }).includes('watch'));
+
+  // The run-info.js shell quoting line must not desynchronize what follows.
+  const quoting = [
+    'export const quoteShellArg = (value) => {',
+    "  return `'${token.replace(/'/g, `'\\\\''`)}'`;",
+    '};',
+    '',
+    '// comment after the template',
+    'export const buildShellCommand = (tokens) => tokens.length;',
+    ''
+  ].join('\n');
+  const quotingCode = lines(maskJavaScript(quoting));
+  const quotingComments = lines(maskJavaScript(quoting, { strings: false }));
+  assert.equal(quotingCode[5], quoting.split('\n')[5]);
+  assert.equal(quotingComments[4].trim(), '');
+  assert.match(quotingCode[1], /token\.replace\(/);
+});
+
 test('workflow triggers separate dev admission, dev staging, promotion, and deployment', () => {
   const candidateActivityTypes = /types: \[opened, synchronize, reopened, labeled, unlabeled\]/;
   const trustedActivityTypes = /types: \[opened, synchronize, reopened, edited, labeled, unlabeled\]/;
@@ -1354,6 +1442,12 @@ test('workflow triggers separate dev admission, dev staging, promotion, and depl
 
   assert.deepEqual(triggerBranches(GALLERY_PUBLICATION_WORKFLOW, 'push'), ['dev']);
   assert.doesNotMatch(GALLERY_PUBLICATION_WORKFLOW, /\n  pull_request:\n/);
+  assert.match(
+    GALLERY_PUBLICATION_WORKFLOW,
+    /group: gallery-publication-\$\{\{ github\.event_name \}\}-\$\{\{ github\.ref \}\}/
+  );
+  // Like Tests, a started Gallery push run finishes so its SHA keeps exact evidence.
+  assert.match(GALLERY_PUBLICATION_WORKFLOW, /\n  cancel-in-progress: \$\{\{ github\.event_name != 'push' \}\}\n/);
   assert.match(GALLERY_PUBLICATION_WORKFLOW, /\n  workflow_dispatch:\n/);
 
   assert.deepEqual(triggerBranches(DEPLOY_WORKFLOW, 'push'), ['main']);
@@ -1482,6 +1576,7 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
     'playwright-performance',
     'acceptance-supported-main',
     'slow-main',
+    'vibrio-generate-release',
     'losat-cache-browser-acceptance'
   ]) {
     const job = workflowJob(jobId);
@@ -1496,11 +1591,11 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
 test('PR smoke selection is explicit while the full functional inventory stays wide', () => {
   assert.equal(
     PACKAGE_SCRIPTS['test:web:functional-full'],
-    'playwright test --config=playwright.functional.config.js'
+    'playwright test --config=tests/web/playwright/functional.config.js'
   );
   assert.equal(
     PACKAGE_SCRIPTS['test:web:pr-smoke'],
-    'playwright test --config=playwright.pr-smoke.config.js'
+    'playwright test --config=tests/web/playwright/pr-smoke.config.js'
   );
   assert.equal(
     PACKAGE_SCRIPTS['test:web:functional-smoke'],
@@ -1577,6 +1672,7 @@ test('exact dev staging routes every job through the protected-branch plan', () 
     'playwright-performance',
     'acceptance-supported-main',
     'slow-main',
+    'vibrio-generate-release',
     'lint',
     'losat-cache-browser-acceptance'
   ]);
@@ -1638,7 +1734,7 @@ test('Gallery readiness routes jobs from direct-parent evidence and aggregates t
   assert.doesNotMatch(browser, /matrix|Vibrio|test:web:vibrio-generate/);
   assert.equal(
     PACKAGE_SCRIPTS['test:web:vibrio-generate'],
-    'playwright test --config=playwright.vibrio.config.js'
+    'playwright test --config=tests/web/playwright/vibrio.config.js'
   );
   assert.match(DEPLOY_WORKFLOW, /npm run test:web:vibrio-generate/);
 
@@ -1769,7 +1865,7 @@ test('the PR template retains architecture evidence anchors', () => {
     'Semantic owners after',
     'Canonical production paths before',
     'Canonical production paths after',
-    'Maintainer architecture decision comment permalink'
+    'Maintainer approval (review or comment link)'
   ].forEach((anchor) => {
     assert.ok(PULL_REQUEST_TEMPLATE.includes(anchor), `Missing PR template anchor: ${anchor}`);
   });
@@ -1880,7 +1976,7 @@ test('dev staging Web checks scope only the newly integrated change', () => {
 });
 
 test('supported-version and slow matrices are mandatory in explicit release acceptance', () => {
-  for (const jobName of ['acceptance-supported-main', 'slow-main']) {
+  for (const jobName of ['acceptance-supported-main', 'slow-main', 'vibrio-generate-release']) {
     const job = TEST_WORKFLOW.match(
       new RegExp(`\\n  ${jobName}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`)
     )?.[0];
@@ -1902,6 +1998,25 @@ test('supported-version and slow matrices are mandatory in explicit release acce
   assert.match(workflowJob('dev-staging-gate'), /inputs\.tier != 'release'/);
 });
 
+test('release acceptance runs the Vibrio full-generation suite that main deploy also keeps', () => {
+  const job = workflowJob('vibrio-generate-release');
+  assert.match(job, /\n    name: Vibrio full generation\n/);
+  assert.match(job, /\n {8}run: npm run test:web:vibrio-generate\n/);
+  assert.match(job, /python tools\/prepare_browser_wheel\.py/);
+  // The release profile requires it and the dev profile does not.
+  assert.deepEqual(knownJobsFor('release').filter((id) => !knownJobsFor('dev').includes(id)), [
+    'acceptance-supported-main',
+    'slow-main',
+    'vibrio-generate-release'
+  ]);
+  // Both aggregate gates list it, so a skipped or failed run blocks release evidence.
+  for (const gateId of ['release-gate', 'dev-staging-gate']) {
+    assert.match(workflowJob(gateId), /\n {6}- vibrio-generate-release\n/, gateId);
+  }
+  // The hosted-Web verification on main keeps its own run.
+  assert.match(DEPLOY_WORKFLOW, /npm run test:web:vibrio-generate/);
+});
+
 const CHANGE_BUDGET_CHECKER = join(REPOSITORY_ROOT, 'tools/check-web-change-budget.mjs');
 const WEB_ARCHITECTURE_DETECTOR_MODULE = join(
   REPOSITORY_ROOT,
@@ -1910,6 +2025,10 @@ const WEB_ARCHITECTURE_DETECTOR_MODULE = join(
 const WEB_ARCHITECTURE_EVALUATION_MODULE = join(
   REPOSITORY_ROOT,
   'tools/web-architecture-evaluation.mjs'
+);
+const WEB_OWNER_GRAPH_DETECTOR_MODULE = join(
+  REPOSITORY_ROOT,
+  'tools/web-owner-graph-detectors.mjs'
 );
 const PRODUCT_IMPACT_EVALUATION_MODULE = join(
   REPOSITORY_ROOT,
@@ -2069,6 +2188,10 @@ const BUDGET_FIXTURE = Object.freeze({
     WEB_ARCHITECTURE_EVALUATION_MODULE,
     'utf8'
   ),
+  'tools/web-owner-graph-detectors.mjs': readFileSync(
+    WEB_OWNER_GRAPH_DETECTOR_MODULE,
+    'utf8'
+  ),
   'tools/web-product-impact-evaluation.mjs': readFileSync(
     PRODUCT_IMPACT_EVALUATION_MODULE,
     'utf8'
@@ -2124,10 +2247,16 @@ const BUDGET_FIXTURE = Object.freeze({
   ),
   'gbdraw/web/vendor/library.js': 'globalThis.vendorLibrary = true;\n'
 });
+const WEB_DESIGN_RULES_PATH = 'gbdraw/web/CLAUDE.md';
+const DESIGN_RULE_GUARD_REGISTRY_PATH = 'tools/web-design-rule-guards.json';
+const OWNER_GRAPH_REGISTRY_PATH = 'tools/web-owner-graph.json';
 const FUTURE_GUARD_PATHS = Object.freeze([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
   '.github/pull_request_template.md',
-  'tools/web-architecture-violations.json'
+  'tools/web-architecture-violations.json',
+  WEB_DESIGN_RULES_PATH,
+  DESIGN_RULE_GUARD_REGISTRY_PATH,
+  OWNER_GRAPH_REGISTRY_PATH
 ]);
 const PROTECTED_ARCHITECTURE_GUARD_PATHS = Object.freeze([
   ...FUTURE_GUARD_PATHS,
@@ -2136,7 +2265,10 @@ const PROTECTED_ARCHITECTURE_GUARD_PATHS = Object.freeze([
 const FUTURE_AUTHORITY_PATHS = Object.freeze([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
   'tools/web-architecture-rules.json',
-  'tools/web-architecture-violations.json'
+  'tools/web-architecture-violations.json',
+  WEB_DESIGN_RULES_PATH,
+  DESIGN_RULE_GUARD_REGISTRY_PATH,
+  OWNER_GRAPH_REGISTRY_PATH
 ]);
 const PRODUCT_IMPACT_GUARD_PATHS = Object.freeze([
   'docs/internal/PRODUCT_IMPACT_RATCHET.md',
@@ -2393,6 +2525,10 @@ const TRUSTED_ARCHITECTURE_FIXTURE_FILES = Object.freeze({
   ),
   'tools/web-architecture-evaluation.mjs': readFileSync(
     WEB_ARCHITECTURE_EVALUATION_MODULE,
+    'utf8'
+  ),
+  'tools/web-owner-graph-detectors.mjs': readFileSync(
+    WEB_OWNER_GRAPH_DETECTOR_MODULE,
     'utf8'
   ),
   'tools/web-architecture-rules.json': WEB_ARCHITECTURE_RULES_SOURCE,
@@ -4460,6 +4596,7 @@ test('checker implementation and authority files cannot change together', () => 
     'tools/check-web-change-budget.mjs',
     'tools/web-change-source.mjs',
     'tools/web-architecture-detectors.mjs',
+    'tools/web-owner-graph-detectors.mjs',
     'tools/web-architecture-evaluation.mjs',
     'tools/web-product-impact-evaluation.mjs',
     'tools/web-product-impact-decision-source.mjs',
@@ -4476,6 +4613,9 @@ test('checker implementation and authority files cannot change together', () => 
     'tools/web-architecture-violations.json',
     'tools/web-product-impact-map.json',
     'tools/web-product-decisions.json',
+    WEB_DESIGN_RULES_PATH,
+    DESIGN_RULE_GUARD_REGISTRY_PATH,
+    OWNER_GRAPH_REGISTRY_PATH,
     '.github/workflows/gallery-publication.yml',
     '.github/workflows/deploy_web.yml',
     '.github/workflows/test.yml',
@@ -4502,6 +4642,7 @@ test('all checker implementations are separated from reserved future authority',
     'tools/check-web-change-budget.mjs',
     'tools/web-change-source.mjs',
     'tools/web-architecture-detectors.mjs',
+    'tools/web-owner-graph-detectors.mjs',
     'tools/web-architecture-evaluation.mjs',
     'tools/web-product-impact-evaluation.mjs',
     'tools/web-product-impact-decision-source.mjs',
@@ -5616,4 +5757,257 @@ test('pull request SHA mismatches are blocking metadata errors', () => {
     assert.match(result.output, /Context: PROMOTION/);
     assert.match(result.output, /Checker base SHA does not match the GitHub event payload/);
   });
+});
+
+// Design-rule guard registry (WEB_CHANGE_POLICY.md "Design-rule co-change"):
+// the registry names the allowlist and baseline literals inside the guard
+// tests of the numbered rules in gbdraw/web/CLAUDE.md. A runtime diff may contract them and
+// may not expand them; an expansion is an authority-only change.
+const DESIGN_RULE_GUARD_TEST_PATH = 'tests/web/design-rule-guard-fixture.test.mjs';
+const designRuleGuardRegistrySource = (rules) => `${JSON.stringify({
+  schemaVersion: 1,
+  rulesPath: WEB_DESIGN_RULES_PATH,
+  rules
+}, null, 2)}\n`;
+const DESIGN_RULE_REGISTRY = designRuleGuardRegistrySource([{
+  id: 'R10',
+  heading: 'R10: A watcher does not repair state',
+  guards: [DESIGN_RULE_GUARD_TEST_PATH],
+  allowlists: [
+    { path: DESIGN_RULE_GUARD_TEST_PATH, symbol: 'RECONCILE', kind: 'set' },
+    { path: DESIGN_RULE_GUARD_TEST_PATH, symbol: 'WRITERS', kind: 'writer-map' },
+    { path: DESIGN_RULE_GUARD_TEST_PATH, symbol: 'THROW_BASELINE', kind: 'count-map' },
+    { path: DESIGN_RULE_GUARD_TEST_PATH, symbol: 'BASELINE', kind: 'count' }
+  ]
+}]);
+const designRuleGuardTestSource = ({
+  reconcile = ['normalizeCircularTrackSlots', 'changeCircularDepthSources'],
+  writers = "{\n  'app/app-setup.js': { removeCircularDepthTrack: 'reconcile' }, // keeps every lane\n  'services/reset.js': { resetSettings: 'restore' }\n}",
+  throwBaseline = "{ 'app/a.js': 3, 'app/b.js': 0 }",
+  baseline = 46
+} = {}) => [
+  "import test from 'node:test';",
+  '',
+  '// Exports that may write outside the transition (R10 reconciles).',
+  `const RECONCILE = new Set([${reconcile.map((name) => `'${name}'`).join(', ')}]);`,
+  `const WRITERS = ${writers};`,
+  `const THROW_BASELINE = ${throwBaseline};`,
+  '',
+  "test('baseline', () => {",
+  `  const BASELINE = ${baseline};`,
+  '  void RECONCILE; void WRITERS; void THROW_BASELINE; void BASELINE;',
+  '});',
+  ''
+].join('\n');
+
+const withDesignRuleGuardRepository = (runCase, { registry = DESIGN_RULE_REGISTRY } = {}) => (
+  withChangeBudgetRepository(({ commit, execute, write }) => {
+    write(DESIGN_RULE_GUARD_REGISTRY_PATH, registry);
+    write(DESIGN_RULE_GUARD_TEST_PATH, designRuleGuardTestSource());
+    commit('register design-rule guards');
+    return runCase({ execute, write });
+  })
+);
+const runtimeChange = (write) => {
+  write('gbdraw/web/js/services/session-file.js', 'export const readSession = () => ({ version: 2 });\n');
+};
+
+test('design-rule allowlists may contract alongside runtime files', () => {
+  withDesignRuleGuardRepository(({ execute, write }) => {
+    runtimeChange(write);
+    write(DESIGN_RULE_GUARD_TEST_PATH, designRuleGuardTestSource({
+      reconcile: ['normalizeCircularTrackSlots'],
+      writers: "{\n  'services/reset.js': { resetSettings: 'restore' }\n}",
+      throwBaseline: "{ 'app/a.js': 2, 'app/b.js': 0 }",
+      baseline: 45
+    }));
+    const result = execute();
+    assert.equal(result.status, 0, result.output);
+    assert.match(result.output, /Gate: \*\*PASS\*\*/);
+    assert.doesNotMatch(result.output, /design-rule\.co-change/);
+    assert.match(result.output, /- contraction: R10 tests\/web\/design-rule-guard-fixture\.test\.mjs#RECONCILE/);
+    assert.match(result.output, /- contraction: R10 tests\/web\/design-rule-guard-fixture\.test\.mjs#WRITERS/);
+    assert.match(result.output, /- contraction: R10 tests\/web\/design-rule-guard-fixture\.test\.mjs#THROW_BASELINE/);
+    assert.match(result.output, /- contraction: R10 tests\/web\/design-rule-guard-fixture\.test\.mjs#BASELINE/);
+    assert.match(result.output, /Registry: 1 rule\(s\) from the trusted base/);
+  });
+});
+
+test('design-rule allowlists cannot expand alongside runtime files', () => {
+  const expansions = [
+    ['RECONCILE', { reconcile: ['normalizeCircularTrackSlots', 'changeCircularDepthSources', 'applyTrackLayout'] }],
+    ['WRITERS', { writers: "{\n  'app/app-setup.js': { removeCircularDepthTrack: 'reconcile' },\n  'services/reset.js': { resetSettings: 'restore' },\n  'app/feature-editor/placement-actions.js': { changeLayoutSetting: 'transition' }\n}" }],
+    ['WRITERS', { writers: "{\n  'app/app-setup.js': { removeCircularDepthTrack: 'transition' },\n  'services/reset.js': { resetSettings: 'restore' }\n}" }],
+    ['THROW_BASELINE', { throwBaseline: "{ 'app/a.js': 4, 'app/b.js': 0 }" }],
+    ['THROW_BASELINE', { throwBaseline: "{ 'app/a.js': 3, 'app/b.js': 0, 'app/c.js': 1 }" }],
+    ['BASELINE', { baseline: 47 }]
+  ];
+  expansions.forEach(([symbol, overrides]) => {
+    withDesignRuleGuardRepository(({ execute, write }) => {
+      runtimeChange(write);
+      write(DESIGN_RULE_GUARD_TEST_PATH, designRuleGuardTestSource(overrides));
+      for (const environment of [{}, { WEB_ARCHITECTURE_CHANGE: 'true' }]) {
+        const result = execute({ environment });
+        assert.equal(result.status, 1, `${symbol}\n${result.output}`);
+        assert.match(result.output, /Gate: \*\*FAIL\*\*/);
+        assert.match(
+          result.output,
+          new RegExp(`design-rule\\.co-change: a registered design-rule allowlist expanded alongside production runtime files \\([^)]*R10 tests/web/design-rule-guard-fixture\\.test\\.mjs#${symbol} \\(expansion\\)`)
+        );
+      }
+    });
+  });
+});
+
+test('a design-rule allowlist expansion without runtime files is an authority change', () => {
+  withDesignRuleGuardRepository(({ execute, write }) => {
+    write(DESIGN_RULE_GUARD_TEST_PATH, designRuleGuardTestSource({ baseline: 47 }));
+    const result = execute();
+    assert.equal(result.status, 0, result.output);
+    assert.match(result.output, /Gate: \*\*PASS\*\*/);
+    assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
+    assert.match(result.output, /Governance and authority: registered design-rule allowlists expanded \(R10 tests\/web\/design-rule-guard-fixture\.test\.mjs#BASELINE \(expansion\)\)/);
+  });
+});
+
+test('an unreadable design-rule allowlist counts as an expansion', () => {
+  withDesignRuleGuardRepository(({ execute, write }) => {
+    runtimeChange(write);
+    write(DESIGN_RULE_GUARD_TEST_PATH, designRuleGuardTestSource({ baseline: 'computeBaseline()' }));
+    const result = execute();
+    assert.equal(result.status, 1, result.output);
+    assert.match(result.output, /design-rule\.co-change: .*#BASELINE \(unreadable\)/);
+  });
+});
+
+test('the design-rule guard registry is read from the trusted base and fails closed when malformed', () => {
+  withDesignRuleGuardRepository(({ execute, write }) => {
+    // A head-side registry rewrite cannot relax the base registry.
+    runtimeChange(write);
+    write(DESIGN_RULE_GUARD_REGISTRY_PATH, designRuleGuardRegistrySource([]));
+    write(DESIGN_RULE_GUARD_TEST_PATH, designRuleGuardTestSource({ baseline: 47 }));
+    const result = execute();
+    assert.equal(result.status, 1, result.output);
+    assert.match(result.output, /design-rule\.co-change: .*#BASELINE \(expansion\)/);
+    assert.match(result.output, /production runtime files and Web guard\/CI files changed together/);
+  });
+  withDesignRuleGuardRepository(({ execute }) => {
+    const result = execute();
+    assert.equal(result.status, 1, result.output);
+    assert.match(result.output, /trusted design-rule guard registry: tools\/web-design-rule-guards\.json: rules\[0\]\.allowlists\[0\]\.kind: expected one of/);
+  }, {
+    registry: designRuleGuardRegistrySource([{
+      id: 'R10',
+      heading: 'R10',
+      guards: [DESIGN_RULE_GUARD_TEST_PATH],
+      allowlists: [{ path: DESIGN_RULE_GUARD_TEST_PATH, symbol: 'RECONCILE', kind: 'list' }]
+    }])
+  });
+  withDesignRuleGuardRepository(({ execute }) => {
+    const result = execute();
+    assert.equal(result.status, 1, result.output);
+    assert.match(result.output, /trusted design-rule guard registry: tools\/web-design-rule-guards\.json: invalid JSON/);
+    assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
+  }, { registry: '{ not json\n' });
+});
+
+test('the Web design rules and the guard registry are pre-registered guard and authority paths', () => {
+  const checker = readFileSync(CHANGE_BUDGET_CHECKER, 'utf8');
+  assert.match(checker, /const webDesignRulesPath = 'gbdraw\/web\/CLAUDE\.md';/);
+  assert.match(checker, /const designRuleGuardRegistryPath = 'tools\/web-design-rule-guards\.json';/);
+  const guardBlock = checker.match(/const guardPaths = new Set\(\[([\s\S]*?)\]\);/)[1];
+  const authorityBlock = checker.match(/const authorityPaths = new Set\(\[([\s\S]*?)\]\);/)[1];
+  for (const block of [guardBlock, authorityBlock]) {
+    assert.match(block, /webDesignRulesPath/);
+    assert.match(block, /designRuleGuardRegistryPath/);
+  }
+  if (existsSync(join(REPOSITORY_ROOT, DESIGN_RULE_GUARD_REGISTRY_PATH))) {
+    // Once the registry is activated, every rule it names exists in the Web
+    // rules, every guard exists, and every allowlist literal is readable.
+    const registry = JSON.parse(readFileSync(join(REPOSITORY_ROOT, DESIGN_RULE_GUARD_REGISTRY_PATH), 'utf8'));
+    const rules = readFileSync(join(REPOSITORY_ROOT, WEB_DESIGN_RULES_PATH), 'utf8');
+    assert.equal(registry.schemaVersion, 1);
+    registry.rules.forEach((rule) => {
+      assert.match(rules, new RegExp(`^### ${rule.heading.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}$`, 'm'), rule.id);
+      rule.guards.forEach((guard) => assert.ok(existsSync(join(REPOSITORY_ROOT, guard)), `${rule.id}: ${guard}`));
+      rule.allowlists.forEach(({ path, symbol }) => {
+        const source = readFileSync(join(REPOSITORY_ROOT, path), 'utf8');
+        assert.match(source, new RegExp(`^[ \\t]*(?:export\\s+)?const\\s+${symbol}\\s*=`, 'm'), `${rule.id}: ${path}#${symbol}`);
+      });
+    });
+  }
+});
+
+// Owner-graph report (implementation plan Phase B1): the checker prints the
+// detector summaries for the base and the head and the NEW and REMOVED
+// subjects, and nothing in that section affects the Gate until Phase B3.
+test('the owner-graph report lists base and head counts and new subjects without gating', () => {
+  const registry = JSON.stringify({
+    schemaVersion: 1,
+    compositionRoots: ['app/wiring.js'],
+    ownerObjectNames: ['store', 'legendOwner'],
+    stateModule: 'state.js',
+    projectionDomains: [],
+    heavyProducers: []
+  });
+  const root = [
+    "import { createLegendOwner } from './legend-owner.js';",
+    "import { createStore } from '../services/store.js';",
+    'export const createWiring = () => {',
+    '  const store = createStore({ state });',
+    '  const legendOwner = createLegendOwner({ state, store });',
+    '  return { store, legendOwner };',
+    '};',
+    ''
+  ].join('\n');
+  const withClosure = root.replace(
+    '  const store = createStore({ state });',
+    '  const store = createStore({ state, buildLegendEntryOwners: () => legendOwner.captureLegendEntryOwners() });'
+  );
+  withChangeBudgetRepository(({ commit, execute, write }) => {
+    write(OWNER_GRAPH_REGISTRY_PATH, `${registry}\n`);
+    write('gbdraw/web/js/app/wiring.js', root);
+    write('gbdraw/web/js/app/legend-owner.js', 'export const createLegendOwner = ({ state, store }) => ({ state, store });\n');
+    write('gbdraw/web/js/services/store.js', 'export const createStore = ({ state }) => ({ state });\n');
+    commit('baseline composition');
+    const unchanged = execute();
+    assert.equal(unchanged.status, 0, unchanged.output);
+    assert.match(unchanged.output, /## Owner graph \(report\)\n\n- Registry: tools\/web-owner-graph\.json from the trusted base\n- injectionEdges: 1 -> 1\n- forwardClosures: 0 -> 0\n- stateBackdoors: 0 -> 0\n- wholeObjectPorts: 1 -> 1/);
+    write('gbdraw/web/js/app/wiring.js', withClosure);
+    write('gbdraw/web/js/app/legend-owner.js', "export const createLegendOwner = ({ state, store }) => { state.legendRows = () => []; return { state, store }; };\n");
+    const result = execute();
+    assert.equal(result.status, 0, result.output);
+    assert.match(result.output, /Gate: \*\*PASS\*\*/);
+    assert.match(result.output, /- forwardClosures: 0 -> 1\n/);
+    assert.match(result.output, /- stateBackdoors: 0 -> 1\n/);
+    assert.match(result.output, /- owner-graph\.forward-closure\.v1: NEW app\/wiring\.js\|store\.buildLegendEntryOwners->legendOwner\.captureLegendEntryOwners/);
+    assert.match(result.output, /- owner-graph\.state-backdoor\.v1: NEW app\/legend-owner\.js\|legendRows/);
+    assert.doesNotMatch(result.output, /Blocking violations\n\n- .*owner-graph/);
+  });
+});
+
+test('the owner-graph registry is pre-registered authority and is read from the trusted base', () => {
+  const checker = readFileSync(CHANGE_BUDGET_CHECKER, 'utf8');
+  assert.match(checker, /const ownerGraphRegistryPath = 'tools\/web-owner-graph\.json';/);
+  assert.match(checker, /const ownerGraphDetectorsPath = 'tools\/web-owner-graph-detectors\.mjs';/);
+  const guardBlock = checker.match(/const guardPaths = new Set\(\[([\s\S]*?)\]\);/)[1];
+  const authorityBlock = checker.match(/const authorityPaths = new Set\(\[([\s\S]*?)\]\);/)[1];
+  const implementationBlock = checker.match(/const checkerImplementationPaths = new Set\(\[([\s\S]*?)\]\);/)[1];
+  assert.match(guardBlock, /ownerGraphRegistryPath/);
+  assert.match(guardBlock, /ownerGraphDetectorsPath/);
+  assert.match(authorityBlock, /ownerGraphRegistryPath/);
+  assert.match(implementationBlock, /ownerGraphDetectorsPath/);
+  assert.match(checker, /readRevisionFile\(base, ownerGraphRegistryPath\)/);
+  withChangeBudgetRepository(({ commit, execute, write }) => {
+    write(OWNER_GRAPH_REGISTRY_PATH, '{"schemaVersion":1,"compositionRoots":["app/app-setup.js"]}\n');
+    commit('register owner graph');
+    write(OWNER_GRAPH_REGISTRY_PATH, '{ malformed\n');
+    const result = execute();
+    assert.match(result.output, /- Registry: tools\/web-owner-graph\.json from the trusted base/);
+  });
+  const malformed = runChangeBudgetCase((write) => {
+    write(OWNER_GRAPH_REGISTRY_PATH, '{ malformed\n');
+  });
+  // An uncommitted registry is read from the base (absent) and reported as defaults.
+  assert.match(malformed.output, /- Registry: defaults \(registry absent\)/);
 });

@@ -8,19 +8,20 @@ branching on the legacy preset name.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Literal, Sequence
+from typing import Literal, Sequence, cast
 
-from ...canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
-from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from ...tracks.circular import (  # type: ignore[reportMissingImports]
+from ...auto_sizes import circular_track_width_px
+from ...canvas import CircularCanvasConfigurator
+from ...config.models import GbdrawConfig
+from ...tracks.circular import (
     CircularTrackSlot,
     NUMERIC_CIRCULAR_TRACK_RENDERERS,
     _internal_circular_track_slot,
     circular_track_slots_with_axis_side,
     tick_label_layout_from_sides,
 )
-from ...tracks.scalars import ScalarSpec  # type: ignore[reportMissingImports]
-from ...svg.circular_ticks import (  # type: ignore[reportMissingImports]
+from ...tracks.scalars import ScalarSpec
+from ...svg.circular_ticks import (
     get_circular_tick_label_radius_bounds,
     get_circular_tick_path_ratio_bounds,
 )
@@ -74,7 +75,7 @@ def normalize_circular_track_preset(raw: str | None) -> CircularTrackPreset:
         raise ValueError(
             "Circular track preset must be one of: tuckin, middle, spreadout"
         )
-    return preset  # type: ignore[return-value]
+    return cast(CircularTrackPreset, preset)  # membership checked above
 
 
 def circular_feature_lane_direction_for_preset(
@@ -101,28 +102,13 @@ def _normalized_renderer(raw: object) -> str:
     return _RENDERER_ALIASES.get(renderer, renderer)
 
 
-def _default_feature_width_px(context: CircularPresetContext) -> float:
-    length_param = str(context.canvas_config.length_param)
-    return (
-        float(context.canvas_config.radius)
-        * float(context.canvas_config.track_ratio)
-        * float(context.cfg.canvas.circular.track_ratio_factors[length_param][0])
+def _default_width_px(renderer: str, context: CircularPresetContext) -> float:
+    return circular_track_width_px(
+        renderer,
+        radius=context.canvas_config.radius,
+        track_ratio=context.canvas_config.track_ratio,
+        factors=context.cfg.canvas.circular.track_ratio_factors[str(context.canvas_config.length_param)],
     )
-
-
-def _default_numeric_width_px(
-    renderer: str,
-    context: CircularPresetContext,
-) -> float:
-    length_param = str(context.canvas_config.length_param)
-    base = float(context.canvas_config.radius) * float(context.canvas_config.track_ratio)
-    if renderer == "sequence_conservation":
-        return base * float(context.cfg.canvas.circular.track_ratio_factors[length_param][0])
-    if renderer == "depth":
-        return base * float(context.cfg.canvas.circular.track_ratio_factors[length_param][1]) * 0.5
-    if renderer == "dinucleotide_skew":
-        return base * float(context.cfg.canvas.circular.track_ratio_factors[length_param][2])
-    return base * float(context.cfg.canvas.circular.track_ratio_factors[length_param][1])
 
 
 def _numeric_slot(
@@ -154,7 +140,7 @@ def _numeric_slot(
         renderer=renderer,
         side="inside",
         radius=radius,
-        width=_scalar_px(_default_numeric_width_px(renderer, context)),
+        width=_scalar_px(_default_width_px(renderer, context)),
         inner_gap_px=max(1.0, 0.01 * float(context.canvas_config.radius)),
         outer_gap_px=max(1.0, 0.01 * float(context.canvas_config.radius)),
         params=dict(params or {}),
@@ -170,7 +156,7 @@ def circular_feature_slot_defaults_for_preset(
     return CircularFeatureSlotDefaults(
         lane_direction=lane_direction,
         radius=None,
-        width=_scalar_px(_default_feature_width_px(context)),
+        width=_scalar_px(_default_width_px("features", context)),
     )
 
 
@@ -184,6 +170,7 @@ def _tick_slot_for_preset(
         preset,
         bool(context.strandedness),
         tick_track_channel_override=context.tick_track_channel_override,
+        length_threshold=int(context.cfg.labels.length_threshold.circular),
     )
     tick_inner_ratio, tick_outer_ratio = sorted((float(tick_inner_ratio), float(tick_outer_ratio)))
     placement_side = "inside" if tick_outer_ratio <= 1.0 else "outside"
@@ -210,6 +197,7 @@ def _tick_slot_for_preset(
             tick_side=tick_side,
             tick_length_px=tick_width_px,
             length_reference_radius_px=base_radius,
+            length_threshold=int(context.cfg.labels.length_threshold.circular),
         )
         if label_bounds is not None:
             label_center = (float(label_bounds[0]) + float(label_bounds[1])) / 2.0
@@ -374,7 +362,7 @@ def _inherited_width_for_renderer(
     context: CircularPresetContext,
 ) -> ScalarSpec | None:
     if renderer == "features":
-        return _scalar_px(_default_feature_width_px(context))
+        return _scalar_px(_default_width_px("features", context))
     if renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS:
         return None
     if params_slot is not None:

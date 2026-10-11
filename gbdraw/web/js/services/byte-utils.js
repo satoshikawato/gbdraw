@@ -1,3 +1,4 @@
+// @ts-check
 const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
 const isBase64Whitespace = (character) => (

@@ -1,10 +1,8 @@
-import { normalizeUserFacingError } from '../services/error-normalization.js';
+// @ts-check
+/** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
+import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
-  getFeatureElementIndex,
-  normalizeFeatureIdentity
-} from './feature-dom.js';
-import {
-  applyEditorOperationsToMountedSvg,
+  reconcileMountedResult,
   getCommittedSvgResultMetadata,
   getCommittedSvgResultRuntimeIdentity,
   markCommittedSvgResultMounted,
@@ -15,22 +13,154 @@ import {
   recordStructuralMetric
 } from '../services/runtime-test-hooks.js';
 
-const normalizeVisibilityMode = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === 'suppress') return 'exclude_matching';
-  return ['on', 'off', 'exclude_matching'].includes(normalized) ? normalized : 'default';
-};
+/**
+ * What the Label editor and the mounted-preview binder steps read from
+ * `bindingOptions`. A caller names only the options its phase needs.
+ * @typedef {object} PreviewBindingOptions
+ * @property {boolean} [isIncrementalEdit] The Result is edited in place, not newly generated.
+ * @property {boolean} [skipLegendExtraction]
+ * @property {boolean} [trustedRestore] A restored artifact: its editor state is already current.
+ * @property {boolean} [replaceGeneratedLegend]
+ * @property {boolean} [modeArrival] The Result is shown again by a mode switch, in its own mode's drawing.
+ * @property {readonly string[]} [requiredLabelFeatureIds]
+ * @property {readonly string[]} [optionalLabelFeatureIds]
+ * @property {{ featureIds: readonly string[], report: (error: unknown) => void }} [reportedLabelBinding]
+ * @property {import('./result-paint-record.js').EditorPaintState} [drawnPaint] The editor state a label rerender drew from.
+ */
 
-const normalizeChanges = (changes) => {
-  if (!Array.isArray(changes)) return [];
-  const byFeatureId = new Map();
-  changes.forEach((change) => {
-    const featureId = normalizeFeatureIdentity(change?.featureId ?? change?.svgId ?? change?.id);
-    if (!featureId) return;
-    byFeatureId.set(featureId, { ...change, featureId });
-  });
-  return Array.from(byFeatureId.values());
-};
+/**
+ * The refs the runtime reads and writes (state.js owns them).
+ * @typedef {object} PreviewRuntimeState
+ * @property {{ value: any }} [svgContainer] The element that holds the mounted SVG.
+ * @property {{ value: Record<string, any>[] }} results
+ * @property {{ value: number }} selectedResultIndex
+ * @property {{ value: any }} [featureCatalog]
+ * @property {{ value: boolean }} [skipCaptureBaseConfig]
+ * @property {() => any} [sessionOperationAvailability]
+ */
+
+/**
+ * @typedef {object} PreviewRuntimeOptions
+ * @property {PreviewRuntimeState} state
+ * @property {(svg: Element) => string} serializeSvg The clean serializer of services/svg-serialization.js.
+ */
+
+/**
+ * The preview readiness a caller registers before it changes the mounted
+ * Result, and the receipt the binder must return for it.
+ * @typedef {object} ReadinessExpectationOptions
+ * @property {Record<string, any>} result
+ * @property {number} [resultIndex]
+ * @property {any} [artifactIdentity] A fingerprint object or string.
+ * @property {string} [generationToken]
+ * @property {any} [catalogState] The feature catalog admission of the Result.
+ * @property {string} [phase]
+ * @property {PreviewBindingOptions} [bindingOptions]
+ * @property {() => boolean} [isCurrent] Whether the operation that registered it is still current.
+ */
+
+/**
+ * @typedef {object} ReadinessExpectation
+ * @property {number} identity
+ * @property {Record<string, any>} result
+ * @property {number} resultIndex
+ * @property {string} resultIdentity
+ * @property {string} artifactIdentity
+ * @property {string} generationToken
+ * @property {any} catalogState
+ * @property {string} phase
+ * @property {Readonly<PreviewBindingOptions>} bindingOptions
+ * @property {number} bindSequence
+ * @property {number} rootGeneration
+ * @property {() => boolean} isCurrent
+ * @property {boolean} settled
+ * @property {Promise<ReadyReceipt>} promise
+ * @property {(receipt: ReadyReceipt) => void} resolve
+ * @property {(reason: Error) => void} reject
+ */
+
+/**
+ * @typedef {object} ReadyReceipt
+ * @property {string} artifactIdentity
+ * @property {string} resultIdentity
+ * @property {number} resultIndex
+ * @property {string} generationToken
+ * @property {number} rootIdentity
+ * @property {number} rootGeneration
+ * @property {number} bindSequence
+ * @property {Readonly<Record<string, boolean>>} requiredBindingFlags
+ * @property {number} readyTimestamp
+ * @property {string} phase
+ */
+
+/**
+ * One mounted Result and the lazily built indexes of its SVG.
+ * @typedef {object} PreviewResultRuntime
+ * @property {number} resultIndex
+ * @property {SVGSVGElement} svg
+ * @property {Record<string, any>} result
+ * @property {string} resultIdentity
+ * @property {string} artifactIdentity
+ * @property {string} generationToken
+ * @property {number} rootGeneration
+ * @property {number} bindSequence
+ * @property {ReadyReceipt | null} readyReceipt
+ * @property {boolean} dirty
+ * @property {Set<string>} dirtyReasons
+ * @property {{ features: Map<string, Element[]> | null, legend: any, pairwiseMatches: any, orthogroupComparisons: any }} indexes
+ * @property {string} [lastInvalidationReason]
+ */
+
+/**
+ * The mount a caller observes. A missing `result` and `resultIndex` mean the
+ * selected Result.
+ * @typedef {object} MountedResultContextOptions
+ * @property {SVGSVGElement} root
+ * @property {Record<string, any>} [result]
+ * @property {number} [resultIndex]
+ * @property {any} [catalogState]
+ * @property {PreviewBindingOptions} [bindingOptions]
+ */
+
+/**
+ * What a binder step receives for one observed mount.
+ * @typedef {object} MountedResultContext
+ * @property {SVGSVGElement} root
+ * @property {Record<string, any>} result
+ * @property {string} sourceClass
+ * @property {number} resultIndex
+ * @property {string} resultIdentity
+ * @property {string} artifactIdentity
+ * @property {string} generationToken
+ * @property {any} catalogState
+ * @property {number} bindSequence
+ * @property {number} rootGeneration
+ * @property {number} expectationIdentity `0` for a mount no expectation owns.
+ * @property {string} phase
+ * @property {Readonly<PreviewBindingOptions>} bindingOptions
+ */
+
+/**
+ * The steps of the mounted-preview binder, in the order they run. The root
+ * wires them with `configureMountedResultBinder`; each is optional.
+ * @typedef {object} MountedResultBinderSteps
+ * @property {(context: MountedResultContext) => unknown} [adoptLegend]
+ * @property {(context: MountedResultContext) => unknown} [bindComposition]
+ * @property {(context: MountedResultContext) => unknown} [setupDragAffordances]
+ * @property {(context: MountedResultContext) => unknown} [installDelegatedInteractions]
+ * @property {(context: MountedResultContext) => unknown} [synchronizeLabelEditor]
+ * @property {(context: MountedResultContext) => unknown} [initializeStrokeAndCanvas]
+ * @property {(context: MountedResultContext) => unknown} [reconcileSelection]
+ * @property {(context: MountedResultContext) => unknown} [afterReady] Runs after the receipt is accepted.
+ * @property {(runtime: PreviewResultRuntime) => unknown} [disposeMountedResult]
+ */
+
+/**
+ * @typedef {object} PreviousResultRestoreOptions
+ * @property {Record<string, any>} [handle] The generated-artifact handle that holds the owner set to restore.
+ * @property {() => unknown} restore The artifact owner's restore.
+ * @property {string} [phase]
+ */
 
 const REQUIRED_BINDING_FLAGS = Object.freeze([
   'rootAdopted',
@@ -44,11 +174,17 @@ const REQUIRED_BINDING_FLAGS = Object.freeze([
 ]);
 
 const readinessError = (message, code = 'PREVIEW_READINESS_REJECTED') => {
-  const error = new Error(message);
+  const error = /** @type {Error & { code?: string }} */ (new Error(message));
   error.code = code;
   return error;
 };
 
+/**
+ * @param {Pick<PreviewResultRuntime,
+ *   'resultIndex' | 'svg' | 'result' | 'resultIdentity' | 'artifactIdentity'
+ *   | 'generationToken' | 'rootGeneration' | 'bindSequence'>} identity
+ * @returns {PreviewResultRuntime}
+ */
 const makeRuntime = ({
   resultIndex,
   svg,
@@ -78,23 +214,39 @@ const makeRuntime = ({
   }
 });
 
+/** @param {PreviewRuntimeOptions} options */
 export const createPreviewRuntime = ({ state, serializeSvg }) => {
   if (!state) throw new Error('createPreviewRuntime requires state.');
   if (typeof serializeSvg !== 'function') throw new Error('createPreviewRuntime requires serializeSvg.');
 
+  /** @type {PreviewResultRuntime | null} */
   let activeRuntime = null;
+  /** @type {ReadinessExpectation | null} */
   let activeExpectation = null;
+  /** @type {{ root: SVGSVGElement, bindSequence: number, promise: Promise<ReadyReceipt> } | null} */
   let pendingBind = null;
+  /** @type {Readonly<MountedResultBinderSteps>} */
   let bindingSteps = Object.freeze({});
   let nextExpectationIdentity = 1;
   let nextFallbackResultIdentity = 1;
   let nextRootGeneration = 1;
   let nextBindSequence = 1;
   let nextRestoreToken = 1;
+  /** @type {{ root: SVGSVGElement, resultIdentity: string, bindSequence: number } | null} */
   let lastObservedMount = null;
+  // A root released with its Result (a mode switch, a Session reset) stays in
+  // the container until the next render replaces it. An edit made before that
+  // render must not commit it into another Result selected now (E1); the same
+  // Result selected again (a Load rolled back) takes the root back.
+  /** @type {{ root: SVGSVGElement, resultIdentity: string } | null} */
+  let released = null;
+  const selectedResultIdentity = () => resultRuntimeIdentity(
+    state.results.value[Number(state.selectedResultIndex?.value || 0)]
+  );
   const fallbackResultIdentities = new WeakMap();
   const invalidatedReceipts = new WeakSet();
 
+  /** @returns {SVGSVGElement | null} */
   const getMountedSvg = () => state.svgContainer?.value?.querySelector?.('svg') || null;
 
   const resultRuntimeIdentity = (result) => {
@@ -126,6 +278,10 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return true;
   };
 
+  /**
+   * @param {ReadinessExpectation | ReadyReceipt | string | null} [target] An expectation, a receipt, or a generation token.
+   * @param {Error | string | null} [reason]
+   */
   const invalidateReadinessExpectation = (target = null, reason = null) => {
     const expectation = activeExpectation;
     if (!expectation) return false;
@@ -133,7 +289,8 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       target
       && target !== expectation
       && target !== expectation.generationToken
-      && target?.generationToken !== expectation.generationToken
+      // A string target reads `generationToken` as undefined, which is the token mismatch below.
+      && /** @type {{ generationToken?: string }} */ (target)?.generationToken !== expectation.generationToken
     ) return false;
     const rejected = rejectExpectation(
       expectation,
@@ -152,6 +309,10 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return rejected;
   };
 
+  /**
+   * @param {ReadinessExpectationOptions} [options]
+   * @returns {ReadinessExpectation}
+   */
   const registerReadinessExpectation = ({
     result,
     resultIndex = 0,
@@ -161,7 +322,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     phase = 'preview',
     bindingOptions = {},
     isCurrent = () => true
-  } = {}) => {
+  } = /** @type {ReadinessExpectationOptions} */ ({})) => {
     if (!result || typeof result !== 'object') {
       throw new Error('Preview readiness requires a selected Result.');
     }
@@ -237,6 +398,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       return activeRuntime;
     }
     releaseActiveResult();
+    released = null;
     activeRuntime = makeRuntime({
       resultIndex: normalizedIndex,
       svg,
@@ -256,6 +418,11 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       null,
       readinessError('The mounted preview was cleared.', 'PREVIEW_RUNTIME_CLEARED')
     );
+    // A root released again before any mount still shows the Result it was
+    // first released with (a Load's rollback resets the baseline again).
+    const root = getMountedSvg();
+    released = !root ? null
+      : released?.root === root ? released : { root, resultIdentity: selectedResultIdentity() };
     releaseActiveResult();
     activeRuntime = null;
     pendingBind = null;
@@ -267,6 +434,10 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
   const ensureRuntimeForCurrentSvg = () => {
     const svg = getMountedSvg();
     if (!svg) return null;
+    if (released?.root === svg) {
+      if (released.resultIdentity !== selectedResultIdentity()) return null;
+      released = null;
+    }
     const resultIndex = Number(state.selectedResultIndex?.value || 0);
     if (!activeRuntime || activeRuntime.svg !== svg || activeRuntime.resultIndex !== resultIndex) {
       return mountResultSvg(resultIndex, svg);
@@ -274,6 +445,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return activeRuntime;
   };
 
+  /** @param {MountedResultBinderSteps} [steps] */
   const configureMountedResultBinder = (steps = {}) => {
     if (!steps || typeof steps !== 'object' || Array.isArray(steps)) {
       throw new Error('PreviewRuntime binder steps must be an object.');
@@ -281,13 +453,17 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     bindingSteps = Object.freeze({ ...steps });
   };
 
+  /**
+   * @param {MountedResultContextOptions} [options]
+   * @returns {MountedResultContext}
+   */
   const createMountedResultContext = ({
     root,
     result = state.results.value[state.selectedResultIndex?.value || 0],
     resultIndex = state.selectedResultIndex?.value || 0,
     catalogState = state.featureCatalog?.value || null,
     bindingOptions = {}
-  } = {}) => {
+  } = /** @type {MountedResultContextOptions} */ ({})) => {
     if (!root) throw new Error('Mounted preview observation requires an SVG root.');
     const normalizedIndex = Number(resultIndex) || 0;
     const resultIdentity = resultRuntimeIdentity(result);
@@ -471,7 +647,11 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     }
   };
 
-  const bindMountedResult = (context = {}) => {
+  /**
+   * @param {MountedResultContext} context
+   * @returns {Promise<ReadyReceipt>}
+   */
+  const bindMountedResult = (context = /** @type {MountedResultContext} */ ({})) => {
     if (
       pendingBind
       && pendingBind.root === context.root
@@ -591,7 +771,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       activeRuntime.readyReceipt = receipt;
       if (typeof bindingSteps.afterReady === 'function') {
         queueMicrotask(() => {
-          Promise.resolve(bindingSteps.afterReady(context)).catch((error) => {
+          Promise.resolve(bindingSteps.afterReady?.(context)).catch((error) => {
             console.error('Post-ready preview work failed.', normalizeUserFacingError(error));
           });
         });
@@ -626,6 +806,10 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return promise;
   };
 
+  /**
+   * @param {ReadyReceipt | null | undefined} receipt
+   * @param {string} [reason]
+   */
   const invalidateReadyReceipt = (receipt, reason = 'Preview readiness entered rollback.') => {
     if (!receipt || typeof receipt !== 'object') return false;
     invalidatedReceipts.add(receipt);
@@ -642,11 +826,15 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return true;
   };
 
+  /**
+   * @param {PreviousResultRestoreOptions} options
+   * @returns {Promise<ReadyReceipt | null>}
+   */
   const restorePreviousSelectedResult = async ({
     handle,
     restore,
     phase = 'rollback-restoration'
-  } = {}) => {
+  } = /** @type {PreviousResultRestoreOptions} */ ({})) => {
     if (typeof restore !== 'function') {
       throw new Error('Preview restoration requires the generated-artifact restore owner.');
     }
@@ -681,11 +869,33 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       phase,
       resultIndex
     });
+    const rootBeforeRestore = getMountedSvg();
     await restore();
     if (!expectation) {
       clearActiveRuntime();
       recordSessionLifecycleEvent('preview.restore-bind-completed', { phase, resultIndex });
       return null;
+    }
+    // R10: a failure before any candidate replaced the Result restores the
+    // Result that is still mounted. The mount watcher observes no change, so
+    // bind that root here, as the watcher binds a remounted one.
+    const root = getMountedSvg();
+    if (
+      root
+      && root === rootBeforeRestore
+      && activeExpectation === expectation
+      && activeRuntime?.svg === root
+      && activeRuntime.resultIdentity === expectation.resultIdentity
+      && expectation.isCurrent()
+    ) {
+      if (activeRuntime.readyReceipt) invalidateReadyReceipt(activeRuntime.readyReceipt);
+      if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = false;
+      void bindMountedResult(createMountedResultContext({
+        root,
+        result,
+        resultIndex,
+        catalogState: expectation.catalogState
+      })).catch(() => {});
     }
     const receipt = await expectation.promise;
     recordSessionLifecycleEvent('preview.restore-bind-completed', {
@@ -712,6 +922,10 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     );
   };
 
+  /**
+   * @param {string} [reason]
+   * @param {string[] | null} [keys]
+   */
   const invalidatePreviewIndexes = (reason = 'unknown', keys = null) => {
     const runtime = activeRuntime;
     if (!runtime) return;
@@ -763,6 +977,35 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return true;
   };
 
+  // The readiness of a Result about to be displayed by selection: a batch
+  // Result picked, or a mode's own Result shown by the mode switch (E1). The
+  // binder projects the editor intent onto it and adopts its Legend inventory.
+  /**
+   * @param {number} resultIndex
+   * @param {Record<string, any>} [bindingOptions]
+   */
+  const expectResultSelection = (resultIndex, bindingOptions = {}) => {
+    const result = state.results.value[resultIndex];
+    if (!result) return null;
+    const expectation = registerReadinessExpectation({
+      result,
+      resultIndex,
+      artifactIdentity: activeRuntime?.artifactIdentity || `selection:${resultRuntimeIdentity(result)}`,
+      generationToken: `result-selection:${nextBindSequence}`,
+      catalogState: state.featureCatalog?.value || null,
+      phase: 'result-selection',
+      bindingOptions,
+      // Editor intent projected while binding replaces the Result content,
+      // never its committed identity (D-07).
+      isCurrent: () => (
+        resultRuntimeIdentity(state.results.value[resultIndex]) === resultRuntimeIdentity(result)
+        && Number(state.selectedResultIndex.value) === resultIndex
+      )
+    });
+    void expectation.promise.catch(() => {});
+    return expectation;
+  };
+
   const selectResult = (index) => {
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
@@ -770,72 +1013,24 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     const numeric = Number(index);
     const nextIndex = Number.isInteger(numeric) ? Math.max(0, Math.min(numeric, Math.max(0, count - 1))) : 0;
     if (state.selectedResultIndex.value === nextIndex) return false;
-    const nextResult = state.results.value[nextIndex];
-    const expectation = nextResult
-      ? registerReadinessExpectation({
-          result: nextResult,
-          resultIndex: nextIndex,
-          artifactIdentity: activeRuntime?.artifactIdentity || `selection:${resultRuntimeIdentity(nextResult)}`,
-          generationToken: `result-selection:${nextBindSequence}`,
-          catalogState: state.featureCatalog?.value || null,
-          phase: 'result-selection',
-          // Editor intent projected while binding replaces the Result content,
-          // never its committed identity (D-07).
-          isCurrent: () => (
-            resultRuntimeIdentity(state.results.value[nextIndex]) === resultRuntimeIdentity(nextResult)
-            && Number(state.selectedResultIndex.value) === nextIndex
-          )
-        })
-      : null;
-    if (expectation) void expectation.promise.catch(() => {});
+    expectResultSelection(nextIndex);
     releaseActiveResult();
     activeRuntime = null;
     state.selectedResultIndex.value = nextIndex;
     return true;
   };
 
-  const buildFeatureIndex = (runtime) => {
-    const indexed = runtime?.svg ? getFeatureElementIndex(runtime.svg) : new Map();
-    runtime.indexes.features = indexed;
-    return indexed;
-  };
+  // E1: the mode switch installed the arriving mode's artifact after
+  // `clearActiveRuntime` released the departing Result. Its selected Result,
+  // if any, is shown as a selection; `bindingOptions` reach the binder.
+  /** @param {Record<string, any>} [bindingOptions] */
+  const presentSelectedResult = (bindingOptions = {}) => expectResultSelection(
+    Number(state.selectedResultIndex.value) || 0,
+    bindingOptions
+  );
 
-  const getFeatureElements = (featureId) => {
-    const normalizedId = normalizeFeatureIdentity(featureId);
-    const runtime = activeRuntime || ensureRuntimeForCurrentSvg();
-    if (!runtime?.svg || !normalizedId) return [];
-
-    const featureIndex = runtime.indexes.features || buildFeatureIndex(runtime);
-    const indexed = featureIndex.get(normalizedId);
-    if (indexed?.length) return indexed;
-
-    const byId = runtime.svg.getElementById?.(normalizedId);
-    return byId ? [byId] : [];
-  };
-
-  const applyFeatureVisibilityChanges = (changes, { reason = 'feature-visibility' } = {}) => {
-    const normalized = normalizeChanges(changes);
-    if (normalized.length === 0) return false;
-
-    let updated = 0;
-    normalized.forEach((change) => {
-      const mode = normalizeVisibilityMode(change?.mode);
-      getFeatureElements(change.featureId).forEach((element) => {
-        if (mode === 'off') {
-          if (element.getAttribute?.('display') === 'none') return;
-          element.setAttribute('display', 'none');
-        } else {
-          if (element.getAttribute?.('display') === null) return;
-          element.removeAttribute('display');
-        }
-        updated += 1;
-      });
-    });
-
-    if (updated === 0) return false;
-    commitActiveResultEdit(reason);
-    return true;
-  };
+  // The readiness of the Result being bound, while its binding runs.
+  const pendingReadiness = () => activeExpectation?.promise ?? null;
 
   // R1: the one commit for an editor's edit of the displayed Result's SVG.
   // Serializes the mounted root into its Result at once, so no edit waits for
@@ -870,15 +1065,22 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return true;
   };
 
-  // D-07: show the canonical editor operations on the displayed Result with
-  // the executor that Generate admission uses, then persist the Result once.
-  const applyEditorOperations = (operations, { afterApply = null } = {}) => {
+  // D-07: reconcile the displayed Result with the canonical editor operations
+  // through the executor that Generate admission uses, then persist the Result
+  // once when the reconcile changed it: a display that changes nothing keeps
+  // the Result's bytes (OV-345). `domains` are the domains returned to
+  // Python's values first; `afterApply` learns whether the reconcile changed
+  // the Legend's rows.
+  /**
+   * @param {SvgMutationOperations | null | undefined} operations
+   * @param {{ domains?: readonly string[], afterApply?: ((svg: SVGSVGElement, legendChanged: boolean) => void) | null }} [options]
+   */
+  const applyEditorOperations = (operations, { domains = [], afterApply = null } = {}) => {
     const runtime = activeRuntime || ensureRuntimeForCurrentSvg();
-    if (!runtime?.svg) return false;
-    if (operations) {
-      applyEditorOperationsToMountedSvg(runtime.svg, operations, { resultIndex: runtime.resultIndex });
-    }
-    afterApply?.(runtime.svg);
+    if (!runtime?.svg || !operations) return false;
+    const { changed, legendChanged } = reconcileMountedResult(runtime.svg, operations, { resultIndex: runtime.resultIndex, domains });
+    if (!changed) return false;
+    afterApply?.(runtime.svg, legendChanged);
     invalidatePreviewIndexes('editor-intent-display');
     return commitActiveResultEdit('editor-intent-display');
   };
@@ -886,7 +1088,6 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
   return {
     acceptReadyReceipt,
     applyEditorOperations,
-    applyFeatureVisibilityChanges,
     bindMountedResult,
     clearActiveRuntime,
     commitActiveResultEdit,
@@ -894,13 +1095,14 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     configureMountedResultBinder,
     createMountedResultContext,
     getActiveRuntime,
-    getFeatureElements,
     getResultIdentity: resultRuntimeIdentity,
     invalidateReadinessExpectation,
     invalidateReadyReceipt,
     invalidatePreviewIndexes,
     isActiveResultReady,
     mountResultSvg,
+    pendingReadiness,
+    presentSelectedResult,
     registerReadinessExpectation,
     restorePreviousSelectedResult,
     selectResult

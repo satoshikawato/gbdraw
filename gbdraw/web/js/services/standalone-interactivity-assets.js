@@ -1,3 +1,4 @@
+// @ts-check
 // Shared standalone interactive SVG runtime/style assets.
 // The embedded display denylist retains an unsupported historical protein-ID
 // shape defensively; it is not a supported session migration path.
@@ -616,7 +617,7 @@ export const STANDALONE_INTERACTIVE_STYLE = `
   padding: 0 5px;
 }
 .gfs-qualifier {
-  flex: 1 1 100px;
+  flex: 1 1 auto;
 }
 .gfs-qualifier:disabled {
   opacity: 0.48;
@@ -686,9 +687,12 @@ export const STANDALONE_INTERACTIVE_STYLE = `
   color: #ffffff;
 }
 .gfs-count {
+  min-width: 0;
   margin-left: auto;
+  overflow: hidden;
   color: #475569;
   font-weight: 700;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .gfs-match-detail {
@@ -766,6 +770,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   var SEARCH_CONTROLS_COMPACT_HEIGHT = 30;
   var SEARCH_CONTROLS_EXPANDED_WIDTH = 390;
   var SEARCH_CONTROLS_EXPANDED_HEIGHT = 84;
+  // The Qualifier key row of the rich bar: its 24 px input and the 6 px row gap.
+  var SEARCH_CONTROLS_QUALIFIER_ROW_HEIGHT = 30;
   var hoverPopupTimer = null;
   var hoverPopupFrame = null;
   var hoverPopupFeatureId = '';
@@ -1686,7 +1692,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       metadataText = await new Response(decompressed).text();
     }
     payload = JSON.parse(metadataText);
-    if (payload && payload.schema === 4 && Array.isArray(payload.items)) {
+    // Feature catalog schema 5 adds drawn selector values, which the popup does not read.
+    if (payload && (payload.schema === 4 || payload.schema === 5) && Array.isArray(payload.items)) {
       payload = decodeCatalogPayload(payload);
     }
   } catch (error) {
@@ -2548,6 +2555,48 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     );
   }
 
+  // The app popup title (getFeatureCaption in services/feature-utils.js) of a
+  // catalog feature, whose product, gene, locus_tag and note (first 50
+  // characters) the app reads from its qualifiers.
+  // tests/web/feature-search-scope.test.mjs binds the two rules.
+  function featureCaption(feature) {
+    var caption = firstNonInternalDisplayText(
+      feature && feature.label,
+      feature && feature.display_label,
+      feature && feature.displayLabel,
+      feature && feature.product,
+      qualifierDisplayValue(feature, 'product'),
+      feature && feature.gene,
+      qualifierDisplayValue(feature, 'gene'),
+      feature && feature.locus_tag,
+      qualifierDisplayValue(feature, 'locus_tag'),
+      feature && feature.note,
+      Array.from(qualifierDisplayValue(feature, 'note')).slice(0, 50).join('')
+    );
+    return caption || String(feature && feature.type) + ' at ' + rangeText(feature);
+  }
+
+  // The Protein ID of the Details tab: a protein ID only, never the gene or
+  // locus tag that displayProteinId falls back to (resolveFeatureProteinId in
+  // services/feature-utils.js).
+  function featureProteinId(feature, member) {
+    return firstNonInternalDisplayText(
+      feature && feature.displayProteinId,
+      feature && feature.display_protein_id,
+      member && member.displayProteinId,
+      member && member.display_protein_id,
+      feature && feature.sourceProteinId,
+      feature && feature.source_protein_id,
+      member && member.sourceProteinId,
+      member && member.source_protein_id,
+      qualifierDisplayValue(feature, 'protein_id'),
+      feature && feature.proteinId,
+      feature && feature.protein_id,
+      member && member.proteinId,
+      member && member.protein_id
+    );
+  }
+
   function internalProteinId(feature, member) {
     return String(
       feature && feature.protein_id ||
@@ -2801,6 +2850,13 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     return label ? label + ': ' + snippet : snippet;
   }
 
+  function formatSearchMatchLine(feature, details) {
+    var detailText = details && details.length ? formatSearchMatchDetail(details[0]) : '';
+    if (!detailText) return '';
+    var recordId = String(feature && feature.record_id || '');
+    return (recordId ? 'Record ' + recordId + ' · ' : '') + 'Matched ' + detailText;
+  }
+
   function syncSearchControls() {
     if (!searchControls) return;
     var root = searchControls.querySelector('.gfs');
@@ -2852,9 +2908,9 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     if (matchDetailText) {
       var activeId = searchState.activeIndex >= 0 ? searchState.matches[searchState.activeIndex] : '';
       var details = activeId ? searchState.matchDetails[activeId] || [] : [];
-      var detailText = details.length ? formatSearchMatchDetail(details[0]) : '';
-      matchDetailText.textContent = detailText ? 'Matched ' + detailText : '';
-      matchDetailText.setAttribute('title', detailText ? 'Matched ' + detailText : '');
+      var lineText = formatSearchMatchLine(activeId ? featuresById.get(activeId) : null, details);
+      matchDetailText.textContent = lineText;
+      matchDetailText.setAttribute('title', lineText);
     }
   }
 
@@ -3134,12 +3190,10 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   function applySearchControlsMode() {
     if (!searchControls) return;
     searchControls.setAttribute(
-      'width',
-      String(searchControlsExpanded ? SEARCH_CONTROLS_EXPANDED_WIDTH : SEARCH_CONTROLS_COMPACT_WIDTH)
-    );
-    searchControls.setAttribute(
       'height',
-      String(searchControlsExpanded ? SEARCH_CONTROLS_EXPANDED_HEIGHT : SEARCH_CONTROLS_COMPACT_HEIGHT)
+      String(searchControlsExpanded
+        ? SEARCH_CONTROLS_EXPANDED_HEIGHT + (popupMode === 'simple' ? 0 : SEARCH_CONTROLS_QUALIFIER_ROW_HEIGHT)
+        : SEARCH_CONTROLS_COMPACT_HEIGHT)
     );
     var root = searchControls.querySelector('.gfs');
     if (root) setClassToken(root, 'is-collapsed', !searchControlsExpanded);
@@ -3169,7 +3223,14 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       view.height / fallbackSize.height
     );
     var margin = 12 * unit;
-    var controlWidth = Number(searchControls.getAttribute('width')) || SEARCH_CONTROLS_EXPANDED_WIDTH;
+    // The expanded bar narrows to the visible width less both margins.
+    var controlWidth = searchControlsExpanded
+      ? Math.max(
+        SEARCH_CONTROLS_COMPACT_WIDTH,
+        Math.min(SEARCH_CONTROLS_EXPANDED_WIDTH, visibleView.width / unit - 24)
+      )
+      : SEARCH_CONTROLS_COMPACT_WIDTH;
+    searchControls.setAttribute('width', formatSvgNumber(controlWidth));
     var x = Math.max(
       visibleView.x + margin,
       visibleView.x + visibleView.width - (controlWidth * unit) - margin
@@ -3254,6 +3315,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     });
     var body = createXhtmlNode('div', { className: 'gfs-body' });
     var firstRow = createXhtmlNode('div', { className: 'gfs-row' });
+    var qualifierRow = createXhtmlNode('div', { className: 'gfs-row' });
     var secondRow = createXhtmlNode('div', { className: 'gfs-row' });
     var queryInput = createXhtmlNode('input', {
       className: 'gfs-input gfs-query',
@@ -3364,9 +3426,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     firstRow.appendChild(fieldSelect);
     firstRow.appendChild(searchButton);
     firstRow.appendChild(collapseButton);
-    if (popupMode !== 'simple') {
-      secondRow.appendChild(qualifierInput);
-    }
+    qualifierRow.appendChild(qualifierInput);
     secondRow.appendChild(regexLabel);
     secondRow.appendChild(prevButton);
     secondRow.appendChild(nextButton);
@@ -3375,6 +3435,9 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     secondRow.appendChild(countText);
     compactRow.appendChild(compactButton);
     body.appendChild(firstRow);
+    if (popupMode !== 'simple') {
+      body.appendChild(qualifierRow);
+    }
     body.appendChild(secondRow);
     body.appendChild(matchDetailText);
     root.appendChild(compactRow);
@@ -3416,13 +3479,16 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     regexInput.addEventListener('change', function () {
       setPendingSearchState({ useRegex: regexInput.checked });
     });
-    searchButton.addEventListener('click', function () {
+    function applyPendingSearch() {
       setSearchState({
         query: pendingSearchState.query,
         field: pendingSearchState.field,
         qualifierKey: pendingSearchState.qualifierKey,
         useRegex: pendingSearchState.useRegex
       });
+    }
+    searchButton.addEventListener('click', function () {
+      applyPendingSearch();
       queryInput.focus();
     });
     prevButton.addEventListener('click', function () {
@@ -3447,8 +3513,14 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
           setSearchControlsExpanded(false);
         }
         event.preventDefault();
-      } else if (event.key === 'Enter' && searchState.matches.length) {
-        openActiveMatchPopup();
+      } else if (event.key === 'Enter' && !(event.target && event.target.closest && event.target.closest('button'))) {
+        // Enter searches; with the search applied, Enter opens the active match.
+        // A focused button keeps its own Enter.
+        if (searchState.matches.length) {
+          openActiveMatchPopup();
+        } else {
+          applyPendingSearch();
+        }
         event.preventDefault();
       }
     });
@@ -4451,21 +4523,25 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     }, 0);
   }
 
-  // Mirrors app/feature-utils.js formatFeatureLocation/formatFeatureLength.
+  // Mirrors services/feature-utils.js formatFeatureRange/formatFeatureLocation/formatFeatureLength.
   function featureLocationParts(feature) {
     return feature && Array.isArray(feature.location_parts) && feature.location_parts.length
       ? feature.location_parts
       : [feature];
   }
 
-  function locationText(feature) {
-    var range = featureLocationParts(feature).map(function (part) {
+  function rangeText(feature) {
+    return featureLocationParts(feature).map(function (part) {
       var display = String(part && part.display || '').trim();
       if (display) return display;
       var start = Number(part && part.start);
       var end = Number(part && part.end);
       return Number.isFinite(start) && Number.isFinite(end) ? String(start + 1) + '..' + String(end) : '';
     }).filter(Boolean).join(', ');
+  }
+
+  function locationText(feature) {
+    var range = rangeText(feature);
     var strand = String(feature && feature.strand || '').trim();
     return range && strand ? range + ' (' + strand + ')' : range;
   }
@@ -4499,7 +4575,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     var member = getFeatureOrthogroupMember(feature, group);
     var memberCount = Number(feature && feature.orthogroup_member_count);
     var recordCoverage = Number(feature && feature.orthogroup_record_coverage);
-    var proteinId = displayProteinId(feature, member);
+    var proteinId = featureProteinId(feature, member);
     var rows = [
       ['Similarity group ID', feature && feature.orthogroup_id || ''],
       ['Similarity group name', group && (group.display_name || group.name) || ''],
@@ -4881,16 +4957,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function renderSimplePopup(feature) {
-    var title = firstNonInternalDisplayText(
-      feature.display_label,
-      feature.label,
-      displayProteinId(feature, null, ''),
-      feature.locus_tag,
-      feature.gene,
-      feature.type,
-      feature.svg_id,
-      'Feature'
-    );
+    var title = featureCaption(feature);
     return '<div class="gfi gfi--simple">' +
       '<div class="gfi-header" data-drag-handle="true">' +
       '<div><div class="gfi-title">' + escapeHtml(title) + '</div>' +
@@ -4919,16 +4986,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     function tabButton(id, label) {
       return '<button type="button" class="gfi-tab' + (tab === id ? ' is-active' : '') + '" data-tab="' + id + '">' + label + '</button>';
     }
-    var title = firstNonInternalDisplayText(
-      feature.display_label,
-      feature.label,
-      displayProteinId(feature, null, ''),
-      feature.locus_tag,
-      feature.gene,
-      feature.type,
-      feature.svg_id,
-      'Feature'
-    );
+    var title = featureCaption(feature);
     return '<div class="gfi">' +
       '<div class="gfi-header" data-drag-handle="true">' +
       '<div><div class="gfi-title">' + escapeHtml(title) + '</div>' +
@@ -5024,6 +5082,18 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     return feature;
   }
 
+  // A match claims one endpoint feature, or several (a collinear block's anchors).
+  // Expansion resolves a plural claim as a whole; a single claim is re-checked
+  // against its rendered feature. A span is the match envelope either way.
+  function catalogMatchEndpointResolved(match, role) {
+    var references = match && match[role + 'FeatureReferences'];
+    if (Array.isArray(references) && references.length > 1) {
+      return match._gbdraw_catalog_endpoint_contract === true
+        && match['_gbdraw_' + role + '_endpoint_resolved'] === true;
+    }
+    return Boolean(resolvedCatalogMatchFeature(match, role));
+  }
+
   function materializedMatchFeatureRow(svgId, fallback, resolvedFeature) {
     var id = String(svgId || '').trim();
     var feature = resolvedFeature || featuresById.get(id) || {};
@@ -5063,8 +5133,20 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   function materializedMatchFeatureRows(match, role, fallback) {
     if (match && match._gbdraw_catalog_endpoint_contract === true) {
       var resolvedFeature = resolvedCatalogMatchFeature(match, role);
-      if (!resolvedFeature) return [materializedMatchFeatureRow('', fallback)];
-      return [materializedMatchFeatureRow(resolvedFeature.svg_id, fallback, resolvedFeature)];
+      if (resolvedFeature) {
+        return [materializedMatchFeatureRow(resolvedFeature.svg_id, fallback, resolvedFeature)];
+      }
+      if (!catalogMatchEndpointResolved(match, role)) {
+        return [materializedMatchFeatureRow('', fallback)];
+      }
+      // A collinear block names several anchors: one row each, as in the Web popup.
+      return getOrthogroupIds(match[role + '_feature_svg_id']).map(function (svgId) {
+        return materializedMatchFeatureRow(
+          svgId,
+          { recordId: fallback && fallback.recordId },
+          featuresById.get(svgId)
+        );
+      });
     }
     var svgIds = match && match[role + '_feature_svg_id'];
     var ids = getOrthogroupIds(svgIds);
@@ -5076,17 +5158,21 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function materializedBlockMemberLabels(group, featureSvgIds) {
     if (!group) return '';
-    return getOrthogroupIds(featureSvgIds).map(function (svgId) {
+    var labels = [];
+    getOrthogroupIds(featureSvgIds).forEach(function (svgId) {
       var renderedFeature = featuresById.get(svgId) || null;
       var member = renderedFeature
         ? getFeatureOrthogroupMember(renderedFeature, group)
         : null;
-      return firstNonInternalDisplayText(
+      if (!member) return;
+      var label = firstNonInternalDisplayText(
         displayProteinId(featureForMember(member) || renderedFeature, member, ''),
-        member && member.label,
+        member.label,
         svgId
       );
-    }).filter(function (value) { return value; }).join('; ');
+      if (label && labels.indexOf(label) < 0) labels.push(label);
+    });
+    return labels.join('; ');
   }
 
   function reverseComplementMatchSequence(sequence) {
@@ -5117,7 +5203,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       && match._gbdraw_catalog_endpoint_contract === true
       && kind !== 'homology'
       && match['_gbdraw_' + role + '_record_span'] !== true
-      && !resolvedCatalogMatchFeature(match, role)
+      && !catalogMatchEndpointResolved(match, role)
     ) {
       return { source: null, reason: 'Match feature endpoint identity is invalid.' };
     }
@@ -5229,8 +5315,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       role: role,
       displayRole: displayRole,
       recordId: recordId,
-      start: start,
-      end: end,
+      start: coordStart,
+      end: coordEnd,
       orientation: strand,
       length: high - low + 1,
       available: true,

@@ -2,8 +2,15 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 const ref = (value) => ({ value });
+// The fixture refs are plain objects, so a watcher runs only on `flushWatchers()`.
+const watchers = [];
+const flushWatchers = () => watchers.forEach((entry) => {
+  const value = entry.source();
+  if (value !== entry.last) entry.callback((entry.last = value));
+});
 globalThis.window = {
-  Vue: { ref, computed: (getter) => ({ get value() { return getter(); } }) }
+  Vue: { ref, computed: (getter) => ({ get value() { return getter(); } }),
+    watch: (source, callback) => { watchers.push({ source, callback, last: source() }); } }
 };
 const { createSimilarityAlignmentActions } = await import(
   '../../gbdraw/web/js/app/similarity-alignment.js'
@@ -33,6 +40,7 @@ const renderRequest = {
   }))
 };
 const state = () => ({
+  mode: ref('linear'),
   featureCatalog: ref({ items: [{
     recordKeys: ['a', 'b', 'c'],
     sequenceSources: [{ sequence: 'A'.repeat(300) }, { sequence: 'C'.repeat(300) },
@@ -170,11 +178,9 @@ const create = ({
     getCommittedRequest:()=>getCommittedRequest?.()||canonical.renderRequest,
     getCommittedSession:()=>({...canonical,renderRequest:getCommittedRequest?.()||canonical.renderRequest}),
     projectCommittedAlignment,
-    recordDisplayControls:{captureAlignmentOrientationIntent:()=>controllerState.linearSeqs.map(r=>r.region_reverse),
-      restoreAlignmentOrientationIntent:before=>before.forEach((v,i)=>{controllerState.linearSeqs[i].region_reverse=v;}),
-      commitAlignmentOrientations:directions=>directions.forEach(({recordKey,reverseComplement})=>{controllerState.linearSeqs.find(r=>r.uid===recordKey).region_reverse=reverseComplement;})},
     getCurrentSvg: () => svg,
-    runCommittedCanonicalCandidate: (options) => history.runUndoableArtifactReplacement(options.label, async () => {
+    // The composition root's port: run the candidate, then commit the changed orientations.
+    runRecordAlignment: (options) => history.runUndoableArtifactReplacement(options.label, async () => {
       generationCalls.push(options);
       const outcome = await generation(options);
       if (outcome.error?.summary) controllerState.errorLog.value = outcome.error;
@@ -184,7 +190,7 @@ const create = ({
         controllerState.similarityAlignmentResetReceipt.value=receipt;
         controllerState.similarityAlignmentPlan.value = canonical.renderRequest.layout.similarityAlignment;
         controllerState.linearRecordTranslations.value = canonical.renderRequest.layout.recordTranslations;
-        options.commitIntent();
+        options.orientations.forEach(({recordKey,reverseComplement})=>{controllerState.linearSeqs.find(r=>r.uid===recordKey).region_reverse=reverseComplement;});
         controllerState.results.value = [{ name: 'aligned.svg' }];
         svg = null;
       }
@@ -591,7 +597,7 @@ test('active schema-2 plan validates on regeneration and supports Reset and stab
   const fixture = create();
   await startReview(fixture);
   await fixture.actions.applyDraft();
-  assert.equal(fixture.actions.activePlanInspector.value.modeLabel, 'Align');
+  assert.equal(fixture.actions.activePlanInspector.value.summary, 'Aligned to gene-clicked in Record 1');
   const calls = fixture.helperCalls.length;
   assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
   assert.equal(fixture.helperCalls.length, calls + 1);
@@ -657,6 +663,88 @@ test('drawer requires a unique exact reference before starting the Worker', asyn
     .filter(({ anchor: selected }) => selected.biologicalFeatureId === 'clicked'), []);
 });
 
+// OV-381: a committed plan (from the popup or a loaded Session) shows its exact
+// reference in the drawer; the drawer offers that reference for Align until the
+// user picks another one, and never offers a stale one.
+test('drawer offers the active plan exact reference until the user picks another (OV-381)', async () => {
+  const fixture = create({ members: [reference, otherReference, targetA, targetC] });
+  await startReview(fixture);
+  await fixture.actions.applyDraft();
+  const planKey = JSON.stringify(fixture.state.similarityAlignmentPlan.value.reference);
+  assert.equal(fixture.actions.drawerReferenceKey.value, planKey);
+  assert.equal(fixture.actions.drawerDisabledReason('og-1'), '');
+  const calls = fixture.helperCalls.length;
+  assert.deepEqual(await fixture.actions.startFromDrawer({ groupId: 'og-1', mode: 'review' }),
+    { status: 'reviewing' });
+  assert.deepEqual(fixture.helperCalls[calls].payload.request.reference,
+    fixture.state.similarityAlignmentPlan.value.reference);
+  fixture.actions.cancel();
+  const other = fixture.actions.drawerReferenceOptions('og-1')
+    .find(({ anchor: a }) => a.biologicalFeatureId === 'other');
+  assert.equal(fixture.actions.setDrawerReference('og-1', other.key), true);
+  assert.equal(fixture.actions.drawerReferenceKey.value, other.key);
+  // Choosing "none" explicitly is kept as well.
+  assert.equal(fixture.actions.setDrawerReference('og-1', ''), false);
+  assert.match(fixture.actions.drawerDisabledReason('og-1'), /Select an exact reference/);
+});
+
+test('drawer does not offer a stale plan reference (OV-381)', async () => {
+  const fixture = create();
+  await startReview(fixture);
+  await fixture.actions.applyDraft();
+  fixture.currentGroup.members.splice(0, 1);
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(),
+    { status: 'blocked', reason: 'stale-reference' });
+  assert.equal(fixture.actions.drawerReferenceKey.value, '');
+  assert.notEqual(fixture.actions.drawerDisabledReason('og-1'), '');
+});
+
+test('a new committed plan drops the drawer pick (OV-381)', async () => {
+  const planKey = (fixture) => JSON.stringify(fixture.state.similarityAlignmentPlan.value.reference);
+  // Drawer Align with a picked reference, then a popup Align from another one.
+  const popupAfterDrawer = create({ members: [reference, otherReference, targetA, targetC] });
+  const picked = popupAfterDrawer.actions.drawerReferenceOptions('og-1')
+    .find(({ anchor: a }) => a.biologicalFeatureId === 'clicked');
+  assert.equal(popupAfterDrawer.actions.setDrawerReference('og-1', picked.key), true);
+  await popupAfterDrawer.actions.startFromDrawer({ groupId: 'og-1', mode: 'review' });
+  await popupAfterDrawer.actions.applyDraft();
+  await startReview(popupAfterDrawer, otherReference);
+  await popupAfterDrawer.actions.applyDraft();
+  assert.equal(popupAfterDrawer.state.similarityAlignmentPlan.value.reference.biologicalFeatureId, 'other');
+  assert.equal(popupAfterDrawer.actions.drawerReferenceKey.value, planKey(popupAfterDrawer));
+
+  // Loading a Session installs its own plan.
+  const sessionLoad = create({ members: [reference, otherReference, targetA, targetC] });
+  await startReview(sessionLoad);
+  await sessionLoad.actions.applyDraft();
+  sessionLoad.actions.setDrawerReference('og-1', '');
+  flushWatchers();
+  // The Session saved another drawer group; its plan selects the plan's group.
+  sessionLoad.state.selectedOrthogroupId.value = 'og-saved';
+  const loaded = JSON.parse(JSON.stringify(sessionLoad.state.similarityAlignmentPlan.value));
+  sessionLoad.state.similarityAlignmentPlan.value = loaded;
+  flushWatchers();
+  assert.equal(sessionLoad.state.selectedOrthogroupId.value, 'og-1');
+  assert.equal(sessionLoad.actions.drawerReferenceKey.value, planKey(sessionLoad));
+  // A group picked after that plan stays until the next plan.
+  sessionLoad.state.selectedOrthogroupId.value = 'og-saved';
+  flushWatchers();
+  assert.equal(sessionLoad.state.selectedOrthogroupId.value, 'og-saved');
+
+  // The repair route empties the pick; the next committed plan restores the offer.
+  const repaired = create();
+  await startReview(repaired);
+  await repaired.actions.applyDraft();
+  const removed = repaired.currentGroup.members.splice(0, 1);
+  assert.equal((await repaired.actions.validateBeforeGenerate()).reason, 'stale-reference');
+  repaired.actions.setDrawerReference('og-1', '');
+  repaired.currentGroup.members.unshift(...removed);
+  await startReview(repaired);
+  await repaired.actions.applyDraft();
+  assert.equal(repaired.actions.drawerReferenceKey.value, planKey(repaired));
+  assert.equal(repaired.actions.drawerDisabledReason('og-1'), '');
+});
+
 test('malformed Python projection and initial Worker errors leave the prior Result intact', async () => {
   for (const helper of [
     (_operation, { request }) => ({ result: { ...responseFor(request), schema: 1 } }),
@@ -715,6 +803,10 @@ test('manual Reverse keeps the plan while invalidating edits clear it with a not
   assert.equal(fixture.actions.clearForMutation('record crop changed.'), true);
   assert.equal(fixture.state.similarityAlignmentPlan.value, null);
   assert.match(fixture.actions.notice.value, /record crop changed/);
+  // OV-382: an Undo that restores the plan retires the notice.
+  const restored = { ...plan };
+  fixture.state.similarityAlignmentPlan.value = restored;
+  assert.equal(fixture.actions.notice.value, '');
 });
 
 test('missing saved reference blocks regeneration while preserving plan and Result', async () => {
@@ -729,6 +821,25 @@ test('missing saved reference blocks regeneration while preserving plan and Resu
   assert.equal(fixture.state.results.value, previous);
   assert.equal(fixture.state.similarityAlignmentPlan.value, plan);
   assert.equal(fixture.actions.repair.value.kind, 'reference');
+  // OV-342: nothing was clicked, so the notice names the missing reference.
+  assert.equal(fixture.actions.notice.value,
+    'Alignment needs repair: The alignment reference feature is no longer found in its record.');
+});
+
+// E1: the plan is Linear draft state; a Circular Generate does not draw it, so
+// a plan whose reference left the Circular Result's groups does not block it.
+test('a Circular Generate is not blocked by the Linear alignment plan', async () => {
+  const fixture = create();
+  await startReview(fixture);
+  await fixture.actions.applyDraft();
+  const plan = fixture.state.similarityAlignmentPlan.value;
+  fixture.currentGroup.members.splice(0, 1);
+  fixture.state.mode.value = 'circular';
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
+  assert.equal(fixture.state.similarityAlignmentPlan.value, plan);
+  fixture.state.mode.value = 'linear';
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(),
+    { status: 'blocked', reason: 'stale-reference' });
 });
 
 test('a committed schema-2 plan regenerates after its transient groups leave the catalog', async () => {
@@ -745,9 +856,87 @@ test('a committed schema-2 plan regenerates after its transient groups leave the
   assert.equal(fixture.state.similarityAlignmentPlan.value, plan);
   fixture.actions.retainForStableReorder(['c', 'a', 'b']);
   assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
-  committed.layout.similarityAlignment.records[1].anchor.biologicalFeatureId = 'different';
+  // A target feature that left its record still blocks (OV-341).
+  fixture.state.featureCatalog.value.items[0].biologicalFeatures = [reference, targetC];
   assert.deepEqual(await fixture.actions.validateBeforeGenerate(),
     { status: 'blocked', reason: 'stale-reference' });
+  assert.equal(fixture.actions.notice.value,
+    'Alignment needs repair: An aligned target feature is no longer found in its record.');
+});
+
+// OV-341 (Owner decision D-46 = A): a plan names anchor features, not group
+// membership. A comparison setting that regroups keeps the plan while every
+// anchor feature still resolves in the shown Result.
+test('a regrouped Similarity Group keeps the plan while its anchors resolve (OV-341)', async () => {
+  const fixture = create();
+  await startReview(fixture);
+  await fixture.actions.applyDraft();
+  const plan = fixture.state.similarityAlignmentPlan.value;
+  const calls = fixture.helperCalls.length;
+  // The reference left the plan's group; its feature is still in record a.
+  fixture.currentGroup.members = [targetA, targetC];
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
+  // A no-edit Generate after that one succeeds as well.
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
+  // A target left the group instead.
+  fixture.currentGroup.members = [reference, targetC];
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
+  assert.equal(fixture.helperCalls.length, calls);
+  assert.equal(fixture.state.similarityAlignmentPlan.value, plan);
+  assert.equal(fixture.actions.repair.value, null);
+  assert.equal(fixture.actions.notice.value, '');
+
+  // A plan that the shown Result did not draw, whose group left the catalog.
+  const loaded = create({ getCommittedRequest: () => renderRequest });
+  await startReview(loaded);
+  await loaded.actions.applyDraft();
+  loaded.state.similarityAlignmentPlan.value = structuredClone(plan);
+  loaded.currentGroup.id = 'no-longer-in-catalog';
+  assert.deepEqual(await loaded.actions.validateBeforeGenerate(), { status: 'ok' });
+});
+
+// An older Session's Result can have no feature catalog, and its committed
+// request need not carry the plan. The client cannot check anchors then, so
+// the typed render validates them (OV-341, #997 CI).
+test('without a feature catalog the plan is not blocked as stale', async () => {
+  const fixture = create({ getCommittedRequest: () => renderRequest });
+  await startReview(fixture);
+  await fixture.actions.applyDraft();
+  fixture.state.featureCatalog.value = null;
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
+  fixture.currentGroup.id = 'no-longer-in-catalog';
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
+  assert.equal(fixture.actions.repair.value, null);
+});
+
+test('a gone target next to a regrouped target blocks without a helper call (OV-342)', async () => {
+  const fixture = create();
+  await startReview(fixture);
+  await fixture.actions.applyDraft();
+  const calls = fixture.helperCalls.length;
+  // target-a left record b; target-c is still in record c but left the group.
+  fixture.currentGroup.members = [reference];
+  fixture.state.featureCatalog.value.items[0].biologicalFeatures = [reference, targetC];
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(),
+    { status: 'blocked', reason: 'stale-reference' });
+  assert.equal(fixture.actions.notice.value,
+    'Alignment needs repair: An aligned target feature is no longer found in its record.');
+  assert.equal(fixture.helperCalls.length, calls);
+});
+
+test('a regrouped plan whose reference feature is gone names it in the repair notice (OV-342)', async () => {
+  const fixture = create();
+  await startReview(fixture);
+  await fixture.actions.applyDraft();
+  const previous = fixture.state.results.value;
+  fixture.currentGroup.members = [targetA, targetC];
+  fixture.state.featureCatalog.value.items[0].biologicalFeatures = [targetA, targetC];
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(),
+    { status: 'blocked', reason: 'stale-reference' });
+  assert.equal(fixture.actions.notice.value,
+    'Alignment needs repair: The alignment reference feature is no longer found in its record.');
+  assert.equal(fixture.actions.repair.value.kind, 'reference');
+  assert.equal(fixture.state.results.value, previous);
 });
 
 test('candidate labels retain biological metadata and displayed record names', async () => {
@@ -772,6 +961,11 @@ test('exclusive modes, reference Custom, Select and Skip are local with zero Wor
   f.actions.skipRecord('b');assert.equal(f.actions.directionPreview.value.records[1].afterReverseComplement,false);
   f.actions.setDirectionMode('keep');assert.deepEqual(f.actions.draft.value.intent,{mode:'keep'});
   assert.equal(f.helperCalls.length,1);assert.equal(f.generationCalls.length,0);
+  // An unknown-strand anchor still moves its record; only its direction stays (PD-OI-027).
+  const unknown=f.actions.directionPreview.value.records.find(r=>r.exclusion==='unknown_strand');
+  assert.match(unknown.exclusionLabel,/^Direction unchanged: /);
+  assert.match(f.actions.directionPreview.value.effect,/1 record keeps its direction/);
+  assert.match(f.actions.directionPreview.value.effect,/1 record stays unchanged/);
 });
 test('Apply and both Reset scopes own one History transaction and consume receipt',async()=>{
   for(const scope of ['positions','positions-and-directions']){
@@ -801,8 +995,9 @@ test('a changed final source binding rejects corrections without committing anyt
   assert.equal(f.history.getUndoCount(),0);assert.equal(f.generationCalls.length,0);assert.equal(f.state.similarityAlignmentResetReceipt.value,null);
 });
 test('empty modern evidence and missing historical evidence disable combined Reset with different reasons',async()=>{
-  const f=create();await startAlign(f);assert.match(f.actions.resetPreview.value.disabledReason,/no direction changes/);
-  f.state.similarityAlignmentResetReceipt.value=null;assert.match(f.actions.resetPreview.value.disabledReason,/historical/);
+  const f=create();await startAlign(f);assert.match(f.actions.resetPreview.value.disabledReason,/did not change any record direction/);
+  assert.equal(f.actions.resetPreview.value.directionsLabel,'Positions and directions');
+  f.state.similarityAlignmentResetReceipt.value=null;assert.match(f.actions.resetPreview.value.disabledReason,/does not record which directions/);
   assert.equal((await f.actions.resetAlignment('positions-and-directions')).status,'rejected');
   assert.equal((await f.actions.resetAlignment()).status,'ok');
 });
@@ -838,6 +1033,8 @@ test('Align A then B resets to B before, including reference and only affected l
   f.generationCalls.at(-1).canonical.renderRequest.records[0].presentation.label='<i>Exact displayed record</i>';
   f.state.linearSeqs[0].definition='Source-only name';
   assert.equal(f.actions.resetPreview.value.targets[0].label,'Exact displayed record');
+  assert.equal(f.actions.resetPreview.value.targets[0].name,'Exact displayed record');
+  assert.equal(f.actions.resetPreview.value.directionsLabel,'Positions and directions (2 records)');
   assert.equal(f.actions.resetPreview.value.targets[0].laterManualEdit,true);
   assert.equal((await f.actions.resetAlignment('positions-and-directions')).status,'ok');
   assert.deepEqual(f.state.linearSeqs.map(row=>row.region_reverse),[...afterA.slice(0,2),true]);
@@ -918,4 +1115,22 @@ test('Review and the active-plan inspector use names, never internal keys or has
     ['Genome B · Record 2', 'gene-target-a · target-a'],
     ['Genome B · Record 3', 'CDS 41..60 bp']
   ]);
+});
+
+// UX-B06: the drawer reference options name the record and the gene, not the
+// record key and the feature hash; the active plan is one line.
+test('drawer reference options and the active-plan line use record and gene names', async () => {
+  const inparalog = { ...member('a', 'twin', 9, '-'), gene: 'gene-clicked' };
+  const fixture = create({ members: [reference, inparalog, targetA, targetC] });
+  Object.assign(fixture.state.linearSeqs[0], { definition: 'Genome A', accession: 'ACC-A' });
+  fixture.state.linearSeqs[1].definition = 'Genome B';
+  assert.deepEqual(fixture.actions.drawerReferenceOptions('og-1').map(({ label }) => label), [
+    'ACC-A · gene-clicked · 51..70 (+)',
+    'ACC-A · gene-clicked · 101..120 (-)',
+    'Genome B · gene-target-a',
+    'Record 3 · gene-target-c'
+  ]);
+  await startReview(fixture);
+  await fixture.actions.applyDraft();
+  assert.equal(fixture.actions.activePlanInspector.value.summary, 'Aligned to gene-clicked in ACC-A');
 });

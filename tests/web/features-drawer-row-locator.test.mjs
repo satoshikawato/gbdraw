@@ -11,7 +11,7 @@ const REPO_ROOT = new URL('../../', import.meta.url);
 const TEMPLATE = new URL('gbdraw/web/index.html', REPO_ROOT);
 const SPEC_ROOT = new URL('tests/web/', REPO_ROOT);
 const ROW_TITLE = ':title="formatFeatureLocation(feat)">{{ formatFeatureLocation(feat) }}</span>';
-const FORMATTER_IMPORT = "import('/gbdraw/web/js/app/feature-utils.js')";
+const FORMATTER_IMPORT = "import('/gbdraw/web/js/services/feature-utils.js')";
 const ROW_LOCATOR = /span\[title=/;
 // A row title built from raw feature coordinates, e.g. span[title="${t.start}..${t.end}"].
 const RAW_COORDINATE_LOCATOR = /span\[title="\$\{[^}]*\bstart\}\.\.\$\{[^}]*\bend\}/;
@@ -61,7 +61,7 @@ test('the locator check rejects a raw-coordinate row title', () => {
     'does not derive the row title from formatFeatureLocation'
   ]);
   const current = [
-    "const { formatFeatureLocation } = await import('/gbdraw/web/js/app/feature-utils.js');",
+    "const { formatFeatureLocation } = await import('/gbdraw/web/js/services/feature-utils.js');",
     'const location = formatFeatureLocation(feature);',
     'drawer.locator(`span[title="${target.location}"]`)'
   ].join('\n');

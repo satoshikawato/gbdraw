@@ -5,6 +5,7 @@ the typed contracts and explicit render helpers used by pipelines and integratio
 """
 
 from .config import GbdrawConfig, apply_config_overrides, load_default_config
+from gbdraw.features.overrides import FeatureIdentityNotice, FeatureOverride
 from gbdraw.features.placement import FeaturePlacementOverride, FeaturePlacementTarget
 from .io import (
     CircularTrackTable,
@@ -32,7 +33,7 @@ from .io import (
     read_qualifier_priority_table,
     read_records_table,
 )
-from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.collinearity import (
     CollinearityAnchor,
     CollinearityBlock,
     CollinearityResult,
@@ -42,7 +43,7 @@ from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
     iter_collinearity_search_pairs,
     normalize_collinearity_search_scope,
 )
-from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.protein_colinearity import (
     OrthogroupMembershipMode,
     OrthologEdge,
     OrthologPath,
@@ -86,6 +87,7 @@ from gbdraw.annotations import (
     AnnotationSet,
     AnnotationTrackParams,
     CoordinateSpan,
+    FeatureIdentitySpan,
     FeatureSelector,
     FeatureSpan,
     HatchStyle,
@@ -153,20 +155,28 @@ from gbdraw.session import (
     MaterializedSession,
     SessionConversionError,
     SessionDocument,
+    SessionDrawing,
+    SessionDrawingSelectionError,
+    SessionDrawingSpec,
     SessionError,
     SessionFormatError,
     SessionRenderError,
     SessionResourceError,
+    SessionUpgrade,
     SessionVersionError,
     build_session_document,
     load_session_document,
     materialize_session,
     render_session,
+    render_session_drawings,
     save_session_document,
     session_to_request,
+    upgrade_session_document,
     with_request_output,
 )
-from .tracks import (  # type: ignore[reportMissingImports]
+from gbdraw.auto_sizes import SettingAdaptation, SettingReset
+from .region_drawing import RegionDrawing, RegionSelection, derive_region_drawing
+from .tracks import (
     CircularTrackRendererName,
     CircularTrackSide,
     CircularTrackSlot,
@@ -193,6 +203,8 @@ from .tracks import (  # type: ignore[reportMissingImports]
 )
 
 __all__ = [
+    "FeatureIdentityNotice",
+    "FeatureOverride",
     "FeaturePlacementOverride",
     "FeaturePlacementTarget",
     # config
@@ -246,6 +258,7 @@ __all__ = [
     "AnnotationSet",
     "AnnotationTrackParams",
     "CoordinateSpan",
+    "FeatureIdentitySpan",
     "FeatureSelector",
     "FeatureSpan",
     "HatchStyle",
@@ -338,18 +351,30 @@ __all__ = [
     "MaterializedSession",
     "SessionConversionError",
     "SessionDocument",
+    "SessionDrawing",
+    "SessionDrawingSelectionError",
+    "SessionDrawingSpec",
     "SessionError",
     "SessionFormatError",
     "SessionRenderError",
     "SessionResourceError",
+    "SessionUpgrade",
     "SessionVersionError",
     "build_session_document",
     "load_session_document",
     "materialize_session",
     "render_session",
+    "render_session_drawings",
     "save_session_document",
     "session_to_request",
+    "upgrade_session_document",
     "with_request_output",
+    # region drawings
+    "RegionDrawing",
+    "RegionSelection",
+    "SettingAdaptation",
+    "SettingReset",
+    "derive_region_drawing",
     # tracks (foundation)
     "CircularTrackRendererName",
     "CircularTrackSide",

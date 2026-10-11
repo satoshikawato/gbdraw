@@ -6,12 +6,14 @@ from __future__ import annotations
 import logging
 import re
 import warnings
+from collections.abc import Mapping
 from typing import Any, Optional, Sequence
 
 import pandas as pd
 from pandas import DataFrame
 
 from ..exceptions import InputFileError, ParseError, ValidationError
+from ..io.table_text import read_literal_table, read_table_lines, table_text_stream
 from .selector_values import (
     _matches_constraint,
     feature_matches_specific_color_rule,
@@ -53,37 +55,22 @@ def read_feature_visibility_file(filepath: str) -> Optional[DataFrame]:
     required_cols = _FEATURE_VISIBILITY_REQUIRED_COLS
 
     try:
-        with open(filepath, "r", encoding="utf-8") as handle:
-            for line_no, raw_line in enumerate(handle, start=1):
-                stripped = raw_line.strip()
-                if stripped == "" or stripped.startswith("#"):
-                    continue
-                if raw_line.rstrip("\r\n").count("\t") + 1 > len(required_cols):
-                    logger.error(
-                        f"ERROR: Malformed line in feature visibility file '{filepath}' at line {line_no}: "
-                        f"expected {len(required_cols)} columns."
-                    )
-                    raise ParseError(
-                        f"Malformed line in feature visibility file '{filepath}' at line {line_no}: "
-                        f"expected {len(required_cols)} columns."
-                    )
+        lines = read_table_lines(filepath)
     except FileNotFoundError as e:
         logger.error(f"ERROR: Feature visibility file not found: {e}")
         raise InputFileError(f"Feature visibility file not found: {e}") from e
 
     try:
-        df = pd.read_csv(
-            filepath,
-            sep="\t",
-            header=None,
+        df = read_literal_table(
+            table_text_stream(lines),
             names=required_cols,
-            dtype=str,
-            comment="#",
+            label="feature visibility file",
+            filepath=filepath,
             keep_default_na=False,
             na_filter=False,
-            on_bad_lines="error",
-            engine="python",
         )
+    except ParseError:
+        raise
     except pd.errors.ParserError as e:
         logger.error(f"ERROR: Malformed line in feature visibility file '{filepath}': {e}")
         raise ParseError(
@@ -241,20 +228,35 @@ def compile_feature_visibility_rules(
 
 
 
-def _rule_matches_feature(feature: Any, rule: dict[str, Any], record_id: Optional[str]) -> bool:
+def _rule_matches_feature(
+    feature: Any,
+    rule: dict[str, Any],
+    record_id: Optional[str],
+    selector: Optional[dict[str, Any]] = None,
+) -> bool:
+    """Match one rule; ``selector`` supplies the drawn feature's hash and
+    locations when the caller has them instead of the feature (the Web)."""
     qualifier_key = str(rule["qualifier_normalized"])
     pattern = rule["pattern"]
 
     if qualifier_key == "record_location":
-        feature_record_location = get_feature_record_location_str(feature, record_id)
+        feature_record_location = (
+            selector.get("record_location")
+            if selector is not None
+            else get_feature_record_location_str(feature, record_id)
+        )
         return bool(feature_record_location and pattern.search(feature_record_location))
 
     if qualifier_key == "hash":
-        feature_hash = get_feature_hash(feature, record_id)
+        feature_hash = (
+            selector.get("hash") if selector is not None else get_feature_hash(feature, record_id)
+        )
         return bool(feature_hash and pattern.search(feature_hash))
 
     if qualifier_key == "location":
-        feature_location = get_feature_location_str(feature)
+        feature_location = (
+            selector.get("location") if selector is not None else get_feature_location_str(feature)
+        )
         return bool(feature_location and pattern.search(feature_location))
 
     qualifiers = get_feature_qualifiers(feature)
@@ -266,6 +268,7 @@ def _first_matching_visibility_rule(
     feature: Any,
     feature_visibility_rules: Optional[list[dict[str, Any]]],
     record_id: Optional[str] = None,
+    selector: Optional[dict[str, Any]] = None,
 ) -> Optional[dict[str, Any]]:
     if not feature_visibility_rules:
         return None
@@ -278,7 +281,9 @@ def _first_matching_visibility_rule(
             continue
         if not _matches_constraint(str(rule["feature_type"]), feature_type):
             continue
-        if not _rule_matches_feature(feature, rule, record_id=resolved_record_id):
+        if not _rule_matches_feature(
+            feature, rule, record_id=resolved_record_id, selector=selector
+        ):
             continue
         return rule
     return None
@@ -317,8 +322,18 @@ def should_render_feature(
     selected_features_set: Sequence[str] | set[str] | None,
     feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
     record_id: Optional[str] = None,
-    specific_color_rules: Optional[dict] = None,
+    specific_color_rules: Optional[Mapping] = None,
+    feature_override: Any = None,
 ) -> bool:
+    """Decide whether a feature is drawn.
+
+    A ``feature_override`` (identity row) decides before the table rules: ``on``
+    draws, ``off`` hides, and ``exclude_matching`` skips the rules and keeps the
+    feature-type selection.
+    """
+    mode = getattr(feature_override, "feature_visibility", None)
+    if mode in ("on", "off"):
+        return mode == "on"
     feature_type = get_feature_type(feature)
     selected_set = {str(feature_name) for feature_name in (selected_features_set or [])}
 
@@ -334,7 +349,7 @@ def should_render_feature(
                 record_id=record_id,
             )
 
-    rule = _first_matching_visibility_rule(
+    rule = None if mode == "exclude_matching" else _first_matching_visibility_rule(
         feature,
         feature_visibility_rules,
         record_id=record_id,
@@ -353,7 +368,11 @@ def should_include_feature_in_analysis(
     feature: Any,
     feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
     record_id: Optional[str] = None,
+    feature_override: Any = None,
 ) -> bool:
+    mode = getattr(feature_override, "feature_visibility", None)
+    if mode is not None:
+        return mode == "on"
     rule = _first_matching_visibility_rule(
         feature,
         feature_visibility_rules,

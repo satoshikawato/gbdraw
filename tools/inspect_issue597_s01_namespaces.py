@@ -19,7 +19,7 @@ paths = {
     "request": "gbdraw/web/js/services/session-request.js",
     "bindings": "gbdraw/web/js/services/session-resources.js",
     "catalog": "gbdraw/web/js/services/feature-catalog.js",
-    "cache": "gbdraw/web/js/app/losat-cache.js",
+    "cache": "gbdraw/web/js/services/losat-cache.js",
 }
 constants = {
     "session": ["SESSION_VERSION"],
@@ -126,7 +126,7 @@ result["sourceFingerprints"] = {
     + [
         "gbdraw/web/js/app/run-analysis.js",
         "gbdraw/web/js/app/watchers.js",
-        "gbdraw/web/js/app/record-discovery.js",
+        "gbdraw/web/js/services/record-discovery.js",
         "gbdraw/web/js/services/session-file.js",
         "gbdraw/web/js/services/svg-result-ingestion.js",
         "gbdraw/web/js/services/svg-sanitization.js",

@@ -314,7 +314,7 @@ def integration_prepare(page, case, raw_cold=False):
       Object.assign(app.losat.blastp, {candidateLimit: options.rawLimit,
         orthogroupMemberMaxHits: 5, collinearInferOrthogroups: options.infer,
         collinearSearchScope: 'adjacent', collinearUnitMode: 'auto', collinearAnchorMode: 'rbh'});
-      app.losat.executionMode = 'serial';
+      app.losatExecution.executionMode = 'serial';
       if (options.rawCold) app.clearLosatCache();
       state.losatDerivedCache.value.clear();
       const {disposeDiagramGenerationWorker} = await import('/gbdraw/web/js/services/diagram-generation.js');
@@ -470,7 +470,7 @@ def run_integration(args):
                             if mode == 'circular':
                                 page.evaluate('''async text => {
                                   const app = window.__GBDRAW_APP__;
-                                  app.mode = 'circular'; app.cInputType = 'gb';
+                                  app.setDiagramMode('circular'); app.cInputType = 'gb';
                                   app.files.c_gb = new File([text], 'HmmtDNA.gbk', {type:'text/plain'});
                                   app.files.c_gff = null; app.files.c_fasta = null;
                                   await Vue.nextTick();

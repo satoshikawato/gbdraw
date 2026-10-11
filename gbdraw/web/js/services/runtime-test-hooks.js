@@ -1,3 +1,4 @@
+// @ts-check
 const testHooks = () => globalThis.__GBDRAW_TEST_HOOKS__;
 
 export const runtimeTestHooksEnabled = () => Boolean(testHooks());

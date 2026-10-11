@@ -1,6 +1,8 @@
+// @ts-check
+/** @import { DrawingState } from '../../state.js' */
 import {
   buildFeatureSearchIndex,
-  formatSearchMatchDetail,
+  formatSearchMatchLine,
   getFeatureSearchFieldOptions,
   isRichFeatureSearchField,
   normalizeFeatureSearchField,
@@ -17,7 +19,25 @@ import {
   schedulePreviewFeatureSearchClasses
 } from './preview-svg.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
+import { featureOverrideValue } from '../../services/feature-placement.js';
+/** @import { FeatureSearchIndex } from './search-core.js' */
+/** @import { FeatureElementIndex } from './preview-svg.js' */
 
+/**
+ * @typedef {object} PreviewFeatureSearchOptions
+ * @property {Record<string, any>} state the Web state; its shape belongs to `state.js`
+ * @property {(source: any, callback: (...args: any[]) => void, options?: Record<string, any>) => any} watch Vue `watch`
+ * @property {(callback?: () => void) => Promise<void>} nextTick Vue `nextTick`
+ * @property {<T>(getter: () => T) => { value: T }} computed Vue `computed`
+ * @property {(feature: Record<string, any>, eventLike?: { clientX: number, clientY: number } | null) => any} openFeatureEditorForFeature
+ *   feature editor port: opens the popup for a feature at a screen point
+ * @property {() => Record<string, any>[]} [resolveOrthogroups] orthogroups named for the search (default: `state.orthogroups`)
+ * @property {(() => boolean) | null} [isActiveResultReady] preview runtime port
+ */
+
+/**
+ * @param {PreviewFeatureSearchOptions} options
+ */
 export const createPreviewFeatureSearch = ({
   state,
   watch,
@@ -25,7 +45,7 @@ export const createPreviewFeatureSearch = ({
   computed,
   openFeatureEditorForFeature,
   resolveOrthogroups = () => state.orthogroups.value,
-  previewRuntime = null
+  isActiveResultReady = null
 }) => {
   const {
     svgContainer,
@@ -33,10 +53,9 @@ export const createPreviewFeatureSearch = ({
     canvasPan,
     selectedResultIndex,
     svgContent,
-    extractedFeatures,
-    featuresBySvgId,
+    featureList,
+    featureListState,
     orthogroups,
-    adv,
     previewFeatureSearchInput,
     previewFeatureSearchQuery,
     previewFeatureSearchField,
@@ -50,13 +69,17 @@ export const createPreviewFeatureSearch = ({
     clickedFeature
   } = state;
 
-  const getPopupMode = () => (adv?.rich_feature_popup === false ? 'simple' : 'rich');
+  // The rich popup is an app preference (`state.richFeaturePopup`), not a drawing setting.
+  const getPopupMode = () => (state.richFeaturePopup.value === false ? 'simple' : 'rich');
   let refreshRequestId = 0;
   let appliedSearchField = normalizeFeatureSearchField(previewFeatureSearchField.value, { popupMode: getPopupMode() });
   let appliedQualifierKey = String(previewFeatureSearchQualifierKey.value || '');
   let appliedUseRegex = Boolean(previewFeatureSearchUseRegex.value);
+  /** @type {FeatureSearchIndex | null} */
   let searchIndex = null;
+  /** @type {FeatureElementIndex | null} */
   let featureElementIndex = null;
+  /** @type {SVGSVGElement | null} */
   let featureElementIndexSvg = null;
   const appliedSearchDomState = createPreviewFeatureSearchDomState();
   const getSvg = () => resolvePreviewSvg(svgContainer.value);
@@ -73,20 +96,30 @@ export const createPreviewFeatureSearch = ({
     featureElementIndex = null;
     featureElementIndexSvg = null;
   };
-  const ensureSearchIndex = () => {
+  // Search features searches the Features list of the displayed Result, so a
+  // hidden feature is found too (R-5). A drawn feature is found by its
+  // rendered ID; one the Result does not draw by its source identity.
+  let featuresBySearchId = new Map();
+  /** @param {DrawingState} drawing */
+  const ensureSearchIndex = (drawing) => {
     if (!searchIndex) {
       const labels = new Map((state.editableLabels?.value || []).map((entry) => [entry.featureId, entry]));
+      featuresBySearchId = new Map();
       searchIndex = buildFeatureSearchIndex({
-        features: extractedFeatures.value.map((feature) => {
-          const entry = labels.get(feature.svg_id);
+        features: featureList.value.rows.map((feature) => {
+          const renderedId = featureListState(feature).renderedId;
+          const searchId = renderedId || String(feature.id || '');
+          featuresBySearchId.set(searchId, feature);
+          const entry = renderedId ? labels.get(renderedId) : null;
           const sources = [entry?.sourceText, feature.label, feature.product, feature.gene, feature.locus_tag];
           return {
             ...feature,
+            search_id: searchId,
             search_labels: [
               feature.search_labels,
               entry?.text,
-              state.labelTextFeatureOverrides?.[feature.svg_id],
-              ...sources.map((source) => state.labelTextBulkOverrides?.[source])
+              featureOverrideValue(drawing.featureOverrides, feature, 'labelText'),
+              ...sources.map((source) => drawing.labelTextBulkOverrides?.[source])
             ]
           };
         }),
@@ -100,7 +133,7 @@ export const createPreviewFeatureSearch = ({
   const updateRenderedCount = () => {
     previewFeatureSearchRenderedCount.value =
       state.featureCatalog?.value?.items?.[selectedResultIndex.value]?.features?.length
-      ?? extractedFeatures.value?.length ?? 0;
+      ?? state.extractedFeatures.value?.length ?? 0;
   };
   const ensureFeatureElementIndex = (svg = getSvg()) => {
     if (featureElementIndexSvg !== svg || !featureElementIndex) {
@@ -108,7 +141,8 @@ export const createPreviewFeatureSearch = ({
       featureElementIndex = getPreviewFeatureElementIndex(svg);
       recordStructuralMetric('featureDomFullScanCount', 1, { phase: 'feature-search' });
     }
-    return featureElementIndex;
+    // The check above assigns the index unless it is already set.
+    return /** @type {FeatureElementIndex} */ (featureElementIndex);
   };
   const previewFeatureSearchFieldOptions = computed(() => getFeatureSearchFieldOptions({ popupMode: getPopupMode() }));
   const previewFeatureSearchQualifierEnabled = computed(() => (
@@ -135,15 +169,15 @@ export const createPreviewFeatureSearch = ({
   const previewFeatureSearchActiveDetail = computed(() => {
     const activeId = getActiveMatchId();
     const details = activeId ? previewFeatureSearchMatchDetails.value?.[activeId] || [] : [];
-    const detailText = details.length ? formatSearchMatchDetail(details[0]) : '';
-    return detailText ? `Matched ${detailText}` : '';
+    return formatSearchMatchLine(getActiveMatchFeature(), details);
   });
 
   const clearPreviewClasses = () => {
     disposePreviewFeatureSearchDomState(appliedSearchDomState);
   };
 
-  const refreshSearchNow = ({ preserveActive = true, center = false } = {}) => {
+  /** @param {DrawingState} drawing */
+  const refreshSearchNow = (drawing, { preserveActive = true, center = false } = {}) => {
     const popupMode = getPopupMode();
     const normalizedField = normalizeFeatureSearchField(appliedSearchField, { popupMode });
     appliedSearchField = normalizedField;
@@ -160,17 +194,17 @@ export const createPreviewFeatureSearch = ({
       return;
     }
     const featureIndex = ensureFeatureElementIndex(svg);
-    const renderedFeatureIds = new Set(featureIndex.keys());
+    const index = ensureSearchIndex(drawing);
     const searchResult = runFeatureSearch({
-      features: extractedFeatures.value,
-      renderedFeatureIds,
+      features: featureList.value.rows,
+      renderedFeatureIds: new Set(index.featureOrder),
       query: previewFeatureSearchQuery.value,
       field: normalizedField,
       qualifierKey: appliedQualifierKey,
       useRegex: appliedUseRegex,
       popupMode,
       orthogroups: orthogroups.value,
-      searchIndex: ensureSearchIndex(),
+      searchIndex: index,
       previousActiveId
     });
 
@@ -199,10 +233,11 @@ export const createPreviewFeatureSearch = ({
   };
 
   const scheduleRefreshSearch = (options = {}) => {
+    const drawing = state.activeDrawing();
     const requestId = ++refreshRequestId;
     nextTick(() => {
       if (requestId !== refreshRequestId) return;
-      refreshSearchNow(options);
+      refreshSearchNow(drawing, options);
     });
   };
 
@@ -229,11 +264,7 @@ export const createPreviewFeatureSearch = ({
 
   const getActiveMatchFeature = () => {
     const activeId = getActiveMatchId();
-    if (!activeId) return null;
-    return featuresBySvgId.value?.get?.(activeId) ||
-      (Array.isArray(extractedFeatures.value)
-        ? extractedFeatures.value.find((candidate) => String(candidate?.svg_id || '').trim() === activeId)
-        : null);
+    return activeId ? featuresBySearchId.get(activeId) || null : null;
   };
 
   const openActiveMatch = ({ center = true } = {}) => {
@@ -311,21 +342,70 @@ export const createPreviewFeatureSearch = ({
   const goToNext = () => goToMatch(previewFeatureSearchActiveIndex.value + 1);
   const goToPrevious = () => goToMatch(previewFeatureSearchActiveIndex.value - 1);
 
-  const clearSearch = () => {
-    previewFeatureSearchInput.value = '';
-    previewFeatureSearchQuery.value = '';
-    previewFeatureSearchField.value = 'all';
-    previewFeatureSearchQualifierKey.value = '';
-    previewFeatureSearchUseRegex.value = false;
-    appliedSearchField = 'all';
-    appliedQualifierKey = '';
-    appliedUseRegex = false;
+  /**
+   * @typedef {object} SearchDraft
+   * @property {string} input
+   * @property {string} query
+   * @property {string} field
+   * @property {string} qualifierKey
+   * @property {boolean} useRegex
+   * @property {string} appliedField
+   * @property {string} appliedQualifierKey
+   * @property {boolean} appliedUseRegex
+   */
+  /** @type {Readonly<SearchDraft>} */
+  const EMPTY_SEARCH = Object.freeze({
+    input: '', query: '', field: 'all', qualifierKey: '', useRegex: false,
+    appliedField: 'all', appliedQualifierKey: '', appliedUseRegex: false
+  });
+  /** @returns {SearchDraft} */
+  const captureSearch = () => ({
+    input: String(previewFeatureSearchInput.value || ''),
+    query: String(previewFeatureSearchQuery.value || ''),
+    field: String(previewFeatureSearchField.value || 'all'),
+    qualifierKey: String(previewFeatureSearchQualifierKey.value || ''),
+    useRegex: Boolean(previewFeatureSearchUseRegex.value),
+    appliedField: appliedSearchField,
+    appliedQualifierKey,
+    appliedUseRegex
+  });
+  /** @param {Readonly<SearchDraft>} draft */
+  const installSearch = (draft) => {
+    previewFeatureSearchInput.value = draft.input;
+    previewFeatureSearchQuery.value = draft.query;
+    previewFeatureSearchField.value = draft.field;
+    previewFeatureSearchQualifierKey.value = draft.qualifierKey;
+    previewFeatureSearchUseRegex.value = draft.useRegex;
+    appliedSearchField = draft.appliedField;
+    appliedQualifierKey = draft.appliedQualifierKey;
+    appliedUseRegex = draft.appliedUseRegex;
     previewFeatureSearchMatches.value = [];
     previewFeatureSearchMatchDetails.value = {};
     previewFeatureSearchActiveIndex.value = -1;
     previewFeatureSearchError.value = '';
     clearPreviewClasses();
+  };
+
+  const clearSearch = () => {
+    installSearch(EMPTY_SEARCH);
     scheduleRefreshSearch({ preserveActive: false });
+  };
+
+  // A search belongs to the mode it was typed in: the mode transition keeps
+  // the departing mode's search and installs the arriving one's, which the
+  // arriving Result's mount applies (`handleMountedResultReady`).
+  /** @type {Map<string, SearchDraft>} */
+  const searchByMode = new Map();
+  /** @param {string} departing @param {string} arriving */
+  const switchModeSearch = (departing, arriving) => {
+    searchByMode.set(departing, captureSearch());
+    installSearch(searchByMode.get(arriving) || EMPTY_SEARCH);
+    searchByMode.delete(arriving);
+  };
+  // A loaded Session replaces the Results of both modes that a search named.
+  const resetModeSearches = () => {
+    searchByMode.clear();
+    clearSearch();
   };
 
   watch(
@@ -338,26 +418,26 @@ export const createPreviewFeatureSearch = ({
         appliedSearchField = 'all';
       }
       invalidateSearchIndex();
-      if (queryIsActive() && previewRuntime?.isActiveResultReady?.()) scheduleRefreshSearch();
+      if (queryIsActive() && isActiveResultReady?.()) scheduleRefreshSearch();
     }
   );
-  watch([extractedFeatures, orthogroups], () => {
+  watch([featureList, orthogroups], () => {
     updateRenderedCount();
     invalidateSearchIndex();
-    if (queryIsActive() && previewRuntime?.isActiveResultReady?.()) scheduleRefreshSearch();
+    if (queryIsActive() && isActiveResultReady?.()) scheduleRefreshSearch();
   });
   watch([selectedResultIndex, svgContent], () => {
     invalidateFeatureElementIndex();
   });
   watch([
     () => (state.editableLabels?.value || []).map((entry) => [entry.featureId, entry.sourceText, entry.text]),
-    () => state.labelTextFeatureOverrides,
-    () => state.labelTextBulkOverrides,
-    () => state.orthogroupNameOverrides,
-    () => state.orthogroupDescriptionOverrides
+    () => Object.values(state.activeDrawing().featureOverrides || {}).map((row) => [row.recordKey, row.biologicalFeatureId, row.labelText]),
+    () => state.activeDrawing().labelTextBulkOverrides,
+    () => state.activeDrawing().orthogroupNameOverrides,
+    () => state.activeDrawing().orthogroupDescriptionOverrides
   ], () => {
     invalidateSearchIndex();
-    if (queryIsActive() && previewRuntime?.isActiveResultReady?.()) scheduleRefreshSearch();
+    if (queryIsActive() && isActiveResultReady?.()) scheduleRefreshSearch();
   }, { deep: true });
 
   updateRenderedCount();
@@ -388,6 +468,8 @@ export const createPreviewFeatureSearch = ({
     goToNext,
     goToPrevious,
     clearSearch,
+    switchModeSearch,
+    resetModeSearches,
     handleMountedResultReady,
     openActiveMatch,
     refreshSearch: scheduleRefreshSearch,

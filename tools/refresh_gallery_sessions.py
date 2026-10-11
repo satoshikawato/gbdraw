@@ -12,14 +12,15 @@ import json
 import math
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
 from collections.abc import Mapping
 from contextlib import contextmanager
-from pathlib import Path
-from typing import Any
+from pathlib import Path, PurePosixPath, PureWindowsPath
+from typing import TYPE_CHECKING, Any
 from xml.etree import ElementTree as ET
 
 
@@ -54,6 +55,9 @@ from gbdraw.tracks.circular import (  # noqa: E402
     parse_circular_track_slots,
 )
 from gbdraw.tracks.scalars import ScalarSpec  # noqa: E402
+
+if TYPE_CHECKING:
+    from tools.prepare_interactive_gallery_assets import GallerySessionExample
 
 
 GALLERY_ROOT = REPO_ROOT / "gbdraw" / "web" / "gallery"
@@ -104,6 +108,12 @@ VIBRIO_EXPECTED_RAW_PAIRS = frozenset(
 TEST_INPUT_SESSION_FILES = (
     "BGC0000708-BGC0000713.gbdraw-session.json",
 )
+
+
+def _is_test_input_session(session_path: Path) -> bool:
+    """A test input keeps the unresolved pipelines its specs run on Generate."""
+
+    return session_path.name in TEST_INPUT_SESSION_FILES
 
 
 def _public_gallery_session_files() -> tuple[str, ...]:
@@ -624,6 +634,7 @@ def _validate_current_session_catalog_structure(
         "recordKey",
         "biologicalFeatureId",
         "fillColor",
+        "drawnSelector",
     }
     duplicated_payload_keys = {
         "qualifiers",
@@ -727,13 +738,31 @@ def _validate_staged_gallery_session(
             f"{session_path.name} has no canonical schema-"
             f"{expected_request_schema} render request"
         )
-    config = session.get("config")
+    modes = session.get("modes")
+    # Session 46 keeps the Linear draft in its Linear slice.
+    linear = modes.get("linear") if isinstance(modes, Mapping) else None
+    config = linear.get("config") if isinstance(linear, Mapping) else session.get("config")
     if isinstance(config, Mapping) and "linearRecordLayout" in config:
         plan = config.get("linearComparisonPlan")
         if not isinstance(plan, Mapping):
             raise ValueError(
                 f"{session_path.name} has a Web Linear draft without linearComparisonPlan"
             )
+    # A Gallery Session stores its protein comparison results, so the first
+    # Generate after Load reuses them (perf-014x D-17 / docs-restructure D-20:
+    # the regenerated Vibrio Session must store the finished protein comparison
+    # results; replaces the empty-derived-cache-only rule of 7aab08f8). A test
+    # input keeps its pipeline, which the Generate-pipeline specs run.
+    if not _is_test_input_session(session_path) and any(
+        isinstance(comparison, Mapping)
+        and comparison.get("kind") == "generatedProteinComparison"
+        and comparison.get("mode") != "none"
+        for comparison in request.get("comparisons") or []
+    ):
+        raise ValueError(
+            f"{session_path.name} must store its resolved protein comparison "
+            "results instead of a pipeline that Generate runs again"
+        )
     if (
         session_path.name == "lambda_basic_linear.gbdraw-session.json"
         and request.get("comparisons")
@@ -795,10 +824,12 @@ def _validate_staged_gallery_session(
             if isinstance(derived_cache, Mapping)
             else []
         )
+        # The stored collinear result replaces derived entries; the raw cache
+        # lets a changed setting recompute without LOSATP.
         if retained_derived_entries:
             raise ValueError(
-                f"{session_path.name} must rebuild its derived LOSATP cache "
-                "from the retained raw cache"
+                f"{session_path.name} stores its collinear result in the request, "
+                "not as derived LOSATP entries"
             )
         protein_entries = [
             entry
@@ -1004,15 +1035,174 @@ def _canonicalize_orthogroup_resources(session: dict[str, Any]) -> int:
     return rewritten
 
 
+def _gallery_id(session_path: Path) -> str:
+    """The Gallery id of a Session file: its name without the Session suffix."""
+
+    return session_path.name.split(".gbdraw-session", 1)[0]
+
+
+def _set_output_prefix(session: dict[str, Any], prefix: str) -> int:
+    """Store ``prefix`` in every place a Session keeps its Output Prefix.
+
+    A Generate after Load names its files after this prefix, so the form field
+    and the render request must agree with the Gallery id the card command uses.
+    Returns the number of fields changed.
+    """
+
+    containers: list[object] = []
+    # Session 46 keeps the form field in each mode slice (``modes.<mode>``).
+    modes = session.get("modes")
+    for mode_slice in modes.values() if isinstance(modes, dict) else ():
+        config = mode_slice.get("config") if isinstance(mode_slice, dict) else None
+        containers.append(config.get("form") if isinstance(config, dict) else None)
+    request = session.get("renderRequest")
+    containers.append(request.get("output") if isinstance(request, dict) else None)
+    changed = 0
+    for container in containers:
+        if isinstance(container, dict) and container.get("prefix") != prefix:
+            container["prefix"] = prefix
+            changed += 1
+    return changed
+
+
+_DEFAULT_COLORS_HEADER = "feature_type\tcolor"
+
+
+def _default_color_rows(text: str) -> dict[str, str]:
+    lines = [line.split("\t", 1) for line in text.splitlines() if line.strip()]
+    return {key.strip(): color.strip() for key, color in lines if f"{key}\t{color}" != _DEFAULT_COLORS_HEADER}
+
+
+def _resolve_default_colors(session: dict[str, Any]) -> int:
+    """Store the request's Default colors resolved over its palette, as the CLI does.
+
+    The Web writes the rows that differ from the palette; the CLI replay writes
+    the palette with those rows applied, and ``finalize`` compares the two
+    (OV-375). Returns 1 when the table changed, else 0.
+    """
+
+    from gbdraw.io.colors import load_default_colors
+
+    colors = session["renderRequest"]["diagramOptions"].get("colors") or {}
+    ref = colors.get("defaultColorsFile") or colors.get("defaultColors")
+    if not ref:
+        return 0
+    resource = session["resources"][ref["resourceId"]]
+    text = base64.b64decode(resource["data"], validate=True).decode("utf-8")
+    with tempfile.NamedTemporaryFile("w", suffix=".tsv", encoding="utf-8") as handle:
+        handle.write(text)
+        handle.flush()
+        table = load_default_colors(handle.name, colors.get("defaultColorsPalette") or "default")
+    resolved = dict(zip(table["feature_type"].astype(str), table["color"].astype(str)))
+    if resolved == _default_color_rows(text):
+        return 0
+    header = f"{_DEFAULT_COLORS_HEADER}\n" if text.startswith(_DEFAULT_COLORS_HEADER) else ""
+    payload = (header + "".join(f"{key}\t{color}\n" for key, color in resolved.items())).encode("utf-8")
+    resource["data"] = base64.b64encode(payload).decode("ascii")
+    resource["size"] = len(payload)
+    return 1
+
+
+def _materialize_one_record_sources(session: dict[str, Any]) -> int:
+    """Store a one-record GenBank source of ``all`` as ``exactly_one``, as the CLI does.
+
+    The Web writes ``all`` for a Linear file without selector or region; the CLI
+    replay materializes each record it draws as ``exactly_one``, and
+    ``finalize`` compares the two (OV-376). Returns the number of records changed.
+    """
+
+    from io import StringIO
+
+    from Bio import SeqIO
+
+    changed = 0
+    for record in session["renderRequest"]["records"]:
+        source = record.get("source") or {}
+        if record.get("cardinality") != "all" or record.get("selector") or record.get("region") or source.get("kind") != "genbank":
+            continue
+        payload = base64.b64decode(session["resources"][source["resourceId"]]["data"], validate=True)
+        if sum(1 for _ in SeqIO.parse(StringIO(payload.decode("utf-8")), "genbank")) == 1:
+            record["cardinality"] = "exactly_one"
+            changed += 1
+    return changed
+
+
+def _recorded_input_name(arg: str) -> str:
+    """The bare file name of a recorded absolute input path in the repository.
+
+    Gallery Sessions record inputs by file name, as the card commands do. A path
+    inside this checkout, or recorded in another checkout of the repository (a
+    maintainer's machine) that holds the same file here, becomes its file name.
+    Any other absolute path is outside the repository and cannot be published.
+    """
+
+    windows_path = re.match(r"^[A-Za-z]:[\\/]", arg) is not None
+    pure = PureWindowsPath(arg) if windows_path else PurePosixPath(arg)
+    if not pure.is_absolute():
+        return arg
+    if not windows_path:
+        try:
+            Path(os.path.realpath(arg)).relative_to(REPO_ROOT)
+            return pure.name
+        except ValueError:
+            pass
+    checkout_names = {REPO_ROOT.name, "gbdraw"}
+    for index, part in enumerate(pure.parts[:-1]):
+        if part not in checkout_names:
+            continue
+        candidate = REPO_ROOT.joinpath(*pure.parts[index + 1 :])
+        try:
+            Path(os.path.realpath(candidate)).relative_to(REPO_ROOT)
+        except ValueError:
+            continue
+        if candidate.is_file():
+            return pure.name
+    raise ValueError(
+        f"Recorded input path {arg!r} is outside the repository ({REPO_ROOT}); "
+        "Gallery Sessions record inputs of the repository by file name."
+    )
+
+
+def _publishable_recorded_args(
+    args: list[str],
+    bindings: list[SessionFileBinding],
+    *,
+    gallery_id: str,
+    declared_command: bool,
+) -> list[str]:
+    """Return ``args`` with the Gallery id as ``-o`` and inputs by file name.
+
+    The declared command of an example is authoritative for its inputs (they
+    resolve in the example's directory), so only the stored-Session route
+    rewrites input paths.
+    """
+
+    input_indexes = set() if declared_command else {binding.argIndex for binding in bindings}
+    published: list[str] = []
+    for index, arg in enumerate(args):
+        if index > 0 and args[index - 1] in {"-o", "--output"}:
+            published.append(gallery_id)
+        elif arg.startswith("--output="):
+            published.append(f"--output={gallery_id}")
+        elif index in input_indexes:
+            published.append(_recorded_input_name(arg))
+        else:
+            published.append(arg)
+    return published
+
+
 def _canonicalize_recorded_cli_invocation(
     session_path: Path,
     *,
     mode: str,
+    gallery_id: str,
+    declared_command: bool = False,
 ) -> None:
-    """Rewrite retired flags in the recorded ``cliInvocation`` of a staged session.
+    """Make the recorded ``cliInvocation`` of a staged session publishable.
 
     The recorded argv is provenance for Gallery commands. Current sessions do not
-    replay it, so the refresh moves it to the current flag names here.
+    replay it, so the refresh moves it to the current flag names here, names the
+    output after the Gallery id, and records inputs by file name.
     """
 
     payload = session_path.read_bytes()
@@ -1029,7 +1219,12 @@ def _canonicalize_recorded_cli_invocation(
         ],
         mode=mode,
     )
-    invocation["args"] = args
+    invocation["args"] = _publishable_recorded_args(
+        args,
+        bindings,
+        gallery_id=gallery_id,
+        declared_command=declared_command,
+    )
     invocation["fileBindings"] = [dataclasses.asdict(binding) for binding in bindings]
     text = json.dumps(session, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     session_path.write_bytes(
@@ -1037,29 +1232,168 @@ def _canonicalize_recorded_cli_invocation(
     )
 
 
-def _refresh_one_session(
-    session_path: Path,
-    *,
-    destination_path: Path | None = None,
-) -> None:
-    session = load_session(session_path)
-    mode = session_mode(session)
-    if mode not in {"circular", "linear"}:
-        raise RuntimeError(f"Could not determine gallery session mode: {session_path}")
-
+def _cli_env() -> dict[str, str]:
     env = os.environ.copy()
     env["PYTHONPATH"] = (
         str(REPO_ROOT)
         if not env.get("PYTHONPATH")
         else f"{REPO_ROOT}{os.pathsep}{env['PYTHONPATH']}"
     )
+    return env
+
+
+def _declared_command_session(
+    command: str,
+    session_path: Path,
+    *,
+    env: Mapping[str, str],
+    cwd: Path = REPO_ROOT,
+) -> None:
+    """Write the CLI Session of a declared Gallery command to ``session_path``.
+
+    The command runs in ``cwd`` (the repository root unless the example names
+    the directory of its inputs), so its relative inputs resolve as documented;
+    only the output prefix moves next to ``session_path``. The recorded
+    invocation keeps the declared arguments.
+    """
+
+    argv = shlex.split(command)
+    if len(argv) < 3 or argv[0] != "gbdraw" or argv[1] not in {"circular", "linear"}:
+        raise ValueError(f"Gallery command must start with 'gbdraw circular|linear': {command}")
+    mode, args = argv[1], argv[2:]
+    output_indexes = [index + 1 for index, arg in enumerate(args) if arg in {"-o", "--output"}]
+    if len(output_indexes) != 1 or output_indexes[0] >= len(args):
+        raise ValueError(f"Gallery command must name one output prefix: {command}")
+    output_index = output_indexes[0]
+    staged_output = str(session_path.parent / args[output_index])
+    staged_args = [*args[:output_index], staged_output, *args[output_index + 1 :]]
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "gbdraw.cli",
+            mode,
+            *staged_args,
+            "--session_output",
+            str(session_path),
+        ],
+        cwd=cwd,
+        env=dict(env),
+        check=True,
+    )
+    payload = session_path.read_bytes()
+    compressed = payload[:2] == b"\x1f\x8b"
+    session = json.loads(gzip.decompress(payload) if compressed else payload)
+    invocation = session["cliInvocation"]
+    invocation["args"] = [
+        args[output_index] if arg == staged_output else arg
+        for arg in invocation["args"]
+    ]
+    text = json.dumps(session, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    session_path.write_bytes(
+        gzip.compress(text, compresslevel=6, mtime=0) if compressed else text
+    )
+
+
+def _store_resolved_protein_comparisons(session_path: Path) -> None:
+    """Replace a generated protein pipeline with its stored result.
+
+    A Gallery Session stores its protein comparison results, so the first
+    Generate after Load reuses them instead of computing them again (perf-014x
+    D-17 / docs-restructure D-20: the regenerated Vibrio Session must store the
+    finished protein comparison results; replaces the empty-derived-cache-only
+    rule of 7aab08f8). The Session is rendered once from its raw LOSATP cache, and
+    its comparisons become the codec's encoding of the resolved request: the
+    collinear result and the marker that reuses it, as the Web writes them
+    after a Generate. The replay and ``finalize`` then check that the CLI and
+    the Web rebuild draw and request the same.
+    """
+
+    from gbdraw.api.request_render import _resolved_losat_search
+    from gbdraw.session import materialize_session, render_session, session_to_request
+    from gbdraw.session_request_codec import encode_canonical_request
+    from gbdraw.session_resources import SessionResourceTable
+
+    session = load_session(session_path)
+    request = session["renderRequest"]
+    modes = {
+        comparison.get("mode")
+        for comparison in request.get("comparisons") or []
+        if comparison.get("kind") == "generatedProteinComparison"
+    } - {"none"}
+    if not modes:
+        return
+    if modes != {"collinear"}:
+        raise ValueError(
+            f"{session_path.name}: Gallery publication stores collinear protein "
+            f"comparison results only, not {sorted(modes)}"
+        )
+    with tempfile.TemporaryDirectory(prefix="gbdraw-gallery-resolve-") as output_dir:
+        with materialize_session(session, output_directory=output_dir) as materialized:
+            typed = session_to_request(materialized)
+            metadata = render_session(materialized).linear_metadata
+            if metadata is None or metadata.collinearity_result is None:
+                raise ValueError(f"{session_path.name} computed no collinear result")
+            resolved = dataclasses.replace(
+                typed,
+                options=dataclasses.replace(
+                    typed.options,
+                    losat_search=_resolved_losat_search(typed.options.losat_search),
+                    collinearity_blocks=metadata.collinearity_result,
+                ),
+            )
+            table = SessionResourceTable(session["resources"])
+            comparisons = encode_canonical_request(resolved, table=table).payload[
+                "comparisons"
+            ]
+            descriptors = table.descriptors()
+    request["comparisons"] = comparisons
+    for resource_id in _referenced_resource_ids(comparisons):
+        session["resources"].setdefault(resource_id, dict(descriptors[resource_id]))
+    write_session_json(session_path, session)
+
+
+def _assert_declared_figure(declared_path: Path, published_path: Path) -> None:
+    """The published Session draws the figure of its declared command.
+
+    Publication writes the Web's configuration overrides in place of the CLI's
+    resolved configuration, so the replayed figure must equal the declared one.
+    """
+
+    declared, published = (
+        [result.get("content") for result in load_session(path).get("results") or []]
+        for path in (declared_path, published_path)
+    )
+    if not declared or declared != published:
+        raise ValueError(
+            f"{published_path.name} does not draw the figure of its declared command"
+        )
+
+
+def _refresh_one_session(
+    session_path: Path,
+    *,
+    destination_path: Path | None = None,
+    declared_command: bool = False,
+) -> None:
+    gallery_id = _gallery_id(session_path)
+    session = load_session(session_path)
+    mode = session_mode(session)
+    if mode not in {"circular", "linear"}:
+        raise RuntimeError(f"Could not determine gallery session mode: {session_path}")
+
+    env = _cli_env()
     with tempfile.TemporaryDirectory(prefix="gbdraw-gallery-session-") as tmpdir:
         staging_root = Path(tmpdir)
         prepared_path = staging_root / f"prepared-{session_path.name}"
         replayed_path = staging_root / f"replayed-{session_path.name}"
         finalized_path = staging_root / session_path.name
         publication_input_path = session_path
-        if _canonicalize_orthogroup_resources(session):
+        # The Output Prefix is part of the request the publication rebuilds and
+        # `finalize` keeps, so it is set on the input, before `prepare`.
+        if _canonicalize_orthogroup_resources(session) + _set_output_prefix(
+            session, gallery_id
+        ) + _resolve_default_colors(session) + _materialize_one_record_sources(session):
             publication_input_path = (
                 staging_root / f"canonicalized-{session_path.name}"
             )
@@ -1072,7 +1406,14 @@ def _refresh_one_session(
             prepared_path,
             env=env,
         )
-        _canonicalize_recorded_cli_invocation(prepared_path, mode=mode)
+        _canonicalize_recorded_cli_invocation(
+            prepared_path,
+            mode=mode,
+            gallery_id=gallery_id,
+            declared_command=declared_command,
+        )
+        if not _is_test_input_session(session_path):
+            _store_resolved_protein_comparisons(prepared_path)
         subprocess.run(
             [
                 sys.executable,
@@ -1084,7 +1425,7 @@ def _refresh_one_session(
                 "-f",
                 "interactive_svg",
                 "-o",
-                session_path.name.split(".gbdraw-session", 1)[0],
+                gallery_id,
                 "--session_output",
                 str(replayed_path),
             ],
@@ -1104,6 +1445,24 @@ def _refresh_one_session(
         del finalized
         gc.collect()
         shutil.move(str(finalized_path), destination_path or session_path)
+
+
+def _declared_session_example(session_path: Path) -> GallerySessionExample | None:
+    """The Gallery example whose declared command builds this Session, if any."""
+
+    from tools.prepare_interactive_gallery_assets import EXAMPLES
+
+    return next(
+        (
+            example
+            for example in EXAMPLES
+            if example.session_from_command
+            and example.session_path.name == session_path.name
+        ),
+        None,
+    )
+
+
 def refresh_gallery_sessions(
     session_names: tuple[str, ...] | None = None,
 ) -> None:
@@ -1127,7 +1486,26 @@ def refresh_gallery_sessions(
         for index, session_path in enumerate(session_paths):
             print(f"Refreshing gallery session: {session_path.relative_to(REPO_ROOT)}")
             staged_path = staging_root / f"{index:02d}-{session_path.name}"
-            _refresh_one_session(session_path, destination_path=staged_path)
+            example = _declared_session_example(session_path)
+            if example is not None:
+                with tempfile.TemporaryDirectory(
+                    prefix="gbdraw-gallery-command-"
+                ) as command_dir:
+                    declared_path = Path(command_dir) / session_path.name
+                    _declared_command_session(
+                        example.command,
+                        declared_path,
+                        env=_cli_env(),
+                        cwd=example.command_cwd,
+                    )
+                    _refresh_one_session(
+                        declared_path,
+                        destination_path=staged_path,
+                        declared_command=True,
+                    )
+                    _assert_declared_figure(declared_path, staged_path)
+            else:
+                _refresh_one_session(session_path, destination_path=staged_path)
             staged_session = load_session(staged_path)
             _validate_staged_gallery_session(
                 session_path,

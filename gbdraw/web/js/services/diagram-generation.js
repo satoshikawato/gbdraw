@@ -1,6 +1,7 @@
+// @ts-check
 import { createBoundedJsonReceiver } from './bounded-json-transport.js';
 import { buildPyodideAssetManifest } from './pyodide-assets.js';
-import { normalizeUserFacingError } from './error-normalization.js';
+import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { validateWebRuntimeCapabilities, DiagramRuntimeCompatibilityError } from './runtime-capabilities.js';
 import {
   DIAGRAM_HELPER_OPERATION_NAMES,
@@ -148,12 +149,45 @@ export const normalizeGenerationResponse = (payload) => {
 
 const resolveWorkerUrl = () => new URL('../workers/diagram-generation-worker.js', import.meta.url).toString();
 
+/** @type {Worker | null} */
 let worker = null;
 let workerInitialized = false;
+/** @type {ReturnType<typeof validateWebRuntimeCapabilities> | null} */
 let workerCapabilities = null;
+/**
+ * The pending Worker initialization: its promise, the reject that settles it,
+ * and the listener cleanup. Null while no initialization is in flight.
+ * @type {{ promise: Promise<Worker>, reject: (error: unknown) => void, cleanup: () => void } | null}
+ */
 let initState = null;
+/**
+ * @typedef {object} GenerateRequest The one running Generate request.
+ * @property {number} requestId
+ * @property {boolean} settled
+ * @property {(() => void) | null} cleanup Null until its Worker listeners exist.
+ * @property {(value: any) => void} resolve
+ * @property {(error: unknown) => void} reject
+ */
+/** @type {GenerateRequest | null} */
 let activeRequest = null;
+/**
+ * @typedef {object} AuxiliaryRequest A feature-extraction or helper request
+ *   that waits on the Worker.
+ * @property {number} requestId
+ * @property {(() => void) | null} cleanup Null until its listeners exist.
+ * @property {(error: unknown) => void} reject
+ */
+/**
+ * @typedef {object} PreparedResources What `resourceTransport.prepare` stages
+ *   for the Worker.
+ * @property {any[]} resourceManifest
+ * @property {any[]} stagedResources
+ * @property {() => boolean} commit Acknowledges the staging; false when a reset
+ *   or another acknowledged request superseded it.
+ */
+/** @type {Set<AuxiliaryRequest>} */
 const activeFeatureRequests = new Set();
+/** @type {Set<AuxiliaryRequest>} */
 const activeHelperRequests = new Set();
 let nextRequestId = 1;
 const resourceTransport = createDiagramResourceTransport();
@@ -173,7 +207,9 @@ export const deserializeWorkerError = (
   options = {}
 ) => {
   const compatibility = serialized instanceof DiagramRuntimeCompatibilityError;
-  const model = normalizeUserFacingError(compatibility ? { code: 'RUNTIME_INCOMPATIBLE', stage: 'initialization' } : serialized || { code: 'UNKNOWN' }, options);
+  // normalizeUserFacingError returns null only for a falsy value; the argument
+  // here is `serialized || { code: 'UNKNOWN' }` or a literal, never falsy.
+  const model = /** @type {NonNullable<ReturnType<typeof normalizeUserFacingError>>} */ (normalizeUserFacingError(compatibility ? { code: 'RUNTIME_INCOMPATIBLE', stage: 'initialization' } : serialized || { code: 'UNKNOWN' }, options));
   return Object.assign(compatibility ? new DiagramRuntimeCompatibilityError('Capability contract mismatch.') : new Error(model.summary), model, { message: model.summary, stack: model.summary });
 };
 
@@ -198,6 +234,7 @@ const rejectPendingInit = (error) => {
   reject(error);
 };
 
+/** @param {unknown} [error] */
 const terminateWorker = (error = null) => {
   if (error) rejectPendingInit(error);
   else clearInitState();
@@ -306,6 +343,10 @@ const settleActiveRequest = (request, callback) => {
   callback();
 };
 
+/**
+ * @param {Record<string, any>} [payload]
+ * @param {{ onProgress?: ((progress: any) => void) | null }} [options]
+ */
 export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) => {
   if (activeRequest) {
     return Promise.reject(new Error('A diagram generation request is already running.'));
@@ -320,6 +361,7 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) =
     resolveRequest = resolve;
     rejectRequest = reject;
   });
+  /** @type {GenerateRequest} */
   const request = {
     requestId,
     settled: false,
@@ -461,6 +503,16 @@ export const runFeatureExtraction = (payload = {}) => {
   });
 };
 
+/**
+ * @param {{
+ *   type: string,
+ *   payload: Record<string, any>,
+ *   operation?: string | null,
+ *   activeRequests: Set<AuxiliaryRequest>,
+ *   prepareResources?: (() => Promise<PreparedResources>) | null,
+ *   onProgress?: ((progress: any) => void) | null
+ * }} options
+ */
 const runAuxiliaryWorkerRequest = ({
   type,
   payload,
@@ -480,6 +532,7 @@ const runAuxiliaryWorkerRequest = ({
   });
 
   (async () => {
+    /** @type {AuxiliaryRequest | null} */
     let request = null;
     let failureStage = 'initialization';
     try {
@@ -497,10 +550,13 @@ const runAuxiliaryWorkerRequest = ({
         currentWorker.removeEventListener('message', handleMessage);
         currentWorker.removeEventListener('error', handleError);
         currentWorker.removeEventListener('messageerror', handleMessageError);
-        activeRequests.delete(request);
+        // `request` is assigned just above this closure exists; nothing calls
+        // `cleanup` before then.
+        activeRequests.delete(/** @type {AuxiliaryRequest} */ (request));
       };
       request.cleanup = cleanup;
       activeRequests.add(request);
+      /** @type {PreparedResources | null} */
       let preparedResources = null;
       let workerPayload = payload;
 
@@ -578,9 +634,14 @@ const runAuxiliaryWorkerRequest = ({
   return promise;
 };
 
+/**
+ * @param {unknown} operation
+ * @param {Record<string, any>} [payload]
+ * @param {{ onProgress?: ((progress: any) => void) | null }} [options]
+ */
 export const runDiagramHelperOperation = (operation, payload = {}, { onProgress = null } = {}) => {
   const normalizedOperation = String(operation || '').trim();
-  if (!diagramHelperOperationNames.has(normalizedOperation)) {
+  if (!diagramHelperOperationNames.has(/** @type {any} */ (normalizedOperation))) {
     return Promise.reject(
       deserializeWorkerError({ code: 'HELPER_PROTOCOL', stage: 'request-validation' })
     );
@@ -588,14 +649,16 @@ export const runDiagramHelperOperation = (operation, payload = {}, { onProgress 
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return Promise.reject(deserializeWorkerError({ code: 'HELPER_PROTOCOL', operation: normalizedOperation, stage: 'request-validation' }));
   }
-  const projection = normalizedOperation === DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT
-    && payload.projection !== undefined;
+  recordStructuralMetric('diagramHelperRequest', 1, { operation: normalizedOperation });
+  // Helpers that read the records of a committed request stage its resources.
+  const staging = normalizedOperation === DIAGRAM_HELPER_OPERATIONS.READ_FEATURE_OVERRIDE_TABLE ? payload
+    : (normalizedOperation === DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT ? payload.projection : undefined);
   const { resources, ...helperPayload } = payload;
   return runAuxiliaryWorkerRequest({
     type: 'helper', operation: normalizedOperation,
-    payload: projection ? helperPayload : payload,
-    prepareResources: projection ? () => resourceTransport.prepare({
-      request: payload.projection.canonicalRequest, resources
+    payload: staging ? helperPayload : payload,
+    prepareResources: staging ? () => resourceTransport.prepare({
+      request: staging.canonicalRequest, resources
     }) : null,
     activeRequests: activeHelperRequests,
     onProgress

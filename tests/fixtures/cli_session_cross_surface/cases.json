@@ -1,0 +1,70 @@
+{
+  "description": "CLI Sessions that every load surface must draw as the CLI did (D-01, OV-221). Paths are relative to the repository root; the tables cover the lambda (NC_001416) and human mitochondrial (HmmtDNA) records. `legacySessions` are Sessions of the case that older CLI writers on main wrote (OV-269, see each provenance file); every surface must draw the case's current CLI figure from them.",
+  "cases": [
+    {
+      "id": "linear_tables",
+      "mode": "linear",
+      "args": ["--gbk", "tests/test_inputs/NC_001416.gb", "--show_labels", "all",
+        "-t", "tests/fixtures/cli_session_cross_surface/colors.tsv",
+        "-d", "tests/fixtures/cli_session_cross_surface/default_colors.tsv",
+        "--feature_visibility_table", "tests/fixtures/cli_session_cross_surface/visibility.tsv",
+        "--label_table", "tests/fixtures/cli_session_cross_surface/labels.tsv",
+        "--label_whitelist", "tests/fixtures/cli_session_cross_surface/whitelist.tsv",
+        "--qualifier_priority", "tests/fixtures/cli_session_cross_surface/priority.tsv"],
+      "legacySessions": {
+        "v40-early": "tests/fixtures/sessions/cli-linear-tables.v40-early.gbdraw-session.json.gz",
+        "v40": "tests/fixtures/sessions/cli-linear-tables.v40.gbdraw-session.json.gz",
+        "v41": "tests/fixtures/sessions/cli-linear-tables.v41.gbdraw-session.json.gz",
+        "v42": "tests/fixtures/sessions/cli-linear-tables.v42.gbdraw-session.json.gz",
+        "v44": "tests/fixtures/sessions/cli-linear-tables.v44.gbdraw-session.json.gz"
+      }
+    },
+    {
+      "id": "linear_records_blacklist",
+      "mode": "linear",
+      "args": ["--records_table", "tests/fixtures/cli_session_cross_surface/records_linear.tsv",
+        "--show_labels", "all",
+        "-t", "tests/fixtures/cli_session_cross_surface/colors.tsv",
+        "-d", "tests/fixtures/cli_session_cross_surface/default_colors.tsv",
+        "--feature_visibility_table", "tests/fixtures/cli_session_cross_surface/visibility.tsv",
+        "--label_table", "tests/fixtures/cli_session_cross_surface/labels.tsv",
+        "--label_blacklist", "hypothetical,putative",
+        "--feature_override_table", "tests/fixtures/cli_session_cross_surface/feature_overrides.tsv"]
+    },
+    {
+      "id": "linear_blast",
+      "mode": "linear",
+      "args": ["--gbk", "tests/fixtures/web_comparison_shared_block.gb",
+        "-b", "tests/fixtures/cli_session_cross_surface/blast.tsv", "--show_labels", "all",
+        "-t", "tests/fixtures/cli_session_cross_surface/colors.tsv",
+        "-d", "tests/fixtures/cli_session_cross_surface/default_colors.tsv"]
+    },
+    {
+      "id": "circular_records_tables",
+      "mode": "circular",
+      "args": ["--records_table", "tests/fixtures/cli_session_cross_surface/records_circular.tsv",
+        "--labels", "out",
+        "-t", "tests/fixtures/cli_session_cross_surface/colors.tsv",
+        "-d", "tests/fixtures/cli_session_cross_surface/default_colors.tsv",
+        "--feature_visibility_table", "tests/fixtures/cli_session_cross_surface/visibility.tsv",
+        "--label_table", "tests/fixtures/cli_session_cross_surface/labels.tsv",
+        "--label_whitelist", "tests/fixtures/cli_session_cross_surface/whitelist.tsv",
+        "--qualifier_priority", "tests/fixtures/cli_session_cross_surface/priority.tsv"]
+    },
+    {
+      "id": "circular_feature_overrides",
+      "mode": "circular",
+      "args": ["--gbk", "tests/test_inputs/NC_001416.gb", "--labels", "out",
+        "-t", "tests/fixtures/cli_session_cross_surface/colors.tsv",
+        "--feature_override_table", "tests/fixtures/cli_session_cross_surface/feature_overrides.tsv"]
+    },
+    {
+      "id": "linear_losatp",
+      "mode": "linear",
+      "args": ["--gbk", "tests/fixtures/sessions/cli-web-mito.gb", "tests/test_inputs/NC_001416.gb",
+        "--losat", "losatp", "--losatp_mode", "similarity_groups",
+        "-t", "tests/fixtures/cli_session_cross_surface/colors.tsv",
+        "--feature_visibility_table", "tests/fixtures/cli_session_cross_surface/visibility.tsv"]
+    }
+  ]
+}

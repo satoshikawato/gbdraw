@@ -23,7 +23,7 @@ from gbdraw.api.diagram import (
 )
 from gbdraw.api.options import CircularDiagramOptions
 from gbdraw.configurators import LegendMeasurement
-from gbdraw.core.text import calculate_bbox_dimensions
+from gbdraw.core.text import calculate_bbox_dimensions, measurement_font_file
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.legend.circular_layout import build_circular_legend_layout
@@ -130,6 +130,10 @@ def _circular_legend_measurement(
         num_of_columns=layout.num_columns,
         num_of_items_per_line=layout.num_items_per_line,
         has_gradient=layout.has_gradient,
+        font_file=measurement_font_file(legend_config.font_family),
+        wrap_width=float(
+            getattr(canvas_config, "total_width", legend_config.legend_width)
+        ),
         circular_layout=layout,
     )
 

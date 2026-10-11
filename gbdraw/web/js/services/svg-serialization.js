@@ -1,3 +1,4 @@
+// @ts-check
 const TRANSIENT_PREVIEW_CLASSES = Object.freeze([
   'gbdraw-preview-layout-target',
   'gbdraw-preview-feature-search-match',
@@ -78,6 +79,31 @@ export const stripTransientPreviewState = (svg, { stripCursor = true } = {}) => 
   }
 };
 
+// The preview feature-search classes (app/feature-search/preview-svg.js) that
+// an export strips from its clone.
+export const PREVIEW_FEATURE_SEARCH_MATCH_CLASS = 'gbdraw-preview-feature-search-match';
+export const PREVIEW_FEATURE_SEARCH_ACTIVE_CLASS = 'gbdraw-preview-feature-search-active-match';
+export const PREVIEW_FEATURE_SEARCH_DIMMED_CLASS = 'gbdraw-preview-feature-search-dimmed';
+export const PREVIEW_FEATURE_SEARCH_ROOT_ACTIVE_CLASS = 'gbdraw-preview-feature-search-results-active';
+export const PREVIEW_FEATURE_SEARCH_ROOT_UPDATING_CLASS = 'gbdraw-preview-feature-search-updating';
+
+export const PREVIEW_FEATURE_SEARCH_CLASSES = Object.freeze([
+  PREVIEW_FEATURE_SEARCH_MATCH_CLASS,
+  PREVIEW_FEATURE_SEARCH_ACTIVE_CLASS,
+  PREVIEW_FEATURE_SEARCH_DIMMED_CLASS
+]);
+
+export const stripPreviewFeatureSearchClasses = (svg) => {
+  if (!svg) return;
+  setClassToken(svg, PREVIEW_FEATURE_SEARCH_ROOT_ACTIVE_CLASS, false);
+  setClassToken(svg, PREVIEW_FEATURE_SEARCH_ROOT_UPDATING_CLASS, false);
+  PREVIEW_FEATURE_SEARCH_CLASSES.forEach((className) => {
+    svg.querySelectorAll(`.${className}`).forEach((element) => {
+      setClassToken(element, className, false);
+    });
+  });
+};
+
 export const serializeCleanSvg = (svg, options = {}) => {
   if (!svg) return '';
   const clone = svg.cloneNode(true);
@@ -91,8 +117,31 @@ export const serializeCleanSvg = (svg, options = {}) => {
   return new XMLSerializer().serializeToString(clone);
 };
 
+// The standalone popup reads label text by rendered ID; each per-feature label
+// edit of the drawing of the Result's mode (identity-keyed, design Q4 6.4, R2)
+// is projected onto the rendered IDs of the exported Result's catalog item.
+/**
+ * @param {Record<string, any>} state
+ * @param {Record<string, any>} drawing
+ * @param {number} resultIndex
+ */
+const renderedLabelTextOverrides = (state, drawing, resultIndex) => {
+  const overrides = {};
+  const textByFeature = new Map(Object.values(drawing.featureOverrides || {})
+    .filter((row) => typeof row?.labelText === 'string' && row.labelText)
+    .map((row) => [`${row.recordKey}\u0000${row.biologicalFeatureId}`, row.labelText]));
+  const item = state.featureCatalog?.value?.items?.[resultIndex];
+  (Array.isArray(item?.features) ? item.features : []).forEach((feature) => {
+    const text = textByFeature.get(`${feature?.recordKey}\u0000${feature?.biologicalFeatureId}`);
+    if (text) overrides[feature.svgId] = text;
+  });
+  return overrides;
+};
+
 // Capture the selected Result before any lazy export modules or libraries load.
+// Its popup settings and edits are those of the Result's mode: that mode's drawing.
 export const captureSvgExport = (state, { interactive = false } = {}) => {
+  const drawing = state.drawings[state.generatedMode?.value === 'linear' ? 'linear' : 'circular'];
   const resultIndex = Number(state.selectedResultIndex.value);
   const name = state.results.value?.[resultIndex]?.name || 'gbdraw.svg';
   return {
@@ -101,7 +150,7 @@ export const captureSvgExport = (state, { interactive = false } = {}) => {
     name,
     dpi: state.downloadDpi.value,
     ...(interactive ? { interactivity: {
-      popupMode: state.adv.rich_feature_popup === false ? 'simple' : 'rich',
+      popupMode: state.richFeaturePopup?.value === false ? 'simple' : 'rich',
       featureCatalog: state.featureCatalog?.value,
       catalogResultIndex: resultIndex,
       catalogResultName: name,
@@ -109,10 +158,10 @@ export const captureSvgExport = (state, { interactive = false } = {}) => {
       editableLabels: (state.editableLabels?.value || []).map(({ featureId, text, sourceText }) => ({
         featureId, text, sourceText
       })),
-      labelTextFeatureOverrides: { ...state.labelTextFeatureOverrides },
-      labelTextBulkOverrides: { ...state.labelTextBulkOverrides },
-      orthogroupNameOverrides: { ...state.orthogroupNameOverrides },
-      orthogroupDescriptionOverrides: { ...state.orthogroupDescriptionOverrides }
+      labelTextFeatureOverrides: renderedLabelTextOverrides(state, drawing, resultIndex),
+      labelTextBulkOverrides: { ...drawing.labelTextBulkOverrides },
+      orthogroupNameOverrides: { ...drawing.orthogroupNameOverrides },
+      orthogroupDescriptionOverrides: { ...drawing.orthogroupDescriptionOverrides }
     } } : {})
   };
 };

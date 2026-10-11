@@ -1,5 +1,6 @@
-const { expect } = require('@playwright/test');
+const { expect, test } = require('@playwright/test');
 const fs = require('node:fs/promises');
+const { gunzipSync } = require('node:zlib');
 const { assertOperationHealth, openApp, readErrorSignature } = require('./app-lifecycle.cjs');
 
 const seeds = {
@@ -82,23 +83,82 @@ const download = async (page, button, path, health = {}) => {
   return fs.readFile(path);
 };
 
+// Legend rows the editor added (`featureIds: []`, captions Python's inventory
+// lacks), as a Session saved while Add legend item existed holds them; R15-2
+// retired that action, so a Session is their only source. The page's Session
+// is saved; `rows` ([caption, color]) are written into the shown drawing's
+// Legend entries and, as that writer drew them, into its Results (a copy of
+// the last row of each feature Legend group, owned by the editor, a unit lower
+// per row so the editor lists them last, in order); the Session is loaded into
+// the page and generated, which lays the rows out as Python does.
+const loadEditorLegendRows = async (page, rows) => {
+  const path = test.info().outputPath(`editor-legend-rows-${rows.map(([caption]) => caption).join('-')
+    .replace(/[^A-Za-z0-9-]+/g, '_').slice(0, 60)}-${Date.now()}.gbdraw-session.json`);
+  // Saved under a title of its own, so a later Save of the page's title is no
+  // second download of one file name (which asks first); loaded with the title.
+  const { mode, title } = await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const shown = state.sessionTitle.value || 'editor-legend-rows';
+    state.sessionTitle.value = `${shown} editor rows`;
+    return { mode: state.mode.value, title: shown };
+  });
+  const bytes = await download(page, 'Save Session', path);
+  const saved = JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString('utf8'));
+  saved.title = title;
+  expect(saved.renderRequest.mode, 'the saved Results are the shown drawing\'s').toBe(mode);
+  saved.modes[mode].editorState.legend.entries.push(...rows.map(([caption, color]) => (
+    { caption, originalCaption: caption, color, featureIds: [] })));
+  saved.results = await page.evaluate(async ({ results, added }) => {
+    const { getAllFeatureLegendGroups, getLegendEntrySwatch } = await import('./js/services/legend-svg.js');
+    return results.map((result) => {
+      const svg = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
+      getAllFeatureLegendGroups(svg).forEach((group) => {
+        const last = [...group.querySelectorAll('g[data-legend-key]')].at(-1);
+        added.forEach(([caption, color], index) => {
+          const row = last.cloneNode(true);
+          [row, ...row.querySelectorAll('*')].forEach((element) => [...element.attributes]
+            .filter(({ name }) => name === 'display' || name.startsWith('data-gbdraw-base-'))
+            .forEach(({ name }) => element.removeAttribute(name)));
+          row.setAttribute('data-legend-key', caption);
+          row.setAttribute('data-legend-owner', 'direct-editor');
+          row.setAttribute('transform', `translate(0,${index + 1}) ${row.getAttribute('transform') || ''}`.trim());
+          getLegendEntrySwatch(row).setAttribute('fill', color);
+          row.querySelector('text').textContent = caption;
+          last.parentNode.appendChild(row);
+        });
+      });
+      return { ...result, content: new XMLSerializer().serializeToString(svg) };
+    });
+  }, { results: saved.results, added: rows });
+  await fs.writeFile(path, JSON.stringify(saved));
+  await page.locator('input[accept^=".json,"]').setInputFiles(path);
+  await expect.poll(() => page.evaluate(captions => {
+    const app = window.__GBDRAW_APP__;
+    return !app.sessionImportPending && captions.every(caption => app.legendEntries.some(entry => entry.caption === caption));
+  }, rows.map(([caption]) => caption)), { timeout: 180000 }).toBe(true);
+  await generate(page);
+};
+
 const snapshot = page => page.evaluate(async () => {
   const { state: s } = await import('./js/state.js');
   const ingestion = await import('./js/services/svg-result-ingestion.js');
   const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
-  const root = s.svgContainer.value.querySelector('svg');
-  const result = s.results.value[s.selectedResultIndex.value];
+  // A mode without its own Result shows the empty Preview (E1).
+  const root = s.svgContainer.value?.querySelector('svg') || null;
+  const result = s.results.value[s.selectedResultIndex.value] || null;
   return {
     mode: s.mode.value, generation: s.resultGenerationKey.value,
-    labels: { ...s.labelTextFeatureOverrides }, bulkLabels: { ...s.labelTextBulkOverrides },
-    labelSources: { ...s.labelTextFeatureOverrideSources }, visibility: { ...s.labelVisibilityOverrides },
-    featureVisibility: { ...s.featureVisibilityOverrides }, visibilityRules: [...s.featureVisibilityManualRules],
-    colors: { ...s.featureColorOverrides }, rules: s.manualSpecificRules.map(rule => ({ ...rule, fromFile: Boolean(rule.fromFile) })),
+    // Per-feature edits by identity key, one map per edited field.
+    ...Object.fromEntries([['labels', 'labelText'], ['labelSources', 'labelSourceText'], ['visibility', 'labelVisibility'],
+      ['featureVisibility', 'featureVisibility']].map(([name, field]) => [name, Object.fromEntries(
+      Object.entries(s.activeDrawing().featureOverrides).filter(([, row]) => row[field] !== null).map(([key, row]) => [key, row[field]]))])),
+    bulkLabels: { ...s.activeDrawing().labelTextBulkOverrides }, visibilityRules: [...s.activeDrawing().featureVisibilityManualRules],
+    colors: { ...s.activeDrawing().featureColorOverrides }, rules: s.activeDrawing().manualSpecificRules.map(rule => ({ ...rule, fromFile: Boolean(rule.fromFile) })),
     featureCount: s.extractedFeatures.value.length,
-    resultIdentity: ingestion.getCommittedSvgResultRuntimeIdentity(result),
-    markedMounted: ingestion.isCommittedSvgResultMounted(result),
-    result: result.content, payload: s.svgContent.value, mounted: root.outerHTML,
-    sameRoot: root === window.__MODE_EDITED_ROOT__,
+    resultIdentity: result ? ingestion.getCommittedSvgResultRuntimeIdentity(result) : null,
+    markedMounted: result ? ingestion.isCommittedSvgResultMounted(result) : false,
+    result: result?.content ?? null, payload: s.svgContent.value, mounted: root?.outerHTML ?? null,
+    sameRoot: Boolean(root) && root === window.__MODE_EDITED_ROOT__,
     mountEvents: window.__MODE_EVENTS__.filter(e => e.name === 'preview.mount-observed'),
     request: getCommittedCanonicalRenderRequest()
   };
@@ -114,4 +174,4 @@ const semantics = (page, content) => page.evaluate(content => {
   }));
 }, content);
 
-module.exports = { seeds, load, generate, switchMode, popup, closeEditor, download, snapshot, semantics };
+module.exports = { seeds, load, generate, switchMode, popup, closeEditor, download, loadEditorLegendRows, snapshot, semantics };

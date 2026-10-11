@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import re
-from typing import Mapping, Sequence
+from typing import TYPE_CHECKING, Mapping, Sequence, TypeGuard, cast
 
 from gbdraw.exceptions import ValidationError
+
+if TYPE_CHECKING:
+    from .protein_colinearity import ProteinIdentityManifest
 
 CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA = 3
 
@@ -81,7 +84,7 @@ def is_current_derived_protein_artifact(entry: object) -> bool:
     )
 
 
-def _is_nonnegative_integer(value: object) -> bool:
+def _is_nonnegative_integer(value: object) -> TypeGuard[int]:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
@@ -172,7 +175,7 @@ def _is_strict_empty_result(entry: Mapping[str, object]) -> bool:
 
 def validate_current_derived_protein_artifacts(
     entries: Sequence[Mapping[str, object]],
-    manifest: Mapping[str, object] | None,
+    manifest: ProteinIdentityManifest | Mapping[str, object] | None,
 ) -> None:
     """Require current envelopes and resolve every protein reference."""
 
@@ -180,10 +183,17 @@ def validate_current_derived_protein_artifacts(
         raise ValidationError(
             "Current derived protein artifacts require protein_identity_manifest."
         )
-    from .protein_colinearity import validate_protein_identity_manifest
+    from .protein_colinearity import (
+        ProteinIdentityManifest,
+        validate_protein_identity_manifest,
+    )
 
     try:
-        authority = validate_protein_identity_manifest(manifest)
+        authority = (
+            manifest
+            if isinstance(manifest, ProteinIdentityManifest)
+            else validate_protein_identity_manifest(manifest)
+        )
     except (TypeError, ValueError, ValidationError) as exc:
         raise ValidationError(
             "Current derived protein artifacts require a valid "
@@ -194,7 +204,7 @@ def validate_current_derived_protein_artifacts(
         str(handle)
         for binding in authority.record_instances.values()
         for handle in (
-            binding.get("runtimeIds", {}).values()
+            cast(Mapping[str, object], binding.get("runtimeIds", {})).values()
             if isinstance(binding.get("runtimeIds"), Mapping)
             else ()
         )
@@ -230,22 +240,22 @@ def validate_current_derived_protein_artifacts(
                     references is not None,
                 )
             if owner_key in _SCALAR_REFERENCE_KEYS and value:
-                references = [reference.strip() for reference in value.split(";")]
+                scalar_references = [reference.strip() for reference in value.split(";")]
                 return (
-                    bool(references)
-                    and all(references)
-                    and all(reference in runtime_handles for reference in references),
+                    bool(scalar_references)
+                    and all(scalar_references)
+                    and all(reference in runtime_handles for reference in scalar_references),
                     True,
                 )
             if owner_key in _UNIT_REFERENCE_KEYS and value:
-                references = [reference.strip() for reference in value.split(";")]
+                unit_references = [reference.strip() for reference in value.split(";")]
                 runtime_references = [
-                    reference for reference in references if reference.startswith("h_")
+                    reference for reference in unit_references if reference.startswith("h_")
                 ]
                 if not runtime_references:
                     return True, False
                 return (
-                    all(references)
+                    all(unit_references)
                     and all(
                         _RUNTIME_HANDLE_RE.fullmatch(reference) is not None
                         and reference in runtime_handles

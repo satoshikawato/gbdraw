@@ -1,0 +1,921 @@
+// @ts-check
+import { drawnLinearSequences, omittedLinearUids } from './record-draw-selection.js';
+/**
+ * @typedef {'none' | 'adjacent' | 'selected'} LinearComparisonMode
+ * @typedef {'losat' | 'upload'} LinearComparisonSource
+ */
+/**
+ * One draft pair of the Linear comparison plan. `file` is the uploaded BLAST
+ * TSV File (a Web File object, or null).
+ * @typedef {object} LinearComparisonEdge
+ * @property {string} id
+ * @property {string} queryUid
+ * @property {string} subjectUid
+ * @property {boolean} included
+ * @property {boolean} fileActive
+ * @property {boolean} losatFilenameActive
+ * @property {LinearComparisonSource} source
+ * @property {any} file
+ * @property {string} losatFilename
+ */
+/**
+ * The options of `createLinearComparisonEdge`; every field may be absent or
+ * unnormalized.
+ * @typedef {object} LinearComparisonEdgeInit
+ * @property {string} [id]
+ * @property {string} [queryUid]
+ * @property {string} [subjectUid]
+ * @property {boolean} [included]
+ * @property {boolean} [fileActive]
+ * @property {boolean} [losatFilenameActive]
+ * @property {string} [source]
+ * @property {any} [file]
+ * @property {string} [losatFilename]
+ */
+/**
+ * @typedef {object} LinearComparisonPlan
+ * @property {LinearComparisonMode} mode
+ * @property {LinearComparisonSource} defaultSource
+ * @property {LinearComparisonEdge[]} edges
+ */
+/**
+ * One edge `resolveLinearComparisonPlan` derives from the plan.
+ * @typedef {object} LinearComparisonResolvedEdge
+ * @property {string} id
+ * @property {string} queryUid
+ * @property {string} subjectUid
+ * @property {number} queryIndex
+ * @property {number} subjectIndex
+ * @property {string} edgeKey
+ * @property {number} ordinal
+ * @property {LinearComparisonSource} source
+ * @property {boolean} included
+ * @property {any} file
+ * @property {boolean} fileActive
+ * @property {string} losatFilename
+ * @property {boolean} losatFilenameActive
+ */
+/**
+ * @typedef {object} LinearComparisonIssue
+ * @property {string} code
+ * @property {string} message
+ * @property {string} edgeId
+ * @property {string} edgeKey
+ */
+/**
+ * @typedef {object} LinearComparisonResolution
+ * @property {LinearComparisonMode} mode
+ * @property {LinearComparisonSource} defaultSource
+ * @property {readonly LinearComparisonResolvedEdge[]} edges
+ * @property {readonly LinearComparisonIssue[]} errors
+ * @property {string} error
+ * @property {boolean} valid
+ * @property {boolean} hasComparisonIntent
+ * @property {boolean} hasLosatIntent
+ * @property {boolean} hasUploadIntent
+ */
+/**
+ * One record-pair search a Generate requests.
+ * @typedef {object} LosatJobSpec
+ * @property {string} edgeKey
+ * @property {number} ordinal
+ * @property {string} queryUid
+ * @property {string} subjectUid
+ * @property {number} queryIndex
+ * @property {number} subjectIndex
+ * @property {string} program
+ */
+export const LINEAR_COMPARISON_MODES = Object.freeze({
+  NONE: 'none',
+  ADJACENT: 'adjacent',
+  SELECTED: 'selected'
+});
+
+export const LINEAR_COMPARISON_SOURCES = Object.freeze({
+  LOSAT: 'losat',
+  UPLOAD: 'upload'
+});
+
+/** @type {Set<string>} */
+const VALID_MODES = new Set(Object.values(LINEAR_COMPARISON_MODES));
+/** @type {Set<string>} */
+const VALID_SOURCES = new Set(Object.values(LINEAR_COMPARISON_SOURCES));
+const VALID_LOSAT_PROGRAMS = new Set(['blastn', 'tblastx', 'blastp']);
+
+let comparisonCounter = 0;
+
+const cleanUid = (value) => String(value || '').trim();
+
+export const plainTextLinearRecordLabel = (value) => {
+  let label = String(value ?? '');
+  let previous;
+  do {
+    previous = label;
+    label = label.replace(/<[^<>]*>/g, '');
+  } while (label !== previous);
+  return label.replace(/[<>]/g, '').trim() || 'Record';
+};
+
+// An absent or unknown mode is the Web default (No comparison): a plan never
+// starts a comparison its writer did not state (B15).
+/**
+ * @param {unknown} value
+ * @returns {LinearComparisonMode}
+ */
+const normalizeMode = (value) => {
+  const mode = String(value || '').trim().toLowerCase();
+  return VALID_MODES.has(mode) ? /** @type {LinearComparisonMode} */ (mode) : LINEAR_COMPARISON_MODES.NONE;
+};
+
+/**
+ * @param {unknown} value
+ * @param {LinearComparisonSource} [fallback]
+ * @returns {LinearComparisonSource}
+ */
+const normalizeSource = (value, fallback = LINEAR_COMPARISON_SOURCES.LOSAT) => {
+  const source = String(value || '').trim().toLowerCase();
+  return VALID_SOURCES.has(source) ? /** @type {LinearComparisonSource} */ (source) : fallback;
+};
+
+const createComparisonId = () => {
+  comparisonCounter += 1;
+  if (globalThis.crypto?.randomUUID) {
+    return `linear-comparison-${globalThis.crypto.randomUUID()}`;
+  }
+  return `linear-comparison-${Date.now()}-${comparisonCounter}`;
+};
+
+export const linearComparisonEdgeKey = (queryUid, subjectUid) => (
+  `${cleanUid(queryUid)}->${cleanUid(subjectUid)}`
+);
+
+/** @returns {LinearComparisonPlan} */
+export const createDefaultLinearComparisonPlan = () => ({
+  mode: LINEAR_COMPARISON_MODES.NONE,
+  defaultSource: LINEAR_COMPARISON_SOURCES.LOSAT,
+  edges: []
+});
+
+/**
+ * @param {LinearComparisonEdgeInit} [init]
+ * @returns {LinearComparisonEdge}
+ */
+export const createLinearComparisonEdge = ({
+  id = '',
+  queryUid = '',
+  subjectUid = '',
+  included = true,
+  fileActive = false,
+  losatFilenameActive = false,
+  source = LINEAR_COMPARISON_SOURCES.UPLOAD,
+  file = null,
+  losatFilename = ''
+} = {}) => ({
+  id: cleanUid(id) || createComparisonId(),
+  queryUid: cleanUid(queryUid),
+  subjectUid: cleanUid(subjectUid),
+  included: included === true,
+  fileActive: fileActive === true,
+  losatFilenameActive: losatFilenameActive === true,
+  source: normalizeSource(source, LINEAR_COMPARISON_SOURCES.UPLOAD),
+  file: file || null,
+  losatFilename: String(losatFilename || '')
+});
+
+const normalizeEdge = (edge, index) => {
+  const source = edge && typeof edge === 'object' ? edge : {};
+  return createLinearComparisonEdge({
+    ...source,
+    id: cleanUid(source.id) || `linear-comparison-draft-${index + 1}`,
+    included: source.included === true,
+    fileActive: source.fileActive === true,
+    losatFilenameActive: source.losatFilenameActive === true
+  });
+};
+
+/**
+ * @param {Record<string, any>} [plan] unvalidated plan (a session, a draft, or a live plan)
+ * @returns {LinearComparisonPlan}
+ */
+export const normalizeLinearComparisonPlan = (plan = {}) => {
+  const source = plan && typeof plan === 'object' && !Array.isArray(plan) ? plan : {};
+  const edges = (Array.isArray(source.edges) ? source.edges : []).map(normalizeEdge);
+  const usedIds = new Set();
+  edges.forEach((edge, index) => {
+    const baseId = cleanUid(edge.id) || `linear-comparison-draft-${index + 1}`;
+    let id = baseId;
+    let suffix = 2;
+    while (usedIds.has(id)) {
+      id = `${baseId}-${suffix}`;
+      suffix += 1;
+    }
+    edge.id = id;
+    usedIds.add(id);
+  });
+  return {
+    mode: normalizeMode(source.mode),
+    defaultSource: normalizeSource(source.defaultSource),
+    edges
+  };
+};
+
+export const reconcileLinearComparisonPlan = (plan, _sequences = []) => (
+  normalizeLinearComparisonPlan(plan)
+);
+
+const positiveRow = (value, fallback) => {
+  const row = Number(value);
+  return Number.isInteger(row) && row > 0 ? row : fallback;
+};
+
+export const normalizeLinearComparisonRows = (sequences = [], layout = []) => {
+  const storedRows = new Map(
+    (Array.isArray(layout) ? layout : []).map((entry) => [
+      cleanUid(entry?.uid),
+      Number(entry?.row)
+    ])
+  );
+  return (Array.isArray(sequences) ? sequences : []).map((sequence, index) => ({
+    uid: cleanUid(sequence?.uid),
+    row: positiveRow(storedRows.get(cleanUid(sequence?.uid)), index + 1)
+  }));
+};
+
+const linearComparisonRowTopology = (sequences = [], layout = []) => {
+  const sequenceList = Array.isArray(sequences) ? sequences : [];
+  const normalizedRows = normalizeLinearComparisonRows(sequenceList, layout);
+  const rowByUid = new Map(normalizedRows.map((entry) => [entry.uid, entry.row]));
+  const recordsByRow = new Map();
+  sequenceList.forEach((sequence, index) => {
+    const uid = cleanUid(sequence?.uid);
+    const row = rowByUid.get(uid) || index + 1;
+    if (!recordsByRow.has(row)) recordsByRow.set(row, []);
+    recordsByRow.get(row).push({ uid, index, sequence });
+  });
+  const orderedRows = [...recordsByRow.keys()].sort((left, right) => left - right);
+  return {
+    rowByUid,
+    recordsByRow,
+    orderedRows,
+    rowPositionByNumber: new Map(orderedRows.map((row, index) => [row, index]))
+  };
+};
+
+export const adjacentRowPairs = (sequences = [], layout = [], allPairs = false) => {
+  const { recordsByRow, orderedRows } = linearComparisonRowTopology(sequences, layout);
+  const pairs = [];
+  for (let index = 0; index < orderedRows.length - 1; index += 1) {
+    const upper = recordsByRow.get(orderedRows[index]);
+    const lower = recordsByRow.get(orderedRows[index + 1]);
+    if (allPairs) {
+      upper.forEach(({ uid: queryUid }) => {
+        lower.forEach(({ uid: subjectUid }) => pairs.push([queryUid, subjectUid]));
+      });
+      continue;
+    }
+    const pairCount = Math.min(upper.length, lower.length);
+    for (let pairIndex = 0; pairIndex < pairCount; pairIndex += 1) {
+      pairs.push([upper[pairIndex].uid, lower[pairIndex].uid]);
+    }
+  }
+  return pairs;
+};
+
+/**
+ * The display pairs of a collinear comparison laid out by a CLI Session's
+ * complete row grid: every pair across adjacent occupied rows of the drawn
+ * records, as Python closes up a row that records turned OFF leave empty.
+ * Null when the drawn records do not all hold a canonical grid cell; the
+ * comparison plan's edges decide then.
+ * @param {readonly { uid: string }[]} sequences The drawn records, in request order.
+ * @param {readonly { uid: string, row: number, canonicalRow?: number, canonicalColumn?: number,
+ *   canonicalCardinality?: string }[]} rows The drawing's record rows.
+ * @returns {((queryIndex: number, subjectIndex: number) => boolean) | null}
+ */
+export const canonicalGridDisplayPairs = (sequences, rows) => {
+  const cells = sequences.map((seq) => rows.find((entry) => entry.uid === seq.uid));
+  if (cells.length < 2 || !cells.every((entry) => entry?.canonicalRow === entry?.row
+    && Number.isInteger(entry?.canonicalColumn) && Number(entry?.canonicalColumn) > 0
+    && entry?.canonicalCardinality === 'exactly_one')) return null;
+  const pairs = new Set(adjacentRowPairs([...sequences], /** @type {{ uid: string, row: number }[]} */ (cells), true)
+    .map(([upper, lower]) => `${upper}\0${lower}`));
+  return (queryIndex, subjectIndex) => {
+    const query = sequences[queryIndex]?.uid;
+    const subject = sequences[subjectIndex]?.uid;
+    return queryIndex < subjectIndex && (pairs.has(`${query}\0${subject}`) || pairs.has(`${subject}\0${query}`));
+  };
+};
+
+/** @param {LinearComparisonEdge | null} [edge] */
+const validationIssue = (code, message, edge = null) => ({
+  code,
+  message,
+  edgeId: cleanUid(edge?.id),
+  edgeKey: edge ? linearComparisonEdgeKey(edge.queryUid, edge.subjectUid) : ''
+});
+
+/**
+ * @param {{ edges?: any[], sequences?: any[], layout?: any[] }} [options]
+ */
+export const validateLinearComparisonEdges = ({
+  edges = [],
+  sequences = [],
+  layout = []
+} = {}) => {
+  const sequenceList = Array.isArray(sequences) ? sequences : [];
+  const validUids = new Set(sequenceList.map((sequence) => cleanUid(sequence?.uid)).filter(Boolean));
+  const { rowByUid, rowPositionByNumber } = linearComparisonRowTopology(sequenceList, layout);
+  const seen = new Set();
+  const issues = [];
+
+  (Array.isArray(edges) ? edges : []).forEach((edge) => {
+    const edgeKey = linearComparisonEdgeKey(edge?.queryUid, edge?.subjectUid);
+    if (seen.has(edgeKey)) {
+      issues.push(validationIssue('duplicate', 'Selected comparisons cannot contain the same directed pair more than once.', edge));
+    }
+    seen.add(edgeKey);
+
+    const queryUid = cleanUid(edge?.queryUid);
+    const subjectUid = cleanUid(edge?.subjectUid);
+    if (!validUids.has(queryUid) || !validUids.has(subjectUid)) {
+      issues.push(validationIssue('missing-uid', 'A selected comparison references a record that is no longer available.', edge));
+      return;
+    }
+    if (queryUid === subjectUid) {
+      issues.push(validationIssue('self', 'A comparison cannot connect a record to itself.', edge));
+      return;
+    }
+    const queryRow = rowByUid.get(queryUid);
+    const subjectRow = rowByUid.get(subjectUid);
+    if (queryRow === subjectRow) {
+      issues.push(validationIssue('same-row', 'Comparisons must connect records in different rows.', edge));
+    } else if (
+      // Every valid uid has a row and every row has a position (linearComparisonRowTopology).
+      Math.abs(/** @type {number} */ (rowPositionByNumber.get(queryRow)) - /** @type {number} */ (rowPositionByNumber.get(subjectRow))) !== 1
+    ) {
+      issues.push(validationIssue('non-adjacent', 'Comparisons must connect adjacent rows.', edge));
+    }
+    if (
+      normalizeSource(edge?.source, LINEAR_COMPARISON_SOURCES.UPLOAD) === LINEAR_COMPARISON_SOURCES.UPLOAD &&
+      (edge?.fileActive !== true || !edge?.file)
+    ) {
+      issues.push(validationIssue(
+        'missing-upload',
+        'Every selected uploaded comparison requires an active BLAST TSV file.',
+        edge
+      ));
+    }
+  });
+  return issues;
+};
+
+const resolvedEdge = ({ edge, queryUid, subjectUid, queryIndex, subjectIndex, source, ordinal }) => Object.freeze({
+  id: cleanUid(edge?.id) || `linear-derived-${linearComparisonEdgeKey(queryUid, subjectUid)}`,
+  queryUid,
+  subjectUid,
+  queryIndex,
+  subjectIndex,
+  edgeKey: linearComparisonEdgeKey(queryUid, subjectUid),
+  ordinal,
+  source,
+  included: true,
+  file: edge?.file || null,
+  fileActive: edge?.fileActive === true,
+  losatFilename: String(edge?.losatFilename || ''),
+  losatFilenameActive: edge?.losatFilenameActive === true
+});
+
+// A selected pair that names an OFF record is left out with its record and
+// comes back with it; a pair that names a record without a card stays an issue.
+/**
+ * @template {{ uid?: unknown }} T
+ * @param {Record<string, unknown>} plan
+ * @param {readonly T[]} sequences Every record card.
+ * @param {Iterable<unknown> | null | undefined} recordsOff
+ */
+const drawnComparisonInputs = (plan, sequences, recordsOff) => {
+  const normalized = normalizeLinearComparisonPlan(plan);
+  const omitted = omittedLinearUids(sequences, recordsOff);
+  if (omitted.size > 0) {
+    normalized.edges = normalized.edges.filter((edge) => (
+      !omitted.has(cleanUid(edge.queryUid)) && !omitted.has(cleanUid(edge.subjectUid))
+    ));
+  }
+  return { normalized, sequenceList: drawnLinearSequences(sequences, recordsOff) };
+};
+
+/**
+ * The plan a Generate runs: its pairs join the drawn records, and every index
+ * is a position in the drawn list (`drawnLinearSequences`).
+ * @param {{
+ *   plan?: Record<string, any>,
+ *   sequences?: any[],
+ *   recordsOff?: Iterable<unknown>,
+ *   layout?: any[],
+ *   losatProgram?: string,
+ *   blastpMode?: string
+ * }} [options]
+ * @returns {LinearComparisonResolution}
+ */
+export const resolveLinearComparisonPlan = ({
+  plan = createDefaultLinearComparisonPlan(),
+  sequences = [],
+  recordsOff = [],
+  layout = [],
+  losatProgram = 'blastn',
+  blastpMode = 'orthogroup'
+} = {}) => {
+  const { normalized, sequenceList } = drawnComparisonInputs(
+    plan, Array.isArray(sequences) ? sequences : [], recordsOff
+  );
+  const indexByUid = new Map(sequenceList.map((sequence, index) => [cleanUid(sequence?.uid), index]));
+  const draftByEdgeKey = new Map();
+  normalized.edges.forEach((edge) => {
+    const edgeKey = linearComparisonEdgeKey(edge.queryUid, edge.subjectUid);
+    if (!draftByEdgeKey.has(edgeKey)) draftByEdgeKey.set(edgeKey, edge);
+  });
+  const normalizedProgram = VALID_LOSAT_PROGRAMS.has(String(losatProgram || '').trim().toLowerCase())
+    ? String(losatProgram).trim().toLowerCase()
+    : 'blastn';
+  const normalizedBlastpMode = String(blastpMode || 'orthogroup').trim().toLowerCase();
+
+  let activeDrafts = [];
+  if (normalized.mode === LINEAR_COMPARISON_MODES.SELECTED) {
+    activeDrafts = normalized.edges.filter((edge) => edge.included === true);
+  } else if (normalized.mode === LINEAR_COMPARISON_MODES.ADJACENT) {
+    activeDrafts = adjacentRowPairs(
+      sequenceList,
+      layout,
+      true
+    ).map(([queryUid, subjectUid]) => {
+      const edgeKey = linearComparisonEdgeKey(queryUid, subjectUid);
+      const draft = draftByEdgeKey.get(edgeKey);
+      return {
+        ...(draft || {
+          id: `linear-derived-${edgeKey}`,
+          file: null,
+          fileActive: false,
+          losatFilename: '',
+          losatFilenameActive: false
+        }),
+        queryUid,
+        subjectUid,
+        included: true,
+        source: normalized.defaultSource
+      };
+    });
+    if (normalized.defaultSource === LINEAR_COMPARISON_SOURCES.UPLOAD) {
+      activeDrafts = activeDrafts.filter((edge) => edge.fileActive === true && Boolean(edge.file));
+    }
+  }
+
+  const issues = normalized.mode === LINEAR_COMPARISON_MODES.SELECTED
+    ? validateLinearComparisonEdges({ edges: activeDrafts, sequences: sequenceList, layout })
+    : [];
+  const selectedHasLosat = normalized.mode === LINEAR_COMPARISON_MODES.SELECTED &&
+    activeDrafts.some((edge) => edge.source === LINEAR_COMPARISON_SOURCES.LOSAT);
+  if (selectedHasLosat && normalizedProgram === 'blastp' && normalizedBlastpMode !== 'pairwise') {
+    issues.push(validationIssue(
+      'selected-losat-requires-pairwise',
+      'Selected LOSAT comparisons require LOSATP Pairwise mode. Similarity groups and Collinear blocks use All adjacent LOSAT.',
+      null
+    ));
+  }
+
+  const edges = activeDrafts.map((edge, ordinal) => resolvedEdge({
+    edge,
+    queryUid: cleanUid(edge.queryUid),
+    subjectUid: cleanUid(edge.subjectUid),
+    queryIndex: indexByUid.get(cleanUid(edge.queryUid)),
+    subjectIndex: indexByUid.get(cleanUid(edge.subjectUid)),
+    source: normalizeSource(edge.source),
+    ordinal
+  }));
+  // A missing upload comes last (D-54): Generate asks about it only when nothing
+  // else blocks the run; otherwise the run and the panel report the other issue.
+  const frozenIssues = Object.freeze([
+    ...issues.filter((issue) => issue.code !== 'missing-upload'),
+    ...issues.filter((issue) => issue.code === 'missing-upload')
+  ].map((issue) => Object.freeze(issue)));
+  const frozenEdges = Object.freeze(edges);
+  const hasAnalysisIntent = sequenceList.length > 1
+    && normalized.mode === LINEAR_COMPARISON_MODES.ADJACENT
+    && normalized.defaultSource === LINEAR_COMPARISON_SOURCES.LOSAT
+    && normalizedProgram === 'blastp'
+    && ['orthogroup', 'collinear'].includes(normalizedBlastpMode);
+  const hasLosatIntent = hasAnalysisIntent
+    || edges.some((edge) => edge.source === LINEAR_COMPARISON_SOURCES.LOSAT);
+  const hasUploadIntent = edges.some((edge) => edge.source === LINEAR_COMPARISON_SOURCES.UPLOAD);
+
+  return Object.freeze({
+    mode: normalized.mode,
+    defaultSource: normalized.defaultSource,
+    edges: frozenEdges,
+    errors: frozenIssues,
+    error: frozenIssues[0]?.message || '',
+    valid: frozenIssues.length === 0,
+    hasComparisonIntent: hasAnalysisIntent || edges.length > 0,
+    hasLosatIntent,
+    hasUploadIntent
+  });
+};
+
+/**
+ * The pairs set to Upload BLAST TSV without an active file, when they are the
+ * draft's only issues: Generate asks to choose a file or set them to No
+ * comparison (D-54). Any other issue keeps its typed error, since setting the
+ * pairs to No comparison would not let the run succeed.
+ * @param {LinearComparisonResolution | null | undefined} resolution
+ * @returns {{ edgeKey: string, queryIndex: number, subjectIndex: number, label: string }[]}
+ */
+export const missingUploadPairsToResolve = (resolution) => {
+  const issues = resolution?.errors || [];
+  if (issues.some((issue) => issue.code !== 'missing-upload')) return [];
+  const missing = new Set(issues.map((issue) => issue.edgeKey));
+  return (resolution?.edges || []).filter((edge) => missing.has(edge.edgeKey)).map((edge) => ({
+    edgeKey: edge.edgeKey,
+    queryIndex: edge.queryIndex,
+    subjectIndex: edge.subjectIndex,
+    label: `#${edge.queryIndex + 1} → #${edge.subjectIndex + 1}`
+  }));
+};
+
+export const hasLinearComparisonIntent = (resolution) => Boolean(resolution?.hasComparisonIntent);
+export const hasActiveLinearLosatIntent = (resolution) => Boolean(resolution?.hasLosatIntent);
+export const hasActiveLinearUploadIntent = (resolution) => Boolean(resolution?.hasUploadIntent);
+
+const hasRetainedPayload = (edge) => Boolean(
+  edge?.file || String(edge?.losatFilename || '').trim()
+);
+
+export const materializeResolvedEdgesAsSelectedPlan = (plan, resolution) => {
+  const normalized = normalizeLinearComparisonPlan(plan);
+  const existingById = new Map(normalized.edges.map((edge) => [edge.id, edge]));
+  const existingByKey = new Map();
+  normalized.edges.forEach((edge) => {
+    const edgeKey = linearComparisonEdgeKey(edge.queryUid, edge.subjectUid);
+    if (!existingByKey.has(edgeKey)) existingByKey.set(edgeKey, edge);
+  });
+  const activeKeys = new Set();
+  const activeIds = new Set();
+  const selectedEdges = (Array.isArray(resolution?.edges) ? resolution.edges : []).map((edge) => {
+    activeKeys.add(edge.edgeKey);
+    const existing = existingById.get(edge.id) || existingByKey.get(edge.edgeKey);
+    const selected = createLinearComparisonEdge({
+      ...(existing || edge),
+      id: existing?.id || '',
+      queryUid: edge.queryUid,
+      subjectUid: edge.subjectUid,
+      included: true,
+      source: edge.source
+    });
+    activeIds.add(selected.id);
+    return selected;
+  });
+  normalized.edges.forEach((edge) => {
+    const edgeKey = linearComparisonEdgeKey(edge.queryUid, edge.subjectUid);
+    if (activeIds.has(edge.id)) return;
+    if (!activeKeys.has(edgeKey) && !hasRetainedPayload(edge)) return;
+    selectedEdges.push({ ...edge, included: false });
+  });
+  return {
+    mode: LINEAR_COMPARISON_MODES.SELECTED,
+    defaultSource: normalized.defaultSource,
+    edges: selectedEdges
+  };
+};
+
+const STRUCTURAL_PRESENTATION_ISSUES = new Set([
+  'duplicate',
+  'missing-uid',
+  'self',
+  'same-row',
+  'non-adjacent'
+]);
+
+const boundaryKey = (upperRow, lowerRow) => `${upperRow}->${lowerRow}`;
+
+const pairBoundary = ({ queryUid, subjectUid, rowByUid, rowPositionByNumber, boundariesByKey }) => {
+  const queryRow = rowByUid.get(queryUid);
+  const subjectRow = rowByUid.get(subjectUid);
+  const queryPosition = rowPositionByNumber.get(queryRow);
+  const subjectPosition = rowPositionByNumber.get(subjectRow);
+  if (
+    queryPosition === undefined ||
+    subjectPosition === undefined ||
+    Math.abs(queryPosition - subjectPosition) !== 1
+  ) {
+    return null;
+  }
+  const upperRow = queryPosition < subjectPosition ? queryRow : subjectRow;
+  const lowerRow = queryPosition < subjectPosition ? subjectRow : queryRow;
+  return boundariesByKey.get(boundaryKey(upperRow, lowerRow)) || null;
+};
+
+const presentationSource = ({ normalizedPlan, candidateKind, draft, resolved }) => {
+  if (resolved) return resolved.source;
+  if (
+    candidateKind === 'zipped' &&
+    normalizedPlan.mode === LINEAR_COMPARISON_MODES.ADJACENT
+  ) {
+    return normalizedPlan.defaultSource;
+  }
+  if (normalizedPlan.mode === LINEAR_COMPARISON_MODES.SELECTED && draft?.included) {
+    return draft.source;
+  }
+  return 'none';
+};
+
+/**
+ * @typedef {{ upperRow: number, lowerRow: number, pairs: any[] }} LinearComparisonBoundary The pairs drawn between two adjacent rows.
+ */
+
+/**
+ * The rows of drawn records and the pairs between them; a pair that names an
+ * OFF record is neither drawn nor listed as unplaced.
+ * @param {{ sequences?: any[], recordsOff?: Iterable<unknown>, layout?: any[], plan?: Record<string, any>,
+ *   resolution?: LinearComparisonResolution | null }} [options]
+ */
+export const buildLinearComparisonTimeline = ({
+  sequences = [],
+  recordsOff = [],
+  layout = [],
+  plan = createDefaultLinearComparisonPlan(),
+  resolution = null
+} = {}) => {
+  const { normalized: normalizedPlan, sequenceList } = drawnComparisonInputs(
+    plan, Array.isArray(sequences) ? sequences : [], recordsOff
+  );
+  const indexByUid = new Map(sequenceList.map((sequence, index) => [cleanUid(sequence?.uid), index]));
+  const {
+    rowByUid,
+    recordsByRow,
+    orderedRows,
+    rowPositionByNumber
+  } = linearComparisonRowTopology(sequenceList, layout);
+  const boundariesByKey = new Map();
+  const rows = orderedRows.map((row, index) => {
+    /** @type {LinearComparisonBoundary | null} */
+    let boundaryAfter = null;
+    if (index < orderedRows.length - 1) {
+      const lowerRow = orderedRows[index + 1];
+      boundaryAfter = {
+        upperRow: row,
+        lowerRow,
+        pairs: []
+      };
+      boundariesByKey.set(boundaryKey(row, lowerRow), boundaryAfter);
+    }
+    return {
+      row,
+      records: recordsByRow.get(row),
+      boundaryAfter
+    };
+  });
+
+  const issuesByDraftId = new Map();
+  validateLinearComparisonEdges({
+    edges: normalizedPlan.edges,
+    sequences: sequenceList,
+    layout
+  }).forEach((issue) => {
+    if (!STRUCTURAL_PRESENTATION_ISSUES.has(issue.code)) return;
+    if (!issuesByDraftId.has(issue.edgeId)) issuesByDraftId.set(issue.edgeId, []);
+    issuesByDraftId.get(issue.edgeId).push(issue);
+  });
+
+  const resolutionEdges = Array.isArray(resolution?.edges) ? resolution.edges : [];
+  const resolvedCandidateByEdgeKey = new Map();
+  resolutionEdges.forEach((edge) => {
+    if (!resolvedCandidateByEdgeKey.has(edge.edgeKey)) {
+      resolvedCandidateByEdgeKey.set(edge.edgeKey, edge);
+    }
+  });
+  const draftsByEdgeKey = new Map();
+  normalizedPlan.edges.forEach((draft) => {
+    const edgeKey = linearComparisonEdgeKey(draft.queryUid, draft.subjectUid);
+    if (!draftsByEdgeKey.has(edgeKey)) draftsByEdgeKey.set(edgeKey, []);
+    draftsByEdgeKey.get(edgeKey).push(draft);
+  });
+  const ownerDraftByEdgeKey = new Map();
+  draftsByEdgeKey.forEach((drafts, edgeKey) => {
+    const resolvedId = cleanUid(resolvedCandidateByEdgeKey.get(edgeKey)?.id);
+    ownerDraftByEdgeKey.set(
+      edgeKey,
+      drafts.find((draft) => draft.id === resolvedId) || drafts[0]
+    );
+  });
+
+  const unplacedDrafts = [];
+  const draftByEdgeKey = new Map();
+  normalizedPlan.edges.forEach((draft) => {
+    const edgeKey = linearComparisonEdgeKey(draft.queryUid, draft.subjectUid);
+    const owner = ownerDraftByEdgeKey.get(edgeKey);
+    const issues = (issuesByDraftId.get(draft.id) || [])
+      .filter((issue) => issue.code !== 'duplicate');
+    const boundary = pairBoundary({
+      queryUid: draft.queryUid,
+      subjectUid: draft.subjectUid,
+      rowByUid,
+      rowPositionByNumber,
+      boundariesByKey
+    });
+    if (draft !== owner) {
+      const fallbackIssues = [
+        validationIssue(
+          'duplicate',
+          'Selected comparisons cannot contain the same directed pair more than once.',
+          draft
+        ),
+        ...issues
+      ];
+      unplacedDrafts.push({ draft, issues: fallbackIssues });
+      return;
+    }
+    if (issues.length > 0 || !boundary) {
+      const fallbackIssues = issues.length > 0 ? issues : [validationIssue(
+        'non-adjacent',
+        'Comparisons must connect adjacent rows.',
+        draft
+      )];
+      unplacedDrafts.push({ draft, issues: fallbackIssues });
+      return;
+    }
+    draftByEdgeKey.set(edgeKey, draft);
+  });
+
+  const resolvedByEdgeKey = new Map();
+  resolutionEdges.forEach((edge) => {
+    const edgeDrafts = draftsByEdgeKey.get(edge.edgeKey) || [];
+    if (edgeDrafts.length > 0) {
+      const owner = draftByEdgeKey.get(edge.edgeKey);
+      if (!owner || owner.id !== edge.id) return;
+    }
+    if (!resolvedByEdgeKey.has(edge.edgeKey)) resolvedByEdgeKey.set(edge.edgeKey, edge);
+  });
+  const pairByEdgeKey = new Map();
+  const addPair = ({ queryUid, subjectUid, candidateKind }) => {
+    const edgeKey = linearComparisonEdgeKey(queryUid, subjectUid);
+    const boundary = pairBoundary({
+      queryUid,
+      subjectUid,
+      rowByUid,
+      rowPositionByNumber,
+      boundariesByKey
+    });
+    if (!boundary || pairByEdgeKey.has(edgeKey)) return;
+    const draft = draftByEdgeKey.get(edgeKey) || null;
+    const resolved = resolvedByEdgeKey.get(edgeKey) || null;
+    const pair = {
+      edgeKey,
+      edgeId: draft?.id || resolved?.id || `linear-derived-${edgeKey}`,
+      queryUid,
+      subjectUid,
+      queryIndex: indexByUid.get(queryUid),
+      subjectIndex: indexByUid.get(subjectUid),
+      source: presentationSource({ normalizedPlan, candidateKind, draft, resolved }),
+      active: Boolean(resolved),
+      candidateKind,
+      draft,
+      resolved
+    };
+    boundary.pairs.push(pair);
+    pairByEdgeKey.set(edgeKey, pair);
+  };
+
+  adjacentRowPairs(sequenceList, layout).forEach(([queryUid, subjectUid]) => {
+    addPair({ queryUid, subjectUid, candidateKind: 'zipped' });
+  });
+  resolutionEdges.forEach((edge) => {
+    if (resolvedByEdgeKey.get(edge.edgeKey) !== edge) return;
+    addPair({
+      queryUid: cleanUid(edge?.queryUid),
+      subjectUid: cleanUid(edge?.subjectUid),
+      candidateKind: 'resolved'
+    });
+  });
+  normalizedPlan.edges.forEach((draft) => {
+    if (draftByEdgeKey.get(linearComparisonEdgeKey(draft.queryUid, draft.subjectUid)) !== draft) return;
+    addPair({
+      queryUid: draft.queryUid,
+      subjectUid: draft.subjectUid,
+      candidateKind: 'draft'
+    });
+  });
+
+  return { rows, unplacedDrafts };
+};
+
+/**
+ * @param {{
+ *   resolution?: LinearComparisonResolution,
+ *   program?: string,
+ *   blastpMode?: string
+ * }} [options]
+ * @returns {readonly LosatJobSpec[]}
+ */
+export const buildPairwiseLosatJobSpecs = ({
+  resolution,
+  program = 'blastn',
+  blastpMode = 'pairwise'
+} = {}) => {
+  if (!resolution || !Array.isArray(resolution.edges)) {
+    throw new Error('A resolved Linear comparison plan is required.');
+  }
+  if (resolution.error) throw new Error(resolution.error);
+  const normalizedProgram = String(program || '').trim().toLowerCase();
+  if (!VALID_LOSAT_PROGRAMS.has(normalizedProgram)) {
+    throw new Error(`Unsupported LOSAT program: ${program}`);
+  }
+  if (normalizedProgram === 'blastp' && String(blastpMode || '').trim().toLowerCase() !== 'pairwise') {
+    if (resolution.mode === LINEAR_COMPARISON_MODES.SELECTED && resolution.hasLosatIntent) {
+      throw new Error('Selected LOSAT comparisons require LOSATP Pairwise mode.');
+    }
+    return Object.freeze([]);
+  }
+  return Object.freeze(resolution.edges
+    .filter((edge) => edge.source === LINEAR_COMPARISON_SOURCES.LOSAT)
+    .map((edge) => Object.freeze({
+      edgeKey: edge.edgeKey,
+      ordinal: edge.ordinal,
+      queryUid: edge.queryUid,
+      subjectUid: edge.subjectUid,
+      queryIndex: edge.queryIndex,
+      subjectIndex: edge.subjectIndex,
+      program: normalizedProgram
+    })));
+};
+
+// The record-pair searches one Generate requests. Generate and the Settings
+// job-count estimate both expand them here (N-10). Similarity groups always
+// include within-record evidence; Collinear includes it only when inference is
+// on (PD-OI-018 item 4).
+/**
+ * @param {{
+ *   resolution?: LinearComparisonResolution,
+ *   recordCount?: number,
+ *   recordUids?: string[],
+ *   program?: string,
+ *   blastpMode?: string,
+ *   collinearInferOrthogroups?: boolean,
+ *   collinearSearchScope?: string
+ * }} [options]
+ * @returns {readonly LosatJobSpec[]}
+ */
+export const buildLosatJobSpecs = ({
+  resolution,
+  recordCount = 0,
+  recordUids = [],
+  program = 'blastn',
+  blastpMode = 'pairwise',
+  collinearInferOrthogroups = true,
+  collinearSearchScope = 'adjacent'
+} = {}) => {
+  const normalizedProgram = String(program || '').trim().toLowerCase();
+  const mode = String(blastpMode || '').trim().toLowerCase();
+  if (normalizedProgram !== 'blastp' || !['orthogroup', 'collinear'].includes(mode)) {
+    return buildPairwiseLosatJobSpecs({ resolution, program: normalizedProgram, blastpMode: mode });
+  }
+  const edges = (resolution?.edges || []).filter((edge) => edge.source === LINEAR_COMPARISON_SOURCES.LOSAT);
+  const lastOrdinal = Math.max(0, edges.length - 1);
+  const specs = [];
+  const push = (queryIndex, subjectIndex, ordinal) => {
+    const edge = edges.find((candidate) => (
+      candidate.queryIndex === queryIndex && candidate.subjectIndex === subjectIndex
+    )) || edges.find((candidate) => candidate.ordinal === ordinal) || edges[Math.max(0, Math.min(ordinal, lastOrdinal))];
+    specs.push(Object.freeze({
+      edgeKey: edge?.edgeKey || '',
+      ordinal: edge?.ordinal ?? ordinal,
+      queryUid: recordUids[queryIndex],
+      subjectUid: recordUids[subjectIndex],
+      queryIndex,
+      subjectIndex,
+      program: normalizedProgram
+    }));
+  };
+  const pushPairs = (withSelf) => {
+    for (let i = 0; i < recordCount; i += 1) {
+      if (withSelf) push(i, i, Math.min(i, lastOrdinal));
+      for (let j = i + 1; j < recordCount; j += 1) {
+        push(i, j, Math.min(i, lastOrdinal));
+        push(j, i, Math.min(i, lastOrdinal));
+      }
+    }
+  };
+  if (mode === 'orthogroup') {
+    pushPairs(true);
+    return Object.freeze(specs);
+  }
+  if (collinearInferOrthogroups !== false) {
+    for (let i = 0; i < recordCount; i += 1) push(i, i, Math.min(i, lastOrdinal));
+  }
+  if (collinearSearchScope === 'all') {
+    pushPairs(false);
+  } else {
+    edges.forEach((edge) => {
+      push(edge.queryIndex, edge.subjectIndex, edge.ordinal);
+      push(edge.subjectIndex, edge.queryIndex, edge.ordinal);
+    });
+  }
+  return Object.freeze(specs);
+};

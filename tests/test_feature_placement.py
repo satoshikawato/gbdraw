@@ -136,9 +136,9 @@ def test_directional_shape_and_deferred_geometry_validation(mode, side):
     plan = plan_request(
         _request(mode=mode, feature_placements=(override,), config_overrides=config)
     )
-    assert plan.inputs.placements[0].foreground[0].target == target
+    assert plan.inputs.record_features[0].foreground[0].target == target
     assert asdict(target) == {"kind": "lane", "side": side, "level": 1}
-    assert not hasattr(plan.inputs.placements[0].foreground[0], "feature_track_id")
+    assert not hasattr(plan.inputs.record_features[0].foreground[0], "feature_track_id")
 
 
 @pytest.mark.parametrize(
@@ -232,6 +232,21 @@ def test_source_selector_zero_and_many_error(selector, count):
         plan_request(_request(feature_placement_table=_table(selector)))
 
 
+def test_hash_selector_names_one_of_identical_source_features():
+    record = _record()
+    alpha, beta = build_source_feature_catalog(record)[1:3]
+    assert alpha.stable_feature_id == beta.stable_feature_id
+    assert beta.biological_feature_id == f"{beta.stable_feature_id}~2"
+    plan = plan_request(
+        _request(record, feature_placement_table=_table(f"hash={beta.biological_feature_id}"))
+    )
+    assert plan.request.options.feature_placements == (_exact(record, 2),)
+    assert plan.inputs.record_features[0].foreground[0].source_feature_index == 2
+    # The original-coordinate hash still names both identical features.
+    with pytest.raises(ValidationError, match="matched 2"):
+        plan_request(_request(feature_placement_table=_table(f"hash={beta.stable_feature_id}")))
+
+
 def test_selector_normalizes_auto_removes_table_and_keeps_original_dataframe():
     table = DataFrame(
         [
@@ -260,7 +275,7 @@ def test_selector_normalizes_auto_removes_table_and_keeps_original_dataframe():
     assert plan.request.options.feature_placement_table is None
     assert plan.request.options.feature_placement_table_file is None
     assert request.options.feature_placement_table is table and table.equals(before)
-    assert plan.inputs.placements[0].overrides[0].source_feature_index == 2
+    assert plan.inputs.record_features[0].placements[0].source_feature_index == 2
 
 
 def test_file_table_supports_hash_record_index_and_drops_path(tmp_path):
@@ -314,7 +329,7 @@ def test_exact_sort_and_duplicate_hashes_are_independent():
     plan = plan_request(_request(record, feature_placements=(beta, alpha)))
     assert plan.request.options.feature_placements == (alpha, beta)
     assert [
-        row.source_feature_index for row in plan.inputs.placements[0].foreground
+        row.source_feature_index for row in plan.inputs.record_features[0].foreground
     ] == [1, 2]
 
 
@@ -337,7 +352,7 @@ def test_source_identity_intent_and_parts_survive_display_and_reverse(
         _request(mode=mode, records=(inp,), feature_placements=(exact,))
     )
     assert plan.request.options.feature_placements == (exact,)
-    binding = plan.inputs.placements[0].foreground[0]
+    binding = plan.inputs.record_features[0].foreground[0]
     assert (
         binding.source_feature_index == 3
         and binding.biological_feature_id == exact.biological_feature_id
@@ -376,10 +391,10 @@ def test_request_crop_known_dormant_and_materialized_request_rebind(
         feature_placements=(exact,),
     )
     plan = plan_request(request)
-    assert plan.inputs.placements[0].overrides[0].status == status
-    assert bool(plan.inputs.placements[0].foreground) == (status == "foreground")
+    assert plan.inputs.record_features[0].placements[0].status == status
+    assert bool(plan.inputs.record_features[0].foreground) == (status == "foreground")
     replay = plan_request(plan.request)
-    assert replay.inputs.placements == plan.inputs.placements
+    assert replay.inputs.record_features == plan.inputs.record_features
     assert (
         replay.provenance[0].source_feature_catalog
         is plan.provenance[0].source_feature_catalog
@@ -388,7 +403,7 @@ def test_request_crop_known_dormant_and_materialized_request_rebind(
         replace(request, records=(replace(request.records[0], region=None),))
     )
     assert (
-        restored.inputs.placements[0].foreground[0].biological_feature_id
+        restored.inputs.record_features[0].foreground[0].biological_feature_id
         == exact.biological_feature_id
     )
 
@@ -405,7 +420,7 @@ def test_selector_uses_original_source_before_crop():
         feature_placement_table=_table(),
     )
     plan = plan_request(request)
-    assert plan.inputs.placements[0].overrides[0].status == "crop_excluded"
+    assert plan.inputs.record_features[0].placements[0].status == "crop_excluded"
     assert len(plan.request.options.feature_placements) == 1
 
 
@@ -429,8 +444,8 @@ def test_existing_visibility_and_rendering_owners_classify_occupancy(kind):
     elif kind == "underlay":
         options["feature_shapes"] = {"CDS": "underlay"}
     plan = plan_request(_request(record, **options))
-    assert plan.inputs.placements[0].overrides[0].status == kind
-    assert bool(plan.inputs.placements[0].foreground) == (kind == "foreground")
+    assert plan.inputs.record_features[0].placements[0].status == kind
+    assert bool(plan.inputs.record_features[0].foreground) == (kind == "foreground")
     assert plan.request.options.feature_placements == (exact,)
     restored = plan_request(
         replace(
@@ -441,7 +456,7 @@ def test_existing_visibility_and_rendering_owners_classify_occupancy(kind):
         )
     )
     assert (
-        restored.inputs.placements[0].foreground[0].biological_feature_id
+        restored.inputs.record_features[0].foreground[0].biological_feature_id
         == exact.biological_feature_id
     )
 
@@ -455,17 +470,25 @@ def test_default_underlay_and_type_hidden_are_dormant():
     )
     statuses = {
         row.source_feature_index: row.status
-        for row in plan_request(request).inputs.placements[0].overrides
+        for row in plan_request(request).inputs.record_features[0].placements
     }
     assert statuses == {0: "hidden", 4: "underlay"}
 
 
-@pytest.mark.parametrize(
-    "key,identity", [("one", "stale"), ("missing", "stale"), ("one", "f1234_record_1")]
-)
-def test_unknown_or_rendered_identity_never_becomes_dormant(key, identity):
-    override = FeaturePlacementOverride(key, identity, FeaturePlacementTarget("main"))
-    with pytest.raises(ValidationError, match="Unknown|stale"):
+@pytest.mark.parametrize("identity", ["stale", "f1234_record_1"])
+def test_unknown_or_rendered_identity_is_an_unresolved_notice(identity):
+    # Owner Q3 = A: an identity the source does not have notifies; Generate succeeds.
+    override = FeaturePlacementOverride("one", identity, FeaturePlacementTarget("main"))
+    plan = plan_request(_request(feature_placements=(override,)))
+    assert plan.inputs.record_features[0].placements == ()
+    assert [(n.biological_feature_id, n.status, n.kinds) for n in plan.inputs.feature_identity_notices] == [
+        (identity, "unresolved", ("placement",)),
+    ]
+
+
+def test_placement_for_a_record_outside_the_request_fails():
+    override = FeaturePlacementOverride("missing", "stale", FeaturePlacementTarget("main"))
+    with pytest.raises(ValidationError, match="Unknown feature identity record key"):
         plan_request(_request(feature_placements=(override,)))
 
 
@@ -483,8 +506,9 @@ def test_caller_precropped_record_does_not_infer_unseen_source():
             )
         )
     ).records[0]
-    with pytest.raises(ValidationError, match="Unknown/stale"):
-        plan_request(_request(crop, feature_placements=(exact,)))
+    plan = plan_request(_request(crop, feature_placements=(exact,)))
+    assert plan.inputs.record_features[0].placements == ()
+    assert [n.status for n in plan.inputs.feature_identity_notices] == ["unresolved"]
 
 
 @pytest.mark.parametrize("reorder", [False, True])
@@ -500,10 +524,10 @@ def test_duplicate_biological_record_ids_are_isolated_and_reordered_by_key(reord
     plan = plan_request(
         _request(mode="linear", records=records, feature_placements=(exact,))
     )
-    assert [r.record_key for r in plan.inputs.placements] == [
+    assert [r.record_key for r in plan.inputs.record_features] == [
         r.record_key for r in records
     ]
-    assert {r.record_key: len(r.foreground) for r in plan.inputs.placements} == {
+    assert {r.record_key: len(r.foreground) for r in plan.inputs.record_features} == {
         "first": 0,
         "second": 1,
     }
@@ -572,7 +596,7 @@ def test_resource_catalog_is_built_once_and_reused_across_crop_reverse_display(
         layers = _planned_layers(plan)
         assert len(layers.foreground_features) == (1 if crop else 3)
         if crop:
-            assert plan.inputs.placements[0].overrides[0].status == "crop_excluded"
+            assert plan.inputs.record_features[0].placements[0].status == "crop_excluded"
             assert all(f.placement.requested_target is None for f in layers.foreground_features.values())
         else:
             assert _assignments(layers)[1].requested_target == FeaturePlacementTarget("main")
@@ -630,13 +654,13 @@ def test_batch_projects_only_each_instances_intent_and_binding():
     plan = plan_request(request)
     first, second = plan.item_plans()
     assert first.request.options.feature_placements == ()
-    assert first.inputs.placements[0].record_key == "first"
-    assert first.inputs.placements[0].overrides == ()
+    assert first.inputs.record_features[0].record_key == "first"
+    assert first.inputs.record_features[0].placements == ()
     assert second.request.options.feature_placements == (_exact(record, key="second"),)
-    assert len(second.inputs.placements) == 1
-    assert second.inputs.placements[0] == plan.inputs.placements[1]
+    assert len(second.inputs.record_features) == 1
+    assert second.inputs.record_features[0] == plan.inputs.record_features[1]
     assert first.inputs.features is second.inputs.features is plan.inputs.features
-    assert plan_request(second.request).inputs.placements == second.inputs.placements
+    assert plan_request(second.request).inputs.record_features == second.inputs.record_features
 
 
 def test_annotation_single_selector_still_allows_multiple_source_matches():
@@ -709,8 +733,8 @@ def test_gff_source_catalog_retains_features_before_loader_visibility_filter(tmp
     plan = plan_request(request)
     assert len(plan.provenance[0].source_feature_catalog) == 2
     assert [feature.type for feature in plan.records[0].features] == ["CDS"]
-    assert plan.inputs.placements[0].overrides[0].status == "hidden"
-    assert plan.inputs.placements[0].foreground == ()
+    assert plan.inputs.record_features[0].placements[0].status == "hidden"
+    assert plan.inputs.record_features[0].foreground == ()
     shown = plan_request(
         replace(
             request,
@@ -721,7 +745,7 @@ def test_gff_source_catalog_retains_features_before_loader_visibility_filter(tmp
         shown.request.options.feature_placements
         == plan.request.options.feature_placements
     )
-    assert shown.inputs.placements[0].foreground[0].source_feature_index == 0
+    assert shown.inputs.record_features[0].foreground[0].source_feature_index == 0
 
 
 def test_gff_catalog_capture_keeps_duplicate_biological_records_instance_aligned(
@@ -765,7 +789,7 @@ def test_shared_planner_reserves_fixed_main_before_auto():
     layers = create_feature_layers(
         plan.records[0], {}, ["CDS"], {"default": "#999999", "CDS": "#999999"},
         False, True, {}, compute_label_text=False,
-        placement_inputs=plan.inputs.placements[0],
+        record_features=plan.inputs.record_features[0],
         placement_slot=FeaturePlacementSlot("circular", "split", False),
     )
     features = {f.source_feature_index: f for f in layers.foreground_features.values()}
@@ -787,7 +811,7 @@ def _planned_layers(plan, *, mode="circular", direction="split", separate=False,
         separate, resolve, {}, compute_label_text=False,
         feature_shapes=plan.request.options.feature_shapes,
         record_transform=plan.transforms[index],
-        placement_inputs=plan.inputs.placements[index] if plan.inputs.placements else None,
+        record_features=plan.inputs.record_features[index] if plan.inputs.record_features else None,
         placement_slot=FeaturePlacementSlot(mode, direction, separate),
         feature_overlap_tolerance_bp=tolerance,
     )
@@ -915,6 +939,39 @@ def test_unsupported_resolved_slot_directions_are_errors(mode, direction, separa
         _planned_layers(plan, mode=mode, direction=direction, separate=separate)
 
 
+@pytest.mark.parametrize("mode,direction,separate,side,reason", [
+    ("circular", "outside", False, "outward", "SPLIT_LANES"),
+    ("circular", "split", True, "inward", None),
+    ("linear", "overlay", True, "above", "OVERLAY_LANES"),
+    ("linear", "below", False, "below", "OVERLAY_LANES"),
+])
+def test_unsupported_lane_diagnostic_names_the_placement_row(mode, direction, separate, side, reason):
+    # OV-09 (R6): the producer names the failure, the request row of the
+    # feature (the Web names that feature), and the lanes that would accept it.
+    from gbdraw.web_support.error_adapter import serialize_web_error
+
+    record = _record()
+    ids = sorted(entry.biological_feature_id for entry in build_source_feature_catalog(record)[1:3])
+    rows = (
+        FeaturePlacementOverride("one", ids[1], FeaturePlacementTarget("lane", side, 1)),
+        FeaturePlacementOverride("one", ids[0], FeaturePlacementTarget("main")),
+    )
+    plan = plan_request(_request(record, mode=mode, feature_placements=rows))
+    if reason is None:
+        _planned_layers(plan, mode=mode, direction=direction, separate=separate)
+        return
+    with pytest.raises(ValidationError, match="unsupported") as caught:
+        _planned_layers(plan, mode=mode, direction=direction, separate=separate)
+    assert f"{ids[1]!r}" in str(caught.value) and "'one'" in str(caught.value)
+    assert caught.value.diagnostic == {
+        "code": "FEATURE_PLACEMENT", "reason": reason, "placementIndex": 1,
+    }
+    assert serialize_web_error(caught.value, operation="generate", stage="render") == {
+        "code": "FEATURE_PLACEMENT", "operation": "generate", "stage": "render",
+        "context": {"reason": reason, "placementIndex": 1},
+    }
+
+
 @pytest.mark.parametrize("resolve", [False, True])
 @pytest.mark.parametrize("placement", ["main", "outward", "inward"])
 @pytest.mark.parametrize("tolerance", [19, 20, 21])
@@ -952,7 +1009,7 @@ def test_fresh_auto_removal_and_a_b_a_never_reuse_derived_lanes():
     auto_plan = plan_request(replace(request, options=replace(
         request.options, feature_placement_table=_table("locus_tag=beta", "auto"),
     )))
-    assert auto_plan.inputs.placements == ()
+    assert auto_plan.inputs.record_features == ()
     auto = _assignments(_planned_layers(auto_plan))
     assert (auto[1].level, auto[2].level) == (0, 1)
     last = _planned_layers(plan_request(request))
@@ -1016,7 +1073,7 @@ def test_dormant_bindings_reserve_no_foreground_lane_and_reactivate(status):
     elif status == "crop_excluded":
         record = replace(record, region=parse_region_spec("41-110"))
     plan = plan_request(_request(records=[record], **options))
-    item = plan.inputs.placements[0].overrides[0]
+    item = plan.inputs.record_features[0].placements[0]
     assert item.status == status
     layers = _planned_layers(plan)
     assert all(f.placement.requested_target is None for f in layers.foreground_features.values())
@@ -1051,7 +1108,7 @@ def test_actual_typed_build_transports_instance_context_and_custom_slot(monkeypa
 
     def capture(features, **kwargs):
         result = actual(features, **kwargs)
-        calls.append((kwargs["placement_inputs"].record_key, kwargs["slot"], {
+        calls.append((kwargs["record_features"].record_key, kwargs["slot"], {
             f.source_feature_index: f.placement for f in features.values()
         }))
         return result
@@ -1153,7 +1210,7 @@ def test_circular_batch_uses_each_item_placement_context(monkeypatch):
 
     def capture(features, **kwargs):
         result = actual(features, **kwargs)
-        calls.append((kwargs["placement_inputs"].record_key,
+        calls.append((kwargs["record_features"].record_key,
                       [f.placement.level for f in features.values()]))
         return result
 
@@ -1215,6 +1272,7 @@ def test_historical_reader_does_not_admit_nondefault_tolerance(form, tmp_path):
     payload["schema"] = 6
     payload["records"][0].pop("display")
     payload["diagramOptions"].pop("featurePlacements")
+    payload["diagramOptions"].pop("featureOverrides")
     payload["diagramOptions"][form] = (
         {"canvas": {"feature_overlap_tolerance_bp": 2}} if form == "config"
         else {"canvas.feature_overlap_tolerance_bp": 2}
@@ -1583,9 +1641,9 @@ def test_final_svg_undefined_uses_negative_geometry_pool(mode, undefined, resolv
             continue
         x, y = map(float, re.search(r"M\s*([-+0-9.eE]+)[,\s]+([-+0-9.eE]+)", node.get("d")).groups())
         starts[node.get("data-gbdraw-feature-id")] = math.hypot(x, y) if mode == "circular" else y
-    from gbdraw.features.ids import compute_feature_hash
-    # The SVG carrier is not canonical source identity (notably raw strand 0).
-    values = [starts[compute_feature_hash(feature, record_id=record.id)] for feature in record.features]
+    from gbdraw.features.ids import compute_source_feature_hash
+    # The SVG carries the source feature hash, which reads raw strand 0 as unstranded.
+    values = [starts[compute_source_feature_hash(feature, record)] for feature in record.features]
     assert (abs(values[0] - values[1]) > 1) if resolve else (values[0] == pytest.approx(values[1]))
     assert (values[2] > values[0]) if mode == "circular" else (values[2] < values[0])
 

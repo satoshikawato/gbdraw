@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Iterable, Literal, Sequence, TypeAlias
+from typing import Iterable, Literal, Sequence, TypeAlias, cast
 
 TextAnchor: TypeAlias = Literal["start", "middle", "end"]
 Point: TypeAlias = tuple[float, float]
@@ -31,7 +31,7 @@ def normalize_text_anchor(value: object) -> TextAnchor:
     anchor = str(value or "middle").strip().lower()
     if anchor not in {"start", "middle", "end"}:
         raise ValueError(f"unsupported text anchor: {value!r}")
-    return anchor  # type: ignore[return-value]
+    return cast(TextAnchor, anchor)  # membership checked above
 
 
 def anchor_x_bounds(width_px: float, text_anchor: object) -> tuple[float, float]:
@@ -79,7 +79,11 @@ def text_box_corner_offsets(
         (x_max + padding, half_height + padding),
         (x_min - padding, half_height + padding),
     )
-    return tuple(rotate_point(point, rotation_deg) for point in unrotated)  # type: ignore[return-value]
+    # ``unrotated`` always holds exactly four points.
+    return cast(
+        tuple[Point, Point, Point, Point],
+        tuple(rotate_point(point, rotation_deg) for point in unrotated),
+    )
 
 
 def translate_points(points: Iterable[Point], x_offset: float, y_offset: float) -> tuple[Point, ...]:
@@ -124,7 +128,7 @@ def oriented_text_box(
         height_px=max(0.0, float(height_px)),
         rotation_deg=float(rotation_deg),
         text_anchor=anchor,
-        corners=corners,  # type: ignore[arg-type]
+        corners=cast(tuple[Point, Point, Point, Point], corners),  # four offsets in, four points out
         aabb=aabb_from_points(corners),
     )
 

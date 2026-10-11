@@ -91,7 +91,11 @@ Depth input has `reference_name`, a 1-based positive `position`, and a
 non-negative `depth`. Files are normally headerless. One header line is
 accepted when the position or depth fields in the first row are nonnumeric.
 Each file is one measured series for the named record; a missing series is not
-equivalent to zero depth.
+equivalent to zero depth. Positions are source coordinates of the named record,
+as in the input file. A crop keeps only the positions inside it, and a reverse
+complement flips them with the record, so the same file draws the same coverage
+for any region or orientation. The automatic Depth maximum comes from the
+positions that are drawn.
 
 ## Manifest tables
 
@@ -111,9 +115,14 @@ One records-table row represents one displayed record. A table uses either
 GenBank rows or GFF3/FASTA rows; it cannot mix the two forms. `record_id`
 selects from a multi-record source. A row-scoped `region` contains coordinates
 only and applies after selection. `reverse_complement` is a row-scoped boolean.
+The two apply in different orders: `region=1000-9000:rc` crops 1000..9000 of
+the record as stored in the file and then reverse-complements the crop, while
+`reverse_complement=1` reverse-complements the whole record first, so a
+`region` in the same row counts its coordinates on the reverse-complemented
+record. `--region` and `--reverse_complement` follow the same order.
 
 `order`, `row`, and `column` are positive integers. Explicit `order` values
-sort before blank values; equal values retain table order. When placement is
+sort before blank values; equal values keep table order. When placement is
 present, every row needs a `row`. `column` controls left-to-right order, and
 duplicate row/column cells are rejected. Use table placement instead of
 repeated surface-specific position options.
@@ -168,11 +177,25 @@ The file can be loaded with **Import TSV**, Python's `read_annotation_table()`,
 or the CLI's `--annotation_table` option.
 
 The download preserves effective row targets and styles, including explicit
-no-fill, unique record IDs, and one-based `#N` record bindings. A blank `fill`
-cell in a styled row means no fill; omitting the column retains the Web import
-default. TSV does not retain empty sets, metadata, or the distinction between
+no-fill, unique record IDs, and one-based `#N` record references. The table has
+no selector for a source record, so an annotation made from **Selected
+features** is written with the record position the current Result draws:
+`record=#<position>` and `feature_selector=hash=<hash>`, the feature's hash in
+its source record. That row names the same feature after a crop or reverse
+complement, but only while the record order stays as drawn, and the download
+says so.
+If the current Result does not draw the feature, the annotation is not written
+and the download says how many. A blank `fill`
+cell in a styled row means no fill; omitting the column keeps the Web import
+default. TSV does not keep empty sets, metadata, or the distinction between
 an inherited set style and a row override. Tabs and line breaks within cells
 are replaced with spaces.
+
+The table is not CSV: a `"` is part of the cell value and never quotes a field,
+so a `label` of `"quoted"` keeps its quotes and `"lead` is a valid label. The
+Web download and import and `read_annotation_table()` read cells the same way.
+A line whose first non-blank character is `#` is a comment and is skipped, also
+before the header; a `#` after other text is part of the cell value.
 
 ## Styling tables
 
@@ -188,18 +211,54 @@ also accept their documented header row.
 | Label overrides | `record_id`, `feature_type`, `qualifier`, `value`, `label_text` |
 | Feature visibility | `record_id`, `feature_type`, `qualifier`, `value`, `action` |
 
-A Specific-colors `color` is `none` (no fill, any case), an SVG color name,
-`#RGB`, or `#RRGGBB`. Other values, including hex colors with alpha, are
-rejected with their line number. The Web app converts a color name to hex when
+In every table in the list above, a line whose first non-blank character is `#`
+is a comment, and a line of only tabs and spaces is blank; both are skipped, and
+error messages count every line of the file. A `#` after other text is
+part of the cell value, so `foo#bar` and `Gene #1` are read as written.
+
+These tables are not CSV: a `"` is part of the cell value and never quotes a
+field, so `"quoted"` is read with its quotes and `"lead` is a valid value. A
+cell cannot contain a tab or a line break. A row with more cells than the table's columns is an
+error that names the file and line; a missing cell is reported as a missing
+value. The [feature override
+table](#feature-override-table) is different: it quotes a `label_text` that
+contains `"`.
+
+A Specific-colors `color` is `none` (no fill), an SVG color name, both in any
+letter case, `#RGB`, or `#RRGGBB`. Other values, including hex colors with
+alpha and names that only a browser knows, such as `currentColor` and system
+colors, are rejected with their line number. The Web app converts a color name to hex when
 it reads the table. In this table, cells such as `None`, `NA`, and `null` are
 values, not blanks.
+
+A Default colors `color` of a feature type, a Specific-colors `color` without
+captions, and a color in a configuration override also accept `transparent`,
+`#RGBA`, `#RRGGBBAA`, and `rgb()`, `rgba()`, `hsl()`, and `hsla()`, which
+browsers read; the comparison gradient colors of the Default colors table take
+`#RGB` or `#RRGGBB`, and the conservation colors a color name or `#RRGGBB`.
+Any other value, including `currentColor`, `inherit`, a paint reference such as
+`url(#id)`, and names that only a browser knows, such as system colors, is
+rejected on every surface: the Web app names the line of the Default colors
+table, and the CLI and Python API name the feature type or the setting. A blank
+Default colors cell keeps the built-in color; an empty configuration color is
+rejected.
+The Web app converts a Default colors color name to hex when it reads the
+table. PNG, PDF, EPS, and PS export (CairoSVG) cannot draw some of them: it draws
+`hsl()` and `hsla()` black, drops the alpha of `#RGBA` and `#RRGGBBAA`, and
+fails on the space syntax `rgb(1 2 3 / 50%)`. Use an SVG color name,
+`#RRGGBB`, or comma-separated `rgb()` or `rgba()` for those formats.
+
+The comparison colors that gbdraw blends into a gradient (`pairwise_match_min`,
+`pairwise_match_max`, and the `collinear_block_*` colors) must be a color name,
+`#RGB`, or `#RRGGBB` when a comparison is drawn; other forms stop the render
+with an error that names the feature type.
 
 `priorities` is a comma-separated qualifier list. Pattern `value` and `keyword`
 fields use case-insensitive Python regular expressions. Specific-color and
 Label-override patterns accept Python-only syntax such as `(?i)NADH`,
-`(?P<enzyme>NADH)` and `NADH\Z`; Unicode matching follows Python semantics.
+`(?P<enzyme>NADH)` and `NADH\Z`; Unicode matching follows Python behavior.
 The Web app prepares Color rules and Label TSV patterns with that same Python
-owner before committing live changes. Invalid syntax is rejected even when the
+code before committing live changes. Invalid syntax is rejected even when the
 feature catalog is empty or contains no matches. A table-structure error or
 runtime preparation failure is distinct from invalid regex syntax.
 
@@ -212,6 +271,10 @@ Retry, Revert and Save/Generate/Export behavior.
 
 Selector qualifiers may also use the documented synthetic keys `location`,
 `record_location`, and `hash` where that surface supports exact feature identity.
+`hash` is the feature's hash in its source record (its biological feature ID
+without the `~<n>` suffix), so it names the same feature on a cropped or
+reverse-complemented record; `location` and `record_location` are the drawn
+coordinates.
 Visibility `action` is `show`, `off`,
 or `exclude_matching`.
 
@@ -237,12 +300,55 @@ resolved record; use a records table for distinct per-record settings.
 
 Selectors must match exactly one original-source feature. A gene qualifier may
 match both a gene annotation and its CDS; a unique protein ID avoids that
-ambiguity. Unknown/stale identities, duplicate resolved targets, extra columns,
-wrong-mode sides and unsupported resolved layouts are errors. GFF duplicate
+ambiguity. Identical features in one record share a hash, so their biological
+feature IDs add the original-source order (`<hash>~<n>`); `hash=<hash>~<n>`
+names one of them, and `hash=<hash>` matches all of them. Run Info writes
+placement rows in the `hash=<biologicalFeatureId>` form. Selectors that match
+no feature, duplicate resolved targets, extra columns, wrong-mode sides and
+unsupported resolved layouts are errors. An exact placement in a typed request
+or Session whose identity the source does not have is not an error: the render
+reports it as an `unresolved` feature identity notice. GFF duplicate
 identities use complete original-source order, including features hidden by
 loading or visibility rules. Changing visibility does not renumber them.
 
 Auto removes an override. Source-known cropped-out, hidden or underlay features
-retain dormant intent and reserve no foreground lane; restoring visibility or
+keep their dormant override and reserve no foreground lane; restoring visibility or
 the crop reactivates it. Persist exact record/biological-feature identities,
 never an SVG fragment ID or a transient lane number.
+
+## Feature override table
+
+`--feature_override_table` sets the Feature visibility, Label visibility, and
+label text of individual features. It accepts UTF-8 TSV (including BOM);
+`feature_selector` is required and the other columns may be omitted:
+
+| Column | Meaning |
+|---|---|
+| `record` | Optional unique record ID or displayed `#index`; omission must resolve to one record |
+| `feature_selector` | Required exact selector, as in the feature placement table |
+| `feature_visibility` | `on`, `off`, `exclude_matching`, or blank |
+| `label_visibility` | `on`, `off`, or blank |
+| `label_text` | One line of label text, or blank |
+
+A blank cell sets nothing for that part, and each row must set at least one
+part. Visibility values ignore case. `label_text` is kept exactly, including
+leading and trailing spaces; a cell that contains `"` is quoted, with `""` for
+each `"`. The values mean what the `feature_overrides` rows of a typed request
+mean (see [Feature identity overrides](typed-requests.md#feature-identity-overrides)):
+a row decides before the feature visibility and label tables, and text alone
+never shows a label.
+
+Each selector must match exactly one original-source feature, so a row keeps
+naming its feature after crop and reverse complement. A selector that matches
+no feature or several features, two rows for one feature, an unknown or
+duplicate column, and an unsupported value are errors that name the table row.
+Run Info writes one row per edited feature in the `#<index>` and
+`hash=<biologicalFeatureId>` form. An edit or placement whose feature the
+source does not have cannot be written as a table row, so a Result with one has
+no Source recipe; **Exact replay** still reproduces it.
+
+The web app's **Export Feature Edits TSV** writes the same rows, and **Load
+Feature Edits TSV** reads a table with this reader against the records of the
+current diagram. There, a row whose record or feature those records do not
+have is counted and skipped instead of failing; every other error above still
+rejects the table.

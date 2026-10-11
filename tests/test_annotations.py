@@ -190,13 +190,22 @@ TSV_IMPORT_CASES = json.loads(
 )
 
 
+def _literal_rows(text: str) -> list[list[str]]:
+    """Split a TSV text the way the table readers do: ``"`` is ordinary and whole-line ``#`` comments are skipped."""
+    return [
+        line.split("\t")
+        for line in text.split("\n")
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+
+
 @pytest.mark.parametrize("case", TSV_IMPORT_CASES, ids=lambda case: case["name"])
 def test_annotation_tsv_import_parity(case, tmp_path, caplog) -> None:
     path = tmp_path / "annotations.tsv"
     path.write_text(case["table"], encoding="utf-8")
-    rows = list(csv.reader(io.StringIO(case["table"]), delimiter="\t"))
+    rows = _literal_rows(case["table"])
     if case["valid"]:
-        controls = list(csv.reader(io.StringIO(case["control"]), delimiter="\t"))
+        controls = _literal_rows(case["control"])
         expected = annotation_sets_from_dataframe(pd.DataFrame(controls[1:], columns=controls[0]))
         assert read_annotation_table(path) == expected
         assert annotation_sets_from_dataframe(pd.DataFrame(rows[1:], columns=rows[0])) == expected
@@ -217,10 +226,17 @@ def test_annotation_tsv_import_parity(case, tmp_path, caplog) -> None:
         assert "PRIVATE-CELL" not in caplog.text
 
 
-def test_annotation_file_preserves_quoted_cells_and_blank_lines(tmp_path) -> None:
-    path = tmp_path / "quoted.tsv"
-    path.write_text('\n\t\t\nset_id\tid\tmark\tstart\tend\tlabel\n\ns\ta\tband\t1\t8\t"quoted\tlabel"\n')
-    assert read_annotation_table(path)[0].annotations[0].label == "quoted\tlabel"
+def test_annotation_file_keeps_quotes_literally_and_skips_blank_lines(tmp_path) -> None:
+    path = tmp_path / "quotes.tsv"
+    path.write_text(
+        '\n\t\t\nset_id\tid\tmark\tstart\tend\tlabel\n\n'
+        's\ta\tband\t1\t8\t"lead\n'
+        's\tb\tband\t9\t12\t"quoted"\n'
+        's\tc\tband\t13\t15\ta"b\n'
+        's\td\tband\t16\t18\t"two words"\n'
+    )
+    labels = [item.label for item in read_annotation_table(path)[0].annotations]
+    assert labels == ['"lead', '"quoted"', 'a"b', '"two words"']
 
 
 def test_annotation_file_read_failure_has_context(tmp_path) -> None:
@@ -419,3 +435,14 @@ def test_fully_matched_envelope_and_circular_path_are_preserved(mode, envelope, 
     )
     assert result.annotations[0].segments == expected
     assert result.warnings == ()
+
+
+@pytest.mark.parametrize(
+    ("field", "name"),
+    [("fill", "annotation fill"), ("stroke", "annotation stroke"), ("label_color", "label color")],
+)
+def test_malformed_hex_annotation_color_names_its_column(field: str, name: str) -> None:
+    # The hex check of resolve_color_to_hex raises its own ValidationError; the
+    # annotation message keeps the column and the annotation-correct advice.
+    with pytest.raises(ValidationError, match=f"{name} is not a valid color: '#zz'"):
+        RegionAnnotationStyle(**{field: "#zz"})

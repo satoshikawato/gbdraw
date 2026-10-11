@@ -20,6 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import io
 import os
+import re
 from typing import Literal
 
 from Bio import SeqIO
@@ -39,7 +40,7 @@ class ComparisonSequenceFile:
 
     ``record_label`` is the label the file names itself (GenBank / DDBJ: the
     first record's DEFINITION, else its organism), or ``None``; ``label`` falls
-    back to the file name when it is ``None``.
+    back to :func:`comparison_file_stem` when it is ``None``.
     """
 
     path: str
@@ -47,6 +48,21 @@ class ComparisonSequenceFile:
     records: tuple[SeqRecord, ...]
     label: str
     record_label: str | None = None
+
+
+def comparison_file_stem(path: str | os.PathLike[str]) -> str:
+    """The file name without its last extension: ``genome.v2.fasta`` -> ``genome.v2``.
+
+    The default label of a ring whose file names no label (D-03) and the stem
+    of its raw LOSAT TSV name; the Web ``defaultConservationSeriesLabel`` uses
+    the same rule (``tests/fixtures/comparison_ring_default_label_cases.json``).
+    """
+
+    return re.sub(r"\.[^.]+$", "", os.path.basename(os.fspath(path)))
+
+
+def _default_label(name: str) -> str:
+    return comparison_file_stem(name).strip() or name
 
 
 def _unreadable(message: str, *, reason: str | None = None) -> ValidationError:
@@ -116,7 +132,7 @@ def read_comparison_sequence_file(path: str | os.PathLike[str]) -> ComparisonSeq
     if not text.strip():
         # An empty file names no genome; a LOSAT ring rejects it, a precomputed
         # ring's span export has no sequence to offer.
-        return ComparisonSequenceFile(text_path, "fasta", (), name)
+        return ComparisonSequenceFile(text_path, "fasta", (), _default_label(name))
     file_format = _detect_format(text, text_path)
     try:
         parsed = list(SeqIO.parse(io.StringIO(text), file_format))
@@ -145,12 +161,11 @@ def read_comparison_sequence_file(path: str | os.PathLike[str]) -> ComparisonSeq
         )
     normalized = tuple(records)
     record_label = _record_label(file_format, tuple(parsed))
-    # Without a record label, the precomputed-ring rule: the file name.
     return ComparisonSequenceFile(
         path=text_path,
         format=file_format,
         records=normalized,
-        label=record_label or name,
+        label=record_label or _default_label(name),
         record_label=record_label,
     )
 
@@ -163,6 +178,7 @@ def read_comparison_sequence_records(path: str | os.PathLike[str]) -> tuple[SeqR
 
 __all__ = [
     "ComparisonSequenceFile",
+    "comparison_file_stem",
     "read_comparison_sequence_file",
     "read_comparison_sequence_records",
 ]

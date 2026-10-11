@@ -531,6 +531,7 @@ def test_linear_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tmp_
             protein_identity_manifest=None,
             request=resolved,
             annotation_warnings=(),
+            feature_identity_notices=(),
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)

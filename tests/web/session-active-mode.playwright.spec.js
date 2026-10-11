@@ -2,12 +2,17 @@ const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { gunzipSync } = require('node:zlib');
+const { promoteRequest } = require('./helpers/request-schema.cjs');
 const { execFile } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const { promisify } = require('node:util');
 const {
-  openApp, assertSessionLoadLeftWorkerIdle, getDiagramWorkerActivity,
-  generateAndWaitForResult, evaluateWithRetainedPromise
+  CURRENT_SESSION_VERSION,
+  assertSessionLoadLeftWorkerIdle,
+  evaluateWithRetainedPromise,
+  generateAndWaitForResult,
+  getDiagramWorkerActivity,
+  openApp
 } = require('./helpers/app-lifecycle.cjs');
 
 const fixture = path.join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
@@ -51,7 +56,7 @@ const snapshot = page => page.evaluate(async () => {
   return {
     mode: state.mode.value,
     generatedMode: state.generatedMode.value,
-    config: buildConfigData(),
+    config: buildConfigData(state.activeDrawing()),
     request: getCommittedCanonicalRenderRequest(),
     results: state.results.value.map(result => ({ name: result.name, content: result.content })),
     selectedResultIndex: state.selectedResultIndex.value,
@@ -67,30 +72,34 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
   test.setTimeout(360_000);
   await openApp(page);
   await load(page, divergentFixture);
+  const circular = await snapshot(page);
   await page.getByRole('button', { name: 'Linear', exact: true }).click();
   await page.getByTestId('linear-genbank-1').setInputFiles(linearSource);
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     await window.__GBDRAW_HISTORY__.runUndoable('Pending Linear scale size', () => {
-      state.adv.scale_font_size = 19;
+      state.activeDrawing().adv.scale_font_size = 19;
     });
     state.featurePanelTab.value = 'labels';
   });
   const before = await snapshot(page);
+  // E1: Linear shows its own empty Result slot; the Circular Result waits in its slot.
   expect(before.mode).toBe('linear');
-  expect(before.generatedMode).toBe('circular');
-  expect(before.request.mode).toBe('circular');
+  expect(before.generatedMode).toBe('linear');
+  expect(before.request).toBeNull();
+  expect(before.results).toEqual([]);
   expect(before.config.adv.scale_font_size).toBe(19);
   expect(before.linearSource).toBeTruthy();
   expect(before.history[0]).toBeGreaterThan(0);
 
   const firstFile = info.outputPath('linear-draft.gbdraw-session.json.gz');
   const first = await save(page, firstFile);
-  expect(first.version).toBe(44);
+  expect(first.version).toBe(CURRENT_SESSION_VERSION);
   expect(first.ui.mode).toBe('linear');
-  expect(first.config.modeProfiles.activeMode).toBe('linear');
   expect(first.renderRequest.mode).toBe('circular');
-  expect(first.config.adv.scale_font_size).toBe(19);
+  // The Linear drawing is the Linear slice (Session 46); the Circular slice keeps its own.
+  expect(first.modes.linear.config.adv.scale_font_size).toBe(19);
+  expect(first.modes.circular.config.adv.scale_font_size).not.toBe(19);
 
   const context = await browser.newContext({
     baseURL: `http://127.0.0.1:${process.env.GBDRAW_WEB_TEST_PORT || 4173}`,
@@ -105,24 +114,35 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     expect(loadWorker.constructions).toBeLessThanOrEqual(1);
     expect(loadWorker.instances.flatMap(instance => instance.helpers.map(helper => helper.operation)))
       .toEqual(loadWorker.helpers ? ['validateConfigOverrides'] : []);
+    // E1 (contract): a Session with a Result opens on that Result's mode.
     const restored = await snapshot(fresh);
-    expect(restored.mode).toBe('linear');
+    expect(restored.mode).toBe('circular');
     expect(restored.generatedMode).toBe('circular');
-    expect(restored.config.modeProfiles).toEqual(before.config.modeProfiles);
-    expect(restored.config.adv.scale_font_size).toBe(19);
     expect(restored.circularSource).toEqual(before.circularSource);
     expect(restored.linearSource).toEqual(before.linearSource);
-    expect(restored.request).toEqual(before.request);
-    expect(restored.results).toEqual(before.results);
-    expect(restored.selectedResultIndex).toBe(before.selectedResultIndex);
+    expect(restored.request).toEqual(await promoteRequest(fresh, circular.request));
+    expect(restored.results).toEqual(circular.results);
+    expect(restored.selectedResultIndex).toBe(circular.selectedResultIndex);
     expect(restored.featurePanelTab).toBe(before.featurePanelTab);
     expect(restored.downloadDpi).toBe(before.downloadDpi);
     expect(restored.history).toEqual([0, 0]);
+    // The Linear draft waits in the Linear drawing.
+    await fresh.getByRole('button', { name: 'Linear', exact: true }).click();
+    const linearDraft = await snapshot(fresh);
+    expect(linearDraft.mode).toBe('linear');
+    expect(linearDraft.results).toEqual([]);
+    expect(linearDraft.config).toEqual(before.config);
+    expect(linearDraft.config.adv.scale_font_size).toBe(19);
 
     const second = await save(fresh, info.outputPath('linear-draft-resaved.gbdraw-session.json.gz'));
     expect(second.ui.mode).toBe('linear');
-    expect(second.config.modeProfiles).toEqual(first.config.modeProfiles);
-    expect(second.config.adv.scale_font_size).toBe(19);
+    // Load opens the Linear typography unlinked, as the draft's scale and ruler
+    // label sizes differ (the step above set only the scale size).
+    expect(first.modes.linear.ui.linearTypographyLinked).toBe(true);
+    expect(second.modes.linear.ui.linearTypographyLinked).toBe(false);
+    const linked = { ...second.modes.linear, ui: { ...second.modes.linear.ui, linearTypographyLinked: true } };
+    expect({ ...second.modes, linear: linked }).toEqual(first.modes);
+    expect(second.modes.linear.config.adv.scale_font_size).toBe(19);
     expect(second.renderRequest).toEqual(first.renderRequest);
     expect(second.results).toEqual(first.results);
     expect(second.resources).toEqual(first.resources);
@@ -130,7 +150,6 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     expect(second.webFiles.bindings.linearSeqs[0].gb).toEqual(first.webFiles.bindings.linearSeqs[0].gb);
     expect(second.webFiles.resourceOriginalNames).toEqual(first.webFiles.resourceOriginalNames);
     expect(second.ui.selectedResultIndex).toBe(first.ui.selectedResultIndex);
-    expect(second.ui.featurePanelTab).toBe(first.ui.featurePanelTab);
 
     await generateAndWaitForResult(fresh);
     const generated = await snapshot(fresh);
@@ -139,7 +158,7 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     expect(generated.request.mode).toBe('linear');
     expect(generated.request.diagramOptions.configOverrides['objects.scale.font_size.short']).toBe(19);
     expect(generated.request.diagramOptions.configOverrides['objects.scale.font_size.long']).toBe(19);
-    expect(generated.results[0].content).not.toBe(restored.results[0].content);
+    expect(generated.results[0].content).not.toBe(circular.results[0].content);
     expect(generated.linearSource).toEqual(before.linearSource);
   } finally {
     await context.close();
@@ -159,9 +178,9 @@ test('each mode keeps its own title and fonts while missing Linear layout starts
     const { state } = await import('./js/state.js');
     const size = value => (value === null || value === undefined || value === '' ? null : Number(value));
     return {
-      title: state.form.plot_title, titleFont: size(state.adv.plot_title_font_size),
-      definitionFont: size(state.adv.def_font_size),
-      rows: state.linearRecordLayoutEnabled.value, replicon: state.adv.linear_show_replicon
+      title: state.activeDrawing().form.plot_title, titleFont: size(state.activeDrawing().adv.plot_title_font_size),
+      definitionFont: size(state.activeDrawing().adv.def_font_size),
+      rows: state.activeDrawing().linearRecordLayoutEnabled.value, replicon: state.activeDrawing().adv.linear_show_replicon
     };
   });
   const circular = await draft(page);
@@ -178,8 +197,9 @@ test('each mode keeps its own title and fonts while missing Linear layout starts
 
   const file = info.outputPath('per-mode-title.gbdraw-session.json.gz');
   const saved = await save(page, file);
-  expect(saved.config.modeProfiles.profiles.circular.values.plot_title).toBe('Circular title');
-  expect(saved.config.modeProfiles.profiles.linear.values.plot_title).toBe('Linear title');
+  // Each mode's drawing is its slice (Session 46).
+  expect(saved.modes.circular.config.form.plot_title).toBe('Circular title');
+  expect(saved.modes.linear.config.form.plot_title).toBe('Linear title');
   const context = await browser.newContext({
     baseURL: `http://127.0.0.1:${process.env.GBDRAW_WEB_TEST_PORT || 4173}`
   });
@@ -246,10 +266,16 @@ test('matching current, historical, CLI-origin, and settings-only modes keep the
     expect(state.mode).toBe(settings.ui.mode);
     expect(state.request).toBeNull();
     expect(state.results).toEqual([]);
-    expect(state.config.modeProfiles.activeMode).toBe(settings.config.modeProfiles.activeMode);
+    // The shown mode takes the saved flat value and the other mode its saved
+    // profile value, each in its own drawing.
+    const axisColors = await fresh.evaluate(async () => {
+      const { state: live } = await import('./js/state.js');
+      return { circular: live.drawings.circular.adv.axis_stroke_color, linear: live.drawings.linear.adv.axis_stroke_color };
+    });
     for (const mode of ['circular', 'linear']) {
-      expect(state.config.modeProfiles.profiles[mode].values.axis_stroke_color)
-        .toBe(settings.config.modeProfiles.profiles[mode].values.axis_stroke_color);
+      expect(axisColors[mode]).toBe(mode === settings.ui.mode
+        ? settings.config.adv.axis_stroke_color
+        : settings.config.modeProfiles.profiles[mode].values.axis_stroke_color);
     }
     await assertSessionLoadLeftWorkerIdle(fresh);
   } finally {

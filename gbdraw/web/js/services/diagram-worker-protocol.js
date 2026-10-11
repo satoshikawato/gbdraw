@@ -1,3 +1,4 @@
+// @ts-check
 export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   EVALUATE_RULES: 'evaluateRules',
   READ_PDF_FONT: 'readPdfFont',
@@ -6,13 +7,13 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   CONVERT_MAIN_SESSION_COMPARISON_FRAME: 'convertMainSessionComparisonFrame',
   EXTRACT_CDS_PROTEIN_FASTA: 'extractCdsProteinFasta',
   EXTRACT_FIRST_FASTA: 'extractFirstFasta',
-  GENERATE_LEGEND_ENTRY_SVG: 'generateLegendEntrySvg',
   HYDRATE_PROTEIN_LOSAT_TSV: 'hydrateProteinLosatTsv',
   LIST_GFF_FASTA_RECORDS: 'listGffFastaRecords',
   LIST_SEQUENCE_RECORDS: 'listSequenceRecords',
   MEASURE_LEGEND_TEXT: 'measureLegendText',
   PROMOTE_LEGACY_LOSATP_CACHE: 'promoteLegacyLosatpCache',
   READ_COMPARISON_SEQUENCE: 'readComparisonSequence',
+  READ_FEATURE_OVERRIDE_TABLE: 'readFeatureOverrideTable',
   RESOLVE_LEGACY_PROTEIN_REFERENCES: 'resolveLegacyProteinReferences',
   RESOLVE_SIMILARITY_ALIGNMENT: 'resolveSimilarityAlignment',
   VALIDATE_CONFIG_OVERRIDES: 'validateConfigOverrides'

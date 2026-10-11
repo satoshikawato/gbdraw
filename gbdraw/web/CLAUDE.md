@@ -25,7 +25,7 @@ The canonical generation path is:
 index.html
   -> app.js and app/app-setup.js
   -> reactive state
-  -> services/session-request.js builds one canonical schema-8 render request
+  -> services/session-request.js builds one canonical schema-9 render request
   -> app/run-analysis.js validates and orchestrates optional LOSAT work
   -> services/diagram-generation.js dispatches the request and resources
   -> workers/diagram-generation-worker.js owns Pyodide rendering
@@ -86,17 +86,22 @@ in the same change.
 | Vue mount and exports | `js/app.js` |
 | Composition and dependency wiring | `js/app/app-setup.js` |
 | Reactive state and computed values | `js/state.js` |
+| Each diagram mode's drawing (settings, editor edits, derived values) | `js/state.js` (`drawings`, `activeDrawing`; R15) |
+| Registry of what a mode's Session slice holds | `gbdraw/web_support/mode_scoped_settings.py`, generated into `js/mode-scoped-settings.generated.js` by `tools/generate_mode_scoped_settings.py` |
+| Session 46 mode slices and the split of a Session 27–44 draft into them | `js/services/mode-scoped-migration.js` (Python twin: `split_draft_into_modes` in `gbdraw/session_io.py`) |
 | Generate-button orchestration | `js/app/run-analysis.js` |
 | Canonical request/session projection and equivalence | `js/services/session-request.js` |
 | Current active-config defaults, inventory, and validation | `js/services/session-active-config-contract.js` |
 | Historical Gallery session migration | `js/services/gallery-session-migration.js` |
+| Per-feature edits and Feature placements by source identity (draft key, row checks, request rows, notices) | `js/services/feature-placement.js` |
+| Rendered-ID feature edits of Sessions 44 and older, and Feature placement drafts of Sessions 41–44, onto mode-scoped identity rows; `hash=` annotation targets of Sessions 40–44 (R-7); drawn-hash `hash` color rules of Sessions 44 and older, renamed to source hashes | `js/services/feature-edit-migration.js` (Python twins in `gbdraw/session_io.py`: `migrate_session_feature_edits`, `migrate_session_annotation_targets`, `migrate_session_hash_rules`; the CLI replay of a request also uses their mapper `source_hash_selector_value`) |
 | Gallery publication preparation, finalization, and readiness | `js/services/gallery-session-publication.js` |
 | Save/load coordination | `js/services/config.js` |
 | History transactions and availability | `js/services/history.js`, `js/app/history-inputs.js`, `js/services/history-snapshot.js` |
-| Error producer contract and user-facing wording | `js/services/error-normalization.js` (`diagnosticError`, `normalizeUserFacingError`) |
+| Error producer contract and user-facing wording | `js/utils/error-normalization.js` (`diagnosticError`, `normalizeUserFacingError`) |
 | Numeric draft projection | `js/utils/optional-positive-number.js` (`projectOptionalNumber`) |
-| GenBank header reading | `js/app/genbank-header.js` |
-| Managed Depth slot reconciliation | `js/app/depth-track-state.js` (`reconcileManagedDepthSlots`), called by `changeCircularDepthSources` and `changeLinearDepthSources` |
+| GenBank header reading | `js/services/genbank-header.js` |
+| Managed Depth slot reconciliation | `js/services/depth-track-state.js` (`reconcileManagedDepthSlots`), called by `changeCircularDepthSources` and `changeLinearDepthSources` |
 | Editor-intent projection onto a displayed Result | `js/app/app-setup.js` (`projectMountedEditorIntent`) |
 | Render-worker client and lifecycle | `js/services/diagram-generation.js` |
 | Pyodide typed rendering | `js/workers/diagram-generation-worker.js` |
@@ -105,7 +110,7 @@ in the same change.
 | SVG Result admission and sanitization | `js/services/svg-result-ingestion.js` |
 | Feature-editor entry point | `js/app/feature-editor.js` |
 | Feature-editor helpers | `js/app/feature-editor/` |
-| Right-side editor drawer state and transitions | `js/app/right-drawer.js` |
+| Right-side editor drawer state and transitions | `js/services/right-drawer-state.js`; the drawer controller is `js/app/right-drawer.js` |
 | Legend entry point | `js/app/legend.js` |
 | Legend helpers | `js/app/legend/` |
 | Legend/diagram positioning | `js/app/legend-layout.js`, `js/app/legend-layout/` |
@@ -166,7 +171,7 @@ applied and report the failure. Metadata-only edits
 with no static SVG target, such as Similarity group names and descriptions,
 update canonical state only.
 
-## Design rules R1-R12
+## Design rules R1-R15
 
 Each rule names one owner and the guard that enforces it. Cite the rule id in PR
 descriptions and tests. Change the code and its guard together, and lower a
@@ -204,23 +209,50 @@ Guards:
 ### R2: Lifetime of editor intent
 
 Editor overrides are created, pruned, or deleted only by an explicit Reset or
-Import, Undo or Redo, a Session replacement, or the owner reconcile inside a
+Import, Undo or Redo, a Session replacement, the owner reconcile inside a
 successful source-replacing Generate (`pruneUnmatchedFeatureOverrides` in
-`app/feature-visibility.js`). Result selection, mount, record selection, mode
-change, hiding, and reflow never touch them.
+`services/feature-visibility.js`), **Remove N unmatched feature edits**
+(`removeUnresolvedFeatureEdits`), or **Delete settings** of a record whose
+drawing is turned off, which deletes that record's per-feature edits, Feature
+placements, and the annotations that target that record. Result selection,
+mount, record selection (including turning a record's drawing on or off), mode
+change, hiding, and reflow never touch them. A source-replacing Generate keeps
+the rows of records that are turned off. Per-feature edits
+(`featureOverrides`) and Feature placements live in the drawing of the mode
+they were made in (R15) and are keyed by
+`JSON.stringify([recordKey, biologicalFeatureId])`. Both modes can use the same
+record key for the same feature (`record-1` in a Gallery or Python Session);
+each drawing holds its own row, so a request, the live projection, and every
+reconcile read only the rows of their own drawing and records, and the other
+drawing keeps its rows. Only `services/feature-placement.js` builds a draft
+key. A selected-feature annotation target (`featureIdentity`) belongs to its
+drawing the same way, and `annotationOptionsPayload` in
+`services/annotation-state.js` gives a request only the targets of its records.
+A row or target of a Session 41–44 that names its mode (`scope`) keeps that
+field only until the Session 46 split moves it into that mode's drawing.
 
 Guards: `tests/web/non-edit-state-preservation.playwright.spec.js` with
 `tests/web/non-edit-state-diff.test.mjs` (user-owned state is identical before
 and after non-edit operations); the disjoint-Result binding test in
-`tests/web/feature-label-visual-unit.test.mjs`.
+`tests/web/feature-label-visual-unit.test.mjs`;
+`tests/web/mode-scoped-feature-edits.test.mjs` (no draft row reaches a request,
+reconcile, or TSV load of the other mode, and no other module builds a draft
+key) and `tests/web/mode-scoped-feature-edits.playwright.spec.js`;
+`tests/web/annotations.test.mjs` and the OV-21 test in
+`tests/web/annotation-feature-identity.playwright.spec.js` (annotation targets).
 
 ### R3: One projection per domain
 
 A live action, a History apply, and a Result display call the same projection:
-`projectMountedEditorIntent` (palette, rules, visibility, labels),
-`orderLegendEntries` in `app/legend/utils.js` (legend order), and
-`featureMatchesExactQualifier` in `app/feature-visibility.js` (exact-qualifier
-rules). A displayed batch Result whose shared legend entries already follow
+`projectMountedEditorIntent` (palette, rules, visibility, labels), which calls
+the domain projections `projectPaletteAndRules` in `app/app-setup.js` (palette
+and specific rules) and `projectFeatureVisibility` in
+`app/feature-editor/visibility-actions.js` (feature visibility and the labels of
+the features it hides or shows),
+`orderLegendEntries` in `services/legend-svg.js` (legend order), and
+`resolveFeatureDrawn` in `services/feature-visibility.js` (whether a feature is
+drawn, as Python's `should_render_feature` answers; the Features list and
+Search features read it through `listFeatureRows`). A displayed batch Result whose shared legend entries already follow
 the legend order keeps its order (`orderLegendEntries` with `keepFollowed`),
 so the entries only that Result draws keep their places; a Result last shown
 with another order also receives the default order. A History legend step made
@@ -228,18 +260,40 @@ on another batch Result projects only its shared legend intent onto the
 displayed Result (`reconcileLegendEntries` with the step's other side, B19), so
 no Result gains or loses an entry that only one Result draws. The displayed
 population comes from the mounted Result's committed metadata
-(`renderedFeatureIdentities`), not from a second selection ref. A dialog's
+(`renderedFeatureIdentities`), not from a second selection ref. Per-feature
+edits reach a Result through its catalog features' identities
+(`resultRenderedFeatures` in `services/feature-catalog.js`), so every copy of
+a feature in every Result shows the same edit. A dialog's
 reactive object holds display values only, never a copy of an owner's data.
+
+One projection means one call shape: a domain's projection function is called
+from outside its owner in one form, not re-implemented or re-sequenced per
+caller. The distinct call shapes per domain may only decrease (R13).
+
+A live edit shows on the Result what the next Generate draws (PD-OI-066). A
+change to a live-edit path is done when the case for its edit kind in
+`tests/web/live-generate-parity.playwright.spec.js` passes with Auto Reflow on
+and off and with the popup opened and not. A difference the Result may show
+until Generate is listed with its decision in
+`tests/web/contracts/live-generate-parity-allowed.json`. A mismatch the matrix
+finds is a bug: the case stays `test.fail` with its finding id until the fix
+makes it pass.
 
 Guards: `tests/web/gui-audit-20260930-editor.playwright.spec.js` (a Result shows
 the edits made on another Result, also after Undo, Save, and Load),
-`tests/web/feature-visibility-actions.test.mjs`, and
-`tests/web/feature-color-actions.test.mjs`.
+`tests/web/feature-visibility-actions.test.mjs`,
+`tests/web/feature-color-actions.test.mjs`,
+`tests/web/live-generate-parity.playwright.spec.js` (the matrix of edit kinds
+and editor states) with `tests/web/live-generate-parity-legend.playwright.spec.js`
+and `tests/web/live-generate-parity-track-data.playwright.spec.js` (Legend edits,
+track-data changes, and mode switches): a live edit equals the next Generate;
+and the `projection-shapes` baseline in
+`tests/web/owner-graph-baseline.test.mjs`.
 
 ### R4: A fast path matches the canonical reader or declines
 
 A browser shortcut for a fact Python owns either equals the canonical loader or
-hands the decision to the Worker. `app/genbank-header.js` is the only JavaScript
+hands the decision to the Worker. `services/genbank-header.js` is the only JavaScript
 GenBank header reader, and it declines what it cannot read exactly. A Worker
 helper that answers what Generate reads calls the canonical loader. A JavaScript
 check that anticipates a Python match (letter case, color domains) uses Python's
@@ -258,13 +312,14 @@ frame (F with the effective reverse complement applied); and Src, input-file
 coordinates. Raw rows and **Save Raw LOSAT TSV** stay in F. Every comparison
 table is read in F, and only the Python planner projects orientation to V.
 Human-readable coordinates (popups, FASTA headers) lead with Src. The Linear
-orientation owner is the File card's `region_reverse`
-(`app/record-display-options.js`).
+orientation owner is the File card's `region_reverse`, written by
+`app/record-display-options.js`; `services/record-display-model.js`
+(`effectiveRecordReverseComplement`) derives the effective orientation.
 
 Reuse compares every input that is knowable without extraction as data; an
 invalidation event is only an optimization. LOSAT job planning is one pure plan
-for execution and the estimate: `planLosatSourceJobs` (`app/linear-sources.js`)
-and `buildLosatJobSpecs` (`app/linear-comparisons.js`).
+for execution and the estimate: `planLosatSourceJobs` (`services/linear-sources.js`)
+and `buildLosatJobSpecs` (`services/linear-comparisons.js`).
 
 Guards: `tests/web/linear-sources.test.mjs` (one-file packaging equals separate
 files; job plan) and `tests/web/gui-audit-20260930-comparisons.playwright.spec.js`
@@ -276,9 +331,9 @@ A failure the user can fix is thrown with a code and a bounded context:
 `diagnosticError(code, context, { stage, operation })` in JavaScript,
 `GbdrawError(..., diagnostic=)` in Python. Wording lives only in the normalizer
 (`normalizeUserFacingError`). A locator in the context (Sequence N, Line N,
-Column N, Track row N, Depth series N, Available band) appears in the summary,
-and an offered action must be one the user can press. Never add a classifier that
-matches message text.
+Column N, Track row N, Depth series N, Available band, Feature) appears in the
+summary, and an offered action must be one the user can press. Never add a
+classifier that matches message text.
 
 Guards:
 
@@ -330,15 +385,39 @@ scans the Python and Web JavaScript sources for a second mapping onto
 ### R10: A watcher does not repair state
 
 A transition that changes the inputs of a derived structure calls the owner's
-reconcile explicitly: Depth sources go through `changeCircularDepthSources` and
+reconcile explicitly, through the port the composition root injected or by
+returning to the root, which calls the reconcile (R13); it does not hold the
+other owner's object. Depth sources go through `changeCircularDepthSources` and
 `changeLinearDepthSources`, and the suppress controls through
 `applyCircularSuppressControlsToSlots`. One concept has one builder
 (`resetCircularTrackSlotsToPreset` for the simple-controls stack). Display values
 are looked up by identity (`slotId`), never by position.
 
+Every edit of a feature-slot input (Track Preset, Track Layout, Separate
+Strands, Use custom stack, and the custom stack rows) runs through one
+transition in `app/feature-editor/placement-actions.js`: the composition root
+passes it to the stack editors as the `changeTrackLayout` port, each editor
+routes its feature-slot edits through it (`featureSlotEdits` in
+`app/track-slot-edits.js`), and a template passes `$event` so Cancel restores
+the control. An edit that would leave a lane Feature placement of the
+drawing undrawable asks first (Owner decision Q3); Reset applies the edit
+and removes those rows as one History step. The control's History adapter
+records an edit that loses no lane, and restores install state as is (R11).
+
+Every edit of a Feature Visibility rule (the Features panel and the popup's
+product and protein ID scopes) runs through `editFeatureVisibilityRules` in
+`app/feature-editor/visibility-actions.js`, which writes the rules, projects
+them, and follows with the labels as one History step.
+
 Guards: `tests/web/depth-slot-lifecycle.test.mjs` (the same cases through the
-Circular and Linear editors), `tests/web/circular-track-slots.test.mjs`, and
-`tests/web/track-slot-display.test.mjs`.
+Circular and Linear editors), `tests/web/circular-track-slots.test.mjs`,
+`tests/web/track-slot-display.test.mjs`, and
+`tests/web/track-layout-transition.test.mjs` (every writer of a feature-slot
+input is that transition, a listed restore, or a listed reconcile) with
+`tests/web/track-layout-transition.playwright.spec.js`, and
+`tests/web/feature-visibility-rule-writers.test.mjs` (every writer of the
+Feature Visibility rules is that transition, a History restore, a Session load,
+or Reset Settings).
 
 ### R11: History transaction boundaries
 
@@ -366,7 +445,8 @@ Circular and Linear editors), `tests/web/circular-track-slots.test.mjs`, and
   comparison sequences of a LOSAT-cache replay included: its ring rows and the
   managed track slots' `series_key` name those rows. Only the generated Linear
   comparisons stay in artifact checkpoints.
-- The Generate-owned feature catalog is held by reference in checkpoints, history
+- The feature catalog of the current Results (Generate's, or the automatic
+  rerender's, which replaces it with its Results) is held by reference in checkpoints, history
   entries, and Session rollback, and is never cloned through JSON.
   `state.featureCatalog` is null or an admitted catalog (`admittedFeatureCatalog`
   in `services/config.js`). The two paragraphs under Module ownership govern
@@ -425,6 +505,182 @@ a Linear scale font without a ruler-label font) and
 has an author-provided name that does not change with its state, and every help
 tip is a reachable disclosure).
 
+### R13: Owner layering and ports
+
+Modules sit in layers, lowest first: leaves (`utils/`, `config.js`,
+`web-ux-profile.js`, `mode-profiles.js`, `mode-profiles.generated.js`,
+`mode-scoped-settings.generated.js`), then
+state-free `services/`, then
+`state.js`, then the two state-bound services (`services/config.js`,
+`services/reset.js`), the only services that import `state.js`, then owner
+modules (`app/*.js` and `app/*/` factories), then the composition roots
+(`app/app-setup.js`, `app/feature-editor.js`, `app/legend.js`,
+`app/legend-layout.js`), then `app.js`, `components.js`, and the template. A
+module imports its own layer and lower ones; a state-free module never imports
+`state.js`, and an owner module never imports a composition root.
+
+- An owner never imports, holds, or calls another owner object. It receives
+  ports: a port is one function, in one direction, named for the reaction it
+  performs (`applyFeatureVisibilityToLabels`), not for its provider
+  (`labelActions`). A factory that takes a whole owner object outside a
+  composition root is a whole-object port.
+- A reaction of owner A to a change in owner B is wired by a composition root:
+  as a port injected into B, or as the root calling A's projection after B's
+  transition returns. B does not call A's object, and A does not call back into
+  B.
+- A closure passed at composition that resolves to an owner created later in
+  the same root (a forward-reference closure) is a composition error: reorder
+  the creation, or register the port after both owners exist. A closure at any
+  depth counts, and so does a late-bound function variable that the root
+  reassigns after the owner exists.
+- `state.<name> = <function>` outside `state.js` is a backdoor: a value an owner
+  needs from a higher layer arrives as a port or on an existing data path
+  (Result metadata, the admitted catalog).
+- A heavy derived value (`rulePreparation`) is triggered from one place per
+  flow: the composition root's projection, the Generate compiler, or the owner
+  of its input. An owner that only reads the result awaits `pending` rather
+  than triggering it. A trigger site includes a call of a producer port (a
+  producer method handed to an owner as a function, such as
+  `rulePreparation.run` or `rulePreparation.runDrawn`) in the module that
+  receives it.
+- Each projection domain has one projection function and one call shape
+  outside its owner (R3).
+
+The baseline of the current violations is recorded in
+`tests/web/owner-graph-baseline.test.mjs` and may only shrink: a runtime change
+removes the subjects it fixes from the baseline in the same pull request, and
+an addition is an authority-only change (`tools/web-design-rule-guards.json`,
+WEB_CHANGE_POLICY.md "Design-rule co-change"). The detectors are
+`tools/web-owner-graph-detectors.mjs` (injection edges, forward-reference
+closures `owner-graph.forward-closure.v2`, state backdoors, whole-object ports,
+projection call shapes, heavy derived trigger sites
+`heavy-derived.trigger-site.v2`, and import direction
+`layer.import-direction.v1`, which ranks modules with `webLayerOf`; no upward
+import is allowed, and none is recorded);
+`node tools/report-web-owner-graph.mjs --at worktree` prints the current
+subjects. Fix an upward import by moving the imported code down or taking a
+port.
+
+Run `node --test tests/web/owner-graph-baseline.test.mjs` before and after a
+change to `gbdraw/web/js`. A new subject means the change couples owners:
+restructure it instead of recording the subject. Renaming a parameter or a call
+so that a subject disappears is not a fix; the pull request states which owner
+no longer holds which object, and which port replaced it. A reaction of one
+editor domain to another follows the decision record's Reaction owner, Channel,
+and Projection (`docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md`); without
+a record, ask the Owner before implementing it.
+
+Guards: `tests/web/owner-graph-baseline.test.mjs` (every observed subject is in
+the baseline with a count no higher than recorded, per detector, and no module
+imports from a higher layer) and
+`tests/web/owner-graph-detectors.test.mjs` (the detectors).
+
+### R14: Typed boundaries
+
+Modules under `js/` except `workers/` are checked by `tsc --noEmit` with JSDoc
+types (`tests/web/types/tsconfig.json`); there is no build step and no
+TypeScript source. A checked module starts with the line `// @ts-check`. The
+modules not yet checked are listed in `UNCHECKED_MODULES` in
+`tests/web/typed-boundaries.test.mjs`, which may only shrink: the pull request
+that checks a module removes it from the list, and an addition is an
+authority-only change. A new module is checked from its first commit.
+
+- A checked module declares the type of every parameter of its exported
+  `create*` and `setup*` factories. A port (R13) is a function type declared by
+  the owner that receives it; a composition root imports it with `@import`. A
+  type naming another owner's factory result (`ReturnType<typeof createX>`) is
+  a whole-object port.
+- A persisted contract (the Session, the canonical render request, the feature
+  catalog) has one typedef, in its writer beside its version constant
+  (`SESSION_VERSION`, `CANONICAL_REQUEST_SCHEMA`, `FEATURE_CATALOG_SCHEMA`),
+  for the current format only. A reader takes unvalidated data and returns that
+  typedef.
+- Types are JSDoc in the module that owns them, imported with
+  `/** @import { T } from './x.js' */`, never a `.d.ts` or a types module under
+  `gbdraw/web/`. A type import follows the layers of R13. The globals of
+  vendored scripts and the test hooks are declared once, as `any`, in
+  `tests/web/types/web-globals.d.ts`.
+- `@ts-ignore`, `@ts-expect-error`, and `@ts-nocheck` are not used: fix the
+  type, cast with JSDoc, or fix the code.
+- `noImplicitAny` is not yet on in the guard config.
+  `tests/web/types/tsconfig.no-implicit-any.json` is the guard config plus
+  `noImplicitAny`, and `NO_IMPLICIT_ANY_BASELINE` in
+  `tests/web/no-implicit-any-ratchet.test.mjs` caps its diagnostics across
+  `js/`. A pull request keeps the count at or below the cap and may lower the
+  cap to the new count: a new parameter or variable declares its type, or the
+  collection a callback iterates is typed. Raising the cap is an
+  authority-only change.
+- Explicit `any` in JSDoc (`any`, `*`, `Object`, or a type that resolves to
+  `any`, such as an alias of it) is type debt. `EXPLICIT_ANY_BASELINE` in
+  `tests/web/explicit-any-ratchet.test.mjs` records it per module and only
+  goes down: a pull request that removes some lowers the module's entry, and
+  new code declares a type or uses `unknown`. A module without an entry,
+  including a new module, has none. Adding or raising an entry is an
+  authority-only change.
+- Distinct identity values (a Python key, a display caption, a swatch color, a
+  feature id) take distinct named types, not one shared `string` alias.
+
+Guards: `tests/web/typed-boundaries.test.mjs` (the checked set, the compiler
+run, declared factory parameters, no suppression, type-import direction),
+`tests/web/no-implicit-any-ratchet.test.mjs` (the `noImplicitAny` cap), and
+`tests/web/explicit-any-ratchet.test.mjs` (explicit `any` per module). They
+run the `typescript` version pinned in `package.json` and fail until `npm ci`
+has installed it.
+
+### R15: Drawing context and mode-scoped settings
+
+Each diagram mode has one drawing, `state.drawings.circular` and
+`state.drawings.linear` (`createDrawingState` in `state.js`). A drawing holds
+that mode's settings (`form`, `adv`, the LOSAT search fields, the comparison
+plan, record display, the layout slot), its editor edits (per-feature edits and
+placements, colors and color rules, label tables and filters, Legend edits,
+annotation sets, canvas padding), and the values derived from them, under their
+former `state` names. Nothing else holds them, and the two drawings share no
+member object, so a setting or an edit made in one mode never reaches the other
+(PD-OI-086).
+
+- `state` keeps only what both modes share: the input files, the LOSAT caches,
+  the LOSAT execution and thread settings, app settings (Auto Reflow, PNG DPI,
+  palette Instant Preview), the Session title, the shown Result and its
+  artifacts (each mode keeps its own Result, `services/artifact-slot.js`), and
+  transient flags. Every `state` key and drawing member is in exactly one class
+  in `tests/web/helpers/drawing-state.mjs`. A value both modes should share is
+  a Product decision: record it in the Product Contract before moving it out
+  of the drawing.
+- A state-free service never resolves the active drawing: it takes the
+  `drawing` it reads, or the mode whose drawing it reads (for example the
+  mode of the Result it handles). An owner resolves `state.activeDrawing()`, the
+  drawing of the shown mode, once per action, or the drawing of the mode its
+  action is about, and passes it down. Generate resolves its drawing once, at
+  the entry of `runAnalysis`; its request, validation, and commit use that
+  drawing only. A reflow or rerender of a committed Result uses the drawing of
+  that Result's mode.
+- A mode switch (`transitionDiagramMode`) writes no drawing (R10). History
+  stays one manager, and a switch is one step (R11).
+- A Session 46 saves each drawing as `modes.circular` and `modes.linear`.
+  `gbdraw/web_support/mode_scoped_settings.py` is the one registry of what a
+  slice holds (domain, path, modes, row key, migration token);
+  `tools/generate_mode_scoped_settings.py` writes it into
+  `js/mode-scoped-settings.generated.js`, which is never edited by hand. Load
+  rebuilds each drawing from the projection of that mode's committed request,
+  then the slice's stored values, then the mode's defaults.
+  `services/mode-scoped-migration.js` splits a Session 27–44 draft into the two
+  slices, and `split_draft_into_modes` in `gbdraw/session_io.py` is its Python
+  twin. A Session 45 is not read.
+
+Guards: `tests/web/drawing-context.test.mjs` (the key classes, one drawing per
+mode, no drawing key read from `state`, no `activeDrawing` identifier in
+`services/`, and Generate resolving it once); `tests/web/per-mode-drawings.test.mjs` (no
+shared member object, and each mode's request carries its own drawing's
+values); `tests/web/mode-scoped-session.test.mjs` (the Session 46 round trip,
+and a Session 45 or a field outside the registry rejected);
+`tests/web/mode-split-vectors.test.mjs` with `tests/test_mode_split_vectors.py`
+(the JavaScript and Python splits agree on shared vectors);
+`tests/test_mode_scoped_settings.py` (the registry rows, and the generated file
+equal to its Python source); and
+`tests/web/mode-scoped-settings.playwright.spec.js` (settings, Legend edits,
+Depth, and History per mode in the browser).
+
 ## Computation ownership
 
 Follow [Computation ownership](../../docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#computation-ownership)
@@ -433,12 +689,11 @@ canonical request builder, generated-table serialization, or full feature
 metadata construction.
 
 Current owners in the initial automated scope:
-- The generated label-override table is owned by
-  `app/feature-editor/label-override-table.js` (`buildLabelOverrideRows`).
-  `services/session-request.js` (`addGeneratedTableResources`) serializes it
-  into the canonical request.
-- Feature-selector metadata and the uniqueness index are owned by
-  `app/feature-selector.js`.
+- The bulk label projection is owned by
+  `services/label-override-table.js` (`buildBulkLabelProjection`).
+  `services/session-request.js` builds it once per request
+  (`requestLabelProjection`) and writes its identity-row label text and its
+  `* * label` table rows into the canonical request.
 - Observation uses `services/runtime-test-hooks.js` (`recordStructuralMetric`),
   History `getDiagnostics()`, and the Worker tracking in
   `tests/web/helpers/app-lifecycle.cjs`.
@@ -454,7 +709,10 @@ state and the persisted/rendered model. It owns:
 - Linear record/group topology;
 - output-prefix and per-batch output projection;
 - explicit track-slot projection;
-- the current `ui.layoutPreferences` representation.
+- per-feature edit and Feature placement rows (`diagramOptions.featureOverrides`
+  and `featurePlacements`, built by `services/feature-placement.js`);
+- the layout-preference slot that a committed request sets in its mode's
+  drawing (`modes.<mode>.ui.layoutPreferences` in a Session 46).
 
 `services/config.js` coordinates user-facing save and load actions. It must not
 grow a parallel model of render fields. Compatibility migrations are reader
@@ -473,7 +731,9 @@ compatibility inputs, not a second source of truth. Preserve empty positions in
 per-record depth and comparison inputs when those positions carry alignment
 meaning.
 
-See `docs/SESSION_COMPATIBILITY.md` for accepted versions and migration limits.
+See `docs/REFERENCE/session-and-request-compatibility.md` for accepted versions
+and migration limits, and `docs/internal/SESSION_FORMAT_HISTORY.md` for the
+version-by-version history.
 
 ## Modes and output topology
 
@@ -531,7 +791,7 @@ request boundary instead of duplicating it in configuration and session modules.
 
 ## Gallery ownership
 
-`tools/prepare_interactive_gallery_assets.py::EXAMPLES` is the public 11-example
+`tools/prepare_interactive_gallery_assets.py::EXAMPLES` is the public example
 inventory. `gbdraw/web/gallery/examples.json`, session artifacts, source/example
 SVGs, thumbnails, and `artifact-manifest.json` are generated projections.
 `tools/refresh_gallery_sessions.py` is the supported unfiltered owner command;
@@ -542,13 +802,12 @@ Tutorial instructions live under
 `gbdraw/web/gallery/tutorials/`; screenshots and thumbnails live under
 `gbdraw/web/gallery/media/` and `thumbnails/`.
 
-Use `tools/build_web_gallery.py` for generated gallery markup. Use
-`tools/capture_gallery_tutorial_screenshots.py` for declarative tutorial
+Use `tools/capture_gallery_tutorial_screenshots.py` for declarative tutorial
 captures. Data-dependent captures must load the example's own session, declare
 the expected app state, and prove that the controls or data identity named by
 the instruction are visible in the final crop.
 
-Read `.agents/skills/web-gallery-screenshot-maintenance/SKILL.md` before editing
+Read `.claude/skills/web-gallery-screenshot-maintenance/SKILL.md` before editing
 Gallery tutorials or screenshots.
 
 ## Local build and verification
@@ -559,6 +818,8 @@ python tools/prepare_browser_wheel.py
 python tools/prepare_browser_wheel.py --refresh-cache-bust
 python -m build
 pytest tests/ -v -m "not slow"
+npm ci
+node --test tests/web/typed-boundaries.test.mjs
 ```
 
 Refresh the cache-bust token only when preparing a deployable bundle.
@@ -599,6 +860,7 @@ the app reaches a ready state without external network access.
 Related project documentation:
 
 - `CLAUDE.md`
-- `docs/TYPED_API.md`
-- `docs/SESSION_COMPATIBILITY.md`
-- `docs/SVG_SEMANTIC_HOOKS.md`
+- `docs/REFERENCE/typed-requests.md`
+- `docs/REFERENCE/session-and-request-compatibility.md`
+- `docs/internal/SESSION_FORMAT_HISTORY.md`
+- `docs/REFERENCE/interactive-svg-and-semantic-hooks.md`

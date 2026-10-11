@@ -40,7 +40,8 @@ from gbdraw.annotations import (
 )
 from gbdraw.exceptions import ValidationError
 import gbdraw.api.request_render as request_render_module
-from gbdraw.api.request_render import normalize_request_records
+from gbdraw.api.request_render import normalize_request_records, plan_request
+from gbdraw.features.overrides import FeatureOverride
 from gbdraw.io.regions import parse_region_spec
 from gbdraw.io.record_select import parse_record_selector
 from gbdraw.session import build_session_document
@@ -246,7 +247,6 @@ def test_warm_and_render_only_generates_reuse_biological_preparation(
     assert cold_metrics["interactiveContextCacheMissCount"] == 1
     assert cold_metrics["interactiveContextBuildCount"] == 1
     assert cold_metrics["interactiveFeatureTraversalCount"] == 1
-    assert cold_metrics["selectorSafetyScopeBuildCount"] == 0
     assert cold_metrics["preparedInputCacheRetainedBytes"] > 0
 
     for diagnostics in (warm_diagnostics, render_only_diagnostics):
@@ -258,7 +258,6 @@ def test_warm_and_render_only_generates_reuse_biological_preparation(
         assert metrics["interactiveContextCacheHitCount"] == 1
         assert metrics["interactiveContextBuildCount"] == 0
         assert metrics["interactiveFeatureTraversalCount"] == 0
-        assert metrics["selectorSafetyScopeBuildCount"] == 0
         assert metrics["preparedInputCacheRetainedBytes"] > 0
         assert metrics["preparedInputCacheMutationViolationCount"] == 0
 
@@ -499,7 +498,7 @@ def test_orthogroup_resource_invalidates_interactive_context_only(
     assert "OG-A" not in changed_payload
 
 
-def test_gff_fasta_policy_is_part_of_the_parsed_source_key(tmp_path: Path) -> None:
+def test_gff_fasta_type_filter_is_part_of_the_resolved_key_not_the_parsed_key(tmp_path: Path) -> None:
     fixture_root = Path(__file__).parent / "test_inputs"
     gff_path = fixture_root / "NC_013668.gff3"
     fasta_path = fixture_root / "NC_013668.fasta"
@@ -517,7 +516,7 @@ def test_gff_fasta_policy_is_part_of_the_parsed_source_key(tmp_path: Path) -> No
     }
     cache = PreparedBiologicalInputCache()
 
-    def request(selected_features: tuple[str, ...]) -> CircularDiagramRequest:
+    def request(selected_features: tuple[str, ...], **options) -> CircularDiagramRequest:
         return CircularDiagramRequest(
             records=(
                 RecordInput(
@@ -527,6 +526,7 @@ def test_gff_fasta_policy_is_part_of_the_parsed_source_key(tmp_path: Path) -> No
             ),
             options=CircularDiagramOptions(
                 selected_features_set=selected_features,
+                **options,
             ),
         )
 
@@ -543,9 +543,25 @@ def test_gff_fasta_policy_is_part_of_the_parsed_source_key(tmp_path: Path) -> No
     assert _metrics(cold_diagnostics)["parsedSourceParseCount"] == 1
     assert _metrics(warm_diagnostics)["parsedSourceCacheHitCount"] == 1
     assert _metrics(warm_diagnostics)["resolvedRecordCacheHitCount"] == 1
-    assert _metrics(changed_diagnostics)["parsedSourceCacheMissCount"] == 1
-    assert _metrics(changed_diagnostics)["parsedSourceParseCount"] == 1
+    assert _metrics(changed_diagnostics)["parsedSourceCacheHitCount"] == 1
+    assert _metrics(changed_diagnostics)["parsedSourceParseCount"] == 0
     assert _metrics(changed_diagnostics)["resolvedRecordBuildCount"] == 1
+
+    # An override row that shows a type the filter dropped reloads from the
+    # same parse: the type filter is applied in memory.
+    gene = next(
+        entry.biological_feature_id
+        for entry in plan_request(request(("CDS",))).provenance[0].source_feature_catalog
+        if entry.feature_type == "gene"
+    )
+    shown_diagnostics: dict[str, object] = {"metrics": {}}
+    with cache.transaction(resource_paths=identities, diagnostics=shown_diagnostics):
+        [record] = normalize_request_records(request(
+            ("CDS",), feature_overrides=(FeatureOverride("record-1", gene, feature_visibility="on"),),
+        ))
+    assert "gene" in {feature.type for feature in record.features}
+    assert _metrics(shown_diagnostics)["parsedSourceCacheHitCount"] == 1
+    assert _metrics(shown_diagnostics)["parsedSourceParseCount"] == 0
 
 
 def test_comparison_fasta_cache_reuses_only_nonempty_sources(tmp_path: Path) -> None:

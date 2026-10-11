@@ -4,11 +4,11 @@ import { test } from 'node:test';
 import {
   readCircularMeasure, writeCircularMeasureValue,
   changeCircularMeasureUnit, projectCircularMeasureDraft
-} from '../../gbdraw/web/js/app/circular-track-slots/measure-editor.js';
+} from '../../gbdraw/web/js/services/circular-track-measure.js';
 import {
   parseOptionalCircularScalar, validateCustomTrackPlan
-} from '../../gbdraw/web/js/app/track-slot-validation.js';
-import { buildCircularTrackSlotPayload } from '../../gbdraw/web/js/app/circular-track-slots.js';
+} from '../../gbdraw/web/js/services/track-slot-validation.js';
+import { buildCircularTrackSlotPayload } from '../../gbdraw/web/js/services/circular-track-slot-model.js';
 import {
   createDefaultAdv, createDefaultForm, validateCurrentWriterActiveConfig
 } from '../../gbdraw/web/js/services/session-active-config-contract.js';
@@ -63,7 +63,7 @@ for (const fixture of fixtures) {
         if (typeof scalar?.value === 'string') assert.equal(draft.value, scalar.value, 'numeric lexeme is not rounded');
       } else {
         assert.equal(view.isAuto, false);
-        assert.match(view.error, /positive finite px or factor/);
+        assert.match(view.error, /^Value must be a number greater than 0, in px or ×R\.$/);
         assert.throws(() => parseOptionalCircularScalar(scalar));
         assert.throws(() => buildCircularTrackSlotPayload(slot));
         assert.ok(validateRow(slot).rowIssues.get(0).some(issue => issue.code === 'geometry_invalid'));
@@ -128,7 +128,7 @@ test('Auto has no canonical unit; explicit clear returns null while typed empty 
     assert.equal(writeCircularMeasureValue('  ', unit), null);
     const empty = { value: '', unit };
     assert.equal(readCircularMeasure(empty).isAuto, false);
-    assert.match(readCircularMeasure(empty).error, /positive/);
+    assert.match(readCircularMeasure(empty).error, /greater than 0/);
     assert.strictEqual(projectCircularMeasureDraft(empty), empty);
   }
 });
@@ -144,14 +144,15 @@ test('tobacco Gallery pairs and precision survive read and real canonical reques
   ];
   const before = structuredClone(tobacco);
   for (const [id, field, valueText, selectedUnit] of expected) {
-    const scalar = tobacco.config.adv.circular_track_slots.find(slot => slot.id === id)[field];
+    // The Circular drawing's slots (Session 46 `modes.circular`).
+    const scalar = tobacco.modes.circular.config.adv.circular_track_slots.find(slot => slot.id === id)[field];
     assert.deepEqual(readCircularMeasure(scalar), { valueText, selectedUnit, isAuto: false, error: null });
     const draft = writeCircularMeasureValue(valueText, selectedUnit);
     assert.deepEqual(parseOptionalCircularScalar(draft), scalar);
   }
   const projected = projectCanonicalSessionRequest(tobacco);
   for (const [id, field] of expected) {
-    const raw = tobacco.config.adv.circular_track_slots.find(slot => slot.id === id)[field];
+    const raw = tobacco.modes.circular.config.adv.circular_track_slots.find(slot => slot.id === id)[field];
     const draft = projected.config.adv.circular_track_slots.find(slot => slot.id === id)[field];
     assert.deepEqual(parseOptionalCircularScalar(draft), raw);
   }
@@ -168,6 +169,7 @@ test('current and historical request projection keeps zero pixel gaps separate f
   for (const spacing of [0, '0px', { value: 0, unit: 'px' }, { value: 5, unit: 'px' }]) {
     const historical = structuredClone(tobacco);
     historical.renderRequest.schema = 2;
+    delete historical.renderRequest.diagramOptions.featureOverrides;
     historical.renderRequest.diagramOptions.output.outputPrefix = 'legacy';
     delete historical.renderRequest.diagramOptions.featurePlacements;
     historical.renderRequest.records.forEach(record => delete record.display);
@@ -188,5 +190,29 @@ test('current and historical request projection keeps zero pixel gaps separate f
       historical.renderRequest.diagramOptions.tracks.circularTrackSlots[0].spacing = invalid;
       assert.throws(() => projectCanonicalSessionRequest(historical), /pixels/);
     }
+  }
+});
+
+// TK-12: Width and Radius read decimal numbers as the CLI does. Number() also
+// read 0x10 as 16; the CLI's float() rejects it.
+test('Width and Radius read decimal number text only (TK-12)', () => {
+  for (const text of ['0x10', '0X1A', '0b11', '0o7', '0x10px', '0b1%', '1_0', ' 0x10 ', '1 0']) {
+    assert.throws(() => parseOptionalCircularScalar(text, 'Width'), /^Error: Width must be a number greater than 0, in px or ×R\.$/, text);
+    assert.throws(() => parseOptionalCircularScalar({ value: text, unit: 'factor' }), text);
+    assert.equal(readCircularMeasure({ value: text, unit: 'px' }, 'Radius').error, 'Radius must be a number greater than 0, in px or ×R.');
+  }
+  for (const [text, value, unit] of [['1e-1', 0.1, 'factor'], ['.5', 0.5, 'factor'], ['5.', 5, 'factor'], ['+0.5', 0.5, 'factor'],
+    ['1E2px', 100, 'px'], [' 12 px ', 12, 'px'], ['50 %', 0.5, 'factor']]) {
+    assert.deepEqual(parseOptionalCircularScalar(text), { value, unit }, text);
+  }
+  assert.deepEqual(parseOptionalCircularScalar({ value: ' 0.25 ', unit: 'factor' }), { value: 0.25, unit: 'factor' });
+});
+
+// TK-12: the row's own field reports an invalid Width or Radius; the row issue
+// names the field, so the row does not repeat it, and Generate still stops.
+test('an invalid Width or Radius row issue names its field (TK-12)', () => {
+  for (const field of ['width', 'radius']) {
+    const issues = validateRow(slotFor({ value: '0', unit: 'factor' }, field)).rowIssues.get(0);
+    assert.deepEqual(issues.map(issue => [issue.code, issue.field]), [['geometry_invalid', field]]);
   }
 });

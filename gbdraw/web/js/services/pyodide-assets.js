@@ -1,3 +1,4 @@
+// @ts-check
 import {
   GBDRAW_WHEEL_CACHE_BUST,
   GBDRAW_WHEEL_NAME,

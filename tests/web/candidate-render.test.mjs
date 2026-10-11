@@ -2,9 +2,23 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { compileDirectEditorMutationPlan } from '../../gbdraw/web/js/app/candidate-render.js';
+import { legendRowFeatureIds } from '../../gbdraw/web/js/services/legend-svg.js';
 import { biologicalFeatureKey } from '../../gbdraw/web/js/services/feature-catalog.js';
 
 const stableKey = biologicalFeatureKey('record-a', 'feature-a');
+// Per-feature visibility and label edits are identity rows (design Q4); each
+// Result reaches them through the rendered targets of their identity.
+const identityRow = (fields, featureId = 'feature-a') => ({
+  [JSON.stringify(['record-a', featureId])]: {
+    recordKey: 'record-a',
+    biologicalFeatureId: featureId,
+    featureVisibility: null,
+    labelVisibility: null,
+    labelText: null,
+    labelSourceText: null,
+    ...fields
+  }
+});
 
 const admission = () => ({
   resultNames: ['diagram.svg'],
@@ -12,7 +26,9 @@ const admission = () => ({
     stableKey,
     [{ resultIndex: 0, renderedId: 'f0001' }]
   ]]),
-  resultIndexesByRenderedId: new Map([['f0001', new Set([0])]])
+  resultIndexesByRenderedId: new Map([['f0001', new Set([0])]]),
+  // The rendered features of each Result with the renderer's fill.
+  renderedFeaturesByResult: [new Map([['f0001', { fill_color: '#94a3b8' }]])]
 });
 
 test('empty, default, stale, renderer, manual-rule, and legacy inputs compile to EMPTY', () => {
@@ -27,12 +43,10 @@ test('empty, default, stale, renderer, manual-rule, and legacy inputs compile to
       stale: { strokeColor: '#223344' },
       [stableKey]: {}
     },
-    featureVisibilityOverrides: {
-      stale: 'off',
-      f0001: 'default'
+    featureOverrides: {
+      ...identityRow({ featureVisibility: 'off', labelText: 'ignored' }, 'stale'),
+      ...identityRow({ featureVisibility: 'exclude_matching', labelSourceText: 'source' })
     },
-    labelTextFeatureOverrides: { stale: 'ignored' },
-    labelVisibilityOverrides: { f0001: 'default' },
     manualSpecificRules: [{ cap: 'manual', color: '#abcdef' }],
     legendEntries: [{ caption: 'file-derived', color: '#abcdef' }],
     originalLegendOrder: ['CDS'],
@@ -69,9 +83,9 @@ test('each direct editor domain and their combination compile to MUTATING', () =
         [stableKey]: { strokeColor: '#223344', strokeWidth: 2 }
       }
     },
-    visibility: { featureVisibilityOverrides: { f0001: 'off' } },
-    labelText: { labelTextFeatureOverrides: { f0001: 'renamed' } },
-    labelVisibility: { labelVisibilityOverrides: { f0001: 'off' } },
+    visibility: { featureOverrides: identityRow({ featureVisibility: 'off' }) },
+    labelText: { featureOverrides: identityRow({ labelText: 'renamed' }) },
+    labelVisibility: { featureOverrides: identityRow({ labelVisibility: 'off' }) },
     legendFill: {
       legendEntries: [{ caption: 'CDS', originalCaption: 'CDS', color: '#334455' }],
       originalLegendOrder: ['CDS'],
@@ -114,9 +128,7 @@ test('each direct editor domain and their combination compile to MUTATING', () =
     catalogAdmission: admission(),
     ...cases.fill,
     ...cases.stroke,
-    ...cases.visibility,
-    ...cases.labelText,
-    ...cases.labelVisibility,
+    featureOverrides: identityRow({ featureVisibility: 'off', labelText: 'renamed', labelVisibility: 'off' }),
     ...cases.legendFill,
     ...cases.legendStroke,
     transformSvg() {}
@@ -169,7 +181,8 @@ test('decoration transforms mutate only their matched batch output; zero keeps E
 
 test('an edited Legend order compiles to one order operation; the default order compiles none (D-08)', async () => {
   const cds = { caption: 'CDS', originalCaption: 'CDS', color: '#111111', xPos: 22, yPos: 7 };
-  const gc = { caption: 'GC percent', originalCaption: 'GC content', color: '#222222', xPos: 22, yPos: 31 };
+  // The live Legend may draw the renamed row elsewhere (a longer caption wraps).
+  const gc = { caption: 'GC percent', originalCaption: 'GC content', color: '#222222', xPos: 140, yPos: 7 };
   const manual = { caption: 'Manual', originalCaption: 'Manual', color: '#333333', xPos: 22, yPos: 55 };
   const compile = (legendEntries) => compileDirectEditorMutationPlan({
     catalogAdmission: admission(),
@@ -179,23 +192,22 @@ test('an edited Legend order compiles to one order operation; the default order 
 
   const defaultOrder = compile([cds, gc, manual]);
   assert.equal(defaultOrder.legendOrder.length, 0);
-  assert.deepEqual(defaultOrder.legendRenames.map(({ from, to, xPos, yPos }) => ({ from, to, xPos, yPos })), [
-    { from: 'GC content', to: 'GC percent', xPos: 22, yPos: 31 }
-  ]);
+  // A rename carries no position: the row keeps its place and the Legend
+  // layout places it (OV-156).
+  assert.deepEqual(defaultOrder.legendRenames, [{ from: 'GC content', to: 'GC percent', allowMissing: false }]);
 
   const reordered = compile([gc, manual, cds]);
   assert.deepEqual(reordered.legendOrder.map(({ captions }) => [...captions]), [['GC percent', 'Manual', 'CDS']]);
-  // The order owns the slots, so a renamed entry does not replay its old anchor.
-  assert.deepEqual(reordered.legendRenames.map(({ xPos, yPos }) => [xPos, yPos]), [[null, null]]);
+  assert.deepEqual(reordered.legendRenames, [{ from: 'GC content', to: 'GC percent', allowMissing: false }]);
 
   const { installFakeSvgDom } = await import('./fake-svg-dom.mjs');
-  const { applyEditorOperationsToMountedSvg } = await import('../../gbdraw/web/js/services/svg-result-ingestion.js');
+  const { reconcileMountedResult } = await import('../../gbdraw/web/js/services/svg-result-ingestion.js');
   installFakeSvgDom();
   const entry = (caption, y) => `<g data-legend-key="${caption}"><path fill="#123456" transform="translate(0, ${y})"/><text transform="translate(22, ${y})"/></g>`;
   const svg = new DOMParser().parseFromString(
     `<svg viewBox="0 0 100 100"><g id="legend"><g id="feature_legend">${entry('CDS', 7)}${entry('GC content', 31)}${entry('Other', 55)}</g></g></svg>`
   ).documentElement;
-  applyEditorOperationsToMountedSvg(svg, { ...reordered, legendAdds: [] });
+  reconcileMountedResult(svg, { ...reordered, legendAdds: [] });
   const placed = svg.querySelectorAll('g[data-legend-key]').map((group) => [
     group.getAttribute('data-legend-key'), group.querySelector('text').getAttribute('transform')
   ]);
@@ -203,6 +215,20 @@ test('an edited Legend order compiles to one order operation; the default order 
   assert.deepEqual(placed, [
     ['GC percent', 'translate(22, 7)'],
     ['CDS', 'translate(22, 31)'],
+    ['Other', 'translate(22, 55)']
+  ]);
+
+  // OV-156: renaming a row that is not last, in the default order, keeps the
+  // row in its place, even when the live Legend drew it elsewhere.
+  const renamedInPlace = new DOMParser().parseFromString(
+    `<svg viewBox="0 0 100 100"><g id="legend"><g id="feature_legend">${entry('CDS', 7)}${entry('GC content', 31)}${entry('Other', 55)}</g></g></svg>`
+  ).documentElement;
+  reconcileMountedResult(renamedInPlace, { ...defaultOrder, legendAdds: [] });
+  assert.deepEqual(renamedInPlace.querySelectorAll('g[data-legend-key]').map((group) => [
+    group.getAttribute('data-legend-key'), group.querySelector('text').getAttribute('transform')
+  ]), [
+    ['CDS', 'translate(22, 7)'],
+    ['GC percent', 'translate(22, 31)'],
     ['Other', 'translate(22, 55)']
   ]);
 });
@@ -234,4 +260,308 @@ test('canvas padding reaches every candidate Result once and is idempotent (D-09
   const plain = parse();
   assert.equal(applyCanvasPaddingToSvg(plain, {}), false);
   assert.equal(plain.getAttribute('data-original-view-box'), null);
+});
+
+// Design Q4 6.2: an identity row reaches each Result through the rendered ID
+// that Result draws it with, not through one rendered ID string.
+test('an identity row projects onto every Result that draws its feature', () => {
+  const plan = compileDirectEditorMutationPlan({
+    catalogAdmission: {
+      resultNames: ['one.svg', 'two.svg'],
+      renderedTargetsByOverrideKey: new Map([[stableKey, [
+        { resultIndex: 0, renderedId: 'f0001_record_1' },
+        { resultIndex: 1, renderedId: 'f0001__instance_record_2_0123456789abcdef' }
+      ]]]),
+      resultIndexesByRenderedId: new Map()
+    },
+    featureOverrides: identityRow({ featureVisibility: 'off', labelText: 'renamed' })
+  });
+  assert.deepEqual(plan.operationsByResult.map((operations) => operations.featureVisibility), [
+    [{ renderedId: 'f0001_record_1', mode: 'off' }],
+    [{ renderedId: 'f0001__instance_record_2_0123456789abcdef', mode: 'off' }]
+  ]);
+  assert.deepEqual(plan.operationsByResult.map((operations) => operations.labelText.map(({ value }) => value)), [
+    ['renamed'], ['renamed']
+  ]);
+});
+
+// OV-45: a batch Result that draws none of a styled Legend row's features draws
+// no row for it, so its Legend style may find the row absent; the Result that
+// draws them still requires it.
+test('a Legend style may miss its row only in a Result that draws none of its features', () => {
+  const options = {
+    catalogAdmission: { ...admission(), resultNames: ['record-a.svg', 'record-b.svg'] },
+    featureColorOverrides: { [stableKey]: { color: '#123456', caption: 'codon start two' } },
+    manualSpecificRules: [{ feat: 'CDS', qual: 'hash', val: 'fef810304', color: '#123456', cap: 'codon start two' }],
+    legendEntries: [{ caption: 'codon start two', originalCaption: 'codon start two', color: '#123456' }],
+    originalLegendOrder: ['codon start two', 'CDS'],
+    legendColorOverrides: { 'codon start two': '#123456' },
+    legendStrokeOverrides: { 'codon start two': { strokeColor: '#445566', strokeWidth: 2 } }
+  };
+  const plan = compileDirectEditorMutationPlan(options);
+  assert.deepEqual(plan.operationsByResult.map(({ legendFills }) => legendFills), [
+    [{ caption: 'codon start two', color: '#123456', allowMissing: false }],
+    [{ caption: 'codon start two', color: '#123456', allowMissing: true }]
+  ]);
+  // A rule draws the feature's color edit, so the stroke reaches the feature
+  // by the color of the row Python draws for the rule, not by its caption
+  // (OV-292); the caption still excuses a Result that draws none of them.
+  assert.deepEqual(plan.operationsByResult.map(({ legendStrokes }) => legendStrokes.map(
+    ({ allowMissing, reach }) => ({ allowMissing, namedIds: reach.namedIds })
+  )), [
+    [{ allowMissing: false, namedIds: [] }],
+    [{ allowMissing: true, namedIds: [] }]
+  ]);
+  // A color edit no rule draws names its feature into the row by its caption.
+  const direct = compileDirectEditorMutationPlan({ ...options, manualSpecificRules: [] });
+  assert.deepEqual(direct.operationsByResult.map(({ legendStrokes }) => legendStrokes.map(({ reach }) => reach.namedIds)), [
+    [['f0001']], [['f0001']]
+  ]);
+});
+
+// OV-46, OV-63: a Legend row with no known features is required by the plan in each
+// Result. Admission lets Python's Legend row facts excuse the absence (suppressed by
+// the draft, or drawn by another Result), so the plan carries no guess of its own.
+test('a Legend row with no known features stays required in each Result of a batch', () => {
+  const plan = compileDirectEditorMutationPlan({
+    catalogAdmission: { ...admission(), resultNames: ['record-a.svg', 'record-b.svg'] },
+    legendEntries: [{ caption: 'other proteins', originalCaption: 'other proteins', color: '#00aa00' }],
+    originalLegendOrder: ['other proteins'],
+    legendColorOverrides: { 'other proteins': '#00aa00' },
+    legendStrokeOverrides: { 'other proteins': { strokeColor: '#445566', strokeWidth: 2 } }
+  });
+  assert.deepEqual(plan.operationsByResult.map(({ legendFills }) => legendFills), [
+    [{ caption: 'other proteins', color: '#00aa00', allowMissing: false }],
+    [{ caption: 'other proteins', color: '#00aa00', allowMissing: false }]
+  ]);
+  assert.deepEqual(plan.operationsByResult.map(({ legendStrokes }) => legendStrokes.map(
+    ({ allowMissing, reach }) => ({ allowMissing, ...reach })
+  )), [
+    [{ allowMissing: false, listedIds: [], namedIds: [], ownStrokeIds: [], draftColor: null }],
+    [{ allowMissing: false, listedIds: [], namedIds: [], ownStrokeIds: [], draftColor: null }]
+  ]);
+});
+
+test('a Legend rename and style of a generated row are compiled the same way whatever the draft hides', () => {
+  const compile = (extra = {}) => compileDirectEditorMutationPlan({
+    catalogAdmission: admission(),
+    legendEntries: [{ caption: 'Repeats', originalCaption: 'repeat_region', color: '#7b2cbf' }],
+    originalLegendOrder: ['repeat_region'],
+    legendColorOverrides: { Repeats: '#7b2cbf' },
+    ...extra
+  }).operationsByResult[0];
+  const plain = compile();
+  const hidden = compile({ featureOverrides: identityRow({ featureVisibility: 'off' }) });
+  assert.deepEqual(hidden.legendFills, plain.legendFills);
+  assert.deepEqual(hidden.legendRenames, plain.legendRenames);
+  assert.deepEqual(plain.legendFills, [{ caption: 'repeat_region', color: '#7b2cbf', allowMissing: false }]);
+  assert.equal(plain.legendRenames[0].allowMissing, false);
+});
+
+test('a Legend row in a single Result stays required in that Result', () => {
+  const plan = compileDirectEditorMutationPlan({
+    catalogAdmission: admission(),
+    legendEntries: [{ caption: 'other proteins', originalCaption: 'other proteins', color: '#00aa00' }],
+    originalLegendOrder: ['other proteins'],
+    legendColorOverrides: { 'other proteins': '#00aa00' }
+  });
+  assert.deepEqual(plan.operationsByResult[0].legendFills, [
+    { caption: 'other proteins', color: '#00aa00', allowMissing: false }
+  ]);
+});
+
+// OV-81: Show Depth off sends Python no Depth source, so it cannot report the Depth
+// row; the draft names it, and only that row may be absent (a Ghost row stays stale).
+test('a Legend style on a Depth series the request left out may miss its row', () => {
+  const compile = (unrequestedDepthCaptions) => compileDirectEditorMutationPlan({
+    catalogAdmission: admission(),
+    legendEntries: [
+      { caption: 'depth', originalCaption: 'depth', color: '#7b2cbf' },
+      { caption: 'Ghost', originalCaption: 'Ghost', color: '#123456' }
+    ],
+    originalLegendOrder: ['depth', 'Ghost'],
+    legendColorOverrides: { depth: '#7b2cbf', Ghost: '#123456' },
+    legendStrokeOverrides: { depth: { strokeColor: '#445566', strokeWidth: 2 } },
+    unrequestedDepthCaptions
+  }).operationsByResult[0];
+  const requested = compile([]);
+  assert.deepEqual(requested.legendFills.map(({ caption, allowMissing }) => [caption, allowMissing]), [
+    ['depth', false], ['Ghost', false]
+  ]);
+  const hidden = compile(['depth']);
+  assert.deepEqual(hidden.legendFills.map(({ caption, allowMissing }) => [caption, allowMissing]), [
+    ['depth', true], ['Ghost', false]
+  ]);
+  assert.deepEqual(hidden.legendStrokes.map(({ caption, allowMissing }) => [caption, allowMissing]), [['depth', true]]);
+});
+
+// OV-88: one rule for the row Python is not sent: a Depth row renamed in the
+// Legend is excused like an unrenamed one, its rename and the styles stored
+// under the new name included.
+test('a renamed Depth row the request left out may miss its row, rename and styles alike', () => {
+  const compile = (unrequestedDepthCaptions) => compileDirectEditorMutationPlan({
+    catalogAdmission: admission(),
+    legendEntries: [
+      { caption: 'Coverage', originalCaption: 'depth', color: '#7b2cbf' },
+      { caption: 'Ghost name', originalCaption: 'Ghost', color: '#123456' }
+    ],
+    originalLegendOrder: ['depth', 'Ghost'],
+    legendColorOverrides: { Coverage: '#7b2cbf', 'Ghost name': '#123456' },
+    legendStrokeOverrides: { Coverage: { strokeColor: '#445566', strokeWidth: 2 } },
+    unrequestedDepthCaptions
+  }).operationsByResult[0];
+  const pairs = (operations, key) => operations.map((operation) => [operation[key], operation.allowMissing]);
+  const requested = compile([]);
+  assert.deepEqual(pairs(requested.legendRenames, 'from'), [['depth', false], ['Ghost', false]]);
+  assert.deepEqual(pairs(requested.legendFills, 'caption'), [['depth', false], ['Ghost', false]]);
+  const hidden = compile(['depth']);
+  assert.deepEqual(pairs(hidden.legendRenames, 'from'), [['depth', true], ['Ghost', false]]);
+  assert.deepEqual(pairs(hidden.legendFills, 'caption'), [['depth', true], ['Ghost', false]]);
+  assert.deepEqual(pairs(hidden.legendStrokes, 'caption'), [['depth', true]]);
+});
+
+// OV-123, OV-288 (R3, R15-4, PD-OI-066): one rule says which features a
+// Legend row's stroke reaches: the listed ones, else the named ones and those
+// drawn in the color the renderer gives the row's features (the draft's where
+// the Result predates it, else Python's row color), never the swatch's.
+test('a Legend row stroke reaches the listed, named, and same-colored features without their own stroke', () => {
+  const drawnFills = [['f1', '#54BCF8'], ['f1', '#54bcf8'], ['f2', '#d3d3d3'], ['f3', '#54bcf8'], ['f4', '#123456']];
+  const reach = (fields = {}) => ({ listedIds: [], namedIds: [], ownStrokeIds: [], draftColor: null, ...fields });
+  assert.deepEqual(legendRowFeatureIds(reach(), '#54bcf8', drawnFills), ['f1', 'f3']);
+  assert.deepEqual(legendRowFeatureIds(reach({ namedIds: ['f4'], ownStrokeIds: ['f3'] }), '#54bcf8', drawnFills), ['f1', 'f4']);
+  assert.deepEqual(legendRowFeatureIds(reach({ listedIds: ['f2', 'f9'] }), '#54bcf8', drawnFills), ['f2']);
+  assert.deepEqual(legendRowFeatureIds(reach(), 'none', drawnFills), []);
+  assert.deepEqual(legendRowFeatureIds(reach({ namedIds: ['f2'] }), null, drawnFills), ['f2']);
+  assert.deepEqual(legendRowFeatureIds(reach({ draftColor: '#d3d3d3' }), '#54bcf8', drawnFills), ['f2']);
+});
+
+test('a stroke on a generated Legend row gives each Result the features that keep their own stroke', () => {
+  const featureB = biologicalFeatureKey('record-a', 'feature-b');
+  const plan = compileDirectEditorMutationPlan({
+    catalogAdmission: {
+      resultNames: ['record-a.svg', 'record-b.svg'],
+      renderedTargetsByOverrideKey: new Map([
+        [stableKey, [{ resultIndex: 0, renderedId: 'f0001' }]],
+        [featureB, [{ resultIndex: 1, renderedId: 'f0002' }]]
+      ]),
+      resultIndexesByRenderedId: new Map([['f0001', new Set([0])], ['f0002', new Set([1])]]),
+      renderedFeaturesByResult: [
+        new Map([['f0001', { fill_color: '#54bcf8' }], ['f0003', { fill_color: '#54bcf8' }], ['f0004', { fill_color: '#d3d3d3' }]]),
+        new Map([['f0002', { fill_color: '#d3d3d3' }], ['f0005', { fill_color: '#54bcf8' }]])
+      ]
+    },
+    // f0001 keeps its own stroke; f0002 is drawn in the row's color by its fill edit.
+    featureStrokeOverrides: { [stableKey]: { strokeColor: '#2a9d8f' } },
+    featureColorOverrides: { [featureB]: { color: '#54bcf8' } },
+    legendEntries: [{ caption: 'CDS', originalCaption: 'CDS', color: '#54bcf8' }],
+    originalLegendOrder: ['CDS'],
+    legendStrokeOverrides: { CDS: { strokeColor: '#e63946', strokeWidth: 3 } }
+  });
+  // The executor finds the row's features in each Result from Python's row
+  // there; the compile gives each Result the features with their own stroke.
+  assert.deepEqual(plan.operationsByResult.map(({ legendStrokes }) => legendStrokes.map(
+    ({ caption, allowMissing, reach }) => ({ caption, allowMissing, ownStrokeIds: reach.ownStrokeIds, draftColor: reach.draftColor })
+  )), [
+    [{ caption: 'CDS', allowMissing: false, ownStrokeIds: ['f0001'], draftColor: null }],
+    [{ caption: 'CDS', allowMissing: false, ownStrokeIds: [], draftColor: null }]
+  ]);
+});
+
+// OV-120: a renamed row that an earlier Generate did not draw (GC off, Show
+// Depth off) waits in the drawing. Each later plan renames and styles the
+// generated row where a Result draws it, and may miss it elsewhere; a row the
+// drawing shows or deleted is not renamed twice. A shown row stays required.
+test('a renamed row an earlier Generate hid is renamed and styled where a Result draws it (OV-120)', () => {
+  const dormant = { caption: 'GC percent', originalCaption: 'GC content', color: '#7b2cbf' };
+  const compile = (options) => compileDirectEditorMutationPlan({
+    catalogAdmission: admission(),
+    legendEntries: [{ caption: 'Ghost', originalCaption: 'Ghost', color: '#123456' }],
+    originalLegendOrder: ['Ghost'],
+    legendColorOverrides: { 'GC percent': '#7b2cbf', Ghost: '#123456' },
+    legendStrokeOverrides: { 'GC percent': { strokeColor: '#445566', strokeWidth: 2 } },
+    dormantLegendEntries: [dormant],
+    ...options
+  }).operationsByResult[0];
+  const waiting = compile({});
+  assert.deepEqual(waiting.legendRenames.map(({ from, to, allowMissing }) => [from, to, allowMissing]),
+    [['GC content', 'GC percent', true]]);
+  assert.deepEqual(waiting.legendFills.map(({ caption, allowMissing }) => [caption, allowMissing]), [
+    ['GC content', true], ['Ghost', false]
+  ]);
+  assert.deepEqual(waiting.legendStrokes.map(({ caption, allowMissing }) => [caption, allowMissing]), [['GC content', true]]);
+  // Without the waiting row, its style names a caption no Result draws.
+  assert.deepEqual(compile({ dormantLegendEntries: [] }).legendRenames, []);
+  // Shown again, or deleted, the row is not renamed from the waiting entry.
+  const shown = compile({
+    legendEntries: [{ caption: 'GC percent', originalCaption: 'GC content', color: '#7b2cbf' }],
+    originalLegendOrder: ['GC content']
+  });
+  assert.deepEqual(shown.legendRenames.map(({ from, to, allowMissing }) => [from, to, allowMissing]),
+    [['GC content', 'GC percent', false]]);
+  const deleted = compile({
+    deletedLegendEntries: [{ caption: 'GC content', originalCaption: 'GC content', color: '#a1a1a1' }],
+    originalLegendOrder: ['Ghost', 'GC content']
+  });
+  assert.deepEqual(deleted.legendRenames, []);
+});
+
+// D-41 (OV-300): a feature fill override is read with the Default colors (-d)
+// domain of `normalizeDefaultColor`: a name becomes its table hex, `none` and
+// `transparent` lower-case, hex and rgb()/hsl() stay as written, and anything
+// else fails with the same message as before.
+test('a feature fill override is read with the Default colors domain (D-41, OV-300)', () => {
+  const fill = (color) => compileDirectEditorMutationPlan({
+    catalogAdmission: admission(),
+    featureColorOverrides: { [stableKey]: { color, caption: 'edited' } }
+  }).operationsByResult[0].featureFills.map((operation) => operation.color);
+  assert.deepEqual(fill('Red'), ['#FF0000']);
+  assert.deepEqual(fill('NONE'), ['none']);
+  assert.deepEqual(fill('#AABBCC'), ['#AABBCC']);
+  assert.deepEqual(fill('rgb(1,2,3)'), ['rgb(1,2,3)']);
+  assert.deepEqual(fill('rgb(1e2 0 0)'), ['rgb(1e2 0 0)']);
+  for (const color of ['buttonface', 'rgb(1/2/3)']) {
+    assert.throws(() => fill(color), { message: 'Invalid feature fill override in the committed editor state.' }, color);
+  }
+});
+
+// U3a A2a: a live fill or stroke of a renamed row addresses Python's key,
+// which the executor's Legend index keeps for the row (A1); no shown caption
+// rides along.
+test('a live Legend fill and stroke of a renamed row address Python\'s key only', () => {
+  const operations = compileDirectEditorMutationPlan({
+    catalogAdmission: admission(),
+    legendEntries: [{ caption: 'Proteins', originalCaption: 'CDS', color: '#aaaaaa' }],
+    originalLegendOrder: ['CDS', 'tRNA'],
+    legendColorOverrides: { Proteins: '#ff0000' },
+    legendStrokeOverrides: { Proteins: { strokeColor: '#00ff00' } },
+    livePreview: { domains: ['legendFills', 'featureStrokes', 'legendStrokes'], paletteColors: { tRNA: '#0000ff' } }
+  }).operationsByResult[0];
+  assert.deepEqual(operations.legendFills.map(({ caption, color }) => [caption, color]), [['CDS', '#ff0000'], ['tRNA', '#0000ff']]);
+  assert.deepEqual(operations.legendStrokes.map(({ caption }) => caption), ['CDS']);
+  assert.doesNotMatch(JSON.stringify(operations), /renamedCaption/);
+});
+
+// U3a A2a (gaps 1 and 2): a rule commit shows its new row where the displayed
+// Result lacks it and retires the row of a removed rule at once; Python draws
+// both at the next Generate, which compiles neither.
+test('a rule commit\'s Legend rows show once on the displayed Result and never at Generate', () => {
+  const intent = {
+    catalogAdmission: admission(),
+    legendEntries: [
+      { caption: 'CDS', originalCaption: 'CDS', color: '#aaaaaa' },
+      { caption: 'Rule', originalCaption: 'Rule', color: '#123456' }
+    ],
+    originalLegendOrder: ['CDS', 'Old'],
+    manualSpecificRules: [{ feat: 'CDS', qual: 'gene', val: 'a', cap: 'Rule', color: '#123456' }],
+    addedLegendCaptions: new Set(['Rule'])
+  };
+  const ruleRows = { add: [{ caption: 'Rule', color: '#123456', before: 'Old' }], retire: ['Old'] };
+  const live = compileDirectEditorMutationPlan({
+    ...intent,
+    livePreview: { domains: ['legendRenames', 'legendDeletes', 'legendAdds', 'legendOrder'], ruleRows }
+  }).operationsByResult[0];
+  assert.deepEqual(live.legendAdds, [{ caption: 'Rule', color: '#123456', xPos: null, yPos: null, ifAbsent: true, before: 'Old' }]);
+  assert.deepEqual(live.legendDeletes, [{ caption: 'Old', allowMissing: true, retire: true }]);
+  const generated = compileDirectEditorMutationPlan(intent).operationsByResult[0];
+  assert.deepEqual([generated.legendAdds, generated.legendDeletes], [[], []]);
 });

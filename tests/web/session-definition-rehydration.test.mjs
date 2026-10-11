@@ -44,8 +44,11 @@ assert.equal(state.featureEditorStatus.summaryCount, state.extractedFeatures.val
 assert.equal(state.featureExtractionPending.value, false);
 assert.equal(state.featureExtractionError.value, null);
 
+// The Legend edits are the Circular drawing's (Session 46 `modes.circular`).
 const maliciousLegendSession = JSON.parse(session);
-maliciousLegendSession.editorState.legend = {
+const circularSlice = maliciousLegendSession.modes.circular;
+circularSlice.editorState = { ...(circularSlice.editorState || {}) };
+circularSlice.editorState.legend = {
   entries: [{
   caption: 'unsafe-current',
   color: 'url(javascript:alert(1))',
@@ -65,11 +68,11 @@ const importedMaliciousLegend = await importSession({
 });
 assert.equal(importedMaliciousLegend.status, 'ok');
 assert.equal(
-  state.legendEntries.value.some((entry) => entry.caption === 'unsafe-current'),
+  state.activeDrawing().legendEntries.value.some((entry) => entry.caption === 'unsafe-current'),
   false
 );
 assert.equal(
-  state.deletedLegendEntries.value.some((entry) => entry.caption === 'unsafe-deleted'),
+  state.activeDrawing().deletedLegendEntries.value.some((entry) => entry.caption === 'unsafe-deleted'),
   false
 );
 

@@ -1,4 +1,5 @@
-import { parseTransform, replaceLeadingTranslate } from './transform-utils.js';
+// @ts-check
+import { parseTransform, replaceLeadingTranslate } from '../../services/svg-transform.js';
 import {
   bindCompositionMetadata,
   COMPOSITION_SCHEMA_ATTRIBUTE,
@@ -11,10 +12,31 @@ import {
 } from '../record-groups.js';
 import { setClassToken } from '../../services/svg-serialization.js';
 
+/**
+ * @typedef {object} DiagramDragActionsOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {((label?: string, options?: { source?: string, owner?: unknown }) => Promise<any>) | null} [beginHistoryTransaction]
+ *   History's begin of one step (R11); resolves to the transaction, or null when History is busy.
+ * @property {((transaction: any, options?: Record<string, any>) => Promise<any>) | null} [commitHistoryTransaction]
+ *   History's commit of the step that `beginHistoryTransaction` opened.
+ * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
+ *   The preview owner's commit of an edit to the displayed Result (R1, R13).
+ * @property {LegendLayoutRecordDragPort | null} [similarityAlignmentLifecycle]
+ *   The alignment owner's record-drag hooks, registered by the root (R13).
+ */
+
+/**
+ * @typedef {object} LegendLayoutRecordDragPort
+ * @property {() => void} [beforeRecordDrag]
+ * @property {(options: { moved: boolean }) => void} [afterRecordDrag]
+ */
+
+/** @param {DiagramDragActionsOptions} options */
 export const createDiagramDragActions = ({
   state,
-  history = null,
-  previewRuntime = null,
+  beginHistoryTransaction = null,
+  commitHistoryTransaction = null,
+  commitActiveResultEdit = null,
   similarityAlignmentLifecycle = null
 }) => {
   const {
@@ -59,8 +81,11 @@ export const createDiagramDragActions = ({
   let activeDragOriginalTransforms = new Map();
   let activeLengthBarOffsetStart = { x: 0, y: 0 };
   let activePlotTitleOffsetStart = { x: 0, y: 0 };
+  /** @type {number | null} */
   let diagramDragFrameId = null;
+  /** @type {{ x: number, y: number } | null} */
   let pendingDiagramPointer = null;
+  /** @type {Promise<any> | null} */
   let diagramDragTxPromise = null;
 
   const isLayoutRepositionModeEnabled = () => Boolean(layoutRepositionMode?.value);
@@ -83,8 +108,8 @@ export const createDiagramDragActions = ({
 
   const beginDragTransaction = (label) => {
     // Each drag gesture owns its transaction and settles a focused control's (N-18).
-    diagramDragTxPromise = history?.begin
-      ? history.begin(label, { source: 'diagram-drag', owner: Symbol(label) })
+    diagramDragTxPromise = beginHistoryTransaction
+      ? beginHistoryTransaction(label, { source: 'diagram-drag', owner: Symbol(label) })
       : null;
   };
 
@@ -204,7 +229,8 @@ export const createDiagramDragActions = ({
     }
     const binding = bindCompositionMetadata(svg);
     const nextPlotTitleGroup = binding.title.targets[0] || null;
-    if (!nextPlotTitleGroup) {
+    if (!nextPlotTitleGroup || !binding.metadata.title) {
+      // bindRole fails on a title target without metadata, so the metadata check never differs.
       clearPlotTitleState();
       return;
     }
@@ -463,10 +489,10 @@ export const createDiagramDragActions = ({
         moved: Math.abs(deltaX) > 1e-9 || Math.abs(deltaY) > 1e-9
       });
     }
-    previewRuntime?.commitActiveResultEdit('diagram-drag');
+    commitActiveResultEdit?.('diagram-drag');
     const tx = diagramDragTxPromise ? await diagramDragTxPromise : null;
     diagramDragTxPromise = null;
-    if (tx && history?.commit) await history.commit(tx);
+    if (tx && commitHistoryTransaction) await commitHistoryTransaction(tx);
   };
 
   const setupDiagramDrag = (preserveOffset = false) => {

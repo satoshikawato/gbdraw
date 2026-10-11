@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { normalizeCircularGeometryShortcuts } from '../../gbdraw/web/js/app/circular-track-slots.js';
-import { diagnosticError, normalizeUserFacingError } from '../../gbdraw/web/js/services/error-normalization.js';
+import { normalizeCircularGeometryShortcuts } from '../../gbdraw/web/js/services/circular-track-slot-model.js';
+import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
 import { deserializeWorkerError, normalizeGenerationResponse } from '../../gbdraw/web/js/services/diagram-generation.js';
 globalThis.self = {};
 const { serializeError, callJsonHelper, resolveGenerationCleanupOutcome } = await import('../../gbdraw/web/js/workers/diagram-generation-worker.js');
@@ -107,7 +107,7 @@ assert.deepEqual(roundtrip(primary).secondary, [{ code: 'CLEANUP_FAILED', stage:
 
 // Existing native validators feed finite corrections; changing a validator's
 // failure template must be detected rather than silently becoming UNKNOWN.
-const options = await import('../../gbdraw/web/js/app/current-option-values.js');
+const options = await import('../../gbdraw/web/js/services/current-option-values.js');
 for (const [validator, input, field, reason] of [
   ['requireCurrentProteinBlastpMaxHits', 0, 'protein_blastp_max_hits', 'POSITIVE_INTEGER'],
   ['requireCurrentProteinBlastpCandidateLimit', -1, 'protein_blastp_candidate_limit', 'POSITIVE_OR_AUTO'],
@@ -189,7 +189,7 @@ for (const exceptionType of ['PRIVATE_Error', 'valueerror', 7]) {
 }
 
 const { validateCustomTrackPlan, assertValidCustomTrackPlan, CustomTrackPlanValidationError } =
-  await import('../../gbdraw/web/js/app/track-slot-validation.js');
+  await import('../../gbdraw/web/js/services/track-slot-validation.js');
 const trackPlan = validateCustomTrackPlan({ mode: 'linear', axisIndex: 0, annotationSetIds: [], slots: [
   { id: 'PRIVATE_FEATURES', renderer: 'features', enabled: true, side: 'overlay', params: {} },
   { id: 'PRIVATE_ANNOTATION', renderer: 'annotations', enabled: true, side: 'overlay',
@@ -301,11 +301,32 @@ test('the operation error panel offers Generate and no Save after a failed Save 
   const exportInput = normalizeUserFacingError({ code: 'EXPORT_INPUT' }, { operation: 'export-png' });
   assert.ok(exportInput.actions.includes('generate'));
   const indexHtml = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
-  assert.match(indexHtml, /errorDisplay\.actions\.includes\('generate'\) && errorDisplay\.operation !== 'generate'" type="button" @click="runAnalysis"/);
+  // E1: an error about the other mode's Result runs Generate in that mode.
+  assert.match(indexHtml, /errorDisplay\.actions\.includes\('generate'\) && errorDisplay\.operation !== 'generate'" type="button" @click="generateFromError"/);
+  const hiddenMode = normalizeUserFacingError(diagnosticError(
+    'SESSION_SAVE_REQUIRES_GENERATE', { diagramMode: 'linear' }, { operation: 'session-save', stage: 'result-admission' }
+  ));
+  assert.equal(hiddenMode.context.diagramMode, 'linear');
+  assert.match(hiddenMode.summary, / Diagram: Linear\.$/);
+  assert.deepEqual(hiddenMode.actions, ['generate']);
   assert.match(indexHtml, /errorDisplay\.actions\.includes\('save-session'\) && errorDisplay\.operation !== 'session-save'/);
   const saveFailure = normalizeUserFacingError(new Error('PRIVATE'), { operation: 'session-save' });
   assert.equal(saveFailure.code, 'UNKNOWN');
   assert.equal(saveFailure.operation, 'session-save');
+});
+
+// #941 residual: every action of an operation error panel is the same small
+// button (`btn btn-secondary btn-sm`), so a new action cannot miss the style.
+test('every operation error panel action is a small secondary button', () => {
+  const indexHtml = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const panels = indexHtml.match(/<operation-error[\s\S]*?<\/operation-error>/g) || [];
+  const buttons = panels.flatMap((panel) => panel.match(/<button\b[^>]*>[^<]*/g) || []);
+  assert.ok(buttons.length >= 15, `operation error actions found: ${buttons.length}`);
+  const unstyled = buttons.filter((button) => {
+    const classes = new Set((button.match(/\sclass="([^"]*)"/)?.[1] || '').split(/\s+/));
+    return !['btn', 'btn-secondary', 'btn-sm'].every((name) => classes.has(name));
+  }).map((button) => button.replace(/^[^>]*>/, '').trim());
+  assert.deepEqual(unstyled, []);
 });
 
 // R6: locators the producer keeps are shown in the summary, wording only here.
@@ -317,7 +338,7 @@ test('summary shows Sequence, Line, Track row, Depth series, band and setting lo
     [diagnosticError('TABLE_INVALID', { row: 3, field: 'color', reason: 'COLOR' }), /^The table is invalid\. Line 3\. Field: color\. Use none/],
     [{ code: 'COMPARISON_INPUT', context: { reason: 'NONNEGATIVE_INTEGER', row: 4, column: 7 } }, / Line 4\. Column 7\. Use an integer of zero or greater\.$/],
     [{ code: 'TRACK_LAYOUT', context: { reason: 'CANNOT_FIT', slotIndex: 1, innerPx: 181, outerPx: 209 } },
-      /^A circular track does not fit inside\. Track row 2\. Move the track.*outside\. Available band: 181–209 px\.$/],
+      /^A circular track does not fit\. Track row 2\. Move the track.*the other side of the Axis\. Available band: 181–209 px\.$/],
     [{ code: 'DEPTH_INVALID', context: { reason: 'DEPTH_VALUES', seriesIndex: 0 } }, / Depth series 1\. Use integer positions/],
     [{ code: 'INPUT_INVALID', context: { reason: 'INTEGER', configPath: 'objects.scale.interval' } }, / Setting: objects\.scale\.interval\. Use an integer\.$/]
   ]) assert.match(roundtrip(source).summary, pattern);
@@ -327,6 +348,17 @@ test('summary shows Sequence, Line, Track row, Depth series, band and setting lo
 });
 
 // X-01: the producer contract message is a fixed identifier, never a document value.
+test('a falsy caught value normalizes to the unknown failure, not to no error (OV-70)', () => {
+  assert.equal(normalizeUserFacingError(undefined), null);
+  for (const value of [undefined, null, 0, '', false]) {
+    const model = normalizeCaughtError(value, { stage: 'request-validation' });
+    assert.deepEqual([model.code, model.stage], ['UNKNOWN', 'request-validation']);
+    assert.match(model.summary, /failed without recognized diagnostic information/);
+  }
+  const thrown = diagnosticError('REGION_INVALID', { inputOrdinal: 1, reason: 'SELECT_RECORD_FOR_REGION' });
+  assert.deepEqual(normalizeCaughtError(thrown, { stage: 'request-validation' }), normalizeUserFacingError(thrown, { stage: 'request-validation' }));
+});
+
 test('diagnosticError carries a fixed message, stage, operation and bounded context', () => {
   const error = diagnosticError('REGION_INVALID', { inputOrdinal: 1, reason: 'SELECT_RECORD_FOR_REGION' });
   assert.equal(error.message, 'REGION_INVALID/SELECT_RECORD_FOR_REGION');
@@ -361,10 +393,28 @@ test('a Circular placement limited by the center reservation names that cause', 
     const layout = roundtrip({ code: 'TRACK_LAYOUT', operation: 'generate', stage: 'render', context: { reason } });
     assert.equal(layout.code, 'TRACK_LAYOUT');
     assert.equal(layout.context.reason, reason);
-    assert.match(layout.summary, /^A circular track does not fit inside\./);
+    assert.match(layout.summary, /^A circular track does not fit\./);
     assert.match(layout.summary, pattern);
     assert.deepEqual(layout.actions, ['edit-track', 'retry']);
   }
+});
+
+// OV-09 (R6): Python reports the request row of an unsupported Feature placement
+// lane; the Web adds that feature's caption and the summary names it.
+test('an unsupported Feature placement lane names the feature and the ways out', () => {
+  for (const [reason, pattern] of [['SPLIT_LANES', /or use split feature lanes \(Track Preset Middle\)\.$/],
+    ['OVERLAY_LANES', /or use Track Layout Features on axis with Separate Strands off\.$/]]) {
+    const engine = roundtrip({ code: 'FEATURE_PLACEMENT', operation: 'generate', stage: 'render', context: { reason, placementIndex: 4 } });
+    assert.deepEqual([engine.code, engine.context], ['FEATURE_PLACEMENT', { reason, placementIndex: 4 }]);
+    const named = normalizeUserFacingError({ ...engine, context: { ...engine.context, featureCaption: ' NADH\ndehydrogenase ' } });
+    assert.match(named.summary, /^A Feature placement uses a lane that the current feature track does not have\. Feature: NADH dehydrogenase\. Set that feature's Feature placement to Auto or Main, /);
+    assert.match(named.summary, pattern);
+    assert.deepEqual(normalizeUserFacingError(named), named);
+    assert.deepEqual(named.actions, ['edit-track', 'retry']);
+  }
+  const long = normalizeUserFacingError({ code: 'FEATURE_PLACEMENT', context: { featureCaption: 'x'.repeat(200) } });
+  assert.equal(long.context.featureCaption.length, 80);
+  assert.equal(normalizeUserFacingError({ code: 'FEATURE_PLACEMENT', context: { featureCaption: 7 } }).context.featureCaption, undefined);
 });
 
 // B9 (P07: offer only working actions): an unclassified failure inside the
@@ -411,6 +461,27 @@ test('a display start beyond the record and an unparsable GenBank file are input
   }
 });
 
+// OV-130 (R6): a preserved setting of the other diagram mode fails Generate and
+// Save Session. Python names the first setting path and the mode it belongs to,
+// so the summary names both and the two ways out, instead of the unclassified
+// input-validation text. Retry repeats the same request, so it is not offered.
+test('a preserved setting of the other diagram mode names the setting and the ways out (OV-130)', () => {
+  const ways = (mode) => ` It applies only to ${mode} diagrams. Reset it under Preserved session settings, or switch to ${mode}.`;
+  const generate = roundtrip(invoke({ configOverrides: { 'objects.blast_match.curve_tension': 0.3 } }).error);
+  assert.deepEqual([generate.code, generate.operation, generate.stage], ['MODE_SETTING', 'generate', 'request-validation']);
+  assert.deepEqual(generate.context, { reason: 'LINEAR_SETTING', configPath: 'objects.blast_match.curve_tension' });
+  assert.equal(generate.summary, 'A preserved session setting does not apply to this diagram mode.'
+    + ` Setting: objects.blast_match.curve_tension.${ways('Linear')}`);
+  assert.deepEqual(generate.actions, ['edit-input']);
+  // Save Session validates the preserved settings through the helper channel.
+  const save = roundtrip(invoke({ helper: 'validate_web_config_overrides_json', args: ['linear', 'null',
+    JSON.stringify({ 'objects.ticks.tick_width': 4, 'canvas.circular.radius': 1.2 }), '[]', true] }).error);
+  assert.deepEqual([save.code, save.operation, save.stage], ['MODE_SETTING', 'validateConfigOverrides', 'helper']);
+  assert.deepEqual(save.context, { reason: 'CIRCULAR_SETTING', configPath: 'canvas.circular.radius' });
+  assert.equal(save.summary, `A preserved session setting does not apply to this diagram mode. Setting: canvas.circular.radius.${ways('Circular')}`);
+  for (const model of [generate, save]) assert.doesNotMatch(model.summary, /Input validation failed/);
+});
+
 // B11 (R6: an offered action must be one that can work): a live edit rerenders
 // the committed Session with the current editor tables, so repeating the edit
 // sends the same request. The note above the Result comes from the failure's
@@ -420,7 +491,7 @@ test('a live edit failure note offers Retry only when the same request can succe
   const note = html.match(/<p v-if="labelReflowProcessing \|\| labelReflowLastError"[^>]*>([^<]*)<\/p>/)[1];
   assert.doesNotMatch(note, /Retry the live edit/, 'the failure note is not fixed text');
   assert.match(note, /: labelReflowLastError\.note \}\}/);
-  const { liveEditFailure } = await import('../../gbdraw/web/js/services/error-normalization.js');
+  const { liveEditFailure } = await import('../../gbdraw/web/js/utils/error-normalization.js');
   assert.equal(liveEditFailure(null), null);
   const prefix = /^Live edit failed: direct edits already applied are kept; geometry may still need updating\. /;
   const repeating = [
@@ -453,4 +524,127 @@ test('a live edit failure note offers Retry only when the same request can succe
   const generate = liveEditFailure(normalizeUserFacingError(diagnosticError('LIVE_EDIT_REQUIRES_GENERATE')));
   assert.deepEqual(generate.actions, ['generate']);
   assert.equal(generate.note, 'Live edit failed: direct edits already applied are kept; geometry may still need updating. Generate the diagram to update its label placement.');
+});
+
+// OV-05..OV-07, OV-13 (R6): a Label visibility On that the diagram does not
+// draw (an underlay feature, Embedded Only, a duplicate feature) names the
+// feature and the popup choice that ends it, instead of UNKNOWN. Two labels
+// bound to one feature repeat for the same inputs, so they are a render
+// failure that names the feature and offers Save Session.
+test('a forced label that the diagram does not draw names the feature (OV-06)', async () => {
+  const { requireUniqueEditableLabelBindings } = await import('../../gbdraw/web/js/app/feature-editor/label-actions.js');
+  const { liveEditFailure } = await import('../../gbdraw/web/js/utils/error-normalization.js');
+  const label = (featureId) => ({ getAttribute: (name) => (name === 'data-label-feature-id' ? featureId : null) });
+  const features = [
+    { svg_id: 'f59dc64fc', type: 'repeat_region', start: 1000, end: 1600, note: 'PRIVATE_NOTE' },
+    { svg_id: 'f1aff4c2b__instance_5_ef2d127de37b942b', type: 'CDS', start: 3000, end: 3600, product: 'PRIVATE_PRODUCT' }
+  ];
+  const failure = (labels, required, options = {}) => {
+    try {
+      requireUniqueEditableLabelBindings(labels, required, { features, ...options });
+    } catch (error) {
+      return roundtrip(error);
+    }
+    return null;
+  };
+  const missing = failure([label('f9b3094c1')], ['f59dc64fc']);
+  assert.deepEqual([missing.code, missing.operation, missing.stage, missing.actions],
+    ['LABEL_NOT_DRAWN', 'generate', 'render', ['edit-input']]);
+  assert.deepEqual(missing.context, { reason: 'FORCED_LABEL', featureId: 'f59dc64fc',
+    featureType: 'repeat_region', featureStart: 1001, featureEnd: 1600 });
+  assert.equal(missing.summary, 'Label visibility is On for a feature, but this diagram does not draw its label.'
+    + ' Feature: repeat_region 1001..1600, ID f59dc64fc.'
+    + " Open the feature's popup and set Label visibility to Default, or change the setting that prevents its label.");
+  assert.match(missing.details[0].text, /\nfeatureId: f59dc64fc\n/);
+  const live = liveEditFailure(missing);
+  assert.deepEqual(live.actions, ['generate']);
+  assert.ok(live.note.includes(missing.summary));
+
+  const several = failure([], ['f1aff4c2b__instance_5_ef2d127de37b942b', 'f59dc64fc']);
+  assert.equal(several.code, 'LABEL_NOT_DRAWN');
+  assert.match(several.summary, / Feature: CDS 3001\.\.3600, ID f1aff4c2b__instance_5_ef2d127de37b942b\. Features affected: 2\. Open/);
+  assert.equal(failure([], ['f59dc64fc'], { allowMissing: true }), null);
+  assert.equal(failure([label('f59dc64fc')], ['f59dc64fc']), null);
+
+  const unknownFeature = failure([], ['f0000dead']);
+  assert.deepEqual(unknownFeature.context, { reason: 'FORCED_LABEL', featureId: 'f0000dead' });
+  assert.match(unknownFeature.summary, / Feature: ID f0000dead\. Open/);
+
+  for (const allowMissing of [false, true]) {
+    const ambiguous = failure([label('f59dc64fc'), label('f59dc64fc')], ['f59dc64fc'], { allowMissing });
+    assert.deepEqual([ambiguous.code, ambiguous.stage, ambiguous.actions], ['RENDER_FAILED', 'render', ['save-session']]);
+    assert.deepEqual(ambiguous.context, { featureId: 'f59dc64fc', featureType: 'repeat_region',
+      featureStart: 1001, featureEnd: 1600 });
+    assert.match(ambiguous.summary, / Feature: repeat_region 1001\.\.1600, ID f59dc64fc\.$/);
+  }
+  for (const model of [missing, several, live]) assert.doesNotMatch(JSON.stringify(model), /PRIVATE_/);
+
+  // The feature locator is bounded like every other context value.
+  assert.deepEqual(roundtrip({ code: 'LABEL_NOT_DRAWN', context: {
+    featureId: 'PRIVATE VALUE', featureType: `CDS${'x'.repeat(80)}`, featureStart: 0, featureEnd: 1.5, featureCount: -1
+  } }).context, {});
+  assert.deepEqual(roundtrip({ code: 'LABEL_NOT_DRAWN', context: { featureType: "5'UTR", featureStart: 1, featureEnd: 20000000 } }).context,
+    { featureType: "5'UTR", featureStart: 1, featureEnd: 20000000 });
+});
+
+const producerSummary = (code, context = {}) => normalizeUserFacingError({ code, stage: 'helper', context }).summary;
+
+test('a region wholly beyond the record keeps the region correction (CI-01)', () => {
+  assert.equal(producerSummary('REGION_INVALID', { field: 'region', reason: 'RECORD_BOUNDS' }),
+    'The region is invalid. Field: region. Keep the region within the record length.');
+});
+
+test('a BLAST table error names its locator and correction, not the sequence-file sentence (CI-04)', () => {
+  assert.equal(producerSummary('COMPARISON_INPUT', { reason: 'FINITE', row: 2, column: 11 }),
+    'The comparison input is invalid. Line 2. Column 11. Use a finite number.');
+  assert.match(producerSummary('COMPARISON_INPUT', { reason: 'RECORD_ID', column: 1 }),
+    /^The comparison input is invalid\. Column 1\. A table row names another displayed record in this column\. Swap the query and subject columns/);
+  // A producer that names no reason keeps the comparison-source guidance.
+  assert.equal(producerSummary('COMPARISON_INPUT'),
+    'The comparison input is invalid. Supply a comparison sequence file (FASTA, GenBank, or DDBJ) or BLAST outfmt 6/7 as required.');
+});
+
+test('a comparison error names its record pair as the comparison panel does (CI-04)', () => {
+  assert.equal(producerSummary('COMPARISON_INPUT', { reason: 'FINITE', row: 2, column: 11, queryRecordIndex: 0, subjectRecordIndex: 1 }),
+    'The comparison input is invalid. Pair: #1 to #2. Line 2. Column 11. Use a finite number.');
+  // The locator is bounded like the other indexes and needs both endpoints.
+  assert.doesNotMatch(producerSummary('COMPARISON_INPUT', { reason: 'FINITE', queryRecordIndex: 0 }), /Pair/);
+  assert.doesNotMatch(producerSummary('COMPARISON_INPUT', { reason: 'FINITE', queryRecordIndex: -1, subjectRecordIndex: 1.5 }), /Pair/);
+});
+
+test('an Upload pair without its BLAST TSV names the missing file (CI-06)', () => {
+  assert.match(producerSummary('COMPARISON_INPUT', { reason: 'BLAST_TSV_REQUIRED' }), /Choose a BLAST TSV for this pair/);
+  assert.match(producerSummary('COMPARISON_INPUT', { reason: 'PAIR_TOPOLOGY' }), /adjacent rows/);
+});
+
+test('an outfmt 7 Fields line that cannot be read names the line (CI-07d)', () => {
+  assert.match(producerSummary('COMPARISON_INPUT', { reason: 'OUTFMT7_FIELDS', row: 2 }), /^The comparison input is invalid\. Line 2\. List all 12 standard/);
+});
+
+test('a GenBank slot file without records says what it looks like (UJ-07)', () => {
+  assert.equal(producerSummary('NO_RECORDS', { reason: 'FASTA_IN_GENBANK' }),
+    'No records were found. Choose input containing records. This file looks like FASTA. Use GFF3 + FASTA input, or a GenBank/DDBJ flat file.');
+  assert.match(producerSummary('NO_RECORDS', { reason: 'EMPTY_FILE' }), / The file is empty\.$/);
+  assert.match(producerSummary('NO_RECORDS', { reason: 'NOT_GENBANK' }), / The file is not a GenBank\/DDBJ flat file: it has no record header line\.$/);
+});
+
+// TK-06: a Depth series with no file in any record names the series and offers
+// both recoveries, whether the request builder or the Generate check finds it.
+test('a Depth series without a file says to attach a TSV or remove the series (TK-06)', () => {
+  const expected = 'The depth input or settings are invalid. Depth series 2. Attach a Depth TSV to this series, or remove the series.';
+  assert.equal(producerSummary('DEPTH_INVALID', { reason: 'DEPTH_SERIES_SOURCE', seriesIndex: 1 }), expected);
+  for (const message of [
+    'Depth series #2 (logical track index 1) has no TSV source in any record.',
+    'Depth series #2 (logical track index 1) has no TSV source in any record. Add a TSV or remove the series.'
+  ]) {
+    const model = roundtrip(new Error(message));
+    assert.deepEqual([model.code, model.context], ['DEPTH_INVALID', { reason: 'DEPTH_SERIES_SOURCE', seriesIndex: 1 }]);
+    assert.equal(model.summary, expected);
+  }
+});
+
+test('a drawing with every record OFF names the fix (record selection)', () => {
+  const model = normalizeUserFacingError(diagnosticError('RECORD_SELECTION', { reason: 'NONE_DRAWN' }));
+  assert.equal(model.code, 'RECORD_SELECTION');
+  assert.match(model.summary, /Turn on at least one record to draw\./);
 });

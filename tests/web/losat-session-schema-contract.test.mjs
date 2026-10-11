@@ -29,7 +29,7 @@ print(json.dumps({
 `], { cwd: root, encoding: 'utf8' }));
 
 test('Web and Python current Session, request and protein-cache schemas agree', () => {
-  const cache = source('gbdraw/web/js/app/losat-cache.js');
+  const cache = source('gbdraw/web/js/services/losat-cache.js');
   assert.deepEqual({
     session: numericConstant(source('gbdraw/web/js/services/config.js'), 'SESSION_VERSION'),
     request: numericConstant(source('gbdraw/web/js/services/session-request.js'), 'CANONICAL_REQUEST_SCHEMA'),

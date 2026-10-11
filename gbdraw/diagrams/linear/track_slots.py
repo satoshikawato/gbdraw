@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping, Sequence
+from typing import Mapping, Sequence, cast
 
 from ...canvas import LinearCanvasConfigurator
 from ...config.models import GbdrawConfig
@@ -295,7 +295,7 @@ def resolve_linear_track_layout(
     gc_skew_track_offset = 0.0
     for track in resolved:
         if track.renderer == "depth":
-            track_index = int(track.params.get("track_index", 0))
+            track_index = int(cast(int, track.params.get("track_index", 0)))
             depth_offsets_by_index[track_index] = float(track.y_offset)
             depth_heights_by_index[track_index] = float(track.height)
         elif track.renderer == "dinucleotide_content":
@@ -555,11 +555,11 @@ def resolve_linear_record_vertical_plan(
         if relation is None:
             continue
         anchor_id, relative_origin = relation
-        anchor = anchors.get(anchor_id)
-        if anchor is None:
+        anchor_slot = anchors.get(anchor_id)
+        if anchor_slot is None:
             continue
         footprint = footprint_map.get(overlay.id, _default_slot_footprint(overlay))
-        item = _resolved_slot(overlay, footprint, anchor.origin_y + relative_origin)
+        item = _resolved_slot(overlay, footprint, anchor_slot.origin_y + relative_origin)
         resolved_overlays.append(item)
         anchors[overlay.id] = item
 

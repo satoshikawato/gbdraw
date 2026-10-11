@@ -574,7 +574,9 @@ def test_web_feature_extraction_region_uses_absolute_display_coordinates(
         record.features[0],
         record_id=record.id,
     )
-    assert feature["rendered_feature_svg_id"] == compute_feature_hash(
+    # A cropped record draws the feature with its source hash (OV-401).
+    assert feature["rendered_feature_svg_id"] == feature["svg_id"]
+    assert feature["drawn_selector"]["hash"] == compute_feature_hash(
         cropped_record.features[0],
         record_id=cropped_record.id,
     )
@@ -640,41 +642,33 @@ def test_web_feature_selector_record_location_matches_visibility_rule(
     )
 
 
-def test_web_feature_selector_safety_scope_precedes_visibility_filtering(
+def test_web_feature_payload_records_the_drawn_selector_values(
     tmp_path: Path,
 ) -> None:
-    record = SeqRecord(Seq("A" * 120), id="NC_000006", name="SafetyScope")
-    record.features.extend(
-        [
-            SeqFeature(
-                FeatureLocation(0, 30, strand=1),
-                type="CDS",
-                qualifiers={"locus_tag": ["HIDDEN_0006"], "translation": ["M"]},
-            ),
-            SeqFeature(
-                FeatureLocation(60, 90, strand=-1),
-                type="misc_feature",
-                qualifiers={"note": ["outside selected type"]},
-            ),
-        ]
-    )
-    rules = compile_feature_visibility_rules(
-        pd.DataFrame(
-            [["NC_000006", "CDS", "locus_tag", "^HIDDEN_0006$", "off"]],
-            columns=["record_id", "feature_type", "qualifier", "value", "action"],
+    # Feature catalog 5 (design Q4 OV-02): each rendered feature carries the
+    # selector values of the record it was drawn from; no selector-safety scope
+    # of the whole source is built.
+    record = SeqRecord(Seq("A" * 120), id="NC_000006", name="Drawn")
+    record.features.append(
+        SeqFeature(
+            FeatureLocation(0, 30, strand=1),
+            type="CDS",
+            qualifiers={"locus_tag": ["DRAWN_0006"], "translation": ["M"]},
         )
     )
 
     payload = extract_features_from_genbank_payload(
         _write_genbank(tmp_path, record),
         selected_features=["CDS"],
-        feature_visibility_rules=rules,
     )
 
-    assert payload["features"] == []
-    scope_types = [entry["feature_type"] for entry in payload["selector_safety_scope"]]
-    assert scope_types == ["CDS", "misc_feature"]
-    assert payload["selector_safety_scope"][0]["selector"]["qualifiers"]["locus_tag"] == ["HIDDEN_0006"]
+    assert sorted(payload) == ["features", "record_ids"]
+    [feature] = payload["features"]
+    assert feature["drawn_selector"] == {
+        "hash": feature["selector"]["hash"],
+        "location": "0..30",
+        "recordLocation": "NC_000006:0..30:+",
+    }
 
 
 def test_biological_feature_catalog_keeps_features_excluded_from_rendering() -> None:
@@ -762,3 +756,42 @@ def test_biological_feature_catalog_excludes_non_rendered_source_features() -> N
     assert [
         feature["type"] for feature in source_payload["biological_features"]
     ] == ["source", "CDS"]
+
+
+def test_biological_feature_catalog_keeps_a_source_feature_with_its_own_visibility() -> None:
+    # R-5 (Owner decision 2026-10-05): a feature with its own Feature
+    # visibility stays in the Web Features list, which lists the catalog's
+    # biological features, so it can be shown again.
+    from gbdraw.features.overrides import ResolvedFeatureOverride
+    from gbdraw.features.placement import ResolvedRecordFeatureInputs
+
+    source = SeqFeature(FeatureLocation(0, 12, strand=1), type="source", qualifiers={"organism": ["x"]})
+    cds = SeqFeature(FeatureLocation(0, 9, strand=1), type="CDS", qualifiers={"locus_tag": ["C1"]})
+    record = SeqRecord(Seq("ATGAAATAAGGG"), id="catalog-record", features=[source, cds])
+    hidden = ResolvedFeatureOverride("off", None, None, "source 1..12")
+    payload = extract_features_from_records_payload(
+        [record],
+        selected_features=["CDS"],
+        record_features=(ResolvedRecordFeatureInputs("k", overrides={0: hidden}),),
+        include_biological_features=True,
+    )
+    assert [feature["type"] for feature in payload["features"]] == ["CDS"]
+    assert [feature["type"] for feature in payload["biological_features"]] == ["source", "CDS"]
+
+
+def test_web_feature_qualifiers_merge_case_variant_keys_like_the_selector() -> None:
+    # OV-249: keys that differ only in case or surrounding space keep every value,
+    # in key order, as rule matching (`selector.qualifiers`) sees them.
+    feature = SeqFeature(
+        FeatureLocation(0, 9, strand=1),
+        type="gene",
+        qualifiers={"Note": ["first"], "note": ["second"], " note ": ["third"], "gene": ["abc"], " ": ["blank"]},
+    )
+    record = SeqRecord(Seq("ATGAAATAA"), id="NC_000249", features=[feature])
+
+    [extracted] = extract_features_from_records_payload([record], selected_features=["gene"])["features"]
+
+    assert extracted["qualifiers"] == {"note": ["first", "second", "third"], "gene": ["abc"]}
+    assert list(extracted["qualifiers"]) == ["note", "gene"]
+    assert extracted["qualifiers"] == extracted["selector"]["qualifiers"]
+    assert extracted["qualifiers"] is not extracted["selector"]["qualifiers"]

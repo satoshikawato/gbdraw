@@ -3,10 +3,10 @@ import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const repoRoot = process.cwd();
 const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js', 'services');
-const appSourceDir = join(repoRoot, 'gbdraw', 'web', 'js', 'app');
 const webSourceDir = join(repoRoot, 'gbdraw', 'web', 'js');
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-history-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
@@ -24,25 +24,16 @@ for (const filename of [
   'history-files.js',
   'history-snapshot.js',
   'json-clone.js',
+  'feature-selector.js',
+  'feature-utils.js',
+  'feature-visibility.js',
+  'layout-preferences.js',
   'runtime-test-hooks.js',
   'svg-serialization.js'
 ]) {
   await writeFile(
     join(tempDir, 'services', filename),
     await readFile(join(sourceDir, filename), 'utf8'),
-    'utf8'
-  );
-}
-for (const filename of [
-  'feature-selector.js',
-  'feature-visibility.js',
-  'feature-utils.js',
-  'layout-preferences.js',
-  'plot-title-position.js'
-]) {
-  await writeFile(
-    join(tempDir, 'app', filename),
-    await readFile(join(appSourceDir, filename), 'utf8'),
     'utf8'
   );
 }
@@ -94,6 +85,50 @@ const createLayoutPreferences = () => ({
   await history.redo();
   assert.equal(value, 1);
   assert.equal(history.getUndoCount(), 1);
+
+  // E1: an Undo or Redo is pending from its call, before it restores, to its
+  // end; the diagram mode switch waits for it.
+  assert.equal(history.traversalPending(), false);
+  const undoing = history.undo();
+  assert.equal(history.traversalPending(), true);
+  assert.equal(history.restoring.value, false);
+  await undoing;
+  assert.equal(history.traversalPending(), false);
+  const redoing = history.redo();
+  assert.equal(history.traversalPending(), true);
+  await redoing;
+  assert.equal(history.traversalPending(), false);
+}
+
+// E1 (REVIEW-2 P-a): the composition root may report one Undo or Redo step
+// busy (a step that switches the diagram mode while a label rerender runs);
+// that step is not applied and stays on its stack.
+{
+  let value = 0;
+  /** @type {{ status: string, reason: string } | null} */
+  let busy = null;
+  const buildState = async () => ({ value });
+  const applyState = async (snapshot) => { value = snapshot.value; };
+  const history = createHistoryManager({
+    buildIntent: buildState,
+    applyIntent: applyState,
+    buildCheckpoint: buildState,
+    applyCheckpoint: applyState,
+    stepAvailability: (step) => (step.type === 'intent' ? busy : null)
+  });
+  await history.captureBaseline('initial');
+  await history.runUndoable('Increment', () => { value = 1; });
+  busy = { status: 'busy', reason: 'Updating diagram. Retry after the update finishes.' };
+  assert.deepEqual(await history.undo(), busy);
+  assert.equal(value, 1);
+  assert.equal(history.getUndoCount(), 1);
+  busy = null;
+  assert.equal(await history.undo(), true);
+  assert.equal(value, 0);
+  busy = { status: 'busy', reason: 'Updating diagram. Retry after the update finishes.' };
+  assert.deepEqual(await history.redo(), busy);
+  assert.equal(value, 0);
+  assert.equal(history.getRedoCount(), 1);
 }
 
 {
@@ -999,13 +1034,9 @@ const createLayoutPreferences = () => ({
     selectedFeatureRecordIdx: ref(0),
     featureColorOverrides: { f1: { color: '#111111', caption: 'A' } },
     featureVisibilityManualRules: [],
-    featureVisibilityOverrides: {},
-    featureVisibilitySelectorCache: {},
+    featureOverrides: {},
     featureStrokeOverrides: {},
-    labelTextFeatureOverrides: {},
     labelTextBulkOverrides: {},
-    labelTextFeatureOverrideSources: {},
-    labelVisibilityOverrides: {},
     orthogroups: ref([]),
     selectedOrthogroupId: ref(''),
     selectedOrthogroupAlignmentFeature: ref(''),
@@ -1017,7 +1048,7 @@ const createLayoutPreferences = () => ({
     skipExtractOnSvgChange: ref(false)
   };
   const snapshots = createHistorySnapshotService({
-    state,
+    state: withDrawings(state),
     fileStore,
     nextTick: async () => {},
     buildConfigData: () => ({
@@ -1030,7 +1061,7 @@ const createLayoutPreferences = () => ({
         edges: state.linearComparisonPlan.edges.map(({ file: _file, ...edge }) => edge)
       }
     }),
-    applyConfigData: (config) => {
+    applyConfigData: (_drawing, config) => {
       state.form = { ...config.form };
       state.adv = { ...config.adv };
       modeProfiles = structuredClone(config.modeProfiles);
@@ -1274,13 +1305,9 @@ const createLayoutPreferences = () => ({
     selectedFeatureRecordIdx: ref(0),
     featureColorOverrides: {},
     featureVisibilityManualRules: [],
-    featureVisibilityOverrides: {},
-    featureVisibilitySelectorCache: {},
+    featureOverrides: {},
     featureStrokeOverrides: {},
-    labelTextFeatureOverrides: {},
     labelTextBulkOverrides: {},
-    labelTextFeatureOverrideSources: {},
-    labelVisibilityOverrides: {},
     orthogroups: ref([]),
     selectedOrthogroupId: ref(''),
     selectedOrthogroupAlignmentFeature: ref(''),
@@ -1292,7 +1319,7 @@ const createLayoutPreferences = () => ({
     skipExtractOnSvgChange: ref(false)
   };
   const snapshots = createHistorySnapshotService({
-    state,
+    state: withDrawings(state),
     fileStore,
     nextTick: async () => {
       if (!pendingModeReset) return;
@@ -1302,7 +1329,7 @@ const createLayoutPreferences = () => ({
       state.orthogroups.value = [];
       state.selectedOrthogroupId.value = '';
     },
-    applyConfigData: (config) => {
+    applyConfigData: (_drawing, config) => {
       state.form = { ...state.form, ...config.form };
       state.adv = { ...state.adv, ...config.adv };
     }
@@ -1452,12 +1479,9 @@ const createLayoutPreferences = () => ({
     selectedFeatureRecordIdx: ref(0),
     featureColorOverrides: {},
     featureVisibilityManualRules: [],
-    featureVisibilityOverrides: {},
+    featureOverrides: {},
     featureStrokeOverrides: {},
-    labelTextFeatureOverrides: {},
     labelTextBulkOverrides: {},
-    labelTextFeatureOverrideSources: {},
-    labelVisibilityOverrides: {},
     orthogroups: ref([{ members: ['x'.repeat(100_000)] }]),
     selectedOrthogroupId: ref(''),
     selectedOrthogroupAlignmentFeature: ref(''),
@@ -1472,11 +1496,9 @@ const createLayoutPreferences = () => ({
   };
   state.legendEntries = Object.create({ value: [{ caption: 'tRNA', color: '#e8b441' }] });
   state.deletedLegendEntries = Object.create({ value: [] });
-  const entryOwners = [{ target: 'feature_legend', entries: [{ caption: 'tRNA', owner: '' }] }];
   const snapshots = createHistorySnapshotService({
-    state,
+    state: withDrawings(state),
     fileStore,
-    buildLegendEntryOwners: () => entryOwners,
     buildConfigData: () => ({ form: state.form, adv: state.adv }),
     buildFeatureStateData: () => {
       forbiddenArtifactBuilds += 1;
@@ -1495,19 +1517,32 @@ const createLayoutPreferences = () => ({
       throw new Error('Results must not be serialized for intent');
     }
   });
+  // R13: the composition owner is created after the snapshot service and
+  // registers its capture once it exists. Until then the intent holds no
+  // capture, as a service without that owner. U3b: the Legend list is intent,
+  // so History captures no Legend row owners.
+  const unregisteredIntent = await snapshots.buildHistoryIntent();
+  assert.equal(Object.hasOwn(unregisteredIntent.ui, 'compositionUserDeltas'), false);
+  assert.throws(() => snapshots.registerCapture('legendOrder', () => []), /Unknown History intent capture: legendOrder/);
+  assert.throws(() => snapshots.registerCapture('legend', () => []), /Unknown History intent capture: legend/);
+  const compositionRecord = { 'result-2': { primary: [[4, 5]] } };
+  snapshots.registerCapture('composition', () => compositionRecord);
   const intent = await snapshots.buildHistoryIntent();
-  assert.deepEqual(intent.editorState.legend.entries, [{ caption: 'tRNA', color: '#e8b441' }]);
+  assert.deepEqual(intent.modes.circular.editorState.legend.entries, [{ caption: 'tRNA', color: '#e8b441' }]);
+  assert.deepEqual(intent.ui.compositionUserDeltas, compositionRecord);
+  compositionRecord['result-2'].primary[0][0] = 9;
+  assert.deepEqual(intent.ui.compositionUserDeltas['result-2'].primary, [[4, 5]], 'the intent holds a copy of the capture');
+  snapshots.registerCapture('composition', null);
+  assert.equal(Object.hasOwn((await snapshots.buildHistoryIntent()).ui, 'compositionUserDeltas'), false);
   state.legendEntries.value = [{ caption: 'tRNA', color: '#c026d3' }];
-  await snapshots.applyHistoryIntent(intent, { changes: [{ path: ['editorState'] }] });
+  await snapshots.applyHistoryIntent(intent, { changes: [{ path: ['modes', 'circular', 'editorState'] }] });
   assert.deepEqual(state.legendEntries.value, [{ caption: 'tRNA', color: '#e8b441' }]);
-  entryOwners[0].entries[0].owner = 'specific-color-file';
-  assert.equal(intent.editorState.legend.entryOwners[0].entries[0].owner, '');
-  assert.equal(state.legendEntries.value.some(entry => Object.hasOwn(entry, 'entryOwners')), false);
+  assert.equal(Object.hasOwn(intent.modes.circular.editorState.legend, 'entryOwners'), false);
   assert.equal(forbiddenArtifactBuilds, 0);
   assert.equal(Object.prototype.hasOwnProperty.call(intent, 'results'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(intent, 'runState'), false);
-  assert.equal(Object.prototype.hasOwnProperty.call(intent.features, 'extractedFeatures'), false);
-  assert.equal(Object.prototype.hasOwnProperty.call(intent.editorState, 'featureCatalog'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(intent.modes.circular.features, 'extractedFeatures'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(intent.modes.circular.editorState, 'featureCatalog'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(intent.orthogroupState, 'groups'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(intent.files, 'linearCanonicalComparisons'), false);
   // B23: a LOSAT-cache replay's comparison sequences are held by reference only.
@@ -1636,7 +1671,7 @@ const createLayoutPreferences = () => ({
   };
   let setting = 'loaded';
   let artifactBuilds = 0;
-  const snapshots = createHistorySnapshotService({ state, fileStore });
+  const snapshots = createHistorySnapshotService({ state: withDrawings(state), fileStore });
   const history = createHistoryManager({
     fileStore,
     collectCurrentFileIds: snapshots.collectCurrentFileIds,
@@ -1684,13 +1719,11 @@ const createLayoutPreferences = () => ({
     newColorFeat: ref('gene'),
     newColorVal: ref('#123456'),
     newFeatureToAdd: ref('mobile_element'),
-    newLegendCaption: ref('Draft legend'),
-    newLegendColor: ref('#654321'),
     fileLegendCaptions: ref(new Set(['Imported legend'])),
     semanticFileWatchersSuppressed: ref(false)
   };
   const snapshots = createHistorySnapshotService({
-    state,
+    state: withDrawings(state),
     fileStore,
     buildUiStateData: () => ({}),
     applyUiStateData: () => {},
@@ -1712,8 +1745,6 @@ const createLayoutPreferences = () => ({
     newColorFeat: state.newColorFeat.value,
     newColorVal: state.newColorVal.value,
     newFeatureToAdd: state.newFeatureToAdd.value,
-    newLegendCaption: state.newLegendCaption.value,
-    newLegendColor: state.newLegendColor.value,
     fileLegendCaptions: Array.from(state.fileLegendCaptions.value)
   });
   const before = draftState();
@@ -1727,8 +1758,6 @@ const createLayoutPreferences = () => ({
     state.newColorFeat.value = 'CDS';
     state.newColorVal.value = '#abcdef';
     state.newFeatureToAdd.value = 'repeat_region';
-    state.newLegendCaption.value = 'Edited legend';
-    state.newLegendColor.value = '#fedcba';
     state.fileLegendCaptions.value = new Set(['Edited imported legend']);
   });
   const after = draftState();
@@ -1747,12 +1776,29 @@ const createLayoutPreferences = () => ({
     state.newColorFeat.value = 'gene';
     state.newColorVal.value = '#d3d3d3';
     state.newFeatureToAdd.value = 'mobile_element';
-    state.newLegendCaption.value = '';
-    state.newLegendColor.value = '#808080';
     state.fileLegendCaptions.value = new Set();
   });
   await history.undo();
   assert.deepEqual(draftState(), after);
+
+  // R15-2 retired Add legend item and its form drafts. A History intent or
+  // checkpoint that still carries them restores the other drafts and writes
+  // nothing for them, even where a holder of the old name exists.
+  const retiredDrafts = { newLegendCaption: 'Old draft', newLegendColor: '#123123' };
+  const oldIntent = { ...(await snapshots.buildHistoryIntent()) };
+  oldIntent.drafts = { ...oldIntent.drafts, ...retiredDrafts };
+  const oldCheckpoint = { ...(await snapshots.buildArtifactCheckpoint()) };
+  oldCheckpoint.drafts = { ...oldCheckpoint.drafts, ...retiredDrafts };
+  state.newLegendCaption = ref('');
+  state.newLegendColor = ref('#808080');
+  state.newColorVal.value = '#000001';
+  await snapshots.applyHistoryIntent(oldIntent);
+  assert.deepEqual(draftState(), after);
+  state.newColorVal.value = '#000002';
+  await snapshots.applyArtifactCheckpoint(oldCheckpoint);
+  assert.deepEqual(draftState(), after);
+  assert.deepEqual([state.newLegendCaption.value, state.newLegendColor.value], ['', '#808080']);
+  assert.equal(Object.hasOwn((await snapshots.buildHistoryIntent()).drafts, 'newLegendCaption'), false);
 }
 
 {
@@ -1773,6 +1819,9 @@ const createLayoutPreferences = () => ({
   const losatCacheInfoA = [{ key: 'raw-a' }];
   const appliedPaletteColorsA = { CDS: '#54bcf8' };
   const pendingPaletteColorsA = {};
+  const noticesA = [{
+    recordKey: 'record-a', biologicalFeatureId: 'gone', status: 'unresolved', kinds: ['label_text'], resultIndex: 0
+  }];
   const state = {
     files: {},
     linearSeqs: [],
@@ -1785,20 +1834,15 @@ const createLayoutPreferences = () => ({
     extractedFeatures: ref(extractedA),
     biologicalFeatures: ref(biologicalA),
     featureCatalog: ref(catalogA),
-    featureSelectorSafetyScope: ref([]),
     featureRecordIds: ref(['record-a']),
     selectedFeatureRecordIdx: ref(0),
     featureColorOverrides: { 'feature-a': '#112233' },
     featureVisibilityManualRules: [],
-    featureVisibilityOverrides: {},
-    featureVisibilitySelectorCache: {
-      'feature-a': { qualifier: 'hash', value: 'feature-a' }
-    },
-    labelTextFeatureOverrides: {},
+    featureOverrides: {},
+    // Python's identity notices are an artifact-owned value (design Q4 6.3).
+    featureIdentityNotices: ref(noticesA),
     canonicalLabelOverrideRows: ref([]),
     labelTextBulkOverrides: {},
-    labelTextFeatureOverrideSources: {},
-    labelVisibilityOverrides: {},
     legendEntries: ref([{ caption: 'A', color: '#112233' }]),
     deletedLegendEntries: ref([]),
     originalLegendOrder: ref(['A']),
@@ -1832,7 +1876,6 @@ const createLayoutPreferences = () => ({
     featureEditorStatus: { status: 'summary-ready', summaryCount: 1 },
     featureExtractionPending: ref(false),
     featureExtractionError: ref(null),
-    labelOverrideBuildWarning: ref(''),
     proteinIdentityManifest: ref(proteinIdentityManifestA),
     legacyProteinRawCandidates: ref(legacyProteinRawCandidatesA),
     legacyProteinDerivedEvidence: ref(legacyProteinDerivedEvidenceA),
@@ -1857,14 +1900,6 @@ const createLayoutPreferences = () => ({
     trustedArtifactRestoreInProgress: ref(false),
     semanticFileWatchersSuppressed: ref(false)
   };
-  let featureVisibilitySelectorCacheOwner = state.featureVisibilitySelectorCache;
-  state.captureFeatureVisibilitySelectorCacheOwner = () => (
-    featureVisibilitySelectorCacheOwner
-  );
-  state.replaceFeatureVisibilitySelectorCacheOwner = (nextOwner) => {
-    featureVisibilitySelectorCacheOwner = nextOwner;
-    state.featureVisibilitySelectorCache = nextOwner;
-  };
   const captureAuthorityOwners = () => ({
     proteinIdentityManifest: state.proteinIdentityManifest.value,
     legacyProteinRawCandidates: state.legacyProteinRawCandidates.value,
@@ -1887,7 +1922,7 @@ const createLayoutPreferences = () => ({
   const authorityOwnersA = captureAuthorityOwners();
   let resultAdmissionCalls = 0;
   const snapshots = createHistorySnapshotService({
-    state,
+    state: withDrawings(state),
     fileStore,
     nextTick: async () => {},
     buildUiStateData: () => ({
@@ -1902,7 +1937,7 @@ const createLayoutPreferences = () => ({
       pendingPaletteName: state.pendingPaletteName.value,
       pendingPaletteColors: { ...state.pendingPaletteColors.value }
     }),
-    applyUiStateData: (ui) => {
+    applyUiStateData: (_drawing, ui) => {
       state.mode.value = ui.mode;
       state.selectedResultIndex.value = ui.selectedResultIndex;
     },
@@ -1913,15 +1948,14 @@ const createLayoutPreferences = () => ({
       resultAdmissionCalls += 1;
       throw new Error('Trusted artifact restore must not use Result admission.');
     },
-    applyFeatureStateData: (features) => {
+    applyFeatureStateData: (_drawing, features) => {
       state.extractedFeatures.value = features.extractedFeatures;
       state.biologicalFeatures.value = features.biologicalFeatures;
-      state.featureSelectorSafetyScope.value = features.featureSelectorSafetyScope;
       state.featureRecordIds.value = features.featureRecordIds;
       state.selectedFeatureRecordIdx.value = features.selectedFeatureRecordIdx;
       Object.assign(state.featureColorOverrides, features.featureColorOverrides);
     },
-    applyEditorStateData: (editorState, options) => {
+    applyEditorStateData: (_drawing, editorState, options) => {
       assert.equal(options.normalized, true);
       state.legendEntries.value = editorState.legend.entries;
       state.featureCatalog.value = editorState.featureCatalog;
@@ -1958,10 +1992,7 @@ const createLayoutPreferences = () => ({
   assert.equal(handleA.ownerSet.losatCacheInfo, losatCacheInfoA);
   assert.equal(handleA.ownerSet.appliedPaletteColors, appliedPaletteColorsA);
   assert.equal(handleA.ownerSet.pendingPaletteColors, pendingPaletteColorsA);
-  assert.equal(
-    handleA.ownerSet.featureVisibilitySelectorCache['feature-a'].value,
-    'feature-a'
-  );
+  assert.equal(handleA.ownerSet.featureIdentityNotices, noticesA);
   assert.ok(handleA.retainedBytes >= 400_000);
 
   state.resultGenerationKey.value += 1;
@@ -1997,10 +2028,8 @@ const createLayoutPreferences = () => ({
   Object.defineProperty(poisonResource, 'data', {
     get() { throw new Error('Resource payloads must not be read during capture.'); }
   });
-  const poisonSelectorCache = new Proxy({}, {
-    ownKeys() {
-      throw new Error('Selector cache entries must not be traversed during capture.');
-    }
+  const poisonNotices = new Proxy([], {
+    get() { throw new Error('Identity notices must not be traversed during capture.'); }
   });
   const structuralMetrics = [];
   const previousHooks = globalThis.__GBDRAW_TEST_HOOKS__;
@@ -2012,7 +2041,7 @@ const createLayoutPreferences = () => ({
   state.losatCache.value = poisonCache;
   state.losatDerivedCache.value = poisonCache;
   state.matchSequenceRegistry.replaceTrustedOwner(poisonSequenceOwner);
-  state.replaceFeatureVisibilitySelectorCacheOwner(poisonSelectorCache);
+  state.featureIdentityNotices.value = poisonNotices;
   state.files.c_gb = poisonResource;
   snapshots.setGeneratedArtifactRuntimeOwner({
     capture: () => ({ retainedBytes: 999, payload: poisonResource }),
@@ -2030,7 +2059,7 @@ const createLayoutPreferences = () => ({
   assert.equal(poisonHandle.ownerSet.featureCatalog, poisonCatalog);
   assert.equal(poisonHandle.ownerSet.losatCache, poisonCache);
   assert.equal(poisonHandle.ownerSet.matchSequenceOwner, poisonSequenceOwner);
-  assert.equal(poisonHandle.ownerSet.featureVisibilitySelectorCache, poisonSelectorCache);
+  assert.equal(poisonHandle.ownerSet.featureIdentityNotices, poisonNotices);
   assert.equal(
     poisonHandle.retainedBytes,
     123_456 + 654_321 + 999 + poisonHandle.identity.compactSignature.length * 2
@@ -2081,9 +2110,7 @@ const createLayoutPreferences = () => ({
   );
   state.results.value = [{ name: 'edited.svg', content: '<svg id="edited" />' }];
   state.featureColorOverrides['feature-a'] = '#abcdef';
-  state.replaceFeatureVisibilitySelectorCacheOwner({
-    'feature-a': { qualifier: 'hash', value: 'edited-feature' }
-  });
+  state.featureIdentityNotices.value = [{ recordKey: 'record-b', biologicalFeatureId: 'bio-b' }];
   state.legendEntries.value[0].caption = 'Edited current legend';
   state.extractedFeatures.value = [{ svg_id: 'feature-b' }];
   state.biologicalFeatures.value = [{ biological_feature_id: 'bio-b' }];
@@ -2120,10 +2147,7 @@ const createLayoutPreferences = () => ({
   assert.equal(handleA.ownerSet.results[0], resultA);
   assert.equal(handleA.mutableIntent.features.featureColorOverrides['feature-a'], '#112233');
   assert.equal(handleA.mutableIntent.editorState.legend.entries[0].caption, 'A');
-  assert.equal(
-    handleA.ownerSet.featureVisibilitySelectorCache['feature-a'].value,
-    'feature-a'
-  );
+  assert.equal(handleA.ownerSet.featureIdentityNotices, noticesA);
   assert.equal(handleB.ownerSet.results[0].name, 'edited.svg');
   assert.equal(handleB.ownerSet.proteinIdentityManifest, proteinIdentityManifestB);
   assert.equal(handleB.ownerSet.legacyProteinRawCandidates, legacyProteinRawCandidatesB);
@@ -2149,7 +2173,7 @@ const createLayoutPreferences = () => ({
   assert.equal(state.orthogroups.value, groupsA);
   assert.equal(state.featureColorOverrides['feature-a'], '#112233');
   assert.equal(state.legendEntries.value[0].caption, 'A');
-  assert.equal(state.featureVisibilitySelectorCache['feature-a'].value, 'feature-a');
+  assert.equal(state.featureIdentityNotices.value, noticesA);
   assertAuthorityOwners(authorityOwnersA);
   assert.equal(state.appliedPaletteColors.value, appliedPaletteColorsA);
   assert.equal(state.pendingPaletteColors.value, pendingPaletteColorsA);
@@ -2381,7 +2405,7 @@ console.log('history tests passed');
 for (const previousSuppressed of [false, true]) {
   const state = { semanticFileWatchersSuppressed: ref(previousSuppressed) };
   const snapshots = createHistorySnapshotService({
-    state,
+    state: withDrawings(state),
     fileStore: createHistoryFileStore(),
     nextTick: async () => {
       assert.equal(state.semanticFileWatchersSuppressed.value, true);

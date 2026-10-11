@@ -10,7 +10,7 @@ test('real Python adapters retain causes through one lazy Worker and successful 
   expect((await getDiagramWorkerActivity(page)).constructions).toBe(0);
   const observations = await page.evaluate(async () => {
     const service = await import('/gbdraw/web/js/services/diagram-generation.js');
-    const { normalizeUserFacingError } = await import('/gbdraw/web/js/services/error-normalization.js');
+    const { normalizeUserFacingError } = await import('/gbdraw/web/js/utils/error-normalization.js');
     const pattern = '😀[PRIVATE_PATTERN_SENTINEL';
     const failures = [];
     for (const kind of ['color', 'label']) {
@@ -66,6 +66,22 @@ test('real Python adapters retain causes through one lazy Worker and successful 
   const activity = await getDiagramWorkerActivity(page);
   expect(activity.constructions).toBe(1);
   expect(activity.instances[0].initializations).toBe(1);
+});
+
+// UI-07: Generate with no input names the missing input before the diagram
+// Worker (Pyodide) starts, in both modes, and Retry repeats the same check.
+test('Generate without input fails before the diagram Worker starts', async ({ page }) => {
+  await openApp(page);
+  for (const mode of ['circular', 'linear']) {
+    await page.evaluate((target) => window.__GBDRAW_APP__.setDiagramMode(target), mode);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const outcome = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+      expect(outcome).toMatchObject({ status: 'error', error: { code: 'INPUT_REQUIRED', operation: 'generate' },
+        recovery: 'no-result' });
+    }
+    await expect(page.getByRole('alert', { name: 'Generation Error' })).toContainText('Supply GenBank input');
+  }
+  expect((await getDiagramWorkerActivity(page)).constructions).toBe(0);
 });
 
 const { join } = require('node:path');
@@ -156,6 +172,36 @@ test('an unclassified render failure offers Save Session and no Retry Generate',
   await inspectSafeDetails(page, alert, failed.error);
 });
 
+// OV-130 (R6): a preserved setting of the other diagram mode (OV-106) fails the
+// engine's request decoding. The panel names the setting, the mode it belongs to
+// and the two ways out, instead of the unclassified input-validation text.
+test('a Circular setting in a Linear request names the setting and the ways out', async ({ page }) => {
+  test.setTimeout(180000);
+  await openApp(page);
+  await loadSession(page, 'BGC0000708-BGC0000713');
+  await page.evaluate(() => {
+    const send = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function (message, ...args) {
+      if (message.type !== 'run') return send.call(this, message, ...args);
+      Worker.prototype.postMessage = send;
+      const request = structuredClone(message.payload.request);
+      request.diagramOptions.configOverrides = { ...request.diagramOptions.configOverrides, 'objects.ticks.tick_width': 4 };
+      return send.call(this, { ...message, payload: { ...message.payload, request } }, ...args);
+    };
+  });
+  const failed = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  expect(failed).toMatchObject({ status: 'error', recovery: 'preserved', error: { code: 'MODE_SETTING',
+    operation: 'generate', stage: 'request-validation', actions: ['edit-input'],
+    context: { reason: 'CIRCULAR_SETTING', configPath: 'objects.ticks.tick_width' } } });
+  const alert = page.getByRole('alert', { name: 'Generation Error' });
+  await expect(alert).toContainText('A preserved session setting does not apply to this diagram mode.'
+    + ' Setting: objects.ticks.tick_width. It applies only to Circular diagrams.'
+    + ' Reset it under Preserved session settings, or switch to Circular.');
+  await expect(alert).not.toContainText('Input validation failed');
+  await expect(alert.getByRole('button', { name: 'Retry Generate', exact: true })).toHaveCount(0);
+  await inspectSafeDetails(page, alert, failed.error);
+});
+
 // B10: the engine's display-start range check is a user-fixable input error.
 test('a display start beyond the record is an input error with a working action', async ({ page }) => {
   test.setTimeout(180000);
@@ -184,7 +230,6 @@ test('a live edit that fails the same way for the same request offers no Retry',
   // The forced reflow request is the path a label visibility edit uses.
   await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
-    state.labelReflowForceRequestReason.value = 'label-edit';
     state.labelReflowForceRequestSeq.value += 1;
   });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.labelReflowLastError?.code ?? null),
@@ -217,7 +262,7 @@ test('@pr-smoke live and downloaded standalone search retain JavaScript regex an
   await expect(page.getByRole('status',{name:'Feature search status'})).toContainText('Invalid JavaScript regular expression. Turn off Regex to return to word search.');
   await regex.uncheck(); await query.fill('NADH'); await query.press('Enter');
   await expect.poll(()=>page.evaluate(()=>[...window.__GBDRAW_APP__.previewFeatureSearchMatches].sort())).toEqual(targets);
-  await page.evaluate(()=>{window.__GBDRAW_APP__.adv.rich_feature_popup=true;});
+  await page.evaluate(()=>{window.__GBDRAW_APP__.richFeaturePopup=true;});
   const pending=page.waitForEvent('download');
   await page.evaluate(()=>window.__GBDRAW_APP__.downloadInteractiveSVG());
   const download=await pending;
@@ -277,8 +322,10 @@ test('Label TSV retry retains its real reselect input and accepted History', asy
   await page.waitForFunction(()=>!window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.extractedFeatures.length);
   await page.evaluate(()=>window.__GBDRAW_APP__.openRightDrawerTab('features'));
   const before=await page.evaluate(()=>({svg:window.__GBDRAW_APP__.svgContent,history:window.__GBDRAW_HISTORY__.getUndoCount()}));
-  const input=page.locator('input[accept=".tsv,.txt,text/tab-separated-values,text/plain"]');
-  await input.setInputFiles({name:'PRIVATE_LABEL_SENTINEL.tsv',mimeType:'text/plain',buffer:Buffer.from('*\tCDS\tproduct\t(?<enzyme>NADH)\tPRIVATE_LABEL_SENTINEL\n')});
+  // The Features list has two TSV file inputs (Label TSV, feature edits TSV); its button opens this one.
+  const picker=page.waitForEvent('filechooser');
+  await page.getByRole('button',{name:'Load Label TSV',exact:true}).click();
+  await (await picker).setFiles({name:'PRIVATE_LABEL_SENTINEL.tsv',mimeType:'text/plain',buffer:Buffer.from('*\tCDS\tproduct\t(?<enzyme>NADH)\tPRIVATE_LABEL_SENTINEL\n')});
   const alert=page.getByRole('alert',{name:'Rule error'});
   await expect(alert).toContainText('Python regular expression is invalid',{timeout:180000});
   await page.evaluate(()=>window.__GBDRAW_APP__.retryLabelImportFailure());

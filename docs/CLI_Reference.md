@@ -22,8 +22,8 @@ The current boolean spelling is symmetric in both modes:
 `--depth_track`. Current multiword long options otherwise use the underscore
 spelling shown below.
 
-For retired options, compatibility aliases, and saved-session migration rules,
-see [Session and request compatibility](./SESSION_COMPATIBILITY.md#retired-inputs).
+For retired options, the two remaining aliases, and how saved Sessions are
+rewritten, see [Retired inputs](./REFERENCE/session-and-request-compatibility.md#retired-inputs).
 
 ## Main command
 
@@ -36,6 +36,7 @@ Usage:
 Subcommands:
   circular  Generate a circular genome diagram
   linear    Generate a linear genome diagram
+  render    Render the drawings of a saved Session
   setup-losat  Install the pinned native LOSAT release
   gui       Launch the local web UI in your browser
 
@@ -49,6 +50,7 @@ Examples:
   gbdraw linear --gff input.gff --fasta input.fna
   gbdraw linear --gbk input1.gb input2.gb input3.gb -b input1_input2.blast.outfmt7.txt input2_input3.blast.outfmt7.txt
   gbdraw linear --gff input1.gff input2.gff input3.gff --fasta input1.fna input2.fna input3.fna -b input1_input2.blast.outfmt7.txt input2_input3.blast.outfmt7.txt
+  gbdraw render --session project.gbdraw-session.json
   gbdraw gui
 
 Options (examples):
@@ -82,6 +84,7 @@ Additional Information:
 
 ```text
 usage: gbdraw circular [-h] [--feature_placement_table TSV]
+              [--feature_override_table TSV]
               [--feature_overlap_tolerance_bp BP]
               [--record_topology {auto,linear,circular}]
               [--display_start_coordinate DISPLAY_START_COORDINATE]
@@ -178,7 +181,7 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--gc_skew_radius GC_SKEW_RADIUS]
               [--legend_box_size LEGEND_BOX_SIZE]
               [--legend_font_size LEGEND_FONT_SIZE] [--session SESSION]
-              [--save_session] [--session_output PATH]
+              [--drawing ID] [--save_session] [--session_output PATH]
 
 Generate genome diagrams in PNG/PDF/SVG/PS/EPS. By default, diagrams for
 multiple entries are saved separately. Use --multi_record_canvas to place
@@ -189,6 +192,10 @@ options:
   --feature_placement_table TSV
                         Feature placements: record, feature_selector,
                         placement, and optional level columns.
+  --feature_override_table TSV
+                        Per-feature edits: record, feature_selector, and
+                        feature_visibility, label_visibility, or label_text
+                        columns.
   --feature_overlap_tolerance_bp BP
                         Non-negative permitted feature overlap in base pairs
                         (default: 0).
@@ -468,8 +475,8 @@ options:
                         Inner label y-radius offset factor (float; default
                         from config)
   --scale_interval SCALE_INTERVAL
-                        Manual scale interval for circular mode (in bp).
-                        Overrides automatic calculation.
+                        Manual scale interval for circular mode (in bp; must
+                        be > 0). Overrides automatic calculation.
   --hide_scale          Hide the primary genome-coordinate scale while
                         retaining the circular axis.
   --tick_label_font_size TICK_LABEL_FONT_SIZE
@@ -554,6 +561,8 @@ options:
                         for genomes <= 50 kb, 16 for genomes >= 50 kb).
   --session SESSION     Regenerate a diagram from a plain or gzip-compressed
                         gbdraw GUI session JSON file.
+  --drawing ID          With --session, the drawing to render, by ID or name
+                        (default: the Session's only drawing of this mode).
   --save_session        Write one GUI-loadable .gbdraw-session.json sidecar
                         for this run.
   --session_output PATH
@@ -572,15 +581,16 @@ remains visible and causes a warning when combined with `--hide_scale`; omit or
 disable that slot to hide the scale.
 
 For fresh Circular input, output names are derived from record IDs when
-`--output` is omitted. An ID used this way must be one filename component:
-directory separators, absolute paths, `.` or `..`, ASCII control characters,
-and Windows-reserved device, stream, or wildcard names are rejected. Pass an
+`--output` is omitted. An ID used this way must be one filename component of
+at most 200 bytes in UTF-8: directory separators, absolute paths, `.` or `..`,
+ASCII control characters, and Windows-reserved device, stream, or wildcard names
+are rejected. Pass an
 explicit `--output` path or prefix for such records.
 Session replay keeps its saved prefix unless an output override is supplied.
 
-Circular BLAST similarity rings use one ring per `--conservation_blast` source and a shared identity gradient legend. The rings display raw HSPs rather than an inferred measure of evolutionary conservation. BLAST tables must be outfmt 6 or 7. Coordinates on the selected reference side are normalized from BLAST 1-based inclusive coordinates to drawing spans; `start > end` marks reverse orientation and is not interpreted as a circular-origin-spanning hit.
+Circular BLAST similarity rings use one ring per `--conservation_blast` source and a shared identity gradient legend. The rings display raw HSPs rather than an inferred measure of evolutionary conservation. Without `--conservation_labels`, a ring is labelled with its table's file name without the last extension (`danio-human.tlosatx.tsv` gives `danio-human.tlosatx`), as in the web app. BLAST tables must be outfmt 6 or 7. Coordinates on the selected reference side are normalized from BLAST 1-based inclusive coordinates to drawing spans; `start > end` marks reverse orientation and is not interpreted as a circular-origin-spanning hit.
 
-To run the searches instead, use `--losat losatn` or `--losat tlosatx` with one `--conservation_sequence` file per ring (`losatp` is not available for rings). Each comparison genome file (FASTA, GenBank, or DDBJ; all records of one file are one genome) is the LOSAT query, and all displayed records are the subject, so every ring uses the reference genome as its E-value database and `--conservation_reference` resolves to `subject` (`query` is rejected). `--conservation_blast` cannot be combined with `--losat`. Ring order, labels, and colors follow `--conservation_sequence`; without `--conservation_labels`, a GenBank or DDBJ ring is labelled with its DEFINITION (or organism) and a FASTA ring with its file name. `--losatn_task` applies to LOSATN. For TLOSATX, `--losat_gencode` sets the reference genetic code and `--conservation_losat_gencode` one code for all rings or one per ring; both default to 1 and are never read from `/transl_table`. `--losat_bin`, `--ncbi_blast_bin`, and `--losat_threads` choose the runtime as in Linear mode. `--losat_output_dir DIR` writes one raw TSV per ring and `conservation.tsv`, which `--conservation_table` accepts unchanged. A saved Session stores the search results, so it replays without LOSAT. Thresholds, ring geometry, and `--circular_track_slot` work as for precomputed rings.
+To run the searches instead, use `--losat losatn` or `--losat tlosatx` with one `--conservation_sequence` file per ring (`losatp` is not available for rings). Each comparison genome file (FASTA, GenBank, or DDBJ; all records of one file are one genome) is the LOSAT query, and all displayed records are the subject, so every ring uses the reference genome as its E-value database and `--conservation_reference` resolves to `subject` (`query` is rejected). `--conservation_blast` cannot be combined with `--losat`. Ring order, labels, and colors follow `--conservation_sequence`; without `--conservation_labels`, a GenBank or DDBJ ring is labelled with its DEFINITION (or organism), and a FASTA ring, or a flat file with neither field, with its file name without the last extension (`genome.v2.fasta` gives `genome.v2`). `--losatn_task` applies to LOSATN. For TLOSATX, `--losat_gencode` sets the reference genetic code and `--conservation_losat_gencode` one code for all rings or one per ring; both default to 1 and are never read from `/transl_table`. `--losat_bin`, `--ncbi_blast_bin`, and `--losat_threads` choose the runtime as in Linear mode. `--losat_output_dir DIR` writes one raw TSV per ring and `conservation.tsv`, which `--conservation_table` accepts unchanged. A saved Session stores the search results and ring labels, so it replays without LOSAT and keeps its labels. Thresholds, ring geometry, and `--circular_track_slot` work as for precomputed rings.
 
 For `interactive_svg`, add one `--conservation_sequence` value (FASTA, GenBank, or DDBJ) per `--conservation_blast` value to enable Reference span, Comparison span, and Both spans FASTA actions in the HSP popup. Without it, the reference span remains available and the comparison action explains that no comparison sequence was supplied. These actions export ungapped genomic spans. A reversed coordinate pair is sliced from the lower to the higher coordinate and reverse-complemented.
 
@@ -660,6 +670,8 @@ Allowed columns:
 | `column` | optional | Positive integer used to order records from left to right within a multi-record row. |
 
 One table row represents one displayed record. A table must use either all GenBank rows or all GFF3/FASTA rows; do not mix `gbk` with `gff`/`fasta`. Put `row`/`column` placement in the table instead of using `--multi_record_position`. In linear mode, put per-record labels, subtitles, selectors, crops, and orientation in the table instead of combining `--records_table` with `--record_label`, `--record_subtitle`, `--record_id`, `--region`, or `--reverse_complement`.
+
+A `:rc` suffix and `reverse_complement` apply in different orders. `region=1000-9000:rc` crops 1000..9000 of the record as stored in the file, then reverse-complements the crop. `reverse_complement=1` reverse-complements the whole record first, so a `region` in the same row counts its coordinates on the reverse-complemented record. `--region` and `--reverse_complement` follow the same order.
 
 For Linear input without a records table, repeat `--multi_record_position SELECTOR@ROW` once for every loaded record. `SELECTOR` uses the usual record selector syntax, including `#1`; quote values containing `#` in a shell. Records assigned to one row share one bp/px scale and are ordered by input order. `--linear_record_gap` controls only the fixed gap between them. Multi-record rows cannot be combined with `--normalize_length`.
 
@@ -857,6 +869,7 @@ alignment](./REFERENCE/command-line.md#strict-similarity-group-alignment).
 
 ```text
 usage: gbdraw linear [-h] [--feature_placement_table TSV]
+              [--feature_override_table TSV]
               [--feature_overlap_tolerance_bp BP]
               [--record_topology {auto,linear,circular}]
               [--display_start_coordinate DISPLAY_START_COORDINATE]
@@ -956,7 +969,7 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--legend_font_size LEGEND_FONT_SIZE] [--normalize_length]
               [--region REGION] [--record_id RECORD_ID]
               [--reverse_complement REVERSE_COMPLEMENT] [--session SESSION]
-              [--save_session] [--session_output PATH]
+              [--drawing ID] [--save_session] [--session_output PATH]
 
 Generate plot in PNG/PDF/SVG/PS/EPS.
 
@@ -965,6 +978,10 @@ options:
   --feature_placement_table TSV
                         Feature placements: record, feature_selector,
                         placement, and optional level columns.
+  --feature_override_table TSV
+                        Per-feature edits: record, feature_selector, and
+                        feature_visibility, label_visibility, or label_text
+                        columns.
   --feature_overlap_tolerance_bp BP
                         Non-negative permitted feature overlap in base pairs
                         (default: 0).
@@ -1358,8 +1375,9 @@ options:
                         color when --ruler_on_axis is active, otherwise
                         black).
   --scale_interval SCALE_INTERVAL
-                        Manual tick interval for "ruler" scale style (in bp).
-                        Overrides automatic calculation; optional
+                        Manual tick interval for "ruler" scale style (in bp;
+                        must be > 0). Overrides automatic calculation;
+                        optional
   --legend_box_size LEGEND_BOX_SIZE
                         Legend box size (optional; float; default: 24 (pixels,
                         96 dpi) for genomes <= 50 kb, 20 for genomes >= 50
@@ -1385,6 +1403,8 @@ options:
                         true/false, yes/no.
   --session SESSION     Regenerate a diagram from a plain or gzip-compressed
                         gbdraw GUI session JSON file.
+  --drawing ID          With --session, the drawing to render, by ID or name
+                        (default: the Session's only drawing of this mode).
   --save_session        Write one GUI-loadable .gbdraw-session.json sidecar
                         for this run.
   --session_output PATH
@@ -1468,14 +1488,60 @@ with `--ncbi_blast_bin`. You can force a native LOSAT executable on any
 platform with `--losat_bin`. NCBI BLAST+ fallback produces compatible outfmt 6
 comparisons, but its hit set is not guaranteed to be identical to LOSAT.
 
+## Render mode
+
+<!-- BEGIN GENERATED RENDER HELP -->
+
+```text
+usage: gbdraw render [-h] --session FILE [--drawing ID [ID ...]]
+                     [--list_drawings] [-o OUTPUT] [-f FORMAT] [--overwrite]
+                     [--save_session | --session_output PATH]
+
+Render the drawings of a plain or gzip-compressed gbdraw Session file. Without
+--drawing, every drawing with a committed render is rendered and the others
+are skipped with a notice.
+
+options:
+  -h, --help            show this help message and exit
+  --session FILE        The gbdraw Session file (.gbdraw-session.json or
+                        .json.gz).
+  --drawing ID [ID ...]
+                        Render only these drawings, by ID or name; repeatable.
+                        Naming a drawing without a committed render is an
+                        error.
+  --list_drawings       Print one tab-separated line per drawing (ID, mode,
+                        name, and yes or no for a committed render) and exit.
+  -o, --output OUTPUT   Output path prefix (default: each drawing's saved
+                        prefix). With several drawings, each name ends in
+                        _<ID>.
+  -f, --format FORMAT   Comma-separated list of output file formats (svg,
+                        interactive_svg, png, pdf, eps, ps; default: the saved
+                        formats; png/pdf/eps/ps require CairoSVG).
+  --overwrite           Replace existing output files (default: refuse to
+                        overwrite).
+  --save_session        Write the Session again with the rendered drawings
+                        replaced, next to the diagrams; several drawings need
+                        -o.
+  --session_output PATH
+                        Write the Session again with the rendered drawings
+                        replaced to PATH; use a .gz suffix for gzip
+                        compression.
+```
+
+<!-- END GENERATED RENDER HELP -->
+
+`gbdraw render` renders the drawings of a saved Session. Drawing selection,
+output names, and the Session re-save are described in
+[Sessions and output](./REFERENCE/command-line.md#sessions-and-output).
+
 ## Related documentation
 
 - [Quickstart](./QUICKSTART.md)
 - [Recipes](./RECIPES.md)
-- [Command-line Tutorials](./TUTORIALS/CLI/README.md)
+- [Tutorials](./TUTORIALS/README.md)
 - [LOSATP modes and comparison semantics](./REFERENCE/comparison-programs-thresholds-and-results.md)
-- [Similarity group Tutorial](./TUTORIALS/CLI/compare-proteins-losatp.md)
-- [Collinear block Tutorial](./TUTORIALS/CLI/compare-proteins-losatp-collinear.md)
+- [Similarity group Tutorial](./TUTORIALS/compare-proteins-losatp.md#on-the-command-line)
+- [Collinear block Tutorial](./TUTORIALS/compare-proteins-losatp-collinear.md#on-the-command-line)
 - [Input formats and TSV schemas](./REFERENCE/input-formats-and-tsv-schemas.md)
 
 [Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Technical documentation](./REFERENCE/README.md) | **CLI Reference (generated)** | [FAQ](./FAQ.md) | [Gallery](./GALLERY.md) | [About](./ABOUT.md)

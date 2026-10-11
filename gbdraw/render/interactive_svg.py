@@ -8,7 +8,7 @@ from importlib import resources
 import json
 import math
 import re
-from typing import Callable, Literal
+from typing import Callable, Literal, TypeGuard, cast, overload
 import xml.etree.ElementTree as ET
 
 from gbdraw.exceptions import GbdrawError
@@ -25,7 +25,6 @@ INTERACTIVE_MATCH_GLOW_FILTER_ID = "gbdraw-interactive-feature-match-glow"
 _FEATURE_ELEMENT_SUFFIX_RE = re.compile(r"__(?:part|line)\d+$")
 _FEATURE_CONNECTOR_SUFFIX_RE = re.compile(r"__line\d+$")
 _FEATURE_RECORD_SUFFIX_RE = re.compile(r"_record_(\d+)$")
-_FEATURE_INSTANCE_SUFFIX_RE = re.compile(r"__instance_.+_[0-9a-f]{16}$")
 _NONNEGATIVE_INTEGER_RE = re.compile(r"\d+")
 _FEATURE_RECORD_INDEX_KEYS = (
     "record_idx",
@@ -151,16 +150,24 @@ def _remove_class_token(element: ET.Element, token: str) -> None:
         element.attrib.pop("class", None)
 
 
+@overload
+def _compact_wire_value(value: Mapping[str, object]) -> dict[str, object] | None: ...
+
+
+@overload
+def _compact_wire_value(value: object) -> object | None: ...
+
+
 def _compact_wire_value(value: object) -> object | None:
     value_type = type(value)
-    if value_type is dict:
+    if value_type is dict and isinstance(value, dict):
         compact = {
             str(key): normalized
             for key, entry in value.items()
             if (normalized := _compact_wire_value(entry)) is not None
         }
         return compact or None
-    if value_type is list or value_type is tuple:
+    if (value_type is list or value_type is tuple) and isinstance(value, (list, tuple)):
         items = [
             normalized
             for entry in value
@@ -590,25 +597,12 @@ def _collect_rendered_features(root: ET.Element) -> dict[str, _RenderedFeatureEn
     return entries
 
 
-def _rendered_space_stable_id_candidates(rendered_id: str) -> set[str]:
-    """Return stable-looking bases encoded by one rendered-space handle."""
-
-    base = _FEATURE_RECORD_SUFFIX_RE.sub("", _normalize_feature_id(rendered_id))
-    candidates = {base} if base else set()
-    instance_base = _FEATURE_INSTANCE_SUFFIX_RE.sub("", base)
-    if instance_base:
-        candidates.add(instance_base)
-    return candidates
-
-
 def _rendered_entry_agrees_with_identity(
     entry: _RenderedFeatureEntry,
     *,
-    rendered_id: str,
     record_index: int | None,
     stable_id: str,
     source_index: int | None = None,
-    allow_rendered_space_stable_id: bool = False,
 ) -> bool:
     if (
         record_index is not None
@@ -620,11 +614,6 @@ def _rendered_entry_agrees_with_identity(
         stable_id
         and entry.stable_id_supplied
         and entry.stable_id != stable_id
-        and not (
-            allow_rendered_space_stable_id
-            and entry.stable_id
-            in _rendered_space_stable_id_candidates(rendered_id)
-        )
     ):
         return False
     return not (
@@ -752,7 +741,8 @@ def _number_or_none(value: object) -> float | int | None:
     if value is None:
         return None
     try:
-        number = float(value)
+        # Any other object type raises TypeError, handled below.
+        number = float(cast("str | float", value))
     except (TypeError, ValueError):
         return None
     if not math.isfinite(number):
@@ -878,7 +868,7 @@ def _normalize_orthogroup_member(
         member.get("featureSvgId"),
         member.get("feature_svg_id"),
     )
-    payload = {
+    payload: dict[str, object] = {
         "orthogroup_id": _first_text(member.get("orthogroupId"), member.get("orthogroup_id")),
         "protein_id": _first_text(member.get("proteinId"), member.get("protein_id")),
         "source_protein_id": _first_text(member.get("sourceProteinId"), member.get("source_protein_id")),
@@ -1010,11 +1000,9 @@ def _resolve_rendered_features(
         mapped_entry = rendered.get(mapped_svg_id)
         if mapped_entry is not None and not _rendered_entry_agrees_with_identity(
             mapped_entry,
-            rendered_id=mapped_svg_id,
             record_index=record_index,
             stable_id=stable_feature_id,
             source_index=feature_index,
-            allow_rendered_space_stable_id=True,
         ):
             raise GbdrawError(
                 f"Feature metadata identity does not agree with rendered SVG ID "
@@ -1100,7 +1088,7 @@ def _feature_payloads_from_rendered(
             (value for value in _normalize_string_array(qualifiers.get("translation")) if value.strip()),
             "",
         )
-        payload = {
+        payload: dict[str, object] = {
             "svg_id": svg_id,
             "rendered_feature_svg_id": svg_id,
             "stable_svg_id": _first_text(
@@ -1415,6 +1403,15 @@ def _apply_viewport_root(root: ET.Element) -> None:
     _set_style_properties(root)
 
 
+def _is_array_value(value: object) -> TypeGuard[Sequence[object]]:
+    return isinstance(value, Sequence) and not isinstance(value, (str, bytes))
+
+
+def _catalog_array(catalog_item: Mapping[str, object], key: str) -> Sequence[object]:
+    # build_feature_catalog_item always emits these keys as lists.
+    return cast("Sequence[object]", catalog_item[key])
+
+
 def _validate_catalog_feature_bindings(
     root: ET.Element,
     catalog_item: Mapping[str, object],
@@ -1424,9 +1421,10 @@ def _validate_catalog_feature_bindings(
     record_keys_value = catalog_item.get("recordKeys")
     biological_value = catalog_item.get("biologicalFeatures")
     rendered_value = catalog_item.get("features")
-    if any(
-        not isinstance(value, Sequence) or isinstance(value, (str, bytes))
-        for value in (record_keys_value, biological_value, rendered_value)
+    if not (
+        _is_array_value(record_keys_value)
+        and _is_array_value(biological_value)
+        and _is_array_value(rendered_value)
     ):
         raise GbdrawError("Interactive feature catalog is missing feature arrays.")
 
@@ -1525,7 +1523,6 @@ def _validate_catalog_feature_bindings(
     for rendered_id, (record_index, stable_id, source_index) in catalog_features.items():
         if not _rendered_entry_agrees_with_identity(
             rendered_entries[rendered_id],
-            rendered_id=rendered_id,
             record_index=record_index,
             stable_id=stable_id,
             source_index=source_index,
@@ -1627,12 +1624,12 @@ def enrich_svg(
             str(feature.get("recordKey") or ""),
             str(feature.get("biologicalFeatureId") or ""),
         ): feature
-        for feature in catalog_item["biologicalFeatures"]
+        for feature in _catalog_array(catalog_item, "biologicalFeatures")
         if isinstance(feature, Mapping)
     }
     rendered_features_by_id = {
         str(feature.get("svgId") or ""): feature
-        for feature in catalog_item["features"]
+        for feature in _catalog_array(catalog_item, "features")
         if isinstance(feature, Mapping)
     }
     for element in root.iter():
@@ -1663,7 +1660,7 @@ def enrich_svg(
 
     matches = [
         match
-        for match in catalog_item["comparisonMatches"]
+        for match in _catalog_array(catalog_item, "comparisonMatches")
         if isinstance(match, Mapping)
     ]
     match_elements = [element for element in root.iter() if _is_match_candidate(element)]

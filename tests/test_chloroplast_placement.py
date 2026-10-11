@@ -97,3 +97,71 @@ def test_chloroplast_placement_preserves_lanes_and_clears_labels_and_legend(
     assert {t.get("side") for t in FeaturePlacementSlot("circular", "split", separate).supported_targets()} == {
         None, "outward", "inward",
     }
+
+
+def _render_layouts(document, monkeypatch, tmp_path):
+    layouts = []
+    original = assemble.resolve_circular_radial_layout
+
+    def capture(*args, **kwargs):
+        layout = original(*args, **kwargs)
+        layouts.append(layout)
+        return layout
+
+    monkeypatch.setattr(assemble, "resolve_circular_radial_layout", capture)
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        plan_request(session_to_request(materialized)).build()
+    return layouts
+
+
+def _bands(layout):
+    return {
+        slot.id: (slot.anchor_radius_px, slot.packing_band_px.inner_px, slot.packing_band_px.outer_px)
+        for slot in layout.slots
+    }
+
+
+def test_published_chloroplast_stack_keeps_its_bands(chloroplast_session, monkeypatch, tmp_path):
+    # The bands that dev 98d4bc13 resolves for the published Session (after the label reflow).
+    layout = _render_layouts(chloroplast_session, monkeypatch, tmp_path)[-1]
+    expected = {
+        "features": (406.7216, 386.1630, 427.2802),
+        "plastome_regions": (253.5, 243.5, 263.5),
+        "gc_content": (218.4, 202.1311, 234.6689),
+    }
+    observed = _bands(layout)
+    assert observed.keys() == expected.keys()
+    for slot_id, bands in expected.items():
+        assert observed[slot_id] == pytest.approx(bands, abs=1e-3), slot_id
+
+
+def test_label_reflow_keeps_outside_rows_beyond_the_moved_feature_row(chloroplast_session, monkeypatch, tmp_path):
+    # The Web's automatic stack (custom stack off): radial inner labels enlarge the
+    # canvas and move the feature row outside the axis. The outside annotation row
+    # stays an outside row beyond it instead of a frozen ring inside the axis.
+    document = copy.deepcopy(chloroplast_session)
+    options = document["renderRequest"]["diagramOptions"]
+
+    def slot(slot_id, renderer, side, params, width=None):
+        return {"kind": "circularTrackSlot", "id": slot_id, "renderer": renderer, "enabled": True, "side": side,
+                "radius": None, "width": width, "z": 0, "params": params, "innerGapPx": None, "outerGapPx": None}
+
+    options["tracks"]["circularTrackSlots"] = [
+        slot("annotations_1", "annotations", "outside", {"set_id": "plastome_regions", "marks": ["bracket"]}),
+        slot("features", "features", "inside", {"lane_direction": "inside"}, {"value": 16, "unit": "px"}),
+        slot("ticks", "ticks", "inside", {"tick_label_layout": "label_in_tick_out"}),
+        slot("gc_content", "dinucleotide_content", "inside", {"nt": "GC"}),
+    ]
+    options["tracks"]["circularTrackAxisIndex"] = 1
+    for annotation in options["annotations"]["sets"][0]["annotations"]:
+        annotation["target"] = {"kind": "featureSpan", "record": annotation["target"]["record"],
+                                "selectors": [{"key": "gene", "value": "PRIVATE-MISSING"}],
+                                "envelope": "outer_bounds", "circularPath": "shortest"}
+
+    layouts = _render_layouts(document, monkeypatch, tmp_path)
+    final = layouts[-1]
+    by_id = {slot.id: slot for slot in final.slots}
+    assert final.axis.radius_px > layouts[0].axis.radius_px  # the label reflow ran
+    assert by_id["features"].side == "outside"
+    assert by_id["features"].packing_band_px.inner_px >= final.axis.radius_px
+    assert by_id["annotations_1"].packing_band_px.inner_px >= by_id["features"].packing_band_px.outer_px

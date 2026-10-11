@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const repoRoot = process.cwd();
 const ref = (value) => ({ value });
@@ -34,8 +35,8 @@ globalThis.__GBDRAW_TEST_HOOKS__ = {
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-preview-transform-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'app', 'feature-editor'), { recursive: true });
-await mkdir(join(tempDir, 'app', 'legend'), { recursive: true });
 await mkdir(join(tempDir, 'services'), { recursive: true });
+await mkdir(join(tempDir, 'utils'), { recursive: true });
 
 const copyModule = async (source, destination) => {
   await writeFile(
@@ -45,25 +46,35 @@ const copyModule = async (source, destination) => {
   );
 };
 
-await copyModule('services/error-normalization.js', 'services/error-normalization.js');
+await copyModule('utils/error-normalization.js', 'utils/error-normalization.js');
 await copyModule('app/ui.js', 'app/ui.js');
-await copyModule('app/feature-dom.js', 'app/feature-dom.js');
+await copyModule('services/feature-dom.js', 'services/feature-dom.js');
 await copyModule('app/feature-editor/svg-actions.js', 'app/feature-editor/svg-actions.js');
+await copyModule('utils/popup-bounds.js', 'utils/popup-bounds.js');
 await copyModule('services/runtime-test-hooks.js', 'services/runtime-test-hooks.js');
 await copyModule('services/feature-identity.js', 'services/feature-identity.js');
+await copyModule('services/feature-placement.js', 'services/feature-placement.js');
+await copyModule('services/json-clone.js', 'services/json-clone.js');
+// No admitted catalog: features open as the Result draws them.
 await writeFile(
-  join(tempDir, 'app', 'color-utils.js'),
+  join(tempDir, 'services', 'feature-catalog.js'),
+  'export const resultCatalogFeatures = () => null;\nexport const stableFeatureOverrideKey = () => "";\n',
+  'utf8'
+);
+await writeFile(
+  join(tempDir, 'utils', 'color-utils.js'),
   'export const resolveColorToHex = (value) => value || "#94a3b8";\n',
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'app', 'feature-utils.js'),
+  join(tempDir, 'services', 'feature-utils.js'),
   [
     'export const formatFeatureLength = () => "";',
     'export const formatFeatureLocation = () => "";',
     'export const getFeatureCaption = (feature) => feature?.label || feature?.id || "Feature";',
     'export const normalizeStringArray = (value) => Array.isArray(value) ? value : (value ? [String(value)] : []);',
-    'export const resolveDisplayProteinId = () => "";'
+    'export const resolveDisplayProteinId = () => "";',
+    'export const resolveFeatureProteinId = () => "";'
   ].join('\n'),
   'utf8'
 );
@@ -72,12 +83,17 @@ await writeFile(
   [
     'export const PAIRWISE_MATCH_SELECTOR = "path[data-gbdraw-pairwise-match-id]";',
     'export const buildPairwiseMatchHoverSummary = (element) => ({ id: element.getAttribute("data-gbdraw-pairwise-match-id"), title: "Pairwise match", subtitle: "", fill: "#94a3b8", rows: [] });',
-    'export const buildPairwiseMatchPayload = () => null;'
+    'export const buildMatchPopupPayload = () => null;'
   ].join('\n'),
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'app', 'feature-sequence-fasta.js'),
+  join(tempDir, 'app', 'rule-matching.js'),
+  'export const reportRuleRunFailure = (_state, _operation, run) => run();\nexport const runWhenPrepared = (_state, _preparations, commit) => commit();\n',
+  'utf8'
+);
+await writeFile(
+  join(tempDir, 'services', 'feature-sequence-fasta.js'),
   'export const buildFeatureSequenceFastas = () => ({ nucleotideFasta: "", aminoAcidFasta: "" });\n',
   'utf8'
 );
@@ -92,7 +108,7 @@ await writeFile(
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'app', 'legend', 'utils.js'),
+  join(tempDir, 'services', 'legend-svg.js'),
   'export const COMPARISON_LEGEND_SELECTOR = "[data-gbdraw-role=comparison-legend]";\n',
   'utf8'
 );
@@ -326,6 +342,79 @@ assert.equal(panZoom.previewTransformInteraction.isActive(), false);
 assert.equal(timers.size, 0);
 completeCase('reset cancels the canonical interaction without reconciliation');
 
+// UI-11 Fit: a fake layout whose surface (and SVG) has its top-center origin at
+// (606.5, 58) in a 896x386 frame at (100, 50), scaled and panned like the CSS.
+// The stylesheet's Editor reserve resolves through a probe element.
+const layout = { width: 997, height: 817 };
+let editorReserve = 0;
+const visualBox = () => {
+  const width = uiState.zoom.value * layout.width;
+  const height = uiState.zoom.value * layout.height;
+  const left = 606.5 + uiState.canvasPan.x - width / 2;
+  const top = 58 + uiState.canvasPan.y;
+  return { left, top, width, height, right: left + width, bottom: top + height };
+};
+const fakeSvg = { getBoundingClientRect: visualBox };
+let probes = 0;
+Object.assign(wrapper, { querySelector: (selector) => (selector === 'svg' ? fakeSvg : null), getBoundingClientRect: visualBox });
+Object.assign(canvas, {
+  clientLeft: 0, clientTop: 0, clientWidth: 896, clientHeight: 386,
+  getBoundingClientRect: () => ({ left: 100, top: 50, width: 896, height: 386 }),
+  appendChild: () => { probes += 1; },
+  ownerDocument: {
+    createElement: () => {
+      const probe = {
+        style: { cssText: '' },
+        getBoundingClientRect: () => ({
+          width: probe.style.cssText.includes('width:var(--preview-editor-reserve,0px)') ? editorReserve : 0
+        }),
+        remove: () => { probes -= 1; }
+      };
+      return probe;
+    }
+  }
+});
+const expectFitted = (zoom) => {
+  const box = visualBox();
+  const right = 996 - editorReserve;
+  const margins = [box.left - 100, right - box.right, box.top - 50, 436 - box.bottom];
+  assert.equal(uiState.zoom.value, zoom);
+  assert.equal(margins.every((margin) => margin >= 8 - 1e-9), true);
+  assert.equal(Math.abs(margins[0] - margins[1]) < 1e-9, true);
+  assert.equal(Math.abs(margins[2] - margins[3]) < 1e-9, true);
+  assert.equal(probes, 0);
+  assert.equal(wrapper.style.transform, `translate(${uiState.canvasPan.x}px, ${uiState.canvasPan.y}px) scale(${zoom})`);
+  assert.equal(wrapper.style.transition, 'transform 0.2s');
+};
+uiState.zoom.value = 2;
+Object.assign(uiState.canvasPan, { x: 30, y: -20 });
+panZoom.handleWheel(wheelEvent);
+panZoom.fitPreviewToViewport();
+// 370 / 817 = 0.4529 rounds down to the whole percent, so the diagram fills the frame.
+expectFitted(0.45);
+assert.equal(panZoom.previewTransformInteraction.isActive(), false);
+assert.equal(timers.size, 0);
+const fittedPan = { ...uiState.canvasPan };
+panZoom.fitPreviewToViewport();
+expectFitted(0.45);
+assert.equal(Math.hypot(uiState.canvasPan.x - fittedPan.x, uiState.canvasPan.y - fittedPan.y) < 1e-9, true);
+// An open Editor drawer reserves 360 px: Fit uses the 536 px left of it,
+// (536 - 16) / 997 = 0.5215 for a wide diagram.
+editorReserve = 360;
+Object.assign(layout, { width: 997, height: 300 });
+panZoom.fitPreviewToViewport();
+expectFitted(0.52);
+editorReserve = 0;
+Object.assign(layout, { width: 50, height: 40 });
+panZoom.fitPreviewToViewport();
+expectFitted(5);
+wrapper.querySelector = () => null;
+panZoom.fitPreviewToViewport();
+assert.equal(uiState.zoom.value, 5);
+for (const key of ['querySelector', 'getBoundingClientRect']) delete wrapper[key];
+for (const key of ['clientLeft', 'clientTop', 'clientWidth', 'clientHeight', 'getBoundingClientRect', 'appendChild', 'ownerDocument']) delete canvas[key];
+completeCase('fit centres the whole diagram left of the Editor reserve at the largest whole percent and cancels the interaction');
+
 panZoom.handleWheel(wheelEvent);
 panZoom.disposePanZoom();
 assert.equal(panZoom.previewTransformInteraction.isActive(), false);
@@ -444,6 +533,7 @@ const unrelatedPath = new FakeElement('generic', {
 const svg = new FakeSvg([featureOne, featureTwo, match, unrelatedPath]);
 globalThis.document = {
   elementsFromPoint: () => [featureOne],
+  querySelector: () => null,
   createElement: () => { throw new Error('Hover summary should stay disabled in this Contract.'); },
   body: { appendChild: () => {} }
 };
@@ -502,13 +592,13 @@ const state = {
   featurePopupSize: { width: 0, height: 0 },
   featureSelectionDrag: { active: false },
   skipCaptureBaseConfig: ref(false),
-  adv: { rich_feature_popup: false }
+  richFeaturePopup: ref(false)
 };
 const { createFeatureSvgActions } = await import(
   pathToFileURL(join(tempDir, 'app', 'feature-editor', 'svg-actions.js'))
 );
 const featureActions = createFeatureSvgActions({
-  state,
+  state: withDrawings(state),
   getFeatureColor: () => '#123456',
   getEffectiveLegendCaption: () => '',
   featureSelection,
@@ -647,7 +737,7 @@ featurePanZoom.disposePanZoom();
 completeCase('Feature action dispose removes delegated listeners and lifecycle subscription');
 
 const featureDomSource = await readFile(
-  join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'feature-dom.js'),
+  join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'feature-dom.js'),
   'utf8'
 );
 assert.doesNotMatch(featureDomSource, /markCursor|style\.cursor\s*=\s*['"]pointer['"]/);
@@ -660,7 +750,7 @@ const cssFeatureSelector = cursorRule[1]
   .split(',')
   .map((selector) => selector.trim())
   .join(', ');
-const { FEATURE_SELECTOR } = await import(pathToFileURL(join(tempDir, 'app', 'feature-dom.js')));
+const { FEATURE_SELECTOR } = await import(pathToFileURL(join(tempDir, 'services', 'feature-dom.js')));
 assert.equal(cssFeatureSelector, FEATURE_SELECTOR);
 for (const excludedSelector of [
   'data-gbdraw-pairwise-match-id',

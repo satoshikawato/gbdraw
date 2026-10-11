@@ -20,7 +20,7 @@ SOURCE_PATHS = (
     "gbdraw/analysis/protein_colinearity.py", "gbdraw/api/__init__.py",
     "gbdraw/session_request_codec.py", "gbdraw/session_io.py",
     "gbdraw/analysis/protein_artifacts.py", "gbdraw/web_support/feature_catalog.py",
-    "gbdraw/render/interactive_svg.py", "gbdraw/web/js/app/losat-cache.js",
+    "gbdraw/render/interactive_svg.py", "gbdraw/web/js/services/losat-cache.js",
     "gbdraw/web/js/services/config.js",
 )
 

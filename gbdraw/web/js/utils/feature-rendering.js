@@ -1,3 +1,4 @@
+// @ts-check
 export const FEATURE_RENDERING_VALUES = Object.freeze([
   'arrow',
   'rectangle',
@@ -86,18 +87,6 @@ export const normalizeFeatureRenderingMap = (source) => {
     normalized[featureType] = normalizeFeatureRendering(rendering);
   });
   return normalized;
-};
-
-export const visibleFeatureUnderlaysForState = (state) => {
-  const featureShapes = {
-    repeat_region: defaultFeatureRendering('repeat_region'),
-    ...normalizeFeatureRenderingMap(state?.adv?.feature_shapes || {})
-  };
-  return Array.from(state?.adv?.features || [])
-    .map((featureType) => String(featureType || '').trim())
-    .filter((featureType) => (
-      (featureShapes[featureType] || defaultFeatureRendering(featureType)) === 'underlay'
-    ));
 };
 
 export const createDefaultFeatureRenderings = () => ({

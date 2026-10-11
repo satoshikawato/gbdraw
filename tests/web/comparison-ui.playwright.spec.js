@@ -23,7 +23,7 @@ const preservedComparisonSession = () => {
     queryRecordIndex: 0,
     subjectRecordIndex: 1
   }));
-  session.config.linearComparisonPlan = {
+  session.modes.linear.config.linearComparisonPlan = {
     mode: 'none',
     defaultSource: 'losat',
     edges: []
@@ -229,8 +229,9 @@ test('fresh Linear keeps primary input visible and uses command/status semantics
       '[data-linear-record-list] .upload-zone',
       '[data-linear-comparison-card]',
       '.basic-settings',
-      '.generate-bar',
-      '[data-linear-advanced-comparison]'
+      '[data-linear-advanced-comparison]',
+      // UI-12 (Owner decision 2026-10-07): Generate is last in Tab order.
+      '.generate-bar'
     ];
     const elements = selectors.map((selector) => document.querySelector(selector));
     return {
@@ -248,6 +249,9 @@ test('fresh Linear keeps primary input visible and uses command/status semantics
   });
   expect(order).toEqual({ present: true, ordered: true, pairInRecordList: 0 });
 
+  // Scroll only as far as a user must to reach Add: Playwright centers a target
+  // that is entirely below the fold, which alone moves the first card out of view.
+  await inputAddAction(page).evaluate((button) => button.scrollIntoView({ block: 'nearest' }));
   await inputAddAction(page).click();
   await expect(page.locator('[data-linear-record-card]')).toHaveCount(2);
   await expectInside(firstUploader, settingsPane);
@@ -421,12 +425,13 @@ test('uploader, comparison commands, and native summaries work from the keyboard
       buildRunStateData,
       buildUiStateData
     } = await import('./js/services/config.js');
+    const drawing = (await import('./js/state.js')).state.activeDrawing();
     const serialized = JSON.parse(JSON.stringify({
-      config: buildConfigData(),
-      ui: buildUiStateData(),
-      features: buildFeatureStateData(),
-      editorState: buildEditorStateData(),
-      orthogroupState: buildOrthogroupStateData(),
+      config: buildConfigData(drawing),
+      ui: buildUiStateData(drawing),
+      features: buildFeatureStateData(drawing),
+      editorState: buildEditorStateData(drawing),
+      orthogroupState: buildOrthogroupStateData(drawing),
       runState: buildRunStateData()
     }));
     const transientKeys = [];
@@ -477,6 +482,7 @@ test('uploader, comparison commands, and native summaries work from the keyboard
 });
 
 test('imported comparison resolutions are explicit and create one History entry each', async ({ page }) => {
+  test.setTimeout(300000);
   await openLinear(page);
   await inputAddAction(page).click();
   await page.evaluate(() => {
@@ -490,7 +496,7 @@ test('imported comparison resolutions are explicit and create one History entry 
 
   const setIntent = (disposition, message) => page.evaluate(async ({ next, explanation }) => {
     const { state } = await import('/gbdraw/web/js/state.js');
-    Object.assign(state.importedComparisonIntent, {
+    Object.assign(state.activeDrawing().importedComparisonIntent, {
       disposition: next,
       action: null,
       message: explanation,
@@ -548,6 +554,62 @@ test('imported comparison resolutions are explicit and create one History entry 
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
     .toBe(beforeReplace + 1);
 
+  // OV-301: a replacement draft that becomes empty or invalid after Replace is
+  // reported with its own diagnostic, not the unclassified fallback.
+  await comparisonCommands(page).getByRole('button', { name: 'Set no comparison' }).click();
+  await page.getByRole('button', { name: 'Generate Diagram' }).click();
+  await expect(page.getByRole('alert', { name: 'Generation Error' })).toContainText(
+    'Set up a comparison in the Comparison panel, or choose Clear comparison, then Generate again.',
+    { timeout: 180000 }
+  );
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
+    code: 'COMPARISON_REPLACEMENT_EMPTY', operation: 'generate', stage: 'request-validation'
+  });
+  const invalidReplacement = await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.setLinearComparisonGlobalAction('losat');
+    app.setLinearComparisonLosatMode('blastp');
+    app.setLinearComparisonLosatpMode('collinear');
+    app.setLinearComparisonGapAction(app.linearComparisonResolution.edges[0].edgeKey, 'losat');
+    const undoBefore = window.__GBDRAW_HISTORY__.getUndoCount();
+    const result = await app.runAnalysis();
+    return { status: result?.status, code: app.errorLog?.code, context: app.errorLog?.context,
+      undoAdded: window.__GBDRAW_HISTORY__.getUndoCount() - undoBefore };
+  });
+  expect(invalidReplacement).toMatchObject({
+    status: 'error', code: 'COMPARISON_INPUT', undoAdded: 0, context: { reason: 'LOSAT_PLAN' }
+  });
+  await expect(page.getByRole('region', { name: 'Result Preview' }))
+    .toContainText('Last Successful Result');
+  await expect(resolution).toContainText('Selected action: REPLACE');
+
+  // D-54 after Replace: an Upload pair without a file asks first. Setting it
+  // to No comparison leaves the replacement empty, which is refused.
+  const missingTsvDialog = page.getByRole('dialog', { name: 'BLAST TSV missing' });
+  const missingTsv = await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearComparisonLosatMode('blastn');
+    await app.setLinearComparisonGlobalAction('losat');
+    const [first, ...rest] = app.linearComparisonResolution.edges.map((edge) => edge.edgeKey);
+    app.setLinearComparisonGapAction(first, 'upload');
+    rest.forEach((edgeKey) => app.setLinearComparisonGapAction(edgeKey, 'none'));
+    const undoBefore = window.__GBDRAW_HISTORY__.getUndoCount();
+    const result = await app.runAnalysis();
+    return { result, undoAdded: window.__GBDRAW_HISTORY__.getUndoCount() - undoBefore };
+  });
+  expect(missingTsv).toEqual({ result: { status: 'blocked', reason: 'missing-blast-tsv' }, undoAdded: 0 });
+  await expect(missingTsvDialog).toContainText('These pairs are set to Upload BLAST TSV but have no file: #1 → #2.');
+  const setToNone = await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    const undoBefore = window.__GBDRAW_HISTORY__.getUndoCount();
+    const result = await app.resolveMissingBlastTsv('none');
+    return { status: result?.status, code: app.errorLog?.code,
+      undoAdded: window.__GBDRAW_HISTORY__.getUndoCount() - undoBefore };
+  });
+  expect(setToNone).toEqual({ status: 'error', code: 'COMPARISON_REPLACEMENT_EMPTY', undoAdded: 1 });
+  await expect(missingTsvDialog).toHaveCount(0);
+  await expect(resolution).toContainText('Selected action: REPLACE');
+
   await setIntent(
     'DECISION_REQUIRED',
     'The saved comparison is incomplete and needs an explicit replacement or clear action.'
@@ -591,6 +653,17 @@ test('preserved imported comparison generates only after explicit inheritance', 
   });
   expect(imported.undoCount).toBe(0);
 
+  // OV-303: Generate before the choice names it instead of the unclassified fallback.
+  await page.getByRole('button', { name: 'Generate Diagram' }).click();
+  await expect(page.getByRole('alert', { name: 'Generation Error' })).toContainText(
+    'Choose how to handle the saved comparison in the Comparison panel, then Generate again.',
+    { timeout: 180000 }
+  );
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
+    code: 'COMPARISON_CHOICE_REQUIRED', operation: 'generate', stage: 'request-validation'
+  });
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(0);
+
   await resolution.getByRole('button', { name: 'Inherit saved comparison' }).click();
   const generated = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
@@ -625,7 +698,7 @@ test('preserved imported comparison generates only after explicit inheritance', 
   const savedSession = JSON.parse(
     gunzipSync(readFileSync(await download.path())).toString('utf8')
   );
-  expect(savedSession.config.importedComparisonResolution).toEqual({ action: 'INHERIT' });
+  expect(savedSession.modes.linear.config.importedComparisonResolution).toEqual({ action: 'INHERIT' });
   expect(savedSession.renderRequest.comparisons).toEqual(generated.comparisons);
   expect(savedSession.results[savedSession.ui.selectedResultIndex].content)
     .toBe(generated.result);
@@ -1051,7 +1124,7 @@ test('comparison controls drive appearance and current Session round trips', { t
   const sessionPath = await sessionDownload.path();
   const sessionBuffer = readFileSync(sessionPath);
   const session = JSON.parse(gunzipSync(sessionBuffer).toString('utf8'));
-  expect(session.config.losat.blastp).toMatchObject({
+  expect(session.modes.linear.config.losat.blastp).toMatchObject({
     mode: 'collinear',
     candidateLimit: 23,
     maxHits: 3,
@@ -1064,7 +1137,7 @@ test('comparison controls drive appearance and current Session round trips', { t
     collinearSearchScope: 'all',
     collinearColorMode: 'orientation_identity'
   });
-  expect(session.config.adv).toMatchObject({
+  expect(session.modes.linear.config.adv).toMatchObject({
     pairwise_match_style: 'curve',
     comparison_height: 85
   });
@@ -1150,11 +1223,11 @@ test('structured comparison errors open and focus their owning disclosure', asyn
   test.setTimeout(300000);
   await openLinear(page);
 
-  const configureRecords = async () => page.evaluate((records) => {
+  const configureRecords = async (records) => page.evaluate((contents) => {
     const app = window.__GBDRAW_APP__;
     app.lInputType = 'gb';
-    if (app.linearSeqs.length < 2) app.addLinearSeq();
-    records.forEach((content, index) => app.setLinearSeqPrimaryFile(
+    while (app.linearSeqs.length < contents.length) app.addLinearSeq();
+    contents.forEach((content, index) => app.setLinearSeqPrimaryFile(
       index,
       'gb',
       new File([content], `error-record-${index + 1}.gbk`, {
@@ -1162,9 +1235,11 @@ test('structured comparison errors open and focus their owning disclosure', asyn
         lastModified: index + 1
       })
     ));
-  }, [makeGenbank('ErrorA'), makeGenbank('ErrorB', 'gct')]);
+  }, records);
 
-  await configureRecords();
+  // D-54: an Upload pair without a file asks at Generate instead of failing;
+  // Choose opens its disclosure and its file chooser.
+  await configureRecords([makeGenbank('ErrorA'), makeGenbank('ErrorB', 'gct')]);
   const missingUpload = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     await app.setLinearComparisonGlobalAction('losat');
@@ -1174,43 +1249,52 @@ test('structured comparison errors open and focus their owning disclosure', asyn
     const result = await app.runAnalysis();
     return {
       result,
+      errorCode: app.errorLog?.code ?? null,
       issueCodes: app.linearComparisonResolution.errors.map((issue) => issue.code),
       edgeKey
     };
   });
-  expect(missingUpload.result.status).toBe('error');
-  expect(missingUpload.issueCodes).toContain('missing-upload');
-  await expect(selectedPairs(page)).toHaveAttribute('open', '');
+  expect(missingUpload.result).toEqual({ status: 'blocked', reason: 'missing-blast-tsv' });
+  expect(missingUpload.errorCode).toBeNull();
+  expect(missingUpload.issueCodes).toEqual(['missing-upload']);
   await expect(comparisonCard(page).getByRole('status')).toContainText('comparison issue');
+  const missingTsvDialog = page.getByRole('dialog', { name: 'BLAST TSV missing' });
+  const chooserOpened = page.waitForEvent('filechooser');
+  await missingTsvDialog.getByRole('button', { name: 'Choose BLAST TSV for #1 → #2…' }).click();
+  await chooserOpened;
+  await expect(selectedPairs(page)).toHaveAttribute('open', '');
   const missingPair = page.locator(`[data-edge-key="${missingUpload.edgeKey}"]`);
-  await expect(missingPair.locator('[data-linear-comparison-pair-upload]')).toContainText(
-    'BLAST TSV'
-  );
   expect(await missingPair.evaluate((element) => (
     element.contains(document.activeElement)
     && Boolean(document.activeElement?.closest('[data-linear-comparison-pair-upload]'))
   ))).toBe(true);
 
+  // Another issue keeps its typed error and focus, even with an Upload pair
+  // without a file: No comparison would not let the run succeed.
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.getByRole('button', { name: 'Linear', exact: true }).click();
-  await configureRecords();
+  await configureRecords([makeGenbank('ErrorA'), makeGenbank('ErrorB', 'gct'), makeGenbank('ErrorC', 'gga')]);
   const selectedCollinear = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     await app.setLinearComparisonGlobalAction('losat');
     app.setLinearComparisonLosatMode('blastp');
     app.setLinearComparisonLosatpMode('collinear');
-    const edgeKey = app.linearComparisonResolution.edges[0].edgeKey;
-    app.setLinearComparisonGapAction(edgeKey, 'losat');
+    const [losatEdgeKey, uploadEdgeKey] = app.linearComparisonResolution.edges.map((edge) => edge.edgeKey);
+    app.setLinearComparisonGapAction(losatEdgeKey, 'losat');
+    app.setLinearComparisonGapAction(uploadEdgeKey, 'upload');
     document.querySelector('[data-linear-comparison-disclosure="settings"]')?.removeAttribute('open');
     const result = await app.runAnalysis();
     return {
       result,
+      reason: app.errorLog?.context?.reason,
       issueCodes: app.linearComparisonResolution.errors.map((issue) => issue.code)
     };
   });
   expect(selectedCollinear.result.status).toBe('error');
-  expect(selectedCollinear.issueCodes).toContain('selected-losat-requires-pairwise');
+  expect(selectedCollinear.reason).toBe('LOSAT_PLAN');
+  expect(selectedCollinear.issueCodes).toEqual(['selected-losat-requires-pairwise', 'missing-upload']);
+  await expect(missingTsvDialog).toHaveCount(0);
   await expect(comparisonSettings(page)).toHaveAttribute('open', '');
   await expect(page.getByRole('combobox', { name: 'LOSATP mode' })).toBeFocused();
 });
@@ -1307,16 +1391,171 @@ test('uploaded BLAST IDs bind to endpoint records and malformed or contradictory
   expect(shortRow.errorCode).toBe('COMPARISON_INPUT');
   expect(shortRow.content).toBe(unrelated.content);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog.context))
-    .toEqual({ reason: 'FIELDS', row: 2, columnCount: 12 });
+    .toEqual({ reason: 'FIELDS', row: 2, columnCount: 12, queryRecordIndex: 0, subjectRecordIndex: 1 });
   await expect(page.getByRole('alert', { name: 'Generation Error' }))
     .toContainText('Required columns: 12.');
 
+  // CI-04: a swapped table names the column and the correction, as the CLI does.
   const swapped = await generateWithTable(hit('Co06B', 'Co06A'), 'swapped-ids.tsv');
   expect(swapped.status).toBe('error');
-  expect(swapped.errorCode).toBe('COMPARISON_IDENTITY');
+  expect(swapped.errorCode).toBe('COMPARISON_INPUT');
   expect(swapped.content).toBe(unrelated.content);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog.context))
+    .toEqual({ reason: 'RECORD_ID', column: 1, queryRecordIndex: 0, subjectRecordIndex: 1 });
   await expect(page.getByRole('alert', { name: 'Generation Error' }))
-    .toContainText('Comparison endpoints disagree');
+    .toContainText('Pair: #1 to #2. Column 1. A table row names another displayed record in this column. Swap the query and subject columns');
+});
+
+// CI-06, D-54: removing the BLAST TSV of an Upload pair names the pair at
+// Generate, in the BLAST TSV missing dialog, and keeps the Result.
+test('removing the BLAST TSV of an Upload pair names the missing file at Generate', async ({ page }) => {
+  test.setTimeout(300000);
+  const { hit, generateWithTable } = await prepareUploadedTablePair(page);
+  const drawn = await generateWithTable(hit('Co06A', 'Co06B'), 'pair-table.tsv');
+  expect(drawn.status, drawn.errorCode).toBe('ok');
+  await page.evaluate(() => document.querySelectorAll('details').forEach((details) => { details.open = true; }));
+  await page.getByRole('group', { name: 'BLAST TSV for #1 to #2 selection' })
+    .getByRole('button', { name: 'Remove' }).click();
+  const blocked = await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    const result = await app.runAnalysis();
+    return { result, code: app.errorLog?.code ?? null,
+      content: String(app.results?.[app.selectedResultIndex]?.content || '') };
+  });
+  expect(blocked).toEqual({ result: { status: 'blocked', reason: 'missing-blast-tsv' }, code: null,
+    content: drawn.content });
+  const dialog = page.getByRole('dialog', { name: 'BLAST TSV missing' });
+  await expect(dialog).toContainText('These pairs are set to Upload BLAST TSV but have no file: #1 → #2.');
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole('alert', { name: 'Generation Error' })).toHaveCount(0);
+
+  // Retry Generate on an earlier failure asks the same way.
+  const shortRow = await generateWithTable('Co06A\tCo06B\t95\n', 'short-row.tsv');
+  expect(shortRow.status).toBe('error');
+  await page.getByRole('group', { name: 'BLAST TSV for #1 to #2 selection' })
+    .getByRole('button', { name: 'Remove' }).click();
+  await page.getByRole('alert', { name: 'Generation Error' })
+    .getByRole('button', { name: 'Retry Generate' }).click();
+  await expect(dialog).toContainText('These pairs are set to Upload BLAST TSV but have no file: #1 → #2.');
+});
+
+// D-54: Generate with pairs set to Upload BLAST TSV but without a file asks
+// first: choose the first pair's file, set the pairs to No comparison and
+// Generate as one History entry, or Cancel.
+test('Generate asks how to resolve Upload pairs without a BLAST TSV', async ({ page }) => {
+  test.setTimeout(300000);
+  await openLinear(page);
+  const edgeCount = await page.evaluate(async (records) => {
+    const app = window.__GBDRAW_APP__;
+    while (app.linearSeqs.length < 3) app.addLinearSeq();
+    records.forEach((content, index) => app.setLinearSeqPrimaryFile(
+      index,
+      'gb',
+      new File([content], `tsv-dialog-${index + 1}.gbk`, { type: 'text/plain', lastModified: index + 1 })
+    ));
+    Object.assign(app.form, {
+      legend: 'none', show_gc: false, show_skew: false, show_depth: false, show_labels_linear: 'none'
+    });
+    await app.setLinearComparisonGlobalAction('losat');
+    const edgeKeys = app.linearComparisonResolution.edges.map((edge) => edge.edgeKey);
+    edgeKeys.forEach((edgeKey) => app.setLinearComparisonGapAction(edgeKey, 'upload'));
+    return edgeKeys.length;
+  }, [makeGenbank('TsvA', 'atg'), makeGenbank('TsvB', 'gct'), makeGenbank('TsvC', 'gga')]);
+  expect(edgeCount).toBe(2);
+  const dialog = page.getByRole('dialog', { name: 'BLAST TSV missing' });
+  const generate = page.getByRole('button', { name: 'Generate Diagram' });
+  const alert = page.getByRole('alert', { name: 'Generation Error' });
+  const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  const resultCount = () => page.evaluate(() => window.__GBDRAW_APP__.results.length);
+  const pairSources = () => page.evaluate(() => window.__GBDRAW_APP__.linearComparisonResolution.edges
+    .map((edge) => `#${edge.queryIndex + 1} → #${edge.subjectIndex + 1}: ${edge.source}`));
+
+  // Cancel closes the dialog and changes nothing.
+  const beforeCancel = await undoCount();
+  await generate.click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText(
+    'These pairs are set to Upload BLAST TSV but have no file: #1 → #2, #2 → #3.'
+  );
+  await expect(dialog.getByRole('button')).toHaveText([
+    'Choose BLAST TSV for #1 → #2…', 'Set to No comparison and Generate', 'Cancel'
+  ]);
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(alert).toHaveCount(0);
+  expect(await undoCount()).toBe(beforeCancel);
+  expect(await resultCount()).toBe(0);
+  expect(await pairSources()).toEqual(['#1 → #2: upload', '#2 → #3: upload']);
+
+  // Set to No comparison and Generate sets both listed pairs to No comparison
+  // as one History step, then Generate succeeds; Undo restores both pairs.
+  await generate.click();
+  await expect(dialog).toContainText('have no file: #1 → #2, #2 → #3.');
+  const bothToNone = await evaluateWithRetainedPromise(page, async () => {
+    const history = window.__GBDRAW_HISTORY__;
+    const undoBefore = history.getUndoCount();
+    const result = await window.__GBDRAW_APP__.resolveMissingBlastTsv('none');
+    const { getCommittedCanonicalRenderRequest } = await import('/gbdraw/web/js/services/config.js');
+    return { status: result?.status, undoAdded: history.getUndoCount() - undoBefore,
+      comparisons: getCommittedCanonicalRenderRequest()?.comparisons ?? null };
+  });
+  expect(bothToNone).toEqual({ status: 'ok', undoAdded: 2, comparisons: [] });
+  await expect(dialog).toHaveCount(0);
+  expect(await pairSources()).toEqual([]);
+  expect(await evaluateWithRetainedPromise(page, async () => {
+    const history = window.__GBDRAW_HISTORY__;
+    await history.undo();
+    const label = history.undoLabel();
+    await history.undo();
+    return label;
+  })).toBe('Set pairs to No comparison');
+  expect(await pairSources()).toEqual(['#1 → #2: upload', '#2 → #3: upload']);
+  expect(await undoCount()).toBe(beforeCancel);
+
+  // Choose opens the first pair's file chooser in the panel and does not generate.
+  await selectedPairs(page).evaluate((details) => { details.open = false; });
+  await generate.click();
+  await expect(dialog).toBeVisible();
+  const chooserOpened = page.waitForEvent('filechooser');
+  await dialog.getByRole('button', { name: 'Choose BLAST TSV for #1 → #2…' }).click();
+  const chooser = await chooserOpened;
+  await expect(dialog).toHaveCount(0);
+  await expect(selectedPairs(page)).toHaveAttribute('open', '');
+  expect(await chooser.element().getAttribute('aria-label')).toBe('BLAST TSV for #1 to #2');
+  expect(await undoCount()).toBe(beforeCancel);
+  expect(await resultCount()).toBe(0);
+  await chooser.setFiles({
+    name: 'pair-1-2.tsv',
+    mimeType: 'text/tab-separated-values',
+    buffer: Buffer.from('TsvA\tTsvB\t95\t80\t4\t0\t1\t80\t5\t84\t1e-40\t160\n')
+  });
+  await expect(page.getByRole('group', { name: 'BLAST TSV for #1 to #2 selection' }))
+    .toContainText('pair-1-2.tsv');
+
+  // The next Generate names only the pair still without a file. The button
+  // reads the pairs when it is pressed: a pair that got its file while the
+  // dialog was open (as Undo can do) is kept, and Generate draws both pairs.
+  await generate.click();
+  await expect(dialog).toContainText('These pairs are set to Upload BLAST TSV but have no file: #2 → #3.');
+  await page.evaluate((text) => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearComparisonCardFile(app.linearComparisonResolution.edges[1].edgeKey,
+      new File([text], 'pair-2-3.tsv', { type: 'text/tab-separated-values' }));
+  }, 'TsvB\tTsvC\t95\t80\t4\t0\t1\t80\t5\t84\t1e-40\t160\n');
+  await dialog.getByRole('button', { name: 'Set to No comparison and Generate' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => (
+    !window.__GBDRAW_APP__.processing && !window.__GBDRAW_HISTORY__.mutationPending()
+      && window.__GBDRAW_APP__.results.length
+  )), { timeout: 180000 }).toBe(1);
+  await expect(alert).toHaveCount(0);
+  expect(await page.evaluate(async () => {
+    const { getCommittedCanonicalRenderRequest } = await import('/gbdraw/web/js/services/config.js');
+    return getCommittedCanonicalRenderRequest().comparisons
+      .map((comparison) => [comparison.kind, comparison.queryRecordIndex, comparison.subjectRecordIndex]);
+  })).toEqual([['nucleotideBlast', 0, 1], ['nucleotideBlast', 1, 2]]);
+  expect(await pairSources()).toEqual(['#1 → #2: upload', '#2 → #3: upload']);
 });
 
 test('unmatched uploaded table IDs show a notice that follows the Result through Save and Load', async ({ page }) => {
@@ -1414,8 +1653,8 @@ test('mobile layout has no overflow, fixed-action overlap, or semantic tab-order
       comparison: [comparison.clientWidth, comparison.scrollWidth],
       order: follows(recordList, comparison)
         && follows(comparison, basic)
-        && follows(basic, generate)
-        && follows(generate, advanced),
+        && follows(basic, advanced)
+        && follows(advanced, generate),
       pairInRecords: recordList.querySelectorAll('[data-edge-key]').length
     };
   });
@@ -1430,7 +1669,7 @@ test('mobile layout has no overflow, fixed-action overlap, or semantic tab-order
   }).first();
   await firstUploader.focus();
   const tabSections = ['input'];
-  for (let step = 0; step < 60; step += 1) {
+  for (let step = 0; step < 200; step += 1) {
     await page.keyboard.press('Tab');
     const section = await page.evaluate(() => {
       const active = document.activeElement;
@@ -1442,9 +1681,9 @@ test('mobile layout has no overflow, fixed-action overlap, or semantic tab-order
       return '';
     });
     if (section && tabSections.at(-1) !== section) tabSections.push(section);
-    if (section === 'advanced') break;
+    if (section === 'generate') break;
   }
-  expect(tabSections).toEqual(['input', 'comparison', 'basic', 'generate', 'advanced']);
+  expect(tabSections).toEqual(['input', 'comparison', 'basic', 'advanced', 'generate']);
 
   const advancedSummary = page.locator(
     '[data-linear-advanced-comparison] summary[aria-label="Advanced comparison and layout"]'
@@ -1463,4 +1702,33 @@ test('mobile layout has no overflow, fixed-action overlap, or semantic tab-order
     && advancedBox.y + advancedBox.height > generateBox.y
   );
   expect(overlap).toBe(false);
+});
+
+// Plan OV-80 §8 S2 (the OIC-017 owner spec): F1, a Session 44 whose Linear
+// LOSATP draft has the flat Max target seqs 7 beside a saved Collinear limit
+// of 5, loads 7 into the Linear drawing for Collinear, and a LOSATP mode round
+// trip through Similarity groups keeps 7.
+test('a loaded Session 44 keeps the Collinear Max target seqs through a LOSATP mode round trip (F1)', async ({ page }) => {
+  test.setTimeout(300000);
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  page.on('dialog', (dialog) => dialog.accept());
+  await page.locator(
+    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+  ).setInputFiles('tests/fixtures/sessions/two-mode-project.v44.gbdraw-session.json.gz');
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180000 });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
+  const linearBlastp = () => page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const { mode, candidateLimit } = state.drawings.linear.losat.blastp;
+    return { mode, candidateLimit };
+  });
+  expect(await linearBlastp()).toEqual({ mode: 'collinear', candidateLimit: 7 });
+  if (await page.evaluate(() => window.__GBDRAW_APP__.mode) !== 'linear') {
+    await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  }
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.setLinearComparisonLosatpMode('orthogroup'))).toBe(true);
+  expect((await linearBlastp()).mode).toBe('orthogroup');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.setLinearComparisonLosatpMode('collinear'))).toBe(true);
+  expect(await linearBlastp()).toEqual({ mode: 'collinear', candidateLimit: 7 });
 });

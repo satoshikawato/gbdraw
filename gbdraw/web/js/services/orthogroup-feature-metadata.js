@@ -1,4 +1,5 @@
-import { normalizeGroupMetadataScope } from '../app/losat-normalization.js';
+// @ts-check
+import { normalizeGroupMetadataScope } from './losat-normalization.js';
 import {
   RECORD_INDEX_KEYS,
   RENDERED_FEATURE_ID_KEYS,
@@ -42,6 +43,11 @@ const consistentTextAlias = (payload, keys) => {
   };
 };
 
+/**
+ * @param {Record<string, any> | null | undefined} payload
+ * @param {readonly string[]} keys
+ * @param {number | string | null} [fallback]
+ */
 const consistentIntegerAlias = (payload, keys, fallback = null) => {
   const fallbackKey = '__gbdrawFallbackIdentity';
   const source = fallback !== null && fallback !== undefined && fallback !== ''
@@ -116,6 +122,10 @@ const sourceFeatureIndex = (payload) => consistentIntegerAlias(
   SOURCE_FEATURE_INDEX_KEYS
 );
 
+/**
+ * @param {Record<string, any> | null | undefined} payload
+ * @param {number | string | null} [fallback]
+ */
 const recordIdentity = (payload, fallback = null) => consistentIntegerAlias(
   payload,
   RECORD_INDEX_KEYS,
@@ -228,12 +238,15 @@ const indexCandidateForMember = ({
   };
 };
 
+/** @typedef {Map<any, any> & { recordsWithRenderedIds?: Set<any> }} OrthogroupFeatureIndex */
+
 /**
  * Incrementally project orthogroup metadata while the catalog owner is already
  * visiting groups and Features. This keeps the canonical admission path from
  * rebuilding an index and remapping the complete Feature population afterward.
  */
 export const createOrthogroupFeatureProjection = () => {
+  /** @type {OrthogroupFeatureIndex} */
   const index = new Map();
   const recordsWithRenderedIds = new Set();
   const candidatesByKey = new Map();
@@ -348,7 +361,7 @@ export const createOrthogroupFeatureProjection = () => {
         memberCount,
         recordCoverage
       }))
-      .filter(Boolean)
+      .filter((candidate) => candidate !== null)
       .map((candidate) => ({
         ...candidate,
         owner: {},
@@ -414,6 +427,11 @@ export const buildOrthogroupFeatureIndex = (orthogroups) => {
   return projection.index;
 };
 
+/**
+ * @param {OrthogroupFeatureIndex} index
+ * @param {any} feature
+ * @param {number | null} [fallbackRecordIndex]
+ */
 const resolveOrthogroupFeatureMetadata = (
   index,
   feature,
@@ -463,6 +481,11 @@ const resolveOrthogroupFeatureMetadata = (
     : null;
 };
 
+/**
+ * @param {OrthogroupFeatureIndex} index
+ * @param {any} feature
+ * @param {number | null} [fallbackRecordIndex]
+ */
 export const enrichFeatureWithOrthogroup = (
   index,
   feature,

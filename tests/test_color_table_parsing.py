@@ -53,6 +53,40 @@ def test_read_color_table_rejects_missing_required_columns(tmp_path: Path) -> No
         read_color_table(str(color_table_path))
 
 
+def test_read_color_table_skips_whitespace_only_lines_as_the_web_does(tmp_path: Path) -> None:
+    # The Web table reader (services/file-imports.js) skips a line that trims to nothing.
+    color_table_path = tmp_path / "specific_colors.tsv"
+    color_table_path.write_text(
+        "# c\n# c2\nCDS\tproduct\tNADH\t#ff0000\tNADH dehydrogenase\n"
+        "\t\t\t\t\n \t \ntRNA\tproduct\ttRNA-Ser\t#ffee00\tSer\n",
+        encoding="utf-8",
+    )
+
+    df = read_color_table(str(color_table_path))
+
+    assert df is not None
+    assert df[["value", "caption"]].to_dict(orient="records") == [
+        {"value": "NADH", "caption": "NADH dehydrogenase"},
+        {"value": "tRNA-Ser", "caption": "Ser"},
+    ]
+
+
+def test_read_color_table_reports_file_line_numbers(tmp_path: Path, caplog) -> None:
+    lines = "# comment\n\n\t\t\nCDS\tproduct\tNADH\t#ff0000\n"
+    color_table_path = tmp_path / "specific_colors.tsv"
+    color_table_path.write_text(lines + "CDS\tproduct\tATPase\tnotacolor\n", encoding="utf-8")
+    with pytest.raises(ValidationError, match="at line 5\\.") as caught:
+        read_color_table(str(color_table_path))
+    assert caught.value.diagnostic is not None
+    assert caught.value.diagnostic["row"] == 5
+
+    color_table_path.write_text(lines + "CDS\tproduct\t\t#00ff00\n", encoding="utf-8")
+    with pytest.raises(ValidationError, match="Missing values"):
+        read_color_table(str(color_table_path))
+    assert "at line 5." in caplog.text
+    assert "at line 2." not in caplog.text
+
+
 @pytest.mark.regression
 @pytest.mark.circular
 def test_circular_cli_accepts_existing_four_column_color_table(

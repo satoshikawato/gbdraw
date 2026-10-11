@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const sourceUrl = new URL('../../gbdraw/web/js/app/depth-track-state.js', import.meta.url);
-const displaySourceUrl = new URL('../../gbdraw/web/js/app/track-slot-display.js', import.meta.url);
+const sourceUrl = new URL('../../gbdraw/web/js/services/depth-track-state.js', import.meta.url);
+const displaySourceUrl = new URL('../../gbdraw/web/js/services/track-slot-display.js', import.meta.url);
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-depth-track-state-'));
 const tempModulePath = join(tempDir, 'depth-track-state.mjs');
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n');
@@ -15,6 +15,8 @@ await writeFile(join(tempDir, 'track-slot-display.js'), await readFile(displaySo
 const {
   activeDepthTrackIndices,
   clearDepthTrackSourceAt,
+  depthSeriesLegendCaptions,
+  depthTrackConfigForEdit,
   depthTrackCoverageCount,
   depthFileSlotsFromValue,
   depthSlotTrackIndex,
@@ -169,4 +171,35 @@ console.log(`depth-track-state tests passed (${fileURLToPath(sourceUrl)})`);
   assert.equal(lost.slots[0], manual, 'kept rows keep their identity');
   const gained = reconcileManagedDepthSlots({ slots: [manual, removed], previousSourced: [], sourced: [2, 0, 1] });
   assert.deepEqual(gained.additions, [1, 2], 'a removed-series row references no series');
+}
+
+{
+  // OV-81: the captions a Depth series draws: its label and the legend label of its rows.
+  const tracks = [{ label: ' depth ' }, { label: 'Depth 2' }, { label: '' }, null];
+  const slots = [
+    { renderer: 'depth', params: { legend_label: 'Coverage' } },
+    { renderer: 'depth', enabled: false, params: { legend_label: 'depth' } },
+    { renderer: 'gc_content', params: { legend_label: 'GC content' } }
+  ];
+  assert.deepEqual(depthSeriesLegendCaptions({ depthTracks: tracks, slots }), ['depth', 'Depth 2', 'Coverage']);
+  assert.deepEqual(depthSeriesLegendCaptions(), []);
+}
+
+{
+  // TK-03: an edit writes a series the mode has; an index past the mode's
+  // series names none, so nothing is written and the series list does not grow.
+  const tracks = [{ label: 'a', color: '#111111' }, { label: 'b', color: '#222222' }];
+  const second = depthTrackConfigForEdit(tracks, 1, 2);
+  assert.equal(second, tracks[1]);
+  assert.equal(depthTrackConfigForEdit(tracks, 2, 2), null, 'index 2 of two series');
+  assert.equal(depthTrackConfigForEdit(tracks, 5, 2), null, 'index 5 of two series');
+  assert.equal(tracks.length, 2, 'the series list does not grow');
+  // A series the mode has but the list does not hold yet gets its defaults.
+  const short = [{ label: 'a', color: '#111111' }];
+  const added = depthTrackConfigForEdit(short, 1, 2, { color: '#4A90E2' });
+  assert.equal(short.length, 2);
+  assert.equal(added, short[1]);
+  // A mode without series still edits its first (default) series.
+  assert.notEqual(depthTrackConfigForEdit([], 0, 0), null);
+  assert.equal(depthTrackConfigForEdit([], 1, 0), null);
 }

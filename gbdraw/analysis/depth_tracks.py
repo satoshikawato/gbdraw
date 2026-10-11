@@ -9,12 +9,13 @@ from numbers import Integral
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Sequence, TypeVar
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame
 
-from gbdraw.analysis.depth import depth_df, read_depth_tsv  # type: ignore[reportMissingImports]
-from gbdraw.configurators import DepthConfigurator  # type: ignore[reportMissingImports]
-from gbdraw.exceptions import GbdrawError, ValidationError  # type: ignore[reportMissingImports]
+from gbdraw.analysis.depth import depth_df, read_depth_tsv
+from gbdraw.configurators import DepthConfigurator
+from gbdraw.exceptions import GbdrawError, ValidationError
+from gbdraw.io.colors import check_user_color
 from gbdraw.tracks.parsing import parse_nonnegative_integer
 
 if TYPE_CHECKING:
@@ -572,6 +573,12 @@ def clone_depth_config(
 ) -> DepthConfigurator:
     config = copy.copy(base_config)
     if fill_color:
+        # Every depth track color (CLI, options, Session, slot) is applied here.
+        check_user_color(
+            fill_color,
+            where="for a depth track",
+            diagnostic={"code": "INPUT_INVALID", "field": "color", "reason": "COLOR"},
+        )
         config.fill_color = str(fill_color)
     if window is not None:
         config.window = int(window)
@@ -658,8 +665,8 @@ def build_depth_track_dataframes(
             if not max_values:
                 continue
             shared_max = max(max_values)
-            for row in indexed_rows:
-                track = row.get(track_index)
+            for indexed_row in indexed_rows:
+                track = indexed_row.get(track_index)
                 if track is not None:
                     track.config.max_depth = shared_max
 

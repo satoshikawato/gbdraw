@@ -1,3 +1,4 @@
+// @ts-check
 export const downloadBlob = (blob, filename) => {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');

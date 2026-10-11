@@ -11,12 +11,16 @@ const {
   validateSessionAuthorityInventory
 } = await import(pathToFileURL(join(repoRoot, 'gbdraw/web/js/services/session-authority.js')));
 
+// `config` and `features` are read from Sessions 27-44; Session 46 keeps the
+// draft of each mode in `modes` and the CLI's options in `cliOptions`.
 assert.deepEqual(Object.keys(SESSION_TOP_LEVEL_AUTHORITY).sort(), [
-  'cliInvocation', 'config', 'createdAt', 'editorState', 'features', 'files', 'format',
-  'legacyArtifacts', 'losatCache', 'losatDerivedCache', 'orthogroupState',
-  'proteinIdentityManifest', 'renderRequest', 'resources',
+  'cliInvocation', 'cliOptions', 'config', 'createdAt', 'editorState', 'features', 'files', 'format',
+  'legacyArtifacts', 'losatCache', 'losatDerivedCache', 'modes', 'orthogroupState',
+  'otherModeResult', 'proteinIdentityManifest', 'renderRequest', 'resources',
   'results', 'runMetadata', 'title', 'ui', 'version', 'webFiles'
 ].sort());
+assert.equal(SESSION_TOP_LEVEL_AUTHORITY.modes, 'editor-metadata');
+assert.equal(SESSION_TOP_LEVEL_AUTHORITY.cliOptions, 'provenance');
 assert.equal(SESSION_TOP_LEVEL_AUTHORITY.renderRequest, 'canonical-render');
 assert.equal(SESSION_TOP_LEVEL_AUTHORITY.resources, 'resource');
 assert.equal(SESSION_TOP_LEVEL_AUTHORITY.webFiles, 'resource-binding');
@@ -432,3 +436,47 @@ for (const invalid of [
 assert.throws(() => validateSessionAuthorityInventory({
   ...frozen, runMetadata: { comparisonWarnings: [comparisonWarning] }
 }, 41), /Result metadata schema/);
+
+// E1: a Session keeps the other diagram mode's Result set in
+// `otherModeResult`, whose fields mirror one committed top-level set
+// (Session 46; the Gallery Sessions are current-writer Sessions).
+{
+  const { readFileSync } = await import('node:fs');
+  const read = (name) => JSON.parse(readFileSync(join(repoRoot, 'gbdraw/web/gallery/sessions', name), 'utf8'));
+  const circularSession = read('HmmtDNA_basic_circular.gbdraw-session.json');
+  const linearSession = read('lambda_basic_linear.gbdraw-session.json');
+  const otherModeResult = {
+    renderRequest: linearSession.renderRequest,
+    results: linearSession.results,
+    editorState: {
+      featureCatalog: linearSession.editorState.featureCatalog,
+      alignmentResetReceipt: null,
+      legend: { originalOrder: [], originalColors: {} },
+      originalSvgStroke: { color: null, width: null }
+    },
+    ui: { selectedResultIndex: 0 },
+    runMetadata: linearSession.runMetadata
+  };
+  const both = { ...circularSession, otherModeResult };
+  assert.doesNotThrow(() => validateSessionAuthorityInventory(both, 46));
+  assert.throws(() => validateSessionAuthorityInventory({
+    ...both, version: 44, editorState: { ...both.editorState, featureCatalog: { ...both.editorState.featureCatalog, schema: 4 } }
+  }, 44), /cannot contain otherModeResult/);
+  assert.throws(() => validateSessionAuthorityInventory({
+    ...both, otherModeResult: { ...otherModeResult, renderRequest: circularSession.renderRequest }
+  }, 46), /committed request of the other mode/);
+  assert.throws(() => validateSessionAuthorityInventory({
+    ...both, renderRequest: null, results: [], editorState: { ...both.editorState, featureCatalog: null }
+  }, 46), /committed request of the other mode/);
+  assert.throws(() => validateSessionAuthorityInventory({
+    ...both, otherModeResult: { ...otherModeResult, results: [], editorState: { ...otherModeResult.editorState, featureCatalog: null } }
+  }, 46), /requires a Result/);
+  assert.throws(() => validateSessionAuthorityInventory({
+    ...both, otherModeResult: { ...otherModeResult, config: {} }
+  }, 46), /only a committed Result set/);
+  const unboundRequest = structuredClone(linearSession.renderRequest);
+  unboundRequest.records[0].source.resourceId = 'record-9-genbank';
+  assert.throws(() => validateSessionAuthorityInventory({
+    ...both, otherModeResult: { ...otherModeResult, renderRequest: unboundRequest }
+  }, 46), /missing resource\(s\): record-9-genbank/);
+}

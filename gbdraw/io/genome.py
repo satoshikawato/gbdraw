@@ -3,7 +3,9 @@
 
 import os
 import logging
-from typing import List, Dict, Set
+from contextlib import contextmanager
+from collections.abc import Set as AbstractSet
+from typing import List, Dict
 
 from Bio import SeqIO
 from Bio.SeqFeature import CompoundLocation, SeqFeature
@@ -20,6 +22,18 @@ logger = logging.getLogger(__name__)
 
 # A file that cannot be parsed is a user-fixable input: the Web asks to replace it.
 _UNREADABLE_INPUT = {"code": "INPUT_UNREADABLE"}
+
+
+def genbank_absence_diagnostic(path: str) -> dict[str, str]:
+    """The NO_RECORDS diagnostic of a GenBank/DDBJ file that has no record (UJ-07).
+
+    Its first non-blank line tells an empty file, a FASTA file, and other text apart.
+    """
+
+    with open(path, "rb") as handle:
+        first = next((line.strip() for line in handle if line.strip()), b"")
+    reason = "EMPTY_FILE" if not first else "FASTA_IN_GENBANK" if first.startswith(b">") else "NOT_GENBANK"
+    return {"code": "NO_RECORDS", "reason": reason}
 
 
 def _attach_source_annotations(record: SeqRecord, source_file: str) -> None:
@@ -75,7 +89,7 @@ def load_gbks(
                     )
                 _attach_source_annotations(record, gbk_file)
                 record_list.append(record)
-                id_list.append(record.id)  # type: ignore
+                id_list.append(record.id)
         except ValueError as e:  # Catching common exception when parsing GenBank files
             if str(e).startswith("Record selector"):
                 logger.error(f"ERROR: {e}")
@@ -246,12 +260,13 @@ def _normalize_gff3_multipart_features(record: SeqRecord) -> SeqRecord:
 
 
 def scan_features_recursive(
-    features: List[SeqFeature], feature_types_to_keep: Set[str],
+    features: List[SeqFeature], feature_types_to_keep: AbstractSet[str] | None,
     source_indexes: dict[int, int] | None = None,
 ) -> List[SeqFeature]:
+    """Flatten nested features in source order; ``None`` keeps every type."""
     filtered_list: list[SeqFeature] = []
     for feature in features:
-        if feature.type in feature_types_to_keep:
+        if feature_types_to_keep is None or feature.type in feature_types_to_keep:
             new_feature = SeqFeature(
                 location=feature.location,
                 type=feature.type,
@@ -273,7 +288,7 @@ def scan_features_recursive(
 
 
 def filter_features_by_type(
-    record: SeqRecord, feature_types_to_keep: Set[str], *, source_indexes: dict[int, int] | None = None,
+    record: SeqRecord, feature_types_to_keep: AbstractSet[str] | None, *, source_indexes: dict[int, int] | None = None,
 ) -> SeqRecord:
     new_record = SeqRecord(
         seq=record.seq,
@@ -287,10 +302,69 @@ def filter_features_by_type(
     filtered_features = scan_features_recursive(record.features, feature_types_to_keep, source_indexes)
     new_record.features = filtered_features
 
+    kept_types = "all" if feature_types_to_keep is None else ", ".join(sorted(feature_types_to_keep))
     logger.info(
-        f"INFO: For record {record.id}, filtered to {len(filtered_features)} features of types: {', '.join(feature_types_to_keep)}."
+        f"INFO: For record {record.id}, filtered to {len(filtered_features)} features of types: {kept_types}."
     )
     return new_record
+
+
+@contextmanager
+def _gff_fasta_errors(gff_file: str, fasta_file: str):
+    """Report a failure while reading a GFF3/FASTA pair the way every caller expects."""
+    try:
+        yield
+    except ValueError as e:
+        if str(e).startswith("Record selector"):
+            logger.error(f"ERROR: {e}")
+            raise ValidationError(str(e)) from e
+        logger.error(
+            f"ERROR: error parsing GFF3/FASTA files ({gff_file}, {fasta_file}). Error: {e}"
+        )
+        raise ParseError(
+            f"Error parsing GFF3/FASTA files ({gff_file}, {fasta_file}).",
+            diagnostic=_UNREADABLE_INPUT,
+        ) from e
+    except Exception as e:
+        logger.error(
+            f"ERROR: an unexpected error occurred while processing {gff_file} or {fasta_file}: {e}"
+        )
+        raise ParseError(
+            f"Unexpected error while processing {gff_file} or {fasta_file}: {e}"
+        ) from e
+
+
+def parse_gff_fasta(
+    gff_file: str,
+    fasta_file: str,
+    *,
+    source_feature_catalogs: list[tuple[SourceFeatureIdentity, ...]] | None = None,
+) -> list[SeqRecord]:
+    """Parse one GFF3/FASTA pair once, whatever feature types a diagram draws.
+
+    Records follow the FASTA order and keep every feature, with Parent-linked
+    children nested in ``sub_features``. ``filter_features_by_type`` then selects
+    types from them, as often as needed, without parsing the file again.
+    ``source_feature_catalogs`` gains one catalog per record, built before any filter.
+    """
+    for path in (gff_file, fasta_file):
+        if not os.path.isfile(path):
+            logger.error(f"ERROR: File does not exist or is not accessible: {path}")
+            raise InputFileError(f"File does not exist or is not accessible: {path}")
+    with _gff_fasta_errors(gff_file, fasta_file):
+        logger.info("INFO: Loading GFF3 file {}".format(gff_file))
+        gff_records = [_normalize_gff3_multipart_features(record) for record in GFF.parse(gff_file)]
+        catalogs = {
+            id(record): build_source_feature_catalog(record) for record in gff_records
+        } if source_feature_catalogs is not None else {}
+        logger.info("INFO: Loading FASTA file {}".format(fasta_file))
+        fasta_records: list[SeqRecord] = list(SeqIO.parse(fasta_file, "fasta"))
+        merged_records = merge_gff_fasta_records(gff_records, fasta_records)
+        if source_feature_catalogs is not None:
+            source_feature_catalogs.extend(catalogs[id(record)] for record in merged_records)
+        for record in merged_records:
+            _attach_source_annotations(record, gff_file)
+        return merged_records
 
 
 def load_gff_fasta(
@@ -314,33 +388,24 @@ def load_gff_fasta(
         raise ValidationError("Number of GFF3 files does not match number of FASTA files.")
 
     for file_idx, (gff_file, fasta_file) in enumerate(zip(gff_list, fasta_list)):
-        if not os.path.isfile(gff_file):
-            logger.error(f"ERROR: File does not exist or is not accessible: {gff_file}")
-            raise InputFileError(f"File does not exist or is not accessible: {gff_file}")
-        if not os.path.isfile(fasta_file):
-            logger.error(f"ERROR: File does not exist or is not accessible: {fasta_file}")
-            raise InputFileError(f"File does not exist or is not accessible: {fasta_file}")
-
-        try:
-            logger.info("INFO: Loading GFF3 file {}".format(gff_file))
-            parsed_gff_records = [
-                _normalize_gff3_multipart_features(record) for record in GFF.parse(gff_file)
+        file_catalogs: list[tuple[SourceFeatureIdentity, ...]] | None = (
+            [] if source_feature_catalogs is not None else None
+        )
+        parsed_records = parse_gff_fasta(gff_file, fasta_file, source_feature_catalogs=file_catalogs)
+        with _gff_fasta_errors(gff_file, fasta_file):
+            # The renderer reads record.features only, so Parent-linked children
+            # (CDS under gene) are flattened whether or not types are filtered.
+            feature_types_to_keep = (
+                None if keep_all_features or selected_features_set is None
+                else set(selected_features_set)
+            )
+            merged_records = [
+                filter_features_by_type(record, feature_types_to_keep,
+                    source_indexes=_feature_source_index_map(record.features)
+                    if file_catalogs is not None else None)
+                for record in parsed_records
             ]
-            catalogs = tuple(build_source_feature_catalog(record) for record in parsed_gff_records) if source_feature_catalogs is not None else ()
-            if keep_all_features or selected_features_set is None:
-                gff_records = parsed_gff_records
-            else:
-                feature_types_to_keep = set(selected_features_set)
-                gff_records = [
-                    filter_features_by_type(record, feature_types_to_keep,
-                        source_indexes=_feature_source_index_map(record.features)
-                        if source_feature_catalogs is not None else None)
-                    for record in parsed_gff_records
-                ]
-            catalog_by_record = {id(record): catalog for record, catalog in zip(gff_records, catalogs)}
-            logger.info("INFO: Loading FASTA file {}".format(fasta_file))
-            fasta_records: list[SeqRecord] = list(SeqIO.parse(fasta_file, "fasta"))
-            merged_records = merge_gff_fasta_records(gff_records, fasta_records)
+            catalog_by_record = {id(record): catalog for record, catalog in zip(merged_records, file_catalogs)} if file_catalogs is not None else {}
 
             selector_raw = (
                 record_selectors[file_idx]
@@ -365,27 +430,8 @@ def load_gff_fasta(
                     )
                 if source_feature_catalogs is not None:
                     source_feature_catalogs.append(selected_catalogs[record_index])
-                _attach_source_annotations(record, gff_file)
                 record_list.append(record)
-                id_list.append(record.id)  # type: ignore
-        except ValueError as e:
-            if str(e).startswith("Record selector"):
-                logger.error(f"ERROR: {e}")
-                raise ValidationError(str(e)) from e
-            logger.error(
-                f"ERROR: error parsing GFF3/FASTA files ({gff_file}, {fasta_file}). Error: {e}"
-            )
-            raise ParseError(
-                f"Error parsing GFF3/FASTA files ({gff_file}, {fasta_file}).",
-                diagnostic=_UNREADABLE_INPUT,
-            ) from e
-        except Exception as e:
-            logger.error(
-                f"ERROR: an unexpected error occurred while processing {gff_file} or {fasta_file}: {e}"
-            )
-            raise ParseError(
-                f"Unexpected error while processing {gff_file} or {fasta_file}: {e}"
-            ) from e
+                id_list.append(record.id)
 
     logger.info("INFO:              ... finished loading GFF3 and FASTA files")
     logger.info(f"INFO: Number of sequences loaded to gbdraw: {len(record_list)}")
@@ -401,6 +447,7 @@ def load_gff_fasta(
 
 __all__ = [
     "load_gbks",
+    "parse_gff_fasta",
     "load_gff_fasta",
     "merge_gff_fasta_records",
     "scan_features_recursive",

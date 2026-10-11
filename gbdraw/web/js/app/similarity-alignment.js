@@ -1,16 +1,18 @@
-import { normalizeUserFacingError } from '../services/error-normalization.js';
-import { plainTextLinearRecordLabel } from './linear-comparisons.js';
-import { resolveLinearRecordEffectiveDefinition } from './linear-sources.js';
-import { canonicalRecordReverseComplement } from './record-display-options.js';
+// @ts-check
+import { normalizeUserFacingError } from '../utils/error-normalization.js';
+import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
+import { resolveLinearRecordEffectiveDefinition } from '../services/linear-sources.js';
+import { canonicalRecordReverseComplement } from '../services/record-display-model.js';
+import { drawnLinearSequences } from '../services/record-draw-selection.js';
 import { validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import {
   featureIdentity,
   orthogroupIdStatus
 } from '../services/feature-identity.js';
 import { materializeRecordTranslations } from './legend-layout/composition-actions.js';
-import { isInternalProteinDisplayId } from './feature-utils.js';
+import { isInternalProteinDisplayId } from '../services/feature-utils.js';
 
-const { computed, ref } = window.Vue;
+const { computed, ref, watch } = window.Vue;
 
 const REVIEW_REASONS = new Set([
   'only_usable_candidate', 'unique_direct_rbh',
@@ -55,15 +57,6 @@ const nullableInteger = (value, path) => {
 
 const sameJson = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 
-const sameKeyedPlan = (left, right) => {
-  if (left?.schema !== 2 || right?.schema !== 2 ||
-      !Array.isArray(left.records) || !Array.isArray(right.records)) return false;
-  const keyed = (plan) => ({ ...plan, records: [...plan.records].sort(
-    (a, b) => String(a?.recordKey || '').localeCompare(String(b?.recordKey || ''))
-  ) });
-  return sameJson(keyed(left), keyed(right));
-};
-
 const anchorKey = (anchor) => JSON.stringify(anchor);
 
 const strandLabel = (strand) => (
@@ -91,11 +84,20 @@ const directionExclusionLabels = Object.freeze({
 
 const arrowLabel = (arrow) => arrow === 1 ? 'right-facing' : arrow === -1 ? 'left-facing' : 'unknown';
 
+// Direct evidence kinds between a candidate and the exact reference (Python edge kinds).
+/** @type {Readonly<Record<string, string>>} */
+const evidenceLabels = Object.freeze({
+  rbh: 'reciprocal best hit',
+  coortholog: 'near-reciprocal hit',
+  record_local_paralog: 'local paralog hit'
+});
+
+// Why a candidate is recommended, as a clause after its name ("Recommended: livU, …").
 const reviewReasonLabels = Object.freeze({
-  only_usable_candidate: 'The only usable candidate in this record.',
-  unique_direct_rbh: 'The only candidate with a direct reciprocal best hit.',
-  unique_representative: 'The only representative candidate.',
-  deterministic_candidate_1: 'The first candidate in Python’s stable order.'
+  only_usable_candidate: 'the only usable candidate in this record',
+  unique_direct_rbh: 'the only candidate with a reciprocal best hit',
+  unique_representative: 'the only group representative among the candidates',
+  deterministic_candidate_1: 'the first candidate in a fixed order; none stands out'
 });
 
 const cloneJson = (value) => {
@@ -116,7 +118,7 @@ const displayText = (...values) => values
 
 // Human-readable names shared by Review, the direction and Reset previews, and
 // the active-plan inspector. Record keys and feature hashes stay binding-only.
-const featureName = (anchor, facts = {}, fallback = '') => {
+const featureNameParts = (anchor, facts = {}, fallback = '') => {
   const feature = facts.sequenceFeature || facts;
   const qualifiers = feature.qualifiers || {};
   const gene = displayText(feature.gene, facts.gene, qualifiers.gene);
@@ -127,23 +129,75 @@ const featureName = (anchor, facts = {}, fallback = '') => {
   const product = displayText(feature.product, facts.product, qualifiers.product);
   const name = gene || product || locusTag || proteinId
     || (fallback === anchor.biologicalFeatureId ? '' : displayText(fallback));
-  if (name) return [name, ...[locusTag, proteinId].filter((value) => value && value !== name)].join(' · ');
+  if (name) {
+    const ids = [locusTag, proteinId].filter((value) => value && value !== name);
+    return { name, ids, label: [name, ...ids].join(' · ') };
+  }
   const start = Number(feature.start ?? facts.start);
   const end = Number(feature.end ?? facts.end);
   const coordinates = Number.isSafeInteger(start) && Number.isSafeInteger(end)
     ? `${(start + 1).toLocaleString('en-US')}..${end.toLocaleString('en-US')} bp` : '';
-  return [displayText(feature.type, facts.type) || 'Feature', coordinates].filter(Boolean).join(' ');
+  const typeName = [displayText(feature.type, facts.type) || 'Feature', coordinates].filter(Boolean).join(' ');
+  return { name: typeName, ids: [], label: typeName };
 };
 
-const featureLabel = (anchor, displayFacts, fallback = '') => (
-  featureName(anchor, displayFacts.get(anchorKey(anchor)) || {}, fallback)
-);
+// The joined label names a feature in accessible names; the parts lay it out.
+/**
+ * @param {{ biologicalFeatureId?: string }} anchor
+ * @param {Map<string, object>} displayFacts
+ * @param {string} [fallback]
+ */
+const featureView = (anchor, displayFacts, fallback = '') => {
+  const parts = featureNameParts(anchor, displayFacts.get(anchorKey(anchor)) || {}, fallback);
+  return { label: parts.label, name: parts.name, ids: parts.ids.join(' · ') };
+};
 
 const catalogBiologicalFeatures = (catalog) => (Array.isArray(catalog?.items) ? catalog.items : [])
   .flatMap((item) => (Array.isArray(item?.biologicalFeatures) ? item.biologicalFeatures : []));
 
+// The catalog facts of an anchor's feature, so names come from the drawn features.
+/** @param {unknown} catalog */
+const catalogFeatureFacts = (catalog) => {
+  const features = new Map();
+  catalogBiologicalFeatures(catalog).forEach((feature) => {
+    const key = `${feature?.recordKey}\0${feature?.biologicalFeatureId}`;
+    if (!features.has(key)) features.set(key, feature);
+  });
+  return (/** @type {{ recordKey?: string, biologicalFeatureId?: string }} */ anchor) => (
+    features.get(`${anchor.recordKey}\0${anchor.biologicalFeatureId}`)
+  );
+};
+
+// A record's name for one-line summaries: its accession, else its definition.
+/** @param {{ name?: string, detail?: string } | undefined} names */
+const shortRecordName = (names) => names?.detail || names?.name || '';
+
+/**
+ * The one catalog feature that a plan anchor names, or null when none or
+ * several match. Generate validation and Reset share this lookup.
+ * @template {{ recordKey?: unknown, biologicalFeatureId?: unknown, sourceFeatureIndex?: unknown }} T
+ * @param {T[]} features
+ * @param {AnchorIdentity | null} anchor
+ * @returns {T | null}
+ */
+const uniqueCatalogFeature = (features, anchor) => {
+  if (!anchor) return null;
+  const matches = features.filter((feature) => feature.recordKey === anchor.recordKey
+    && feature.biologicalFeatureId === anchor.biologicalFeatureId
+    && (anchor.sourceFeatureIndex === null || feature.sourceFeatureIndex === anchor.sourceFeatureIndex));
+  return matches.length === 1 ? matches[0] : null;
+};
+
 // Presentation label or definition plus accession; the display position is
 // appended only to tell otherwise identical records apart.
+/**
+ * @param {{
+ *   recordKeys: string[],
+ *   request?: Record<string, any> | null,
+ *   linearSeqs?: Record<string, any>[],
+ *   catalog?: Record<string, any> | null
+ * }} options
+ */
 const recordNames = ({ recordKeys, request = null, linearSeqs = [], catalog = null }) => {
   const accessions = new Map();
   catalogBiologicalFeatures(catalog).forEach((feature) => {
@@ -151,21 +205,32 @@ const recordNames = ({ recordKeys, request = null, linearSeqs = [], catalog = nu
     const id = displayText(feature?.record_id, feature?.recordId);
     if (key && id && !accessions.has(key)) accessions.set(key, id);
   });
-  const labels = recordKeys.map((recordKey, index) => {
+  const parts = recordKeys.map((recordKey, index) => {
     const record = request?.records?.find((entry) => entry?.recordKey === recordKey);
     const sequence = (Array.isArray(linearSeqs) ? linearSeqs : [])
       .find((entry) => String(entry?.uid || '') === recordKey);
-    const name = plainTextLinearRecordLabel(displayText(record?.presentation?.label,
-      sequence ? resolveLinearRecordEffectiveDefinition(sequence) : ''));
+    const definition = displayText(record?.presentation?.label,
+      sequence ? resolveLinearRecordEffectiveDefinition(sequence) : '');
+    const name = definition ? plainTextLinearRecordLabel(definition) : '';
     const accession = displayText(sequence?.accession, accessions.get(recordKey));
-    return [...new Set([name, accession].filter(Boolean))].join(' · ')
-      || plainTextLinearRecordLabel(displayText(sequence?.gb?.name, sequence?.gff?.name))
+    const fileName = displayText(sequence?.gb?.name, sequence?.gff?.name);
+    const label = [...new Set([name, accession].filter(Boolean))].join(' · ')
+      || (fileName ? plainTextLinearRecordLabel(fileName) : '')
       || `Record ${index + 1}`;
+    return { label, name: name || accession || label, accession: name && accession !== name ? accession : '' };
   });
   const counts = new Map();
-  labels.forEach((label) => counts.set(label, (counts.get(label) || 0) + 1));
-  return new Map(recordKeys.map((recordKey, index) => [recordKey,
-    counts.get(labels[index]) > 1 ? `${labels[index]} · Record ${index + 1}` : labels[index]]));
+  parts.forEach(({ label }) => counts.set(label, (counts.get(label) || 0) + 1));
+  // Each entry keeps the joined label for accessible names and its parts for layout.
+  return new Map(recordKeys.map((recordKey, index) => {
+    const { label, name, accession } = parts[index];
+    const duplicate = counts.get(label) > 1 ? `Record ${index + 1}` : '';
+    return [recordKey, {
+      label: duplicate ? `${label} · ${duplicate}` : label,
+      name,
+      detail: [accession, duplicate].filter(Boolean).join(' · ')
+    }];
+  }));
 };
 
 const candidateView = (candidate, request, displayFacts = new Map()) => {
@@ -173,10 +238,14 @@ const candidateView = (candidate, request, displayFacts = new Map()) => {
   const member = request.members.find(({ anchor }) => anchorKey(anchor) === key);
   if (!member) throw new Error('Alignment candidate has no current member facts.');
   const coordinates = `${(candidate.sourceStart + 1).toLocaleString('en-US')}..${candidate.sourceEnd.toLocaleString('en-US')} bp`;
+  const feature = featureView(candidate.anchor, displayFacts, candidate.displayName);
   return {
     key,
     anchor: candidate.anchor,
-    label: featureLabel(candidate.anchor, displayFacts, candidate.displayName),
+    label: feature.label,
+    name: feature.name,
+    ids: feature.ids,
+    evidence: candidate.directEvidence.map((/** @type {string} */ kind) => evidenceLabels[kind] || kind),
     coordinates,
     displayedStrand: strandLabel(candidate.displayedStrand),
     representative: candidate.representative,
@@ -190,9 +259,15 @@ const candidateView = (candidate, request, displayFacts = new Map()) => {
 const referenceView = (response, request, displayFacts, recordLabels) => {
   const member = request.members.find(({ anchor }) => sameJson(anchor, response.reference));
   if (!member) throw new Error('Alignment reference has no current member facts.');
+  const feature = featureView(response.reference, displayFacts);
+  const record = recordLabels.get(response.reference.recordKey);
   return {
-    label: featureLabel(response.reference, displayFacts),
-    recordLabel: recordLabels.get(response.reference.recordKey),
+    label: feature.label,
+    name: feature.name,
+    ids: feature.ids,
+    recordLabel: record?.label,
+    recordName: record?.name,
+    recordDetail: record?.detail,
     recordKey: response.reference.recordKey,
     coordinates: (member.sourceStart + 1).toLocaleString('en-US') + '..'
       + member.sourceEnd.toLocaleString('en-US') + ' bp',
@@ -211,9 +286,12 @@ const reviewRows = (response, request, displayFacts, recordLabels) => response.r
       : record.status === 'skipped' ? record.rationale : record.reviewReason;
     const recommendedKey = selectedAnchor && REVIEW_REASONS.has(reason)
       ? anchorKey(selectedAnchor) : null;
+    const names = recordLabels.get(record.recordKey);
     return {
       recordKey: record.recordKey,
-      recordLabel: recordLabels.get(record.recordKey),
+      recordLabel: names?.label,
+      recordName: names?.name,
+      recordDetail: names?.detail,
       candidates: record.candidates.filter(({ usable }) => usable)
         .map((candidate) => candidateView(candidate, request, displayFacts)),
       reason,
@@ -252,34 +330,40 @@ const successfulSummary = (plan, reversed) => {
 
 const baseReverseComplement = canonicalRecordReverseComplement;
 
+/**
+ * @param {Record<string, any> | null | undefined} plan
+ * @param {{
+ *   linearSeqs?: Record<string, any>[],
+ *   catalog?: Record<string, any> | null,
+ *   request?: Record<string, any> | null
+ * }} [options]
+ */
 const inspectActivePlan = (plan, { linearSeqs = [], catalog = null, request = null } = {}) => {
   if (!plan || plan.schema !== 2 || !Array.isArray(plan.records)) return null;
   const records = new Map(
     (Array.isArray(linearSeqs) ? linearSeqs : [])
       .map((record) => [String(record?.uid || ''), Boolean(record.region_reverse)])
   );
-  const features = new Map();
-  catalogBiologicalFeatures(catalog).forEach((feature) => {
-    const key = `${feature?.recordKey}\0${feature?.biologicalFeatureId}`;
-    if (!features.has(key)) features.set(key, feature);
-  });
-  const nameOf = (anchor) => featureName(anchor,
-    features.get(`${anchor.recordKey}\0${anchor.biologicalFeatureId}`) || {});
+  const factsOf = catalogFeatureFacts(catalog);
+  const nameOf = (anchor) => featureNameParts(anchor, factsOf(anchor) || {});
   const names = recordNames({ recordKeys: plan.records.map(({ recordKey }) => recordKey),
     request, linearSeqs, catalog });
+  const reference = nameOf(plan.reference);
+  const referenceRecord = names.get(plan.reference.recordKey);
   return deepFreeze({
     groupId: plan.groupId,
-    modeLabel: 'Align',
+    // The collapsed inspector line: what the alignment holds fixed.
+    summary: `Aligned to ${reference.name} in ${shortRecordName(referenceRecord)}`,
     reference: {
       ...plan.reference,
-      label: nameOf(plan.reference),
-      recordLabel: names.get(plan.reference.recordKey)
+      label: reference.label,
+      recordLabel: referenceRecord?.label
     },
     records: plan.records.map((decision) => {
       return {
         recordKey: decision.recordKey,
-        recordLabel: names.get(decision.recordKey),
-        anchorLabel: decision.anchor ? nameOf(decision.anchor) : 'Skip',
+        recordLabel: names.get(decision.recordKey)?.label,
+        anchorLabel: decision.anchor ? nameOf(decision.anchor).label : 'Skip',
         status: decision.status,
         rationale: decision.rationale,
         rationaleLabel: rationaleLabels[decision.rationale] || decision.rationale,
@@ -611,7 +695,8 @@ export const validateSimilarityAlignmentResolution = (value, request) => {
     schema: 2, status: raw.status, groupId: raw.groupId, reference,
     referenceDisplayedStrand: raw.referenceDisplayedStrand,
     referenceDisplayCenter: raw.referenceDisplayCenter,
-    records, plan: null, projection: validateProjection(raw.projection, request)
+    records, plan: /** @type {Record<string, any> | null} */ (null),
+    projection: validateProjection(raw.projection, request)
   };
   response.projection?.records.forEach((fact, index) => {
     const current = fact.variants[Number(fact.beforeReverseComplement)];
@@ -648,7 +733,8 @@ const strandValue = (value, path) => {
   throw new Error(`${path} has an invalid source strand.`);
 };
 
-const recordLengths = (catalog, recordCatalog, linearSeqs) => {
+// `drawnSeqs`: the drawn Linear cards, which the record catalog's `sourceIndex` counts.
+const recordLengths = (catalog, recordCatalog, drawnSeqs) => {
   const lengths = new Map();
   (Array.isArray(catalog?.items) ? catalog.items : []).forEach((item) => {
     const keys = Array.isArray(item?.recordKeys) ? item.recordKeys : [];
@@ -669,7 +755,7 @@ const recordLengths = (catalog, recordCatalog, linearSeqs) => {
       discovered.set(index, discovered.has(index) ? null : record);
     });
     discovered.forEach((record, index) => {
-      const key = String(linearSeqs?.[index]?.uid || '');
+      const key = String(drawnSeqs?.[index]?.uid || '');
       if (key && record && Number.isSafeInteger(record.recordLength)
           && record.recordLength > 0 && !lengths.has(key)) {
         lengths.set(key, record.recordLength);
@@ -680,7 +766,7 @@ const recordLengths = (catalog, recordCatalog, linearSeqs) => {
 };
 
 const buildHelperRequest = ({ group, members, reference, request, catalog,
-  recordCatalog, linearSeqs, choices }) => {
+  recordCatalog, drawnSeqs, choices }) => {
   const groupStatus = orthogroupIdStatus(group);
   if (!groupStatus.valid || !groupStatus.supplied) {
     throw new Error('The selected Similarity Group identity is invalid.');
@@ -689,7 +775,7 @@ const buildHelperRequest = ({ group, members, reference, request, catalog,
   if (!request || request.mode !== 'linear' || !Array.isArray(request.records)) {
     throw new Error('Generate a Linear diagram before aligning a Similarity Group.');
   }
-  const lengths = recordLengths(catalog, recordCatalog, linearSeqs);
+  const lengths = recordLengths(catalog, recordCatalog, drawnSeqs);
   const records = request.records.map((record, index) => {
     const recordKey = text(record?.recordKey, `renderRequest.records[${index}].recordKey`);
     const region = record?.region === null || record?.region === undefined
@@ -803,6 +889,80 @@ const anchorsAgree = (left, right) => {
   ));
 };
 
+/**
+ * One record of the Review alignment direction preview, as the cards read it.
+ * @typedef {object} DirectionPreviewRecord
+ * @property {string} recordKey
+ * @property {string} status
+ * @property {string | null} exclusion
+ * @property {number} afterArrow
+ * @property {boolean} beforeReverseComplement
+ * @property {boolean} afterReverseComplement
+ * @property {boolean} reversed
+ * @property {string} shortLabel
+ * @property {string} label
+ * @property {string} description
+ */
+
+/**
+ * One alignment run that the composition root executes as a candidate (R13):
+ * the root commits `orientations` to the record display intent.
+ * @typedef {object} AlignmentCandidateRun
+ * @property {Record<string, any>} canonical canonical Session projected by the alignment
+ * @property {string} operation
+ * @property {string} label
+ * @property {Record<string, any> | null} alignmentResetBefore
+ * @property {Record<string, any> | null | undefined} alignmentResetReceipt
+ * @property {{ recordKey: string, reverseComplement: boolean }[]} orientations
+ */
+
+/**
+ * The ports and state that the alignment owner receives. Ports are function
+ * types; the shapes of orthogroups, requests, and helper payloads belong to
+ * their owners (the committed request to Python, R7) and stay `Record<string, any>`.
+ * @typedef {object} SimilarityAlignmentActionsOptions
+ * @property {Record<string, any>} state the Web state; its shape belongs to `state.js`
+ * @property {(groupId: string) => Record<string, any> | null} getOrthogroupById
+ * @property {(group: Record<string, any> | string | null) => Record<string, any>[]} getEnrichedOrthogroupMembers
+ * @property {() => Record<string, any> | null} getCommittedRequest
+ * @property {(() => Record<string, any>) | null} [getRecordCatalog]
+ * @property {() => Record<string, any> | null} getCommittedSession
+ * @property {(args: Record<string, any>) => Record<string, any>} projectCommittedAlignment
+ * @property {(run: AlignmentCandidateRun) => Promise<Record<string, any>>} runRecordAlignment
+ * @property {(() => void) | null} [cancelRunAnalysis]
+ * @property {(operation: string, payload: Record<string, any>) => Promise<Record<string, any>>} runHelperOperation
+ * @property {string} resolveOperation
+ * @property {(() => SVGSVGElement | null) | null} [getCurrentSvg]
+ * @property {((anchor: Record<string, any>) => any) | null} [previewCandidate]
+ * @property {(() => void) | null} [clearCandidatePreview]
+ * @property {((error: Record<string, any>) => void) | null} [onError]
+ */
+
+/**
+ * One committed alignment baseline: the canonical Session that `projectCommittedAlignment`
+ * returned, its render request, and the record translations it carries.
+ * @typedef {object} AlignmentBaseline
+ * @property {Record<string, any>} canonical
+ * @property {any} request
+ * @property {any} translations
+ */
+
+/** @typedef {ReturnType<typeof anchorFromSource>} AnchorIdentity */
+
+/**
+ * What `captureArtifact` records to tell whether a draft's source artifact changed.
+ * @typedef {object} AlignmentArtifactStamp
+ * @property {string} records
+ * @property {string} group
+ * @property {any} selectedGroup
+ * @property {any} catalog
+ * @property {any} result
+ * @property {string} translations
+ */
+
+/**
+ * @param {SimilarityAlignmentActionsOptions} options
+ */
 export const createSimilarityAlignmentActions = ({
   state,
   getOrthogroupById,
@@ -811,8 +971,7 @@ export const createSimilarityAlignmentActions = ({
   getRecordCatalog = null,
   getCommittedSession,
   projectCommittedAlignment,
-  runCommittedCanonicalCandidate,
-  recordDisplayControls,
+  runRecordAlignment,
   cancelRunAnalysis = null,
   runHelperOperation,
   resolveOperation,
@@ -821,6 +980,7 @@ export const createSimilarityAlignmentActions = ({
   clearCandidatePreview = null,
   onError = null
 }) => {
+  const drawnLinearCards = () => drawnLinearSequences(state.linearSeqs, state.drawings?.linear?.recordsOff);
   if (
     !state
     || typeof getOrthogroupById !== 'function'
@@ -828,7 +988,7 @@ export const createSimilarityAlignmentActions = ({
     || typeof getCommittedRequest !== 'function'
     || typeof getCommittedSession !== 'function'
     || typeof projectCommittedAlignment !== 'function'
-    || typeof runCommittedCanonicalCandidate !== 'function'
+    || typeof runRecordAlignment !== 'function'
     || typeof runHelperOperation !== 'function'
     || typeof resolveOperation !== 'string'
     || !resolveOperation
@@ -839,24 +999,39 @@ export const createSimilarityAlignmentActions = ({
   const busy = computed(() => status.value === 'resolving' || status.value === 'applying');
   const error = ref(null);
   const summary = ref(null);
-  const notice = ref('');
+  // A "cleared" notice holds only while no plan is active, so an Undo that
+  // restores the plan also retires it (OV-382).
+  const noticeState = ref({ text: '', whileNoPlan: false });
+  const notice = computed(() => (
+    noticeState.value.whileNoPlan && state.similarityAlignmentPlan?.value ? '' : noticeState.value.text
+  ));
   const repair = ref(null);
-  const drawerReferenceKey = ref('');
+  // The user's drawer reference pick and the committed plan it was made
+  // against. A new plan (Apply, Session load, Undo) drops the pick (OV-381).
+  const drawerReferencePick = ref(/** @type {{ key: string, plan: unknown } | null} */ (null));
   const resetDialogOpen = ref(false);
   const automaticApply = ref(false);
   const resetScope = ref('positions');
   let actionId = 0;
+  /** @type {Record<string, any> | null} */
   let activeRequest = null;
+  /** @type {Promise<Record<string, any>> | null} */
   let activeApply = null;
+  /** @type {AlignmentBaseline | null} */
   let activeBaseline = null;
   let displayFacts = new Map();
   let recordLabels = new Map();
+  /** @type {AlignmentArtifactStamp | null} */
   let artifactStamp = null;
   let materializedRecordDrag = false;
+  /** @type {AlignmentBaseline | null} */
   let pendingRecordDragBaseline = null;
 
   const publishError = (value, notify = true) => {
-    const normalized = normalizeUserFacingError(value || { code: 'UNKNOWN' }, { operation: 'align', stage: 'helper' });
+    // The value is always truthy (`value || { code: 'UNKNOWN' }`), and only a falsy value normalizes to null.
+    const normalized = /** @type {Record<string, any>} */ (
+      normalizeUserFacingError(value || { code: 'UNKNOWN' }, { operation: 'align', stage: 'helper' })
+    );
     error.value = normalized;
     if (notify && typeof onError === 'function') onError(normalized);
     return normalized;
@@ -899,7 +1074,8 @@ export const createSimilarityAlignmentActions = ({
   };
 
   const currentRecordKeys = () => (
-    (Array.isArray(currentRequest()?.records) ? currentRequest().records : [])
+    // The same committed request: its `records` was just checked to be an array.
+    (Array.isArray(currentRequest()?.records) ? /** @type {Record<string, any>} */ (currentRequest()).records : [])
       .map(({ recordKey }) => String(recordKey || ''))
       .filter(Boolean)
   );
@@ -935,8 +1111,8 @@ export const createSimilarityAlignmentActions = ({
     state.linearRecordTranslations.value = cloneJson(value.translations);
   };
 
-  const publishNotice = (message) => {
-    notice.value = String(message || '');
+  const publishNotice = (message, whileNoPlan = false) => {
+    noticeState.value = { text: String(message || ''), whileNoPlan };
   };
 
   const clearCommittedPlan = (reason) => {
@@ -952,7 +1128,7 @@ export const createSimilarityAlignmentActions = ({
     state.similarityAlignmentPlan.value = null;
     summary.value = null;
     repair.value = null;
-    publishNotice(`Alignment cleared: ${reason}`);
+    publishNotice(`Alignment cleared: ${reason}`, true);
     return true;
   };
 
@@ -976,19 +1152,27 @@ export const createSimilarityAlignmentActions = ({
     status.value = 'reviewing';
   };
 
+  /**
+   * @param {{
+   *   canonical: Record<string, any>,
+   *   label: string,
+   *   alignmentResetBefore?: Record<string, any> | null,
+   *   alignmentResetReceipt?: Record<string, any> | null
+   * }} options
+   */
   const runAlignmentCandidate = async ({ canonical, label, alignmentResetBefore = null,
     alignmentResetReceipt = undefined }) => {
-    const beforeRecords = new Map(currentRequest().records.map(record => [record.recordKey, record]));
+    // Both callers ran `baseline()` first, which throws when no render request is committed.
+    const beforeRecords = new Map(/** @type {Record<string, any>} */ (currentRequest()).records.map(record => [record.recordKey, record]));
     const changed = canonical.renderRequest.records.filter(record => (
       baseReverseComplement(record) !== baseReverseComplement(beforeRecords.get(record.recordKey))
     )).map(record => ({recordKey: record.recordKey, reverseComplement: baseReverseComplement(record)}));
-    return runCommittedCanonicalCandidate({ canonical, operation: 'align', label, alignmentResetBefore, alignmentResetReceipt,
-      captureIntentCheckpoint: () => recordDisplayControls.captureAlignmentOrientationIntent(changed),
-      restoreIntentCheckpoint: checkpoint => recordDisplayControls.restoreAlignmentOrientationIntent(checkpoint),
-      commitIntent: () => recordDisplayControls.commitAlignmentOrientations(changed) });
+    // R13 port: the root commits `orientations` to the record display intent.
+    return runRecordAlignment({ canonical, operation: 'align', label, alignmentResetBefore, alignmentResetReceipt,
+      orientations: changed });
   };
 
-  const applyPlan = async (response, request, expectedActionId, projected) => {
+  const applyPlan = async (response, expectedActionId, projected) => {
     if (expectedActionId !== actionId) return { status: 'stale' };
     if (!artifactIsCurrent()) return rejectStaleDraft();
     if (!projected.selectionComplete || !projected.geometryValidated) {
@@ -996,11 +1180,14 @@ export const createSimilarityAlignmentActions = ({
     }
     const orientations = projected.records.map(({ recordKey, afterReverseComplement }) => ({
       recordKey, reverseComplement: afterReverseComplement }));
-    const canonical = projectCommittedAlignment({ committed: activeBaseline.canonical,
+    // An applying draft has its baseline: `start` and `prepareStaleTargetRepair` set it with
+    // `activeRequest`, and every clear of one is followed by a stale `actionId`, checked above.
+    const canonical = projectCommittedAlignment({
+      committed: /** @type {AlignmentBaseline} */ (activeBaseline).canonical,
       plan: response.plan, orientations,
       translations: projected.records.map(({ recordKey, translation }) => ({recordKey, ...translation})) });
-    const promise = runAlignmentCandidate({canonical, operation: 'align', label: 'Align Similarity Group',
-      alignmentResetBefore: activeBaseline.canonical});
+    const promise = runAlignmentCandidate({canonical, label: 'Align Similarity Group',
+      alignmentResetBefore: /** @type {AlignmentBaseline} */ (activeBaseline).canonical});
     activeApply = promise;
     let outcome;
     try { outcome = await promise; }
@@ -1010,7 +1197,7 @@ export const createSimilarityAlignmentActions = ({
     if (outcome?.status === 'ok') {
       summary.value = successfulSummary(response.plan, projected.records.filter(record => (
         record.beforeReverseComplement !== record.afterReverseComplement)).length);
-      repair.value = null; notice.value = ''; activeBaseline = null;
+      repair.value = null; publishNotice(''); activeBaseline = null;
       clearDraft(); error.value = null; status.value = 'idle';
       return {status:'ok'};
     }
@@ -1023,10 +1210,12 @@ export const createSimilarityAlignmentActions = ({
   const resolveRequest = async (request, expectedActionId, mode) => {
     let response;
     try {
+      // `start` sets the baseline right before it resolves; nothing clears it in between.
       const helper = await runHelperOperation(resolveOperation, { request,
-        projection: { canonicalRequest: activeBaseline.request, orientations: Object.fromEntries(
-          request.records.map(record => [record.recordKey, baseReverseComplement(record)])) },
-        resources: activeBaseline.canonical.resources });
+        projection: { canonicalRequest: /** @type {AlignmentBaseline} */ (activeBaseline).request,
+          orientations: Object.fromEntries(
+            request.records.map(record => [record.recordKey, baseReverseComplement(record)])) },
+        resources: /** @type {AlignmentBaseline} */ (activeBaseline).canonical.resources });
       if (expectedActionId !== actionId) return { status: 'stale' };
       response = validateSimilarityAlignmentResolution(helper?.result, request);
       if (!artifactIsCurrent()) return rejectStaleDraft();
@@ -1044,7 +1233,7 @@ export const createSimilarityAlignmentActions = ({
     if (mode === 'align' && response.status === 'resolved') {
       status.value = 'applying';
       automaticApply.value = true;
-      try { return await applyPlan(response, request, expectedActionId, projectDraft(response, [])); }
+      try { return await applyPlan(response, expectedActionId, projectDraft(response, [])); }
       finally { automaticApply.value = false; }
     }
     return { status: 'reviewing' };
@@ -1075,7 +1264,7 @@ export const createSimilarityAlignmentActions = ({
         request: activeBaseline.request,
         catalog: state.featureCatalog?.value,
         recordCatalog: getRecordCatalog?.(),
-        linearSeqs: state.linearSeqs,
+        drawnSeqs: drawnLinearCards(),
         choices: []
       });
       setReviewNames(request, members, activeBaseline.request);
@@ -1132,9 +1321,10 @@ export const createSimilarityAlignmentActions = ({
     const orientations = Object.fromEntries(preview.records.map(record => [record.recordKey, record.afterReverseComplement]));
     status.value = 'applying';
     try {
+      // An open draft (`activeRequest`, checked above) always has its baseline (see `applyPlan`).
       const helper = await runHelperOperation(resolveOperation, { request,
-        projection: { canonicalRequest: activeBaseline.request, orientations },
-        resources: activeBaseline.canonical.resources });
+        projection: { canonicalRequest: /** @type {AlignmentBaseline} */ (activeBaseline).request, orientations },
+        resources: /** @type {AlignmentBaseline} */ (activeBaseline).canonical.resources });
       if (expectedActionId !== actionId) return { status: 'stale' };
       const response = validateSimilarityAlignmentResolution(helper?.result, request);
       if (!artifactIsCurrent()) return rejectStaleDraft();
@@ -1149,7 +1339,7 @@ export const createSimilarityAlignmentActions = ({
         publishError(new Error('Validated directions or reference placement changed. Review the updated preview and Apply again.'));
         return {status:'reviewing'};
       }
-      return applyPlan(response, request, expectedActionId, final);
+      return applyPlan(response, expectedActionId, final);
     } catch (cause) {
       if (expectedActionId !== actionId) return { status: 'stale' };
       status.value = 'reviewing';
@@ -1168,33 +1358,70 @@ export const createSimilarityAlignmentActions = ({
     return { status: 'canceled' };
   };
 
+  // Record and feature names of the committed request, shared by the drawer
+  // reference options and the Reset preview; record keys and hashes stay binding-only.
+  const committedNames = computed(() => {
+    const request = currentRequest();
+    const catalog = state.featureCatalog?.value;
+    return {
+      records: recordNames({ recordKeys: (request?.records || []).map(({ recordKey }) => recordKey),
+        request, linearSeqs: state.linearSeqs, catalog }),
+      factsOf: catalogFeatureFacts(catalog)
+    };
+  });
+
   const drawerReferenceOptions = (groupId) => {
     const id = String(groupId || '').trim();
     const group = getOrthogroupById(id);
     if (!group) return [];
-    const candidates = getEnrichedOrthogroupMembers(group).map((member) => {
+    const { records, factsOf } = committedNames.value;
+    // `filter(Boolean)` drops the members whose anchor does not resolve (the `null` results).
+    const candidates = /** @type {{ anchor: ReturnType<typeof anchorFromSource>, canonicalKey: string, key: string, label: string, location: string }[]} */ (getEnrichedOrthogroupMembers(group).map((member) => {
       try {
         const anchor = anchorFromSource(member, 'Drawer reference');
+        const record = shortRecordName(records.get(anchor.recordKey)) || 'Unavailable record';
         return {
           anchor,
           canonicalKey: `${anchor.recordKey}\0${anchor.biologicalFeatureId}`,
           key: anchorKey(anchor),
-          label: `${anchor.recordKey} · ${anchor.biologicalFeatureId} · `
-            + `${Number(member?.start) + 1}..${Number(member?.end)} `
+          label: `${record} · ${featureNameParts(anchor, factsOf(anchor) || member).name}`,
+          location: `${(Number(member?.start) + 1).toLocaleString('en-US')}..`
+            + `${Number(member?.end).toLocaleString('en-US')} `
             + `(${strandLabel(strandValue(member?.strand, 'Drawer reference strand'))})`
         };
       } catch (_error) {
         return null;
       }
-    }).filter(Boolean);
+    }).filter(Boolean));
     const counts = new Map();
     candidates.forEach(({ canonicalKey }) => {
       counts.set(canonicalKey, (counts.get(canonicalKey) || 0) + 1);
     });
-    return candidates
-      .filter(({ canonicalKey }) => counts.get(canonicalKey) === 1)
-      .map(({ canonicalKey: _canonicalKey, ...candidate }) => candidate);
+    const unique = candidates.filter(({ canonicalKey }) => counts.get(canonicalKey) === 1);
+    // Two features with the same record and name (inparalogs) also show their location.
+    const labels = new Map();
+    unique.forEach(({ label }) => labels.set(label, (labels.get(label) || 0) + 1));
+    return unique.map(({ canonicalKey: _canonicalKey, location, ...candidate }) => (
+      labels.get(candidate.label) > 1 ? { ...candidate, label: `${candidate.label} · ${location}` } : candidate
+    ));
   };
+
+  // OV-381: a new plan (Apply, Session load, Undo) selects its own group in the
+  // drawer, whichever group was selected or saved before, so the drawer can
+  // offer the plan's reference below.
+  watch(() => state.similarityAlignmentPlan.value, (plan) => {
+    const groupId = String(plan?.groupId || '');
+    if (groupId && getOrthogroupById(groupId)) state.selectedOrthogroupId.value = groupId;
+  });
+
+  // OV-381: until the user picks, the drawer offers the committed plan's exact
+  // reference (from a popup Align or a loaded Session), never a stale one.
+  const drawerReferenceKey = computed(() => {
+    const plan = state.similarityAlignmentPlan.value;
+    const pick = drawerReferencePick.value;
+    if (pick && pick.plan === plan) return pick.key;
+    return plan?.reference && !repair.value ? anchorKey(plan.reference) : '';
+  });
 
   const selectedDrawerReference = (groupId) => (
     drawerReferenceOptions(groupId)
@@ -1225,17 +1452,22 @@ export const createSimilarityAlignmentActions = ({
   const resetPreview = computed(() => {
     const receipt = state.similarityAlignmentResetReceipt.value;
     const request = currentRequest();
-    const names = recordNames({ recordKeys: (request?.records || []).map(({ recordKey }) => recordKey),
-      request, linearSeqs: state.linearSeqs, catalog: state.featureCatalog?.value });
+    const names = committedNames.value.records;
     const targets = (receipt?.directions || []).map(delta => {
       const record = request?.records.find(({recordKey}) => recordKey === delta.recordKey);
-      return {recordKey: delta.recordKey, label: names.get(delta.recordKey) || 'Unavailable record',
+      const recordName = names.get(delta.recordKey);
+      return {recordKey: delta.recordKey, label: recordName?.label || 'Unavailable record',
+        name: shortRecordName(recordName) || 'Unavailable record',
         current: baseReverseComplement(record), restored: delta.before,
         laterManualEdit: baseReverseComplement(record) !== delta.after};
     });
-    return { targets, disabledReason: !receipt
-      ? 'This Session has no historical alignment direction evidence. Reset positions is available.'
-      : !targets.length ? 'The latest Align made no direction changes. Reset positions is available.' : '' };
+    const count = targets.length;
+    return { targets,
+      directionsLabel: count ? `Positions and directions (${count} ${count === 1 ? 'record' : 'records'})`
+        : 'Positions and directions',
+      disabledReason: !receipt
+        ? 'Not available: this Session does not record which directions the latest Align changed.'
+        : !count ? 'Not available: the latest Align did not change any record direction.' : '' };
   });
   const resetAlignment = async (scope = 'positions') => {
     if (!state.similarityAlignmentPlan?.value) return {status:'noop'};
@@ -1263,18 +1495,15 @@ export const createSimilarityAlignmentActions = ({
       if (orientations.some((direction, index) => direction.reverseComplement
         !== baseReverseComplement(current.request.records[index]))) {
         const plan = current.request.layout.similarityAlignment;
-        const catalogFeatures = (state.featureCatalog?.value?.items || [])
-          .flatMap(item => item.biologicalFeatures || []);
+        const catalogFeatures = catalogBiologicalFeatures(state.featureCatalog?.value);
         const members = plan.records.filter(record => record.anchor).map(({anchor}) => {
-          const matches = catalogFeatures.filter(feature => feature.recordKey === anchor.recordKey
-            && feature.biologicalFeatureId === anchor.biologicalFeatureId
-            && (anchor.sourceFeatureIndex === null || feature.sourceFeatureIndex === anchor.sourceFeatureIndex));
-          if (matches.length !== 1) throw new Error('Alignment Reset source anchor is unavailable or ambiguous.');
-          return {...matches[0], ...anchor};
+          const feature = uniqueCatalogFeature(catalogFeatures, anchor);
+          if (!feature) throw new Error('Alignment Reset source anchor is unavailable or ambiguous.');
+          return {...feature, ...anchor};
         });
         const request = buildHelperRequest({group:{id:plan.groupId}, members,
           reference:plan.reference, request:current.request, catalog:state.featureCatalog?.value,
-          recordCatalog:getRecordCatalog?.(), linearSeqs:state.linearSeqs, choices:planChoices(plan)});
+          recordCatalog:getRecordCatalog?.(), drawnSeqs:drawnLinearCards(), choices:planChoices(plan)});
         const vector = Object.fromEntries(orientations.map(direction => [direction.recordKey,direction.reverseComplement]));
         const helper = await runHelperOperation(resolveOperation, {request,
           projection:{canonicalRequest:current.request,orientations:vector},resources:current.canonical.resources});
@@ -1288,7 +1517,7 @@ export const createSimilarityAlignmentActions = ({
         });
       }
       const canonical = projectCommittedAlignment({committed: current.canonical, plan:null, translations, orientations});
-      promise = runAlignmentCandidate({canonical, operation: 'align', label: scope === 'positions'
+      promise = runAlignmentCandidate({canonical, label: scope === 'positions'
         ? 'Reset alignment positions' : 'Reset alignment positions and direction changes', alignmentResetReceipt:null});
       activeApply = promise;
       const outcome = await promise;
@@ -1388,17 +1617,42 @@ export const createSimilarityAlignmentActions = ({
       repair.value = null;
       return { status: 'ok' };
     }
-    const group = getOrthogroupById(plan.groupId);
-    if (!group) {
-      // A saved Result can retain its exact plan after comparison groups have
-      // left the editor catalog. The typed render still validates every anchor.
-      if (sameKeyedPlan(plan, currentRequest()?.layout?.similarityAlignment)) {
-        repair.value = null;
-        return { status: 'ok' };
-      }
-      return markStaleReference('The saved Similarity Group is no longer available.');
+    // The plan is Linear draft state: only a Linear request draws it.
+    if (state.mode.value !== 'linear') return { status: 'ok' };
+    // A plan names anchor features, not group membership (PD-OI-028, OV-341):
+    // it is stale only when an anchor feature no longer resolves in the shown
+    // Result's feature catalog. A Result without a catalog (an older Session)
+    // cannot be checked here; the typed render validates every anchor.
+    const catalogFeatures = catalogBiologicalFeatures(state.featureCatalog?.value);
+    /** @type {{ recordKey: string, status: string, anchor: AnchorIdentity | null }[]} */
+    const decisions = plan.records;
+    const resolves = (/** @type {AnchorIdentity | null} */ anchor) => (
+      !catalogFeatures.length || uniqueCatalogFeature(catalogFeatures, anchor) !== null);
+    if (!resolves(plan.reference)) {
+      return markStaleReference('The alignment reference feature is no longer found in its record.');
     }
-    const members = getEnrichedOrthogroupMembers(group);
+    const goneRecordKeys = new Set(decisions
+      .filter(({ status, anchor }) => status === 'aligned' && !resolves(anchor))
+      .map(({ recordKey }) => recordKey));
+    const group = getOrthogroupById(plan.groupId);
+    const members = group ? getEnrichedOrthogroupMembers(group) : [];
+    const currentAnchors = members.map((member) => {
+      try { return anchorFromSource(member, 'Current Similarity Group member'); } catch (_error) { return null; }
+    }).filter(Boolean);
+    const inGroup = (/** @type {AnchorIdentity | null} */ anchor) => currentAnchors.filter((candidate) => anchorsAgree(candidate, anchor)).length === 1;
+    // A comparison setting regrouped the plan's group, or the group left the
+    // catalog: the typed render still validates every anchor.
+    const regrouped = !inGroup(plan.reference) || decisions.some(({ recordKey, status, anchor }) => (
+      status === 'aligned' && !goneRecordKeys.has(recordKey) && !inGroup(anchor)));
+    if (regrouped && goneRecordKeys.size === 0) {
+      repair.value = null;
+      return { status: 'ok' };
+    }
+    // Target repair offers this group's members and keeps the other choices,
+    // so it needs the reference and every remaining target in the group.
+    if (regrouped) {
+      return markStaleReference('An aligned target feature is no longer found in its record.');
+    }
     let request;
     try {
       request = buildHelperRequest({
@@ -1408,26 +1662,15 @@ export const createSimilarityAlignmentActions = ({
         request: currentRequest(),
         catalog: state.featureCatalog?.value,
         recordCatalog: getRecordCatalog?.(),
-        linearSeqs: state.linearSeqs,
+        drawnSeqs: drawnLinearCards(),
         choices: planChoices(plan)
       });
     } catch (cause) {
       return markStaleReference(cause?.message || cause);
     }
     setReviewNames(request, members, currentRequest());
-    const currentAnchors = members.map((member) => {
-      try { return anchorFromSource(member, 'Current Similarity Group member'); } catch (_error) { return null; }
-    }).filter(Boolean);
-    const staleRecordKeys = new Set(
-      plan.records
-        .filter(({ status, anchor }) => (
-          status === 'aligned'
-          && !currentAnchors.some((candidate) => anchorsAgree(candidate, anchor))
-        ))
-        .map(({ recordKey }) => recordKey)
-    );
-    if (staleRecordKeys.size > 0) {
-      return prepareStaleTargetRepair(plan, request, staleRecordKeys, expectedActionId);
+    if (goneRecordKeys.size > 0) {
+      return prepareStaleTargetRepair(plan, request, goneRecordKeys, expectedActionId);
     }
     try {
       const helper = await runHelperOperation(resolveOperation, { request });
@@ -1498,14 +1741,54 @@ export const createSimilarityAlignmentActions = ({
   const directionPreview = computed(() => {
     if (!draft.value) return null;
     const projected = projectDraft();
-    return { ...projected,
-      eligibleCount: projected.records.filter(record => !record.exclusion).length,
-      records: projected.records.map(record => ({ ...record,
-        label: record.status === 'reference' ? draft.value.reference.recordLabel
-          : draft.value.rows.find(row => row.recordKey === record.recordKey)?.recordLabel || record.recordKey,
-        beforeDirection: arrowLabel(record.beforeArrow), afterDirection: arrowLabel(record.afterArrow),
-        exclusionLabel: directionExclusionLabels[record.exclusion] || record.exclusion
-      })) };
+    const { reference, rows, intent } = draft.value;
+    const records = /** @type {DirectionPreviewRecord[]} */ (projected.records.map((record) => {
+      const row = rows.find(entry => entry.recordKey === record.recordKey);
+      const isReference = record.status === 'reference';
+      const label = isReference ? reference.recordLabel : row?.recordLabel || record.recordKey;
+      const beforeDirection = arrowLabel(record.beforeArrow);
+      const afterDirection = arrowLabel(record.afterArrow);
+      // An anchor of unknown strand still moves its record; only the direction stays (PD-OI-027).
+      const exclusionLabel = record.exclusion
+        ? `${record.exclusion === 'unknown_strand' ? 'Direction unchanged' : 'Unchanged'}: ${directionExclusionLabels[record.exclusion] || record.exclusion}`
+        : '';
+      return { ...record, label, beforeDirection, afterDirection, exclusionLabel,
+        shortLabel: (isReference ? reference.recordDetail || reference.recordName : row?.recordDetail || row?.recordName) || label,
+        reversed: record.beforeReverseComplement !== record.afterReverseComplement,
+        // The accessible before/after statement each card and its Custom select describe.
+        description: `${label}${isReference ? ' · exact reference' : ''}: Current ${beforeDirection}; after Align ${afterDirection}.`
+          + (exclusionLabel ? ` ${exclusionLabel}` : '') };
+    }));
+    const eligible = records.filter(record => !record.exclusion);
+    const reversed = records.filter(record => record.reversed);
+    // A record still waiting for Select or Skip is counted by the footer, not here.
+    const excluded = records.filter(record => record.exclusion
+      && !['selection_required', 'unknown_strand'].includes(record.exclusion)).length;
+    const unknownStrand = records.filter(record => record.exclusion === 'unknown_strand').length;
+    const plural = (/** @type {number} */ count, /** @type {string} */ word) => `${count} ${word}${count === 1 ? '' : 's'}`;
+    const reversedText = `${plural(reversed.length, 'record')} (${reversed.map(({ shortLabel }) => shortLabel).join(', ')})`;
+    const sameAfter = eligible.length > 0 && eligible.every(({ afterArrow }) => afterArrow === eligible[0].afterArrow)
+      ? (eligible[0].afterArrow === 1 ? 'right' : eligible[0].afterArrow === -1 ? 'left' : '') : '';
+    const features = eligible.length === 1 ? 'the chosen feature' : `all ${eligible.length} chosen features`;
+    let effect;
+    if (intent.mode === 'custom') {
+      effect = reversed.length ? `Reverses ${reversedText}.` : 'No record is reversed yet. Choose a direction in each card.';
+    } else if (reversed.length) {
+      effect = `Reverses ${reversedText} so ${features} point${eligible.length === 1 ? 's' : ''} ${intent.mode}.`;
+    } else if (sameAfter) {
+      effect = `No record is reversed. ${features[0].toUpperCase()}${features.slice(1)} already point${eligible.length === 1 ? 's' : ''} ${sameAfter}.`;
+    } else {
+      effect = `No record is reversed. ${plural(eligible.length, 'chosen feature')} keep their current directions.`;
+    }
+    if (excluded) effect += ` ${plural(excluded, 'record')} ${excluded === 1 ? 'stays' : 'stay'} unchanged; the reason is in ${excluded === 1 ? 'its card' : 'their cards'}.`;
+    if (unknownStrand) effect += ` ${plural(unknownStrand, 'record')} ${unknownStrand === 1 ? 'keeps its' : 'keep their'} direction; the reason is in ${unknownStrand === 1 ? 'its card' : 'their cards'}.`;
+    // D-11: the reference feature centre stays fixed; its record's left edge may move.
+    const shift = Math.round(projected.reference.deltaX);
+    const referenceShift = shift
+      ? `${reference.name} stays where it is; the record's left edge moves ${Math.abs(shift).toLocaleString('en-US')} px (at 100% zoom) to the ${shift > 0 ? 'right' : 'left'}.`
+      : '';
+    const severalCandidateCount = rows.filter(row => row.candidates.length > 1).length;
+    return { ...projected, effect, referenceShift, records, severalCandidateCount };
   });
   const setDirectionIntent = (intent) => {
     if (!draft.value || status.value !== 'reviewing') return {status:'rejected'};
@@ -1528,7 +1811,7 @@ export const createSimilarityAlignmentActions = ({
     if (status.value === 'applying') return 'Applying the alignment plan.';
     if (status.value === 'resolving') return 'Resolving the current alignment.';
     if (unresolvedCount.value > 0) {
-      return `${unresolvedCount.value} record${unresolvedCount.value === 1 ? '' : 's'} still require Select or Skip.`;
+      return `Choose a candidate or Skip for ${unresolvedCount.value} record${unresolvedCount.value === 1 ? '' : 's'}.`;
     }
     if (status.value !== 'reviewing') return 'Open an alignment review before applying.';
     return '';
@@ -1576,7 +1859,7 @@ export const createSimilarityAlignmentActions = ({
     drawerReferenceOptions,
     setDrawerReference: (groupId, key) => {
       const option = drawerReferenceOptions(groupId).find((entry) => entry.key === key);
-      drawerReferenceKey.value = option?.key || '';
+      drawerReferencePick.value = { key: option?.key || '', plan: state.similarityAlignmentPlan.value };
       return Boolean(option);
     },
     drawerDisabledReason,

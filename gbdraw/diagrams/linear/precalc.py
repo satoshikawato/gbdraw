@@ -15,23 +15,23 @@ from collections.abc import Collection
 import math
 from typing import Sequence
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from ...canvas import LinearCanvasConfigurator  # type: ignore[reportMissingImports]
-from ...config.models import (  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from ...canvas import LinearCanvasConfigurator
+from ...config.models import (
     GbdrawConfig,
     LinearRenderProfile,
 )
-from ...configurators import FeatureDrawingConfigurator  # type: ignore[reportMissingImports]
-from ...core.sequence import determine_length_parameter  # type: ignore[reportMissingImports]
-from ...features.colors import preprocess_color_tables  # type: ignore[reportMissingImports]
-from ...features.factory import (  # type: ignore[reportMissingImports]
+from ...configurators import FeatureDrawingConfigurator
+from ...auto_sizes import linear_label_font_size
+from ...features.colors import preprocess_color_tables
+from ...features.factory import (
     FeatureBuildResult,
     create_feature_layers,
 )
-from ...features.objects import FeatureObject  # type: ignore[reportMissingImports]
-from ...render.groups.linear import DefinitionGroup  # type: ignore[reportMissingImports]
-from ...labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
-from ...labels.linear import calculate_label_y_bounds, prepare_label_list_linear  # type: ignore[reportMissingImports]
+from ...features.objects import FeatureObject
+from ...render.groups.linear import DefinitionGroup
+from ...labels.filtering import preprocess_label_filtering
+from ...labels.linear import calculate_label_y_bounds, prepare_label_list_linear
 from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderContext
 from .orthogroup_alignment import OrthogroupLabelEligibility, orthogroup_label_sets_for_record
@@ -46,19 +46,21 @@ def _resolve_linear_diagram_label_font_size(
     canvas_config: LinearCanvasConfigurator,
     profile: LinearRenderProfile,
 ) -> float:
-    """Resolve one readable auto label size for all labels drawn in a linear diagram."""
+    """Resolve one readable auto label size for all labels drawn in a linear diagram.
+
+    The records in the label display scope set the size. With no record in
+    scope, labels shown by per-feature overrides use the size of all records.
+    """
 
     cfg = profile.config
-    label_font_sizes: list[float] = []
-    threshold = int(cfg.labels.length_threshold.linear)
-    for index, record in enumerate(records):
-        if profile.label_scope == "first" and index > 0:
-            continue
-        length_param = determine_length_parameter(len(record.seq), threshold)
-        label_font_sizes.append(cfg.labels.font_size.linear.for_length_param(length_param))
-
-    if label_font_sizes:
-        return max(label_font_sizes)
+    sized_indexes = [index for index in range(len(records)) if profile.labels_in_scope(index)]
+    sized_lengths = [
+        len(record.seq)
+        for index, record in enumerate(records)
+        if not sized_indexes or index in sized_indexes
+    ]
+    if sized_lengths:
+        return linear_label_font_size(sized_lengths, cfg)
     return cfg.labels.font_size.linear.for_length_param(canvas_config.length_param)
 
 
@@ -72,7 +74,7 @@ def _precalculate_definition_metrics(
     """
     Pre-calculate definition widths and heights for all records.
     """
-    max_definition_width = 0
+    max_definition_width: float = 0
     definition_heights: list[float] = []
     definition_widths: list[float] = []
     if not records:
@@ -111,7 +113,6 @@ def _precalculate_feature_layers(
     """Build feature objects once per record for the linear assembly pipeline."""
 
     cfg = profile.config
-    label_scope = profile.label_scope
     color_table, default_colors = preprocess_color_tables(
         feature_config.color_table,
         feature_config.default_colors,
@@ -120,11 +121,7 @@ def _precalculate_feature_layers(
 
     feature_layers: list[FeatureBuildResult] = []
     for i, record in enumerate(records):
-        compute_label_text = (
-            label_scope == "all"
-            or (label_scope == "first" and i == 0)
-            or label_scope == "orthogroup_top"
-        )
+        compute_label_text = profile.labels_in_scope(i)
         result = create_feature_layers(
             record,
             color_table,
@@ -136,7 +133,7 @@ def _precalculate_feature_layers(
             feature_shapes=feature_config.feature_shapes,
             feature_visibility_rules=feature_config.feature_visibility_rules,
             compute_label_text=compute_label_text,
-            placement_inputs=feature_config.placements[i] if feature_config.placements else None,
+            record_features=feature_config.record_features[i] if feature_config.record_features else None,
             placement_slot=placement_slot,
             feature_overlap_tolerance_bp=profile.feature_overlap_tolerance_bp,
             record_transform=(record_transforms[i] if record_transforms is not None else None),
@@ -162,7 +159,7 @@ def _precalculate_label_dimensions(
     cfg = profile.config
     label_scope = profile.label_scope
 
-    if label_scope == "none":
+    if not any(profile.record_has_labels(i) for i in range(len(records))):
         return 0, [[] for _ in records], [0.0 for _ in records]
 
     label_font_size = _resolve_linear_diagram_label_font_size(
@@ -170,7 +167,7 @@ def _precalculate_label_dimensions(
         canvas_config=canvas_config,
         profile=profile,
     )
-    max_required_height = 0
+    max_required_height: float = 0
     all_labels_by_record: list[list[dict]] = []
     record_label_heights: list[float] = []
     normalize_length = cfg.canvas.linear.normalize_length
@@ -182,7 +179,7 @@ def _precalculate_label_dimensions(
         label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
 
     for i, record in enumerate(records):
-        if label_scope == "first" and i > 0:
+        if not profile.record_has_labels(i):
             all_labels_by_record.append([])
             record_label_heights.append(0.0)
             continue
@@ -233,6 +230,7 @@ def _precalculate_label_dimensions(
             label_font_size=label_font_size,
             orthogroup_label_member_ids=member_ids,
             orthogroup_label_top_member_ids=top_member_ids,
+            labels_overrides_only=not profile.labels_in_scope(i),
             feature_lane_geometry=(
                 feature_lane_geometries[i]
                 if feature_lane_geometries is not None

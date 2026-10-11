@@ -102,9 +102,6 @@ test('label search includes live edits and reports the initial rendered feature 
   await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
   await page.locator('.feature-popup input[placeholder="Edit label text"]').fill('AUDIT_RENAMED_FEATURE');
   await page.getByRole('button', { name: 'Apply Label', exact: true }).click();
-  if (await page.getByRole('heading', { name: 'Enable Labels', exact: true }).isVisible()) {
-    await page.getByRole('button', { name: /Show all labels/ }).click();
-  }
   await page.waitForFunction(() => !window.__GBDRAW_APP__.labelReflowProcessing && !window.__GBDRAW_APP__.processing);
   await page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
   await page.getByRole('combobox', { name: 'Search field', exact: true }).selectOption('label');
@@ -161,7 +158,7 @@ for (const { method, delayedAsset, extension } of [
   const filename = await page.evaluate((extension) => window.__GBDRAW_APP__.results[0].name.replace(/\.svg$/, `.${extension}`), extension);
   await page.evaluate((method) => { window.__AUDIT_EXPORT__ = window.__GBDRAW_APP__[method](); }, method);
   await requestStarted;
-  await page.locator('select[class*="border-green-300"]').selectOption('1');
+  await page.locator('[aria-label="Result Preview"] h2 select').selectOption('1');
   const pending = page.waitForEvent('download');
   release();
   await page.evaluate(() => window.__AUDIT_EXPORT__);
@@ -186,8 +183,9 @@ test('malformed annotations preserve the draft and a valid import is undoable', 
   const before = await page.evaluate(() => JSON.stringify(window.__GBDRAW_APP__.annotationSets));
   const upload = panel.locator('input[type=file]');
   await upload.setInputFiles({ name: 'bad.tsv', mimeType: 'text/plain', buffer: Buffer.from('set_id\tid\tmark\tfeature_selector\ns\ta\thighlight\t;\n') });
-  await expect.poll(() => dialogs.length).toBe(1);
-  expect(dialogs[0]).toContain('feature_selector requires');
+  // FL-14: the panel notice names the error; no browser alert.
+  await expect(panel.getByRole('status')).toContainText('feature_selector requires');
+  expect(dialogs).toEqual([]);
   expect(await page.evaluate(() => JSON.stringify(window.__GBDRAW_APP__.annotationSets))).toBe(before);
   await upload.setInputFiles({ name: 'good.tsv', mimeType: 'text/plain', buffer: Buffer.from('set_id\tid\tmark\tstart\tend\nloaded\ta\tband\t1\t8\n') });
   await expect(panel.getByLabel('Annotation set id')).toHaveValue('loaded');
@@ -295,7 +293,7 @@ test('a failed PDF font request can be retried without reloading the diagram', a
 test('a delayed label TSV cannot replace the labels from a newer upload', async ({ page }) => {
   test.setTimeout(180000);
   await session(page);
-  const outcome = await page.evaluate(async () => {
+  const outcome = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const older = new File(['*\t*\tproduct\t.*\tOLDER\n'], 'older.tsv');
     const newer = new File(['*\t*\tproduct\t.*\tNEWER\n'], 'newer.tsv');
@@ -313,10 +311,36 @@ test('a delayed label TSV cannot replace the labels from a newer upload', async 
     await app.loadLabelOverrideTable({ target: input });
     release();
     await pending;
-    return Object.values(app.labelTextFeatureOverrides);
+    return Object.values(app.featureOverrides).map((row) => row.labelText).filter((text) => text !== null);
   });
   expect(outcome.length).toBeGreaterThan(0);
   expect(new Set(outcome)).toEqual(new Set(['NEWER']));
+});
+
+// OV-131: a label TSV replaces the label edits only when it applies to a label.
+// One that matches no label keeps them, records no Undo step, and says so.
+test('a label TSV that matches no label keeps the label edits and records no Undo step', async ({ page }) => {
+  test.setTimeout(180000);
+  await session(page);
+  const alerts = [];
+  page.on('dialog', (dialog) => alerts.push(dialog.message()));
+  const importTsv = (tsv) => evaluateWithRetainedPromise(page, async (text) => {
+    const app = window.__GBDRAW_APP__;
+    await app.loadLabelOverrideTable({ target: { files: [new File([text], 'labels.tsv')], value: 'labels.tsv' } });
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const history = window.__GBDRAW_HISTORY__;
+    return { bulk: { ...app.labelTextBulkOverrides }, undoCount: history.getUndoCount(), undoLabel: history.undoLabel() };
+  }, tsv);
+  const edited = await importTsv('*\t*\tlabel\t^tRNA-Phe$\tMyLabel\n');
+  expect(edited).toMatchObject({ bulk: { 'tRNA-Phe': 'MyLabel' }, undoLabel: 'Load label edits' });
+  expect(await importTsv('*\t*\tproduct\t^no such product$\tZZ\n')).toEqual(edited);
+  const replaced = await importTsv('*\t*\tlabel\t^tRNA-Val$\tOther\n');
+  expect(replaced).toEqual({ bulk: { 'tRNA-Val': 'Other' }, undoCount: edited.undoCount + 1, undoLabel: 'Load label edits' });
+  expect(alerts).toEqual([
+    'Loaded 1 row(s). Applied to 1 label(s).',
+    'Loaded 1 row(s). Not applied: no row matched a label of the diagram. The existing label edits were kept.',
+    'Loaded 1 row(s). Applied to 1 label(s).'
+  ]);
 });
 
 test('invalid annotation coordinates preserve the draft and the last successful diagram', async ({ page }) => {
@@ -329,12 +353,15 @@ test('invalid annotation coordinates preserve the draft and the last successful 
   const before = await page.evaluate(() => JSON.stringify(window.__GBDRAW_APP__.annotationSets));
   const dialogs = [];
   page.on('dialog', (dialog) => dialogs.push(dialog.message()));
-  for (const [index, start] of ['abc', '0', '-10', '1.5'].entries()) {
-    await panel.locator('input[type=file]').setInputFiles({ name: 'bad.tsv', mimeType: 'text/plain', buffer: Buffer.from(`set_id\tid\tmark\tstart\tend\ns\ta\thighlight\t${start}\t3000\n`) });
-    await expect.poll(() => dialogs.length).toBe(index + 1);
-    expect(dialogs.at(-1)).toContain('positive integers');
+  // FL-14: each error shows in the panel notice; no browser alert.
+  const upload = panel.locator('input[type=file]');
+  for (const start of ['abc', '0', '-10', '1.5']) {
+    await upload.setInputFiles({ name: 'bad.tsv', mimeType: 'text/plain', buffer: Buffer.from(`set_id\tid\tmark\tstart\tend\ns\ta\thighlight\t${start}\t3000\n`) });
+    await expect.poll(() => upload.inputValue()).toBe('');
+    await expect(panel.getByRole('status')).toContainText('positive integers');
     expect(await page.evaluate(() => JSON.stringify(window.__GBDRAW_APP__.annotationSets))).toBe(before);
   }
+  expect(dialogs).toEqual([]);
   const oldResult = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
   await panel.getByPlaceholder('Start (1-based)', { exact: true }).fill('1.5');
   await panel.getByPlaceholder('Start (1-based)', { exact: true }).press('Tab');

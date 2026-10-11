@@ -1,13 +1,31 @@
-import { parseTransform } from './utils.js';
+// @ts-check
+import { parseTransform } from '../../services/legend-svg.js';
 import { setClassToken } from '../../services/svg-serialization.js';
 import {
   bindCompositionMetadata,
   COMPOSITION_SCHEMA_ATTRIBUTE,
   compositionUserDeltas
 } from '../legend-layout/composition-actions.js';
-import { replaceLeadingTranslate } from '../legend-layout/transform-utils.js';
+import { replaceLeadingTranslate } from '../../services/svg-transform.js';
 
-export const createLegendDragActions = ({ state, extractLegendEntries, history = null, previewRuntime = null }) => {
+/**
+ * @typedef {object} LegendDragActionsOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {((label?: string, options?: { source?: string, owner?: unknown }) => Promise<any>) | null} [beginHistoryTransaction]
+ *   History's begin of one step (R11); resolves to the transaction, or null when History is busy.
+ * @property {((transaction: any, options?: Record<string, any>) => Promise<any>) | null} [commitHistoryTransaction]
+ *   History's commit of the step that `beginHistoryTransaction` opened.
+ * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
+ *   The preview owner's commit of an edit to the displayed Result (R1, R13).
+ */
+
+/** @param {LegendDragActionsOptions} options */
+export const createLegendDragActions = ({
+  state,
+  beginHistoryTransaction = null,
+  commitHistoryTransaction = null,
+  commitActiveResultEdit = null
+}) => {
   const {
     svgContainer,
     legendDragging,
@@ -18,9 +36,13 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     layoutRepositionMode,
     zoom
   } = state;
+  /** @type {number | null} */
   let legendDragFrameId = null;
+  /** @type {{ x: number, y: number } | null} */
   let pendingLegendPointer = null;
+  /** @type {Promise<any> | null} */
   let legendDragTxPromise = null;
+  /** @type {{ binding: ReturnType<typeof bindCompositionMetadata>, svg: any } | null} */
   let legendDragContext = null;
 
   const isLayoutRepositionModeEnabled = () => Boolean(layoutRepositionMode?.value);
@@ -81,8 +103,8 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     pendingLegendPointer = null;
     legendDragContext = { binding, svg };
     // The drag gesture owns its transaction and settles a focused control's (N-18).
-    legendDragTxPromise = history?.begin
-      ? history.begin('Move legend', { source: 'legend-drag', owner: Symbol('Move legend') })
+    legendDragTxPromise = beginHistoryTransaction
+      ? beginHistoryTransaction('Move legend', { source: 'legend-drag', owner: Symbol('Move legend') })
       : null;
     legendDragging.value = true;
     legendDragStart.x = e.clientX;
@@ -127,11 +149,11 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     legendDragging.value = false;
     legendDragContext = null;
 
-    if (completedDragContext?.svg) previewRuntime?.commitActiveResultEdit('legend-drag');
+    if (completedDragContext?.svg) commitActiveResultEdit?.('legend-drag');
 
     const tx = legendDragTxPromise ? await legendDragTxPromise : null;
     legendDragTxPromise = null;
-    if (tx && history?.commit) await history.commit(tx);
+    if (tx && commitHistoryTransaction) await commitHistoryTransaction(tx);
   };
 
   const refreshLegendDragAffordances = () => {
@@ -146,9 +168,9 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     setElementCursor(legendGroup, legendDragging.value ? 'grabbing' : isLayoutRepositionModeEnabled() ? 'grab' : 'help');
   };
 
-  const resetLegendPositionOnly = () => {
-    const sessionBusy = state.sessionOperationAvailability?.();
-    if (sessionBusy) return sessionBusy;
+  // Moving the Legend group leaves its rows, so the Legend list stays (U3b).
+  const resetLegendPosition = () => {
+    if (state.sessionOperationAvailability?.()) return;
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
@@ -166,12 +188,7 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     legendCurrentOffset.x = 0;
     legendCurrentOffset.y = 0;
 
-    previewRuntime?.commitActiveResultEdit('legend-position-reset');
-  };
-
-  const resetLegendPosition = () => {
-    resetLegendPositionOnly();
-    extractLegendEntries();
+    commitActiveResultEdit?.('legend-position-reset');
   };
 
   const setupLegendDrag = () => {
@@ -181,7 +198,8 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     if (svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) !== '1') return;
     const binding = bindCompositionMetadata(svg);
     const legendGroup = binding.legend.targets[0] || null;
-    if (!legendGroup) return;
+    // bindRole fails on a legend target without metadata, so the metadata check never differs.
+    if (!legendGroup || !binding.metadata.legend) return;
 
     const automatic = binding.metadata.legend.automaticTranslation;
     const offsets = compositionUserDeltas(svg).legend || [0, 0];
@@ -202,7 +220,6 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     onLegendDrag,
     refreshLegendDragAffordances,
     resetLegendPosition,
-    resetLegendPositionOnly,
     setupLegendDrag,
     startLegendDrag
   };

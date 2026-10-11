@@ -1,18 +1,13 @@
-import { ruleMatchesReady, ruleMatchesFeature, firstMatchingRule } from './rule-matching.js';
+// @ts-check
+/** @import { DrawingState } from '../state.js' */
 import {
+  appliedFeatureColors,
   estimateColorFactor,
   interpolateColor,
   resolveCollinearMatchColor,
   resolvePairwiseLegendGradientColorKeys
-} from './color-utils.js';
-import {
-  getFeatureElementIndex,
-  getFeatureFillElements,
-  getFeatureIdentity
-} from './feature-editor/svg-actions.js';
-import { isFeatureFillTarget } from './feature-dom.js';
-import { PAIRWISE_LEGEND_SELECTOR, parseTransformXY } from './legend/utils.js';
-import { getFeatureOverride } from '../services/feature-override-identity.js';
+} from '../utils/color-utils.js';
+import { PAIRWISE_LEGEND_SELECTOR } from '../services/legend-svg.js';
 import { getGroupsByBaseIds } from '../services/svg-result-normalization.js';
 import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
 
@@ -28,7 +23,8 @@ const setColorAttributeIfChanged = (element, attribute, value) => {
   return true;
 };
 
-const paletteColorsEqual = (left, right) => {
+// Whether two palettes give every key the same color (the palette watcher's test).
+export const paletteColorsEqual = (left, right) => {
   const keys = new Set([...Object.keys(left || {}), ...Object.keys(right || {})]);
   return Array.from(keys).every(
     (key) => normalizeComparableColor(left?.[key]) === normalizeComparableColor(right?.[key])
@@ -39,30 +35,36 @@ const paletteColorKeysEqual = (left, right, keys) => keys.every(
   (key) => normalizeComparableColor(left?.[key]) === normalizeComparableColor(right?.[key])
 );
 
+/**
+ * @typedef {object} SvgStylesOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {(source: any, callback: (...args: any[]) => void, options?: Record<string, any>) => any} watch Vue `watch`
+ * @property {(callback?: () => void) => Promise<void>} nextTick Vue `nextTick`
+ * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
+ *   The preview owner's commit of an edit to the displayed Result (R1, R13).
+ * @property {(options?: { recolor?: Record<string, any>, prepareRules?: boolean }) => boolean | Promise<boolean>} projectPaletteAndRules
+ *   The root's projection of the palette and the rules (R3), which prepares the
+ *   rule matches, paints the tracks through this owner, and shows the fills.
+ */
+
+/** @param {SvgStylesOptions} options */
 export const createSvgStyles = ({
   state,
   watch,
   nextTick,
-  legendActions,
-  rulePreparation,
-  previewRuntime = null
+  // R13: the preview owner's commit of an edit to the displayed Result.
+  commitActiveResultEdit = null,
+  // R13: the composition root's projection of the palette and the rules (R3),
+  // which prepares the rule matches and paints the tracks through this owner.
+  projectPaletteAndRules
 }) => {
   const {
     svgContent,
-    extractedFeatures,
-    featuresBySvgId,
     appliedPaletteColors,
-    manualSpecificRules,
-    featureColorOverrides,
-    legendColorOverrides,
     pairwiseMatchFactors,
     svgContainer,
-    adv,
-    mode,
-    form
+    mode
   } = state;
-
-  const { getAllFeatureLegendGroups } = legendActions;
 
   const updatePairwiseLegendGradientStops = (pairwiseLegend, colors) => {
     let updated = false;
@@ -81,43 +83,25 @@ export const createSvgStyles = ({
     return updated;
   };
 
+  // The palette styles the tracks of the displayed Result with the settings of
+  // the drawing of that Result's mode: its skew slot colors (OV-108). Feature
+  // and Legend row fills are editor operations (`projectPaletteAndRules`).
   const applyPaletteToSvg = ({
     recolorPairwise = false,
     recolorCollinear = false
   } = {}) => {
+    const resultMode = (state.generatedMode?.value ?? mode.value) === 'linear' ? 'linear' : 'circular';
+    const drawing = state.drawings[resultMode];
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
-    if (!svgContent.value || !extractedFeatures.value.length) return;
+    if (!svgContent.value) return;
     if (!svgContainer.value) return;
-    if (!ruleMatchesReady(extractedFeatures.value, manualSpecificRules)) return;
 
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
 
-    const colors = appliedPaletteColors.value;
-    const featurePaths = Array.from(getFeatureElementIndex(svg).values()).flat();
-    const featureLookup = featuresBySvgId?.value || new Map();
+    const colors = appliedFeatureColors(state);
     let updatedCount = 0;
-
-    featurePaths.forEach((path) => {
-      if (!isFeatureFillTarget(path)) return;
-      const svgId = getFeatureIdentity(path);
-      const feat = featureLookup.get(svgId);
-      if (!feat) return;
-
-      const paletteColor = colors[feat.type] || colors.default;
-      if (!paletteColor) return;
-
-      const hasSpecificRule = manualSpecificRules.some((rule) => ruleMatchesFeature(feat, rule));
-
-      if (!hasSpecificRule && !getFeatureOverride(featureColorOverrides, feat)) {
-        const currentFill = path.getAttribute('fill');
-        if (currentFill !== paletteColor) {
-          path.setAttribute('fill', paletteColor);
-          updatedCount++;
-        }
-      }
-    });
 
     const gcContentGroups = getGroupsByBaseIds(
       svg,
@@ -141,12 +125,12 @@ export const createSvgStyles = ({
     if (skewGroups.length > 0) {
       skewGroups.forEach((skewGroup) => {
         const slotId = String(skewGroup.getAttribute('data-gbdraw-slot-id') || '').trim();
-        const customSlotsEnabled = mode.value === 'circular'
-          ? adv.circular_track_slots_enabled
-          : adv.linear_track_slots_enabled;
-        const slots = mode.value === 'circular'
-          ? adv.circular_track_slots
-          : adv.linear_track_slots;
+        const customSlotsEnabled = resultMode === 'circular'
+          ? drawing.adv.circular_track_slots_enabled
+          : drawing.adv.linear_track_slots_enabled;
+        const slots = resultMode === 'circular'
+          ? drawing.adv.circular_track_slots
+          : drawing.adv.linear_track_slots;
         const slot = customSlotsEnabled && Array.isArray(slots)
           ? slots.find((candidate) => (
               candidate?.enabled !== false &&
@@ -154,16 +138,16 @@ export const createSvgStyles = ({
               String(candidate?.id || '').trim() === slotId
             ))
           : null;
-        const positiveColor = resolveTrackSlotSkewColorValue({
+        const positiveColor = resolveTrackSlotSkewColorValue(/** @type {any} */ ({
           slot,
           key: 'positive_color',
           currentColors: colors
-        });
-        const negativeColor = resolveTrackSlotSkewColorValue({
+        }));
+        const negativeColor = resolveTrackSlotSkewColorValue(/** @type {any} */ ({
           slot,
           key: 'negative_color',
           currentColors: colors
-        });
+        }));
         const skewPaths = skewGroup.querySelectorAll('path');
         let pathIndex = 0;
         skewPaths.forEach((path) => {
@@ -249,99 +233,6 @@ export const createSvgStyles = ({
       }
     }
 
-    const featureLegendGroups = getAllFeatureLegendGroups(svg);
-    const keyToColorKey = {
-      CDS: 'CDS',
-      'D-loop': 'D-loop',
-      repeat_region: 'repeat_region',
-      tmRNA: 'tmRNA',
-      tRNA: 'tRNA',
-      rRNA: 'rRNA',
-      ncRNA: 'ncRNA',
-      misc_feature: 'misc_feature',
-      mobile_element: 'mobile_element',
-      'GC content': 'gc_content',
-      'GC skew (+)': 'skew_high',
-      'GC skew (-)': 'skew_low'
-    };
-    const resolveOtherLegendColor = (legendKey, palette) => {
-      if (!legendKey) return null;
-      const lowerKey = legendKey.toLowerCase();
-      if (lowerKey === 'other proteins') return palette.CDS || null;
-      if (!lowerKey.startsWith('other ')) return null;
-      let raw = legendKey.slice(6).trim();
-      if (!raw) return null;
-      if (raw.toLowerCase() === 'proteins') return palette.CDS || null;
-      if (raw.endsWith('s')) raw = raw.slice(0, -1);
-      return palette[raw] || null;
-    };
-    const resolveLegendColor = (legendKey, palette) => {
-      if (!legendKey) return null;
-      const colorKey = keyToColorKey[legendKey];
-      if (colorKey && palette[colorKey]) return palette[colorKey];
-      if (palette[legendKey]) return palette[legendKey];
-      return resolveOtherLegendColor(legendKey, palette);
-    };
-    featureLegendGroups.forEach((featureLegendGroup) => {
-      if (!featureLegendGroup) return;
-
-      const entryGroups = featureLegendGroup.querySelectorAll('g[data-legend-key]');
-
-      if (entryGroups.length > 0) {
-        entryGroups.forEach((entryGroup) => {
-          const legendKey = entryGroup.getAttribute('data-legend-key');
-          if (!legendKey) return;
-          if (legendColorOverrides[legendKey]) return;
-
-          const newColor = resolveLegendColor(legendKey, colors);
-          if (!newColor) return;
-
-          const paths = entryGroup.querySelectorAll('path');
-          for (const path of paths) {
-            const fill = path.getAttribute('fill');
-            if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-              if (setColorAttributeIfChanged(path, 'fill', newColor)) updatedCount++;
-              break;
-            }
-          }
-        });
-      } else {
-        const texts = featureLegendGroup.querySelectorAll('text');
-        const allPaths = featureLegendGroup.querySelectorAll('path');
-        texts.forEach((textEl) => {
-          const textContent = textEl.textContent?.trim();
-          if (!textContent) return;
-          if (legendColorOverrides[textContent]) return;
-
-          const newColor = resolveLegendColor(textContent, colors);
-          if (!newColor) return;
-
-          const textPos = parseTransformXY(textEl.getAttribute('transform'));
-          let bestPath = null;
-          let bestX = -Infinity;
-          for (const path of allPaths) {
-            const pathPos = parseTransformXY(path.getAttribute('transform'));
-            const fill = path.getAttribute('fill');
-            if (
-              Math.abs(pathPos.y - textPos.y) < 2 &&
-              pathPos.x < textPos.x &&
-              fill &&
-              fill !== 'none' &&
-              !fill.startsWith('url(')
-            ) {
-              if (pathPos.x > bestX) {
-                bestX = pathPos.x;
-                bestPath = path;
-              }
-            }
-          }
-          if (bestPath) {
-            if (setColorAttributeIfChanged(bestPath, 'fill', newColor)) updatedCount++;
-          }
-        });
-      }
-    });
-
     if (colors.pairwise_match_min && colors.pairwise_match_max) {
       const allPairwiseLegends = svg.querySelectorAll(PAIRWISE_LEGEND_SELECTOR);
       allPairwiseLegends.forEach((pairwiseLegend) => {
@@ -349,49 +240,11 @@ export const createSvgStyles = ({
       });
     }
 
-    if (updatedCount > 0) previewRuntime?.commitActiveResultEdit('palette');
-  };
-
-  const applySpecificRulesToSvg = () => {
-    const sessionBusy = state.sessionOperationAvailability?.();
-    if (sessionBusy) return sessionBusy;
-    if (!svgContent.value || !extractedFeatures.value.length) return;
-    if (!manualSpecificRules.length) return;
-    if (!svgContainer.value) return;
-    if (!ruleMatchesReady(extractedFeatures.value, manualSpecificRules)) return;
-
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return;
-
-    const featureElementIndex = getFeatureElementIndex(svg);
-    let updatedCount = 0;
-
-    extractedFeatures.value.forEach((feat) => {
-      if (!feat.svg_id) return;
-
-      const matchingRule = firstMatchingRule(feat, manualSpecificRules);
-
-      const elements = getFeatureFillElements(svg, feat.svg_id, featureElementIndex);
-      if (elements.length > 0) {
-        const newColor = matchingRule
-          ? matchingRule.color
-          : appliedPaletteColors.value[feat.type] || appliedPaletteColors.value.default;
-        elements.forEach((el) => {
-          if (el.getAttribute('fill') !== newColor) {
-            el.setAttribute('fill', newColor);
-            updatedCount++;
-          }
-        });
-      }
-    });
-
-    if (updatedCount > 0) {
-      previewRuntime?.commitActiveResultEdit('specific-rules');
-      console.log(`Applied specific rules: updated ${updatedCount} elements`);
-    }
+    if (updatedCount > 0) commitActiveResultEdit?.('palette');
   };
 
   const applyTrackVisibility = () => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!svgContent.value) return;
@@ -408,7 +261,7 @@ export const createSvgStyles = ({
       ['dinucleotide_content']
     );
     if (gcContentGroups.length > 0) {
-      const shouldHide = mode.value === 'circular' ? form.suppress_gc : !form.show_gc;
+      const shouldHide = mode.value === 'circular' ? drawing.form.suppress_gc : !drawing.form.show_gc;
       gcContentGroups.forEach((gcContentGroup) => {
         const currentDisplay = gcContentGroup.getAttribute('display');
         if (shouldHide && currentDisplay !== 'none') {
@@ -427,7 +280,7 @@ export const createSvgStyles = ({
       ['dinucleotide_skew']
     );
     if (skewGroups.length > 0) {
-      const shouldHide = mode.value === 'circular' ? form.suppress_skew : !form.show_skew;
+      const shouldHide = mode.value === 'circular' ? drawing.form.suppress_skew : !drawing.form.show_skew;
       skewGroups.forEach((skewGroup) => {
         const currentDisplay = skewGroup.getAttribute('display');
         if (shouldHide && currentDisplay !== 'none') {
@@ -442,7 +295,7 @@ export const createSvgStyles = ({
 
     const depthGroups = getGroupsByBaseIds(svg, ['depth'], ['depth']);
     if (depthGroups.length > 0) {
-      const shouldHide = !form.show_depth;
+      const shouldHide = !drawing.form.show_depth;
       depthGroups.forEach((depthGroup) => {
         const currentDisplay = depthGroup.getAttribute('display');
         if (shouldHide && currentDisplay !== 'none') {
@@ -456,7 +309,7 @@ export const createSvgStyles = ({
     }
 
     if (updated) {
-      previewRuntime?.commitActiveResultEdit('track-visibility');
+      commitActiveResultEdit?.('track-visibility');
       console.log('Track visibility updated');
     }
   };
@@ -482,26 +335,24 @@ export const createSvgStyles = ({
           'collinear_block_minus'
         ]
       );
-      nextTick(async () => {
-        if (!await rulePreparation.prepare()) return;
-        applyPaletteToSvg({ recolorPairwise, recolorCollinear });
-        applySpecificRulesToSvg();
-      });
+      nextTick(() => projectPaletteAndRules({ recolor: { recolorPairwise, recolorCollinear } }));
     },
     { deep: true }
   );
 
-  watch(
-    () => [form.suppress_gc, form.suppress_skew, form.show_gc, form.show_skew, form.show_depth],
+  // Each drawing's track toggles; a mode switch changes neither drawing, so it
+  // applies nothing (R10).
+  /** @type {DrawingState[]} */ ([state.drawings.circular, state.drawings.linear]).forEach((drawing) => watch(
+    () => [drawing.form.suppress_gc, drawing.form.suppress_skew, drawing.form.show_gc, drawing.form.show_skew, drawing.form.show_depth],
     () => {
+      if (drawing !== state.activeDrawing()) return;
       if (state.semanticFileWatchersSuppressed?.value || state.sessionOperationAvailability?.()) return;
       applyTrackVisibility();
     }
-  );
+  ));
 
   return {
     applyPaletteToSvg,
-    applySpecificRulesToSvg,
     applyTrackVisibility
   };
 };

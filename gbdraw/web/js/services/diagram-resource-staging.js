@@ -1,3 +1,4 @@
+// @ts-check
 import { collectCanonicalResourceIds } from './canonical-resource-references.js';
 import { decodeDepthText, isEncodedDepthFileEntry } from './depth-file-codec.js';
 import { takeFileBytesForTransfer } from './file-content-cache.js';
@@ -72,6 +73,7 @@ export const createDiagramResourceTransport = () => {
     nextCacheToken = 1;
   };
 
+  /** @param {{ request?: any, resources?: any }} [payload] */
   const prepare = async ({ request, resources } = {}) => {
     const previousCachedResources = cachedResources;
     const referencedIds = Array.from(collectCanonicalResourceIds(request));

@@ -14,7 +14,9 @@ from ..core.record_metadata import (
     _feature_source_index_map,
     _source_feature_index,
 )
+from .ids import compute_source_feature_hash
 from .objects import GeneObject, RepeatObject, FeatureObject
+from .overrides import feature_override_lookup
 from .visibility import should_render_feature
 from ..labels.filtering import get_label_text
 from .colors import get_color, get_color_with_info
@@ -30,7 +32,8 @@ from .shapes import (
 from gbdraw.exceptions import ValidationError
 from .tracks import arrange_feature_tracks
 if TYPE_CHECKING:
-    from .placement import FeaturePlacementSlot, ResolvedPlacementInputs
+    from .overrides import ResolvedFeatureOverride
+    from .placement import FeaturePlacementSlot, ResolvedRecordFeatureInputs
 
 
 def create_repeat_object(
@@ -44,6 +47,7 @@ def create_repeat_object(
     record_id: Optional[str] = None,
     compute_label_text: bool = True,
     glyph_kind: FeatureGlyph | None = None,
+    feature_override: ResolvedFeatureOverride | None = None,
 ) -> RepeatObject:
     """
     Creates a RepeatObject representing a repeat region in a genome.
@@ -55,7 +59,10 @@ def create_repeat_object(
     location = get_exon_and_intron_coordinates(coordinates, genome_length)
     color: str = get_color(feature, color_table, default_colors, record_id=record_id)
     feature_type = feature.type
-    label_text = get_label_text(feature, label_filtering, record_id=record_id) if compute_label_text else ""
+    label_text = (
+        get_label_text(feature, label_filtering, record_id=record_id, feature_override=feature_override)
+        if compute_label_text else ""
+    )
 
     repeat_object = RepeatObject(
         repeat_id,
@@ -72,6 +79,7 @@ def create_repeat_object(
         record_id=record_id,
         glyph_kind=glyph_kind,
     )
+    repeat_object.feature_override = feature_override
     return repeat_object
 
 
@@ -86,6 +94,7 @@ def create_feature_object(
     record_id: Optional[str] = None,
     compute_label_text: bool = True,
     glyph_kind: FeatureGlyph | None = None,
+    feature_override: ResolvedFeatureOverride | None = None,
 ) -> FeatureObject:
     """
     Creates a FeatureObject representing a generic genomic feature.
@@ -95,7 +104,10 @@ def create_feature_object(
     location = get_exon_and_intron_coordinates(coordinates, genome_length)
     color: str = get_color(feature, color_table, default_colors, record_id=record_id)
     feature_type = feature.type
-    label_text = get_label_text(feature, label_filtering, record_id=record_id) if compute_label_text else ""
+    label_text = (
+        get_label_text(feature, label_filtering, record_id=record_id, feature_override=feature_override)
+        if compute_label_text else ""
+    )
 
     feature_object = FeatureObject(
         feature_id,
@@ -110,6 +122,7 @@ def create_feature_object(
         record_id=record_id,
         glyph_kind=glyph_kind,
     )
+    feature_object.feature_override = feature_override
     return feature_object
 
 
@@ -124,6 +137,7 @@ def create_gene_object(
     record_id: Optional[str] = None,
     compute_label_text: bool = True,
     glyph_kind: FeatureGlyph | None = None,
+    feature_override: ResolvedFeatureOverride | None = None,
 ) -> GeneObject:
     """
     Creates a GeneObject representing a gene in a genome.
@@ -136,7 +150,10 @@ def create_gene_object(
     feature_type = feature.type
     location = get_exon_and_intron_coordinates(coordinates, genome_length, is_trans_spliced)
     color: str = get_color(feature, color_table, default_colors, record_id=record_id)
-    label_text = get_label_text(feature, label_filtering, record_id=record_id) if compute_label_text else ""
+    label_text = (
+        get_label_text(feature, label_filtering, record_id=record_id, feature_override=feature_override)
+        if compute_label_text else ""
+    )
 
     gene_object = GeneObject(
         feature_id,
@@ -154,6 +171,7 @@ def create_gene_object(
         record_id=record_id,
         glyph_kind=glyph_kind,
     )
+    gene_object.feature_override = feature_override
     return gene_object
 
 
@@ -179,7 +197,7 @@ def _build_feature_layers(
     feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
     compute_label_text: bool = True,
     record_transform: RecordDisplayTransform | None = None,
-    placement_inputs: ResolvedPlacementInputs | None = None,
+    record_features: ResolvedRecordFeatureInputs | None = None,
     placement_slot: FeaturePlacementSlot | None = None,
     feature_overlap_tolerance_bp: int = 0,
 ) -> FeatureBuildResult:
@@ -191,14 +209,19 @@ def _build_feature_layers(
     feature_count: int = 0
     genome_length: int = len(gb_record.seq)
     source_indexes = _feature_source_index_map(gb_record.features)
+    override_of = feature_override_lookup(
+        gb_record, record_features.overrides if record_features is not None else None
+    )
 
     for feature in gb_record.features:
+        override = override_of(feature)
         if not should_render_feature(
             feature,
             selected_features_set,
             feature_visibility_rules=feature_visibility_rules,
             record_id=gb_record.id,
             specific_color_rules=color_table,
+            feature_override=override,
         ):
             continue
 
@@ -212,6 +235,8 @@ def _build_feature_layers(
         )
         include_label = compute_label_text and rendering != "underlay"
 
+        feature_id: str
+        feature_object: FeatureObject
         if feature.type in {"CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA"}:
             locus_count += 1
             locus_id: str = "gene_" + str(locus_count).zfill(9)
@@ -226,6 +251,7 @@ def _build_feature_layers(
                 record_id=gb_record.id,
                 compute_label_text=include_label,
                 glyph_kind=glyph_kind,
+                feature_override=override,
             )
             feature_id, feature_object = locus_id, gene_object
         elif feature.type == "repeat_region":
@@ -242,12 +268,13 @@ def _build_feature_layers(
                 record_id=gb_record.id,
                 compute_label_text=include_label,
                 glyph_kind=glyph_kind,
+                feature_override=override,
             )
             feature_id, feature_object = repeat_id, repeat_object
         else:
             feature_count += 1
-            feature_id: str = "feature_" + str(feature_count).zfill(9)
-            feature_object: FeatureObject = create_feature_object(
+            feature_id = "feature_" + str(feature_count).zfill(9)
+            feature_object = create_feature_object(
                 feature_id,
                 feature,
                 color_table,
@@ -258,6 +285,7 @@ def _build_feature_layers(
                 record_id=gb_record.id,
                 compute_label_text=include_label,
                 glyph_kind=glyph_kind,
+                feature_override=override,
             )
         source_feature_index = _source_feature_index(feature)
         feature_object.source_feature_index = (
@@ -265,6 +293,7 @@ def _build_feature_layers(
             if source_feature_index is None
             else source_feature_index
         )
+        feature_object.feature_hash = compute_source_feature_hash(feature, gb_record)
         if record_transform is not None and record_transform.start_coordinate is not None:
             feature_object.display_parts = project_feature_parts(
                 feature.location.parts, record_transform,
@@ -279,12 +308,12 @@ def _build_feature_layers(
         from .placement import plan_feature_placements
 
         plan_feature_placements(
-            foreground_features, slot=placement_slot, placement_inputs=placement_inputs,
+            foreground_features, slot=placement_slot, record_features=record_features,
             resolve_overlaps=resolve_overlaps, tolerance_bp=feature_overlap_tolerance_bp,
             genome_length=genome_length,
         )
     else:
-        if placement_inputs is not None and placement_inputs.overrides:
+        if record_features is not None and record_features.placements:
             raise ValidationError("Feature placement requires resolved slot geometry.")
         arrange_feature_tracks(
             foreground_features, separate_strands, resolve_overlaps,
@@ -311,7 +340,7 @@ def create_feature_layers(
     feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
     compute_label_text: bool = True,
     record_transform: RecordDisplayTransform | None = None,
-    placement_inputs: ResolvedPlacementInputs | None = None,
+    record_features: ResolvedRecordFeatureInputs | None = None,
     placement_slot: FeaturePlacementSlot | None = None,
     feature_overlap_tolerance_bp: int = 0,
 ) -> FeatureBuildResult:
@@ -334,7 +363,7 @@ def create_feature_layers(
         feature_visibility_rules=feature_visibility_rules,
         compute_label_text=compute_label_text,
         record_transform=record_transform,
-        placement_inputs=placement_inputs,
+        record_features=record_features,
         placement_slot=placement_slot,
         feature_overlap_tolerance_bp=feature_overlap_tolerance_bp,
     )

@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { DrawingState, LegendEntry } from '../state.js' */
 import { createLegendDragActions } from './legend/drag-actions.js';
 import { createLegendEntryActions } from './legend/entry-actions.js';
 import { createLegendLayoutActions } from './legend/layout-actions.js';
@@ -6,65 +8,79 @@ import { createLegendStrokeActions } from './legend/stroke-actions.js';
 import {
   getAllFeatureLegendGroups,
   getVisibleFeatureLegendGroup,
-  isCurrentLegendHorizontal
-} from './legend/utils.js';
-import { legendRowRules } from './specific-color-rules.js';
+  isCurrentLegendHorizontal,
+  legendEntryKey
+} from '../services/legend-svg.js';
+import { legendRowRules } from '../services/specific-color-rules.js';
+import { displayedLegendRowContext } from '../services/feature-visibility.js';
 
+/**
+ * @typedef {object} LegendManagerOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {(rows: Array<Record<string, any>>, label?: string) => Promise<any>} commitLegendRowRules
+ *   The rule owner's commit of the specific-color rules that a Legend row edit changes (R13).
+ * @property {((label?: string, options?: { source?: string, owner?: unknown }) => Promise<any>) | null} [beginHistoryTransaction]
+ *   History's begin of one step (R11); resolves to the transaction, or null when History is busy.
+ * @property {((transaction: any, options?: Record<string, any>) => Promise<any>) | null} [commitHistoryTransaction]
+ *   History's commit of the step that `beginHistoryTransaction` opened.
+ * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
+ *   The preview owner's commit of an edit to the displayed Result (R1, R13).
+ * @property {(() => string | undefined) | null} [readActiveResultIdentity]
+ *   The preview owner's runtime identity of the mounted Result.
+ * @property {import('./candidate-render.js').LegendRowColorOf} readShownLegendColor
+ *   The root's color of a listed row as the Legend panel shows it (OV-282).
+ * @property {() => unknown} showLegendStructure The root's show of the Legend structure intent (R1).
+ */
+
+/** @param {LegendManagerOptions} options */
 export const createLegendManager = ({
   state,
-  rulePreparation,
-  commitSpecificRules,
-  history = null,
-  previewRuntime = null,
-  getCommittedRequest = () => null
+  commitLegendRowRules,
+  beginHistoryTransaction = null,
+  commitHistoryTransaction = null,
+  // R13: the preview owner's ports; the Legend owners never hold it.
+  commitActiveResultEdit = null,
+  readActiveResultIdentity = null,
+  readShownLegendColor,
+  showLegendStructure
 }) => {
-  const layoutActions = createLegendLayoutActions({ state });
-  const entryActions = createLegendEntryActions({
-    state,
-    layoutActions,
-    previewRuntime,
-    getCommittedRequest
-  });
-  const sortActions = createLegendSortActions({
-    state,
-    extractLegendEntries: entryActions.extractLegendEntries,
-    previewRuntime
-  });
-  const strokeActions = createLegendStrokeActions({ state, previewRuntime });
-  const rowRulesAt = (index) => legendRowRules(state.legendEntries.value[index]?.caption, {
-    rules: state.manualSpecificRules,
-    legendEntries: state.legendEntries.value,
-    originalLegendOrder: state.originalLegendOrder?.value || []
-  });
+  const layoutActions = createLegendLayoutActions();
+  const entryActions = createLegendEntryActions({ state, readActiveResultIdentity, readShownLegendColor });
+  const sortActions = createLegendSortActions({ state, showLegendStructure });
+  const strokeActions = createLegendStrokeActions({ state });
+  // The rules a row draws, by its key among Python's rows of the displayed
+  // Result (OV-294).
+  /** @param {DrawingState} drawing @param {number} index */
+  const rowRulesAt = (drawing, index) => {
+    /** @type {LegendEntry | undefined} */
+    const entry = drawing.legendEntries.value[index];
+    return entry ? legendRowRules(legendEntryKey(entry), displayedLegendRowContext(state, drawing)) : [];
+  };
   const dragActions = createLegendDragActions({
     state,
-    extractLegendEntries: entryActions.extractLegendEntries,
-    history,
-    previewRuntime
+    beginHistoryTransaction,
+    commitHistoryTransaction,
+    commitActiveResultEdit
   });
 
   return {
     ...entryActions,
     // A row a rule draws, including its N-06 "<caption> [<hex>]" row, edits
-    // that rule; any other row is a legend-only edit.
+    // that rule through the rule owner's port (R13); any other row is a
+    // legend-only edit, which the root shows on the Result.
+    /** @param {number} index */
+    legendRowHasRules: (index) => rowRulesAt(state.activeDrawing(), index).length > 0,
     updateLegendEntryColor: (index, color) => {
-      const rowRules = rowRulesAt(index);
+      const drawing = state.activeDrawing();
+      const rowRules = rowRulesAt(drawing, index);
       if (rowRules.length) {
-        return commitSpecificRules(state.manualSpecificRules.map(rule => rowRules.includes(rule) ? { ...rule, color } : { ...rule }), 'Change legend color');
+        return commitLegendRowRules(drawing.manualSpecificRules.map(rule => rowRules.includes(rule) ? { ...rule, color } : { ...rule }), 'Change legend color');
       }
       return entryActions.updateLegendEntryColor(index, color);
-    },
-    updateLegendEntryCaption: (index, caption) => {
-      const rowRules = rowRulesAt(index);
-      if (rowRules.length) {
-        return commitSpecificRules(state.manualSpecificRules.map(rule => rowRules.includes(rule) ? { ...rule, cap: caption } : { ...rule }), 'Rename legend item');
-      }
-      return entryActions.updateLegendEntryCaption(index, caption);
     },
     ...layoutActions,
     ...sortActions,
     ...strokeActions,
-    captureOriginalStrokeValues: (...args) => rulePreparation.run(state.manualSpecificRules, () => strokeActions.captureOriginalStrokeValues(...args)),
     ...dragActions,
     getAllFeatureLegendGroups,
     getVisibleFeatureLegendGroup,

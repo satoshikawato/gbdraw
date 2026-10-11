@@ -79,8 +79,8 @@ def test_fasta_genbank_and_ddbj_give_the_same_records(tmp_path: Path) -> None:
             (r.id, r.name, str(r.seq).upper()) for r in fasta.records
         ]
     assert fasta.records[0].id == "NC_002333.2" and len(fasta.records[0]) == 16_596
-    # Default ring labels: FASTA file name (precomputed rule); flat file DEFINITION.
-    assert fasta.label == "NC_002333.2.fna"
+    # Default ring labels: FASTA file name without the extension (D-03); flat file DEFINITION.
+    assert fasta.label == "NC_002333.2"
     assert genbank.label == ddbj.label == "Danio rerio mitochondrion, complete genome"
 
 
@@ -91,6 +91,24 @@ def test_flat_file_label_falls_back_to_the_organism(tmp_path: Path) -> None:
     path = tmp_path / "no-definition.gb"
     path.write_text(head + "DEFINITION  .\nACCESSION" + rest, encoding="utf-8")
     assert read_comparison_sequence_file(path).label == "Danio rerio"
+
+
+_LABEL_CASES = json.loads(
+    (REPO_ROOT / "tests" / "fixtures" / "comparison_ring_default_label_cases.json").read_text(encoding="utf-8")
+)["cases"]
+
+
+@pytest.mark.parametrize("case", _LABEL_CASES, ids=[case["fileName"] for case in _LABEL_CASES])
+def test_unlabelled_file_takes_the_shared_file_stem(tmp_path: Path, case: dict) -> None:
+    # The Web defaultConservationSeriesLabel runs the same vectors.
+    path = tmp_path / case["fileName"]
+    path.write_text(">s1\nACGT\n", encoding="utf-8")
+    assert read_comparison_sequence_file(path).label == case["expected"]
+    path.write_text(DANIO_GENBANK.read_text(encoding="utf-8").replace(
+        "DEFINITION  Danio rerio mitochondrion, complete genome.", "DEFINITION  ."
+    ).replace("ORGANISM  Danio rerio", "ORGANISM  ."), encoding="utf-8")
+    flat = read_comparison_sequence_file(path)
+    assert (flat.format, flat.record_label, flat.label) == ("genbank", None, case["expected"])
 
 
 @pytest.mark.parametrize("variant", ["empty-origin", "contig-only"])

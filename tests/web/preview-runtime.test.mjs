@@ -6,49 +6,36 @@ import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
 const sourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'preview-runtime.js');
-const featureDomSourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'feature-dom.js');
-const legendUtilsSourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'legend', 'utils.js');
-const legendTransformSourcePath = join(
-  repoRoot,
-  'gbdraw',
-  'web',
-  'js',
-  'app',
-  'legend-layout',
-  'transform-utils.js'
-);
+const featureDomSourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'feature-dom.js');
 const serviceNames = [
-  'error-normalization.js',
   'current-worker-result-source.js',
+  'legend-svg.js',
+  'result-paint-bases.js',
   'runtime-test-hooks.js',
   'session-feature-metadata.js',
   'svg-result-normalization.js',
   'svg-result-ingestion.js',
   'svg-sanitization.js',
-  'svg-serialization.js'
+  'svg-serialization.js',
+  'svg-transform.js'
 ];
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-preview-runtime-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'app'), { recursive: true });
-await mkdir(join(tempDir, 'app', 'legend'), { recursive: true });
-await mkdir(join(tempDir, 'app', 'legend-layout'), { recursive: true });
 await mkdir(join(tempDir, 'services'), { recursive: true });
 await writeFile(join(tempDir, 'app', 'preview-runtime.js'), await readFile(sourcePath, 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'app', 'feature-dom.js'), await readFile(featureDomSourcePath, 'utf8'), 'utf8');
-await writeFile(
-  join(tempDir, 'app', 'legend', 'utils.js'),
-  await readFile(legendUtilsSourcePath, 'utf8'),
-  'utf8'
-);
-await writeFile(
-  join(tempDir, 'app', 'legend-layout', 'transform-utils.js'),
-  await readFile(legendTransformSourcePath, 'utf8'),
-  'utf8'
-);
+await writeFile(join(tempDir, 'services', 'feature-dom.js'), await readFile(featureDomSourcePath, 'utf8'), 'utf8');
 await Promise.all(serviceNames.map(async (name) => {
   const servicePath = join(repoRoot, 'gbdraw', 'web', 'js', 'services', name);
   await writeFile(join(tempDir, 'services', name), await readFile(servicePath, 'utf8'), 'utf8');
 }));
+
+await mkdir(join(tempDir, 'utils'), { recursive: true });
+await writeFile(
+  join(tempDir, 'utils', 'error-normalization.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'error-normalization.js'), 'utf8'),
+  'utf8'
+);
 
 const { createPreviewRuntime } = await import(pathToFileURL(join(tempDir, 'app', 'preview-runtime.js')));
 
@@ -124,8 +111,17 @@ const runtime = createPreviewRuntime({
   }
 });
 
+// An editor's edit of the mounted elements' display, committed as every editor
+// edit commits (R1); false when nothing changed or no Result is displayed.
+const editDisplay = (edits) => {
+  const changed = edits.filter(([element, mode]) => (mode === 'off'
+    ? element.getAttribute('display') !== 'none' : element.getAttribute('display') !== null));
+  changed.forEach(([element, mode]) => (mode === 'off' ? element.setAttribute('display', 'none') : element.removeAttribute('display')));
+  return changed.length > 0 && runtime.commitActiveResultEdit('feature-visibility');
+};
+
 runtime.mountResultSvg(0, svg);
-assert.equal(runtime.applyFeatureVisibilityChanges([{ featureId: 'feature-a', mode: 'off' }]), true);
+assert.equal(editDisplay([[featureA, 'off']]), true);
 assert.equal(featureA.getAttribute('display'), 'none');
 assert.equal(serializeCount, 1);
 assert.equal(resultReplacementCount, 1);
@@ -134,16 +130,13 @@ assert.equal(state.skipCaptureBaseConfig.value, true);
 
 state.skipCaptureBaseConfig.value = false;
 const resultAfterSingleEdit = state.results.value[0];
-assert.equal(runtime.applyFeatureVisibilityChanges([{ featureId: 'feature-a', mode: 'off' }]), false);
+assert.equal(editDisplay([[featureA, 'off']]), false);
 assert.equal(serializeCount, 1);
 assert.equal(resultReplacementCount, 1);
 assert.equal(state.results.value[0], resultAfterSingleEdit);
 assert.equal(state.skipCaptureBaseConfig.value, false);
 
-assert.equal(runtime.applyFeatureVisibilityChanges([
-  { featureId: 'feature-a', mode: 'on' },
-  { featureId: 'feature-b', mode: 'off' }
-]), true);
+assert.equal(editDisplay([[featureA, 'on'], [featureBBlock, 'off'], [featureBConnector, 'off']]), true);
 assert.equal(featureA.getAttribute('display'), null);
 assert.equal(featureBBlock.getAttribute('display'), 'none');
 assert.equal(featureBConnector.getAttribute('display'), 'none');
@@ -152,10 +145,7 @@ assert.equal(resultReplacementCount, 2);
 
 state.skipCaptureBaseConfig.value = false;
 const resultAfterBulkEdit = state.results.value[0];
-assert.equal(runtime.applyFeatureVisibilityChanges([
-  { featureId: 'feature-a', mode: 'on' },
-  { featureId: 'feature-b', mode: 'off' }
-]), false);
+assert.equal(editDisplay([[featureA, 'on'], [featureBBlock, 'off'], [featureBConnector, 'off']]), false);
 assert.equal(serializeCount, 2);
 assert.equal(resultReplacementCount, 2);
 assert.equal(state.results.value[0], resultAfterBulkEdit);
@@ -199,11 +189,66 @@ delete legacyBlock.attributes['data-gbdraw-feature-id'];
 delete legacyBlock.attributes['data-gbdraw-feature-part'];
 const legacySvg = makeSvg([legacyConnector, legacyBlock]);
 state.svgContainer.value = { querySelector: (selector) => (selector === 'svg' ? legacySvg : null) };
-assert.equal(runtime.applyFeatureVisibilityChanges([{ featureId: 'feature-c', mode: 'off' }]), true);
+assert.equal(editDisplay([[legacyBlock, 'off'], [legacyConnector, 'off']]), true);
 assert.equal(legacyBlock.getAttribute('display'), 'none');
 assert.equal(legacyConnector.getAttribute('display'), 'none');
 assert.equal(runtime.getActiveRuntime().resultIndex, 1);
 assert.equal(state.results.value[1].content, '<svg data-count="4" data-elements="2"></svg>');
+
+// E1: a Session Load releases the displayed Result; a Load that fails and
+// rolls back selects the same Result again, under the same root, which edits
+// commit into as before (REVIEW-2 R).
+{
+  const kept = state.results.value;
+  runtime.clearActiveRuntime();
+  // The Load empties the Results, fails, and its rollback resets again.
+  state.results.value = [];
+  runtime.clearActiveRuntime();
+  state.results.value = [...kept];
+  const writes = resultReplacementCount;
+  assert.equal(editDisplay([[legacyBlock, 'on'], [legacyConnector, 'on']]), true);
+  assert.equal(runtime.getActiveRuntime().svg, legacySvg);
+  assert.equal(resultReplacementCount, writes + 1);
+}
+
+// E1: a mode switch releases the displayed Result and installs the other
+// mode's Results before the next render replaces the released root. An edit
+// made in between (a Show Depth repair) leaves the arriving Result alone.
+{
+  runtime.clearActiveRuntime();
+  const arriving = [{ name: 'arriving.svg', content: '<svg id="arriving"></svg>' }];
+  state.results.value = arriving;
+  state.selectedResultIndex.value = 0;
+  const writes = resultReplacementCount;
+  assert.equal(editDisplay([[legacyBlock, 'off']]), false);
+  assert.equal(runtime.commitActiveResultEdit('track-visibility'), false);
+  assert.equal(resultReplacementCount, writes);
+  assert.equal(state.results.value[0].content, '<svg id="arriving"></svg>');
+  assert.equal(runtime.getActiveRuntime(), null);
+  // The render mounts the arriving Result's own root, which edits commit into.
+  const arrivingBlock = new FakeFeatureElement('feature-d__part1', { featureId: 'feature-d', fill: '#333333' });
+  const arrivingSvg = makeSvg([arrivingBlock]);
+  state.svgContainer.value = { querySelector: (selector) => (selector === 'svg' ? arrivingSvg : null) };
+  assert.equal(editDisplay([[arrivingBlock, 'off']]), true);
+  assert.equal(runtime.getActiveRuntime().svg, arrivingSvg);
+  assert.equal(state.results.value[0].content, '<svg data-count="6" data-elements="1"></svg>');
+}
+
+// OV-345: a display, History restore, or Reset that changes nothing in the
+// displayed Result neither lays out its Legend nor serializes it, so the
+// Result keeps the bytes it has (Python's, after a Generate or a Load).
+{
+  const { createEmptySvgMutationPlan } = await import(pathToFileURL(join(tempDir, 'services', 'svg-result-ingestion.js')));
+  const shown = state.results.value[0];
+  const serialized = serializeCount;
+  const writes = resultReplacementCount;
+  let laidOut = 0;
+  const afterApply = () => { laidOut += 1; };
+  assert.equal(runtime.applyEditorOperations(null, { afterApply }), false);
+  assert.equal(runtime.applyEditorOperations(createEmptySvgMutationPlan(1).operationsByResult[0], { domains: [], afterApply }), false);
+  assert.deepEqual([serializeCount, resultReplacementCount, laidOut], [serialized, writes, 0]);
+  assert.equal(state.results.value[0], shown);
+}
 
 const structuralMetrics = [];
 const lifecycleEvents = [];
@@ -457,5 +502,75 @@ assert.equal(metricTotal('featureDomFullScanCount', 'generate'), 0);
 assert.equal(metricTotal('perFeatureListenerRegistrationCount', 'generate'), 0);
 assert.equal(metricTotal('featureSearchIndexBuildCount', 'generate'), 0);
 assert.ok(lifecycleEvents.some(({ name }) => name === 'preview.ready-receipt-accepted'));
+
+// OV-16: a Generate that fails before it replaces the Result rolls back to the
+// Result that is still mounted. The restore changes nothing the mount watcher
+// observes, so the rollback binds that root itself and settles.
+const keptResult = { name: 'kept.svg', content: '<svg></svg>' };
+const keptRoot = makeSvg([]);
+const keptState = {
+  results: ref([keptResult]),
+  selectedResultIndex: ref(0),
+  skipCaptureBaseConfig: ref(false),
+  featureCatalog: ref(null),
+  svgContainer: ref({
+    querySelector: (selector) => (selector === 'svg' ? keptRoot : null)
+  })
+};
+const keptRuntime = createPreviewRuntime({ state: keptState, serializeSvg: () => '<svg></svg>' });
+let keptBindCount = 0;
+keptRuntime.configureMountedResultBinder({ adoptLegend: () => { keptBindCount += 1; } });
+const keptExpectation = keptRuntime.registerReadinessExpectation({
+  result: keptResult,
+  resultIndex: 0,
+  generationToken: 'generation-kept',
+  phase: 'generate-kept',
+  isCurrent: () => true
+});
+const keptReceipt = await keptRuntime.bindMountedResult(keptRuntime.createMountedResultContext({
+  root: keptRoot,
+  result: keptResult,
+  resultIndex: 0
+}));
+assert.equal(await keptExpectation.promise, keptReceipt);
+const keptHandle = {
+  ownerSet: { results: keptState.results.value },
+  mutableIntent: { ui: { selectedResultIndex: 0 } }
+};
+// The restore owner installs the same Result set and marks the remount as an
+// incremental edit, as restoreGeneratedArtifactHandle does.
+const restoreKept = async () => {
+  keptState.skipCaptureBaseConfig.value = true;
+  keptState.results.value = keptHandle.ownerSet.results;
+};
+const settleWithin = (promise) => {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((resolve) => { timer = setTimeout(() => resolve('unsettled'), 1000); })
+  ]).finally(() => clearTimeout(timer));
+};
+// Generate's rollback invalidates the displayed receipt before it restores.
+keptRuntime.invalidateReadyReceipt(keptReceipt, 'History finalization failed.');
+const restoredReceipt = await settleWithin(keptRuntime.restorePreviousSelectedResult({
+  handle: keptHandle,
+  restore: restoreKept
+}));
+assert.notEqual(restoredReceipt, 'unsettled', 'the rollback must settle when the Result stays mounted');
+assert.equal(restoredReceipt.resultIndex, 0);
+assert.equal(restoredReceipt.phase, 'rollback-restoration');
+assert.equal(keptBindCount, 2);
+assert.equal(keptRuntime.isActiveResultReady(), true);
+assert.equal(keptState.skipCaptureBaseConfig.value, false);
+// The target-record rollback restores without invalidating the receipt first.
+const targetReceipt = await settleWithin(keptRuntime.restorePreviousSelectedResult({
+  handle: keptHandle,
+  phase: 'target-history-finalization-rollback',
+  restore: restoreKept
+}));
+assert.notEqual(targetReceipt, 'unsettled', 'the rollback must settle when the receipt is still valid');
+assert.equal(targetReceipt.phase, 'target-history-finalization-rollback');
+assert.equal(keptBindCount, 3);
+assert.equal(keptRuntime.isActiveResultReady(), true);
 
 console.log('preview runtime tests passed');

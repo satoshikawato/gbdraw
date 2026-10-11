@@ -39,6 +39,7 @@ from gbdraw.api import (
 )
 from gbdraw.session_io import CURRENT_SESSION_VERSION
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
+from gbdraw.web_support.feature_catalog import FEATURE_CATALOG_SCHEMA
 
 if __package__:
     from ._scenario_support import (
@@ -47,6 +48,7 @@ if __package__:
         assert_gallery_bgc_definitions,
         assert_exact_workdir_files,
         copy_declared_inputs,
+        executable_source,
         extract_executable_block,
         inspect_standard_svg,
         validate_joint_chloroplast,
@@ -63,6 +65,7 @@ else:
         assert_gallery_bgc_definitions,
         assert_exact_workdir_files,
         copy_declared_inputs,
+        executable_source,
         extract_executable_block,
         inspect_standard_svg,
         validate_joint_chloroplast,
@@ -109,9 +112,7 @@ def run_scenario(
         try:
             os.chdir(workdir)
             with redirect_stdout(output):
-                source_name = chapter["execution"].get(
-                    "source", chapter.get("destination", scenario_id)
-                )
+                source_name = executable_source(chapter) or scenario_id
                 exec(compile(recipe, source_name, "exec"), namespace)
         finally:
             os.chdir(previous_cwd)
@@ -409,7 +410,7 @@ def _validate_interactive_handoff_tutorial(
         interactive_root.attrib.get("data-gbdraw-interactive-svg") != "true"
         or len(feature_ids) != 37
         or len(metadata) != 1
-        or metadata[0].attrib.get("data-schema") != "4"
+        or metadata[0].attrib.get("data-schema") != str(FEATURE_CATALOG_SCHEMA)
         or "COX1" not in interactive_source
         or "gbdraw-feature-search-controls" not in interactive_source
     ):

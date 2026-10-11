@@ -1,16 +1,20 @@
 # Web audit sweeps
 
-These are the manual sweeps from the 2026-09-30 Web GUI audit
-(`docs/internal/web-gui-audit-20260930/`). They are too slow or too broad
-for CI, so they live here as tools. CI runs the guards that were derived from
-them (G-A to G-J); these sweeps cover the long tail. Run them during the periodic
-audit before a `dev` to `main` promotion (see
-[`docs/internal/WEB_PERIODIC_AUDIT.md`](../../docs/internal/WEB_PERIODIC_AUDIT.md)),
-or when you investigate a finding.
+These are the sweeps from the 2026-09-30 Web GUI audit
+(`docs/internal/web-gui-audit-20260930/`) and the promotion user journeys.
+They are too slow or too broad for PR and push CI, so they live here as tools.
+PR and push CI run the guards that were derived from them (G-A to G-J); these
+sweeps cover the long tail. The release-tier `Tests` dispatch runs them for the
+periodic audit before a `dev` to `main` promotion (the `Promotion audit / ...`
+jobs; see
+[`docs/internal/WEB_PERIODIC_AUDIT.md`](../../docs/internal/WEB_PERIODIC_AUDIT.md)).
+Run one locally when you investigate a finding.
 
-A sweep records evidence; a failing sweep is not a release block by itself.
-Each confirmed problem becomes an audit row with a severity, and then a guard
-or a recorded decision not to add one.
+A sweep records evidence; a failing sweep is not a release block by itself,
+and the release-tier jobs run the sweeps report-only. Each confirmed problem
+becomes an audit row with a severity, and then a guard or a recorded decision
+not to add one. A user journey is different: it asserts the correct outcome,
+and a failed journey is a finding that fails its job.
 
 ## Setup
 
@@ -35,11 +39,12 @@ The config serves the repository root with `python3 -m http.server`, like
 | File | What it checks | Options | Evidence (`$GBDRAW_AUDIT_OUT/...`) |
 | --- | --- | --- | --- |
 | `parity-sweep.audit.spec.js` | GUI Generate against the Source recipe: a baseline and 31 Circular (HmmtDNA) and 25 Linear (MjeNMV + MelaMJNV + BLAST table) option probes. Each probe starts from a freshly opened app and saves the Result SVG, the recipe command, and the Run info helper files. | `AUDIT_ONLY=probe1,probe2`, `AUDIT_INPUT=<file in tests/test_inputs>` | `parity/circular-<input>/`, `parity/linear-MJNV/` |
-| `parity_replay.py` | Replays each saved recipe with this checkout's CLI and compares the CLI SVG with the GUI SVG through `tests/utils/svg_compare.compare_svgs`. It ignores the same binding attributes as the Gallery publication parity check, plus the root `baseProfile`. Probes without a recipe are listed as `NO_RECIPE` with the GUI's reason. | probe directory and input files | `<probe dir>/replay-report.json` |
+| `parity_replay.py` | Replays each saved recipe with this checkout's CLI and compares the CLI SVG with the GUI SVG through `tests/utils/svg_compare.compare_svgs`. It ignores the same binding attributes as the Gallery publication parity check, plus the root `baseProfile`. Probes without a recipe are listed as `NO_RECIPE` with the GUI's reason. A probe whose GUI SVG equals the baseline SVG (`sameAsBaseline` in `manifest.json`) is listed as `NO_EFFECT` instead of `MATCH`: the probe did not change the drawing, so a match proves nothing about its option. Change the probe so that it does. Each compared row also reports `same_as_baseline_in_gui`, so such a probe whose replay differs still shows as `DIFF`. | probe directory and input files | `<probe dir>/replay-report.json` |
 | `xss-sweep.audit.spec.js` | A synthetic record with script-like DEFINITION, ORGANISM, qualifiers, and file name. Checks the preview, search, the feature popup, Run info, static and interactive SVG export, and the exported interactive SVG opened on its own. Any dialog fails the test. | `XSS_FILE=<GenBank>`, `XSS_FNAME=<upload name>` | `xss/` |
 | `viewport-sweep.audit.spec.js` | Horizontal overflow of the app (open, after upload, after Generate) at 390, 768, 1280, and 1920 px, and of the Gallery page and its tabs at 390, 768, and 1280 px. Records the elements past the viewport and saves screenshots. | `AUDIT_WIDTHS=390,768` | `viewport/` |
 | `gallery-roundtrip.audit.spec.js` | Every Gallery session: Load, Save, Load the saved file in a fresh context, and Save again. User-owned state (the G-C snapshot from `tests/web/helpers/app-lifecycle.cjs`) and the saved documents must match, apart from save timestamps. | `AUDIT_SESSIONS=name1,name2` | `gallery-roundtrip/` |
 | `session-load-timing.audit.spec.js` | Session load time and the order of Worker starts, Worker messages, and session lifecycle events after the load starts. | `AUDIT_SESSIONS=name1,name2` | `session-load-timing/` |
+| `user-journey.audit.spec.js` | User journeys J1 to J7, one test each: input, Generate, and every export (the interactive SVG also opened alone); mode switch with per-mode settings; Session round trip of a 0.13.0 Session 30, a `main`-written Session 44, and two Gallery Sessions (Generate equals the loaded preview, or, for the two older Sessions whose saved Result their draft no longer draws, keeps its records in order; Save, reload in a fresh context, user state equal, Generate equals the reloaded preview); Legend editing with Undo and Redo; feature editing and Reset Settings (live equals Generate); a comparison setting on a LOSATP Gallery Session; the flow at 390 px. After each step: no page error, console error, or unhandled rejection, and no busy indicator left. The run prints the capabilities changed since `origin/main` that no journey covers, with their changed paths (`COVERAGE` in the spec). | `--grep "J5 "` runs one journey | `journeys/<journey>/` (a screenshot per step, `steps.json`), `journeys/index.html` (contact sheet, failures first), `journeys/coverage.json` |
 
 Example: run the full parity sweep, then replay it.
 
@@ -53,6 +58,11 @@ python tools/audit/parity_replay.py "$GBDRAW_AUDIT_OUT/parity/linear-MJNV" \
 The parity sweep reopens the app for every probe, so the full run takes longer
 than the others. The 2026-09-30 audit estimated about 20 minutes for both modes.
 Use `AUDIT_ONLY` to repeat single probes.
+
+`release-audit-summary.mjs` writes the `Promotion audit / summary` table of
+a release-tier run (job, result, artifact link, findings count) from the
+downloaded `promotion-audit-*` artifacts. `node tools/audit/helpers/journey-evidence.cjs <journeys dir>`
+rebuilds a journey contact sheet, for example after merging the shards.
 
 ## Investigation helpers
 
@@ -71,6 +81,7 @@ It reuses `tests/web/helpers/app-lifecycle.cjs` and does not copy it.
 ## Keeping the sweeps current
 
 The sweeps drive the app through `window.__GBDRAW_APP__` and visible labels. If
-a UI change breaks a sweep, fix the sweep in the same PR as the UI change or in
-the next periodic audit. Do not move a sweep into CI. Instead, turn the bug
-class it found into a small guard under `tests/` (see W8 in the audit folder).
+a UI change breaks a sweep or a journey, fix it in the same PR as the UI
+change or in the next periodic audit. Do not move a sweep into PR or push CI
+(the release-tier dispatch runs them report-only). Instead, turn the bug class
+it found into a small guard under `tests/` (see W8 in the audit folder).

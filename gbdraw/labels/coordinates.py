@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..features.objects import FeatureObject
+from ..features.objects import FeatureDisplayPart, FeatureObject
 from ..layout.record_coordinates import RecordDisplayTransform
 
 
@@ -35,7 +35,7 @@ def display_label_segment(
         return None
     groups = [[part] for part in blocks]
     if circular:
-        by_part = {}
+        by_part: dict[int, list[FeatureDisplayPart]] = {}
         for part in blocks:
             by_part.setdefault(part.fragment.part_index, []).append(part)
         groups = list(by_part.values())

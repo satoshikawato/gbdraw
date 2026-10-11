@@ -3,12 +3,19 @@
 
 import logging
 import re
+from collections.abc import Mapping
 from typing import Any, Optional
 
 import pandas as pd
 from pandas import DataFrame
 
 from ..exceptions import InputFileError, ParseError, ValidationError
+from ..io.table_text import (
+    LEGACY_TABLE_ROWS,
+    read_literal_table,
+    read_table_lines,
+    table_text_stream,
+)
 from ..features.selector_values import (
     _matches_constraint,
     get_feature_hash as _get_feature_hash,
@@ -51,15 +58,14 @@ def read_qualifier_priority_file(filepath: str) -> Optional[DataFrame]:
     required_cols = ["feature_type", "priorities"]
 
     try:
-        df = pd.read_csv(
+        df = read_literal_table(
             filepath,
-            sep="\t",
-            header=None,
             names=required_cols,
-            dtype=str,
-            on_bad_lines="error",
-            engine="python",
+            label="qualifier priority file",
+            legacy_rows=LEGACY_TABLE_ROWS["qualifier-priority"],
         )
+    except ParseError:
+        raise
     except pd.errors.ParserError as e:
         logger.error(f"ERROR: Malformed line in qualifier priority file '{filepath}': {e}")
         raise ParseError(
@@ -95,16 +101,15 @@ def read_filter_list_file(filepath: str) -> Optional[DataFrame]:
     required_cols = ["feature_type", "qualifier", "keyword"]
 
     try:
-        df = pd.read_csv(
-            filepath,
-            sep="\t",
-            header=None,
+        df = read_literal_table(
+            table_text_stream(read_table_lines(filepath)),
             names=required_cols,
-            dtype=str,
-            comment="#",
-            on_bad_lines="error",
-            engine="python",
+            label="filter list file",
+            filepath=filepath,
+            legacy_rows=LEGACY_TABLE_ROWS["label-whitelist"],
         )
+    except ParseError:
+        raise
     except pd.errors.ParserError as e:
         logger.error(f"ERROR: Malformed line in filter list file '{filepath}': {e}")
         raise ParseError(
@@ -140,37 +145,22 @@ def read_label_override_file(filepath: str) -> Optional[DataFrame]:
     required_cols = _LABEL_OVERRIDE_REQUIRED_COLS
 
     try:
-        with open(filepath, "r", encoding="utf-8") as handle:
-            for line_no, raw_line in enumerate(handle, start=1):
-                stripped = raw_line.strip()
-                if stripped == "" or stripped.startswith("#"):
-                    continue
-                if raw_line.rstrip("\r\n").count("\t") + 1 > len(required_cols):
-                    logger.error(
-                        f"ERROR: Malformed line in label override file '{filepath}' at line {line_no}: "
-                        f"expected {len(required_cols)} columns."
-                    )
-                    raise ParseError(
-                        f"Malformed line in label override file '{filepath}' at line {line_no}: "
-                        f"expected {len(required_cols)} columns."
-                    )
+        lines = read_table_lines(filepath)
     except FileNotFoundError as e:
         logger.error(f"ERROR: Label override file not found: {e}")
         raise InputFileError(f"Label override file not found: {e}") from e
 
     try:
-        df = pd.read_csv(
-            filepath,
-            sep="\t",
-            header=None,
+        df = read_literal_table(
+            table_text_stream(lines),
             names=required_cols,
-            dtype=str,
-            comment="#",
+            label="label override file",
+            filepath=filepath,
             keep_default_na=False,
             na_filter=False,
-            on_bad_lines="error",
-            engine="python",
         )
+    except ParseError:
+        raise
     except pd.errors.ParserError as e:
         logger.error(f"ERROR: Malformed line in label override file '{filepath}': {e}")
         raise ParseError(
@@ -443,7 +433,69 @@ def preprocess_label_filtering(label_filtering: dict):
     return label_filtering
 
 
-def get_label_text(feature: Any, label_filtering: dict, record_id: Optional[str] = None) -> str:
+def has_forced_label_overrides(label_filtering: dict) -> bool:
+    """Return whether a per-feature override can show a label.
+
+    A per-feature override is a label-override row with the ``hash`` qualifier.
+    Non-empty text shows that feature's label, and empty text hides it; either
+    decision takes precedence over label filters and the label display scope.
+    """
+    rules = label_filtering.get("label_override_rules")
+    if rules is None and "label_override_rules" not in label_filtering:
+        override_df = label_filtering.get("label_override_df")
+        rules = _build_label_override_rules(override_df) if isinstance(override_df, DataFrame) else None
+    return any(
+        rule.get("qualifier_normalized") == "hash" and rule.get("label_text")
+        for rule in rules or ()
+    )
+
+
+def get_label_text(
+    feature: Any,
+    label_filtering: Mapping,
+    record_id: Optional[str] = None,
+    *,
+    overrides_only: bool = False,
+    feature_override: Any = None,
+) -> str:
+    """Return the label text for one feature, or an empty string for no label.
+
+    ``overrides_only`` selects a feature outside the label display scope: only
+    its per-feature override can give it a label. An identity-addressed
+    ``feature_override`` decides before the tables: ``label_visibility="off"``
+    hides the label; ``"on"`` shows its ``label_text``, else the qualifier text
+    with the non-``hash`` rules applied, else its default label, regardless of
+    scope and filters. ``label_text`` alone replaces the text of a label that is
+    shown anyway; it never shows one.
+    """
+    visibility = getattr(feature_override, "label_visibility", None)
+    if visibility == "off":
+        return ""
+    text = getattr(feature_override, "label_text", None)
+    if visibility == "on":
+        unfiltered = {
+            **label_filtering,
+            "whitelist_map": None,
+            "blacklist_keywords": (),
+            "label_override_rules": [
+                rule for rule in label_filtering.get("label_override_rules") or ()
+                if rule.get("qualifier_normalized") != "hash"
+            ],
+        }
+        return text or _label_text(feature, unfiltered, record_id) or str(
+            getattr(feature_override, "default_label", "")
+        )
+    label = _label_text(feature, label_filtering, record_id, overrides_only=overrides_only)
+    return text if label and text else label
+
+
+def _label_text(
+    feature: Any,
+    label_filtering: Mapping,
+    record_id: Optional[str] = None,
+    *,
+    overrides_only: bool = False,
+) -> str:
     feature_type = _get_feature_type(feature)
     qualifiers = _get_feature_qualifiers(feature)
     whitelist_map = label_filtering.get("whitelist_map")
@@ -476,6 +528,9 @@ def get_label_text(feature: Any, label_filtering: dict, record_id: Optional[str]
         )
         if hash_override_text is not None:
             return hash_override_text
+
+    if overrides_only:
+        return ""
 
     if whitelist_map:
         is_eligible = False
@@ -535,6 +590,7 @@ def get_label_text(feature: Any, label_filtering: dict, record_id: Optional[str]
 __all__ = [
     "DERIVED_LABEL_FILTERING_KEYS",
     "get_label_text",
+    "has_forced_label_overrides",
     "preprocess_label_filtering",
     "read_filter_list_file",
     "read_label_override_file",

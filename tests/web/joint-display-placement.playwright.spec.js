@@ -3,7 +3,7 @@ const fs = require('node:fs/promises');
 const zlib = require('node:zlib');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 
 const replayEnv = { ...process.env };
 delete replayEnv.PYTHONPATH;
@@ -160,12 +160,12 @@ for (const mode of ['circular', 'linear']) {
     await download.saveAs(savedPath);
     const bytes = await fs.readFile(savedPath);
     const session = JSON.parse((bytes[0] === 0x1f ? zlib.gunzipSync(bytes) : bytes).toString());
-    expect(session.version).toBe(44);
-    expect(session.renderRequest.schema).toBe(8);
+    expect(session.version).toBe(CURRENT_SESSION_VERSION);
+    expect(session.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
     expect(session.renderRequest.records[0].display.startCoordinate).toBe(71);
     expect(session.renderRequest.diagramOptions.featurePlacements).toHaveLength(1);
     expect(session.renderRequest.diagramOptions.configOverrides['canvas.feature_overlap_tolerance_bp']).toBe(1);
-    expect(session.config.recordDisplayDrafts.some((draft) => draft.startCoordinate === 91)).toBe(true);
+    expect(session.modes[session.ui.mode].config.recordDisplayDrafts.some((draft) => draft.startCoordinate === 91)).toBe(true);
     expect(session.results[0].content).toBe(savedResult);
     await page.screenshot({ path: testInfo.outputPath('joint-controls.png'), fullPage: true });
     const context = await browser.newContext();
@@ -207,8 +207,8 @@ test('historical v40/schema6 saves as the joint format without Generate', async 
   await download.saveAs(savedPath);
   const bytes = await fs.readFile(savedPath);
   const saved = JSON.parse(zlib.gunzipSync(bytes));
-  expect(saved.version).toBe(44);
-  expect(saved.renderRequest.schema).toBe(8);
+  expect(saved.version).toBe(CURRENT_SESSION_VERSION);
+  expect(saved.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
   expect(saved.renderRequest.records.every((record) => record.display.isCircular === null
     && record.display.startCoordinate === null)).toBe(true);
   expect(saved.renderRequest.diagramOptions.featurePlacements).toEqual([]);
@@ -268,7 +268,7 @@ for (const mode of ['circular', 'linear']) {
 }
 
 for (const mode of ['circular', 'linear']) {
-  test(`${mode} real shortcuts topology reset bulk placement and Auto history`, async ({ page }, testInfo) => {
+  test(`${mode} real topology reset bulk placement and Auto history`, async ({ page }, testInfo) => {
     test.setTimeout(180000);
     await openApp(page);
     if (mode === 'linear') await page.getByRole('button', { name: 'Linear', exact: true }).click();
@@ -290,7 +290,7 @@ for (const mode of ['circular', 'linear']) {
     await inactiveDownload.saveAs(inactivePath);
     const inactive = JSON.parse(zlib.gunzipSync(await fs.readFile(inactivePath)));
     expect(inactive.results).toEqual([]);
-    expect(inactive.config.recordDisplayDrafts[0]).toMatchObject({ topologyOverride: false, startCoordinate: 71 });
+    expect(inactive.modes[inactive.ui.mode].config.recordDisplayDrafts[0]).toMatchObject({ topologyOverride: false, startCoordinate: 71 });
     await page.getByRole('button', { name: 'Reset to detected', exact: true }).click();
     await expect(start).toBeEnabled();
     await expect(start).toHaveValue('71');
@@ -304,22 +304,17 @@ for (const mode of ['circular', 'linear']) {
     const bodies = features.map((feature) => page.locator(`[data-gbdraw-feature-id="${feature.id}"]`).first());
     await selectPaintedFeature(page, bodies[0]);
     await expect(page.getByLabel('Selected feature count')).toContainText('1 selected');
-    await page.getByRole('button', { name: 'Use selected feature 5′ end', exact: true }).click();
-    await expect(start).toHaveValue('21');
-    await page.getByRole('button', { name: 'Use selected feature midpoint', exact: true }).click();
-    await expect(start).toHaveValue('63');
     await selectPaintedFeature(page, bodies[1]);
     await expect(page.getByLabel('Selected feature count')).toContainText('2 selected');
-    await expect(page.getByRole('button', { name: 'Use selected feature midpoint', exact: true })).toBeDisabled();
     const bulk = page.getByRole('combobox', { name: 'Selected feature placements', exact: true });
     await bulk.selectOption(mode === 'circular' ? 'outward' : 'above');
-    await expect.poll(() => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.featurePlacementOverrides).length)).toBe(2);
+    await expect.poll(() => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.activeDrawing().featurePlacementOverrides).length)).toBe(2);
     await bulk.selectOption('auto');
-    await expect.poll(() => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.featurePlacementOverrides).length)).toBe(0);
+    await expect.poll(() => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.activeDrawing().featurePlacementOverrides).length)).toBe(0);
     await page.getByRole('button', { name: /^Undo/ }).first().click();
-    await expect.poll(() => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.featurePlacementOverrides).length)).toBe(2);
+    await expect.poll(() => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.activeDrawing().featurePlacementOverrides).length)).toBe(2);
     await page.getByRole('button', { name: /^Redo/ }).first().click();
-    await expect.poll(() => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.featurePlacementOverrides).length)).toBe(0);
+    await expect.poll(() => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.activeDrawing().featurePlacementOverrides).length)).toBe(0);
     await generateFromControl(page);
     expect(await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.map((f) => ({ stableId: f.stable_feature_id, parts: f.location_parts, strand: f.strand })))).toEqual(features.map(({ id, ...biological }) => biological));
     for (const id of await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.map((f) => f.svg_id))) {
@@ -327,17 +322,22 @@ for (const mode of ['circular', 'linear']) {
         `[data-gbdraw-rendered-feature-id="${id}"], [data-gbdraw-feature-id="${id}"]:not([data-gbdraw-rendered-feature-id])`
       ).first()).toBeVisible();
     }
-    await page.screenshot({ path: testInfo.outputPath('shortcuts-bulk.png'), fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath('topology-bulk.png'), fullPage: true });
   });
 }
 
-test('paired GFF/FASTA replacement purges source-bound rotation and placement and Undo restores both', async ({ page }) => {
+// Owner decision Q3 = A (design Q4 3.4, 6.3): replacing a source keeps the
+// feature placements; a Generate that replaced the source removes the rows
+// whose feature the new source no longer has and reports how many. The record
+// rotation draft still follows its source.
+test('paired GFF/FASTA replacement keeps placements; Generate applies survivors and removes the ones whose feature is gone', async ({ page }) => {
   test.setTimeout(180000);
   await openApp(page);
   await page.getByRole('radio', { name: 'GFF3 + FASTA', exact: true }).check();
   const gff = '##gff-version 3\n##sequence-region shared 1 360\nshared\t.\tCDS\t21\t105\t.\t+\t0\tID=chosen.full.source;product=chosen protein\n';
   const fasta = '>shared\n' + 'ACGT'.repeat(90) + '\n';
-  await page.getByLabel('GFF3 File', { exact: true }).setInputFiles({ name: 'same.gff', mimeType: 'text/plain', buffer: Buffer.from(gff) });
+  const gffUpload = page.getByLabel('GFF3 File', { exact: true });
+  await gffUpload.setInputFiles({ name: 'same.gff', mimeType: 'text/plain', buffer: Buffer.from(gff) });
   const upload = page.getByLabel('FASTA File', { exact: true });
   await upload.setInputFiles({ name: 'same.fa', mimeType: 'text/plain', buffer: Buffer.from(fasta) });
   const start = page.getByRole('spinbutton', { name: 'Display start shared #1', exact: true });
@@ -350,14 +350,31 @@ test('paired GFF/FASTA replacement purges source-bound rotation and placement an
   await page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
   await page.locator('.drawer-toggle').click();
   await generateFromControl(page);
+  const placements = () => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.activeDrawing().featurePlacementOverrides).length);
   const before = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
   await upload.setInputFiles({ name: 'same.fa', mimeType: 'text/plain', buffer: Buffer.from(fasta.replace('ACGT', 'TCGT')) });
   await expect(start).toHaveValue('');
-  await expect.poll(() => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.featurePlacementOverrides).length)).toBe(0);
+  expect(await placements()).toBe(1);
   await page.getByRole('button', { name: /^Undo/ }).first().click();
   await expect(start).toHaveValue('71');
-  await expect.poll(() => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.featurePlacementOverrides).length)).toBe(1);
+  expect(await placements()).toBe(1);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(before);
+  // The feature survives a FASTA replacement (same record, type, and
+  // location), so the source-replacing Generate applies its placement.
+  await upload.setInputFiles({ name: 'same.fa', mimeType: 'text/plain', buffer: Buffer.from(fasta.replace('ACGT', 'TCGT')) });
+  await generateFromControl(page);
+  expect(await placements()).toBe(1);
+  expect(await page.evaluate(async () => (await import('./js/services/config.js'))
+    .getCommittedCanonicalRenderRequest().diagramOptions.featurePlacements.map((row) => row.placement))).toEqual([{ kind: 'main' }]);
+  await expect(page.getByTestId('feature-identity-notice')).toHaveCount(0);
+  // The CDS moves, so the placed feature is not in the replacing source.
+  await gffUpload.setInputFiles({ name: 'moved.gff', mimeType: 'text/plain', buffer: Buffer.from(gff.replace('\t21\t105\t', '\t31\t105\t')) });
+  expect(await placements()).toBe(1);
+  await generateFromControl(page);
+  expect(await placements()).toBe(0);
+  await expect(page.getByTestId('feature-identity-notice')).toContainText(
+    'Removed 1 feature edit(s) whose feature the replaced source no longer has.'
+  );
 });
 
 for (const mode of ['circular', 'linear']) for (const intent of ['rotation', 'placement']) {

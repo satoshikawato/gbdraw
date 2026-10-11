@@ -1,0 +1,38 @@
+{
+  "purpose": "Positive fixture for the Load reader that records Python's paint on a Session 44 Result, which main's writer saved without data-gbdraw-base-* records (EU U2a).",
+  "writer": "gbdraw/web/js/services/config.js Save Session (Web), bytes kept unchanged",
+  "sourceCommit": "fe6861f06d0eaaecac0ba4ee6b1c3095019789df",
+  "checkout": "git worktree add --detach <dir> fe6861f0; python tools/prepare_browser_wheel.py; Playwright with that commit's tests/web/helpers (audit-browser.cjs openWithGenBank with labels_mode out, Auto Reflow off, app-lifecycle.cjs generateAndWaitForResult, mode-transition.cjs download), Circular, one Result; the input GenBank file (not in that commit) passed by path",
+  "tools": {
+    "node": "v26.8.2",
+    "playwright": "1.61.1",
+    "python": "3.13.3"
+  },
+  "sessions": {
+    "forced-label-underlay-strokes.v44.gbdraw-session.json.gz": {
+      "wheel": "gbdraw-0.14.0-py3-none-any.whl",
+      "sessionVersion": 44,
+      "records": "tests/fixtures/forced_label_underlay.gb (sha256 a9e11770edd5736d727d466fac3131b88ddb991486391db543e6ba091b559ea7), Circular, labels out, one Result",
+      "steps": [
+        "Generate",
+        "Feature FL1 (f38ba7c3f): stroke color #2a9d8f, This feature only",
+        "Legend row repeat_region: stroke color #e63946, stroke width 3",
+        "Legend row repeat_region: color #f4a261",
+        "Save Session"
+      ],
+      "pythonPaint": {
+        "f38ba7c3f, f841fb8a8, f2f7a48cf__instance_4_4b227777d4dd1fc6, f2f7a48cf__instance_5_ef2d127de37b942b blocks": "fill #54bcf8, stroke gray, stroke-width 2.0",
+        "f9cf91913 (repeat_region, automatic underlay)": "fill #d3d3d3, stroke none, stroke-width 0",
+        "CDS swatch": "fill #54bcf8, stroke gray, stroke-width 2.0",
+        "repeat_region swatch": "fill #d3d3d3, stroke gray, stroke-width 2.0"
+      },
+      "savedPaint": {
+        "f38ba7c3f block": "stroke #2a9d8f, stroke-width 2.0",
+        "f9cf91913 underlay": "stroke #e63946, stroke-width 3",
+        "repeat_region swatch": "fill #f4a261, stroke #e63946, stroke-width 3"
+      },
+      "sha256": "3c680438dae66070a3ff484cd108ba67a0bb8b14850bee9505189a89390f6ffc",
+      "decompressedSha256": "6828a9ba42f8b3c84992f5de18d370b6d5c8f84c1ba529cdf877623cdf2a987d"
+    }
+  }
+}

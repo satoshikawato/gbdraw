@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal, Mapping, TypeAlias
+from typing import Any, Literal, Mapping, TypeAlias, cast
 
 from ..exceptions import ValidationError
 from ..layout.text_geometry import AabbTuple, Point
@@ -23,7 +23,7 @@ def normalize_circular_label_placement(value: object) -> CircularLabelPlacement:
             "circular label placement must be 'horizontal' or 'radial' "
             f"(received {value!r})"
         )
-    return placement  # type: ignore[return-value]
+    return cast(CircularLabelPlacement, placement)
 
 
 @dataclass(frozen=True)

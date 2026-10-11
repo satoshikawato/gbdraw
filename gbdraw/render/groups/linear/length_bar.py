@@ -3,37 +3,18 @@
 
 import math
 
-from svgwrite.container import Group
-from svgwrite.shapes import Line
-from svgwrite.text import Text
+from gbdraw.svg.elements import Group, Line, Text
 
+from ....auto_sizes import linear_tick_interval
+from ....canvas import LinearCanvasConfigurator
+from ....core.numeric import scaled_tick_text
 from ....core.text import calculate_bbox_dimensions
-from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ....config.models import GbdrawConfig
 from ....layout.spatial import Aabb
 
 RULER_TICK_LENGTH = 10.0 * (2.0 / 3.0)
 RULER_LABEL_OFFSET = 15.0
 RULER_LABEL_COLLISION_PADDING = 2.0
-
-_AUTO_LINEAR_TICK_THRESHOLDS: list[tuple[float, int]] = [
-    (2000, 100),
-    (20000, 1000),
-    (50000, 5000),
-    (150000, 10000),
-    (250000, 50000),
-    (1000000, 100000),
-    (2000000, 200000),
-    (5000000, 500000),
-    (float("inf"), 1000000),
-]
-
-
-def auto_linear_tick_interval(total_length: int) -> int:
-    """Return a sensible linear tick interval for a given length."""
-    for threshold, tick_val in _AUTO_LINEAR_TICK_THRESHOLDS:
-        if total_length < threshold:
-            return tick_val
-    return 1000000
 
 
 def format_linear_tick_label(
@@ -62,18 +43,7 @@ def format_linear_tick_label(
 
     if divisor == 1:
         return f"{position:,} bp"
-
-    decimals = 0
-    if tick_interval is not None:
-        interval = abs(int(tick_interval))
-        if interval > 0 and interval < divisor:
-            decimals = min(6, int(math.ceil(math.log10(divisor / float(interval)))))
-
-    value = float(position) / float(divisor)
-    value_text = f"{value:.{decimals}f}" if decimals > 0 else f"{value:.0f}"
-    if decimals > 0:
-        value_text = value_text.rstrip("0").rstrip(".")
-    return f"{value_text} {unit}"
+    return f"{scaled_tick_text(position, divisor, tick_interval)} {unit}"
 
 
 def _label_bounds(x_pos: float, bbox_width: float) -> tuple[float, float]:
@@ -101,7 +71,7 @@ class LengthBarGroup:
         fig_width: int,
         alignment_width: float,
         longest_genome: int,
-        canvas_config: dict,
+        canvas_config: LinearCanvasConfigurator,
         group_id="length_bar",
         *,
         cfg: GbdrawConfig,
@@ -179,7 +149,7 @@ class LengthBarGroup:
         if self.manual_interval is not None and self.manual_interval > 0:
             tick_interval = self.manual_interval
         else:
-            tick_interval = auto_linear_tick_interval(ruler_length_bp)
+            tick_interval = linear_tick_interval(ruler_length_bp)
 
         if tick_interval <= 0 or ruler_length_bp <= 0 or self.ruler_width <= 0:
             return
@@ -291,7 +261,7 @@ class LengthBarGroup:
         Automatically determines a sensible tick interval for the 'bar' style
         or as a fallback for the 'ruler' style.
         """
-        self.tick = auto_linear_tick_interval(self.longest_genome)
+        self.tick = linear_tick_interval(self.longest_genome)
         self.label_text = format_linear_tick_label(
             self.tick,
             context_length=self.longest_genome,
@@ -363,7 +333,6 @@ __all__ = [
     "LengthBarGroup",
     "RULER_LABEL_OFFSET",
     "RULER_TICK_LENGTH",
-    "auto_linear_tick_interval",
     "format_linear_tick_label",
 ]
 

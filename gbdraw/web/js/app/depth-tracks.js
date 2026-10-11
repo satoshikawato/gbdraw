@@ -1,10 +1,12 @@
+// @ts-check
 export const getDepthTrackFallbackLabel = (index) => {
   const numericIndex = Math.max(0, Number(index) || 0);
   return numericIndex === 0 ? 'Depth' : `Depth ${numericIndex + 1}`;
 };
 
 export const getDepthTrackFileBaseName = (file) => {
-  const rawName = String(file?.name || '').split(/[\\/]/).pop().trim();
+  // split always returns at least one element, so pop is not undefined.
+  const rawName = /** @type {string} */ (String(file?.name || '').split(/[\\/]/).pop()).trim();
   if (!rawName) return '';
   const withoutExtension = rawName.replace(/\.[^.]+$/, '').trim();
   return withoutExtension || rawName;

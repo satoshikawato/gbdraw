@@ -1,22 +1,23 @@
+// @ts-check
+import { COMPARISON_COLOR_KEYS } from './utils/color-utils.js';
+import { collectSpecificColorQualifierSuggestions } from './services/feature-selector.js';
 import {
-  COMPARISON_COLOR_KEYS,
-  normalizePaletteColors,
-  normalizePaletteDefinitions
-} from './app/color-utils.js';
-import { collectSpecificColorQualifierSuggestions } from './app/feature-selector.js';
-import { deriveFeatureVisibilityRulesForBoundary } from './app/feature-visibility.js';
-import { normalizeCircularPlotTitlePosition } from './app/plot-title-position.js';
+  featureDrawnContext,
+  listFeatureRows,
+  normalizeFeatureVisibilityRule
+} from './services/feature-visibility.js';
+import { resultCatalogFeatures } from './services/feature-catalog.js';
 import {
   createDefaultLayoutPreferences,
+  normalizeCircularPlotTitlePosition,
   resolveActiveLayoutPreference,
   updateActiveLayoutPreference
-} from './app/layout-preferences.js';
-import { createSequenceSourceRegistry } from './app/match-sequences.js';
+} from './services/layout-preferences.js';
+import { createSequenceSourceRegistry } from './services/match-sequences.js';
 import {
   createDefaultLinearComparisonPlan,
   resolveLinearComparisonPlan
-} from './app/linear-comparisons.js';
-import { createModeProfileStateManager } from './mode-profiles.js';
+} from './services/linear-comparisons.js';
 import { WEB_UX_PROFILE } from './web-ux-profile.js';
 import { createDefaultFeatureRenderings } from './utils/feature-rendering.js';
 import {
@@ -25,16 +26,17 @@ import {
   getCommittedSvgResultRuntimeIdentity
 } from './services/svg-result-ingestion.js';
 import { createImportedComparisonIntentState } from './services/imported-comparison-intent.js';
+import { drawnLinearSequences } from './services/record-draw-selection.js';
 import {
   createDefaultAdv,
   createDefaultCircularConservation,
   createDefaultForm,
-  createDefaultLosat
+  createDefaultLosat,
+  createDefaultLosatExecution
 } from './services/session-active-config-contract.js';
 export { createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat };
 const { ref, reactive, computed } = window.Vue;
 const toRaw = window.Vue.toRaw || ((value) => value);
-const shallowRef = window.Vue.shallowRef || ref;
 
 // System State
 const processing = ref(false);
@@ -47,8 +49,6 @@ const sessionImportPending = ref(false);
 const semanticFileWatchersSuppressed = ref(false);
 const sessionResourceDiscoveryDeferred = ref(false);
 const sessionImportRollbackInProgress = ref(false);
-const importedComparisonIntent = reactive(createImportedComparisonIntentState());
-const unmanagedConfigOverrides = reactive({});
 
 const results = ref([]);
 const selectedResultIndex = ref(0);
@@ -58,6 +58,11 @@ const resultPanelTab = ref('preview');
 const lastRunInfo = ref(null);
 const trackSlotResolvedGeometry = ref(null);
 const annotationWarnings = ref([]);
+// Python's report of the identity-addressed edits a Result does not draw
+// (`featureIdentityNotices`, design Q4 3.4); artifact-owned like annotationWarnings.
+const featureIdentityNotices = ref([]);
+// The edits the last source-replacing Generate removed (Q3 = A); a notice only.
+const featureEditRemovalCount = ref(0);
 const comparisonWarnings = ref([]);
 // Store original pairwise match factors for re-interpolation
 const pairwiseMatchFactors = ref({}); // { pathId: factor }
@@ -85,11 +90,9 @@ const canvasContainerRef = ref(null);
 
 // App State
 const mode = ref('circular');
-const layoutPreferences = reactive(createDefaultLayoutPreferences());
 const suppressCircularMultiRecordDefaults = ref(false);
 const cInputType = ref('gb');
 const lInputType = ref('gb');
-const losatProgram = ref('blastn'); // 'blastn' | 'tblastx' | 'blastp'
 const files = reactive({
   c_gb: null,
   c_gff: null,
@@ -123,6 +126,32 @@ const normalizeLinearSeqNumber = (value) => {
   return Number.isFinite(numeric) ? numeric : null;
 };
 
+/**
+ * One linear record slot as `createLinearSeq` builds it. The file fields hold
+ * browser `File` objects or null.
+ * @typedef {object} LinearSeq
+ * @property {string} uid
+ * @property {any} gb
+ * @property {any} gff
+ * @property {any} fasta
+ * @property {any} depth
+ * @property {number} losat_gencode
+ * @property {string} definition
+ * @property {string} record_subtitle
+ * @property {string} file_definition
+ * @property {string} file_subtitle
+ * @property {string} inferred_definition
+ * @property {string} region_record_id
+ * @property {number | null} region_start
+ * @property {number | null} region_end
+ * @property {boolean} region_reverse
+ */
+
+/**
+ * @param {Partial<LinearSeq> | Record<string, any> | null} [overrides] a slot,
+ *   or unvalidated data (a session, an import) that is normalized here
+ * @returns {LinearSeq}
+ */
 export const createLinearSeq = (overrides = {}) => {
   const source = overrides && typeof overrides === 'object' && !Array.isArray(overrides) ? overrides : {};
   const rawUid = String(source.uid ?? '').trim();
@@ -171,13 +200,6 @@ export const collapseEmptyLinearSeqList = (items) => {
 };
 
 const linearSeqs = reactive(normalizeLinearSeqList([]));
-const linearRecordLayoutEnabled = ref(WEB_UX_PROFILE.linear.arrangeInRowsByDefault);
-const linearRecordGap = ref(24);
-const linearRecordRows = reactive([]);
-const linearComparisonPlan = reactive(createDefaultLinearComparisonPlan());
-const annotationSets = reactive([]);
-const recordDisplayDrafts = reactive([]);
-const featurePlacementOverrides = reactive({});
 const selectedAnnotation = ref(null);
 
 export const createDefaultFeatureShapes = () => createDefaultFeatureRenderings();
@@ -218,63 +240,16 @@ export const createDefaultEditorDraftState = () => ({
   featurePanelTab: 'colors',
   newColorFeat: 'gene',
   newColorVal: '#d3d3d3',
-  newFeatureToAdd: 'mobile_element',
-  newLegendCaption: '',
-  newLegendColor: '#808080'
+  newFeatureToAdd: 'mobile_element'
 });
 
-const circularConservation = reactive(createDefaultCircularConservation());
 const defaultEditorDraftState = createDefaultEditorDraftState();
 
-// Configuration Forms
-const form = reactive(createDefaultForm());
-
-// Extended Advanced Config
-const adv = reactive(createDefaultAdv(mode.value));
-const linearTypographyLinked = ref(true);
-const modeProfileStateManager = createModeProfileStateManager(mode.value, adv, form);
-const activeLayoutPreferences = computed(() => resolveActiveLayoutPreference(
-  layoutPreferences,
-  mode.value,
-  form.multi_record_canvas
-));
-Object.defineProperty(form, 'legend', {
-  enumerable: false,
-  get: () => activeLayoutPreferences.value.legend,
-  set: (value) => {
-    updateActiveLayoutPreference(
-      layoutPreferences,
-      mode.value,
-      form.multi_record_canvas,
-      { legend: value }
-    );
-  }
-});
-Object.defineProperty(adv, 'plot_title_position', {
-  enumerable: false,
-  get: () => activeLayoutPreferences.value.plotTitlePosition,
-  set: (value) => {
-    updateActiveLayoutPreference(
-      layoutPreferences,
-      mode.value,
-      form.multi_record_canvas,
-      { plotTitlePosition: value }
-    );
-  }
-});
-
-const losat = reactive(createDefaultLosat());
-
-const linearComparisonResolution = computed(() => resolveLinearComparisonPlan({
-  plan: linearComparisonPlan,
-  sequences: linearSeqs,
-  layout: linearRecordLayoutEnabled.value ? linearRecordRows : [],
-  losatProgram: losatProgram.value,
-  blastpMode: losat.blastp?.mode
-}));
-const hasLinearComparisonIntent = computed(() => linearComparisonResolution.value.hasComparisonIntent);
-const hasActiveLinearLosatIntent = computed(() => linearComparisonResolution.value.hasLosatIntent);
-const hasActiveLinearUploadIntent = computed(() => linearComparisonResolution.value.hasUploadIntent);
+// App-level settings shared by both drawings: the LOSAT execution and thread
+// settings (Session `ui.losatExecution`) and the rich feature popup
+// (`ui.richFeaturePopup`), PD-OI-086.
+const losatExecution = reactive(createDefaultLosatExecution());
+const richFeaturePopup = ref(true);
 
 const losatCacheInfo = ref([]);
 const losatThreadingStatus = ref({
@@ -299,10 +274,6 @@ const similarityAlignmentPlan = ref(null);
 const similarityAlignmentResetReceipt = ref(null);
 const linearRecordTranslations = ref([]);
 const legacySimilarityAlignment = ref(null);
-const orthogroupNameOverrides = reactive({});
-const orthogroupDescriptionOverrides = reactive({});
-// User names of groups whose members no longer form one group, keyed by member set (D-21).
-const orthogroupDormantOverrides = reactive({});
 const selectedOrthogroupId = ref('');
 const orthogroupSearch = ref('');
 const orthogroupSortMode = ref('id');
@@ -323,21 +294,9 @@ const circularRecordDiscovery = reactive({
 const paletteDefinitions = ref({});
 const paletteNames = ref(['default']);
 const defaultPaletteDraftState = createDefaultPaletteDraftState();
-const selectedPalette = ref(defaultPaletteDraftState.selectedPalette);
-const currentColors = ref(defaultPaletteDraftState.currentColors);
 const paletteInstantPreviewEnabled = ref(defaultPaletteDraftState.paletteInstantPreviewEnabled);
 const appliedPaletteName = ref(defaultPaletteDraftState.appliedPaletteName);
 const appliedPaletteColors = ref(defaultPaletteDraftState.appliedPaletteColors);
-const pendingPaletteName = ref(defaultPaletteDraftState.pendingPaletteName);
-const pendingPaletteColors = ref(defaultPaletteDraftState.pendingPaletteColors);
-const hasPendingPaletteDraft = computed(
-  () => !paletteInstantPreviewEnabled.value && String(pendingPaletteName.value || '').trim() !== ''
-);
-const defaultLabelFilterState = createDefaultLabelFilterState();
-const filterMode = ref(defaultLabelFilterState.filterMode);
-const manualBlacklist = ref(defaultLabelFilterState.manualBlacklist);
-const manualWhitelist = reactive(defaultLabelFilterState.manualWhitelist);
-const manualSpecificRules = reactive([]);
 const newSpecRule = reactive(createDefaultSpecificRule());
 const specificRulePresets = [
   {
@@ -359,10 +318,12 @@ const downloadDpi = ref(defaultEditorDraftState.downloadDpi);
 const extractedFeatures = ref([]); // Features from last generation
 const biologicalFeatures = ref([]); // Complete source catalog, including non-rendered features
 const featureCatalog = ref(null); // Validated schema-4 metadata for committed Results
+// Whether the rule preparation (app/rule-matching.js) is matching rules; it
+// records the matches, which live on the feature objects, before this falls back.
+const ruleMatchingPending = ref(false);
 const specificRuleQualifierSuggestions = computed(() =>
-  collectSpecificColorQualifierSuggestions(extractedFeatures.value, manualSpecificRules)
+  collectSpecificColorQualifierSuggestions(extractedFeatures.value, activeDrawing().manualSpecificRules)
 );
-const featureSelectorSafetyScope = ref([]); // Python selector scope before feature visibility filtering
 const renderedFeatureSvgId = (feature) => {
   return String(
     feature?.rendered_svg_id ||
@@ -440,40 +401,12 @@ const previewFeatureSearchMatchDetails = ref({});
 const previewFeatureSearchActiveIndex = ref(-1);
 const previewFeatureSearchError = ref('');
 const previewFeatureSearchRenderedCount = ref(0);
-const featureColorOverrides = reactive({}); // {featureKey: color}
-const featureVisibilityManualRules = reactive([]);
-const featureVisibilityOverrides = reactive({}); // {svg_id: 'on' | 'off' | 'exclude_matching'}
-const featureVisibilitySelectorCacheOwner = shallowRef({});
-const captureFeatureVisibilitySelectorCacheOwner = () => (
-  featureVisibilitySelectorCacheOwner.value
-);
-const replaceFeatureVisibilitySelectorCacheOwner = (nextOwner = {}) => {
-  featureVisibilitySelectorCacheOwner.value = (
-    nextOwner && typeof nextOwner === 'object' && !Array.isArray(nextOwner)
-      ? nextOwner
-      : {}
-  );
-};
-const featureVisibilityRules = computed(() => deriveFeatureVisibilityRulesForBoundary(
-  featureVisibilityManualRules,
-  featureVisibilityOverrides,
-  featureVisibilitySelectorCacheOwner.value
-));
-const featureStrokeOverrides = reactive({}); // {featureKey: { strokeColor, strokeWidth, originalStrokeColor, originalStrokeWidth }}
 const labelSearch = ref('');
 const editableLabels = ref([]); // [{key, text, sourceText, featureId, draftText}]
-const labelTextFeatureOverrides = reactive({}); // { featureId: text }
-const canonicalLabelOverrideRows = ref([]);
-const labelTextBulkOverrides = reactive({}); // { sourceText: text }
-const labelTextFeatureOverrideSources = reactive({}); // { featureId: sourceText }
-const labelVisibilityOverrides = reactive({}); // { featureId: 'on' | 'off' }
-const labelOverrideBuildWarning = ref('');
 const autoLabelReflowEnabled = ref(false);
 const labelReflowProcessing = ref(false);
 const labelReflowRequestSeq = ref(0);
-const labelReflowRequestReason = ref('');
 const labelReflowForceRequestSeq = ref(0);
-const labelReflowForceRequestReason = ref('');
 const labelReflowLastError = ref(null);
 
 // SVG Feature Click state
@@ -523,7 +456,32 @@ const featureStyleScopeDialog = reactive({
   annotationLabelSiblingCount: 0, // Number of other features sharing source annotation label
   existingCaptionRule: null, // Existing hash rule for same caption (already colored)
   existingCaptionColor: null, // Color of existing caption rule
+  defaultColorType: null, // D-15: the feature type whose default color "Apply to all" sets
+  replacedDefaultColor: null, // D-15: the user default color of that type it replaces
   resolve: null // Promise resolver
+});
+
+/**
+ * The palette dialog (D-15): a palette switch or Default colors Reset while
+ * user default colors exist. Display values only (`createResultsManager`).
+ * @typedef {object} PaletteColorsDialog
+ * @property {boolean} show
+ * @property {'switch' | 'reset'} kind
+ * @property {string} fromPalette
+ * @property {string} toPalette
+ * @property {string} droppedPalette The queued palette a switch back to the applied one drops, or ''.
+ * @property {number} count The number of user default colors.
+ * @property {string} keysText Their keys, for the dialog body.
+ */
+/** @type {PaletteColorsDialog} */
+const paletteColorsDialog = reactive({
+  show: false,
+  kind: 'switch',
+  fromPalette: '',
+  toPalette: '',
+  droppedPalette: '',
+  count: 0,
+  keysText: ''
 });
 
 // Reset Color Dialog state
@@ -542,6 +500,10 @@ const legendRenameDialog = reactive({
   targetColor: '',
   currentColor: '',
   siblingCount: 0,
+  mergeAvailable: true, // false unless both rows draw features of one same type
+  // R15-3 (OV-285): the Python key of the deleted row the new caption names;
+  // '' when the target is listed. Its Merge restores that row first.
+  deletedTargetKey: /** @type {PythonLegendKey | ''} */ (''),
   pendingRequest: null
 });
 
@@ -555,6 +517,22 @@ const labelTextScopeDialog = reactive({
   matchingCount: 0
 });
 
+// A label text edit on a feature that has no label in the displayed Result.
+// `reason` is the label absence reason (label-actions.js) the dialog words.
+const hiddenLabelTextDialog = reactive({
+  show: false,
+  featureId: '',
+  reason: ''
+});
+
+// Label visibility On that the diagram cannot draw (Owner Q1, Q2): why, and
+// the feature type the dialog names. The label actions own the pending edit.
+const labelOnDialog = reactive({
+  show: false,
+  reason: '',
+  featureType: ''
+});
+
 const featureVisibilityScopeDialog = reactive({
   show: false,
   feat: null,
@@ -563,30 +541,17 @@ const featureVisibilityScopeDialog = reactive({
   scopes: []
 });
 
-const globalLabelModeDialog = reactive({
-  show: false,
-  featureId: '',
-  featureType: '',
-  resolve: null
-});
-
 // Sidebar resize state
 const sidebarWidth = ref(320); // Initial width in pixels
 const isResizing = ref(false);
 
 // Legend Editor state
-const legendEntries = ref([]); // [{caption, originalCaption, color, yPos, showStroke, featureIds}]
-const deletedLegendEntries = ref([]); // Track deleted entries for restoration
 const originalLegendOrder = ref([]); // Store original order from generation
 const originalLegendColors = ref({}); // Store original colors: { caption: color }
-const newLegendCaption = ref(defaultEditorDraftState.newLegendCaption);
-const newLegendColor = ref(defaultEditorDraftState.newLegendColor);
 
-// Legend stroke overrides: { caption: { strokeColor, strokeWidth, originalStrokeColor, originalStrokeWidth } }
-const legendStrokeOverrides = reactive({});
-
-// Legend color overrides: { caption: color } - tracks custom colors set via Legend Editor
-const legendColorOverrides = reactive({});
+// The Legend editor rows whose stroke options are shown, by caption: app-level
+// view state, which History and the Session do not hold (OV-157).
+const legendStrokeOptionsOpen = reactive(new Set());
 
 // Original stroke values from SVG generation (gbdraw's auto-determined defaults)
 const originalSvgStroke = ref({ color: null, width: null });
@@ -615,7 +580,6 @@ const plotTitleAutoTransform = ref({ x: 0, y: 0 });
 const plotTitleUserOffset = reactive({ x: 0, y: 0 });
 
 // Canvas size state
-const canvasPadding = reactive({ top: 0, right: 0, bottom: 0, left: 0 });
 const showCanvasControls = ref(false);
 
 // Track legend position at generation time (for repositioning without regeneration)
@@ -624,17 +588,17 @@ const generatedMode = ref('circular');
 const generatedMultiRecordCanvas = ref(false);
 const generatedCircularPlotTitlePosition = ref('none');
 const normalizeCircularLegendPosition = (value) => String(value || '').trim().toLowerCase() || 'left';
-const shouldDeferCircularPreviewUpdates = computed(
-  () =>
-    generatedMode.value === 'circular' &&
+const shouldDeferCircularPreviewUpdates = computed(() => {
+  const { form, adv } = drawings.circular;
+  return generatedMode.value === 'circular' &&
     mode.value === 'circular' &&
     (
       Boolean(form.multi_record_canvas) !== Boolean(generatedMultiRecordCanvas.value) ||
       normalizeCircularLegendPosition(form.legend) !== normalizeCircularLegendPosition(generatedLegendPosition.value) ||
       normalizeCircularPlotTitlePosition(adv.plot_title_position) !==
         normalizeCircularPlotTitlePosition(generatedCircularPlotTitlePosition.value)
-    )
-);
+    );
+});
 
 // Flag to skip captureBaseConfig when editing SVG (repositioning legend, adding legend entries, etc.)
 // This prevents base config from being overwritten during incremental edits
@@ -700,35 +664,75 @@ const defaultColorKeys = [...featureKeys, 'default', 'skew_high', 'skew_low', 'g
 const newColorFeat = ref(defaultEditorDraftState.newColorFeat);
 const newColorVal = ref(defaultEditorDraftState.newColorVal);
 
-const manualPriorityRules = reactive([]);
 const newPriorityRule = reactive(createDefaultPriorityRule());
 
 const newFeatureToAdd = ref(defaultEditorDraftState.newFeatureToAdd);
 
-const addedLegendCaptions = ref(new Set());
-const fileLegendCaptions = ref(new Set());
+// The committed metadata of the displayed Result (svg-result-ingestion.js).
+const displayedResultMetadata = () => getCommittedSvgResultMetadata(toRaw(results.value[selectedResultIndex.value]));
 
-// The Features drawer lists the features rendered in the displayed Result.
-// A batch Result shows one record, so the record picker appears only when the
-// displayed Result shows several records (FE-03).
-const displayedResultFeatures = computed(() => {
-  const features = extractedFeatures.value;
-  if (results.value.length < 2) return features;
-  const renderedIds = getCommittedSvgResultMetadata(toRaw(results.value[selectedResultIndex.value]))
-    ?.renderedFeatureIdentities?.renderedIds;
-  return renderedIds instanceof Set
-    ? features.filter((feature) => renderedIds.has(feature.svg_id))
-    : features;
+// The Features drawer and Search features list the displayed Result's catalog
+// features (`listFeatureRows`, R-5): a hidden feature stays listed so it can be
+// shown again. The selected feature types are those of the request that drew
+// the Result, which its committed metadata carries (R13). A Result
+// without a catalog lists the features it renders. A batch Result shows one
+// record, so the record picker appears only when the displayed Result shows
+// several records (FE-03).
+// The list reads of the Results only their names (the catalog admission matches
+// them) and the displayed Result's committed metadata. A write of a Result's
+// content (an editor edit, R1) keeps both, so it does not list the features
+// again. The rule matches the drawn state reads are recorded while
+// `ruleMatchingPending` holds, so the list follows its fall.
+/**
+ * What the list reads of the displayed Result's committed metadata.
+ * @typedef {{ selectedFeatureTypes?: string[] | null, renderedFeatureIdentities?: { renderedIds?: unknown } | null }} ListedResultMetadata
+ */
+/** @typedef {{ list: readonly { name?: unknown }[], names: unknown[], metadata: ListedResultMetadata | null }} ListedResults */
+const listedResults = computed((/** @type {ListedResults | undefined} */ previous) => {
+  /** @type {readonly { name?: unknown }[]} */
+  const list = results.value;
+  const names = list.map((result) => result?.name);
+  const metadata = displayedResultMetadata();
+  return previous !== undefined && previous.metadata === metadata && previous.names.length === names.length
+    && previous.names.every((name, index) => name === names[index])
+    ? previous : { list, names, metadata };
 });
+const featureList = computed(() => {
+  void ruleMatchingPending.value;
+  const { list, names, metadata } = listedResults.value;
+  const catalogFeatures = resultCatalogFeatures(state, selectedResultIndex.value, list);
+  if (catalogFeatures) {
+    return listFeatureRows(catalogFeatures, featureDrawnContext(activeDrawing(), {
+      diagramOptions: { selectedFeaturesSet: metadata?.selectedFeatureTypes }
+    }));
+  }
+  const features = extractedFeatures.value;
+  const renderedIds = names.length < 2 ? null : metadata?.renderedFeatureIdentities?.renderedIds;
+  return {
+    rows: renderedIds instanceof Set ? features.filter((feature) => renderedIds.has(feature.svg_id)) : features,
+    drawn: null,
+    rendered: null
+  };
+});
+// A listed feature's drawn state and the rendered ID it is drawn with ('' when
+// the Result does not draw it).
+const featureListState = (feature) => {
+  const { drawn, rendered } = featureList.value;
+  const raw = toRaw(feature);
+  return {
+    drawn: drawn?.get(raw) ?? true,
+    renderedId: !rendered || rendered.has(raw) ? String(feature?.svg_id || '') : ''
+  };
+};
 const featureRecordPickerVisible = computed(() => (
   featureRecordIds.value.length > 1
-  && new Set(displayedResultFeatures.value.map((feature) => (
+  && new Set(featureList.value.rows.map((feature) => (
     mode.value === 'circular' ? feature.record_idx : feature.displayRecordId
   ))).size > 1
 ));
 
 const filteredFeatures = computed(() => {
-  let features = [...displayedResultFeatures.value];
+  let features = [...featureList.value.rows];
 
   // Filter by the selected record when the displayed Result shows several.
   if (featureRecordPickerVisible.value) {
@@ -758,7 +762,9 @@ const filteredFeatures = computed(() => {
   return features;
 });
 
-const FEATURE_ROW_HEIGHT_PX = 64;
+// The height of a Features list row (`h-[83px]` in index.html): three lines,
+// the last with the Visibility checkbox (R-5).
+const FEATURE_ROW_HEIGHT_PX = 83;
 const FEATURE_LIST_OVERSCAN = 8;
 const featureListScrollTop = ref(0);
 const featureListViewportHeight = ref(520);
@@ -809,17 +815,187 @@ const filteredEditableLabels = computed(() => {
 
 // Pending is owned by the existing Session lifecycle; availability stores no lock.
 // 'history' words why History rejects Undo/Redo; History decides when (D-28).
-export const sessionOperationAvailability = (operation = 'mutation') => {
+// `preparationBusyReason` words an edit still applying, whose owners only the
+// composition root holds: it passes it for Save and Load (R13). History words
+// its own pending edit the same way, so it passes none.
+export const sessionOperationAvailability = (
+  operation = 'mutation',
+  preparationBusyReason = /** @type {(() => string | null | undefined) | null} */ (null)
+) => {
   let reason = '';
   if (sessionImportPending.value) reason = 'Loading session. Retry after loading finishes.';
   else if (sessionSavePending.value) reason = 'Saving session. Retry after saving finishes.';
   else if (operation === 'save' || operation === 'load' || operation === 'history') {
     if (processing.value) reason = 'Generating diagram. Retry after generation finishes.';
     else if (labelReflowProcessing.value) reason = 'Updating diagram. Retry after the update finishes.';
-    else reason = state.sessionPreparationBusyReason?.() || '';
+    else reason = preparationBusyReason?.() || '';
   }
   return reason ? { status: 'busy', reason } : null;
 };
+
+/** @typedef {'circular' | 'linear'} DiagramMode */
+
+/** @import { PythonLegendKey, RenderedFeatureId } from './services/legend-svg.js' */
+/** @typedef {string & { readonly __brand: 'LegendCaption' }} LegendCaption The caption a Legend row shows, which a rename writes. */
+/**
+ * The color a Legend row records, never its identity (OV-288): one the user
+ * set (a Legend color, an editor row's color, the color of a rule's row), or,
+ * for a row the palette colors, the swatch the displayed Result showed when
+ * its Legend list was last extracted (a Generate, a Result display, Settings
+ * Reset). That can be a draft palette color, not Python's swatch, and a
+ * palette, Default colors or Reset edit does not refresh it by itself. A row
+ * shows `displayedLegendRowColors` (app/candidate-render.js; OV-282, D-26).
+ * @typedef {string & { readonly __brand: 'RecordedLegendColor' }} RecordedLegendColor
+ */
+/**
+ * A row of a drawing's Legend list. Its identity is Python's key
+ * (`originalCaption`; an editor row's own caption); the caption and the
+ * recorded color are display values their writers own (rename, Legend color),
+ * never a row's identity or the features it reaches (OV-288).
+ * @typedef {object} LegendEntry
+ * @property {LegendCaption} caption
+ * @property {PythonLegendKey} originalCaption
+ * @property {RecordedLegendColor} color
+ * @property {number} xPos
+ * @property {number} yPos
+ * @property {RenderedFeatureId[]} featureIds The features the row lists (older Sessions); empty: Python's row decides.
+ */
+
+// The drawing of a diagram mode: its settings, its editor edits, and the
+// values derived from them, under their former `state` names and kinds (a ref
+// stays a ref). Only the drawing holds them: a service reads them from the
+// drawing it is given, and an owner resolves `state.activeDrawing()` or the
+// drawing of the mode its action is about (PD-OI-086). Each mode has its own
+// drawing: an edit in one mode never reaches the other, and a mode switch
+// writes neither (R10). A drawing holds the complete default `form` and `adv`
+// of its mode, so every reader stays valid; its `form.legend` and
+// `adv.plot_title_position` read and write its own mode's layout slot.
+/** @param {DiagramMode} drawingMode */
+const createDrawingState = (drawingMode) => {
+  const form = reactive(createDefaultForm());
+  const adv = reactive(createDefaultAdv(drawingMode));
+  const layoutPreferences = reactive(createDefaultLayoutPreferences());
+  const activeLayoutPreferences = computed(() => resolveActiveLayoutPreference(
+    layoutPreferences,
+    drawingMode,
+    form.multi_record_canvas
+  ));
+  Object.defineProperty(form, 'legend', {
+    enumerable: false,
+    get: () => activeLayoutPreferences.value.legend,
+    set: (value) => {
+      updateActiveLayoutPreference(layoutPreferences, drawingMode, form.multi_record_canvas, { legend: value });
+    }
+  });
+  Object.defineProperty(adv, 'plot_title_position', {
+    enumerable: false,
+    get: () => activeLayoutPreferences.value.plotTitlePosition,
+    set: (value) => {
+      updateActiveLayoutPreference(layoutPreferences, drawingMode, form.multi_record_canvas, { plotTitlePosition: value });
+    }
+  });
+  const losat = reactive(createDefaultLosat());
+  const losatProgram = ref('blastn'); // 'blastn' | 'tblastx' | 'blastp'
+  const linearComparisonPlan = reactive(createDefaultLinearComparisonPlan());
+  const linearRecordLayoutEnabled = ref(WEB_UX_PROFILE.linear.arrangeInRowsByDefault);
+  const linearRecordRows = reactive([]);
+  // The keys of the records this drawing leaves out (record-selection D-02):
+  // Linear card uids or Circular source selectors `#N`
+  // (services/record-draw-selection.js).
+  /** @type {string[]} */
+  const recordsOff = reactive([]);
+  const linearComparisonResolution = computed(() => resolveLinearComparisonPlan({
+    plan: linearComparisonPlan,
+    sequences: linearSeqs,
+    recordsOff,
+    layout: linearRecordLayoutEnabled.value ? linearRecordRows : [],
+    losatProgram: losatProgram.value,
+    blastpMode: losat.blastp?.mode
+  }));
+  const featureVisibilityManualRules = reactive([]);
+  const pendingPaletteName = ref(defaultPaletteDraftState.pendingPaletteName);
+  const labelFilters = createDefaultLabelFilterState();
+  return Object.freeze({
+    // Settings
+    form,
+    adv,
+    losat,
+    losatProgram,
+    circularConservation: reactive(createDefaultCircularConservation()),
+    linearComparisonPlan,
+    linearRecordLayoutEnabled,
+    linearRecordGap: ref(24),
+    linearRecordRows,
+    recordDisplayDrafts: reactive([]),
+    recordsOff,
+    unmanagedConfigOverrides: reactive({}),
+    importedComparisonIntent: reactive(createImportedComparisonIntentState()),
+    layoutPreferences,
+    linearTypographyLinked: ref(true),
+    // Editor edits
+    // Per-feature edits keyed by original-source identity (design Q4, R2):
+    // {JSON.stringify([recordKey, biologicalFeatureId]): {recordKey,
+    // biologicalFeatureId, featureVisibility, labelVisibility, labelText,
+    // labelSourceText}} (services/feature-placement.js owns the row shape).
+    featureOverrides: reactive({}),
+    featurePlacementOverrides: reactive({}),
+    featureColorOverrides: reactive({}), // {featureKey: color}
+    // {featureKey: { strokeColor, strokeWidth, originalStrokeColor, originalStrokeWidth }}
+    featureStrokeOverrides: reactive({}),
+    featureVisibilityManualRules,
+    labelTextBulkOverrides: reactive({}), // { sourceText: text }
+    canonicalLabelOverrideRows: ref([]),
+    legendEntries: ref([]), // LegendEntry[]; typed with its writers (OV-288 STATUS)
+    deletedLegendEntries: ref([]),
+    // OV-120: renamed rows the last Generate did not draw (GC off, Show Depth
+    // off); their renames apply again when a Generate draws the row.
+    dormantLegendEntries: ref([]),
+    legendColorOverrides: reactive({}), // { caption: color }
+    // { caption: { strokeColor, strokeWidth, originalStrokeColor, originalStrokeWidth } }
+    legendStrokeOverrides: reactive({}),
+    addedLegendCaptions: ref(new Set()),
+    fileLegendCaptions: ref(new Set()),
+    manualSpecificRules: reactive([]),
+    manualPriorityRules: reactive([]),
+    filterMode: ref(labelFilters.filterMode),
+    manualBlacklist: ref(labelFilters.manualBlacklist),
+    manualWhitelist: reactive(labelFilters.manualWhitelist),
+    selectedPalette: ref(defaultPaletteDraftState.selectedPalette),
+    currentColors: ref({ ...defaultPaletteDraftState.currentColors }),
+    pendingPaletteName,
+    pendingPaletteColors: ref({ ...defaultPaletteDraftState.pendingPaletteColors }),
+    annotationSets: reactive([]),
+    orthogroupNameOverrides: reactive({}),
+    orthogroupDescriptionOverrides: reactive({}),
+    // User names of groups whose members no longer form one group, keyed by member set (D-21).
+    orthogroupDormantOverrides: reactive({}),
+    canvasPadding: reactive({ top: 0, right: 0, bottom: 0, left: 0 }),
+    // Derived from the members above
+    activeLayoutPreferences,
+    // The Linear record cards a Generate draws, in file order (read-only; the
+    // cards are project inputs that both drawings read).
+    // Frozen: a reader never edits the drawn list (the cards are `linearSeqs`).
+    drawnLinearSeqs: /** @type {{ readonly value: LinearSeq[] }} */ (
+      computed(() => Object.freeze(drawnLinearSequences(linearSeqs, recordsOff)))
+    ),
+    linearComparisonResolution,
+    hasLinearComparisonIntent: computed(() => linearComparisonResolution.value.hasComparisonIntent),
+    hasActiveLinearLosatIntent: computed(() => linearComparisonResolution.value.hasLosatIntent),
+    hasActiveLinearUploadIntent: computed(() => linearComparisonResolution.value.hasUploadIntent),
+    // The visibility table carries rules only; per-feature edits are featureOverrides.
+    featureVisibilityRules: computed(() => featureVisibilityManualRules
+      .map((rule) => normalizeFeatureVisibilityRule(rule))),
+    hasPendingPaletteDraft: computed(
+      () => !paletteInstantPreviewEnabled.value && String(pendingPaletteName.value || '').trim() !== ''
+    )
+  });
+};
+const circularDrawing = createDrawingState('circular');
+/** @typedef {typeof circularDrawing} DrawingState */
+/** @type {Readonly<Record<DiagramMode, DrawingState>>} */
+const drawings = Object.freeze({ circular: circularDrawing, linear: createDrawingState('linear') });
+/** @returns {DrawingState} */
+const activeDrawing = () => drawings[mode.value === 'linear' ? 'linear' : 'circular'];
 
 export const state = {
   processing,
@@ -833,16 +1009,17 @@ export const state = {
   semanticFileWatchersSuppressed,
   sessionResourceDiscoveryDeferred,
   sessionImportRollbackInProgress,
-  importedComparisonIntent,
-  unmanagedConfigOverrides,
   results,
   selectedResultIndex,
+  displayedResultMetadata,
   failedGeneratePreservedResult,
   generationFailureRecovery,
   resultPanelTab,
   lastRunInfo,
   trackSlotResolvedGeometry,
   annotationWarnings,
+  featureIdentityNotices,
+  featureEditRemovalCount,
   comparisonWarnings,
   pairwiseMatchFactors,
   matchSequenceRegistry,
@@ -855,32 +1032,14 @@ export const state = {
   canvasPan,
   canvasContainerRef,
   mode,
-  layoutPreferences,
-  activeLayoutPreferences,
+  drawings,
+  activeDrawing,
   suppressCircularMultiRecordDefaults,
   cInputType,
   lInputType,
-  losatProgram,
   files,
-  circularConservation,
-  annotationSets,
-  recordDisplayDrafts,
-  featurePlacementOverrides,
   selectedAnnotation,
   linearSeqs,
-  linearRecordLayoutEnabled,
-  linearRecordGap,
-  linearRecordRows,
-  linearComparisonPlan,
-  linearComparisonResolution,
-  hasLinearComparisonIntent,
-  hasActiveLinearLosatIntent,
-  hasActiveLinearUploadIntent,
-  form,
-  adv,
-  linearTypographyLinked,
-  modeProfileStateManager,
-  losat,
   losatCacheInfo,
   losatThreadingStatus,
   losatCache,
@@ -896,9 +1055,6 @@ export const state = {
   similarityAlignmentResetReceipt,
   linearRecordTranslations,
   legacySimilarityAlignment,
-  orthogroupNameOverrides,
-  orthogroupDescriptionOverrides,
-  orthogroupDormantOverrides,
   selectedOrthogroupId,
   orthogroupSearch,
   orthogroupSortMode,
@@ -909,18 +1065,11 @@ export const state = {
   circularRecordDiscovery,
   paletteDefinitions,
   paletteNames,
-  selectedPalette,
-  currentColors,
   paletteInstantPreviewEnabled,
+  losatExecution,
+  richFeaturePopup,
   appliedPaletteName,
   appliedPaletteColors,
-  pendingPaletteName,
-  pendingPaletteColors,
-  hasPendingPaletteDraft,
-  filterMode,
-  manualBlacklist,
-  manualWhitelist,
-  manualSpecificRules,
   newSpecRule,
   specificRulePresets,
   specificRuleQualifierSuggestions,
@@ -930,7 +1079,7 @@ export const state = {
   extractedFeatures,
   biologicalFeatures,
   featureCatalog,
-  featureSelectorSafetyScope,
+  ruleMatchingPending,
   featuresBySvgId,
   selectedFeatureIds,
   selectedFeatureAnchorId,
@@ -967,30 +1116,12 @@ export const state = {
   featureRecordPickerVisible,
   featureListTopSpacerPx,
   featureListBottomSpacerPx,
-  featureColorOverrides,
-  featureVisibilityManualRules,
-  featureVisibilityRules,
-  featureVisibilityOverrides,
-  get featureVisibilitySelectorCache() {
-    return featureVisibilitySelectorCacheOwner.value;
-  },
-  captureFeatureVisibilitySelectorCacheOwner,
-  replaceFeatureVisibilitySelectorCacheOwner,
-  featureStrokeOverrides,
   labelSearch,
   editableLabels,
-  labelTextFeatureOverrides,
-  canonicalLabelOverrideRows,
-  labelTextBulkOverrides,
-  labelTextFeatureOverrideSources,
-  labelVisibilityOverrides,
-  labelOverrideBuildWarning,
   autoLabelReflowEnabled,
   labelReflowProcessing,
   labelReflowRequestSeq,
-  labelReflowRequestReason,
   labelReflowForceRequestSeq,
-  labelReflowForceRequestReason,
   labelReflowLastError,
   svgContainer,
   clickedFeature,
@@ -1008,21 +1139,18 @@ export const state = {
   clickedLabel,
   clickedLabelPos,
   featureStyleScopeDialog,
+  paletteColorsDialog,
   resetColorDialog,
   legendRenameDialog,
   labelTextScopeDialog,
   featureVisibilityScopeDialog,
-  globalLabelModeDialog,
+  hiddenLabelTextDialog,
+  labelOnDialog,
   sidebarWidth,
   isResizing,
-  legendEntries,
-  deletedLegendEntries,
   originalLegendOrder,
   originalLegendColors,
-  newLegendCaption,
-  newLegendColor,
-  legendStrokeOverrides,
-  legendColorOverrides,
+  legendStrokeOptionsOpen,
   originalSvgStroke,
   legendDragging,
   legendDragStart,
@@ -1043,7 +1171,6 @@ export const state = {
   plotTitleDragStart,
   plotTitleAutoTransform,
   plotTitleUserOffset,
-  canvasPadding,
   showCanvasControls,
   generatedLegendPosition,
   generatedMode,
@@ -1053,17 +1180,14 @@ export const state = {
   skipCaptureBaseConfig,
   skipExtractOnSvgChange,
   trustedArtifactRestoreInProgress,
-  normalizePaletteColors,
-  normalizePaletteDefinitions,
   featureKeys,
   defaultColorKeys,
   newColorFeat,
   newColorVal,
-  manualPriorityRules,
   newPriorityRule,
   newFeatureToAdd,
-  addedLegendCaptions,
-  fileLegendCaptions,
+  featureList,
+  featureListState,
   filteredFeatures,
   filteredEditableLabels
 };

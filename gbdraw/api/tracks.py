@@ -1,6 +1,6 @@
 """Circular track-slot helpers exposed through the public API."""
 
-from gbdraw.tracks import (  # type: ignore[reportMissingImports]
+from gbdraw.tracks import (
     CircularTrackRendererName,
     CircularTrackSide,
     CircularTrackSlot,

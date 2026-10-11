@@ -1,0 +1,200 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import { evaluateWebOwnerGraphAt, revisionExists } from '../../tools/report-web-owner-graph.mjs';
+
+// Untouched-base characterization and historical replay of the owner-graph
+// detectors (implementation plan Phase B1). Both read revisions from Git, so
+// they run where the history is present (a full checkout or the trusted-base
+// policy job) and skip in a shallow checkout.
+const BASE = '8f450194';
+
+// First-parent merges that introduced a coupling the audit attributes to the
+// named detector; each must be observable as a NEW subject against its first
+// parent.
+const REPLAY = [
+  { pr: '#617', merge: 'f5f86634', detector: 'owner-graph.forward-closure.v1', subject: 'app/app-setup.js|legendActions.commitSpecificRules->featureActions.commitSpecificRules' },
+  { pr: '#622', merge: '27939fae', detector: 'owner-graph.forward-closure.v1', subject: 'app/app-setup.js|historySnapshots.buildLegendEntryOwners->legendActions.captureLegendEntryOwners' },
+  { pr: '#641', merge: 'b1744142', detector: 'owner-graph.state-backdoor.v1', subject: 'app/app-setup.js|sessionPreparationBusyReason' },
+  { pr: '#692', merge: '942fa954', detector: 'owner-graph.injection-edge.v1', subject: 'app/feature-editor.js|visibilityActions<-labelActions' },
+  { pr: '#737', merge: 'cafed980', detector: 'owner-graph.forward-closure.v1', subject: 'app/app-setup.js|historySnapshots.buildCompositionIntent->legendLayout.captureCompositionIntent' },
+  { pr: '#764', merge: '0bf9034a', detector: 'owner-graph.forward-closure.v1', subject: 'app/feature-editor.js|labelActions.setFeatureVisibility->visibilityActions.setFeatureVisibility' },
+  { pr: '#805', merge: '1808d20d', detector: 'owner-graph.whole-object-port.v1', subject: 'app/circular-track-slots.js|createCircularTrackSlotEditor|trackLayoutActions' },
+  { pr: '#807', merge: '4cf78f5d', detector: 'owner-graph.state-backdoor.v1', subject: 'app/app-setup.js|committedDiagramOptions' }
+];
+
+const historyAvailable = revisionExists(BASE) && REPLAY.every(({ merge }) => revisionExists(`${merge}^1`));
+
+test(`untouched-base characterization at ${BASE}`, { skip: historyAvailable ? false : 'revision history not available in this checkout' }, () => {
+  const { results, summary } = evaluateWebOwnerGraphAt(BASE);
+  assert.deepEqual(summary, {
+    injectionEdges: 57,
+    forwardClosures: 7,
+    stateBackdoors: 3,
+    wholeObjectPorts: 46,
+    projectionShapes: {
+      'feature-visibility': 2,
+      'feature-visibility-labels': 5,
+      'label-intent': 2,
+      'legend-order': 3,
+      'palette-rules': 4,
+      strokes: 2,
+      composition: 1
+    },
+    triggerSites: 15,
+    triggerModules: 9,
+    layerImports: 79
+  });
+  assert.deepEqual(results['owner-graph.forward-closure.v1'].subjects, [
+    'app/app-setup.js|historySnapshots.buildCompositionIntent->legendLayout.captureCompositionIntent',
+    'app/app-setup.js|historySnapshots.buildLegendEntryOwners->legendActions.captureLegendEntryOwners',
+    'app/app-setup.js|legendActions.commitSpecificRules->featureActions.commitSpecificRules',
+    'app/app-setup.js|previewFeatureSearch.resolveOrthogroups->orthogroupActions.resolveOrthogroupDescription',
+    'app/app-setup.js|previewFeatureSearch.resolveOrthogroups->orthogroupActions.resolveOrthogroupName',
+    'app/app-setup.js|rightDrawerActions.onClose->featureActions.suspendSpecificRulePatternDrafts',
+    'app/feature-editor.js|labelActions.setFeatureVisibility->visibilityActions.setFeatureVisibility'
+  ]);
+  assert.deepEqual(results['owner-graph.state-backdoor.v1'].subjects, [
+    'app/app-setup.js|committedDiagramOptions',
+    'app/app-setup.js|recordDisplayRows',
+    'app/app-setup.js|sessionPreparationBusyReason'
+  ]);
+  assert.deepEqual(results['heavy-derived.trigger-site.v1'].countsBySubject, {
+    'rulePreparation|app/app-setup.js': 3,
+    'rulePreparation|app/feature-editor/color-actions.js': 2,
+    'rulePreparation|app/feature-editor/label-actions.js': 2,
+    'rulePreparation|app/feature-editor/rule-actions.js': 1,
+    'rulePreparation|app/feature-editor/svg-actions.js': 1,
+    'rulePreparation|app/feature-editor/visibility-actions.js': 2,
+    'rulePreparation|app/legend.js': 1,
+    'rulePreparation|app/run-analysis.js': 2,
+    'rulePreparation|app/svg-styles.js': 1
+  });
+  assert.deepEqual(
+    results['owner-graph.injection-edge.v1'].subjects.filter((subject) => subject.startsWith('app/feature-editor.js|visibilityActions')),
+    [
+      'app/feature-editor.js|visibilityActions<-featureSvgActions',
+      'app/feature-editor.js|visibilityActions<-labelActions',
+      'app/feature-editor.js|visibilityActions<-previewRuntime',
+      'app/feature-editor.js|visibilityActions<-rulePreparation'
+    ]
+  );
+});
+
+test('the 2026-09-01 baseline had no forward closures, state backdoors, or trigger sites', { skip: revisionExists('e11e1d02') ? false : 'revision history not available in this checkout' }, () => {
+  const { summary } = evaluateWebOwnerGraphAt('e11e1d02');
+  assert.equal(summary.forwardClosures, 0);
+  assert.equal(summary.stateBackdoors, 0);
+  assert.equal(summary.triggerSites, 0);
+  assert.equal(summary.injectionEdges, 32);
+});
+
+REPLAY.forEach(({ pr, merge, detector, subject }) => {
+  test(`${pr} (${merge}) is observable as a NEW ${detector} subject against its first parent`, {
+    skip: historyAvailable ? false : 'revision history not available in this checkout'
+  }, () => {
+    const before = new Set(evaluateWebOwnerGraphAt(`${merge}^1`).results[detector].subjects);
+    const after = new Set(evaluateWebOwnerGraphAt(merge).results[detector].subjects);
+    assert.ok(!before.has(subject), `${pr}: ${subject} already present before the merge`);
+    assert.ok(after.has(subject), `${pr}: ${subject} not observed at the merge`);
+  });
+});
+
+// Hand fixes of hidden forward references that v1 could not see. The v2
+// detector (nested closures and late-bound function variables) reports the
+// closures before the merge and none of them after it. The before revision is
+// the merge's first parent; E11's first parent (9a83e8f8) holds the same three
+// closures as 161ca594, the last merge before the E11 branch changed them.
+const FORWARD_CLOSURE_V2 = 'owner-graph.forward-closure.v2';
+const E11_CLOSURES = [
+  'app/app-setup.js|getOpenDisabledReason->alignmentReviewBlocksEditor',
+  'app/app-setup.js|installDelegatedInteractions->refreshSimilarityAlignmentCanvas',
+  'app/app-setup.js|watch(callback)->refreshSimilarityAlignmentCanvas'
+];
+const REPLAY_FIXED_V2 = [
+  {
+    pr: '#843 (E10)',
+    merge: '8d44ed7c',
+    before: [
+      'app/app-setup.js|afterRecordDrag->similarityAlignmentActions.afterRecordDrag',
+      'app/app-setup.js|beforeRecordDrag->similarityAlignmentActions.beforeRecordDrag',
+      'app/app-setup.js|restoreWithSpecificRuleDrafts->featureActions.captureSpecificRulePatternDrafts',
+      'app/app-setup.js|restoreWithSpecificRuleDrafts->featureActions.restoreSpecificRulePatternDrafts',
+      ...E11_CLOSURES
+    ],
+    after: E11_CLOSURES
+  },
+  { pr: '#854 (E11)', merge: 'ae52337e', before: E11_CLOSURES, after: [] }
+];
+
+const fixedHistoryAvailable = REPLAY_FIXED_V2.every(({ merge }) => revisionExists(`${merge}^1`) && revisionExists('161ca594'));
+
+REPLAY_FIXED_V2.forEach(({ pr, merge, before, after }) => {
+  test(`${pr} (${merge}) fixed the ${FORWARD_CLOSURE_V2} closures that v1 did not report`, {
+    skip: fixedHistoryAvailable ? false : 'revision history not available in this checkout'
+  }, () => {
+    assert.deepEqual(evaluateWebOwnerGraphAt(`${merge}^1`).results[FORWARD_CLOSURE_V2].subjects, [...before].sort());
+    assert.deepEqual(evaluateWebOwnerGraphAt(merge).results[FORWARD_CLOSURE_V2].subjects, [...after].sort());
+  });
+});
+
+test('161ca594 (before E11) reports the three E11 closures and nothing else', { skip: fixedHistoryAvailable ? false : 'revision history not available in this checkout' }, () => {
+  assert.deepEqual(evaluateWebOwnerGraphAt('161ca594').results[FORWARD_CLOSURE_V2].subjects, E11_CLOSURES);
+});
+
+test('trigger sites handed to owners as producer ports are counted by v2 and not by v1 (E4, E9)', { skip: revisionExists('ae52337e') ? false : 'revision history not available in this checkout' }, () => {
+  const { results } = evaluateWebOwnerGraphAt('ae52337e');
+  const hidden = ['rulePreparation|app/feature-editor/color-actions.js', 'rulePreparation|app/feature-editor/svg-actions.js'];
+  hidden.forEach((subject) => {
+    assert.equal(results['heavy-derived.trigger-site.v1'].countsBySubject[subject], undefined);
+  });
+  assert.equal(results['heavy-derived.trigger-site.v2'].countsBySubject[hidden[0]], 2);
+  assert.equal(results['heavy-derived.trigger-site.v2'].countsBySubject[hidden[1]], 1);
+});
+
+// Identity read from a display value at dev 2cc12a2e, before the Legend moves
+// to Python's keys: OV-243 (`readMountedLegend` matches a mounted row to an
+// intent entry by its shown caption and color) and OV-288
+// (`legendRowFeatureIds` reads stroke membership from the row color) are
+// subjects. Write-if-different (`applyStrokeToFeaturesByCaption`) is change
+// detection, not a subject. The detector is report-only until a baseline
+// references it.
+const IDENTITY_FROM_DISPLAY = 'owner-graph.identity-from-display.v1';
+const IDENTITY_FROM_DISPLAY_AT = '2cc12a2e';
+
+test(`${IDENTITY_FROM_DISPLAY} characterization at ${IDENTITY_FROM_DISPLAY_AT}`, { skip: revisionExists(IDENTITY_FROM_DISPLAY_AT) ? false : 'revision history not available in this checkout' }, () => {
+  const result = evaluateWebOwnerGraphAt(IDENTITY_FROM_DISPLAY_AT).results[IDENTITY_FROM_DISPLAY];
+  assert.deepEqual(result.countsBySubject, {
+    'app/candidate-render.js|matchingRuleDerivedFill|paint-join': 1,
+    'app/legend/entry-actions.js|addLegendEntry|shown-join': 2,
+    'app/legend/entry-actions.js|findLegendEntryGroup|shown-join': 1,
+    'app/legend/entry-actions.js|prepareFileLegendEntries|paint-join': 2,
+    'app/legend/entry-actions.js|prepareFileLegendEntries|shown-join': 1,
+    'app/legend/entry-actions.js|readMountedLegend|shown-join': 3,
+    'app/legend/entry-actions.js|reconcileLegendEntries|shown-join': 1,
+    'app/legend/entry-actions.js|rendererRowStroke|shown-join': 1,
+    'app/legend/entry-actions.js|restoredRowStroke|shown-join': 2,
+    'app/legend/entry-actions.js|updateLegendEntryColorByCaption|shown-join': 1,
+    'app/legend/layout-actions.js|placeEntries|shown-join': 1,
+    'app/legend/stroke-actions.js|getLegendSwatches|shown-join': 1,
+    'app/rule-matching.js|rebindRuleColorOverrides|paint-join': 1,
+    'app/svg-styles.js|applyPaletteToSvg|shown-join': 2,
+    'services/legend-svg.js|followsOrder|shown-join': 1,
+    'services/legend-svg.js|legendRowFeatureIds|paint-join': 1,
+    'services/legend-svg.js|mountedLegendRowFeatureIds|shown-join': 1,
+    'services/specific-color-rules.js|createRuleLegendCaptions|paint-join': 1,
+    'services/specific-color-rules.js|mayBeAllocated|paint-join': 1,
+    'services/svg-result-ingestion.js|legends|shown-join': 5
+  });
+  assert.deepEqual(
+    result.observedSites.filter(({ function: name }) => name === 'readMountedLegend' || name === 'legendRowFeatureIds')
+      .filter((site) => site.class !== 'caption-key')
+      .map(({ path, line, class: kind }) => `${path}:${line} ${kind}`),
+    [
+      'app/legend/entry-actions.js:893 shown-join',
+      'app/legend/entry-actions.js:894 shown-join',
+      'app/legend/entry-actions.js:895 shown-join',
+      'services/legend-svg.js:164 paint-join'
+    ]
+  );
+});

@@ -1,0 +1,14 @@
+{
+  "writer": "gbdraw circular --session_output (CLI sidecar) at dev b6e48f2a, run in a directory holding copies of the three inputs",
+  "command": "python -m gbdraw.cli circular --gbk SARS-CoV-1.gbk SARS-CoV-2.gbk MERS-CoV.gbk --multi_record_canvas -o three-coronaviruses -f svg --session_output three-coronaviruses.gbdraw-session.json",
+  "inputs": {
+    "tests/test_inputs/SARS-CoV-1.gbk": "69118f0140697ea87f56c08ce604714375a18f1b27594864a00c1d980d804a4a",
+    "tests/test_inputs/SARS-CoV-2.gbk": "87744b176aa9ce71350c8becf0d062950dbc485a59766fcfe723ec859f6b6d5c",
+    "tests/test_inputs/MERS-CoV.gbk": "8ffa60b005a2ee74225220a8ad46afec2ee3f61b4bd5f7603da65c513d5c7428"
+  },
+  "shape": "Circular has one GenBank File; the three input files are bound as one composite c_gb (webFiles.bindings schema 2) whose components keep each file's name and bytes",
+  "sessionVersion": 44,
+  "requestSchema": 8,
+  "compression": "gzip -n -9",
+  "sha256": "9c371d16a5b74bebffd28d9efdff16e8678d0fdecd1bfe1c07a326f33078571b"
+}

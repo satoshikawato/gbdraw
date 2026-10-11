@@ -4,6 +4,7 @@ import { cp, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const root = await mkdtemp(join(tmpdir(), 'gbdraw-session-operations-'));
 await cp(join(process.cwd(), 'gbdraw/web/js'), join(root, 'js'), { recursive: true });
@@ -17,7 +18,8 @@ const { state, sessionOperationAvailability } = await load('state.js');
 const { createHistoryManager } = await load('services/history.js');
 const { createAnnotationEditor } = await load('app/annotations.js');
 const { createLinearRecordSelector } = await load('app/linear-record-selector.js');
-const { createRulePreparation, ruleMatchesFeature } = await load('app/rule-matching.js');
+const { createRulePreparation } = await load('app/rule-matching.js');
+const { ruleMatchesFeature } = await load('services/rule-matchers.js');
 const gate = () => {
   let release;
   const promise = new Promise(resolve => { release = resolve; });
@@ -173,9 +175,11 @@ test('History admits no late command or action after an awaited capture', async 
   state.sessionSavePending.value = false;
 });
 
+// R13: the composition root passes the busy source of an edit still applying
+// as an argument; availability keeps no registered callback on `state`.
 test('Save and Load report an active asynchronous History mutation until settlement', async () => {
   const history = historyFor();
-  state.sessionPreparationBusyReason = () => history.mutationPending()
+  const preparationBusyReason = () => history.mutationPending()
     ? 'Applying an edit. Retry after the edit finishes.' : '';
   const work = gate();
   let started = false;
@@ -184,12 +188,38 @@ test('Save and Load report an active asynchronous History mutation until settlem
     await work.promise;
   });
   while (!started) await Promise.resolve();
-  assert.match(sessionOperationAvailability('save').reason, /Applying/);
-  assert.match(sessionOperationAvailability('load').reason, /Applying/);
+  assert.match(sessionOperationAvailability('save', preparationBusyReason).reason, /Applying/);
+  assert.match(sessionOperationAvailability('load', preparationBusyReason).reason, /Applying/);
+  // Draft edits and callers without the source do not read it.
+  assert.equal(sessionOperationAvailability('mutation', preparationBusyReason), null);
+  assert.equal(sessionOperationAvailability('save'), null);
+  // A Generate in progress is worded before the edit still applying.
+  state.processing.value = true;
+  assert.match(sessionOperationAvailability('save', preparationBusyReason).reason, /Generating/);
+  state.processing.value = false;
   work.release();
   await pending;
-  assert.equal(sessionOperationAvailability('save'), null);
-  state.sessionPreparationBusyReason = null;
+  assert.equal(sessionOperationAvailability('save', preparationBusyReason), null);
+  assert.equal('sessionPreparationBusyReason' in state, false);
+});
+
+test('Save and Load consult the availability the composition root passes (R13)', async () => {
+  const { exportSession, importSession } = await load('services/config.js');
+  const calls = [];
+  const busyFrom = (operation, call) => (requested) => {
+    calls.push(requested);
+    return requested === operation && calls.length >= call ? applying : null;
+  };
+  // Save checks before it starts and again when its turn comes.
+  assert.deepEqual(await exportSession(null, { availability: busyFrom('save', 2) }), applying);
+  assert.deepEqual(calls, ['save', 'save']);
+  assert.equal(state.sessionSavePending.value, false);
+  calls.length = 0;
+  const input = { files: [{ name: 'session.gbdraw' }], value: 'session.gbdraw' };
+  assert.deepEqual(await importSession({ target: input }, { availability: busyFrom('load', 1) }), applying);
+  assert.deepEqual(calls, ['load']);
+  assert.equal(input.value, '');
+  assert.equal(state.sessionImportPending.value, false);
 });
 
 test('focused input intent does not occupy Session until asynchronous mutation starts', async () => {
@@ -218,7 +248,7 @@ test('late annotation reads return busy without replacing the existing rows', as
   const read = gate();
   const sets = [];
   const owner = createAnnotationEditor({
-    state: { annotationSets: sets, adv: {}, sessionOperationAvailability },
+    state: withDrawings({ annotationSets: sets, adv: {}, sessionOperationAvailability }),
     getRecordCatalog: () => ({ status: 'ready', records: [] })
   });
   const file = { name: 'annotations.tsv', text: () => read.promise };
@@ -260,12 +290,12 @@ test('late rule helper replies cannot publish cache entries while Session is pen
   const feature = { type: 'CDS', record: 'record', id: 'gene', qualifiers: {} };
   const rule = { feat: '*', qual: 'product', val: 'gene' };
   const owner = createRulePreparation({
-    state: { extractedFeatures: { value: [feature] }, manualSpecificRules: [rule], sessionOperationAvailability },
+    state: withDrawings({ extractedFeatures: { value: [feature] }, manualSpecificRules: [rule], sessionOperationAvailability }),
     evaluate: () => reply.promise
   });
   const pending = owner.prepare([rule]);
   state.sessionSavePending.value = true;
-  reply.release({ matches: [[0]], priorities: [0] });
+  reply.release({ matches: [[0]], priorities: [[0]] });
   assert.equal(await pending, false);
   assert.equal(ruleMatchesFeature(feature, rule), null);
   state.sessionSavePending.value = false;

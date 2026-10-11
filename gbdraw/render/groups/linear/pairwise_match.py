@@ -4,18 +4,19 @@
 from gbdraw.exceptions import ComparisonIdentityError
 
 import math
-from typing import Dict, Sequence, Tuple
+from typing import Dict, Sequence, cast
 
 from pandas import DataFrame
-from svgwrite.container import Group
-from svgwrite.path import Path
+from gbdraw.svg.elements import Group, Path
 
 from ....canvas import LinearCanvasConfigurator
 from ....layout.linear_coords import normalize_position_linear
 from ....core.color import (
+    COLLINEAR_ORIENTATION_COLOR_KEYS,
+    COLLINEAR_ORIENTATION_MIN_COLOR_KEYS,
     DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS,
     DEFAULT_COLLINEAR_ORIENTATION_COLORS,
-    interpolate_color,
+    interpolate_default_colors,
 )
 from ....features.ids import make_linear_rendered_feature_id
 from ....layout.linear_multi_record import LinearRecordPlacement
@@ -57,7 +58,8 @@ def _required_attribute_text(value: object) -> str:
 
 def _row_float(row: object, name: str, default: float = 0.0) -> float:
     try:
-        return float(_row_value(row, name, default))
+        # Non-numeric values still raise TypeError/ValueError, handled below.
+        return float(cast("str | float", _row_value(row, name, default)))
     except (TypeError, ValueError):
         return float(default)
 
@@ -183,7 +185,7 @@ class PairWiseMatchGroup:
         self.track_id: str = "comparison" + str(self.comparison_count)
         self._pairwise_match_counter = 0
         self.calculate_query_subject_offsets()
-        self.match_group = Group(id=self.track_id, debug=False)
+        self.match_group = Group(id=self.track_id)
         if self.query_placement is not None:
             self.match_group.attribs["data-query-record-index"] = self.query_record_index
             self.match_group.attribs["data-subject-record-index"] = self.subject_record_index
@@ -192,19 +194,13 @@ class PairWiseMatchGroup:
             self.match_group.attribs["data-subject-row"] = self.subject_placement.row
         self.add_elements_to_group()
 
-    def calculate_query_subject_offsets(self) -> Tuple[float, float]:
+    def calculate_query_subject_offsets(self) -> None:
         """
         Calculates the horizontal offsets for the query and subject sequences.
 
         This method determines the starting x-coordinates for the query and subject in the alignment,
-        ensuring they are centered if specified in the configuration.
-
-        Args:
-            query_id (str): Identifier for the query sequence.
-            subject_id (str): Identifier for the subject sequence.
-
-        Returns:
-            Tuple[float, float]: The x-coordinate offsets for the query and subject sequences.
+        ensuring they are centered if specified in the configuration. The results are
+        stored on ``self`` (``query_offset_x``, ``subject_offset_x`` and the alignment offsets).
         """
         if self.query_placement is not None and self.subject_placement is not None:
             self.query_offset_x = 0.0
@@ -265,16 +261,16 @@ class PairWiseMatchGroup:
             feature_indexes = []
             for part in index_parts:
                 try:
-                    feature_index = int(part)
+                    parsed_index = int(part)
                 except (TypeError, ValueError):
                     raise ComparisonIdentityError(
                         "Comparison source feature index must be a nonnegative integer.", reason="SOURCE_INDEX"
                     ) from None
-                if feature_index < 0 or str(feature_index) != part:
+                if parsed_index < 0 or str(parsed_index) != part:
                     raise ComparisonIdentityError(
                         "Comparison source feature index must be a nonnegative integer.", reason="SOURCE_INDEX"
                     )
-                feature_indexes.append(feature_index)
+                feature_indexes.append(parsed_index)
         else:
             feature_indexes = [None] * len(view_ids)
 
@@ -362,7 +358,11 @@ class PairWiseMatchGroup:
                 100 - self.min_identity
             )
             factor = max(0.0, min(1.0, factor))
-        default_gradient_color = interpolate_color(self.match_min_color, self.match_max_color, factor)
+        default_gradient_color = interpolate_default_colors(
+            ("pairwise_match_min", self.match_min_color),
+            ("pairwise_match_max", self.match_max_color),
+            factor,
+        )
         dynamic_fill_color = self.resolve_match_fill_color(row, factor, default_gradient_color)
         if endpoints is None:
             query_start, query_end, subject_start, subject_end = self.calculate_offsets(row)
@@ -412,7 +412,6 @@ class PairWiseMatchGroup:
             fill_opacity=self.match_fill_opacity,
             stroke=self.match_stroke_color,
             stroke_width=self.match_stroke_width,
-            debug=False,
         )
         path.attribs["data-pairwise-match-style"] = match_style
         path.attribs["data-identity-factor"] = f"{factor:.6g}"
@@ -492,8 +491,13 @@ class PairWiseMatchGroup:
                 "collinearity_orientation_min_colors",
                 DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS,
             )
+            min_key = COLLINEAR_ORIENTATION_MIN_COLOR_KEYS.get(orientation, "pairwise_match_min")
             min_color = orientation_min_colors.get(orientation, self.match_min_color)
-            return interpolate_color(min_color, orientation_color, factor)
+            return interpolate_default_colors(
+                (min_key, min_color),
+                (COLLINEAR_ORIENTATION_COLOR_KEYS[orientation], orientation_color),
+                factor,
+            )
 
         return default_gradient_color
 
@@ -718,7 +722,7 @@ class PairWiseMatchGroup:
                     if transforms is not None else None)
             projected = pair is not None and any(t.start_coordinate is not None for t in pair)
             endpoints = (project_match_endpoints((row.qstart, row.qend, row.sstart, row.send), pair)
-                         if projected else (None,))
+                         if projected and pair is not None else (None,))
             for fragment_index, fragment in enumerate(endpoints):
                 match_path = self.generate_linear_match_path(row, match_index=index, endpoints=fragment)
                 if projected:

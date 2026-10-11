@@ -1,14 +1,21 @@
+// @ts-check
 import {
   applyCanvasPaddingToSvg,
   bindCompositionMetadata,
   compositionUserDeltas
 } from './composition-actions.js';
 
-export const createLegendCanvasActions = ({ state, previewRuntime = null }) => {
+/**
+ * @typedef {object} LegendCanvasActionsOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
+ *   The preview owner's commit of an edit to the displayed Result (R1, R13).
+ */
+
+/** @param {LegendCanvasActionsOptions} options */
+export const createLegendCanvasActions = ({ state, commitActiveResultEdit = null }) => {
   const {
     svgContainer,
-    canvasPadding,
-    originalSvgStroke,
     diagramElements,
     diagramElementOriginalTransforms,
     diagramOffset,
@@ -25,35 +32,25 @@ export const createLegendCanvasActions = ({ state, previewRuntime = null }) => {
   // applies it before the candidate is published, and a displayed Result
   // receives the current value. Applying the same padding twice is a no-op.
   const applyCanvasPadding = () => {
+    const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
     const svg = currentSvg();
     if (!svg) return false;
     bindCompositionMetadata(svg);
-    if (!applyCanvasPaddingToSvg(svg, canvasPadding)) return false;
-    return Boolean(previewRuntime?.commitActiveResultEdit('canvas-padding'));
+    if (!applyCanvasPaddingToSvg(svg, drawing.canvasPadding)) return false;
+    return Boolean(commitActiveResultEdit?.('canvas-padding'));
   };
 
   const resetCanvasPadding = () => {
+    const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
-    canvasPadding.top = 0;
-    canvasPadding.right = 0;
-    canvasPadding.bottom = 0;
-    canvasPadding.left = 0;
+    drawing.canvasPadding.top = 0;
+    drawing.canvasPadding.right = 0;
+    drawing.canvasPadding.bottom = 0;
+    drawing.canvasPadding.left = 0;
     return applyCanvasPadding();
-  };
-
-  const captureOriginalStroke = () => {
-    const svg = currentSvg();
-    if (!svg) return;
-    const firstFeaturePath = svg.querySelector('path[id^="f"]');
-    if (!firstFeaturePath) return;
-    const strokeWidth = Number.parseFloat(firstFeaturePath.getAttribute('stroke-width'));
-    originalSvgStroke.value = {
-      color: firstFeaturePath.getAttribute('stroke'),
-      width: Number.isFinite(strokeWidth) ? strokeWidth : null
-    };
   };
 
   const captureBaseConfig = () => {
@@ -108,7 +105,6 @@ export const createLegendCanvasActions = ({ state, previewRuntime = null }) => {
   return {
     applyCanvasPadding,
     captureBaseConfig,
-    captureOriginalStroke,
     resetCanvasPadding
   };
 };

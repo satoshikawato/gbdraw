@@ -121,7 +121,8 @@ test('Generate reports real cold/warm stages and preserves the successful Result
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     window.successfulResults = app.results;
-    app.adv.scale_interval = 12345;
+    // An edit since the shown Result, made as a History step like a user edit (UJ-10).
+    await window.__GBDRAW_HISTORY__.runUndoable('Set scale interval', () => { app.adv.scale_interval = 12345; });
     window.feedbackHistory = [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()];
     const config = await import('./js/services/config.js');
     window.appliedBeforeCancel = config.getCommittedCanonicalRenderRequest();
@@ -178,7 +179,7 @@ test('Linear comparison preparation, real search counts, cache reuse, and no-com
   const external = await prepare(page, baseURL);
   await page.evaluate(async content => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'linear';
+    app.setDiagramMode('linear');
     await window.Vue.nextTick();
     while (app.linearSeqs.length < 2) app.addLinearSeq();
     for (let i = 0; i < 2; i += 1) {
@@ -222,7 +223,7 @@ test('S03 Linear LOSAT draft edits never replace the committed request before Ge
   await prepare(page,baseURL);
   await page.evaluate(async content => {
     const app=window.__GBDRAW_APP__;
-    app.mode='linear';await window.Vue.nextTick();
+    app.setDiagramMode('linear');await window.Vue.nextTick();
     while(app.linearSeqs.length<2) app.addLinearSeq();
     for(let i=0;i<2;i++) app.setLinearSeqPrimaryFile(i,'gb',new File([content],`record-${i}.gbk`,{type:'text/plain'}));
     await app.setLinearComparisonGlobalAction('losat');await window.Vue.nextTick();
@@ -234,11 +235,11 @@ test('S03 Linear LOSAT draft edits never replace the committed request before Ge
   expect(await page.evaluate(()=>window.__GBDRAW_APP__.errorLog?.summary||'')).toBe('');
   expect(await keepCommitted(page,'losatCommitted')).toBe(true);
   await page.evaluate(async()=>{
-    const {state}=await import('./js/state.js');state.losat.blastn.task='blastn';await window.Vue.nextTick();
+    const {state}=await import('./js/state.js');state.activeDrawing().losat.blastn.task='blastn';await window.Vue.nextTick();
   });
   expect(await committedIs(page,'losatCommitted')).toBe(true);
   await page.evaluate(async()=>{
-    const {state}=await import('./js/state.js');state.losat.blastn.task='megablast';await window.Vue.nextTick();
+    const {state}=await import('./js/state.js');state.activeDrawing().losat.blastn.task='megablast';await window.Vue.nextTick();
   });
   expect(await committedIs(page,'losatCommitted')).toBe(true);
 });
@@ -290,4 +291,40 @@ test('S04 Linear Generate cancel, stale completion, failure and retry retain the
     expect(await committedIs(page,'s04PreviousBasis')).toBe(false);
     expect(page.externalRequests).toEqual([]);
   } finally {await page.context().close();}
+});
+
+
+test('OV-16 a Generate that fails before it replaces the loaded Session Result settles and keeps that Result ready', async ({ browser }, info) => {
+  test.setTimeout(240000);
+  const { load, generate } = require('./helpers/mode-transition.cjs');
+  const page = await load(browser);
+  try {
+    const before = await page.evaluate(() => {
+      window.ov16LoadedResults = window.__GBDRAW_APP__.results;
+      const observe = window.__GBDRAW_TEST_HOOKS__.onSessionLifecycleEvent;
+      // The first Generate step throws once, before any candidate replaces the Result.
+      window.__GBDRAW_TEST_HOOKS__.onSessionLifecycleEvent = (event) => {
+        observe(event);
+        if (event.name !== 'generation-input-resolution-start') return;
+        window.__GBDRAW_TEST_HOOKS__.onSessionLifecycleEvent = observe;
+        throw new Error('OV-16 forced early Generate failure');
+      };
+      return [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()];
+    });
+    await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.processing), { timeout: 30000 }).toBe(false);
+    await expect(page.getByRole('alert', { name: 'Generation Error' })).toBeVisible();
+    await expect(page.getByRole('alert', { name: 'Generation Error' })).not.toContainText('OV-16 forced');
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({ code: 'UNKNOWN', operation: 'generate' });
+    expect(await page.evaluate(() => ({
+      sameResult: window.__GBDRAW_APP__.results === window.ov16LoadedResults,
+      preserved: window.__GBDRAW_APP__.failedGeneratePreservedResult,
+      history: [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()],
+      restoring: window.__GBDRAW_HISTORY__.restoring.value,
+      restoredReady: window.__MODE_EVENTS__.some(event => event.name === 'preview.restore-ready-receipt-accepted')
+    }))).toEqual({ sameResult: true, preserved: true, history: before, restoring: false, restoredReady: true });
+    await page.screenshot({ path: info.outputPath('early-generate-failure-settled.png') });
+    await generate(page);
+    expect(page.externalRequests).toEqual([]);
+  } finally { await page.context().close(); }
 });

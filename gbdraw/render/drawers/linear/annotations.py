@@ -5,11 +5,8 @@ from __future__ import annotations
 import hashlib
 import re
 
-from svgwrite import Drawing  # type: ignore[reportMissingImports]
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
-from svgwrite.path import Path  # type: ignore[reportMissingImports]
-from svgwrite.shapes import Line, Rect  # type: ignore[reportMissingImports]
-from svgwrite.text import Text  # type: ignore[reportMissingImports]
+from svgwrite import Drawing
+from gbdraw.svg.elements import Group, Line, Path, Rect, Text
 
 from gbdraw.annotations import (
     AnnotationTrackParams,
@@ -60,7 +57,7 @@ def draw_linear_annotation_track(
     group_id = dom_group_id or (
         f"gbdraw-annotation-track-{_dom_token(track.slot_id)}-{record_index + 1}"
     )
-    group = Group(id=group_id, debug=False)
+    group = Group(id=group_id)
     if semantic_slot_id:
         group.attribs["data-gbdraw-slot-id"] = str(semantic_slot_id)
         group.attribs["data-gbdraw-slot-renderer"] = "annotations"
@@ -88,7 +85,7 @@ def draw_linear_annotation_track(
             set_id=track.set_id,
             annotation_id=annotation.id,
         )
-        item_group = Group(id=item_id, debug=False)
+        item_group = Group(id=item_id)
         if not auto_feature_underlay:
             item_group.attribs.update(
                 {
@@ -120,7 +117,6 @@ def draw_linear_annotation_track(
                     fill_opacity=style.fill_opacity,
                     stroke="none" if auto_feature_underlay else style.stroke,
                     stroke_width=0 if auto_feature_underlay else style.stroke_width,
-                    debug=False,
                 )
                 if dash:
                     rect.attribs["stroke-dasharray"] = dash
@@ -182,6 +178,7 @@ def draw_linear_annotation_track(
                         item_group.add(Line(start=(x2, lane_center - cap), end=(x2, lane_center + cap), stroke=style.stroke, stroke_width=style.stroke_width))
 
         if params.show_labels and annotation.label:
+            label_bp: float
             if style.label_position == "start":
                 label_bp, anchor = annotation.geometry_segments[0][0], "start"
             elif style.label_position == "end":

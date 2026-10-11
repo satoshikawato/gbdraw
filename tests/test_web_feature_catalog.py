@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import xml.etree.ElementTree as ET
 
 import pytest
@@ -38,7 +39,7 @@ def test_schema_three_promotion_only_restores_exact_single_part_anchors() -> Non
     promoted = promote_legacy_feature_catalog(legacy)
 
     assert legacy["schema"] == 3
-    assert promoted["schema"] == 4
+    assert promoted["schema"] == feature_catalog_module.FEATURE_CATALOG_SCHEMA
     exact, compound = promoted["items"][0]["biologicalFeatures"]
     assert exact["anchorProfile"] == {
         "precision": "exact",
@@ -53,6 +54,42 @@ def test_schema_three_promotion_only_restores_exact_single_part_anchors() -> Non
         "partOrder": "ambiguous",
         "strand": "+",
     }
+
+
+def test_schema_three_promotion_reads_the_source_index_of_a_disambiguated_id() -> None:
+    """OV-269: a schema 3 writer named a duplicated stable identity
+    ``<stableFeatureId>~<source feature index>`` without storing the index.
+    Mirrored in tests/web/feature-catalog.test.mjs."""
+
+    features = [
+        {"stableFeatureId": "s", "biologicalFeatureId": "s~136"},
+        {"stableFeatureId": "s", "biologicalFeatureId": "s~137", "featureIndex": 9},
+        {"biologicalFeatureId": "s~138"},
+        {"stableFeatureId": "s", "biologicalFeatureId": "s~139~2"},
+        {"stableFeatureId": "s", "biologicalFeatureId": "t~140"},
+    ]
+    legacy = {"schema": 3, "items": [{"biologicalFeatures": features}]}
+
+    promoted = promote_legacy_feature_catalog(legacy)["items"][0]["biologicalFeatures"]
+
+    assert [feature.get("sourceFeatureIndex") for feature in promoted] == [136, None, None, None, None]
+
+
+SOURCE_INDEX_ALIAS_VECTORS = json.loads(
+    (Path(__file__).resolve().parent / "fixtures" / "source-feature-index-alias-vectors.json")
+    .read_text(encoding="utf-8")
+)["cases"]
+
+
+@pytest.mark.parametrize(
+    "case", SOURCE_INDEX_ALIAS_VECTORS, ids=[case["name"] for case in SOURCE_INDEX_ALIAS_VECTORS]
+)
+def test_schema_three_promotion_source_index_alias_vectors(case: dict) -> None:
+    """OV-274: shared with tests/web/feature-catalog.test.mjs."""
+
+    legacy = {"schema": 3, "items": [{"biologicalFeatures": [dict(case["feature"])]}]}
+    promoted = promote_legacy_feature_catalog(legacy)["items"][0]["biologicalFeatures"][0]
+    assert promoted.get("sourceFeatureIndex") == case["promotedSourceFeatureIndex"]
 
 
 def _combined_catalog_fixture() -> tuple[str, InteractiveSvgContext]:
@@ -157,6 +194,56 @@ def _combined_catalog_fixture() -> tuple[str, InteractiveSvgContext]:
     return svg, context
 
 
+def test_feature_catalog_records_each_rendered_features_drawn_selector() -> None:
+    # Design Q4 OV-02: live rule matching reads the values the feature was drawn
+    # with, which crop and reverse complement change.
+    svg, context = _combined_catalog_fixture()
+    drawn = {"hash": "fdrawn", "location": "3..9:-", "recordLocation": "record-a:3..9:-"}
+    features = list(context.features)
+    features[0] = {**features[0], "drawn_selector": drawn}
+    context = InteractiveSvgContext(**{**context.__dict__, "features": tuple(features)})
+
+    item = build_feature_catalog_item(svg, context, result_index=0, result_name="drawn.svg")
+    for biological in item["biologicalFeatures"]:
+        biological["anchorProfile"] = {
+            "precision": "unavailable",
+            "operator": "unknown",
+            "partOrder": "ambiguous",
+            "strand": "unstranded",
+        }
+    catalog = {"schema": feature_catalog_module.FEATURE_CATALOG_SCHEMA, "items": [item]}
+
+    assert feature_catalog_module.FEATURE_CATALOG_SCHEMA == 5
+    assert [feature["drawnSelector"] for feature in item["features"]] == [drawn, None, None]
+    assert select_feature_catalog_item(catalog, result_index=0, result_name="drawn.svg") is not None
+    for invalid in ({"hash": "fdrawn"}, {**drawn, "hash": ""}):
+        broken = json.loads(json.dumps(catalog))
+        broken["items"][0]["features"][0]["drawnSelector"] = invalid
+        with pytest.raises(GbdrawError, match="drawn selector"):
+            select_feature_catalog_item(broken, result_index=0, result_name="drawn.svg")
+    missing = json.loads(json.dumps(catalog))
+    del missing["items"][0]["features"][0]["drawnSelector"]
+    with pytest.raises(GbdrawError, match="drawn selector"):
+        select_feature_catalog_item(missing, result_index=0, result_name="drawn.svg")
+
+
+def test_schema_four_promotion_marks_drawn_selectors_unknown() -> None:
+    svg, context = _combined_catalog_fixture()
+    item = build_feature_catalog_item(svg, context, result_index=0, result_name="old.svg")
+    for feature in item["features"]:
+        del feature["drawnSelector"]
+    anchor_catalog = {"schema": 4, "items": [item]}
+
+    promoted = promote_legacy_feature_catalog(anchor_catalog)
+
+    assert "drawnSelector" not in anchor_catalog["items"][0]["features"][0]
+    assert promoted["schema"] == feature_catalog_module.FEATURE_CATALOG_SCHEMA
+    assert [feature["drawnSelector"] for feature in promoted["items"][0]["features"]] == [
+        None, None, None
+    ]
+    assert promoted["items"][0]["biologicalFeatures"] == item["biologicalFeatures"]
+
+
 def test_feature_catalog_uses_one_read_only_svg_index(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -215,18 +302,21 @@ def test_feature_catalog_uses_one_read_only_svg_index(
                 "recordKey": "record-a",
                 "biologicalFeatureId": "multi",
                 "fillColor": "#22aa44",
+                "drawnSelector": None,
             },
             {
                 "svgId": "suffix_record_2",
                 "recordKey": "record-b",
                 "biologicalFeatureId": "suffix",
                 "fillColor": "#3355cc",
+                "drawnSelector": None,
             },
             {
                 "svgId": "fallback_record_2",
                 "recordKey": "record-b",
                 "biologicalFeatureId": "fallback",
                 "fillColor": "#cc7733",
+                "drawnSelector": None,
             },
         ],
         "biologicalFeatures": [
@@ -710,6 +800,7 @@ def test_feature_catalog_normalizes_references_and_sequence_ownership() -> None:
             "recordKey": "stable-record-key",
             "biologicalFeatureId": biological_id,
             "fillColor": "#123456",
+            "drawnSelector": None,
         }
     ]
     group = item["orthogroups"][0]
@@ -1648,7 +1739,7 @@ def test_feature_catalog_references_one_biological_payload_from_many_renderings(
     }
     assert all(
         set(feature)
-        <= {"svgId", "recordKey", "biologicalFeatureId", "fillColor"}
+        <= {"svgId", "recordKey", "biologicalFeatureId", "fillColor", "drawnSelector"}
         for feature in item["features"]
     )
     encoded = json.dumps(item)
@@ -1771,7 +1862,7 @@ def test_catalog_match_payload_reports_record_source_coordinates() -> None:
          "subject_record_index": "1", "sstart": "5", "send": "9"},
         {0: (101, 200, -1), 1: (11, 30, 1)},
     )
-    # Same values as recordSourceInterval in app/record-source-coordinates.js.
+    # Same values as recordSourceInterval in services/record-source-coordinates.js.
     assert fields == {
         "qsource_start": "121", "qsource_end": "160", "qtable_interval": "21..60",
         "ssource_start": "15", "ssource_end": "19", "stable_interval": "5..9",
@@ -1780,3 +1871,39 @@ def test_catalog_match_payload_reports_record_source_coordinates() -> None:
         {"match_kind": "homology", "query_record_index": "0", "qstart": "80", "qend": "41"},
         {0: (101, 200, -1)},
     ) == {}
+
+
+def _former_reverse_complement_sequence(sequence: str) -> str:
+    complements = {
+        "A": "T", "C": "G", "G": "C", "T": "A", "U": "A", "R": "Y", "Y": "R",
+        "S": "S", "W": "W", "K": "M", "M": "K", "B": "V", "D": "H", "H": "D",
+        "V": "B", "N": "N", "-": "-",
+    }
+    return "".join(
+        complements.get(base, "N")
+        for base in reversed("".join(sequence.split()).upper())
+    )
+
+
+def test_reverse_complement_sequence_matches_the_former_per_base_mapping() -> None:
+    import random
+
+    from gbdraw.web_support.feature_catalog import _reverse_complement_sequence
+
+    every_character = [chr(code) for code in range(0x300)]
+    # Characters whose upper-case form is several characters or a different
+    # letter ("ß", "ſ", "ı", ligatures) must be mapped after upper-casing.
+    special = list("ßſıİŉǰﬃﬀ  　\t\r\n") + ["K", "Ａ"]
+    for character in every_character + special:
+        assert _reverse_complement_sequence(character) == (
+            _former_reverse_complement_sequence(character)
+        ), repr(character)
+
+    rng = random.Random(11)
+    alphabet = every_character + special + list("ACGTUacgtuNnRYKMSWBDHV- ") * 20
+    for _ in range(300):
+        text = "".join(rng.choice(alphabet) for _ in range(rng.randrange(0, 200)))
+        assert _reverse_complement_sequence(text) == (
+            _former_reverse_complement_sequence(text)
+        )
+    assert _reverse_complement_sequence("") == ""

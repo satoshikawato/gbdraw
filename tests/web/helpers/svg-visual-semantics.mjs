@@ -1,6 +1,7 @@
 // Promoted from SESSION 05A13-B audit-state.js. Same-browser numbers retain
 // their full precision; CLI/Wasm tolerance belongs to the separate CLI oracle.
 import { stripTransientPreviewState } from '../../../gbdraw/web/js/services/svg-serialization.js';
+import { legendRowShown } from '../../../gbdraw/web/js/services/legend-svg.js';
 
 const properties = ['x','y','x1','y1','x2','y2','cx','cy','r','rx','ry','width','height','d','points','transform','viewBox','fill','fill-opacity','fill-rule','stroke','stroke-width','stroke-opacity','stroke-dasharray','stroke-linecap','stroke-linejoin','opacity','display','visibility','font-family','font-size','font-weight','font-style','text-anchor','dominant-baseline','alignment-baseline','baseline-shift','letter-spacing','clip-path','mask','filter','marker-start','marker-mid','marker-end','href','xlink:href','offset','stop-color','stop-opacity','gradientUnits','gradientTransform','spreadMethod','preserveAspectRatio'];
 const numbers = new Set(['x','y','x1','y1','x2','y2','cx','cy','r','rx','ry','width','height','d','points','transform','viewBox','fill-opacity','stroke-width','stroke-opacity','stroke-dasharray','opacity','font-size','letter-spacing','offset','stop-opacity']);
@@ -21,8 +22,18 @@ const attributes = element => {
   return Object.fromEntries(Object.entries(attrs).sort(([a], [b]) => a.localeCompare(b)));
 };
 
+// D-15-6 (2): a deleted Legend row stays hidden in the stored Result and every
+// export strips it, so its nodes are not part of what the user sees.
+const inHiddenLegendRow = (element, root) => {
+  for (let parent = element.parentElement; parent && parent !== root; parent = parent.parentElement) {
+    if (parent.getAttribute('data-legend-key') !== null && !legendRowShown(parent)) return true;
+  }
+  return false;
+};
+
 export const visualSemanticsFromRoot = root => {
-  const nodes = [root, ...root.querySelectorAll('path,text,tspan,textPath,circle,ellipse,rect,line,polyline,polygon,image,use,linearGradient,radialGradient,stop,style')];
+  const nodes = [root, ...root.querySelectorAll('path,text,tspan,textPath,circle,ellipse,rect,line,polyline,polygon,image,use,linearGradient,radialGradient,stop,style')]
+    .filter(element => !inHiddenLegendRow(element, root));
   return nodes.map(element => {
     const ancestors = [];
     for (let parent = element.parentElement; parent; parent = parent.parentElement) {

@@ -172,7 +172,7 @@ const {
 } = await import('../../gbdraw/web/js/app/run-analysis.js');
 const {
   resolveLinearComparisonPlan
-} = await import('../../gbdraw/web/js/app/linear-comparisons.js');
+} = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 const {
   applyEditorStateData,
   applyFeatureStateData,
@@ -189,6 +189,7 @@ const {
   serializeResults,
   SESSION_VERSION
 } = await import('../../gbdraw/web/js/services/config.js');
+const { CANONICAL_REQUEST_SCHEMA } = await import('../../gbdraw/web/js/services/session-request.js');
 const { createHistoryFileStore } = await import(
   '../../gbdraw/web/js/services/history-files.js'
 );
@@ -288,6 +289,11 @@ const createImmediatePreviewRuntime = ({ onEvent = () => {} } = {}) => {
       });
       onEvent('test.preview-restore-ready');
       return activeReceipt;
+    },
+    selectResult(index) {
+      if (state.selectedResultIndex.value === index) return false;
+      state.selectedResultIndex.value = index;
+      return true;
     }
   };
 };
@@ -299,6 +305,9 @@ const generatedArtifactHandleOptions = {
   restoreGeneratedArtifactHandle: artifactSnapshots.restoreGeneratedArtifactHandle,
   setGeneratedArtifactIdentity: artifactSnapshots.setGeneratedArtifactIdentity,
   previewRuntime: immediatePreviewRuntime,
+  // The label owner's ports (R13); these tests do not open the label dialog.
+  closeLabelTextScopeDialog: () => {},
+  clearLabelBuildNotices: () => {},
   nextTick: window.Vue.nextTick,
   waitForAfterPaint: async () => {}
 };
@@ -317,7 +326,7 @@ const result = (name, marker) => ({
 });
 
 const validCatalog = (name) => ({
-  schema: 4,
+  schema: 5,
   items: [{
     resultIndex: 0,
     resultName: name,
@@ -326,7 +335,8 @@ const validCatalog = (name) => ({
       svgId: 'rendered-feature-1',
       recordKey: 'record-1',
       biologicalFeatureId: 'biological-feature-1',
-      fillColor: '#abcdef'
+      fillColor: '#abcdef',
+      drawnSelector: { hash: 'rendered-feature-1', location: '0..9', recordLocation: 'record-1:0..9:+' }
     }],
     biologicalFeatures: [{
       recordKey: 'record-1',
@@ -388,13 +398,12 @@ const committedFeatureState = () => structuredClone({
   featureCatalog: state.featureCatalog.value,
   extractedFeatures: state.extractedFeatures.value,
   biologicalFeatures: state.biologicalFeatures.value,
-  featureSelectorSafetyScope: state.featureSelectorSafetyScope.value,
   selectedFeatureIds: [...state.selectedFeatureIds.value],
   selectedFeatureAnchorId: state.selectedFeatureAnchorId.value,
   featureSelectionStatus: state.featureSelectionStatus.value,
-  featureColorOverrides: state.featureColorOverrides,
-  featureStrokeOverrides: state.featureStrokeOverrides,
-  legendEntries: state.legendEntries.value,
+  featureColorOverrides: state.activeDrawing().featureColorOverrides,
+  featureStrokeOverrides: state.activeDrawing().featureStrokeOverrides,
+  legendEntries: state.activeDrawing().legendEntries.value,
   featureEditorStatus: state.featureEditorStatus,
   featureExtractionPending: state.featureExtractionPending.value,
   featureExtractionError: state.featureExtractionError.value,
@@ -492,6 +501,38 @@ test('canonical execution carries the Worker comparison table ID warnings to the
   );
 });
 
+test('a rerender admits the Results it draws again under their kept names (OV-136)', async () => {
+  const admitted = [];
+  const outcome = await executeCanonicalRenderCandidate({
+    canonical: { renderRequest: { schema: 7 }, resources: {} },
+    mode: 'circular',
+    kind: 'reflow',
+    resultNames: ['HmmtDNA_basic_circular'],
+    generationExecutor: async () => ({
+      results: [{ name: 'out.svg', content: '<svg/>' }],
+      metadata: {
+        featureCatalog: { items: [{ resultIndex: 0, resultName: 'out.svg' }] },
+        annotationWarnings: [{
+          code: 'empty_span', setId: 's', annotationId: 'a', recordId: 'NC_012920.1', recordIndex: 0,
+          missingCount: 0, message: 'Empty span.', resultIndex: 0, resultName: 'out.svg'
+        }]
+      }
+    }),
+    catalogAdmission: (catalog, results) => {
+      admitted.push({ items: catalog.items, names: results.map((result) => result.name) });
+      return { catalog };
+    },
+    prepareCommit: ({ generationResponse }) => ({ results: generationResponse.results })
+  });
+  assert.equal(outcome.status, 'ok');
+  assert.deepEqual(admitted, [{
+    items: [{ resultIndex: 0, resultName: 'HmmtDNA_basic_circular' }],
+    names: ['HmmtDNA_basic_circular']
+  }]);
+  assert.deepEqual(outcome.commit.results.map((result) => result.name), ['HmmtDNA_basic_circular']);
+  assert.equal(outcome.annotationWarnings[0].resultName, 'HmmtDNA_basic_circular');
+});
+
 test('audit-5 owner: direct simple createRunAnalysis path is worker-only and catalog-transactional', async () => {
   const structuralMetrics = {};
   const lifecycleEvents = [];
@@ -529,13 +570,13 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   state.files.blacklist = inactive;
   state.files.whitelist = inactive;
   state.files.qualifier_priority = inactive;
-  state.form.prefix = 'audit-simple';
-  state.form.show_depth = false;
-  state.form.multi_record_canvas = false;
-  state.adv.circular_track_slots_enabled = false;
-  state.circularConservation.enabled = false;
-  state.circularConservation.source = 'upload';
-  state.annotationSets.splice(0);
+  state.activeDrawing().form.prefix = 'audit-simple';
+  state.activeDrawing().form.show_depth = false;
+  state.activeDrawing().form.multi_record_canvas = false;
+  state.activeDrawing().adv.circular_track_slots_enabled = false;
+  state.activeDrawing().circularConservation.enabled = false;
+  state.activeDrawing().circularConservation.source = 'upload';
+  state.activeDrawing().annotationSets.splice(0);
   state.circularRecordList.value = [{ selector: '#1', record_id: 'audit' }];
   Object.assign(state.circularRecordDiscovery, {
     status: 'ready',
@@ -601,9 +642,15 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       }
     }
   });
+  // OV-36: Generate's start clears only the label build warning; a Generate
+  // that commits its Results also clears the last live-edit failure.
+  const labelNoticeClears = [];
   let runner;
   runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
     ...generatedArtifactHandleOptions,
+    clearLabelBuildNotices: ({ rerender = false } = {}) => {
+      labelNoticeClears.push(rerender ? 'rerender' : 'build');
+    },
     captureGeneratedArtifactHandle: captureForHistory,
     installGeneratedArtifactOwnerSet: (ownerSet, options) => {
       activationOwnerSets.push(ownerSet);
@@ -635,9 +682,9 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
         });
       } : null;
     },
-    serializeCanonicalFiles: () => {
+    serializeCanonicalFiles: (_snapshot, _catalog, drawing) => {
       assert.equal(state.processingStatus.value, 'Preparing render inputs and session...');
-      return serializeActiveRenderFiles(state.mode.value, state);
+      return serializeActiveRenderFiles(state.mode.value, state, drawing);
     },
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts: (canonical) => {
@@ -648,19 +695,17 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       lastAdoptedCanonical = structuredClone(canonical);
     },
     prepareCandidateCommit: ({
-      results,
-      catalog,
-      featureColorOverrides,
-      featureStrokeOverrides
+      generationResponse,
+      catalogAdmission,
+      featureColorOverrides
     }) => {
       if (failCandidateAdmission) {
         throw new Error('forced current Result admission failure');
       }
       const candidate = {
-        results: structuredClone(results),
-        featureState: featureStateFromCatalog(catalog),
-        featureColorOverrides: structuredClone(featureColorOverrides),
-        featureStrokeOverrides: structuredClone(featureStrokeOverrides)
+        results: structuredClone(generationResponse.results),
+        featureState: featureStateFromCatalog(catalogAdmission.catalog),
+        featureColorOverrides: structuredClone(featureColorOverrides)
       };
       return candidate;
     },
@@ -674,12 +719,21 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   const committedResult = result('audit-simple.svg', 'committed');
   const committedCatalog = validCatalog(committedResult.name);
   workerResponses.push(response(committedResult, committedCatalog));
+  // OV-84: a stroke on a feature this Result does not draw (here, a record of
+  // the other mode) stays in the draft through the Generate.
+  const dormantStrokeKey = 'linear-seq-other\u0000feature-x';
+  state.activeDrawing().featureStrokeOverrides[dormantStrokeKey] = { strokeColor: '#ff0000', strokeWidth: 3 };
 
   assert.deepEqual(
     await runner.runAnalysis(),
     { status: 'ok' },
     JSON.stringify(state.errorLog.value)
   );
+  assert.deepEqual(state.activeDrawing().featureStrokeOverrides, {
+    [dormantStrokeKey]: { strokeColor: '#ff0000', strokeWidth: 3 }
+  });
+  delete state.activeDrawing().featureStrokeOverrides[dormantStrokeKey];
+  assert.deepEqual(labelNoticeClears.splice(0), ['build', 'rerender']);
   assert.equal(state.failedGeneratePreservedResult.value, false);
   assert.deepEqual(state.results.value, [committedResult]);
   assert.deepEqual(state.featureCatalog.value, committedCatalog);
@@ -740,7 +794,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   const replay = JSON.parse(replayEntry.text);
   assert.equal(replay.format, 'gbdraw-session');
   assert.equal(replay.version, SESSION_VERSION);
-  assert.equal(replay.renderRequest.schema, 8);
+  assert.equal(replay.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
   assert.ok(Object.keys(replay.resources).length > 0);
 
   const firstRunPayload = workerMessages.find(({ type }) => type === 'run').payload;
@@ -756,7 +810,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   targetCandidate.renderRequest.records[0].display.startCoordinate = 3;
   targetCandidate.renderRequest.records[0].presentation.reverseComplement = true;
   const committedOutputPrefix = targetCandidate.renderRequest.output.prefix;
-  state.form.prefix = 'unrelated-pending-prefix';
+  state.activeDrawing().form.prefix = 'unrelated-pending-prefix';
   let targetIntent = {
     startCoordinate: null,
     reverseComplementOverride: null,
@@ -789,12 +843,12 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(state.errorLog.value, null);
   assert.equal(state.failedGeneratePreservedResult.value, false);
   assert.equal(generationHistory.getUndoCount(), historyCountBeforeTarget + 1);
-  assert.equal(state.form.prefix, 'unrelated-pending-prefix');
+  assert.equal(state.activeDrawing().form.prefix, 'unrelated-pending-prefix');
   assert.equal(targetIntent.startCoordinate, 3);
   assert.deepEqual(state.results.value, [targetResult]);
   const targetRunPayload = workerMessages.filter(({ type }) => type === 'run').at(-1).payload;
   assert.equal(targetRunPayload.request.output.prefix, committedOutputPrefix);
-  assert.notEqual(targetRunPayload.request.output.prefix, state.form.prefix);
+  assert.notEqual(targetRunPayload.request.output.prefix, state.activeDrawing().form.prefix);
   assert.equal(structuralMetrics.canonicalCandidateExecutionCount, 2);
   await generationHistory.undo();
   assert.deepEqual(state.results.value, [committedResult]);
@@ -839,12 +893,14 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(targetIntent.startCoordinate, 3);
   assert.equal(generationHistory.getUndoCount(), targetHistoryCount);
 
-  state.form.prefix = 'audit-simple';
+  state.activeDrawing().form.prefix = 'audit-simple';
 
   workerResponses.push(response(result('missing.svg', 'missing'), undefined));
   const metricsBeforePreActivationFailure = { ...structuralMetrics };
+  labelNoticeClears.length = 0;
   const failedRun = await runner.runAnalysis();
   assert.equal(failedRun.status, 'error');
+  assert.deepEqual(labelNoticeClears, ['build']);
   assert.equal(failedRun.error, state.errorLog.value);
   assert.equal(state.failedGeneratePreservedResult.value, true);
   assert.match(
@@ -1050,7 +1106,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(workerMessages.filter(({ type }) => type === 'run').length, 12); // Includes the explicit failed-restoration attempt.
   assert.equal(workerMessages.filter(({ type }) => type === 'feature-extraction').length, 0);
 
-  state.form.multi_record_canvas = true;
+  state.activeDrawing().form.multi_record_canvas = true;
   state.circularRecordList.value = [{ selector: '#1', record_id: 'audit' }];
   Object.assign(state.circularRecordDiscovery, {
     status: 'ready',
@@ -1098,7 +1154,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(state.processing.value, false);
 
   // A later operation owns the notification while this Worker response is held.
-  const { normalizeUserFacingError } = await import('../../gbdraw/web/js/services/error-normalization.js');
+  const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
   let releaseOlderFailure;
   workerResponses.push(new Promise(resolve => { releaseOlderFailure = resolve; }));
   const runsBeforeOlderFailure = workerMessages.filter(message => message.type === 'run').length;
@@ -1150,11 +1206,11 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     /Traceback|simple render must not initialize Pyodide/
   );
 
-  state.form.multi_record_canvas = false;
-  state.form.show_depth = false;
+  state.activeDrawing().form.multi_record_canvas = false;
+  state.activeDrawing().form.show_depth = false;
   state.files.c_depth = [[inactive]];
-  state.adv.circular_track_slots_enabled = true;
-  state.adv.circular_track_slots = [{
+  state.activeDrawing().adv.circular_track_slots_enabled = true;
+  state.activeDrawing().adv.circular_track_slots = [{
     id: 'custom-depth',
     renderer: 'depth',
     enabled: true,
@@ -1212,14 +1268,14 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
 
   // IN-05 (OIPC-C06): an inactive Circular source keeps its records and the
   // Multi-Record Canvas order through a mode round trip without rereading them.
-  state.adv.multi_record_positions.splice(
+  state.activeDrawing().adv.multi_record_positions.splice(
     0,
-    state.adv.multi_record_positions.length,
+    state.activeDrawing().adv.multi_record_positions.length,
     { selector: '#1', row: 3 }
   );
   const circularStateBeforeRoundTrip = structuredClone({
     records: state.circularRecordList.value,
-    positions: state.adv.multi_record_positions,
+    positions: state.activeDrawing().adv.multi_record_positions,
     discovery: { ...state.circularRecordDiscovery }
   });
   const helperRequestsBeforeRoundTrip = workerMessages.filter(({ type }) => type === 'helper').length;
@@ -1230,7 +1286,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   await runner.refreshCircularRecordOrder({ automatic: true });
   assert.deepEqual(structuredClone({
     records: state.circularRecordList.value,
-    positions: state.adv.multi_record_positions,
+    positions: state.activeDrawing().adv.multi_record_positions,
     discovery: { ...state.circularRecordDiscovery }
   }), circularStateBeforeRoundTrip);
   assert.equal(
@@ -1257,14 +1313,14 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   state.mode.value = 'circular';
   await runner.refreshCircularRecordOrder({ automatic: true });
   assert.deepEqual(state.circularRecordList.value, []);
-  assert.deepEqual(state.adv.multi_record_positions, []);
+  assert.deepEqual(state.activeDrawing().adv.multi_record_positions, []);
   assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, []);
   state.files.c_gb = fallbackPrimary;
 
-  state.form.multi_record_canvas = true;
+  state.activeDrawing().form.multi_record_canvas = true;
   state.files.c_depth = null;
-  state.adv.circular_track_slots_enabled = false;
-  state.adv.circular_track_slots = [];
+  state.activeDrawing().adv.circular_track_slots_enabled = false;
+  state.activeDrawing().adv.circular_track_slots = [];
   state.circularRecordList.value = [];
   Object.assign(state.circularRecordDiscovery, {
     status: 'idle',
@@ -1301,11 +1357,11 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     workerRunCountBeforeDiscoveryFailure
   );
 
-  state.form.multi_record_canvas = true;
+  state.activeDrawing().form.multi_record_canvas = true;
   state.files.c_gb = fallbackPrimary;
-  state.adv.multi_record_positions.splice(
+  state.activeDrawing().adv.multi_record_positions.splice(
     0,
-    state.adv.multi_record_positions.length,
+    state.activeDrawing().adv.multi_record_positions.length,
     { selector: '#1', row: 2 }
   );
   state.circularRecordList.value = [{
@@ -1326,7 +1382,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   await Promise.resolve();
   const discoveryStateBeforeRollback = {
     records: structuredClone(state.circularRecordList.value),
-    positions: structuredClone(state.adv.multi_record_positions),
+    positions: structuredClone(state.activeDrawing().adv.multi_record_positions),
     discovery: { ...state.circularRecordDiscovery }
   };
   state.semanticFileWatchersSuppressed.value = true;
@@ -1334,7 +1390,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   releaseStaleDiscovery();
   await staleDiscovery;
   assert.deepEqual(state.circularRecordList.value, discoveryStateBeforeRollback.records);
-  assert.deepEqual(state.adv.multi_record_positions, discoveryStateBeforeRollback.positions);
+  assert.deepEqual(state.activeDrawing().adv.multi_record_positions, discoveryStateBeforeRollback.positions);
   assert.deepEqual(state.circularRecordDiscovery, discoveryStateBeforeRollback.discovery);
   state.semanticFileWatchersSuppressed.value = false;
 });
@@ -1405,18 +1461,18 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
 
   state.mode.value = 'circular';
   state.cInputType.value = 'gb';
-  state.form.prefix = 'lazy-circular';
-  state.form.show_depth = false;
-  state.form.multi_record_canvas = false;
-  state.adv.circular_track_slots_enabled = false;
-  state.adv.circular_track_slots = [];
-  Object.assign(state.adv, {
+  state.activeDrawing().form.prefix = 'lazy-circular';
+  state.activeDrawing().form.show_depth = false;
+  state.activeDrawing().form.multi_record_canvas = false;
+  state.activeDrawing().adv.circular_track_slots_enabled = false;
+  state.activeDrawing().adv.circular_track_slots = [];
+  Object.assign(state.activeDrawing().adv, {
     min_bitscore: 0,
     evalue: '1e-2',
     identity: 0,
     alignment_length: 0
   });
-  Object.assign(state.circularConservation, {
+  Object.assign(state.activeDrawing().circularConservation, {
     enabled: true,
     source: 'losat',
     losat_program: 'blastn',
@@ -1426,9 +1482,9 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     ring_width: 5,
     ring_gap: 2
   });
-  state.circularConservation.series.splice(
+  state.activeDrawing().circularConservation.series.splice(
     0,
-    state.circularConservation.series.length,
+    state.activeDrawing().circularConservation.series.length,
     ...comparisonViews.map((file, index) => ({
       sourceKey: `${file.name}|${file.size}|0|${index}`,
       fileName: file.name,
@@ -1445,7 +1501,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
   state.files.c_conservation_blasts = [];
   state.files.c_conservation_fastas = comparisonViews;
   state.files.c_conservation_sequence_sources = [];
-  state.annotationSets.splice(0);
+  state.activeDrawing().annotationSets.splice(0);
   state.circularRecordList.value = [];
   Object.assign(state.circularRecordDiscovery, {
     status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null
@@ -1490,10 +1546,12 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
   let failLateArtifactAdoption = false;
   let committedRenderRequest = null;
   let committedCanonicalSession = null;
+  const recordDisplayRows = { value: [] };
   const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
     ...generatedArtifactHandleOptions,
     state,
-    serializeCanonicalFiles: (_snapshot, _catalog, runState) => serializeActiveRenderFiles(runState.mode.value, runState),
+    recordDisplayRows,
+    serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state.mode.value, state, drawing),
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts: (canonical) => {
       if (failLateArtifactAdoption) {
@@ -1510,15 +1568,13 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       error: ''
     }),
     prepareCandidateCommit: ({
-      results,
-      catalog,
-      featureColorOverrides,
-      featureStrokeOverrides
+      generationResponse,
+      catalogAdmission,
+      featureColorOverrides
     }) => ({
-      results: structuredClone(results),
-      featureState: featureStateFromCatalog(catalog),
-      featureColorOverrides: structuredClone(featureColorOverrides),
-      featureStrokeOverrides: structuredClone(featureStrokeOverrides)
+      results: structuredClone(generationResponse.results),
+      featureState: featureStateFromCatalog(catalogAdmission.catalog),
+      featureColorOverrides: structuredClone(featureColorOverrides)
     }),
     resetPreviewViewport: () => {}
   }));
@@ -1636,14 +1692,14 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const thirdView = createSessionResourceFileView(linearTable, 'third');
     state.mode.value = 'linear';
     state.lInputType.value = 'gb';
-    state.form.prefix = 'lazy-linear';
-    state.form.show_depth = false;
-    state.form.linear_track_layout = 'middle';
-    state.adv.linear_track_slots_enabled = false;
-    state.adv.linear_track_slots = [];
-    state.adv.comparison_height = null;
-    state.linearRecordLayoutEnabled.value = false;
-    state.linearRecordRows.splice(0);
+    state.activeDrawing().form.prefix = 'lazy-linear';
+    state.activeDrawing().form.show_depth = false;
+    state.activeDrawing().form.linear_track_layout = 'middle';
+    state.activeDrawing().adv.linear_track_slots_enabled = false;
+    state.activeDrawing().adv.linear_track_slots = [];
+    state.activeDrawing().adv.comparison_height = null;
+    state.activeDrawing().linearRecordLayoutEnabled.value = false;
+    state.activeDrawing().linearRecordRows.splice(0);
     state.linearSeqs.splice(0, state.linearSeqs.length, {
       uid: 'multi',
       gb: multiView,
@@ -1690,11 +1746,11 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       region_end: null,
       region_reverse: false
     });
-    Object.assign(state.linearComparisonPlan, {
+    Object.assign(state.activeDrawing().linearComparisonPlan, {
       mode: 'selected',
       defaultSource: 'losat'
     });
-    state.linearComparisonPlan.edges.splice(0, state.linearComparisonPlan.edges.length, {
+    state.activeDrawing().linearComparisonPlan.edges.splice(0, state.activeDrawing().linearComparisonPlan.edges.length, {
       id: 'lazy-linear-edge',
       queryUid: 'middle',
       subjectUid: 'third',
@@ -1706,22 +1762,22 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       losatFilenameActive: true
     });
     state.files.linearCanonicalComparisons = [];
-    state.losatProgram.value = 'blastn';
-    state.losat.blastn.task = 'megablast';
-    state.losat.executionMode = 'serial';
+    state.activeDrawing().losatProgram.value = 'blastn';
+    state.activeDrawing().losat.blastn.task = 'megablast';
+    state.losatExecution.executionMode = 'serial';
     state.losatCache.value = new Map();
 
     const comparisonPlanSnapshot = resolveLinearComparisonPlan({
-      plan: state.linearComparisonPlan,
+      plan: state.activeDrawing().linearComparisonPlan,
       sequences: state.linearSeqs,
       layout: [],
-      losatProgram: state.losatProgram.value,
-      blastpMode: state.losat.blastp.mode
+      losatProgram: state.activeDrawing().losatProgram.value,
+      blastpMode: state.activeDrawing().losat.blastp.mode
     });
     state.linearSeqs.find(({uid})=>uid==='middle').region_reverse=true;
-    state.recordDisplayRows = { value: [{ scope: 'linear', sourceUid: 'middle',
-      key: JSON.stringify(['linear', 'middle', '#1']), selector: '#1', recordId: 'MIDDLE', recordLength: 8,
-      reverse: true, cropped: false, detectedTopology: 'linear' }] };
+    recordDisplayRows.value = [{ scope: 'linear', sourceUid: 'middle',
+      key: JSON.stringify(['middle', '#1']), selector: '#1', recordId: 'MIDDLE', recordLength: 8,
+      reverse: true, cropped: false, detectedTopology: 'linear' }];
     const linearResult = result('lazy-linear.svg', 'lazy-linear');
     workerResponses.push(response(linearResult, validCatalog(linearResult.name)));
     assert.deepEqual(
@@ -1759,7 +1815,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.equal(projectedRun.records.find(({ recordKey }) => recordKey === 'middle')
       .presentation.reverseComplement, true);
     assert.equal(state.linearSeqs.find(({ uid }) => uid === 'middle').region_reverse, true);
-    delete state.recordDisplayRows;
+    recordDisplayRows.value = [];
     assert.equal(
       resourceMetrics.filter(({ name }) => name === 'resourceByteReadCount').length,
       3
@@ -1822,7 +1878,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const committedLosatTelemetry = structuredClone(
       globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__
     );
-    state.losat.blastn.task = 'blastn';
+    state.activeDrawing().losat.blastn.task = 'blastn';
     failLateArtifactAdoption = true;
     workerHelperResponses.push({
       ok: true,
@@ -1838,7 +1894,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.equal((await runner.runAnalysis(comparisonPlanSnapshot)).status, 'error');
     assert.equal(state.linearSeqs.find(({ uid }) => uid === 'middle').region_reverse, true);
     failLateArtifactAdoption = false;
-    state.losat.blastn.task = 'megablast';
+    state.activeDrawing().losat.blastn.task = 'megablast';
     assert.equal(state.errorLog.value?.code, 'UNKNOWN');
     assert.doesNotMatch(JSON.stringify(state.errorLog.value), /injected LOSAT late artifact adoption failure/);
     assert.equal(state.losatCache.value, committedLosatCache);
@@ -1855,7 +1911,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     );
     assert.equal(losatCalls, 2, 'the failed candidate must execute without becoming committed evidence');
 
-    state.losat.blastn.task = 'blastn';
+    state.activeDrawing().losat.blastn.task = 'blastn';
     workerHelperResponses.push({
       ok: true,
       result: { tsv: 'MIDDLE\tTHIRD\t100\t8\t0\t0\t1\t8\t1\t8\t1e-10\t20\n' }
@@ -1869,10 +1925,10 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       queryIndex: 0, subjectIndex: 1, ordinal: 0, display: true
     }];
     state.losatCacheInfo.value = structuredClone(warmCacheInfo);
-    state.losatProgram.value = 'blastp';
-    state.losat.blastp.mode = 'pairwise';
-    state.losat.blastp.maxHits = 5;
-    state.losat.blastp.candidateLimit = null;
+    state.activeDrawing().losatProgram.value = 'blastp';
+    state.activeDrawing().losat.blastp.mode = 'pairwise';
+    state.activeDrawing().losat.blastp.maxHits = 5;
+    state.activeDrawing().losat.blastp.candidateLimit = null;
     const warmSettings = {
       proteinBlastpMaxHits: 5,
       proteinBlastpCandidateLimit: null
@@ -1893,10 +1949,10 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     committedRenderRequest = {
       records: structuredClone(committedRenderRequest.records),
       diagramOptions: {
-        bitscore: Number(state.adv.min_bitscore),
-        evalue: Number(state.adv.evalue),
-        identity: Number(state.adv.identity),
-        alignmentLength: Number(state.adv.alignment_length)
+        bitscore: Number(state.activeDrawing().adv.min_bitscore),
+        evalue: Number(state.activeDrawing().adv.evalue),
+        identity: Number(state.activeDrawing().adv.identity),
+        alignmentLength: Number(state.activeDrawing().adv.alignment_length)
       },
       comparisons: [{
         kind: 'precomputedProteinComparison'
@@ -1905,11 +1961,11 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       }]
     };
     const warmComparisonPlan = resolveLinearComparisonPlan({
-      plan: state.linearComparisonPlan,
+      plan: state.activeDrawing().linearComparisonPlan,
       sequences: state.linearSeqs,
       layout: [],
-      losatProgram: state.losatProgram.value,
-      blastpMode: state.losat.blastp.mode
+      losatProgram: state.activeDrawing().losatProgram.value,
+      blastpMode: state.activeDrawing().losat.blastp.mode
     });
     const warmResult = result('lazy-linear-warm.svg', 'lazy-linear-warm');
     workerResponses.push(response(warmResult, validCatalog(warmResult.name)));
@@ -2052,12 +2108,12 @@ test('Linear mode none ignores dormant comparison state while active depth and a
 
   state.mode.value = 'linear';
   state.lInputType.value = 'gb';
-  state.form.prefix = 'linear-none';
-  state.form.show_depth = true;
-  state.form.multi_record_canvas = false;
-  state.adv.linear_track_slots_enabled = false;
-  state.adv.linear_track_slots = [];
-  state.adv.depth_tracks = [{
+  state.activeDrawing().form.prefix = 'linear-none';
+  state.activeDrawing().form.show_depth = true;
+  state.activeDrawing().form.multi_record_canvas = false;
+  state.activeDrawing().adv.linear_track_slots_enabled = false;
+  state.activeDrawing().adv.linear_track_slots = [];
+  state.activeDrawing().adv.depth_tracks = [{
     label: 'Coverage',
     color: '#4A90E2',
     height: null,
@@ -2065,8 +2121,8 @@ test('Linear mode none ignores dormant comparison state while active depth and a
     small_tick_interval: null,
     tick_font_size: null
   }];
-  state.linearRecordLayoutEnabled.value = false;
-  state.linearRecordRows.splice(0);
+  state.activeDrawing().linearRecordLayoutEnabled.value = false;
+  state.activeDrawing().linearRecordRows.splice(0);
   state.linearSeqs.splice(0, state.linearSeqs.length,
     {
       uid: 'linear-none-first',
@@ -2099,9 +2155,9 @@ test('Linear mode none ignores dormant comparison state while active depth and a
       region_reverse: false
     }
   );
-  state.linearComparisonPlan.mode = 'none';
-  state.linearComparisonPlan.defaultSource = 'losat';
-  state.linearComparisonPlan.edges.splice(0, state.linearComparisonPlan.edges.length, {
+  state.activeDrawing().linearComparisonPlan.mode = 'none';
+  state.activeDrawing().linearComparisonPlan.defaultSource = 'losat';
+  state.activeDrawing().linearComparisonPlan.edges.splice(0, state.activeDrawing().linearComparisonPlan.edges.length, {
     id: 'dormant-upload-edge',
     queryUid: 'linear-none-first',
     subjectUid: 'linear-none-second',
@@ -2112,7 +2168,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
     losatFilename: '',
     losatFilenameActive: false
   });
-  Object.assign(state.adv, {
+  Object.assign(state.activeDrawing().adv, {
     comparison_height: 'dormant-invalid-height',
     min_bitscore: 'dormant-invalid-bitscore',
     evalue: 'dormant-invalid-evalue',
@@ -2120,13 +2176,13 @@ test('Linear mode none ignores dormant comparison state while active depth and a
     alignment_length: 'dormant-invalid-alignment',
     pairwise_match_style: 'dormant-invalid-style'
   });
-  state.losatProgram.value = 'dormant-invalid-program';
-  Object.assign(state.losat, {
+  state.activeDrawing().losatProgram.value = 'dormant-invalid-program';
+  Object.assign(state.activeDrawing().losat, {
     totalThreadBudget: 'dormant-invalid-budget',
     threadsPerJob: 'dormant-invalid-threads',
     parallelWorkers: 'dormant-invalid-workers'
   });
-  Object.assign(state.losat.blastp, {
+  Object.assign(state.activeDrawing().losat.blastp, {
     mode: 'dormant-invalid-presentation',
     maxHits: 'dormant-invalid-max-hits',
     orthogroupMembershipMode: 'dormant-invalid-membership',
@@ -2142,15 +2198,15 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   });
   const dormantComparisonSettingsBefore = structuredClone({
     adv: {
-      comparison_height: state.adv.comparison_height,
-      min_bitscore: state.adv.min_bitscore,
-      evalue: state.adv.evalue,
-      identity: state.adv.identity,
-      alignment_length: state.adv.alignment_length,
-      pairwise_match_style: state.adv.pairwise_match_style
+      comparison_height: state.activeDrawing().adv.comparison_height,
+      min_bitscore: state.activeDrawing().adv.min_bitscore,
+      evalue: state.activeDrawing().adv.evalue,
+      identity: state.activeDrawing().adv.identity,
+      alignment_length: state.activeDrawing().adv.alignment_length,
+      pairwise_match_style: state.activeDrawing().adv.pairwise_match_style
     },
-    losatProgram: state.losatProgram.value,
-    losat: state.losat
+    losatProgram: state.activeDrawing().losatProgram.value,
+    losat: state.activeDrawing().losat
   });
   const dormantRawCache = new AuditCacheMap([['dormant-raw', { stale: true }]]);
   const dormantDerivedCache = new AuditCacheMap([['dormant-derived', { stale: true }]]);
@@ -2168,7 +2224,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
     mode: 'pairwise',
     pairs: [{ queryIndex: 0, subjectIndex: 1 }]
   }];
-  state.annotationSets.splice(0, state.annotationSets.length, {
+  state.activeDrawing().annotationSets.splice(0, state.activeDrawing().annotationSets.length, {
     id: 'active-annotation',
     annotations: [{
       id: 'active-window',
@@ -2193,11 +2249,11 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   });
 
   const comparisonPlanSnapshot = resolveLinearComparisonPlan({
-    plan: state.linearComparisonPlan,
+    plan: state.activeDrawing().linearComparisonPlan,
     sequences: state.linearSeqs,
     layout: [],
-    losatProgram: state.losatProgram.value,
-    blastpMode: state.losat.blastp.mode
+    losatProgram: state.activeDrawing().losatProgram.value,
+    blastpMode: state.activeDrawing().losat.blastp.mode
   });
   assert.equal(Object.isFrozen(comparisonPlanSnapshot), true);
   assert.equal(comparisonPlanSnapshot.mode, 'none');
@@ -2223,30 +2279,27 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
     ...generatedArtifactHandleOptions,
     state,
-    serializeCanonicalFiles: (snapshot, recordCatalog, runState) => {
+    serializeCanonicalFiles: (snapshot, recordCatalog, drawing) => {
       serializeCalls += 1;
       serializedSnapshot = snapshot;
       serializedRecordCatalog = recordCatalog;
-      return serializeActiveRenderFiles(runState.mode.value, runState, snapshot);
+      return serializeActiveRenderFiles(state.mode.value, state, drawing, snapshot);
     },
     prepareLinearRecordCatalog: (...args) => prepareLinearRecordCatalogImpl(...args),
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts: () => {},
-    validateAnnotationTargets: ({ loadComparison }) => {
+    validateAnnotationTargets: () => {
       annotationValidationCalls += 1;
-      assert.equal(loadComparison, false);
       return annotationValidationError;
     },
     prepareCandidateCommit: ({
-      results,
-      catalog,
-      featureColorOverrides,
-      featureStrokeOverrides
+      generationResponse,
+      catalogAdmission,
+      featureColorOverrides
     }) => ({
-      results: structuredClone(results),
-      featureState: featureStateFromCatalog(catalog),
-      featureColorOverrides: structuredClone(featureColorOverrides),
-      featureStrokeOverrides: structuredClone(featureStrokeOverrides)
+      results: structuredClone(generationResponse.results),
+      featureState: featureStateFromCatalog(catalogAdmission.catalog),
+      featureColorOverrides: structuredClone(featureColorOverrides)
     }),
     resetPreviewViewport: ({ pan = null } = {}) => {
       state.canvasPan.x = Number(pan?.x) || 0;
@@ -2287,7 +2340,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   const workerRunMessages = workerMessages.filter(({ type }) => type === 'run');
   assert.ok(stagedAnnotationTables.length > 0, 'Generate stages the annotation helper');
   for (const text of stagedAnnotationTables) {
-    assert.equal(text, encodeAnnotationTable(state.annotationSets));
+    assert.equal(text, encodeAnnotationTable(state.activeDrawing().annotationSets));
     assert.equal(parseAnnotationTable(text)[0].annotations[0].style.fill, null);
   }
   const payload = workerRunMessages.at(-1).payload;
@@ -2304,15 +2357,15 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   assert.deepEqual(payload.request.comparisons, []);
   assert.deepEqual({
     adv: {
-      comparison_height: state.adv.comparison_height,
-      min_bitscore: state.adv.min_bitscore,
-      evalue: state.adv.evalue,
-      identity: state.adv.identity,
-      alignment_length: state.adv.alignment_length,
-      pairwise_match_style: state.adv.pairwise_match_style
+      comparison_height: state.activeDrawing().adv.comparison_height,
+      min_bitscore: state.activeDrawing().adv.min_bitscore,
+      evalue: state.activeDrawing().adv.evalue,
+      identity: state.activeDrawing().adv.identity,
+      alignment_length: state.activeDrawing().adv.alignment_length,
+      pairwise_match_style: state.activeDrawing().adv.pairwise_match_style
     },
-    losatProgram: state.losatProgram.value,
-    losat: state.losat
+    losatProgram: state.activeDrawing().losatProgram.value,
+    losat: state.activeDrawing().losat
   }, dormantComparisonSettingsBefore);
   for (const field of [
     'pairwiseMatchStyle',

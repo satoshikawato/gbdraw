@@ -1,3 +1,4 @@
+// @ts-check
 import {
   annotationRecordBinding,
   annotationRecordSelectorFromTarget,
@@ -6,6 +7,10 @@ import {
 
 const cleanText = (value) => String(value ?? '').trim();
 
+/**
+ * @param {{ start?: any, end?: any }} span A coordinate target or a table row.
+ * @returns {string} The message of a failed span, or ''.
+ */
 export const validateAnnotationCoordinates = ({ start, end }) => (
   [start, end].every((value) => cleanText(value) !== '' && Number.isSafeInteger(Number(value)) && Number(value) >= 1)
     ? '' : 'start and end must be positive integers (1-based coordinates).'
@@ -34,7 +39,12 @@ export const validateAnnotationRecordTargets = (sets, catalog) => {
   if (catalogIssue) return catalogIssue;
 
   const records = Array.isArray(catalog?.records) ? catalog.records : [];
+  const omitted = new Set(Array.isArray(catalog?.omittedRecordKeys) ? catalog.omittedRecordKeys : []);
   for (const { annotation } of annotations) {
+    // A source-identity target names its record by key (design Q4).
+    if (annotation.target?.kind === 'featureIdentity') continue;
+    // A target bound to an OFF record waits in the draft (record selection).
+    if (omitted.has(annotationRecordBinding(annotation))) continue;
     if (annotation.target?.kind === 'coordinateSpan' && validateAnnotationCoordinates(annotation.target)) {
       return targetIssue('POSITIVE_INTEGER');
     }

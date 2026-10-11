@@ -11,6 +11,7 @@ import math
 from dataclasses import dataclass
 from enum import Enum
 from itertools import product
+from typing import cast
 
 from .spatial import Aabb, union_aabbs
 
@@ -233,11 +234,16 @@ class CompositionPlacement:
 
 @dataclass(frozen=True, slots=True)
 class CompositionPlan:
-    """Resolved final canvas and automatic item placements."""
+    """Resolved final canvas and automatic item placements.
+
+    ``primary_local_bounds`` is the request's primary bounds, kept exactly as
+    given; ``primary_bounds`` is the same box after the automatic translation.
+    """
 
     canvas_bounds: Aabb
     view_box: tuple[float, float, float, float]
     primary_bounds: Aabb
+    primary_local_bounds: Aabb
     placements: tuple[CompositionPlacement, ...]
     spacing: CompositionSpacing
     overlay_obstacles: tuple[Aabb, ...] = ()
@@ -249,6 +255,8 @@ class CompositionPlan:
             raise TypeError("canvas_bounds must be an Aabb")
         if not isinstance(self.primary_bounds, Aabb):
             raise TypeError("primary_bounds must be an Aabb")
+        if not isinstance(self.primary_local_bounds, Aabb):
+            raise TypeError("primary_local_bounds must be an Aabb")
         view_box = tuple(float(value) for value in self.view_box)
         if len(view_box) != 4 or not all(math.isfinite(value) for value in view_box):
             raise ValueError("view_box must contain four finite values")
@@ -624,6 +632,9 @@ def plan_composition(request: CompositionRequest) -> CompositionPlan:
     if not isinstance(request, CompositionRequest):
         raise TypeError("request must be a CompositionRequest")
 
+    # CompositionRequest.__post_init__ coerces both fields to their enums.
+    legend_placement = cast(LegendPlacement, request.legend_placement)
+    title_placement = cast(TitlePlacement, request.title_placement)
     primary = _WorkingPlacement(request.primary, 0.0, 0.0)
     working: list[_WorkingPlacement] = [primary]
     legend: _WorkingPlacement | None = None
@@ -633,39 +644,39 @@ def plan_composition(request: CompositionRequest) -> CompositionPlan:
     if (
         request.legend is not None
         and not request.legend.is_empty
-        and request.legend_placement is not LegendPlacement.NONE
+        and legend_placement is not LegendPlacement.NONE
     ):
-        if request.legend_placement.is_dock:
+        if legend_placement.is_dock:
             legend = _place_docked_legend(
                 primary.bounds,
                 request.legend,
-                request.legend_placement,
+                legend_placement,
                 request.spacing,
             )
-        elif request.legend_placement.is_overlay:
+        elif legend_placement.is_overlay:
             legend, overlay_conflict_indices, overlay_resolution = _place_overlay_legend(
                 primary.bounds,
                 request.legend,
-                request.legend_placement,
+                legend_placement,
                 request.overlay_obstacles,
                 request.spacing,
             )
         else:  # pragma: no cover - closed enum exhaustiveness
-            raise ValueError(f"unsupported legend placement: {request.legend_placement.value}")
+            raise ValueError(f"unsupported legend placement: {legend_placement.value}")
         working.append(legend)
 
     if (
         request.title is not None
         and not request.title.is_empty
-        and request.title_placement is not TitlePlacement.NONE
+        and title_placement is not TitlePlacement.NONE
     ):
         title = _place_title(
             primary.bounds,
             request.title,
-            request.title_placement,
+            title_placement,
             request.spacing,
             legend,
-            request.legend_placement,
+            legend_placement,
         )
         working.append(title)
 
@@ -690,6 +701,7 @@ def plan_composition(request: CompositionRequest) -> CompositionPlan:
         canvas_bounds=canvas_bounds,
         view_box=(0.0, 0.0, canvas_bounds.width, canvas_bounds.height),
         primary_bounds=primary_placement.final_bounds,
+        primary_local_bounds=request.primary.local_bounds,
         placements=placements,
         spacing=request.spacing,
         overlay_obstacles=tuple(

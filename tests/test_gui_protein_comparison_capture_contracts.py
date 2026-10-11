@@ -162,15 +162,9 @@ PINNED_NCBI_REVISION_URLS = {
 }
 PINNED_NCBI_REVISIONS_ASSERTION = "source_record_revisions=ncbi-pinned-all-five"
 PAGES = {
-    "T-GUI-04": (
-        REPO_ROOT / "docs" / "TUTORIALS" / "GUI" / "compare-proteins-losatp.md"
-    ),
+    "T-GUI-04": REPO_ROOT / "docs" / "TUTORIALS" / "compare-proteins-losatp.md",
     "T-GUI-08": (
-        REPO_ROOT
-        / "docs"
-        / "TUTORIALS"
-        / "GUI"
-        / "compare-proteins-losatp-collinear.md"
+        REPO_ROOT / "docs" / "TUTORIALS" / "compare-proteins-losatp-collinear.md"
     ),
 }
 SCREENSHOT_NAMES = {
@@ -578,10 +572,10 @@ def test_hepatoplasmataceae_collinear_guards_pin_evidence_and_span_fasta() -> No
         '_move_popup_opposite_match(page, popup, first_match)',
         'if not _box_is_inside(moved_popup_box, viewport)',
         'if _boxes_overlap(moved_popup_box, match_box)',
-        'expect(fasta_buttons).to_have_count(3)',
-        "_scroll_popup_to_collinearity_details(page, popup)",
-        'name="Pairwise match details content", exact=True',
-        'page.mouse.wheel(0, before["maxScroll"])',
+        '"details.action-menu > summary"',
+        'name="Download both spans", exact=True',
+        "_open_collinearity_details(page, popup)",
+        '"[data-collinear-details]"',
         "first_match.focus()",
         'first_match.press("Enter")',
         "expect(first_match).to_have_class(",
@@ -661,7 +655,9 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
         else:
             page_path = PAGES[scenario_id]
             page = page_path.read_text(encoding="utf-8")
-            assert chapter["destination"] == str(page_path.relative_to(REPO_ROOT))
+            assert chapter["destination"] == (
+                f"{page_path.relative_to(REPO_ROOT).as_posix()}#in-the-web-app"
+            )
             for record_id in EXPECTED_RECORD_IDS:
                 assert record_id in page
             for value in (
@@ -758,7 +754,7 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
     assert "Focus the first visible ribbon and press **Enter**" in (
         normalized_gallery_collinear
     )
-    assert "scroll within the popup" in normalized_gallery_collinear
+    assert "open **Details** in the popup" in normalized_gallery_collinear
     gallery_baseline = gallery_chapter["screenshots"][1]
     assert gallery_baseline["reason"] == (
         "Show all five accession-and-length definitions in a readable 80% "
@@ -786,12 +782,12 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
     )
     gallery_popup = gallery_chapter["screenshots"][-1]
     assert gallery_popup["reason"] == (
-        "Show the selected ribbon beside the nonoverlapping popup and its Both "
-        "spans FASTA action."
+        "Show the selected ribbon beside the nonoverlapping popup with its "
+        "block summary and FASTA menu."
     )
     assert gallery_popup["alt"] == (
-        "Selected Collinear ribbon beside a nonoverlapping query and subject "
-        "span popup"
+        "Selected Collinear ribbon beside a nonoverlapping popup with the "
+        "block summary and FASTA menu"
     )
     assert "anchor" not in " ".join(gallery_popup.values()).casefold()
 
@@ -864,12 +860,12 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
     )
     how_to_popup = chapter["screenshots"][-1]
     assert how_to_popup["reason"] == (
-        "Show the selected ribbon beside the nonoverlapping popup and its Both "
-        "spans FASTA action."
+        "Show the selected ribbon beside the nonoverlapping popup with its "
+        "block summary and FASTA menu."
     )
     assert how_to_popup["alt"] == (
         "Selected Hepatoplasmataceae Collinear ribbon beside a nonoverlapping "
-        "span popup"
+        "block popup"
     )
     assert "anchor" not in " ".join(how_to_popup.values()).casefold()
 
@@ -896,11 +892,11 @@ def test_protein_popup_state_uses_catalog_commit_path() -> None:
     for fragment in (
         "const setLinearComparisonLosatFilename = (id, value) => {",
         "const deactivateLinearComparisonLosatFilename = (id) => {",
-        "const updateResolvedLosatFilenameDraft = (edgeKey, updater) => {",
+        "const updateResolvedLosatFilenameDraft = (drawing, edgeKey, updater) => {",
     ):
         start = app_setup.index(fragment)
         body = app_setup[start : start + 1_600]
-        assert "replaceLinearComparisonPlan(next, { invalidate: false });" in body
+        assert "replaceLinearComparisonPlan(drawing, next, { invalidate: false });" in body
 
     for fragment in (
         "kind: 'collinearityResult'",
@@ -927,10 +923,17 @@ def test_protein_popup_state_uses_catalog_commit_path() -> None:
         in history_snapshot
     )
 
+    # Match popups read their groups from the committed catalog state. The
+    # catalog puts every group, collinear presentation groups included, in
+    # `orthogroups`, so one committed list serves pairwise and collinear
+    # ribbons (OV-370) and the popup reads no second group source.
+    orthogroup_push = feature_catalog.index("context.orthogroups.push(expanded);")
+    assert orthogroup_push < feature_catalog.index("context.collinearGroups.push(expanded);")
     for fragment in (
-        "collinearGroups,",
-        "orthogroups: groupsForMatch(matchElement),",
-        "orthogroups: () => groupsForMatch(matchElement),",
-        "const payload = buildMatchPayload(matchElement, featureLookup);",
+        "const groupsForMatch = () => orthogroups?.value || [];",
+        "orthogroups: groupsForMatch(),",
+        "orthogroups: groupsForMatch,",
+        "const payload = buildMatchPayload(drawing, matchElement, featureLookup);",
     ):
         assert fragment in svg_actions
+    assert "collinearGroups" not in svg_actions

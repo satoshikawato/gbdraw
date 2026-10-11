@@ -6,7 +6,7 @@ import {
   classifyOptionalPositiveNumber,
   projectOptionalNumber
 } from '../../gbdraw/web/js/utils/optional-positive-number.js';
-import { normalizeUserFacingError } from '../../gbdraw/web/js/services/error-normalization.js';
+import { normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
 
 const repoRoot = process.cwd();
 const cases = JSON.parse(await readFile(

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 import logging
 from typing import Sequence
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
 
 from ..core.record_metadata import (
     _copy_source_feature_identity,

@@ -3,6 +3,7 @@ const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
+const { loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const genbankPath = join(repoRoot, 'tests', 'test_inputs', 'HmmtDNA.gbk');
@@ -10,10 +11,9 @@ const renamedLegendCaption = [
   'WP5 renamed browser composition legend entry with deliberately wide text',
   'that forces the live legend to be measured and reflowed'
 ].join(' ');
-const postDragLegendCaption = [
-  'WP5 post-drag legend entry that forces another measured reflow',
-  'without discarding the manual composition deltas'
-].join(' ');
+// A generated row deleted after the drags: another measured reflow that keeps
+// the manual composition deltas.
+const postDragDeletedCaption = 'rRNA';
 const legendColor = '#336699';
 
 const blockExternalHttpRequests = async (page, baseURL) => {
@@ -39,7 +39,7 @@ const renderRealDiagram = async (
 ) => {
   const outcome = await evaluateWithRetainedPromise(page, async ({ diagramMode, source, requestedLegendSide }) => {
     const app = window.__GBDRAW_APP__;
-    app.mode = diagramMode;
+    app.setDiagramMode(diagramMode);
     await window.Vue.nextTick();
     await window.Vue.nextTick();
     app.form.prefix = `wp5-real-${diagramMode}`;
@@ -123,6 +123,19 @@ const inspectLiveComposition = async (page, caption = renamedLegendCaption) => (
 
     const binding = composition.bindCompositionMetadata(svg);
     const deltas = composition.compositionUserDeltas(svg);
+    // Zero shift: the Legend's recorded local bounds are the bounds the Legend
+    // layout owner gives its rows (Python's layout), not its painted box.
+    const { createLegendLayoutActions } = await import('./js/app/legend/layout-actions.js');
+    const legendLayout = createLegendLayoutActions();
+    await legendLayout.prepareLegendLayout();
+    const laidOut = svg.getElementById('legend')
+      ? legendLayout.layOutLegend(new DOMParser().parseFromString(
+        new XMLSerializer().serializeToString(svg), 'image/svg+xml'
+      ).documentElement)
+      : null;
+    const layoutLegendBounds = laidOut && {
+      x: laidOut.minX, y: laidOut.minY, width: laidOut.maxX - laidOut.minX, height: laidOut.maxY - laidOut.minY
+    };
     const transformPoint = (matrix, x, y) => ({
       x: matrix.a * x + matrix.c * y + matrix.e,
       y: matrix.b * x + matrix.d * y + matrix.f
@@ -277,6 +290,7 @@ const inspectLiveComposition = async (page, caption = renamedLegendCaption) => (
       metadataBoundsErrors: {
         primary: boundsError(automaticBounds.primary, binding.metadata.primary.finalBounds),
         legend: boundsError(localBounds.legend, binding.metadata.legend?.localBounds || null),
+        legendLayout: boundsError(layoutLegendBounds, binding.metadata.legend?.localBounds || null),
         title: boundsError(localBounds.title, binding.metadata.title?.localBounds || null)
       },
       primaryMetadataContainmentError: containmentError(
@@ -303,32 +317,25 @@ const inspectLiveComposition = async (page, caption = renamedLegendCaption) => (
   }, caption)
 );
 
-const addPostDragLegendEntry = async (page) => {
-  await page.evaluate(async ({ caption, color }) => {
+const deletePostDragLegendEntry = async (page) => {
+  await evaluateWithRetainedPromise(page, async (caption) => {
     const app = window.__GBDRAW_APP__;
-    app.newLegendCaption = caption;
-    app.newLegendColor = color;
-    await app.addNewLegendEntry();
-  }, { caption: postDragLegendCaption, color: '#884422' });
+    await app.deleteLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === caption));
+  }, postDragDeletedCaption);
   await page.waitForFunction((caption) => {
     const app = window.__GBDRAW_APP__;
     const svg = document.querySelector('svg[data-gbdraw-composition-schema="1"]');
-    const resultText = String(app.results?.[app.selectedResultIndex]?.content || '');
-    return app.legendEntries.some((entry) => entry.caption === caption) &&
+    return !app.legendEntries.some((entry) => entry.caption === caption) &&
       Array.from(svg?.querySelectorAll('g[data-legend-key]') || [])
-        .some((entry) => entry.getAttribute('data-legend-key') === caption) &&
-      resultText.includes(caption);
-  }, postDragLegendCaption, { timeout: 180000 });
+        .filter((entry) => entry.getAttribute('data-legend-key') === caption)
+        .every((entry) => entry.getAttribute('display') === 'none');
+  }, postDragDeletedCaption, { timeout: 180000 });
 };
 
-const addAndRenameLegendEntry = async (page) => {
+const loadAndRenameLegendEntry = async (page) => {
   const addedCaption = 'WP5 legend entry';
-  await page.evaluate(async ({ caption, color }) => {
-    const app = window.__GBDRAW_APP__;
-    app.newLegendCaption = caption;
-    app.newLegendColor = color;
-    await app.addNewLegendEntry();
-  }, { caption: addedCaption, color: legendColor });
+  // An editor row from a Session (R15-2 retired Add legend item).
+  await loadEditorLegendRows(page, [[addedCaption, legendColor]]);
   await page.waitForFunction((caption) => (
     window.__GBDRAW_APP__.legendEntries.some((entry) => entry.caption === caption) &&
     Array.from(document.querySelectorAll('g[data-legend-key]'))
@@ -365,7 +372,7 @@ const addAndRenameLegendEntry = async (page) => {
     renamed.legendBox.width !== added.legendBox.width ||
     renamed.legendBox.height !== added.legendBox.height
   ).toBe(true);
-  expect(renamed.metadataBoundsErrors.legend).toBeLessThan(1);
+  expect(renamed.metadataBoundsErrors.legendLayout).toBeLessThan(1e-9);
   expect(renamed.metadata.legend.localBounds).not.toEqual(added.metadata.legend.localBounds);
   return { added, renamed };
 };
@@ -566,10 +573,22 @@ const expectValidComposition = (
   });
   if (hasLegend) {
     expect(snapshot.metadata.legend).toEqual(expect.any(Object));
+    // Python's Legend layout inputs survive every edit, History step, Session
+    // round trip, and export below.
     expect(snapshot.metadata.legendReflow).toMatchObject({
       colorRectSize: expect.any(Number),
+      dpi: 96,
+      fontFile: 'LiberationSans-Regular',
+      fontSize: expect.any(Number),
       lineHeight: expect.any(Number),
-      textXOffset: expect.any(Number)
+      primaryLocalBounds: {
+        minX: expect.any(Number),
+        minY: expect.any(Number),
+        maxX: expect.any(Number),
+        maxY: expect.any(Number)
+      },
+      textXOffset: expect.any(Number),
+      wrapWidth: expect.any(Number)
     });
     expect(snapshot.roleCounts.legend).toBe(1);
     if (['left', 'right', 'top', 'bottom'].includes(legendSide)) {
@@ -648,7 +667,7 @@ for (const mode of ['circular', 'linear']) {
     expectZeroDeltas(fresh.deltas);
     const baselineDeltas = fresh.deltas;
 
-    const { renamed } = await addAndRenameLegendEntry(page);
+    const { renamed } = await loadAndRenameLegendEntry(page);
     expectValidComposition(renamed);
 
     await dragCompositionRole(page, 'legend', 8, -7);
@@ -694,12 +713,12 @@ for (const mode of ['circular', 'linear']) {
     expectDeltasClose(redone.deltas, moved.deltas);
     expectRenamedEntry(redone);
 
-    await addPostDragLegendEntry(page);
+    await deletePostDragLegendEntry(page);
     const reflowedAfterDrag = await inspectLiveComposition(page);
     expectValidComposition(reflowedAfterDrag);
     expectDeltasClose(reflowedAfterDrag.deltas, moved.deltas);
     expectRenamedEntry(reflowedAfterDrag);
-    expect(reflowedAfterDrag.metadataBoundsErrors.legend).toBeLessThan(1);
+    expect(reflowedAfterDrag.metadataBoundsErrors.legendLayout).toBeLessThan(1e-9);
 
     const saved = await saveSession(page);
     expect(saved.session.format).toBe('gbdraw-session');

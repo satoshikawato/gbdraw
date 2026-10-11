@@ -43,6 +43,7 @@ const {
   pathToFileURL(join(tempRoot, 'js', 'services', 'gallery-session-publication.js'))
 );
 const {
+  CANONICAL_REQUEST_SCHEMA,
   assertCanonicalRenderRequestsEquivalent,
   buildCanonicalRenderRequest,
   buildCanonicalRequestState,
@@ -56,7 +57,7 @@ const {
   createDefaultLinearComparisonPlan,
   resolveLinearComparisonPlan
 } = await import(
-  pathToFileURL(join(tempRoot, 'js', 'app', 'linear-comparisons.js'))
+  pathToFileURL(join(tempRoot, 'js', 'services', 'linear-comparisons.js'))
 );
 const {
   admitGallerySession,
@@ -72,6 +73,9 @@ const {
 });
 const { applyConfigData } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'config.js'))
+);
+const { splitDraftIntoModes } = await import(
+  pathToFileURL(join(tempRoot, 'js', 'services', 'mode-scoped-migration.js'))
 );
 const { state: webState } = await import(
   pathToFileURL(join(tempRoot, 'js', 'state.js'))
@@ -152,7 +156,7 @@ const syntheticCliSession = {
 };
 const originalCliRequest = structuredClone(syntheticCliSession.renderRequest);
 const promotedSyntheticCli = promoteGallerySessionToCurrent(syntheticCliSession);
-assert.equal(promotedSyntheticCli.renderRequest.schema, 8);
+assert.equal(promotedSyntheticCli.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
 assert.equal(promotedSyntheticCli.renderRequest.grouping, 'single');
 assert.deepEqual(promotedSyntheticCli.renderRequest.diagramOptions.output, {
   legend: 'right',
@@ -193,20 +197,21 @@ const cliEditorProjection = projectCanonicalSessionRequest({
 });
 webState.mode.value = 'linear';
 webState.lInputType.value = cliEditorProjection.inputType;
-applyConfigData(promotedSyntheticCli.config);
+applyConfigData(webState.activeDrawing(), promotedSyntheticCli.config);
 const cliNextComparisonSnapshot = resolveLinearComparisonPlan({
-  plan: webState.linearComparisonPlan,
+  plan: webState.activeDrawing().linearComparisonPlan,
   sequences: cliEditorProjection.files.linearSeqs,
-  layout: webState.linearRecordLayoutEnabled.value ? webState.linearRecordRows : [],
-  losatProgram: webState.losatProgram.value,
-  blastpMode: webState.losat.blastp.mode
+  layout: webState.activeDrawing().linearRecordLayoutEnabled.value ? webState.activeDrawing().linearRecordRows : [],
+  losatProgram: webState.activeDrawing().losatProgram.value,
+  blastpMode: webState.activeDrawing().losat.blastp.mode
 });
 const cliNextWebRequest = buildCanonicalRenderRequest({
   state: webState,
+  drawing: webState.activeDrawing(),
   filesData: cliEditorProjection.files,
   comparisonPlanSnapshot: cliNextComparisonSnapshot
 });
-assert.equal(webState.linearComparisonPlan.mode, 'none');
+assert.equal(webState.activeDrawing().linearComparisonPlan.mode, 'none');
 assert.deepEqual(
   promotedSyntheticCli.renderRequest.comparisons,
   committedCliComparisons,
@@ -285,7 +290,7 @@ const syntheticGuiSession = {
 };
 const promotedSyntheticGui = promoteGallerySessionToCurrent(syntheticGuiSession);
 const syntheticGuiOptions = promotedSyntheticGui.renderRequest.diagramOptions;
-assert.equal(promotedSyntheticGui.renderRequest.schema, 8);
+assert.equal(promotedSyntheticGui.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
 assert.equal(promotedSyntheticGui.renderRequest.grouping, 'single');
 assert.equal(promotedSyntheticGui.renderRequest.output.prefix, 'old');
 assert.equal(promotedSyntheticGui.renderRequest.output.overwrite, false);
@@ -330,19 +335,29 @@ assert.equal(
   false
 );
 
-assert.equal(admitGallerySession(promotedSyntheticGui), promotedSyntheticGui);
+// The promoted Session keeps its flat draft until publication splits it into
+// its mode's slice; a current Session holds the draft in `modes` only.
+const asCurrent = (promoted) => {
+  const mode = promoted.renderRequest.mode;
+  const split = splitDraftIntoModes(structuredClone(promoted), { committedMode: mode, modeProfiles: null });
+  return { ...split, modes: { [mode]: split.modes[mode] } };
+};
+assert.throws(() => admitGallerySession(promotedSyntheticGui), /Web draft in modes/);
+const currentSyntheticGui = asCurrent(promotedSyntheticGui);
+assert.equal(admitGallerySession(currentSyntheticGui), currentSyntheticGui);
 assert.throws(
   () => promoteGallerySessionToCurrent(promotedSyntheticGui),
   /historical migration supports session versions 31-33 and 39/
 );
-const retiredCurrentConfig = structuredClone(promotedSyntheticGui);
-retiredCurrentConfig.config.adv.cli_circular_track_order = [];
+const retiredCurrentConfig = structuredClone(currentSyntheticGui);
+retiredCurrentConfig.modes.circular.config.adv.cli_circular_track_order = [];
+// A retired field is no registry field of a slice (Session format, plan 4.1).
 assert.throws(
   () => admitGallerySession(retiredCurrentConfig),
-  /config\.adv.*cli_circular_track_order/
+  (error) => error.code === 'INPUT_INVALID' && error.context?.reason === 'FIELDS'
 );
-const currentWithoutWebConfig = structuredClone(promotedSyntheticGui);
-delete currentWithoutWebConfig.config;
+const currentWithoutWebConfig = structuredClone(currentSyntheticGui);
+delete currentWithoutWebConfig.modes;
 assert.throws(
   () => admitGallerySession(currentWithoutWebConfig),
   /missing its active Web configuration/
@@ -557,7 +572,7 @@ assert.equal(Object.hasOwn(migratedCliOnly.config, 'linearRecordLayout'), false)
 const hmmt = JSON.parse(await readFile(join(repoRoot, 'tests/fixtures/sessions/HmmtDNA_ATskew.v40-schema5.json'), 'utf8'));
 const promotedHmmt = promoteGallerySessionToCurrent({ ...hmmt, version: 39 });
 const hmmtOptions = promotedHmmt.renderRequest.diagramOptions;
-assert.equal(promotedHmmt.renderRequest.schema, 8);
+assert.equal(promotedHmmt.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
 assert.equal(hmmtOptions.configOverrides['labels.circular.scope'], 'outer');
 assert.equal(hmmtOptions.configOverrides['objects.definition.circular.font_size'], 28);
 assert.equal(hmmtOptions.featureShapes.repeat_region, 'underlay');
@@ -638,7 +653,7 @@ const promotedV39Request = promoteCanonicalRenderRequestToCurrent(
   v39.renderRequest,
   { legacyOrthogroupState: v39.orthogroupState }
 );
-assert.equal(promotedV39Request.schema, 8);
+assert.equal(promotedV39Request.schema, CANONICAL_REQUEST_SCHEMA);
 assert.equal(promotedV39Request.layout.similarityAlignment.groupId, 'og_1');
 assert.deepEqual(
   promotedV39Request.layout.similarityAlignment.records.map(
@@ -748,7 +763,7 @@ const majani = await loadSession('majanivirus_orthogroup.gbdraw-session.json.gz'
 const promotedMajani = (await prepareGallerySessionForPublication(majani)).session;
 const vibrio = await loadSession('vibrio-harveyi-group-collinear.gbdraw-session.json.gz');
 const promotedVibrio = (await prepareGallerySessionForPublication(vibrio)).session;
-assert.equal(promotedVibrio.config.losat.blastp.collinearInferOrthogroups, true);
+assert.equal(promotedVibrio.modes.linear.config.losat.blastp.collinearInferOrthogroups, true);
 assert.equal(
   majani.renderRequest.comparisons.find(({ kind }) => kind === 'generatedProteinComparison')
     .settings.collinearInferOrthogroups,
@@ -822,7 +837,8 @@ for (const [name, promoted] of [
       `${name} resource ${resourceId} repeats its canonical prefix`
     );
   }
-  assert.equal(admitGallerySession(promoted), promoted);
+  const current = asCurrent(promoted);
+  assert.equal(admitGallerySession(current), current);
   assert.throws(
     () => promoteGallerySessionToCurrent(promoted),
     /historical migration supports session versions 31-33 and 39/

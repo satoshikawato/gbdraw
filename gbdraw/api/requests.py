@@ -9,9 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path, PureWindowsPath
-from typing import Literal, Sequence, TypeAlias
+from typing import Literal, Sequence, TypeAlias, cast
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.source import SourceFeatureIdentity
@@ -349,6 +349,13 @@ def _contains_ascii_control(value: str) -> bool:
     return any(ord(character) < 32 or ord(character) == 127 for character in value)
 
 
+# The longest name written from a prefix is the CLI Session sidecar
+# "<prefix>.gbdraw-session.json", staged as ".<name>.<random>.tmp" (34 more
+# bytes). 200 bytes keeps it within the 255-byte file name limit of common
+# filesystems.
+_OUTPUT_PREFIX_MAX_BYTES = 200
+
+
 @dataclass(frozen=True)
 class RenderOutputRequest:
     """Output destination and format policy for a typed render request."""
@@ -375,7 +382,21 @@ class RenderOutputRequest:
         ):
             raise ValidationError(
                 "output_prefix must be a valid portable filename prefix "
-                "without directories."
+                "without directories.",
+                diagnostic={
+                    "code": "INPUT_INVALID",
+                    "field": "output_prefix",
+                    "reason": "FILENAME" if prefix else "REQUIRED",
+                },
+            )
+        if len(prefix.encode("utf-8", "surrogatepass")) > _OUTPUT_PREFIX_MAX_BYTES:
+            raise ValidationError(
+                f"output_prefix must be at most {_OUTPUT_PREFIX_MAX_BYTES} bytes in UTF-8.",
+                diagnostic={
+                    "code": "INPUT_INVALID",
+                    "field": "output_prefix",
+                    "reason": "FILENAME_LENGTH",
+                },
             )
         object.__setattr__(self, "output_prefix", prefix)
 
@@ -779,7 +800,10 @@ class LinearDiagramRequest:
             else None
         )
         if translations or plan is not None:
-            record_keys = tuple(record.record_key for record in records)
+            # None keys are rejected just below.
+            record_keys = cast(
+                "tuple[str, ...]", tuple(record.record_key for record in records)
+            )
             if any(record_key is None for record_key in record_keys):
                 raise ValidationError(
                     "Similarity alignment and record translations require stable record keys."

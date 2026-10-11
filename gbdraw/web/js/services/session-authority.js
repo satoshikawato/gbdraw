@@ -1,10 +1,23 @@
+// @ts-check
 import { validateAnnotationWarnings } from './session-feature-metadata.js';
 import { validateComparisonWarnings } from './comparison-warnings.js';
 import { assertSafeObjectKeys } from './safe-object-keys.js';
 import { validateWebFileBindings } from './session-resource-backing.js';
 import { validateCurrentWriterActiveConfig, validateAlignmentResetReceiptShape } from './session-active-config-contract.js';
-import { migrateLegacyLinearLabelVisibility } from '../app/linear-label-visibility.js';
-import { migrateLegacyRecordDisplayDrafts } from '../app/record-display-options.js';
+import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
+import { migrateLegacyRecordDisplayDrafts } from './record-display-model.js';
+import { canonicalFeatureOverrides, validateFeatureIdentityNotices } from './feature-placement.js';
+import { RENDERED_ID_FEATURE_EDIT_FIELDS, migrateSessionFeaturePlacements } from './feature-edit-migration.js';
+import { collectCanonicalResourceIds } from './canonical-resource-references.js';
+import { LOSAT_EXECUTION_FIELDS, MODE_SCOPED_ROWS, SLICE_MODES, validateModeSliceFields } from './mode-scoped-migration.js';
+import { diagnosticError } from '../utils/error-normalization.js';
+
+// Session 44 introduced the current active-config and record-display draft
+// shapes; Session 46 keeps the draft of each diagram mode in `modes`
+// (PD-OI-086) and keys per-feature edits by source identity (design Q4).
+export const TYPED_DRAFT_SESSION_VERSION = 44;
+export const MODE_SCOPED_SESSION_VERSION = 46;
+const FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = Object.freeze({ 44: 4, 46: 5 });
 
 export const SESSION_TOP_LEVEL_AUTHORITY = Object.freeze({
   format: 'document',
@@ -26,8 +39,21 @@ export const SESSION_TOP_LEVEL_AUTHORITY = Object.freeze({
   proteinIdentityManifest: 'artifact',
   legacyArtifacts: 'artifact',
   runMetadata: 'artifact',
-  cliInvocation: 'provenance'
+  otherModeResult: 'artifact',
+  cliInvocation: 'provenance',
+  modes: 'editor-metadata',
+  cliOptions: 'provenance'
 });
+
+// The homes that Session 46 moved into `modes` (and app-level `ui`): a
+// Session 46 that holds any of them is rejected (plan 4.1).
+/** @type {ReadonlyArray<[string, ReadonlySet<string>]>} */
+const RETIRED_MODE_SCOPED_FIELDS = Object.freeze([
+  ['', new Set(['config', 'features'])],
+  ['editorState', new Set(['featureStrokes'])],
+  ['editorState.legend', new Set(MODE_SCOPED_ROWS.filter((row) => row.domain === 'editorState.legend').map((row) => row.path))],
+  ['ui', new Set(MODE_SCOPED_ROWS.filter((row) => row.domain === 'ui').map((row) => row.path))]
+]);
 
 const WEB_EDITOR_UI_FIELDS = Object.freeze([
   'cInputType',
@@ -64,20 +90,19 @@ const ARTIFACT_UI_FIELDS = Object.freeze([
   'generatedCircularPlotTitlePosition'
 ]);
 
+// Older Sessions' rendered-ID edit maps are read once and migrated to
+// `featureOverrides` (services/feature-edit-migration.js).
 const ARTIFACT_FEATURE_FIELDS = Object.freeze([
   'extractedFeatures',
   'biologicalFeatures',
-  'featureSelectorSafetyScope',
   'featureRecordIds',
   'selectedFeatureRecordIdx',
   'featureColorOverrides',
   'featureVisibilityManualRules',
-  'featureVisibilityOverrides',
-  'labelTextFeatureOverrides',
+  'featureOverrides',
   'labelOverrideRows',
   'labelTextBulkOverrides',
-  'labelTextFeatureOverrideSources',
-  'labelVisibilityOverrides'
+  ...RENDERED_ID_FEATURE_EDIT_FIELDS
 ]);
 
 const isPlainObject = (value) => (
@@ -161,8 +186,16 @@ const validateLinearComparisonPlan = (plan) => {
   return ids;
 };
 
+/**
+ * @param {Record<string, any>} sessionData Unvalidated Session data.
+ * @returns {void}
+ */
 export const validateCurrentComparisonAuthority = (sessionData) => {
-  const config = isPlainObject(sessionData.config) ? sessionData.config : {};
+  // Session 46: the comparison draft is the Linear drawing's.
+  const draftConfig = Number(sessionData.version) >= MODE_SCOPED_SESSION_VERSION
+    ? sessionData.modes?.linear?.config
+    : sessionData.config;
+  const config = isPlainObject(draftConfig) ? draftConfig : {};
   const ui = isPlainObject(sessionData.ui) ? sessionData.ui : {};
   const webFiles = isPlainObject(sessionData.webFiles) ? sessionData.webFiles : {};
   const bindings = webFiles.bindings || {};
@@ -268,13 +301,21 @@ const hasInput = value => Array.isArray(value) ? value.some(hasInput) : value !=
 
 // The same complete inventory is used before Save and at document admission.
 // An inactive input remains biological even when it cannot render the active mode.
+/**
+ * @param {Record<string, any>} [files] The Session's Web input inventory.
+ * @returns {boolean}
+ */
 export const hasBiologicalSessionInputs = (files = {}) => (
   ['c_gb', 'c_gff', 'c_fasta', 'c_conservation_fastas', 'c_conservation_sequence_sources']
     .some(key => hasInput(files[key]))
   || (files.linearSeqs || []).some(row => ['gb', 'gff', 'fasta'].some(key => hasInput(row[key])))
 );
 
-export const isSettingsOnlySessionDocument = data => [42, 44].includes(data?.version)
+/**
+ * @param {Record<string, any> | null | undefined} data
+ * @returns {boolean}
+ */
+export const isSettingsOnlySessionDocument = data => data != null && [42, 44, MODE_SCOPED_SESSION_VERSION].includes(data.version)
   && Object.hasOwn(data, 'renderRequest') && data.renderRequest === null;
 
 const validateSettingsOnlyDocument = data => {
@@ -297,22 +338,14 @@ const validateSettingsOnlyDocument = data => {
     || bindings.c_conservation_blasts_source === 'losat-cache') {
     throw new Error('Settings-only Session cannot contain committed render artifacts.');
   }
-  let storedConfig = data.version === 44 || !isPlainObject(data.config?.adv)
-    ? data.config
-    : {
-        ...data.config,
-        adv: migrateLegacyLinearLabelVisibility(data.config.adv)
-      };
-  if (data.version < 44 && isPlainObject(storedConfig)
-    && Object.prototype.hasOwnProperty.call(storedConfig, 'recordDisplayDrafts')) {
-    storedConfig = {
-      ...storedConfig,
-      recordDisplayDrafts: migrateLegacyRecordDisplayDrafts(
-        storedConfig.recordDisplayDrafts
-      )
-    };
+  // Session 46: each mode's slice holds that mode's settings draft.
+  if (data.version >= MODE_SCOPED_SESSION_VERSION) {
+    if (!isPlainObject(data.modes?.[data.ui?.mode]?.config)) {
+      throw new Error('Settings-only Session requires the settings of its mode.');
+    }
+  } else {
+    validateSettingsOnlyFlatDraft(data);
   }
-  validateCurrentWriterActiveConfig({ mode: data.ui?.mode, storedConfig });
   const referenced = new Set();
   const visit = value => {
     if (!value || typeof value !== 'object') return;
@@ -325,14 +358,215 @@ const validateSettingsOnlyDocument = data => {
   }
 };
 
+// A settings-only Session 42 or 44 keeps its flat draft in `config`.
+const validateSettingsOnlyFlatDraft = (data) => {
+  let storedConfig = data.version >= TYPED_DRAFT_SESSION_VERSION || !isPlainObject(data.config?.adv)
+    ? data.config
+    : {
+        ...data.config,
+        adv: migrateLegacyLinearLabelVisibility(data.config.adv)
+      };
+  if (data.version < TYPED_DRAFT_SESSION_VERSION && isPlainObject(storedConfig)
+    && Object.prototype.hasOwnProperty.call(storedConfig, 'recordDisplayDrafts')) {
+    storedConfig = {
+      ...storedConfig,
+      recordDisplayDrafts: migrateLegacyRecordDisplayDrafts(
+        storedConfig.recordDisplayDrafts
+      )
+    };
+  }
+  if (isPlainObject(storedConfig)
+    && Object.prototype.hasOwnProperty.call(storedConfig, 'featurePlacementOverrides')) {
+    storedConfig = {
+      ...storedConfig,
+      featurePlacementOverrides: migrateSessionFeaturePlacements(storedConfig.featurePlacementOverrides)
+    };
+  }
+  validateCurrentWriterActiveConfig({ mode: data.ui?.mode, storedConfig, scopedDrafts: true });
+};
+
+// One committed Result set: the top-level fields, or `otherModeResult`, whose
+// fields mirror them.
+/**
+ * @param {Record<string, any>} set
+ * @param {number | string} version
+ */
+const validateCommittedResultSet = (set, version) => {
+  if (!Array.isArray(set.results)) {
+    throw new Error(`Session version ${String(version)} requires a results array.`);
+  }
+  set.results.forEach((result) => {
+    const resultName = (
+      isPlainObject(result) && typeof result.name === 'string'
+        ? result.name.trim()
+        : ''
+    );
+    const content = isPlainObject(result) ? result.content : null;
+    if (
+      !resultName
+      || resultName.toLowerCase().endsWith('.interactive.svg')
+      || typeof content !== 'string'
+      || !content.includes('<svg')
+      || content.includes('gbdraw-interactive-feature-metadata')
+      || content.includes('gbdraw-interactive-feature-script')
+    ) {
+      throw new Error('Each current Session Result must be a named plain SVG.');
+    }
+  });
+  const editorState = set.editorState;
+  if (
+    !isPlainObject(editorState)
+    || !Object.prototype.hasOwnProperty.call(editorState, 'featureCatalog')
+  ) {
+    throw new Error(
+      `Session version ${String(version)} requires editorState.featureCatalog.`
+    );
+  }
+  if (set.renderRequest?.schema >= 8
+    && set.renderRequest.layout?.similarityAlignment
+    && !Object.hasOwn(editorState, 'alignmentResetReceipt')) {
+    throw new Error('Current alignment Session requires editorState.alignmentResetReceipt.');
+  }
+  validateAlignmentResetReceiptShape(editorState.alignmentResetReceipt, set.renderRequest);
+  const featureCatalog = editorState.featureCatalog;
+  const expectedCatalogSchema = FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION[Number(version)] ?? 3;
+  if (
+    featureCatalog !== null
+    && (!isPlainObject(featureCatalog) || featureCatalog.schema !== expectedCatalogSchema)
+  ) {
+    throw new Error(
+      `Session version ${String(version)} requires a schema-${expectedCatalogSchema} editorState.featureCatalog.`
+    );
+  }
+  if (
+    Array.isArray(set.results)
+    && set.results.length > 0
+    && featureCatalog === null
+  ) {
+    throw new Error(
+      `Session version ${String(version)} requires a feature catalog for saved results.`
+    );
+  }
+};
+
+const OTHER_MODE_RESULT_FIELDS = new Set([
+  'renderRequest', 'results', 'editorState', 'ui', 'runMetadata', 'cliInvocation'
+]);
+// The per-set part of the shared `ui` and `editorState` objects.
+const OTHER_MODE_RESULT_UI_FIELDS = new Set([
+  'selectedResultIndex', 'generatedLegendPosition', 'generatedMultiRecordCanvas',
+  'generatedCircularPlotTitlePosition', 'appliedPaletteName', 'appliedPaletteColors'
+]);
+const OTHER_MODE_RESULT_EDITOR_FIELDS = new Set([
+  'featureCatalog', 'alignmentResetReceipt', 'legend', 'originalSvgStroke'
+]);
+const OTHER_MODE_RESULT_LEGEND_FIELDS = new Set(['originalOrder', 'originalColors']);
+const OTHER_MODE_RESULT_RUN_METADATA_FIELDS = new Set([
+  'trackSlotGeometry', 'annotationWarnings', 'featureIdentityNotices', 'comparisonWarnings'
+]);
+
+// E1: Session 46 keeps the other diagram mode's Result set beside the
+// top-level set. It needs a committed top-level request of the other mode, at
+// least one Result, and resources in the top-level table.
+/**
+ * @param {Record<string, any>} sessionData
+ * @param {number | string} version
+ */
+const validateOtherModeResult = (sessionData, version) => {
+  const other = sessionData.otherModeResult;
+  if (!isPlainObject(other) || Object.keys(other).some((key) => !OTHER_MODE_RESULT_FIELDS.has(key))) {
+    throw new Error('Session otherModeResult must contain only a committed Result set.');
+  }
+  const mode = other.renderRequest?.mode;
+  if (!isPlainObject(sessionData.renderRequest) || !isPlainObject(other.renderRequest)
+    || !['circular', 'linear'].includes(mode) || mode === sessionData.renderRequest.mode
+    || other.renderRequest.schema !== sessionData.renderRequest.schema) {
+    throw new Error('Session otherModeResult requires a committed request of the other mode.');
+  }
+  validateCommittedResultSet(other, version);
+  if (other.results.length === 0) throw new Error('Session otherModeResult requires a Result.');
+  const missing = [...collectCanonicalResourceIds(other.renderRequest)]
+    .filter((resourceId) => !Object.hasOwn(sessionData.resources || {}, resourceId));
+  if (missing.length > 0) {
+    throw new Error(`Session otherModeResult names missing resource(s): ${missing.join(', ')}`);
+  }
+  // One rule with gbdraw/session_io.py: a present field is an object (null is not).
+  const ui = Object.hasOwn(other, 'ui') ? other.ui : {};
+  const legend = Object.hasOwn(other.editorState, 'legend') ? other.editorState.legend : {};
+  const runMetadata = Object.hasOwn(other, 'runMetadata') ? other.runMetadata : {};
+  if (!isPlainObject(ui) || Object.keys(ui).some((key) => !OTHER_MODE_RESULT_UI_FIELDS.has(key))
+    || Object.keys(other.editorState).some((key) => !OTHER_MODE_RESULT_EDITOR_FIELDS.has(key))
+    || !isPlainObject(legend) || Object.keys(legend).some((key) => !OTHER_MODE_RESULT_LEGEND_FIELDS.has(key))) {
+    throw new Error('Session otherModeResult editorState and ui hold only that Result set\'s fields.');
+  }
+  if (!isPlainObject(runMetadata)
+    || Object.keys(runMetadata).some((key) => !OTHER_MODE_RESULT_RUN_METADATA_FIELDS.has(key))) {
+    throw new Error('Session otherModeResult.runMetadata holds only that Result set\'s metadata.');
+  }
+  validateAnnotationWarnings(runMetadata.annotationWarnings, other.results);
+  validateFeatureIdentityNotices(runMetadata.featureIdentityNotices, other.results);
+  validateComparisonWarnings(runMetadata.comparisonWarnings, other.results);
+};
+
+// Session 46 keeps each mode's draft in `modes` (registry fields only) and
+// none of it in its former homes; `ui.losatExecution` holds only the LOSAT
+// execution settings (plan 4.1).
+/** @param {Record<string, any>} sessionData */
+const validateModeScopedFields = (sessionData) => {
+  // A field outside the Session 46 shape is a Session-format error (plan 4.1).
+  const fieldsInvalid = () => diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
+  if (Object.hasOwn(sessionData, 'cliOptions') && !isPlainObject(sessionData.cliOptions)) throw fieldsInvalid();
+  const retired = RETIRED_MODE_SCOPED_FIELDS.flatMap(([domain, fields]) => {
+    const container = domain ? domain.split('.').reduce(
+      (/** @type {any} */ current, part) => (isPlainObject(current) ? current[part] : undefined), sessionData
+    ) : sessionData;
+    return isPlainObject(container)
+      ? Object.keys(container).filter((field) => fields.has(field)).map((field) => (domain ? `${domain}.${field}` : field))
+      : [];
+  });
+  // Session 46 keeps the draft of each mode in `modes`, never in a former home.
+  if (retired.length > 0) throw fieldsInvalid();
+  // `ui.losatExecution` holds only the LOSAT execution settings.
+  const execution = sessionData.ui?.losatExecution;
+  if (execution !== undefined && (!isPlainObject(execution)
+    || Object.keys(execution).some((field) => !LOSAT_EXECUTION_FIELDS.includes(field)))) throw fieldsInvalid();
+  if (!Object.hasOwn(sessionData, 'modes')) return;
+  // `modes` holds a circular and a linear slice only.
+  if (!isPlainObject(sessionData.modes)
+    || Object.keys(sessionData.modes).some((mode) => !SLICE_MODES.includes(/** @type {any} */ (mode)))) throw fieldsInvalid();
+  Object.values(sessionData.modes).forEach((slice) => validateModeSliceFields(slice));
+};
+
+/**
+ * @param {Record<string, any>} sessionData Unvalidated Session data.
+ * @param {number | string} version
+ * @returns {void}
+ */
 export const validateSessionAuthorityInventory = (sessionData, version) => {
   if (!sessionData || typeof sessionData !== 'object' || Array.isArray(sessionData)) {
     throw new Error('Session authority inventory requires an object.');
   }
   assertSafeObjectKeys(sessionData, 'Session');
+  if (Number(version) < MODE_SCOPED_SESSION_VERSION) {
+    for (const field of ['otherModeResult', 'modes', 'cliOptions']) {
+      if (Object.hasOwn(sessionData, field)) {
+        throw new Error(`Session version ${String(version)} cannot contain ${field}.`);
+      }
+    }
+  } else {
+    validateModeScopedFields(sessionData);
+  }
   const bindings = validateWebFileBindings(sessionData.webFiles, sessionData.resources);
-  if (bindings?.schema === 2 && ![41, 42, 44].includes(Number(version))) {
-    throw new Error('Web binding schema 2 requires session version 41, 42, or 44.');
+  // A Linear record the Session turns OFF names a bound record card (record-selection D-05).
+  const linearRecordsOff = sessionData.modes?.linear?.config?.recordsOff;
+  if (Number(version) >= MODE_SCOPED_SESSION_VERSION && Array.isArray(linearRecordsOff)) {
+    const boundUids = new Set((Array.isArray(bindings?.linearSeqs) ? bindings.linearSeqs : []).map((/** @type {{ uid?: unknown }} */ sequence) => sequence?.uid));
+    if (linearRecordsOff.some((uid) => !boundUids.has(uid))) {
+      throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
+    }
+  }
+  if (bindings?.schema === 2 && ![41, 42, 44, MODE_SCOPED_SESSION_VERSION].includes(Number(version))) {
+    throw new Error('Web binding schema 2 requires session version 41, 42, 44, or 46.');
   }
   if (Number(version) < 31) return;
   if (
@@ -369,6 +603,16 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
         + forbiddenFeatureFields.join(', ')
       );
     }
+    if (Number(version) >= MODE_SCOPED_SESSION_VERSION) {
+      SLICE_MODES.forEach((mode) => {
+        const sliceFeatures = sessionData.modes?.[mode]?.features;
+        if (!isPlainObject(sliceFeatures) || !Object.hasOwn(sliceFeatures, 'featureOverrides')) return;
+        if (!isPlainObject(sliceFeatures.featureOverrides)) {
+          throw new Error(`Session modes.${mode}.features.featureOverrides must be an object.`);
+        }
+        canonicalFeatureOverrides(sliceFeatures.featureOverrides);
+      });
+    }
     if (
       Object.prototype.hasOwnProperty.call(sessionData, 'orthogroupState')
       && !isPlainObject(sessionData.orthogroupState)
@@ -383,62 +627,9 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
         `Session version ${String(version)} cannot contain duplicated orthogroup groups.`
       );
     }
-    if (!Array.isArray(sessionData.results)) {
-      throw new Error(`Session version ${String(version)} requires a results array.`);
-    }
-    sessionData.results.forEach((result) => {
-      const resultName = (
-        isPlainObject(result) && typeof result.name === 'string'
-          ? result.name.trim()
-          : ''
-      );
-      const content = isPlainObject(result) ? result.content : null;
-      if (
-        !resultName
-        || resultName.toLowerCase().endsWith('.interactive.svg')
-        || typeof content !== 'string'
-        || !content.includes('<svg')
-        || content.includes('gbdraw-interactive-feature-metadata')
-        || content.includes('gbdraw-interactive-feature-script')
-      ) {
-        throw new Error('Each current Session Result must be a named plain SVG.');
-      }
-    });
-    const editorState = sessionData.editorState;
-    if (
-      !isPlainObject(editorState)
-      || !Object.prototype.hasOwnProperty.call(editorState, 'featureCatalog')
-    ) {
-      throw new Error(
-        `Session version ${String(version)} requires editorState.featureCatalog.`
-      );
-    }
-    if (sessionData.renderRequest?.schema === 8
-      && sessionData.renderRequest.layout?.similarityAlignment
-      && !Object.hasOwn(editorState, 'alignmentResetReceipt')) {
-      throw new Error('Current alignment Session requires editorState.alignmentResetReceipt.');
-    }
-    validateAlignmentResetReceiptShape(editorState.alignmentResetReceipt, sessionData.renderRequest);
-    const featureCatalog = editorState.featureCatalog;
-    const expectedCatalogSchema = Number(version) === 44 ? 4 : 3;
-    if (
-      featureCatalog !== null
-      && (!isPlainObject(featureCatalog) || featureCatalog.schema !== expectedCatalogSchema)
-    ) {
-      throw new Error(
-        `Session version ${String(version)} requires a schema-${expectedCatalogSchema} editorState.featureCatalog.`
-      );
-    }
-    if (
-      Array.isArray(sessionData.results)
-      && sessionData.results.length > 0
-      && featureCatalog === null
-    ) {
-      throw new Error(
-        `Session version ${String(version)} requires a feature catalog for saved results.`
-      );
-    }
+    validateCommittedResultSet(sessionData, version);
   }
+  if (Object.hasOwn(sessionData, 'otherModeResult')) validateOtherModeResult(sessionData, version);
   const unknown = Object.keys(sessionData).filter(
     (key) => !Object.prototype.hasOwnProperty.call(SESSION_TOP_LEVEL_AUTHORITY, key)
   );
@@ -446,10 +637,15 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
     throw new Error(`Session contains unclassified top-level field(s): ${unknown.join(', ')}`);
   }
   validateAnnotationWarnings(sessionData.runMetadata?.annotationWarnings, sessionData.results);
+  validateFeatureIdentityNotices(sessionData.runMetadata?.featureIdentityNotices, sessionData.results);
   validateComparisonWarnings(sessionData.runMetadata?.comparisonWarnings, sessionData.results);
   if (isSettingsOnlySessionDocument(sessionData)) validateSettingsOnlyDocument(sessionData);
 };
 
+/**
+ * @param {Record<string, any>} canonical `{ renderRequest, resources, webFiles }`.
+ * @returns {Record<string, any>} The same object, adopted.
+ */
 export const adoptRuntimeCanonicalSession = (canonical) => {
   if (
     !isPlainObject(canonical)
@@ -466,6 +662,11 @@ export const adoptRuntimeCanonicalSession = (canonical) => {
   return canonical;
 };
 
+/**
+ * @param {Record<string, any>} sessionData Unvalidated Session data.
+ * @param {number} currentVersion
+ * @returns {{ document: Record<string, any>, canonical: Record<string, any> | null }}
+ */
 export const adoptCurrentSessionDocument = (sessionData, currentVersion) => {
   validateSessionAuthorityInventory(sessionData, currentVersion);
   if (sessionData.version !== currentVersion) {
@@ -480,18 +681,34 @@ export const adoptCurrentSessionDocument = (sessionData, currentVersion) => {
   return { document: sessionData, canonical };
 };
 
+/**
+ * @param {any} value
+ * @returns {boolean}
+ */
 export const isAdoptedCurrentSessionDocument = (value) => (
   Boolean(value) && adoptedCurrentDocuments.has(value)
 );
 
+/**
+ * @param {any} value
+ * @returns {boolean}
+ */
 export const isAdoptedCanonicalSession = (value) => (
   Boolean(value) && adoptedCanonicalOwners.has(value)
 );
 
+/**
+ * @param {Record<string, any> | null | undefined} sessionData
+ * @returns {{ ui: Record<string, any> }}
+ */
 export const projectWebOnlyEditorMetadata = (sessionData) => ({
   ui: copyFields(sessionData?.ui, WEB_EDITOR_UI_FIELDS)
 });
 
+/**
+ * @param {Record<string, any> | null | undefined} sessionData
+ * @returns {Record<string, any>}
+ */
 export const projectArtifactState = (sessionData) => ({
   results: Array.isArray(sessionData?.results) ? sessionData.results : [],
   ui: copyFields(sessionData?.ui, ARTIFACT_UI_FIELDS),
@@ -505,6 +722,10 @@ export const projectArtifactState = (sessionData) => ({
   runMetadata: sessionData?.runMetadata || {}
 });
 
+/**
+ * @param {Record<string, any> | null | undefined} sessionData
+ * @returns {{ format: any, version: any, createdAt: any, title: string }}
+ */
 export const projectDocumentMetadata = (sessionData) => ({
   format: sessionData?.format,
   version: sessionData?.version,

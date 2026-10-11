@@ -1,16 +1,27 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { execFileSync } = require('node:child_process');
-const { load, generate, download } = require('./helpers/mode-transition.cjs');
-const { getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
+const { load, generate, download, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
+const { evaluateWithRetainedPromise, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
 
-const inspect = page => page.evaluate(async () => {
+// A rule edit that changes the Legend asks for the automatic rerender (OV-42,
+// OV-43, #857), so the Result is read once Python has drawn it.
+const inspect = async page => {
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.processing && !window.__GBDRAW_APP__.labelReflowProcessing);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.processing && !window.__GBDRAW_APP__.labelReflowProcessing);
+  return inspectNow(page);
+};
+const inspectNow = page => page.evaluate(async () => {
   const { state: s } = await import('./js/state.js');
-  const { getVisibleFeatureLegendGroup, getAllFeatureLegendGroups } = await import('./js/app/legend/utils.js');
+  const { getVisibleFeatureLegendGroup, getAllFeatureLegendGroups, legendRowShown } = await import('./js/services/legend-svg.js');
   const root=s.svgContainer.value.querySelector('svg');
   const result=new DOMParser().parseFromString(s.results.value[s.selectedResultIndex.value].content,'image/svg+xml').documentElement;
-  const entries=svg=>[...(getVisibleFeatureLegendGroup(svg)?.querySelectorAll('g[data-legend-key]')||[])].map(e=>({caption:e.getAttribute('data-legend-key'),color:e.querySelector('path[fill]')?.getAttribute('fill')}));
-  return {rules:JSON.parse(JSON.stringify(s.manualSpecificRules.map(rule=>({...rule,fromFile:Boolean(rule.fromFile)})))), mounted:entries(root), result:entries(result),
+  // The rows a Result shows: a rule commit that merges a row into a shown row
+  // retires it live as a hidden row, which the layout skips and every export
+  // strips, until Python draws the Legend again (D-15-6 (2), (3); OV-313).
+  const entries=svg=>[...(getVisibleFeatureLegendGroup(svg)?.querySelectorAll('g[data-legend-key]')||[])].filter(legendRowShown).map(e=>({caption:e.getAttribute('data-legend-key'),color:e.querySelector('path[fill]')?.getAttribute('fill')}));
+  return {rules:JSON.parse(JSON.stringify(s.activeDrawing().manualSpecificRules.map(rule=>({...rule,fromFile:Boolean(rule.fromFile)})))), mounted:entries(root), result:entries(result),
     dual:getAllFeatureLegendGroups(root).map(group=>[...group.querySelectorAll('g[data-legend-key]')].map(e=>e.getAttribute('data-legend-key'))),
     dualStyles:getAllFeatureLegendGroups(root).map(group=>[...group.querySelectorAll('g[data-legend-key]')].map(e=>({caption:e.getAttribute('data-legend-key'),color:e.querySelector('path[fill]')?.getAttribute('fill')}))),
     svg:s.results.value[s.selectedResultIndex.value].content, fileName:s.files.t_color?.name,
@@ -34,11 +45,11 @@ for(const width of [1440,390]) {
     try {
       page.setDefaultTimeout(180000);
       await generate(page);
-      const source=await page.evaluate(async()=>{
+      const source=await evaluateWithRetainedPromise(page, async()=>{
         const a=window.__GBDRAW_APP__;
-        const {getFeatureGenerationHash}=await import('./js/app/feature-utils.js');
+        const {getFeatureColorRuleHash}=await import('./js/services/feature-utils.js');
         const selected=a.extractedFeatures.filter(f=>f.type==='CDS').slice(0,3);
-        const ids=selected.map(getFeatureGenerationHash);
+        const ids=selected.map(getFeatureColorRuleHash);
         const original=a.manualSpecificRules.map(r=>[r.feat,r.qual,r.val,r.color,r.cap].join('\t')).join('\n');
         Object.assign(a.newSpecRule,{feat:'CDS',qual:'hash',val:ids[2],color:'#778899',cap:'Color group'});
         await a.addSpecificRule();
@@ -168,21 +179,18 @@ test('generated-caption collisions roll back and old Session drafts normalize on
   let fresh;
   try {
     await generate(page);
-    await page.evaluate(async()=>{
-      const a=window.__GBDRAW_APP__;
-      a.newLegendCaption='Conflict [#112233]';a.newLegendColor='#abcdef';
-      await a.addNewLegendEntry();
-    });
+    // An editor row a Session holds (R15-2 retired Add legend item).
+    await loadEditorLegendRows(page,[['Conflict [#112233]','#abcdef']]);
     await expect.poll(()=>page.evaluate(()=>window.__GBDRAW_APP__.legendEntries.some(e=>e.caption==='Conflict [#112233]'))).toBe(true);
-    const ids=await page.evaluate(async()=>{
-      const a=window.__GBDRAW_APP__,{getFeatureGenerationHash}=await import('./js/app/feature-utils.js');
-      const ids=a.extractedFeatures.filter(f=>f.type==='CDS').slice(0,2).map(getFeatureGenerationHash);
+    const ids=await evaluateWithRetainedPromise(page, async()=>{
+      const a=window.__GBDRAW_APP__,{getFeatureColorRuleHash}=await import('./js/services/feature-utils.js');
+      const ids=a.extractedFeatures.filter(f=>f.type==='CDS').slice(0,2).map(getFeatureColorRuleHash);
       Object.assign(a.newSpecRule,{feat:'CDS',qual:'hash',val:ids[0],color:'#445566',cap:'Conflict'});
       await a.addSpecificRule();return ids;
     });
     const before=await inspect(page);
     const warningBefore=await page.evaluate(async()=>JSON.stringify((await import('./js/state.js')).state.annotationWarnings.value));
-    await page.evaluate(async id=>{
+    await evaluateWithRetainedPromise(page, async id=>{
       const a=window.__GBDRAW_APP__;
       Object.assign(a.newSpecRule,{feat:'CDS',qual:'hash',val:id,color:'#112233',cap:'Conflict'});
       await a.addSpecificRule();
@@ -231,11 +239,11 @@ test('Linear comparison keeps both legend orientations and their swatches canoni
   page.setDefaultTimeout(180000);
   try {
     await generate(page);
-    await page.evaluate(async()=>{
-      const a=window.__GBDRAW_APP__,{getFeatureGenerationHash}=await import('./js/app/feature-utils.js');
+    await evaluateWithRetainedPromise(page, async()=>{
+      const a=window.__GBDRAW_APP__,{getFeatureColorRuleHash}=await import('./js/services/feature-utils.js');
       const features=a.extractedFeatures.filter(f=>f.type==='CDS').slice(0,2);
       for(let i=0;i<features.length;i++) {
-        Object.assign(a.newSpecRule,{feat:'CDS',qual:'hash',val:getFeatureGenerationHash(features[i]),color:['#112233','#445566'][i],cap:'Comparison group'});
+        Object.assign(a.newSpecRule,{feat:'CDS',qual:'hash',val:getFeatureColorRuleHash(features[i]),color:['#112233','#445566'][i],cap:'Comparison group'});
         await a.addSpecificRule();
       }
     });
@@ -259,7 +267,9 @@ test('Linear comparison keeps both legend orientations and their swatches canoni
 
 
 for (const width of [1440, 390]) {
-  test(`loaded default caption recolors its complete group atomically (${width}px)`, async ({ browser }, info) => {
+  // D-15: "Apply to all" on the loaded tRNA palette row sets the tRNA default
+  // color, so the whole row, hidden features included, takes it at once.
+  test(`loaded palette row takes its new default color atomically (${width}px)`, async ({ browser }, info) => {
     test.setTimeout(180000);
     const page = await load(browser, 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', { width, height: 1000 });
     let fresh;
@@ -289,6 +299,9 @@ for (const width of [1440, 390]) {
       await fill.fill('#c026d3');
       const scope = page.getByRole('heading', { name: 'Color Change Scope' }).locator('..');
       await scope.getByRole('button').filter({ hasText: 'Apply to all "tRNA"' }).last().click();
+      // The choice prepares the rules it adds; on a Session just loaded that
+      // starts the Worker runtime (OV-225), so wait for the choice to finish.
+      await page.waitForFunction(() => !window.__GBDRAW_APP__.featureStyleScopeDialog.show);
       await expect.poll(async () => (await evidence()).mounted, { timeout: 10000 }).toEqual(['#c026d3']);
       const after = await evidence();
       expect(after.result).toEqual(['#c026d3']);
@@ -299,6 +312,8 @@ for (const width of [1440, 390]) {
       await expect(page.locator('[data-generation-application-feedback]')).toHaveCount(0);
       const live = await inspect(page);
       expect(live.result.find(entry => entry.caption === 'tRNA')?.color).toBe('#c026d3');
+      expect(live.rules.filter(rule => rule.feat === 'tRNA')).toEqual([]);
+      expect(await page.evaluate(() => window.__GBDRAW_APP__.currentColors.tRNA)).toBe('#c026d3');
       await history(page, 'Undo');
       expect((await evidence()).mounted).toEqual(before.mounted);
       expect((await evidence()).result).toEqual(before.result);
@@ -316,11 +331,11 @@ for (const width of [1440, 390]) {
       await generate(fresh);
       expect((await inspect(fresh)).result.find(entry => entry.caption === 'tRNA')?.color).toBe('#c026d3');
       await history(page, 'Undo');
-      await page.evaluate(async () => {
+      await evaluateWithRetainedPromise(page, async () => {
         const a = window.__GBDRAW_APP__;
-        const { getFeatureGenerationHash } = await import('./js/app/feature-utils.js');
+        const { getFeatureColorRuleHash } = await import('./js/services/feature-utils.js');
         Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'hash',
-          val: getFeatureGenerationHash(a.extractedFeatures.find(feature => feature.type === 'CDS')),
+          val: getFeatureColorRuleHash(a.extractedFeatures.find(feature => feature.type === 'CDS')),
           color: '#112233', cap: 'Independent group' });
         await a.addSpecificRule();
       });

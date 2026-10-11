@@ -505,7 +505,7 @@ def require_losat_task_support(
         version = _runtime_version(runtime) or "unknown version"
         raise ValidationError(
             f"LOSATN task {task!r} is not supported by the LOSAT runtime at "
-            f"{_recorded_runtime_path(runtime)} ({version}; supported: "
+            f"{runtime.executable} ({version}; supported: "
             f"{', '.join(sorted(values))}). Choose another --losatn_task, or pass a "
             f"runtime that supports it with {LOSAT_BIN_OPTION} or {NCBI_BLAST_BIN_OPTION}.",
             diagnostic={
@@ -539,11 +539,13 @@ def _runtime_version(runtime: LosatRuntime) -> str | None:
 
 
 def _recorded_runtime_path(runtime: LosatRuntime) -> str:
+    # Sessions are shared, so a runtime outside the package records only its
+    # executable's name; source and version identify it.
     if runtime.source == "bundled":
         platform_dir = _bundled_platform_dir()
         if platform_dir is not None:
             return "/".join(("gbdraw", _BUNDLED_LOSAT_DIR, platform_dir, _bundled_filename()))
-    return runtime.executable
+    return Path(runtime.executable).name or runtime.executable
 
 
 def losat_runtime_record(

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from typing import Dict, List, NoReturn, Optional, Tuple
+from typing import Any, Dict, List, NoReturn, Optional, Tuple, cast
 
 from ..exceptions import ValidationError
 from ..layout.spatial import IntervalIndex, split_circular_interval
@@ -94,7 +94,10 @@ def feature_overlap_bp(
 
     def pieces(feature):
         start, end = feature["start"], feature["end"]
-        return [(start, end)] if start <= end else [(start, int(genome_length)), (1, end)]
+        if start <= end:
+            return [(start, end)]
+        # genome_length is set here: origin-spanning input without it raised above.
+        return [(start, int(cast(int, genome_length))), (1, end)]
 
     return sum(
         max(0, min(a_end, b_end) - max(a_start, b_start))
@@ -358,7 +361,7 @@ def arrange_feature_tracks(
     Returns:
         Updated feature_dict with feature_track_id set on each feature
     """
-    feature_metrics = {}
+    feature_metrics: dict[str, dict[str, Any]] = {}
     for feat_id, feature in feature_dict.items():
         total_span, occupied_length = calculate_feature_metrics(feature, genome_length)
         start, end, strand = get_feature_ends(feature, genome_length)

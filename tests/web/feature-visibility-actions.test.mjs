@@ -1,41 +1,53 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-
-const repoRoot = process.cwd();
-const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js', 'app');
-const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-feature-visibility-actions-'));
-await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
-await mkdir(join(tempDir, 'app', 'feature-editor'), { recursive: true });
-await mkdir(join(tempDir, 'services'), { recursive: true });
-await writeFile(
-  join(tempDir, 'app', 'feature-editor', 'visibility-actions.js'),
-  await readFile(join(sourceDir, 'feature-editor', 'visibility-actions.js'), 'utf8'),
-  'utf8'
-);
-await writeFile(join(tempDir, 'app', 'feature-visibility.js'), await readFile(join(sourceDir, 'feature-visibility.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'app', 'feature-selector.js'), await readFile(join(sourceDir, 'feature-selector.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'app', 'feature-utils.js'), await readFile(join(sourceDir, 'feature-utils.js'), 'utf8'), 'utf8');
-await writeFile(
-  join(tempDir, 'services', 'text-download.js'),
-  await readFile(join(sourceDir, '..', 'services', 'text-download.js'), 'utf8'),
-  'utf8'
-);
-await writeFile(
-  join(tempDir, 'services', 'feature-identity.js'),
-  await readFile(join(sourceDir, '..', 'services', 'feature-identity.js'), 'utf8'),
-  'utf8'
-);
-
-const { createFeatureVisibilityActions } = await import(
-  pathToFileURL(join(tempDir, 'app', 'feature-editor', 'visibility-actions.js'))
-);
+import { createFeatureVisibilityActions } from '../../gbdraw/web/js/app/feature-editor/visibility-actions.js';
+import {
+  requestFeatureVisibilityRules,
+  setFeatureVisibilityOverride
+} from '../../gbdraw/web/js/services/feature-visibility.js';
+import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
+import { admitFeatureCatalog, resultCatalogFeatures } from '../../gbdraw/web/js/services/feature-catalog.js';
+import { featureDrawnContext } from '../../gbdraw/web/js/services/feature-visibility.js';
+import { displayedFeatureAddressing } from '../../gbdraw/web/js/services/feature-override-identity.js';
+import { compileDirectEditorMutationPlan } from '../../gbdraw/web/js/app/candidate-render.js';
+import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const ref = (value) => ({ value });
-const featureA = { svg_id: 'feature-a', type: 'CDS', label: 'A' };
-const featureB = { svg_id: 'feature-b', type: 'CDS', label: 'B' };
+// The live projection reads Python's rule matches (R4) and the committed
+// request's feature types.
+const rulePreparationFor = (state) => createRulePreparation({
+  state: withDrawings(state),
+  evaluate: evaluatePythonRules,
+  visibilityRules: () => requestFeatureVisibilityRules(state.featureVisibilityManualRules)
+});
+const committedRequest = (selectedFeaturesSet) => () => ({ diagramOptions: { selectedFeaturesSet } });
+// The root's port (R13) as it shows Feature visibility: the compile hides the
+// rendered features `resolveFeatureDrawn` does not draw. `show` receives each
+// rendered feature's mode and answers whether the Result changed.
+const visibilityPort = (state, getCommittedRequest, show, addressing = () => displayedFeatureAddressing(
+  state.extractedFeatures.value, ['one.svg'], 0
+)) => ({ domains }) => {
+  assert.deepEqual(domains, ['featureVisibility']);
+  const catalogAdmission = addressing();
+  const hidden = new Set(compileDirectEditorMutationPlan({
+    catalogAdmission,
+    livePreview: {
+      domains,
+      paletteColors: {},
+      drawnContext: featureDrawnContext(state.activeDrawing(), { diagramOptions: getCommittedRequest()?.diagramOptions })
+    }
+  }).operationsByResult[0].featureVisibility.map(({ renderedId }) => renderedId));
+  return show(Object.fromEntries([...catalogAdmission.renderedFeaturesByResult[0].keys()]
+    .map((renderedId) => [renderedId, hidden.has(renderedId) ? 'off' : 'on'])));
+};
+// Per-feature visibility is the identity row of the feature (design Q4).
+const identity = (id) => ({ scope: 'circular', record_key: 'record-1', biological_feature_id: `bio-${id}` });
+const modes = (overrides) => Object.fromEntries(Object.values(overrides)
+  .filter((row) => row.featureVisibility !== null)
+  .map((row) => [row.biologicalFeatureId.replace(/^bio-/, ''), row.featureVisibility]));
+const clear = (overrides) => Object.keys(overrides).forEach((key) => delete overrides[key]);
+const featureA = { svg_id: 'feature-a', type: 'CDS', label: 'A', ...identity('feature-a') };
+const featureB = { svg_id: 'feature-b', type: 'CDS', label: 'B', ...identity('feature-b') };
 const extractedFeatures = ref([featureA, featureB]);
 const orthogroups = ref([]);
 const featureVisibilityOverrides = {};
@@ -44,84 +56,74 @@ const featureVisibilityScopeDialog = {};
 const selectedResultIndex = ref(0);
 const resultGenerationKey = ref('generation-1');
 const appliedPreviewChanges = [];
-// F-3: each visibility edit hands the feature's label to the label owner.
+// F-3: each visibility edit hands the feature's label to the label owner,
+// through the port the composition root registers (R13).
 const labelVisibilityCalls = [];
 
+const actionState = {
+  clickedFeature,
+  extractedFeatures,
+  orthogroups,
+  featureVisibilityManualRules: [],
+  featureVisibilityRules: ref([]),
+  featureOverrides: featureVisibilityOverrides,
+  featureVisibilityScopeDialog,
+  resultGenerationKey,
+  results: ref([{ name: 'one.svg', content: '<svg></svg>' }]),
+  selectedResultIndex,
+  svgContainer: ref({
+    querySelector: (selector) => (selector === 'svg' ? {} : null)
+  })
+};
 const actions = createFeatureVisibilityActions({
-  state: {
-    clickedFeature,
-    extractedFeatures,
-    orthogroups,
-    featureVisibilityManualRules: [],
-    featureVisibilityRules: ref([]),
-    featureVisibilityOverrides,
-    featureVisibilitySelectorCache: {},
-    featureVisibilityScopeDialog,
-    resultGenerationKey,
-    results: ref([{ name: 'one.svg', content: '<svg></svg>' }]),
-    selectedResultIndex,
-    svgContainer: ref({
-      querySelector: (selector) => (selector === 'svg' ? {} : null)
-    })
-  },
-  featureSvgActions: {
-    applyVisibilityPreviewChanges: (changes, options = {}) => {
-      appliedPreviewChanges.push({ changes, reason: options.reason });
+  state: withDrawings(actionState),
+  rulePreparation: rulePreparationFor(actionState),
+  getCommittedRequest: committedRequest(['CDS']),
+  showEditorIntent: visibilityPort(actionState, committedRequest(['CDS']), (modes) => {
+    appliedPreviewChanges.push(modes);
+    return true;
+  }),
+  ports: {
+    applyFeatureVisibilityToLabels: (options = {}) => {
+      labelVisibilityCalls.push(options.reflow !== false);
       return true;
     }
   },
-  labelActions: {
-    applyFeatureVisibilityToLabels: (reason, options = {}) => {
-      labelVisibilityCalls.push([reason, options.reflow !== false]);
-      return true;
-    }
-  },
-  previewRuntime: {
-    selectResult: (index) => {
-      selectedResultIndex.value = index;
-      return true;
-    }
+  selectResult: (index) => {
+    selectedResultIndex.value = index;
+    return true;
   }
 });
 
 const command = actions.buildSelectedFeaturesVisibilityCommand([featureA, featureB], 'off');
 assert.ok(command);
 assert.equal(await command.apply(), true);
-assert.deepEqual(featureVisibilityOverrides, {
+assert.deepEqual(modes(featureVisibilityOverrides), {
   'feature-a': 'off',
   'feature-b': 'off'
 });
 assert.equal(appliedPreviewChanges.length, 1);
-assert.deepEqual(
-  appliedPreviewChanges[0].changes.map((change) => [change.featureId, change.mode]),
-  [['feature-a', 'off'], ['feature-b', 'off']]
-);
+assert.deepEqual(appliedPreviewChanges[0], { 'feature-a': 'off', 'feature-b': 'off' });
 
 assert.equal(await command.revert(), true);
 assert.deepEqual(featureVisibilityOverrides, {});
 assert.equal(appliedPreviewChanges.length, 2);
 assert.deepEqual(labelVisibilityCalls, [
-  ['bulk-feature-visibility-apply', true],
-  ['bulk-feature-visibility-undo', true]
+  true,
+  true
 ]);
-assert.deepEqual(
-  appliedPreviewChanges[1].changes.map((change) => [change.featureId, change.mode]),
-  [['feature-a', 'on'], ['feature-b', 'on']]
-);
+assert.deepEqual(appliedPreviewChanges[1], { 'feature-a': 'on', 'feature-b': 'on' });
 
 assert.equal(actions.setFeatureVisibility(featureA, 'off', {
   triggerReflow: false,
   scope: { id: 'feature' }
 }), true);
-assert.equal(featureVisibilityOverrides['feature-a'], 'off');
+assert.equal(modes(featureVisibilityOverrides)['feature-a'], 'off');
 assert.equal(appliedPreviewChanges.length, 3);
-assert.deepEqual(labelVisibilityCalls.at(-1), ['feature-visibility', false],
+assert.deepEqual(labelVisibilityCalls.at(-1), false,
   'the label follows the feature even when the caller declines the reflow');
-assert.deepEqual(
-  appliedPreviewChanges[2].changes.map((change) => [change.featureId, change.mode]),
-  [['feature-a', 'off']]
-);
-delete featureVisibilityOverrides['feature-a'];
+assert.deepEqual(appliedPreviewChanges[2], { 'feature-a': 'off', 'feature-b': 'on' });
+clear(featureVisibilityOverrides);
 
 const sourceIdFeature = {
   svg_id: 'feature-source-id',
@@ -134,7 +136,7 @@ clickedFeature.value = {
   featureVisibility: 'default',
   feat: sourceIdFeature
 };
-actions.updateClickedFeatureVisibility('off');
+await actions.updateClickedFeatureVisibility('off');
 assert.equal(featureVisibilityScopeDialog.show, true);
 assert.ok(featureVisibilityScopeDialog.scopes.some((scope) => (
   scope.id === 'protein_id' &&
@@ -154,9 +156,9 @@ clickedFeature.value = {
   feat: runtimeOnlyFeature
 };
 featureVisibilityScopeDialog.show = false;
-actions.updateClickedFeatureVisibility('off');
+await actions.updateClickedFeatureVisibility('off');
 assert.equal(featureVisibilityScopeDialog.show, false);
-delete featureVisibilityOverrides[runtimeOnlyFeature.svg_id];
+clear(featureVisibilityOverrides);
 
 const reversedFeature = {
   svg_id: 'display-feature_record_3',
@@ -195,7 +197,7 @@ clickedFeature.value = {
   featureVisibility: 'default',
   feat: reversedFeature
 };
-actions.updateClickedFeatureVisibility('off');
+await actions.updateClickedFeatureVisibility('off');
 const reversedGroupScope = featureVisibilityScopeDialog.scopes.find((scope) => scope.id === 'orthogroup');
 assert.ok(reversedGroupScope);
 assert.deepEqual(
@@ -242,9 +244,9 @@ clickedFeature.value = {
 };
 featureVisibilityScopeDialog.show = false;
 featureVisibilityScopeDialog.scopes = [];
-actions.updateClickedFeatureVisibility('off');
+await actions.updateClickedFeatureVisibility('off');
 assert.equal(featureVisibilityScopeDialog.show, false);
-delete featureVisibilityOverrides[strictTrigger.svg_id];
+clear(featureVisibilityOverrides);
 
 const duplicateA = {
   svg_id: 'duplicate-rendered',
@@ -263,17 +265,17 @@ orthogroups.value[0].members[1] = {
 };
 featureVisibilityScopeDialog.show = false;
 featureVisibilityScopeDialog.scopes = [];
-actions.updateClickedFeatureVisibility('off');
+await actions.updateClickedFeatureVisibility('off');
 assert.equal(featureVisibilityScopeDialog.show, false);
-delete featureVisibilityOverrides[strictTrigger.svg_id];
+clear(featureVisibilityOverrides);
 
 extractedFeatures.value = [strictTrigger, duplicateA];
 orthogroups.value = [orthogroups.value[0], { ...orthogroups.value[0] }];
 featureVisibilityScopeDialog.show = false;
 featureVisibilityScopeDialog.scopes = [];
-actions.updateClickedFeatureVisibility('off');
+await actions.updateClickedFeatureVisibility('off');
 assert.equal(featureVisibilityScopeDialog.show, false);
-delete featureVisibilityOverrides[strictTrigger.svg_id];
+clear(featureVisibilityOverrides);
 
 const previewChangeCountBeforeStaleApply = appliedPreviewChanges.length;
 resultGenerationKey.value = 'generation-2';
@@ -282,54 +284,315 @@ assert.deepEqual(featureVisibilityOverrides, {});
 assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
 
 // FE-04: an Exact product hide is committed as an editor qualifier rule. The
-// reconcile that History runs after Undo/Redo resolves it with the action's
-// matcher (case-insensitive, like Python), so the feature stays hidden.
+// projection that History runs after Undo/Redo resolves it with the action's
+// resolver (Python's matches), so the feature stays hidden. R-2: every rule,
+// also one typed in the Features panel or loaded from a TSV, hides live as
+// Generate hides.
 {
-  const nd1 = { svg_id: 'nd1', type: 'CDS', qualifiers: { product: ['NADH dehydrogenase subunit 1'] } };
-  const nd1Case = { svg_id: 'nd1-case', type: 'CDS', qualifiers: { product: ['nadh DEHYDROGENASE subunit 1'] } };
-  const nd2 = { svg_id: 'nd2', type: 'CDS', qualifiers: { product: ['NADH dehydrogenase subunit 2'] } };
-  const geneRna = { svg_id: 'nd1-rna', type: 'tRNA', qualifiers: { product: ['NADH dehydrogenase subunit 1'] } };
+  const nd1 = { svg_id: 'nd1', type: 'CDS', qualifiers: { product: ['NADH dehydrogenase subunit 1'] }, ...identity('nd1') };
+  const nd1Case = {
+    svg_id: 'nd1-case', type: 'CDS', qualifiers: { product: ['nadh DEHYDROGENASE subunit 1'] }, ...identity('nd1-case')
+  };
+  const nd2 = { svg_id: 'nd2', type: 'CDS', qualifiers: { product: ['NADH dehydrogenase subunit 2'] }, ...identity('nd2') };
+  const geneRna = {
+    svg_id: 'nd1-rna', type: 'tRNA', qualifiers: { product: ['NADH dehydrogenase subunit 1'] }, ...identity('nd1-rna')
+  };
   const manualRules = [];
   const overrides = {};
   const reconciled = [];
   const scopeDialog = {};
+  const productState = {
+    clickedFeature: ref({ svg_id: nd1.svg_id, featureVisibility: 'default', feat: nd1 }),
+    extractedFeatures: ref([nd1, nd1Case, nd2, geneRna]),
+    orthogroups: ref([]),
+    featureVisibilityManualRules: manualRules,
+    featureVisibilityRules: ref([]),
+    featureOverrides: overrides,
+    featureVisibilityScopeDialog: scopeDialog,
+    resultGenerationKey: ref('generation-1'),
+    results: ref([{ name: 'one.svg', content: '<svg></svg>' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? {} : null) })
+  };
+  const productPreparation = rulePreparationFor(productState);
   const productActions = createFeatureVisibilityActions({
-    state: {
-      clickedFeature: ref({ svg_id: nd1.svg_id, featureVisibility: 'default', feat: nd1 }),
-      extractedFeatures: ref([nd1, nd1Case, nd2, geneRna]),
-      orthogroups: ref([]),
-      featureVisibilityManualRules: manualRules,
-      featureVisibilityRules: ref([]),
-      featureVisibilityOverrides: overrides,
-      featureVisibilitySelectorCache: {},
-      featureVisibilityScopeDialog: scopeDialog,
-      resultGenerationKey: ref('generation-1'),
-      results: ref([{ name: 'one.svg', content: '<svg></svg>' }]),
-      selectedResultIndex: ref(0),
-      svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? {} : null) })
-    },
-    featureSvgActions: {
-      applyVisibilityPreviewChanges: (changes) => {
-        reconciled.push(Object.fromEntries(changes.map((change) => [change.featureId, change.mode])));
-        return true;
-      }
-    },
-    previewRuntime: { selectResult: () => true }
+    state: withDrawings(productState),
+    rulePreparation: productPreparation,
+    getCommittedRequest: committedRequest(['CDS', 'tRNA']),
+    showEditorIntent: visibilityPort(productState, committedRequest(['CDS', 'tRNA']), (modes) => {
+      reconciled.push(modes);
+      return true;
+    }),
+    ports: { applyFeatureVisibilityToLabels: () => true },
+    selectResult: () => true
   });
-  productActions.updateClickedFeatureVisibility('off');
+  await productActions.updateClickedFeatureVisibility('off');
   assert.equal(scopeDialog.show, true);
-  assert.equal(productActions.handleFeatureVisibilityScopeChoice('product'), true);
-  assert.deepEqual(reconciled.at(-1), { nd1: 'off', 'nd1-case': 'off' });
+  assert.equal(await productActions.handleFeatureVisibilityScopeChoice('product'), true);
+  const hidden = { nd1: 'off', 'nd1-case': 'off', nd2: 'on', 'nd1-rna': 'on' };
+  assert.deepEqual(reconciled.at(-1), hidden);
   assert.equal(manualRules.length, 1);
-  assert.equal(productActions.reconcileFeatureVisibility(), true);
-  assert.deepEqual(reconciled.at(-1), { nd1: 'off', 'nd1-case': 'off', nd2: 'on', 'nd1-rna': 'on' });
-  overrides['nd1-case'] = 'on';
-  productActions.reconcileFeatureVisibility();
+  assert.equal(await productActions.projectFeatureVisibility(), true);
+  assert.deepEqual(reconciled.at(-1), hidden);
+  setFeatureVisibilityOverride(overrides, nd1Case, 'on');
+  await productActions.projectFeatureVisibility();
   assert.equal(reconciled.at(-1)['nd1-case'], 'on', 'a per-feature override takes precedence');
-  manualRules.splice(0, manualRules.length, { ...manualRules[0], source: 'manual' });
-  delete overrides['nd1-case'];
-  productActions.reconcileFeatureVisibility();
-  assert.equal(reconciled.at(-1).nd1, 'on', 'a manual product rule applies on Generate only');
+  clear(overrides);
+  manualRules.splice(0, manualRules.length, {
+    ...manualRules[0], source: 'file', recordId: '*', featureType: '*', qualifier: 'Product', value: 'subunit 2$'
+  });
+  assert.equal(await productPreparation.prepareDrawn(), true);
+  await productActions.projectFeatureVisibility();
+  assert.deepEqual(reconciled.at(-1), { nd1: 'on', 'nd1-case': 'on', nd2: 'off', 'nd1-rna': 'on' },
+    'a loaded rule hides live as Generate does');
+}
+
+// OV-19 (PD-OI-066, R10): every Features panel rule edit is one transition
+// that writes the rules and projects them onto the displayed Result as
+// Generate draws them. A table Generate rejects stays in the draft, changes
+// nothing, and reports Generate's error until an edit leaves a table Generate
+// accepts.
+{
+  const fl1 = { svg_id: 'fl1', type: 'CDS', qualifiers: { locus_tag: ['FL1'] }, ...identity('fl1') };
+  const fl2 = { svg_id: 'fl2', type: 'CDS', qualifiers: { locus_tag: ['FL2'] }, ...identity('fl2') };
+  const rules = [];
+  const shown = { fl1: 'on', fl2: 'on' };
+  const labelProjections = [];
+  const panelState = {
+    clickedFeature: ref(null),
+    extractedFeatures: ref([fl1, fl2]),
+    orthogroups: ref([]),
+    featureVisibilityManualRules: rules,
+    featureVisibilityRules: ref([]),
+    featureOverrides: {},
+    featureVisibilityScopeDialog: {},
+    resultGenerationKey: ref('generation-1'),
+    results: ref([{ name: 'one.svg', content: '<svg></svg>' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? {} : null) }),
+    errorLog: ref(null)
+  };
+  const panel = createFeatureVisibilityActions({
+    state: withDrawings(panelState),
+    rulePreparation: rulePreparationFor(panelState),
+    getCommittedRequest: committedRequest(['CDS']),
+    showEditorIntent: visibilityPort(panelState, committedRequest(['CDS']), (modes) => Object.entries(modes)
+      .reduce((changed, [featureId, mode]) => {
+        if (shown[featureId] === mode) return changed;
+        shown[featureId] = mode;
+        return true;
+      }, false)),
+    ports: { applyFeatureVisibilityToLabels: (options) => labelProjections.push(options) },
+    selectResult: () => true
+  });
+  const field = (index, name, value) => panel.setFeatureVisibilityRuleField(index, name, value);
+
+  await panel.addFeatureVisibilityRule();
+  await field(0, 'qualifier', 'locus_tag');
+  assert.deepEqual(shown, { fl1: 'on', fl2: 'on' }, 'a rule without a value is not in the request');
+  await field(0, 'value', '^fl1$');
+  assert.deepEqual(shown, { fl1: 'off', fl2: 'on' }, 'a rule edit hides live');
+  assert.deepEqual(labelProjections, [{ rerender: false }], 'the labels follow the features the edit hides');
+  await field(0, 'action', 'show');
+  assert.deepEqual(shown, { fl1: 'on', fl2: 'on' });
+  await panel.addFeatureVisibilityRule();
+  await field(1, 'qualifier', 'locus_tag');
+  await field(1, 'value', '^fl');
+  assert.deepEqual(shown, { fl1: 'on', fl2: 'off' }, 'the first matching rule decides');
+  await panel.moveFeatureVisibilityRuleUp(1);
+  assert.deepEqual(rules.map((rule) => rule.value), ['^fl', '^fl1$']);
+  assert.deepEqual(shown, { fl1: 'off', fl2: 'off' });
+
+  await field(1, 'value', '^fl1(');
+  assert.equal(rules[1].value, '^fl1(', 'the draft keeps a regex Generate rejects');
+  assert.deepEqual(shown, { fl1: 'off', fl2: 'off' });
+  assert.equal(panelState.errorLog.value?.operation, 'evaluateRules');
+  await panel.removeFeatureVisibilityRule(0);
+  assert.deepEqual(shown, { fl1: 'off', fl2: 'off' }, 'no edit shows a table Generate rejects');
+  assert.notEqual(panelState.errorLog.value, null);
+  await field(0, 'value', '^fl1$');
+  assert.equal(panelState.errorLog.value, null, 'an edit that Generate accepts clears the report');
+  assert.deepEqual(shown, { fl1: 'on', fl2: 'on' });
+
+  assert.equal(await panel.removeFeatureVisibilityRule(5), false, 'an edit of no rule changes nothing');
+  assert.equal(await panel.moveFeatureVisibilityRuleDown(0), false);
+  assert.equal(rules.length, 1);
+}
+
+// R13, R3: the owner reaches the label owner through the one port the
+// composition root registers once the label owner exists. Its projection, which
+// History apply, the display of a Result, and Load Feature Edits TSV call
+// through `projectMountedEditorIntent`, hands the label owner every feature it
+// hides or shows (OV-35), asks for the rerender only when a History step or a
+// loaded table (`rerender`) must draw a feature the Result does not draw, and
+// after a loaded table (`reflow`) also places the labels. A later projection
+// supersedes one that still waits for its matches.
+{
+  const recordFeature = (id, start) => ({
+    recordKey: 'REC1', biologicalFeatureId: id, record_id: 'REC1', type: 'CDS', start, end: start + 30, strand: 1,
+    anchorProfile: { precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+' },
+    qualifiers: { locus_tag: [id] }
+  });
+  // The Result draws A; B is not drawn.
+  const catalog = {
+    schema: 5,
+    items: [{
+      resultIndex: 0,
+      resultName: 'result-0.svg',
+      recordKeys: ['REC1'],
+      biologicalFeatures: [recordFeature('A', 0), recordFeature('B', 100)],
+      features: [{
+        svgId: 'svg-A', recordKey: 'REC1', biologicalFeatureId: 'A', fillColor: '#000000',
+        drawnSelector: { hash: 'svg-A', location: null, recordLocation: null }
+      }],
+      orthogroups: [],
+      annotations: [],
+      comparisonMatches: []
+    }]
+  };
+  const overrides = {};
+  const mounted = { 'svg-A': 'on' };
+  let projections = 0;
+  const follows = [];
+  const portState = {
+    clickedFeature: ref(null),
+    extractedFeatures: ref([]),
+    orthogroups: ref([]),
+    featureVisibilityManualRules: [],
+    featureVisibilityRules: ref([]),
+    featureOverrides: overrides,
+    featureVisibilityScopeDialog: {},
+    featureCatalog: ref(catalog),
+    generatedMode: ref('circular'),
+    resultGenerationKey: ref('generation-1'),
+    results: ref([{ name: 'result-0.svg', content: '<svg />' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? {} : null) }),
+    errorLog: ref(null)
+  };
+  const ports = {};
+  const owner = createFeatureVisibilityActions({
+    state: withDrawings(portState),
+    rulePreparation: rulePreparationFor(portState),
+    getCommittedRequest: committedRequest(['CDS']),
+    showEditorIntent: visibilityPort(portState, committedRequest(['CDS']), (modes) => {
+      projections += 1;
+      return Object.entries(modes).reduce((changed, [featureId, mode]) => {
+        if (mounted[featureId] === mode) return changed;
+        mounted[featureId] = mode;
+        return true;
+      }, false);
+    }, () => admitFeatureCatalog(catalog, portState.results.value, { mode: 'circular' })),
+    ports,
+    selectResult: () => true
+  });
+  // The root registers the port after both owners exist.
+  ports.applyFeatureVisibilityToLabels = (options) => follows.push(options);
+  const featureOf = (id) => resultCatalogFeatures(portState).biological
+    .find((feature) => feature.biological_feature_id === id);
+  setFeatureVisibilityOverride(overrides, featureOf('B'), 'off');
+
+  assert.equal(await owner.projectFeatureVisibility({ rerender: true }), false);
+  assert.deepEqual(follows, [], 'nothing to follow when the Result draws what Generate draws');
+  // U2BFIX2 review M1: a caller that also projects the label intent (a loaded
+  // table, a History step) has the label owner project it in the same follow.
+  assert.equal(await owner.projectFeatureVisibility({ rerender: true, labels: true }), false);
+  assert.deepEqual(follows, [{ reflow: false, rerender: false, labels: true }]);
+  follows.length = 0;
+
+  // OV-35: a Result display (or a History step) that hides A hides its label.
+  setFeatureVisibilityOverride(overrides, featureOf('A'), 'off');
+  assert.equal(await owner.projectFeatureVisibility(), true);
+  assert.deepEqual(mounted, { 'svg-A': 'off' });
+  assert.deepEqual(follows, [{ reflow: false, rerender: false, labels: false }], 'the label follows the feature');
+
+  // B is shown, which the Result does not draw.
+  setFeatureVisibilityOverride(overrides, featureOf('A'), 'default');
+  setFeatureVisibilityOverride(overrides, featureOf('B'), 'on');
+  await owner.projectFeatureVisibility();
+  assert.deepEqual(follows.at(-1), { reflow: false, rerender: false, labels: false }, 'a Result display does not rerender');
+  await owner.projectFeatureVisibility({ rerender: true });
+  assert.deepEqual(follows.at(-1), { reflow: false, rerender: true, labels: false }, 'a History step rerenders to draw B');
+  await owner.projectFeatureVisibility({ rerender: true, reflow: true });
+  assert.deepEqual(follows.at(-1), { reflow: true, rerender: true, labels: false }, 'a loaded table also places the labels');
+  setFeatureVisibilityOverride(overrides, featureOf('B'), 'off');
+  await owner.projectFeatureVisibility({ rerender: true, reflow: true });
+  assert.deepEqual(follows.at(-1), { reflow: true, rerender: false, labels: false });
+
+  setFeatureVisibilityOverride(overrides, featureOf('A'), 'off');
+  const projectionsBefore = projections;
+  const followCount = follows.length;
+  const [waiting, latest] = await Promise.all([
+    owner.projectFeatureVisibility({ rerender: true }),
+    owner.projectFeatureVisibility({ rerender: true })
+  ]);
+  assert.deepEqual([waiting, latest], [false, true], 'the later projection supersedes the waiting one');
+  assert.equal(projections, projectionsBefore + 1);
+  assert.equal(follows.length, followCount + 1);
+}
+
+// OV-330: a rule edit made while an automatic rerender runs is decided
+// against the Result that rerender is about to replace, and the rerender may
+// have read the rules before the edit. The edit therefore asks for one more
+// rerender (the running one coalesces it), also when the displayed Result
+// already draws what the edited rules draw. Without a running rerender, such
+// an edit asks for nothing.
+{
+  const catalog = {
+    schema: 5,
+    items: [{
+      resultIndex: 0,
+      resultName: 'result-0.svg',
+      recordKeys: ['REC1'],
+      biologicalFeatures: [{
+        recordKey: 'REC1', biologicalFeatureId: 'A', record_id: 'REC1', type: 'CDS', start: 0, end: 30, strand: 1,
+        anchorProfile: { precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+' },
+        qualifiers: { locus_tag: ['A'] }
+      }],
+      features: [{
+        svgId: 'svg-A', recordKey: 'REC1', biologicalFeatureId: 'A', fillColor: '#000000',
+        drawnSelector: { hash: 'svg-A', location: null, recordLocation: null }
+      }],
+      orthogroups: [],
+      annotations: [],
+      comparisonMatches: []
+    }]
+  };
+  const follows = [];
+  const rerenderState = {
+    clickedFeature: ref(null),
+    extractedFeatures: ref([]),
+    orthogroups: ref([]),
+    featureVisibilityManualRules: [],
+    featureVisibilityRules: ref([]),
+    featureOverrides: {},
+    featureVisibilityScopeDialog: {},
+    featureCatalog: ref(catalog),
+    generatedMode: ref('circular'),
+    labelReflowProcessing: ref(false),
+    resultGenerationKey: ref('generation-1'),
+    results: ref([{ name: 'result-0.svg', content: '<svg />' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? {} : null) }),
+    errorLog: ref(null)
+  };
+  const owner = createFeatureVisibilityActions({
+    state: withDrawings(rerenderState),
+    rulePreparation: rulePreparationFor(rerenderState),
+    getCommittedRequest: committedRequest(['CDS']),
+    showEditorIntent: visibilityPort(rerenderState, committedRequest(['CDS']), () => false,
+      () => admitFeatureCatalog(catalog, rerenderState.results.value, { mode: 'circular' })),
+    ports: { applyFeatureVisibilityToLabels: (options) => follows.push(options) },
+    selectResult: () => true
+  });
+  await owner.addFeatureVisibilityRule();
+  for (const [field, value] of [['featureType', 'CDS'], ['qualifier', 'locus_tag'], ['action', 'show'], ['value', '^A$']]) {
+    await owner.setFeatureVisibilityRuleField(0, field, value);
+  }
+  assert.deepEqual(follows, [], 'a rule that draws what the Result draws asks for nothing');
+  rerenderState.labelReflowProcessing.value = true;
+  await owner.setFeatureVisibilityRuleField(0, 'value', '^(A)$');
+  assert.deepEqual(follows, [{ rerender: true }], 'an edit during a rerender asks for one more');
 }
 
 console.log('feature visibility action tests passed');

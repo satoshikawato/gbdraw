@@ -624,8 +624,9 @@ def measure_linear_feature_lanes(
     lane_sources = [
         (
             (
-                feature.placement.strand_pool
-                if separate_strands and getattr(feature, "placement", None) is not None
+                placement.strand_pool
+                if separate_strands
+                and (placement := getattr(feature, "placement", None)) is not None
                 else str(getattr(feature, "strand", "undefined"))
             ),
             int(getattr(feature, "feature_track_id", 0)),
@@ -679,7 +680,7 @@ def measure_linear_feature_lanes(
 
 
 def measure_linear_label_band(
-    labels: Sequence[Mapping[str, object]],
+    labels: Sequence[dict],
     *,
     leader_stroke_width: float = 0.0,
 ) -> VerticalBand | None:

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 globalThis.location = { href: 'https://example.test/gbdraw/web/' };
 delete globalThis.loadPyodide;
@@ -226,7 +227,7 @@ globalThis.fetch = async () => ({
     }
   })
 });
-await createPaletteLoader({ state: paletteState }).loadPaletteAsset();
+await createPaletteLoader({ state: withDrawings(paletteState) }).loadPaletteAsset();
 assert.equal(globalThis.loadPyodide, undefined);
 assert.equal(paletteState.currentColors.value.repeat_region, '#d3d3d3');
 

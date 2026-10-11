@@ -10,16 +10,15 @@ from collections import Counter
 from functools import lru_cache
 
 from ..features.coordinates import get_strand
-from ..features.ids import compute_feature_object_hash
 from .filtering import preprocess_label_filtering
 from .circular_candidates import build_circular_label_candidates
 from .circular_radial import place_radial_labels
-from ..config.models import (  # type: ignore[reportMissingImports]
+from ..config.models import (
     CircularRenderProfile,
     GbdrawConfig,
 )
 from ..core.text import calculate_bbox_dimensions
-from ..core.sequence import determine_length_parameter
+from ..auto_sizes import determine_length_parameter
 from ..layout.common import calculate_cds_ratio
 from ..layout.circular import (
     CircularFeatureLayout,
@@ -3687,7 +3686,7 @@ def _rebalance_inner_labels_strict_order(labels: list[dict], total_length: int) 
         ):
             continue
 
-        candidate_score = (
+        fallback_candidate_score = (
             candidate_mismatch_count,
             candidate_mismatch_weighted,
             candidate_line_intersections,
@@ -3695,8 +3694,8 @@ def _rebalance_inner_labels_strict_order(labels: list[dict], total_length: int) 
             candidate_leader_bbox_collisions,
             max_shift_cap,
         )
-        if fallback_best_score is None or candidate_score < fallback_best_score:
-            fallback_best_score = candidate_score
+        if fallback_best_score is None or fallback_candidate_score < fallback_best_score:
+            fallback_best_score = fallback_candidate_score
             fallback_best_labels = candidate_labels
 
     if fallback_best_labels is not None:
@@ -3937,14 +3936,14 @@ def _refine_labels_to_preferred_hemisphere(
                                     candidate_labels[label_idx],
                                     total_length,
                                 )
-                                candidate_score = (
+                                block_candidate_score = (
                                     candidate_plain_total,
                                     candidate_neighbor_overlap_count,
                                     abs(delta),
                                     block_width,
                                 )
-                                if best_block_score is None or candidate_score < best_block_score:
-                                    best_block_score = candidate_score
+                                if best_block_score is None or block_candidate_score < best_block_score:
+                                    best_block_score = block_candidate_score
                                     best_block_result = (
                                         candidate_labels,
                                         candidate_angles,
@@ -4558,12 +4557,13 @@ def prepare_label_list(
                 interval,
             ),
             record_transform=record_transform,
+            overrides_only=profile.labels_overrides_only,
         )
         if _candidate_cache is not None:
             _candidate_cache["candidates"] = candidates
     candidates_by_id = {candidate.stable_id: candidate for candidate in candidates}
     feature_ids = {
-        key: compute_feature_object_hash(feature) for key, feature in feature_dict.items()
+        key: feature.feature_hash for key, feature in feature_dict.items()
     }
     feature_id_counts = Counter(feature_ids.values())
 
@@ -4578,7 +4578,7 @@ def prepare_label_list(
             longest_segment_end = int(candidate.segment_end_bp)
             longeset_segment_middle = float(candidate.segment_middle_bp)
             is_embedded = False
-            label_middle = 0
+            label_middle: float = 0
             coordinate_strand = candidate.strand
 
             # Get track_id for overlap resolution

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -13,9 +14,11 @@ from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
+import gbdraw
 import gbdraw.circular as circular_cli_module
 import gbdraw.linear as linear_cli_module
 import gbdraw.api.request_render as request_render_module
+from gbdraw.api.record_planning import resolve_record_inputs
 from gbdraw.api.requests import LinearDiagramRequest
 from gbdraw.core.sequence import check_feature_presence
 from gbdraw.exceptions import InputFileError, ParseError, ValidationError
@@ -32,7 +35,10 @@ from gbdraw.analysis.protein_colinearity import extract_cds_proteins
 from gbdraw.io.colors import load_default_colors
 from gbdraw.legend.table import prepare_legend_table
 from gbdraw.labels.filtering import preprocess_label_filtering
-from gbdraw.web_support.feature_metadata import extract_features_from_genbank_json
+from gbdraw.web_support.feature_metadata import (
+    extract_features_from_genbank_json,
+    extract_features_from_gff_fasta_payload,
+)
 from tests.utils.feature_fixtures import (
     make_origin_spanning_feature_object as _make_origin_spanning_feature_object,
     make_origin_spanning_seq_feature as _make_origin_spanning_seq_feature,
@@ -352,6 +358,8 @@ def test_should_include_feature_in_analysis_first_match_wins() -> None:
 def test_should_render_feature_feature_object_origin_spanning_hash_rule_matches() -> None:
     feature_object = _make_origin_spanning_feature_object(record_id="rec1")
     feature_hash = compute_feature_hash(_make_origin_spanning_seq_feature(), record_id="rec1")
+    # The factory stores each FeatureObject's source hash (OV-401).
+    feature_object.feature_hash = feature_hash
     rules = compile_feature_visibility_rules(
         _visibility_df([["*", "*", "hash", f"^{feature_hash}$", "off"]])
     )
@@ -583,6 +591,99 @@ def test_resolve_candidate_feature_types_wildcard_requests_all_features() -> Non
     assert candidate_types == {"CDS"}
 
 
+_NESTED_GFF3 = "\n".join(
+    [
+        "##gff-version 3",
+        "##sequence-region nested 1 240",
+        "nested\ttest\tgene\t1\t90\t.\t+\t.\tID=gene1;locus_tag=g1",
+        "nested\ttest\tCDS\t1\t90\t.\t+\t0\tID=cds1;Parent=gene1;locus_tag=g1;product=alpha protein",
+        "nested\ttest\tgene\t121\t210\t.\t-\t.\tID=gene2;locus_tag=g2",
+        "nested\ttest\tCDS\t121\t210\t.\t-\t0\tID=cds2;Parent=gene2;locus_tag=g2;product=hypothetical protein",
+        "",
+    ]
+)
+
+
+def _write_nested_gff3(tmp_path: Path) -> tuple[Path, Path]:
+    gff_path = tmp_path / "nested.gff3"
+    fasta_path = tmp_path / "nested.fasta"
+    gff_path.write_text(_NESTED_GFF3, encoding="utf-8")
+    fasta_path.write_text(">nested\n" + "ACGT" * 60 + "\n", encoding="utf-8")
+    return gff_path, fasta_path
+
+
+def _drawn_feature_ids(svg: str) -> set[str]:
+    return set(re.findall(r'data-gbdraw-feature-id="([^"]+)"', svg))
+
+
+def _gff_popup_catalog(gff_path: Path, fasta_path: Path) -> list[dict[str, Any]]:
+    payload = extract_features_from_gff_fasta_payload(
+        gff_path, fasta_path, include_biological_features=True
+    )
+    return payload["biological_features"]
+
+
+@pytest.mark.parametrize(
+    ("option", "row", "drawn_products"),
+    [
+        pytest.param(
+            "--feature_visibility_table", "*\t*\tproduct\t^alpha protein$\toff",
+            {"hypothetical protein"}, id="any-type-off-row",
+        ),
+        pytest.param(
+            "--feature_visibility_table", "*\t*\tproduct\t.*\tshow",
+            {"alpha protein", "hypothetical protein"}, id="any-type-show-row",
+        ),
+        pytest.param(
+            "-t", "*\tproduct\thypothetical\t#ff0000\thypothetical",
+            {"alpha protein", "hypothetical protein"}, id="any-type-color-row",
+        ),
+    ],
+)
+def test_gff_any_type_table_row_keeps_parent_linked_cds(
+    tmp_path: Path, option: str, row: str, drawn_products: set[str]
+) -> None:
+    """A table row for every feature type draws the CDS the popup lists (OV-15)."""
+    gff_path, fasta_path = _write_nested_gff3(tmp_path)
+    table_path = tmp_path / "table.tsv"
+    table_path.write_text(row + "\n", encoding="utf-8")
+
+    circular_cli_module.circular_main(
+        ["--gff", str(gff_path), "--fasta", str(fasta_path), option, str(table_path),
+         "-f", "svg", "-o", str(tmp_path / "out")]
+    )
+
+    cds_ids = {
+        feature["product"]: feature["svg_id"]
+        for feature in _gff_popup_catalog(gff_path, fasta_path)
+        if feature["type"] == "CDS"
+    }
+    drawn = _drawn_feature_ids((tmp_path / "out.svg").read_text(encoding="utf-8"))
+    assert drawn == {cds_ids[product] for product in drawn_products}
+
+
+def test_read_gff_without_feature_filter_draws_parent_linked_cds(tmp_path: Path) -> None:
+    gff_path, fasta_path = _write_nested_gff3(tmp_path)
+
+    svg = gbdraw.draw_circular(gbdraw.read_gff(gff_path, fasta_path)).to_svg()
+
+    assert _drawn_feature_ids(svg) == {
+        feature["svg_id"]
+        for feature in _gff_popup_catalog(gff_path, fasta_path)
+        if feature["type"] == "CDS"
+    }
+
+
+def test_gff_popup_catalog_lists_nested_features_once_in_source_order(tmp_path: Path) -> None:
+    gff_path, fasta_path = _write_nested_gff3(tmp_path)
+
+    catalog = _gff_popup_catalog(gff_path, fasta_path)
+
+    assert [(feature["type"], feature["feature_index"]) for feature in catalog] == [
+        ("gene", 0), ("CDS", 1), ("gene", 2), ("CDS", 3),
+    ]
+
+
 @pytest.mark.parametrize(
     ("feature_type", "rule_value", "expected"),
     [
@@ -768,6 +869,7 @@ def test_linear_cli_feature_visibility_table_is_forwarded(
             losat_derived_cache_entries=(),
             protein_identity_manifest=None,
             annotation_warnings=(),
+            feature_identity_notices=(),
             request=resolved,
         )
 
@@ -791,6 +893,27 @@ def test_linear_cli_feature_visibility_table_is_forwarded(
     assert canonical_request.options.feature_visibility_table is feature_table_df
 
 
+def _capture_gff_candidate_features(
+    monkeypatch: pytest.MonkeyPatch, record: SeqRecord, captured: dict[str, Any],
+) -> None:
+    """Serve ``record`` as the parsed GFF3 and note the types the request keeps from it."""
+
+    def fake_parse_gff_fasta(*args, **kwargs):
+        from gbdraw.features.source import build_source_feature_catalog
+        for feature in record.features:
+            feature.sub_features = []  # as BCBio leaves a feature without children
+        kwargs["source_feature_catalogs"].append(build_source_feature_catalog(record))
+        return [record]
+
+    def spy_resolve_record_inputs(*args, **kwargs):
+        captured["selected_features_set"] = set(kwargs["gff_candidate_features"])
+        captured["keep_all_features"] = kwargs["gff_keep_all_features"]
+        return resolve_record_inputs(*args, **kwargs)
+
+    monkeypatch.setattr(request_render_module, "parse_gff_fasta", fake_parse_gff_fasta)
+    monkeypatch.setattr(request_render_module, "resolve_record_inputs", spy_resolve_record_inputs)
+
+
 def test_circular_gff_loader_uses_candidate_features_when_feature_visibility_table_given(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -799,14 +922,7 @@ def test_circular_gff_loader_uses_candidate_features_when_feature_visibility_tab
     record = _make_record()
     captured: dict[str, Any] = {}
 
-    def fake_load_gff_fasta(*args, **kwargs):
-        captured["selected_features_set"] = set(kwargs["selected_features_set"])
-        captured["keep_all_features"] = kwargs.get("keep_all_features")
-        from gbdraw.features.source import build_source_feature_catalog
-        kwargs["source_feature_catalogs"].append(build_source_feature_catalog(record))
-        return [record]
-
-    monkeypatch.setattr(request_render_module, "load_gff_fasta", fake_load_gff_fasta)
+    _capture_gff_candidate_features(monkeypatch, record, captured)
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(
         request_render_module,
@@ -848,14 +964,7 @@ def test_linear_gff_loader_uses_candidate_features_when_feature_visibility_table
     )
     captured: dict[str, Any] = {}
 
-    def fake_load_gff_fasta(*args, **kwargs):
-        captured["selected_features_set"] = set(kwargs["selected_features_set"])
-        captured["keep_all_features"] = kwargs.get("keep_all_features")
-        from gbdraw.features.source import build_source_feature_catalog
-        kwargs["source_feature_catalogs"].append(build_source_feature_catalog(record))
-        return [record]
-
-    monkeypatch.setattr(request_render_module, "load_gff_fasta", fake_load_gff_fasta)
+    _capture_gff_candidate_features(monkeypatch, record, captured)
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(
         request_render_module,
@@ -874,6 +983,7 @@ def test_linear_gff_loader_uses_candidate_features_when_feature_visibility_table
             losat_derived_cache_entries=(),
             protein_identity_manifest=None,
             annotation_warnings=(),
+            feature_identity_notices=(),
             request=resolved,
         )
 

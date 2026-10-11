@@ -5,9 +5,10 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Mapping
+from typing import Mapping, cast
 
 from ..core.text import calculate_bbox_dimensions
+from ..core.numeric import compensated_sum
 from .metrics import legend_line_height, legend_text_x_offset
 
 
@@ -90,7 +91,8 @@ class _MeasuredLegendEntry:
 
 
 def min_gradient_label_text(value: object) -> str:
-    min_identity = float(value or 0)
+    # Non-numeric values were never accepted; legend properties are numeric or numeric strings.
+    min_identity = float(cast("float | str", value or 0))
     if min_identity == int(min_identity):
         return f"{int(min_identity)}%"
     return f"{min_identity}%"
@@ -278,7 +280,7 @@ def _horizontal_legend_width(
     color_rect_size: float,
     x_margin: float,
 ) -> float:
-    solid_single_row_width = sum(entry.entry_width for entry in solid_entries)
+    solid_single_row_width = compensated_sum(entry.entry_width for entry in solid_entries)
     solid_desired_width = solid_single_row_width + (2 * float(x_margin) if solid_entries else 0.0)
     desired_width = solid_desired_width
     if gradient_layout is not None:
@@ -331,7 +333,7 @@ def _build_horizontal_layout(
             if gradient_layout is not None
             else row_index * float(line_margin)
         )
-        row_width = sum(float(entry.entry_width) for entry in row_entries)
+        row_width = compensated_sum(float(entry.entry_width) for entry in row_entries)
         if math.isfinite(wrap_width):
             row_start_x = float(x_margin) + max(0.0, (wrap_width - row_width) * 0.5)
         else:

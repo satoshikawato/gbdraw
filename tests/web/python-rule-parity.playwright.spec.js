@@ -7,6 +7,17 @@ const loadSession = async (page) => {
   await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.extractedFeatures.length);
 };
+// A rule that changes the Legend asks for the automatic rerender (OV-42, OV-43,
+// #857); the Result and its Legend are Python's once it has finished.
+const rerendered = (page) => page.waitForFunction(() => !window.__GBDRAW_APP__.processing
+  && !window.__GBDRAW_APP__.labelReflowProcessing);
+// The wait runs from a promise the page retains: V8 can collect a promise that
+// page.evaluate awaits ("Promise was collected"), which Playwright reports as a
+// destroyed execution context.
+const waitForColorTableImport = (page) => evaluateWithRetainedPromise(page, async () => {
+  const a = window.__GBDRAW_APP__;
+  await a.waitForAuxiliaryFileImport(a.files.t_color);
+});
 const fills = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
   return app.extractedFeatures.filter((feature) => {
@@ -23,7 +34,7 @@ test('Python-only color rules commit atomically, retain History and agree with G
   expect((await getDiagramWorkerActivity(page)).constructions).toBe(0);
   messages.length = 0;
   const before = await page.evaluate(() => window.__GBDRAW_APP__.svgContent);
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     const a = window.__GBDRAW_APP__;
     Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: '(?i)NADH', color: '#f01234', cap: '' });
     await a.addSpecificRule();
@@ -51,7 +62,7 @@ test('Python label TSV syntax is validated before replacing live overrides', asy
   const messages = [];
   page.on('dialog', async (dialog) => { messages.push(dialog.message()); await dialog.accept(); });
   await loadSession(page);
-  const importLabel = (pattern, label) => page.evaluate(async ({ pattern, label }) => {
+  const importLabel = (pattern, label) => evaluateWithRetainedPromise(page, async ({ pattern, label }) => {
     const input = { files: [new File([`*\tCDS\tproduct\t${pattern}\t${label}\n`], 'labels.tsv')], value: 'labels.tsv' };
     await window.__GBDRAW_APP__.loadLabelOverrideTable({ target: input });
   }, { pattern, label });
@@ -61,10 +72,10 @@ test('Python label TSV syntax is validated before replacing live overrides', asy
   expect(await page.locator('.origin-top svg text').filter({ hasText: /^MATCHED$/ }).count()).toBe(0);
   await page.evaluate(() => window.__GBDRAW_APP__.redoHistory());
   expect(await page.locator('.origin-top svg text').filter({ hasText: /^MATCHED$/ }).count()).toBe(7);
-  const snapshot = await page.evaluate(() => ({ svg: window.__GBDRAW_APP__.svgContent, overrides: JSON.stringify(window.__GBDRAW_APP__.labelTextFeatureOverrides) }));
+  const snapshot = await page.evaluate(() => ({ svg: window.__GBDRAW_APP__.svgContent, overrides: JSON.stringify(window.__GBDRAW_APP__.featureOverrides) }));
   await importLabel('(?<enzyme>NADH)', 'INVALID');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({code:'REGEX_SYNTAX',context:{reason:'UNKNOWN_EXTENSION'}});
-  expect(await page.evaluate(() => ({ svg: window.__GBDRAW_APP__.svgContent, overrides: JSON.stringify(window.__GBDRAW_APP__.labelTextFeatureOverrides) }))).toEqual(snapshot);
+  expect(await page.evaluate(() => ({ svg: window.__GBDRAW_APP__.svgContent, overrides: JSON.stringify(window.__GBDRAW_APP__.featureOverrides) }))).toEqual(snapshot);
   await generateAndWaitForResult(page);
   expect(await page.locator('.origin-top svg text').filter({ hasText: /^MATCHED$/ }).count()).toBe(7);
 });
@@ -84,7 +95,7 @@ test('late Python evaluation cannot replace a newer rule or a loaded Session', a
     };
   });
   await loadSession(page);
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     const a = window.__GBDRAW_APP__;
     Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: '(?i)NADH', color: '#f01234', cap: '' });
     await a.addSpecificRule();
@@ -98,10 +109,16 @@ test('late Python evaluation cannot replace a newer rule or a loaded Session', a
   await page.evaluate(async () => { window.__RELEASE_RULES__(); await window.__OLD_RULE_EDIT__; });
   expect(await fills(page)).toEqual(newer);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules[0].val)).toBe('(?i)ATP');
-  await page.evaluate(() => {
+  // A caption edit that gives one caption two colors asks Python to
+  // normalize the captions before the matches (U3a 1e); the Load runs while
+  // that request is late. A pending match would make the Load wait instead.
+  await evaluateWithRetainedPromise(page, async () => {
+    const a = window.__GBDRAW_APP__;
+    Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: '(?i)cytochrome', color: '#2266aa', cap: 'Shared' });
+    await a.addSpecificRule();
     window.__RELEASE_RULES__ = null;
     window.__HOLD_RULES__ = true;
-    window.__OLD_RULE_EDIT__ = window.__GBDRAW_APP__.setSpecificRuleField(0, 'val', '(?i)cytochrome');
+    window.__OLD_RULE_EDIT__ = a.setSpecificRuleField(0, 'cap', 'Shared');
   });
   await page.waitForFunction(() => window.__RELEASE_RULES__);
   await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
@@ -146,7 +163,7 @@ test('Unicode regex corpus has identical live and generated color/label targets'
     ['(?i)NADH', ['R0', 'R1']], ['(?P<enzyme>NADH)', ['R0', 'R1']],
     ['NADH\\Z', ['R0']], ['\\bβ', ['R2']], ['i', ['R3', 'R4', 'R5']]
   ]) {
-    await page.evaluate(async (pattern) => {
+    await evaluateWithRetainedPromise(page, async (pattern) => {
       const a = window.__GBDRAW_APP__;
       await a.clearAllSpecificRules();
       Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: pattern, color: '#f01234', cap: '' });
@@ -155,7 +172,7 @@ test('Unicode regex corpus has identical live and generated color/label targets'
     const ids = await fills(page);
     const tags = await page.evaluate(ids => window.__GBDRAW_APP__.extractedFeatures.filter(f => ids.includes(f.svg_id)).map(f => f.locus_tag).sort(), ids);
     expect(tags).toEqual(expected);
-    await page.evaluate(async (pattern) => {
+    await evaluateWithRetainedPromise(page, async (pattern) => {
       await window.__GBDRAW_APP__.loadLabelOverrideTable({ target: { files: [new File([`*\tCDS\tproduct\t${pattern}\tMATCH\n`], 'labels.tsv')], value: 'labels.tsv' } });
     }, pattern);
     expect(await page.locator('.origin-top svg text').filter({ hasText: /^MATCH$/ }).count()).toBe(expected.length);
@@ -180,6 +197,7 @@ test('Python preset rules update the legend and invalid replacements preserve th
     a.selectedSpecificPreset = id;
     await a.applySpecificRulePreset();
   }, preset.id);
+  await rerendered(page);
   expect(await fills(page)).toHaveLength(7);
   expect(await page.locator('.origin-top svg text').filter({ hasText: /^Python preset$/ }).count()).toBe(1);
   const snapshot = await page.evaluate(() => ({ rules: JSON.stringify(window.__GBDRAW_APP__.manualSpecificRules), svg: window.__GBDRAW_APP__.svgContent }));
@@ -190,6 +208,7 @@ test('Python preset rules update the legend and invalid replacements preserve th
   await page.evaluate(() => window.__GBDRAW_APP__.undoHistory());
   expect(await fills(page)).toEqual([]);
   await page.evaluate(() => window.__GBDRAW_APP__.redoHistory());
+  await rerendered(page);
   expect(await fills(page)).toHaveLength(7);
   await generateAndWaitForResult(page);
   expect(await fills(page)).toHaveLength(7);
@@ -202,7 +221,7 @@ test('invalid color TSV preserves the selected file, preview, rules and History'
   await loadSession(page);
   const upload = page.getByLabel('Specific Table (-t)', { exact: true });
   await upload.setInputFiles({ name: 'valid.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\tproduct\t(?i)NADH\t#f01234\t\n') });
-  await page.evaluate(async () => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files.t_color); });
+  await waitForColorTableImport(page);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(1);
   const inspect = () => page.evaluate(() => {
     const a = window.__GBDRAW_APP__;
@@ -210,7 +229,7 @@ test('invalid color TSV preserves the selected file, preview, rules and History'
   });
   const before = await inspect();
   await upload.setInputFiles({ name: 'invalid.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\tproduct\t(?<enzyme>NADH)\t#abcdef\tInvalid\n') });
-  await page.evaluate(async () => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files.t_color); });
+  await waitForColorTableImport(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({code:'REGEX_SYNTAX',context:{reason:'UNKNOWN_EXTENSION'}});
   await expect.poll(inspect).toEqual(before);
   await generateAndWaitForResult(page);
@@ -222,10 +241,12 @@ test('25,000-feature Python preparation keeps the event loop responsive and reus
   await openApp(page);
   expect((await getDiagramWorkerActivity(page)).constructions).toBe(0);
   const result = await page.evaluate(async () => {
-    const { createRulePreparation, ruleMatchesFeature } = await import('/gbdraw/web/js/app/rule-matching.js');
+    const { createRulePreparation } = await import('/gbdraw/web/js/app/rule-matching.js');
+    const { ruleMatchesFeature } = await import('/gbdraw/web/js/services/rule-matchers.js');
     const { runDiagramHelperOperation, DIAGRAM_HELPER_OPERATIONS } = await import('/gbdraw/web/js/services/diagram-generation.js');
     const features = Array.from({ length: 25000 }, (_, i) => ({ type: 'CDS', svg_id: `f${i}`, qualifiers: { product: [i % 2 ? 'other' : 'β-lactamase'] } }));
-    const state = { extractedFeatures: { value: features }, manualSpecificRules: [] };
+    const drawing = { manualSpecificRules: [] };
+    const state = { extractedFeatures: { value: features }, activeDrawing: () => drawing };
     let calls = 0;
     const preparation = createRulePreparation({ state, evaluate: async payload => {
       calls++;

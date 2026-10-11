@@ -36,6 +36,7 @@ from gbdraw.render.interactive_svg import (
     enrich_svg,
 )
 from gbdraw.features.ids import compute_feature_hash, compute_feature_hash_from_parts
+from gbdraw.web_support.feature_catalog import FEATURE_CATALOG_SCHEMA
 from gbdraw.web_support.feature_metadata import extract_features_from_records_payload
 from gbdraw.web_support.orthogroup_metadata import enrich_features_with_orthogroups
 
@@ -59,7 +60,7 @@ def _metadata_payload(svg_source: str) -> dict[str, object]:
 
 def _catalog_item(svg_source: str) -> dict[str, object]:
     payload = _metadata_payload(svg_source)
-    assert payload["schema"] == 4
+    assert payload["schema"] == FEATURE_CATALOG_SCHEMA
     items = payload["items"]
     assert isinstance(items, list) and len(items) == 1
     return items[0]
@@ -145,7 +146,7 @@ def test_enrich_svg_promotes_selected_schema_three_catalog_item_exactly() -> Non
         feature_catalog=catalog,
     )
 
-    assert _metadata_payload(enriched) == {"schema": 4, "items": [item]}
+    assert _metadata_payload(enriched) == {"schema": FEATURE_CATALOG_SCHEMA, "items": [item]}
     root = ET.fromstring(enriched)
     metadata = next(
         element
@@ -154,7 +155,7 @@ def test_enrich_svg_promotes_selected_schema_three_catalog_item_exactly() -> Non
     )
     assert metadata.get("data-result-index") == "1"
     assert metadata.get("data-result-name") == "selected.svg"
-    assert metadata.get("data-schema") == "4"
+    assert metadata.get("data-schema") == str(FEATURE_CATALOG_SCHEMA)
     feature = next(
         element
         for element in root.iter()
@@ -865,7 +866,7 @@ def test_enrich_svg_v4_embeds_sequences_without_precomputed_fastas() -> None:
     payload = _metadata_payload(enriched)
     feature = payload["items"][0]["biologicalFeatures"][0]
 
-    assert payload["schema"] == 4
+    assert payload["schema"] == FEATURE_CATALOG_SCHEMA
     assert feature["nucleotide_sequence"] == "ATGAAATAA"
     assert feature["amino_acid_sequence"] == "MK"
     assert "nucleotide_fasta" not in feature
@@ -937,7 +938,7 @@ def test_enrich_svg_v4_metadata_is_at_least_35_percent_smaller_than_v1_fixture()
     )
     v4_text = _metadata_text(enriched)
 
-    assert _metadata_payload(enriched)["schema"] == 4
+    assert _metadata_payload(enriched)["schema"] == FEATURE_CATALOG_SCHEMA
     assert len(v4_text.encode("utf-8")) <= len(v1_text.encode("utf-8")) * 0.65
 
 

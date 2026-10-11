@@ -1,7 +1,8 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
+const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
 
 const seed = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json';
 const external = new WeakMap();
@@ -47,7 +48,7 @@ const snapshot = page => page.evaluate(async () => {
   const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
   const feature = state.extractedFeatures.value.find(f => f.biological_feature_id === 'fb8ff22d9');
   return { mode: state.mode.value, records: state.circularRecordList.value,
-    placements: state.featurePlacementOverrides,
+    placements: state.activeDrawing().featurePlacementOverrides,
     feature: feature && { recordKey: feature.record_key, biologicalFeatureId: feature.biological_feature_id },
     featureCount: state.extractedFeatures.value.length,
     committedPlacements: getCommittedCanonicalRenderRequest()?.diagramOptions.featurePlacements || [],
@@ -153,14 +154,25 @@ for (const committed of [false, true]) {
   });
 }
 
+// #494: replacing or removing the Circular source, also while its mode is
+// inactive, unbinds the old source identity. Owner decision Q3 = A (design Q4
+// 3.4, 6.3): the source change keeps the placement draft; the next Generate
+// that replaces the source removes the rows it no longer resolves and reports
+// how many. The replacement keeps the record ID, but a new file gets its own
+// record key (not the Session's `record-1`), so the old row reaches no request
+// and is removed; an unrelated file loaded after removal does not take it
+// either.
+const placementKeys = page => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.activeDrawing().featurePlacementOverrides));
 for (const operation of ['replacement', 'removal']) {
-  test(`Circular source ${operation} invalidates old identity and placement after mode inactivity`, async ({ browser }) => {
+  test(`Circular source ${operation} after mode inactivity unbinds the old identity and Generate drops its placement`, async ({ browser }) => {
     test.setTimeout(180000);
     const page = await load(browser);
     try {
       await generate(page);
       await placement(page, 'outward');
       const before = await snapshot(page);
+      const placed = Object.keys(before.placements);
+      expect(placed).toEqual([JSON.stringify([before.feature.recordKey, before.feature.biologicalFeatureId])]);
       const source = await page.evaluate(async () => {
         const { state } = await import('./js/state.js');
         window.__MODE_SOURCE__ = state.files.c_gb;
@@ -169,17 +181,18 @@ for (const operation of ['replacement', 'removal']) {
       });
       await switchMode(page, 'linear');
       await switchMode(page, 'circular');
+      const upload = page.getByLabel('GenBank/DDBJ File', { exact: true });
+      const discovered = () => expect.poll(() => page.evaluate(async () =>
+        (await import('./js/state.js')).state.circularRecordDiscovery.status)).toBe('ready');
       if (operation === 'replacement') {
         // Keep the biological record ID: file/source identity must still invalidate its binding.
-        await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({ name: 'replacement.gbk',
+        await upload.setInputFiles({ name: 'replacement.gbk',
           mimeType: 'text/plain', buffer: Buffer.from(source.replace(/Homo sapiens/g, 'Replacement source')) });
-        await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.circularRecordDiscovery.status)).toBe('ready');
+        await discovered();
       } else {
-        await page.getByLabel('GenBank/DDBJ File', { exact: true })
-          .locator('xpath=ancestor::div[@role="group"]')
-          .getByRole('button', { name: /Remove/ }).click();
+        await upload.locator('xpath=ancestor::div[@role="group"]').getByRole('button', { name: /Remove/ }).click();
+        await expect.poll(async () => (await snapshot(page)).records).toEqual([]);
       }
-      await expect.poll(() => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.featurePlacementOverrides))).toEqual([]);
       const invalidation = await page.evaluate(async () => {
         const { state } = await import('./js/state.js');
         return { sameSource: state.files.c_gb === window.__MODE_SOURCE__,
@@ -191,8 +204,29 @@ for (const operation of ['replacement', 'removal']) {
       expect(invalidation.choices.every(choice => !choice.enabled)).toBe(true);
       const changed = await snapshot(page);
       expect(changed.records.some(record => record.recordKey === before.feature.recordKey)).toBe(false);
-      if (operation === 'replacement') await generate(page);
-      else expect(changed.records).toEqual([]);
+      // The source change itself removes no draft row (Q3 = A).
+      expect(await placementKeys(page)).toEqual(placed);
+      if (operation === 'removal') {
+        await upload.setInputFiles('tests/fixtures/regex_rules.gb');
+        await discovered();
+        expect(await placementKeys(page)).toEqual(placed);
+      }
+      await generate(page);
+      const generated = await snapshot(page);
+      expect(generated.committedPlacements).toEqual([]);
+      expect(await placementKeys(page)).toEqual([]);
+      await expect(page.getByTestId('feature-identity-notice')).toContainText(
+        'Removed 1 feature edit(s) whose feature the replaced source no longer has.'
+      );
+      // The removal is part of the Generate step: Undo restores the row and
+      // clears the count with the previous Result, and Redo removes it again.
+      const notice = page.getByTestId('feature-identity-notice');
+      await page.getByRole('button', { name: /^Undo/ }).first().click();
+      await expect.poll(() => placementKeys(page)).toEqual(placed);
+      await expect(notice).toHaveCount(0);
+      await page.getByRole('button', { name: /^Redo/ }).first().click();
+      await expect.poll(() => placementKeys(page)).toEqual([]);
+      await expect(notice).toContainText('Removed 1 feature edit(s)');
       expect(external.get(page)).toEqual([]);
     } finally { await page.context().close(); }
   });
@@ -215,3 +249,84 @@ test('no-placement Circular and Linear mode round trips remain generatable', asy
     } finally { await page.context().close(); }
   }
 });
+
+// OV-105: annotation sets are kept per mode (PD-OI-086). A target record
+// picked in one mode belongs to that mode's set: the other mode has no such
+// annotation, so its Generate requests and draws nothing and shows no record
+// selector for it, and the first mode draws it again on its record.
+const TWO_RECORDS = 'tests/fixtures/web_batch_two_records.gb';
+const TESTB = '#2 · TESTB · 4,000 bp';
+const regionPanel = page => page.locator('details').filter({ has: page.locator('summary[aria-label="Region Annotations"]') });
+const recordSelect = page => regionPanel(page).getByLabel('Annotation target record');
+const loadInMode = async (page, mode) => {
+  if (mode === 'circular') {
+    await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(TWO_RECORDS);
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60000 }).toBe(2);
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = true; });
+    return;
+  }
+  await page.evaluate(({ text, name }) => {
+    const app = window.__GBDRAW_APP__;
+    app.linearComparisonPlan.mode = 'none';
+    app.setLinearSeqPrimaryFile(0, 'gb', new File([text], name, { type: 'text/plain', lastModified: 1 }));
+  }, { text: readFileSync(TWO_RECORDS, 'utf8'), name: 'web_batch_two_records.gb' });
+};
+const openRegions = page => regionPanel(page).evaluate(details => { details.open = true; });
+const binding = page => page.evaluate(() => (
+  window.__GBDRAW_APP__.annotationSets[0].annotations[0].metadata._gbdraw_web_target_record_key));
+const hasOv105 = page => page.evaluate(() => window.__GBDRAW_APP__.annotationSets.some(set => set.id === 'ov105'
+  || set.annotations.some(annotation => annotation.id === 'ov105')));
+// Generate, then the records the region is drawn on and the region rows of the request.
+const generateRegion = async page => {
+  const outcome = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  return page.evaluate(async outcome => {
+    const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
+    const drawn = window.__GBDRAW_APP__.results.flatMap(result => [
+      ...new DOMParser().parseFromString(result.content || '', 'image/svg+xml')
+        .querySelectorAll('[data-gbdraw-annotation-id="ov105"]')
+    ].map(element => element.getAttribute('data-gbdraw-record-id')));
+    const requested = getCommittedCanonicalRenderRequest()?.diagramOptions.annotations?.sets
+      .flatMap(set => set.annotations.map(annotation => annotation.id)) || [];
+    return { outcome, drawn: [...new Set(drawn)], requested };
+  }, outcome);
+};
+
+for (const [first, second] of [['circular', 'linear'], ['linear', 'circular']]) {
+  test(`OV-105: a target record picked in ${first} waits in ${second} and draws again in ${first}`, async ({ page }) => {
+    test.setTimeout(300000);
+    page.on('dialog', dialog => dialog.accept());
+    await openApp(page);
+    if (first === 'linear') await switchMode(page, 'linear');
+    await loadInMode(page, first);
+    await page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      const item = app.addCoordinateAnnotation(app.addAnnotationSet('ov105'), { start: 100, end: 2000 });
+      item.id = 'ov105';
+      item.mark = 'band';
+    });
+    await openRegions(page);
+    await expect(recordSelect(page).locator('option', { hasText: TESTB })).toHaveCount(1, { timeout: 60000 });
+    await recordSelect(page).selectOption({ label: TESTB });
+    const picked = await binding(page);
+    expect(picked).toMatch(new RegExp(`^\\["${first}",`));
+    const drawnInFirst = { outcome: { status: 'ok' }, drawn: ['TESTB'], requested: ['ov105'] };
+    expect(await generateRegion(page)).toEqual(drawnInFirst);
+
+    // The same file in the other mode: its sets have no ov105 annotation, so
+    // Generate requests and draws nothing and no record selector shows.
+    await switchMode(page, second);
+    await loadInMode(page, second);
+    expect(await hasOv105(page), `${second} has no ov105 annotation`).toBe(false);
+    expect(await generateRegion(page)).toEqual({ outcome: { status: 'ok' }, drawn: [], requested: [] });
+    await openRegions(page);
+    await expect(recordSelect(page)).toHaveCount(0);
+
+    await switchMode(page, first);
+    expect(await hasOv105(page), `${first} keeps its ov105 annotation`).toBe(true);
+    expect(await generateRegion(page)).toEqual(drawnInFirst);
+    await openRegions(page);
+    await expect(recordSelect(page).locator('option:checked')).toHaveText(TESTB);
+    await expect(recordSelect(page)).toBeEnabled();
+    expect(await binding(page)).toBe(picked);
+  });
+}

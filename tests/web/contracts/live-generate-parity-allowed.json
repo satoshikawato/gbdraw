@@ -1,0 +1,19 @@
+{
+  "description": "Differences between a live-edited Result and the Result Generate draws from the same draft that PD-OI-066 allows. Read by tests/web/helpers/live-generate-parity.cjs. An entry applies to a difference of its kind and one of its attributes when every condition field equals the difference's context: the live Result's mode, resultIndex, resultCount, and autoReflow, and labelDrawnInBoth (the feature's label is drawn live and after Generate). Each entry cites the decision or rule that allows it; add one only with such a citation.",
+  "entries": [
+    {
+      "id": "label-placement-awaits-reflow",
+      "kind": "leader",
+      "attributes": [
+        "drawn",
+        "count"
+      ],
+      "condition": {
+        "autoReflow": false,
+        "labelDrawnInBoth": true
+      },
+      "reason": "With Auto Reflow off, a live edit does not place the remaining labels again, so a drawn label may stay embedded or external, with or without its leader segments, until a reflow or Generate places it. The label itself (its text and whether it is drawn) must still match, so a leader of a label that is drawn on one side only is not allowed.",
+      "decision": "Owner, OV-35 brief 2026-10-05: 「他の label の配置のやり直しは reflow を待ってよい」; docs/REFERENCE/web-app.md (\"with Auto Reflow on, the remaining labels are placed again\"); gbdraw/web/CLAUDE.md, Reactive availability and live-edit invariants (the Result updates \"before optional geometry reflow\")"
+    }
+  ]
+}

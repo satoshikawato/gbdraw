@@ -1,3 +1,4 @@
+// @ts-check
 const isGroup = (element) => String(element?.tagName || '').toLowerCase() === 'g';
 const isSvg = (element) => String(element?.tagName || '').toLowerCase() === 'svg';
 const hasSemanticRecordId = (group) =>

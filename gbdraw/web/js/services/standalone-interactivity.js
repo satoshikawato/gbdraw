@@ -1,5 +1,7 @@
-import { normalizeStringArray } from '../app/feature-utils.js';
-import { readRecordSourceSpan, recordSourceInterval } from '../app/record-source-coordinates.js';
+// @ts-check
+/** @import { FeatureCatalog, FeatureCatalogItem, FeatureCatalogRow } from './feature-catalog.js' */
+import { normalizeStringArray } from './feature-utils.js';
+import { readRecordSourceSpan, recordSourceInterval } from './record-source-coordinates.js';
 import { FEATURE_CATALOG_SCHEMA } from './feature-catalog.js';
 import { STANDALONE_INTERACTIVE_SCRIPT, STANDALONE_INTERACTIVE_STYLE } from './standalone-interactivity-assets.js';
 import { ensureSvgDefs } from './svg-serialization.js';
@@ -148,7 +150,8 @@ const standaloneConsistentTextAlias = (payload, keys) => {
 const standaloneIntegerAlias = (candidates) => {
   const indexes = new Set();
   for (const candidate of candidates) {
-    if (candidate === null || candidate === undefined || candidate === '') continue;
+    // A blank or whitespace-only index is not supplied (OV-274).
+    if (candidate === null || candidate === undefined || (typeof candidate === 'string' && candidate.trim() === '')) continue;
     const text = String(candidate).trim();
     if (typeof candidate === 'boolean' || !/^\d+$/.test(text)) {
       return { valid: false, value: null };
@@ -235,11 +238,6 @@ const standaloneMemberRecordIndexStatus = (member) => (
   ])
 );
 
-const standaloneMemberRecordIndex = (member) => {
-  const status = standaloneMemberRecordIndexStatus(member);
-  return status.valid ? status.value : null;
-};
-
 const standaloneMemberStableSvgId = (member) => {
   const stable = standaloneConsistentTextAlias(member, [
     'stableFeatureSvgId', 'stable_feature_svg_id',
@@ -255,14 +253,6 @@ const standaloneMemberStableSvgId = (member) => {
     || (stable.value && legacy.value && stable.value !== legacy.value)
   ) return '';
   return stable.value || legacy.value;
-};
-
-const standaloneMemberRenderedSvgId = (member) => {
-  const status = standaloneConsistentTextAlias(member, [
-    'renderedFeatureSvgId', 'rendered_feature_svg_id',
-    'renderedSvgId', 'rendered_svg_id'
-  ]);
-  return status.valid ? status.value : '';
 };
 
 const standaloneFeatureIndexStatus = (payload) => standaloneIntegerAlias([
@@ -315,14 +305,13 @@ const normalizeStandaloneContext = (options = {}) => ({
     options.orthogroupDescriptionOverrides && typeof options.orthogroupDescriptionOverrides === 'object'
       ? options.orthogroupDescriptionOverrides
       : {},
-  legendEntries: Array.isArray(options.legendEntries) ? options.legendEntries : [],
-  currentColors:
-    options.currentColors && typeof options.currentColors === 'object'
-      ? options.currentColors
-      : {},
   sequenceSources: Array.isArray(options.sequenceSources) ? options.sequenceSources : []
 });
 
+/**
+ * @param {Record<string, any>} context The normalized standalone context.
+ * @returns {FeatureCatalogItem | null}
+ */
 const selectStandaloneCatalogItem = (context) => {
   const catalog = context?.featureCatalog;
   if (
@@ -351,6 +340,10 @@ const selectStandaloneCatalogItem = (context) => {
   return matches.length === 1 ? matches[0] : null;
 };
 
+/**
+ * @param {FeatureCatalogItem} item
+ * @returns {FeatureCatalogItem}
+ */
 const cloneStandaloneCatalogItem = (item) => JSON.parse(JSON.stringify(item));
 
 const standaloneCatalogFeatureKey = (recordKey, biologicalFeatureId) => (
@@ -672,6 +665,11 @@ const getStandaloneOrthogroupDescription = (group, context) => {
   return override || String(group?.description || '').trim();
 };
 
+/**
+ * @param {FeatureCatalogItem} sourceItem
+ * @param {Record<string, any>} context The normalized standalone context.
+ * @returns {FeatureCatalogItem | null}
+ */
 const catalogItemWithStandaloneOverrides = (sourceItem, context) => {
   const item = cloneStandaloneCatalogItem(sourceItem);
   const biologicalByKey = new Map();
@@ -685,7 +683,8 @@ const catalogItemWithStandaloneOverrides = (sourceItem, context) => {
   }
   const renderedKeys = new Set();
   const renderedIds = new Set();
-  item.features = (Array.isArray(item.features) ? item.features : []).map((reference) => {
+  // A null entry makes the check below return null, which drops this local clone.
+  item.features = /** @type {FeatureCatalogRow[]} */ ((Array.isArray(item.features) ? item.features : []).map((reference) => {
     const recordKey = String(reference?.recordKey || '').trim();
     const biologicalFeatureId = String(reference?.biologicalFeatureId || '').trim();
     if (!recordKey || !biologicalFeatureId) return null;
@@ -706,10 +705,11 @@ const catalogItemWithStandaloneOverrides = (sourceItem, context) => {
     return displayLabel && displayLabel !== fallbackLabel
       ? { ...reference, displayLabel }
       : reference;
-  });
+  }));
   if (item.features.some((reference) => !reference)) return null;
   const groupIds = new Set();
-  item.orthogroups = (Array.isArray(item.orthogroups) ? item.orthogroups : [])
+  // A null entry makes the check below return null, which drops this local clone.
+  item.orthogroups = /** @type {FeatureCatalogRow[]} */ ((Array.isArray(item.orthogroups) ? item.orthogroups : [])
     .map((group) => {
       const identity = standaloneConsistentTextAlias(
         group,
@@ -729,7 +729,7 @@ const catalogItemWithStandaloneOverrides = (sourceItem, context) => {
         ...(displayName ? { display_name: displayName } : {}),
         ...(description ? { description } : {})
       };
-    });
+    }));
   if (item.orthogroups.some((group) => !group)) return null;
   return item;
 };
@@ -1007,7 +1007,9 @@ const getRenderedFeatureFill = (entry) => {
   return '';
 };
 
-const collectLegendCaptionsByColor = (svg, context) => {
+// The captions of the exported SVG's Legend by swatch fill: the colors the
+// exported Result shows, never a Legend row's recorded color (OV-282).
+const collectLegendCaptionsByColor = (svg) => {
   const captionsByColor = new Map();
   const addCaption = (color, caption) => {
     const key = normalizeColorKey(color);
@@ -1016,14 +1018,6 @@ const collectLegendCaptionsByColor = (svg, context) => {
       captionsByColor.set(key, text);
     }
   };
-
-  const legendEntries = Array.isArray(context?.legendEntries) ? context.legendEntries : [];
-  legendEntries.forEach((entry) => addCaption(entry?.color, entry?.caption || entry?.originalCaption));
-
-  const paletteColors = context?.currentColors && typeof context.currentColors === 'object'
-    ? context.currentColors
-    : {};
-  Object.entries(paletteColors).forEach(([caption, color]) => addCaption(color, caption));
 
   if (!svg) return captionsByColor;
   const legendRoots = Array.from(svg.querySelectorAll('#legend, g[id*="legend"], [data-gbdraw-sticky-legend]'));
@@ -1198,7 +1192,7 @@ const buildStandaloneFeaturePayloads = (svg, options = {}) => {
   const normalizedPopupMode = normalizeStandalonePopupMode(context.popupMode);
   const resolveSourceFeature = createStandaloneBiologicalFeatureResolver(context.features);
   const payloads = [];
-  const captionsByColor = collectLegendCaptionsByColor(svg, context);
+  const captionsByColor = collectLegendCaptionsByColor(svg);
   renderedEntries.forEach((entry, svgId) => {
     const feature = resolveSourceFeature({
       stableSvgId: entry.stableId,
@@ -1770,10 +1764,10 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
     metadata.setAttribute('data-schema', String(FEATURE_CATALOG_SCHEMA));
     metadata.setAttribute('data-result-index', String(catalogItem.resultIndex));
     metadata.setAttribute('data-result-name', String(catalogItem.resultName || ''));
-    metadata.textContent = JSON.stringify({
+    metadata.textContent = JSON.stringify(/** @satisfies {FeatureCatalog} */ ({
       schema: FEATURE_CATALOG_SCHEMA,
       items: [catalogItem]
-    });
+    }));
   } else {
     metadata.setAttribute('data-schema', INTERACTIVE_SCHEMA);
     metadata.textContent = JSON.stringify(compactWireValue({

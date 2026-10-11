@@ -315,6 +315,7 @@ def _with_mock_circular_result(
         canvas_bounds=Aabb(0.0, 0.0, width, height),
         view_box=(0.0, 0.0, width, height),
         primary_bounds=resolved_bounds,
+        primary_local_bounds=resolved_bounds,
         placements=(
             CompositionPlacement(
                 role="primary",
@@ -340,6 +341,8 @@ def _with_mock_circular_result(
             num_of_columns=0,
             num_of_items_per_line=0,
             has_gradient=False,
+            font_file="LiberationSans-Regular",
+            wrap_width=0.0,
         ),
         legend_table={},
         source_content_bounds=resolved_bounds,
@@ -1051,12 +1054,14 @@ def test_multi_record_mixed_lengths_force_long_tick_channel_for_short_record(
         20_000,
         "tuckin",
         False,
+        length_threshold=50_000,
     )
     forced_long_tick_bounds = get_circular_tick_path_ratio_bounds(
         20_000,
         "tuckin",
         False,
         tick_track_channel_override="long",
+        length_threshold=50_000,
     )
     assert default_short_tick_bounds[1] >= 0.98
     assert forced_long_tick_bounds[1] < 1.0

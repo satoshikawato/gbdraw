@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import dataclasses
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -16,7 +17,7 @@ from gbdraw.api.record_planning import (
     resolve_linear_options,
     resolve_record_inputs,
 )
-from gbdraw.api.request_render import resolve_request
+from gbdraw.api.request_render import build_request_plan_diagram, plan_request, resolve_request
 from gbdraw.api.requests import (
     CircularBatchOutputPolicy,
     CircularBatchRequest,
@@ -32,7 +33,7 @@ from gbdraw.api.requests import (
     RenderOutputRequest,
 )
 from gbdraw.circular import _circular_cli_record_cardinality
-from gbdraw.exceptions import ValidationError
+from gbdraw.exceptions import GbdrawError, ValidationError
 from gbdraw.io.record_select import parse_record_selector
 from gbdraw.io.regions import parse_region_spec
 from gbdraw.linear import _linear_cli_record_cardinality, linear_main
@@ -41,7 +42,7 @@ from gbdraw.session import (
     materialize_session,
     session_to_request,
 )
-from gbdraw.session_request_codec import encode_canonical_request
+from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA, encode_canonical_request
 
 
 def _record(record_id: str, sequence: str = "AAACCG") -> SeqRecord:
@@ -192,6 +193,42 @@ def test_selection_reverse_region_order_and_provenance(tmp_path: Path) -> None:
     assert provenance.record_key == "chosen-row"
     assert provenance.selector is not None
     assert provenance.region is not None
+
+
+def test_records_resolved_from_one_source_write_only_their_own_fields(
+    tmp_path: Path,
+) -> None:
+    source_record = _record("chosen", "AAACCGTT")
+    source_record.features = [
+        SeqFeature(FeatureLocation(1, 7, strand=1), type="CDS", qualifiers={"gene": ["g"]})
+    ]
+    source = GenBankInputSource(tmp_path / "records.gb")
+
+    resolved = _resolve(
+        tuple(
+            RecordInput(
+                source=source,
+                presentation=RecordPresentation(label=label, reverse_complement=reverse),
+                record_key=label,
+            )
+            for label, reverse in (("first", False), ("second", False), ("third", True))
+        ),
+        lambda _paths: [source_record],
+    )
+
+    first, second, third = resolved.records
+    assert [record.annotations["gbdraw_record_label"] for record in resolved.records] == [
+        "first",
+        "second",
+        "third",
+    ]
+    assert "gbdraw_record_label" not in source_record.annotations
+    assert first.features is not source_record.features
+    # The planned records share the parsed features; nothing writes them.
+    assert first.features[0] is source_record.features[0]
+    assert third.features[0].location.strand == -1
+    assert source_record.features[0].location.strand == 1
+    assert source_record.features[0].qualifiers == {"gene": ["g"]}
 
 
 def test_region_reverse_crops_once_and_flips_boundary_crossing_feature(
@@ -406,7 +443,7 @@ def test_current_schema_round_trips_unresolved_then_materializes_session(
     )
 
     unresolved_encoded = encode_canonical_request(unresolved)
-    assert unresolved_encoded.payload["schema"] == 8
+    assert unresolved_encoded.payload["schema"] == CANONICAL_REQUEST_SCHEMA
     assert unresolved_encoded.payload["records"][0]["cardinality"] == "all"
 
     resolved = resolve_request(unresolved)
@@ -688,9 +725,14 @@ def test_display_unset_preserves_external_crop_source_length(crop_rc, reverse, r
 @pytest.mark.parametrize("query_reverse,subject_reverse", [(True, False), (False, True), (True, True)])
 @pytest.mark.parametrize("cropped", [False, True])
 def test_source_bound_comparison_direction_projection_round_trip(tmp_path, query_reverse, subject_reverse, cropped):
-    """Saved evidence reprojects without analysis and preserves its source binding."""
+    """Saved evidence reprojects without analysis and preserves its source binding.
+
+    The planned request keeps the rows it was given, so a saved Session stays in
+    the search frame; the build projects them into the drawn views (OV-399).
+    """
     from dataclasses import replace
     import pandas as pd
+    from gbdraw.api.record_planning import project_source_bound_comparisons
     from gbdraw.api.request_render import plan_linear_request
     from gbdraw.features.ids import compute_feature_hash
     from gbdraw.linear_comparison import LinearComparison
@@ -722,7 +764,10 @@ def test_source_bound_comparison_direction_projection_round_trip(tmp_path, query
         presentation=RecordPresentation(reverse_complement=reverse if not item.region else False))
         for item, reverse in zip(inputs, (query_reverse, subject_reverse), strict=True)))
     after = plan_linear_request(reversed_request)
-    projected = after.request.options.linear_comparisons[0].matches
+    assert after.request.options.linear_comparisons[0].matches is evidence
+    projected = project_source_bound_comparisons(
+        after.request.options, after.records, after.provenance
+    ).linear_comparisons[0].matches
     assert evidence.to_dict("records") == [row]
     for role, prefix, record, reverse in zip(("query", "subject"), ("q", "s"), after.records,
                                             (query_reverse, subject_reverse), strict=True):
@@ -733,14 +778,196 @@ def test_source_bound_comparison_direction_projection_round_trip(tmp_path, query
             assert projected.iloc[0][key] == (len(record) + 1 - row[key] if reverse else row[key])
     assert projected.iloc[0].bitscore == row["bitscore"]
     assert projected.iloc[0].collinearity_orientation == ("plus" if query_reverse != subject_reverse else "minus")
-    restored = plan_linear_request(replace(baseline, options=after.request.options))
-    pd.testing.assert_frame_equal(restored.request.options.linear_comparisons[0].matches, evidence)
+    restored = project_source_bound_comparisons(
+        replace(options, linear_comparisons=(LinearComparison(0, 1, projected),)),
+        before.records, before.provenance,
+    )
+    pd.testing.assert_frame_equal(restored.linear_comparisons[0].matches, evidence)
+    # Planning checks the bindings, so a Session writer rejects them (review 2).
     corrupted = evidence.copy(deep=True)
     corrupted.at[0, "query_view_feature_svg_id"] = "fnot-source-bound"
     with pytest.raises(ValidationError, match="source/crop binding"):
         plan_linear_request(replace(reversed_request, options=replace(options,
             linear_comparisons=(LinearComparison(0, 1, corrupted),))))
     corrupted.at[0, "query_feature_svg_id"] = "fwrong-source"
+    corrupted_request = replace(reversed_request, options=replace(options,
+        linear_comparisons=(LinearComparison(0, 1, corrupted),)))
     with pytest.raises(ValidationError, match="source feature ID"):
-        plan_linear_request(replace(reversed_request, options=replace(options,
-            linear_comparisons=(LinearComparison(0, 1, corrupted),))))
+        plan_linear_request(corrupted_request)
+    with pytest.raises(GbdrawError, match="source feature ID"):
+        build_session_document(corrupted_request)
+
+
+_PLANNING_EXAMPLE = Path(__file__).resolve().parents[1] / "examples" / "MellatMJNV.gb"
+
+
+def test_a_drawn_diagram_ignores_edits_to_the_callers_record() -> None:
+    import gbdraw
+
+    record = next(SeqIO.parse(_PLANNING_EXAMPLE, "genbank"))
+    diagram = gbdraw.draw_circular(record)
+    for feature in record.features:
+        if feature.type == "CDS":
+            feature.qualifiers["product"] = ["EDITED AFTER DRAWING"]
+
+    assert "EDITED AFTER DRAWING" not in diagram.to_svg(interactive=True)
+
+
+def test_a_plan_ignores_edits_to_the_callers_record(tmp_path: Path) -> None:
+    from Bio.SeqFeature import SimpleLocation
+
+    from gbdraw.api import build_request_plan_diagram, plan_request
+
+    record = next(SeqIO.parse(_PLANNING_EXAMPLE, "genbank"))
+    plan = plan_request(
+        CircularDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            output=RenderOutputRequest(output_directory=tmp_path, overwrite=True),
+        )
+    )
+    before = build_request_plan_diagram(plan).drawing.tostring()
+    feature = next(feature for feature in record.features if feature.type == "CDS")
+    feature.location = SimpleLocation(
+        feature.location.start, feature.location.end, strand=-feature.location.strand
+    )
+
+    assert build_request_plan_diagram(plan).drawing.tostring() == before
+
+
+def _record_snapshot(record: SeqRecord) -> tuple[object, ...]:
+    def feature_snapshot(feature: SeqFeature) -> tuple[object, ...]:
+        return (
+            feature.type,
+            feature.id,
+            repr(feature.location),
+            repr(feature.qualifiers),
+            tuple(feature_snapshot(sub) for sub in getattr(feature, "sub_features", ())),
+        )
+
+    return (
+        record.id,
+        record.name,
+        record.description,
+        str(record.seq),
+        repr(record.annotations),
+        repr(record.letter_annotations),
+        tuple(record.dbxrefs),
+        tuple(feature_snapshot(feature) for feature in record.features),
+    )
+
+
+def test_rendering_leaves_the_records_parsed_from_a_source_unchanged(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pandas as pd
+
+    from gbdraw.api import (
+        CircularDiagramOptions,
+        build_prepared_interactive_context,
+        build_request_plan_diagram,
+        plan_request,
+    )
+    from gbdraw.api import request_render
+    from gbdraw.features.overrides import FeatureOverride
+
+    parsed: list[tuple[SeqRecord, tuple[object, ...]]] = []
+    load_gbks = request_render.load_gbks
+
+    def recording_loader(paths: list[str]) -> list[SeqRecord]:
+        records = load_gbks(paths)
+        parsed.extend((record, _record_snapshot(record)) for record in records)
+        return records
+
+    monkeypatch.setattr(request_render, "load_gbks", recording_loader)
+    source = GenBankInputSource(_PLANNING_EXAMPLE)
+    visibility = pd.DataFrame(
+        [["*", "CDS", "product", "RCBTB1", "off"]],
+        columns=["record_id", "feature_type", "qualifier", "value", "action"],
+    )
+    inputs = (
+        RecordInput(source=source, record_key="plain"),
+        RecordInput(
+            source=source,
+            presentation=RecordPresentation(reverse_complement=True),
+            record_key="reversed",
+        ),
+        RecordInput(source=source, region=parse_region_spec("20000-90000:rc"), record_key="cropped"),
+    )
+    catalog = plan_request(
+        LinearDiagramRequest(records=inputs[:1])
+    ).provenance[0].source_feature_catalog
+    first_cds = next(entry.biological_feature_id for entry in catalog if entry.feature_type == "CDS")
+    parsed.clear()
+    overrides = tuple(
+        FeatureOverride(key, first_cds, label_visibility="on", label_text="OVERRIDDEN")
+        for key in ("plain", "reversed", "cropped")
+    )
+    requests = (
+        LinearDiagramRequest(
+            records=inputs,
+            options=LinearDiagramOptions(
+                feature_visibility_table=visibility, feature_overrides=overrides
+            ),
+            output=RenderOutputRequest(output_directory=tmp_path, overwrite=True),
+        ),
+        CircularDiagramRequest(
+            records=(inputs[1],),
+            options=CircularDiagramOptions(
+                feature_visibility_table=visibility, feature_overrides=overrides[1:2]
+            ),
+            output=RenderOutputRequest(output_directory=tmp_path, overwrite=True),
+        ),
+    )
+    for request in requests:
+        prepared = build_request_plan_diagram(plan_request(request))
+        assert "OVERRIDDEN" in prepared.drawing.tostring()
+        build_prepared_interactive_context(prepared)
+
+    # One parse per request serves all of its inputs.
+    assert len(parsed) == 2
+    for record, snapshot in parsed:
+        assert _record_snapshot(record) == snapshot
+
+
+MELLAT = Path(__file__).resolve().parents[1] / "examples" / "MellatMJNV.gb"
+
+
+def _flip_first_cds(record: SeqRecord) -> None:
+    feature = next(item for item in record.features if item.type == "CDS")
+    feature.location = FeatureLocation(
+        feature.location.start, feature.location.end, strand=-feature.location.strand
+    )
+
+
+def _plan_svg(plan: object) -> str:
+    return build_request_plan_diagram(plan).drawing.tostring()
+
+
+def _circular_request(tmp_path: Path) -> CircularDiagramRequest:
+    return CircularDiagramRequest(
+        records=(RecordInput(source=GenBankInputSource(MELLAT)),),
+        output=RenderOutputRequest(output_directory=tmp_path, overwrite=True),
+    )
+
+
+def test_editing_the_record_a_resolved_request_holds_does_not_change_its_plan(tmp_path: Path) -> None:
+    resolved = resolve_request(_circular_request(tmp_path))
+    plan = plan_request(resolved)
+    expected = _plan_svg(plan)
+    _flip_first_cds(resolved.records[0].source.record)
+    assert _plan_svg(plan) == expected
+
+
+def test_editing_the_record_swapped_into_a_resolved_request_does_not_change_its_plan(tmp_path: Path) -> None:
+    resolved = resolve_request(_circular_request(tmp_path))
+    mine = next(SeqIO.parse(MELLAT, "genbank"))
+    held = resolved.records[0]
+    swapped = dataclasses.replace(
+        resolved,
+        records=(dataclasses.replace(held, source=dataclasses.replace(held.source, record=mine)),),
+    )
+    plan = plan_request(swapped)
+    expected = _plan_svg(plan)
+    _flip_first_cds(mine)
+    assert _plan_svg(plan) == expected

@@ -1,24 +1,23 @@
-import { normalizeUserFacingError } from '../services/error-normalization.js';
+// @ts-check
+/** @import { DrawingState } from '../state.js' */
+/** @import { MountedResultContext, MountedResultContextOptions } from './preview-runtime.js' */
+/** @import { RulePreparation } from './rule-matching.js' */
+import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
   parseBlacklistWords,
   parseColorTable,
   parsePriorityRules,
   parseWhitelistRules
-} from './file-imports.js';
+} from '../services/file-imports.js';
 import {
   prepareSpecificColorImport
-} from './specific-color-rules.js';
+} from '../services/specific-color-rules.js';
 import {
-  buildFeatureVisibilitySelectorCache,
-  preserveFeatureVisibilitySelectorCacheForOverrides
-} from './feature-visibility.js';
-import {
-  normalizeCircularPlotTitlePosition
-} from './plot-title-position.js';
-import { resolveCircularLayoutPreference } from './layout-preferences.js';
+  normalizeCircularPlotTitlePosition,
+  resolveCircularLayoutPreference
+} from '../services/layout-preferences.js';
 import { readFileText } from '../services/file-content-cache.js';
 import { isCommittedSvgResultMounted } from '../services/svg-result-ingestion.js';
-import { featureStateFromCatalog } from '../services/feature-catalog.js';
 
 export const runRecordDiscoveryWatcher = async ({
   rollbackInProgress,
@@ -35,6 +34,46 @@ export const runRecordDiscoveryWatcher = async ({
   return !suppress;
 };
 
+/**
+ * The members of the preview owner's runtime (app/preview-runtime.js) that the
+ * mounted-Result watcher reads.
+ * @typedef {object} WatchersPreviewRuntime
+ * @property {() => void} clearActiveRuntime
+ * @property {(options: MountedResultContextOptions) => MountedResultContext} createMountedResultContext
+ * @property {(context: MountedResultContext) => Promise<any>} bindMountedResult
+ */
+
+/**
+ * @typedef {object} WatchersOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {RulePreparation} rulePreparation
+ * @property {(value?: any) => { value: any }} ref Vue `ref`.
+ * @property {(getter: () => any) => { readonly value: any }} computed Vue `computed`.
+ * @property {(source: any, callback: (...args: any[]) => any, options?: Record<string, any>) => any} watch Vue `watch`.
+ * @property {(callback?: () => void) => Promise<void>} nextTick Vue `nextTick`.
+ * @property {(callback: () => any) => void} onMounted Vue `onMounted`.
+ * @property {{ refreshLegendDragAffordances: () => void }} legendActions
+ *   The Legend owner's reaction to a rebuilt Legend.
+ * @property {{
+ *   syncLabelEditor: (options?: Record<string, any>) => void,
+ *   commitSpecificRules: (rules: Record<string, any>[], label?: string, options?: Record<string, any>) => Promise<any>
+ * }} featureActions The feature editor's label reaction and its commit of the specific color rules.
+ * @property {{ applyCanvasPadding: () => void, refreshDiagramDragAffordances: () => void }} legendLayout
+ *   The Legend layout owner's canvas padding and drag affordances.
+ * @property {{ applyPaletteDraftToPreview: () => void, syncPaletteDraftState: () => void }} resultsManager
+ *   The Results owner's palette draft projections.
+ * @property {(() => Promise<any>) | null} [runLabelReflow] Generate's label reflow.
+ * @property {((options?: { suppress?: boolean, automatic?: boolean }) => Promise<any>) | null} [refreshCircularRecordOrder]
+ * @property {((options?: { suppress?: boolean }) => Promise<any>) | null} [refreshLinearRecordSelectors]
+ * @property {(options?: { pan?: any, resetZoom?: boolean }) => void} [resetPreviewViewport] The preview owner's viewport reset.
+ * @property {() => void} resetRightDrawer The right drawer owner's reset.
+ * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
+ * @property {(options?: { rerender?: boolean }) => void} clearLabelBuildNotices The label owner's port.
+ * @property {WatchersPreviewRuntime} previewRuntime The preview owner's mounted-Result binding.
+ * @property {(() => Promise<any>) | null} [preparePaletteDefinitions] The palette loader's load of the browser palette definitions.
+ */
+
+/** @param {WatchersOptions} options */
 export const setupWatchers = ({
   state,
   rulePreparation,
@@ -42,7 +81,6 @@ export const setupWatchers = ({
   nextTick,
   onMounted,
   legendActions,
-  svgActions,
   featureActions,
   legendLayout,
   resultsManager,
@@ -51,82 +89,51 @@ export const setupWatchers = ({
   refreshLinearRecordSelectors,
   resetPreviewViewport,
   resetRightDrawer,
-  previewRuntime = null,
+  // R13: the label owner's ports (app/feature-editor/label-actions.js).
+  closeLabelTextScopeDialog,
+  clearLabelBuildNotices,
+  previewRuntime,
   preparePaletteDefinitions = null
 }) => {
   const {
-    manualSpecificRules,
-    extractedFeatures,
-    biologicalFeatures,
-    featureSelectorSafetyScope,
     layoutRepositionMode,
-    editableLabels,
     results,
     svgContent,
     selectedResultIndex,
-    form,
-    generatedMode,
     shouldDeferCircularPreviewUpdates,
     mode,
     cInputType,
     lInputType,
-    canvasPadding,
     skipCaptureBaseConfig,
     skipExtractOnSvgChange,
     trustedArtifactRestoreInProgress,
     svgContainer,
-    layoutPreferences,
     suppressCircularMultiRecordDefaults,
-    featureRecordIds,
     selectedFeatureRecordIdx,
-    featureVisibilityOverrides,
-    replaceFeatureVisibilitySelectorCacheOwner,
     featurePanelTab,
     labelSearch,
-    orthogroups,
-    collinearGroups,
-    featureOrthogroupIndex,
     selectedOrthogroupAlignmentFeature,
     selectedOrthogroupId,
     orthogroupSearch,
-    labelTextBulkOverrides,
-    labelTextFeatureOverrides,
-    canonicalLabelOverrideRows,
-    labelVisibilityOverrides,
-    labelOverrideBuildWarning,
     isFeatureDrawerMounted,
-    clickedFeature,
     clickedPairwiseMatch,
     clickedLabel,
-    labelTextScopeDialog,
-    globalLabelModeDialog,
+    hiddenLabelTextDialog,
     files,
-    currentColors,
     paletteInstantPreviewEnabled,
-    pendingPaletteName,
     semanticFileWatchersSuppressed,
     sessionResourceDiscoveryDeferred,
     sessionImportRollbackInProgress,
-    manualPriorityRules,
-    manualWhitelist,
-    manualBlacklist,
     linearSeqs,
     linearReorderNotice,
     autoLabelReflowEnabled,
     labelReflowRequestSeq,
-    labelReflowRequestReason,
     labelReflowForceRequestSeq,
-    labelReflowForceRequestReason,
     errorLog
   } = state;
 
-  const {
-    addLegendEntry,
-    extractLegendEntries,
-    refreshLegendDragAffordances
-  } = legendActions;
+  const { refreshLegendDragAffordances } = legendActions;
 
-  const { applyPaletteToSvg } = svgActions;
   const { syncLabelEditor } = featureActions;
   const {
     applyCanvasPadding,
@@ -144,63 +151,52 @@ export const setupWatchers = ({
 
   const hasStoredLayoutValue = (value) => typeof value === 'string' && value.trim() !== '';
 
-  const hasStoredCircularMultiRecordLayout = () =>
-    hasStoredLayoutValue(layoutPreferences.circular.multi.legend) ||
-    hasStoredLayoutValue(layoutPreferences.circular.multi.plotTitlePosition);
+  /** @param {DrawingState} drawing */
+  const hasStoredCircularMultiRecordLayout = (drawing) =>
+    hasStoredLayoutValue(drawing.layoutPreferences.circular.multi.legend) ||
+    hasStoredLayoutValue(drawing.layoutPreferences.circular.multi.plotTitlePosition);
 
-  const applyCircularMultiRecordSmartDefaults = () => {
-    const singleLayout = resolveCircularLayoutPreference(layoutPreferences, false);
-    layoutPreferences.circular.multi.legend =
+  /** @param {DrawingState} drawing */
+  const applyCircularMultiRecordSmartDefaults = (drawing) => {
+    const singleLayout = resolveCircularLayoutPreference(drawing.layoutPreferences, false);
+    drawing.layoutPreferences.circular.multi.legend =
       singleLayout.legend === 'left' ? 'bottom' : singleLayout.legend;
-    layoutPreferences.circular.multi.plotTitlePosition =
+    drawing.layoutPreferences.circular.multi.plotTitlePosition =
       singleLayout.plotTitlePosition === 'none' ? 'bottom' : singleLayout.plotTitlePosition;
   };
 
-  const replacePlainObject = (target, source = {}) => {
-    Object.keys(target || {}).forEach((key) => delete target[key]);
-    Object.entries(source || {}).forEach(([key, value]) => {
-      target[key] = value;
-    });
-  };
-
-  const refreshFeatureVisibilitySelectorCache = () => {
-    const nextCache = preserveFeatureVisibilitySelectorCacheForOverrides(
-      buildFeatureVisibilitySelectorCache(extractedFeatures.value, featureSelectorSafetyScope.value),
-      state.featureVisibilitySelectorCache,
-      featureVisibilityOverrides
-    );
-    if (typeof replaceFeatureVisibilitySelectorCacheOwner === 'function') {
-      replaceFeatureVisibilitySelectorCacheOwner(nextCache);
-    } else {
-      replacePlainObject(state.featureVisibilitySelectorCache, nextCache);
-    }
-  };
-
-  watch(
-    currentColors,
+  // Each drawing's watchers watch that drawing, so a mode switch, which
+  // changes neither drawing, fires none of them (R10); an edit of the drawing
+  // that is not shown (a Load, a History restore) touches no shown Result.
+  /** @type {DrawingState[]} */
+  const drawingsOfModes = [state.drawings.circular, state.drawings.linear];
+  drawingsOfModes.forEach((drawing) => watch(
+    () => drawing.currentColors.value,
     () => {
-      syncPaletteDraftState();
+      if (drawing === state.activeDrawing()) syncPaletteDraftState();
     },
     { deep: true }
-  );
+  ));
 
   watch(
     () => paletteInstantPreviewEnabled.value,
     (enabled) => {
+      const drawing = state.activeDrawing();
       if (!enabled) return;
-      if (String(pendingPaletteName.value || '').trim() === '') return;
+      if (String(drawing.pendingPaletteName.value || '').trim() === '') return;
       applyPaletteDraftToPreview();
     }
   );
 
-  watch(
-    canvasPadding,
+  drawingsOfModes.forEach((drawing) => watch(
+    () => drawing.canvasPadding,
     () => {
+      if (drawing !== state.activeDrawing()) return;
       if (semanticFileWatchersSuppressed.value || state.sessionOperationAvailability?.()) return;
       applyCanvasPadding();
     },
     { deep: true }
-  );
+  ));
 
   watch(
     () => layoutRepositionMode.value,
@@ -213,21 +209,22 @@ export const setupWatchers = ({
   );
 
   watch(
-    () => form.multi_record_canvas,
+    () => state.drawings.circular.form.multi_record_canvas,
     (enabled, previousEnabled) => {
+      const drawing = state.drawings.circular;
       if (mode.value !== 'circular') return;
       if (enabled === previousEnabled) return;
 
-      if (enabled && !hasStoredCircularMultiRecordLayout()) {
+      if (enabled && !hasStoredCircularMultiRecordLayout(drawing)) {
         if (suppressCircularMultiRecordDefaults.value) {
-          layoutPreferences.circular.multi.legend = normalizeLegendPosition(
-            form.legend,
+          drawing.layoutPreferences.circular.multi.legend = normalizeLegendPosition(
+            drawing.form.legend,
             'left'
           );
-          layoutPreferences.circular.multi.plotTitlePosition =
-            normalizeCircularPlotTitlePosition(state.adv.plot_title_position);
+          drawing.layoutPreferences.circular.multi.plotTitlePosition =
+            normalizeCircularPlotTitlePosition(drawing.adv.plot_title_position);
         } else {
-          applyCircularMultiRecordSmartDefaults();
+          applyCircularMultiRecordSmartDefaults(drawing);
         }
       }
 
@@ -246,7 +243,7 @@ export const setupWatchers = ({
     nextTick(async () => {
       const root = svgContainer.value?.querySelector('svg') || null;
       if (!root) {
-        previewRuntime?.clearActiveRuntime?.();
+        previewRuntime.clearActiveRuntime();
         return;
       }
       const resultIndex = Number(selectedResultIndex.value) || 0;
@@ -286,24 +283,17 @@ export const setupWatchers = ({
     }
   );
 
-  watch(extractedFeatures, () => {
-    if (semanticFileWatchersSuppressed.value || trustedArtifactRestoreInProgress.value) return;
-    refreshFeatureVisibilitySelectorCache();
-  });
-
-  watch(featureSelectorSafetyScope, () => {
-    if (trustedArtifactRestoreInProgress.value) return;
-    refreshFeatureVisibilitySelectorCache();
-  }, { immediate: true });
-
-  watch(
-    [labelTextFeatureOverrides, labelTextBulkOverrides, labelVisibilityOverrides],
+  // The saved label table is the rules a loaded Session sent; a bulk label
+  // edit replaces it with the rows the editor builds. Per-feature label edits
+  // are identity rows, which apply before the table (design Q4).
+  drawingsOfModes.forEach((drawing) => watch(
+    () => drawing.labelTextBulkOverrides,
     () => {
       if (semanticFileWatchersSuppressed.value) return;
-      canonicalLabelOverrideRows.value = [];
+      drawing.canonicalLabelOverrideRows.value = [];
     },
     { deep: true }
-  );
+  ));
 
   watch(
     () => labelReflowRequestSeq.value,
@@ -312,7 +302,7 @@ export const setupWatchers = ({
       if (!autoLabelReflowEnabled.value) return;
       if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
       if (typeof runLabelReflow !== 'function') return;
-      await runLabelReflow(labelReflowRequestReason.value || 'label-edit');
+      await runLabelReflow();
     }
   );
 
@@ -322,65 +312,31 @@ export const setupWatchers = ({
       if (nextSeq === prevSeq) return;
       if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
       if (typeof runLabelReflow !== 'function') return;
-      await runLabelReflow(labelReflowForceRequestReason.value || 'label-edit');
+      await runLabelReflow();
     }
   );
 
-  watch(
-    () => mode.value,
-    () => {
-      if (semanticFileWatchersSuppressed.value) return;
-
-      // Vue replaces the mode-keyed container. Release its frozen live-edit
-      // payload first so the new root materializes the selected Result content.
-      previewRuntime?.clearActiveRuntime?.();
-
-      if (typeof resetPreviewViewport === 'function') {
-        resetPreviewViewport();
-      }
-
-      // The retained Result's catalog owns this projection across mode inactivity.
-      const features = state.featureCatalog?.value && generatedMode.value === mode.value
-        ? featureStateFromCatalog(window.Vue.toRaw(state.featureCatalog.value), { mode: mode.value })
-        : {};
-      extractedFeatures.value = features.extractedFeatures || [];
-      if (biologicalFeatures) biologicalFeatures.value = features.biologicalFeatures || [];
-      featureSelectorSafetyScope.value = features.featureSelectorSafetyScope || [];
-      featureRecordIds.value = features.featureRecordIds || [];
-      selectedFeatureRecordIdx.value = 0;
-      // Mode inactivity clears projections, not durable label/visibility intent.
-      // The editor's existing identity reconciliation handles source replacement.
-      if (typeof replaceFeatureVisibilitySelectorCacheOwner === 'function') {
-        replaceFeatureVisibilitySelectorCacheOwner({});
-      } else {
-        replacePlainObject(state.featureVisibilitySelectorCache, {});
-      }
-      editableLabels.value = [];
-      orthogroups.value = features.orthogroups || [];
-      collinearGroups.value = features.collinearGroups || [];
-      featureOrthogroupIndex.value = features.featureOrthogroupIndex || new Map();
-      selectedOrthogroupAlignmentFeature.value = '';
-      selectedOrthogroupId.value = '';
-      orthogroupSearch.value = '';
-      labelOverrideBuildWarning.value = '';
-      labelSearch.value = '';
-      featurePanelTab.value = 'colors';
-      clickedPairwiseMatch.value = null;
-      clickedLabel.value = null;
-      labelTextScopeDialog.show = false;
-      labelTextScopeDialog.labelKey = '';
-      labelTextScopeDialog.newText = '';
-      labelTextScopeDialog.sourceText = '';
-      labelTextScopeDialog.featureId = '';
-      labelTextScopeDialog.matchingCount = 0;
-      globalLabelModeDialog.show = false;
-      globalLabelModeDialog.featureId = '';
-      globalLabelModeDialog.featureType = '';
-      globalLabelModeDialog.resolve = null;
-      resetRightDrawer();
-      linearReorderNotice.value = '';
-    }
-  );
+  // E1: the transient UI of the departing mode. The mode transition in the
+  // composition root calls it after it installed the arriving mode's artifact
+  // (R10); durable label and visibility intent stays (R2).
+  const resetModeTransientUi = () => {
+    if (typeof resetPreviewViewport === 'function') resetPreviewViewport();
+    selectedFeatureRecordIdx.value = 0;
+    selectedOrthogroupAlignmentFeature.value = '';
+    selectedOrthogroupId.value = '';
+    orthogroupSearch.value = '';
+    clearLabelBuildNotices();
+    labelSearch.value = '';
+    featurePanelTab.value = 'colors';
+    clickedPairwiseMatch.value = null;
+    clickedLabel.value = null;
+    closeLabelTextScopeDialog();
+    hiddenLabelTextDialog.show = false;
+    hiddenLabelTextDialog.featureId = '';
+    hiddenLabelTextDialog.reason = '';
+    resetRightDrawer();
+    linearReorderNotice.value = '';
+  };
 
   const auxiliaryImportFailure = ref(null);
   const canRetryAuxiliaryImportFailure = computed(() => Boolean(auxiliaryImportFailure.value
@@ -392,6 +348,7 @@ export const setupWatchers = ({
     return busy || (canRetryAuxiliaryImportFailure.value ? auxiliaryImportFailure.value.retry() : false);
   };
   const pendingFileImports = window.Vue.reactive(new Map());
+  /** @type {Promise<any>} */
   let fileImportApplications = Promise.resolve();
   const restoredFileSelections = new Map();
   const applyFileImport = (key, apply, file, previousFile) => {
@@ -449,10 +406,11 @@ export const setupWatchers = ({
   const waitForAuxiliaryFileImport = (file) => pendingFileImports.get(file);
 
   watchFileImport('d_color', (text) => {
+    const drawing = state.activeDrawing();
     try {
       const { colors, count } = parseColorTable(text);
       Object.entries(colors).forEach(([key, color]) => {
-        currentColors.value[key] = color;
+        drawing.currentColors.value[key] = color;
       });
       console.log(`Loaded ${count} colors from file.`);
     } catch (e) {
@@ -462,9 +420,10 @@ export const setupWatchers = ({
   });
 
   watchFileImport('t_color', async (text, isCurrent) => {
+    const drawing = state.activeDrawing();
     try {
-      const prepared = prepareSpecificColorImport(text, manualSpecificRules);
-      if (!await featureActions.commitSpecificRules(prepared.nextRules, 'Import specific color rules', { isCurrent })) return false;
+      const prepared = prepareSpecificColorImport(text, drawing.manualSpecificRules);
+      if (!await featureActions.commitSpecificRules(prepared.nextRules, 'Import specific color rules', { drawing, isCurrent })) return false;
       console.log(`Loaded ${prepared.importedCount} rules from file.`);
     } catch (e) {
       if (isCurrent()) errorLog.value = normalizeUserFacingError(e, { operation: 'evaluateRules', stage: 'rule-validation' });
@@ -473,14 +432,15 @@ export const setupWatchers = ({
   });
 
   watchFileImport('qualifier_priority', (text) => {
+    const drawing = state.activeDrawing();
     try {
       const { rules, count } = parsePriorityRules(text);
       rules.forEach((rule) => {
-        const idx = manualPriorityRules.findIndex((r) => r.feat === rule.feat);
+        const idx = drawing.manualPriorityRules.findIndex((r) => r.feat === rule.feat);
         if (idx >= 0) {
-          manualPriorityRules[idx].order = rule.order;
+          drawing.manualPriorityRules[idx].order = rule.order;
         } else {
-          manualPriorityRules.push({ feat: rule.feat, order: rule.order });
+          drawing.manualPriorityRules.push({ feat: rule.feat, order: rule.order });
         }
       });
       console.log(`Loaded ${count} priority rules.`);
@@ -491,9 +451,10 @@ export const setupWatchers = ({
   });
 
   watchFileImport('whitelist', (text) => {
+    const drawing = state.activeDrawing();
     try {
       const { rules, count } = parseWhitelistRules(text);
-      rules.forEach((rule) => manualWhitelist.push(rule));
+      rules.forEach((rule) => drawing.manualWhitelist.push(rule));
       console.log(`Loaded ${count} whitelist rules.`);
     } catch (e) {
       errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
@@ -502,12 +463,13 @@ export const setupWatchers = ({
   });
 
   watchFileImport('blacklist', (text) => {
+    const drawing = state.activeDrawing();
     try {
       const { words, count } = parseBlacklistWords(text);
       if (words.length > 0) {
-        const existing = manualBlacklist.value ? manualBlacklist.value.trim() : '';
+        const existing = drawing.manualBlacklist.value ? drawing.manualBlacklist.value.trim() : '';
         const separator = existing && !existing.endsWith(',') ? ', ' : '';
-        manualBlacklist.value = existing + separator + words.join(', ');
+        drawing.manualBlacklist.value = existing + separator + words.join(', ');
         console.log(`Loaded ${count} blacklist words.`);
       }
     } catch (e) {
@@ -581,5 +543,5 @@ export const setupWatchers = ({
       console.warn('Could not load browser palette definitions.', normalizeUserFacingError(error, { stage: 'initialization' }));
     }
   });
-  return { waitForAuxiliaryFileImport, auxiliaryFileImportPending: () => pendingFileImports.size > 0, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure };
+  return { waitForAuxiliaryFileImport, auxiliaryFileImportPending: () => pendingFileImports.size > 0, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure, resetModeTransientUi };
 };

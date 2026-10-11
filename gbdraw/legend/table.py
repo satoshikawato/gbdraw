@@ -192,7 +192,7 @@ def prepare_legend_table(
     gc_config,
     skew_config,
     feature_config,
-    features_present,
+    features_present: List[str],
     blast_config=None,
     has_blast: bool = False,
     used_color_rules: Optional[Set[Tuple[str, str]]] = None,
@@ -218,7 +218,6 @@ def prepare_legend_table(
     legend_table = dict()
     color_table: Optional[DataFrame] = feature_config.color_table
     default_colors: DataFrame = feature_config.default_colors
-    features_present: List[str] = features_present
     block_stroke_color: str = feature_config.block_stroke_color
     block_stroke_width: float = feature_config.block_stroke_width
     gc_stroke_color: str = gc_config.stroke_color
@@ -230,7 +229,7 @@ def prepare_legend_table(
     skew_stroke_color: str = skew_config.stroke_color
     skew_stroke_width: float = skew_config.stroke_width
     dinucleotide = gc_config.dinucleotide
-    feature_specific_colors = dict()
+    feature_specific_colors: dict[str, list[tuple[str, str]]] = {}
     default_used_features = default_used_features or set()
     if color_table is not None and not color_table.empty:
         for _, row in color_table.iterrows():

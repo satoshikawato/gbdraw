@@ -1,3 +1,4 @@
+// @ts-check
 import { captureDecorationContinuity } from './legend-layout/decoration-continuity.js';
 import { createLegendCanvasActions } from './legend-layout/canvas-actions.js';
 import { createDiagramDragActions } from './legend-layout/diagram-drag.js';
@@ -8,24 +9,58 @@ import {
   resetCompositionUserDeltas
 } from './legend-layout/composition-actions.js';
 
+/**
+ * The preview owner's ports that this root reads (R13); only this root holds
+ * the preview owner.
+ * @typedef {object} LegendLayoutPreviewPort
+ * @property {(reason: string) => boolean} commitActiveResultEdit
+ * @property {(result: any) => string} getResultIdentity
+ * @property {() => { svg?: Element | null, resultIdentity?: string } | null} getActiveRuntime
+ * @property {(
+ *   resultIndex: number,
+ *   edit: (svg: SVGSVGElement, context: { mounted: boolean }) => boolean,
+ *   reason?: string
+ * ) => boolean} commitResultEdit
+ */
+
+/**
+ * @typedef {object} LegendLayoutOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {(svg: SVGSVGElement, options?: { side?: string }) => import('../services/legend-layout.js').LayoutBox | null} layOutLegend
+ *   The Legend manager's layout of the Legend for a side as Python lays it out.
+ * @property {((label?: string, options?: { source?: string, owner?: unknown }) => Promise<any>) | null} [beginHistoryTransaction]
+ *   History's begin of one step (R11); resolves to the transaction, or null when History is busy.
+ * @property {((transaction: any, options?: Record<string, any>) => Promise<any>) | null} [commitHistoryTransaction]
+ *   History's commit of the step that `beginHistoryTransaction` opened.
+ * @property {LegendLayoutPreviewPort | null} [previewRuntime]
+ * @property {{ beforeRecordDrag?: () => void, afterRecordDrag?: (options: { moved: boolean }) => void } | null} [similarityAlignmentLifecycle]
+ *   The alignment owner's record-drag hooks, registered by the root (R13).
+ */
+
+/** @param {LegendLayoutOptions} options */
 export const createLegendLayout = ({
   state,
-  legendActions,
-  history = null,
+  layOutLegend,
+  beginHistoryTransaction = null,
+  commitHistoryTransaction = null,
   previewRuntime = null,
   similarityAlignmentLifecycle = null
 }) => {
+  // R13: the drag, canvas, and position owners commit their edit through the
+  // preview owner's port; only this root holds the preview owner.
+  const commitActiveResultEdit = previewRuntime?.commitActiveResultEdit;
   const diagramActions = createDiagramDragActions({
     state,
-    history,
-    previewRuntime,
+    beginHistoryTransaction,
+    commitHistoryTransaction,
+    commitActiveResultEdit,
     similarityAlignmentLifecycle
   });
-  const canvasActions = createLegendCanvasActions({ state, previewRuntime });
+  const canvasActions = createLegendCanvasActions({ state, commitActiveResultEdit });
   const repositionActions = createLegendRepositionActions({
     state,
-    legendActions,
-    previewRuntime
+    layOutLegend,
+    commitActiveResultEdit
   });
 
   const resetAllPositions = () => {
@@ -58,8 +93,10 @@ export const createLegendLayout = ({
   const resultIdentity = (result) => previewRuntime?.getResultIdentity?.(result) || '';
   const captureCompositionIntent = () => {
     const runtime = previewRuntime?.getActiveRuntime?.() || null;
-    const svg = state.svgContainer.value?.querySelector?.('svg') || null;
+    // state is untyped; the container holds our own Result, so this is an SVG or null.
+    const svg = /** @type {SVGSVGElement | null} */ (state.svgContainer.value?.querySelector?.('svg') || null);
     if (svg && runtime?.svg === svg && runtime.resultIdentity) {
+      /** @type {Record<string, any> | null} */
       let deltas = null;
       try {
         deltas = compositionUserDeltas(svg);
@@ -99,11 +136,12 @@ export const createLegendLayout = ({
   };
 
   return {
-    captureDecorationContinuity: (canonical, projectRecordIdentity) => captureDecorationContinuity({
+    /** @param {Record<string, any>} drawing The drawing of the run that keeps the decorations. */
+    captureDecorationContinuity: (canonical, projectRecordIdentity, drawing) => captureDecorationContinuity({
       canonical, projectRecordIdentity, results: state.results.value, catalog: state.featureCatalog.value,
       mountedSvg: state.svgContainer.value?.querySelector?.('svg') || null,
       selectedResultIndex: state.selectedResultIndex.value,
-      canvasPadding: state.canvasPadding
+      canvasPadding: drawing.canvasPadding
     }),
     ...canvasActions,
     ...repositionActions,

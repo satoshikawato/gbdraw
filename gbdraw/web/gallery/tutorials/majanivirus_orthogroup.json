@@ -1,7 +1,7 @@
 {
   "id": "majanivirus_orthogroup",
   "version": 1,
-  "title": "Plot CDS protein-similarity links across nine majanivirus genomes",
+  "title": "Link similar proteins across nine majanivirus genomes",
   "summary": "Run LOSATP in the browser, assign CDS-derived proteins from nine majanivirus genomes to gbdraw similarity groups, apply product-based feature colors, and draw curved links between group members.",
   "appMode": "Linear",
   "primaryWorkflow": "LOSATP similarity-group comparison",
@@ -100,7 +100,7 @@
     },
     {
       "title": "Upload the nine GenBank files and labels",
-      "body": "Keep the records and Organism / strain labels in the same order as the Gallery command so adjacent comparison tracks and labels match the published example.",
+      "body": "Keep the records and Organism / strain labels in the same order as the Gallery command so adjacent comparison tracks and labels match the published example. For LvMJNV.gb (row 6), also check Reverse complement in its Record options, so its synteny with the other genomes reads left to right.",
       "table": {
         "columns": ["Order", "GenBank file", "Organism / strain"],
         "rows": [
@@ -153,7 +153,7 @@
     },
     {
       "title": "Configure browser LOSAT",
-      "body": "In Comparison, choose Run LOSAT, open Settings, set LOSAT Mode to LOSATP, and set LOSATP mode to Similarity groups. Runtime controls are under Advanced comparison and layout.",
+      "body": "In Comparison, choose Run LOSAT, open Settings, set LOSAT Mode to LOSATP, and set LOSATP mode to Similarity groups. The runtime controls are in the same Settings panel, under Runtime and reproducibility.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -282,19 +282,19 @@
             "source": "webapp",
             "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json.gz",
             "viewport": {"width": 1600, "height": 1100},
-            "openDetails": ["Advanced comparison and layout"],
+            "openDetails": ["Settings"],
             "actions": [
               {
                 "type": "evaluate",
-                "script": "async () => { const app = window.__GBDRAW_APP__; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('orthogroup'); app.losat.executionMode = 'auto'; app.losat.totalThreadBudget = 'safe'; app.losat.parallelWorkers = undefined; app.losat.threadsPerJob = '32'; }"
+                "script": "async () => { const app = window.__GBDRAW_APP__; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('orthogroup'); app.losatExecution.executionMode = 'auto'; app.losatExecution.totalThreadBudget = 'safe'; app.losatExecution.parallelWorkers = undefined; app.losatExecution.threadsPerJob = '32'; }"
               },
               {
                 "type": "waitForFunction",
-                "script": "() => Array.from(document.querySelectorAll('[data-linear-advanced-comparison] section')).some((section) => section.textContent.includes('Runtime and reproducibility'))"
+                "script": "() => Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).some((section) => section.textContent.includes('Runtime and reproducibility'))"
               },
               {
                 "type": "evaluate",
-                "script": "const section = Array.from(document.querySelectorAll('[data-linear-advanced-comparison] section')).find((node) => node.textContent.includes('Runtime and reproducibility')); if (!section) throw new Error('Runtime and reproducibility section was not found.'); section.dataset.capture = 'majanivirus-runtime'; section.scrollIntoView({ block: 'center' });"
+                "script": "const section = Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).find((node) => node.textContent.includes('Runtime and reproducibility')); if (!section) throw new Error('Runtime and reproducibility section was not found.'); section.dataset.capture = 'majanivirus-runtime'; section.scrollIntoView({ block: 'center' });"
               }
             ],
             "selector": "[data-capture='majanivirus-runtime']",
@@ -303,15 +303,15 @@
               "mode": "linear",
               "linearComparisonPlan.mode": "adjacent",
               "linearComparisonPlan.defaultSource": "losat",
-              "losat.executionMode": "auto",
-              "losat.totalThreadBudget": "safe",
-              "losat.threadsPerJob": "32"
+              "losatExecution.executionMode": "auto",
+              "losatExecution.totalThreadBudget": "safe",
+              "losatExecution.threadsPerJob": "32"
             },
             "visibleText": ["Runtime and reproducibility", "Parallel runs"],
             "visibleControls": [
-              {"label": "Execution", "value": "auto"},
-              {"label": "Total threads", "value": "safe"},
-              {"label": "Threads per run", "value": "32"}
+              {"selector": "[data-capture='majanivirus-runtime'] select[aria-label='LOSAT execution']", "value": "auto"},
+              {"selector": "[data-capture='majanivirus-runtime'] select[aria-label='LOSAT total threads']", "value": "safe"},
+              {"selector": "[data-capture='majanivirus-runtime'] select[aria-label='LOSAT threads per run']", "value": "32"}
             ]
           }
         }
@@ -505,13 +505,13 @@
     },
     {
       "title": "Inspect a similarity-group ribbon",
-      "body": "Click a pairwise match ribbon to inspect the gbdraw group ID, annotation-derived display name, member count, and record coverage. The table below the summary lists all member proteins.",
+      "body": "Click a pairwise match ribbon to inspect the gbdraw group ID, annotation-derived display name, and the count of genes and records. The table below lists the member proteins.",
       "operations": [
         {
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-08-01-orthogroup-popup.webp",
             "alt": "Selected og_31 pairwise ribbon beside the similarity-group popup for wsv360-like protein.",
-            "caption": "Click the highlighted og_31 ribbon; the compact popup summary shows wsv360-like protein with 9 members across all 9 records."
+            "caption": "Click the highlighted og_31 ribbon; the popup shows wsv360-like protein, 9 genes in 9 records, and the first rows of the member table."
           },
           "capture": {
             "source": "webapp",
@@ -551,15 +551,15 @@
               },
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.pairwise-match-popup'); const section = popup?.querySelector('.pairwise-match-popup-section'); const title = section?.querySelector('.pairwise-match-popup-section-title'); const rows = Array.from(section?.querySelectorAll('.pairwise-match-popup-row') || []).slice(0, 4); if (!popup || !title || rows.length !== 4) throw new Error('Compact og_31 summary not found.'); popup.children[0]?.setAttribute('data-capture', 'og31-popup-header'); title.setAttribute('data-capture', 'og31-popup-summary-title'); rows.forEach((row, index) => row.setAttribute('data-capture', `og31-popup-summary-row-${index + 1}`));"
+                "script": "const popup = document.querySelector('.pairwise-match-popup'); const count = popup?.querySelector('[data-match-group-count]'); const rows = Array.from(popup?.querySelectorAll('[data-match-group] tbody tr') || []); const lastShown = rows[Math.min(rows.length, 4) - 1]?.querySelector('td'); if (!popup || !count || !lastShown) throw new Error('Compact og_31 member table not found.'); popup.children[0]?.setAttribute('data-capture', 'og31-popup-header'); count.setAttribute('data-capture', 'og31-popup-count'); lastShown.setAttribute('data-capture', 'og31-popup-member-row'); document.activeElement?.blur();"
               }
             ],
-            "clipSelectors": ["path[data-gbdraw-pairwise-match-id='comparison1_match1']", "[data-capture='og31-popup-header']", "[data-capture='og31-popup-summary-title']", "[data-capture^='og31-popup-summary-row-']"],
+            "clipSelectors": ["path[data-gbdraw-pairwise-match-id='comparison1_match1']", "[data-capture='og31-popup-header']", "[data-capture='og31-popup-count']", "[data-capture='og31-popup-member-row']"],
             "highlightSelector": "path[data-gbdraw-pairwise-match-id='comparison1_match1']",
             "cropPadding": {
               "top": 24,
               "right": 24,
-              "bottom": 24,
+              "bottom": 2,
               "left": 24
             },
             "waitForSelector": ".pairwise-match-popup"

@@ -21,6 +21,7 @@ from xml.etree import ElementTree
 
 from gbdraw.session_io import CURRENT_SESSION_VERSION
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
+from gbdraw.web_support.feature_catalog import FEATURE_CATALOG_SCHEMA
 
 if __package__:
     from ._scenario_support import (
@@ -30,6 +31,7 @@ if __package__:
         assert_exact_workdir_files,
         checkout_subprocess_environment,
         copy_declared_inputs,
+        executable_source,
         extract_executable_block,
         inspect_standard_svg,
         validate_joint_chloroplast,
@@ -47,6 +49,7 @@ else:
         assert_exact_workdir_files,
         checkout_subprocess_environment,
         copy_declared_inputs,
+        executable_source,
         extract_executable_block,
         inspect_standard_svg,
         validate_joint_chloroplast,
@@ -1496,8 +1499,7 @@ def _assert_generated_tables_are_recorded(
     tables = _GENERATED_TABLES.get(scenario_id, {})
     if not tables:
         return
-    execution = chapter["execution"]
-    relative_source = execution.get("source", chapter.get("destination"))
+    relative_source = executable_source(chapter)
     source_path = Path(__file__).resolve().parents[2] / str(relative_source)
     source = source_path.read_text(encoding="utf-8")
     for table_source in tables.values():
@@ -2257,7 +2259,7 @@ def _assert_export_set(workdir: Path) -> None:
     if (
         len(scripts) != 1
         or len(metadata) != 1
-        or metadata[0].attrib.get("data-schema") != "4"
+        or metadata[0].attrib.get("data-schema") != str(FEATURE_CATALOG_SCHEMA)
         or any(
             token not in interactive_source
             for token in (
@@ -2342,7 +2344,7 @@ def _assert_tutorial_interactive_handoff(workdir: Path) -> None:
         interactive_root.attrib.get("data-gbdraw-interactive-svg") != "true"
         or len(feature_ids) != 37
         or len(metadata) != 1
-        or metadata[0].attrib.get("data-schema") != "4"
+        or metadata[0].attrib.get("data-schema") != str(FEATURE_CATALOG_SCHEMA)
         or "COX1" not in interactive_source
         or any(
             token not in interactive_source

@@ -3,9 +3,12 @@ from __future__ import annotations
 import base64
 from collections import Counter
 from collections.abc import Callable
+import csv
 import gzip
+import hashlib
 import json
 from pathlib import Path
+import shlex
 import subprocess
 import sys
 from xml.etree import ElementTree as ET
@@ -14,6 +17,7 @@ import pytest
 import gbdraw.web_support.feature_catalog as feature_catalog_module
 from gbdraw.features.ids import compute_feature_hash_from_parts
 from gbdraw.session_io import (
+    CURRENT_FEATURE_CATALOG_SCHEMA,
     CURRENT_SESSION_VERSION,
     LOSAT_DERIVED_CACHE_SCHEMA,
     NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
@@ -41,6 +45,7 @@ from tools.prepare_interactive_gallery_assets import (
 )
 from tools.refresh_gallery_sessions import (
     TEST_INPUT_SESSION_FILES,
+    TEST_INPUT_SESSION_ROOT,
     VIBRIO_EXPANDED_HARD_LIMIT,
     VIBRIO_EXPANDED_REGRESSION_CEILING,
     VIBRIO_EXPECTED_RAW_PAIRS,
@@ -62,8 +67,8 @@ from tools.refresh_gallery_sessions import (
 
 pytestmark = pytest.mark.gallery
 
-BUNDLED_REQUEST_SCHEMAS = frozenset({5, 6, 7, CANONICAL_REQUEST_SCHEMA})
-BUNDLED_SESSION_VERSIONS = frozenset({41, 42, CURRENT_SESSION_VERSION})
+BUNDLED_REQUEST_SCHEMAS = frozenset({CANONICAL_REQUEST_SCHEMA})
+BUNDLED_SESSION_VERSIONS = frozenset({CURRENT_SESSION_VERSION})
 
 
 def test_default_refresh_inventory_covers_gallery_and_test_input_sessions() -> None:
@@ -357,13 +362,75 @@ def test_current_session_catalog_structure_rejects_duplicate_payloads(
         _validate_current_session_catalog_structure(session_path, session)
 
 
-def test_vibrio_gallery_session_retains_complete_compact_cache(
+def test_current_session_catalog_structure_accepts_drawn_selector(
+    tmp_path: Path,
+) -> None:
+    session_path = tmp_path / "current.gbdraw-session.json"
+    session = {
+        "resources": {},
+        "editorState": {
+            "featureCatalog": {
+                "schema": 5,
+                "items": [
+                    {
+                        "resultIndex": 0,
+                        "resultName": "result",
+                        "recordKeys": ["record-key"],
+                        "features": [
+                            {
+                                "svgId": "rendered",
+                                "recordKey": "record-key",
+                                "biologicalFeatureId": "biological",
+                                "fillColor": "#000000",
+                                "drawnSelector": {"hash": "abc"},
+                            }
+                        ],
+                        "biologicalFeatures": [
+                            {
+                                "recordKey": "record-key",
+                                "biologicalFeatureId": "biological",
+                            }
+                        ],
+                        "orthogroups": [],
+                        "annotations": [],
+                        "comparisonMatches": [],
+                    }
+                ],
+            }
+        },
+    }
+
+    _validate_current_session_catalog_structure(session_path, session)
+
+
+def test_vibrio_gallery_session_stores_resolved_comparisons_and_raw_cache(
     load_cached_gallery_session: Callable[[Path], dict[str, object]],
 ) -> None:
+    """Load and the first Generate reuse the stored result (Owner, 2026-10-09).
+
+    The request carries the collinear result and the marker that reuses it, so
+    the first Generate after Load does not compute the comparisons again. The
+    raw LOSATP cache stays, so a changed setting recomputes without LOSATP.
+    """
+
     path = _session_path("vibrio-harveyi-group-collinear")
     session = load_cached_gallery_session(path)
 
-    assert session["renderRequest"]["schema"] in BUNDLED_REQUEST_SCHEMAS
+    request = session["renderRequest"]
+    assert request["schema"] in BUNDLED_REQUEST_SCHEMAS
+    comparisons = request["comparisons"]
+    assert [comparison["kind"] for comparison in comparisons] == [
+        "collinearityResult",
+        "generatedProteinComparison",
+    ]
+    assert comparisons[1]["mode"] == "none"
+    assert session["resources"][comparisons[0]["resourceId"]]["kind"] == (
+        "collinearity-result"
+    )
+    assert session["modes"]["linear"]["config"]["losat"]["blastp"]["mode"] == (
+        "collinear"
+    )
+    assert session["losatDerivedCache"]["entries"] == []
 
     protein_entries = [
         entry
@@ -378,6 +445,79 @@ def test_vibrio_gallery_session_retains_complete_compact_cache(
         )
         for entry in protein_entries
     } == VIBRIO_EXPECTED_RAW_PAIRS
+
+
+_GALLERY_ROOT = Path(__file__).parents[1] / "gbdraw" / "web" / "gallery"
+_GALLERY_ENTRIES = json.loads(
+    (_GALLERY_ROOT / "examples.json").read_text(encoding="utf-8")
+)
+_SEQUENCE_INPUT_SUFFIXES = frozenset(
+    {".gb", ".gbk", ".gbff", ".gff", ".gff3", ".fa", ".fas", ".fasta", ".fna"}
+)
+
+
+def _declared_input_names(entry: dict[str, object]) -> set[str]:
+    """The input files a Gallery entry declares: Files plus command inputs."""
+
+    declared = {str(name) for name in entry["featureSources"]}
+    args = shlex.split(str(entry["command"]))
+    declared.update(
+        Path(arg).name
+        for arg in args
+        if Path(arg).suffix.lower() in _SEQUENCE_INPUT_SUFFIXES
+    )
+    for flag, value in zip(args, args[1:]):
+        if flag != "--records_table":
+            continue
+        table = Path(__file__).parents[1] / value
+        with table.open(encoding="utf-8", newline="") as handle:
+            for row in csv.DictReader(handle, delimiter="\t"):
+                declared.update(
+                    Path(row[column]).name
+                    for column in ("gbk", "gff", "fasta")
+                    if row.get(column)
+                )
+    return declared
+
+
+def _record_source_original_names(session: dict[str, object]) -> list[str]:
+    resources = session["resources"]
+    original_names = (session.get("webFiles") or {}).get("resourceOriginalNames") or {}
+    resource_ids: list[str] = []
+    for record in session["renderRequest"]["records"]:
+        for field in ("resourceId", "gffResourceId", "fastaResourceId"):
+            resource_id = record["source"].get(field)
+            if resource_id and resource_id not in resource_ids:
+                resource_ids.append(resource_id)
+    names = []
+    for resource_id in resource_ids:
+        name = original_names.get(resource_id)
+        if name is None:
+            name = str(resources[resource_id].get("name") or "")
+            name = name.removeprefix(f"{resource_id}-")
+        names.append(name)
+    return names
+
+
+@pytest.mark.parametrize(
+    "entry", [pytest.param(entry, id=entry["id"]) for entry in _GALLERY_ENTRIES]
+)
+def test_gallery_session_record_sources_are_the_declared_input_files(
+    entry: dict[str, object],
+    load_cached_gallery_session: Callable[[Path], dict[str, object]],
+) -> None:
+    """One declared input file is one Session resource with its own name.
+
+    A Session that stores each record of a multi-record file as its own
+    resource names resources that no declared input has, or repeats one.
+    """
+
+    session = load_cached_gallery_session(_GALLERY_ROOT / str(entry["session"]))
+    names = _record_source_original_names(session)
+
+    assert names
+    assert len(names) == len(set(names)), names
+    assert set(names) <= _declared_input_names(entry), names
 
 
 def test_gallery_session_inventory_matches_files_and_examples() -> None:
@@ -402,8 +542,6 @@ def test_all_bundled_sessions_use_supported_request_and_current_artifact_schemas
     assert len(paths) == 11
     for path in paths:
         session = load_cached_gallery_session(path)
-        # Published Sessions advance through canonical refreshes without forcing
-        # unrelated Gallery examples into the same asset-only change.
         assert session["version"] in BUNDLED_SESSION_VERSIONS, path
         assert session["renderRequest"]["schema"] in BUNDLED_REQUEST_SCHEMAS, path
         assert (
@@ -470,7 +608,7 @@ def _staged_geometry_session(
         "results": [{"name": "result", "content": "<svg></svg>"}],
         "editorState": {
             "featureCatalog": {
-                "schema": 4,
+                "schema": CURRENT_FEATURE_CATALOG_SCHEMA,
                 "items": [
                     {
                         "resultIndex": 0,
@@ -775,6 +913,29 @@ def test_staged_gallery_validator_allows_custom_extra_spacing(
         )
 
 
+def test_refresh_leaves_a_test_input_pipeline_unresolved(tmp_path: Path) -> None:
+    # The Generate-pipeline specs load this input, so its orthogroup pipeline
+    # stays; only public Gallery Sessions store resolved comparisons.
+    name = TEST_INPUT_SESSION_FILES[0]
+    source = tmp_path / name
+    destination = tmp_path / "refreshed" / name
+    destination.parent.mkdir()
+    source.write_bytes((TEST_INPUT_SESSION_ROOT / name).read_bytes())
+
+    def pipelines(path: Path) -> list[tuple[str, object]]:
+        return [
+            (item["kind"], item.get("mode"))
+            for item in load_session(path)["renderRequest"]["comparisons"]
+        ]
+
+    before = pipelines(source)
+    assert ("generatedProteinComparison", "orthogroup") in before
+
+    _refresh_one_session(source, destination_path=destination)
+
+    assert pipelines(destination) == before
+
+
 def test_refresh_records_resolved_track_geometry(
     tmp_path: Path,
 ) -> None:
@@ -799,6 +960,279 @@ def test_refresh_records_resolved_track_geometry(
     assert geometry["mode"] == "circular"
     assert geometry["source"] == "resolved"
     assert geometry["records"][0]["axisRadiusPx"] > 0
+
+
+@pytest.mark.parametrize(
+    "example",
+    [
+        pytest.param(example, id=example.id)
+        for example in gallery_assets_module.EXAMPLES
+        if "Multi-record" in example.tags
+    ],
+)
+def test_multi_record_gallery_sessions_are_built_from_their_declared_commands(
+    example: gallery_assets_module.GallerySessionExample,
+) -> None:
+    """Refresh rebuilds a multi-record example from its command and inputs.
+
+    Replaying a stored Session keeps whatever resources it holds, so a Session
+    once split per record would stay split. The declared command reads each
+    input file as one source, and its inputs resolve in ``command_dir``.
+    """
+
+    declared = refresh_gallery_sessions_module._declared_session_example(
+        example.session_path
+    )
+    assert declared is example
+    args = shlex.split(example.command)
+    inputs = [
+        value
+        for flag, value in zip(args, args[1:])
+        if flag in {"--gbk", "--gff", "--fasta", "--records_table"}
+    ]
+    assert inputs
+    for value in inputs:
+        assert (example.command_cwd / value).is_file(), value
+
+
+def _declared_input_files(example: gallery_assets_module.GallerySessionExample) -> list[Path]:
+    args = shlex.split(example.command)
+    files = []
+    for flag, value in zip(args, args[1:]):
+        if flag in {"--gbk", "--gff", "--fasta"}:
+            files.append(example.command_cwd / value)
+        elif flag == "--records_table":
+            table = example.command_cwd / value
+            with table.open(encoding="utf-8", newline="") as handle:
+                files.extend(
+                    table.parent / row[column]
+                    for row in csv.DictReader(handle, delimiter="\t")
+                    for column in ("gbk", "gff", "fasta")
+                    if row.get(column)
+                )
+    return files
+
+
+@pytest.mark.parametrize(
+    "example",
+    [
+        pytest.param(example, id=example.id)
+        for example in gallery_assets_module.EXAMPLES
+        if example.session_from_command
+    ],
+)
+def test_declared_command_gallery_sessions_store_their_input_files_unchanged(
+    example: gallery_assets_module.GallerySessionExample,
+    load_cached_gallery_session: Callable[[Path], dict[str, object]],
+) -> None:
+    """Each record source holds its declared input file byte for byte.
+
+    The CLI stores an input file whose records it draws unchanged as that
+    file, so Web Load binds the same bytes the Result was drawn from.
+    """
+
+    declared = {
+        hashlib.sha256(path.read_bytes()).hexdigest(): path.name
+        for path in _declared_input_files(example)
+    }
+    session = load_cached_gallery_session(example.session_path)
+    resource_ids = {
+        record["source"][field]
+        for record in session["renderRequest"]["records"]
+        for field in ("resourceId", "gffResourceId", "fastaResourceId")
+        if record["source"].get(field)
+    }
+    stored = {
+        resource_id: declared.get(
+            hashlib.sha256(base64.b64decode(session["resources"][resource_id]["data"])).hexdigest()
+        )
+        for resource_id in resource_ids
+    }
+    assert None not in stored.values(), stored
+    assert sorted(stored.values()) == sorted(set(declared.values()))
+
+
+def test_replayed_gallery_sessions_have_no_declared_command_example() -> None:
+    assert (
+        refresh_gallery_sessions_module._declared_session_example(
+            _session_path("lambda_basic_linear")
+        )
+        is None
+    )
+
+
+@pytest.mark.linear
+def test_declared_command_refresh_keeps_one_file_as_one_resource(
+    tmp_path: Path,
+) -> None:
+    """A Gallery Session built from a records table keeps two Files.
+
+    Each multi-record GenBank file is one resource named after it, and its
+    records are bound by record ID on the rows the table declares.
+    """
+
+    from tests.test_losatp_source_batching import _fake_losat
+
+    inputs = Path(__file__).parent / "test_inputs"
+    for name, members in (
+        ("left.gbk", ("BGC0000708.gbk", "BGC0000709.gbk")),
+        ("right.gbk", ("BGC0000711.gbk", "BGC0000712.gbk")),
+    ):
+        (tmp_path / name).write_text(
+            "".join((inputs / member).read_text(encoding="utf-8") for member in members),
+            encoding="utf-8",
+        )
+    table = tmp_path / "records.tsv"
+    table.write_text(
+        "gbk\trecord_id\ttopology\tdisplay_start\trow\n"
+        "left.gbk\tBGC0000708\tcircular\t1001\t1\nleft.gbk\tBGC0000709\t\t\t1\n"
+        "right.gbk\tBGC0000711\t\t\t2\nright.gbk\tBGC0000712\t\t\t2\n",
+        encoding="utf-8",
+    )
+    # A headerless colour table and a label table, which the Vibrio command no
+    # longer declares but the Session builder must still read as one resource each.
+    colors = tmp_path / "colors.tsv"
+    colors.write_text("CDS\tprotein_id\tCAG38690\t#6a3d9a\tFirst CDS\n", encoding="utf-8")
+    labels = tmp_path / "labels.tsv"
+    labels.write_text(
+        "record\tfeature_selector\tlabel_visibility\tlabel_text\n"
+        "BGC0000708\tprotein_id=CAG38690.1\ton\tFirst\n",
+        encoding="utf-8",
+    )
+    from tools.prepare_interactive_gallery_assets import (
+        VIBRIO_HARVEYI_GROUP_COMMAND,
+    )
+
+    # The Vibrio command with these inputs and a fake LOSAT runtime.
+    losat, _log = _fake_losat(tmp_path)
+    argv = shlex.split(VIBRIO_HARVEYI_GROUP_COMMAND)
+    for flag, value in (
+        ("--records_table", str(table)),
+        ("--losat_threads", "1"),
+        ("-o", "declared"),
+    ):
+        argv[argv.index(flag) + 1] = value
+    command = shlex.join(
+        [
+            *argv,
+            "-t",
+            str(colors),
+            "--feature_override_table",
+            str(labels),
+            "--losat_bin",
+            losat,
+        ]
+    )
+    declared = tmp_path / "stage" / "declared.gbdraw-session.json"
+    declared.parent.mkdir()
+    destination = tmp_path / "published.gbdraw-session.json"
+
+    refresh_gallery_sessions_module._declared_command_session(
+        command, declared, env=refresh_gallery_sessions_module._cli_env()
+    )
+    _refresh_one_session(
+        declared, destination_path=destination, declared_command=True
+    )
+    refresh_gallery_sessions_module._assert_declared_figure(declared, destination)
+
+    session = load_session(destination)
+    assert session["cliInvocation"]["args"] == shlex.split(command)[2:]
+    assert _stored_output_prefixes(session) == ("declared", "declared")
+    # The Session stores the collinear result its command computed, with the
+    # marker that reuses it, as the Web writes it after a Generate.
+    comparisons = session["renderRequest"]["comparisons"]
+    assert [(item["kind"], item.get("mode")) for item in comparisons] == [
+        ("collinearityResult", None),
+        ("generatedProteinComparison", "none"),
+    ]
+    # The Web's configuration overrides, so Session Load needs no Worker.
+    options = session["renderRequest"]["diagramOptions"]
+    assert options.get("config") is None
+    assert options["configOverrides"]["objects.scale.interval"] == 750000
+    # The tables publish as the declared command wrote them (OV-215, OV-216).
+    assert [
+        (row["recordKey"], row["labelVisibility"], row["labelText"])
+        for row in options["featureOverrides"]
+    ] == [("record-1", "on", "First")]
+    color_table = options["colors"]["colorTable"] or options["colors"]["colorTableFile"]
+    assert "CAG38690\t#6a3d9a\tFirst CDS" in base64.b64decode(
+        session["resources"][color_table["resourceId"]]["data"]
+    ).decode("utf-8")
+    records = session["renderRequest"]["records"]
+    assert records[0]["display"] == {"isCircular": True, "startCoordinate": 1001}
+    assert [
+        (
+            record["source"]["resourceId"],
+            record["selector"],
+            record["presentation"]["gridRow"],
+        )
+        for record in records
+    ] == [
+        ("record-1-genbank", {"kind": "recordId", "value": "BGC0000708"}, 1),
+        ("record-1-genbank", {"kind": "recordId", "value": "BGC0000709"}, 1),
+        ("record-3-genbank", {"kind": "recordId", "value": "BGC0000711"}, 2),
+        ("record-3-genbank", {"kind": "recordId", "value": "BGC0000712"}, 2),
+    ]
+    assert _record_source_original_names(session) == ["left.gbk", "right.gbk"]
+    genbank = [
+        base64.b64decode(resource["data"]).decode("utf-8")
+        for resource in session["resources"].values()
+        if resource["kind"] == "genbank"
+    ]
+    assert [text.count("\nLOCUS ") + text.startswith("LOCUS ") for text in genbank] == [2, 2]
+
+
+@pytest.mark.circular
+def test_declared_circular_command_refresh_keeps_one_file_as_one_resource(
+    tmp_path: Path,
+) -> None:
+    """The Vnig command builds a Session with one resource for its one file.
+
+    The command names its input by file name, so it runs in the directory that
+    holds the input; the published Session binds both records of the file by
+    record ID and draws the figure of the declared command.
+    """
+
+    from tools.prepare_interactive_gallery_assets import VNIG_COMMAND
+
+    source = Path(__file__).parent / "fixtures" / "web_batch_two_records.gb"
+    (tmp_path / "two-records.gbff").write_bytes(source.read_bytes())
+    argv = shlex.split(VNIG_COMMAND)
+    argv[argv.index("--gbk") + 1] = "two-records.gbff"
+    argv[argv.index("-o") + 1] = "declared"
+    # Keep the positions of the two records the file holds.
+    for position in ("#3@2", "#4@2", "#5@2", "#6@2"):
+        index = argv.index(position)
+        del argv[index - 1 : index + 1]
+    command = shlex.join(argv)
+    declared = tmp_path / "stage" / "declared.gbdraw-session.json"
+    declared.parent.mkdir()
+    destination = tmp_path / "published.gbdraw-session.json"
+
+    refresh_gallery_sessions_module._declared_command_session(
+        command, declared, env=refresh_gallery_sessions_module._cli_env(), cwd=tmp_path
+    )
+    _refresh_one_session(
+        declared, destination_path=destination, declared_command=True
+    )
+    refresh_gallery_sessions_module._assert_declared_figure(declared, destination)
+
+    session = load_session(destination)
+    assert session["cliInvocation"]["args"] == argv[2:]
+    assert _stored_output_prefixes(session) == ("declared", "declared")
+    assert [
+        (record["source"]["resourceId"], record["selector"])
+        for record in session["renderRequest"]["records"]
+    ] == [
+        ("record-1-genbank", {"kind": "recordId", "value": "TESTA"}),
+        ("record-1-genbank", {"kind": "recordId", "value": "TESTB"}),
+    ]
+    assert _record_source_original_names(session) == ["two-records.gbff"]
+    assert [
+        resource_id
+        for resource_id, resource in session["resources"].items()
+        if resource["kind"] == "genbank"
+    ] == ["record-1-genbank"]
 
 
 def test_linear_schema5_publication_preserves_materialized_cardinality_round_trip(
@@ -839,7 +1273,7 @@ def test_staged_gallery_validator_accepts_current_artifact_schemas(
         "results": [{"name": "result", "content": "<svg></svg>"}],
         "editorState": {
             "featureCatalog": {
-                "schema": 4,
+                "schema": CURRENT_FEATURE_CATALOG_SCHEMA,
                 "items": [
                     {
                         "resultIndex": 0,
@@ -865,6 +1299,30 @@ def test_staged_gallery_validator_accepts_current_artifact_schemas(
     }
 
     _validate_staged_gallery_session(session_path, session)
+
+    # A Gallery Session stores its protein comparison results; a pipeline that
+    # the first Generate would run again is rejected (perf-014x D-17 /
+    # docs-restructure D-20). A test input keeps its pipeline.
+    def with_protein_mode(mode: str) -> dict[str, object]:
+        request = dict(
+            session["renderRequest"],
+            comparisons=[
+                {
+                    "kind": "generatedProteinComparison",
+                    "mode": mode,
+                    "pairs": [],
+                    "settings": {},
+                }
+            ],
+        )
+        return dict(session, renderRequest=request)
+
+    _validate_staged_gallery_session(session_path, with_protein_mode("none"))
+    with pytest.raises(ValueError, match="resolved protein comparison results"):
+        _validate_staged_gallery_session(session_path, with_protein_mode("collinear"))
+    _validate_staged_gallery_session(
+        tmp_path / TEST_INPUT_SESSION_FILES[0], with_protein_mode("orthogroup")
+    )
 
     stale_version = dict(session, version=33)
     with pytest.raises(ValueError, match=f"expected {CURRENT_SESSION_VERSION}"):
@@ -1509,7 +1967,8 @@ def test_gallery_session_features_seed_biological_catalog() -> None:
         }
     )
 
-    assert list(context.features) == [feature]
+    # A schema-4 catalog reads as schema 5 without drawn selector values.
+    assert list(context.features) == [{**feature, "drawnSelector": None}]
     assert list(context.biological_features) == [biological, hidden]
 
 
@@ -1542,15 +2001,11 @@ def test_orthogroup_gallery_preserves_session_members_and_rendered_ids(
         if element.get("id") == "gbdraw-interactive-feature-metadata"
     )
     payload = json.loads(metadata.text or "{}")
-    assert payload["schema"] == 4
+    assert payload["schema"] == feature_catalog_module.FEATURE_CATALOG_SCHEMA
     assert len(payload["items"]) == 1
     item = payload["items"][0]
     session_catalog = session["editorState"]["featureCatalog"]
-    if session_catalog["schema"] == 3:
-        session_catalog = feature_catalog_module.promote_legacy_feature_catalog(
-            session_catalog
-        )
-    assert session_catalog["schema"] == 4
+    assert session_catalog["schema"] == feature_catalog_module.FEATURE_CATALOG_SCHEMA
     session_item = session_catalog["items"][0]
     assert item == session_item
 
@@ -1662,7 +2117,7 @@ def test_refresh_rewrites_retired_flags_in_the_recorded_cli_invocation(
     path.write_bytes(gzip.compress(payload) if compressed else payload)
 
     refresh_gallery_sessions_module._canonicalize_recorded_cli_invocation(
-        path, mode="linear"
+        path, mode="linear", gallery_id="s"
     )
 
     raw = path.read_bytes()
@@ -1683,3 +2138,266 @@ def test_refresh_rewrites_retired_flags_in_the_recorded_cli_invocation(
     ]
     (binding,) = session["cliInvocation"]["fileBindings"]
     assert args[binding["argIndex"]] == "A.gb"
+
+
+def _stored_output_prefixes(session: dict[str, object]) -> tuple[object, object]:
+    """The Output Prefix as the form field of the Result's mode slice and the
+    render request store it."""
+
+    mode = session["renderRequest"]["mode"]  # type: ignore[index]
+    return (
+        session["modes"][mode]["config"]["form"]["prefix"],  # type: ignore[index]
+        session["renderRequest"]["output"]["prefix"],  # type: ignore[index]
+    )
+
+
+def _recorded_output(args: list[str]) -> str:
+    (value,) = [
+        args[index + 1] for index, arg in enumerate(args) if arg in {"-o", "--output"}
+    ]
+    return value
+
+
+@pytest.mark.parametrize(
+    "gallery_id",
+    ["HmmtDNA_basic_circular", "HmmtDNA_ATskew", "lambda_basic_linear"],
+)
+def test_stored_session_refresh_publishes_gallery_id_and_input_file_names(
+    gallery_id: str,
+    tmp_path: Path,
+) -> None:
+    """The stored-Session route names the output and the inputs for the Gallery.
+
+    A Generate after Load names its files after the stored Output Prefix, so the
+    prefix is the Gallery id the card command uses, in the form field and the
+    render request. The recorded invocation uses the id for ``-o`` and no
+    maintainer-local path for an input.
+    """
+
+    source = _session_path(gallery_id)
+    staged = tmp_path / source.name
+    staged.write_bytes(source.read_bytes())
+    destination = tmp_path / "published" / source.name
+    destination.parent.mkdir()
+
+    _refresh_one_session(staged, destination_path=destination)
+
+    session = load_session(destination)
+    assert _stored_output_prefixes(session) == (gallery_id, gallery_id)
+    args = session["cliInvocation"]["args"]
+    assert _recorded_output(args) == gallery_id
+    assert not [arg for arg in args if arg.startswith(("/", "~"))], args
+    for binding in session["cliInvocation"]["fileBindings"]:
+        assert args[binding["argIndex"]] == binding["name"]
+
+
+def test_refresh_sets_every_stored_output_prefix() -> None:
+    session = {
+        "modes": {
+            "circular": {"config": {"form": {"prefix": "out", "species": "kept"}}},
+            "linear": {"config": {"form": {"prefix": "out"}}},
+        },
+        "renderRequest": {"mode": "circular", "output": {"prefix": "out", "format": "svg"}},
+    }
+
+    assert refresh_gallery_sessions_module._set_output_prefix(session, "card-id") == 3
+    assert _stored_output_prefixes(session) == ("card-id", "card-id")
+    assert session["modes"]["linear"]["config"]["form"]["prefix"] == "card-id"
+    assert session["modes"]["circular"]["config"]["form"]["species"] == "kept"
+    assert refresh_gallery_sessions_module._set_output_prefix(session, "card-id") == 0
+
+
+def test_refresh_resolves_web_default_colors_over_their_palette() -> None:
+    # The Web stores the Default colors rows that differ from the palette; the
+    # CLI replay stores them resolved over it, and `finalize` compares the two
+    # (OV-375). A resolved table is left as it is.
+    if sys.version_info >= (3, 11):
+        import tomllib
+    else:
+        import tomli as tomllib
+
+    rows = "CDS\t#d3d3d3\nskew_low\t#ad72e3\n"
+    resource = {
+        "kind": "colors-default-colors-file",
+        "size": len(rows),
+        "encoding": "base64",
+        "data": base64.b64encode(rows.encode()).decode(),
+    }
+    session = {
+        "renderRequest": {
+            "diagramOptions": {
+                "colors": {
+                    "defaultColors": None,
+                    "defaultColorsPalette": "orange",
+                    "defaultColorsFile": {"resourceId": "colors-default-colors-file", "representation": "file"},
+                }
+            }
+        },
+        "resources": {"colors-default-colors-file": resource},
+    }
+    palettes = tomllib.loads(Path("gbdraw/data/color_palettes.toml").read_text(encoding="utf-8"))
+
+    assert refresh_gallery_sessions_module._resolve_default_colors(session) == 1
+    text = base64.b64decode(resource["data"]).decode()
+    assert dict(line.split("\t") for line in text.splitlines()) == {
+        **palettes["orange"],
+        "CDS": "#d3d3d3",
+        "skew_low": "#ad72e3",
+    }
+    assert resource["size"] == len(text.encode())
+    assert refresh_gallery_sessions_module._resolve_default_colors(session) == 0
+    assert refresh_gallery_sessions_module._resolve_default_colors({"renderRequest": {"diagramOptions": {}}}) == 0
+
+
+def test_refresh_stores_one_record_sources_as_exactly_one() -> None:
+    # The Web writes `all` for a Linear GenBank file without selector; the CLI
+    # replay materializes a one-record file as `exactly_one`, and `finalize`
+    # compares the two (OV-376). A file with more records keeps `all`.
+    one = Path("tests/test_inputs/NC_001416.gb").read_bytes()
+
+    def record(index: int) -> dict[str, object]:
+        return {"recordKey": f"record-{index}", "cardinality": "all", "selector": None, "region": None,
+                "source": {"kind": "genbank", "resourceId": f"record-{index}-genbank"}}
+
+    session = {
+        "renderRequest": {"mode": "linear", "records": [record(1), record(2), {**record(3), "selector": {"kind": "recordIndex", "index": 0}}]},
+        "resources": {
+            f"record-{index}-genbank": {"encoding": "base64", "data": base64.b64encode(payload).decode()}
+            for index, payload in ((1, one), (2, one + one), (3, one))
+        },
+    }
+
+    assert refresh_gallery_sessions_module._materialize_one_record_sources(session) == 1
+    assert [entry["cardinality"] for entry in session["renderRequest"]["records"]] == ["exactly_one", "all", "all"]
+    assert refresh_gallery_sessions_module._materialize_one_record_sources(session) == 0
+
+
+def _write_invocation(tmp_path: Path, args: list[str], bindings: list[dict[str, object]]) -> Path:
+    path = tmp_path / "session.json"
+    path.write_text(
+        json.dumps(
+            {
+                "cliInvocation": {
+                    "schema": 1,
+                    "mode": "circular",
+                    "args": args,
+                    "fileBindings": bindings,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_recorded_invocation_uses_gallery_id_and_input_file_names(
+    tmp_path: Path,
+) -> None:
+    root = Path(refresh_gallery_sessions_module.REPO_ROOT)
+    inside = root / "tests" / "test_inputs" / "HmmtDNA.gbk"
+    # Recorded in another checkout of the repository (a maintainer's machine).
+    foreign = "/mnt/c/Users/someone/GitHub/gbdraw/tests/test_inputs/NC_001416.gb"
+    path = _write_invocation(
+        tmp_path,
+        ["--gbk", str(inside), foreign, "-o", "/tmp/work/old", "--labels", "out"],
+        [
+            {"argIndex": 1, "slot": "files.c_gb", "name": "HmmtDNA.gbk"},
+            {"argIndex": 2, "slot": "files.c_gb2", "name": "NC_001416.gb"},
+        ],
+    )
+
+    refresh_gallery_sessions_module._canonicalize_recorded_cli_invocation(
+        path, mode="circular", gallery_id="card-id"
+    )
+
+    assert json.loads(path.read_text(encoding="utf-8"))["cliInvocation"]["args"] == [
+        "--gbk",
+        "HmmtDNA.gbk",
+        "NC_001416.gb",
+        "-o",
+        "card-id",
+        "--labels",
+        "out",
+    ]
+
+
+def test_recorded_invocation_keeps_relative_inputs(tmp_path: Path) -> None:
+    path = _write_invocation(
+        tmp_path,
+        ["--output=old", "--gbk", "HmmtDNA.gbk"],
+        [{"argIndex": 2, "slot": "files.c_gb", "name": "HmmtDNA.gbk"}],
+    )
+
+    refresh_gallery_sessions_module._canonicalize_recorded_cli_invocation(
+        path, mode="circular", gallery_id="card-id"
+    )
+
+    assert json.loads(path.read_text(encoding="utf-8"))["cliInvocation"]["args"] == [
+        "--output=card-id",
+        "--gbk",
+        "HmmtDNA.gbk",
+    ]
+
+
+@pytest.mark.parametrize(
+    "outside",
+    ["/tmp/elsewhere/HmmtDNA.gbk", "/home/someone/data/gbdraw/tests/missing.gbk", "C:\\data\\HmmtDNA.gbk"],
+)
+def test_recorded_invocation_rejects_an_input_outside_the_repository(
+    outside: str,
+    tmp_path: Path,
+) -> None:
+    path = _write_invocation(
+        tmp_path,
+        ["--gbk", outside, "-o", "x"],
+        [{"argIndex": 1, "slot": "files.c_gb", "name": "HmmtDNA.gbk"}],
+    )
+
+    with pytest.raises(ValueError, match="outside the repository"):
+        refresh_gallery_sessions_module._canonicalize_recorded_cli_invocation(
+            path, mode="circular", gallery_id="card-id"
+        )
+
+
+def test_declared_command_invocation_keeps_its_declared_inputs(tmp_path: Path) -> None:
+    path = _write_invocation(
+        tmp_path,
+        ["--gbk", "/elsewhere/in.gbk", "-o", "old"],
+        [{"argIndex": 1, "slot": "files.c_gb", "name": "in.gbk"}],
+    )
+
+    refresh_gallery_sessions_module._canonicalize_recorded_cli_invocation(
+        path, mode="circular", gallery_id="card-id", declared_command=True
+    )
+
+    assert json.loads(path.read_text(encoding="utf-8"))["cliInvocation"]["args"] == [
+        "--gbk",
+        "/elsewhere/in.gbk",
+        "-o",
+        "card-id",
+    ]
+
+
+def test_feature_sources_of_a_web_saved_session_come_from_its_record_resources() -> None:
+    # A Web-saved Session has no cliInvocation; its input names live in
+    # webFiles.resourceOriginalNames, keyed by each record's source resource.
+    session = {
+        "renderRequest": {
+            "records": [
+                {"recordKey": "record-1", "source": {"kind": "genbank", "resourceId": "record-1-genbank"}},
+                {"recordKey": "record-2", "source": {"kind": "genbank", "resourceId": "record-2-genbank"}},
+            ]
+        },
+        "webFiles": {
+            "resourceOriginalNames": {
+                "colors-default-colors-file": "colors-default-colors.tsv",
+                "record-2-genbank": "second.gbk",
+                "record-1-genbank": "first.gbk",
+            }
+        },
+    }
+
+    assert gallery_assets_module._session_feature_sources(session) == [
+        "first.gbk",
+        "second.gbk",
+    ]

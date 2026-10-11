@@ -7,9 +7,9 @@ from gbdraw.layout.record_coordinates import DisplayFragment
 from dataclasses import dataclass, field
 from math import isfinite
 from types import MappingProxyType
-from typing import Literal, Mapping, TypeAlias
+from typing import Literal, Mapping, TypeAlias, cast
 
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from pandas import DataFrame
 
 from gbdraw.core.color import normalize_hex_color
 from gbdraw.exceptions import ValidationError
@@ -19,7 +19,8 @@ from gbdraw.io.record_select import RecordSelector
 
 def _finite(value: object, name: str, *, positive: bool = False, nonnegative: bool = False) -> float:
     try:
-        number = float(value)
+        # TypeError/ValueError from non-numeric input is reported below.
+        number = float(cast("float | str", value))
     except (TypeError, ValueError) as exc:
         raise ValidationError(f"{name} must be numeric.") from exc
     if not isfinite(number):
@@ -41,7 +42,7 @@ def _color(value: object | None, name: str, *, optional: bool = False) -> str | 
         raise ValidationError(f"{name} cannot be empty.")
     try:
         return normalize_hex_color(resolve_color_to_hex(text))
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, ValidationError) as exc:
         raise ValidationError(f"{name} is not a valid color: {text!r}.") from exc
 
 
@@ -125,14 +126,41 @@ class FeatureSpan:
         selectors = tuple(parse_feature_selector(item) for item in self.selectors)
         if not selectors:
             raise ValidationError("FeatureSpan requires at least one selector.")
-        if self.envelope not in {"outer_bounds", "segments"}:
-            raise ValidationError("envelope must be 'outer_bounds' or 'segments'.")
-        if self.circular_path not in {"shortest", "forward", "reverse"}:
-            raise ValidationError("circular_path must be 'shortest', 'forward', or 'reverse'.")
+        _validate_feature_envelope(self)
         object.__setattr__(self, "selectors", selectors)
 
 
-RegionTarget: TypeAlias = CoordinateSpan | FeatureSpan
+def _validate_feature_envelope(target: FeatureSpan | FeatureIdentitySpan) -> None:
+    if target.envelope not in {"outer_bounds", "segments"}:
+        raise ValidationError("envelope must be 'outer_bounds' or 'segments'.")
+    if target.circular_path not in {"shortest", "forward", "reverse"}:
+        raise ValidationError("circular_path must be 'shortest', 'forward', or 'reverse'.")
+
+
+@dataclass(frozen=True)
+class FeatureIdentitySpan:
+    """One feature by original-source identity, as in feature overrides (design Q4).
+
+    It keeps naming the same feature after crop, reverse complement, reordering
+    and record duplication. The typed request planner resolves it.
+    """
+
+    record_key: str
+    biological_feature_id: str
+    envelope: Literal["outer_bounds", "segments"] = "outer_bounds"
+    circular_path: Literal["shortest", "forward", "reverse"] = "shortest"
+
+    def __post_init__(self) -> None:
+        # Deferred: gbdraw.features.source imports this package.
+        from gbdraw.features.source import FeatureIdentity
+
+        identity = FeatureIdentity(self.record_key, self.biological_feature_id)
+        object.__setattr__(self, "record_key", identity.record_key)
+        object.__setattr__(self, "biological_feature_id", identity.biological_feature_id)
+        _validate_feature_envelope(self)
+
+
+RegionTarget: TypeAlias = CoordinateSpan | FeatureSpan | FeatureIdentitySpan
 
 
 @dataclass(frozen=True)
@@ -205,8 +233,10 @@ class RegionAnnotation:
         annotation_id = str(self.id).strip()
         if not annotation_id:
             raise ValidationError("Annotation id cannot be empty.")
-        if not isinstance(self.target, (CoordinateSpan, FeatureSpan)):
-            raise ValidationError("Annotation target must be CoordinateSpan or FeatureSpan.")
+        if not isinstance(self.target, (CoordinateSpan, FeatureSpan, FeatureIdentitySpan)):
+            raise ValidationError(
+                "Annotation target must be CoordinateSpan, FeatureSpan or FeatureIdentitySpan."
+            )
         if self.mark not in {"line", "bracket", "band", "highlight"}:
             raise ValidationError(
                 "Annotation mark must be 'line', 'bracket', 'band', or 'highlight'."
@@ -350,16 +380,24 @@ def annotation_track_params_from_mapping(params: Mapping[str, object]) -> Annota
             style_override = RegionAnnotationStyle(**dict(style_override))
         except TypeError as exc:
             raise ValidationError(f"Invalid annotation style_override: {exc}") from exc
+    # The casts below only satisfy the checker: AnnotationTrackParams.__post_init__
+    # validates every one of these values at run time.
     return AnnotationTrackParams(
         set_id=str(raw.get("set_id", "")),
-        marks=raw.get("marks"),  # type: ignore[arg-type]
-        lane_gap_px=raw.get("lane_gap_px", 3.0),  # type: ignore[arg-type]
-        padding_px=raw.get("padding_px", 2.0),  # type: ignore[arg-type]
-        overflow=str(raw.get("overflow", "error")).strip().lower(),  # type: ignore[arg-type]
+        marks=cast("tuple[str, ...] | None", raw.get("marks")),
+        lane_gap_px=cast(float, raw.get("lane_gap_px", 3.0)),
+        padding_px=cast(float, raw.get("padding_px", 2.0)),
+        overflow=cast(
+            'Literal["error", "compress", "clip"]',
+            str(raw.get("overflow", "error")).strip().lower(),
+        ),
         show_labels=show_labels,
-        style_override=style_override,  # type: ignore[arg-type]
+        style_override=cast("RegionAnnotationStyle | None", style_override),
         anchor_slot=(None if raw.get("anchor_slot") is None else str(raw["anchor_slot"])),
-        layer=str(raw.get("layer", "foreground")).strip().lower(),  # type: ignore[arg-type]
+        layer=cast(
+            'Literal["underlay", "foreground"]',
+            str(raw.get("layer", "foreground")).strip().lower(),
+        ),
         cover_anchor=cover_anchor,
     )
 

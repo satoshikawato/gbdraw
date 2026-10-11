@@ -5,6 +5,9 @@ const { existsSync, mkdirSync, readFileSync } = require('node:fs');
 const os = require('node:os');
 const { join, resolve } = require('node:path');
 const {
+  CURRENT_FEATURE_CATALOG_SCHEMA,
+  CURRENT_REQUEST_SCHEMA,
+  CURRENT_SESSION_VERSION,
   evaluateWithRetainedPromise,
   getDiagramWorkerActivity,
   openApp
@@ -120,10 +123,13 @@ const compatibilityCatalog = catalog ? {
 } : catalog;
 const losatEntries = document.losatCache?.entries || [];
 const request = document.renderRequest;
-const legacyRequest = request?.schema === 8
+// Schema 9 adds only diagramOptions.featureOverrides (empty for this Session).
+const legacyRequest = request?.schema >= 8
   ? {
       ...request,
       schema: 7,
+      diagramOptions: Object.fromEntries(Object.entries(request.diagramOptions || {})
+        .filter(([key]) => key !== 'featureOverrides')),
       layout: { recordGapPx: request.layout?.recordGapPx },
       comparisons: request.comparisons.map((comparison) => (
         comparison.kind === 'generatedProteinComparison'
@@ -132,13 +138,16 @@ const legacyRequest = request?.schema === 8
       ))
     }
   : request;
-const schema8LayoutDefaults = request?.schema === 8 &&
+// No translation is written as an empty list (CLI) or as zero offsets (Web).
+const schema8LayoutDefaults = request?.schema >= 8 &&
   request.layout?.multiRecordPositions === null &&
   request.layout?.similarityAlignment === null &&
   Array.isArray(request.layout?.recordTranslations) &&
-  request.layout.recordTranslations.length === request.records.length &&
-  request.layout.recordTranslations.every((entry, index) => (
-    entry.recordKey === request.records[index].recordKey && entry.x === 0 && entry.y === 0
+  (request.layout.recordTranslations.length === 0 || (
+    request.layout.recordTranslations.length === request.records.length &&
+    request.layout.recordTranslations.every((entry, index) => (
+      entry.recordKey === request.records[index].recordKey && entry.x === 0 && entry.y === 0
+    ))
   ));
 process.stdout.write(JSON.stringify({
   format: document.format,
@@ -480,11 +489,11 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   const savedSummary = inspectSession(savedPath);
   expect(sourceSummary).toMatchObject({
     format: 'gbdraw-session',
-    version: 44,
-    requestSchema: 8,
+    version: CURRENT_SESSION_VERSION,
+    requestSchema: CURRENT_REQUEST_SCHEMA,
     schema8LayoutDefaults: true,
-    catalogSchema: 4,
-    resourceCount: 4,
+    catalogSchema: CURRENT_FEATURE_CATALOG_SCHEMA,
+    resourceCount: 3,
     resultCount: 1,
     catalogItems: 1,
     catalogBiologicalFeatures: 18_782,
@@ -494,11 +503,11 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   });
   expect(savedSummary).toMatchObject({
     format: 'gbdraw-session',
-    version: 44,
-    requestSchema: 8,
+    version: CURRENT_SESSION_VERSION,
+    requestSchema: CURRENT_REQUEST_SCHEMA,
     schema8LayoutDefaults: true,
-    catalogSchema: 4,
-    resourceCount: 4,
+    catalogSchema: CURRENT_FEATURE_CATALOG_SCHEMA,
+    resourceCount: 3,
     resultCount: 1,
     catalogItems: 1,
     catalogBiologicalFeatures: 18_782,
@@ -561,7 +570,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   await freshContext.close();
 
   const crossSurface = crossSurfaceAcceptance(savedPath, testInfo.outputPath('cross-surface'));
-  expect(crossSurface.reader).toEqual({ version: 44, mode: 'linear', records: 4 });
+  expect(crossSurface.reader).toEqual({ version: CURRENT_SESSION_VERSION, mode: 'linear', records: 4 });
   expect(crossSurface.cliExitCode).toBe(0);
   expect(crossSurface.cliSvgBytes).toBeGreaterThan(0);
 

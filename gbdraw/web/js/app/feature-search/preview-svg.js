@@ -1,20 +1,16 @@
+// @ts-check
 import {
   getFeatureElementIndex,
   getFeatureElements
 } from '../feature-editor/svg-actions.js';
-import { setClassToken } from '../../services/svg-serialization.js';
-
-export const PREVIEW_FEATURE_SEARCH_MATCH_CLASS = 'gbdraw-preview-feature-search-match';
-export const PREVIEW_FEATURE_SEARCH_ACTIVE_CLASS = 'gbdraw-preview-feature-search-active-match';
-export const PREVIEW_FEATURE_SEARCH_DIMMED_CLASS = 'gbdraw-preview-feature-search-dimmed';
-export const PREVIEW_FEATURE_SEARCH_ROOT_ACTIVE_CLASS = 'gbdraw-preview-feature-search-results-active';
-export const PREVIEW_FEATURE_SEARCH_ROOT_UPDATING_CLASS = 'gbdraw-preview-feature-search-updating';
-
-export const PREVIEW_FEATURE_SEARCH_CLASSES = Object.freeze([
-  PREVIEW_FEATURE_SEARCH_MATCH_CLASS,
+import {
   PREVIEW_FEATURE_SEARCH_ACTIVE_CLASS,
-  PREVIEW_FEATURE_SEARCH_DIMMED_CLASS
-]);
+  PREVIEW_FEATURE_SEARCH_MATCH_CLASS,
+  PREVIEW_FEATURE_SEARCH_ROOT_ACTIVE_CLASS,
+  PREVIEW_FEATURE_SEARCH_ROOT_UPDATING_CLASS,
+  setClassToken,
+  stripPreviewFeatureSearchClasses
+} from '../../services/svg-serialization.js';
 
 export const resolvePreviewSvg = (root) => {
   if (!root) return null;
@@ -22,19 +18,26 @@ export const resolvePreviewSvg = (root) => {
   return root.querySelector?.('svg') || null;
 };
 
-export const stripPreviewFeatureSearchClasses = (svg) => {
-  if (!svg) return;
-  setClassToken(svg, PREVIEW_FEATURE_SEARCH_ROOT_ACTIVE_CLASS, false);
-  setClassToken(svg, PREVIEW_FEATURE_SEARCH_ROOT_UPDATING_CLASS, false);
-  PREVIEW_FEATURE_SEARCH_CLASSES.forEach((className) => {
-    svg.querySelectorAll(`.${className}`).forEach((element) => {
-      setClassToken(element, className, false);
-    });
-  });
-};
-
 export const getPreviewFeatureElementIndex = (svg) => getFeatureElementIndex(svg);
 
+/**
+ * The DOM state that the search classes last applied to one preview SVG.
+ * @typedef {object} PreviewFeatureSearchDomState
+ * @property {SVGSVGElement | null} svg
+ * @property {boolean} queryActive
+ * @property {Set<string>} matchedIds
+ * @property {string} activeId
+ * @property {number} updateGeneration
+ * @property {any} firstFrame handle of the first animation frame (or timeout)
+ * @property {any} secondFrame handle of the second animation frame (or timeout)
+ */
+
+/**
+ * Rendered feature elements by SVG id.
+ * @typedef {Map<string, Element[]>} FeatureElementIndex
+ */
+
+/** @returns {PreviewFeatureSearchDomState} */
 export const createPreviewFeatureSearchDomState = () => ({
   svg: null,
   queryActive: false,
@@ -69,6 +72,16 @@ const setFeatureClass = (featureIndex, svgId, className, enabled) => {
   });
 };
 
+/**
+ * @typedef {object} ApplyPreviewActiveSearchMatchOptions
+ * @property {FeatureElementIndex} [featureIndex]
+ * @property {PreviewFeatureSearchDomState} [appliedState]
+ * @property {string} [activeId]
+ */
+
+/**
+ * @param {ApplyPreviewActiveSearchMatchOptions} [options]
+ */
 export const applyPreviewActiveSearchMatch = ({
   featureIndex,
   appliedState,
@@ -89,6 +102,19 @@ export const applyPreviewActiveSearchMatch = ({
   }
 };
 
+/**
+ * @typedef {object} ApplyPreviewFeatureSearchClassesOptions
+ * @property {SVGSVGElement | null} [svg]
+ * @property {string[]} [matches]
+ * @property {string} [activeId]
+ * @property {boolean} [queryActive]
+ * @property {FeatureElementIndex | null} [featureIndex]
+ * @property {PreviewFeatureSearchDomState} [appliedState]
+ */
+
+/**
+ * @param {ApplyPreviewFeatureSearchClassesOptions} [options]
+ */
 export const applyPreviewFeatureSearchClasses = ({
   svg,
   matches = [],
@@ -123,6 +149,9 @@ export const applyPreviewFeatureSearchClasses = ({
   return appliedState;
 };
 
+/**
+ * @param {ApplyPreviewFeatureSearchClassesOptions} [options]
+ */
 export const schedulePreviewFeatureSearchClasses = (options = {}) => {
   const { svg, appliedState } = options;
   if (!svg || !appliedState) return appliedState;
@@ -154,6 +183,7 @@ export const disposePreviewFeatureSearchDomState = (appliedState) => {
   appliedState.activeId = '';
 };
 
+/** @param {FeatureElementIndex | null} [featureIndex] */
 const getFeatureRect = (svg, featureId, featureIndex = null) => {
   const elements = getFeatureElements(svg, featureId, featureIndex);
   let left = Infinity;
@@ -174,6 +204,7 @@ const getFeatureRect = (svg, featureId, featureIndex = null) => {
   return { left, top, right, bottom, width: right - left, height: bottom - top };
 };
 
+/** @param {FeatureElementIndex | null} [featureIndex] */
 export const getFeatureScreenCenter = (svg, featureId, featureIndex = null) => {
   const rect = getFeatureRect(svg, featureId, featureIndex);
   if (!rect) return null;
@@ -183,6 +214,19 @@ export const getFeatureScreenCenter = (svg, featureId, featureIndex = null) => {
   };
 };
 
+/**
+ * @typedef {object} CenterPreviewFeatureOptions
+ * @property {SVGSVGElement | null} [svg]
+ * @property {string} [featureId]
+ * @property {FeatureElementIndex | null} [featureIndex]
+ * @property {HTMLElement | null} [canvasContainer]
+ * @property {{ x: number, y: number } | null} [canvasPan]
+ * @property {number} [maxDelta]
+ */
+
+/**
+ * @param {CenterPreviewFeatureOptions} [options]
+ */
 export const centerPreviewFeature = ({
   svg,
   featureId,

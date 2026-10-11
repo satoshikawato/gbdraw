@@ -22,7 +22,7 @@ from gbdraw.web_support.error_adapter import serialize_web_error
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PYTHON_HELPERS = REPO_ROOT / "gbdraw" / "web" / "js" / "app" / "python-helpers.js"
-WEB_WORDING = REPO_ROOT / "gbdraw" / "web" / "js" / "services" / "error-normalization.js"
+WEB_WORDING = REPO_ROOT / "gbdraw" / "web" / "js" / "utils" / "error-normalization.js"
 UNCLASSIFIED = {"UNKNOWN", "VALIDATION_UNCLASSIFIED"}
 # Placeholder values for interpolations: empty, numbers, private text, a #index.
 FILLS = ("", "0", "1", "PRIVATE", "#1")
@@ -54,7 +54,7 @@ UNPROVEN_BASELINE: dict[str, tuple[int, str]] = {
     "gbdraw/analysis/ortholog_paths.py": (25, _COMPARISON),
     "gbdraw/analysis/protein_artifacts.py": (4, _COMPARISON),
     "gbdraw/analysis/protein_colinearity.py": (115, _COMPARISON),
-    "gbdraw/annotations/feature_underlays.py": (3, _ANNOTATIONS),
+    "gbdraw/annotations/feature_underlays.py": (1, _ANNOTATIONS),
     "gbdraw/annotations/io.py": (7, _ANNOTATIONS),
     "gbdraw/annotations/layout.py": (5, _ANNOTATIONS),
     "gbdraw/annotations/models.py": (47, _ANNOTATIONS),
@@ -63,28 +63,26 @@ UNPROVEN_BASELINE: dict[str, tuple[int, str]] = {
     "gbdraw/api/config.py": (1, _TYPED_API),
     "gbdraw/api/diagram.py": (64, _TYPED_API),
     "gbdraw/api/io.py": (7, _TYPED_API),
-    "gbdraw/api/options.py": (62, _TYPED_API),
+    "gbdraw/api/options.py": (61, _TYPED_API),
     "gbdraw/api/prepared.py": (3, _TYPED_API),
     "gbdraw/api/record_planning.py": (39, _TYPED_API),
     "gbdraw/api/render.py": (10, _TYPED_API),
     "gbdraw/api/request_render.py": (47, _TYPED_API),
-    "gbdraw/api/requests.py": (93, _TYPED_API),
-    "gbdraw/api/session_compat.py": (40, _SESSION),
+    "gbdraw/api/requests.py": (92, _TYPED_API),
+    "gbdraw/api/session_compat.py": (38, _SESSION),
     "gbdraw/circular.py": (3, _CLI),
     "gbdraw/cli_utils/common.py": (3, _CLI),
-    "gbdraw/cli_utils/session.py": (13, _SESSION),
+    "gbdraw/cli_utils/session.py": (11, _SESSION),
     "gbdraw/config/models/canvas.py": (10, _CONFIG),
     "gbdraw/config/models/labels.py": (6, _CONFIG),
     "gbdraw/config/models/objects.py": (19, _CONFIG),
     "gbdraw/config/models/render_profiles.py": (1, _CONFIG),
     "gbdraw/config/modify.py": (11, _CONFIG),
-    "gbdraw/diagrams/circular/assemble.py": (1, _LAYOUT),
-    "gbdraw/diagrams/circular/radial_layout.py": (4, _LAYOUT),
     "gbdraw/diagrams/linear/assemble.py": (5, _LAYOUT),
     "gbdraw/diagrams/linear/orthogroup_alignment.py": (5, _COMPARISON),
     "gbdraw/features/factory.py": (1, _FEATURES),
     "gbdraw/features/ids.py": (2, _FEATURES),
-    "gbdraw/features/placement.py": (34, _FEATURES),
+    "gbdraw/features/placement.py": (18, _FEATURES),
     "gbdraw/features/source.py": (1, _FEATURES),
     "gbdraw/features/tracks.py": (4, _FEATURES),
     "gbdraw/interface.py": (34, _TYPED_API),

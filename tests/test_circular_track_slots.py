@@ -228,6 +228,7 @@ def _capture_circular_core_geometry(
                 str(canvas_config.profile.config.canvas.circular.track_type),
                 bool(canvas_config.profile.strandedness),
                 tick_track_channel_override=tick_track_channel_override,
+                length_threshold=int(canvas_config.profile.config.labels.length_threshold.circular),
             )
             width_px = center * (max(float(tick_min_ratio), float(tick_max_ratio)) - min(float(tick_min_ratio), float(tick_max_ratio)))
         captured["ticks"] = (
@@ -334,7 +335,8 @@ def _capture_circular_radial_layout(
     monkeypatch: pytest.MonkeyPatch,
     *,
     track_type: str,
-    circular_track_slots: list[CircularTrackSlot] | None = None,
+    circular_track_slots: list[CircularTrackSlot] | list[str] | None = None,
+    circular_track_axis_index: int | None = None,
     center_reserved_radius: float | None = None,
     input_filename: str = "HmmtDNA.gbk",
 ):
@@ -358,6 +360,8 @@ def _capture_circular_radial_layout(
     kwargs = {}
     if circular_track_slots is not None:
         kwargs["circular_track_slots"] = circular_track_slots
+    if circular_track_axis_index is not None:
+        kwargs["circular_track_axis_index"] = circular_track_axis_index
     if center_reserved_radius is not None:
         kwargs["center_reserved_radius"] = center_reserved_radius
 
@@ -906,10 +910,16 @@ def test_circular_preset_slots_do_not_emit_origin_metadata() -> None:
 
 
 @pytest.mark.circular
-def test_blank_builtin_numeric_slots_reflow_as_movable_stack_without_explicit_radius() -> None:
+def test_blank_builtin_numeric_slots_keep_the_preset_anchors_of_the_default_stack() -> None:
+    # GX-19: a preset stack with nothing typed resolves like the default stack;
+    # here the preset anchors fit, so both keep them.
     from gbdraw.canvas import CircularCanvasConfigurator
     from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
-    from gbdraw.diagrams.circular.presets import CircularPresetContext, circular_track_slots_from_preset_order
+    from gbdraw.diagrams.circular.presets import (
+        CircularPresetContext,
+        circular_radial_plan_for_preset,
+        circular_track_slots_from_preset_order,
+    )
     from gbdraw.diagrams.circular.radial_layout import resolve_circular_radial_layout
 
     record = _load_record()
@@ -963,12 +973,23 @@ def test_blank_builtin_numeric_slots_reflow_as_movable_stack_without_explicit_ra
 
     assert not by_id["gc_content"].explicit_anchor
     assert not by_id["gc_skew"].explicit_anchor
-    assert by_id["gc_content"].anchor_radius_px != pytest.approx(
+    assert by_id["gc_content"].anchor_radius_px == pytest.approx(
         float(canvas_config.radius) * float(track_dict["2"])
     )
-    assert by_id["gc_skew"].anchor_radius_px != pytest.approx(
+    assert by_id["gc_skew"].anchor_radius_px == pytest.approx(
         float(canvas_config.radius) * float(track_dict["3"])
     )
+    default_plan = circular_radial_plan_for_preset("middle", context)
+    default_layout = resolve_circular_radial_layout(
+        total_length=len(record.seq),
+        canvas_config=canvas_config,
+        slots=default_plan.slots,
+        preferred_anchor_slot_ids=default_plan.preferred_anchor_slot_ids,
+    )
+    expected = _slot_geometry(default_layout)
+    assert _slot_geometry(layout).keys() == expected.keys()
+    for key, geometry in _slot_geometry(layout).items():
+        assert geometry == pytest.approx(expected[key], abs=1e-6), key
     assert by_id["features"].packing_band_px.center_px > by_id["ticks"].packing_band_px.center_px
     assert by_id["ticks"].packing_band_px.center_px > by_id["gc_content"].packing_band_px.center_px
     assert by_id["gc_content"].packing_band_px.center_px > by_id["gc_skew"].packing_band_px.center_px
@@ -2493,3 +2514,143 @@ def test_cli_center_reserved_radius_forwards_value(
     )
 
     assert captured["center_reserved_radius"] == pytest.approx(48.0)
+
+
+# The Web "Reset to <preset>" stacks as CLI slots: feature lane and axis index.
+_WEB_PRESET_FEATURE_LANES = {"tuckin": ("inside", 0), "middle": ("split", 0), "spreadout": ("outside", 1)}
+
+
+def _web_preset_stack(track_type: str, **radius: str) -> tuple[list[str], int]:
+    lane, axis_index = _WEB_PRESET_FEATURE_LANES[track_type]
+    rows = {
+        "features": f"features:features@lane_direction={lane}",
+        "ticks": "ticks:ticks@side=inside,tick_label_layout=label_in_tick_out",
+        "gc_content": "gc_content:dinucleotide_content@side=inside",
+        "gc_skew": "gc_skew:dinucleotide_skew@side=inside",
+    }
+    return [
+        f"{spec},r={radius[slot_id]}" if slot_id in radius else spec for slot_id, spec in rows.items()
+    ], axis_index
+
+
+def _web_preset_layout(
+    monkeypatch: pytest.MonkeyPatch,
+    track_type: str,
+    input_filename: str = "HmmtDNA.gbk",
+    **radius: str,
+):
+    slots, axis_index = _web_preset_stack(track_type, **radius)
+    layout = _capture_circular_radial_layout(
+        monkeypatch,
+        track_type=track_type,
+        circular_track_slots=slots,
+        circular_track_axis_index=axis_index,
+        input_filename=input_filename,
+    )
+    monkeypatch.undo()
+    return layout
+
+
+@pytest.mark.parametrize("track_type", ["tuckin", "middle", "spreadout"])
+@pytest.mark.parametrize(("slot_id", "radius"), [("gc_content", 0.6), ("gc_skew", 0.45)])
+def test_pinned_numeric_row_keeps_unpinned_rows_above_it_in_stack_order(
+    monkeypatch: pytest.MonkeyPatch,
+    track_type: str,
+    slot_id: str,
+    radius: float,
+) -> None:
+    # TK-01: the rows above a pinned inside row pack between it and the axis.
+    layout = _web_preset_layout(monkeypatch, track_type, **{slot_id: str(radius)})
+
+    pinned = next(slot for slot in layout.slots if slot.id == slot_id)
+    assert pinned.explicit_anchor
+    assert pinned.anchor_radius_px == pytest.approx(radius * layout.axis.radius_px)
+    inside = [slot for slot in layout.slots if slot.side == "inside"]
+    assert [slot.id for slot in inside][-2:] == ["gc_content", "gc_skew"]
+    assert inside[0].reserved_band_px.outer_px < layout.axis.radius_px
+    for outer_slot, inner_slot in zip(inside, inside[1:]):
+        assert inner_slot.reserved_band_px.outer_px <= outer_slot.reserved_band_px.inner_px + 1e-6
+
+
+def _slot_geometry(layout) -> dict[str, tuple[float, ...]]:
+    return {
+        slot.id: (
+            float(slot.anchor_radius_px),
+            float(slot.resolved_width_px),
+            *(
+                edge
+                for band in (slot.packing_band_px, slot.draw_band_px, slot.reserved_band_px)
+                for edge in ((band.inner_px, band.outer_px) if band is not None else ())
+            ),
+        )
+        for slot in layout.slots
+    }
+
+
+def test_preset_lane_rows_reflow_when_their_preset_anchors_leave_no_room(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # GX-19: a preset anchor is a preference. Here keeping gc_skew on its
+    # preset lane leaves the ticks no room above the pinned feature row, so
+    # gc_skew reflows with the Auto rows, as before.
+    layout = _capture_circular_radial_layout(
+        monkeypatch,
+        track_type="tuckin",
+        circular_track_slots=[
+            "features:features@lane_direction=inside,r=0.6",
+            "ticks:ticks@side=inside,tick_label_layout=label_in_tick_out",
+            "gc_skew:dinucleotide_skew@side=inside,w=10px",
+            "at_skew:dinucleotide_skew@side=inside,nt=AT",
+        ],
+        circular_track_axis_index=0,
+    )
+
+    inside = [slot for slot in layout.slots if slot.side == "inside" and slot.renderer != "features"]
+    assert [slot.id for slot in inside] == ["ticks", "gc_skew", "at_skew"]
+    for outer_slot, inner_slot in zip(inside, inside[1:]):
+        assert inner_slot.reserved_band_px.outer_px <= outer_slot.reserved_band_px.inner_px + 1e-6
+
+
+@pytest.mark.parametrize("input_filename", ["HmmtDNA.gbk", "MG1655.gbk"])
+@pytest.mark.parametrize("track_type", ["tuckin", "middle", "spreadout"])
+def test_preset_stack_with_nothing_typed_matches_the_default_stack(
+    monkeypatch: pytest.MonkeyPatch,
+    input_filename: str,
+    track_type: str,
+) -> None:
+    # GX-19: turning on "Use custom stack" without typing anything keeps the
+    # default figure. On MG1655 the numeric rows used to pack under the ticks
+    # instead of keeping their preset anchors.
+    default = _capture_circular_radial_layout(monkeypatch, track_type=track_type, input_filename=input_filename)
+    monkeypatch.undo()
+    preset_stack = _web_preset_layout(monkeypatch, track_type, input_filename)
+
+    observed = _slot_geometry(preset_stack)
+    expected = _slot_geometry(default)
+    assert observed.keys() == expected.keys()
+    for key, geometry in expected.items():
+        assert observed[key] == pytest.approx(geometry, abs=1e-6), key
+
+
+@pytest.mark.parametrize("input_filename", ["HmmtDNA.gbk", "MG1655.gbk"])
+@pytest.mark.parametrize("track_type", ["tuckin", "middle", "spreadout"])
+@pytest.mark.parametrize("slot_id", ["features", "ticks", "gc_content", "gc_skew"])
+def test_row_pinned_at_its_auto_radius_keeps_the_auto_layout(
+    monkeypatch: pytest.MonkeyPatch,
+    input_filename: str,
+    track_type: str,
+    slot_id: str,
+) -> None:
+    # GX-17: typing a row's Auto radius back gives the Auto layout, also where
+    # Auto compressed the numeric rows (MG1655 Tuckin): a pinned row with an
+    # Auto width compresses like Auto.
+    auto = _web_preset_layout(monkeypatch, track_type, input_filename)
+    auto_radius = next(slot for slot in auto.slots if slot.id == slot_id).anchor_radius_px
+
+    pinned = _web_preset_layout(monkeypatch, track_type, input_filename, **{slot_id: f"{auto_radius!r}px"})
+
+    observed = _slot_geometry(pinned)
+    expected = _slot_geometry(auto)
+    assert observed.keys() == expected.keys()
+    for key, geometry in expected.items():
+        assert observed[key] == pytest.approx(geometry, abs=1e-6), key

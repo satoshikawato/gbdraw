@@ -6,8 +6,8 @@ import json
 import hashlib
 from dataclasses import replace
 from pathlib import Path
-from collections.abc import Mapping, Sequence
-from typing import Any
+from collections.abc import Mapping, Sequence, Set
+from typing import Any, cast
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.record_planning import (
@@ -19,6 +19,7 @@ from gbdraw.api.requests import LinearDiagramRequest
 from gbdraw.session_request_codec import decode_canonical_request
 from gbdraw.layout.similarity_alignment import (
     AlignmentAnchorIdentity,
+    AlignmentChoiceKind,
     AlignmentEvidenceEdge,
     AlignmentRecordChoice,
     AlignmentRecordDecision,
@@ -36,7 +37,7 @@ def _object(
     keys: set[str],
     path: str,
     *,
-    optional: set[str] = frozenset(),
+    optional: Set[str] = frozenset(),
 ) -> Mapping[str, Any]:
     if (
         not isinstance(value, Mapping)
@@ -348,7 +349,7 @@ def _projection_context(value: object, resource_paths: Mapping[str, str], output
         orientations = {key: item.source_step == 1
                         for key, item in zip(keys, before.transforms, strict=True)}
     else:
-        orientations = _object(orientations, set(keys), "projection.orientations")
+        orientations = _object(orientations, set(cast("list[str]", keys)), "projection.orientations")
         orientations = {key: _boolean(value, f"projection.orientations.{key}")
                         for key, value in orientations.items()}
     records = []
@@ -559,7 +560,8 @@ def resolve_similarity_alignment_payload(
         choices.append(
             AlignmentRecordChoice(
                 record_key=_text(choice["recordKey"], f"{path}.recordKey"),
-                kind=_text(choice["kind"], f"{path}.kind"),
+                # AlignmentRecordChoice validates the text as a choice kind.
+                kind=cast(AlignmentChoiceKind, _text(choice["kind"], f"{path}.kind")),
                 anchor=(
                     _anchor(choice["anchor"], f"{path}.anchor")
                     if choice["anchor"] is not None else None

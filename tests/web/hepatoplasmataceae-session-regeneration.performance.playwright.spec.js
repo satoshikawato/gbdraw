@@ -4,6 +4,7 @@ const { existsSync, readFileSync, statSync } = require('node:fs');
 const os = require('node:os');
 const { join, resolve } = require('node:path');
 const {
+  CURRENT_FEATURE_CATALOG_SCHEMA,
   getDiagramWorkerActivity,
   openApp
 } = require('./helpers/app-lifecycle.cjs');
@@ -440,7 +441,7 @@ const assertSemanticSnapshot = (snapshot) => {
   expect(snapshot).toMatchObject({
     resultCount: 1,
     selectedResultIndex: 0,
-    catalogSchema: 4,
+    catalogSchema: CURRENT_FEATURE_CATALOG_SCHEMA,
     catalogItemCount: 1,
     catalogResultIndex: 0,
     recordKeys: EXPECTED_RECORD_KEYS,
@@ -619,7 +620,7 @@ test('exact saved Session regenerates twice with bounded work and fresh readines
       resultCount: 1,
       selectedResultIndex: 0,
       rootMounted: true,
-      catalogSchema: 4,
+      catalogSchema: CURRENT_FEATURE_CATALOG_SCHEMA,
       catalogItemCount: 1,
       catalogResultIndex: 0,
       activePlan: { mode: 'adjacent', defaultSource: 'losat', edgeCount: 0 },
@@ -639,7 +640,7 @@ test('exact saved Session regenerates twice with bounded work and fresh readines
       },
       state: {
         selectedResultCount: saved.resultCount,
-        currentCatalog: saved.catalogSchema === 4 && saved.catalogResultIndex === 0,
+        currentCatalog: saved.catalogSchema === CURRENT_FEATURE_CATALOG_SCHEMA && saved.catalogResultIndex === 0,
         activeDraftCommittedDistinct: saved.activePlan.edgeCount === 0
           && saved.committedRequest.precomputedComparisonCount === 4,
         interactiveProbePassed: true

@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import copy
 import logging
+from collections import Counter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Callable, Hashable, Literal, Sequence
+from typing import Any, Callable, Hashable, Literal, MutableMapping, Sequence, cast
 
 import pandas as pd
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
 
 from gbdraw.analysis.protein_colinearity import (
     OrthogroupGraphResult,
@@ -17,14 +18,19 @@ from gbdraw.analysis.protein_colinearity import (
     OrthogroupResult,
 )
 from gbdraw.exceptions import ValidationError
-from gbdraw.core.record_metadata import _iter_source_features, _read_coord_map, _source_feature_index
+from gbdraw.core.record_metadata import (
+    _feature_source_index_map,
+    _iter_source_features,
+    _read_coord_map,
+    _source_feature_index,
+)
 from gbdraw.io.cli_tables import (
     read_comparisons_table,
     read_conservation_table,
     read_records_table,
 )
 from gbdraw.io.comparisons import read_comparison_table
-from gbdraw.io.genome import load_gbks, load_gff_fasta
+from gbdraw.io.genome import filter_features_by_type, load_gbks, parse_gff_fasta
 from gbdraw.io.record_select import (
     RecordSelector,
     parse_record_selector,
@@ -154,6 +160,8 @@ class ResolvedRecordProvenance:
     detected_topology: Literal["circular", "linear", "unknown"] = "unknown"
     is_cropped: bool = False
     has_collection_region: bool = False
+    # No other record of the source has this record's ID, so the ID selects it.
+    source_record_id_unique: bool = True
     resolved_display: ResolvedRecordDisplay | None = None
     source_feature_catalog: tuple[SourceFeatureIdentity, ...] | None = field(default=None, repr=False)
 
@@ -178,7 +186,7 @@ class ResolvedRecordCollection:
         displays = []
         transforms = []
         for record, item in zip(self.records, self.provenance, strict=True):
-            base, step = _read_coord_map(record)
+            base, step = cast("tuple[int, Literal[-1, 1]]", _read_coord_map(record))
             cropped = item.is_cropped or bool(record.annotations.get("gbdraw_region_applied"))
             length = item.source_length
             if length is None and not cropped:
@@ -186,7 +194,8 @@ class ResolvedRecordCollection:
             try:
                 display = resolve_record_display(
                     item.display,
-                    source_length=length,
+                    # A None length is rejected by RecordDisplayTransform.
+                    source_length=cast(int, length),
                     detected_topology=item.detected_topology,
                     source_base=base,
                     source_step=step,
@@ -195,7 +204,7 @@ class ResolvedRecordCollection:
                     is_cropped=cropped,
                 )
                 transform = RecordDisplayTransform(
-                    length, base, step, display.start_coordinate, display.is_circular,
+                    cast(int, length), base, step, display.start_coordinate, display.is_circular,
                 )
             except ValidationError as exc:
                 raise ValidationError(
@@ -212,13 +221,21 @@ class ResolvedRecordCollection:
 
 
 def project_source_bound_comparisons(
-    options: LinearDiagramOptions, collection: ResolvedRecordCollection,
+    options: LinearDiagramOptions,
+    records: Sequence[SeqRecord],
+    provenance: Sequence[ResolvedRecordProvenance],
+    *,
+    search_frame: bool = False,
 ) -> LinearDiagramOptions:
-    """Reproject existing source-bound evidence into the requested record views.
+    """Reproject existing source-bound evidence into the drawn record views.
 
-    View hashes must match this source/crop's current or opposite orientation.
-    Source identities, scores and block membership remain unchanged. Coordinates
-    are record-local; the existing renderer alone applies a circular display cut.
+    View hashes must match this source/crop's current or opposite orientation;
+    each row's view IDs tell which frame it is in. Source identities, scores and
+    block membership remain unchanged. Coordinates are record-local; the
+    existing renderer alone applies a circular display cut. The diagram build
+    calls this; a planned request keeps the rows it was given, so a Session
+    saved from it keeps the search frame (OV-399). ``search_frame`` projects
+    rows of the drawn ``records`` back into each record's search frame.
     """
     frames = [comparison.matches for comparison in options.linear_comparisons or ()]
     frames.extend(options.protein_comparisons or ())
@@ -227,7 +244,9 @@ def project_source_bound_comparisons(
     if not any(not frame.empty and required <= set(frame.columns) for frame in frames):
         return options
     bindings = []
-    for record, provenance in zip(collection.records, collection.provenance, strict=True):
+    for record, item in zip(records, provenance, strict=True):
+        current: dict[int, str]
+        opposite: dict[int, str]
         current, opposite = {}, {}
         for ordinal, feature in enumerate(_iter_source_features(record.features)):
             if feature.location is None:
@@ -242,7 +261,9 @@ def project_source_bound_comparisons(
                     record_id=record.id,
                 )
         source = {feature.source_feature_index: feature.stable_feature_id
-                  for feature in provenance.source_feature_catalog or ()}
+                  for feature in item.source_feature_catalog or ()}
+        if search_frame and _read_coord_map(record)[1] == -1:
+            current, opposite = opposite, current
         bindings.append((source, current, opposite, len(record)))
 
     def project(frame: pd.DataFrame, query_index: int, subject_index: int) -> pd.DataFrame:
@@ -281,7 +302,10 @@ def project_source_bound_comparisons(
                     if not 1 <= coordinate <= length or int(coordinate) != coordinate:
                         raise ValidationError("Comparison view coordinate must be a finite genomic base within its record.")
                     updated.at[row_index, coordinate_field] = length + 1 - int(coordinate)
-                updated.at[row_index, f"{role}_view_feature_svg_id"] = ";".join(current_ids)
+                # Every ID is present: view_ids matched opposite_ids, which has the same keys.
+                updated.at[row_index, f"{role}_view_feature_svg_id"] = ";".join(
+                    cast("list[str]", current_ids)
+                )
             if updated is not None and flips[0] != flips[1] and "collinearity_orientation" in frame.columns:
                 orientation = row["collinearity_orientation"]
                 if orientation in ("plus", "minus"):
@@ -585,7 +609,7 @@ def _optional_positive_float(value: object | None, *, field_name: str) -> float 
     }:
         return None
     try:
-        numeric = float(value)
+        numeric = float(cast(Any, value))
     except (TypeError, ValueError) as exc:
         raise ValidationError(f"{field_name} values must be numeric or auto.") from exc
     if numeric <= 0:
@@ -707,11 +731,16 @@ def _source_details(
     raise ValidationError("Unsupported record input source.")
 
 
+def _gff_feature_types(
+    gff_candidate_features: Sequence[str] | None, gff_keep_all_features: bool,
+) -> frozenset[str] | None:
+    """The GFF3 feature types a request draws; ``None`` keeps every type."""
+    return None if gff_keep_all_features or gff_candidate_features is None else frozenset(gff_candidate_features)
+
+
 def _load_source_records(
     source: RecordInputSource,
     *,
-    gff_candidate_features: Sequence[str] | None,
-    gff_keep_all_features: bool,
     genbank_loader: GenBankLoader,
     gff_loader: GffFastaLoader,
 ) -> ParsedRecordInputs:
@@ -720,15 +749,15 @@ def _load_source_records(
         if isinstance(source, GenBankInputSource):
             records = genbank_loader([str(source.path)])
         elif isinstance(source, GffFastaInputSource):
+            # One parse serves every type filter: ``resolve_record_inputs`` applies it in memory.
             records = gff_loader(
-                [str(source.gff_path)],
-                [str(source.fasta_path)],
-                selected_features_set=gff_candidate_features,
-                keep_all_features=gff_keep_all_features,
+                str(source.gff_path),
+                str(source.fasta_path),
                 source_feature_catalogs=gff_catalogs,
             )
         elif isinstance(source, InMemoryRecordSource):
-            records = [source.record]
+            # The caller keeps its record: a plan must not change with it.
+            records = [copy.deepcopy(source.record)]
         else:  # pragma: no cover - RecordInput validates this union.
             raise ValidationError("Unsupported record input source.")
         if not records:
@@ -741,11 +770,7 @@ def _load_source_records(
         )
         return ParsedRecordInputs(tuple(records), catalogs)
 
-    cache_spec = _prepared_source_cache_spec(
-        source,
-        gff_candidate_features=gff_candidate_features,
-        gff_keep_all_features=gff_keep_all_features,
-    )
+    cache_spec = _prepared_source_cache_spec(source)
     if cache_spec is None:
         return load()
     key, identities = cache_spec
@@ -759,9 +784,6 @@ def _load_source_records(
 
 def _prepared_source_cache_spec(
     source: RecordInputSource,
-    *,
-    gff_candidate_features: Sequence[str] | None,
-    gff_keep_all_features: bool,
 ) -> tuple[Hashable, frozenset[PreparedResourceIdentity]] | None:
     """Build a path-independent parsed-source cache key for a Web resource."""
 
@@ -776,17 +798,7 @@ def _prepared_source_cache_spec(
         if gff_identity is None or fasta_identity is None:
             return None
         identities = frozenset({gff_identity, fasta_identity})
-        return (
-            (
-                "parsed-source-v1",
-                "gff-fasta",
-                gff_identity,
-                fasta_identity,
-                tuple(sorted(gff_candidate_features or ())),
-                bool(gff_keep_all_features),
-            ),
-            identities,
-        )
+        return ("parsed-source-v1", "gff-fasta", gff_identity, fasta_identity), identities
     return None
 
 
@@ -901,6 +913,7 @@ def _apply_provenance_annotations(
             "gbdraw_source_record_index": provenance.source_record_index,
             "gbdraw_source_record_count": provenance.source_record_count,
             "gbdraw_source_record_id": provenance.source_record_id,
+            "gbdraw_source_record_id_unique": provenance.source_record_id_unique,
             "gbdraw_record_key": provenance.record_key,
             "gbdraw_record_cardinality": provenance.cardinality.value,
             "gbdraw_source_kind": provenance.source_kind,
@@ -945,6 +958,23 @@ def _apply_collection_options(
     return records
 
 
+def _detached_record(record: SeqRecord) -> SeqRecord:
+    """Return a record whose own fields can be written without changing ``record``.
+
+    Planning writes the annotations of each resolved record; parsed sources are
+    shared by every record resolved from them. The sequence and the feature
+    objects stay shared: no later step writes them (reverse complement and
+    region crops build new features). A caller's in-memory record is copied
+    whole when its source loads.
+    """
+
+    detached = copy.copy(record)
+    detached.annotations = dict(record.annotations)
+    detached.features = list(record.features)
+    detached.dbxrefs = list(record.dbxrefs)
+    return detached
+
+
 def resolve_record_inputs(
     record_inputs: Sequence[RecordInput],
     *,
@@ -952,28 +982,34 @@ def resolve_record_inputs(
     gff_candidate_features: Sequence[str] | None,
     gff_keep_all_features: bool,
     genbank_loader: GenBankLoader = load_gbks,
-    gff_loader: GffFastaLoader = load_gff_fasta,
+    gff_loader: GffFastaLoader = parse_gff_fasta,
+    parsed_sources: MutableMapping[tuple[object, ...], ParsedRecordInputs] | None = None,
 ) -> ResolvedRecordCollection:
-    """Load each unique source once, then apply typed selection and transforms."""
+    """Load each unique source once, then apply typed selection and transforms.
+
+    ``parsed_sources`` keeps the parses across calls: a caller that resolves the
+    same sources again with other GFF3 candidate types does not parse them again.
+    """
 
     inputs = tuple(record_inputs)
     if not inputs:
         raise ValidationError("A request requires at least one RecordInput.")
-    cache: dict[tuple[object, ...], ParsedRecordInputs] = {}
+    gff_types = _gff_feature_types(gff_candidate_features, gff_keep_all_features)
+    cache = {} if parsed_sources is None else parsed_sources
+    id_counts: dict[tuple[object, ...], Counter[str]] = {}
     records: list[SeqRecord] = []
     provenance: list[ResolvedRecordProvenance] = []
     for input_index, record_input in enumerate(inputs):
         key = _source_key(record_input.source)
         parsed = cache.get(key)
         if parsed is None:
-            parsed = _load_source_records(
+            parsed = cache[key] = _load_source_records(
                 record_input.source,
-                gff_candidate_features=gff_candidate_features,
-                gff_keep_all_features=gff_keep_all_features,
                 genbank_loader=genbank_loader,
                 gff_loader=gff_loader,
             )
-            cache[key] = parsed
+        if key not in id_counts:
+            id_counts[key] = Counter(str(record.id) for record in parsed.records)
         raw_records = parsed.records
         selector = record_input.selector or _selector_from_region(record_input.region)
         source_indexes = _cardinality_indexes(
@@ -985,8 +1021,12 @@ def resolve_record_inputs(
         expands = len(source_indexes) > 1
         for source_record_index in source_indexes:
             source_record = raw_records[source_record_index]
+            if source_kind == "gff_fasta":
+                source_record = filter_features_by_type(
+                    source_record, gff_types, source_indexes=_feature_source_index_map(source_record.features),
+                )
             source_cropped = bool(source_record.annotations.get("gbdraw_region_applied"))
-            record = copy.deepcopy(source_record)
+            record = _detached_record(source_record)
             record = reverse_records(
                 (record,),
                 record_input.presentation.reverse_complement,
@@ -1013,6 +1053,9 @@ def resolve_record_inputs(
                 source_record_index=source_record_index,
                 source_record_count=len(raw_records),
                 source_record_id=str(raw_records[source_record_index].id),
+                source_record_id_unique=(
+                    id_counts[key][str(raw_records[source_record_index].id)] == 1
+                ),
                 source_kind=source_kind,
                 source_paths=source_paths,
                 record_key=record_key,

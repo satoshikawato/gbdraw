@@ -10,9 +10,9 @@ const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-record-selector-'));
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 await cp(join(sourceRoot, 'linear-record-selector.js'), join(tempRoot, 'linear-record-selector.js'));
 await writeFile(join(tempRoot, 'linear-record-selector.js'), (await readFile(join(sourceRoot, 'linear-record-selector.js'), 'utf8'))
-  .replace('../services/error-normalization.js', pathToFileURL(join(sourceRoot, '../services/error-normalization.js')).href)
-  .replace('./record-discovery.js', pathToFileURL(join(sourceRoot, 'record-discovery.js')).href), 'utf8');
-await cp(join(sourceRoot, 'record-options.js'), join(tempRoot, 'record-options.js'));
+  .replace('../utils/error-normalization.js', pathToFileURL(join(sourceRoot, '../utils/error-normalization.js')).href)
+  .replace('../services/record-options.js', pathToFileURL(join(sourceRoot, '../services/record-options.js')).href)
+  .replace('../services/record-discovery.js', pathToFileURL(join(sourceRoot, '../services/record-discovery.js')).href), 'utf8');
 
 const {
   AUTOMATIC_RECORD_OPTION_LABEL,
@@ -25,7 +25,7 @@ const {
   discoverSequenceRecords,
   normalizeSequenceRecords,
   parseSequenceRecordText
-} = await import(pathToFileURL(join(sourceRoot, 'record-discovery.js')));
+} = await import(pathToFileURL(join(sourceRoot, '..', 'services', 'record-discovery.js')));
 
 assert.equal(formatRecordLength(4641652), '4,641,652 bp');
 assert.equal(formatRecordLength(null), 'length unavailable');

@@ -6,6 +6,8 @@ const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const {
+  CURRENT_REQUEST_SCHEMA,
+  CURRENT_SESSION_VERSION,
   evaluateWithRetainedPromise,
   getDiagramWorkerActivity,
   openApp
@@ -72,29 +74,33 @@ const jsonDigest = (value) => createHash('sha256')
   .update(JSON.stringify(stableValue(value)))
   .digest('hex');
 
+// The draft of a Session's committed mode (Session 46 `modes.<mode>`).
+const sessionDraft = (session) => session.modes?.[session.renderRequest?.mode || session.ui?.mode] || {};
+
 const sessionCanonicalEvidence = (session) => {
+  const draft = sessionDraft(session);
   const active = {
-    palette: session.config?.palette,
-    colors: session.config?.colors,
-    rules: (session.config?.rules || []).map((rule) => ({
+    palette: draft.config?.palette,
+    colors: draft.config?.colors,
+    rules: (draft.config?.rules || []).map((rule) => ({
       ...rule,
       fromFile: Boolean(rule.fromFile)
     })),
-    qualifierPriorityRules: session.config?.qualifierPriorityRules,
-    filterMode: session.config?.filterMode,
-    whitelist: session.config?.whitelist,
-    blacklistText: session.config?.blacklistText,
+    qualifierPriorityRules: draft.config?.qualifierPriorityRules,
+    filterMode: draft.config?.filterMode,
+    whitelist: draft.config?.whitelist,
+    blacklistText: draft.config?.blacklistText,
     form: {
-      plot_title: session.config?.form?.plot_title,
-      labels_mode: session.config?.form?.labels_mode,
-      show_scale: session.config?.form?.show_scale
+      plot_title: draft.config?.form?.plot_title,
+      labels_mode: draft.config?.form?.labels_mode,
+      show_scale: draft.config?.form?.show_scale
     },
     adv: {
-      axis_stroke_width: session.config?.adv?.axis_stroke_width,
-      label_font_size: session.config?.adv?.label_font_size,
-      feature_width_circular: session.config?.adv?.feature_width_circular
+      axis_stroke_width: draft.config?.adv?.axis_stroke_width,
+      label_font_size: draft.config?.adv?.label_font_size,
+      feature_width_circular: draft.config?.adv?.feature_width_circular
     },
-    annotationSetIds: (session.config?.annotationSets || []).map(({ id }) => id)
+    annotationSetIds: (draft.config?.annotationSets || []).map(({ id }) => id)
   };
   return {
     renderRequestSha256: jsonDigest(session.renderRequest),
@@ -180,7 +186,7 @@ const loadCurrentSession = async (page, filePath, session) => {
   expect(probe.metrics.activeConfigCanonicalOverwriteCount || 0).toBe(0);
 
   const suppliedDomains = ACTIVE_CONFIG_DOMAINS.filter((domain) => (
-    Object.prototype.hasOwnProperty.call(session.config, domain)
+    Object.prototype.hasOwnProperty.call(sessionDraft(session).config || {}, domain)
   ));
   const restored = probe.details.find(
     (entry) => entry.name === 'currentWriterActiveConfigRestoreCount'
@@ -207,10 +213,9 @@ const saveCurrentSession = async (page, title) => {
     const resultBefore = state.results.value;
     const requestBefore = getCommittedCanonicalRenderRequest();
     const overridesBefore = JSON.stringify([
-      state.featureColorOverrides, state.featureStrokeOverrides,
-      state.featureVisibilityOverrides, state.labelTextFeatureOverrides,
-      state.labelVisibilityOverrides, state.legendColorOverrides,
-      state.legendStrokeOverrides
+      state.activeDrawing().featureColorOverrides, state.activeDrawing().featureStrokeOverrides,
+      state.activeDrawing().featureOverrides, state.activeDrawing().legendColorOverrides,
+      state.activeDrawing().legendStrokeOverrides
     ]);
     const result = await window.__GBDRAW_APP__.saveSessionWithTitle();
     return {
@@ -219,10 +224,9 @@ const saveCurrentSession = async (page, title) => {
         resultUnchanged: state.results.value === resultBefore,
         requestUnchanged: getCommittedCanonicalRenderRequest() === requestBefore,
         overridesUnchanged: JSON.stringify([
-          state.featureColorOverrides, state.featureStrokeOverrides,
-          state.featureVisibilityOverrides, state.labelTextFeatureOverrides,
-          state.labelVisibilityOverrides, state.legendColorOverrides,
-          state.legendStrokeOverrides
+          state.activeDrawing().featureColorOverrides, state.activeDrawing().featureStrokeOverrides,
+          state.activeDrawing().featureOverrides, state.activeDrawing().legendColorOverrides,
+          state.activeDrawing().legendStrokeOverrides
         ]) === overridesBefore,
         savePending: state.sessionSavePending.value,
         availability: state.sessionOperationAvailability('save')
@@ -240,10 +244,12 @@ const saveCurrentSession = async (page, title) => {
       }
     });
     expect(Date.now()).toBeLessThan(saveDeadline);
-    await page.waitForFunction(async () => {
-      const { state } = await import('/gbdraw/web/js/state.js');
-      return state.sessionOperationAvailability('save') === null;
-    }, null, { timeout: Math.max(1, saveDeadline - Date.now()) });
+    // The Save availability the composition root composes, which also waits
+    // for an edit still applying (R13).
+    await page.waitForFunction(
+      () => window.__GBDRAW_APP__.sessionSaveAvailable,
+      null, { timeout: Math.max(1, saveDeadline - Date.now()) }
+    );
     expect(await page.evaluate(() => window.__GBDRAW_APP__.labelReflowLastError))
       .toBeFalsy();
     const previous = attempt;
@@ -262,8 +268,8 @@ const saveCurrentSession = async (page, title) => {
   const session = JSON.parse(gunzipSync(readFileSync(path)).toString('utf8'));
   expect(session).toMatchObject({
     format: 'gbdraw-session',
-    version: 44,
-    renderRequest: { schema: 8 }
+    version: CURRENT_SESSION_VERSION,
+    renderRequest: { schema: CURRENT_REQUEST_SCHEMA }
   });
   return { path, session };
 };
@@ -286,9 +292,11 @@ const diagramWorkerResourceBytes = (activity) => (
   ), 0)
 );
 
-const expectRulePreparationWorker = (activity, runs = 0) => {
+// `helpers`: the exact count of rule-caption requests, or null for "at least one".
+const expectRulePreparationWorker = (activity, runs = 0, helpers = null) => {
   expect(activity).toMatchObject({ constructions: 1, initializations: 1, runs });
-  expect(activity.helpers).toBeGreaterThan(0);
+  if (helpers === null) expect(activity.helpers).toBeGreaterThan(0);
+  else expect(activity.helpers).toBe(helpers);
   for (const helper of activity.instances.flatMap(instance => instance.helpers || [])) {
     expect(helper).toMatchObject({ operation: 'evaluateRules', transferredBytes: 0 });
   }
@@ -339,6 +347,9 @@ const prepareLoadedPreviewDirectEditTarget = (page, expected = null) => page.eva
       || feature?.id
       || ''
     ).trim();
+    // The draft key of the feature's per-feature edits (design Q4).
+    // A drawing's rows are keyed by the identity pair (PR-1).
+    const identityKey = (feature) => JSON.stringify([feature.record_key, feature.biological_feature_id]);
     const hasFeatureElement = (id) => Boolean(
       svg.querySelector(`[data-gbdraw-feature-id="${CSS.escape(id)}"]`)
       || svg.querySelector(`[data-gbdraw-rendered-feature-id="${CSS.escape(id)}"]`)
@@ -439,13 +450,16 @@ const prepareLoadedPreviewDirectEditTarget = (page, expected = null) => page.eva
       visibilityFeature,
       visibilityFeatureId: featureId(visibilityFeature),
       visibilityFeatureOverrideKey: featureOverrideKey(visibilityFeature),
+      visibilityFeatureIdentity: identityKey(visibilityFeature),
       fillLegendCaption: String(fillLegendEntry.caption || ''),
       labelFeature,
       labelFeatureId: labelFeature ? featureId(labelFeature) : String(
         expectedTarget?.labelFeatureId || ''
       ),
+      labelFeatureIdentity: labelFeature ? identityKey(labelFeature) : '',
       labelKey: String(labelEntry?.key || expectedTarget?.labelKey || ''),
       labelVisibilityFeature,
+      labelVisibilityFeatureIdentity: labelVisibilityFeature ? identityKey(labelVisibilityFeature) : '',
       labelVisibilityFeatureId: labelVisibilityFeature
         ? featureId(labelVisibilityFeature)
         : String(expectedTarget?.labelVisibilityFeatureId || ''),
@@ -469,10 +483,13 @@ const prepareLoadedPreviewDirectEditTarget = (page, expected = null) => page.eva
       biologicalFeatureId: target.biologicalFeatureId,
       visibilityFeatureId: target.visibilityFeatureId,
       visibilityFeatureOverrideKey: target.visibilityFeatureOverrideKey,
+      visibilityFeatureIdentity: target.visibilityFeatureIdentity,
       fillLegendCaption: target.fillLegendCaption,
       labelFeatureId: target.labelFeatureId,
+      labelFeatureIdentity: target.labelFeatureIdentity,
       labelKey: target.labelKey,
       labelVisibilityFeatureId: target.labelVisibilityFeatureId,
+      labelVisibilityFeatureIdentity: target.labelVisibilityFeatureIdentity,
       labelVisibilityKey: target.labelVisibilityKey,
       legendCaption: target.legendCaption
     };
@@ -532,9 +549,16 @@ const bindLoadedPreviewDirectEditLabel = (page, expected = null) => page.evaluat
     }
     target.labelFeature = resolved.labelFeature;
     target.labelFeatureId = featureId(resolved.labelFeature);
+    target.labelFeatureIdentity = JSON.stringify([
+      resolved.labelFeature.record_key, resolved.labelFeature.biological_feature_id
+    ]);
     target.labelKey = String(resolved.labelEntry.key || '');
     target.labelVisibilityFeature = resolved.labelVisibilityFeature;
     target.labelVisibilityFeatureId = featureId(resolved.labelVisibilityFeature);
+    target.labelVisibilityFeatureIdentity = JSON.stringify([
+      resolved.labelVisibilityFeature.record_key,
+      resolved.labelVisibilityFeature.biological_feature_id
+    ]);
     target.labelVisibilityKey = String(resolved.labelVisibilityEntry.key || '');
     target.baselineMountedContent = serializeCleanSvg(svg);
     target.loadedResultContent = String(
@@ -542,8 +566,10 @@ const bindLoadedPreviewDirectEditLabel = (page, expected = null) => page.evaluat
     );
     return {
       labelFeatureId: target.labelFeatureId,
+      labelFeatureIdentity: target.labelFeatureIdentity,
       labelKey: target.labelKey,
       labelVisibilityFeatureId: target.labelVisibilityFeatureId,
+      labelVisibilityFeatureIdentity: target.labelVisibilityFeatureIdentity,
       labelVisibilityKey: target.labelVisibilityKey
     };
   },
@@ -626,6 +652,9 @@ const captureLoadedPreviewDirectEditState = (page) => page.evaluate(async () => 
   );
   const target = window.__GBDRAW_LOADED_PREVIEW_DIRECT_EDIT_TARGET__;
   if (!target) throw new Error('The loaded-preview direct-edit target is not configured.');
+  // A per-feature edit by the identity key the target recorded; a hidden
+  // feature is no longer drawn after Generate (design Q4).
+  const featureEdit = (identityKey, field) => state.activeDrawing().featureOverrides[identityKey]?.[field] ?? null;
   const svg = state.svgContainer.value?.querySelector?.('svg');
   if (!svg) throw new Error('The loaded SVG preview is no longer mounted.');
   const resultContent = String(
@@ -762,7 +791,7 @@ const captureLoadedPreviewDirectEditState = (page) => page.evaluate(async () => 
       label: labelAttributes(
         svg,
         target.labelFeatureId,
-        String(state.labelTextFeatureOverrides[target.labelFeatureId] || '')
+        String(featureEdit(target.labelFeatureIdentity, 'labelText') || '')
       ),
       labelVisibility: labelAttributes(svg, target.labelVisibilityFeatureId),
       legend: legendAttributes(svg)
@@ -773,20 +802,22 @@ const captureLoadedPreviewDirectEditState = (page) => page.evaluate(async () => 
       label: labelAttributes(
         resultSvg,
         target.labelFeatureId,
-        String(state.labelTextFeatureOverrides[target.labelFeatureId] || '')
+        String(featureEdit(target.labelFeatureIdentity, 'labelText') || '')
       ),
       labelVisibility: labelAttributes(resultSvg, target.labelVisibilityFeatureId),
       legend: legendAttributes(resultSvg)
     },
     overrides: {
-      fill: plain(state.featureColorOverrides[target.featureOverrideKey]),
-      stroke: plain(state.featureStrokeOverrides[target.featureOverrideKey]),
-      visibility: state.featureVisibilityOverrides[target.visibilityFeatureId] ?? null,
-      labelText: state.labelTextFeatureOverrides[target.labelFeatureId] ?? null,
-      labelVisibility:
-        state.labelVisibilityOverrides[target.labelVisibilityFeatureId] ?? null,
-      legendColor: state.legendColorOverrides[target.legendCaption] ?? null,
-      legendStroke: plain(state.legendStrokeOverrides[target.legendCaption])
+      fill: plain(state.activeDrawing().featureColorOverrides[target.featureOverrideKey]),
+      defaultFill: String(state.activeDrawing().currentColors.value[
+        window.__GBDRAW_LOADED_PREVIEW_DIRECT_EDIT_TARGET__?.feature?.type
+      ] || '').toLowerCase(),
+      stroke: plain(state.activeDrawing().featureStrokeOverrides[target.featureOverrideKey]),
+      visibility: featureEdit(target.visibilityFeatureIdentity, 'featureVisibility'),
+      labelText: featureEdit(target.labelFeatureIdentity, 'labelText'),
+      labelVisibility: featureEdit(target.labelVisibilityFeatureIdentity, 'labelVisibility'),
+      legendColor: state.activeDrawing().legendColorOverrides[target.legendCaption] ?? null,
+      legendStroke: plain(state.activeDrawing().legendStrokeOverrides[target.legendCaption])
     },
     history: {
       undoCount: window.__GBDRAW_HISTORY__.getUndoCount(),
@@ -840,7 +871,7 @@ const expectDirectEditFlushed = (before, after) => {
 
 const capturePageEvidence = (page, savedSvg = null) => page.evaluate(async (savedSvg) => {
   const { state } = await import('/gbdraw/web/js/state.js');
-  const { resolveColorToHex } = await import('/gbdraw/web/js/app/color-utils.js');
+  const { resolveColorToHex } = await import('/gbdraw/web/js/utils/color-utils.js');
   const { serializeCleanSvg } = await import('/gbdraw/web/js/services/svg-serialization.js');
   const app = window.__GBDRAW_APP__;
   const history = window.__GBDRAW_HISTORY__;
@@ -857,9 +888,12 @@ const capturePageEvidence = (page, savedSvg = null) => page.evaluate(async (save
     return { length: text.length, hash: hash >>> 0 };
   };
   const mountedSvg = state.svgContainer.value?.querySelector?.('svg');
-  const svgContent = savedSvg ?? (mountedSvg
+  // The label editor marks the labels it lists (`data-label-editable`, `-key`,
+  // `-source-text`) once it has synchronized; a Result the automatic rerender drew and a Load without
+  // that synchronization differ only by this mark (OV-42, OV-43, #857).
+  const svgContent = (savedSvg ?? (mountedSvg
     ? serializeCleanSvg(mountedSvg)
-    : String(app.results?.[app.selectedResultIndex]?.content || ''));
+    : String(app.results?.[app.selectedResultIndex]?.content || ''))).replace(/ data-label-(?:editable|key|source-text)="[^"]*"/g, '');
   const svgDocument = new DOMParser().parseFromString(svgContent, 'image/svg+xml');
   const root = svgDocument.documentElement;
   if (!root || root.localName === 'parsererror') {
@@ -956,41 +990,41 @@ const capturePageEvidence = (page, savedSvg = null) => page.evaluate(async (save
           : state.lInputType.value
       },
       palette: {
-        selected: state.selectedPalette.value,
-        currentColors: sortedObject(state.currentColors.value),
+        selected: state.activeDrawing().selectedPalette.value,
+        currentColors: sortedObject(state.activeDrawing().currentColors.value),
         selectedDefaults: sortedObject(
-          state.paletteDefinitions.value?.[state.selectedPalette.value] || {}
+          state.paletteDefinitions.value?.[state.activeDrawing().selectedPalette.value] || {}
         ),
         instantPreview: state.paletteInstantPreviewEnabled.value,
         appliedName: state.appliedPaletteName.value,
         appliedColors: sortedObject(state.appliedPaletteColors.value),
-        pendingName: state.pendingPaletteName.value,
-        pendingColors: sortedObject(state.pendingPaletteColors.value)
+        pendingName: state.activeDrawing().pendingPaletteName.value,
+        pendingColors: sortedObject(state.activeDrawing().pendingPaletteColors.value)
       },
-      specificRules: state.manualSpecificRules.map((rule) => ({
+      specificRules: state.activeDrawing().manualSpecificRules.map((rule) => ({
         ...plain(rule),
         fromFile: Boolean(rule.fromFile)
       })),
-      qualifierPriorityRules: plain(state.manualPriorityRules),
+      qualifierPriorityRules: plain(state.activeDrawing().manualPriorityRules),
       filters: {
-        mode: state.filterMode.value,
-        whitelist: plain(state.manualWhitelist),
-        blacklistText: state.manualBlacklist.value
+        mode: state.activeDrawing().filterMode.value,
+        whitelist: plain(state.activeDrawing().manualWhitelist),
+        blacklistText: state.activeDrawing().manualBlacklist.value
       },
       form: {
-        plot_title: state.form.plot_title,
-        labels_mode: state.form.labels_mode,
-        show_scale: state.form.show_scale,
-        legend: state.form.legend,
-        track_type: state.form.track_type
+        plot_title: state.activeDrawing().form.plot_title,
+        labels_mode: state.activeDrawing().form.labels_mode,
+        show_scale: state.activeDrawing().form.show_scale,
+        legend: state.activeDrawing().form.legend,
+        track_type: state.activeDrawing().form.track_type
       },
       adv: {
-        axis_stroke_width: state.adv.axis_stroke_width,
-        label_font_size: state.adv.label_font_size,
-        feature_width_circular: state.adv.feature_width_circular,
-        plot_title_position: state.adv.plot_title_position
+        axis_stroke_width: state.activeDrawing().adv.axis_stroke_width,
+        label_font_size: state.activeDrawing().adv.label_font_size,
+        feature_width_circular: state.activeDrawing().adv.feature_width_circular,
+        plot_title_position: state.activeDrawing().adv.plot_title_position
       },
-      annotations: state.annotationSets.map((set) => ({
+      annotations: state.activeDrawing().annotationSets.map((set) => ({
         id: set.id,
         annotations: set.annotations.map((annotation) => ({
           id: annotation.id,
@@ -1004,9 +1038,9 @@ const capturePageEvidence = (page, savedSvg = null) => page.evaluate(async (save
         }))
       })),
       tracks: {
-        enabled: state.adv.circular_track_slots_enabled,
-        axisIndex: state.adv.circular_track_slots_axis_index,
-        slots: state.adv.circular_track_slots.map((slot) => ({
+        enabled: state.activeDrawing().adv.circular_track_slots_enabled,
+        axisIndex: state.activeDrawing().adv.circular_track_slots_axis_index,
+        slots: state.activeDrawing().adv.circular_track_slots.map((slot) => ({
           id: slot.id,
           renderer: slot.renderer,
           enabled: slot.enabled,
@@ -1016,23 +1050,21 @@ const capturePageEvidence = (page, savedSvg = null) => page.evaluate(async (save
         }))
       },
       layout: {
-        preferences: plain(state.layoutPreferences),
+        preferences: plain(state.activeDrawing().layoutPreferences),
         linearRecordLayout: {
-          enabled: state.linearRecordLayoutEnabled.value,
-          recordGap: state.linearRecordGap.value,
-          rows: plain(state.linearRecordRows)
+          enabled: state.activeDrawing().linearRecordLayoutEnabled.value,
+          recordGap: state.activeDrawing().linearRecordGap.value,
+          rows: plain(state.activeDrawing().linearRecordRows)
         }
       },
       editorOverrides: {
-        fills: sortedObject(state.featureColorOverrides),
-        strokes: normalizeStrokeOverrides(state.featureStrokeOverrides),
-        visibility: sortedObject(state.featureVisibilityOverrides),
-        labelText: sortedObject(state.labelTextFeatureOverrides),
-        labelVisibility: sortedObject(state.labelVisibilityOverrides),
-        legendColors: sortedObject(state.legendColorOverrides),
-        legendStrokes: normalizeStrokeOverrides(state.legendStrokeOverrides),
-        orthogroupNames: sortedObject(state.orthogroupNameOverrides),
-        orthogroupDescriptions: sortedObject(state.orthogroupDescriptionOverrides)
+        fills: sortedObject(state.activeDrawing().featureColorOverrides),
+        strokes: normalizeStrokeOverrides(state.activeDrawing().featureStrokeOverrides),
+        featureOverrides: sortedObject(state.activeDrawing().featureOverrides),
+        legendColors: sortedObject(state.activeDrawing().legendColorOverrides),
+        legendStrokes: normalizeStrokeOverrides(state.activeDrawing().legendStrokeOverrides),
+        orthogroupNames: sortedObject(state.activeDrawing().orthogroupNameOverrides),
+        orthogroupDescriptions: sortedObject(state.activeDrawing().orthogroupDescriptionOverrides)
       }
     },
     svg: {
@@ -1134,26 +1166,27 @@ const expectSvgEquivalent = (left, right, label) => {
   return comparison;
 };
 
-const applyDivergentDraft = async (page) => page.evaluate(async () => {
+const applyDivergentDraft = async (page) => evaluateWithRetainedPromise(page, async () => {
   const { state } = await import('/gbdraw/web/js/state.js');
-  const { createAnnotationSet } = await import('/gbdraw/web/js/app/annotations/state.js');
+  const { normalizePaletteColors } = await import('/gbdraw/web/js/utils/color-utils.js');
+  const { createAnnotationSet } = await import('/gbdraw/web/js/services/annotation-state.js');
   const app = window.__GBDRAW_APP__;
   const history = window.__GBDRAW_HISTORY__;
   state.autoLabelReflowEnabled.value = false;
 
-  const orange = state.paletteDefinitions.value.orange || state.currentColors.value;
-  const draftColors = state.normalizePaletteColors({
+  const orange = state.paletteDefinitions.value.orange || state.activeDrawing().currentColors.value;
+  const draftColors = normalizePaletteColors({
     ...orange,
     CDS: '#0b4f6c',
     tRNA: '#f59e0b'
   });
-  state.selectedPalette.value = 'orange';
-  state.currentColors.value = draftColors;
+  state.activeDrawing().selectedPalette.value = 'orange';
+  state.activeDrawing().currentColors.value = draftColors;
   state.paletteInstantPreviewEnabled.value = false;
-  state.pendingPaletteName.value = 'orange';
-  state.pendingPaletteColors.value = { ...draftColors };
+  state.activeDrawing().pendingPaletteName.value = 'orange';
+  state.activeDrawing().pendingPaletteColors.value = { ...draftColors };
 
-  state.manualSpecificRules.splice(0, state.manualSpecificRules.length, {
+  state.activeDrawing().manualSpecificRules.splice(0, state.activeDrawing().manualSpecificRules.length, {
     feat: 'CDS',
     qual: 'gene',
     val: '^ND2$',
@@ -1161,28 +1194,28 @@ const applyDivergentDraft = async (page) => page.evaluate(async () => {
     cap: 'Saved ND2 rule',
     fromFile: false
   });
-  state.manualPriorityRules.splice(0, state.manualPriorityRules.length, {
+  state.activeDrawing().manualPriorityRules.splice(0, state.activeDrawing().manualPriorityRules.length, {
     feat: 'CDS',
     order: 'product,gene'
   });
-  state.filterMode.value = 'Whitelist';
-  state.manualWhitelist.splice(0, state.manualWhitelist.length, {
+  state.activeDrawing().filterMode.value = 'Whitelist';
+  state.activeDrawing().manualWhitelist.splice(0, state.activeDrawing().manualWhitelist.length, {
     feat: 'CDS',
     qual: 'gene',
     key: 'ND1'
   });
-  state.manualBlacklist.value = 'hypothetical, draft-only';
-  Object.assign(state.form, {
+  state.activeDrawing().manualBlacklist.value = 'hypothetical, draft-only';
+  Object.assign(state.activeDrawing().form, {
     plot_title: 'Saved active draft',
     labels_mode: 'both',
     show_scale: false
   });
-  Object.assign(state.adv, {
+  Object.assign(state.activeDrawing().adv, {
     axis_stroke_width: 6,
     label_font_size: 27,
     feature_width_circular: 18
   });
-  state.annotationSets.splice(0, state.annotationSets.length, createAnnotationSet({
+  state.activeDrawing().annotationSets.splice(0, state.activeDrawing().annotationSets.length, createAnnotationSet({
     id: 'saved-regenerate-annotations',
     legendLabel: 'Saved annotation',
     annotations: [{
@@ -1229,14 +1262,16 @@ const applyDivergentDraft = async (page) => page.evaluate(async () => {
   app.clickedFeature.labelText = 'Saved direct label';
   app.clickedFeature.labelVisibility = 'off';
   await app.updateClickedFeatureLabelText();
-  const labelVisibilityApplied = state.labelVisibilityOverrides[labelFeatureId] === 'off';
+  const labelVisibilityApplied = state.activeDrawing().featureOverrides[
+    JSON.stringify([labelFeature.record_key, labelFeature.biological_feature_id])
+  ]?.labelVisibility === 'off';
   const visibilityApplied = await app.setFeatureVisibility(
     feature,
     'off',
     { triggerReflow: false, scope: { id: 'feature' } }
   );
-  state.legendColorOverrides['Saved direct fill'] = '#7c3aed';
-  state.legendStrokeOverrides['Saved direct fill'] = {
+  state.activeDrawing().legendColorOverrides['Saved direct fill'] = '#7c3aed';
+  state.activeDrawing().legendStrokeOverrides['Saved direct fill'] = {
     strokeColor: '#111827',
     strokeWidth: 4
   };
@@ -1245,15 +1280,17 @@ const applyDivergentDraft = async (page) => page.evaluate(async () => {
   await new Promise((resolveFrame) => (
     requestAnimationFrame(() => requestAnimationFrame(resolveFrame))
   ));
-  const fillOverrideKey = Object.keys(state.featureColorOverrides).find((key) => (
-    state.featureColorOverrides[key]?.color === '#7c3aed'
+  const fillOverrideKey = Object.keys(state.activeDrawing().featureColorOverrides).find((key) => (
+    state.activeDrawing().featureColorOverrides[key]?.color === '#7c3aed'
   ));
-  const strokeOverrideKey = Object.keys(state.featureStrokeOverrides).find((key) => (
-    state.featureStrokeOverrides[key]?.strokeColor === '#111827'
+  const strokeOverrideKey = Object.keys(state.activeDrawing().featureStrokeOverrides).find((key) => (
+    state.activeDrawing().featureStrokeOverrides[key]?.strokeColor === '#111827'
   ));
   return {
     featureId,
+    featureIdentity: JSON.stringify([feature.record_key, feature.biological_feature_id]),
     labelFeatureId,
+    labelFeatureIdentity: JSON.stringify([labelFeature.record_key, labelFeature.biological_feature_id]),
     fillOverrideKey,
     strokeOverrideKey,
     fillApplied,
@@ -1397,7 +1434,8 @@ test('loaded current preview supports direct edits before the first Generate', a
     expectLabelEdited(snapshot, options);
     expectLegendEdited(snapshot);
     expect(snapshot.overrides).toMatchObject({
-      fill: { color: DIRECT_FILL },
+      fill: null,
+      defaultFill: DIRECT_FILL,
       stroke: {
         strokeColor: DIRECT_STROKE,
         strokeWidth: DIRECT_STROKE_WIDTH
@@ -1545,33 +1583,35 @@ test('loaded current preview supports direct edits before the first Generate', a
   }).last();
   await expect(captionScopeButton).toBeVisible();
   await captionScopeButton.click();
-  await page.waitForFunction(({ overrideKey, color }) => {
+  // D-15: "Apply to all" on the palette row sets the type's default color; it
+  // writes no rule and no per-feature edit.
+  await page.waitForFunction((color) => {
     const app = window.__GBDRAW_APP__;
-    return app.featureColorOverrides?.[overrideKey]?.color === color
+    return app.currentColors?.[window.__GBDRAW_LOADED_PREVIEW_DIRECT_EDIT_TARGET__.feature.type] === color
       && String(app.results?.[app.selectedResultIndex]?.content || '').includes(color);
-  }, { overrideKey: target.featureOverrideKey, color: DIRECT_FILL });
+  }, DIRECT_FILL);
   await settleMountedDom(page);
   const afterFill = await captureLoadedPreviewDirectEditState(page);
   expectDirectEditFlushed(initiallyLoaded, afterFill);
   expectFeatureFill(afterFill, DIRECT_FILL);
-  expect(afterFill.overrides.fill).toMatchObject({ color: DIRECT_FILL });
+  expect(afterFill.overrides).toMatchObject({ fill: null, defaultFill: DIRECT_FILL });
   expect(afterFill.history.undoCount).toBeGreaterThan(initiallyLoaded.history.undoCount);
   await capturePreviewWorkerStage(page, 'after feature fill', previewWorkerStages, true);
 
-  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undo())).toBe(true);
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo())).toBe(true);
   await settleMountedDom(page);
   const afterFillUndo = await captureLoadedPreviewDirectEditState(page);
   expectDirectEditFlushed(afterFill, afterFillUndo);
   expectFeatureFill(afterFillUndo, featureBlocks(initiallyLoaded)[0].fill);
-  expect(afterFillUndo.overrides.fill).toBeNull();
+  expect(afterFillUndo.overrides).toMatchObject({ fill: null, defaultFill: initiallyLoaded.overrides.defaultFill });
   await capturePreviewWorkerStage(page, 'after direct-edit Undo', previewWorkerStages, true);
 
-  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.redo())).toBe(true);
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo())).toBe(true);
   await settleMountedDom(page);
   const afterFillRedo = await captureLoadedPreviewDirectEditState(page);
   expectDirectEditFlushed(afterFillUndo, afterFillRedo);
   expectFeatureFill(afterFillRedo, DIRECT_FILL);
-  expect(afterFillRedo.overrides.fill).toMatchObject({ color: DIRECT_FILL });
+  expect(afterFillRedo.overrides).toMatchObject({ fill: null, defaultFill: DIRECT_FILL });
   await capturePreviewWorkerStage(page, 'after direct-edit Redo', previewWorkerStages, true);
 
   const strokeApplied = await page.evaluate(async ({ color, width }) => {
@@ -1607,7 +1647,7 @@ test('loaded current preview supports direct edits before the first Generate', a
   expect(afterVisibility.overrides.visibility).toBe('off');
   await capturePreviewWorkerStage(page, 'after feature visibility', previewWorkerStages, true);
 
-  const labelApplied = await page.evaluate(async ({ text }) => {
+  const labelApplied = await evaluateWithRetainedPromise(page, async ({ text }) => {
     const app = window.__GBDRAW_APP__;
     const targetState = window.__GBDRAW_LOADED_PREVIEW_DIRECT_EDIT_TARGET__;
     const requested = await app.requestLabelTextChangeByFeatureId(
@@ -1630,11 +1670,13 @@ test('loaded current preview supports direct edits before the first Generate', a
     }
     app.clickedFeature.labelVisibility = 'off';
     await app.updateClickedFeatureLabelText();
+    const edit = (drawn, field) => app.featureOverrides[
+      JSON.stringify([drawn?.record_key, drawn?.biological_feature_id])
+    ]?.[field];
     return {
       requested,
-      textOverride: app.labelTextFeatureOverrides[targetState.labelFeatureId],
-      visibilityOverride:
-        app.labelVisibilityOverrides[targetState.labelVisibilityFeatureId]
+      textOverride: edit(targetState.labelFeature, 'labelText'),
+      visibilityOverride: edit(targetState.labelVisibilityFeature, 'labelVisibility')
     };
   }, { text: DIRECT_LABEL_TEXT });
   expect(labelApplied).toEqual({
@@ -1660,9 +1702,9 @@ test('loaded current preview supports direct edits before the first Generate', a
     );
     if (index < 0) throw new Error('The loaded legend entry is no longer available.');
     return {
-      color: app.updateLegendEntryColor(index, color),
+      color: await app.updateLegendEntryColor(index, color),
       stroke: await app.setLegendEntryStrokeColorValue(index, stroke),
-      strokeWidth: app.updateLegendEntryStrokeWidth(index, strokeWidth)
+      strokeWidth: await app.updateLegendEntryStrokeWidth(index, strokeWidth)
     };
   }, {
     color: DIRECT_LEGEND_COLOR,
@@ -1703,23 +1745,24 @@ test('loaded current preview supports direct edits before the first Generate', a
   ).toBe(await page.evaluate(() => (
     window.__GBDRAW_APP__.results[window.__GBDRAW_APP__.selectedResultIndex].content
   )));
-  expect(saved.session.config).toMatchObject({
+  const savedDraft = sessionDraft(saved.session);
+  expect(savedDraft.config).toMatchObject({
     form: { plot_title: DIRECT_REGENERATED_TITLE }
   });
-  expect(saved.session.ui).toMatchObject({
-    layoutPreferences: {
-      circular: { single: { plotTitlePosition: 'top' } }
+  expect(savedDraft.ui).toMatchObject({
+    layoutPreferences: { single: { plotTitlePosition: 'top' } }
+  });
+  expect(savedDraft.features.featureColorOverrides?.[target.featureOverrideKey]).toBeUndefined();
+  const fillType = await page.evaluate(() => window.__GBDRAW_LOADED_PREVIEW_DIRECT_EDIT_TARGET__.feature.type);
+  expect(String(savedDraft.config.colors?.[fillType] || '').toLowerCase()).toBe(DIRECT_FILL);
+  expect(savedDraft.features).toMatchObject({
+    featureOverrides: {
+      [target.visibilityFeatureIdentity]: { featureVisibility: 'off' },
+      [target.labelFeatureIdentity]: { labelText: DIRECT_LABEL_TEXT },
+      [target.labelVisibilityFeatureIdentity]: { labelVisibility: 'off' }
     }
   });
-  expect(saved.session.features).toMatchObject({
-    featureColorOverrides: {
-      [target.featureOverrideKey]: { color: DIRECT_FILL }
-    },
-    featureVisibilityOverrides: { [target.visibilityFeatureId]: 'off' },
-    labelTextFeatureOverrides: { [target.labelFeatureId]: DIRECT_LABEL_TEXT },
-    labelVisibilityOverrides: { [target.labelVisibilityFeatureId]: 'off' }
-  });
-  expect(saved.session.editorState).toMatchObject({
+  expect(savedDraft.editorState).toMatchObject({
     legend: {
       colorOverrides: { [target.legendCaption]: DIRECT_LEGEND_COLOR },
       strokeOverrides: {
@@ -1811,9 +1854,11 @@ test('loaded current preview supports direct edits before the first Generate', a
     freshlyLoaded.history.artifactCheckpointBuilds
   );
   const generatedWorker = await getDiagramWorkerActivity(freshPage);
-  expectRulePreparationWorker(generatedWorker, 1);
+  // Every rule caption has one color, so Generate skips Python's caption
+  // normalization (D-15-6 (4)): no rule-caption request.
+  expectRulePreparationWorker(generatedWorker, 1, 0);
 
-  expect(await freshPage.evaluate(() => window.__GBDRAW_HISTORY__.undo())).toBe(true);
+  expect(await evaluateWithRetainedPromise(freshPage, () => window.__GBDRAW_HISTORY__.undo())).toBe(true);
   await settleMountedDom(freshPage);
   const generatedUndo = await captureLoadedPreviewDirectEditState(freshPage);
   expect(generatedUndo.result.equalsLoadedResult).toBe(true);
@@ -1824,9 +1869,9 @@ test('loaded current preview supports direct edits before the first Generate', a
     artifactReplacementHistoryEntryCount: 1
   });
   const workerAfterGenerateUndo = await getDiagramWorkerActivity(freshPage);
-  expectRulePreparationWorker(workerAfterGenerateUndo, 1);
+  expectRulePreparationWorker(workerAfterGenerateUndo, 1, 0);
 
-  expect(await freshPage.evaluate(() => window.__GBDRAW_HISTORY__.redo())).toBe(true);
+  expect(await evaluateWithRetainedPromise(freshPage, () => window.__GBDRAW_HISTORY__.redo())).toBe(true);
   await settleMountedDom(freshPage);
   const generatedRedo = await captureLoadedPreviewDirectEditState(freshPage);
   expect(generatedRedo.result.sha256).toBe(regenerated.result.sha256);
@@ -1837,7 +1882,7 @@ test('loaded current preview supports direct edits before the first Generate', a
     artifactReplacementHistoryEntryCount: 1
   });
   const workerAfterGenerateRedo = await getDiagramWorkerActivity(freshPage);
-  expectRulePreparationWorker(workerAfterGenerateRedo, 1);
+  expectRulePreparationWorker(workerAfterGenerateRedo, 1, 0);
 
   await testInfo.attach('loaded-preview-direct-edit.json', {
     body: Buffer.from(JSON.stringify({
@@ -1914,8 +1959,10 @@ test('divergent draft and direct editor overrides survive repeated Save, Load, a
         '/gbdraw/web/js/services/svg-serialization.js'
       );
       const svg = state.svgContainer.value?.querySelector('svg');
-      return state.sessionOperationAvailability?.('save') == null
-        && Boolean(svg) && serializeCleanSvg(svg) === capturedSvg;
+      // The edits that change the Legend ask for the automatic rerender
+      // (OV-42, OV-43, #857); the preview settles once it has finished.
+      return state.sessionOperationAvailability?.('save') == null && !state.labelReflowProcessing.value
+        && Boolean(svg) && serializeCleanSvg(svg).replace(/ data-label-(?:editable|key|source-text)="[^"]*"/g, '') === capturedSvg;
     }, evidence.svg.raw);
     if (settled) savedDraftIntent = evidence;
     return settled;
@@ -1942,9 +1989,16 @@ test('divergent draft and direct editor overrides survive repeated Save, Load, a
     strokes: {
       [actions.strokeOverrideKey]: expect.objectContaining({ strokeColor: '#111827' })
     },
-    visibility: { [actions.featureId]: 'off' },
-    labelText: { [actions.labelFeatureId]: 'Saved direct label' },
-    labelVisibility: { [actions.labelFeatureId]: 'off' }
+    featureOverrides: actions.featureIdentity === actions.labelFeatureIdentity
+      ? {
+          [actions.featureIdentity]: {
+            featureVisibility: 'off', labelText: 'Saved direct label', labelVisibility: 'off'
+          }
+        }
+      : {
+          [actions.featureIdentity]: { featureVisibility: 'off' },
+          [actions.labelFeatureIdentity]: { labelText: 'Saved direct label', labelVisibility: 'off' }
+        }
   });
 
   const divergentSave = await saveCurrentSession(page, 'intent-divergent-draft');
@@ -1955,8 +2009,8 @@ test('divergent draft and direct editor overrides survive repeated Save, Load, a
   );
   expect(savedPreview.active).toEqual(savedDraftIntent.active);
   expect(savedPreview.history).toEqual(savedDraftIntent.history);
-  expect(divergentSave.session.config.palette).toBe('orange');
-  expect(divergentSave.session.config.colors).toMatchObject({
+  expect(sessionDraft(divergentSave.session).config.palette).toBe('orange');
+  expect(sessionDraft(divergentSave.session).config.colors).toMatchObject({
     CDS: '#0b4f6c',
     tRNA: '#f59e0b'
   });
@@ -2029,7 +2083,7 @@ test('divergent draft and direct editor overrides survive repeated Save, Load, a
       Number(beforeGenerateHistory.generatedArtifactFullCloneCount || 0)
   ).toBe(0);
 
-  const undoRedo = await freshPage.evaluate(async () => {
+  const undoRedo = await evaluateWithRetainedPromise(freshPage, async () => {
     const app = window.__GBDRAW_APP__;
     const history = window.__GBDRAW_HISTORY__;
     const content = () => String(app.results?.[app.selectedResultIndex]?.content || '');
@@ -2194,7 +2248,7 @@ test('bare legacy configuration drives the next canonical request and SVG', asyn
   const generated = await runGenerate(page);
   expect(svgEquivalence(generated.svg, baseline.svg).visual).toBe(false);
   const saved = await saveCurrentSession(page, 'legacy-config-generated');
-  expect(saved.session.config).toMatchObject({
+  expect(sessionDraft(saved.session).config).toMatchObject({
     palette: 'orange',
     colors: { CDS: '#0b4f6c', tRNA: '#f59e0b' },
     filterMode: 'Blacklist',
@@ -2210,10 +2264,10 @@ test('bare legacy configuration drives the next canonical request and SVG', asyn
       feature_width_circular: 22
     }
   });
-  expect(saved.session.config.rules).toEqual([
+  expect(sessionDraft(saved.session).config.rules).toEqual([
     expect.objectContaining({ val: '^ND3$', color: '#be123c' })
   ]);
-  expect(saved.session.config.qualifierPriorityRules).toEqual([
+  expect(sessionDraft(saved.session).config.qualifierPriorityRules).toEqual([
     { feat: 'CDS', order: 'product,gene' }
   ]);
   const colors = saved.session.renderRequest.diagramOptions.colors;

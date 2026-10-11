@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame
+from gbdraw.svg.elements import Group
 
-from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from ....configurators import DepthConfigurator  # type: ignore[reportMissingImports]
-from ....core.sequence import determine_length_parameter  # type: ignore[reportMissingImports]
+from ....config.models import GbdrawConfig
+from ....configurators import DepthConfigurator
+from ....auto_sizes import determine_length_parameter
 from ...drawers.circular.depth import DepthDrawer
 
 
@@ -32,7 +32,7 @@ class DepthGroup:
         record_transform: RecordDisplayTransform | None = None,
     ) -> None:
         self.record_transform = record_transform
-        self.depth_group = Group(id=group_id or "depth", debug=False)
+        self.depth_group = Group(id=group_id or "depth")
         self.radius = float(radius)
         self.depth_config = depth_config
         self.gb_record = gb_record

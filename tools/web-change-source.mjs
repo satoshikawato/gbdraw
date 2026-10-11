@@ -3,6 +3,8 @@ export const maskJavaScript = (source = '', { strings = true } = {}) => {
   let state = 'code';
   let escaped = false;
   let regexCharacterClass = false;
+  // One entry per open `${ ... }` template expression: the brace depth inside it.
+  const templateExpressions = [];
   const hide = (index) => {
     if (source[index] !== '\n' && source[index] !== '\r') masked[index] = ' ';
   };
@@ -50,12 +52,30 @@ export const maskJavaScript = (source = '', { strings = true } = {}) => {
         escaped = true;
         continue;
       }
+      if (state === 'template' && character === '$' && next === '{') {
+        if (strings) hide(index + 1);
+        index += 1;
+        templateExpressions.push(0);
+        state = 'code';
+        continue;
+      }
       const delimiter = state === 'single-quote' ? "'" : state === 'double-quote' ? '"' : '`';
       if (character === delimiter) state = 'code';
       continue;
     }
 
-    if (character === '/' && next === '/') {
+    if (templateExpressions.length > 0 && character === '{') {
+      templateExpressions[templateExpressions.length - 1] += 1;
+    } else if (templateExpressions.length > 0 && character === '}') {
+      if (templateExpressions[templateExpressions.length - 1] > 0) {
+        templateExpressions[templateExpressions.length - 1] -= 1;
+      } else {
+        // The closing brace returns to the enclosing template text.
+        templateExpressions.pop();
+        if (strings) hide(index);
+        state = 'template';
+      }
+    } else if (character === '/' && next === '/') {
       hide(index);
       hide(index + 1);
       index += 1;

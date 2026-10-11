@@ -1,27 +1,29 @@
+// @ts-check
 import {
   migrateLegacyCircularTrackSlot,
   migrateLegacyCircularTrackSlotSpec,
   parseCircularTrackSlotSpec
-} from '../app/circular-track-slots.js';
+} from './circular-track-slot-model.js';
 import {
   migratePersistedCircularMultiRecordSizeMode,
   migratePersistedLinearLabelPlacement,
   migratePersistedLinearTrackLayout,
   migratePersistedWebStateFieldNames
-} from '../app/current-option-values.js';
+} from './current-option-values.js';
 import {
   buildCanonicalRenderRequest,
   buildCanonicalRequestState,
   projectCanonicalSessionRequest
 } from './session-request.js';
-import { migrateLegacyLinearLabelVisibility } from '../app/linear-label-visibility.js';
-import { resolveActiveLayoutPreference } from '../app/layout-preferences.js';
+import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
+import { resolveActiveLayoutPreference } from './layout-preferences.js';
 import {
   createLinearComparisonEdge,
   normalizeLinearComparisonPlan,
   resolveLinearComparisonPlan
-} from '../app/linear-comparisons.js';
+} from './linear-comparisons.js';
 import { textToBase64, textToBytes } from './file-content-cache.js';
+
 
 const isPlainObject = (value) => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -268,12 +270,18 @@ const stripLegacyComparisonConfig = (config) => {
 
 const legacyComparisonFile = (comparison) => comparison?.file || null;
 
+/**
+ * @param {{ config?: Record<string, any>, filesData?: Record<string, any>, forceWebDraft?: boolean | null }} [draft]
+ * An unvalidated active configuration and its legacy file state.
+ * @returns {{ config: Record<string, any>, filesData: Record<string, any> }}
+ */
 export const migrateLegacyLinearComparisonDraft = ({
   config: sourceConfig,
   filesData: sourceFiles,
   forceWebDraft = null
 } = {}) => {
   const config = cloneJson(isPlainObject(sourceConfig) ? sourceConfig : {});
+  /** @type {Record<string, any>} */
   const filesData = {
     ...(isPlainObject(sourceFiles) ? sourceFiles : {}),
     linearSeqs: (Array.isArray(sourceFiles?.linearSeqs) ? sourceFiles.linearSeqs : [])
@@ -314,9 +322,9 @@ export const migrateLegacyLinearComparisonDraft = ({
 
   if (isPlainObject(config.linearComparisonPlan)) {
     const fileById = new Map(
-      legacyFileComparisons
+      /** @type {[string, any][]} */ (legacyFileComparisons
         .map((comparison) => [String(comparison?.id || ''), legacyComparisonFile(comparison)])
-        .filter(([id, file]) => id && file)
+        .filter(([id, file]) => id && file))
     );
     const normalized = normalizeLinearComparisonPlan(config.linearComparisonPlan);
     config.linearComparisonPlan = {
@@ -395,6 +403,7 @@ export const migrateLegacyLinearComparisonDraft = ({
     return id;
   };
   const edges = [];
+  /** @param {Record<string, any>} edge */
   const addEdge = ({
     id,
     queryUid,
@@ -555,6 +564,11 @@ const preserveComparisonResources = (session, promoted) => {
   }
 };
 
+/**
+ * @param {Record<string, any>} session A validated Session of version 31-33 or 39.
+ * @param {string[]} args
+ * @returns {Record<string, any>} A current-request Session with its flat draft (`config`), which publication and Load split into mode slices.
+ */
 const promoteCliAuthoredSession = (session, args) => {
   const sourceConfig = session.renderRequest.diagramOptions?.config;
   const promoted = promoteGuiAuthoredSession(session, args, false);
@@ -571,6 +585,12 @@ const promoteCliAuthoredSession = (session, args) => {
   return promoted;
 };
 
+/**
+ * @param {Record<string, any>} session A validated Session of version 31-33 or 39.
+ * @param {string[]} args
+ * @param {boolean} [forceWebDraft]
+ * @returns {Record<string, any>} A current-request Session with its flat draft (`config`), which publication and Load split into mode slices.
+ */
 const promoteGuiAuthoredSession = (session, args, forceWebDraft = true) => {
   const projection = projectCanonicalSessionRequest({
     renderRequest: session.renderRequest,
@@ -599,19 +619,20 @@ const promoteGuiAuthoredSession = (session, args, forceWebDraft = true) => {
   const config = migratedDraft.config;
   const filesData = migratedDraft.filesData;
   hydrateLinearFilePresentations(filesData, args);
-  const state = buildCanonicalRequestState({ session, projection, config, filesData });
-  restoreConservationFiles(session, filesData, state.circularConservation);
+  const { state, drawing } = buildCanonicalRequestState({ session, projection, config });
+  restoreConservationFiles(session, filesData, drawing.circularConservation);
   const comparisonPlanSnapshot = projection.mode === 'linear'
     ? resolveLinearComparisonPlan({
-        plan: state.linearComparisonPlan,
+        plan: drawing.linearComparisonPlan,
         sequences: filesData.linearSeqs,
-        layout: state.linearRecordLayoutEnabled.value ? state.linearRecordRows : [],
-        losatProgram: state.losatProgram.value,
-        blastpMode: state.losat?.blastp?.mode
+        layout: drawing.linearRecordLayoutEnabled.value ? drawing.linearRecordRows : [],
+        losatProgram: drawing.losatProgram.value,
+        blastpMode: drawing.losat?.blastp?.mode
       })
     : null;
   const promotedCore = buildCanonicalRenderRequest({
     state,
+    drawing,
     filesData,
     comparisonPlanSnapshot
   });
@@ -621,10 +642,12 @@ const promoteGuiAuthoredSession = (session, args, forceWebDraft = true) => {
   if (isPlainObject(orthogroupState)) {
     delete orthogroupState.selectedOrthogroupAlignmentFeature;
   }
-  const promoted = {
+  const promoted = ({
     ...session,
     format: 'gbdraw-session',
-    version: 44,
+    // The current Session version (services/config.js SESSION_VERSION); the
+    // flat draft goes to its mode slice when publication prepares it.
+    version: 46,
     config: cloneJson(config),
     renderRequest: promotedCore.renderRequest,
     resources: promotedCore.resources,
@@ -633,12 +656,16 @@ const promoteGuiAuthoredSession = (session, args, forceWebDraft = true) => {
       ...(session.webFiles || {}),
       ...promotedCore.webFiles
     }
-  };
+  });
   hydrateRecordPresentations(promoted.renderRequest, args);
   preserveComparisonResources(session, promoted);
   return promoted;
 };
 
+/**
+ * @param {Record<string, any>} session An unvalidated historical Gallery Session.
+ * @returns {Record<string, any>} A current-request Session with its flat draft (`config`), which publication and Load split into mode slices.
+ */
 export const promoteGallerySessionToCurrent = (session) => {
   if (!isPlainObject(session) || !isPlainObject(session.renderRequest)) {
     throw new Error('Gallery session must contain a canonical renderRequest.');

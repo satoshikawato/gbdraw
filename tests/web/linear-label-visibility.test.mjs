@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { linearRecordLayoutHasSharedRow } from '../../gbdraw/web/js/app/linear-record-layout.js';
+import { linearRecordLayoutHasSharedRow } from '../../gbdraw/web/js/services/linear-record-layout.js';
 
 import {
   describeLinearLabelVisibility,
   migrateLegacyLinearLabelVisibility,
   requireLinearLabelVisibilityMode,
   resolveLinearLabelVisibility
-} from '../../gbdraw/web/js/app/linear-label-visibility.js';
+} from '../../gbdraw/web/js/services/linear-label-visibility.js';
 
 for (const recordRows of [[1], [1, 2, 3, 4]]) {
   const hasSharedRow = new Set(recordRows).size !== recordRows.length;

@@ -1,15 +1,16 @@
+// @ts-check
 import {
   formatFeatureLocation,
   isInternalProteinDisplayId,
   resolveDisplayProteinId
-} from './feature-utils.js';
-import { buildFeatureSequenceFastas } from './feature-sequence-fasta.js';
-import { buildMatchSequenceBundle } from './match-sequences.js';
-import { readRecordSourceSpan, recordSourceInterval } from './record-source-coordinates.js';
+} from '../services/feature-utils.js';
+import { buildFeatureSequenceFastas } from '../services/feature-sequence-fasta.js';
+import { buildMatchSequenceBundle } from '../services/match-sequences.js';
+import { readRecordSourceSpan, recordSourceInterval } from '../services/record-source-coordinates.js';
 import {
   groupMetadataScopeLabel,
   normalizeGroupMetadataScope
-} from './losat-normalization.js';
+} from '../services/losat-normalization.js';
 import {
   RENDERED_FEATURE_ID_KEYS,
   STABLE_FEATURE_ID_KEYS,
@@ -18,6 +19,97 @@ import {
   renderedFeatureIdentity,
   textAliasStatus
 } from '../services/feature-identity.js';
+
+/**
+ * One popup table row.
+ * @typedef {{ label: string, value: string }} PopupRow
+ */
+
+/**
+ * A popup section. `section` builds `title` and `rows`; the member and
+ * feature sections add their list data and the Similarity group section
+ * adds the copy and FASTA fields.
+ * @typedef {object} PopupSection
+ * @property {string} title
+ * @property {PopupRow[]} rows
+ * @property {Record<string, any>[]} [featureRows]
+ * @property {Record<string, any>[]} [memberRows]
+ * @property {string} [memberCopyText]
+ * @property {string} [memberNtFasta]
+ * @property {string} [memberAaFasta]
+ * @property {number} [memberNtCount]
+ * @property {number} [memberAaCount]
+ * @property {string} [memberNtFilename]
+ * @property {string} [memberAaFilename]
+ * @property {Record<string, any>[]} [blockOrthogroups]
+ */
+
+/**
+ * What the popup and the hover summary read from one match element.
+ * @typedef {object} PairwiseMatchDescriptor
+ * @property {string} matchKind
+ * @property {string} matchId
+ * @property {string} orthogroupId
+ * @property {string[]} orthogroupIds
+ * @property {string} collinearityBlockId
+ * @property {string} groupScope
+ * @property {string} normalizedGroupScope
+ * @property {string} queryFeatureSvgId
+ * @property {string} subjectFeatureSvgId
+ * @property {string} queryRecordId
+ * @property {string} subjectRecordId
+ * @property {string} queryInterval
+ * @property {string} subjectInterval
+ * @property {string} queryTableInterval
+ * @property {string} subjectTableInterval
+ * @property {string} identity
+ * @property {string} orientation
+ * @property {string} title
+ * @property {string} subtitle
+ * @property {string} fill
+ * @property {{ query: ReturnType<typeof matchEndpointReferences>, subject: ReturnType<typeof matchEndpointReferences> }} endpoints
+ */
+
+/**
+ * The values of one hover summary, taken from a descriptor or from a payload.
+ * @typedef {object} PairwiseHoverRowValues
+ * @property {string} [matchKind]
+ * @property {string} [identity]
+ * @property {string} [queryInterval]
+ * @property {string} [subjectInterval]
+ * @property {string} [orthogroupId]
+ * @property {string} [displayName]
+ * @property {string} [memberCount]
+ * @property {string} [groupScope]
+ * @property {number | string} [blockOrthogroupCount]
+ * @property {string} [collinearityBlockId]
+ */
+
+/**
+ * Overrides keyed by similarity-group ID, as a Map or a plain object.
+ * @typedef {Map<string, string> | Record<string, string> | null} OrthogroupTextOverrides
+ */
+
+/**
+ * Rendered features by SVG ID, as the SVG owner holds them.
+ * @typedef {Map<string, any> | Record<string, any> | any[] | null} FeatureLookup
+ */
+
+/**
+ * @typedef {object} MatchPopupPayloadOptions
+ * @property {FeatureLookup} [featureLookup]
+ * @property {Record<string, any>[]} [sourceFeatures]
+ * @property {Record<string, any>[]} [orthogroups]
+ * @property {OrthogroupTextOverrides} [orthogroupNameOverrides]
+ * @property {OrthogroupTextOverrides} [orthogroupDescriptionOverrides]
+ * @property {import('../services/match-sequences.js').SequenceSourceResolver | null} [resolveSequenceSource]
+ */
+
+/**
+ * @typedef {object} MatchHoverSummaryOptions
+ * @property {Record<string, any>[] | (() => Record<string, any>[])} [orthogroups]
+ * @property {OrthogroupTextOverrides} [orthogroupNameOverrides]
+ */
 
 export const PAIRWISE_MATCH_SELECTOR = [
   'path[data-gbdraw-match-id]',
@@ -108,6 +200,7 @@ const makeSafeFilename = (value, fallback = 'orthogroup') => {
 const sequenceKindLabel = (sequenceKind) => (sequenceKind === 'aa' ? 'aa' : 'nt');
 const sequenceExtension = (sequenceKind) => (sequenceKindLabel(sequenceKind) === 'aa' ? 'faa' : 'fna');
 
+/** @param {SVGElement | null} [element] */
 const normalizeMatchKind = (value, element = null) => {
   const normalized = normalizeText(value).toLowerCase();
   if (MATCH_KIND_ALIASES.has(normalized)) return normalized;
@@ -285,6 +378,10 @@ const matchIntervals = (element, matchKind, role, start, end) => {
     : { interval: intervalText(start, end), table: '' };
 };
 
+/**
+ * @param {SVGElement} element
+ * @returns {PairwiseMatchDescriptor}
+ */
 const readPairwiseMatchDescriptor = (element) => {
   const matchKind = normalizeMatchKind(attr(element, 'data-match-kind'), element);
   const orthogroupId = attr(element, 'data-orthogroup-id');
@@ -353,11 +450,6 @@ const featureOrthogroupIdStatus = (feature) => {
     supplied: statuses.some((status) => status.supplied),
     value: values.size === 1 ? values.values().next().value : ''
   };
-};
-
-const featureOrthogroupId = (feature) => {
-  const status = featureOrthogroupIdStatus(feature);
-  return status.valid ? status.value : '';
 };
 
 const featureProduct = (feature) => firstText(
@@ -430,6 +522,14 @@ const identityIndexKeys = (identity) => {
   return keys;
 };
 
+/**
+ * @param {{
+ *   featureLookup?: FeatureLookup,
+ *   sourceFeatures?: Record<string, any>[],
+ *   orthogroups?: Record<string, any>[],
+ *   descriptor?: PairwiseMatchDescriptor | null
+ * }} [options]
+ */
 const createPairwisePayloadContext = ({
   featureLookup = new Map(),
   sourceFeatures = [],
@@ -518,7 +618,7 @@ const createPairwisePayloadContext = ({
   for (const role of ['query', 'subject']) {
     const endpoint = descriptor?.endpoints?.[role];
     if (!endpoint?.constrained) continue;
-    const renderedIds = splitMetadataValues(descriptor[`${role}FeatureSvgId`]);
+    const renderedIds = splitMetadataValues(descriptor?.[`${role}FeatureSvgId`]);
     if (!endpoint.valid) {
       renderedIds.forEach((renderedId) => rejectedRenderedIds.add(renderedId));
       continue;
@@ -541,7 +641,8 @@ const createPairwisePayloadContext = ({
   const featureForLookupId = (renderedSvgId) => {
     const id = normalizeText(renderedSvgId);
     if (!id || rejectedRenderedIds.has(id)) return null;
-    const feature = featureLookup?.get?.(id) || null;
+    // Only a Map answers `get`; an array or plain object lookup yields no feature.
+    const feature = /** @type {Partial<Map<string, any>> | null} */ (featureLookup)?.get?.(id) || null;
     const record = feature ? renderedByObject.get(feature) : null;
     return record && rejectedRenderedIds.has(record.identity.renderedId.value)
       ? null
@@ -549,10 +650,12 @@ const createPairwisePayloadContext = ({
   };
 
   const groupMemberIndexes = new WeakMap();
+  /** @returns {{ records: { member: any, identity: any }[], byIdentity: Map<any, any> }} */
   const memberIndexForGroup = (group) => {
     if (!group || typeof group !== 'object') return { records: [], byIdentity: new Map() };
     const cached = groupMemberIndexes.get(group);
     if (cached) return cached;
+    /** @type {{ records: { member: any, identity: any }[], byIdentity: Map<any, any> }} */
     const index = { records: [], byIdentity: new Map() };
     for (const member of Array.isArray(group.members) ? group.members : []) {
       const record = { member, identity: cachedIdentity(member, 'standard') };
@@ -743,46 +846,6 @@ const buildFallbackOrthogroupWithContext = ({
   };
 };
 
-const getRenderedFeatureForMember = (member, feature, featureLookup) => (
-  createPairwisePayloadContext({ featureLookup, sourceFeatures: [feature] })
-    .renderedFeatureForMember(member, feature)
-);
-
-const getFeatureForMember = (member, featureLookup, sourceFeatures = []) => (
-  createPairwisePayloadContext({ featureLookup, sourceFeatures }).featureForMember(member)
-);
-
-const getGroupMemberForFeatureSvgId = (group, featureSvgId, featureLookup = null) => (
-  createPairwisePayloadContext({ featureLookup, orthogroups: [group] })
-    .groupMemberForFeatureId(group, featureSvgId)
-);
-
-const getOrthogroupForMatch = (orthogroups, options = {}) => (
-  createPairwisePayloadContext({
-    featureLookup: options.featureLookup,
-    orthogroups,
-    descriptor: {
-      matchKind: 'pairwise',
-      orthogroupId: options.orthogroupId,
-      groupScope: options.groupScope,
-      queryFeatureSvgId: options.queryFeatureSvgId,
-      subjectFeatureSvgId: options.subjectFeatureSvgId
-    }
-  }).orthogroupForMatch()
-);
-
-const buildFallbackOrthogroup = ({
-  orthogroupId,
-  queryFeature,
-  subjectFeature,
-  featureLookup
-}) => buildFallbackOrthogroupWithContext({
-  orthogroupId,
-  queryFeature,
-  subjectFeature,
-  context: createPairwisePayloadContext({ featureLookup })
-});
-
 const overrideValue = (overrides, key) => {
   const normalizedKey = normalizeText(key);
   if (!normalizedKey || !overrides) return '';
@@ -790,6 +853,12 @@ const overrideValue = (overrides, key) => {
   return normalizeText(overrides[normalizedKey]);
 };
 
+/**
+ * @param {string} title
+ * @param {PopupRow[]} rows
+ * @param {Partial<PopupSection>} [extras]
+ * @returns {PopupSection}
+ */
 const section = (title, rows, extras = {}) => ({
   title,
   rows: rows.filter((row) => normalizeText(row.value)),
@@ -891,6 +960,20 @@ const orthogroupMemberSequenceFilename = (member, orthogroupId, sequenceKind) =>
   return `${makeSafeFilename(`${id}_${memberId}_${sequenceKindLabel(sequenceKind)}`)}.${sequenceExtension(sequenceKind)}`;
 };
 
+// Python's member defaults (OrthogroupMember in analysis/protein_colinearity.py).
+// The member table names a role or confidence only when it differs (UX-B02).
+const DEFAULT_MEMBER_ROLE = 'anchor';
+const DEFAULT_MEMBER_CONFIDENCE = 'high';
+
+/**
+ * @param {string} role
+ * @param {string} confidence
+ */
+const memberRoleNote = (role, confidence) => [
+  role && role !== DEFAULT_MEMBER_ROLE ? role.replaceAll('_', ' ') : '',
+  confidence && confidence !== DEFAULT_MEMBER_CONFIDENCE ? `${confidence} confidence` : ''
+].filter(Boolean).join(' · ');
+
 const buildOrthogroupMemberRows = (group, context, orthogroupId) => (
   context.groupMemberRecords(group)
     .map(({ member }) => {
@@ -904,14 +987,17 @@ const buildOrthogroupMemberRows = (group, context, orthogroupId) => (
         nucleotideSequence,
         aminoAcidSequence
       );
+      const role = firstText(member?.role, member?.memberRole, member?.member_role);
+      const confidence = firstText(member?.confidence, member?.memberConfidence, member?.member_confidence);
       return {
         feature: renderedFeature || feature,
         canOpen: Boolean(renderedFeature),
         record: firstText(member?.recordId, member?.record_id),
         coordinates: memberLocationText(member),
         proteinId: resolveDisplayProteinId(null, member),
-        role: firstText(member?.role, member?.memberRole, member?.member_role),
-        confidence: firstText(member?.confidence, member?.memberConfidence, member?.member_confidence),
+        role,
+        confidence,
+        roleNote: memberRoleNote(role, confidence),
         assignmentReason: firstText(member?.assignmentReason, member?.assignment_reason),
         productOrNote: firstText(member?.product, member?.note),
         ntFasta: fastas.ntFasta,
@@ -1125,111 +1211,275 @@ const orthogroupMemberSectionExtras = (memberRows, orthogroupId, displayName) =>
   };
 };
 
-const resolveBlockMemberLabels = ({
-  group,
-  featureSvgIds,
-  context
-}) => {
-  if (!group) return '';
-  const values = [];
-  uniqueMetadataValues(featureSvgIds).forEach((featureSvgId) => {
-    const feature = context.featureForLookupId(featureSvgId);
-    const member = group ? context.groupMemberForFeatureId(group, featureSvgId) : null;
-    if (!member) return;
-    addUniqueDisplayText(values, resolveDisplayProteinId(feature, member, ''));
-  });
-  return values.join('; ');
+/**
+ * "N genes in M records" (UX-B02): the one count line of a group.
+ * @param {unknown} memberCount
+ * @param {unknown} recordCoverage
+ */
+export const groupCountText = (memberCount, recordCoverage) => {
+  const plural = (/** @type {unknown} */ value, /** @type {string} */ noun) => {
+    const count = Number(normalizeText(value));
+    return Number.isInteger(count) && count > 0 ? `${count} ${noun}${count === 1 ? '' : 's'}` : '';
+  };
+  const genes = plural(memberCount, 'gene');
+  const records = plural(recordCoverage, 'record');
+  return genes && records ? `${genes} in ${records}` : genes || records;
 };
 
-const buildOrthogroupDetailRows = ({
+/**
+ * The lookups of the payload context that the group and gene-pair views use.
+ * @typedef {{
+ *   orthogroupById: (orthogroupId: string, groupScope?: string) => Record<string, unknown> | null,
+ *   groupMemberForFeatureId: (group: Record<string, unknown> | null, featureSvgId: string) => unknown
+ * }} GroupLookupPort
+ */
+
+/**
+ * The view of one similarity group in the match popup (UX-B02): the name with
+ * the ID as a badge, one count line, the member table and its copy menu, and
+ * the computed facts behind "Technical details". A description the user wrote
+ * is shown under the name; a computed description is a technical detail.
+ * @param {{
+ *   orthogroupId: string,
+ *   group: Record<string, unknown> | null,
+ *   context: GroupLookupPort,
+ *   displayName: string,
+ *   userDescription: string,
+ *   groupScope: string,
+ *   localGroups?: boolean
+ * }} input
+ */
+const buildGroupView = ({
   orthogroupId,
-  idLabel = 'Similarity group ID',
-  displayName,
-  description,
-  scopeLabel,
-  memberCount,
-  recordCoverage,
-  rbhOrthogroups,
-  orthologPathCount,
-  relatedEdgeCount
-}) => {
-  const rows = [];
-  addRow(rows, idLabel, orthogroupId);
-  addRow(rows, 'Display name', displayName);
-  addRow(rows, 'Description', description);
-  addRow(rows, 'Scope', scopeLabel);
-  addRow(rows, 'Members', memberCount);
-  addRow(rows, 'Record coverage', recordCoverage);
-  addRow(rows, 'RBH seeds', Array.isArray(rbhOrthogroups) ? rbhOrthogroups.join('; ') : rbhOrthogroups);
-  addRow(rows, 'Group paths', orthologPathCount);
-  addRow(rows, 'Related edges', relatedEdgeCount);
-  return rows;
-};
-
-const buildBlockOrthogroups = ({
-  orthogroupIds,
+  group,
   context,
-  queryFeatureSvgId,
-  subjectFeatureSvgId,
-  orthogroupNameOverrides,
-  orthogroupDescriptionOverrides,
-  groupScope
-}) => orthogroupIds.map((orthogroupId) => {
-  const group = context.orthogroupById(orthogroupId, groupScope);
-  const normalizedGroupScope = normalizeGroupMetadataScope(groupScopeValue(group) || groupScope);
-  const displayName = firstText(
-    overrideValue(orthogroupNameOverrides, orthogroupId),
-    group?.displayName,
-    group?.display_name,
-    group?.name
-  );
-  const description = firstText(
-    overrideValue(orthogroupDescriptionOverrides, orthogroupId),
-    group?.description
-  );
+  displayName,
+  userDescription,
+  groupScope,
+  localGroups = false
+}) => {
+  const memberRows = buildOrthogroupMemberRows(group, context, orthogroupId);
   const memberCount = firstText(
     group?.member_count,
     group?.memberCount,
     Array.isArray(group?.members) ? group.members.length : ''
   );
-  const scopeLabel = groupMetadataScopeLabel(normalizedGroupScope);
-  const idLabel = normalizedGroupScope === 'adjacent_local'
-    ? 'Collinear group ID'
-    : 'Similarity group ID';
   const recordCoverage = firstText(group?.record_coverage_count, group?.recordCoverage);
-  const rbhOrthogroups = Array.isArray(group?.rbhOrthogroupIds) ? group.rbhOrthogroupIds : [];
-  const orthologPathCount = firstText(
+  const technicalRows = [];
+  addRow(technicalRows, localGroups ? 'Collinear group ID' : 'Similarity group ID', orthogroupId);
+  addRow(technicalRows, 'Description', userDescription ? '' : group?.description);
+  addRow(technicalRows, 'Scope', groupMetadataScopeLabel(normalizeGroupMetadataScope(groupScopeValue(group) || groupScope)));
+  addRow(technicalRows, 'RBH seeds', Array.isArray(group?.rbhOrthogroupIds) ? group.rbhOrthogroupIds.join('; ') : '');
+  addRow(technicalRows, 'Group paths', firstText(
     group?.orthologPathCount,
     Array.isArray(group?.orthologPaths) ? String(group.orthologPaths.length) : ''
-  );
-  const relatedEdgeCount = firstText(
+  ));
+  addRow(technicalRows, 'Related edges', firstText(
     group?.relatedEdgeCount,
     Array.isArray(group?.relatedEdges) ? String(group.relatedEdges.length) : ''
-  );
-  const memberRows = buildOrthogroupMemberRows(group, context, orthogroupId);
+  ));
+  const id = normalizeText(orthogroupId);
+  const name = normalizeText(displayName);
   return {
-    id: orthogroupId,
-    displayName,
-    description,
+    id,
+    displayName: name,
+    title: name || id || MATCH_KIND_TITLES.orthogroup,
+    badge: name && id && name !== id ? id : '',
+    description: normalizeText(userDescription),
     memberCount,
     recordCoverage,
-    queryMember: resolveBlockMemberLabels({ group, featureSvgIds: queryFeatureSvgId, context }),
-    subjectMember: resolveBlockMemberLabels({ group, featureSvgIds: subjectFeatureSvgId, context }),
-    detailRows: buildOrthogroupDetailRows({
-      orthogroupId,
-      idLabel,
-      displayName,
-      description,
-      scopeLabel,
-      memberCount,
-      recordCoverage,
-      rbhOrthogroups,
-      orthologPathCount,
-      relatedEdgeCount
-    }),
+    countText: groupCountText(memberCount || memberRows.length, recordCoverage),
+    technicalRows,
     ...orthogroupMemberSectionExtras(memberRows, orthogroupId, displayName)
   };
+};
+
+const buildBlockOrthogroups = ({
+  orthogroupIds,
+  context,
+  orthogroupNameOverrides,
+  orthogroupDescriptionOverrides,
+  groupScope
+}) => orthogroupIds.map((orthogroupId) => {
+  const group = context.orthogroupById(orthogroupId, groupScope);
+  return buildGroupView({
+    orthogroupId,
+    group,
+    context,
+    displayName: firstText(
+      overrideValue(orthogroupNameOverrides, orthogroupId),
+      group?.displayName,
+      group?.display_name,
+      group?.name
+    ),
+    userDescription: overrideValue(orthogroupDescriptionOverrides, orthogroupId),
+    groupScope,
+    localGroups: normalizeGroupMetadataScope(groupScopeValue(group) || groupScope) === 'adjacent_local'
+  });
 });
+
+// Collinear block popup (UX-B01): one summary line, the gene pairs, and the
+// block facts behind "Details".
+const COLLINEAR_ORIENTATION_TEXT = Object.freeze({ plus: 'Same orientation', minus: 'Inverted' });
+const COLLINEAR_BLOCK_NOTE = 'Block envelopes may include intergenic sequence and genes that are not anchors.';
+
+/** @param {number} value */
+const groupedInteger = (value) => value.toLocaleString('en-US');
+
+/** @param {unknown} value */
+const finiteNumber = (value) => {
+  const text = normalizeText(value);
+  const number = Number(text);
+  return text && Number.isFinite(number) ? number : null;
+};
+
+/**
+ * "AP027133.1 10,124..28,017 (17.9 kb)" for one side of a block.
+ * @param {string} recordId
+ * @param {string} interval
+ * @param {string} tableInterval
+ */
+const blockSpanView = (recordId, interval, tableInterval) => {
+  const match = /^(\d+)\.\.(\d+)$/.exec(normalizeText(interval));
+  const start = match ? Number(match[1]) : 0;
+  const end = match ? Number(match[2]) : 0;
+  const length = match ? Math.abs(end - start) + 1 : 0;
+  const lengthText = length >= 1000 ? `${(length / 1000).toFixed(1)} kb` : (length ? `${length} bp` : '');
+  const intervalText = match ? `${groupedInteger(start)}..${groupedInteger(end)}` : normalizeText(interval);
+  return {
+    recordId: normalizeText(recordId),
+    interval: normalizeText(interval),
+    intervalText,
+    lengthText,
+    tableInterval: normalizeText(tableInterval),
+    text: [normalizeText(recordId), intervalText, lengthText ? `(${lengthText})` : ''].filter(Boolean).join(' ')
+  };
+};
+
+/**
+ * @param {Element} element
+ * @param {PairwiseMatchDescriptor} descriptor
+ */
+const collinearDetailRows = (element, descriptor) => {
+  const rows = [];
+  const identity = finiteNumber(descriptor.identity);
+  const alignedLength = finiteNumber(attr(element, 'data-alignment-length'));
+  addRow(rows, 'Block ID', descriptor.collinearityBlockId);
+  addRow(rows, 'Kind', attr(element, 'data-collinearity-block-kind'));
+  addRow(rows, 'Orientation', attr(element, 'data-collinearity-orientation'));
+  addRow(rows, 'Color mode', attr(element, 'data-collinearity-color-mode'));
+  if (descriptor.matchKind === 'collinear') {
+    addRow(rows, 'Average identity', identity === null ? descriptor.identity : `${identity.toFixed(2)}%`);
+    // LOSATP anchors: the summed protein alignment length.
+    addRow(rows, 'Aligned length', alignedLength === null ? '' : `${groupedInteger(alignedLength)} aa`);
+  }
+  addRow(rows, 'Block score', attr(element, 'data-collinearity-block-score'));
+  addRow(rows, 'Block e-value', attr(element, 'data-collinearity-block-evalue'));
+  addRow(rows, 'Anchor', [
+    attr(element, 'data-collinearity-anchor-index'),
+    attr(element, 'data-collinearity-anchor-count')
+  ].filter(Boolean).join(' / '));
+  return rows;
+};
+
+/**
+ * One row per gene pair (query gene | subject gene | group), in the order of
+ * the block's groups; a gene in no group of the block gets a row of its own.
+ * @param {{
+ *   queryRows: Record<string, unknown>[],
+ *   subjectRows: Record<string, unknown>[],
+ *   blockOrthogroups: ReturnType<typeof buildGroupView>[],
+ *   context: GroupLookupPort,
+ *   groupScope: string
+ * }} input
+ */
+const buildGenePairs = ({ queryRows, subjectRows, blockOrthogroups, context, groupScope }) => {
+  const used = new Set();
+  /**
+   * @param {Record<string, unknown>[]} rows
+   * @param {Record<string, unknown>} group
+   */
+  const membersOf = (rows, group) => rows.filter((row) => (
+    !used.has(row) && row.svgId && context.groupMemberForFeatureId(group, String(row.svgId))
+  ));
+  const pairs = [];
+  blockOrthogroups.forEach((view) => {
+    const group = context.orthogroupById(view.id, groupScope);
+    const queries = group ? membersOf(queryRows, group) : [];
+    const subjects = group ? membersOf(subjectRows, group) : [];
+    [...queries, ...subjects].forEach((row) => used.add(row));
+    const count = Math.max(queries.length, subjects.length, 1);
+    for (let index = 0; index < count; index += 1) {
+      pairs.push({
+        key: `${view.id}-${index}`,
+        query: queries[index] || null,
+        subject: subjects[index] || null,
+        group: { id: view.id, displayName: view.displayName }
+      });
+    }
+  });
+  [...queryRows, ...subjectRows].filter((row) => !used.has(row)).forEach((row) => {
+    const isQuery = queryRows.includes(row);
+    pairs.push({
+      key: `${isQuery ? 'query' : 'subject'}-${row.key}`,
+      query: isQuery ? row : null,
+      subject: isQuery ? null : row,
+      group: null
+    });
+  });
+  return pairs;
+};
+
+/** @param {Record<string, unknown> | null} row */
+const genePairCells = (row) => (row
+  ? [row.record, row.location, row.proteinId, row.product]
+  : ['', '', '', '']
+).map((value) => normalizeText(value));
+
+/**
+ * @param {{
+ *   element: Element,
+ *   descriptor: PairwiseMatchDescriptor,
+ *   genePairs: ReturnType<typeof buildGenePairs>,
+ *   localGroups: boolean
+ * }} input
+ */
+const buildCollinearBlockView = ({ element, descriptor, genePairs, localGroups }) => {
+  const query = blockSpanView(descriptor.queryRecordId, descriptor.queryInterval, descriptor.queryTableInterval);
+  const subject = blockSpanView(descriptor.subjectRecordId, descriptor.subjectInterval, descriptor.subjectTableInterval);
+  const orientation = normalizeText(descriptor.orientation).toLowerCase();
+  const orientationText = COLLINEAR_ORIENTATION_TEXT[/** @type {'plus' | 'minus'} */ (orientation)] || orientation;
+  const identity = finiteNumber(descriptor.identity);
+  const identityText = identity === null ? '' : `${Math.round(identity)}% identity`;
+  const pairCount = genePairs.filter((pair) => pair.query && pair.subject).length;
+  const pairsLabel = `${pairCount} gene pair${pairCount === 1 ? '' : 's'}`;
+  const facts = [orientationText, identityText, pairsLabel].filter(Boolean);
+  const groupHeading = localGroups ? 'Collinear group' : 'Similarity group';
+  return {
+    query,
+    subject,
+    facts,
+    identity: descriptor.identity,
+    pairCount,
+    pairsLabel,
+    groupHeading,
+    genePairs,
+    summaryText: `Collinear block: ${query.text} vs ${subject.text}; ${facts.join('; ')}`,
+    pairsCopyText: [
+      ['Query record', 'Query location', 'Query protein ID', 'Query product',
+        'Subject record', 'Subject location', 'Subject protein ID', 'Subject product',
+        `${groupHeading} ID`, `${groupHeading} name`].join('\t'),
+      ...genePairs.map((pair) => [
+        ...genePairCells(pair.query),
+        ...genePairCells(pair.subject),
+        pair.group?.id || '',
+        pair.group?.displayName || ''
+      ].join('\t'))
+    ].join('\n'),
+    detailRows: collinearDetailRows(element, descriptor),
+    note: COLLINEAR_BLOCK_NOTE
+  };
+};
 
 const buildFeatureRows = ({
   title,
@@ -1318,7 +1568,7 @@ const buildMatchSpans = (element, matchKind) => {
 const buildSequenceBundleForMatch = (element, matchKind, matchId, resolveSequenceSource) => {
   const spans = buildMatchSpans(element, matchKind);
   if (!spans.length) return null;
-  return buildMatchSequenceBundle(spans, {
+  const bundle = buildMatchSequenceBundle(spans, {
     matchId,
     resolveSequenceSource: (sourceKey, recordId, context) => {
       const resolved = typeof resolveSequenceSource === 'function'
@@ -1346,8 +1596,19 @@ const buildSequenceBundleForMatch = (element, matchKind, matchId, resolveSequenc
       span.identityValid ? '' : 'The sequence identity metadata for this match is invalid.'
     )
   });
+  // The span rows show input-file coordinates, as the Interval rows and the
+  // FASTA headers do (R5, CI-05); the bases are read on the displayed record.
+  bundle.entries = bundle.entries.map((entry, index) => {
+    const source = recordSourceInterval(spans[index].sourceSpan, entry.span.start, entry.span.end);
+    return source ? { ...entry, span: { ...entry.span, start: source.start, end: source.end } } : entry;
+  });
+  return bundle;
 };
 
+/**
+ * @param {SVGElement} element
+ * @param {MatchPopupPayloadOptions} [options]
+ */
 export const buildMatchPopupPayload = (
   element,
   {
@@ -1392,29 +1653,94 @@ export const buildMatchPopupPayload = (
       subjectFeature,
       context
     });
-  const blockOrthogroups = matchKind === 'collinear'
-    ? buildBlockOrthogroups({
+  const userDescription = overrideValue(orthogroupDescriptionOverrides, orthogroupId);
+  const groupView = matchKind !== 'collinear' && (normalizeText(orthogroupId) || group)
+    ? buildGroupView({
+      orthogroupId: firstText(orthogroupId, group ? orthogroupIdStatus(group).value : ''),
+      group,
+      context,
+      displayName: firstText(
+        overrideValue(orthogroupNameOverrides, orthogroupId),
+        group?.displayName,
+        group?.display_name,
+        group?.name,
+        featureProduct(queryFeature),
+        featureProduct(subjectFeature)
+      ),
+      userDescription,
+      groupScope
+    })
+    : null;
+  const identity = {
+    matchKind,
+    orthogroupId,
+    collinearityBlockId,
+    queryFeatureSvgId,
+    subjectFeatureSvgId,
+    fill: descriptor.fill
+  };
+
+  if (matchKind === 'orthogroup') {
+    return {
+      id: firstText(matchId, orthogroupId),
+      title: orthogroupTitle(orthogroupId, groupView?.displayName),
+      subtitle: '',
+      ...identity,
+      group: groupView,
+      sections: []
+    };
+  }
+
+  const sequenceBundle = buildSequenceBundleForMatch(
+    element,
+    matchKind,
+    matchId || 'match',
+    resolveSequenceSource
+  );
+
+  const featureListRows = (role) => buildFeatureListRows({
+    featureSvgIds: role === 'query' ? queryFeatureSvgId : subjectFeatureSvgId,
+    context,
+    group,
+    recordId: role === 'query' ? descriptor.queryRecordId : descriptor.subjectRecordId,
+    interval: role === 'query' ? qInterval : sInterval,
+    proteinId: attr(element, `data-${role}-protein-id`),
+    locusId: attr(element, `data-${role}-locus-id`),
+    displayName: attr(element, `data-${role}-display-name`)
+  });
+
+  if (matchKind === 'collinear') {
+    const blockOrthogroups = buildBlockOrthogroups({
       orthogroupIds,
       context,
-      queryFeatureSvgId,
-      subjectFeatureSvgId,
       orthogroupNameOverrides,
       orthogroupDescriptionOverrides,
       groupScope
-    })
-    : [];
-  const displayName = firstText(
-    overrideValue(orthogroupNameOverrides, orthogroupId),
-    group?.displayName,
-    group?.display_name,
-    group?.name,
-    featureProduct(queryFeature),
-    featureProduct(subjectFeature)
-  );
-  const description = firstText(
-    overrideValue(orthogroupDescriptionOverrides, orthogroupId),
-    group?.description
-  );
+    });
+    return {
+      id: matchId,
+      title,
+      subtitle,
+      ...identity,
+      groupScope: normalizedGroupScope,
+      blockOrthogroupCount: blockOrthogroups.length || orthogroupIds.length,
+      blockOrthogroups,
+      block: buildCollinearBlockView({
+        element,
+        descriptor,
+        genePairs: buildGenePairs({
+          queryRows: featureListRows('query'),
+          subjectRows: featureListRows('subject'),
+          blockOrthogroups,
+          context,
+          groupScope
+        }),
+        localGroups: normalizedGroupScope === 'adjacent_local'
+      }),
+      sequenceBundle,
+      sections: []
+    };
+  }
 
   const summaryRows = [];
   addRow(summaryRows, 'Query record', descriptor.queryRecordId);
@@ -1443,8 +1769,8 @@ export const buildMatchPopupPayload = (
   addRow(alignmentRows, 'Render role', attr(element, 'data-render-role'));
   addRow(alignmentRows, 'RBH seed', attr(element, 'data-rbh-orthogroup-id'));
   addRow(alignmentRows, 'Group path ID', attr(element, 'data-ortholog-path-id'));
-  addRow(alignmentRows, 'Query members', attr(element, 'data-query-orthogroup-member-count'));
-  addRow(alignmentRows, 'Subject members', attr(element, 'data-subject-orthogroup-member-count'));
+  addRow(alignmentRows, 'Query group genes', attr(element, 'data-query-orthogroup-member-count'));
+  addRow(alignmentRows, 'Subject group genes', attr(element, 'data-subject-orthogroup-member-count'));
   addRow(alignmentRows, 'Query member role', attr(element, 'data-query-orthogroup-role'));
   addRow(alignmentRows, 'Subject member role', attr(element, 'data-subject-orthogroup-role'));
   addRow(alignmentRows, 'Query confidence', attr(element, 'data-query-orthogroup-confidence'));
@@ -1452,142 +1778,44 @@ export const buildMatchPopupPayload = (
   addRow(alignmentRows, 'Query assignment', attr(element, 'data-query-orthogroup-assignment-reason'));
   addRow(alignmentRows, 'Subject assignment', attr(element, 'data-subject-orthogroup-assignment-reason'));
 
-  const blockRows = [];
-  addRow(blockRows, 'Block ID', collinearityBlockId);
-  addRow(blockRows, 'Kind', attr(element, 'data-collinearity-block-kind'));
-  addRow(blockRows, 'Orientation', attr(element, 'data-collinearity-orientation'));
-  addRow(blockRows, 'Color mode', attr(element, 'data-collinearity-color-mode'));
-  if (matchKind === 'collinear') {
-    addRow(blockRows, 'Average identity', descriptor.identity);
-    addRow(blockRows, 'Aligned length', attr(element, 'data-alignment-length'));
+  const sections = [section('Summary', summaryRows), section('Alignment', alignmentRows)];
+  const blockRows = collinearDetailRows(element, descriptor);
+  if (blockRows.length > 0) sections.push(section('Collinearity', blockRows));
+  if (matchKind !== 'homology') {
+    sections.push(buildFeatureRows({
+      title: 'Query',
+      feature: queryFeature,
+      recordId: descriptor.queryRecordId,
+      interval: qInterval,
+      proteinId: attr(element, 'data-query-protein-id'),
+      locusId: attr(element, 'data-query-locus-id'),
+      displayName: attr(element, 'data-query-display-name'),
+      featureSvgIds: queryFeatureSvgId,
+      context,
+      group
+    }));
+    sections.push(buildFeatureRows({
+      title: 'Subject',
+      feature: subjectFeature,
+      recordId: descriptor.subjectRecordId,
+      interval: sInterval,
+      proteinId: attr(element, 'data-subject-protein-id'),
+      locusId: attr(element, 'data-subject-locus-id'),
+      displayName: attr(element, 'data-subject-display-name'),
+      featureSvgIds: subjectFeatureSvgId,
+      context,
+      group
+    }));
   }
-  addRow(blockRows, 'Block score', attr(element, 'data-collinearity-block-score'));
-  addRow(blockRows, 'Block e-value', attr(element, 'data-collinearity-block-evalue'));
-  addRow(blockRows, 'Anchor', [
-    attr(element, 'data-collinearity-anchor-index'),
-    attr(element, 'data-collinearity-anchor-count')
-  ].filter(Boolean).join(' / '));
-
-  const orthogroupRows = [];
-  if (matchKind !== 'collinear') {
-    addRow(orthogroupRows, 'Similarity group ID', orthogroupId);
-    addRow(orthogroupRows, 'Display name', displayName);
-    addRow(orthogroupRows, 'Description', description);
-    addRow(orthogroupRows, 'Members', firstText(group?.member_count, group?.memberCount));
-    addRow(orthogroupRows, 'Record coverage', firstText(group?.record_coverage_count, group?.recordCoverage));
-    addRow(orthogroupRows, 'RBH seeds', Array.isArray(group?.rbhOrthogroupIds) ? group.rbhOrthogroupIds.join('; ') : '');
-    addRow(orthogroupRows, 'Group paths', firstText(
-      group?.orthologPathCount,
-      Array.isArray(group?.orthologPaths) ? String(group.orthologPaths.length) : ''
-    ));
-    addRow(orthogroupRows, 'Related edges', firstText(
-      group?.relatedEdgeCount,
-      Array.isArray(group?.relatedEdges) ? String(group.relatedEdges.length) : ''
-    ));
-  }
-  const orthogroupMemberRows = buildOrthogroupMemberRows(group, context, orthogroupId);
-
-  if (matchKind === 'orthogroup') {
-    const summarySection = section(
-      'Summary',
-      orthogroupRows,
-      orthogroupMemberSectionExtras(orthogroupMemberRows, orthogroupId, displayName)
-    );
-    return {
-      id: firstText(matchId, orthogroupId),
-      title: orthogroupTitle(orthogroupId, displayName),
-      subtitle: '',
-      matchKind,
-      orthogroupId,
-      collinearityBlockId,
-      queryFeatureSvgId,
-      subjectFeatureSvgId,
-      fill: descriptor.fill,
-      sections: summarySection.rows.length > 0 || summarySection.memberRows.length > 0
-        ? [summarySection]
-        : []
-    };
-  }
-
-  const sections = [section('Summary', summaryRows)];
-  if (matchKind !== 'collinear') {
-    sections.push(section('Alignment', alignmentRows));
-  }
-  if (matchKind === 'orthogroup' || orthogroupRows.length > 0) {
-    sections.push(section(
-      'Similarity group',
-      orthogroupRows,
-      orthogroupMemberSectionExtras(orthogroupMemberRows, orthogroupId, displayName)
-    ));
-  }
-  if (matchKind === 'collinear') {
-    const blockOrthogroupRows = [];
-    const localGroups = normalizedGroupScope === 'adjacent_local';
-    addRow(
-      blockOrthogroupRows,
-      localGroups
-        ? 'Number of local collinear groups'
-        : 'Number of similarity groups covered',
-      String(orthogroupIds.length)
-    );
-    sections.push(section(
-      localGroups ? 'Local collinear groups' : 'Similarity groups covered',
-      blockOrthogroupRows,
-      { blockOrthogroups }
-    ));
-  }
-  if (matchKind === 'collinear' || blockRows.length > 0) {
-    sections.push(section('Collinearity', blockRows));
-  }
-  if (matchKind !== 'homology') sections.push(buildFeatureRows({
-    title: 'Query',
-    feature: queryFeature,
-    recordId: descriptor.queryRecordId,
-    interval: qInterval,
-    proteinId: attr(element, 'data-query-protein-id'),
-    locusId: attr(element, 'data-query-locus-id'),
-    displayName: attr(element, 'data-query-display-name'),
-    featureSvgIds: queryFeatureSvgId,
-    context,
-    group
-  }));
-  if (matchKind !== 'homology') sections.push(buildFeatureRows({
-    title: 'Subject',
-    feature: subjectFeature,
-    recordId: descriptor.subjectRecordId,
-    interval: sInterval,
-    proteinId: attr(element, 'data-subject-protein-id'),
-    locusId: attr(element, 'data-subject-locus-id'),
-    displayName: attr(element, 'data-subject-display-name'),
-    featureSvgIds: subjectFeatureSvgId,
-    context,
-    group
-  }));
-
-  const sequenceBundle = buildSequenceBundleForMatch(
-    element,
-    matchKind,
-    matchId || 'match',
-    resolveSequenceSource
-  );
 
   return {
     id: matchId,
     title,
     subtitle,
-    matchKind,
-    orthogroupId,
+    ...identity,
     groupScope: normalizedGroupScope,
-    collinearityBlockId,
-    queryFeatureSvgId,
-    subjectFeatureSvgId,
-    blockOrthogroupCount: blockOrthogroups.length || (matchKind === 'collinear' ? orthogroupIds.length : 0),
-    blockOrthogroups,
-    fill: descriptor.fill,
-    sequenceTitle: matchKind === 'collinear' ? 'Collinear block spans' : 'Matched sequences',
-    sequenceNote: matchKind === 'collinear'
-      ? 'Block envelopes may include intergenic sequence and genes that are not anchors.'
-      : '',
+    group: groupView,
+    sequenceTitle: 'Matched sequences',
     sequenceBundle,
     sections: sections.filter((entry) => (
       entry.rows.length > 0 ||
@@ -1596,10 +1824,9 @@ export const buildMatchPopupPayload = (
   };
 };
 
-// Compatibility export retained for callers and older tests.
-export const buildPairwiseMatchPayload = (element, options = {}) =>
-  buildMatchPopupPayload(element, options);
-
+/**
+ * @param {PairwiseHoverRowValues} [values]
+ */
 const formatPairwiseMatchHoverRows = ({
   matchKind,
   identity,
@@ -1619,7 +1846,7 @@ const formatPairwiseMatchHoverRows = ({
     addFirst('Kind', matchKind);
     addFirst('Similarity group', orthogroupId);
     addFirst('Display name', displayName);
-    addFirst('Members', memberCount);
+    addFirst('Genes', memberCount);
     return rows.slice(0, 6);
   }
   addFirst('Kind', matchKind);
@@ -1640,6 +1867,10 @@ const formatPairwiseMatchHoverRows = ({
   return rows.slice(0, 6);
 };
 
+/**
+ * @param {SVGElement} element
+ * @param {MatchHoverSummaryOptions} [options]
+ */
 export const buildPairwiseMatchHoverSummary = (
   element,
   {
@@ -1696,25 +1927,19 @@ export const buildPairwiseMatchHoverRows = (payload) => {
   if (!payload) return [];
   const summary = payload.sections.find((entry) => entry.title === 'Summary');
   const alignment = payload.sections.find((entry) => entry.title === 'Alignment');
-  const block = payload.sections.find((entry) => entry.title === 'Collinearity');
-  const orthogroup = payload.sections.find(
-    (entry) => entry.title === 'Similarity group'
-  );
   const findValue = (sectionEntry, label) => (
     sectionEntry?.rows.find((row) => row.label === label)?.value || ''
   );
   return formatPairwiseMatchHoverRows({
     matchKind: payload.matchKind,
-    identity: findValue(alignment, 'Identity') || findValue(block, 'Average identity'),
-    queryInterval: findValue(summary, 'Query interval'),
-    subjectInterval: findValue(summary, 'Subject interval'),
-    orthogroupId: payload.matchKind === 'orthogroup'
-      ? findValue(summary, 'Similarity group ID') || payload.orthogroupId
-      : findValue(orthogroup, 'Similarity group ID'),
-    displayName: findValue(summary, 'Display name'),
-    memberCount: findValue(summary, 'Members'),
+    identity: payload.block ? payload.block.identity : findValue(alignment, 'Identity'),
+    queryInterval: payload.block ? payload.block.query.interval : findValue(summary, 'Query interval'),
+    subjectInterval: payload.block ? payload.block.subject.interval : findValue(summary, 'Subject interval'),
+    orthogroupId: payload.orthogroupId,
+    displayName: payload.matchKind === 'orthogroup' ? payload.group?.displayName : '',
+    memberCount: payload.matchKind === 'orthogroup' ? payload.group?.memberCount : '',
     groupScope: payload.groupScope,
     blockOrthogroupCount: payload.blockOrthogroupCount,
-    collinearityBlockId: findValue(block, 'Block ID')
+    collinearityBlockId: payload.collinearityBlockId
   });
 };

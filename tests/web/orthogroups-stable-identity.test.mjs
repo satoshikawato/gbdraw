@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const repoRoot = process.cwd();
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-orthogroup-stable-identity-'));
@@ -20,10 +21,10 @@ const copyModule = async (sourceRelative, targetRelative) => {
   );
 };
 
-await copyModule('gbdraw/web/js/app/feature-utils.js', 'app/feature-utils.js');
-await copyModule('gbdraw/web/js/app/feature-sequence-fasta.js', 'app/feature-sequence-fasta.js');
-await copyModule('gbdraw/web/js/app/losat-normalization.js', 'app/losat-normalization.js');
-await copyModule('gbdraw/web/js/app/record-source-coordinates.js', 'app/record-source-coordinates.js');
+await copyModule('gbdraw/web/js/services/feature-utils.js', 'services/feature-utils.js');
+await copyModule('gbdraw/web/js/services/feature-sequence-fasta.js', 'services/feature-sequence-fasta.js');
+await copyModule('gbdraw/web/js/services/losat-normalization.js', 'services/losat-normalization.js');
+await copyModule('gbdraw/web/js/services/record-source-coordinates.js', 'services/record-source-coordinates.js');
 await copyModule('gbdraw/web/js/app/feature-search/search-core.js', 'app/feature-search/search-core.js');
 await copyModule(
   'gbdraw/web/js/services/standalone-interactivity-assets.js',
@@ -41,7 +42,14 @@ await copyModule('gbdraw/web/js/services/feature-identity.js', 'services/feature
 await copyModule('gbdraw/web/js/services/feature-catalog.js', 'services/feature-catalog.js');
 await copyModule('gbdraw/web/js/services/runtime-test-hooks.js', 'services/runtime-test-hooks.js');
 await copyModule('gbdraw/web/js/services/text-download.js', 'services/text-download.js');
+await copyModule('gbdraw/web/js/services/record-draw-selection.js', 'services/record-draw-selection.js');
+// The member tables name records through the Linear record label owners (OV-369).
+for (const name of ['linear-comparisons', 'linear-sources', 'file-content-cache', 'session-resource-backing',
+  'byte-utils', 'depth-file-codec', 'depth-track-state', 'track-slot-display', 'record-options']) {
+  await copyModule(`gbdraw/web/js/services/${name}.js`, `services/${name}.js`);
+}
 await copyModule('gbdraw/web/js/utils/clipboard.js', 'utils/clipboard.js');
+await copyModule('gbdraw/web/js/utils/download-names.js', 'utils/download-names.js');
 const standaloneSource = await readFile(
   join(repoRoot, 'gbdraw/web/js/services/standalone-interactivity.js'),
   'utf8'
@@ -129,7 +137,7 @@ const {
 const {
   isInternalProteinDisplayId,
   resolveDisplayProteinId
-} = await import(pathToFileURL(join(tempDir, 'app', 'feature-utils.js')));
+} = await import(pathToFileURL(join(tempDir, 'services', 'feature-utils.js')));
 const { runFeatureSearch } = await import(
   pathToFileURL(join(tempDir, 'app', 'feature-search', 'search-core.js'))
 );
@@ -426,12 +434,16 @@ const catalogEndpointRuntime = new Function('featuresById', 'sequenceSources', `
     'featureRecordIdentity',
     'biologicalFeatureStableSvgId',
     'resolvedCatalogMatchFeature',
+    'catalogMatchEndpointResolved',
     'matchSourceAliases',
     'resolveEmbeddedMatchSource'
   ].map(embeddedFunctionSource).join('\n')}
   return { resolvedCatalogMatchFeature, resolveEmbeddedMatchSource };
 `)(
-  new Map([['rendered-a', expandedCatalogItem.features[0]]]),
+  new Map([
+    ['rendered-a', expandedCatalogItem.features[0]],
+    ['rendered-b', expandedDuplicateLocationCatalog.features[1]]
+  ]),
   [{ origin: 'linear-record', recordIndex: 0, recordId: 'record-a', sequence: 'ACGT' }]
 );
 assert.equal(
@@ -447,6 +459,33 @@ assert.equal(
     'query'
   ).source.sequence,
   'ACGT'
+);
+// A collinear block names several anchor features; its span is the envelope
+// on the record, so a plural claim that resolves as a whole may copy it.
+const collinearBlockCatalog = (references) => catalogRuntime.expandCatalogItem({
+  ...duplicateLocationCatalog,
+  comparisonMatches: [{
+    ...duplicateLocationCatalog.comparisonMatches[0],
+    match_kind: 'collinear',
+    queryFeatureReferences: references
+  }]
+}, 'rich').matches[0];
+const collinearBlock = collinearBlockCatalog(
+  duplicateLocationCatalog.comparisonMatches[0].queryFeatureReferences
+);
+assert.equal(collinearBlock._gbdraw_query_endpoint_resolved, true);
+assert.equal(
+  catalogEndpointRuntime.resolveEmbeddedMatchSource(collinearBlock, 'query').source.sequence,
+  'ACGT'
+);
+const collinearBlockMissingMember = collinearBlockCatalog([
+  duplicateLocationCatalog.comparisonMatches[0].queryFeatureReferences[0],
+  { recordKey: 'record-a', biologicalFeatureId: 'missing-feature' }
+]);
+assert.equal(collinearBlockMissingMember._gbdraw_query_endpoint_resolved, false);
+assert.equal(
+  catalogEndpointRuntime.resolveEmbeddedMatchSource(collinearBlockMissingMember, 'query').source,
+  null
 );
 assert.equal(
   catalogEndpointRuntime.resolvedCatalogMatchFeature(
@@ -1015,7 +1054,7 @@ assert.equal(
 const catalogSelectionItem = { resultIndex: 0, resultName: 'result-zero' };
 assert.equal(
   selectStandaloneCatalogItem({
-    featureCatalog: { schema: 4, items: [catalogSelectionItem] },
+    featureCatalog: { schema: 5, items: [catalogSelectionItem] },
     catalogResultIndex: '0',
     catalogResultName: 'result-zero'
   }),
@@ -1029,7 +1068,7 @@ for (const invalidCatalogIndex of [
 ]) {
   assert.equal(
     selectStandaloneCatalogItem({
-      featureCatalog: { schema: 4, items: [catalogSelectionItem] },
+      featureCatalog: { schema: 5, items: [catalogSelectionItem] },
       catalogResultIndex: invalidCatalogIndex,
       catalogResultName: 'result-zero'
     }),
@@ -1101,6 +1140,18 @@ const directContext = {
 assert.equal(
   getStandaloneFeatureOrthogroupEntry({
     fileIdx: 1,
+    stable_svg_id: 'shared-stable',
+    orthogroupId: 'og_direct',
+    orthogroupMember: { ...directGroupMember }
+  }, directContext)?.orthogroupId,
+  'og_direct'
+);
+// A whitespace-only feature index is not supplied, as in the catalog readers
+// and Python (OV-274).
+assert.equal(
+  getStandaloneFeatureOrthogroupEntry({
+    fileIdx: 1,
+    featureIndex: ' ',
     stable_svg_id: 'shared-stable',
     orthogroupId: 'og_direct',
     orthogroupMember: { ...directGroupMember }
@@ -1324,7 +1375,7 @@ const state = {
   ])
 };
 
-const editor = createOrthogroupEditor({ state, runAnalysis: null });
+const editor = createOrthogroupEditor({ state: withDrawings(state), runAnalysis: null });
 const aliasedEditorGroup = {
   orthogroupId: 'og_editor_alias',
   orthogroup_id: 'og_editor_alias',
@@ -1869,9 +1920,23 @@ console.log('orthogroup stable identity tests passed');
   });
   const lazyState = { ...state,
     biologicalFeatures: ref([...originalBiologicalFeatures, unrelated]) };
-  const lazyEditor = createOrthogroupEditor({ state: lazyState });
+  const lazyEditor = createOrthogroupEditor({ state: withDrawings(lazyState) });
   const member = lazyEditor.getEnrichedOrthogroupMembers({ id: 'selected-only',
     members: [{ recordKey: 'record-key-c', biologicalFeatureId: 'biological-c' }] })[0];
   assert.equal(member.nucleotideSequence, 'GGGG');
   assert.equal(member.aminoAcidSequence, 'MQ');
+}
+
+// Record selection: a member's record index is a position in the records of
+// the Result's request. A Generate drew a and c (b OFF); turning c OFF and b ON
+// afterwards does not relabel the members until the next Generate.
+{
+  const offState = { ...state, recordsOff: ['uid-c'],
+    linearSeqs: state.linearSeqs.map((sequence, index) => ({ ...sequence, uid: `uid-${'abc'[index]}` })) };
+  const offEditor = createOrthogroupEditor({
+    state: withDrawings(offState),
+    getCommittedRequest: () => ({ records: [{ recordKey: 'uid-a' }, { recordKey: 'uid-c' }] })
+  });
+  const grouped = offEditor.groupOrthogroupMembersByRecord([{ fileIdx: 1 }, { fileIdx: 0 }]);
+  assert.deepEqual(grouped.map((entry) => entry.recordLabel), ['record-a', 'record-c']);
 }

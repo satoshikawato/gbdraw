@@ -53,7 +53,7 @@ test('Circular single-record presentation selects, transforms, titles, and round
 
   await page.evaluate(({ first, second }) => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'circular';
+    app.setDiagramMode('circular');
     app.cInputType = 'gb';
     app.files.c_gb = new File([`${first}\n${second}`], 'two-records.gbk', {
       type: 'text/plain',
@@ -282,4 +282,113 @@ test('History restore re-inspects sources and reconciles missing or ambiguous se
   await expect(page.getByLabel('Circular region start')).toBeEnabled();
   await expect(page.getByLabel('Circular region start')).toHaveValue('25');
   await expect(page.getByLabel('Circular region end')).toHaveValue('100');
+});
+
+test('Loaded Session shows the saved record selector as uninspected, not as missing, until inspection', async ({ page }) => {
+  test.setTimeout(420000);
+  await openApp(page);
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.form.multi_record_canvas = false;
+    window.__GBDRAW_APP__.sessionTitle = 'ov41-record-selector';
+  });
+  await nativeUpload(page, singleSource);
+  await ready(page);
+  await page.getByLabel('Circular record', { exact: true }).selectOption('NC_012920.1');
+  await generateAndWaitForResult(page);
+  const downloadPromise = page.waitForEvent('download', { timeout: 180000 });
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle());
+  const savedSessionPath = await (await downloadPromise).path();
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForAppShell(page, { waitForPalette: false });
+  const dialogPromise = page.waitForEvent('dialog', { timeout: 180000 });
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
+  await (await dialogPromise).accept();
+
+  const select = page.getByLabel('Circular record', { exact: true });
+  await expect(select).toHaveValue('NC_012920.1');
+  const shot = async (name) => {
+    if (!process.env.OV41_SHOT_DIR) return;
+    const section = page.locator('section[aria-label="Source records"]');
+    await section.scrollIntoViewIfNeeded();
+    await section.screenshot({ path: join(process.env.OV41_SHOT_DIR, name) });
+  };
+  // A Session load does not inspect the source; the saved selector is unverified, not missing.
+  await expect(page.locator('[data-circular-discovery-status]')).toHaveText('Records not inspected');
+  await shot('record-control-loaded.png');
+  await expect(select.locator('option:checked')).toHaveText('NC_012920.1 (not inspected)');
+
+  // Inspection resolves the selector to the real record entry.
+  await page.getByRole('button', { name: 'Inspect source records', exact: true }).click();
+  await ready(page);
+  await expect(select).toHaveValue('NC_012920.1');
+  await expect(select.locator('option:checked')).toHaveText('NC_012920.1 (16,569 bp)');
+  await shot('record-control-inspected.png');
+});
+
+// CI-03: a replaced or removed multi-record source retires the record selector,
+// crop, orientation, and title lines chosen for one of its records, in the
+// same History step; one record replacing one record keeps them (D-32).
+test('replacing or removing a multi-record source resets its one-record presentation in one History step', async ({ page }) => {
+  test.setTimeout(300000);
+  await openApp(page);
+  await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = false; });
+  const presentation = () => page.evaluate(() => {
+    const { form, adv } = window.__GBDRAW_APP__;
+    return [form.circular_record_selector, form.circular_region_start, form.circular_region_end, form.circular_reverse,
+      form.circular_record_label, form.circular_record_subtitle, adv.circular_grouping_intent];
+  });
+  const clean = ['', null, null, false, '', '', 'auto'];
+  const choose = async () => {
+    await nativeUpload(page, `${firstGenbank}\n${secondGenbank}`, 'two.gb');
+    await ready(page);
+    await page.getByLabel('Circular record', { exact: true }).selectOption('BGC0000709');
+    await page.evaluate(() => Object.assign(window.__GBDRAW_APP__.form, {
+      circular_region_start: 500, circular_region_end: 3000, circular_reverse: true,
+      circular_record_label: 'Label X', circular_record_subtitle: 'Sub Y'
+    }));
+    expect(await presentation()).toEqual(['BGC0000709', 500, 3000, true, 'Label X', 'Sub Y', 'single']);
+  };
+  await choose();
+  const undoBefore = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  await nativeUpload(page, singleSource);
+  await ready(page);
+  expect(await presentation()).toEqual(clean);
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoBefore + 1);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(presentation).toEqual(['BGC0000709', 500, 3000, true, 'Label X', 'Sub Y', 'single']);
+  await page.getByRole('button', { name: 'Redo', exact: true }).click();
+  await expect.poll(presentation).toEqual(clean);
+  await ready(page);
+  await generateAndWaitForResult(page);
+
+  await choose();
+  await page.getByRole('button', { name: 'Remove GenBank/DDBJ File', exact: true }).click();
+  await expect.poll(presentation).toEqual(clean);
+});
+
+// CI-03 / D-32: one record replacing one record with a different record ID
+// keeps the crop and Record label but retires the selector naming the old
+// record, so Generate draws the new record instead of failing RECORD_SELECTION.
+test('one record replacing one record with another ID keeps the crop and still generates', async ({ page }) => {
+  test.setTimeout(300000);
+  await openApp(page);
+  await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = false; });
+  await nativeUpload(page, firstGenbank, 'one.gb');
+  await ready(page);
+  await page.getByLabel('Circular record', { exact: true }).selectOption('BGC0000708');
+  await page.evaluate(() => Object.assign(window.__GBDRAW_APP__.form, {
+    circular_region_start: 500, circular_region_end: 3000, circular_record_label: 'Label X'
+  }));
+  await nativeUpload(page, secondGenbank, 'other.gb');
+  await ready(page);
+  const outcome = await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    const result = await app.runAnalysis();
+    return { status: result?.status, code: app.errorLog?.code || null,
+      selector: app.form.circular_record_selector, start: app.form.circular_region_start,
+      end: app.form.circular_region_end, label: app.form.circular_record_label };
+  });
+  expect(outcome).toEqual({ status: 'ok', code: null, selector: '', start: 500, end: 3000, label: 'Label X' });
+  expect((await inspectCircularResult(page)).recordIds).toContain('BGC0000709');
 });

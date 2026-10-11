@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from typing import Any, Generator
 
+import numpy as np
 import pandas as pd
 from pandas import DataFrame
 from Bio.SeqRecord import SeqRecord
@@ -44,40 +45,31 @@ def sliding_window(seq: str, window: int, step: int) -> Generator[tuple[int, str
         yield start, out_seq
 
 
-def _build_prefix_counts(seq_bytes: bytes, target_base: int) -> list[int]:
-    """Return prefix counts for a single nucleotide across the sequence."""
-    prefix = [0] * (len(seq_bytes) + 1)
-    running_count = 0
-    for idx, value in enumerate(seq_bytes, start=1):
-        if value == target_base:
-            running_count += 1
-        prefix[idx] = running_count
+def _build_prefix_counts(seq_bytes: bytes, target_base: int) -> np.ndarray:
+    """Return prefix counts (length n + 1) for a single nucleotide."""
+    prefix = np.zeros(len(seq_bytes) + 1, dtype=np.int64)
+    np.cumsum(np.frombuffer(seq_bytes, dtype=np.uint8) == target_base, out=prefix[1:])
     return prefix
 
 
-def _window_count_from_prefix(
-    prefix: list[int],
+def _window_counts(
+    prefix: np.ndarray,
     seq_length: int,
     *,
-    start: int,
+    starts: np.ndarray,
     window: int,
-    total_count: int,
-) -> int:
-    """Count a base in a circular window using prefix sums."""
-    if seq_length <= 0 or window <= 0:
-        return 0
-
+) -> np.ndarray:
+    """Count a base in the circular windows beginning at ``starts``."""
+    total_count = int(prefix[seq_length])
     full_cycles, remainder = divmod(window, seq_length)
-    count = full_cycles * total_count
+    counts = np.full(len(starts), full_cycles * total_count, dtype=np.int64)
     if remainder == 0:
-        return count
-
-    end = start + remainder
-    if end <= seq_length:
-        count += prefix[end] - prefix[start]
-    else:
-        count += (prefix[seq_length] - prefix[start]) + prefix[end - seq_length]
-    return count
+        return counts
+    end = starts + remainder
+    wrapped = end > seq_length
+    counts += prefix[np.where(wrapped, end - seq_length, end)] - prefix[starts]
+    counts[wrapped] += total_count
+    return counts
 
 
 def counted_dinucleotide(record: SeqRecord, nt: str) -> tuple[str, str, str, str]:
@@ -108,51 +100,27 @@ def skew_df(record: SeqRecord, window: int, step: int, nt: str) -> DataFrame:
         )
 
     seq_bytes = seq_str.encode("ascii")
-    nt_1_byte = ord(nt_1)
-    nt_2_byte = ord(nt_2)
-    prefix_nt_1 = _build_prefix_counts(seq_bytes, nt_1_byte)
-    prefix_nt_2 = _build_prefix_counts(seq_bytes, nt_2_byte)
-    total_nt_1 = prefix_nt_1[-1]
-    total_nt_2 = prefix_nt_2[-1]
+    starts = np.arange(0, seq_length, step, dtype=np.int64)
+    base1_counts = _window_counts(
+        _build_prefix_counts(seq_bytes, ord(nt_1)), seq_length, starts=starts, window=window
+    )
+    base2_counts = _window_counts(
+        _build_prefix_counts(seq_bytes, ord(nt_2)), seq_length, starts=starts, window=window
+    )
+    total_counts = base1_counts + base2_counts
+    skew_values = np.divide(
+        base1_counts - base2_counts,
+        total_counts,
+        out=np.zeros(len(starts), dtype=np.float64),
+        where=total_counts != 0,
+    )
+    content_values = total_counts / float(window)
+    skew_cumulative_values = np.cumsum(skew_values)
 
-    starts: list[int] = []
-    content_values: list[float] = []
-    skew_values: list[float] = []
-    skew_cumulative_values: list[float] = []
-    skew_sum = 0.0
-    window_length = float(window)
-
-    for start in range(0, seq_length, step):
-        base1_count = _window_count_from_prefix(
-            prefix_nt_1,
-            seq_length,
-            start=start,
-            window=window,
-            total_count=total_nt_1,
-        )
-        base2_count = _window_count_from_prefix(
-            prefix_nt_2,
-            seq_length,
-            start=start,
-            window=window,
-            total_count=total_nt_2,
-        )
-        total_count = base1_count + base2_count
-        if total_count == 0:
-            skew = 0.0
-        else:
-            skew = (base1_count - base2_count) / total_count
-
-        starts.append(start)
-        content_values.append(total_count / window_length)
-        skew_values.append(skew)
-        skew_sum += skew
-        skew_cumulative_values.append(skew_sum)
-
-    max_skew_abs = max((abs(value) for value in skew_values), default=0.0)
-    max_skew_cumulative_abs = max((abs(value) for value in skew_cumulative_values), default=0.0)
+    max_skew_abs = float(np.abs(skew_values).max())
+    max_skew_cumulative_abs = float(np.abs(skew_cumulative_values).max())
     factor: float = 0.0 if max_skew_cumulative_abs == 0 else (max_skew_abs / max_skew_cumulative_abs)
-    normalized_cumulative = [value * factor for value in skew_cumulative_values]
+    normalized_cumulative = skew_cumulative_values * factor
     df = pd.DataFrame(
         {
             content_legend: content_values,

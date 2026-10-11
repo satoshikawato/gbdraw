@@ -1,0 +1,43 @@
+{
+  "purpose": "Positive fixtures for the Session 41-44 Feature placement draft reader: a lane placement and a Main placement saved by the Web app (OV-102).",
+  "history": "first-parent main",
+  "writer": "gbdraw/web/js/services/config.js Save Session (Web), bytes kept unchanged",
+  "checkout": "git worktree add --detach <dir> <sourceCommit>; python tools/prepare_browser_wheel.py; served with python3 -m http.server <port> --bind 127.0.0.1 --directory <dir>",
+  "tools": {
+    "node": "v26.8.2",
+    "playwright": "1.61.0",
+    "python": "3.13.3"
+  },
+  "sessions": {
+    "feature-placements-circular.v44.gbdraw-session.json.gz": {
+      "sourceCommit": "fe6861f06d0eaaecac0ba4ee6b1c3095019789df",
+      "wheel": "gbdraw-0.14.0-py3-none-any.whl",
+      "sessionVersion": 44,
+      "records": "tests/test_inputs/HmmtDNA.gbk (sha256 7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f)",
+      "steps": [
+        "Circular; Track type middle (form.track_type, so both lane sides are offered); Generate",
+        "ND1 (f406d90f1) popup Feature placement = Outward lane 1",
+        "ND2 (fbe3a7c0c) popup Feature placement = Main",
+        "Generate",
+        "Save Session"
+      ],
+      "sha256": "29f9e7a2173aa804bdb3bc4c2d7b322861adecf399b6d0ab730ff6f02559ff21",
+      "decompressedSha256": "52c62c911f1a3cbc4ecf8e45afca3f4c5237240eb5cde0a1d93c265225687590"
+    },
+    "feature-placements-linear.v44.gbdraw-session.json.gz": {
+      "sourceCommit": "fe6861f06d0eaaecac0ba4ee6b1c3095019789df",
+      "wheel": "gbdraw-0.14.0-py3-none-any.whl",
+      "sessionVersion": 44,
+      "records": "tests/test_inputs/HmmtDNA.gbk (sha256 7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f) as one Linear record",
+      "steps": [
+        "Linear; Separate Strands off (form.separate_strands, so both lane sides are offered); Generate",
+        "ND1 (f406d90f1) popup Feature placement = Above lane 1",
+        "ND2 (fbe3a7c0c) popup Feature placement = Main",
+        "Generate",
+        "Save Session"
+      ],
+      "sha256": "f3bd6d71b6e097c3ab9477c49efe3358b9f830d94a6bdb409844c19186c4a4be",
+      "decompressedSha256": "73bc7d7dc4523a6c3a2d0a7dfb09c5da18648bdfe5fcf6a3c7382154c369202b"
+    }
+  }
+}

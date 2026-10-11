@@ -1,7 +1,7 @@
 {
   "id": "hepatoplasmataceae_orthogroup",
   "version": 1,
-  "title": "Plot CDS protein-similarity links across five Hepatoplasmataceae genomes",
+  "title": "Group similar proteins across five Hepatoplasmataceae genomes",
   "summary": "Run LOSATP in the browser, assign CDS-derived proteins to gbdraw similarity groups, and draw links between group members in five Hepatoplasmataceae genomes.",
   "appMode": "Linear",
   "primaryWorkflow": "LOSATP similarity groups",
@@ -102,7 +102,7 @@
     },
     {
       "title": "Use browser LOSAT",
-      "body": "In Comparison, choose Run LOSAT. Open Advanced comparison and layout when you need to review the browser runtime controls.",
+      "body": "In Comparison, choose Run LOSAT. Open Settings when you need to review the browser runtime controls under Runtime and reproducibility.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -153,25 +153,25 @@
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-03-02-runtime-reproducibility.webp",
             "alt": "Runtime and reproducibility controls showing Auto execution, Safe total threads, and automatic run allocation.",
-            "caption": "Open Advanced comparison and layout to review the execution and thread allocation used by browser LOSAT."
+            "caption": "Open Comparison › Settings to review the execution and thread allocation used by browser LOSAT."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
             "viewport": {"width": 1600, "height": 1100},
-            "openDetails": ["Advanced comparison and layout"],
+            "openDetails": ["Settings"],
             "actions": [
               {
                 "type": "evaluate",
-                "script": "async () => { const app = window.__GBDRAW_APP__; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('orthogroup'); app.losat.executionMode = 'auto'; app.losat.totalThreadBudget = 'safe'; app.losat.parallelWorkers = undefined; app.losat.threadsPerJob = 'auto'; }"
+                "script": "async () => { const app = window.__GBDRAW_APP__; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('orthogroup'); app.losatExecution.executionMode = 'auto'; app.losatExecution.totalThreadBudget = 'safe'; app.losatExecution.parallelWorkers = undefined; app.losatExecution.threadsPerJob = 'auto'; }"
               },
               {
                 "type": "waitForFunction",
-                "script": "() => Array.from(document.querySelectorAll('[data-linear-advanced-comparison] section')).some((section) => section.textContent.includes('Runtime and reproducibility'))"
+                "script": "() => Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).some((section) => section.textContent.includes('Runtime and reproducibility'))"
               },
               {
                 "type": "evaluate",
-                "script": "const section = Array.from(document.querySelectorAll('[data-linear-advanced-comparison] section')).find((node) => node.textContent.includes('Runtime and reproducibility')); if (!section) throw new Error('Runtime and reproducibility section was not found.'); section.dataset.capture = 'hep-orthogroup-runtime'; section.scrollIntoView({ block: 'center' });"
+                "script": "const section = Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).find((node) => node.textContent.includes('Runtime and reproducibility')); if (!section) throw new Error('Runtime and reproducibility section was not found.'); section.dataset.capture = 'hep-orthogroup-runtime'; section.scrollIntoView({ block: 'center' });"
               }
             ],
             "selector": "[data-capture='hep-orthogroup-runtime']",
@@ -180,15 +180,15 @@
               "mode": "linear",
               "linearComparisonPlan.mode": "adjacent",
               "linearComparisonPlan.defaultSource": "losat",
-              "losat.executionMode": "auto",
-              "losat.totalThreadBudget": "safe",
-              "losat.threadsPerJob": "auto"
+              "losatExecution.executionMode": "auto",
+              "losatExecution.totalThreadBudget": "safe",
+              "losatExecution.threadsPerJob": "auto"
             },
             "visibleText": ["Runtime and reproducibility", "Parallel runs"],
             "visibleControls": [
-              {"label": "Execution", "value": "auto"},
-              {"label": "Total threads", "value": "safe"},
-              {"label": "Threads per run", "value": "auto"}
+              {"selector": "[data-capture='hep-orthogroup-runtime'] select[aria-label='LOSAT execution']", "value": "auto"},
+              {"selector": "[data-capture='hep-orthogroup-runtime'] select[aria-label='LOSAT total threads']", "value": "safe"},
+              {"selector": "[data-capture='hep-orthogroup-runtime'] select[aria-label='LOSAT threads per run']", "value": "auto"}
             ]
           }
         }
@@ -427,13 +427,13 @@
     },
     {
       "title": "Open a similarity-group match popup",
-      "body": "Click a pairwise ribbon in the interactive SVG to inspect the gbdraw group ID, display name, member count, and record coverage. The table below the summary lists the member proteins.",
+      "body": "Click a pairwise ribbon in the interactive SVG to inspect the gbdraw group ID, display name, and the count of genes and records. The table below lists the member proteins.",
       "operations": [
         {
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-08-01-orthogroup-popup.webp",
             "alt": "Zoomed Hepatoplasmataceae similarity-group crop with the highlighted match ribbon and popup.",
-            "caption": "The highlighted og_244 ribbon remains visible beside its compact 30S ribosomal protein S11 summary."
+            "caption": "The highlighted og_244 ribbon remains visible beside its popup: rpsK, 5 genes in 5 records, and the first rows of the 30S ribosomal protein S11 member table."
           },
           "capture": {
             "source": "webapp",
@@ -462,20 +462,20 @@
               },
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.pairwise-match-popup'); const target = document.querySelector(\"[data-gbdraw-pairwise-match-id='comparison1_match331']\"); const text = String(popup?.textContent || '').replace(/\\s+/g, ' ').toLowerCase(); const rect = target?.getBoundingClientRect(); for (const expected of ['og_244', '30s ribosomal protein s11', 'similarity group id', 'members', 'record coverage', 'ap027078.1']) { if (!text.includes(expected)) throw new Error(`Similarity-group popup is missing: ${expected}`); } if (!rect || !popup) throw new Error('Similarity-group target bounds are unavailable.'); popup.style.width = '600px'; const app = window.__GBDRAW_APP__; if (app?.clickedPairwiseMatchPos) { const rightX = rect.right + 24; app.clickedPairwiseMatchPos.x = rightX + 600 <= window.innerWidth - 12 ? rightX : Math.max(12, rect.left - 624); app.clickedPairwiseMatchPos.y = Math.max(24, Math.min(window.innerHeight - 500, rect.top - 80)); }"
+                "script": "const popup = document.querySelector('.pairwise-match-popup'); const target = document.querySelector(\"[data-gbdraw-pairwise-match-id='comparison1_match331']\"); const text = String(popup?.textContent || '').replace(/\\s+/g, ' ').toLowerCase(); const rect = target?.getBoundingClientRect(); for (const expected of ['og_244', '30s ribosomal protein s11', 'genes in', 'ap027078.1']) { if (!text.includes(expected)) throw new Error(`Similarity-group popup is missing: ${expected}`); } if (!rect || !popup) throw new Error('Similarity-group target bounds are unavailable.'); popup.style.width = '600px'; const app = window.__GBDRAW_APP__; if (app?.clickedPairwiseMatchPos) { const rightX = rect.right + 24; app.clickedPairwiseMatchPos.x = rightX + 600 <= window.innerWidth - 12 ? rightX : Math.max(12, rect.left - 624); app.clickedPairwiseMatchPos.y = Math.max(24, Math.min(window.innerHeight - 500, rect.top - 80)); }"
               },
               {"type": "wait", "ms": 250},
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.pairwise-match-popup'); const section = popup?.querySelector('.pairwise-match-popup-section'); const title = section?.querySelector('.pairwise-match-popup-section-title'); const rows = Array.from(section?.querySelectorAll('.pairwise-match-popup-row') || []).slice(0, 5); if (!popup || !title || rows.length !== 5) throw new Error('Compact similarity-group summary not found.'); popup.children[0]?.setAttribute('data-capture', 'hepat-og-popup-header'); title.setAttribute('data-capture', 'hepat-og-popup-summary-title'); rows.forEach((row, index) => row.setAttribute('data-capture', `hepat-og-popup-summary-row-${index + 1}`));"
+                "script": "const popup = document.querySelector('.pairwise-match-popup'); const count = popup?.querySelector('[data-match-group-count]'); const rows = Array.from(popup?.querySelectorAll('[data-match-group] tbody tr') || []); const lastShown = rows[Math.min(rows.length, 4) - 1]?.querySelector('td'); if (!popup || !count || !lastShown) throw new Error('Compact similarity-group member table not found.'); popup.children[0]?.setAttribute('data-capture', 'hepat-og-popup-header'); count.setAttribute('data-capture', 'hepat-og-popup-count'); lastShown.setAttribute('data-capture', 'hepat-og-popup-member-row'); document.activeElement?.blur();"
               }
             ],
             "highlightSelector": "[data-gbdraw-pairwise-match-id='comparison1_match331']",
-            "clipSelectors": ["[data-capture='hepat-og-popup-header']", "[data-capture='hepat-og-popup-summary-title']", "[data-capture^='hepat-og-popup-summary-row-']"],
+            "clipSelectors": ["[data-capture='hepat-og-popup-header']", "[data-capture='hepat-og-popup-count']", "[data-capture='hepat-og-popup-member-row']"],
             "cropPadding": {
               "top": 18,
               "right": 180,
-              "bottom": 18,
+              "bottom": 2,
               "left": 18
             },
             "waitForSelector": ".pairwise-match-popup"
@@ -530,7 +530,7 @@
               },
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.feature-popup'); const text = String(popup?.textContent || '').replace(/\\s+/g, ' ').toLowerCase(); for (const expected of ['chromosomal replication initiator protein dnaa', 'ap027078.1', 'cds', '101..1513 (+)', 'og_1', 'bdu67348.1']) { if (!text.includes(expected)) throw new Error(`Feature popup is missing: ${expected}`); } const labels = ['Record ID', 'Feature type', 'Location', 'Similarity group ID', 'Protein ID']; const detailRows = Array.from(popup?.querySelectorAll('.feature-popup-body .border-b') || []); const rows = labels.map((label) => detailRows.find((row) => row.firstElementChild?.textContent?.trim() === label)); if (rows.some((row) => !row)) throw new Error('Compact DnaA detail rows not found.'); popup.children[0]?.setAttribute('data-capture', 'dnaa-popup-header'); popup.children[1]?.setAttribute('data-capture', 'dnaa-popup-tabs'); rows.forEach((row, index) => row.setAttribute('data-capture', `dnaa-popup-row-${index + 1}`));"
+                "script": "const popup = document.querySelector('.feature-popup'); const text = String(popup?.textContent || '').replace(/\\s+/g, ' ').toLowerCase(); for (const expected of ['chromosomal replication initiator protein dnaa', 'ap027078.1', 'cds', '101..1513 (+)', 'og_1', 'bdu67348.1']) { if (!text.includes(expected)) throw new Error(`Feature popup is missing: ${expected}`); } const labels = ['Record ID', 'Feature type', 'Location', 'Similarity group ID', 'Protein ID']; const detailRows = Array.from(popup?.querySelectorAll('.feature-popup-body .border-b') || []); const rows = labels.map((label) => detailRows.find((row) => row.firstElementChild?.textContent?.trim() === label)); if (rows.some((row) => !row)) throw new Error('Compact DnaA detail rows not found.'); popup.children[0]?.setAttribute('data-capture', 'dnaa-popup-header'); popup.children[1]?.setAttribute('data-capture', 'dnaa-popup-tabs'); rows.forEach((row, index) => row.setAttribute('data-capture', `dnaa-popup-row-${index + 1}`)); document.activeElement?.blur();"
               }
             ],
             "highlightSelector": "[data-gbdraw-stable-feature-id='fe826bac7']",

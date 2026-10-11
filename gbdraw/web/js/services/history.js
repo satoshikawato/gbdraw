@@ -1,3 +1,4 @@
+// @ts-check
 import { collectHistoryFileIds } from './history-files.js';
 import {
   recordSessionLifecycleEvent,
@@ -12,6 +13,11 @@ const HISTORY_EDIT_BUSY = Object.freeze({
   reason: 'Applying an edit. Retry after the edit finishes.'
 });
 
+/**
+ * @template T
+ * @param {T} value
+ * @returns {{ value: T }}
+ */
 const makeBox = (value) => ({ value });
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 const isPlainObject = (value) => (
@@ -109,6 +115,20 @@ const emitHistoryDiagnostic = (event) => {
   }
 };
 
+/**
+ * The artifact a generated-artifact handle names: its fingerprint and compact
+ * signature, which the default handle comparison also reads. A handle without
+ * a fingerprint names only itself.
+ * @param {{ identity?: { fingerprint?: string, compactSignature?: string } }} handle
+ * @returns {unknown}
+ */
+const artifactRetentionKey = (handle) => {
+  const identity = handle?.identity;
+  return identity?.fingerprint
+    ? `${identity.fingerprint}\u0000${identity.compactSignature ?? ''}`
+    : handle;
+};
+
 const checkpointSvgBytes = (checkpoint) => (
   Array.isArray(checkpoint?.results)
     ? checkpoint.results.reduce(
@@ -118,6 +138,75 @@ const checkpointSvgBytes = (checkpoint) => (
     : 0
 );
 
+/**
+ * @typedef {Record<string, any>} HistoryIntent
+ *   The editable intent (config, files, ui, features, ...); the snapshot service builds and applies it.
+ * @typedef {Record<string, any>} HistoryCheckpoint
+ *   An artifact checkpoint: intent plus the generated Result domains.
+ * @typedef {{
+ *   label: string,
+ *   before: any,
+ *   closed: boolean,
+ *   source: string,
+ *   owner?: any,
+ *   deferAdapterCommit?: boolean,
+ *   beforeSignature?: string,
+ *   beforeFileIds?: Set<any>,
+ *   beforeIntentCheckpoint?: any
+ * }} HistoryTransaction
+ *   An open Undo transaction: an intent edit (`begin`), an artifact checkpoint, or an artifact replacement.
+ * @typedef {{ path: string[], before: any, after: any, beforeHas: boolean, afterHas: boolean }} HistoryIntentChange
+ *   One changed leaf of an intent; `path[0]` is the domain.
+ * @typedef {{
+ *   retainedBytes: number,
+ *   fileIds?: readonly string[],
+ *   identity?: { fingerprint?: string, compactSignature?: string },
+ *   [key: string]: any
+ * }} HistoryArtifactHandle
+ *   A generated-artifact capture; History reads only these fields. Handles with the same
+ *   fingerprint and compact signature name one artifact, whose `retainedBytes` count once.
+ * @typedef {{ status: string, reason: string }} HistoryBusy
+ *   The Session availability that rejects an edit, Undo, or Redo.
+ * @typedef {object} HistoryFileRetention
+ *   The two functions of the History file store that History calls (R13).
+ * @property {(fileIds: Set<string>) => number} estimateBytes
+ *   Bytes of the retained files named by `fileIds`.
+ * @property {(fileIds: Set<string>) => void} retainOnly
+ *   Drops every stored file that `fileIds` does not name.
+ *
+ * @typedef {object} HistoryManagerOptions
+ * @property {() => HistoryIntent | Promise<HistoryIntent>} buildIntent
+ *   The snapshot service's capture of the current intent.
+ * @property {(intent: HistoryIntent, context: { changes: HistoryIntentChange[], direction: 'undo' | 'redo' }) => unknown} applyIntent
+ *   The snapshot service's restore of an intent; History awaits it.
+ * @property {() => HistoryCheckpoint | Promise<HistoryCheckpoint>} buildCheckpoint
+ *   The snapshot service's capture of an artifact checkpoint.
+ * @property {(checkpoint: HistoryCheckpoint) => unknown} applyCheckpoint
+ *   The snapshot service's restore of an artifact checkpoint; History awaits it.
+ * @property {(() => HistoryArtifactHandle | Promise<HistoryArtifactHandle>) | null} [captureGeneratedArtifactHandle]
+ *   The snapshot service's capture of the generated artifact for a replacement step.
+ * @property {((handle: HistoryArtifactHandle, options: { clearFailedGeneratePresentation: boolean }) => unknown) | null} [restoreGeneratedArtifactHandle]
+ *   The snapshot service's restore of a captured handle; History awaits it.
+ * @property {((before: HistoryArtifactHandle, after: HistoryArtifactHandle) => boolean) | null} [compareGeneratedArtifactHandles]
+ *   Whether two handles name the same artifact.
+ * @property {(value: unknown) => string} [signatureFor]
+ *   The signature that detects a change; JSON by default.
+ * @property {HistoryFileRetention | null} [fileStore]
+ *   The file store that keeps the files that entries name (F-05).
+ * @property {(() => Iterable<string>) | null} [collectCurrentFileIds]
+ *   The ids of the files bound now, from the snapshot service.
+ * @property {number} [maxActions] Undo entries kept.
+ * @property {number} [maxBytes] Retained bytes allowed before the oldest entries drop.
+ * @property {<T>(value: T) => { value: T }} [makeRef]
+ *   Creates a reactive box (Vue `ref` in the app); a plain box by default.
+ * @property {(operation?: string) => HistoryBusy | null} [mutationAvailability]
+ *   The Session lifecycle's busy answer (`'history'` words Undo and Redo, D-28).
+ * @property {(step: { type: string, changes?: unknown }) => HistoryBusy | null} [stepAvailability]
+ *   The composition root's busy answer for one Undo or Redo step (E1: a step
+ *   that switches the diagram mode waits as the mode buttons do).
+ */
+
+/** @param {HistoryManagerOptions} options */
 export const createHistoryManager = ({
   buildIntent,
   applyIntent,
@@ -132,8 +221,9 @@ export const createHistoryManager = ({
   maxActions = DEFAULT_MAX_ACTIONS,
   maxBytes = DEFAULT_MAX_BYTES,
   makeRef = makeBox,
-  mutationAvailability = () => null
-} = {}) => {
+  mutationAvailability = () => null,
+  stepAvailability = () => null
+} = /** @type {HistoryManagerOptions} */ ({})) => {
   if (typeof buildIntent !== 'function') {
     throw new Error('createHistoryManager requires buildIntent.');
   }
@@ -147,12 +237,17 @@ export const createHistoryManager = ({
     throw new Error('createHistoryManager requires applyCheckpoint.');
   }
 
+  /** @type {any[]} */
   const undoStack = [];
+  /** @type {any[]} */
   const redoStack = [];
   const revision = makeRef(0);
   // Transaction open/close notifies mutationPending() without a document revision.
   const transactionRevision = makeRef(0);
   const restoring = makeRef(false);
+  // Undo and Redo calls from their request to their end, the settle of an
+  // open intent before `restoring` included (E1: the mode switch waits for them).
+  const traversals = makeRef(0);
   const capturing = makeRef(false);
   const historyLimitMessage = makeRef('');
   const diagnostics = {
@@ -178,8 +273,16 @@ export const createHistoryManager = ({
   let currentCheckpointSignature = '';
   let currentFileIds = new Set();
   let totalEntryBytes = 0;
+  // OV-112: adjacent artifact replacements name one artifact (entry k's `after`
+  // is entry k+1's `before`), so its bytes count once while any live entry
+  // names it. Keyed by `artifactRetentionKey`.
+  /** @type {Map<unknown, { bytes: number, references: number }>} */
+  const retainedArtifacts = new Map();
+  /** @type {HistoryTransaction | null} */
   let activeTransaction = null;
+  /** @type {HistoryTransaction | null} */
   let activeCheckpoint = null;
+  /** @type {HistoryTransaction | null} */
   let activeReplacement = null;
 
   const touch = () => {
@@ -332,12 +435,51 @@ export const createHistoryManager = ({
     fileStore.retainOnly(collectRetainedFileIds());
   };
 
+  /**
+   * The handles whose bytes an entry names in addition to its own `byteSize`.
+   * @param {any} entry
+   * @returns {HistoryArtifactHandle[]}
+   */
+  const entryArtifactHandles = (entry) => (
+    entry?.type === 'artifact-replacement' ? [entry.before, entry.after] : []
+  );
+
+  /** @param {HistoryArtifactHandle} handle */
+  const retainArtifactBytes = (handle) => {
+    const key = artifactRetentionKey(handle);
+    const bytes = Number(handle?.retainedBytes) || 0;
+    const retained = retainedArtifacts.get(key);
+    if (!retained) {
+      retainedArtifacts.set(key, { bytes, references: 1 });
+      totalEntryBytes += bytes;
+      return;
+    }
+    retained.references += 1;
+    if (bytes > retained.bytes) {
+      totalEntryBytes += bytes - retained.bytes;
+      retained.bytes = bytes;
+    }
+  };
+
+  /** @param {HistoryArtifactHandle} handle */
+  const releaseArtifactBytes = (handle) => {
+    const key = artifactRetentionKey(handle);
+    const retained = retainedArtifacts.get(key);
+    if (!retained) return;
+    retained.references -= 1;
+    if (retained.references > 0) return;
+    retainedArtifacts.delete(key);
+    totalEntryBytes = Math.max(0, totalEntryBytes - retained.bytes);
+  };
+
   const addEntryBytes = (entry) => {
     totalEntryBytes += Number(entry?.byteSize) || 0;
+    entryArtifactHandles(entry).forEach(retainArtifactBytes);
   };
 
   const removeEntryBytes = (entry) => {
     totalEntryBytes = Math.max(0, totalEntryBytes - (Number(entry?.byteSize) || 0));
+    entryArtifactHandles(entry).forEach(releaseArtifactBytes);
   };
 
   const clearStack = (stack) => {
@@ -351,6 +493,23 @@ export const createHistoryManager = ({
   };
 
   const clearRedo = () => clearStack(redoStack);
+
+  // UJ-09: the History position of the last Save or Load. Work is unsaved
+  // when an Undo or Redo step was added or traversed since then, or when an
+  // open control transaction already changed the intent it began with.
+  /** @param {any[]} stack */
+  const topEntry = (stack) => stack[stack.length - 1] || null;
+  let savePoint = { undo: null, redo: null };
+  const markSavePoint = () => {
+    savePoint = { undo: topEntry(undoStack), redo: topEntry(redoStack) };
+  };
+  const hasChangesSinceSavePoint = async () => {
+    if (topEntry(undoStack) !== savePoint.undo || topEntry(redoStack) !== savePoint.redo) return true;
+    const open = activeTransaction && !activeTransaction.closed ? activeTransaction : null;
+    if (!open) return false;
+    // A text control begins on focus; focus alone changes nothing.
+    return (await captureIntent()).signature !== open.beforeSignature;
+  };
 
   const enforceLimits = () => {
     let evicted = false;
@@ -403,6 +562,7 @@ export const createHistoryManager = ({
     const before = await captureIntent();
     if (mutationAvailability()) return null;
     emitHistoryDiagnostic({ type: 'begin', scope: 'intent', label });
+    /** @type {HistoryTransaction} */
     const tx = {
       label,
       before: before.intent,
@@ -430,6 +590,7 @@ export const createHistoryManager = ({
     if (!isCurrent()) return false;
     clearStack(undoStack);
     clearRedo();
+    markSavePoint();
     currentCheckpoint = null;
     currentCheckpointSignature = '';
     setCurrentIntent(intentRecord);
@@ -669,7 +830,7 @@ export const createHistoryManager = ({
     if (phase === 'before') diagnostics.artifactHandleBeforeBuildCount += 1;
     else diagnostics.artifactHandleAfterBuildCount += 1;
     try {
-      const handle = captureGeneratedArtifactHandle({ phase });
+      const handle = captureGeneratedArtifactHandle();
       if (isPromiseLike(handle)) {
         return Promise.resolve(handle)
           .then((captured) => finishArtifactHandleCapture(captured, phase))
@@ -802,15 +963,16 @@ export const createHistoryManager = ({
           afterIntentCheckpoint.value
         ]) || '').length * 2
       : 0;
+    const namedBytes = intentCheckpointBytes
+      + (Number(transaction.before.retainedBytes) || 0)
+      + (Number(after.retainedBytes) || 0);
     const entry = {
       type: 'artifact-replacement',
       label: transaction.label || options.label || 'Generate diagram',
       before: transaction.before,
       after,
-      byteSize: Math.max(
-        1,
-        (Number(transaction.before.retainedBytes) || 0) + (Number(after.retainedBytes) || 0)
-      ) + intentCheckpointBytes,
+      // The entry's own bytes; `addEntryBytes` counts `before` and `after` once per artifact.
+      byteSize: intentCheckpointBytes,
       fileIds,
       ...(intentChanged ? {
         intentCheckpoint: {
@@ -826,7 +988,7 @@ export const createHistoryManager = ({
     emitHistoryDiagnostic({
       type: 'size',
       scope: 'artifact-replacement',
-      bytes: entry.byteSize
+      bytes: namedBytes
     });
     pushUndoEntry(entry);
     clearRedo();
@@ -837,7 +999,7 @@ export const createHistoryManager = ({
       scope: 'artifact-replacement',
       label: entry.label,
       created: true,
-      bytes: entry.byteSize
+      bytes: namedBytes
     });
     notifyCheckpointCapture(options, 'after-end');
     return true;
@@ -1043,11 +1205,23 @@ export const createHistoryManager = ({
     return historyAvailability();
   };
 
-  const undo = async () => {
+  /** @param {() => Promise<unknown>} step */
+  const traverse = async (step) => {
+    traversals.value += 1;
+    try {
+      return await step();
+    } finally {
+      traversals.value -= 1;
+    }
+  };
+
+  const undo = () => traverse(async () => {
     const busy = await settleBeforeTraversal();
     if (busy) return busy;
     if (restoring.value || undoStack.length === 0) return false;
     const entry = undoStack[undoStack.length - 1];
+    const stepBusy = stepAvailability(entry);
+    if (stepBusy) return stepBusy;
     if (entry.type === 'command') {
       const reverted = await applyCommandWithFlag(entry, 'undo');
       if (!reverted) {
@@ -1067,13 +1241,15 @@ export const createHistoryManager = ({
     enforceLimits();
     touch();
     return true;
-  };
+  });
 
-  const redo = async () => {
+  const redo = () => traverse(async () => {
     const busy = await settleBeforeTraversal();
     if (busy) return busy;
     if (restoring.value || redoStack.length === 0) return false;
     const entry = redoStack[redoStack.length - 1];
+    const stepBusy = stepAvailability(entry);
+    if (stepBusy) return stepBusy;
     if (entry.type === 'command') {
       const applied = await applyCommandWithFlag(entry, 'redo');
       if (!applied) {
@@ -1093,7 +1269,7 @@ export const createHistoryManager = ({
     enforceLimits();
     touch();
     return true;
-  };
+  });
 
   const canUndo = () => undoStack.length > 0 && !restoring.value && !historyAvailability();
   const canRedo = () => redoStack.length > 0 && !restoring.value && !historyAvailability();
@@ -1122,8 +1298,12 @@ export const createHistoryManager = ({
     getDiagnostics: () => ({ ...diagnostics, retainedEntryBytes: totalEntryBytes }),
     getRedoCount: () => redoStack.length,
     getUndoCount: () => undoStack.length,
+    hasChangesSinceSavePoint,
+    historyAvailability,
     historyLimitMessage,
+    traversalPending: () => traversals.value > 0,
     initializeIntentBaseline,
+    markSavePoint,
     redo,
     redoLabel,
     restoring,

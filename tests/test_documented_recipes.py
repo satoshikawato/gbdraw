@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from docs.recipes._scenario_support import destination_page
+
 
 pytestmark = pytest.mark.recipe
 
@@ -14,15 +16,7 @@ pytestmark = pytest.mark.recipe
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DOCS_ROOT = REPO_ROOT / "docs"
 MANIFEST = DOCS_ROOT / "scenarios" / "manifest.json"
-LEGACY_ROUTERS = (
-    DOCS_ROOT / "QUICKSTART.md",
-    *(sorted((DOCS_ROOT / "TUTORIALS").glob("[0-9]*_*.md"))),
-    DOCS_ROOT / "GFF3_FASTA.md",
-    DOCS_ROOT / "EXPORT.md",
-    DOCS_ROOT / "PYTHON_API.md",
-    DOCS_ROOT / "TYPED_API.md",
-    DOCS_ROOT / "WORKFLOW_GUIDE.md",
-)
+LEGACY_ROUTERS = (DOCS_ROOT / "QUICKSTART.md",)
 MARKDOWN_LINK_RE = re.compile(r"(?<!!)\[[^\]\n]+\]\(([^)\n]+)\)")
 
 
@@ -44,7 +38,7 @@ def _canonical_destinations_by_source() -> dict[Path, set[Path]]:
     for chapter in manifest["scenarios"]:
         if "destination" not in chapter:
             continue
-        destination = (REPO_ROOT / chapter["destination"]).resolve()
+        destination = (REPO_ROOT / str(destination_page(chapter))).resolve()
         for source in chapter["sources"]:
             destinations[(REPO_ROOT / source).resolve()].add(destination)
     return destinations
@@ -66,10 +60,9 @@ def test_legacy_routers_link_every_manifest_owned_replacement() -> None:
     for path in LEGACY_ROUTERS:
         expected = destinations_by_source.get(path.resolve(), set())
         if path.name == "QUICKSTART.md":
-            expected = {
-                DOCS_ROOT / "TUTORIALS" / "GUI" / "first-circular-genome-diagram.md",
-                DOCS_ROOT / "TUTORIALS" / "CLI" / "first-circular-genome-diagram.md",
-                DOCS_ROOT / "TUTORIALS" / "PYTHON" / "first-genome-diagram.md",
+            expected = expected | {
+                DOCS_ROOT / "TUTORIALS" / "first-circular-genome-diagram.md",
+                DOCS_ROOT / "TUTORIALS" / "first-linear-genome-diagram.md",
             }
         assert expected, path.relative_to(REPO_ROOT)
         linked = {
@@ -83,7 +76,7 @@ def test_legacy_routers_link_every_manifest_owned_replacement() -> None:
 def test_legacy_paths_are_never_canonical_chapter_destinations() -> None:
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     destinations = {
-        (REPO_ROOT / chapter["destination"]).resolve()
+        (REPO_ROOT / str(destination_page(chapter))).resolve()
         for chapter in manifest["scenarios"]
         if "destination" in chapter
     }

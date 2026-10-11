@@ -1,10 +1,24 @@
+// @ts-check
+/** @import { DrawingState } from '../state.js' */
+/** @import { RulePreparation } from './rule-matching.js' */
+/** @import { PreviousResultRestoreOptions, ReadinessExpectation, ReadinessExpectationOptions, ReadyReceipt } from './preview-runtime.js' */
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
+import { keepResultNames } from '../services/result-normalization.js';
+import {
+  nameFeaturePlacementFailure,
+  requestFeatureOverrides,
+  restorePlacements,
+  validateFeatureIdentityNotices
+} from '../services/feature-placement.js';
 import { rekeyOrthogroupOverrides } from '../services/orthogroup-feature-metadata.js';
-import { resolveLinearRegionBounds } from './feature-metadata-extraction.js';
+import { resolveLinearRegionBounds } from '../services/feature-metadata-extraction.js';
 import { buildSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import { prepareLosatRuntime, runLosatPairsParallel } from '../services/losat.js';
-import { losatRecordGencode, prepareLosatSourceBatches, splitLosatSourceResult } from './linear-sources.js';
+import {
+  losatRecordGencode, losatSearchSequences, prepareLosatSourceBatches, splitLosatSourceResult
+} from '../services/linear-sources.js';
+import { offRecordRequestKeys } from '../services/record-draw-selection.js';
 import {
   cancelDiagramGeneration,
   DIAGRAM_HELPER_OPERATIONS,
@@ -22,29 +36,31 @@ import {
   projectCommittedRecordTransform,
   projectCommittedSimilarityAlignment,
   promoteCanonicalRenderRequestToCurrent,
-  readCanonicalResourceRecordCount
+  readCanonicalResourceRecordCount,
+  requestLabelProjection,
+  requestLabelTableTsv,
+  requireLinearComparisonPlanSnapshot
 } from '../services/session-request.js';
-import {
-  buildLabelOverrideTsv,
-  serializeLabelOverrideRows
-} from './feature-editor/label-override-table.js';
+import { labelDrawingBlocker } from './feature-editor/label-actions.js';
 import {
   applyCircularSuppressControlsToSlots,
+  hasEnabledCircularTrackRenderer
+} from './circular-track-slots.js';
+import {
   applyCircularTrackOrderPlacements,
   clampCircularTrackAxisIndex,
-  hasEnabledCircularTrackRenderer,
   inferLegacyAxisIndexFromFeature
-} from './circular-track-slots.js';
+} from '../services/circular-track-slot-model.js';
 import {
   normalizeFileList,
   orderedConservationSources
-} from './conservation-series.js';
+} from '../services/conservation-series.js';
 import {
   applyLinearTrackOrderPlacements,
   clampLinearTrackAxisIndex,
   normalizeLinearTrackSlots,
   resolveLinearTrackAxisIndex
-} from './linear-track-slots.js';
+} from '../services/linear-track-slot-model.js';
 import { getDepthTrackFallbackLabel } from './depth-tracks.js';
 import {
   activeDepthTrackIndices,
@@ -53,38 +69,40 @@ import {
   depthTrackMatrixWidth,
   isRecordMajorDepthFileMatrix,
   normalizeRecordMajorDepthFileRows,
+  depthSeriesLegendCaptions,
   representativeDepthFiles,
   syncDepthSlotLabels
-} from './depth-track-state.js';
+} from '../services/depth-track-state.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import {
   CustomTrackPlanValidationError,
   customTrackPlanIssues,
   validateCustomTrackPlan
-} from './track-slot-validation.js';
-import {
-  normalizeCollinearSearchScope
-} from './losat-normalization.js';
+} from '../services/track-slot-validation.js';
 import { buildRunInfo, buildSourceRecipe, summarizeLosatRuntimes } from './run-info.js';
 import {
   buildLosatJobSpecs,
+  canonicalGridDisplayPairs,
   resolveLinearComparisonPlan
-} from './linear-comparisons.js';
+} from '../services/linear-comparisons.js';
 import {
   buildDefaultColorOverrideTsv,
   normalizePaletteColors
-} from './color-utils.js';
-import { serializeSpecificRules } from './file-imports.js';
+} from '../utils/color-utils.js';
 import {
-  buildFeatureVisibilitySelectorCache,
-  preserveFeatureVisibilitySelectorCacheForOverrides,
+  serializeLabelWhitelistRules,
+  serializeQualifierPriorityRules,
+  serializeSpecificRules
+} from '../services/file-imports.js';
+import { rebindRuleColorOverrides } from './rule-matching.js';
+import {
   pruneUnmatchedFeatureOverrides,
   serializeFeatureVisibilityRules
-} from './feature-visibility.js';
+} from '../services/feature-visibility.js';
 import {
   normalizeDefinitionLineStyleState
-} from './definition-line-style-state.js';
-import { requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
+} from '../services/definition-line-style-state.js';
+import { requireLinearLabelVisibilityMode } from '../services/linear-label-visibility.js';
 import { createZipBlob } from '../utils/zip.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import { cloneJsonData, cloneJsonValue } from '../services/json-clone.js';
@@ -93,7 +111,7 @@ import { downloadBlob, downloadTextFile } from '../services/text-download.js';
 import {
   normalizeCircularPlotTitlePosition,
   normalizeLinearPlotTitlePosition
-} from './plot-title-position.js';
+} from '../services/layout-preferences.js';
 import {
   normalizeCurrentPairwiseMatchStyle,
   requireCurrentCircularMultiRecordSizeMode,
@@ -115,14 +133,14 @@ import {
   requireCurrentProteinBlastpCandidateLimit,
   requireCurrentProteinBlastpMaxHits,
   requireCurrentProteinBlastpMode
-} from './current-option-values.js';
+} from '../services/current-option-values.js';
 import {
   circularDiscoveryForInput,
   discoverGffFastaRecords,
   discoverSequenceRecords,
   discoveryErrorIsFinal
-} from './record-discovery.js';
-import { genbankHeaderIds } from './genbank-header.js';
+} from '../services/record-discovery.js';
+import { genbankHeaderIds } from '../services/genbank-header.js';
 import {
   LOSAT_DERIVED_CACHE_SCHEMA,
   NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
@@ -141,9 +159,9 @@ import {
   losatEdgeFilename,
   validateDerivedProteinReferences,
   webLosatRuntimeRecord
-} from './losat-cache.js';
+} from '../services/losat-cache.js';
 import { comparisonFiltersForMode, resolveComparisonThresholds } from '../mode-profiles.js';
-import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../services/error-normalization.js';
+import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
   cloneFileBytesForTransfer,
   readFileBytes,
@@ -156,6 +174,7 @@ import {
   prepareCandidateRenderCommit,
   prepareReflowResultCommit
 } from './candidate-render.js';
+import { editorPaintState } from './result-paint-record.js';
 import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
@@ -197,7 +216,24 @@ const hashText = async (text) => {
   return `fnv1a-${(hash >>> 0).toString(16)}`;
 };
 
-const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
+// Label visibility On draws the label whatever Show Labels and the label
+// filters select, so it must bind, unless the request cannot draw it: a feature
+// drawn as underlay, or Label Rendering = Embedded Only. That On takes effect
+// when the label can be drawn (Owner Q1, Q2). The operations reach only the
+// features the request's catalog lists as rendered, which Python draws
+// (should_render_feature), so a hidden feature has none. Label text alone and
+// Off follow those settings, which may leave the feature unlabeled.
+const labelOperationIds = (operations) => (operations || [])
+  .map((operation) => String(operation?.renderedId || '').trim())
+  .filter(Boolean);
+const forcedLabelFeatureIds = (operations, { features, diagramOptions }) => {
+  const featuresById = new Map((features || []).map((feature) => [String(feature?.svg_id || '').trim(), feature]));
+  return Object.freeze([...new Set(labelOperationIds(
+    (operations?.labelVisibility || []).filter((operation) => operation?.mode === 'on')
+  ))].filter((featureId) => !labelDrawingBlocker(featuresById.get(featureId), diagramOptions)));
+};
+
+const getNow = () => (typeof globalThis.performance?.now === 'function' ? performance.now() : Date.now());
 const formatDuration = (ms) => `${(ms / 1000).toFixed(2)}s`;
 const fastaExtractionCache = new WeakMap();
 const FASTA_EXTRACTION_CACHE_LIMIT = 12;
@@ -234,6 +270,25 @@ export const confirmHydratedLosatExport = (
   ))
 );
 
+/**
+ * @typedef {object} LosatCacheMetadata
+ * @property {string} [identityKind] `protein` for a BLASTP search, otherwise nucleotide.
+ * @property {string} flow
+ * @property {string} program
+ * @property {string} [outfmt]
+ * @property {string[]} args
+ * @property {string} [queryCanonicalHash]
+ * @property {string} [subjectCanonicalHash]
+ * @property {string} [queryProteinSetHash]
+ * @property {string} [subjectProteinSetHash]
+ * @property {string} [queryRuntimeBindingHash]
+ * @property {string} [subjectRuntimeBindingHash]
+ * @property {string} [queryRecordInstanceKey]
+ * @property {string} [subjectRecordInstanceKey]
+ * @property {Record<string, any>} [searchContext]
+ */
+
+/** @param {LosatCacheMetadata} metadata */
 export const buildLosatCachePayload = ({
   identityKind,
   flow,
@@ -280,6 +335,10 @@ export const buildLosatCachePayload = ({
   return payload;
 };
 
+/**
+ * @param {Record<string, any> | null} [manifest]
+ * @param {object | null} [identityIndex]
+ */
 const getRawLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null, identityIndex = null) => {
   if (!cacheMap) return null;
   const direct = getCurrentRawLosatCacheEntry(cacheMap, cacheKey, metadata, manifest, { identityIndex });
@@ -337,6 +396,34 @@ const pruneLosatDerivedCache = (cacheMap) => {
   }
 };
 
+/**
+ * The option values a derived protein payload depends on, as the options form holds them.
+ * @typedef {object} LosatDerivedCacheMetadata
+ * @property {any} [mode]
+ * @property {any} [maxHits]
+ * @property {any} [bitscore]
+ * @property {any} [evalue]
+ * @property {any} [identity]
+ * @property {any} [alignmentLength]
+ * @property {any} [collinearMinAnchors]
+ * @property {any} [collinearMaxUnitGap]
+ * @property {any} [collinearUnitMode]
+ * @property {any} [collinearColorMode]
+ * @property {any} [collinearAnchorMode]
+ * @property {any} [collinearMergeOrientation]
+ * @property {any} [collinearMaxDiagonalDrift]
+ * @property {any} [collinearMaxConflictsInMergeGap]
+ * @property {any} [collinearMaxParalogLinksPerOrthogroup]
+ * @property {any} [collinearSearchScope]
+ * @property {any} [orthogroupMembershipMode]
+ * @property {any} [orthogroupMemberMaxHits]
+ * @property {boolean} [collinearInferOrthogroups]
+ * @property {boolean} [explicitDisplayPairs]
+ * @property {Record<string, any>[]} [recordPayloads]
+ * @property {Record<string, any>[]} [pairPayloads]
+ */
+
+/** @param {LosatDerivedCacheMetadata} metadata */
 export const buildLosatDerivedPayloadCachePayload = ({
   mode,
   maxHits,
@@ -501,7 +588,9 @@ const canReuseResolvedProteinArtifacts = ({
   ));
   if (!persistedMarker || !committedMarker || !active) return false;
   // Selected proteins follow the Feature visibility rules (CO-02).
-  if (!committedFeatureVisibilityMatches(committedSession, active.featureVisibility)) return false;
+  if (!committedFeatureVisibilityMatches(committedSession, active.featureVisibility, active.featureOverrides)) {
+    return false;
+  }
 
   // Derived rows carry view coordinates and feature IDs. Raw LOSATP evidence
   // remains reusable, but a reversed view needs these rows to be projected again.
@@ -770,7 +859,7 @@ const selectParsedRecord = (records, selectorRaw) => {
 };
 const parseFastaRecordsFast = (text) => {
   const records = [];
-  let current = null;
+  let current = /** @type {{ id: string, parts: string[] } | null} */ (null);
   String(text || '').split(/\r?\n/).forEach((line) => {
     if (line.startsWith('>')) {
       if (current) records.push({ ...current, sequence: current.parts.join('').toUpperCase() });
@@ -789,7 +878,7 @@ const parseGenbankRecordsFast = (text) => {
   recordChunks.forEach((chunk) => {
     const originMatch = chunk.match(/\nORIGIN\b([\s\S]*)$/i);
     const header = originMatch ? genbankHeaderIds(chunk) : null;
-    if (!header) return;
+    if (!header || !originMatch) return;
     const sequence = originMatch[1].replace(/[^A-Za-z]/g, '').toUpperCase();
     if (sequence) records.push({ id: header.recordId, sequence });
   });
@@ -803,7 +892,8 @@ const applyLosatSequenceTransforms = (record, regionSpec, reverseFlag) => {
     const start = Math.max(0, region.start - 1);
     const end = Math.min(sequence.length, region.end);
     if (start >= end && (region.start !== 1 || region.end !== sequence.length)) {
-      throw new Error(`Start position (${region.start}) must be less than end position (${region.end}).`);
+      // The region starts after the record ends, as crop_genbank.py reports it (GX-09).
+      throw diagnosticError('REGION_INVALID', { field: 'region', reason: 'RECORD_BOUNDS' });
     }
     sequence = sequence.slice(start, end);
     if (region.reverse) sequence = reverseComplementSequence(sequence);
@@ -871,6 +961,7 @@ export const extractLosatFastaFast = async ({ file, text, fmt, regionSpec, recor
     canonicalLength: transformed.sequence.length
   };
 };
+/** @param {{ file?: any, text?: string | null, fmt: string }} options */
 const extractAllLosatFastaFast = async ({ file, text, fmt }) => {
   const sourceText = typeof text === 'string' ? text : await readFileText(file);
   const records = fmt === 'genbank' ? parseGenbankRecordsFast(sourceText) : parseFastaRecordsFast(sourceText);
@@ -984,6 +1075,24 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
   );
 };
 
+/**
+ * @typedef {object} CanonicalRenderCandidateExecutionOptions
+ * @property {Record<string, any>} canonical The candidate's request and resources.
+ * @property {string} mode
+ * @property {string} [kind]
+ * @property {((progress: any) => void) | null} [onProgress]
+ * @property {() => boolean} [shouldAdmit]
+ * @property {((payload: Record<string, any>, options?: { onProgress?: ((progress: any) => void) | null }) => Promise<any>) | null} [generationExecutor] Test seam.
+ * @property {typeof admitFeatureCatalog} [catalogAdmission]
+ * @property {typeof prepareCandidateRenderCommit} [prepareCommit]
+ * @property {Record<string, any>} [prepareCommitInput]
+ * @property {((canonical: Record<string, any>, catalogState: any) => any) | null} [decorationContinuity]
+ * @property {any[]} [timingEntries]
+ * @property {readonly string[] | null} [resultNames] The names of the Results a rerender draws again,
+ *   which they keep (OV-136); Generate's Results take the names the engine gives them.
+ */
+
+/** @param {CanonicalRenderCandidateExecutionOptions} options */
 export const executeCanonicalRenderCandidate = async ({
   canonical,
   mode,
@@ -995,7 +1104,8 @@ export const executeCanonicalRenderCandidate = async ({
   prepareCommit = prepareCandidateRenderCommit,
   prepareCommitInput = {},
   decorationContinuity = null,
-  timingEntries = []
+  timingEntries = [],
+  resultNames = null
 }) => {
   if (!canonical?.renderRequest || !canonical?.resources) {
     throw new Error('Canonical candidate execution requires a request and resources.');
@@ -1013,11 +1123,11 @@ export const executeCanonicalRenderCandidate = async ({
       }, { onProgress: onProgress });
   const results = generationResponse.results;
   if (!shouldAdmit()) {
-    return { status: 'superseded', generationResponse, elapsedMs: getNow() - startedAt };
+    return { status: /** @type {const} */ ('superseded'), generationResponse, elapsedMs: getNow() - startedAt };
   }
   if (results?.error) {
     return {
-      status: 'engine-error',
+      status: /** @type {const} */ ('engine-error'),
       generationResponse,
       engineError: results.error,
       elapsedMs: getNow() - startedAt
@@ -1026,6 +1136,7 @@ export const executeCanonicalRenderCandidate = async ({
   if (!Array.isArray(results)) {
     throw new Error('The diagram engine returned an invalid Result list.');
   }
+  keepResultNames(generationResponse, resultNames);
   const metadata = generationResponse.metadata
     && typeof generationResponse.metadata === 'object'
     && !Array.isArray(generationResponse.metadata)
@@ -1033,6 +1144,10 @@ export const executeCanonicalRenderCandidate = async ({
     : {};
   const annotationWarnings = validateAnnotationWarnings(metadata.annotationWarnings, results);
   const comparisonWarnings = validateComparisonWarnings(metadata.comparisonWarnings, results);
+  // Edits by source identity that a Result does not draw (design Q4 3.4).
+  const featureIdentityNotices = Array.isArray(metadata.featureIdentityNotices)
+    ? metadata.featureIdentityNotices : [];
+  validateFeatureIdentityNotices(featureIdentityNotices, results);
   recordSessionLifecycleEvent('candidate-result-validation-start');
   const catalogState = catalogAdmission(metadata.featureCatalog, results, {
     adopt: true,
@@ -1048,19 +1163,19 @@ export const executeCanonicalRenderCandidate = async ({
     () => prepareCommit({
       generationResponse,
       catalogAdmission: catalogState,
-      results,
-      catalog: catalogState.catalog,
-      mode,
+      // The Results carry the feature types of the request that drew them (R13).
+      selectedFeatureTypes: canonical.renderRequest.diagramOptions?.selectedFeaturesSet ?? null,
       ...prepareCommitInput,
       resultTransforms: decorationContinuity?.(canonical, catalogState) || []
     })
   );
   recordSessionLifecycleEvent('result-admission-end');
   return {
-    status: 'ok',
+    status: /** @type {const} */ ('ok'),
     generationResponse,
     generationMetadata: metadata,
     annotationWarnings,
+    featureIdentityNotices,
     comparisonWarnings,
     results,
     catalogAdmission: catalogState,
@@ -1070,6 +1185,64 @@ export const executeCanonicalRenderCandidate = async ({
   };
 };
 
+/**
+ * The members of the preview owner's runtime (app/preview-runtime.js) that
+ * Generate reads: it registers the readiness a candidate must meet, and rolls
+ * the selection back when the candidate is rejected.
+ * @typedef {object} RunAnalysisPreviewRuntime
+ * @property {(expectation: ReadinessExpectationOptions) => ReadinessExpectation} registerReadinessExpectation
+ * @property {(generationToken: string, reason: Error) => void} invalidateReadinessExpectation
+ * @property {(receipt: any, reason: string) => void} invalidateReadyReceipt
+ * @property {(options: PreviousResultRestoreOptions) => Promise<any>} restorePreviousSelectedResult
+ * @property {(index: number) => any} selectResult
+ * @property {(result: any) => any} getResultIdentity
+ * @property {() => ({ readyReceipt?: any } | null)} [getActiveRuntime]
+ */
+
+/**
+ * @typedef {object} RunAnalysisOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {RulePreparation | null} [rulePreparation] The rule owner's preparation, which Generate runs before it draws.
+ * @property {(feature: Record<string, any>) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
+ * @property {(comparisonPlanSnapshot: Record<string, any> | null, linearRecordCatalog: any, drawing: DrawingState) => any} serializeCanonicalFiles
+ *   The Session owner's serialization of the active render files, chosen by the run's drawing.
+ * @property {number} canonicalSessionVersion `SESSION_VERSION` of the Session owner.
+ * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean }) => void} adoptCanonicalRenderArtifacts
+ *   The Session owner's adoption of a candidate's request, resources, and files.
+ * @property {(() => (Record<string, any> | null)) | null} [getCommittedCanonicalSession] The committed canonical Session.
+ * @property {(session: Record<string, any> | null | undefined, projectIdentity: (...args: any[]) => any, drawing: Record<string, any>) => any} [captureDecorationContinuity]
+ *   The Legend layout owner's capture of the decoration positions a rerender of the drawing keeps.
+ * @property {() => Record<string, any> | Promise<Record<string, any>>} captureGeneratedArtifactHandle History's capture of the current generated artifact.
+ * @property {() => ({ results: any[] } & Record<string, any>)} captureGeneratedArtifactOwnerSet
+ * @property {(ownerSet: Record<string, any>, options: { selectedResultIndex: number, installResults: (results: any[]) => void }) => void} installGeneratedArtifactOwnerSet
+ * @property {(handle: Record<string, any>) => any} restoreGeneratedArtifactHandle
+ * @property {((artifactIdentity: any, options: { results: any[] }) => void) | null} [setGeneratedArtifactIdentity]
+ * @property {((label: string, execute: (handle?: Record<string, any>) => any, options: Record<string, any>) => Promise<any>) | null} [runGeneratedArtifactReplacement]
+ *   History's undoable replacement of the generated artifact.
+ * @property {RunAnalysisPreviewRuntime | null} [previewRuntime]
+ * @property {() => Promise<void>} [nextTick] Vue `nextTick`.
+ * @property {() => Promise<void>} [waitForAfterPaint]
+ * @property {() => Promise<void>} [waitForPostBindFrame]
+ * @property {((capture: { phase?: string, diagnostics?: any }) => void) | null} [onGeneratedArtifactCheckpointCapture]
+ * @property {(options?: { pan?: any, resetZoom?: boolean }) => void} resetPreviewViewport The preview owner's viewport reset.
+ * @property {(() => ({ code: string, context?: any } | null | undefined)) | null} [validateAnnotationTargets]
+ * @property {(() => string[]) | null} [omittedAnnotationRecordKeys] The record-catalog keys of the drawing's OFF records.
+ * @property {((discovered: { primaryFile: File | null, pairedFile: File | null, recordCount: number }) => void) | null}
+ *   [onCircularRecordsDiscovered] A discovery of the Circular input settled (success or error).
+ * @property {(() => Promise<Record<string, any>>) | null} [prepareLinearRecordCatalog]
+ * @property {{ value: Record<string, any>[] } | null} [recordDisplayRows]
+ *   The draft record display rows the request reads (`recordDisplayControls.allRows`, R13).
+ * @property {() => Promise<void>} [settleComparisonRecordLabels] D12: ring rows added just before Generate are named before it reads them.
+ * @property {((mode: string, state: any) => void) | null} [assertActiveModeInputs]
+ * @property {(() => string) | null} [readDraftSignature] The History signature of the committed draft
+ *   intent (UJ-10: a Cancel compares the canceled draft with the draft of the shown Result).
+ *   services/config.js owns the active-mode input check shared with Save.
+ * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
+ * @property {(options?: { rerender?: boolean }) => void} clearLabelBuildNotices The label owner's port.
+ * @property {typeof prepareCandidateRenderCommit} [prepareCandidateCommit] Test seam.
+ */
+
+/** @param {RunAnalysisOptions} options */
 export const createRunAnalysis = ({
   state,
   rulePreparation = null,
@@ -1092,15 +1265,20 @@ export const createRunAnalysis = ({
   onGeneratedArtifactCheckpointCapture = null,
   resetPreviewViewport,
   validateAnnotationTargets = null,
+  omittedAnnotationRecordKeys = null,
+  onCircularRecordsDiscovered = null,
   prepareLinearRecordCatalog = null,
+  // The draft record display rows the request reads (`recordDisplayControls.allRows`, R13).
+  recordDisplayRows = null,
   // D12: ring rows added just before Generate are named before it reads them.
   settleComparisonRecordLabels = async () => {},
   // services/config.js owns the active-mode input check shared with Save.
   assertActiveModeInputs = null,
-  losatExecutor = runLosatPairsParallel,
-  executeCanonicalCandidate = executeCanonicalRenderCandidate,
-  prepareCandidateCommit = prepareCandidateRenderCommit,
-  prepareReflowCommit = prepareReflowResultCommit
+  readDraftSignature = null,
+  // R13: the label owner's ports (app/feature-editor/label-actions.js).
+  closeLabelTextScopeDialog,
+  clearLabelBuildNotices,
+  prepareCandidateCommit = prepareCandidateRenderCommit
 }) => {
   const {
     processing,
@@ -1112,40 +1290,19 @@ export const createRunAnalysis = ({
     generationFailureRecovery,
     resultGenerationKey,
     resultPanelTab,
-    lastRunInfo,
     pairwiseMatchFactors,
-    trackSlotResolvedGeometry,
     errorLog,
     semanticFileWatchersSuppressed,
     sessionImportRollbackInProgress,
     zoom,
-    canvasPan,
     skipCaptureBaseConfig,
     matchSequenceRegistry,
-    featureColorOverrides,
-    featureVisibilityOverrides,
-    featureVisibilityRules,
-    featureStrokeOverrides,
-    legendColorOverrides,
-    legendStrokeOverrides,
-    selectedPalette,
-    currentColors,
     paletteDefinitions,
     appliedPaletteName,
     appliedPaletteColors,
-    pendingPaletteName,
-    pendingPaletteColors,
-    filterMode,
-    manualSpecificRules,
-    manualWhitelist,
-    manualPriorityRules,
-    form,
-    adv,
     mode,
     cInputType,
     lInputType,
-    losatProgram,
-    losat,
     losatCacheInfo,
     losatThreadingStatus,
     losatCache,
@@ -1153,51 +1310,26 @@ export const createRunAnalysis = ({
     proteinIdentityManifest,
     legacyProteinRawCandidates,
     legacyProteinDerivedEvidence,
-    circularConservation,
-    annotationSets,
     orthogroups,
     selectedOrthogroupAlignmentFeature,
-    orthogroupNameOverrides,
-    orthogroupDescriptionOverrides,
-    orthogroupDormantOverrides,
     selectedOrthogroupId,
     circularRecordList,
     circularRecordDiscovery,
     files,
-    linearSeqs,
-    linearRecordLayoutEnabled,
-    linearRecordRows,
-    linearComparisonPlan,
-    linearComparisonResolution,
-    importedComparisonIntent,
-    generatedLegendPosition,
-    generatedMode,
-    generatedMultiRecordCanvas,
-    generatedCircularPlotTitlePosition,
+    // Every Linear record card; a Generate reads the drawn ones (`drawing.drawnLinearSeqs`).
+    linearSeqs: allLinearSeqs,
     shouldDeferCircularPreviewUpdates,
     extractedFeatures,
     biologicalFeatures,
     featureCatalog,
-    featureSelectorSafetyScope,
+    featureEditRemovalCount,
     featureEditorStatus,
     featureExtractionPending,
     featureExtractionError,
-    featureRecordIds,
     selectedFeatureRecordIdx,
-    editableLabels,
-    labelTextScopeDialog,
-    labelTextFeatureOverrides,
-    canonicalLabelOverrideRows,
-    labelTextBulkOverrides,
-    labelTextFeatureOverrideSources,
-    labelVisibilityOverrides,
-    labelOverrideBuildWarning,
     labelReflowProcessing,
     labelReflowLastError,
-    legendEntries,
-    deletedLegendEntries,
-    originalLegendOrder,
-    addedLegendCaptions
+    originalLegendOrder
   } = state;
   if (
     typeof captureGeneratedArtifactHandle !== 'function'
@@ -1211,22 +1343,50 @@ export const createRunAnalysis = ({
     !previewRuntime
     || typeof previewRuntime.registerReadinessExpectation !== 'function'
     || typeof previewRuntime.restorePreviousSelectedResult !== 'function'
+    || typeof previewRuntime.selectResult !== 'function'
   ) {
-    throw new Error('createRunAnalysis requires PreviewRuntime readiness handlers.');
+    throw new Error('createRunAnalysis requires PreviewRuntime readiness and selection handlers.');
   }
   const executeLosatJobs = (...args) => {
     const override = globalThis.__GBDRAW_LOSAT_EXECUTOR__;
-    return (typeof override === 'function' ? override : losatExecutor)(...args);
+    return (typeof override === 'function' ? override : runLosatPairsParallel)(...args);
   };
+  // Show Depth off leaves the Depth sources out of the request, so Python cannot name
+  // the Depth rows a Legend style may still address; the draft names them (OV-81).
+  /** @param {DrawingState} drawing */
+  const unrequestedDepthCaptions = (drawing, canonical) => (
+    canonical.renderRequest.diagramOptions?.depthTracks
+      ? []
+      : depthSeriesLegendCaptions({
+          depthTracks: drawing.adv.depth_tracks,
+          slots: canonical.renderRequest.mode === 'linear' ? drawing.adv.linear_track_slots : drawing.adv.circular_track_slots
+        })
+  );
+  // A target-record transform and a label reflow draw the committed Results
+  // again, with the settings and edits of the committed request's mode.
+  /** @param {Record<string, any> | null | undefined} committed */
+  const committedDrawing = (committed) => state.drawings[committed?.renderRequest?.mode === 'linear' ? 'linear' : 'circular'];
   let pendingReflowRequestId = 0;
   let activeReflowRequestId = 0;
-  let pendingReflowReason = 'label-edit';
+  // A rerender requested while Generate (or a committed-candidate run) is in
+  // progress waits for it: the rerender would take the newer generation token
+  // and silently supersede the run (OV-48). It runs once after the run settles.
+  let reflowDeferredByProcessing = false;
+  // The label rerender loop while it runs. A run that sets `processing` waits
+  // for it before it renders: its iteration may already be in the diagram
+  // Worker, which takes one request at a time (OV-349), and no further
+  // iteration starts.
+  /** @type {Promise<void> | null} */
+  let activeReflowRun = null;
   let featureExtractionRequestId = 0;
   let latestGenerationToken = 0;
   let latestOperationId = 0;
   let circularRecordRefreshGeneration = 0;
+  /** @type {{ fingerprint: any[], promise: Promise<any> | null } | null} */
   let activeCircularRecordRefresh = null;
+  /** @type {AbortController | null} */
   let activeLosatAbortController = null;
+  /** @type {readonly Record<string, any>[]} */
   let latestCliHelperFiles = Object.freeze([]);
   let latestCliHelperArchiveName = 'out-cli-files.zip';
   let latestCliHelperRetainedBytes = 0;
@@ -1253,6 +1413,10 @@ export const createRunAnalysis = ({
       retainedBytes: latestCliHelperRetainedBytes
     })
   );
+  /**
+   * @param {Record<string, any>} [runtimeState]
+   * @param {{ ui?: { canvasPan?: any } }} [options]
+   */
   const restoreGeneratedArtifactRuntimeState = (runtimeState = {}, { ui = {} } = {}) => {
     latestCliHelperFiles = runtimeState?.latestCliHelperFiles || Object.freeze([]);
     latestCliHelperArchiveName = String(
@@ -1265,6 +1429,10 @@ export const createRunAnalysis = ({
     }
   };
   const generatedArtifactTransactionOwner = Object.freeze({
+    /**
+     * @param {Record<string, any>} ownerSet
+     * @param {{ runtimeState?: Record<string, any> | null }} [options]
+     */
     build(ownerSet, { runtimeState = null } = {}) {
       recordSessionLifecycleEvent('artifact.candidate-completed');
       recordStructuralMetric('generatedArtifactCandidateBuildCount', 1);
@@ -1309,7 +1477,8 @@ export const createRunAnalysis = ({
     sessionImportRollbackInProgress?.value
   );
 
-  const buildLatestCliHelperFiles = (runInfo, generatedCliFileMap, archiveBaseName) => {
+  /** @param {DrawingState} drawing */
+  const buildLatestCliHelperFiles = (drawing, runInfo, generatedCliFileMap, archiveBaseName) => {
     const helperFiles = Array.isArray(runInfo?.helperFiles) ? runInfo.helperFiles : [];
     if (helperFiles.length === 0) {
       return {
@@ -1339,7 +1508,7 @@ export const createRunAnalysis = ({
         };
       })
       .filter(Boolean);
-    const archiveStem = makeSafeFilename(`${archiveBaseName || form.prefix || 'out'}-cli-files`);
+    const archiveStem = makeSafeFilename(`${archiveBaseName || drawing.form.prefix || 'out'}-cli-files`);
     return {
       files,
       archiveName: `${archiveStem}.zip`
@@ -1379,6 +1548,31 @@ export const createRunAnalysis = ({
 
   const formatError = (cause, operation = 'generate', stage = 'request-validation') =>
     normalizeUserFacingError(cause || { code: 'UNKNOWN' }, { operation, stage });
+  // UJ-08: the shown Generate failure about the source inputs, and its mode.
+  /** @type {{ error: any, mode: string } | null} */
+  let sourceInputFailure = null;
+  const SOURCE_INPUT_FAILURES = new Set(['INPUT_REQUIRED', 'FASTA_REQUIRED', 'INPUT_UNREADABLE', 'NO_RECORDS']);
+  /**
+   * Record discovery read every source input of `drawingMode`: a shown
+   * Generate failure about those inputs no longer holds, so it ends here.
+   * @param {string} drawingMode
+   */
+  const releaseSourceInputFailure = (drawingMode) => {
+    if (!sourceInputFailure || sourceInputFailure.mode !== drawingMode
+      || errorLog.value !== sourceInputFailure.error) return;
+    try {
+      assertActiveModeInputs?.(drawingMode, state);
+    } catch (_) {
+      return;
+    }
+    sourceInputFailure = null;
+    errorLog.value = null;
+  };
+  /**
+   * @param {any} cause
+   * @param {{ handle?: Record<string, any> | null, restore?: (() => any) | null, operation?: string, stage?: string,
+   *   isCurrent?: () => boolean, isCurrentOperation?: () => boolean, recovery?: string | null }} [options]
+   */
   const failOperation = async (cause, { handle, restore = null, operation = 'generate',
     stage = 'render', isCurrent = () => true, isCurrentOperation = () => true, recovery = null } = {}) => {
     if (!isCurrentOperation()) return { status: 'stale' };
@@ -1397,6 +1591,8 @@ export const createRunAnalysis = ({
     }
     if (!isCurrent()) return { status: 'stale' };
     errorLog.value = error;
+    sourceInputFailure = operation === 'generate' && SOURCE_INPUT_FAILURES.has(error?.code)
+      ? { error: errorLog.value, mode: mode.value } : null;
     if (generationFailureRecovery) generationFailureRecovery.value = recovery;
     failedGeneratePreservedResult.value = ['preserved', 'restored'].includes(recovery);
     return { status: 'error', error, recovery };
@@ -1405,7 +1601,12 @@ export const createRunAnalysis = ({
   // Raw searches finish before the artifact transaction. Keep only the latest
   // search's entries for retry, without changing the saved Result. Cache owner
   // replacement (Clear Cache, Session load, or History) invalidates the retry.
+  /** @type {{ owner: any, entries: Map<string, any> } | null} */
   let completedLosatSearch = null;
+  /**
+   * @param {Record<string, any> | null} [manifest]
+   * @param {object | null} [identityIndex]
+   */
   const getReusableLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null, identityIndex = null) => {
     if (completedLosatSearch?.owner !== losatCache.value) completedLosatSearch = null;
     return getRawLosatCacheEntry(cacheMap, cacheKey, metadata, manifest, identityIndex)
@@ -1449,16 +1650,17 @@ export const createRunAnalysis = ({
   };
 
   // D-21: names follow the exact member set; the rest stay dormant.
-  const rekeyCommittedOrthogroupOverrides = (previousGroups, candidateGroups) => {
+  /** @param {DrawingState} drawing */
+  const rekeyCommittedOrthogroupOverrides = (drawing, previousGroups, candidateGroups) => {
     const next = rekeyOrthogroupOverrides({
       previousGroups,
       candidateGroups,
-      names: orthogroupNameOverrides,
-      descriptions: orthogroupDescriptionOverrides,
-      dormant: orthogroupDormantOverrides
+      names: drawing.orthogroupNameOverrides,
+      descriptions: drawing.orthogroupDescriptionOverrides,
+      dormant: drawing.orthogroupDormantOverrides
     });
-    [[orthogroupNameOverrides, next.names], [orthogroupDescriptionOverrides, next.descriptions],
-      [orthogroupDormantOverrides, next.dormant]].forEach(([target, values]) => {
+    [[drawing.orthogroupNameOverrides, next.names], [drawing.orthogroupDescriptionOverrides, next.descriptions],
+      [drawing.orthogroupDormantOverrides, next.dormant]].forEach(([target, values]) => {
       Object.keys(target).forEach((key) => delete target[key]);
       Object.assign(target, values);
     });
@@ -1486,20 +1688,23 @@ export const createRunAnalysis = ({
     return '';
   };
 
-  const buildLosatSuffix = () => {
-    if (losatProgram.value === 'blastn') return 'losatn';
-    if (losatProgram.value === 'blastp') return 'losatp';
+  /** @param {DrawingState} drawing */
+  const buildLosatSuffix = (drawing) => {
+    if (drawing.losatProgram.value === 'blastn') return 'losatn';
+    if (drawing.losatProgram.value === 'blastp') return 'losatp';
     return 'tlosatx';
   };
 
-  const buildLosatFilename = (leftLabel, rightLabel) => (
-    losatEdgeFilename(leftLabel, rightLabel, buildLosatSuffix())
+  /** @param {DrawingState} drawing */
+  const buildLosatFilename = (drawing, leftLabel, rightLabel) => (
+    losatEdgeFilename(leftLabel, rightLabel, buildLosatSuffix(drawing))
   );
 
-  const getResolvedLinearEdge = (edgeKey) => {
+  /** @param {DrawingState} drawing */
+  const getResolvedLinearEdge = (drawing, edgeKey) => {
     const normalizedKey = String(edgeKey || '').trim();
     if (!normalizedKey) return null;
-    const edges = linearComparisonResolution?.value?.edges;
+    const edges = drawing.linearComparisonResolution?.value?.edges;
     return (Array.isArray(edges) ? edges : []).find((edge) => edge.edgeKey === normalizedKey) || null;
   };
 
@@ -1510,20 +1715,37 @@ export const createRunAnalysis = ({
     return entries.find((entry) => String(entry?.edgeKey || '') === normalizedKey) || null;
   };
 
-  const getLosatPairDefaultName = (edgeKey, queryEntry = null, subjectEntry = null) => {
+  /**
+   * @param {DrawingState} drawing
+   * @param {string} edgeKey
+   * @param {{ recordId?: string } | null} [queryEntry]
+   * @param {{ recordId?: string } | null} [subjectEntry]
+   */
+  const losatPairDefaultName = (drawing, edgeKey, queryEntry = null, subjectEntry = null) => {
     const cacheEntry = getLosatCacheInfoEntry(edgeKey);
-    const edge = getResolvedLinearEdge(edgeKey) || cacheEntry;
+    const edge = getResolvedLinearEdge(drawing, edgeKey) || cacheEntry;
     const queryIndex = Number(edge?.queryIndex);
     const subjectIndex = Number(edge?.subjectIndex);
+    const drawnSeqs = drawing.drawnLinearSeqs.value;
     const leftLabel = getSeqLabel(
-      linearSeqs[queryIndex],
+      drawnSeqs[queryIndex],
       queryEntry?.recordId || `seq_${Number.isInteger(queryIndex) ? queryIndex + 1 : 1}`
     );
     const rightLabel = getSeqLabel(
-      linearSeqs[subjectIndex],
+      drawnSeqs[subjectIndex],
       subjectEntry?.recordId || `seq_${Number.isInteger(subjectIndex) ? subjectIndex + 1 : 2}`
     );
-    return buildLosatFilename(leftLabel, rightLabel);
+    return buildLosatFilename(drawing, leftLabel, rightLabel);
+  };
+  // LOSAT pairs are the Linear comparisons: their names follow the Linear drawing.
+  /**
+   * @param {string} edgeKey
+   * @param {{ recordId?: string } | null} [queryEntry]
+   * @param {{ recordId?: string } | null} [subjectEntry]
+   */
+  const getLosatPairDefaultName = (edgeKey, queryEntry = null, subjectEntry = null) => {
+    const drawing = state.drawings.linear;
+    return losatPairDefaultName(drawing, edgeKey, queryEntry, subjectEntry);
   };
 
   const normalizeLosatFilename = (name, fallback) => {
@@ -1532,28 +1754,31 @@ export const createRunAnalysis = ({
     return makeSafeFilename(withExt);
   };
 
+  // How LOSAT runs is one app-level setting (`state.losatExecution`) for both
+  // drawings: the Linear comparisons and the Circular conservation series.
   const getLosatParallelWorkers = () => {
-    const raw = String(losat.parallelWorkers || 'auto').trim().toLowerCase();
+    const raw = String(state.losatExecution.parallelWorkers || 'auto').trim().toLowerCase();
     if (raw === 'auto') return undefined;
     const parsed = Number(raw);
     return Number.isInteger(parsed) && parsed >= 1 ? parsed : undefined;
   };
 
   const getLosatExecutionMode = () => {
-    const raw = String(losat.executionMode || 'auto').trim().toLowerCase();
+    const raw = String(state.losatExecution.executionMode || 'auto').trim().toLowerCase();
     return ['auto', 'serial', 'threaded'].includes(raw) ? raw : 'auto';
   };
 
-  const getLosatThreadsPerJob = () => {
-    if (losatProgram.value !== 'blastp') return 1;
-    const raw = String(losat.threadsPerJob || 'auto').trim().toLowerCase();
+  /** @param {DrawingState} drawing */
+  const getLosatThreadsPerJob = (drawing) => {
+    if (drawing.losatProgram.value !== 'blastp') return 1;
+    const raw = String(state.losatExecution.threadsPerJob || 'auto').trim().toLowerCase();
     if (raw === 'auto') return undefined;
     const parsed = Number(raw);
     return Number.isInteger(parsed) && parsed >= 1 ? parsed : undefined;
   };
 
   const getLosatTotalThreadBudget = () => {
-    const raw = String(losat.totalThreadBudget || 'safe').trim().toLowerCase();
+    const raw = String(state.losatExecution.totalThreadBudget || 'safe').trim().toLowerCase();
     if (raw === 'safe' || raw === 'auto') return undefined;
     if (raw === 'available') {
       return Math.max(1, Number(globalThis.navigator?.hardwareConcurrency || 4) || 4);
@@ -1564,10 +1789,6 @@ export const createRunAnalysis = ({
     return Math.min(parsed, hardwareBudget);
   };
 
-  const normalizeLabelRendering = (value) => {
-    const normalized = String(value || '').trim().toLowerCase();
-    return ['embedded_only', 'external_only'].includes(normalized) ? normalized : 'auto';
-  };
 
   const hydrateLosatDownloadText = async (cacheKey, cached) => {
     if (classifyRawLosatCacheEntry(cached) !== 'protein-current') {
@@ -1597,12 +1818,13 @@ export const createRunAnalysis = ({
   };
 
   const downloadLosatPair = async (edgeKey, customName) => {
+    const drawing = state.drawings.linear;
     const entry = getLosatCacheInfoEntry(edgeKey);
     const cacheMap = losatCache.value;
     if (!entry || !cacheMap) return;
     const cached = cacheMap.get(entry.key);
     if (!isCurrentRawLosatCacheEntry(cached)) return;
-    const defaultName = getLosatPairDefaultName(entry.edgeKey || edgeKey);
+    const defaultName = losatPairDefaultName(drawing, entry.edgeKey || edgeKey);
     const fallbackOrdinal = Number.isInteger(Number(entry.ordinal))
       ? Number(entry.ordinal)
       : 0;
@@ -1624,11 +1846,12 @@ export const createRunAnalysis = ({
   };
 
   const setLosatPairFilename = (edgeKey, customName) => {
+    const drawing = state.drawings.linear;
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const entry = getLosatCacheInfoEntry(edgeKey);
     if (!entry) return;
-    const defaultName = getLosatPairDefaultName(entry.edgeKey || edgeKey);
+    const defaultName = losatPairDefaultName(drawing, entry.edgeKey || edgeKey);
     const fallbackOrdinal = Number.isInteger(Number(entry.ordinal))
       ? Number(entry.ordinal)
       : 0;
@@ -1641,15 +1864,6 @@ export const createRunAnalysis = ({
     ));
   };
 
-  const resetLabelScopeDialogState = () => {
-    labelTextScopeDialog.show = false;
-    labelTextScopeDialog.labelKey = '';
-    labelTextScopeDialog.newText = '';
-    labelTextScopeDialog.sourceText = '';
-    labelTextScopeDialog.featureId = '';
-    labelTextScopeDialog.matchingCount = 0;
-  };
-
   const circularDiscoveryTargetsCurrentInput = () => circularDiscoveryForInput(state).current;
 
   const circularDiscoveryMatchesCurrentInput = () => (
@@ -1657,19 +1871,20 @@ export const createRunAnalysis = ({
     circularDiscoveryTargetsCurrentInput()
   );
 
-  const validateDepthInputPresence = () => {
+  /** @param {DrawingState} drawing */
+  const validateDepthInputPresence = (drawing) => {
     const linear = mode.value === 'linear';
-    const slots = linear ? adv.linear_track_slots : adv.circular_track_slots;
+    const slots = linear ? drawing.adv.linear_track_slots : drawing.adv.circular_track_slots;
     const customDepthRequested = (
-      (linear ? adv.linear_track_slots_enabled : adv.circular_track_slots_enabled) === true &&
+      (linear ? drawing.adv.linear_track_slots_enabled : drawing.adv.circular_track_slots_enabled) === true &&
       (Array.isArray(slots) ? slots : []).some((slot) => (
         slot?.enabled !== false && String(slot?.renderer || '') === 'depth'
       ))
     );
-    if (!form.show_depth && !customDepthRequested) return '';
+    if (!drawing.form.show_depth && !customDepthRequested) return '';
     let rows;
     if (linear) {
-      rows = linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
+      rows = drawing.drawnLinearSeqs.value.map((seq) => depthFileSlotsFromValue(seq.depth));
     } else {
       const discoveredCount = (
         circularDiscoveryMatchesCurrentInput() &&
@@ -1715,6 +1930,7 @@ export const createRunAnalysis = ({
   };
 
   const runCircularRecordRefresh = async ({ suppress = false, automatic = false, reuseFinalError = false } = {}) => {
+    const drawing = state.drawings.circular;
     // An inactive Circular source keeps its records and Multi-Record Canvas
     // order; only a read still running for it is superseded.
     if (mode.value !== 'circular') {
@@ -1732,8 +1948,8 @@ export const createRunAnalysis = ({
       && circularRecordDiscovery.status === 'error' && discoveryErrorIsFinal(circularRecordDiscovery.error)) return;
     const refreshGeneration = ++circularRecordRefreshGeneration;
     if (suppress || recordDiscoverySuppressed()) return;
-    if (!Array.isArray(adv.multi_record_positions)) {
-      adv.multi_record_positions = [];
+    if (!Array.isArray(drawing.adv.multi_record_positions)) {
+      drawing.adv.multi_record_positions = [];
     }
     const inputType = cInputType.value;
     const primaryFile = inputType === 'gff' ? files.c_gff : files.c_gb;
@@ -1769,7 +1985,7 @@ export const createRunAnalysis = ({
     });
     circularRecordList.value = [];
     if (!hasCompleteInput) {
-      adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
+      drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length);
       return;
     }
     if (
@@ -1817,8 +2033,10 @@ export const createRunAnalysis = ({
       circularRecordDiscovery.canonicalRecordIdentities = nextRecords
         .filter((record) => record.recordKey)
         .map(({ selector, record_id, recordKey }) => ({ selector, record_id, recordKey }));
-      const nextPositions = mergeCircularRecordPositions(nextRecords, adv.multi_record_positions);
-      adv.multi_record_positions.splice(0, adv.multi_record_positions.length, ...nextPositions);
+      const nextPositions = mergeCircularRecordPositions(nextRecords, drawing.adv.multi_record_positions);
+      drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length, ...nextPositions);
+      if (nextRecords.length > 0) releaseSourceInputFailure('circular');
+      onCircularRecordsDiscovered?.({ primaryFile, pairedFile, recordCount: nextRecords.length });
     } catch (error) {
       if (
         refreshGeneration !== circularRecordRefreshGeneration ||
@@ -1838,7 +2056,8 @@ export const createRunAnalysis = ({
       circularRecordList.value = [];
       circularRecordDiscovery.status = 'error';
       circularRecordDiscovery.error = formatError(error, inputType === 'gff' ? 'listGffFastaRecords' : 'listSequenceRecords', 'helper');
-      adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
+      drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length);
+      onCircularRecordsDiscovered?.({ primaryFile, pairedFile, recordCount: 0 });
     }
   };
 
@@ -1853,16 +2072,17 @@ export const createRunAnalysis = ({
       inputType === 'gff' ? files.c_gff : files.c_gb,
       inputType === 'gff' ? files.c_fasta : null
     ];
+    const inflightRefresh = activeCircularRecordRefresh;
     if (
-      activeCircularRecordRefresh &&
-      fingerprint.length === activeCircularRecordRefresh.fingerprint.length &&
+      inflightRefresh &&
+      fingerprint.length === inflightRefresh.fingerprint.length &&
       fingerprint.every((value, index) => (
-        Object.is(value, activeCircularRecordRefresh.fingerprint[index])
+        Object.is(value, inflightRefresh.fingerprint[index])
       ))
     ) {
-      return activeCircularRecordRefresh.promise;
+      return inflightRefresh.promise;
     }
-    const entry = { fingerprint, promise: null };
+    const entry = { fingerprint, promise: /** @type {Promise<any> | null} */ (null) };
     entry.promise = runCircularRecordRefresh(options).finally(() => {
       if (activeCircularRecordRefresh === entry) activeCircularRecordRefresh = null;
     });
@@ -1870,7 +2090,38 @@ export const createRunAnalysis = ({
     return entry.promise;
   };
 
-  const runAnalysisInternal = async ({
+  // R13: Generate and the label reflow prepare the specific-color rules they
+  // render here, the Generate compiler's one trigger of the rule preparation.
+  // `isCurrent` is the run's own staleness: the candidate is null when the run
+  // went stale during the preparation, and is admitted (`shouldAdmit`) while
+  // the run and the rule inputs it was prepared from stay current. The run
+  // commits the feature color overrides rebound to the normalized captions.
+  /**
+   * @param {DrawingState} drawing
+   * @param {() => boolean} isCurrent
+   * @param {Record<string, any>} [options]
+   */
+  const prepareAndAdmitCandidate = async (drawing, isCurrent, options) => {
+    if (!rulePreparation) {
+      return { rules: drawing.manualSpecificRules, featureColorOverrides: drawing.featureColorOverrides, shouldAdmit: isCurrent, notifyChanges: () => {} };
+    }
+    const candidate = await rulePreparation.prepareCandidate(drawing.manualSpecificRules, options);
+    if (!candidate || !isCurrent()) return null;
+    return {
+      rules: candidate.rules,
+      featureColorOverrides: rebindRuleColorOverrides(drawing.featureColorOverrides, drawing.manualSpecificRules, candidate.rules),
+      shouldAdmit: () => rulePreparation.isCurrent(candidate.snapshot) && isCurrent(),
+      notifyChanges: () => rulePreparation.notifyChanges(candidate)
+    };
+  };
+
+  /**
+   * @param {DrawingState} drawing
+   * @param {{ decorationContinuity?: any, comparisonPlanSnapshot?: Record<string, any> | null,
+   *   generatedArtifactHandle?: Record<string, any> | null, comparisonExecution?: Record<string, any> | null,
+   *   isCurrentOperation?: () => boolean, isCurrentAlert?: () => boolean }} [options]
+   */
+  const runAnalysisInternal = async (drawing, {
     decorationContinuity = null,
     comparisonPlanSnapshot = null,
     generatedArtifactHandle = null,
@@ -1878,13 +2129,19 @@ export const createRunAnalysis = ({
     isCurrentOperation = () => true,
     isCurrentAlert = () => true
   } = {}) => {
-    const runState = { ...state };
-    const { linearSeqs } = runState;
+    /** @type {Awaited<ReturnType<typeof prepareAndAdmitCandidate>>} */
     let colorCandidate = null;
-    let candidateRules = manualSpecificRules;
+    let candidateRules = drawing.manualSpecificRules;
+    // The request reads the run's drawing with the color rules the run
+    // admits (`candidateRules`), and the label projection the run built.
+    let requestDrawing = drawing;
+    /** @type {ReturnType<typeof requestLabelProjection> | null} */
+    let generatedLabelProjection = null;
     let failureStage = 'request-validation';
     recordSessionLifecycleEvent('generate-start');
     recordSessionLifecycleEvent('generation-input-resolution-start');
+    // The records this Generate draws; every Linear index below is a position in it.
+    const linearSeqs = drawing.drawnLinearSeqs.value;
     const useCommittedComparison = comparisonExecution?.mode === 'inherit';
     const forceEmptyComparison = useCommittedComparison || comparisonExecution?.mode === 'clear';
     const activeComparisonPlanSnapshot = mode.value === 'linear'
@@ -1892,17 +2149,19 @@ export const createRunAnalysis = ({
           forceEmptyComparison
             ? resolveLinearComparisonPlan({
                 plan: { mode: 'none', defaultSource: 'losat', edges: [] },
-                sequences: linearSeqs,
-                layout: linearRecordLayoutEnabled.value ? linearRecordRows : [],
-                losatProgram: losatProgram.value,
-                blastpMode: normalizeBlastpMode(losat.blastp?.mode)
+                sequences: allLinearSeqs,
+                recordsOff: drawing.recordsOff,
+                layout: drawing.linearRecordLayoutEnabled.value ? drawing.linearRecordRows : [],
+                losatProgram: drawing.losatProgram.value,
+                blastpMode: normalizeBlastpMode(drawing.losat.blastp?.mode)
               })
             : comparisonPlanSnapshot || resolveLinearComparisonPlan({
-                plan: linearComparisonPlan,
-                sequences: linearSeqs,
-                layout: linearRecordLayoutEnabled.value ? linearRecordRows : [],
-                losatProgram: losatProgram.value,
-                blastpMode: normalizeBlastpMode(losat.blastp?.mode)
+                plan: drawing.linearComparisonPlan,
+                sequences: allLinearSeqs,
+                recordsOff: drawing.recordsOff,
+                layout: drawing.linearRecordLayoutEnabled.value ? drawing.linearRecordRows : [],
+                losatProgram: drawing.losatProgram.value,
+                blastpMode: normalizeBlastpMode(drawing.losat.blastp?.mode)
               })
         )
       : null;
@@ -1910,10 +2169,14 @@ export const createRunAnalysis = ({
 
     const generationToken = ++latestGenerationToken;
     let canceledAttemptOwnsPresentation = false;
+    /** @type {AbortController | null} */
     let generationAbortController = null;
+    /** @type {AbortSignal | null} */
     let generationAbortSignal = null;
     const committedArtifactHandle = generatedArtifactHandle || await captureGeneratedArtifactHandle();
+    /** @type {ReturnType<typeof generatedArtifactTransactionOwner.build> | null} */
     let activatedGeneratedArtifactCandidate = null;
+    /** @type {ReadyReceipt | null} */
     let acceptedCandidateReadyReceipt = null;
     let workingProteinIdentityManifest = committedArtifactHandle?.ownerSet
       ?.proteinIdentityManifest ?? proteinIdentityManifest.value;
@@ -1927,13 +2190,24 @@ export const createRunAnalysis = ({
       ?? extractedFeatures.value;
     let workingBiologicalFeatures = committedArtifactHandle?.ownerSet?.biologicalFeatures
       ?? biologicalFeatures?.value;
-    const hasSourceBoundEditorIntent = Object.keys(featureVisibilityOverrides).length > 0
-      || Object.keys(labelTextFeatureOverrides).length > 0 || Object.keys(labelVisibilityOverrides).length > 0
-      || Object.keys(legendColorOverrides).length > 0 || Object.keys(legendStrokeOverrides).length > 0
-      || legendEntries.value.some(entry => entry.originalCaption && entry.originalCaption !== entry.caption);
-    const sourceReplaced = hasSourceBoundEditorIntent
-      && [...new Map((workingBiologicalFeatures || []).map(feature => [feature.record_key, feature])).values()]
-        .some(feature => !isCurrentFeature(feature));
+    const hasSourceBoundEditorIntent = Object.keys(drawing.featureOverrides).length > 0
+      || Object.keys(drawing.featurePlacementOverrides || {}).length > 0
+      || Object.keys(drawing.featureStrokeOverrides).length > 0
+      || Object.keys(drawing.legendColorOverrides).length > 0 || Object.keys(drawing.legendStrokeOverrides).length > 0
+      || drawing.legendEntries.value.some(entry => entry.originalCaption && entry.originalCaption !== entry.caption)
+      || drawing.dormantLegendEntries.value.length > 0;
+    // The committed records whose source this Generate replaces or drops. The
+    // metadata of a Session without a feature catalog has no record keys.
+    const replacedFeatures = hasSourceBoundEditorIntent
+      ? [...new Map((workingBiologicalFeatures || []).filter(feature => feature.record_key)
+        .map(feature => [feature.record_key, feature])).values()]
+        .filter(feature => !isCurrentFeature(feature))
+      : [];
+    const sourceReplaced = replacedFeatures.length > 0;
+    const previousCommittedRequest = typeof getCommittedCanonicalSession === 'function'
+      ? getCommittedCanonicalSession()?.renderRequest : null;
+    const previousRequestRecords = previousCommittedRequest?.mode === mode.value
+      ? previousCommittedRequest.records || [] : [];
     let workingLosatCacheInfo = committedArtifactHandle?.ownerSet?.losatCacheInfo
       ?? losatCacheInfo.value;
     let workingSelectedOrthogroupId = selectedOrthogroupId.value;
@@ -2000,9 +2274,7 @@ export const createRunAnalysis = ({
       processingStatus.value = 'Reading input records...';
       let prepared;
       try {
-        prepared = await prepareLinearRecordCatalog(
-          activeComparisonPlanSnapshot?.hasComparisonIntent
-        );
+        prepared = await prepareLinearRecordCatalog();
       } catch (error) {
         prepared = {
           catalog: null,
@@ -2067,7 +2339,7 @@ export const createRunAnalysis = ({
         }
       }
     }
-    const depthInputError = validateDepthInputPresence();
+    const depthInputError = validateDepthInputPresence(drawing);
     if (depthInputError) {
       const error = formatError(depthInputError);
       if (activeLosatAbortController === generationAbortController) {
@@ -2077,28 +2349,16 @@ export const createRunAnalysis = ({
         restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
     }
     const previousSelectedResultIndex = selectedResultIndex.value;
-    const editableLabelsSnapshot = Array.isArray(editableLabels.value)
-      ? editableLabels.value.map((entry) => ({ ...entry }))
-      : [];
-    const featureOverrideSourcesSnapshot = Object.fromEntries(
-      Object.entries(labelTextFeatureOverrideSources || {}).map(([featureId, sourceText]) => [
-        String(featureId || ''),
-        String(sourceText ?? '')
-      ])
-    );
-    const visibilityOverridesSnapshot = Object.fromEntries(
-      Object.entries(labelVisibilityOverrides || {}).map(([featureId, modeValue]) => [
-        String(featureId || ''),
-        String(modeValue || '')
-      ])
-    );
-    const activeRunColors = currentColors.value;
+    const activeRunColors = drawing.currentColors.value;
     const manualRunStartedAt = getNow();
     const manualRunStartedAtIso = new Date().toISOString();
+    /** @type {Record<string, any> | null} */
     let structuredLosatTelemetry = null;
     const legacyPromotionTransaction = [];
     let legacyPromotionCommitted = false;
+    /** @type {((candidateOwnerSet: Record<string, any>) => { ownerSet: Record<string, any>, selectedOrthogroupAlignmentFeature: any }) | null} */
     let commitProteinMigration = null;
+    /** @type {{ cacheInfo: any[], cacheMap: Map<any, any>, derivedCacheMap: Map<any, any> | null } | null} */
     let pendingLosatCacheCommit = null;
 
     featureExtractionRequestId += 1;
@@ -2106,39 +2366,32 @@ export const createRunAnalysis = ({
     resultPanelTab.value = 'preview';
     if (isCurrentAlert()) errorLog.value = null;
     skipCaptureBaseConfig.value = false;
-    resetLabelScopeDialogState();
+    closeLabelTextScopeDialog();
     window._origPairwiseMin = activeRunColors.pairwise_match_min || '#FFE7E7';
     window._origPairwiseMax = activeRunColors.pairwise_match_max || '#FF7272';
-    labelOverrideBuildWarning.value = '';
+    clearLabelBuildNotices();
 
     try {
-      if (rulePreparation) {
-        colorCandidate = await rulePreparation.prepareCandidate(manualSpecificRules, { onProgress: onDiagramProgress });
-        throwIfGenerationCanceled();
-        if (!colorCandidate || generationToken !== latestGenerationToken) return { status: 'stale' };
-        candidateRules = colorCandidate.rules;
-        runState.manualSpecificRules = candidateRules;
-      }
-      if (mode.value === 'linear') {
-        if (!activeComparisonPlanSnapshot || !Array.isArray(activeComparisonPlanSnapshot.edges)) {
-          throw new Error('A resolved Linear comparison plan is required.');
-        }
-        if (activeComparisonPlanSnapshot.error) {
-          throw new Error(activeComparisonPlanSnapshot.error);
-        }
-      }
-      const annotationLoadComparison = (
-        mode.value === 'linear' && activeComparisonPlanSnapshot?.hasComparisonIntent === true
+      colorCandidate = await prepareAndAdmitCandidate(
+        drawing,
+        () => generationToken === latestGenerationToken && !generationCancelRequested.value,
+        { onProgress: onDiagramProgress }
       );
-      if (typeof validateAnnotationTargets === 'function' && annotationSets.length > 0) {
-        const annotationError = validateAnnotationTargets({
-          loadComparison: annotationLoadComparison
-        });
+      if (!colorCandidate) {
+        throwIfGenerationCanceled();
+        return { status: 'stale' };
+      }
+      candidateRules = colorCandidate.rules;
+      requestDrawing = { ...drawing, manualSpecificRules: candidateRules };
+      if (mode.value === 'linear') {
+        requireLinearComparisonPlanSnapshot(activeComparisonPlanSnapshot);
+      }
+      if (typeof validateAnnotationTargets === 'function' && drawing.annotationSets.length > 0) {
+        const annotationError = validateAnnotationTargets();
         if (annotationError) throw diagnosticError(annotationError.code, annotationError.context);
       }
       let regionSpecs = [];
       let recordSelectors = [];
-      let reverseFlags = [];
       const resolvedComparisons = [];
       let resolvedCircularConservation = [];
       const runInfoFileMap = new Map();
@@ -2225,6 +2478,11 @@ export const createRunAnalysis = ({
           slot: resolvedSlot
         });
       };
+      /**
+       * @param {File | null | undefined} fileObj
+       * @param {string} path
+       * @param {{ cacheText?: boolean, textCache?: WeakMap<WeakKey, any> | null, slot?: string }} [options]
+       */
       const stageUploadedFile = async (fileObj, path, {
         cacheText = false,
         textCache = null,
@@ -2245,10 +2503,10 @@ export const createRunAnalysis = ({
         return true;
       };
 
-      const normalizedOutputPrefix = String(form.prefix || '').trim();
+      const normalizedOutputPrefix = String(drawing.form.prefix || '').trim();
 
       const activePaletteName = String(
-        selectedPalette?.value || appliedPaletteName.value || 'default'
+        drawing.selectedPalette?.value || appliedPaletteName.value || 'default'
       ).trim() || 'default';
       const paletteBaseColors = normalizePaletteColors(
         paletteDefinitions.value?.[activePaletteName] ||
@@ -2268,53 +2526,43 @@ export const createRunAnalysis = ({
         stageTextFile('/combined_t.tsv', tContent);
       }
 
-      if (Array.isArray(annotationSets) && annotationSets.length > 0) {
-        stageTextFile('/web_annotations.tsv', encodeAnnotationTable(annotationSets), {
+      if (Array.isArray(drawing.annotationSets) && drawing.annotationSets.length > 0) {
+        stageTextFile('/web_annotations.tsv', encodeAnnotationTable(drawing.annotationSets), {
           name: 'annotations.tsv',
           slot: 'generatedFiles.web_annotations'
         });
       }
 
-      if (filterMode.value === 'Whitelist') {
-        if (manualWhitelist.length > 0) {
-          let wlContent = '';
-          manualWhitelist.forEach((r) => {
-            if (r.feat && r.qual) wlContent += `${r.feat}\t${r.qual}\t${r.key}\n`;
-          });
+      if (drawing.filterMode.value === 'Whitelist') {
+        const wlContent = serializeLabelWhitelistRules(drawing.manualWhitelist);
+        if (wlContent) {
           stageTextFile('/manual_wl.tsv', wlContent);
         }
       }
 
-      let pContent = '';
-      manualPriorityRules.forEach((r) => {
-        pContent += `${r.feat}\t${r.order}\n`;
-      });
+      const pContent = serializeQualifierPriorityRules(drawing.manualPriorityRules);
       if (pContent.trim() !== '') {
         stageTextFile('/priority.tsv', pContent);
       }
 
-      // One label table per Generate: the staged copy and the canonical
-      // request both use this value (CW-02); imported rows need no build.
-      const canonicalLabelOverrideTsv = serializeLabelOverrideRows(canonicalLabelOverrideRows.value);
-      const labelOverride = canonicalLabelOverrideTsv
-        ? { tsv: canonicalLabelOverrideTsv, skippedMissingSourceCount: 0 }
-        : buildLabelOverrideTsv(labelTextFeatureOverrides, labelTextBulkOverrides, {
-          editableLabels: editableLabelsSnapshot,
-          extractedFeatures: workingExtractedFeatures,
-          featureOverrideSources: featureOverrideSourcesSnapshot,
-          visibilityOverrides: visibilityOverridesSnapshot
-        });
-      const effectiveLabelOverrideTsv = labelOverride.tsv;
-      runState.generatedLabelOverrideTsv = effectiveLabelOverrideTsv;
-      if (labelOverride.skippedMissingSourceCount > 0) {
-        labelOverrideBuildWarning.value = `${labelOverride.skippedMissingSourceCount} feature override row(s) were skipped due to missing source label context.`;
+      // The staged label table is the request's: label rules only; per-feature
+      // label edits travel as featureOverrides rows (design Q4). One projection
+      // per Generate serves the staged copy and the request (CW-02).
+      generatedLabelProjection = requestLabelProjection(state, requestDrawing);
+      const labelTableTsv = requestLabelTableTsv(state, requestDrawing, generatedLabelProjection);
+      if (labelTableTsv) {
+        stageTextFile('/web_label_table.tsv', labelTableTsv);
       }
-      if (effectiveLabelOverrideTsv) {
-        stageTextFile('/web_label_table.tsv', effectiveLabelOverrideTsv);
-      }
+      // Per-feature Feature visibility decides LOSATP's proteins as the rules do;
+      // the helper resolves one record's rows as Generate does (R4).
+      const proteinVisibilityRows = (recordKeys) => requestFeatureOverrides(
+        drawing.featureOverrides, recordKeys.map((recordKey) => ({ recordKey }))
+      ).filter((row) => row.featureVisibility !== null)
+        .map((row) => ({ ...row, labelVisibility: null, labelText: null }));
+      /** @type {string | null} */
       let featureVisibilityTablePath = null;
       let featureVisibilityCacheKey = '';
-      const featureVisibilityTsv = serializeFeatureVisibilityRules(featureVisibilityRules?.value || []);
+      const featureVisibilityTsv = serializeFeatureVisibilityRules(drawing.featureVisibilityRules?.value || []);
       if (featureVisibilityTsv.trim()) {
         featureVisibilityTablePath = '/web_feature_visibility_table.tsv';
         featureVisibilityCacheKey = featureVisibilityTsv;
@@ -2322,37 +2570,37 @@ export const createRunAnalysis = ({
       }
       const validateDepthStyleSettings = () => {
         if (
-          adv.depth_min !== null &&
-          adv.depth_min !== undefined &&
-          adv.depth_min !== '' &&
-          adv.depth_max !== null &&
-          adv.depth_max !== undefined &&
-          adv.depth_max !== '' &&
-          Number(adv.depth_min) > Number(adv.depth_max)
+          drawing.adv.depth_min !== null &&
+          drawing.adv.depth_min !== undefined &&
+          drawing.adv.depth_min !== '' &&
+          drawing.adv.depth_max !== null &&
+          drawing.adv.depth_max !== undefined &&
+          drawing.adv.depth_max !== '' &&
+          Number(drawing.adv.depth_min) > Number(drawing.adv.depth_max)
         ) {
           throw new Error('Depth minimum must be less than or equal to depth maximum.');
         }
         if (
-          adv.depth_large_tick_interval !== null &&
-          adv.depth_large_tick_interval !== undefined &&
-          adv.depth_large_tick_interval !== ''
+          drawing.adv.depth_large_tick_interval !== null &&
+          drawing.adv.depth_large_tick_interval !== undefined &&
+          drawing.adv.depth_large_tick_interval !== ''
         ) {
-          if (Number(adv.depth_large_tick_interval) <= 0) throw new Error('Depth large tick interval must be greater than 0.');
+          if (Number(drawing.adv.depth_large_tick_interval) <= 0) throw new Error('Depth large tick interval must be greater than 0.');
         }
         if (
           mode.value === 'circular' &&
-          adv.depth_small_tick_interval !== null &&
-          adv.depth_small_tick_interval !== undefined &&
-          adv.depth_small_tick_interval !== ''
+          drawing.adv.depth_small_tick_interval !== null &&
+          drawing.adv.depth_small_tick_interval !== undefined &&
+          drawing.adv.depth_small_tick_interval !== ''
         ) {
-          if (Number(adv.depth_small_tick_interval) <= 0) throw new Error('Depth small tick interval must be greater than 0.');
+          if (Number(drawing.adv.depth_small_tick_interval) <= 0) throw new Error('Depth small tick interval must be greater than 0.');
         }
         if (
-          adv.depth_tick_font_size !== null &&
-          adv.depth_tick_font_size !== undefined &&
-          adv.depth_tick_font_size !== ''
+          drawing.adv.depth_tick_font_size !== null &&
+          drawing.adv.depth_tick_font_size !== undefined &&
+          drawing.adv.depth_tick_font_size !== ''
         ) {
-          if (Number(adv.depth_tick_font_size) <= 0) throw new Error('Depth tick font size must be greater than 0.');
+          if (Number(drawing.adv.depth_tick_font_size) <= 0) throw new Error('Depth tick font size must be greater than 0.');
         }
       };
       const normalizeDepthTrackValue = (value) => {
@@ -2374,30 +2622,30 @@ export const createRunAnalysis = ({
       );
       const ensureDepthTrackConfigAt = (index) => {
         const idx = Math.max(0, Number(index) || 0);
-        if (!Array.isArray(adv.depth_tracks)) adv.depth_tracks = [];
-        while (adv.depth_tracks.length <= idx) {
-          const nextIndex = adv.depth_tracks.length;
-          adv.depth_tracks.push({
+        if (!Array.isArray(drawing.adv.depth_tracks)) drawing.adv.depth_tracks = [];
+        while (drawing.adv.depth_tracks.length <= idx) {
+          const nextIndex = drawing.adv.depth_tracks.length;
+          drawing.adv.depth_tracks.push({
             label: getDepthTrackFallbackLabel(nextIndex),
-            color: nextIndex === 0 ? String(adv.depth_color || '#4A90E2') : '',
+            color: nextIndex === 0 ? String(drawing.adv.depth_color || '#4A90E2') : '',
             height: null,
             large_tick_interval: null,
             small_tick_interval: null,
             tick_font_size: null
           });
         }
-        const config = adv.depth_tracks[idx];
+        const config = drawing.adv.depth_tracks[idx];
         if (!config || typeof config !== 'object' || Array.isArray(config)) {
-          adv.depth_tracks[idx] = {
+          drawing.adv.depth_tracks[idx] = {
             label: getDepthTrackFallbackLabel(idx),
-            color: idx === 0 ? String(adv.depth_color || '#4A90E2') : '',
+            color: idx === 0 ? String(drawing.adv.depth_color || '#4A90E2') : '',
             height: null,
             large_tick_interval: null,
             small_tick_interval: null,
             tick_font_size: null
           };
         }
-        return adv.depth_tracks[idx];
+        return drawing.adv.depth_tracks[idx];
       };
       const syncDepthSlotLegendLabelsFromTrackConfigs = (slots, trackFiles = []) => {
         if (!Array.isArray(slots)) return;
@@ -2407,11 +2655,11 @@ export const createRunAnalysis = ({
         for (let trackIndex = 0; trackIndex < trackCount; trackIndex += 1) {
           ensureDepthTrackConfigAt(trackIndex);
         }
-        syncDepthSlotLabels({
+        syncDepthSlotLabels(/** @type {any} */ ({
           slots,
-          depthTracks: adv.depth_tracks,
+          depthTracks: drawing.adv.depth_tracks,
           activeCount: trackCount
-        });
+        }));
       };
       const linearDepthRepresentativeFiles = () => {
         const rows = linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
@@ -2436,13 +2684,13 @@ export const createRunAnalysis = ({
         }
       };
       const normalizeGcContentPercentState = () => {
-        adv.gc_content_mode = String(adv.gc_content_mode || '').trim().toLowerCase() === 'percent'
+        drawing.adv.gc_content_mode = String(drawing.adv.gc_content_mode || '').trim().toLowerCase() === 'percent'
           ? 'percent'
           : 'deviation';
-        if (adv.gc_content_mode !== 'percent') return;
+        if (drawing.adv.gc_content_mode !== 'percent') return;
 
-        const minPercent = Number(adv.gc_content_min_percent);
-        const maxPercent = Number(adv.gc_content_max_percent);
+        const minPercent = Number(drawing.adv.gc_content_min_percent);
+        const maxPercent = Number(drawing.adv.gc_content_max_percent);
         if (!Number.isFinite(minPercent)) {
           throw new Error('GC content minimum percent must be a finite number.');
         }
@@ -2452,63 +2700,64 @@ export const createRunAnalysis = ({
         if (minPercent > maxPercent) {
           throw new Error('GC content minimum percent must be less than or equal to maximum percent.');
         }
-        adv.gc_content_min_percent = minPercent;
-        adv.gc_content_max_percent = maxPercent;
+        drawing.adv.gc_content_min_percent = minPercent;
+        drawing.adv.gc_content_max_percent = maxPercent;
 
         if (
-          adv.gc_content_tick_interval !== null &&
-          adv.gc_content_tick_interval !== undefined &&
-          adv.gc_content_tick_interval !== ''
+          drawing.adv.gc_content_tick_interval !== null &&
+          drawing.adv.gc_content_tick_interval !== undefined &&
+          drawing.adv.gc_content_tick_interval !== ''
         ) {
-          if (Number(adv.gc_content_tick_interval) <= 0) throw new Error('GC content large tick interval must be greater than 0.');
+          if (Number(drawing.adv.gc_content_tick_interval) <= 0) throw new Error('GC content large tick interval must be greater than 0.');
         }
         if (
-          adv.gc_content_small_tick_interval !== null &&
-          adv.gc_content_small_tick_interval !== undefined &&
-          adv.gc_content_small_tick_interval !== ''
+          drawing.adv.gc_content_small_tick_interval !== null &&
+          drawing.adv.gc_content_small_tick_interval !== undefined &&
+          drawing.adv.gc_content_small_tick_interval !== ''
         ) {
-          if (Number(adv.gc_content_small_tick_interval) <= 0) throw new Error('GC content small tick interval must be greater than 0.');
+          if (Number(drawing.adv.gc_content_small_tick_interval) <= 0) throw new Error('GC content small tick interval must be greater than 0.');
         }
         if (
-          adv.gc_content_tick_font_size !== null &&
-          adv.gc_content_tick_font_size !== undefined &&
-          adv.gc_content_tick_font_size !== ''
+          drawing.adv.gc_content_tick_font_size !== null &&
+          drawing.adv.gc_content_tick_font_size !== undefined &&
+          drawing.adv.gc_content_tick_font_size !== ''
         ) {
-          if (Number(adv.gc_content_tick_font_size) <= 0) throw new Error('GC content tick font size must be greater than 0.');
+          if (Number(drawing.adv.gc_content_tick_font_size) <= 0) throw new Error('GC content tick font size must be greater than 0.');
         }
       };
       normalizeGcContentPercentState();
 
       if (mode.value === 'circular') {
-        const normalizedCircularPlotTitle = String(form.plot_title || '').trim();
-        const normalizedPlotTitlePosition = normalizeCircularPlotTitlePosition(adv.plot_title_position);
-        const useCircularTrackSlots = adv.circular_track_slots_enabled === true;
+        const normalizedCircularPlotTitle = String(drawing.form.plot_title || '').trim();
+        const normalizedPlotTitlePosition = normalizeCircularPlotTitlePosition(drawing.adv.plot_title_position);
+        const useCircularTrackSlots = drawing.adv.circular_track_slots_enabled === true;
         const circularTrackAxisIndex = clampCircularTrackAxisIndex(
-          adv.circular_track_slots_axis_index,
-          Array.isArray(adv.circular_track_slots) ? adv.circular_track_slots.length : 0
+          drawing.adv.circular_track_slots_axis_index,
+          Array.isArray(drawing.adv.circular_track_slots) ? drawing.adv.circular_track_slots.length : 0
         );
         const circularTrackSlots = useCircularTrackSlots
           ? applyCircularSuppressControlsToSlots(
               applyCircularTrackOrderPlacements(
-                adv.circular_track_slots,
-                adv.nt,
-                form.track_type,
+                drawing.adv.circular_track_slots,
+                drawing.adv.nt,
+                drawing.form.track_type,
                 circularTrackAxisIndex
               ),
-              form
+              drawing.form,
+              drawing.adv.nt
             )
           : [];
         if (useCircularTrackSlots) {
-          adv.circular_track_slots.splice(0, adv.circular_track_slots.length, ...circularTrackSlots);
+          drawing.adv.circular_track_slots.splice(0, drawing.adv.circular_track_slots.length, ...circularTrackSlots);
           const circularTrackOnAxisIndex = circularTrackSlots.findIndex((slot) => slot?.side === 'overlay');
           const normalizedCircularTrackAxisIndex = circularTrackOnAxisIndex >= 0
             ? circularTrackOnAxisIndex
             : (
                 circularTrackAxisIndex === null
-                  ? inferLegacyAxisIndexFromFeature(circularTrackSlots, form.track_type)
+                  ? inferLegacyAxisIndexFromFeature(circularTrackSlots, drawing.form.track_type)
                   : circularTrackAxisIndex
               );
-          adv.circular_track_slots_axis_index = clampCircularTrackAxisIndex(
+          drawing.adv.circular_track_slots_axis_index = clampCircularTrackAxisIndex(
             normalizedCircularTrackAxisIndex,
             circularTrackSlots.length
           );
@@ -2516,32 +2765,25 @@ export const createRunAnalysis = ({
         // Numeric settings (plot title font size, center radius, label
         // spacing, multi-record ratios, ring geometry) are projected literally
         // by the request and validated by Python; Generate keeps the draft.
-        const keepFullDefinitionWithPlotTitle = Boolean(adv.keep_full_definition_with_plot_title);
-        form.plot_title = normalizedCircularPlotTitle;
-        adv.plot_title_position = normalizedPlotTitlePosition;
-        adv.keep_full_definition_with_plot_title = keepFullDefinitionWithPlotTitle;
+        const keepFullDefinitionWithPlotTitle = Boolean(drawing.adv.keep_full_definition_with_plot_title);
+        drawing.form.plot_title = normalizedCircularPlotTitle;
+        drawing.adv.plot_title_position = normalizedPlotTitlePosition;
+        drawing.adv.keep_full_definition_with_plot_title = keepFullDefinitionWithPlotTitle;
 
-        const labelsModeRaw =
-          typeof form.labels_mode === 'string'
-            ? form.labels_mode
-            : (form.allow_inner_labels ? 'both' : (form.show_labels ? 'out' : 'none'));
-        const labelsMode = String(labelsModeRaw || 'none').trim().toLowerCase();
-        const normalizedLabelRendering = labelsMode === 'none' ? 'auto' : normalizeLabelRendering(adv.label_rendering);
-        adv.label_rendering = normalizedLabelRendering;
         const normalizedCircularLabelPlacement =
-          String(adv.circular_label_placement || '').trim().toLowerCase() === 'radial'
+          String(drawing.adv.circular_label_placement || '').trim().toLowerCase() === 'radial'
             ? 'radial'
             : 'horizontal';
-        adv.circular_label_placement = normalizedCircularLabelPlacement;
-        if (form.multi_record_canvas) {
+        drawing.adv.circular_label_placement = normalizedCircularLabelPlacement;
+        if (drawing.form.multi_record_canvas) {
           const effectiveRecordPositions = mergeCircularRecordPositions(
             circularRecordList.value,
-            adv.multi_record_positions
+            drawing.adv.multi_record_positions
           );
-          requireCurrentCircularMultiRecordSizeMode(adv.multi_record_size_mode);
-          adv.multi_record_positions.splice(
+          requireCurrentCircularMultiRecordSizeMode(drawing.adv.multi_record_size_mode);
+          drawing.adv.multi_record_positions.splice(
             0,
-            adv.multi_record_positions.length,
+            drawing.adv.multi_record_positions.length,
             ...effectiveRecordPositions
           );
         }
@@ -2584,7 +2826,7 @@ export const createRunAnalysis = ({
         }
         const hasCircularDepthFile = circularDepthEntries.length > 0;
         const circularSlotNeedsDepth = useCircularTrackSlots && hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth');
-        if (form.show_depth || circularSlotNeedsDepth) {
+        if (drawing.form.show_depth || circularSlotNeedsDepth) {
           if (!hasCircularDepthFile) throw new Error('Please upload a Depth TSV file or disable Show depth track.');
           for (let depthIndex = 0; depthIndex < circularDepthEntries.length; depthIndex += 1) {
             const entry = circularDepthEntries[depthIndex];
@@ -2597,29 +2839,27 @@ export const createRunAnalysis = ({
           validateDepthStyleSettings();
         }
 
-        assertActiveModeInputs?.('circular', state);
-
-        const sourceMode = String(circularConservation.source || '').trim().toLowerCase() === 'upload'
+        const sourceMode = String(drawing.circularConservation.source || '').trim().toLowerCase() === 'upload'
           ? 'upload'
           : 'losat';
         const circularConservationSourceFiles = sourceMode === 'upload'
           ? normalizeFileList(files.c_conservation_blasts)
           : normalizeFileList(files.c_conservation_fastas);
         const shouldDrawCircularPairwiseComparisons = circularConservationSourceFiles.length > 0;
-        circularConservation.enabled = shouldDrawCircularPairwiseComparisons;
+        drawing.circularConservation.enabled = shouldDrawCircularPairwiseComparisons;
 
         if (shouldDrawCircularPairwiseComparisons) {
           setProcessingStatus('Preparing conservation comparisons...');
           // Thresholds are evaluated before conservation work; the request
           // projects the same resolution, and the draft keeps what was typed.
-          resolveComparisonThresholds(adv, 'circular');
+          resolveComparisonThresholds(drawing.adv, 'circular');
 
           const runCircularLosatConservation = async (comparisonEntries) => {
             const circularLosatProgram = normalizeCircularConservationLosatProgram(
-              circularConservation.losat_program
+              drawing.circularConservation.losat_program
             );
-            circularConservation.losat_program = circularLosatProgram;
-            const subjectGencode = normalizePositiveInteger(circularConservation.subject_gencode, 1);
+            drawing.circularConservation.losat_program = circularLosatProgram;
+            const subjectGencode = normalizePositiveInteger(drawing.circularConservation.subject_gencode, 1);
             const buildExtraArgs = (comparisonGencode) => {
               if (circularLosatProgram === 'tblastx') {
                 return [
@@ -2629,7 +2869,7 @@ export const createRunAnalysis = ({
                   String(subjectGencode)
                 ];
               }
-              const normalizedTask = String(losat.blastn?.task || 'megablast').trim() || 'megablast';
+              const normalizedTask = String(drawing.losat.blastn?.task || 'megablast').trim() || 'megablast';
               return ['--task', normalizedTask];
             };
             const circularLosatSuffix = circularLosatProgram === 'tblastx' ? 'tlosatx' : 'losatn';
@@ -2668,7 +2908,7 @@ export const createRunAnalysis = ({
               const cacheMetadata = {
                 flow: 'circular-conservation',
                 program: circularLosatProgram,
-                outfmt: String(losat.outfmt || '6'),
+                outfmt: String(drawing.losat.outfmt || '6'),
                 args: extraArgs,
                 queryCanonicalHash: queryHash,
                 subjectCanonicalHash: subjectHash
@@ -2701,7 +2941,7 @@ export const createRunAnalysis = ({
                   subjectSequenceKey,
                   queryCanonicalHash: queryHash,
                   subjectCanonicalHash: subjectHash,
-                  outfmt: losat.outfmt || '6',
+                  outfmt: drawing.losat.outfmt || '6',
                   extraArgs
                 });
               }
@@ -2742,7 +2982,7 @@ export const createRunAnalysis = ({
                   text: result.text,
                   program: circularLosatProgram,
                   flow: 'circular-conservation',
-                  outfmt: String(losat.outfmt || '6'),
+                  outfmt: String(drawing.losat.outfmt || '6'),
                   args: job?.extraArgs || [],
                   queryCanonicalHash: job?.queryCanonicalHash || '',
                   subjectCanonicalHash: job?.subjectCanonicalHash || '',
@@ -2779,8 +3019,8 @@ export const createRunAnalysis = ({
             if (blastFiles.length === 0) {
               throw new Error('Please upload at least one BLAST outfmt 6/7 file for Pairwise Comparisons.');
             }
-            const rawReference = String(circularConservation.reference || 'auto').trim().toLowerCase();
-            circularConservation.reference = ['query', 'subject'].includes(rawReference)
+            const rawReference = String(drawing.circularConservation.reference || 'auto').trim().toLowerCase();
+            drawing.circularConservation.reference = ['query', 'subject'].includes(rawReference)
               ? rawReference
               : 'auto';
             workingLosatCacheInfo = [];
@@ -2789,12 +3029,14 @@ export const createRunAnalysis = ({
             if (comparisonFiles.length === 0) {
               throw new Error('Please upload at least one comparison sequence file for Pairwise Comparisons.');
             }
-            const conservationEntries = orderedConservationSources(comparisonFiles, circularConservation);
-            const conservationSeries = buildConservationSeries(comparisonFiles, circularConservation);
+            const conservationEntries = orderedConservationSources(comparisonFiles, drawing.circularConservation);
+            const conservationSeries = buildConservationSeries(comparisonFiles, drawing.circularConservation);
             const conservationResults = await runCircularLosatConservation(conservationEntries);
-            circularConservation.reference = 'subject';
+            drawing.circularConservation.reference = 'subject';
             resolvedCircularConservation = conservationResults.map((result, index) => {
+              /** @type {Record<string, any>} */
               const source = conservationEntries[index] || {};
+              /** @type {Record<string, any>} */
               const style = conservationSeries[index] || {};
               return {
                 name: result.name || getPayloadName(result.path),
@@ -2809,16 +3051,17 @@ export const createRunAnalysis = ({
           workingLosatCacheInfo = [];
         }
       } else {
-        requireCurrentLinearTrackLayout(form.linear_track_layout);
-        const useLinearTrackSlots = adv.linear_track_slots_enabled === true;
+        requireCurrentLinearTrackLayout(drawing.form.linear_track_layout);
+        const useLinearTrackSlots = drawing.adv.linear_track_slots_enabled === true;
         let linearTrackSlots = [];
+        /** @type {number | null} */
         let linearTrackSlotAxisIndex = null;
         let linearSlotNeedsDepth = false;
         if (useLinearTrackSlots) {
           linearTrackSlots = normalizeLinearTrackSlots(
-            adv.linear_track_slots,
-            adv.nt,
-            form.linear_track_layout
+            drawing.adv.linear_track_slots,
+            drawing.adv.nt,
+            drawing.form.linear_track_layout
           );
           linearSlotNeedsDepth = linearTrackSlots.some(
             (slot) => slot.enabled !== false && slot.renderer === 'depth'
@@ -2843,7 +3086,7 @@ export const createRunAnalysis = ({
             linearDepthRepresentativeFiles()
           );
           linearTrackSlotAxisIndex = clampLinearTrackAxisIndex(
-            adv.linear_track_slots_axis_index,
+            drawing.adv.linear_track_slots_axis_index,
             linearTrackSlots.length
           );
           linearTrackSlotAxisIndex = resolveLinearTrackAxisIndex(
@@ -2853,88 +3096,90 @@ export const createRunAnalysis = ({
           linearTrackSlots = applyLinearTrackOrderPlacements(
             linearTrackSlots,
             linearTrackSlotAxisIndex,
-            adv.nt,
-            form.linear_track_layout
+            drawing.adv.nt,
+            drawing.form.linear_track_layout
           );
-          adv.linear_track_slots_axis_index = linearTrackSlotAxisIndex;
-          adv.linear_track_slots.splice(0, adv.linear_track_slots.length, ...linearTrackSlots);
+          drawing.adv.linear_track_slots_axis_index = linearTrackSlotAxisIndex;
+          drawing.adv.linear_track_slots.splice(0, drawing.adv.linear_track_slots.length, ...linearTrackSlots);
         }
-        const comparisonResolution = activeComparisonPlanSnapshot;
+        // This branch is Linear mode, where the 'A resolved Linear comparison plan is required.' check above
+        // throws when the snapshot is null.
+        const comparisonResolution = /** @type {NonNullable<typeof activeComparisonPlanSnapshot>} */ (activeComparisonPlanSnapshot);
         const hasComparisonIntent = comparisonResolution.hasComparisonIntent === true;
         const hasLosatIntent = comparisonResolution.hasLosatIntent === true;
-        const useProteinBlastp = hasLosatIntent && losatProgram.value === 'blastp';
+        const useProteinBlastp = hasLosatIntent && drawing.losatProgram.value === 'blastp';
         const blastpMode = useProteinBlastp
-          ? requireCurrentProteinBlastpMode(losat.blastp?.mode)
-          : String(losat.blastp?.mode ?? '');
+          ? requireCurrentProteinBlastpMode(drawing.losat.blastp?.mode)
+          : String(drawing.losat.blastp?.mode ?? '');
         const usePairwiseBlastp = useProteinBlastp && blastpMode === 'pairwise';
         const useOrthogroupBlastp = useProteinBlastp && blastpMode === 'orthogroup';
         const useCollinearBlastp = useProteinBlastp && blastpMode === 'collinear';
         if (hasComparisonIntent) {
           setProcessingStatus('Preparing comparisons...');
-          adv.pairwise_match_style = normalizeCurrentPairwiseMatchStyle(
-            adv.pairwise_match_style,
+          drawing.adv.pairwise_match_style = normalizeCurrentPairwiseMatchStyle(
+            drawing.adv.pairwise_match_style,
             'ribbon'
           );
         }
         // One resolution per Generate feeds LOSAT post-processing and caches.
         const comparisonThresholds = hasComparisonIntent
-          ? resolveComparisonThresholds(adv, 'linear')
+          ? resolveComparisonThresholds(drawing.adv, 'linear')
           : null;
 
         const blastpMaxHits = usePairwiseBlastp
-          ? requireCurrentProteinBlastpMaxHits(losat.blastp?.maxHits)
+          ? requireCurrentProteinBlastpMaxHits(drawing.losat.blastp?.maxHits)
           : 5;
         const blastpCandidateLimit = useProteinBlastp
-          ? resolveProteinBlastpCandidateLimit(losat.blastp?.candidateLimit)
+          ? resolveProteinBlastpCandidateLimit(drawing.losat.blastp?.candidateLimit)
           : null;
         const orthogroupMembershipMode = useOrthogroupBlastp || useCollinearBlastp
           ? requireCurrentOrthogroupMembershipMode(
-              losat.blastp?.orthogroupMembershipMode
+              drawing.losat.blastp?.orthogroupMembershipMode
             )
           : 'anchor_core_v1';
         const orthogroupMemberMaxHits = useOrthogroupBlastp || useCollinearBlastp
           ? requireCurrentOrthogroupMemberMaxHits(
-              losat.blastp?.orthogroupMemberMaxHits
+              drawing.losat.blastp?.orthogroupMemberMaxHits
             )
           : null;
         const collinearMinAnchors = useCollinearBlastp
-          ? requireCurrentCollinearMinAnchors(losat.blastp?.collinearMinAnchors)
+          ? requireCurrentCollinearMinAnchors(drawing.losat.blastp?.collinearMinAnchors)
           : 1;
         const collinearMaxUnitGap = useCollinearBlastp
-          ? requireCurrentCollinearMaxUnitGap(losat.blastp?.collinearMaxUnitGap)
+          ? requireCurrentCollinearMaxUnitGap(drawing.losat.blastp?.collinearMaxUnitGap)
           : 0;
         const collinearMaxDiagonalDrift = useCollinearBlastp
           ? requireCurrentCollinearMaxDiagonalDrift(
-              losat.blastp?.collinearMaxDiagonalDrift
+              drawing.losat.blastp?.collinearMaxDiagonalDrift
             )
           : 0;
         const collinearMaxConflictsInMergeGap = useCollinearBlastp
           ? requireCurrentCollinearMaxConflicts(
-              losat.blastp?.collinearMaxConflictsInMergeGap
+              drawing.losat.blastp?.collinearMaxConflictsInMergeGap
             )
           : 1;
         const collinearMaxParalogLinksPerOrthogroup = useCollinearBlastp
           ? requireCurrentCollinearMaxParalogLinks(
-              losat.blastp?.collinearMaxParalogLinksPerOrthogroup
+              drawing.losat.blastp?.collinearMaxParalogLinksPerOrthogroup
             )
           : 2;
         const collinearColorMode = useCollinearBlastp
-          ? requireCurrentCollinearColorMode(losat.blastp?.collinearColorMode)
+          ? requireCurrentCollinearColorMode(drawing.losat.blastp?.collinearColorMode)
           : 'orientation';
         const collinearUnitMode = useCollinearBlastp
-          ? requireCurrentCollinearUnitMode(losat.blastp?.collinearUnitMode)
+          ? requireCurrentCollinearUnitMode(drawing.losat.blastp?.collinearUnitMode)
           : 'auto';
         const collinearAnchorMode = useCollinearBlastp
-          ? requireCurrentCollinearAnchorMode(losat.blastp?.collinearAnchorMode)
+          ? requireCurrentCollinearAnchorMode(drawing.losat.blastp?.collinearAnchorMode)
           : 'rbh';
         const collinearMergeOrientation = useCollinearBlastp
           ? requireCurrentCollinearMergeOrientation(
-              losat.blastp?.collinearMergeOrientation
+              drawing.losat.blastp?.collinearMergeOrientation
             )
           : 'either';
-        const collinearInferOrthogroups = requireCurrentCollinearInferOrthogroups(losat.blastp?.collinearInferOrthogroups);
+        const collinearInferOrthogroups = requireCurrentCollinearInferOrthogroups(drawing.losat.blastp?.collinearInferOrthogroups);
         const collinearSearchScope = useCollinearBlastp
-          ? requireCurrentCollinearSearchScope(losat.blastp?.collinearSearchScope)
+          ? requireCurrentCollinearSearchScope(drawing.losat.blastp?.collinearSearchScope)
           : 'adjacent';
 
         const reuseResolvedProteinArtifacts = useProteinBlastp
@@ -2947,6 +3192,7 @@ export const createRunAnalysis = ({
               : null,
             active: {
               featureVisibility: featureVisibilityCacheKey,
+              featureOverrides: proteinVisibilityRows(linearSeqs.map((sequence) => String(sequence?.uid || ''))),
               mode: blastpMode,
               candidateLimit: blastpCandidateLimit,
               ...comparisonThresholds,
@@ -2970,65 +3216,59 @@ export const createRunAnalysis = ({
         if (useLosat) recordSessionLifecycleEvent('losat-cache-preparation-start');
 
         if (useProteinBlastp) {
-          losat.blastp.mode = blastpMode;
-          losat.blastp.candidateLimit = blastpCandidateLimit;
+          drawing.losat.blastp.mode = blastpMode;
+          drawing.losat.blastp.candidateLimit = blastpCandidateLimit;
         }
         if (usePairwiseBlastp) {
-          losat.blastp.maxHits = blastpMaxHits;
+          drawing.losat.blastp.maxHits = blastpMaxHits;
         } else if (useOrthogroupBlastp) {
-          losat.blastp.orthogroupMembershipMode = orthogroupMembershipMode;
-          losat.blastp.orthogroupMemberMaxHits = orthogroupMemberMaxHits;
+          drawing.losat.blastp.orthogroupMembershipMode = orthogroupMembershipMode;
+          drawing.losat.blastp.orthogroupMemberMaxHits = orthogroupMemberMaxHits;
         } else if (useCollinearBlastp) {
-          losat.blastp.orthogroupMembershipMode = orthogroupMembershipMode;
-          losat.blastp.orthogroupMemberMaxHits = orthogroupMemberMaxHits;
-          losat.blastp.collinearMinAnchors = collinearMinAnchors;
-          losat.blastp.collinearMaxUnitGap = collinearMaxUnitGap;
-          losat.blastp.collinearMaxDiagonalDrift = collinearMaxDiagonalDrift;
-          losat.blastp.collinearMaxConflictsInMergeGap = collinearMaxConflictsInMergeGap;
-          losat.blastp.collinearMaxParalogLinksPerOrthogroup =
+          drawing.losat.blastp.orthogroupMembershipMode = orthogroupMembershipMode;
+          drawing.losat.blastp.orthogroupMemberMaxHits = orthogroupMemberMaxHits;
+          drawing.losat.blastp.collinearMinAnchors = collinearMinAnchors;
+          drawing.losat.blastp.collinearMaxUnitGap = collinearMaxUnitGap;
+          drawing.losat.blastp.collinearMaxDiagonalDrift = collinearMaxDiagonalDrift;
+          drawing.losat.blastp.collinearMaxConflictsInMergeGap = collinearMaxConflictsInMergeGap;
+          drawing.losat.blastp.collinearMaxParalogLinksPerOrthogroup =
             collinearMaxParalogLinksPerOrthogroup;
-          losat.blastp.collinearColorMode = collinearColorMode;
-          losat.blastp.collinearUnitMode = collinearUnitMode;
-          losat.blastp.collinearAnchorMode = collinearAnchorMode;
-          losat.blastp.collinearMergeOrientation = collinearMergeOrientation;
-          losat.blastp.collinearSearchScope = collinearSearchScope;
+          drawing.losat.blastp.collinearColorMode = collinearColorMode;
+          drawing.losat.blastp.collinearUnitMode = collinearUnitMode;
+          drawing.losat.blastp.collinearAnchorMode = collinearAnchorMode;
+          drawing.losat.blastp.collinearMergeOrientation = collinearMergeOrientation;
+          drawing.losat.blastp.collinearSearchScope = collinearSearchScope;
         }
 
-        const normalizedPlotTitle = String(form.plot_title || '').trim();
-        const normalizedPlotTitlePosition = normalizeLinearPlotTitlePosition(adv.plot_title_position);
-        adv.linear_show_replicon = adv.linear_show_replicon === true;
-        adv.linear_accession_visibility = requireLinearLabelVisibilityMode(
-          adv.linear_accession_visibility,
+        const normalizedPlotTitle = String(drawing.form.plot_title || '').trim();
+        const normalizedPlotTitlePosition = normalizeLinearPlotTitlePosition(drawing.adv.plot_title_position);
+        drawing.adv.linear_show_replicon = drawing.adv.linear_show_replicon === true;
+        drawing.adv.linear_accession_visibility = requireLinearLabelVisibilityMode(
+          drawing.adv.linear_accession_visibility,
           'Linear Accession visibility'
         );
-        adv.linear_length_visibility = requireLinearLabelVisibilityMode(
-          adv.linear_length_visibility,
+        drawing.adv.linear_length_visibility = requireLinearLabelVisibilityMode(
+          drawing.adv.linear_length_visibility,
           'Linear Length / Coordinates visibility'
         );
-        adv.linear_definition_line_styles = normalizeDefinitionLineStyleState(adv.linear_definition_line_styles);
-        form.plot_title = normalizedPlotTitle;
-        adv.plot_title_position = normalizedPlotTitlePosition;
+        drawing.adv.linear_definition_line_styles = normalizeDefinitionLineStyleState(drawing.adv.linear_definition_line_styles);
+        drawing.form.plot_title = normalizedPlotTitle;
+        drawing.adv.plot_title_position = normalizedPlotTitlePosition;
 
-        const normalizedLabelPlacement = requireCurrentLinearLabelPlacement(
-          adv.label_placement
-        );
-        let normalizedLabelRendering = form.show_labels_linear === 'none' ? 'auto' : normalizeLabelRendering(adv.label_rendering);
-        if (normalizedLabelPlacement === 'above_feature') {
-          normalizedLabelRendering = 'auto';
-        }
-        adv.label_rendering = normalizedLabelRendering;
+        requireCurrentLinearLabelPlacement(drawing.adv.label_placement);
         if (hasComparisonIntent) {
-          const comparisonHeight = classifyOptionalPositiveNumber(adv.comparison_height);
+          const comparisonHeight = classifyOptionalPositiveNumber(drawing.adv.comparison_height);
           if (comparisonHeight.status === 'invalid') {
             throw diagnosticError('INPUT_INVALID', { field: 'match_height', reason: 'POSITIVE_OR_AUTO' });
           }
         }
 
         const viewTransformSpecs = [];
-        const buildRegionSpec = (seq, idx) => {
+        const buildRegionSpec = (seq) => {
           const recordIdRaw = seq.region_record_id ? String(seq.region_record_id).trim() : '';
           const wantsReverse = Boolean(seq.region_reverse);
-          const bounds = resolveLinearRegionBounds(seq, idx);
+          // An error names the record card, OFF cards counted.
+          const bounds = resolveLinearRegionBounds(seq, allLinearSeqs.indexOf(seq));
 
           recordSelectors.push(recordIdRaw || '');
 
@@ -3040,16 +3280,19 @@ export const createRunAnalysis = ({
             const displayReverse = wantsReverse || coordinateReverse;
             const specBody = `${start}-${end}${wantsReverse ? ':rc' : ''}`;
             const canonicalSpecBody = `${canonicalStart}-${canonicalEnd}`;
-            reverseFlags.push(false);
             viewTransformSpecs.push({ reverse: displayReverse });
             return { file: canonicalSpecBody, displayFile: specBody };
           }
 
-          reverseFlags.push(wantsReverse);
           viewTransformSpecs.push({ reverse: wantsReverse });
           return null;
         };
 
+        // LOSAT reads the drawn records, then the OFF records of the same
+        // files, which stay in the searched databases (D-07); an index below
+        // `losatSearch.drawnCount` is a position in the drawn list.
+        const losatSearch = losatSearchSequences(linearSeqs, useLosat ? allLinearSeqs : linearSeqs);
+        const losatSeqs = /** @type {typeof linearSeqs} */ (losatSearch.sequences);
         const fastaCache = new Map();
         const fastaHashCache = new Map();
         const sequenceEntriesByKey = new Map();
@@ -3095,7 +3338,7 @@ export const createRunAnalysis = ({
               helperRequestMetadataBytes: 0,
               helperRequestRawTransferBytes: 0,
               helperRequestFileCount: 0,
-              rawJobs: [],
+              rawJobs: /** @type {Record<string, any>[]} */ ([]),
               cacheHashHits: 0,
               cacheHits: 0,
               cacheMisses: 0,
@@ -3104,7 +3347,7 @@ export const createRunAnalysis = ({
             }
           : null;
         const losatExecutionMode = useLosat ? getLosatExecutionMode() : 'serial';
-        const losatRequestedThreadsPerJob = useLosat ? getLosatThreadsPerJob() : undefined;
+        const losatRequestedThreadsPerJob = useLosat ? getLosatThreadsPerJob(drawing) : undefined;
         const losatRequestedTotalThreadBudget = useLosat ? getLosatTotalThreadBudget() : undefined;
         const losatRuntimeWarmup = useLosat
           ? prepareLosatRuntime({ includeThreaded: losatExecutionMode !== 'serial' }).then((runtime) => {
@@ -3127,7 +3370,7 @@ export const createRunAnalysis = ({
 
         const buildProteinRecordInstanceKeys = async () => {
           const used = new Set();
-          return linearSeqs.map((sequence, index) => {
+          return losatSeqs.map((sequence, index) => {
             const base = String(sequence?.uid || `record-${index + 1}`).trim() || `record-${index + 1}`;
             let key = base;
             let suffix = 2;
@@ -3149,17 +3392,18 @@ export const createRunAnalysis = ({
             : (useProteinBlastp ? 'gff' : 'fasta');
           const regionSpec = regionSpecs[idx]?.file || null;
           const recordSelector = recordSelectors[idx] ?? '';
-          const reverseFlag = '0';
+          const reverseFlag = /** @type {string} */ ('0');
           const sourceFile = lInputType.value === 'gb'
-            ? linearSeqs[idx]?.gb
-            : (useProteinBlastp ? linearSeqs[idx]?.gff : linearSeqs[idx]?.fasta);
+            ? losatSeqs[idx]?.gb
+            : (useProteinBlastp ? losatSeqs[idx]?.gff : losatSeqs[idx]?.fasta);
           const sourceText = sourceFile ? linearFileTextCache.get(sourceFile) : null;
           const pairedFastaFile = lInputType.value === 'gff' && useProteinBlastp
-            ? linearSeqs[idx]?.fasta
+            ? losatSeqs[idx]?.fasta
             : null;
           const recordInstanceKey = useProteinBlastp
             ? (proteinRecordInstanceKeys[idx] || `r_${idx + 1}`)
             : '';
+          const recordVisibilityRows = useProteinBlastp ? proteinVisibilityRows([recordInstanceKey]) : [];
           const persistentCacheKey = useProteinBlastp
             ? JSON.stringify({
                 inputFormat: lInputType.value,
@@ -3169,6 +3413,7 @@ export const createRunAnalysis = ({
                 recordInstanceKey,
                 recordIndex: idx,
                 featureVisibility: featureVisibilityCacheKey,
+                featureOverrides: recordVisibilityRows,
                 proteinMapSchema: 4
               })
             : JSON.stringify({ fmt, regionSpec, recordSelector, reverseFlag });
@@ -3214,7 +3459,8 @@ export const createRunAnalysis = ({
                   recordSelector,
                   reverseFlag: reverseFlag === '1',
                   recordIndex: idx,
-                  recordInstanceKey
+                  recordInstanceKey,
+                  featureOverrides: recordVisibilityRows.length ? recordVisibilityRows : null
                 }
               );
               const res = response.result;
@@ -3332,7 +3578,7 @@ export const createRunAnalysis = ({
             return {
               identityKind: 'protein',
               program: 'blastp',
-              outfmt: String(losat.outfmt || '6'),
+              outfmt: String(drawing.losat.outfmt || '6'),
               args: argsKey,
               queryProteinSetHash: queryEntry.proteinSetHash,
               subjectProteinSetHash: subjectEntry.proteinSetHash,
@@ -3346,8 +3592,8 @@ export const createRunAnalysis = ({
           const subjectHash = await getSeqHash(subjectIdx);
           return {
             identityKind: 'nucleotide',
-            program: losatProgram.value,
-            outfmt: String(losat.outfmt || '6'),
+            program: drawing.losatProgram.value,
+            outfmt: String(drawing.losat.outfmt || '6'),
             args: argsKey,
             queryCanonicalHash: queryHash,
             subjectCanonicalHash: subjectHash
@@ -3453,7 +3699,8 @@ export const createRunAnalysis = ({
           const edge = comparisonResolution.edges.find(
             (candidate) => candidate.edgeKey === spec.edgeKey
           );
-          const fallback = getLosatPairDefaultName(
+          const fallback = losatPairDefaultName(
+            drawing,
             spec.edgeKey,
             queryEntry,
             subjectEntry
@@ -3482,11 +3729,11 @@ export const createRunAnalysis = ({
 
         const buildLosatArgs = (queryIdx, subjectIdx) => {
           const args = [];
-          if (losatProgram.value === 'blastn') {
-            pushArg(args, '--task', losat.blastn.task);
-          } else if (losatProgram.value === 'tblastx') {
-            pushArg(args, '--query-gencode', losatRecordGencode(linearSeqs[queryIdx]));
-            pushArg(args, '--db-gencode', losatRecordGencode(linearSeqs[subjectIdx]));
+          if (drawing.losatProgram.value === 'blastn') {
+            pushArg(args, '--task', drawing.losat.blastn.task);
+          } else if (drawing.losatProgram.value === 'tblastx') {
+            pushArg(args, '--query-gencode', losatRecordGencode(losatSeqs[queryIdx]));
+            pushArg(args, '--db-gencode', losatRecordGencode(losatSeqs[subjectIdx]));
           } else {
             if (!useOrthogroupBlastp && !useCollinearBlastp) {
               pushArg(args, '--max-hsps-per-subject', 1);
@@ -3503,7 +3750,6 @@ export const createRunAnalysis = ({
             : new Set(comparisonResolution.edges
                 .filter((edge) => edge.source === 'losat')
                 .flatMap((edge) => [edge.queryIndex, edge.subjectIndex]));
-          assertActiveModeInputs?.('linear', state);
           for (let i = 0; i < linearSeqs.length; i++) {
             const seq = linearSeqs[i];
             if (lInputType.value === 'gb') {
@@ -3528,7 +3774,7 @@ export const createRunAnalysis = ({
           if (losatTiming) losatTiming.inputWriteMs += getNow() - inputWriteStartedAt;
         }
 
-        regionSpecs = linearSeqs.map((seq, idx) => buildRegionSpec(seq, idx));
+        regionSpecs = losatSeqs.map((seq) => buildRegionSpec(seq));
         if (useLosat && useProteinBlastp) {
           proteinRecordInstanceKeys = await buildProteinRecordInstanceKeys();
           const proteinRecordIndexes = (useOrthogroupBlastp || useCollinearBlastp)
@@ -3598,7 +3844,8 @@ export const createRunAnalysis = ({
           }
         }
 
-        if (useLosat) {
+        // `losatTiming` is built exactly when `useLosat` holds; the second test narrows it for this block.
+        if (useLosat && losatTiming) {
           setProcessingStatus('Preparing LOSAT jobs...');
           const losatPairs = [];
           const losatJobs = [];
@@ -3607,18 +3854,18 @@ export const createRunAnalysis = ({
           const fastaExtractionBeforeJobBuild = losatTiming.fastaExtractionMs;
           const cacheHashBeforeJobBuild = losatTiming.cacheHashMs;
 
-          const jobSpecs = buildLosatJobSpecs({
+          const jobSpecs = buildLosatJobSpecs(/** @type {any} */ ({
             resolution: comparisonResolution,
             recordCount: linearSeqs.length,
             recordUids: linearSeqs.map((seq) => seq.uid),
-            program: losatProgram.value,
+            program: drawing.losatProgram.value,
             blastpMode,
             collinearInferOrthogroups,
             collinearSearchScope
-          });
+          }));
 
           const sourcePlan = await prepareLosatSourceBatches({
-            sequences: linearSeqs,
+            ...losatSearch,
             specs: jobSpecs,
             getEntry: getSeqEntry,
             buildArgs: buildLosatArgs,
@@ -3636,6 +3883,7 @@ export const createRunAnalysis = ({
             if (batch.searchContext) cacheMetadata.searchContext = batch.searchContext;
             preparedJobs.push({ spec, losatArgs, cacheMetadata, batch });
           }
+          /** @type {string[] | null} */
           let proteinCacheKeys = null;
           if (useProteinBlastp && preparedJobs.length > 0) {
             throwIfGenerationCanceled();
@@ -3680,13 +3928,10 @@ export const createRunAnalysis = ({
           // CLI Sessions can specify a complete two-dimensional row layout.
           // For collinearity, every pair across adjacent rows is displayed;
           // the Web comparison-plan edges alone do not represent those pairs.
-          const canonicalGridRows = useCollinearBlastp && linearRecordLayoutEnabled.value
-            ? linearSeqs.map((seq) => linearRecordRows.find((entry) => entry.uid === seq.uid))
+          const canonicalGridPair = useCollinearBlastp && drawing.linearRecordLayoutEnabled.value
+            ? canonicalGridDisplayPairs(linearSeqs, drawing.linearRecordRows)
             : null;
-          const hasCanonicalGridRows = canonicalGridRows?.length > 1
-            && canonicalGridRows.every((entry) => entry?.canonicalRow === entry.row
-              && Number.isInteger(entry.canonicalColumn) && entry.canonicalColumn > 0
-              && entry.canonicalCardinality === 'exactly_one');
+          const hasCanonicalGridRows = canonicalGridPair !== null;
           try {
             for (const [jobIndex, { spec, losatArgs, cacheMetadata, batch }] of preparedJobs.entries()) {
               throwIfGenerationCanceled();
@@ -3695,7 +3940,8 @@ export const createRunAnalysis = ({
               const subjectEntry = await getSeqEntry(spec.subjectIndex);
               throwIfGenerationCanceled();
               const cacheKey = useProteinBlastp
-                ? proteinCacheKeys[jobIndex]
+                // The loop runs only for a non-empty `preparedJobs`, and then `proteinCacheKeys` was set above for a protein run.
+                ? /** @type {string[]} */ (proteinCacheKeys)[jobIndex]
                 : await hashText(JSON.stringify(buildLosatCachePayload(cacheMetadata)));
               throwIfGenerationCanceled();
               const queryCanonicalHash = await getSeqHash(spec.queryIndex);
@@ -3732,11 +3978,8 @@ export const createRunAnalysis = ({
               const resolvedEdge = comparisonResolution.edges.find(
                 (edge) => edge.edgeKey === spec.edgeKey
               );
-              const isResolvedDisplayPair = hasCanonicalGridRows
-                ? spec.queryIndex < spec.subjectIndex && Math.abs(
-                    canonicalGridRows[spec.queryIndex].row
-                    - canonicalGridRows[spec.subjectIndex].row
-                  ) === 1
+              const isResolvedDisplayPair = canonicalGridPair
+                ? canonicalGridPair(spec.queryIndex, spec.subjectIndex)
                 : Boolean(
                     resolvedEdge &&
                     spec.queryIndex === resolvedEdge.queryIndex &&
@@ -3783,12 +4026,12 @@ export const createRunAnalysis = ({
                   queryIndex: spec.queryIndex,
                   subjectIndex: spec.subjectIndex,
                   cacheKey,
-                  program: losatProgram.value,
+                  program: drawing.losatProgram.value,
                   querySequenceKey: queryEntry.sequenceKey,
                   subjectSequenceKey: subjectEntry.sequenceKey,
                   queryCanonicalHash,
                   subjectCanonicalHash,
-                  outfmt: losat.outfmt || '6',
+                  outfmt: drawing.losat.outfmt || '6',
                   extraArgs: losatArgs,
                   cacheMetadata,
                   batch
@@ -3807,7 +4050,7 @@ export const createRunAnalysis = ({
             sourceJobs.push({
               ...members[0],
               cacheKey: await hashText(JSON.stringify([
-                losatProgram.value, losat.outfmt || '6', batch.args,
+                drawing.losatProgram.value, drawing.losat.outfmt || '6', batch.args,
                 batch.query.hash, batch.subject.hash
               ])),
               querySequenceKey: batch.query.sequenceKey,
@@ -3878,8 +4121,8 @@ export const createRunAnalysis = ({
                 identityKind: isProteinEntry ? 'protein' : 'nucleotide',
                 ...(isProteinEntry ? { idEncoding: 'runtime-handle-v1' } : {}),
                 text: result.text,
-                program: losatProgram.value,
-                outfmt: String(losat.outfmt || '6'),
+                program: drawing.losatProgram.value,
+                outfmt: String(drawing.losat.outfmt || '6'),
                 args: job?.extraArgs || [],
                 ...(cacheMetadata.searchContext ? { searchContext: cacheMetadata.searchContext } : {}),
                 ...(isProteinEntry
@@ -3897,7 +4140,7 @@ export const createRunAnalysis = ({
                       queryCanonicalHash: job?.queryCanonicalHash || '',
                       subjectCanonicalHash: job?.subjectCanonicalHash || ''
                     }),
-                runtime: webLosatRuntimeRecord(losatProgram.value)
+                runtime: webLosatRuntimeRecord(drawing.losatProgram.value)
               };
               cacheMap.set(result.cacheKey, rawEntry);
             });
@@ -3966,6 +4209,7 @@ export const createRunAnalysis = ({
             );
             const useDerivedProteinPayloadCache = useOrthogroupBlastp || useCollinearBlastp;
             let derivedCacheKey = '';
+            /** @type {Record<string, any> | null} */
             let convertedPayload = null;
             if (useDerivedProteinPayloadCache) {
               const derivedCachePayload = buildLosatDerivedPayloadCachePayload({
@@ -4045,7 +4289,8 @@ export const createRunAnalysis = ({
                   explicitDisplayPairs: Boolean(hasCanonicalGridRows)
                 }
               );
-              convertedPayload = response.result;
+              // The converter returns a JSON object (convert_losatp_blastp_pairs_to_genomic_payload in python-helpers.js).
+              convertedPayload = /** @type {Record<string, any>} */ (response.result);
               if (["orthogroup", "collinear"].includes(blastpMode)) {
                 const resourceKey = blastpMode === "collinear" ? "collinearityResult" : "orthogroupResult";
                 const canonical = convertedPayload.canonicalResource;
@@ -4227,8 +4472,8 @@ export const createRunAnalysis = ({
             candidateLimitRequested: useProteinBlastp ? blastpCandidateLimit : null,
             candidateLimitEffective: useProteinBlastp ? blastpCandidateLimit : null,
             collinearSearchScope: useCollinearBlastp ? collinearSearchScope : null,
-            program: useProteinBlastp ? 'blastp' : losatProgram.value,
-            outfmt: String(losat.outfmt || '6'),
+            program: useProteinBlastp ? 'blastp' : drawing.losatProgram.value,
+            outfmt: String(drawing.losat.outfmt || '6'),
             rawTsvEntryCount: losatTiming.rawTsvEntryCount,
             rawTsvBytes: losatTiming.rawTsvBytes,
             rawTsvLargestEntryBytes: losatTiming.rawTsvLargestEntryBytes,
@@ -4288,7 +4533,7 @@ export const createRunAnalysis = ({
             )
           });
         }
-        if ((!useLinearTrackSlots && form.show_depth) || linearSlotNeedsDepth) {
+        if ((!useLinearTrackSlots && drawing.form.show_depth) || linearSlotNeedsDepth) {
           const depthRows = linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
           const totalDepthFiles = depthRows.reduce((sum, row) => sum + row.filter(Boolean).length, 0);
           if (totalDepthFiles === 0) {
@@ -4308,8 +4553,8 @@ export const createRunAnalysis = ({
         }
       }
 
-      if (annotationSets.length > 0) {
-        stageTextFile('/web_annotations.tsv', encodeAnnotationTable(annotationSets), {
+      if (drawing.annotationSets.length > 0) {
+        stageTextFile('/web_annotations.tsv', encodeAnnotationTable(drawing.annotationSets), {
           name: 'annotations.tsv',
           slot: 'generatedFiles.web_annotations'
         });
@@ -4328,7 +4573,7 @@ export const createRunAnalysis = ({
       const serializedFiles = await serializeCanonicalFiles(
         activeComparisonPlanSnapshot,
         linearRecordCatalog,
-        runState
+        requestDrawing
       );
       recordSessionLifecycleEvent('serialize-canonical-files-end');
       throwIfGenerationCanceled();
@@ -4339,19 +4584,19 @@ export const createRunAnalysis = ({
         ...entry,
         fasta: candidateFiles.c_conservation_fastas?.[entry.sourceIndex] || null
       }));
-      const candidateRequestState = {
-        ...runState,
-        selectedOrthogroupAlignmentFeature: {
-          value: workingSelectedOrthogroupAlignmentFeature
-        }
-      };
       recordSessionLifecycleEvent('canonical-request-construction-start');
       const canonical = buildCanonicalRenderRequest({
-        state: candidateRequestState,
+        state,
+        drawing: requestDrawing,
+        generatedLabelProjection,
         filesData: candidateFiles,
+        recordDisplayRows: recordDisplayRows?.value || [],
         comparisonPlanSnapshot: activeComparisonPlanSnapshot,
         resolvedComparisons,
-        resolvedCircularConservation: canonicalCircularConservation
+        resolvedCircularConservation: canonicalCircularConservation,
+        omittedAnnotationRecordKeys: requestDrawing.annotationSets.length > 0
+          ? (omittedAnnotationRecordKeys?.() || [])
+          : []
       });
       if (useCommittedComparison) {
         if (typeof getCommittedCanonicalSession !== 'function') {
@@ -4411,6 +4656,7 @@ export const createRunAnalysis = ({
       const canonicalReplayName = makeSafeFilename(
         `${normalizedOutputPrefix || 'out'}.gbdraw-session.json`
       );
+      /** @type {{ results: any[] | null, featureCatalog: Record<string, any> | null | undefined }} */
       const publishedReplayArtifact = { results: null, featureCatalog: null };
       const buildCanonicalReplayText = createCanonicalReplayTextBuilder({
         version: canonicalSessionVersion,
@@ -4432,6 +4678,7 @@ export const createRunAnalysis = ({
           + canonicalResourceBase64Characters * 2
           + 65_536
       });
+      /** @type {Awaited<ReturnType<typeof buildSourceRecipe>> | null} */
       let sourceRecipe = null;
       if (manualRunStartedAt !== null) {
         const generatedFileNameHints = new Map();
@@ -4443,40 +4690,38 @@ export const createRunAnalysis = ({
           }
         });
         // Establish source counts before Worker transfer releases the file-content cache.
-        sourceRecipe = await buildSourceRecipe({
+        sourceRecipe = await buildSourceRecipe(/** @type {any} */ ({
           ...canonical,
           generatedFileNameHints,
           readResourceRecordCount: (resourceId, kind) => (
             readCanonicalResourceRecordCount(canonical.resources, resourceId, kind)
           )
-        });
+        }));
         throwIfGenerationCanceled();
       }
       const postGbdrawTimingEntries = [];
       failureStage = 'render';
-      const canonicalExecution = await executeCanonicalCandidate({
+      const canonicalExecution = await executeCanonicalRenderCandidate({
         canonical,
         decorationContinuity,
         mode: mode.value,
         kind: 'generate',
-        shouldAdmit: () => (!colorCandidate || rulePreparation.isCurrent(colorCandidate.snapshot))
-          && generationToken === latestGenerationToken
-          && !generationCancelRequested.value,
+        shouldAdmit: colorCandidate.shouldAdmit,
         onProgress: onDiagramProgress,
         prepareCommit: prepareCandidateCommit,
         prepareCommitInput: {
           sourceReplaced,
-          featureColorOverrides: colorCandidate?.featureColorOverrides || featureColorOverrides,
-          featureStrokeOverrides,
-          featureVisibilityOverrides,
-          labelTextFeatureOverrides,
-          labelVisibilityOverrides,
-          legendEntries: legendEntries.value,
-          deletedLegendEntries: deletedLegendEntries.value,
+          featureColorOverrides: colorCandidate.featureColorOverrides,
+          featureStrokeOverrides: drawing.featureStrokeOverrides,
+          featureOverrides: drawing.featureOverrides,
+          legendEntries: drawing.legendEntries.value,
+          deletedLegendEntries: drawing.deletedLegendEntries.value,
+          dormantLegendEntries: drawing.dormantLegendEntries.value,
           originalLegendOrder: originalLegendOrder.value,
-          addedLegendCaptions: addedLegendCaptions.value,
-          legendColorOverrides,
-          legendStrokeOverrides,
+          addedLegendCaptions: drawing.addedLegendCaptions.value,
+          unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical),
+          legendColorOverrides: drawing.legendColorOverrides,
+          legendStrokeOverrides: drawing.legendStrokeOverrides,
           manualSpecificRules: candidateRules
         },
         timingEntries: postGbdrawTimingEntries
@@ -4495,7 +4740,9 @@ export const createRunAnalysis = ({
       }
       if (canonicalExecution.status === 'engine-error') {
         logPostGbdrawTimings(postGbdrawTimingEntries);
-        return await failOperation(canonicalExecution.engineError, { handle: committedArtifactHandle,
+        // R6: Python names the failed placement row; the Result still shows its feature.
+        return await failOperation(nameFeaturePlacementFailure(canonicalExecution.engineError,
+          canonical.renderRequest, extractedFeatures.value), { handle: committedArtifactHandle,
           restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
       }
       const {
@@ -4515,10 +4762,12 @@ export const createRunAnalysis = ({
         return { status: 'stale' };
       }
 
+      /** @type {ReturnType<typeof buildRunInfo> | null} */
       let candidateRunInfo = null;
+      /** @type {ReturnType<typeof buildLatestCliHelperFiles> | null} */
       let candidateCliHelpers = null;
       if (manualRunStartedAt !== null) {
-        candidateRunInfo = buildRunInfo({
+        candidateRunInfo = buildRunInfo(/** @type {any} */ ({
           mode: mode.value,
           sourceRecipe,
           exactReplayArgs: ['--session', canonicalReplayPath],
@@ -4530,9 +4779,11 @@ export const createRunAnalysis = ({
           losatRuntimes: summarizeLosatRuntimes(
             pendingLosatCacheCommit?.cacheInfo || workingLosatCacheInfo,
             pendingLosatCacheCommit?.cacheMap || losatCache.value
-          )
-        });
-        sourceRecipe.generatedFiles.forEach((file) => {
+          ),
+          featureIdentityNotices: generationMetadata.featureIdentityNotices
+        }));
+        // Assigned above under the same `manualRunStartedAt !== null` test, which always holds: it is a number.
+        /** @type {NonNullable<typeof sourceRecipe>} */ (sourceRecipe).generatedFiles.forEach((file) => {
           recordGeneratedCliFile(
             file.path,
             file.data instanceof Uint8Array ? textDecoder.decode(file.data) : file.data,
@@ -4543,6 +4794,7 @@ export const createRunAnalysis = ({
           candidateRunInfo.losatTelemetry = cloneJsonData(structuredLosatTelemetry);
         }
         candidateCliHelpers = buildLatestCliHelperFiles(
+          drawing,
           candidateRunInfo,
           generatedCliFileMap,
           normalizedOutputPrefix || 'out'
@@ -4560,13 +4812,13 @@ export const createRunAnalysis = ({
       const candidateExtractedFeatures = candidateCommit.featureState.extractedFeatures;
       const candidateBiologicalFeatures = candidateCommit.featureState.biologicalFeatures;
       const currentOwnerSet = captureGeneratedArtifactOwnerSet();
+      /** @type {Record<string, any>} */
       let candidateOwnerSet = {
         ...currentOwnerSet,
         results: candidateCommit.results,
         featureCatalog: candidateCatalog,
         extractedFeatures: candidateExtractedFeatures,
         biologicalFeatures: candidateBiologicalFeatures,
-        featureSelectorSafetyScope: candidateCommit.featureState.featureSelectorSafetyScope,
         featureRecordIds: candidateCommit.featureState.featureRecordIds,
         orthogroups: candidateGroups,
         featureOrthogroupIndex: candidateOrthogroupIndex,
@@ -4575,6 +4827,7 @@ export const createRunAnalysis = ({
           : [],
         trackSlotResolvedGeometry: generationMetadata.trackSlotGeometry || null,
         annotationWarnings: canonicalExecution.annotationWarnings,
+        featureIdentityNotices: canonicalExecution.featureIdentityNotices,
         comparisonWarnings: canonicalExecution.comparisonWarnings,
         specificRules: candidateRules,
         fileLegendCaptions: new Set(candidateRules.filter(rule => rule.fromFile && rule.cap).map(rule => rule.cap)),
@@ -4591,17 +4844,17 @@ export const createRunAnalysis = ({
         lastRunInfo: candidateRunInfo,
         pairwiseMatchFactors: { ...(pairwiseMatchFactors?.value || {}) },
         editableLabels: [],
-        generatedLegendPosition: form.legend,
+        generatedLegendPosition: drawing.form.legend,
         generatedMode: mode.value,
         generatedMultiRecordCanvas:
-          mode.value === 'circular' ? Boolean(form.multi_record_canvas) : false,
+          mode.value === 'circular' ? Boolean(drawing.form.multi_record_canvas) : false,
         generatedCircularPlotTitlePosition: mode.value === 'circular'
-          ? normalizeCircularPlotTitlePosition(adv.plot_title_position)
+          ? normalizeCircularPlotTitlePosition(drawing.adv.plot_title_position)
           : currentOwnerSet.generatedCircularPlotTitlePosition,
         appliedPaletteName: String(
-          selectedPalette?.value || appliedPaletteName.value || 'default'
+          drawing.selectedPalette?.value || appliedPaletteName.value || 'default'
         ),
-        appliedPaletteColors: { ...currentColors.value },
+        appliedPaletteColors: { ...drawing.currentColors.value },
         pendingPaletteName: '',
         pendingPaletteColors: {}
       };
@@ -4633,20 +4886,14 @@ export const createRunAnalysis = ({
         candidateCommit.mutationPlan?.operationsByResult?.[nextSelectedResultIndex]
         || null
       );
-      const optionalLabelFeatureIds = new Set(
-        (selectedMutationOperations?.labelVisibility || [])
-          .filter((operation) => operation?.mode === 'off')
-          .map((operation) => String(operation?.renderedId || '').trim())
-          .filter(Boolean)
-      );
-      const requiredLabelFeatureIds = Object.freeze([
-        ...new Set([
-          ...(selectedMutationOperations?.labelText || []),
-          ...(selectedMutationOperations?.labelVisibility || [])
-        ].map((operation) => String(operation?.renderedId || '').trim()).filter(
-          (renderedId) => renderedId && !optionalLabelFeatureIds.has(renderedId)
-        ))
-      ]);
+      const requiredLabelFeatureIds = forcedLabelFeatureIds(selectedMutationOperations, {
+        features: [...(candidateCatalogAdmission.renderedFeaturesByResult[nextSelectedResultIndex]?.values() || [])],
+        diagramOptions: canonical.renderRequest.diagramOptions
+      });
+      const optionalLabelFeatureIds = new Set(labelOperationIds([
+        ...(selectedMutationOperations?.labelText || []),
+        ...(selectedMutationOperations?.labelVisibility || [])
+      ]).filter((renderedId) => !requiredLabelFeatureIds.includes(renderedId)));
       const candidatePreviewReadiness = previewRuntime.registerReadinessExpectation({
         result: selectedCandidateResult,
         resultIndex: nextSelectedResultIndex,
@@ -4676,7 +4923,7 @@ export const createRunAnalysis = ({
       const candidateGroupIds = candidateGroups
         .map((group) => String(group?.id || '').trim())
         .filter(Boolean);
-      rekeyCommittedOrthogroupOverrides(previousOrthogroups, candidateGroups);
+      rekeyCommittedOrthogroupOverrides(drawing, previousOrthogroups, candidateGroups);
       if (
         !workingSelectedOrthogroupId
         || !candidateGroupIds.includes(String(workingSelectedOrthogroupId || '').trim())
@@ -4686,16 +4933,14 @@ export const createRunAnalysis = ({
       selectedOrthogroupId.value = workingSelectedOrthogroupId;
       featureExtractionPending.value = false;
       featureExtractionError.value = null;
-      Object.keys(featureColorOverrides).forEach((key) => delete featureColorOverrides[key]);
+      Object.keys(drawing.featureColorOverrides).forEach((key) => delete drawing.featureColorOverrides[key]);
       Object.assign(
-        featureColorOverrides,
+        drawing.featureColorOverrides,
         cloneJsonValue(candidateCommit.featureColorOverrides, {})
       );
-      Object.keys(featureStrokeOverrides).forEach((key) => delete featureStrokeOverrides[key]);
-      Object.assign(
-        featureStrokeOverrides,
-        cloneJsonValue(candidateCommit.featureStrokeOverrides, {})
-      );
+      // Feature strokes stay in the draft when this Result does not draw their
+      // feature (the other mode's, or one this request leaves out); the next
+      // Generate that draws the feature draws them again (R2, OIPC-C06, OV-84).
       setFeatureEditorStatus({
         status: candidateExtractedFeatures.length ? 'summary-ready' : 'idle',
         generationId: featureExtractionRequestId,
@@ -4731,27 +4976,24 @@ export const createRunAnalysis = ({
         await restoreCommittedArtifact();
         return { status: 'stale' };
       }
-      const removedVisibilityTargets = sourceReplaced && pruneUnmatchedFeatureOverrides(
-        featureVisibilityOverrides,
-        candidateBiologicalFeatures,
-        workingExtractedFeatures,
-        state.featureVisibilitySelectorCache
-      );
-      if (sourceReplaced) {
-        // D-10: drop only the label edits whose feature is gone; bulk label
-        // overrides stay as text matchers.
-        [labelTextFeatureOverrides, labelTextFeatureOverrideSources, labelVisibilityOverrides]
-          .forEach((overrides) => pruneUnmatchedFeatureOverrides(
-            overrides, candidateBiologicalFeatures, workingExtractedFeatures
-          ));
-      }
-      if (removedVisibilityTargets > 0) {
-        state.replaceFeatureVisibilitySelectorCacheOwner(preserveFeatureVisibilitySelectorCacheForOverrides(
-          buildFeatureVisibilitySelectorCache(candidateExtractedFeatures, candidateCommit.featureState.featureSelectorSafetyScope),
-          state.featureVisibilitySelectorCache,
-          featureVisibilityOverrides
-        ));
-      }
+      // Owner decision Q3 = A (design Q4 3.4, 6.3): a Generate that replaced a
+      // source removes only the edits whose feature that source no longer has,
+      // and the edits of records the request dropped; Python names them.
+      featureEditRemovalCount.value = sourceReplaced ? pruneUnmatchedFeatureOverrides({
+        featureOverrides: drawing.featureOverrides,
+        featurePlacementOverrides: drawing.featurePlacementOverrides,
+        featureStrokeOverrides: drawing.featureStrokeOverrides,
+        notices: canonicalExecution.featureIdentityNotices,
+        replacedRecordKeys: replacedFeatures.filter((feature) => feature.scope === canonical.renderRequest.mode)
+          .map((feature) => String(feature.record_key)),
+        previousRecords: previousRequestRecords,
+        currentRecords: canonical.renderRequest.records || [],
+        retainedRecordKeys: offRecordRequestKeys(canonical.renderRequest.mode, drawing.recordsOff),
+        biologicalFeatures: candidateBiologicalFeatures
+      }) : 0;
+      // OV-120: a source replacement also retires the renames of the Legend
+      // rows the new Result does not draw (as the OV-84 strokes).
+      if (sourceReplaced) drawing.dormantLegendEntries.value = [];
       if (typeof setGeneratedArtifactIdentity === 'function') {
         setGeneratedArtifactIdentity(generationResponse.artifactIdentity, {
           results: candidateCommit.results
@@ -4762,14 +5004,14 @@ export const createRunAnalysis = ({
         // target-only renders and Similarity alignment use it without LOSATP.
         adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
       }
-      if (!useCommittedComparison && importedComparisonIntent) {
+      if (!useCommittedComparison && drawing.importedComparisonIntent) {
         Object.assign(
-          importedComparisonIntent,
+          drawing.importedComparisonIntent,
           createImportedComparisonIntentState(),
           { disposition: IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE }
         );
       }
-      if (colorCandidate) rulePreparation.notifyChanges(colorCandidate);
+      colorCandidate.notifyChanges();
       return {
         status: 'ok',
         generatedArtifactCandidate: activatedGeneratedArtifactCandidate
@@ -4799,31 +5041,63 @@ export const createRunAnalysis = ({
     }
   };
 
+  // UJ-10: the Results a successful Generate showed and the draft it read.
+  /** @type {{ results: any, signature: string } | null} */
+  let shownGenerateDraft = null;
+  /**
+   * @param {Record<string, any> | null} [comparisonPlanSnapshot]
+   * @param {Record<string, any> | null} [generatedArtifactHandle]
+   * @param {Record<string, any> | null} [comparisonExecution]
+   * @param {{ prepareGenerate?: (() => Promise<Record<string, any>>) | null,
+   *   afterGenerate?: ((outcome: Record<string, any> | null) => any) | null }} [options]
+   */
   const runAnalysis = async (
     comparisonPlanSnapshot = null,
     generatedArtifactHandle = null,
     comparisonExecution = null,
     { prepareGenerate = null, afterGenerate = null } = {}
   ) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
+    /** @type {Record<string, any> | null} */
     let outcome = null;
     const operationId = ++latestOperationId;
     const isCurrentOperation = () => operationId === latestOperationId;
     const previousAlert = errorLog.value;
     const isCurrentAlert = () => isCurrentOperation()
       && (errorLog.value === previousAlert || errorLog.value === null);
+    /** @type {Record<string, any> | null} */
     let beforeHandle = null;
-    const initialResults = results.value;
+    let initialResults = results.value;
+    /** @type {string | null} */
     let historyRecovery = null;
+    // UJ-10: whether the draft this run reads is the one of the shown Result.
+    // It is read when the run settles its draft or when Cancel is observed,
+    // whichever comes first, so an edit committed before either counts.
+    const readRunDraftIsShown = () => {
+      const signature = readDraftSignature?.() || '';
+      return Boolean(signature) && shownGenerateDraft?.signature === signature
+        && shownGenerateDraft.results === results.value;
+    };
+    /** @param {boolean} draftIsShown */
+    const preserveCanceledResult = (draftIsShown) => {
+      failedGeneratePreservedResult.value = results.value.length > 0 && (draftIsShown ? 'current' : true);
+    };
+    let runDraftIsShown = false;
     processing.value = true;
     processingStatus.value = 'Preparing input files...';
     generationCancelRequested.value = false;
     recordSessionLifecycleEvent('generate.processing-published');
     try {
-      const decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity);
+      const decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity, drawing);
       await nextTick();
       await waitForAfterPaint();
+      // A rerender this run waited for may commit a Result; a failure keeps that one.
+      if (activeReflowRun) {
+        await activeReflowRun;
+        initialResults = results.value;
+      }
       if (!isCurrentOperation()) return { status: 'stale' };
       recordSessionLifecycleEvent('generate.paint-opportunity-completed');
       // Cancel is honored before rendering, including during preparation.
@@ -4831,10 +5105,19 @@ export const createRunAnalysis = ({
         if (!generationCancelRequested.value) return null;
         processingStatus.value = 'Canceled.';
         outcome = { status: 'canceled' };
-        failedGeneratePreservedResult.value = results.value.length > 0;
+        preserveCanceledResult(readRunDraftIsShown());
         return outcome;
       };
       if (cancelBeforeRender()) return outcome;
+      // UI-07: the active mode's input check runs before anything here starts
+      // the diagram Worker, so a missing input is named at once.
+      try {
+        assertActiveModeInputs?.(mode.value, state);
+      } catch (cause) {
+        outcome = await failOperation(cause, { handle: null, stage: 'request-validation',
+          isCurrent: isCurrentAlert, isCurrentOperation, recovery: results.value.length ? 'preserved' : 'no-result' });
+        return outcome;
+      }
       await settleComparisonRecordLabels();
       if (!isCurrentOperation()) return { status: 'stale' };
       if (cancelBeforeRender()) return outcome;
@@ -4849,7 +5132,9 @@ export const createRunAnalysis = ({
       }
       const execute = (handle) => {
         beforeHandle = handle || generatedArtifactHandle;
-        return runAnalysisInternal({
+        // History has settled the draft this run reads.
+        runDraftIsShown = readRunDraftIsShown();
+        return runAnalysisInternal(drawing, {
           decorationContinuity, comparisonPlanSnapshot, generatedArtifactHandle: beforeHandle,
           comparisonExecution, isCurrentOperation, isCurrentAlert
         });
@@ -4860,6 +5145,18 @@ export const createRunAnalysis = ({
             execute,
             {
               shouldCommit: (result) => result?.status === 'ok',
+              // A Generate that replaced a source removes the feature placements
+              // it no longer resolves (Q3 = A). Placements are draft intent, not
+              // part of the Result, so Undo and Redo restore them, and the
+              // removal count, with this step.
+              captureIntentCheckpoint: () => ({
+                placements: cloneJsonData(drawing.featurePlacementOverrides) || {},
+                removed: Number(featureEditRemovalCount.value) || 0
+              }),
+              restoreIntentCheckpoint: ({ placements, removed }) => {
+                restorePlacements(drawing.featurePlacementOverrides, placements);
+                featureEditRemovalCount.value = removed;
+              },
               onCheckpointCapture: onGeneratedArtifactCheckpointCapture,
               restoreAppliedArtifact: async (beforeHandle) => {
                 historyRecovery = 'restore-failed';
@@ -4889,19 +5186,24 @@ export const createRunAnalysis = ({
       if (outcome?.status === 'ok' && outcome.generatedArtifactCandidate) {
         generatedArtifactTransactionOwner.finalize();
         completedLosatSearch = null;
+        // The committed Results draw every edit, so the last live edit failure
+        // no longer applies (OV-36). A failed Generate keeps the Result it
+        // could not replace, and the note with it.
+        clearLabelBuildNotices({ rerender: true });
         recordSessionLifecycleEvent('generate.completed');
       }
-      if (Object.prototype.hasOwnProperty.call(outcome || {}, 'generatedArtifactCandidate')) {
+      if (outcome && Object.prototype.hasOwnProperty.call(outcome, 'generatedArtifactCandidate')) {
         const { generatedArtifactCandidate, ...publicOutcome } = outcome;
         outcome = publicOutcome;
       }
       if (outcome?.status === 'canceled' && isCurrentOperation()) {
-        failedGeneratePreservedResult.value = results.value.length > 0;
+        preserveCanceledResult(runDraftIsShown);
       } else if (outcome?.status === 'ok') {
         failedGeneratePreservedResult.value = false;
         if (generationFailureRecovery) generationFailureRecovery.value = null;
       }
       await afterGenerate?.(outcome);
+      if (outcome?.status === 'ok') shownGenerateDraft = { results: results.value, signature: readDraftSignature?.() || '' };
       return outcome;
     } catch (cause) {
       outcome = await failOperation(cause, { handle: beforeHandle, isCurrent: isCurrentAlert, isCurrentOperation,
@@ -4916,11 +5218,18 @@ export const createRunAnalysis = ({
         recordSessionLifecycleEvent('generate.processing-cleared', {
           status: outcome?.status || 'error'
         });
+        replayDeferredLabelReflow();
       }
     }
   };
 
-  const runCommittedCanonicalCandidateInternal = async ({
+  /**
+   * @param {DrawingState} drawing
+   * @param {{ canonical: Record<string, any>, decorationContinuity?: any, generatedArtifactHandle?: Record<string, any> | null,
+   *   commitIntent?: (() => any) | null, alignmentResetBefore?: any, alignmentResetReceipt?: any, operation?: string,
+   *   isCurrentOperation?: () => boolean, isCurrentAlert?: () => boolean }} options
+   */
+  const runCommittedCanonicalCandidateInternal = async (drawing, {
     canonical,
     decorationContinuity = null,
     generatedArtifactHandle = null,
@@ -4939,7 +5248,9 @@ export const createRunAnalysis = ({
     activeLosatAbortController = generationAbortController;
     const committedArtifactHandle = generatedArtifactHandle
       || await captureGeneratedArtifactHandle();
+    /** @type {ReturnType<typeof generatedArtifactTransactionOwner.build> | null} */
     let activatedCandidate = null;
+    /** @type {ReadyReceipt | null} */
     let acceptedReadyReceipt = null;
     const restoreCommittedArtifact = async () => {
       if (!activatedCandidate) return false;
@@ -4975,7 +5286,7 @@ export const createRunAnalysis = ({
     };
     try {
       const timingEntries = [];
-      const execution = await executeCanonicalCandidate({
+      const execution = await executeCanonicalRenderCandidate({
         canonical,
         decorationContinuity,
         mode: canonical.renderRequest.mode,
@@ -4996,18 +5307,18 @@ export const createRunAnalysis = ({
         prepareCommit: prepareCandidateCommit,
         prepareCommitInput: {
           sourceReplaced: false,
-          featureColorOverrides,
-          featureStrokeOverrides,
-          featureVisibilityOverrides,
-          labelTextFeatureOverrides,
-          labelVisibilityOverrides,
-          legendEntries: legendEntries.value,
-          deletedLegendEntries: deletedLegendEntries.value,
+          featureColorOverrides: drawing.featureColorOverrides,
+          featureStrokeOverrides: drawing.featureStrokeOverrides,
+          featureOverrides: drawing.featureOverrides,
+          legendEntries: drawing.legendEntries.value,
+          deletedLegendEntries: drawing.deletedLegendEntries.value,
+          dormantLegendEntries: drawing.dormantLegendEntries.value,
           originalLegendOrder: originalLegendOrder.value,
-          addedLegendCaptions: addedLegendCaptions.value,
-          legendColorOverrides,
-          legendStrokeOverrides,
-          manualSpecificRules
+          addedLegendCaptions: drawing.addedLegendCaptions.value,
+          unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical),
+          legendColorOverrides: drawing.legendColorOverrides,
+          legendStrokeOverrides: drawing.legendStrokeOverrides,
+          manualSpecificRules: drawing.manualSpecificRules
         },
         timingEntries
       });
@@ -5044,8 +5355,6 @@ export const createRunAnalysis = ({
         featureCatalog: candidateCatalog,
         extractedFeatures: candidateCommit.featureState.extractedFeatures,
         biologicalFeatures: candidateCommit.featureState.biologicalFeatures,
-        featureSelectorSafetyScope:
-          candidateCommit.featureState.featureSelectorSafetyScope,
         featureRecordIds: candidateCommit.featureState.featureRecordIds,
         orthogroups: candidateGroups,
         featureOrthogroupIndex: candidateCommit.featureState.featureOrthogroupIndex,
@@ -5055,6 +5364,7 @@ export const createRunAnalysis = ({
         trackSlotResolvedGeometry:
           execution.generationMetadata.trackSlotGeometry || null,
         annotationWarnings: execution.annotationWarnings,
+        featureIdentityNotices: execution.featureIdentityNotices,
         comparisonWarnings: execution.comparisonWarnings,
         matchSequenceOwner: matchSequenceRegistry?.buildTrustedOwner?.(
           candidateCommit.featureState.sequenceSources
@@ -5156,6 +5466,11 @@ export const createRunAnalysis = ({
     }
   };
 
+  /**
+   * @param {{ canonical: Record<string, any>, label?: string,
+   *   captureIntentCheckpoint?: ((...args: any[]) => any) | null, restoreIntentCheckpoint?: ((...args: any[]) => any) | null,
+   *   commitIntent?: (() => any) | null, alignmentResetBefore?: any, alignmentResetReceipt?: any, operation?: string }} options
+   */
   const runCommittedCanonicalCandidate = async ({
     canonical,
     label = 'Rotate record to feature',
@@ -5166,28 +5481,37 @@ export const createRunAnalysis = ({
     alignmentResetReceipt = undefined,
     operation = 'generate'
   }) => {
+    const drawing = committedDrawing(canonical);
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
+    /** @type {Record<string, any> | null} */
     let outcome = null;
     const operationId = ++latestOperationId;
     const isCurrentOperation = () => operationId === latestOperationId;
     const previousAlert = errorLog.value;
     const isCurrentAlert = () => isCurrentOperation()
       && (errorLog.value === previousAlert || errorLog.value === null);
+    /** @type {Record<string, any> | null} */
     let beforeHandle = null;
-    const initialResults = results.value;
+    let initialResults = results.value;
+    /** @type {string | null} */
     let historyRecovery = null;
     processing.value = true;
     processingStatus.value = 'Preparing target record...';
     generationCancelRequested.value = false;
     try {
-      const decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity);
+      const decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity, drawing);
       await nextTick();
       await waitForAfterPaint();
+      // A rerender this run waited for may commit a Result; a failure keeps that one.
+      if (activeReflowRun) {
+        await activeReflowRun;
+        initialResults = results.value;
+      }
       if (!isCurrentOperation()) return { status: 'stale' };
       const execute = (handle) => {
         beforeHandle = handle;
-        return runCommittedCanonicalCandidateInternal({
+        return runCommittedCanonicalCandidateInternal(drawing, {
           canonical, decorationContinuity, generatedArtifactHandle: beforeHandle,
           commitIntent, alignmentResetBefore, alignmentResetReceipt, operation, isCurrentOperation, isCurrentAlert
         });
@@ -5212,7 +5536,7 @@ export const createRunAnalysis = ({
       if (outcome?.status === 'ok' && outcome.generatedArtifactCandidate) {
         generatedArtifactTransactionOwner.finalize();
       }
-      if (Object.prototype.hasOwnProperty.call(outcome || {}, 'generatedArtifactCandidate')) {
+      if (outcome && Object.prototype.hasOwnProperty.call(outcome, 'generatedArtifactCandidate')) {
         const { generatedArtifactCandidate, ...publicOutcome } = outcome;
         outcome = publicOutcome;
       }
@@ -5227,6 +5551,7 @@ export const createRunAnalysis = ({
         if (outcome?.status !== 'canceled') processingStatus.value = '';
         generationCancelRequested.value = false;
         processing.value = false;
+        replayDeferredLabelReflow();
       }
     }
   };
@@ -5250,10 +5575,52 @@ export const createRunAnalysis = ({
     return cancelDiagramGeneration();
   };
 
+  // A reflow keeps the Result it draws, so the preview binder reports a forced
+  // label that the Result does not draw instead of failing the binding, with
+  // the diagnostic Generate raises for it (R6, OV-06). The rerender also draws
+  // the Legend again, so the Legend it draws is the generated inventory, as
+  // after Generate (OV-42, OV-43): the next edit compares against it.
+  const expectReflowBindings = (commit, resultIndex, isCurrentReflow, diagramOptions, drawnPaint) => {
+    const result = commit.results[resultIndex];
+    const featureIds = forcedLabelFeatureIds(commit.mutationPlan?.operationsByResult?.[resultIndex], {
+      features: [...(commit.featureState?.renderedFeaturesByResult?.[resultIndex]?.values()
+        || extractedFeatures.value || [])],
+      diagramOptions
+    });
+    if (!result) return;
+    const readinessId = `label-reflow:${latestGenerationToken}`;
+    const resultIdentity = previewRuntime.getResultIdentity(result);
+    previewRuntime.registerReadinessExpectation({
+      result,
+      resultIndex,
+      artifactIdentity: readinessId,
+      generationToken: readinessId,
+      catalogState: featureCatalog?.value || null,
+      phase: 'label-reflow',
+      bindingOptions: {
+        replaceGeneratedLegend: true,
+        drawnPaint,
+        ...(featureIds.length === 0 ? {} : {
+          reportedLabelBinding: Object.freeze({
+            featureIds,
+            report: (error) => {
+              if (!isCurrentReflow()) return;
+              labelReflowLastError.value = liveEditFailure(formatError(error, 'generate', 'render'));
+            }
+          })
+        })
+      },
+      isCurrent: () => (
+        previewRuntime.getResultIdentity(results.value[resultIndex]) === resultIdentity
+        && Number(selectedResultIndex.value) === resultIndex
+      )
+    });
+  };
+
   // A label reflow re-renders the committed Session with the current editor
-  // tables (R1(c), N-16): it never reads the settings draft. The Enable Labels
-  // choice also commits its label selection with the reflowed Result.
-  const runLabelReflowCandidate = async ({ requestId, reason, decorationContinuity }) => {
+  // tables (R1(c), N-16): it never reads the settings draft.
+  /** @param {DrawingState} drawing */
+  const runLabelReflowCandidate = async (drawing, { requestId, decorationContinuity }) => {
     if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) {
       return { status: 'skipped' };
     }
@@ -5262,73 +5629,66 @@ export const createRunAnalysis = ({
       labelReflowLastError.value = liveEditFailure(formatError(diagnosticError('LIVE_EDIT_REQUIRES_GENERATE')));
       return { status: 'skipped' };
     }
+    // The reflow draws the committed Session's Results again, so they keep their names (OV-136).
+    const committedResultNames = results.value.map((/** @type {{ name: string }} */ result) => result.name);
     const generationToken = ++latestGenerationToken;
-    const labelSelection = reason === 'global-off-label-apply';
+    /** @type {Awaited<ReturnType<typeof prepareAndAdmitCandidate>>} */
     let colorCandidate = null;
-    labelReflowLastError.value = null;
-    labelOverrideBuildWarning.value = '';
+    clearLabelBuildNotices({ rerender: true });
     skipCaptureBaseConfig.value = true;
     const isCurrent = () => generationToken === latestGenerationToken && requestId === pendingReflowRequestId;
+    // The editor state the rerender draws from; an edit made from here on is
+    // shown on its Results after they commit (OV-346).
+    const drawnPaint = editorPaintState(/** @type {import('./result-paint-record.js').PaintStateSource} */ (state), drawing);
+    // A candidate whose rule inputs changed while it was prepared or drawn (an
+    // edit the Result shows live) is not admitted. No newer request replaces
+    // it, so the rerender it was asked for (a Legend relabel) runs again (OV-351).
+    const notAdmitted = () => ({ status: 'stale', rerun: isCurrent() });
     try {
-      let candidateRules = manualSpecificRules;
-      if (rulePreparation) {
-        colorCandidate = await rulePreparation.prepareCandidate(manualSpecificRules);
-        if (!colorCandidate || !isCurrent()) return { status: 'stale' };
-        candidateRules = colorCandidate.rules;
-      }
-      const canonicalLabelOverrideTsv = serializeLabelOverrideRows(canonicalLabelOverrideRows.value);
-      const labelOverride = canonicalLabelOverrideTsv
-        ? { tsv: canonicalLabelOverrideTsv, skippedMissingSourceCount: 0 }
-        : buildLabelOverrideTsv(labelTextFeatureOverrides, labelTextBulkOverrides, {
-          editableLabels: editableLabels.value || [],
-          extractedFeatures: extractedFeatures.value,
-          featureOverrideSources: labelTextFeatureOverrideSources,
-          visibilityOverrides: labelVisibilityOverrides
-        });
-      if (labelOverride.skippedMissingSourceCount > 0) {
-        labelOverrideBuildWarning.value = `${labelOverride.skippedMissingSourceCount} feature override row(s) were skipped due to missing source label context.`;
-      }
+      colorCandidate = await prepareAndAdmitCandidate(drawing, isCurrent);
+      if (!colorCandidate) return notAdmitted();
+      const candidateRules = colorCandidate.rules;
       const canonical = projectCommittedEditorIntent({
         committed,
-        labelSelection,
         promotion: {
           featureCatalog: featureCatalog?.value ?? null,
           legacyOrthogroupState: { groups: cloneJsonData(orthogroups.value || []) }
         },
-        state: {
-          ...state,
+        state,
+        drawing: {
+          ...drawing,
           selectedPalette: appliedPaletteName,
           currentColors: appliedPaletteColors,
-          manualSpecificRules: candidateRules,
-          generatedLabelOverrideTsv: labelOverride.tsv
+          manualSpecificRules: candidateRules
         }
       });
       const timingEntries = [];
-      const execution = await executeCanonicalCandidate({
+      const execution = await executeCanonicalRenderCandidate({
         canonical,
         decorationContinuity,
         mode: canonical.renderRequest.mode,
         kind: 'reflow',
-        shouldAdmit: () => (!colorCandidate || rulePreparation.isCurrent(colorCandidate.snapshot)) && isCurrent(),
-        prepareCommit: prepareReflowCommit,
+        shouldAdmit: colorCandidate.shouldAdmit,
+        prepareCommit: prepareReflowResultCommit,
         prepareCommitInput: {
-          featureColorOverrides: colorCandidate?.featureColorOverrides || featureColorOverrides,
-          featureStrokeOverrides,
-          featureVisibilityOverrides,
-          labelTextFeatureOverrides,
-          labelVisibilityOverrides,
-          legendEntries: legendEntries.value,
-          deletedLegendEntries: deletedLegendEntries.value,
+          featureColorOverrides: colorCandidate.featureColorOverrides,
+          featureStrokeOverrides: drawing.featureStrokeOverrides,
+          featureOverrides: drawing.featureOverrides,
+          legendEntries: drawing.legendEntries.value,
+          deletedLegendEntries: drawing.deletedLegendEntries.value,
+          dormantLegendEntries: drawing.dormantLegendEntries.value,
           originalLegendOrder: originalLegendOrder.value,
-          addedLegendCaptions: addedLegendCaptions.value,
-          legendColorOverrides,
-          legendStrokeOverrides,
+          addedLegendCaptions: drawing.addedLegendCaptions.value,
+          unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical),
+          legendColorOverrides: drawing.legendColorOverrides,
+          legendStrokeOverrides: drawing.legendStrokeOverrides,
           manualSpecificRules: candidateRules
         },
-        timingEntries
+        timingEntries,
+        resultNames: committedResultNames
       });
       console.info(`gbdraw ${canonical.renderRequest.mode} typed request render: ${formatDuration(execution.elapsedMs)}.`);
-      if (execution.status === 'superseded' || !isCurrent()) return { status: 'stale' };
+      if (execution.status === 'superseded' || !isCurrent()) return notAdmitted();
       if (execution.status === 'engine-error') {
         logPostGbdrawTimings(timingEntries);
         const error = formatError(execution.engineError, 'generate', 'render');
@@ -5336,18 +5696,31 @@ export const createRunAnalysis = ({
         return { status: 'error', error };
       }
       const previousSelectedResultIndex = selectedResultIndex.value;
+      const nextSelectedResultIndex = Math.max(
+        0, Math.min(previousSelectedResultIndex, execution.commit.results.length - 1)
+      );
       skipCaptureBaseConfig.value = true;
+      // The rerender's catalog describes the Results it draws, so they replace
+      // the previous pair together: a feature it draws again or no more keeps
+      // its popup, label binding, Features list row, and History projection
+      // (R-5). It renders the committed request, so the records and the
+      // similarity groups the Generate committed stay.
+      featureCatalog.value = execution.catalog;
+      extractedFeatures.value = execution.commit.featureState.extractedFeatures;
+      biologicalFeatures.value = execution.commit.featureState.biologicalFeatures;
       results.value = execution.commit.results;
+      // The preview owner selects the Result (R13). It registers readiness only
+      // when fewer Results leave the selection out of range; the reflow's own
+      // expectation, registered next, replaces it, so the binder reports a
+      // forced label the Result does not draw (OV-06).
       if (execution.commit.results.length > 0) {
-        selectedResultIndex.value = Math.max(
-          0, Math.min(previousSelectedResultIndex, execution.commit.results.length - 1)
-        );
+        previewRuntime.selectResult(nextSelectedResultIndex);
       }
-      if (labelSelection && typeof adoptCanonicalRenderArtifacts === 'function') {
-        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
-      }
+      expectReflowBindings(
+        execution.commit, nextSelectedResultIndex, isCurrent, canonical.renderRequest.diagramOptions, drawnPaint
+      );
       logPostGbdrawTimings(timingEntries);
-      if (colorCandidate) rulePreparation.notifyChanges(colorCandidate);
+      colorCandidate.notifyChanges();
       return { status: 'ok' };
     } catch (e) {
       if (isDiagramGenerationCanceled(e)) {
@@ -5360,34 +5733,51 @@ export const createRunAnalysis = ({
     }
   };
 
-  const runLabelReflow = async (reason = 'label-edit') => {
+  const runLabelReflow = async () => {
+    const drawing = committedDrawing(getCommittedCanonicalSession?.());
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     pendingReflowRequestId += 1;
-    pendingReflowReason = String(reason || 'label-edit');
     if (activeReflowRequestId !== 0) return;
+    if (processing.value) {
+      reflowDeferredByProcessing = true;
+      return;
+    }
 
     labelReflowProcessing.value = true;
-    try {
-      while (activeReflowRequestId < pendingReflowRequestId) {
+    activeReflowRun = (async () => {
+      // Generate takes priority: an iteration never starts while it runs.
+      while (!processing.value && activeReflowRequestId < pendingReflowRequestId) {
         activeReflowRequestId = pendingReflowRequestId;
         let decorationContinuity;
         try {
-          decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity);
+          decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity, drawing);
         } catch (error) {
           labelReflowLastError.value = liveEditFailure(formatError(error));
           return;
         }
-        await runLabelReflowCandidate({
+        const outcome = await runLabelReflowCandidate(drawing, {
           decorationContinuity,
-          requestId: activeReflowRequestId,
-          reason: pendingReflowReason
+          requestId: activeReflowRequestId
         });
+        if (outcome.rerun && !processing.value && !state.sessionOperationAvailability?.()) pendingReflowRequestId += 1;
       }
-    } finally {
+      if (processing.value && activeReflowRequestId < pendingReflowRequestId) {
+        reflowDeferredByProcessing = true;
+      }
+    })().finally(() => {
       activeReflowRequestId = 0;
       labelReflowProcessing.value = false;
-    }
+      activeReflowRun = null;
+    });
+    await activeReflowRun;
+  };
+
+  // Called where a run clears `processing`: the requests it held back run once.
+  const replayDeferredLabelReflow = () => {
+    if (!reflowDeferredByProcessing || processing.value) return;
+    reflowDeferredByProcessing = false;
+    void runLabelReflow();
   };
 
   const downloadLosatCache = async () => {
@@ -5443,6 +5833,7 @@ export const createRunAnalysis = ({
     restoreGeneratedArtifactRuntimeState,
     runLabelReflow,
     refreshCircularRecordOrder,
+    releaseSourceInputFailure,
     downloadCliHelperFiles,
     downloadLosatCache,
     downloadLosatPair,

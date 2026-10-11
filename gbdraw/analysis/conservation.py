@@ -6,22 +6,25 @@ import io
 import logging
 import os
 from dataclasses import dataclass
-from typing import Iterable, Literal, Sequence
+from typing import TYPE_CHECKING, Iterable, Literal, Sequence, cast
 
 import pandas as pd
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame
 
-from gbdraw.core.color import normalize_hex_color, tint_color  # type: ignore[reportMissingImports]
-from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
-from gbdraw.io.colors import resolve_color_to_hex  # type: ignore[reportMissingImports]
-from gbdraw.io.comparisons import (  # type: ignore[reportMissingImports]
+from gbdraw.core.color import normalize_hex_color, tint_color
+from gbdraw.exceptions import ValidationError
+from gbdraw.io.colors import resolve_color_to_hex
+from gbdraw.io.comparison_sequences import comparison_file_stem
+from gbdraw.io.comparisons import (
     COMPARISON_COLUMNS,
     filter_comparison_dataframe,
     normalize_comparison_dataframe,
     read_comparison_table,
 )
 
+if TYPE_CHECKING:
+    from gbdraw.configurators import BlastMatchConfigurator
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +118,7 @@ def normalize_conservation_reference(value: object | None) -> ConservationRefere
     normalized = str(value or "auto").strip().lower()
     if normalized not in {"query", "subject", "auto"}:
         raise ValidationError("conservation_reference must be one of: query, subject, auto")
-    return normalized  # type: ignore[return-value]
+    return cast(ConservationReferenceMode, normalized)
 
 
 def empty_normalized_conservation_hits() -> DataFrame:
@@ -123,12 +126,14 @@ def empty_normalized_conservation_hits() -> DataFrame:
 
 
 def _default_label(source_index: int, path: "str | ConservationSearchResult | None") -> str:
+    """The file name without its last extension (D-03), as for a FASTA ring and in the Web."""
+
     if isinstance(path, ConservationSearchResult):
         path = path.name
     if path:
         basename = os.path.basename(str(path))
         if basename:
-            return basename
+            return comparison_file_stem(basename).strip() or basename
     return f"Conservation {int(source_index) + 1}"
 
 
@@ -142,6 +147,25 @@ def normalize_conservation_color(value: object | None) -> str | None:
         raise ValidationError(f"Invalid conservation color {text!r}. Use an SVG color name or #RRGGBB.") from exc
 
 
+def _default_conservation_color(value: object | None, leaf: str) -> str:
+    """A configured default ring color: a config-accepted value this domain rejects names its leaf."""
+
+    path = f"objects.conservation.{leaf}"
+    try:
+        color = normalize_conservation_color(value)
+    except ValidationError as exc:
+        raise ValidationError(
+            f"{path} {str(value).strip()!r} cannot color a conservation ring. Use an SVG color name or #RRGGBB.",
+            diagnostic={"code": "INPUT_INVALID", "reason": "COLOR", "configPath": path},
+        ) from exc
+    if color is None:
+        raise ValidationError(
+            f"{path} must be a color.",
+            diagnostic={"code": "INPUT_INVALID", "reason": "COLOR", "configPath": path},
+        )
+    return color
+
+
 def conservation_track_gradient_colors(
     track_color: object | None,
     *,
@@ -150,21 +174,24 @@ def conservation_track_gradient_colors(
 ) -> tuple[str, str]:
     normalized_track_color = normalize_conservation_color(track_color)
     if normalized_track_color is None:
-        return normalize_hex_color(default_min_color), normalize_hex_color(default_max_color)
+        return (
+            _default_conservation_color(default_min_color, "min_color"),
+            _default_conservation_color(default_max_color, "max_color"),
+        )
     return tint_color(normalized_track_color), normalized_track_color
 
 
-def _filter_normalized_dataframe(dataframe: DataFrame, blast_config: object) -> DataFrame:
+def _filter_normalized_dataframe(dataframe: DataFrame, blast_config: BlastMatchConfigurator) -> DataFrame:
     df = dataframe.copy()
     # Keep the original source-row identity through filtering and paint-order sorting.
     df["source_hit_index"] = range(len(df))
-    filtered = filter_comparison_dataframe(df, blast_config)  # type: ignore[arg-type]
+    filtered = filter_comparison_dataframe(df, blast_config)
     return filtered.loc[:, [*COMPARISON_COLUMNS, "source_hit_index"]].reset_index(drop=True)
 
 
 def _load_conservation_file(
     path: "str | ConservationSearchResult",
-    blast_config: object,
+    blast_config: BlastMatchConfigurator,
 ) -> tuple[DataFrame | None, str | None]:
     try:
         if isinstance(path, ConservationSearchResult):
@@ -221,7 +248,7 @@ def load_conservation_sources(
         if path is not None:
             frame, reason = _load_conservation_file(
                 path if isinstance(path, ConservationSearchResult) else str(path),
-                blast_config,
+                cast("BlastMatchConfigurator", blast_config),
             )
             if frame is not None:
                 valid_frames.append(frame)
@@ -234,7 +261,7 @@ def load_conservation_sources(
                 valid_frames.append(
                     _filter_normalized_dataframe(
                         normalize_comparison_dataframe(dataframes[source_index]),
-                        blast_config,
+                        cast("BlastMatchConfigurator", blast_config),
                     )
                 )
             except ValidationError as exc:
@@ -325,7 +352,7 @@ def resolve_conservation_reference_side(
 ) -> ConservationReferenceSide | None:
     mode = normalize_conservation_reference(reference)
     if mode in {"query", "subject"}:
-        return mode  # type: ignore[return-value]
+        return mode
 
     df = source.dataframe
     if df is None or df.empty:

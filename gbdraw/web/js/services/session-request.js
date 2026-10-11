@@ -1,23 +1,36 @@
-import { writeCanonicalRecordReverseComplement } from '../app/record-display-options.js';
-import { canonicalFeaturePlacements } from './feature-placement.js';
-export { canonicalFeaturePlacements } from './feature-placement.js';
-import { buildDefaultColorOverrideTsv, normalizePaletteColors } from '../app/color-utils.js';
+// @ts-check
+import { writeCanonicalRecordReverseComplement } from './record-display-model.js';
 import {
+  canonicalFeatureOverrides,
+  canonicalFeaturePlacements,
+  featureDraftMap,
+  featureIdentityKeyOf,
+  requestFeatureOverrides,
+  requestFeaturePlacements
+} from './feature-placement.js';
+import { resultRenderedFeatures } from './feature-catalog.js';
+export { canonicalFeaturePlacements } from './feature-placement.js';
+import { buildDefaultColorOverrideTsv, normalizePaletteColors } from '../utils/color-utils.js';
+import {
+  EDITOR_TABLE_OPTIONS,
+  editorTableRef,
   parseColorTable,
   parsePriorityRules,
   parseSpecificRules,
   parseWhitelistRules,
+  serializeLabelWhitelistRules,
+  serializeQualifierPriorityRules,
   serializeSpecificRules
-} from '../app/file-imports.js';
+} from './file-imports.js';
 import {
-  buildLabelOverrideTsv,
+  buildBulkLabelProjection,
   parseLabelOverrideTsv,
   serializeLabelOverrideRows
-} from '../app/feature-editor/label-override-table.js';
+} from './label-override-table.js';
 import {
   parseFeatureVisibilityRules,
   serializeFeatureVisibilityRules
-} from '../app/feature-visibility.js';
+} from './feature-visibility.js';
 import {
   applyCircularGeometryShortcuts,
   buildCircularTrackSlotPayload,
@@ -29,60 +42,62 @@ import {
   migrateLegacyCircularTrackSlotSpec,
   normalizeCircularTrackSlot,
   parseCircularTrackSlotSpecs
-} from '../app/circular-track-slots.js';
-import { countGenBankRecords } from '../app/genbank-header.js';
-import { projectCircularMeasureDraft } from '../app/circular-track-slots/measure-editor.js';
+} from './circular-track-slot-model.js';
+import { countGenBankRecords } from './genbank-header.js';
+import { downloadSafeName } from '../utils/download-names.js';
+import { projectCircularMeasureDraft } from './circular-track-measure.js';
 import {
   buildLinearTrackSlotPayload,
   LINEAR_TRACK_RENDERERS,
   LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   migrateLinearTrackSlotsToCurrentSchema,
   parseLinearTrackSlotSpecs
-} from '../app/linear-track-slots.js';
+} from './linear-track-slot-model.js';
 import {
   isRecordMajorDepthFileMatrix,
   normalizeRecordMajorDepthFileRows,
   parseDepthTrackIndexIdentity
-} from '../app/depth-track-state.js';
+} from './depth-track-state.js';
 import {
   buildDisambiguatedRecordEntries,
   resolveCircularRequestRecordSet,
   resolveDisambiguatedRecordSelection
-} from '../app/record-options.js';
+} from './record-options.js';
+import { circularRecordRequestKey, circularSingleRecordKey } from './record-draw-selection.js';
 import {
   orderedConservationSources,
   orderedOptionalConservationFiles
-} from '../app/conservation-series.js';
+} from './conservation-series.js';
 import {
   resolveLinearRecordEffectiveDefinition,
   resolveLinearRecordEffectiveSubtitle
-} from '../app/linear-sources.js';
+} from './linear-sources.js';
 import {
   linearRecordLayoutHasSharedRow,
   resolveEffectiveLinearRecordRows
-} from '../app/linear-record-layout.js';
-import { resolveLinearLabelVisibility } from '../app/linear-label-visibility.js';
+} from './linear-record-layout.js';
+import { resolveLinearLabelVisibility } from './linear-label-visibility.js';
 import {
   assertValidCustomTrackPlan,
   parseOptionalPixel,
   validateCustomTrackPlan,
   validateTrackSlotBindingInvariants
-} from '../app/track-slot-validation.js';
-import { annotationOptionsPayload, normalizeAnnotationSets } from '../app/annotations/state.js';
+} from './track-slot-validation.js';
+import { annotationOptionsPayload, draftAnnotationSetsOfRequest } from './annotation-state.js';
 import { classifyOptionalNumber, classifyOptionalPositiveNumber, projectOptionalNumber } from '../utils/optional-positive-number.js';
-import { diagnosticError } from './error-normalization.js';
+import { SESSION_TABLE_LABELS, diagnosticError, normalizeCaughtError } from '../utils/error-normalization.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
 import {
   arrowHeadLengthRatioForState,
   defaultFeatureRendering,
   normalizeArrowHeadLengthRatio,
   normalizeArrowShaftWidthRatio,
-  normalizeFeatureRenderingMap,
-  visibleFeatureUnderlaysForState
+  normalizeFeatureRenderingMap
 } from '../utils/feature-rendering.js';
 import {
   comparisonFiltersForMode,
   effectiveLinearAxisColor,
+  isModeProfileDefault,
   MODE_DEFAULT_FEATURE_TYPES,
   modeProfile,
   resolveComparisonThresholds,
@@ -92,7 +107,7 @@ import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import {
   createDefaultLayoutPreferences,
   updateActiveLayoutPreference
-} from '../app/layout-preferences.js';
+} from './layout-preferences.js';
 import {
   migratePersistedCircularMultiRecordSizeMode,
   migratePersistedLinearLabelPlacement,
@@ -117,12 +132,12 @@ import {
   requireCurrentProteinBlastpMaxHits,
   requireCurrentProteinBlastpMode,
   requireCurrentWebStateFieldNames
-} from '../app/current-option-values.js';
+} from './current-option-values.js';
 import {
   normalizeCollinearAnchorMode,
   normalizeCollinearSearchScope,
   normalizeOrthogroupMembershipMode
-} from '../app/losat-normalization.js';
+} from './losat-normalization.js';
 import {
   canonicalComparisonResourceKind,
   isResourceBackedCanonicalComparison,
@@ -134,7 +149,6 @@ import {
   bytesToText,
   getSessionResourceSource,
   readFileText,
-  textToBase64,
   textToBytes
 } from './file-content-cache.js';
 import {
@@ -144,7 +158,8 @@ import {
   createSessionResourceFileView,
   validateWebFileBindings
 } from './session-resource-backing.js';
-import { normalizeLinearComparisonPlan } from '../app/linear-comparisons.js';
+import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
+import { createDefaultLosatExecution } from './session-active-config-contract.js';
 import {
   getResourcePayloadOwner,
   setResourcePayloadOwner
@@ -153,11 +168,44 @@ import { sha256Hex } from './byte-utils.js';
 import { cloneJsonData } from './json-clone.js';
 import { isCanonicalResourceReferenceField } from './canonical-resource-references.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
-import { recordDisplayKey, requestedRecordTransform } from '../app/record-display-options.js';
+import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } from './record-display-model.js';
 
-export const CANONICAL_REQUEST_SCHEMA = 8;
+/** @import { SessionResourceSource } from './session-resources.js' */
+
+// The drawing a request reads its settings and edits from: a `DrawingState`
+// (state.js), Generate's drawing with the rules it admits, or a Gallery
+// Session's (`buildCanonicalRequestState`). Project inputs, the mode and the
+// generated artifacts still come from `state`.
+/** @typedef {Record<string, any>} RequestDrawing */
+
+export const CANONICAL_REQUEST_SCHEMA = 9;
+/**
+ * The canonical render request of the current schema (the writer format only;
+ * readers take unvalidated data, R14). Python owns the option field set (R7),
+ * so `diagramOptions` is open; the top-level fields equal
+ * `_TOP_LEVEL_FIELDS_V5` in `gbdraw/session_request_codec.py` (a pytest checks
+ * this list).
+ * @typedef {object} CanonicalRenderRequest
+ * @property {number} schema
+ * @property {string} mode
+ * @property {Record<string, any>[]} records
+ * @property {Record<string, any>} diagramOptions
+ * @property {Record<string, any>} layout
+ * @property {Record<string, any>[]} comparisons
+ * @property {Record<string, any> | Record<string, any>[]} output
+ * @property {string} grouping
+ */
+/**
+ * What the request writer returns and the session stores beside the request:
+ * the encoded resources by id and the Web-only file metadata.
+ * @typedef {object} CanonicalRenderEnvelope
+ * @property {CanonicalRenderRequest} renderRequest
+ * @property {Record<string, any>} resources
+ * @property {Record<string, any>} webFiles
+ */
+const FEATURE_OVERRIDE_SCHEMA = 9;
 const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = new Set([
-  1, 2, 5, 6, 7, CANONICAL_REQUEST_SCHEMA
+  1, 2, 5, 6, 7, 8, CANONICAL_REQUEST_SCHEMA
 ]);
 
 const requireExactCanonicalKeys = (value, keys, path) => {
@@ -298,6 +346,49 @@ const canonicalRecordTranslations = (value, recordKeys, path, { requireCoverage 
   return translations;
 };
 
+// The Linear Accession and Length visibility a committed request resolved,
+// by the `adv` key that selects it; null when the request is not Linear.
+/**
+ * @param {Record<string, any> | null} renderRequest
+ * @returns {Record<string, boolean | null>}
+ */
+export const linearDefinitionVisibilityOf = (renderRequest) => {
+  const overrides = renderRequest?.mode === 'linear'
+    ? renderRequest.diagramOptions?.configOverrides || {}
+    : {};
+  /** @param {string} path @returns {boolean | null} */
+  const read = (path) => (typeof overrides[path] === 'boolean' ? overrides[path] : null);
+  return {
+    linear_accession_visibility: read(CONFIG_OVERRIDE_PATHS.linearDefinitionShowAccession),
+    linear_length_visibility: read(CONFIG_OVERRIDE_PATHS.linearDefinitionShowLength)
+  };
+};
+
+// E1: the similarity alignment plan and record translations of a committed
+// Linear request, admitted with the rules the request projection applies;
+// Session Load takes them from the Linear Result set wherever it sits.
+/** @param {Record<string, any>} renderRequest */
+export const canonicalLinearRecordLayout = (renderRequest) => {
+  const layout = renderRequest?.layout || {};
+  if (renderRequest?.mode !== 'linear' || renderRequest.schema < 8 || Object.keys(layout).length === 0) {
+    return { similarityAlignment: null, recordTranslations: [] };
+  }
+  const recordKeys = (Array.isArray(renderRequest.records) ? renderRequest.records : [])
+    .map((/** @type {Record<string, any>} */ record, /** @type {number} */ index) => requireCanonicalText(
+      record?.recordKey, `renderRequest.records[${index}].recordKey`
+    ));
+  const similarityAlignment = canonicalSimilarityAlignment(
+    layout.similarityAlignment ?? null, recordKeys, 'renderRequest.layout.similarityAlignment'
+  );
+  return {
+    similarityAlignment,
+    recordTranslations: canonicalRecordTranslations(
+      layout.recordTranslations ?? [], recordKeys, 'renderRequest.layout.recordTranslations',
+      { requireCoverage: similarityAlignment !== null }
+    )
+  };
+};
+
 const canonicalRecordDisplay = (raw) => {
   if (!raw || Object.keys(raw).sort().join(',') !== 'isCircular,startCoordinate'
     || (raw.isCircular !== null && typeof raw.isCircular !== 'boolean')
@@ -429,8 +520,9 @@ const labelScopeOverride = (form, circular) => (circular
   ? ({ none: 'none', out: 'outer', both: 'both' }[form.labels_mode] || 'none')
   : form.show_labels_linear);
 
-const labelBlacklistOverride = (state) => (state.filterMode.value === 'Blacklist'
-  ? String(state.manualBlacklist.value || '').split(/[,\n]/)
+/** @param {RequestDrawing} drawing */
+const labelBlacklistOverride = (drawing) => (drawing.filterMode.value === 'Blacklist'
+  ? String(drawing.manualBlacklist.value || '').split(/[,\n]/)
     .map((keyword) => keyword.trim()).filter(Boolean)
   : []);
 
@@ -443,6 +535,9 @@ const LINEAR_DEFINITION_STYLE_PATHS = Object.freeze(
   )
 );
 const LINEAR_DEFINITION_STYLE_FIELDS = Object.freeze(['font_size', 'font_weight', 'fill']);
+const LINEAR_DEFINITION_WEIGHT_PATHS = new Set(
+  Object.values(LINEAR_DEFINITION_STYLE_PATHS).map((prefix) => `${prefix}.font_weight`)
+);
 
 const CIRCULAR_ONLY_GUI_CONFIG_OVERRIDE_PATHS = new Set([
   CONFIG_OVERRIDE_PATHS.circularAxisStrokeColor,
@@ -486,9 +581,11 @@ export const managedConfigOverridePathsForMode = (mode) => {
   if (!['circular', 'linear'].includes(mode)) {
     throw new Error(`Unsupported config override mode: ${String(mode)}.`);
   }
+  /** @type {Set<string>} */
   const excluded = mode === 'circular'
     ? LINEAR_ONLY_GUI_CONFIG_OVERRIDE_PATHS
     : CIRCULAR_ONLY_GUI_CONFIG_OVERRIDE_PATHS;
+  /** @type {Set<string>} */
   const paths = new Set(
     Object.values(CONFIG_OVERRIDE_PATHS).filter((path) => !excluded.has(path))
   );
@@ -527,14 +624,13 @@ const legacyFlatConfigKey = (semanticName) => (
     .toLowerCase()
 );
 
-const safePrefix = (value, fallback = 'out') => {
-  const normalized = String(value || '').trim().replace(/[\\/]+/g, '_');
-  return normalized && normalized !== '.' && normalized !== '..' ? normalized : fallback;
-};
-
+// FL-10: the typed Output Prefix goes to Python as typed (Python strips it as
+// this does); Python rejects a value that is not one portable file name
+// (INPUT_INVALID, field Output Prefix). A name derived from a record ID is
+// made safe here, by the browser's download-name rule (utils/download-names.js).
 const explicitOutputPrefix = (value) => {
-  const raw = String(value || '').trim();
-  return raw ? safePrefix(raw) : null;
+  const raw = String(value ?? '').trim();
+  return raw || null;
 };
 
 const circularRecordId = (record, index) => (
@@ -549,7 +645,7 @@ const resolveCircularBatchPrefixes = (records, explicitPrefix) => {
   const prefixes = [];
   const used = new Set();
   records.forEach((record, index) => {
-    const base = safePrefix(circularRecordId(record, index));
+    const base = downloadSafeName(circularRecordId(record, index), 'out');
     let candidate = base;
     let suffix = 2;
     while (used.has(candidate)) {
@@ -569,6 +665,7 @@ const renderOutputPayload = (prefix) => ({
   interactiveMetadataPolicy: 'auto'
 });
 
+/** @param {Record<string, any>} thresholds */
 const projectComparisonThresholds = ({ evalue, bitscore, identity, alignmentLength }) => ({
   evalue: Number(evalue), bitscore, identity, alignmentLength
 });
@@ -577,7 +674,7 @@ const projectComparisonThresholds = ({ evalue, bitscore, identity, alignmentLeng
 // documented fallback; projected render values use projectOptionalNumber.
 const integerSettingOr = (value, fallback, minimum) => {
   const { value: numeric } = classifyOptionalNumber(value);
-  return Number.isInteger(numeric) && numeric >= minimum ? numeric : fallback;
+  return typeof numeric === 'number' && Number.isInteger(numeric) && numeric >= minimum ? numeric : fallback;
 };
 
 // A record label or subtitle is saved resolved. Sessions written since file
@@ -590,21 +687,25 @@ const resolveSavedRecordOverride = ({ savedOverride, fileDefault, resolved }) =>
   return resolved === fileDefault ? '' : resolved;
 };
 
+// A Depth series that no record gives a file (TK-06). The one producer of
+// this failure for the request builder and the Session projections.
+/** @param {number} seriesIndex */
+const depthSeriesWithoutSource = (seriesIndex) => (
+  diagnosticError('DEPTH_INVALID', { seriesIndex, reason: 'DEPTH_SERIES_SOURCE' })
+);
+
 const validateProjectedDepthSources = (depthRows, logicalTrackCount) => {
   for (let trackIndex = 0; trackIndex < logicalTrackCount; trackIndex += 1) {
     const hasSource = depthRows.some((row) => (
       Array.isArray(row) && Boolean(row[trackIndex]?.resourceId)
     ));
-    if (!hasSource) {
-      throw new Error(
-        `Depth series #${trackIndex + 1} (logical track index ${trackIndex}) has no source in any record.`
-      );
-    }
+    if (!hasSource) throw depthSeriesWithoutSource(trackIndex);
   }
 };
 
 const normalizeResourceName = (resourceId, name) => {
-  const basename = String(name || 'resource.dat').replace(/\\/g, '/').split('/').pop();
+  // split() always returns at least one element, so pop() is a string.
+  const basename = /** @type {string} */ (String(name || 'resource.dat').replace(/\\/g, '/').split('/').pop());
   const safe = basename.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^[._]+|[._]+$/g, '');
   const prefix = `${resourceId}-`;
   let leaf = safe || 'resource.dat';
@@ -615,10 +716,11 @@ const normalizeResourceName = (resourceId, name) => {
 };
 
 const normalizeOriginalResourceName = (name) => {
-  const basename = String(name || '')
+  // split() always returns at least one element, so pop() is a string.
+  const basename = /** @type {string} */ (String(name || '')
     .replace(/\\/g, '/')
     .split('/')
-    .pop()
+    .pop())
     .replace(/[\u0000-\u001f\u007f]/g, '')
     .trim();
   if (!basename || basename === '.' || basename === '..') return '';
@@ -649,12 +751,16 @@ const createResourceBuilder = ({ encode = true } = {}) => {
       throw new Error(`Canonical resource ${resourceId} is missing.`);
     }
     if (resources[resourceId]) return resourceId;
-    const adoptedSource = getSessionResourceSource(entry);
+    const adoptedSource = /** @type {SessionResourceSource | null} */ (
+      getSessionResourceSource(entry)
+    );
     const encodedEntry = adoptedSource?.descriptor || entry;
     const effectiveKind = String(encodedEntry.kind || kind);
     const kindResourceIds = fileResourceIds.get(effectiveKind) || new WeakMap();
     const owner = getResourcePayloadOwner(entry);
-    const identity = getSessionResourceSource(owner)?.descriptor || owner;
+    const identity = /** @type {SessionResourceSource | null} */ (
+      getSessionResourceSource(owner)
+    )?.descriptor || owner;
     const existingResourceId = kindResourceIds.get(identity);
     if (existingResourceId) return existingResourceId;
     const descriptor = {
@@ -731,6 +837,7 @@ const createResourceBuilder = ({ encode = true } = {}) => {
     return resourceId;
   };
 
+  /** @param {unknown} [columns] */
   const addCanonicalTable = (resourceId, rows, columns = null) => {
     if (resources[resourceId]) return resourceId;
     const normalizedRows = Array.isArray(rows)
@@ -797,9 +904,11 @@ const createResourceBuilder = ({ encode = true } = {}) => {
 };
 
 const fileRef = (resourceId) => ({ resourceId, representation: 'file' });
+// The table inputs whose committed file a rebuilt request keeps (`publicationFileRef`).
+const REQUEST_TABLE_FILE_SLOTS = Object.freeze(['d_color', 't_color', 'whitelist', 'qualifier_priority']);
 const publicationFileRef = (resources, files, key, fallbackId) => {
   if (!files[key]) return null;
-  const source = getSessionResourceSource(files[key]);
+  const source = /** @type {SessionResourceSource | null} */ (getSessionResourceSource(files[key]));
   return {
     resourceId: resources.addFile(source?.resourceId || fallbackId, fallbackId, files[key]),
     representation: source?.descriptor?.kind === 'canonical-tsv' ? 'canonicalTsv' : 'file'
@@ -868,17 +977,11 @@ const circularRegionPayload = (form, record) => {
   };
 };
 
-const circularRecordKey = (record) => {
-  const preserved = String(record?.recordKey || '').trim();
-  if (preserved) return preserved;
-  const recordId = safePrefix(record?.recordId, 'record');
-  const selector = safePrefix(record?.selector, '1');
-  return `circular-${recordId}-${selector}`;
-};
-
 const linearRegionPayload = (seq) => {
-  const start = projectOptionalNumber(seq?.region_start, { field: 'region' });
-  const end = projectOptionalNumber(seq?.region_end, { field: 'region' });
+  // projectOptionalNumber yields null or a finite number: the only arm without
+  // a number-or-null value is 'invalid', which it throws on.
+  const start = /** @type {number | null} */ (projectOptionalNumber(seq?.region_start, { field: 'region' }));
+  const end = /** @type {number | null} */ (projectOptionalNumber(seq?.region_end, { field: 'region' }));
   if (start === null && end === null) return null;
   if (start === null || end === null) {
     throw diagnosticError('REGION_INVALID', { field: 'region', reason: 'BOTH_ENDPOINTS' });
@@ -891,15 +994,27 @@ const linearRegionPayload = (seq) => {
   };
 };
 
-const buildRecords = ({ state, filesData, resources }) => {
+// The Linear card fields that hold a request record's selection, crop, and
+// orientation.
+const linearSeqRecordFields = (record) => ({
+  region_record_id: canonicalRecordSelector(record) || '',
+  region_start: record?.region?.start ?? null,
+  region_end: record?.region?.end ?? null,
+  region_reverse: Boolean(record?.region?.reverseComplement || record?.presentation?.reverseComplement)
+});
+
+/**
+ * @param {{ state: any, drawing: RequestDrawing, filesData: any, resources: any }} input
+ */
+const buildRecords = ({ state, drawing, filesData, resources }) => {
   if (state.mode.value === 'linear') {
-    const resolvedRows = resolveEffectiveLinearRecordRows(
+    const resolvedRows = /** @type {Record<string, any>[]} */ (resolveEffectiveLinearRecordRows(
       filesData.linearSeqs,
-      state.linearRecordRows,
-      { enabled: Boolean(state.linearRecordLayoutEnabled?.value) }
-    );
+      drawing.linearRecordRows,
+      { enabled: Boolean(drawing.linearRecordLayoutEnabled?.value) }
+    ));
     const canonicalCardinalityByUid = new Map(
-      (state.linearRecordRows || []).map((entry) => [entry.uid, entry.canonicalCardinality])
+      (drawing.linearRecordRows || []).map((entry) => [entry.uid, entry.canonicalCardinality])
     );
     const records = (filesData.linearSeqs || []).map((seq, index) => {
       const source = state.lInputType.value === 'gff'
@@ -925,10 +1040,10 @@ const buildRecords = ({ state, filesData, resources }) => {
           ...presentationPayload({
             label: resolveLinearRecordEffectiveDefinition(seq),
             subtitle: resolveLinearRecordEffectiveSubtitle(seq),
-            gridRow: state.linearRecordLayoutEnabled?.value
+            gridRow: drawing.linearRecordLayoutEnabled?.value
               ? (resolvedRows[index]?.row ?? null)
               : null,
-            gridColumn: state.linearRecordLayoutEnabled?.value
+            gridColumn: drawing.linearRecordLayoutEnabled?.value
               ? (resolvedRows[index]?.canonicalColumn ?? null)
               : null
           }),
@@ -936,7 +1051,7 @@ const buildRecords = ({ state, filesData, resources }) => {
         }
       };
     });
-    return { records, circularSourceIndexes: null, circularSourceCount: null };
+    return { records, circularSourceIndexes: null, circularSourceCount: null, circularPresentedCount: null };
   }
 
   if (Array.isArray(filesData.circularRecords) && filesData.circularRecords.length > 0) {
@@ -959,14 +1074,14 @@ const buildRecords = ({ state, filesData, resources }) => {
     });
     const singleJourney = (
       records.length === 1 &&
-      !state.form.multi_record_canvas &&
-      state.adv.circular_grouping_intent !== 'batch'
+      !drawing.form.multi_record_canvas &&
+      drawing.adv.circular_grouping_intent !== 'batch'
     );
     if (singleJourney) {
       const record = records[0];
       const savedSelector = canonicalRecordSelector(record);
       const requestedSelector = String(
-        state.form.circular_record_selector || savedSelector || ''
+        drawing.form.circular_record_selector || savedSelector || ''
       ).trim();
       const knownRecords = (Array.isArray(state.circularRecordList.value)
         ? state.circularRecordList.value
@@ -993,13 +1108,13 @@ const buildRecords = ({ state, filesData, resources }) => {
         selector: requestedSelector,
         recordId: requestedSelector
       };
-      const region = circularRegionPayload(state.form, selected);
+      const region = circularRegionPayload(drawing.form, selected);
       records[0] = {
         ...record,
-        recordKey: record.recordKey || circularRecordKey(selected),
+        recordKey: record.recordKey || circularSingleRecordKey(selected),
         selector: region ? null : selectorPayload(selected.value),
         region,
-        presentation: circularPresentationPayload(state.form, {
+        presentation: circularPresentationPayload(drawing.form, {
           hasRegion: Boolean(region)
         })
       };
@@ -1007,7 +1122,8 @@ const buildRecords = ({ state, filesData, resources }) => {
     return {
       records,
       circularSourceIndexes: records.map((_, index) => index),
-      circularSourceCount: records.length
+      circularSourceCount: records.length,
+      circularPresentedCount: records.length
     };
   }
   const source = state.cInputType.value === 'gff'
@@ -1020,27 +1136,31 @@ const buildRecords = ({ state, filesData, resources }) => {
         kind: 'genbank',
         resourceId: resources.addFile('record-1-genbank', 'genbank', filesData.c_gb)
       };
-  const recordSet = resolveCircularRequestRecordSet({
+  const recordSet = resolveCircularRequestRecordSet(/** @type {Record<string, any>} */ ({
     records: state.circularRecordList.value,
-    selector: state.form.circular_record_selector,
-    multiRecordCanvas: state.form.multi_record_canvas,
-    groupingIntent: state.adv.circular_grouping_intent
-  });
+    selector: drawing.form.circular_record_selector,
+    multiRecordCanvas: drawing.form.multi_record_canvas,
+    groupingIntent: drawing.adv.circular_grouping_intent,
+    recordsOff: drawing.recordsOff
+  }));
   if (recordSet.selectionFailure) throw diagnosticError('RECORD_SELECTION', { reason: recordSet.selectionFailure });
   const { recordSelectors } = recordSet;
   const selectedRecords = recordSet.records.length > 0 ? recordSet.records : [null];
+  // The offered records decide the journey, so one ON record of several
+  // stays a batch of one or a grid of one.
   const singleJourney = (
-    selectedRecords.length === 1 &&
+    recordSet.presentedCount <= 1 &&
     recordSet.singlePresentation
   );
   const records = selectedRecords.map((record, index) => {
     const region = singleJourney
-      ? circularRegionPayload(state.form, record)
+      ? circularRegionPayload(drawing.form, record)
       : null;
+    // A record keeps its key while others go OFF: `record-<file position>`.
     return {
       recordKey: singleJourney && record
-        ? circularRecordKey(record)
-        : `record-${index + 1}`,
+        ? circularSingleRecordKey(record)
+        : circularRecordRequestKey(Number.isInteger(record?.sourceIndex) ? record.sourceIndex : index),
       cardinality: 'exactly_one',
       source,
       selector: region
@@ -1048,7 +1168,7 @@ const buildRecords = ({ state, filesData, resources }) => {
         : selectorPayload(record?.value ?? record?.selector),
       region,
       presentation: singleJourney
-        ? circularPresentationPayload(state.form, { hasRegion: Boolean(region) })
+        ? circularPresentationPayload(drawing.form, { hasRegion: Boolean(region) })
         : presentationPayload()
     };
   });
@@ -1058,19 +1178,45 @@ const buildRecords = ({ state, filesData, resources }) => {
   return {
     records,
     circularSourceIndexes,
-    circularSourceCount: recordSelectors.length || records.length
+    circularSourceCount: recordSelectors.length || records.length,
+    circularPresentedCount: recordSet.presentedCount || records.length
   };
 };
 
+// The label rendering a Generate draws (OV-159): Auto while the mode shows no
+// labels or a Linear label sits above its feature. The draft keeps the
+// choice, so the control shows it again where it applies (R7).
+/**
+ * @param {Record<string, any>} form
+ * @param {Record<string, any>} adv
+ * @param {boolean} circular
+ * @param {string | null} linearLabelPlacement
+ */
+const effectiveLabelRendering = (form, adv, circular, linearLabelPlacement) => {
+  const labelsMode = circular
+    ? String((typeof form.labels_mode === 'string'
+      ? form.labels_mode
+      : (form.allow_inner_labels ? 'both' : (form.show_labels ? 'out' : 'none'))) || 'none').trim().toLowerCase()
+    : String(form.show_labels_linear || 'none');
+  if (labelsMode === 'none' || linearLabelPlacement === 'above_feature') return 'auto';
+  const normalized = String(adv.label_rendering || '').trim().toLowerCase();
+  return ['embedded_only', 'external_only'].includes(normalized) ? normalized : 'auto';
+};
+
+/**
+ * @param {Record<string, any>} state
+ * @param {RequestDrawing} drawing
+ */
 const buildConfigOverrides = (
   state,
+  drawing,
   {
-    depthRequested = Boolean(state.form.show_depth),
+    depthRequested = Boolean(drawing.form.show_depth),
     hasComparisonIntent = false,
     linearHasSharedRow = false
   } = {}
 ) => {
-  const { form, adv } = state;
+  const { form, adv } = drawing;
   const circular = state.mode.value === 'circular';
   // R7: a config leaf is projected literally; Python validates its domain.
   const leaf = (configPath, value) => projectOptionalNumber(value, { configPath });
@@ -1087,10 +1233,8 @@ const buildConfigOverrides = (
   if (comparisonHeight?.status === 'invalid') {
     throw diagnosticError('INPUT_INVALID', { field: 'match_height', reason: 'POSITIVE_OR_AUTO' });
   }
-  const linearAxisManaged = state.modeProfileStateManager?.isManaged?.(
-    adv,
-    'axis_stroke_color'
-  ) === true;
+  // An axis color still at the Linear default follows the ruler.
+  const linearAxisManaged = isModeProfileDefault('linear', 'axis_stroke_color', adv.axis_stroke_color);
   const linearAxisStrokeColor = circular
     ? null
     : effectiveLinearAxisColor({
@@ -1106,7 +1250,7 @@ const buildConfigOverrides = (
       normalizeArrowShaftWidthRatio(adv.arrow_shaft_width_ratio),
     [CONFIG_OVERRIDE_PATHS.blockStrokeColor]: adv.block_stroke_color || null,
     [CONFIG_OVERRIDE_PATHS.lineStrokeColor]: adv.line_stroke_color || null,
-    [CONFIG_OVERRIDE_PATHS.labelRendering]: adv.label_rendering || 'auto',
+    [CONFIG_OVERRIDE_PATHS.labelRendering]: effectiveLabelRendering(form, adv, circular, linearLabelPlacement),
     [CONFIG_OVERRIDE_PATHS.showGc]: circular ? !form.suppress_gc : Boolean(form.show_gc),
     [CONFIG_OVERRIDE_PATHS.showSkew]: circular
       ? !form.suppress_skew
@@ -1141,7 +1285,7 @@ const buildConfigOverrides = (
     [CONFIG_OVERRIDE_PATHS.depthShareAxis]: Boolean(adv.depth_share_axis),
     [CONFIG_OVERRIDE_PATHS.showScale]: form.show_scale !== false,
     [CONFIG_OVERRIDE_PATHS.scaleInterval]: leaf(CONFIG_OVERRIDE_PATHS.scaleInterval, adv.scale_interval),
-    [CONFIG_OVERRIDE_PATHS.labelBlacklist]: labelBlacklistOverride(state),
+    [CONFIG_OVERRIDE_PATHS.labelBlacklist]: labelBlacklistOverride(drawing),
     ...(circular
       ? {
           [CONFIG_OVERRIDE_PATHS.circularAxisStrokeColor]:
@@ -1192,7 +1336,10 @@ const buildConfigOverrides = (
           ...(hasComparisonIntent
             ? {
                 [CONFIG_OVERRIDE_PATHS.comparisonHeight]:
-                  comparisonHeight.status === 'auto' ? null : comparisonHeight.value,
+                  // hasComparisonIntent && !circular holds here, so comparisonHeight is set.
+                  /** @type {NonNullable<typeof comparisonHeight>} */ (comparisonHeight).status === 'auto'
+                    ? null
+                    : /** @type {NonNullable<typeof comparisonHeight>} */ (comparisonHeight).value,
                 [CONFIG_OVERRIDE_PATHS.pairwiseMatchStyle]: adv.pairwise_match_style
               }
             : {}),
@@ -1255,7 +1402,7 @@ const buildConfigOverrides = (
   const managedOverrides = Object.fromEntries(
     Object.entries(overrides).filter(([, value]) => value !== null && value !== undefined)
   );
-  const preservedOverrides = state.unmanagedConfigOverrides;
+  const preservedOverrides = drawing.unmanagedConfigOverrides;
   const plainPreservedOverrides = (
     preservedOverrides && typeof preservedOverrides === 'object' && !Array.isArray(preservedOverrides)
   )
@@ -1267,38 +1414,76 @@ const buildConfigOverrides = (
   };
 };
 
+/**
+ * Whether request `comparisons` are only the protein settings that the CLI
+ * writes without -b or a protein mode: disabled pipelines (mode `none`) with
+ * no pairs, which draw no comparison.
+ * @param {any[]} comparisons
+ */
+const drawsNoComparison = (comparisons) => comparisons.length > 0
+  && comparisons.every((comparison) => comparison?.kind === 'generatedProteinComparison'
+    && comparison.mode === 'none' && !comparison.pairs?.length);
+
+/** @type {Readonly<Record<string, boolean>>} */
 const ALL_GENERATED_TABLES = Object.freeze({
   colors: true, visibility: true, whitelist: true, priority: true, labelOverrides: true
 });
 
+// The label edits a request carries: the bulk label edits projected onto the
+// displayed Result's labels and the recorded label sources, as identity row
+// text, and the `* * label` rows of the rest (CW-02: built once per request).
+/**
+ * @param {Record<string, any>} state
+ * @param {RequestDrawing} drawing
+ */
+export const requestLabelProjection = (state, drawing) => {
+  const bulk = drawing.labelTextBulkOverrides || {};
+  if (Object.keys(bulk).length === 0) return { bulkLabelText: {}, rows: [] };
+  const displayed = resultRenderedFeatures(state);
+  const labelTargets = (state.editableLabels?.value || []).map((entry) => ({
+    identityKey: featureIdentityKeyOf(displayed?.get(String(entry?.featureId || '').trim())),
+    sourceText: entry?.sourceText
+  })).filter((target) => target.identityKey);
+  return buildBulkLabelProjection(bulk, { labelTargets, featureOverrides: drawing.featureOverrides });
+};
+
+/**
+ * @param {Record<string, any>} state
+ * @param {RequestDrawing} drawing
+ */
 const addGeneratedTableResources = (
-  state, resources, diagramOptions, tables = ALL_GENERATED_TABLES
+  state, drawing, resources, diagramOptions, tables = ALL_GENERATED_TABLES,
+  labelProjection = requestLabelProjection(state, drawing)
 ) => {
   recordStructuralMetric('generatedTableBuildCount');
-  if (tables.colors) addColorTableResources(state, resources, diagramOptions);
+  if (tables.colors) addColorTableResources(state, drawing, resources, diagramOptions);
   if (tables.visibility) {
-    const visibility = serializeFeatureVisibilityRules(state.featureVisibilityRules?.value || []);
+    const visibility = serializeFeatureVisibilityRules(drawing.featureVisibilityRules?.value || []);
     if (visibility.trim()) {
       diagramOptions.featureVisibilityTableFile = fileRef(resources.addText(
         'feature-visibility-table-file', 'feature-visibility-table-file', 'feature-visibility.tsv', visibility
       ));
     }
   }
-  if (tables.whitelist) addLabelWhitelistResource(state, resources, diagramOptions);
-  if (tables.priority) addQualifierPriorityResource(state, resources, diagramOptions);
-  if (tables.labelOverrides) addLabelOverrideResource(state, resources, diagramOptions);
+  if (tables.whitelist) addLabelWhitelistResource(state, drawing, resources, diagramOptions);
+  if (tables.priority) addQualifierPriorityResource(state, drawing, resources, diagramOptions);
+  if (tables.labelOverrides) addLabelOverrideResource(state, drawing, resources, diagramOptions, labelProjection);
 };
 
-const addColorTableResources = (state, resources, diagramOptions) => {
-  const paletteName = String(state.selectedPalette.value || 'default');
+/**
+ * @param {Record<string, any>} state
+ * @param {RequestDrawing} drawing
+ */
+const addColorTableResources = (state, drawing, resources, diagramOptions) => {
+  const paletteName = String(drawing.selectedPalette.value || 'default');
   const paletteColors = state.canonicalPublicationFiles && !state.canonicalPublicationFiles.d_color ? {}
-    : state.normalizePaletteColors(state.paletteDefinitions.value?.[paletteName]
+    : normalizePaletteColors(state.paletteDefinitions.value?.[paletteName]
       || state.paletteDefinitions.value?.default || {});
   const defaultColors = buildDefaultColorOverrideTsv({
-    colors: state.currentColors.value,
+    colors: drawing.currentColors.value,
     paletteColors
   });
-  const specificColors = serializeSpecificRules(state.manualSpecificRules);
+  const specificColors = serializeSpecificRules(drawing.manualSpecificRules);
   const publicationFiles = state.canonicalPublicationFiles || {};
   const defaultColorsFile = publicationFileRef(
     resources, publicationFiles, 'd_color', 'colors-default-colors-file'
@@ -1322,32 +1507,34 @@ const addColorTableResources = (state, resources, diagramOptions) => {
   };
 };
 
-const addLabelWhitelistResource = (state, resources, diagramOptions) => {
+/**
+ * @param {Record<string, any>} state
+ * @param {RequestDrawing} drawing
+ */
+const addLabelWhitelistResource = (state, drawing, resources, diagramOptions) => {
   const publicationFiles = state.canonicalPublicationFiles || {};
   const preservedWhitelist = publicationFileRef(
     resources, publicationFiles, 'whitelist', 'label-whitelist-file'
   );
   if (preservedWhitelist) {
     diagramOptions.labelWhitelistFile = preservedWhitelist;
-  } else if (state.filterMode.value === 'Whitelist' && state.manualWhitelist.length > 0) {
-    const whitelist = state.manualWhitelist
-      .filter((rule) => rule?.feat && rule?.qual)
-      .map((rule) => `${rule.feat}\t${rule.qual}\t${rule.key || ''}`)
-      .join('\n');
+  } else if (drawing.filterMode.value === 'Whitelist' && drawing.manualWhitelist.length > 0) {
+    const whitelist = serializeLabelWhitelistRules(drawing.manualWhitelist);
     if (whitelist) {
       diagramOptions.labelWhitelistFile = fileRef(resources.addText(
-        'label-whitelist-file', 'label-whitelist-file', 'label-whitelist.tsv', `${whitelist}\n`
+        'label-whitelist-file', 'label-whitelist-file', 'label-whitelist.tsv', whitelist
       ));
     }
   }
 };
 
-const addQualifierPriorityResource = (state, resources, diagramOptions) => {
+/**
+ * @param {Record<string, any>} state
+ * @param {RequestDrawing} drawing
+ */
+const addQualifierPriorityResource = (state, drawing, resources, diagramOptions) => {
   const publicationFiles = state.canonicalPublicationFiles || {};
-  const priority = state.manualPriorityRules
-    .filter((rule) => rule?.feat && rule?.order)
-    .map((rule) => `${rule.feat}\t${rule.order}`)
-    .join('\n');
+  const priority = serializeQualifierPriorityRules(drawing.manualPriorityRules);
   const priorityRef = publicationFileRef(
     resources, publicationFiles, 'qualifier_priority', 'qualifier-priority-file'
   );
@@ -1358,25 +1545,29 @@ const addQualifierPriorityResource = (state, resources, diagramOptions) => {
     ] = priorityRef;
   } else if (priority) {
     diagramOptions.qualifierPriorityFile = fileRef(resources.addText(
-      'qualifier-priority-file', 'qualifier-priority-file', 'qualifier-priority.tsv', `${priority}\n`
+      'qualifier-priority-file', 'qualifier-priority-file', 'qualifier-priority.tsv', priority
     ));
   }
 };
 
-const addLabelOverrideResource = (state, resources, diagramOptions) => {
-  // Generate supplies the table it already built for this operation (CW-02).
-  const labelOverrideTsv = serializeLabelOverrideRows(state.canonicalLabelOverrideRows?.value)
-    || (typeof state.generatedLabelOverrideTsv === 'string' ? state.generatedLabelOverrideTsv
-      : buildLabelOverrideTsv(
-        state.labelTextFeatureOverrides,
-        state.labelTextBulkOverrides,
-        {
-          editableLabels: state.editableLabels?.value || [],
-          extractedFeatures: state.extractedFeatures.value,
-          featureOverrideSources: state.labelTextFeatureOverrideSources,
-          visibilityOverrides: state.labelVisibilityOverrides
-        }
-      ).tsv);
+// The label table carries rules only: a saved table, else the bulk label edits
+// no displayed label resolves. Per-feature label edits are `featureOverrides`.
+/**
+ * @param {Record<string, any>} state
+ * @param {RequestDrawing} drawing
+ * @param {{ rows: string[] }} [labelProjection]
+ */
+export const requestLabelTableTsv = (state, drawing, labelProjection = requestLabelProjection(state, drawing)) => (
+  serializeLabelOverrideRows(drawing.canonicalLabelOverrideRows?.value)
+    || (labelProjection.rows.length ? `${labelProjection.rows.join('\n')}\n` : '')
+);
+
+/**
+ * @param {Record<string, any>} state
+ * @param {RequestDrawing} drawing
+ */
+const addLabelOverrideResource = (state, drawing, resources, diagramOptions, labelProjection) => {
+  const labelOverrideTsv = requestLabelTableTsv(state, drawing, labelProjection);
   if (labelOverrideTsv) {
     diagramOptions.labelOverrideFile = fileRef(resources.addText(
       'label-override-file', 'label-override-file', 'label-overrides.tsv', labelOverrideTsv
@@ -1399,7 +1590,11 @@ const logicalDepthTrackCountForRequest = ({ state, filesData, recordCount }) => 
   ), 0);
 };
 
-const buildDepthResources = ({ state, filesData, resources, diagramOptions, recordCount }) => {
+/**
+ * @param {{ state: Record<string, any>, drawing: RequestDrawing, filesData: Record<string, any>,
+ *   resources: any, diagramOptions: Record<string, any>, recordCount: number }} input
+ */
+const buildDepthResources = ({ state, drawing, filesData, resources, diagramOptions, recordCount }) => {
   if (
     state.mode.value === 'circular' &&
     isRecordMajorDepthFileMatrix(filesData.c_depth) &&
@@ -1416,18 +1611,14 @@ const buildDepthResources = ({ state, filesData, resources, diagramOptions, reco
       `${state.mode.value === 'circular' ? 'Circular' : 'Linear'} Depth sources must contain one row per record (${recordCount}).`
     );
   }
-  const tracks = Array.isArray(state.adv.depth_tracks) ? state.adv.depth_tracks : [];
+  const tracks = Array.isArray(drawing.adv.depth_tracks) ? drawing.adv.depth_tracks : [];
   const logicalTrackCount = Math.max(
     tracks.length,
     ...rows.map((row) => row.length)
   );
   diagramOptions.depthTracks = Array.from({ length: logicalTrackCount }, (_, trackIndex) => {
     const sources = rows.map((row) => row[trackIndex] || null);
-    if (!sources.some(Boolean)) {
-      throw new Error(
-        `Depth series #${trackIndex + 1} (logical track index ${trackIndex}) has no source in any record.`
-      );
-    }
+    if (!sources.some(Boolean)) throw depthSeriesWithoutSource(trackIndex);
     const sharedSource = sources[0] && sources.every((source) => source === sources[0]);
     const sourceName = `depth-tracks-${trackIndex + 1}-source`;
     const source = sharedSource
@@ -1445,7 +1636,7 @@ const buildDepthResources = ({ state, filesData, resources, diagramOptions, reco
     return {
       source,
       label: String(track.label || (logicalTrackCount === 1 ? 'Depth' : `Depth ${trackIndex + 1}`)),
-      color: String(track.color || state.adv.depth_color || '#4A90E2'),
+      color: String(track.color || drawing.adv.depth_color || '#4A90E2'),
       height: state.mode.value === 'linear'
         ? projectOptionalNumber(track.height, { field: 'height', seriesIndex: trackIndex })
         : null,
@@ -1456,24 +1647,27 @@ const buildDepthResources = ({ state, filesData, resources, diagramOptions, reco
   });
 };
 
-const circularGeometryShortcutsForState = (state) => ({
-  featureWidth: state.adv.feature_width_circular,
-  depthWidth: state.adv.depth_width_circular,
-  gcContentWidth: state.adv.gc_content_width_circular,
-  gcContentRadius: state.adv.gc_content_radius_circular,
-  gcSkewWidth: state.adv.gc_skew_width_circular,
-  gcSkewRadius: state.adv.gc_skew_radius_circular
+/** @param {RequestDrawing} drawing */
+const circularGeometryShortcutsForState = (drawing) => ({
+  featureWidth: drawing.adv.feature_width_circular,
+  depthWidth: drawing.adv.depth_width_circular,
+  gcContentWidth: drawing.adv.gc_content_width_circular,
+  gcContentRadius: drawing.adv.gc_content_radius_circular,
+  gcSkewWidth: drawing.adv.gc_skew_width_circular,
+  gcSkewRadius: drawing.adv.gc_skew_radius_circular
 });
 
-const annotationSetIdsForState = (state) => (
-  (Array.isArray(state.annotationSets) ? state.annotationSets : [])
+/** @param {RequestDrawing} drawing */
+const annotationSetIdsForState = (drawing) => (
+  (Array.isArray(drawing.annotationSets) ? drawing.annotationSets : [])
     .map((set) => String(set?.id || '').trim())
     .filter(Boolean)
 );
 
-const automaticCircularAnnotationSlots = (state) => {
+/** @param {RequestDrawing} drawing */
+const automaticCircularAnnotationSlots = (drawing) => {
   const slots = [];
-  (Array.isArray(state.annotationSets) ? state.annotationSets : [])
+  (Array.isArray(drawing.annotationSets) ? drawing.annotationSets : [])
     .forEach((set, index) => {
       const setId = String(set?.id || '').trim();
       if (!setId) return;
@@ -1530,14 +1724,18 @@ const conservationDiagramOptions = (conservation, entries, referenceDefault) => 
   conservationRingGap: projectOptionalNumber(conservation.ring_gap, { field: 'conservation_ring_gap' })
 });
 
+/**
+ * @param {{ drawing: RequestDrawing, filesData: Record<string, any>,
+ *   resolvedCircularConservation: Record<string, any>[] | undefined }} input
+ */
 const conservationSeriesForValidation = ({
-  state,
+  drawing,
   filesData,
   resolvedCircularConservation
 }) => {
-  if (state.circularConservation?.enabled !== true) return [];
+  if (drawing.circularConservation?.enabled !== true) return [];
   const conservationSource = String(
-    state.circularConservation?.source || ''
+    drawing.circularConservation?.source || ''
   ).trim().toLowerCase();
   const blastsAreDerived = filesData.c_conservation_blasts_source === 'losat-cache';
   const sourceFiles = (
@@ -1549,7 +1747,7 @@ const conservationSeriesForValidation = ({
   try {
     ordered = orderedConservationSources(
       Array.isArray(sourceFiles) ? sourceFiles : [],
-      state.circularConservation || {}
+      drawing.circularConservation || {}
     );
   } catch {
     ordered = [];
@@ -1566,8 +1764,13 @@ const conservationSeriesForValidation = ({
   return [...ordered, ...resolved];
 };
 
+/**
+ * @param {{ state: Record<string, any>, drawing: RequestDrawing, filesData: Record<string, any>,
+ *   recordCount: number, resolvedCircularConservation: Record<string, any>[] | undefined }} input
+ */
 const buildTrackPlan = ({
   state,
+  drawing,
   filesData,
   recordCount,
   resolvedCircularConservation
@@ -1578,20 +1781,18 @@ const buildTrackPlan = ({
     filesData,
     recordCount
   });
-  const annotationSetIds = annotationSetIdsForState(state);
-  const visibleFeatureUnderlays = visibleFeatureUnderlaysForState(state);
+  const annotationSetIds = annotationSetIdsForState(drawing);
 
-  if (circular && state.adv.circular_track_slots_enabled) {
+  if (circular && drawing.adv.circular_track_slots_enabled) {
     const validation = assertValidCustomTrackPlan(validateCustomTrackPlan({
       mode: 'circular',
-      slots: state.adv.circular_track_slots,
-      axisIndex: state.adv.circular_track_slots_axis_index,
-      trackType: state.form.track_type,
+      slots: drawing.adv.circular_track_slots,
+      axisIndex: drawing.adv.circular_track_slots_axis_index,
+      trackType: drawing.form.track_type,
       depthTrackCount,
       annotationSetIds,
-      visibleFeatureUnderlays,
       conservationSeries: conservationSeriesForValidation({
-        state,
+        drawing,
         filesData,
         resolvedCircularConservation
       })
@@ -1603,25 +1804,24 @@ const buildTrackPlan = ({
       depthRequested,
       tracks: {
         circularTrackSlots: validation.enabledSlots.map((slot) => (
-          buildCircularTrackSlotPayload(slot, state.adv.nt, state.form.track_type)
+          buildCircularTrackSlotPayload(slot, drawing.adv.nt, drawing.form.track_type)
         )),
         circularTrackAxisIndex: validation.emittedAxisIndex,
         linearTrackSlots: null,
         linearTrackAxisIndex: null,
-        centerReservedRadius: projectOptionalNumber(state.adv.center_reserved_radius, { field: 'center_reserved_radius' })
+        centerReservedRadius: projectOptionalNumber(drawing.adv.center_reserved_radius, { field: 'center_reserved_radius' })
       }
     };
   }
 
-  if (!circular && state.adv.linear_track_slots_enabled) {
+  if (!circular && drawing.adv.linear_track_slots_enabled) {
     const validation = assertValidCustomTrackPlan(validateCustomTrackPlan({
       mode: 'linear',
-      slots: state.adv.linear_track_slots,
-      axisIndex: state.adv.linear_track_slots_axis_index,
-      trackType: state.form.linear_track_layout,
+      slots: drawing.adv.linear_track_slots,
+      axisIndex: drawing.adv.linear_track_slots_axis_index,
+      trackType: drawing.form.linear_track_layout,
       depthTrackCount,
       annotationSetIds,
-      visibleFeatureUnderlays,
       conservationSeries: []
     }));
     const depthRequested = validation.enabledSlots.some(
@@ -1639,50 +1839,49 @@ const buildTrackPlan = ({
     };
   }
 
-  const depthRequested = Boolean(state.form.show_depth);
+  const depthRequested = Boolean(drawing.form.show_depth);
   if (circular) {
-    const shortcuts = circularGeometryShortcutsForState(state);
+    const shortcuts = circularGeometryShortcutsForState(drawing);
     if (hasCircularGeometryShortcuts(shortcuts)) {
       const implicitSlots = applyCircularGeometryShortcuts(
         createDefaultCircularTrackSlots({
-          nt: state.adv.nt,
+          nt: drawing.adv.nt,
           showDepth: depthRequested,
           depthTrackCount: Math.max(1, depthTrackCount),
-          showGc: !state.form.suppress_gc,
-          showSkew: !state.form.suppress_skew,
-          showTicks: state.form.show_scale !== false,
-          preset: state.form.track_type
+          showGc: !drawing.form.suppress_gc,
+          showSkew: !drawing.form.suppress_skew,
+          showTicks: drawing.form.show_scale !== false,
+          preset: drawing.form.track_type
         }),
         shortcuts
       );
       const slots = [
-        ...automaticCircularAnnotationSlots(state),
+        ...automaticCircularAnnotationSlots(drawing),
         ...implicitSlots
       ];
       const axisIndex = inferLegacyAxisIndexFromFeature(
         slots,
-        state.form.track_type
+        drawing.form.track_type
       );
       const validation = assertValidCustomTrackPlan(validateCustomTrackPlan({
         mode: 'circular',
         slots,
         axisIndex,
-        trackType: state.form.track_type,
+        trackType: drawing.form.track_type,
         depthTrackCount,
         annotationSetIds,
-        visibleFeatureUnderlays,
         conservationSeries: []
       }));
       return {
         depthRequested,
         tracks: {
           circularTrackSlots: validation.enabledSlots.map((slot) => (
-            buildCircularTrackSlotPayload(slot, state.adv.nt, state.form.track_type)
+            buildCircularTrackSlotPayload(slot, drawing.adv.nt, drawing.form.track_type)
           )),
           circularTrackAxisIndex: validation.emittedAxisIndex,
           linearTrackSlots: null,
           linearTrackAxisIndex: null,
-          centerReservedRadius: projectOptionalNumber(state.adv.center_reserved_radius, { field: 'center_reserved_radius' })
+          centerReservedRadius: projectOptionalNumber(drawing.adv.center_reserved_radius, { field: 'center_reserved_radius' })
         }
       };
     }
@@ -1695,14 +1894,19 @@ const buildTrackPlan = ({
       circularTrackAxisIndex: null,
       linearTrackSlots: null,
       linearTrackAxisIndex: null,
-      centerReservedRadius: circular ? projectOptionalNumber(state.adv.center_reserved_radius, { field: 'center_reserved_radius' }) : null
+      centerReservedRadius: circular ? projectOptionalNumber(drawing.adv.center_reserved_radius, { field: 'center_reserved_radius' }) : null
     }
   };
 };
 
-const generatedProteinSettings = (state, baseline = {}) => {
+// `losatExecution` is the app-level LOSAT execution setting (`state.losatExecution`).
+/**
+ * @param {RequestDrawing} drawing
+ * @param {Record<string, any>} losatExecution
+ */
+const generatedProteinSettings = (drawing, losatExecution, baseline = {}) => {
   const { alignOrthogroupFeature: _legacyAlignment, ...currentBaseline } = baseline;
-  const blastp = state.losat.blastp || {};
+  const blastp = drawing.losat.blastp || {};
   const blastpMode = requireCurrentProteinBlastpMode(blastp.mode);
   const positiveInteger = (value, fallback) => integerSettingOr(value, fallback, 1);
   const nonNegativeInteger = (value, fallback) => integerSettingOr(value, fallback, 0);
@@ -1772,7 +1976,7 @@ const generatedProteinSettings = (state, baseline = {}) => {
     collinearityColorMode,
     losatpBin: baseline.losatpBin || 'losat',
     ncbiBlastpBin: baseline.ncbiBlastpBin ?? null,
-    losatpThreads: integerSettingOr(state.losat.threadsPerJob, null, 1),
+    losatpThreads: integerSettingOr(losatExecution?.threadsPerJob, null, 1),
     proteinBlastpMaxHits: blastpMode === 'pairwise'
       ? requireCurrentProteinBlastpMaxHits(blastp.maxHits)
       : positiveInteger(blastp.maxHits, 5),
@@ -1794,19 +1998,23 @@ const generatedProteinSettings = (state, baseline = {}) => {
   };
 };
 
-const comparisonPlanErrorMessage = (snapshot) => {
-  const direct = String(snapshot?.error || '').trim();
-  if (direct) return direct;
-  const issue = Array.isArray(snapshot?.errors) ? snapshot.errors[0] : null;
-  return String(issue?.message || issue || '').trim();
-};
+// The correction of a resolver issue the comparison panel reports (CI-06).
+const PLAN_ISSUE_REASONS = Object.freeze({
+  'missing-upload': 'BLAST_TSV_REQUIRED', 'selected-losat-requires-pairwise': 'LOSAT_PLAN'
+});
 
-const requireLinearComparisonPlanSnapshot = (snapshot) => {
+export const requireLinearComparisonPlanSnapshot = (snapshot) => {
   if (!snapshot || !Array.isArray(snapshot.edges)) {
     throw new Error('A resolved Linear comparison plan is required.');
   }
-  const error = comparisonPlanErrorMessage(snapshot);
-  if (error) throw new Error(error);
+  const issue = Array.isArray(snapshot.errors) ? snapshot.errors[0] : null;
+  if (issue || String(snapshot.error || '').trim()) {
+    const edge = snapshot.edges.find((item) => item?.id && item.id === issue?.edgeId);
+    throw diagnosticError('COMPARISON_INPUT', {
+      reason: PLAN_ISSUE_REASONS[issue?.code] || 'PAIR_TOPOLOGY',
+      queryRecordIndex: edge?.queryIndex, subjectRecordIndex: edge?.subjectIndex
+    });
+  }
   return snapshot;
 };
 
@@ -1887,8 +2095,13 @@ const addCanonicalInputProteinComparisonResource = ({
   subjectRecordIndex: Number(comparison.subjectRecordIndex)
 });
 
+/**
+ * @param {{ state: Record<string, any>, drawing: RequestDrawing, filesData: Record<string, any>,
+ *   resources: any, comparisonPlanSnapshot: Record<string, any> | null, resolvedComparisons?: Record<string, any>[] }} input
+ */
 const buildComparisons = ({
   state,
+  drawing,
   filesData,
   resources,
   comparisonPlanSnapshot,
@@ -1947,7 +2160,7 @@ const buildComparisons = ({
     (comparison) => comparison?.kind === 'generatedProteinComparison'
   );
   const activeProteinPipeline = (
-    snapshot.hasLosatIntent === true && state.losatProgram?.value === 'blastp'
+    snapshot.hasLosatIntent === true && drawing.losatProgram?.value === 'blastp'
   );
   const persistedCanonicalInputs = persistedCanonicalComparisons.filter(
     (comparison) => comparison?.canonicalInput === true
@@ -1956,10 +2169,10 @@ const buildComparisons = ({
     (
       (
         comparison?.kind === 'orthogroupResult'
-        && String(state.losat?.blastp?.mode || '').trim().toLowerCase() === 'orthogroup'
+        && String(drawing.losat?.blastp?.mode || '').trim().toLowerCase() === 'orthogroup'
       ) || (
         comparison?.kind === 'collinearityResult'
-        && String(state.losat?.blastp?.mode || '').trim().toLowerCase() === 'collinear'
+        && String(drawing.losat?.blastp?.mode || '').trim().toLowerCase() === 'collinear'
       )
     ) && activeProteinPipeline && comparison.canonicalInput !== true
   ));
@@ -2067,7 +2280,9 @@ const buildComparisons = ({
     if (edge.source === 'upload') {
       const file = uploadFilesByEdgeId.get(String(edge.id || ''));
       if (!file) {
-        throw new Error(`The uploaded comparison '${edge.edgeKey}' has no active BLAST TSV file.`);
+        throw diagnosticError('COMPARISON_INPUT', {
+          reason: 'BLAST_TSV_REQUIRED', queryRecordIndex: edge.queryIndex, subjectRecordIndex: edge.subjectIndex
+        });
       }
       const resourceId = `comparison-nucleotide-${edge.ordinal + 1}`;
       comparisons.push({
@@ -2112,7 +2327,7 @@ const buildComparisons = ({
   const selectedPairwiseLosat = (
     snapshot.mode === 'selected' &&
     activeProteinPipeline &&
-    String(state.losat?.blastp?.mode || '').trim().toLowerCase() === 'pairwise'
+    String(drawing.losat?.blastp?.mode || '').trim().toLowerCase() === 'pairwise'
   );
   const shouldEmitResolvedProteinMarker = (
     activeProteinPipeline &&
@@ -2136,7 +2351,7 @@ const buildComparisons = ({
       ? 'none'
       : selectedPairwiseLosat
         ? 'pairwise'
-        : String(state.losat?.blastp?.mode || persistedGeneratedComparison?.mode || 'orthogroup');
+        : String(drawing.losat?.blastp?.mode || persistedGeneratedComparison?.mode || 'orthogroup');
     comparisons.push({
       kind: 'generatedProteinComparison',
       mode,
@@ -2147,7 +2362,8 @@ const buildComparisons = ({
           }))
         : [],
       settings: generatedProteinSettings(
-        state,
+        drawing,
+        state.losatExecution,
         persistedGeneratedComparison?.settings || {}
       )
     });
@@ -2155,7 +2371,12 @@ const buildComparisons = ({
   return comparisons;
 };
 
-const buildLayout = (state, filesData, records = []) => {
+/**
+ * @param {Record<string, any>} state
+ * @param {RequestDrawing} drawing
+ */
+/** @param {number[] | null} [circularSourceIndexes] The file position of each drawn Circular record. */
+const buildLayout = (state, drawing, records = [], circularSourceIndexes = null) => {
   if (state.mode.value === 'linear') {
     const recordKeys = records.map((record) => requireCanonicalText(
       record.recordKey,
@@ -2172,21 +2393,31 @@ const buildLayout = (state, filesData, records = []) => {
       'renderRequest.layout.recordTranslations',
       { requireCoverage: plan !== null }
     );
-    if (!state.linearRecordLayoutEnabled?.value &&
+    if (!drawing.linearRecordLayoutEnabled?.value &&
         !records.some((record) => record.presentation.gridRow != null) &&
         plan === null && translations.length === 0) return {};
     return {
-      recordGapPx: Math.max(0, Number(state.linearRecordGap?.value) || 0),
+      recordGapPx: Math.max(0, Number(drawing.linearRecordGap?.value) || 0),
       multiRecordPositions: null,
       recordTranslations: translations,
       similarityAlignment: plan
     };
   }
-  if (!state.form.multi_record_canvas) return {};
-  const positions = Array.isArray(state.adv.multi_record_positions)
-    ? state.adv.multi_record_positions
+  if (!drawing.form.multi_record_canvas) return {};
+  // The draft keys each record's row by its file selector `#N`; the request
+  // names the drawn records by their position among them, so an OFF record
+  // has no token and returns to its row when it is ON again.
+  /** @param {string} selector */
+  const drawnPosition = (selector) => {
+    const match = /^#([1-9][0-9]*)$/.exec(selector);
+    if (!match || !Array.isArray(circularSourceIndexes)) return selector;
+    const position = circularSourceIndexes.indexOf(Number(match[1]) - 1);
+    return position < 0 ? '' : `#${position + 1}`;
+  };
+  const positions = Array.isArray(drawing.adv.multi_record_positions)
+    ? drawing.adv.multi_record_positions
         .map((entry) => {
-          const selector = String(entry?.selector || '').trim();
+          const selector = drawnPosition(String(entry?.selector || '').trim());
           const row = Number(entry?.row);
           return selector && Number.isInteger(row) && row > 0 ? `${selector}@${row}` : null;
         })
@@ -2194,13 +2425,33 @@ const buildLayout = (state, filesData, records = []) => {
     : [];
   return {
     multiRecordSizeMode: requireCurrentCircularMultiRecordSizeMode(
-      state.adv.multi_record_size_mode
+      drawing.adv.multi_record_size_mode
     ),
     // Blank is the documented default (Python's); any number is sent literally.
-    multiRecordMinRadiusRatio: projectOptionalNumber(state.adv.multi_record_min_radius_ratio, { field: 'multi_record_min_radius_ratio' }) ?? 0.55,
-    multiRecordColumnGapRatio: projectOptionalNumber(state.adv.multi_record_column_gap_ratio, { field: 'multi_record_column_gap_ratio' }) ?? 0.10,
-    multiRecordRowGapRatio: projectOptionalNumber(state.adv.multi_record_row_gap_ratio, { field: 'multi_record_row_gap_ratio' }) ?? 0.05,
+    multiRecordMinRadiusRatio: projectOptionalNumber(drawing.adv.multi_record_min_radius_ratio, { field: 'multi_record_min_radius_ratio' }) ?? 0.55,
+    multiRecordColumnGapRatio: projectOptionalNumber(drawing.adv.multi_record_column_gap_ratio, { field: 'multi_record_column_gap_ratio' }) ?? 0.10,
+    multiRecordRowGapRatio: projectOptionalNumber(drawing.adv.multi_record_row_gap_ratio, { field: 'multi_record_row_gap_ratio' }) ?? 0.05,
     multiRecordPositions: positions.length > 0 ? positions : null
+  };
+};
+
+// A draft without a per-feature edit field (a Session written by the CLI, the
+// Python API, or the Gallery publication) takes the request projection's
+// value for it. Gallery publication and Session Load both read edits this way
+// (OV-216, OV-220).
+const PROJECTED_FEATURE_EDIT_FIELDS = ['featureOverrides', 'featureVisibilityManualRules', 'labelOverrideRows'];
+/**
+ * @param {Record<string, any> | null | undefined} draft
+ * @param {{ semanticFeatureState?: Record<string, any> } | null | undefined} projection
+ * @returns {Record<string, any>}
+ */
+export const featureEditsOverProjection = (draft, projection) => {
+  const saved = draft && typeof draft === 'object' ? draft : {};
+  const projected = projection?.semanticFeatureState || {};
+  return {
+    ...saved,
+    ...Object.fromEntries(PROJECTED_FEATURE_EDIT_FIELDS.filter((field) => !Object.hasOwn(saved, field)
+      && projected[field] !== undefined).map((field) => [field, projected[field]]))
   };
 };
 
@@ -2212,16 +2463,21 @@ const canonicalRecordSelector = (record) => {
   if (selector?.kind === 'recordIndex') return `#${Number(selector.index) + 1}`;
   return null;
 };
-export const buildCanonicalRequestState = ({ session, projection, config,
-  filesData = projection.files }) => {
-  const canonicalPublicationFiles = { ...filesData };
+// A Gallery Session's request inputs: the project inputs, mode and artifacts
+// as `state`, the settings and edits as the drawing the request reads, and the
+// per-feature edits of that drawing as the draft stores them (`features`).
+/** @returns {{ state: Record<string, any>, drawing: RequestDrawing, features: Record<string, unknown> }} */
+export const buildCanonicalRequestState = ({ session, projection, config }) => {
+  // The request keeps the tables it was written with, not the files bound as
+  // their inputs (OV-367).
+  const canonicalPublicationFiles = { ...projection.requestTableFiles };
   const pythonColors = (colors) => Object.fromEntries(Object.entries(colors || {}).filter(
     ([key]) => !key.startsWith('collinear_block_')).sort(([left], [right]) => left.localeCompare(right)));
   const activeColors = pythonColors(config?.colors);
   const colorOverridesChanged = config?.colorsAreOverrides === true
     && JSON.stringify(activeColors) !== JSON.stringify(pythonColors(projection.config?.colors));
   if (colorOverridesChanged) delete canonicalPublicationFiles.d_color;
-  const features = session?.features || {}, layout = config?.linearRecordLayout || {};
+  const features = featureEditsOverProjection(session?.features, projection), layout = config?.linearRecordLayout || {};
   const canonicalLayout = projection.config?.linearRecordLayout || {};
   const legacyAlignment = projection.pipelineState?.legacySimilarityAlignment;
   const materializedLegacyPlan = legacyAlignment
@@ -2243,19 +2499,11 @@ export const buildCanonicalRequestState = ({ session, projection, config,
   });
   if (!String(conservation.labels || '').trim() && conservation.series?.length)
     conservation.labels = conservation.series.map(({ label }) => String(label || '').trim()).join(',');
-  const refs = {
+  const stateRefs = {
     mode: projection.mode, cInputType: session?.ui?.cInputType || projection.inputType,
     lInputType: session?.ui?.lInputType || projection.inputType,
     circularRecordList,
-    paletteDefinitions: { [palette]: {} }, currentColors: colorOverridesChanged ? activeColors : config.colors || {},
-    selectedPalette: palette, featureVisibilityRules: publicationClone(features.featureVisibilityManualRules
-      || projection.semanticFeatureState?.featureVisibilityManualRules || []),
-    filterMode: config.filterMode || 'None', manualBlacklist: String(config.blacklistText || ''),
-    canonicalLabelOverrideRows: publicationClone(features.labelOverrideRows || []), editableLabels: [],
-    extractedFeatures: features.extractedFeatures || [],
-    losatProgram: config.losatProgram || 'blastn',
-    linearRecordLayoutEnabled: Boolean(layout.enabled),
-    linearRecordGap: layout.recordGap ?? 24,
+    paletteDefinitions: { [palette]: {} }, editableLabels: [],
     similarityAlignmentPlan: materializedLegacyPlan ||
       canonicalLayout.similarityAlignment || null,
     linearRecordTranslations: materializedLegacyPlan
@@ -2264,37 +2512,66 @@ export const buildCanonicalRequestState = ({ session, projection, config,
         }))
       : publicationClone(canonicalLayout.recordTranslations || [])
   };
-  return {
-    ...Object.fromEntries(Object.entries(refs).map(([key, value]) => [key, publicationRef(value)])),
-    form: config.form || {}, adv: config.adv || {}, normalizePaletteColors,
+  const drawingRefs = {
+    currentColors: colorOverridesChanged ? activeColors : config.colors || {},
+    selectedPalette: palette, featureVisibilityRules: publicationClone(features.featureVisibilityManualRules || []),
+    filterMode: config.filterMode || 'None', manualBlacklist: String(config.blacklistText || ''),
+    canonicalLabelOverrideRows: publicationClone(features.labelOverrideRows || []),
+    losatProgram: config.losatProgram || 'blastn',
+    linearRecordLayoutEnabled: Boolean(layout.enabled),
+    linearRecordGap: layout.recordGap ?? 24
+  };
+  /** @param {Record<string, any>} values */
+  const refsOf = (values) => Object.fromEntries(Object.entries(values).map(([key, value]) => [key, publicationRef(value)]));
+  // How LOSAT runs is app-level (`state.losatExecution`): the request's thread
+  // count, which the projection puts in `config.losat`, over the defaults.
+  const savedLosat = config?.losat && typeof config.losat === 'object' ? config.losat : {};
+  const losatExecution = Object.fromEntries(Object.entries(createDefaultLosatExecution())
+    .map(([field, value]) => [field, Object.hasOwn(savedLosat, field) ? savedLosat[field] : value]));
+  return { features, state: { ...refsOf(stateRefs), canonicalPublicationFiles, losatExecution }, drawing: {
+    ...refsOf(drawingRefs),
+    form: config.form || {}, adv: config.adv || {},
     manualSpecificRules: publicationClone(config.rules || []), manualWhitelist: publicationClone(config.whitelist || []), manualPriorityRules: publicationClone(config.qualifierPriorityRules || []),
-    labelTextFeatureOverrides: publicationClone(features.labelTextFeatureOverrides || {}), labelTextBulkOverrides: publicationClone(features.labelTextBulkOverrides || {}),
-    labelTextFeatureOverrideSources: publicationClone(features.labelTextFeatureOverrideSources || {}), labelVisibilityOverrides: publicationClone(features.labelVisibilityOverrides || {}),
+    featureOverrides: publicationClone(features.featureOverrides || {}),
+    labelTextBulkOverrides: publicationClone(features.labelTextBulkOverrides || {}),
     circularConservation: conservation, losat: publicationClone(config.losat || { blastp: {} }),
     linearRecordRows: publicationClone(layout.rows || []), linearComparisonPlan: normalizeLinearComparisonPlan(config.linearComparisonPlan),
     annotationSets: publicationClone(config.annotationSets || []),
     recordDisplayDrafts: publicationClone(config.recordDisplayDrafts || []),
-    featurePlacementOverrides: publicationClone(config.featurePlacementOverrides || {}), canonicalPublicationFiles
-  };
+    featurePlacementOverrides: publicationClone(config.featurePlacementOverrides || {})
+  } };
 };
+// `recordDisplayRows` are the record display rows of the draft sources
+// (`recordDisplayControls.allRows`); the caller reads them from the owner that
+// the composition root wires, never from `state` (R13).
+/**
+ * @param {Record<string, any>} input
+ * @returns {CanonicalRenderEnvelope}
+ */
 const projectCanonicalRenderInput = ({
   state,
+  drawing,
+  // Generate supplies the label projection it already built for this operation.
+  generatedLabelProjection = null,
   filesData,
+  recordDisplayRows = [],
   comparisonPlanSnapshot = null,
   resolvedComparisons = [],
   resolvedCircularConservation = [],
+  // The record-catalog keys of OFF records: annotations bound to them wait in the draft.
+  omittedAnnotationRecordKeys = [],
   resources = createResourceBuilder()
 }) => {
   recordStructuralMetric('canonicalRequestProjectionCount');
-  requireCurrentWebStateFieldNames(state);
-  requireCurrentCircularMultiRecordSizeMode(state.adv.multi_record_size_mode);
-  requireCurrentLinearTrackLayout(state.form.linear_track_layout);
-  requireCurrentLinearLabelPlacement(state.adv.label_placement);
+  requireCurrentWebStateFieldNames(drawing);
+  requireCurrentCircularMultiRecordSizeMode(drawing.adv.multi_record_size_mode);
+  requireCurrentLinearTrackLayout(drawing.form.linear_track_layout);
+  requireCurrentLinearLabelPlacement(drawing.adv.label_placement);
   if (
     state.mode.value === 'linear' &&
-    Boolean(state.form.normalize_length) &&
-    Boolean(state.linearRecordLayoutEnabled?.value) &&
-    linearRecordLayoutHasSharedRow(filesData?.linearSeqs, state.linearRecordRows)
+    Boolean(drawing.form.normalize_length) &&
+    Boolean(drawing.linearRecordLayoutEnabled?.value) &&
+    linearRecordLayoutHasSharedRow(filesData?.linearSeqs, drawing.linearRecordRows)
   ) {
     throw new Error(
       'Normalize Record Lengths cannot be used when multiple records share the same Linear row. ' +
@@ -2308,15 +2585,15 @@ const projectCanonicalRenderInput = ({
   const comparisonOptionsRequested = (
     state.mode.value === 'circular' || hasLinearComparisonIntent
   );
+  /** @type {Record<string, any>} */
   const webFiles = {};
-  const recordPlan = buildRecords({ state, filesData, resources });
-  const drafts = state.recordDisplayDrafts || [];
-  const displayRows = state.recordDisplayRows?.value || [];
+  const recordPlan = buildRecords({ state, drawing, filesData, resources });
+  const drafts = bindRecordDisplayDrafts(drawing.recordDisplayDrafts || [], recordDisplayRows);
   const sourceInputIndexes = [];
   const records = recordPlan.records.flatMap((record, index) => {
     const sourceUid = state.mode.value === 'linear'
       ? String(filesData.linearSeqs?.[index]?.uid || record.recordKey) : 'circular';
-    const sourceRows = displayRows.filter((row) => row.scope === state.mode.value && row.sourceUid === sourceUid);
+    const sourceRows = recordDisplayRows.filter((row) => row.scope === state.mode.value && row.sourceUid === sourceUid);
     const selector = record.region?.selector || record.selector;
     const selectedRows = sourceRows.filter((row) => !selector
       || (selector.kind === 'recordIndex' ? row.selector === `#${selector.index + 1}` : row.recordId === selector.value));
@@ -2336,7 +2613,7 @@ const projectCanonicalRenderInput = ({
       }
     }
     const selected = selectedRows[0];
-    const savedDraft = drafts.find((draft) => draft.scope === state.mode.value && draft.sourceUid === sourceUid
+    const savedDraft = drafts.find((draft) => draft.sourceUid === sourceUid
       && (selector?.kind === 'recordIndex' ? draft.selector === `#${selector.index + 1}`
         : selector?.kind === 'recordId' ? draft.recordId === selector.value : true));
     const transform = selected ? transformFor(selected) : {
@@ -2372,6 +2649,7 @@ const projectCanonicalRenderInput = ({
     : filesData;
   const trackPlan = buildTrackPlan({
     state,
+    drawing,
     filesData: state.mode.value === 'linear'
       ? { ...filesData, linearSeqs: sourceInputIndexes.map((index) => filesData.linearSeqs[index]) }
       : selectedCircularFilesData,
@@ -2379,17 +2657,17 @@ const projectCanonicalRenderInput = ({
     resolvedCircularConservation
   });
   const circularGroupingIntent = ['single', 'batch'].includes(
-    state.adv.circular_grouping_intent
+    drawing.adv.circular_grouping_intent
   )
-    ? state.adv.circular_grouping_intent
+    ? drawing.adv.circular_grouping_intent
     : null;
   const grouping = state.mode.value === 'linear'
     ? 'single'
     : (
-        state.form.multi_record_canvas
+        drawing.form.multi_record_canvas
           ? 'grid'
           : (
-              records.length === 1
+              (recordPlan.circularPresentedCount ?? records.length) === 1
                 ? (
                     circularGroupingIntent ||
                     WEB_UX_PROFILE.circular.singleRecordGrouping
@@ -2397,7 +2675,7 @@ const projectCanonicalRenderInput = ({
                 : WEB_UX_PROFILE.circular.multiRecordGrouping
             )
       );
-  const explicitPrefix = explicitOutputPrefix(state.form.prefix);
+  const explicitPrefix = explicitOutputPrefix(drawing.form.prefix);
   if (state.mode.value === 'circular') {
     webFiles.circularOutputPrefixExplicit = explicitPrefix !== null;
   }
@@ -2420,54 +2698,61 @@ const projectCanonicalRenderInput = ({
       record_id: resolved.record?.recordId || selector || `Record_${index + 1}`
     };
   });
-  const defaultCircularPrefix = safePrefix(circularRecordId(circularOutputRecords[0], 0));
+  const defaultCircularPrefix = downloadSafeName(circularRecordId(circularOutputRecords[0], 0), 'out');
   const output = grouping === 'batch'
     ? resolveCircularBatchPrefixes(circularOutputRecords, explicitPrefix)
         .map(renderOutputPayload)
     : renderOutputPayload(
         explicitPrefix ?? (state.mode.value === 'circular' ? defaultCircularPrefix : 'out')
       );
+  const labelProjection = generatedLabelProjection || requestLabelProjection(state, drawing);
+  /** @type {Record<string, any>} */
   const diagramOptions = {
-    featurePlacements: canonicalFeaturePlacements(state.featurePlacementOverrides || {}, state.mode.value),
-    configOverrides: buildConfigOverrides(state, {
+    featurePlacements: requestFeaturePlacements(drawing.featurePlacementOverrides, state.mode.value, records),
+    // Per-feature edits by source identity (design Q4); the rows of other
+    // records stay in the drawing's draft (R2).
+    featureOverrides: requestFeatureOverrides(drawing.featureOverrides, records, {
+      bulkLabelText: labelProjection.bulkLabelText
+    }),
+    configOverrides: buildConfigOverrides(state, drawing, {
       depthRequested: trackPlan.depthRequested,
       hasComparisonIntent: hasLinearComparisonIntent,
       linearHasSharedRow: state.mode.value === 'linear' && linearRecordLayoutHasSharedRow(
         filesData.linearSeqs,
-        state.linearRecordRows,
-        { enabled: Boolean(state.linearRecordLayoutEnabled?.value) }
+        drawing.linearRecordRows,
+        { enabled: Boolean(drawing.linearRecordLayoutEnabled?.value) }
       )
     }),
     tracks: trackPlan.tracks,
     output: {
-      legend: String(state.form.legend || 'right'),
-      plotTitlePosition: String(state.adv.plot_title_position || (state.mode.value === 'linear' ? 'bottom' : 'none'))
+      legend: String(drawing.form.legend || 'right'),
+      plotTitlePosition: String(drawing.adv.plot_title_position || (state.mode.value === 'linear' ? 'bottom' : 'none'))
     },
-    selectedFeaturesSet: Array.from(state.adv.features || []).map((value) => String(value)),
+    selectedFeaturesSet: Array.from(drawing.adv.features || []).map((value) => String(value)),
     featureShapes: {
       repeat_region: defaultFeatureRendering('repeat_region'),
-      ...normalizeFeatureRenderingMap(state.adv.feature_shapes || {})
+      ...normalizeFeatureRenderingMap(drawing.adv.feature_shapes || {})
     },
-    dinucleotide: String(state.adv.nt || 'GC').toUpperCase(),
-    window: projectOptionalNumber(state.adv.window_size, { field: 'window' }),
-    step: projectOptionalNumber(state.adv.step_size, { field: 'step' }),
-    depthWindow: projectOptionalNumber(state.adv.depth_window_size, { field: 'depth_window' }),
-    depthStep: projectOptionalNumber(state.adv.depth_step_size, { field: 'depth_step' }),
-    plotTitle: String(state.form.plot_title || '').trim() || null,
-    plotTitleFontSize: projectOptionalNumber(state.adv.plot_title_font_size, { field: 'plot_title_font_size' }),
+    dinucleotide: String(drawing.adv.nt || 'GC').toUpperCase(),
+    window: projectOptionalNumber(drawing.adv.window_size, { field: 'window' }),
+    step: projectOptionalNumber(drawing.adv.step_size, { field: 'step' }),
+    depthWindow: projectOptionalNumber(drawing.adv.depth_window_size, { field: 'depth_window' }),
+    depthStep: projectOptionalNumber(drawing.adv.depth_step_size, { field: 'depth_step' }),
+    plotTitle: String(drawing.form.plot_title || '').trim() || null,
+    plotTitleFontSize: projectOptionalNumber(drawing.adv.plot_title_font_size, { field: 'plot_title_font_size' }),
     ...(comparisonOptionsRequested
-      ? projectComparisonThresholds(resolveComparisonThresholds(state.adv, state.mode.value))
+      ? projectComparisonThresholds(resolveComparisonThresholds(drawing.adv, state.mode.value))
       : {})
   };
-  if (Array.isArray(state.annotationSets) && state.annotationSets.length > 0) {
-    diagramOptions.annotations = annotationOptionsPayload(state.annotationSets);
+  if (Array.isArray(drawing.annotationSets) && drawing.annotationSets.length > 0) {
+    diagramOptions.annotations = annotationOptionsPayload(drawing.annotationSets, records, omittedAnnotationRecordKeys);
   }
   if (state.mode.value === 'circular') {
-    diagramOptions.keepFullDefinitionWithPlotTitle = Boolean(state.adv.keep_full_definition_with_plot_title);
-    diagramOptions.species = String(state.form.species || '').trim() || null;
-    diagramOptions.strain = String(state.form.strain || '').trim() || null;
+    diagramOptions.keepFullDefinitionWithPlotTitle = Boolean(drawing.adv.keep_full_definition_with_plot_title);
+    diagramOptions.species = String(drawing.form.species || '').trim() || null;
+    diagramOptions.strain = String(drawing.form.strain || '').trim() || null;
     const conservationSource = String(
-      state.circularConservation.source || ''
+      drawing.circularConservation.source || ''
     ).trim().toLowerCase();
     const conservationBlastsAreDerived = (
       filesData.c_conservation_blasts_source === 'losat-cache'
@@ -2480,7 +2765,7 @@ const projectCanonicalRenderInput = ({
     if (conservation.length > 0) {
       const conservationEntries = orderedConservationSources(
         conservation,
-        state.circularConservation
+        drawing.circularConservation
       );
       diagramOptions.conservationBlastFiles = conservationEntries.map((entry, index) => fileRef(
         resources.addFile(
@@ -2506,7 +2791,7 @@ const projectCanonicalRenderInput = ({
             : null
         ));
       }
-      Object.assign(diagramOptions, conservationDiagramOptions(state.circularConservation, conservationEntries, 'auto'));
+      Object.assign(diagramOptions, conservationDiagramOptions(drawing.circularConservation, conservationEntries, 'auto'));
       if (conservationBlastsAreDerived) {
         webFiles.conservationBlastSource = 'losat-cache';
       }
@@ -2514,7 +2799,7 @@ const projectCanonicalRenderInput = ({
     if (conservationSource === 'losat') {
       const comparisonFastas = orderedOptionalConservationFiles(
         filesData.c_conservation_fastas,
-        state.circularConservation
+        drawing.circularConservation
       );
       if (comparisonFastas.length > 0) {
         webFiles.conservationLosatFastaSources = comparisonFastas.map(
@@ -2556,7 +2841,7 @@ const projectCanonicalRenderInput = ({
       if (comparisonFastas.some(Boolean)) {
         diagramOptions.conservationFastaFiles = comparisonFastas;
       }
-      Object.assign(diagramOptions, conservationDiagramOptions(state.circularConservation,
+      Object.assign(diagramOptions, conservationDiagramOptions(drawing.circularConservation,
         resolvedCircularConservation.map((entry, index) => ({
           label: String(entry?.label || `Comparison ${index + 1}`),
           color: String(entry?.color || '#D9EAF7')
@@ -2564,13 +2849,14 @@ const projectCanonicalRenderInput = ({
       webFiles.conservationBlastSource = 'losat-cache';
     }
   } else if (hasLinearComparisonIntent) {
-    diagramOptions.pairwiseMatchStyle = String(state.adv.pairwise_match_style || 'ribbon');
+    diagramOptions.pairwiseMatchStyle = String(drawing.adv.pairwise_match_style || 'ribbon');
   }
 
-  addGeneratedTableResources(state, resources, diagramOptions);
+  addGeneratedTableResources(state, drawing, resources, diagramOptions, ALL_GENERATED_TABLES, labelProjection);
   if (trackPlan.depthRequested) {
     buildDepthResources({
       state,
+      drawing,
       filesData: state.mode.value === 'linear'
       ? { ...filesData, linearSeqs: sourceInputIndexes.map((index) => filesData.linearSeqs[index]) }
       : selectedCircularFilesData,
@@ -2619,16 +2905,17 @@ const projectCanonicalRenderInput = ({
     });
   }
 
-  return {
+  return /** @satisfies {CanonicalRenderEnvelope} */ ({
     renderRequest: {
       schema: CANONICAL_REQUEST_SCHEMA,
       mode: state.mode.value,
       grouping,
       records,
       diagramOptions,
-      layout: buildLayout(state, filesData, records),
+      layout: buildLayout(state, drawing, records, recordPlan.circularSourceIndexes),
       comparisons: buildComparisons({
       state,
+      drawing,
       filesData,
       resources,
       comparisonPlanSnapshot,
@@ -2638,7 +2925,7 @@ const projectCanonicalRenderInput = ({
     },
     resources: resources.resources,
     webFiles
-  };
+  });
 };
 
 // The request writer and the inexpensive comparison use the same projection.
@@ -2650,7 +2937,7 @@ const generationResourceIdentity = (resource) => {
     return typeof value === 'string' ? { text: value } : value;
   }
   const owner = getResourcePayloadOwner(resource);
-  const backing = getSessionResourceSource(owner);
+  const backing = /** @type {SessionResourceSource | null} */ (getSessionResourceSource(owner));
   if (backing?.descriptors) {
     return { bindings: backing.descriptors.map((entry) => entry.descriptor) };
   }
@@ -2742,10 +3029,8 @@ const legacyResourceOriginalNames = ({ renderRequest, legacyFiles, fileBindings 
   const namedOptionResources = {
     d_color: referencedResourceId(options.colors?.defaultColorsFile || options.colors?.defaultColors),
     t_color: referencedResourceId(options.colors?.colorTableFile || options.colors?.colorTable),
-    whitelist: referencedResourceId(options.labelWhitelistFile),
-    qualifier_priority: referencedResourceId(
-      options.qualifierPriorityFile || options.qualifierPriorityTable
-    )
+    whitelist: referencedResourceId(editorTableRef(options, 'whitelist')),
+    qualifier_priority: referencedResourceId(editorTableRef(options, 'priority'))
   };
   Object.entries(namedOptionResources).forEach(([slot, resourceId]) => {
     addResourceOriginalNameHint(hints, resourceId, files?.[slot]?.name);
@@ -2832,6 +3117,13 @@ const resourceAsLegacyFile = (resources, resourceId) => {
   return file;
 };
 
+/**
+ * @typedef {(resourceId: string, metadata?: Record<string, any>) => unknown} ResourceFileResolver
+ *   Builds the file a Session binding stands for from its resource id and the
+ *   binding's recorded name, type, and modification time.
+ */
+
+/** @param {ResourceFileResolver | null} [resolveResourceFile] */
 const webBindingAsLegacyFile = (resources, binding, resolveResourceFile = null, schema = 1) => {
   if (binding === null || binding === undefined) return null;
   const resourceId = String(binding.resourceId || '').trim();
@@ -2847,12 +3139,23 @@ const webBindingAsLegacyFile = (resources, binding, resolveResourceFile = null, 
   return { ...file, ...metadata, name: schema === 2 ? metadata.name : (metadata.name || file.name) };
 };
 
+/** @param {ResourceFileResolver | null} [resolveResourceFile] */
 const webBindingValueAsLegacyFile = (resources, value, resolveResourceFile = null, schema = 1) => (
   Array.isArray(value)
     ? value.map((item) => webBindingValueAsLegacyFile(resources, item, resolveResourceFile, schema))
     : webBindingAsLegacyFile(resources, value, resolveResourceFile, schema)
 );
 
+/**
+ * @param {Record<string, any>} files
+ * @param {Record<string, any> | null | undefined} webMetadata
+ * @param {Record<string, any> | null | undefined} resources
+ * @param {{
+ *   resolveResourceFile?: ResourceFileResolver | null,
+ *   sessionResourceTable?: any,
+ *   adoptCanonicalPayloads?: boolean
+ * }} [options]
+ */
 const applyWebFileBindings = (
   files,
   webMetadata,
@@ -2937,10 +3240,14 @@ const applyWebFileBindings = (
 
 // Called only after Session authority has admitted the explicit source-free
 // document. No canonical request or committed owner is created by this projection.
+// A settings-only Session's draft: the shown mode's slice (Session 46), or
+// the flat draft of an older Session.
 export const projectSettingsOnlySession = (data, sessionResourceTable) => ({
   mode: data.ui.mode,
   inputType: data.ui.mode === 'linear' ? data.ui.lInputType : data.ui.cInputType,
-  config: cloneCanonicalJsonValue(data.config),
+  config: cloneCanonicalJsonValue(data.modes && typeof data.modes === 'object'
+    ? data.modes[data.ui.mode]?.config
+    : data.config),
   files: applyWebFileBindings({}, data.webFiles, data.resources, {
     sessionResourceTable, adoptCanonicalPayloads: true
   }),
@@ -3015,6 +3322,7 @@ const projectGeneratedProteinPipeline = (
   if (requestSchema >= 8 && Object.hasOwn(settings, 'alignOrthogroupFeature')) {
     throw new Error('Current canonical protein settings cannot contain legacy alignment state.');
   }
+  /** @type {{ target: string, sourceSchema: number } | null} */
   let legacySimilarityAlignment = null;
   if (requestSchema <= 7 && settings.alignOrthogroupFeature !== null &&
       settings.alignOrthogroupFeature !== undefined) {
@@ -3097,6 +3405,7 @@ const requireExactCanonicalFields = (value, required, fieldName) => {
   }
 };
 
+/** @param {ResourceFileResolver | null} [resolveResourceFile] */
 const canonicalDepthResourceFile = (
   ref,
   resources,
@@ -3135,6 +3444,15 @@ const canonicalDepthText = (value, fieldName) => {
   return value.trim();
 };
 
+/**
+ * @param {{
+ *   options: Record<string, any>,
+ *   records: unknown[],
+ *   resources: Record<string, any> | null | undefined,
+ *   mode: string,
+ *   resolveResourceFile?: ResourceFileResolver | null
+ * }} params
+ */
 const projectCanonicalDepthTracks = ({
   options,
   records,
@@ -3156,7 +3474,9 @@ const projectCanonicalDepthTracks = ({
     throw new Error('diagramOptions.depthTracks must be a non-empty array.');
   }
 
+  /** @type {unknown[][]} */
   const sourceRows = Array.from({ length: records.length }, () => []);
+  /** @type {unknown[][]} */
   const fileRows = Array.from({ length: records.length }, () => []);
   const tracks = options.depthTracks.map((track, trackIndex) => {
     const fieldName = `diagramOptions.depthTracks[${trackIndex}]`;
@@ -3188,9 +3508,7 @@ const projectCanonicalDepthTracks = ({
       sourceRefs = Array.from({ length: records.length }, () => track.source);
     }
     if (!sourceRefs.some((ref) => ref !== null && ref !== undefined)) {
-      throw new Error(
-        `Depth series #${trackIndex + 1} (logical track index ${trackIndex}) has no source in any record.`
-      );
+      throw depthSeriesWithoutSource(trackIndex);
     }
     sourceRefs.forEach((ref, recordIndex) => {
       sourceRows[recordIndex][trackIndex] = ref ?? null;
@@ -3277,16 +3595,68 @@ const resourceTextFromRef = (resources, ref) => (
   ref?.resourceId ? decodeCanonicalResourceText(resources, ref.resourceId) : null
 );
 
+// A table the Session stores is named in its failure: the user corrects the
+// Session file, not a table in this page.
+const readSessionTable = (table, read) => {
+  try {
+    return read();
+  } catch (error) {
+    const model = normalizeCaughtError(error);
+    if (['UNKNOWN', 'VALIDATION_UNCLASSIFIED'].includes(model.code)) throw error;
+    throw diagnosticError(model.code, { ...model.context, sessionTable: table }, { stage: model.stage });
+  }
+};
+
+const cappedList = (singular, plural, items) => (items.length === 1 ? `${singular} ${items[0]}`
+  : `${plural} ${items.slice(0, 5).join(', ')}${items.length > 5 ? `, and ${items.length - 5} more` : ''}`);
+const lineList = (rows) => cappedList('line', 'lines', rows);
+// The Load notice for the rows `legacyTableRepairs` lists, by table.
+export const legacyTableRowsNotice = (repairs) => {
+  if (!repairs?.length) return '';
+  const tables = [...new Set(repairs.map(({ table }) => table))];
+  return ['Some table rows of this older Session were read as the current version writes them.',
+    ...tables.flatMap((table) => {
+      const rows = (repair) => repairs.filter((item) => item.table === table && item.repair === repair)
+        .map(({ row }) => row);
+      const joined = rows('joined');
+      const dropped = rows('dropped');
+      const invalid = rows('invalid');
+      return [
+        joined.length ? `${SESSION_TABLE_LABELS[table]}: ${lineList(joined)} had extra cells, joined into the last column with one space.` : '',
+        dropped.length ? `${SESSION_TABLE_LABELS[table]}: ${lineList(dropped)} lacked a required column and ${dropped.length === 1 ? 'was' : 'were'} dropped.` : '',
+        invalid.length ? `${SESSION_TABLE_LABELS[table]}: ${lineList(invalid)} had a color the table does not accept and ${invalid.length === 1 ? 'was' : 'were'} dropped.` : ''
+      ].filter(Boolean);
+    })].join(' ');
+};
+
+// The Load notice for the Legend entries a Session stored with a color outside
+// the Default colors domain (D-43): `drops` lists `{ list, caption }` per
+// dropped entry, possibly more than once. Captions are free text, quoted with " as
+// other user text is.
+const LEGEND_LIST_MARKS = { entries: '', dormantEntries: ' (not drawn)', deletedEntries: ' (deleted)' };
+export const legendColorDropNotice = (drops) => {
+  const named = [...new Set((drops || []).map(({ list, caption }) => `"${caption}"${LEGEND_LIST_MARKS[list] ?? ''}`))];
+  if (!named.length) return '';
+  return `Legend: ${cappedList('entry', 'entries', named)} had a color the app does not accept and ${named.length === 1 ? 'was' : 'were'} dropped.`;
+};
+
 // Whether the committed Session drew with the given Feature visibility rules
 // (TSV), compared after normalization. Reusing resolved protein comparisons is
 // valid only when it holds (CO-02); an unreadable committed table declines.
-export const committedFeatureVisibilityMatches = (committedSession, activeRulesTsv) => {
+// Feature visibility decides which proteins LOSATP compares: the rules and the
+// per-feature `featureVisibility` of the request's identity rows (design Q4 3.3).
+const featureVisibilityRowsKey = (rows) => JSON.stringify((Array.isArray(rows) ? rows : [])
+  .filter((row) => row?.featureVisibility)
+  .map((row) => [row.recordKey, row.biologicalFeatureId, row.featureVisibility]));
+export const committedFeatureVisibilityMatches = (committedSession, activeRulesTsv, activeOverrideRows = []) => {
   const normalize = (text) => serializeFeatureVisibilityRules(parseFeatureVisibilityRules(String(text ?? '')).rules);
   try {
     return normalize(resourceTextFromRef(
       committedSession?.resources,
-      committedSession?.renderRequest?.diagramOptions?.featureVisibilityTableFile
-    )) === normalize(activeRulesTsv);
+      editorTableRef(committedSession?.renderRequest?.diagramOptions, 'visibility')
+    )) === normalize(activeRulesTsv)
+      && featureVisibilityRowsKey(committedSession?.renderRequest?.diagramOptions?.featureOverrides)
+        === featureVisibilityRowsKey(activeOverrideRows);
   } catch {
     return false;
   }
@@ -3346,6 +3716,7 @@ const legacyLabelScope = ({ mode, showLabels, allowInnerLabels }) => {
 
 const projectFullConfigOverrides = (config, mode) => {
   if (!config || typeof config !== 'object' || Array.isArray(config)) return {};
+  /** @type {Set<string>} */
   const paths = new Set(Object.values(CONFIG_OVERRIDE_PATHS));
   const labelScopePath = MODE_LABEL_SCOPE_PATHS[mode];
   paths.add(labelScopePath);
@@ -3380,6 +3751,7 @@ const projectFullConfigOverrides = (config, mode) => {
 };
 
 const projectCanonicalConfigOverrides = (overrides, mode) => {
+  /** @type {Record<string, any>} */
   const projected = {};
   for (const [semanticName, path] of Object.entries(CONFIG_OVERRIDE_PATHS)) {
     if (Object.prototype.hasOwnProperty.call(overrides, path)) {
@@ -3465,7 +3837,11 @@ const projectCircularConservationConfig = (options, files) => {
     : [];
   const series = sourceFiles.map((file, index) => {
     const fileName = String(file?.name || `comparison-${index + 1}.tsv`);
-    const defaultLabel = fileName.replace(/\.[^.]+$/, '').trim() || `Comparison ${index + 1}`;
+    // A Session without stored labels predates D-03 and drew the full file name,
+    // as the Python decoder reads it; every Web Session stores its labels.
+    const defaultLabel = Array.isArray(options.conservationLabels)
+      ? fileName.replace(/\.[^.]+$/, '').trim() || `Comparison ${index + 1}`
+      : fileName;
     return {
       fileName,
       sourceIndex: index,
@@ -3544,6 +3920,15 @@ const projectLegacyCanonicalCircularSlot = (slot) => {
   return migrateLegacyCircularTrackSlot(projected);
 };
 
+/**
+ * @param {Record<string, any> | null | undefined} resources
+ * @param {Array<Record<string, any> | null | undefined>} records
+ * @param {string} [originalName]
+ * @param {{
+ *   resolveResourceFile?: ResourceFileResolver | null,
+ *   sessionResourceTable?: any
+ * }} [options]
+ */
 const combineCircularGenbankResources = (
   resources,
   records,
@@ -3691,6 +4076,10 @@ const projectedOutputPrefix = (
     : '';
 };
 
+/**
+ * A reader of unvalidated Session data (R14): the input is not typed.
+ * @param {Record<string, any>} input
+ */
 export const projectCanonicalSessionRequest = ({
   renderRequest,
   resources: canonicalResources,
@@ -3701,6 +4090,7 @@ export const projectCanonicalSessionRequest = ({
   fileBindings = [],
   linearTrackSlotSchemaVersion = LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   repairInvalidComparisonHeight = false,
+  repairLegacyTableRows = false,
   sessionResourceTable = null,
   deferResourceContent = false,
   adoptCanonicalPayloads = false
@@ -3722,6 +4112,13 @@ export const projectCanonicalSessionRequest = ({
     || Object.hasOwn(renderRequest.diagramOptions || {}, 'featurePlacements')) {
     throw new Error('Record display and feature placements require canonical schema 7.');
   }
+  if ((renderRequest.schema >= FEATURE_OVERRIDE_SCHEMA)
+    !== Array.isArray(renderRequest.diagramOptions?.featureOverrides)) {
+    throw diagnosticError('INPUT_INVALID', { field: 'featureOverrides', reason: 'SESSION_FORMAT' });
+  }
+  const projectedFeatureOverrides = renderRequest.schema >= FEATURE_OVERRIDE_SCHEMA
+    ? canonicalFeatureOverrides(renderRequest.diagramOptions.featureOverrides)
+    : [];
   const normalizedRecordOrdering = normalizeWebGridColumnOrdering(sourceRecords);
   const records = normalizedRecordOrdering.records;
   const reorderRecordIndexedValues = (values) => (
@@ -3729,6 +4126,7 @@ export const projectCanonicalSessionRequest = ({
       .map((sourceIndex) => values?.[sourceIndex])
   );
   if (records.length === 0) throw new Error('Canonical renderRequest records are required.');
+  /** @type {ReturnType<typeof canonicalSimilarityAlignment> | null} */
   let similarityAlignment = null;
   let recordTranslations = [];
   if (renderRequest.mode === 'linear' && renderRequest.schema >= 8) {
@@ -3806,12 +4204,19 @@ export const projectCanonicalSessionRequest = ({
     // A CLI binding uid (`cli-seq-N`) is only an initial value. The committed
     // request owns record identity, so each Linear file takes the recordKey
     // that Inherit matches against. A multi-record file, which Python expands
-    // as `<fileKey>:<n>`, becomes one row per record with the `#n` selector.
+    // as `<fileKey>:<n>`, becomes one row per record. The request also owns
+    // each record's selection, crop, and orientation: the CLI binds the input
+    // file and writes them in the request, so a file of which the CLI drew
+    // some records stays one File that draws only those records. A record
+    // without a selector (a CLI Session that stored a copy of each drawn
+    // record) takes the `#n` of its expanded recordKey.
     const recordKeysByFile = new Map();
+    const recordsByKey = new Map();
     sourceRecords.forEach((record) => {
       const key = String(record.recordKey || '');
       const fileKey = key.replace(/:[1-9]\d*$/, '');
       recordKeysByFile.set(fileKey, [...(recordKeysByFile.get(fileKey) || []), key]);
+      recordsByKey.set(key, record);
     });
     const fileRecordKeys = [...recordKeysByFile.keys()];
     if (renderRequest.mode === 'linear' && Array.isArray(explicitBindings.linearSeqs)
@@ -3820,13 +4225,17 @@ export const projectCanonicalSessionRequest = ({
       explicitBindings = {
         ...explicitBindings,
         linearSeqs: explicitBindings.linearSeqs.flatMap((sequence, index) => (
-          recordKeysByFile.get(fileRecordKeys[index]).map((uid) => ({
-            ...sequence,
-            uid,
-            ...(uid === fileRecordKeys[index] ? {} : {
-              region_record_id: `#${uid.slice(fileRecordKeys[index].length + 1)}`
-            })
-          }))
+          recordKeysByFile.get(fileRecordKeys[index]).map((uid) => {
+            const fields = linearSeqRecordFields(recordsByKey.get(uid));
+            return {
+              ...sequence,
+              uid,
+              ...fields,
+              ...(fields.region_record_id || uid === fileRecordKeys[index] ? {} : {
+                region_record_id: `#${uid.slice(fileRecordKeys[index].length + 1)}`
+              })
+            };
+          })
         ))
       };
     }
@@ -3903,17 +4312,15 @@ export const projectCanonicalSessionRequest = ({
   const committedComparisons = renderRequest.comparisons || [];
   const cliLinearSidecar = initializeCliInputs && storedConfig == null
     && renderRequest.mode === 'linear';
-  const cliDraftWithoutComparison = cliLinearSidecar && committedComparisons.length > 0
-    && committedComparisons.every((comparison) => (
-      comparison?.kind === 'generatedProteinComparison' && comparison.mode === 'none'
-      && !comparison.pairs?.length
-    ));
+  const cliDraftWithoutComparison = cliLinearSidecar && drawsNoComparison(committedComparisons);
   const cliProteinPlan = cliLinearSidecar && projectedProteinPipeline && !cliDraftWithoutComparison
     ? { linearComparisonPlan: normalizeLinearComparisonPlan({ mode: 'adjacent' }) }
     : {};
   const {
     blastSource: _cliBlastSource, losatProgram: _cliLosatProgram, ...cliProteinSettings
   } = projectedProteinPipeline?.config || {};
+  // The legacy file bag that the Web form state reads; its fields depend on the mode.
+  /** @type {Record<string, any>} */
   const files = { linearSeqs: [] };
   if (renderRequest.mode === 'circular') {
     files.circularRecords = records.map((record) => {
@@ -3954,8 +4361,6 @@ export const projectCanonicalSessionRequest = ({
   } else {
     files.linearSeqs = records.map((record, index) => {
       const source = record.source || {};
-      const region = record.region || null;
-      const selector = region?.selector || record.selector;
       const sourceIndex = normalizedRecordOrdering.sourceIndexByProjectedIndex[index];
       const savedMetadata = savedLinearRecordMetadataByKey.get(String(record.recordKey || '')) ||
         savedLinearRecordMetadata[sourceIndex] || legacyLinearSequences[sourceIndex] || {};
@@ -3998,10 +4403,7 @@ export const projectCanonicalSessionRequest = ({
         }),
         file_definition: fileDefinition,
         file_subtitle: fileSubtitle,
-        region_record_id: selector?.kind === 'recordId' ? selector.value : (selector?.kind === 'recordIndex' ? `#${selector.index + 1}` : ''),
-        region_start: region?.start ?? null,
-        region_end: region?.end ?? null,
-        region_reverse: Boolean(region?.reverseComplement || record.presentation?.reverseComplement)
+        ...linearSeqRecordFields(record)
       };
     });
     files.linearComparisons = [];
@@ -4022,6 +4424,8 @@ export const projectCanonicalSessionRequest = ({
         const file = resolveResourceFile
           ? resolveResourceFile(comparison.resourceId)
           : resourceAsLegacyFile(resources, comparison.resourceId);
+        // An unmapped source index is undefined; it never named a sequence here.
+        if (queryIndex === undefined || subjectIndex === undefined) return;
         if (files.linearSeqs[queryIndex] && subjectIndex === queryIndex + 1) {
           files.linearSeqs[queryIndex].blast = file;
         }
@@ -4045,6 +4449,8 @@ export const projectCanonicalSessionRequest = ({
         if (
           comparison.kind === 'precomputedProteinComparison' &&
           (
+            queryRecordIndex === undefined ||
+            subjectRecordIndex === undefined ||
             !Number.isInteger(queryRecordIndex) ||
             !Number.isInteger(subjectRecordIndex) ||
             !files.linearSeqs[queryRecordIndex] ||
@@ -4094,6 +4500,7 @@ export const projectCanonicalSessionRequest = ({
               .get(Number(pair?.queryRecordIndex));
             const subjectIndex = normalizedRecordOrdering.projectedIndexBySourceIndex
               .get(Number(pair?.subjectRecordIndex));
+            if (queryIndex === undefined || subjectIndex === undefined) return;
             if (!files.linearSeqs[queryIndex] || !files.linearSeqs[subjectIndex]) return;
             files.linearComparisons.push({
               id: `linear-comparison-canonical-losat-${index + 1}`,
@@ -4167,6 +4574,16 @@ export const projectCanonicalSessionRequest = ({
       files.linearSeqs[index].depth = depth.length > 1 ? depth : (depth[0] || null);
     });
   }
+  // Sessions 31–39 (repairLegacyTableRows) read these three tables as the
+  // current writer writes them; the Load notice lists the rows read so.
+  const legacyTableRepairs = [];
+  const readLegacyTable = (table, ref, parse) => {
+    const parsed = readSessionTable(table, () => parse(
+      resourceTextFromRef(resources, ref), { legacyRows: repairLegacyTableRows }
+    ));
+    legacyTableRepairs.push(...parsed.repairs.map((repair) => ({ table, ...repair })));
+    return parsed;
+  };
   const defaultColorsRef = options.colors?.defaultColorsFile || options.colors?.defaultColors;
   let projectedDefaultColors = deferResourceContent
     && storedConfig?.colors
@@ -4179,9 +4596,7 @@ export const projectCanonicalSessionRequest = ({
       ? resolveResourceFile(defaultColorsRef.resourceId)
       : resourceAsLegacyFile(resources, defaultColorsRef.resourceId);
     if (!deferResourceContent) {
-      projectedDefaultColors = parseColorTable(
-        resourceTextFromRef(resources, defaultColorsRef)
-      ).colors;
+      projectedDefaultColors = readLegacyTable('default-colors', defaultColorsRef, parseColorTable).colors;
     }
   }
   const colorTableRef = options.colors?.colorTableFile || options.colors?.colorTable;
@@ -4193,48 +4608,47 @@ export const projectCanonicalSessionRequest = ({
       ? resolveResourceFile(colorTableRef.resourceId)
       : resourceAsLegacyFile(resources, colorTableRef.resourceId);
     if (!deferResourceContent) {
-      projectedSpecificRules = parseSpecificRules(
+      projectedSpecificRules = readSessionTable('specific-colors', () => parseSpecificRules(
         resourceTextFromRef(resources, colorTableRef)
-      ).rules.map(({ fromFile: _fromFile, ...rule }) => rule);
+      )).rules.map(({ fromFile: _fromFile, ...rule }) => rule);
     }
   }
   let projectedWhitelist = deferResourceContent && Array.isArray(storedConfig?.whitelist)
     ? storedConfig.whitelist
     : [];
-  if (options.labelWhitelistFile?.resourceId) {
+  const whitelistRef = editorTableRef(options, 'whitelist');
+  if (whitelistRef) {
     files.whitelist = resolveResourceFile
-      ? resolveResourceFile(options.labelWhitelistFile.resourceId)
-      : resourceAsLegacyFile(resources, options.labelWhitelistFile.resourceId);
+      ? resolveResourceFile(whitelistRef.resourceId)
+      : resourceAsLegacyFile(resources, whitelistRef.resourceId);
     if (!deferResourceContent) {
-      projectedWhitelist = parseWhitelistRules(
-        resourceTextFromRef(resources, options.labelWhitelistFile)
-      ).rules;
+      projectedWhitelist = readLegacyTable('label-whitelist', whitelistRef, parseWhitelistRules).rules;
     }
   }
-  const qualifierPriorityRef = options.qualifierPriorityFile || options.qualifierPriorityTable;
+  const qualifierPriorityRef = editorTableRef(options, 'priority');
   let projectedPriorityRules = deferResourceContent
     && Array.isArray(storedConfig?.qualifierPriorityRules)
     ? storedConfig.qualifierPriorityRules
     : [];
-  if (qualifierPriorityRef?.resourceId) {
+  if (qualifierPriorityRef) {
     files.qualifier_priority = resolveResourceFile
       ? resolveResourceFile(qualifierPriorityRef.resourceId)
       : resourceAsLegacyFile(resources, qualifierPriorityRef.resourceId);
     if (!deferResourceContent) {
-      projectedPriorityRules = parsePriorityRules(
-        resourceTextFromRef(resources, qualifierPriorityRef)
-      ).rules;
+      projectedPriorityRules = readLegacyTable('qualifier-priority', qualifierPriorityRef, parsePriorityRules).rules;
     }
   }
-  const projectedFeatureVisibilityRules = !deferResourceContent
-    && options.featureVisibilityTableFile?.resourceId
-    ? parseFeatureVisibilityRules(
-        resourceTextFromRef(resources, options.featureVisibilityTableFile)
-      ).rules
+  const visibilityRef = editorTableRef(options, 'visibility');
+  const projectedFeatureVisibilityRules = !deferResourceContent && visibilityRef
+    ? readSessionTable('feature-visibility', () => parseFeatureVisibilityRules(
+        resourceTextFromRef(resources, visibilityRef)
+      )).rules
     : [];
-  const projectedLabelOverrideRows = !deferResourceContent
-    && options.labelOverrideFile?.resourceId
-    ? parseLabelOverrideTsv(resourceTextFromRef(resources, options.labelOverrideFile)).map((row) => ({
+  const labelOverrideRef = editorTableRef(options, 'labelOverrides');
+  const projectedLabelOverrideRows = !deferResourceContent && labelOverrideRef
+    ? readSessionTable('label-overrides', () => parseLabelOverrideTsv(
+      resourceTextFromRef(resources, labelOverrideRef)
+    )).map((row) => ({
         recordId: row.recordId,
         featureType: row.featureType,
         qualifier: row.qualifier,
@@ -4293,6 +4707,9 @@ export const projectCanonicalSessionRequest = ({
           : null
       ));
   }
+  // The tables the request reads. A Web or CLI binding names the file a table
+  // was imported from; the writer stored the table derived from it (OV-367).
+  const requestTableFiles = Object.fromEntries(REQUEST_TABLE_FILE_SLOTS.map((slot) => [slot, files[slot] || null]));
   Object.assign(files, applyWebFileBindings(
     files,
     webMetadata,
@@ -4721,6 +5138,7 @@ export const projectCanonicalSessionRequest = ({
     mode: renderRequest.mode,
     inputType,
     files,
+    requestTableFiles,
     layoutPreferences,
     config: {
       form,
@@ -4738,9 +5156,8 @@ export const projectCanonicalSessionRequest = ({
       whitelist: projectedWhitelist,
       blacklistText: projectedBlacklistText,
       linearRecordLayout: linearLayout,
-      annotationSets: normalizeAnnotationSets(options.annotations?.sets),
+      annotationSets: draftAnnotationSetsOfRequest(options.annotations?.sets),
       recordDisplayDrafts: records.flatMap((record, index) => (record.display?.isCircular != null || record.display?.startCoordinate != null) ? [{
-        scope: renderRequest.mode,
         sourceUid: renderRequest.mode === 'linear' ? String(files.linearSeqs[index]?.uid || record.recordKey) : 'circular',
         selector: record.selector?.kind === 'recordIndex' ? `#${record.selector.index + 1}` : '#1',
         recordId: record.selector?.kind === 'recordId' ? record.selector.value : '',
@@ -4749,16 +5166,20 @@ export const projectCanonicalSessionRequest = ({
         reverseComplementOverride: null,
         anchorIntent: null
       }] : []),
-      featurePlacementOverrides: Object.fromEntries(canonicalFeaturePlacements(
+      featurePlacementOverrides: featureDraftMap(canonicalFeaturePlacements(
         options.featurePlacements || [], renderRequest.mode
-      ).map((row) => [JSON.stringify([row.recordKey, row.biologicalFeatureId]), row])),
+      )),
       circularConservation: renderRequest.mode === 'circular'
         ? projectCircularConservationConfig(options, files)
         : undefined
     },
     semanticFeatureState: {
       featureVisibilityManualRules: projectedFeatureVisibilityRules,
-      featureVisibilityOverrides: {},
+      // A request written without the Web draft (CLI, Python) carries its
+      // per-feature edits only as these rows.
+      featureOverrides: featureDraftMap(
+        projectedFeatureOverrides.map((row) => ({ ...row, labelSourceText: null }))
+      ),
       labelOverrideRows: projectedLabelOverrideRows
     },
     pipelineState: projectedProteinPipeline
@@ -4768,9 +5189,11 @@ export const projectCanonicalSessionRequest = ({
           legacySimilarityAlignment:
             projectedProteinPipeline.legacySimilarityAlignment
         }
-      : null
+      : null,
+    legacyTableRepairs
   };
 };
+// Output fields that name files, not the figure; a batch request has one output per record.
 const PUBLICATION_OUTPUT_ONLY_FIELDS = new Set(['prefix', 'formats', 'overwrite', 'artifactFilename']);
 const PUBLICATION_COMPARISON_FILTER_FIELDS = new Set(['evalue', 'bitscore', 'identity', 'alignmentLength']);
 const PUBLICATION_OPTION_DEFAULTS = { dinucleotide: 'GC', keepFullDefinitionWithPlotTitle: false, conservationReference: 'auto', 'objects.features.arrow_geometry.head_length_ratio': 'auto', 'objects.features.arrow_geometry.shaft_width_ratio': 1, 'objects.scale.show': true };
@@ -4783,29 +5206,45 @@ const publicationBytes = async (resource, id) => {
   throw new Error(`Canonical request resource '${id}' has no decodable payload.`);
 };
 const TSV_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+// The tables a CLI Session stores with a header; the files the Web writes have
+// none (OV-266, OV-367). Each compares by kind and rows
+// without the header; default colors compare as a set, the others keep their
+// rule order.
+const PUBLICATION_TABLES = Object.freeze({
+  '$.diagramOptions.colors.defaultColors': ['default-colors', 'feature_type\tcolor'],
+  '$.diagramOptions.colors.colorTable': ['color-table', 'feature_type\tqualifier_key\tvalue\tcolor\tcaption'],
+  '$.diagramOptions.featureVisibilityTable': ['feature-visibility-table', 'record_id\tfeature_type\tqualifier\tvalue\taction'],
+  '$.diagramOptions.labelWhitelistTable': ['label-whitelist-table', 'feature_type\tqualifier\tkeyword'],
+  '$.diagramOptions.qualifierPriorityTable': ['qualifier-priority-table', 'feature_type\tpriorities'],
+  '$.diagramOptions.labelOverrideTable': ['label-override-table', 'record_id\tfeature_type\tqualifier\tvalue\tlabel_text']
+});
+const publicationTable = (path) => PUBLICATION_TABLES[path.replace(/\.resourceId$/, '')] || null;
 const normalizedPublicationBytes = async (resource, id, normalize, path) => {
   const bytes = await publicationBytes(resource, id);
-  if (path.includes('.diagramOptions.colors.defaultColors')) {
-    const rows = bytesToText(bytes).split(/\r?\n/).map((row) => row.trim()).filter(
-      (row) => row && row !== 'feature_type\tcolor').sort();
-    return textToBytes(`${rows.join('\n')}\n`);
+  const table = publicationTable(path);
+  if (table) {
+    const [kind, header] = table, sorted = kind === 'default-colors';
+    const rows = bytesToText(bytes).split(/\r?\n/).map((row) => (sorted ? row.trim() : row))
+      .filter((row) => row.trim() && row !== header);
+    return textToBytes(`${(sorted ? rows.sort() : rows).join('\n')}\n`);
   }
   if (!normalize) return bytes;
   if (!path.startsWith('$.comparisons') || resource.kind !== 'canonical-tsv') return bytes;
   const rows = bytesToText(bytes).trimEnd().split(/\r?\n/).map((row, index) => index === 0
     ? row : row.split('\t').map((cell) => {
       const number = Number(cell);
-      return TSV_NUMBER.test(cell) && Number.isFinite(number)
-        ? String(Number(number.toPrecision(15))) : cell;
+      if (TSV_NUMBER.test(cell) && Number.isFinite(number)) return String(Number(number.toPrecision(15)));
+      // The CLI replay writes booleans through pandas as True/False (OV-413).
+      return cell === 'True' || cell === 'False' ? cell.toLowerCase() : cell;
     }).join('\t'));
   return textToBytes(`${rows.join('\n')}\n`);
 };
 const publicationResourceIdentity = async (resources, id, normalize, path, cache) => {
   const resourceId = String(id || '').trim();
   if (!resourceId) throw new Error('Canonical request contains an empty resourceId.');
-  const resource = resources?.[resourceId], key = resource?.encoding === 'base64' && !path.includes('.diagramOptions.colors.defaultColors') && (!normalize || !path.startsWith('$.comparisons') || resource.kind !== 'canonical-tsv') ? resource.data : null;
-  const kind = path.includes('.diagramOptions.colors.defaultColors') ? 'default-colors'
-    : (path.includes('.diagramOptions.colors.colorTable') ? 'color-table' : String(resource.kind || ''));
+  const table = publicationTable(path);
+  const resource = resources?.[resourceId], key = resource?.encoding === 'base64' && !table && (!normalize || !path.startsWith('$.comparisons') || resource.kind !== 'canonical-tsv') ? resource.data : null;
+  const kind = table ? table[0] : String(resource.kind || '');
   let digest = key ? cache.get(key) : null;
   if (!digest) { digest = normalizedPublicationBytes(resource, resourceId, normalize, path).then((bytes) => sha256Hex(bytes)); if (key) cache.set(key, digest); }
   return { kind, decodedPayloadSha256: await digest };
@@ -4821,9 +5260,16 @@ const canonicalizePublicationValue = async (value, resources, context, path = '$
       || (path === '$.diagramOptions.configOverrides' && key === 'labels.filtering.blacklist_keywords'
         && Array.isArray(value[key]) && value[key].length === 0)
       || (path === '$.diagramOptions.configOverrides' && key === 'canvas.feature_overlap_tolerance_bp' && value[key] === 0)
+      // A request may state a default the other writer omits (OV-398): the
+      // definition-line weight `normal`, which a Web draft holds as null, and
+      // a feature rendering, which a CLI request states only when changed.
+      || (path === '$.diagramOptions.configOverrides' && LINEAR_DEFINITION_WEIGHT_PATHS.has(key) && value[key] === 'normal')
+      || (path === '$.diagramOptions.featureShapes' && value[key] === defaultFeatureRendering(key))
+      || (path === '$.diagramOptions' && key === 'featureShapes' && value[key] && typeof value[key] === 'object'
+        && Object.entries(value[key]).every(([type, rendering]) => rendering === defaultFeatureRendering(type)))
       || (path === '$.diagramOptions.config.canvas' && key === 'feature_overlap_tolerance_bp' && value[key] === 0)
       || (context.ignoreComparisonFilters && path === '$.diagramOptions' && PUBLICATION_COMPARISON_FILTER_FIELDS.has(key))
-      || (path === '$.output' && PUBLICATION_OUTPUT_ONLY_FIELDS.has(key))) continue;
+      || (/^\$\.output(?:\[\d+\])?$/.test(path) && PUBLICATION_OUTPUT_ONLY_FIELDS.has(key))) continue;
     if (resourceReference && ['encoding', 'representation'].includes(key)) continue;
     const childPath = `${path}.${key}`;
     if (key === 'resourceId') {
@@ -4847,15 +5293,28 @@ const firstPublicationDiff = (expected, actual, path = '$') => {
   }
   return null;
 };
-export const promoteCanonicalRenderRequestToCurrent = (
-  request,
-  { featureCatalog = null, legacyOrthogroupState = null } = {}
-) => {
+/**
+ * @param {Record<string, any>} request A canonical request of schema 5 to 9.
+ * @param {Record<string, any>} [promotion]
+ * @returns {CanonicalRenderRequest}
+ */
+export const promoteCanonicalRenderRequestToCurrent = (request, promotion = {}) => {
   const promoted = cloneCanonicalJsonValue(request);
   if (promoted.schema === CANONICAL_REQUEST_SCHEMA) return promoted;
-  if (![5, 6, 7].includes(promoted.schema)) {
-    throw new Error('Only canonical renderRequest schemas 5, 6, and 7 can be promoted to schema 8.');
+  if (![5, 6, 7, 8].includes(promoted.schema)) {
+    throw new Error('Only canonical renderRequest schemas 5, 6, 7, and 8 can be promoted to schema 9.');
   }
+  if (promoted.schema < 8) promoteRenderRequestToSchema8(promoted, promotion);
+  // Schema 9 adds per-feature edits by source identity (design Q4).
+  promoted.schema = CANONICAL_REQUEST_SCHEMA;
+  promoted.diagramOptions = { ...promoted.diagramOptions, featureOverrides: [] };
+  return promoted;
+};
+
+const promoteRenderRequestToSchema8 = (
+  promoted,
+  { featureCatalog = null, legacyOrthogroupState = null }
+) => {
   const sourceSchema = promoted.schema;
   const linearRows = promoted.mode === 'linear'
     ? (promoted.layout?.multiRecordPositions || []).map((token) => {
@@ -4863,7 +5322,7 @@ export const promoteCanonicalRenderRequestToCurrent = (
         return Number(String(token).slice(split + 1)) || null;
       })
     : [];
-  promoted.schema = CANONICAL_REQUEST_SCHEMA;
+  promoted.schema = 8;
   (promoted.records || []).forEach((record, index) => {
     if (sourceSchema < 7) record.display = { isCircular: null, startCoordinate: null };
     if (sourceSchema === 5) record.cardinality = promoted.mode === 'linear' &&
@@ -5004,6 +5463,14 @@ const shiftCanonicalComparisonIndexes = (comparisons, recordIndex, expansion) =>
   })
 );
 
+// A schema-8 request has no feature overrides, so a Session saved before schema 9
+// stays usable without Generate (design Q4).
+const withCurrentCommittedRequest = (committed) => (
+  committed?.renderRequest?.schema === 8
+    ? { ...committed, renderRequest: promoteCanonicalRenderRequestToCurrent(committed.renderRequest) }
+    : committed
+);
+
 const requireCurrentCommittedRequest = (committed, request) => {
   if (!request || request.schema !== CANONICAL_REQUEST_SCHEMA
     || !['circular', 'linear'].includes(request.mode)
@@ -5016,7 +5483,8 @@ const requireCurrentCommittedRequest = (committed, request) => {
  * Clone the last committed canonical Session and overlay one record transform.
  * No live form state participates in this projection.
  */
-export const projectCommittedRecordTransform = ({ committed, target, transform }) => {
+export const projectCommittedRecordTransform = ({ committed: source, target, transform }) => {
+  const committed = withCurrentCommittedRequest(source);
   const request = committed?.renderRequest;
   requireCurrentCommittedRequest(committed, request);
   validateRecordTransformTarget(target, transform, request.mode);
@@ -5108,9 +5576,7 @@ export const projectCommittedRecordTransform = ({ committed, target, transform }
 
 const COMMITTED_EDITOR_TABLE_OPTIONS = Object.freeze({
   colors: ['colors'],
-  visibility: ['featureVisibilityTableFile'],
-  whitelist: ['labelWhitelistFile'],
-  labelOverrides: ['labelOverrideFile']
+  ...EDITOR_TABLE_OPTIONS
 });
 
 const referencedResourceIds = (value, ids = new Set()) => {
@@ -5128,19 +5594,19 @@ const referencedResourceIds = (value, ids = new Set()) => {
  * Clone the last committed canonical Session and replace only the tables of
  * live editor intent: feature colors (rules and the applied palette), feature
  * visibility, and label overrides. A label reflow renders this request, so no
- * other draft setting reaches the Result before Generate (R1(c), N-16). The
- * Enable Labels choice also carries its label selection: the label scope,
- * blacklist, and whitelist.
+ * other draft setting reaches the Result before Generate (R1(c), N-16).
+ * @param {{ committed: any, state: Record<string, any>, drawing: RequestDrawing,
+ *   promotion?: Record<string, any> }} input
  */
 export const projectCommittedEditorIntent = ({
   committed,
   state,
-  labelSelection = false,
+  drawing,
   promotion = {}
 }) => {
   // A Session loaded from an older supported request schema keeps that request
   // until the next Generate; promote it the way Save does before overlaying.
-  const request = [5, 6, 7].includes(committed?.renderRequest?.schema)
+  const request = [5, 6, 7, 8].includes(committed?.renderRequest?.schema)
     ? promoteCanonicalRenderRequestToCurrent(committed.renderRequest, promotion)
     : committed?.renderRequest;
   requireCurrentCommittedRequest(committed, request);
@@ -5152,7 +5618,7 @@ export const projectCommittedEditorIntent = ({
   const options = candidate.renderRequest.diagramOptions || {};
   candidate.renderRequest.diagramOptions = options;
   const tables = {
-    colors: true, visibility: true, whitelist: labelSelection, priority: false, labelOverrides: true
+    colors: true, visibility: true, whitelist: false, priority: false, labelOverrides: true
   };
   const retired = new Set();
   Object.entries(COMMITTED_EDITOR_TABLE_OPTIONS).forEach(([table, keys]) => {
@@ -5167,16 +5633,14 @@ export const projectCommittedEditorIntent = ({
     if (!stillReferenced.has(resourceId)) delete candidate.resources[resourceId];
   });
   const resources = createResourceBuilder();
-  addGeneratedTableResources(state, resources, options, tables);
+  const labelProjection = requestLabelProjection(state, drawing);
+  // Per-feature edits are live editor intent too (design Q4).
+  options.featureOverrides = requestFeatureOverrides(
+    drawing.featureOverrides, candidate.renderRequest.records,
+    { bulkLabelText: labelProjection.bulkLabelText }
+  );
+  addGeneratedTableResources(state, drawing, resources, options, tables, labelProjection);
   Object.assign(candidate.resources, resources.resources);
-  if (labelSelection) {
-    const circular = request.mode === 'circular';
-    options.configOverrides = {
-      ...(options.configOverrides || {}),
-      [MODE_LABEL_SCOPE_PATHS[request.mode]]: labelScopeOverride(state.form, circular),
-      [CONFIG_OVERRIDE_PATHS.labelBlacklist]: labelBlacklistOverride(state)
-    };
-  }
   projectCanonicalSessionRequest({
     renderRequest: candidate.renderRequest,
     resources: candidate.resources,
@@ -5188,7 +5652,8 @@ export const projectCommittedEditorIntent = ({
 };
 
 /** Project only alignment-owned fields of the last committed canonical artifact. */
-export const projectCommittedSimilarityAlignment = ({ committed, plan, translations, orientations }) => {
+export const projectCommittedSimilarityAlignment = ({ committed: source, plan, translations, orientations }) => {
+  const committed = withCurrentCommittedRequest(source);
   if (committed?.renderRequest?.schema !== CANONICAL_REQUEST_SCHEMA
     || committed.renderRequest.mode !== 'linear' || !committed.resources) {
     throw new Error('Alignment requires a committed canonical Linear artifact.');
@@ -5210,7 +5675,7 @@ export const projectCommittedSimilarityAlignment = ({ committed, plan, translati
 };
 
 const normalizePublicationRequestAliases = (request) => {
-  const normalized = [5, 6, 7].includes(request?.schema)
+  const normalized = [5, 6, 7, 8].includes(request?.schema)
     ? promoteCanonicalRenderRequestToCurrent(request)
     : cloneCanonicalJsonValue(request);
   for (const comparison of normalized.comparisons || []) {
@@ -5220,6 +5685,7 @@ const normalizePublicationRequestAliases = (request) => {
       );
     }
   }
+  if (drawsNoComparison(normalized.comparisons || [])) normalized.comparisons = [];
   const colors = normalized.diagramOptions?.colors;
   if (colors) {
     colors.defaultColors = colors.defaultColors || colors.defaultColorsFile || null;
@@ -5227,6 +5693,11 @@ const normalizePublicationRequestAliases = (request) => {
     delete colors.defaultColorsFile;
     delete colors.colorTableFile;
   }
+  const options = normalized.diagramOptions;
+  if (options) Object.entries(EDITOR_TABLE_OPTIONS).forEach(([table, [key, fileKey]]) => {
+    options[key] = editorTableRef(options, /** @type {keyof typeof EDITOR_TABLE_OPTIONS} */ (table));
+    delete options[fileKey];
+  });
   return normalized;
 };
 const publicationRequestIdentity = async (request, resources, normalize, resourceIdentities) => {
@@ -5248,7 +5719,7 @@ export const compareCanonicalRenderRequests = async (input) => {
 export const assertCanonicalRenderRequestsEquivalent = async (input) => {
   const comparison = await compareCanonicalRenderRequests(input);
   if (comparison.equivalent) return comparison;
-  const error = new Error(`Gallery publication request differs at ${comparison.differences[0]?.path || '$'} (committed ${comparison.expected.digest}, rebuilt ${comparison.actual.digest}).`);
+  const error = /** @type {Error & { comparison?: any }} */ (new Error(`Gallery publication request differs at ${comparison.differences[0]?.path || '$'} (committed ${comparison.expected.digest}, rebuilt ${comparison.actual.digest}).`));
   error.comparison = comparison;
   throw error;
 };

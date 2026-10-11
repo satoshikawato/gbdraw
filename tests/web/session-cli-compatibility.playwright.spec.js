@@ -5,7 +5,7 @@ const { createHash } = require('node:crypto');
 const { gunzipSync } = require('node:zlib');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
-const { evaluateWithRetainedPromise, openApp, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
 
 const root = process.cwd();
 const mito = path.join(root, 'tests/fixtures/sessions/cli-web-mito.gb');
@@ -18,7 +18,22 @@ const cases = [
   { name: 'original single', mode: 'circular', args: ['--gbk', mito, '--labels', 'out'], sources: [mito] },
   { name: 'composite', mode: 'circular', args: ['--gbk', mito, lambda, '--multi_record_canvas'], sources: [mito, lambda] },
   { name: 'linear', mode: 'linear', args: ['--gbk', mito, lambda], sources: [mito, lambda] },
-  { name: 'gff fasta', mode: 'circular', args: ['--gff', gff, '--fasta', fasta], sources: [gff, fasta] }
+  {
+    name: 'linear crop and reverse', mode: 'linear', sources: [mito, lambda],
+    args: ['--gbk', mito, lambda, '--region', '#1:1000-8000', '--reverse_complement', '0', '--reverse_complement', '1']
+  },
+  { name: 'gff fasta', mode: 'circular', args: ['--gff', gff, '--fasta', fasta], sources: [gff, fasta] },
+  // D-01, OV-221: the tables of a CLI Session reach the next Web Generate.
+  ...[
+    ['linear_tables', [lambda]], ['circular_records_tables', [path.join(root, 'tests/test_inputs/HmmtDNA.gbk')]],
+    ['linear_records_blacklist', [path.join(root, 'tests/test_inputs/HmmtDNA.gbk'), lambda]],
+    ['linear_blast', [path.join(root, 'tests/fixtures/web_comparison_shared_block.gb')]]
+  ]
+    .map(([id, sources]) => {
+      const entry = require('../fixtures/cli_session_cross_surface/cases.json').cases.find(item => item.id === id);
+      const args = entry.args.map(arg => (arg.startsWith('tests/') ? path.join(root, arg) : arg));
+      return { name: id.replace(/_/g, ' '), mode: entry.mode, args, sources };
+    })
 ];
 
 const cli = async (mode, args, testInfo, label) => {
@@ -37,10 +52,14 @@ const svgSemantics = content => {
   const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
   const records = new Map([...svg.querySelectorAll('[data-gbdraw-record-index]')]
     .map(element => [Number(element.getAttribute('data-gbdraw-record-index')), element.getAttribute('data-gbdraw-record-id')]));
+  // The CLI's Python and Pyodide differ in the last digits of path numbers;
+  // compare them at the 4 decimals of tests/utils/svg_compare.py.
+  const path = d => d && d.replace(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi, number => String(Math.round(Number(number) * 1e4) / 1e4));
   return {
     records: [...records.entries()].sort((a, b) => a[0] - b[0]),
     features: [...svg.querySelectorAll('[data-gbdraw-feature-id]')].map(element =>
-      ['data-gbdraw-feature-id', 'data-gbdraw-record-id', 'd', 'fill', 'stroke', 'display', 'visibility'].map(key => element.getAttribute(key))),
+      ['data-gbdraw-feature-id', 'data-gbdraw-record-id', 'd', 'fill', 'stroke', 'display', 'visibility']
+        .map(key => key === 'd' ? path(element.getAttribute(key)) : element.getAttribute(key))),
     text: [...svg.querySelectorAll('text')].map(element => element.textContent)
   };
 };
@@ -109,8 +128,8 @@ for (const entry of cases) {
       if (phase === 'cli-replay') file = await cli(entry.mode, ['--session', file], testInfo, phase);
       if (phase === 'web-cli-replay') file = await cli(entry.mode, ['--session', webFile], testInfo, phase);
       const session = await readSession(file);
-      expect(session.version).toBe(44);
-      expect(session.renderRequest.schema).toBe(8);
+      expect(session.version).toBe(CURRENT_SESSION_VERSION);
+      expect(session.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
       expect(session.webFiles.bindings.schema).toBe(2);
       if (entry.name === 'composite') {
         expect(session.webFiles.bindings.c_gb.kind).toBe('composite');
@@ -122,26 +141,54 @@ for (const entry of cases) {
         const before = await snapshot(run.page);
         expect(before.mode).toBe(entry.mode);
         expect(before.request).toEqual(session.renderRequest);
-        expect(before.files.flatMap(file => file.parts.map(part => part.sha256))).toEqual(sourceHashes);
+        // A CLI Session binds each input file once; the Web shows one row per
+        // drawn record, so a two-record file (linear blast) fills two rows bound
+        // to the same resource, and a Session the Web saved lists both rows. The
+        // checks below read each resource once on either side.
+        const resourceKey = parts => parts.map(part => part.resourceId).join('+');
+        const distinct = (items, parts) => [...new Map(items.map(item => [resourceKey(parts(item)), item])).values()];
+        const distinctFiles = files => distinct(files, file => file.parts);
+        const distinctBindings = items => distinct(items, binding => binding.components || [binding]);
+        expect(distinctFiles(before.files).flatMap(file => file.parts.map(part => part.sha256))).toEqual(sourceHashes);
         expect(before.files.every(file => !file.isArray)).toBe(true);
-        const inventory = session.webFiles.bindings;
-        const bindings = entry.mode === 'linear' ? inventory.linearSeqs.map(seq => seq.gb)
-          : entry.name === 'gff fasta' ? [inventory.c_gff, inventory.c_fasta] : [inventory.c_gb];
-        const metadata = file => ({ name: file.name, type: file.type, lastModified: file.lastModified });
-        expect(before.files.map(metadata)).toEqual(bindings.map(metadata));
-        expect(before.files.flatMap(file => file.parts.map(part => ({ resourceId: part.resourceId, ...metadata(part) }))))
-          .toEqual(bindings.flatMap(binding => (binding.components || [binding]).map(part => ({ resourceId: part.resourceId, ...metadata(part) }))));
+        // A records table binds its input through the request record, not the
+        // Web inventory; the file bytes above identify it.
+        if (!entry.args.includes('--records_table')) {
+          const inventory = session.webFiles.bindings;
+          const bindings = entry.mode === 'linear' ? inventory.linearSeqs.map(seq => seq.gb)
+            : entry.name === 'gff fasta' ? [inventory.c_gff, inventory.c_fasta] : [inventory.c_gb];
+          const metadata = file => ({ name: file.name, type: file.type, lastModified: file.lastModified });
+          expect(distinctFiles(before.files).map(metadata)).toEqual(distinctBindings(bindings).map(metadata));
+          expect(distinctFiles(before.files).flatMap(file => file.parts.map(part => ({ resourceId: part.resourceId, ...metadata(part) }))))
+            .toEqual(distinctBindings(bindings).flatMap(binding => (binding.components || [binding]).map(part => ({ resourceId: part.resourceId, ...metadata(part) }))));
+          // Every row that shares a resource shows the same file.
+          for (const file of before.files) {
+            expect(metadata(file)).toEqual(metadata(before.files.find(other => resourceKey(other.parts) === resourceKey(file.parts))));
+          }
+        }
         for (const part of before.files.flatMap(file => file.parts)) expect(before.resourceIds).toContain(part.resourceId);
         const expectedSvg = await run.page.evaluate(svgSemantics, before.selected);
         expect(expectedSvg.records.length).toBe(session.renderRequest.records.length);
         expect(await run.page.evaluate(svgSemantics, before.mounted)).toEqual(expectedSvg);
+        // A read-only imported comparison (-b) is reused through Inherit (D-04):
+        // the user picks it in the comparison resolution panel before Generate.
+        if (entry.args.includes('-b')) {
+          const resolution = run.page.locator('[data-imported-comparison-resolution]');
+          await resolution.getByRole('button', { name: 'Inherit saved comparison' }).click();
+          await expect(resolution).toContainText('Selected action: INHERIT');
+        }
         await generateAndWaitForResult(run.page);
         const after = await snapshot(run.page);
         const generatedSvg = await run.page.evaluate(svgSemantics, after.selected);
-        expect(generatedSvg.records).toEqual(expectedSvg.records);
+        // Generate draws the figure of the loaded Session (D-01).
+        expect(generatedSvg).toEqual(expectedSvg);
         expect(after.request.records).toHaveLength(session.renderRequest.records.length);
+        // Generate keeps each record's crop and orientation.
+        const transform = record => [record.region?.start ?? null, record.region?.end ?? null,
+          Boolean(record.region?.reverseComplement || record.presentation.reverseComplement)];
+        expect(after.request.records.map(transform)).toEqual(session.renderRequest.records.map(transform));
         expect(after.files).toEqual(before.files);
-        expect(after.files.flatMap(file => file.parts.map(part => part.sha256))).toEqual(sourceHashes);
+        expect(distinctFiles(after.files).flatMap(file => file.parts.map(part => part.sha256))).toEqual(sourceHashes);
         expect(await run.page.evaluate(svgSemantics, after.mounted)).toEqual(generatedSvg);
         const download = run.page.waitForEvent('download');
         await run.page.getByRole('button', { name: 'SVG', exact: true }).click();
@@ -154,7 +201,8 @@ for (const entry of cases) {
           expect(outcome.status).toBe('saved');
           webFile = testInfo.outputPath('web-current.gbdraw-session.json.gz');
           await (await saved).saveAs(webFile);
-          expect((await readSession(webFile)).config.form).toBeTruthy();
+          const webSession = await readSession(webFile);
+          expect(webSession.modes[webSession.renderRequest.mode].config.form).toBeTruthy();
         }
         await fs.writeFile(testInfo.outputPath(`${phase}-state.json`), JSON.stringify({
           before: { ...before, selected: undefined, mounted: undefined },
@@ -169,6 +217,41 @@ for (const entry of cases) {
     }
   });
 }
+
+// OV-269, OV-273: a Session 40 the CLI of main 8228ffab wrote (no composition
+// metadata in its Result) loads with its tables, and Generate draws the
+// case's current CLI figure.
+test('Session 40 early CLI linear tables survives Web Generate', async ({ browser }, testInfo) => {
+  test.setTimeout(1_800_000);
+  const entry = cases.find(item => item.name === 'linear tables');
+  const prefix = testInfo.outputPath('cli');
+  await promisify(execFile)('python', ['-m', 'gbdraw.cli', entry.mode, ...entry.args, '-o', prefix, '-f', 'svg'], {
+    cwd: testInfo.outputDir, env: { ...process.env, PYTHONPATH: root }, timeout: 1_800_000, maxBuffer: 1_000_000
+  });
+  const file = testInfo.outputPath('v40-early.gbdraw-session.json');
+  await fs.writeFile(file, gunzipSync(await fs.readFile(
+    path.join(root, 'tests/fixtures/sessions/cli-linear-tables.v40-early.gbdraw-session.json.gz'))));
+  const run = await load(browser, file, { width: 1600, height: 1000 });
+  try {
+    const tables = () => run.page.evaluate(async () => {
+      const drawing = (await import('./js/state.js')).state.activeDrawing();
+      return [drawing.manualSpecificRules.length, drawing.currentColors.value.CDS, drawing.featureVisibilityRules.value.length,
+        drawing.canonicalLabelOverrideRows.value.length, drawing.filterMode.value, drawing.manualWhitelist.length,
+        drawing.manualPriorityRules.length];
+    });
+    // The rows of colors.tsv, default_colors.tsv, visibility.tsv, labels.tsv, whitelist.tsv, priority.tsv.
+    const loaded = [2, '#123456', 2, 2, 'Whitelist', 3, 1];
+    expect(await tables()).toEqual(loaded);
+    await generateAndWaitForResult(run.page);
+    expect(await tables()).toEqual(loaded);
+    const generated = (await snapshot(run.page)).selected;
+    expect(await run.page.evaluate(svgSemantics, generated))
+      .toEqual(await run.page.evaluate(svgSemantics, await fs.readFile(`${prefix}.svg`, 'utf8')));
+    expect(run.errors).toEqual([]);
+  } finally {
+    await run.context.close();
+  }
+});
 
 test('Session schema-1 Web binding control still loads', async ({ browser }, testInfo) => {
   const run = await load(browser, path.join(root, 'tests/fixtures/sessions/single.v41-bindings1.json'), { width: 1600, height: 1000 }, false);

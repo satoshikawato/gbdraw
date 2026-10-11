@@ -16,7 +16,7 @@ const setup = async (page, mode = 'circular') => {
   await openApp(page);
   await load(page, fixture(mode));
   await page.waitForFunction(() => window.__GBDRAW_APP__.extractedFeatures.length);
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     const a = window.__GBDRAW_APP__;
     Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: '(?i)protein', color: '#f01234', cap: '' });
     await a.addSpecificRule();
@@ -78,7 +78,9 @@ for (const mode of ['circular', 'linear']) for (const width of [1600, 390]) {
     expect(await snapshot(page)).toEqual(before);
     const afterRetry = await getDiagramWorkerActivity(page);
     expect(afterRetry.constructions).toBe(activity.constructions);
-    expect(afterRetry.helpers - activity.helpers).toBe(4); // captions + one Python syntax/match operation per attempt
+    // One Python syntax/match operation per attempt; rules whose captions have
+    // one color each send no caption request (U3a 1e, OV-238).
+    expect(afterRetry.helpers - activity.helpers).toBe(2);
     await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.openRightDrawerTab('features'); a.closeRightDrawer(); a.openRightDrawerTab('features'); });
     await expect(field).toHaveValue('😀[PRIVATE_PATTERN_SENTINEL');
     await page.evaluate(() => window.__GBDRAW_APP__.closeRightDrawer());
@@ -103,6 +105,51 @@ for (const mode of ['circular', 'linear']) for (const width of [1600, 390]) {
     console.log(JSON.stringify({ mode, width, helpers: afterRetry.helpers - activity.helpers, constructions: afterRetry.constructions, acceptedHistoryDelta: 1 }));
   });
 }
+
+// OV-251: a root update that leaves the rules unchanged (a dialog opening or
+// closing) renders no rule row; a rule edit renders the rows it changes.
+test('a root update renders no Specific color rule row; a rule edit does', async ({ page }) => {
+  test.setTimeout(180000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await setup(page);
+  await evaluateWithRetainedPromise(page, async () => {
+    const a = window.__GBDRAW_APP__;
+    Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'gene', val: 'ND1', color: '#123456', cap: '' });
+    await a.addSpecificRule();
+  });
+  await expect(page.locator('[data-color-rule-row]')).toHaveCount(2);
+  const count = () => page.evaluate(() => window.__ruleRowRenders);
+  await page.evaluate(() => {
+    // Renders of the root and of the component that renders the rule rows.
+    const counted = (instance, keys) => {
+      const run = instance.effect.fn;
+      instance.effect.fn = function counting(...args) {
+        keys.forEach(key => { window.__ruleRowRenders[key] += 1; });
+        return run.apply(this, args);
+      };
+    };
+    window.__ruleRowRenders = { root: 0, rows: 0 };
+    const root = document.querySelector('#app').__vue_app__._instance;
+    const rows = document.querySelector('[data-color-rule-row]').__vueParentComponent;
+    if (rows === root) counted(root, ['root', 'rows']);
+    else { counted(root, ['root']); counted(rows, ['rows']); }
+  });
+  for (const show of [true, false]) {
+    await page.evaluate(async value => {
+      window.__GBDRAW_APP__.featureStyleScopeDialog.show = value;
+      await window.Vue.nextTick();
+    }, show);
+  }
+  const afterDialog = await count();
+  expect(afterDialog.root).toBeGreaterThan(0);
+  expect(afterDialog).toEqual({ root: afterDialog.root, rows: 0 });
+  await page.getByLabel('Color rule 2 color', { exact: true }).fill('#00ff00');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules[1].color)).toBe('#00ff00');
+  await expect(page.getByLabel('Color rule 2 color', { exact: true })).toHaveValue('#00ff00');
+  expect((await count()).rows).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});
 
 test('native runtime initialization and transport preparation failures retain their field drafts; Retry succeeds atomically', async ({ page }) => {
   test.setTimeout(180000); page.on('dialog', d => d.accept());
@@ -182,8 +229,14 @@ test('real History, failed Session rollback, fresh Save/Load, Export and Generat
   expect(await snapshot(page)).toEqual(stable);
   // Fail after reset/commit began: actual Session owner must restore source first.
   await page.evaluate(async () => {
-    const { state } = await import('/gbdraw/web/js/state.js'); const original = state.normalizePaletteColors;
-    state.normalizePaletteColors = (...args) => { state.normalizePaletteColors = original; throw new Error('PRIVATE_COMMIT_SENTINEL'); };
+    const { state } = await import('/gbdraw/web/js/state.js');
+    // The first palette write of the reset throws once, then the ref behaves normally again.
+    const accessor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(state.activeDrawing().selectedPalette), 'value');
+    Object.defineProperty(state.activeDrawing().selectedPalette, 'value', {
+      configurable: true,
+      get() { return accessor.get.call(this); },
+      set() { delete state.activeDrawing().selectedPalette.value; throw new Error('PRIVATE_COMMIT_SENTINEL'); }
+    });
   });
   await load(page, fixture('circular'));
   await expect(page.getByLabel('Color rule 1 pattern', { exact: true })).toHaveValue('[PRIVATE_DRAFT_SENTINEL');
@@ -194,7 +247,13 @@ test('real History, failed Session rollback, fresh Save/Load, Export and Generat
   expect(exported).not.toContain('PRIVATE_');
   expect(exported).toContain('#f01234');
   const exportXml = await page.evaluate(text => new XMLSerializer().serializeToString(new DOMParser().parseFromString(text, 'image/svg+xml')), exported);
-  expect(exportXml).toBe((await snapshot(page)).result[0].content);
+  // An export strips the paint records the Result keeps (result-paint-bases.js).
+  expect(exportXml).toBe(await page.evaluate(async (content) => {
+    const { stripResultBaseAttributes } = await import('/gbdraw/web/js/services/result-paint-bases.js');
+    const root = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
+    stripResultBaseAttributes(root);
+    return new XMLSerializer().serializeToString(root);
+  }, (await snapshot(page)).result[0].content));
   expect((await draft(page)).text).toBe('[PRIVATE_DRAFT_SENTINEL');
   await generateAndWaitForResult(page);
   expect((await draft(page)).text).toBe('(?i)NADH');
@@ -212,7 +271,7 @@ test('real History, failed Session rollback, fresh Save/Load, Export and Generat
   await reject(page);
   await load(page, fixture('linear'));
   expect(await draft(page)).toBe(null);
-  await page.evaluate(async () => { const a = window.__GBDRAW_APP__; Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: 'protein', color: '#f01234', cap: '' }); await a.addSpecificRule(); });
+  await evaluateWithRetainedPromise(page, async () => { const a = window.__GBDRAW_APP__; Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: 'protein', color: '#f01234', cap: '' }); await a.addSpecificRule(); });
   await reject(page);
   await page.evaluate(() => window.__GBDRAW_APP__.resetSettings());
   expect(await draft(page)).toBe(null);
@@ -228,25 +287,38 @@ for (const boundary of ['drawer', 'mode cycle', 'remove', 'reorder', 'Session', 
       await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.setDiagramMode('linear'); a.setDiagramMode('circular'); });
       await snapshot(page);
     }
-    await page.evaluate(() => {
+    // Session: the held request is the caption normalization a caption edit
+    // asks for when it gives rule 1's caption to rule 0 in another color (a
+    // Load waits for a pending match, U3a 1e), so the Load takes over while
+    // the edit is late.
+    await evaluateWithRetainedPromise(page, async (captionEdit) => {
+      const a = window.__GBDRAW_APP__;
+      if (captionEdit) {
+        Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: '(?i)cytochrome', color: '#2266aa', cap: 'Shared' });
+        await a.addSpecificRule();
+      }
       const send = Worker.prototype.postMessage;
       Worker.prototype.postMessage = function (message, ...args) {
         if (message.operation === 'evaluateRules') {
           Worker.prototype.postMessage = send;
+          window.__heldKind = message.payload?.kind;
           window.__releasePattern = () => send.call(this, message, ...args);
           return;
         }
         return send.call(this, message, ...args);
       };
-      window.__pendingPattern = window.__GBDRAW_APP__.setSpecificRuleField(0, 'val', '(?P<enzyme>NADH)');
-    });
+      window.__pendingPattern = captionEdit
+        ? a.setSpecificRuleField(0, 'cap', 'Shared')
+        : a.setSpecificRuleField(0, 'val', '(?P<enzyme>NADH)');
+    }, boundary === 'Session');
     await page.waitForFunction(() => window.__releasePattern);
     const before = await snapshot(page);
-    expect((await draft(page)).draft.pending).toBe(true);
+    if (boundary === 'Session') expect(await page.evaluate(() => window.__heldKind)).toBe('color-captions');
+    else expect((await draft(page)).draft.pending).toBe(true);
     if (boundary === 'drawer') await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.openRightDrawerTab('features'); a.closeRightDrawer(); a.openRightDrawerTab('features'); });
     if (boundary === 'mode cycle') await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.setDiagramMode('linear'); a.setDiagramMode('circular'); });
     if (boundary === 'remove') await page.evaluate(() => window.__GBDRAW_APP__.removeSpecificRule(0));
-    if (boundary === 'reorder') await page.evaluate(async () => { const a = window.__GBDRAW_APP__; Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: 'other', color: '#abcdef', cap: '' }); await a.addSpecificRule(); await a.moveSpecificRuleDown(0); });
+    if (boundary === 'reorder') await evaluateWithRetainedPromise(page, async () => { const a = window.__GBDRAW_APP__; Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: 'other', color: '#abcdef', cap: '' }); await a.addSpecificRule(); await a.moveSpecificRuleDown(0); });
     if (boundary === 'Session') await load(page, fixture('circular'));
     if (boundary === 'new edit') await page.evaluate(() => window.__GBDRAW_APP__.setSpecificRuleField(0, 'val', '(?P<enzyme>protein)'));
     if (boundary === 'new keystroke') await page.getByLabel('Color rule 1 pattern', { exact: true }).fill('[new');

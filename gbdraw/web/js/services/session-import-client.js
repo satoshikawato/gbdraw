@@ -1,6 +1,7 @@
+// @ts-check
 import { createBoundedJsonReceiver } from './bounded-json-transport.js';
 import { recordSessionLifecycleEvent } from './runtime-test-hooks.js';
-import { diagnosticError } from './error-normalization.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 
 let nextOperationId = 1;
 
@@ -8,8 +9,13 @@ let nextOperationId = 1;
 const unavailable = () => diagnosticError('SESSION_IMPORT_UNAVAILABLE', {}, { stage: 'transport' });
 
 // This owns transport lifetime only. The caller still admits an untrusted candidate.
+/**
+ * @param {File} file
+ * @param {{ signal?: AbortSignal }} [options]
+ */
 export const importSessionFile = (file, { signal } = {}) => new Promise((resolve, reject) => {
   const operationId = nextOperationId++;
+  /** @type {Worker | null} */
   let worker = null;
   let settled = false;
   const assembly = createBoundedJsonReceiver();
@@ -44,7 +50,8 @@ export const importSessionFile = (file, { signal } = {}) => new Promise((resolve
     if (reply.status === 'part') {
       try {
         assembly.receivePart(reply);
-        worker.postMessage({ operationId, ack: true });
+        // `settled` is false here, and only `settle` clears `worker`, so the started Worker is still held.
+        /** @type {Worker} */ (worker).postMessage({ operationId, ack: true });
       } catch { unreadable(); }
     } else if (reply.status === 'error') {
       const { code = 'UNKNOWN', stage = 'transport', context = {} } = reply.error || {};

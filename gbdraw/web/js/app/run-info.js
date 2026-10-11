@@ -1,13 +1,18 @@
-import { normalizeUserFacingError } from '../services/error-normalization.js';
+// @ts-check
+import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
-  buildCircularTrackSlotSpec,
-  parseCircularTrackSlotSpec
+  buildCircularTrackSlotSpec
 } from './circular-track-slots.js';
 import {
-  buildLinearTrackSlotSpec,
-  parseLinearTrackSlotSpec
+  parseCircularTrackSlotSpec
+} from '../services/circular-track-slot-model.js';
+import {
+  buildLinearTrackSlotSpec
 } from './linear-track-slots.js';
-import { countGenBankRecords } from './genbank-header.js';
+import {
+  parseLinearTrackSlotSpec
+} from '../services/linear-track-slot-model.js';
+import { countGenBankRecords } from '../services/genbank-header.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import { base64ToBytes } from '../services/byte-utils.js';
 
@@ -18,17 +23,25 @@ const SOURCE_PROVENANCE_UNAVAILABLE =
 
 class SourceRecipeUnavailable extends Error {}
 
+// identityTableUnavailable assigns reason after construction.
+/** @typedef {{ reason?: string }} Reasoned */
+
 const normalizePath = (value) => String(value ?? '').trim();
 
+/**
+ * @param {any} value
+ * @returns {value is Record<string, any>}
+ */
 const isPlainObject = (value) => Boolean(
   value && typeof value === 'object' && !Array.isArray(value)
 );
 
 const visibleBasename = (value) => {
-  const name = String(value || '')
+  // `split` always returns at least one element, so `pop` returns a string.
+  const name = /** @type {string} */ (String(value || '')
     .replace(/\\/g, '/')
     .split('/')
-    .pop()
+    .pop())
     .replace(/[\u0000-\u001f\u007f]/g, '')
     .trim();
   return name && name !== '.' && name !== '..' ? name : '';
@@ -43,13 +56,14 @@ const normalizeMetadataEntries = (fileMetadata) => {
   if (!fileMetadata) return [];
   if (fileMetadata instanceof Map) return Array.from(fileMetadata.entries());
   if (Array.isArray(fileMetadata)) {
-    return fileMetadata
+    // `filter(Boolean)` drops the `null` entries, which leaves only [path, entry] pairs.
+    return /** @type {any[][]} */ (fileMetadata
       .map((entry) => {
         if (Array.isArray(entry) && entry.length >= 2) return [entry[0], entry[1]];
         if (entry && typeof entry === 'object') return [entry.path, entry];
         return null;
       })
-      .filter(Boolean);
+      .filter(Boolean));
   }
   if (typeof fileMetadata === 'object') return Object.entries(fileMetadata);
   return [];
@@ -117,6 +131,7 @@ const allocateVisibleFilenames = ({ sourceMetadata, exactMetadata, sourceAvailab
     used.set(filenameCollisionKey(name), `${namespace}:${path}`);
   };
 
+  /** @type {Array<[string, Map<string, any>]>} */
   const namespaces = sourceAvailable ? [['source', source], ['exact', exact]] : [['exact', exact]];
   namespaces.forEach(([namespace, metadata]) => metadata.forEach((entry, path) => {
     if (entry.kind !== 'generated') reserveFixed(namespace, path, entry);
@@ -158,6 +173,43 @@ const tsv = (columns, rows) => `${[
   columns.join('\t'),
   ...rows.map((row) => columns.map((column) => tsvCell(row[column])).join('\t'))
 ].join('\n')}\n`;
+
+// An identity table that cannot carry a row: the Source recipe is unavailable,
+// and Export Feature Edits TSV reports the reason.
+const identityTableUnavailable = (reason) => Object.assign(
+  new SourceRecipeUnavailable(`Source recipe unavailable: ${reason}`), { reason }
+);
+
+// R12: identity-table rows must read back as the same rows through the CLI's one
+// reader (gbdraw/features/source.py::read_identity_table trims every cell except
+// label_text). hash=<biologicalFeatureId> names exactly one source feature; a bare
+// value would match the shared hash of identical features.
+const identityTableCells = (renderRequest, row, kind) => {
+  const index = renderRequest.records.findIndex((record) => record.recordKey === row.recordKey);
+  const id = row.biologicalFeatureId;
+  if (index < 0 || typeof id !== 'string' || !id || id !== id.trim() || /[\t\r\n\0]/.test(id)) {
+    throw identityTableUnavailable(`a ${kind} names a feature identity that no table row can carry.`);
+  }
+  return { record: `#${index + 1}`, feature_selector: `hash=${id}` };
+};
+
+// gbdraw/features/overrides.py::FEATURE_OVERRIDE_TABLE_COLUMNS
+const FEATURE_OVERRIDE_TABLE_COLUMNS = [
+  'record', 'feature_selector', 'feature_visibility', 'label_visibility', 'label_text'
+];
+const featureOverrideTableRow = (renderRequest, row) => {
+  const cells = identityTableCells(renderRequest, row, 'feature edit');
+  const { featureVisibility: feature, labelVisibility: label, labelText: text } = row;
+  if (![null, 'on', 'off', 'exclude_matching'].includes(feature) || ![null, 'on', 'off'].includes(label)
+    || (text !== null && (typeof text !== 'string' || !text.trim() || /[\t\r\n\0]/.test(text)))
+    || (feature === null && label === null && text === null)) {
+    throw identityTableUnavailable('a feature edit has a value that the feature override table cannot carry.');
+  }
+  return { ...cells, feature_visibility: feature ?? '', label_visibility: label ?? '', label_text: text ?? '' };
+};
+const featureOverrideTable = (renderRequest, rows) => tsv(
+  FEATURE_OVERRIDE_TABLE_COLUMNS, rows.map((row) => featureOverrideTableRow(renderRequest, row))
+);
 
 const collectBindingNameHints = (value, hints) => {
   if (Array.isArray(value)) {
@@ -463,7 +515,22 @@ const validateCurrentSemanticCoverage = (request) => {
   });
 
   const options = request.diagramOptions;
-  coverObject(coverage, options, 'diagramOptions', new Set([...DIAGRAM_OPTION_FIELDS, ...(request.schema >= 7 ? ['featurePlacements'] : [])]));
+  coverObject(coverage, options, 'diagramOptions', new Set([
+    ...DIAGRAM_OPTION_FIELDS,
+    ...(request.schema >= 7 ? ['featurePlacements'] : []),
+    ...(request.schema >= 9 ? ['featureOverrides'] : [])
+  ]));
+  (options.featureOverrides || []).forEach((row, index) => {
+    coverObject(coverage, row, `diagramOptions.featureOverrides[${index}]`, [
+      'recordKey', 'biologicalFeatureId', 'featureVisibility', 'labelVisibility', 'labelText'
+    ]);
+  });
+  if ((options.annotations?.sets || []).some((set) => (set?.annotations || [])
+    .some((item) => item?.target?.kind === 'featureIdentity'))) {
+    throw new SourceRecipeUnavailable(
+      'Source recipe unavailable: annotations that name a source feature have no current CLI projection.'
+    );
+  }
   (options.featurePlacements || []).forEach((row, index) => {
     const path = `diagramOptions.featurePlacements[${index}]`;
     coverObject(coverage, row, path, ['recordKey', 'biologicalFeatureId', 'placement']);
@@ -580,14 +647,21 @@ const sourceSpec = (record) => {
   );
 };
 
+// The row of each record, and, when the order of the positions within a row is
+// not the record order (CI-02: Up/Down), each record's 1-based place in its row:
+// a records table orders a row by `column`, then by its record order.
 const layoutRows = (request, records) => {
   const positions = request.layout?.multiRecordPositions;
-  if (positions == null) return [];
+  /** @type {number[]} */
+  const columns = [];
+  if (positions == null) return { rows: [], columns };
   if (!Array.isArray(positions)) {
     throw new SourceRecipeUnavailable('Source recipe unavailable: record placement is invalid.');
   }
-  if (positions.length === 0) return [];
+  if (positions.length === 0) return { rows: [], columns };
   const rows = Array(records.length).fill(null);
+  /** @type {Map<number, number[]>} The records of each row, in position order. */
+  const rowMembers = new Map();
   positions.forEach((position) => {
     const text = String(position || '').trim();
     const separator = text.lastIndexOf('@');
@@ -619,13 +693,20 @@ const layoutRows = (request, records) => {
       );
     }
     rows[recordIndex] = row;
+    rowMembers.set(row, [...(rowMembers.get(row) || []), recordIndex]);
   });
   if (rows.some((row) => row === null)) {
     throw new SourceRecipeUnavailable(
       'Source recipe unavailable: record placement is incomplete for a records table.'
     );
   }
-  return rows;
+  const recordOrder = [...rowMembers.values()].every((members) => (
+    members.every((recordIndex, at) => at === 0 || recordIndex > members[at - 1])
+  ));
+  if (!recordOrder) {
+    rowMembers.forEach((members) => members.forEach((recordIndex, at) => { columns[recordIndex] = at + 1; }));
+  }
+  return { rows, columns };
 };
 
 const gridCoordinate = (value) => {
@@ -682,7 +763,7 @@ const appendInputArgs = async (args, request, files) => {
       }
     }
   }
-  const requestedRows = layoutRows(request, records);
+  const { rows: requestedRows, columns: requestedColumns } = layoutRows(request, records);
   records.forEach((record, index) => {
     const presentationRow = gridCoordinate(record.presentation?.gridRow);
     if (presentationRow !== '' && requestedRows.length && presentationRow !== requestedRows[index]) {
@@ -749,7 +830,7 @@ const appendInputArgs = async (args, request, files) => {
         reverse_complement: region ? '0' : (record.presentation?.reverseComplement ? '1' : '0'),
         order: index + 1,
         row: gridCoordinate(record.presentation?.gridRow) || requestedTableRows[index] || '',
-        column: gridCoordinate(record.presentation?.gridColumn),
+        column: gridCoordinate(record.presentation?.gridColumn) || requestedColumns[index] || '',
         topology: record.display?.isCircular == null ? '' : record.display.isCircular ? 'circular' : 'linear',
         display_start: record.display?.startCoordinate ?? ''
       };
@@ -827,8 +908,7 @@ const CONFIG_VALUE_OPTIONS = Object.freeze({
   'objects.depth.max_depth': '--depth_max',
   'objects.depth.large_tick_interval': '--depth_large_tick_interval',
   'objects.depth.small_tick_interval': '--depth_small_tick_interval',
-  'objects.depth.tick_font_size': '--depth_tick_font_size',
-  'objects.scale.interval': '--scale_interval'
+  'objects.depth.tick_font_size': '--depth_tick_font_size'
 });
 
 const CIRCULAR_CONFIG_VALUE_OPTIONS = Object.freeze({
@@ -896,6 +976,9 @@ const appendConfigOverrides = (args, request) => {
     ...CONFIG_VALUE_OPTIONS,
     ...(request.mode === 'linear' ? LINEAR_CONFIG_VALUE_OPTIONS : CIRCULAR_CONFIG_VALUE_OPTIONS)
   }).forEach(([path, option]) => appendOption(args, option, take(path)));
+  // D-04: a request reads a scale interval of 0 or less as automatic, which the CLI writes as no flag.
+  const scaleInterval = take('objects.scale.interval');
+  appendOption(args, '--scale_interval', typeof scaleInterval === 'number' && scaleInterval <= 0 ? null : scaleInterval);
 
   appendBooleanOption(args, take('canvas.show_gc'), '--gc', '--no-gc');
   appendBooleanOption(args, take('canvas.show_skew'), '--skew', '--no-skew');
@@ -1501,6 +1584,46 @@ const appendLayoutOptions = (args, request, recordsTableUsed = false) => {
   }
 };
 
+// Identity tables name a record by its #index among the materialized records,
+// which is its request index only when no input expands to several records.
+const requireExactRecords = async (renderRequest, files) => {
+  for (const record of renderRequest.records) {
+    if (record.cardinality === 'exactly_one') continue;
+    const source = sourceSpec(record);
+    if (await files.resourceRecordCount(source.ids.at(-1), source.kind === 'genbank' ? 'genbank' : 'fasta') !== 1) {
+      throw identityTableUnavailable('feature placements and feature edits require exact materialized records.');
+    }
+  }
+};
+
+// Export Feature Edits TSV (design Q4 6.4): request featureOverrides rows as the
+// Source recipe writes its --feature_override_table, or why no table carries them.
+/**
+ * @param {Pick<SourceRecipeOptions, 'resources' | 'readResourceRecordCount'> & { renderRequest: Record<string, any>, rows: any }} options
+ */
+export const buildFeatureOverrideTable = async ({
+  renderRequest, resources, rows, readResourceRecordCount = null
+}) => {
+  try {
+    await requireExactRecords(renderRequest, createRecipeFiles(resources, {}, null, readResourceRecordCount));
+    return { text: featureOverrideTable(renderRequest, rows), reason: '' };
+  } catch (error) {
+    if (error instanceof SourceRecipeUnavailable && /** @type {Reasoned} */ (error).reason) return {
+      text: '', reason: /** @type {Reasoned} */ (error).reason };
+    throw error;
+  }
+};
+
+/**
+ * @typedef {Object} SourceRecipeOptions
+ * @property {Record<string, any>} [renderRequest] Committed render request (schema owned by the session request).
+ * @property {Record<string, any>} [resources]
+ * @property {any} [webFiles]
+ * @property {Map<string, string>} [generatedFileNameHints]
+ * @property {((resourceId: string, kind: string) => number | Promise<number>) | null} [readResourceRecordCount]
+ */
+
+/** @param {SourceRecipeOptions} [options] */
 export const buildSourceRecipe = async ({
   renderRequest,
   resources,
@@ -1529,23 +1652,20 @@ export const buildSourceRecipe = async ({
     const args = [];
     const recordsTableUsed = await appendInputArgs(args, renderRequest, files);
     const placements = renderRequest.diagramOptions?.featurePlacements || [];
+    const featureOverrides = renderRequest.diagramOptions?.featureOverrides || [];
+    if (placements.length || featureOverrides.length) await requireExactRecords(renderRequest, files);
     if (placements.length) {
-      for (const record of renderRequest.records) {
-        if (record.cardinality === 'exactly_one') continue;
-        const source = sourceSpec(record);
-        if (await files.resourceRecordCount(source.ids.at(-1), source.kind === 'genbank' ? 'genbank' : 'fasta') !== 1) {
-          throw new SourceRecipeUnavailable('Source recipe unavailable: placement record instances require exact materialized records.');
-        }
-      }
-      const rows = placements.map((row) => {
-        const index = renderRequest.records.findIndex((record) => record.recordKey === row.recordKey);
-        if (index < 0) throw new SourceRecipeUnavailable('Source recipe unavailable: unknown placement record identity.');
-        return { record: `#${index + 1}`, feature_selector: row.biologicalFeatureId,
-          placement: row.placement.kind === 'main' ? 'main' : row.placement.side,
-          level: row.placement.kind === 'main' ? '' : row.placement.level };
-      });
+      const rows = placements.map((row) => ({
+        ...identityTableCells(renderRequest, row, 'placement'),
+        placement: row.placement.kind === 'main' ? 'main' : row.placement.side,
+        level: row.placement.kind === 'main' ? '' : row.placement.level
+      }));
       args.push('--feature_placement_table', files.generatedTextPath('feature-placements.tsv',
         tsv(['record', 'feature_selector', 'placement', 'level'], rows), 'generatedFiles.source_recipe.feature_placements'));
+    }
+    if (featureOverrides.length) {
+      args.push('--feature_override_table', files.generatedTextPath('feature-overrides.tsv',
+        featureOverrideTable(renderRequest, featureOverrides), 'generatedFiles.source_recipe.feature_overrides'));
     }
     appendDiagramOptions(args, renderRequest, files);
     appendConfigOverrides(args, renderRequest);
@@ -1594,13 +1714,6 @@ export const reproducibilityLabel = (level) => {
   if (normalized === 'requires-helper-files') return 'Source recipe needs helper files';
   if (normalized === 'session-recommended') return 'Source recipe needs helper files';
   return 'Approximate command';
-};
-
-export const isCliInvocationSessionExportable = (invocation) => {
-  if (!invocation || typeof invocation !== 'object') return false;
-  if (invocation.sessionExportable === false) return false;
-  const bindings = Array.isArray(invocation.fileBindings) ? invocation.fileBindings : [];
-  return bindings.every((binding) => String(binding?.slot || '').startsWith('files.'));
 };
 
 const projectInvocation = ({ mode, args, fileMetadata, generatedBy }) => {
@@ -1724,6 +1837,23 @@ export const summarizeLosatRuntimes = (cacheInfo, cacheMap) => {
   return Array.from(runtimes.values());
 };
 
+/**
+ * @typedef {Object} RunInfoOptions
+ * @property {string} [mode]
+ * @property {string[]} [args]
+ * @property {Record<string, any> | null} [sourceRecipe] Result of buildSourceRecipe.
+ * @property {string[]} [exactReplayArgs]
+ * @property {any} [fileMetadata] Map or entries of uploaded and generated file metadata.
+ * @property {number} [elapsedMs]
+ * @property {number} [resultCount]
+ * @property {string} [startedAtIso]
+ * @property {string} [generatedBy]
+ * @property {boolean} [losatComparisons]
+ * @property {any[]} [losatRuntimes]
+ * @property {any[]} [featureIdentityNotices]
+ */
+
+/** @param {RunInfoOptions} [options] */
 export const buildRunInfo = ({
   mode,
   args,
@@ -1735,12 +1865,21 @@ export const buildRunInfo = ({
   startedAtIso,
   generatedBy = 'gbdraw-web',
   losatComparisons = false,
-  losatRuntimes = []
+  losatRuntimes = [],
+  featureIdentityNotices = []
 } = {}) => {
   const normalizedMode = String(mode || '').trim() === 'linear' ? 'linear' : 'circular';
-  let sourceAvailable = sourceRecipe?.available !== false;
-  let sourceUnavailableReason = String(sourceRecipe?.unavailableReason || 'Source recipe unavailable.');
-  const sourceMetadata = normalizeFileMetadata(
+  // R12: the CLI tables reject a row whose feature the source does not have,
+  // while the render reports it as an `unresolved` notice and draws without it.
+  const unresolvedIdentity = sourceRecipe?.available !== false
+    && (Array.isArray(featureIdentityNotices) ? featureIdentityNotices : [])
+      .some((notice) => notice?.status === 'unresolved');
+  if (unresolvedIdentity && Array.isArray(sourceRecipe?.generatedFiles)) sourceRecipe.generatedFiles.splice(0);
+  let sourceAvailable = sourceRecipe?.available !== false && !unresolvedIdentity;
+  let sourceUnavailableReason = unresolvedIdentity
+    ? 'Source recipe unavailable: a feature edit or placement names a feature that the source does not have.'
+    : String(sourceRecipe?.unavailableReason || 'Source recipe unavailable.');
+  const sourceMetadata = unresolvedIdentity ? new Map() : normalizeFileMetadata(
     sourceRecipe?.fileMetadata || fileMetadata
   );
   const allExactMetadata = normalizeFileMetadata(fileMetadata);
@@ -1839,7 +1978,7 @@ export const buildRunInfo = ({
   if (losatComparisons) {
     notes.push(LOSAT_DATABASE_SCOPE_NOTE);
   }
-  if (exact?.helperFiles.length > 0) {
+  if (exact && exact.helperFiles.length > 0) {
     notes.push(
       `Exact replay references ${formatHelperFileList(exact.helperFiles)}, which is included in "Download reproducibility files".`
     );
@@ -1852,7 +1991,7 @@ export const buildRunInfo = ({
             : 'The Source recipe uses only the original source files.'
         )
       : 'The Source recipe is unavailable.',
-    exact?.helperFiles.length > 0
+    exact && exact.helperFiles.length > 0
       ? `Exact replay file: ${formatHelperFileList(exact.helperFiles)}.`
       : 'No Exact replay file is available.'
   ].join(' ');

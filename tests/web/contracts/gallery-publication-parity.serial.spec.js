@@ -1,8 +1,8 @@
 const { test, expect } = require('@playwright/test');
-const { spawnSync } = require('node:child_process');
 const { readFileSync, writeFileSync } = require('node:fs');
 const { basename, resolve } = require('node:path');
 const { openApp, evaluateWithRetainedPromise } = require('../helpers/app-lifecycle.cjs');
+const { compareSvgFiles } = require('../helpers/svg-semantic-compare.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const examples = JSON.parse(readFileSync(
@@ -13,16 +13,6 @@ const isolatedExamples = new Set([
   'vibrio-harveyi-group-collinear'
 ]);
 const commonExamples = examples.filter(({ id }) => !isolatedExamples.has(id));
-const compareCommand = [
-  'import sys',
-  'from tests.utils.svg_compare import compare_svgs',
-  'ignored = {"data-label-feature-id", "data-gbdraw-label-binding-schema", '
-    + '"data-record-key", "data-record-translation-x", "data-record-translation-y"}',
-  'result = compare_svgs(sys.argv[1], sys.argv[2], ignored_attributes=ignored)',
-  'print(result.message)',
-  'print("\\n".join(result.differences))',
-  'raise SystemExit(0 if result.equal else 1)'
-].join(';');
 
 test.describe.configure({ mode: 'serial' });
 
@@ -78,11 +68,11 @@ for (const example of commonExamples) {
           recordCount: state.mode.value === 'linear'
             ? state.linearSeqs.length
             : state.circularRecordList.value.length,
-          slotIds: state.adv.circular_track_slots.map(({ id }) => id),
-          annotationSetIds: state.annotationSets.map(({ id: setId }) => setId),
-          legend: state.form.legend,
-          arrowShaftWidthRatio: state.adv.arrow_shaft_width_ratio,
-          ruleCaptions: state.manualSpecificRules.map(({ cap }) => cap).filter(Boolean)
+          slotIds: state.activeDrawing().adv.circular_track_slots.map(({ id }) => id),
+          annotationSetIds: state.activeDrawing().annotationSets.map(({ id: setId }) => setId),
+          legend: state.activeDrawing().form.legend,
+          arrowShaftWidthRatio: state.activeDrawing().adv.arrow_shaft_width_ratio,
+          ruleCaptions: state.activeDrawing().manualSpecificRules.map(({ cap }) => cap).filter(Boolean)
         };
       }, example);
       expect(loaded.status).toBe('ok');
@@ -135,15 +125,8 @@ for (const example of commonExamples) {
       const generatedPath = testInfo.outputPath(`${basename(example.id)}-generated.svg`);
       writeFileSync(loadedPath, loaded.svg, 'utf8');
       writeFileSync(generatedPath, generated.svg, 'utf8');
-      const comparison = spawnSync(
-        process.env.GBDRAW_PYTHON || 'python',
-        ['-c', compareCommand, loadedPath, generatedPath],
-        { cwd: repoRoot, encoding: 'utf8' }
-      );
-      expect(
-        comparison.status,
-        `${comparison.stdout}\n${comparison.stderr}`
-      ).toBe(0);
+      const comparison = compareSvgFiles(loadedPath, generatedPath, { repoRoot });
+      expect(comparison.status, comparison.report).toBe(0);
     } finally {
       await context.close();
     }

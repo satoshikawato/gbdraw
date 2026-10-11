@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from pandas import DataFrame  # type: ignore[reportMissingImports]
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
-from svgwrite.path import Path  # type: ignore[reportMissingImports]
+from pandas import DataFrame
+from gbdraw.svg.elements import Group, Path
 
-from ....analysis.conservation import conservation_track_gradient_colors  # type: ignore[reportMissingImports]
-from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from ....render.drawers.circular.conservation import (  # type: ignore[reportMissingImports]
+from ....analysis.conservation import conservation_track_gradient_colors
+from ....config.models import GbdrawConfig
+from ....render.drawers.circular.conservation import (
     ConservationDrawer,
     _safe_id_fragment,
 )
@@ -45,7 +44,7 @@ class ConservationGroup:
             str(track_label),
             namespace=safe_label or f"source_{int(source_index) + 1}",
         )
-        self.group = Group(id=resolved_group_id, debug=False)
+        self.group = Group(id=resolved_group_id)
         if slot_id:
             self.group.attribs["data-gbdraw-slot-id"] = str(slot_id)
             self.group.attribs["data-gbdraw-slot-renderer"] = "sequence_conservation"
@@ -81,7 +80,6 @@ class ConservationGroup:
                 fill_opacity=conservation_cfg.background_opacity,
                 stroke="none",
                 stroke_width=0,
-                debug=False,
             )
         )
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import Counter
 import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, Sequence, cast
 
 from Bio import SeqIO
 
@@ -13,13 +13,15 @@ from gbdraw.core.record_metadata import (
     _read_coord_map as _read_record_coord_map,
     _source_feature_anchor_profile,
     _source_feature_index,
-    _source_feature_location_parts,
 )
 from gbdraw.core.sequence import translate_cds
+from gbdraw.features.overrides import feature_override_lookup
 from gbdraw.features.selector_values import build_feature_selector_values
 from gbdraw.features.ids import (
+    compute_feature_hash,
     compute_feature_hash_from_location_parts,
     make_linear_rendered_feature_id,
+    source_feature_location_parts,
 )
 from gbdraw.features.visibility import (
     compile_feature_visibility_rules,
@@ -28,6 +30,9 @@ from gbdraw.features.visibility import (
 )
 from gbdraw.svg.ids import instance_svg_id
 from gbdraw.web_support.error_adapter import serialize_web_error
+
+if TYPE_CHECKING:
+    from gbdraw.features.placement import ResolvedRecordFeatureInputs
 
 
 _NULLISH_TEXT = {"", "none", "null", "jsnull", "undefined", "jsundefined", "-"}
@@ -158,24 +163,31 @@ def _biological_location_parts(
 def _biological_selector_values(
     feature: Any,
     *,
-    record_id: str | None,
-    coord_base: int,
+    record: Any,
     coord_step: int,
-) -> tuple[dict[str, object], str, str]:
-    """Return selector values plus biological and processed-record feature IDs."""
+) -> tuple[dict[str, object], str, dict[str, str | None]]:
+    """Return source selector values, the feature hash, and the drawn
+    record's selector values.
 
-    selector = build_feature_selector_values(feature, record_id=record_id)
-    rendered_feature_id = str(selector.get("hash") or "")
-    rendered_parts = _biological_location_parts(
-        feature.location,
-        coord_base,
-        coord_step,
-    )
-    parts = _source_feature_location_parts(feature) or tuple(rendered_parts)
+    The drawn values are the ones the renderer's `location` and
+    `record_location` rule matching reads from the processed (cropped,
+    reverse-complemented) record (feature catalog 5, ``drawnSelector``); a
+    `hash` rule matches the source hash in ``selector``.
+    """
+
+    selector = build_feature_selector_values(feature, record_id=record.id)
+    # The drawn values are frame tags for Session readers: `hash` here is the
+    # drawn location's hash, which only legacy rendered-ID readers compare.
+    drawn_selector = {
+        "hash": compute_feature_hash(feature, record_id=record.id) or None,
+        "location": str(selector.get("location") or "") or None,
+        "recordLocation": str(selector.get("record_location") or "") or None,
+    }
+    parts = source_feature_location_parts(feature, record)
     stable_feature_id = compute_feature_hash_from_location_parts(
         str(getattr(feature, "type", "") or ""),
         parts,
-        record_id=record_id,
+        record_id=record.id,
     )
     selector["hash"] = stable_feature_id
     if parts:
@@ -185,11 +197,11 @@ def _biological_selector_values(
             _biological_strand(feature.location.strand, coord_step)
         )
         selector["location"] = f"{start}..{end}"
-        if record_id:
-            selector["record_location"] = f"{record_id}:{start}..{end}:{strand}"
+        if record.id:
+            selector["record_location"] = f"{record.id}:{start}..{end}:{strand}"
         else:
             selector.pop("record_location", None)
-    return selector, stable_feature_id, rendered_feature_id
+    return selector, stable_feature_id, drawn_selector
 
 
 
@@ -268,39 +280,15 @@ def _extract_amino_acid_sequence(feature: Any, nucleotide_sequence: str) -> tupl
         return "", warnings
 
 
-def _build_selector_safety_scope(records: list[Any]) -> list[dict[str, object]]:
-    scope: list[dict[str, object]] = []
-    for rec_idx, record in enumerate(records):
-        record_id = record.id or f"Record_{rec_idx}"
-        hash_record_id = record.id
-        coord_base, coord_step = _read_record_coord_map(record)
-        for feat in _iter_features(getattr(record, "features", None)):
-            selector, _, _ = _biological_selector_values(
-                feat,
-                record_id=hash_record_id,
-                coord_base=coord_base,
-                coord_step=coord_step,
-            )
-            scope.append(
-                {
-                    "record_id": record_id,
-                    "record_idx": rec_idx,
-                    "feature_type": str(getattr(feat, "type", "") or ""),
-                    "selector": selector,
-                }
-            )
-    return scope
-
-
 def extract_features_from_records_payload(
     records: Any,
     *,
     selected_features: object | None = None,
     feature_visibility_rules: list[dict[str, Any]] | None = None,
+    record_features: Sequence[ResolvedRecordFeatureInputs] = (),
     specific_color_rules: dict | None = None,
     linear_rendered_feature_ids: bool = False,
     include_biological_features: bool = False,
-    include_selector_safety_scope: bool = True,
 ) -> dict[str, object]:
     """Extract feature metadata from processed records.
 
@@ -316,12 +304,6 @@ def extract_features_from_records_payload(
     features: list[dict[str, object]] = []
     biological_features: list[dict[str, object]] = []
     record_ids: list[str] = []
-    selector_safety_scope: list[dict[str, object]] = []
-    if include_selector_safety_scope:
-        from gbdraw.api.prepared import record_prepared_input_metric
-
-        record_prepared_input_metric("selectorSafetyScopeBuildCount")
-        selector_safety_scope = _build_selector_safety_scope(records)
     idx = 0
     biological_idx = 0
     for rec_idx, record in enumerate(records):
@@ -332,31 +314,39 @@ def extract_features_from_records_payload(
         record_ids.append(record_id)
         prepared_features = []
         rendered_id_counts: Counter[str] = Counter()
+        override_of = feature_override_lookup(
+            record, record_features[rec_idx].overrides if record_features else None
+        )
         for feature_index, feat in enumerate(_iter_features(record.features)):
             source_feature_index = _source_feature_index(feat)
+            feature_override = override_of(feat)
             is_rendered_feature = should_render_feature(
                 feat,
                 selected_feature_set,
                 feature_visibility_rules=feature_visibility_rules,
                 record_id=hash_record_id,
                 specific_color_rules=specific_color_rules,
+                feature_override=feature_override,
             )
             if not is_rendered_feature and not include_biological_features:
                 continue
+            # An undrawn source feature stays out of the catalog unless it has
+            # its own Feature visibility, which keeps it in the Web Features
+            # list so it can be shown again (R-5).
             if (
                 include_biological_features
                 and not is_rendered_feature
                 and str(getattr(feat, "type", "") or "").lower() == "source"
+                and getattr(feature_override, "feature_visibility", None) is None
             ):
                 continue
             selector_values = _biological_selector_values(
                 feat,
-                record_id=hash_record_id,
-                coord_base=coord_base,
+                record=record,
                 coord_step=coord_step,
             )
-            if is_rendered_feature and selector_values[2]:
-                rendered_id_counts[selector_values[2]] += 1
+            if is_rendered_feature and selector_values[1]:
+                rendered_id_counts[selector_values[1]] += 1
             prepared_features.append(
                 (
                     feature_index,
@@ -395,14 +385,16 @@ def extract_features_from_records_payload(
             )
             sequence_warnings.extend(translation_warnings)
 
-            selector, stable_svg_id, rendered_stable_svg_id = selector_values
+            selector, stable_svg_id, drawn_selector = selector_values
 
-            qualifiers = {}
-            for q_key, q_vals in feat.qualifiers.items():
-                q_list = _normalize_qualifier_values(q_vals)
-                if not q_list:
-                    continue
-                qualifiers[q_key.lower()] = q_list
+            # The same qualifier map rule matching reads: keys stripped and
+            # lowercased, case variants merged in key order (OV-249).
+            qualifiers = {
+                key: list(values)
+                for key, values in cast(
+                    "dict[str, list[str]]", selector["qualifiers"]
+                ).items()
+            }
 
             feature_payload = {
                 "id": f"f{biological_idx}",
@@ -452,19 +444,20 @@ def extract_features_from_records_payload(
                 continue
             rendered_feature_payload = dict(feature_payload)
             rendered_feature_payload["id"] = f"f{idx}"
-            rendered_feature_svg_id = rendered_stable_svg_id
+            rendered_feature_payload["drawn_selector"] = drawn_selector
+            rendered_feature_svg_id = stable_svg_id
             if linear_rendered_feature_ids:
                 rendered_feature_svg_id = (
                     make_linear_rendered_feature_id(
                         record_index=rec_idx,
-                        stable_feature_id=rendered_stable_svg_id,
+                        stable_feature_id=stable_svg_id,
                         record_count=len(records),
                     )
-                    or rendered_stable_svg_id
+                    or stable_svg_id
                 )
             if (
                 rendered_feature_svg_id
-                and rendered_id_counts[rendered_stable_svg_id] > 1
+                and rendered_id_counts[stable_svg_id] > 1
             ):
                 rendered_feature_svg_id = instance_svg_id(
                     rendered_feature_svg_id,
@@ -484,7 +477,6 @@ def extract_features_from_records_payload(
     payload: dict[str, object] = {
         "features": features,
         "record_ids": record_ids,
-        "selector_safety_scope": selector_safety_scope,
     }
     if include_biological_features:
         payload["biological_features"] = biological_features

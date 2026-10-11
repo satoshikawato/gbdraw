@@ -74,6 +74,7 @@ Complete only when `GOVERNANCE` is selected.
 - Authority or evidence-producer files touched:
 - Checker implementation files touched:
 - Self-authorization separation evidence:
+- Design-rule or guard-allowlist change (rule id, `contraction` or `expansion`, and the separate runtime pull request it precedes or follows), or `N/A`:
 - Branch-protection or ruleset impact, including unchanged settings:
 - Governance-specific rollback or protection restore point:
 
@@ -119,8 +120,7 @@ The sets and O, T, and P inputs must reproduce every row and total. `<= 0`, `non
 - Best non-exception alternative and why it was not selected:
 - Expiry or measurable removal condition:
 - Persisted-compatibility, deterministic-check, performance, and scientific-output evidence, as applicable:
-- Maintainer architecture decision comment permalink:
-- Reviewed exact head SHA:
+- Maintainer approval (review or comment link):
 
 ### PROMOTION
 

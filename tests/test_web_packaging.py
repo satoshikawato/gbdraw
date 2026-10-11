@@ -6,6 +6,7 @@ import gzip
 import hashlib
 import html
 import importlib.util
+import io
 import json
 import os
 import re
@@ -22,13 +23,12 @@ import pytest
 from PIL import Image
 
 from gbdraw.session_io import (
-    CURRENT_FEATURE_CATALOG_SCHEMA,
     CURRENT_SESSION_VERSION,
+    FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION,
     LOSAT_DERIVED_CACHE_SCHEMA,
     NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
     PROTEIN_IDENTITY_MANIFEST_SCHEMA,
     PROTEIN_LOSAT_CACHE_SCHEMA,
-    SUPPORTED_SESSION_VERSIONS,
 )
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 
@@ -51,7 +51,7 @@ BROWSER_WHEEL_FORBIDDEN_PREFIXES = (
     "gbdraw/web/vendor/",
     "gbdraw/web/wasm/",
 )
-BUNDLED_REQUEST_SCHEMAS = frozenset({5, 7, CANONICAL_REQUEST_SCHEMA})
+BUNDLED_REQUEST_SCHEMAS = frozenset({CANONICAL_REQUEST_SCHEMA})
 BROWSER_WHEEL_FORBIDDEN_FILES = {
     "gbdraw/web/index.html",
     "gbdraw/web/open-source-notices.html",
@@ -261,6 +261,8 @@ def test_local_web_package_data_excludes_gallery_assets() -> None:
     assert "bin/*/*" in build_support.get_excluded_package_data_patterns(include_browser_wheel=True)
     assert "bin/*/*" in build_support.get_excluded_package_data_patterns(include_browser_wheel=False)
 
+    # UJ-06 (Owner 2026-10-08): the local GUI ships no Gallery catalog or
+    # Session, so its empty state shows no Load an example.
     assert [pattern for pattern in package_data_patterns if "web/gallery" in pattern] == [
         "web/gallery/palettes/palettes.json"
     ]
@@ -280,6 +282,32 @@ def test_local_web_package_data_excludes_gallery_assets() -> None:
     assert (
         "gbdraw/web/tutorial-data/" in build_support._BROWSER_WHEEL_FORBIDDEN_PREFIXES
     )
+
+
+@pytest.mark.parametrize(
+    "member",
+    [
+        "gbdraw/web/gallery/examples.json",
+        "gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json",
+        "gbdraw/web/gallery/sessions/majanivirus_orthogroup.gbdraw-session.json.gz",
+    ],
+)
+def test_distribution_checks_reject_gallery_catalog_and_sessions(
+    tmp_path: Path, member: str
+) -> None:
+    verify_module = _load_verify_module()
+    wheel_path = tmp_path / "gbdraw-0.0.0-py3-none-any.whl"
+    with zipfile.ZipFile(wheel_path, "w") as wheel:
+        wheel.writestr(member, "{}")
+    with pytest.raises(RuntimeError, match="Wheel ships Gallery catalog or Session files"):
+        verify_module.inspect_wheel(wheel_path)
+    sdist_path = tmp_path / "gbdraw-0.0.0.tar.gz"
+    with tarfile.open(sdist_path, "w:gz") as sdist:
+        info = tarfile.TarInfo(f"gbdraw-0.0.0/{member}")
+        info.size = 2
+        sdist.addfile(info, io.BytesIO(b"{}"))
+    with pytest.raises(RuntimeError, match="Sdist ships Gallery catalog or Session files"):
+        verify_module.inspect_sdist(sdist_path)
 
 
 def test_index_links_to_open_source_notices() -> None:
@@ -477,16 +505,17 @@ def test_interactive_gallery_examples_are_wired() -> None:
         entry["displayOrder"] for entry in examples
     )
     assert [entry["title"] for entry in examples] == [
-        "Human mitochondrial genome: first circular figure",
-        "Lambda phage: first linear figure",
-        "Human mitochondrial genome (AT skew)",
-        "<i>Nicotiana tabacum</i> chloroplast genome regions",
-        "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",
-        "Hepatoplasmataceae collinear protein-match blocks",
-        "<i>Vibrio parahaemolyticus</i> and <i>V. alginolyticus</i> collinearity",
-        "Hepatoplasmataceae CDS protein-similarity links",
-        "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
-        "Majanivirus CDS protein-similarity links",
+        "A first circular genome map (human mitochondrial genome)",
+        "A first linear genome map (phage lambda)",
+        "Strand composition of the human mitochondrial genome (AT skew)",
+        "Quadripartite structure of a chloroplast genome (<i>Nicotiana tabacum</i>)",
+        "Every replicon of a multi-replicon bacterial genome on one canvas "
+        "(<i>Vibrio nigripulchritudo</i>)",
+        "Shared gene order between neighboring genomes (Hepatoplasmataceae)",
+        "Collinearity analysis of multi-replicon bacterial genomes (<i>Vibrio</i> spp.)",
+        "Protein similarity groups across five genomes (Hepatoplasmataceae)",
+        "Protein similarity among aminoglycoside biosynthetic gene clusters (<i>Streptomyces</i> spp.)",
+        "Protein similarity across nine majanivirus genomes",
     ]
     for entry in examples:
         assert entry["title"]
@@ -535,7 +564,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
         assert '"format":"gbdraw-session"' in session_prefix
         version_match = re.search(r'"version":(\d+)', session_prefix)
         assert version_match is not None
-        assert int(version_match.group(1)) in SUPPORTED_SESSION_VERSIONS
+        assert int(version_match.group(1)) == CURRENT_SESSION_VERSION
         assert "gbdraw-gallery-interactive-script" not in svg_source
         assert "data-gbdraw-gallery" not in svg_source
         assert "window.parent" not in svg_source
@@ -553,7 +582,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
             assert 'data-popup-mode="rich"' in svg_source
             assert "data-gbdraw-original-viewbox" in svg_source
             payload = _gallery_svg_metadata(svg_source)
-            assert payload["schema"] == 4
+            assert payload["schema"] == FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION[CURRENT_SESSION_VERSION]
             assert len(payload["items"]) == 1
             item = payload["items"][0]
             biological_features = item["biologicalFeatures"]
@@ -764,10 +793,8 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files(
         ), session_name
         assert "files" not in session, session_name
         assert results, session_name
-        expected_catalog_schema = (
-            CURRENT_FEATURE_CATALOG_SCHEMA
-            if session.get("version") == CURRENT_SESSION_VERSION
-            else 3
+        expected_catalog_schema = FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION.get(
+            session.get("version"), 3
         )
         assert feature_catalog.get("schema") == expected_catalog_schema, session_name
         assert [
@@ -1068,9 +1095,13 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(
         "gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz"
         not in remote_assets
     )
+    # The Vibrio Session stores its collinear result and exceeds the 25 MiB
+    # Pages asset limit, so the Worker serves it from the pinned commit.
     assert (
-        "gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
-        not in remote_assets
+        remote_assets[
+            "gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
+        ]
+        == f"{remote_base}gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
     )
     assert "gallery/examples/vibrio-harveyi-group-collinear.svg" not in remote_assets
     assert all("/main/" not in url for url in remote_assets.values())
@@ -1086,7 +1117,7 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(
         / "sessions"
         / "Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz"
     ).exists()
-    assert (
+    assert not (
         bundle_path
         / "gallery"
         / "sessions"
@@ -1393,8 +1424,8 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
         / "js"
         / "workers"
         / "losat-wasi-thread-worker.js",
-        build_root / "gbdraw" / "web" / "js" / "app" / "record-discovery.js",
-        build_root / "gbdraw" / "web" / "js" / "app" / "record-options.js",
+        build_root / "gbdraw" / "web" / "js" / "services" / "record-discovery.js",
+        build_root / "gbdraw" / "web" / "js" / "services" / "record-options.js",
         build_root / "gbdraw" / "web" / "js" / "app" / "linear-record-selector.js",
         build_root / "gbdraw" / "web" / "js" / "app" / "right-drawer.js",
         build_root
@@ -1435,7 +1466,7 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
     )
     assert [
         path.relative_to(build_root).as_posix()
-        for path in (build_root / "gbdraw/web/gallery").rglob("*") if path.is_file()
+        for path in sorted((build_root / "gbdraw/web/gallery").rglob("*")) if path.is_file()
     ] == ["gbdraw/web/gallery/palettes/palettes.json"]
     copied_wheels = sorted(
         path.name for path in (build_root / "gbdraw" / "web").glob("gbdraw-*.whl")
@@ -1493,8 +1524,8 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
         )
         assert browser_wheels == [browser_wheel_member]
         assert gallery_members == ["gbdraw/web/gallery/palettes/palettes.json"]
-        assert "gbdraw/web/js/app/record-discovery.js" in outer_names
-        assert "gbdraw/web/js/app/record-options.js" in outer_names
+        assert "gbdraw/web/js/services/record-discovery.js" in outer_names
+        assert "gbdraw/web/js/services/record-options.js" in outer_names
         assert "gbdraw/web/js/app/linear-record-selector.js" in outer_names
         assert "gbdraw/web/js/app/right-drawer.js" in outer_names
         assert "gbdraw/web/js/services/canonical-comparisons.js" in outer_names

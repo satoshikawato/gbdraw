@@ -1,18 +1,21 @@
+// @ts-check
 import {
   FEATURE_SELECTOR,
   getFeatureElements,
   getFeatureIdentity
 } from './feature-editor/svg-actions.js';
-import { buildFeatureSequenceFastas } from './feature-sequence-fasta.js';
+import { buildFeatureSequenceFastas } from '../services/feature-sequence-fasta.js';
 import {
   groupMetadataScopeLabel,
   normalizeGroupMetadataScope
-} from './losat-normalization.js';
+} from '../services/losat-normalization.js';
 import {
   isInternalProteinDisplayId,
   resolveDisplayProteinId
-} from './feature-utils.js';
+} from '../services/feature-utils.js';
 import { downloadTextFile } from '../services/text-download.js';
+import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
+import { resolveLinearRecordEffectiveDefinition } from '../services/linear-sources.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import {
   ORTHOGROUP_ID_KEYS,
@@ -29,7 +32,7 @@ import {
 
 export { resolveUniqueOrthogroupMemberForFeature } from '../services/feature-identity.js';
 
-const { computed, reactive, watch, toDisplayString } = window.Vue;
+const { computed, nextTick, reactive, watch, toDisplayString } = window.Vue;
 
 const COPY_FEEDBACK_DURATION_MS = 1500;
 const COPY_FEEDBACK_LABELS = Object.freeze({
@@ -50,9 +53,11 @@ const indexFeatureIdentities = (entries, identityOf) => {
     for (const field of fields) {
       const status = identity[field];
       if (!status.supplied) continue;
-      const index = indexes.get(field);
+      // `fields` lists every key of `indexes`, so the lookup always finds a map.
+      const index = /** @type {Map<any, any[]>} */ (indexes.get(field));
       if (!index.has(status.value)) index.set(status.value, []);
-      index.get(status.value).push(entry);
+      // The line above stores a list under this value when none exists.
+      /** @type {any[]} */ (index.get(status.value)).push(entry);
     }
   }
   return (reference) => {
@@ -61,7 +66,8 @@ const indexFeatureIdentities = (entries, identityOf) => {
     for (const field of fields) {
       const status = reference[field];
       if (!status.supplied) continue;
-      const matches = indexes.get(field).get(status.value) || [];
+      // `fields` lists every key of `indexes`, so the lookup always finds a map.
+      const matches = /** @type {Map<any, any[]>} */ (indexes.get(field)).get(status.value) || [];
       if (matches.length < candidates.length) candidates = matches;
     }
     return candidates.filter((entry) => identityMatches(reference, identityOf(entry), { includeRendered: true }));
@@ -181,7 +187,7 @@ const buildMemberFeaturePayload = (member) => {
   };
 };
 
-const memberFastaText = (member, sequenceKind, orthogroupId = '') => {
+const memberFastaText = (member, sequenceKind) => {
   const feature = buildMemberFeaturePayload(member);
   const fastas = buildFeatureSequenceFastas(feature, {
     nucleotideSequence: getMemberSequence(member, 'nt'),
@@ -293,12 +299,45 @@ const renderedFeatureIdForMember = (member, renderedIndex) => {
   return matches.length === 1 ? matches[0].renderedId.value : '';
 };
 
-export const createOrthogroupEditor = ({ state }) => {
+/**
+ * The reactive state fields the similarity-group editor reads and writes.
+ * A `{ value }` field is a Vue ref; the override maps and `linearSeqs` are
+ * reactive objects.
+ * @typedef {object} OrthogroupEditorState
+ * @property {{ value: Record<string, any>[] }} orthogroups
+ * @property {{ linear: OrthogroupEditorDrawing }} drawings Similarity groups are the Linear drawing's (registry: `config.webEdits`, linear only).
+ * @property {{ value: string }} selectedOrthogroupId
+ * @property {{ value: string }} orthogroupSearch
+ * @property {{ value: string }} orthogroupSortMode
+ * @property {{ value: Record<string, any> | null }} clickedFeature
+ * @property {{ value: boolean }} showRightDrawer
+ * @property {{ value: string }} rightDrawerTab
+ * @property {{ value: HTMLElement | null }} svgContainer
+ * @property {Record<string, any>[]} linearSeqs
+ * @property {{ value: Record<string, any>[] }} extractedFeatures
+ * @property {{ value: Record<string, any>[] }} biologicalFeatures
+ * @property {() => { status: string, reason: string } | null} [sessionOperationAvailability]
+ */
+
+/**
+ * The group names of a drawing (`DrawingState` of state.js); reactive objects.
+ * @typedef {object} OrthogroupEditorDrawing
+ * @property {Record<string, string>} orthogroupNameOverrides
+ * @property {Record<string, string>} orthogroupDescriptionOverrides
+ * @property {Record<string, { name?: string, description?: string }>} orthogroupDormantOverrides
+ */
+
+/**
+ * @typedef {() => { records?: { recordKey?: unknown }[] } | null} CommittedRequestPort
+ *   The request of the shown Result, whose `records[i].recordKey` is the card uid of record index i.
+ */
+
+/**
+ * @param {{ state: OrthogroupEditorState, getCommittedRequest?: CommittedRequestPort }} options
+ */
+export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null }) => {
   const {
     orthogroups,
-    orthogroupNameOverrides,
-    orthogroupDescriptionOverrides,
-    orthogroupDormantOverrides,
     selectedOrthogroupId,
     orthogroupSearch,
     orthogroupSortMode,
@@ -398,6 +437,18 @@ export const createOrthogroupEditor = ({ state }) => {
       clearCopyFeedback,
       { flush: 'sync' }
     );
+    // The open Similarity groups list shows the selected group's row, whoever
+    // selected it: a new alignment plan (OV-381), Show in editor, or the user.
+    // The tab panel's v-show applies after post watchers, hence nextTick.
+    watch(
+      () => [selectedOrthogroupId.value, showRightDrawer?.value && rightDrawerTab?.value === 'orthogroups'],
+      async ([id, listShown]) => {
+        if (!id || !listShown || typeof document === 'undefined') return;
+        await nextTick();
+        document.querySelector(`[data-similarity-group-row="${CSS.escape(String(id))}"]`)
+          ?.scrollIntoView({ block: 'nearest' });
+      }
+    );
   }
 
   const resolvableOrthogroupEntries = computed(() => {
@@ -419,17 +470,19 @@ export const createOrthogroupEditor = ({ state }) => {
   };
 
   const resolveOrthogroupName = (groupOrId) => {
+    const drawing = state.drawings.linear;
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
     const id = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
     if (!id) return '';
-    return normalizeText(orthogroupNameOverrides[id]) || normalizeText(group?.name) || id;
+    return normalizeText(drawing.orthogroupNameOverrides[id]) || normalizeText(group?.name) || id;
   };
 
   const resolveOrthogroupDescription = (groupOrId) => {
+    const drawing = state.drawings.linear;
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
     const id = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
     if (!id) return '';
-    return normalizeText(orthogroupDescriptionOverrides[id]) || normalizeText(group?.description);
+    return normalizeText(drawing.orthogroupDescriptionOverrides[id]) || normalizeText(group?.description);
   };
 
   const orthogroupScope = (groupOrId) => {
@@ -440,14 +493,15 @@ export const createOrthogroupEditor = ({ state }) => {
   const orthogroupScopeLabel = (groupOrId) => groupMetadataScopeLabel(orthogroupScope(groupOrId));
 
   const isOrthogroupRenamed = (groupOrId) => {
+    const drawing = state.drawings.linear;
     const id = typeof groupOrId === 'string'
       ? normalizeText(groupOrId)
       : orthogroupIdValue(groupOrId);
     return Boolean(
       id &&
       (
-        Object.prototype.hasOwnProperty.call(orthogroupNameOverrides, id) ||
-        Object.prototype.hasOwnProperty.call(orthogroupDescriptionOverrides, id)
+        Object.prototype.hasOwnProperty.call(drawing.orthogroupNameOverrides, id) ||
+        Object.prototype.hasOwnProperty.call(drawing.orthogroupDescriptionOverrides, id)
       )
     );
   };
@@ -502,14 +556,20 @@ export const createOrthogroupEditor = ({ state }) => {
   });
 
   const orthogroupRows = computed(() => {
+    const drawing = state.drawings.linear;
     // Renamed markers depend on description override keys, not their text.
-    Reflect.ownKeys(orthogroupDescriptionOverrides);
+    Reflect.ownKeys(drawing.orthogroupDescriptionOverrides);
+    /** @type {(count: string, noun: string) => string} */
+    const counted = (count, noun) => `${count} ${count === '1' ? noun : `${noun}s`}`;
     return filteredOrthogroups.value.map((group) => ({
       group, id: group.id,
       name: resolveOrthogroupName(group),
-      scopeLabel: orthogroupScopeLabel(group),
-      memberCount: toDisplayString(group.member_count || (group.members ? group.members.length : 0)),
-      recordCount: toDisplayString(group.record_coverage_count || 0),
+      // Only a scope other than the usual cross-record group is worth a word on the row.
+      scopeLabel: orthogroupScope(group) === 'global' ? '' : orthogroupScopeLabel(group),
+      countsLabel: [
+        counted(toDisplayString(group.member_count || (group.members ? group.members.length : 0)), 'gene'),
+        counted(toDisplayString(group.record_coverage_count || 0), 'record')
+      ].join(' · '),
       renamed: isOrthogroupRenamed(group)
     }));
   });
@@ -584,7 +644,16 @@ export const createOrthogroupEditor = ({ state }) => {
     return getGroupMembers(group).map(enrichOrthogroupMember);
   };
 
+  // A member's record index is a position in the records of the Result's
+  // request, which names each record's card (record selection: a card turned
+  // OFF after Generate does not shift the labels).
   const groupOrthogroupMembersByRecord = (members) => {
+    const requestRecords = getCommittedRequest()?.records || [];
+    /** @param {number} recordIndex */
+    const cardOf = (recordIndex) => {
+      const uid = String(requestRecords[recordIndex]?.recordKey ?? '');
+      return uid ? linearSeqs.find((sequence) => sequence.uid === uid) : undefined;
+    };
     const byRecord = new Map();
     (Array.isArray(members) ? members : []).forEach((member) => {
       const recordIndex = nonnegativeIntegerAliasStatus(member, RECORD_INDEX_KEYS);
@@ -596,11 +665,13 @@ export const createOrthogroupEditor = ({ state }) => {
       .sort((left, right) => left[0] - right[0])
       .map(([recordIndex, members]) => ({
         recordIndex,
+        // The record's drawn definition as plain text (the diagram heading
+        // renders its markup), else its file name (OV-369).
         recordLabel: recordIndex >= 0
-          ? (
-              linearSeqs[recordIndex]?.definition ||
-              linearSeqs[recordIndex]?.gb?.name ||
-              linearSeqs[recordIndex]?.gff?.name ||
+          ? plainTextLinearRecordLabel(
+              resolveLinearRecordEffectiveDefinition(cardOf(recordIndex)) ||
+              cardOf(recordIndex)?.gb?.name ||
+              cardOf(recordIndex)?.gff?.name ||
               `Record ${recordIndex + 1}`
             )
           : 'Record',
@@ -623,18 +694,14 @@ export const createOrthogroupEditor = ({ state }) => {
 
   const buildOrthogroupFasta = (groupOrId, sequenceKind) => {
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
-    const orthogroupId = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
     return getEnrichedOrthogroupMembers(group)
-      .map((member) => memberFastaText(member, sequenceKind, orthogroupId))
+      .map((member) => memberFastaText(member, sequenceKind))
       .filter(Boolean)
       .join('');
   };
 
-  const buildOrthogroupMemberFasta = (member, sequenceKind, groupOrId = selectedOrthogroup.value) => {
-    const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
-    const orthogroupId = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
-    return memberFastaText(enrichOrthogroupMember(member), sequenceKind, orthogroupId);
-  };
+  const buildOrthogroupMemberFasta = (member, sequenceKind) =>
+    memberFastaText(enrichOrthogroupMember(member), sequenceKind);
 
   const orthogroupSequenceFilename = (groupOrId, sequenceKind) => {
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
@@ -687,13 +754,13 @@ export const createOrthogroupEditor = ({ state }) => {
     groupOrId = selectedOrthogroup.value,
     context = 'drawer'
   ) => {
-    const text = buildOrthogroupMemberFasta(member, sequenceKind, groupOrId);
+    const text = buildOrthogroupMemberFasta(member, sequenceKind);
     const key = orthogroupCopyFeedbackKey(groupOrId, sequenceKind, member, context);
     return copyWithFeedback(text, key);
   };
 
   const downloadOrthogroupMemberSequence = (member, sequenceKind = 'nt', groupOrId = selectedOrthogroup.value) => {
-    const text = buildOrthogroupMemberFasta(member, sequenceKind, groupOrId);
+    const text = buildOrthogroupMemberFasta(member, sequenceKind);
     if (!text) return;
     downloadTextFile(
       orthogroupMemberSequenceFilename(member, sequenceKind, groupOrId),
@@ -710,6 +777,7 @@ export const createOrthogroupEditor = ({ state }) => {
   };
 
   const setOrthogroupNameOverride = (orthogroupId, value) => {
+    const drawing = state.drawings.linear;
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const id = normalizeText(orthogroupId);
@@ -719,13 +787,14 @@ export const createOrthogroupEditor = ({ state }) => {
     const normalized = normalizeText(value);
     const base = normalizeText(group?.name);
     if (!normalized || normalized === base) {
-      delete orthogroupNameOverrides[id];
+      delete drawing.orthogroupNameOverrides[id];
       return;
     }
-    orthogroupNameOverrides[id] = normalized;
+    drawing.orthogroupNameOverrides[id] = normalized;
   };
 
   const setOrthogroupDescriptionOverride = (orthogroupId, value) => {
+    const drawing = state.drawings.linear;
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const id = normalizeText(orthogroupId);
@@ -735,28 +804,30 @@ export const createOrthogroupEditor = ({ state }) => {
     const normalized = normalizeText(value);
     const base = normalizeText(group?.description);
     if (!normalized || normalized === base) {
-      delete orthogroupDescriptionOverrides[id];
+      delete drawing.orthogroupDescriptionOverrides[id];
       return;
     }
-    orthogroupDescriptionOverrides[id] = normalized;
+    drawing.orthogroupDescriptionOverrides[id] = normalized;
   };
 
   const resetOrthogroupRename = (orthogroupId = selectedOrthogroupId.value) => {
+    const drawing = state.drawings.linear;
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const id = normalizeText(orthogroupId);
     if (!id) return;
-    delete orthogroupNameOverrides[id];
-    delete orthogroupDescriptionOverrides[id];
+    delete drawing.orthogroupNameOverrides[id];
+    delete drawing.orthogroupDescriptionOverrides[id];
   };
 
   // Dormant names are listed and cleared here (D-21).
-  const orthogroupDormantNames = computed(() => Object.values(orthogroupDormantOverrides || {})
+  const orthogroupDormantNames = computed(() => Object.values(state.drawings.linear.orthogroupDormantOverrides || {})
     .map((entry) => normalizeText(entry?.name) || normalizeText(entry?.description)).filter(Boolean));
   const clearOrthogroupDormantOverrides = () => {
+    const drawing = state.drawings.linear;
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    Object.keys(orthogroupDormantOverrides || {}).forEach((key) => delete orthogroupDormantOverrides[key]);
+    Object.keys(drawing.orthogroupDormantOverrides || {}).forEach((key) => delete drawing.orthogroupDormantOverrides[key]);
   };
 
   const clearOrthogroupHighlight = () => {

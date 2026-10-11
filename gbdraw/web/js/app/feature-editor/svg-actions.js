@@ -1,20 +1,25 @@
-import { normalizeUserFacingError } from '../../services/error-normalization.js';
-import { resolveColorToHex } from '../color-utils.js';
+// @ts-check
+/** @import { DrawingState } from '../../state.js' */
+import { resolveColorToHex } from '../../utils/color-utils.js';
+import { popupViewportBottom } from '../../utils/popup-bounds.js';
+import { reportRuleRunFailure, runWhenPrepared } from '../rule-matching.js';
 import {
   formatFeatureLength,
   formatFeatureLocation,
   getFeatureCaption,
   normalizeStringArray,
-  resolveDisplayProteinId
-} from '../feature-utils.js';
+  resolveFeatureProteinId
+} from '../../services/feature-utils.js';
 import {
   PAIRWISE_MATCH_SELECTOR,
   buildPairwiseMatchHoverSummary,
-  buildPairwiseMatchPayload
+  buildMatchPopupPayload
 } from '../pairwise-match-popup.js';
-import { buildFeatureSequenceFastas } from '../feature-sequence-fasta.js';
+import { buildFeatureSequenceFastas } from '../../services/feature-sequence-fasta.js';
 import { getFeatureOverride } from '../../services/feature-override-identity.js';
-import { COMPARISON_LEGEND_SELECTOR } from '../legend/utils.js';
+import { featureIdentityKeyOf, featureOverrideValue } from '../../services/feature-placement.js';
+import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
+import { COMPARISON_LEGEND_SELECTOR } from '../../services/legend-svg.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import {
   featureIdentity,
@@ -26,13 +31,12 @@ import {
   FEATURE_SELECTOR,
   buildFeatureElementIndex,
   clearFeatureElementIndex,
-  filterFeatureFillTargets,
   getFeatureElementIndex,
   getFeatureElements,
   getFeatureFillElements,
   getFeatureIdentity,
   normalizeFeatureIdentity
-} from '../feature-dom.js';
+} from '../../services/feature-dom.js';
 
 export {
   FEATURE_ID_ATTRIBUTE,
@@ -46,26 +50,132 @@ export {
   normalizeFeatureIdentity
 };
 
+/**
+ * The feature selection owner's reactions to a click or a drag on the preview.
+ * @typedef {object} FeatureSelectionPort
+ * @property {() => boolean} [consumeSuppressNextClick]
+ * @property {(event: Event, svg: Element) => Element | null} [getSelectableFeatureTarget]
+ * @property {(selectionId: string) => any} [toggleFeatureSelection]
+ * @property {(selectionId: string, options?: { additive?: boolean }) => any} [selectFeatureRange]
+ * @property {(options?: { clearStatus?: boolean }) => any} [clearFeatureSelection]
+ * @property {(svgId: string) => any} [markPlainFeatureClick]
+ * @property {(event: Event, svg: Element) => boolean} [startMarqueePointer]
+ * @property {(event: Event) => boolean} [moveMarqueePointer]
+ * @property {(event: Event) => boolean} [commitMarqueePointer]
+ * @property {() => any} [cancelMarqueePointer]
+ */
+
+/**
+ * The preview owner's pan and zoom interaction, which pauses feature hover.
+ * @typedef {object} PreviewTransformInteractionPort
+ * @property {() => boolean} [isActive]
+ * @property {(listener: (change: { active: boolean, kind: string, event: Event, reconcile: boolean }) => void) => (() => void) | void} [subscribe]
+ */
+
+/**
+ * The visibility owner's preparation of the rule matches `resolveFeatureDrawn`
+ * reads. Strict, it rejects when the color preparation fails and resolves to
+ * false when it is stale.
+ * @typedef {(options?: { strict?: boolean, view?: boolean }) => boolean | Promise<boolean | { error: any }>} PrepareDrawnFeatureMatchesPort
+ */
+
+/**
+ * @typedef {object} FeatureSvgActionsOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {(feature: Record<string, any>) => string} getFeatureColor The rule owner's color of a feature.
+ * @property {(feature: Record<string, any>) => string} [getEffectiveLegendCaption] The rule owner's Legend caption of a feature.
+ * @property {(() => void) | null} [onFeaturePopupOpened] The label owner's sync of its editor when the popup opens.
+ * @property {PrepareDrawnFeatureMatchesPort} [prepareDrawnFeatureMatches]
+ *   The visibility owner's preparation of the rule matches `resolveFeatureDrawn` reads.
+ * @property {FeatureSelectionPort | null} [featureSelection]
+ *   The preview owner's projection of feature visibility changes.
+ * @property {PreviewTransformInteractionPort | null} [previewTransformInteraction]
+ */
+
+/**
+ * The state of the feature and match hover summary. The tooltip element is
+ * created on the first hover; `lastEvent` holds the last pointer position seen.
+ * @typedef {object} HoverSummaryState
+ * @property {HTMLElement | null} element
+ * @property {number | null} timer
+ * @property {number | null} frame
+ * @property {boolean} visible
+ * @property {string} activeSvgId
+ * @property {{ clientX?: number, clientY?: number } | null} lastEvent
+ */
+
+/**
+ * The Similarity alignment overlay over the preview. `observer` is set once the
+ * overlay is built and stays null without ResizeObserver.
+ * @typedef {object} AlignmentOverlay
+ * @property {HTMLElement} element
+ * @property {HTMLElement} scrollRoot
+ * @property {number} frame
+ * @property {ResizeObserver | null} observer
+ * @property {() => void} schedule
+ * @property {(recordKey: string, anchor: any) => void} onSelect
+ * @property {(recordKey: string, candidateKey: string) => void} onHover
+ */
+
+/**
+ * @typedef {object} AlignmentOverlayRequest
+ * @property {any} reference
+ * @property {any[]} [ambiguities]
+ * @property {(recordKey: string, anchor: any) => void} onSelect
+ * @property {(recordKey: string, candidateKey: string) => void} onHover
+ */
+
+/**
+ * The delegated handlers bound to one Result SVG. The lookup maps are built on
+ * first use, and the methods are set while the handlers are attached.
+ * @typedef {object} DelegatedFeatureHandlers
+ * @property {Element} svg
+ * @property {Map<string, Element[]> | null} pathsByIdMap
+ * @property {Map<string, Record<string, any>> | null} featureLookup
+ * @property {Map<string, Set<string>> | null} featureIdsByOrthogroupId
+ * @property {Map<string, Element[]> | null} comparisonElementsByOrthogroupId
+ * @property {Map<string, Element[]> | null} comparisonElementsByCollinearityBlockId
+ * @property {Map<string, Element[]> | null} comparisonElementsByMatchId
+ * @property {boolean} pairwiseAffordancesPrepared
+ * @property {string | null} activeHoverSvgId
+ * @property {string} activeHoverKey
+ * @property {Element | null} activeMatchHoverElement
+ * @property {string} activeMatchHoverKey
+ * @property {Element | null} pendingMatchElement
+ * @property {Set<Element>} activeHoverElements
+ * @property {{ clientX: number, clientY: number } | null} transformPointer
+ * @property {boolean} reconcileHoverAfterTransform
+ * @property {number | null} hoverReconcileFrame
+ * @property {string} alignmentCandidateSvgId
+ * @property {{ featureSvgId: string | null, matchElement: Element | null } | null} alignmentCandidateRestore
+ * @property {AlignmentOverlay | null} alignmentOverlay
+ * @property {Map<string, any>} alignmentCandidatesBySvgId
+ * @property {((request: AlignmentOverlayRequest) => void) | null} showAlignmentOverlay
+ * @property {(() => void) | null} clearAlignmentOverlay
+ * @property {((anchor: any) => boolean) | null} previewAlignmentCandidate
+ * @property {((options?: { restore?: boolean }) => void) | null} clearAlignmentCandidatePreview
+ * @property {((eventLike: any, kind?: string) => void) | null} beginPreviewTransformInteraction
+ * @property {((options?: { reconcile?: boolean }) => void) | null} endPreviewTransformInteraction
+ * @property {(() => void) | null} cleanup
+ */
+
+/** @param {FeatureSvgActionsOptions} options */
 export const createFeatureSvgActions = ({
   state,
   getFeatureColor,
   getEffectiveLegendCaption,
   onFeaturePopupOpened = null,
-  rulePreparation,
+  // R13: the popup opens once the rule matches `resolveFeatureDrawn` reads are
+  // prepared; the composition root injects the visibility owner's preparation.
+  prepareDrawnFeatureMatches = () => true,
   featureSelection = null,
-  previewRuntime = null,
   previewTransformInteraction = null
 }) => {
   const {
     orthogroups,
-    collinearGroups,
-    orthogroupNameOverrides,
-    orthogroupDescriptionOverrides,
     extractedFeatures,
     biologicalFeatures,
     featuresBySvgId,
-    featureColorOverrides,
-    featureVisibilityOverrides,
     svgContainer,
     clickedFeature,
     clickedFeaturePos,
@@ -74,13 +184,14 @@ export const createFeatureSvgActions = ({
     matchSequenceRegistry,
     selectedAnnotation,
     featurePopupSize,
-    featureSelectionDrag,
-    adv
+    featureSelectionDrag
   } = state;
+  /** @type {DelegatedFeatureHandlers | null} */
   let delegatedFeatureHandlers = null;
   const isPreviewTransformInteractionActive = () => Boolean(
     previewTransformInteraction?.isActive?.()
   );
+  /** @type {HoverSummaryState} */
   const hoverSummaryState = {
     element: null,
     timer: null,
@@ -116,13 +227,14 @@ export const createFeatureSvgActions = ({
   const getPopupPosition = (eventLike, popupWidth = 720, popupHeight = 520) => {
     const margin = 12;
     const fallbackX = window.innerWidth / 2;
-    const fallbackY = window.innerHeight / 2;
+    const bottom = popupViewportBottom();
+    const fallbackY = bottom / 2;
     const resolvedPopupWidth = Math.min(popupWidth, Math.max(0, window.innerWidth - (2 * margin)));
-    const resolvedPopupHeight = Math.min(popupHeight, Math.max(0, window.innerHeight - (2 * margin)));
+    const resolvedPopupHeight = Math.min(popupHeight, Math.max(0, bottom - (2 * margin)));
     const rawX = Number.isFinite(eventLike?.clientX) ? eventLike.clientX + 10 : fallbackX;
     const rawY = Number.isFinite(eventLike?.clientY) ? eventLike.clientY + 10 : fallbackY;
     const maxX = Math.max(margin, window.innerWidth - resolvedPopupWidth - margin);
-    const maxY = Math.max(margin, window.innerHeight - resolvedPopupHeight - margin);
+    const maxY = Math.max(margin, bottom - resolvedPopupHeight - margin);
     return {
       x: Math.min(Math.max(rawX, margin), maxX),
       y: Math.min(Math.max(rawY, margin), maxY)
@@ -209,10 +321,10 @@ export const createFeatureSvgActions = ({
 
   const buildOrthogroupDetailRows = (feat) => {
     const member = feat?.orthogroupMember || feat?.orthogroup_member || null;
-    const proteinId = resolveDisplayProteinId(feat, member);
+    const proteinId = resolveFeatureProteinId(feat, member);
     const rows = [
       { key: 'orthogroup_id', label: 'Similarity group ID', value: feat?.orthogroupId || feat?.orthogroup_id },
-      { key: 'orthogroup_members', label: 'Members', value: feat?.orthogroupMemberCount || feat?.orthogroup_member_count },
+      { key: 'orthogroup_members', label: 'Group genes', value: feat?.orthogroupMemberCount || feat?.orthogroup_member_count },
       { key: 'orthogroup_coverage', label: 'Record coverage', value: feat?.orthogroupRecordCoverage || feat?.orthogroup_record_coverage },
       { key: 'protein_id', label: 'Protein ID', value: proteinId }
     ];
@@ -232,6 +344,7 @@ export const createFeatureSvgActions = ({
       .filter((row) => row.value !== '');
   };
 
+  /** @returns {Map<string, Record<string, any>>} */
   const buildFeatureLookup = () => {
     if (featuresBySvgId?.value instanceof Map) return featuresBySvgId.value;
     const indexed = new Map();
@@ -315,9 +428,16 @@ export const createFeatureSvgActions = ({
     delegatedFeatureHandlers = null;
   };
 
-  const buildClickedFeaturePayload = (feat, featureElement = null, renderedSvgId = '') => {
+  // `renderedSvgId` is '' for a feature the displayed Result does not draw.
+  /**
+   * @param {DrawingState} drawing
+   * @param {Record<string, any>} feat
+   * @param {Element | null} [featureElement]
+   * @param {string} [renderedSvgId]
+   */
+  const buildClickedFeaturePayload = (drawing, feat, featureElement = null, renderedSvgId = undefined) => {
     const defaultLabel = getFeatureCaption(feat);
-    const existingOverride = getFeatureOverride(featureColorOverrides, feat);
+    const existingOverride = getFeatureOverride(drawing.featureColorOverrides, feat);
     const effectiveCaption = String(getEffectiveLegendCaption?.(feat) || existingOverride?.caption || defaultLabel || '').trim();
     const locationText = formatFeatureLocation(feat);
     const locationParts = Array.isArray(feat.location_parts) ? feat.location_parts : [];
@@ -334,10 +454,10 @@ export const createFeatureSvgActions = ({
       featureElement?.getAttribute('fill') || getFeatureColor(feat)
     );
     const currentStrokeColor = featureElement?.getAttribute('stroke') || '#000000';
-    const currentStrokeWidth = parseFloat(featureElement?.getAttribute('stroke-width')) || 0.5;
+    const currentStrokeWidth = parseFloat(featureElement?.getAttribute('stroke-width') ?? '') || 0.5;
 
-    const actualSvgId = String(renderedSvgId || renderedFeatureSvgId(feat)).trim();
-    const visibilityMode = normalizeVisibilityMode(featureVisibilityOverrides[actualSvgId]);
+    const actualSvgId = String(renderedSvgId ?? renderedFeatureSvgId(feat)).trim();
+    const visibilityMode = normalizeVisibilityMode(featureOverrideValue(drawing.featureOverrides, feat, 'featureVisibility'));
 
     return {
       id: feat.id,
@@ -351,6 +471,7 @@ export const createFeatureSvgActions = ({
       feat,
       activeTab: 'edit',
       recordId: String(feat.record_id || ''),
+      gene: getQualifierFirstValue(feat, 'gene'),
       recordIdx: Number.isInteger(Number(feat.record_idx)) ? Number(feat.record_idx) : null,
       featureType: String(feat.type || ''),
       start: Number.isFinite(Number(feat.start)) ? Number(feat.start) : null,
@@ -368,13 +489,13 @@ export const createFeatureSvgActions = ({
       appliedLegendName: effectiveCaption,
       strokeColor: currentStrokeColor,
       strokeWidth: currentStrokeWidth,
-      originalStrokeColor: currentStrokeColor,
-      originalStrokeWidth: currentStrokeWidth,
       labelKey: '',
       labelText: '',
       labelSourceText: '',
       labelVisibility: 'default',
       featureVisibility: visibilityMode,
+      // Per-feature edits name the feature by source identity (design Q4).
+      identityEditable: Boolean(featureIdentityKeyOf(feat)),
       proteinId: feat.proteinId || feat.protein_id || '',
       sourceProteinId: feat.sourceProteinId || feat.source_protein_id || '',
       orthogroupId: feat.orthogroupId || '',
@@ -387,27 +508,47 @@ export const createFeatureSvgActions = ({
     };
   };
 
-  const openPreparedFeatureEditor = (feat, eventLike = null) => {
+  /**
+   * @param {DrawingState} drawing
+   * @param {Record<string, any>} feat
+   * @param {{ clientX: number, clientY: number } | null} [eventLike]
+   */
+  const openPreparedFeatureEditor = (drawing, feat, eventLike = null) => {
     if (!feat) return null;
     if (!svgContainer.value) return null;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return null;
 
-    const renderedSvgId = renderedFeatureSvgId(feat);
-    if (!renderedSvgId) return null;
-    const featureElements = getFeatureElements(svg, renderedSvgId);
-    if (featureElements.length === 0) return null;
+    // A catalog feature opens as the displayed Result draws it; one that the
+    // Result lists but does not draw (a hidden feature, R-5) opens without an
+    // element, so its popup can show it again.
+    let target = feat;
+    let renderedSvgId = renderedFeatureSvgId(feat);
+    const catalogFeatures = resultCatalogFeatures(state);
+    const key = stableFeatureOverrideKey(feat);
+    if (catalogFeatures && key) {
+      target = catalogFeatures.renderedByIdentity.get(key)
+        || catalogFeatures.biological.find((candidate) => stableFeatureOverrideKey(candidate) === key);
+      if (!target) return null;
+      renderedSvgId = catalogFeatures.renderedByIdentity.has(key) ? renderedFeatureSvgId(target) : '';
+    } else if (!renderedSvgId) {
+      return null;
+    }
+    const featureElements = renderedSvgId ? getFeatureElements(svg, renderedSvgId) : [];
+    if (renderedSvgId && featureElements.length === 0) return null;
 
     hideHoverSummary();
     if (clickedPairwiseMatch) clickedPairwiseMatch.value = null;
-    const featureElement = getFeatureFillElements(svg, renderedSvgId)[0] || featureElements[0] || null;
-    clickedFeature.value = buildClickedFeaturePayload(feat, featureElement, renderedSvgId);
+    const featureElement = renderedSvgId
+      ? getFeatureFillElements(svg, renderedSvgId)[0] || featureElements[0] || null
+      : null;
+    clickedFeature.value = buildClickedFeaturePayload(drawing, target, featureElement, renderedSvgId);
     if (featurePopupSize) {
       featurePopupSize.width = 0;
       featurePopupSize.height = 0;
     }
 
-    const popupPosition = getPopupPosition(eventLike, adv?.rich_feature_popup === false ? 440 : 720);
+    const popupPosition = getPopupPosition(eventLike, state.richFeaturePopup.value === false ? 440 : 720);
     clickedFeaturePos.x = popupPosition.x;
     clickedFeaturePos.y = popupPosition.y;
     if (typeof onFeaturePopupOpened === 'function') {
@@ -416,11 +557,18 @@ export const createFeatureSvgActions = ({
     return clickedFeature.value;
   };
 
+  // The popup states whether the feature is drawn (resolveFeatureDrawn).
+  /**
+   * @param {Record<string, any>} feat
+   * @param {{ clientX: number, clientY: number } | null} [eventLike]
+   */
   const openFeatureEditorForFeature = (feat, eventLike = null) => {
-    const previousAlert = state.errorLog?.value;
-    const opened = () => openPreparedFeatureEditor(feat, eventLike);
-    const result = rulePreparation ? rulePreparation.run(state.manualSpecificRules, opened) : opened();
-    return result?.catch ? result.catch((error) => { state.errorLog && state.errorLog.value === previousAlert && (state.errorLog.value = normalizeUserFacingError(error, { operation: 'feature-extraction', stage: 'helper' })); }) : result;
+    const drawing = state.activeDrawing();
+    return reportRuleRunFailure(
+      state, 'feature-extraction', () => runWhenPrepared(
+        state, () => [prepareDrawnFeatureMatches({ strict: true, view: true })], () => openPreparedFeatureEditor(drawing, feat, eventLike)
+      )
+    );
   };
 
   const hoverSummaryIsAllowed = () => {
@@ -448,8 +596,9 @@ export const createFeatureSvgActions = ({
     if (!element || element.hidden || !eventLike) return;
     const margin = 12;
     const offset = 14;
-    const clientX = Number.isFinite(eventLike.clientX) ? eventLike.clientX : window.innerWidth / 2;
-    const clientY = Number.isFinite(eventLike.clientY) ? eventLike.clientY : window.innerHeight / 2;
+    // Number.isFinite is true only for a number, so a finite clientX is a number.
+    const clientX = Number.isFinite(eventLike.clientX) ? /** @type {number} */ (eventLike.clientX) : window.innerWidth / 2;
+    const clientY = Number.isFinite(eventLike.clientY) ? /** @type {number} */ (eventLike.clientY) : window.innerHeight / 2;
     const rect = element.getBoundingClientRect();
     let x = clientX + offset;
     let y = clientY + offset;
@@ -599,31 +748,34 @@ export const createFeatureSvgActions = ({
     hoverSummaryState.lastEvent = null;
   }
 
-  const groupsForMatch = (matchElement) => (
-    matchElement.getAttribute('data-match-kind') === 'collinear'
-      ? collinearGroups?.value || []
-      : orthogroups?.value || []
-  );
+  // Every catalog group, collinear presentation groups included, is in
+  // `orthogroups`; the popup's scoped lookup picks the one a ribbon names. A
+  // collinear ribbon without a collinear group scope names ordinary similarity
+  // groups, which the presentation subset lacks (OV-370).
+  const groupsForMatch = () => orthogroups?.value || [];
 
-  const buildMatchPayload = (matchElement, featureLookup) => buildPairwiseMatchPayload(matchElement, {
+  /** @param {DrawingState} drawing */
+  const buildMatchPayload = (drawing, matchElement, featureLookup) => buildMatchPopupPayload(matchElement, {
     featureLookup,
     sourceFeatures: Array.isArray(biologicalFeatures?.value) && biologicalFeatures.value.length > 0
       ? biologicalFeatures.value
       : (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []),
-    orthogroups: groupsForMatch(matchElement),
-    orthogroupNameOverrides,
-    orthogroupDescriptionOverrides,
+    orthogroups: groupsForMatch(),
+    orthogroupNameOverrides: drawing.orthogroupNameOverrides,
+    orthogroupDescriptionOverrides: drawing.orthogroupDescriptionOverrides,
     resolveSequenceSource: matchSequenceRegistry?.resolve
   });
 
-  const buildMatchHoverSummary = (matchElement) => buildPairwiseMatchHoverSummary(matchElement, {
-    orthogroups: () => groupsForMatch(matchElement),
-    orthogroupNameOverrides
-  });
+  // The summary builder reads a function as well as a list.
+  const buildMatchHoverSummary = (matchElement) => buildPairwiseMatchHoverSummary(matchElement, /** @type {any} */ ({
+    orthogroups: groupsForMatch,
+    orthogroupNameOverrides: state.activeDrawing().orthogroupNameOverrides
+  }));
 
   const openPairwiseMatchPopup = (matchElement, eventLike, featureLookup) => {
+    const drawing = state.activeDrawing();
     if (!matchElement || !clickedPairwiseMatch || !clickedPairwiseMatchPos) return null;
-    const payload = buildMatchPayload(matchElement, featureLookup);
+    const payload = buildMatchPayload(drawing, matchElement, featureLookup);
     if (!payload) return null;
     hideHoverSummary();
     clickedFeature.value = null;
@@ -634,21 +786,7 @@ export const createFeatureSvgActions = ({
     return payload;
   };
 
-  const applyVisibilityPreviewChanges = (changes, { reason = 'feature-visibility' } = {}) => {
-    const normalizedChanges = (Array.isArray(changes) ? changes : [])
-      .map((change) => ({
-        featureId: String(change?.featureId || change?.svgId || change?.id || '').trim(),
-        mode: normalizeVisibilityMode(change?.mode)
-      }))
-      .filter((change) => change.featureId);
-    if (normalizedChanges.length === 0) return false;
-    return previewRuntime?.applyFeatureVisibilityChanges(normalizedChanges, { reason }) === true;
-  };
-
-  const applyVisibilityPreviewBySvgId = (svgId, modeRaw) => (
-    applyVisibilityPreviewChanges([{ featureId: svgId, mode: modeRaw }])
-  );
-
+  /** @param {{ root?: Element | null, phase?: string, rootGeneration?: number }} [options] */
   const attachSvgFeatureHandlers = ({
     root = null,
     phase = 'preview-bind',
@@ -679,6 +817,7 @@ export const createFeatureSvgActions = ({
       return false;
     }
 
+    /** @type {DelegatedFeatureHandlers} */
     const handlerState = {
       svg,
       pathsByIdMap: null,
@@ -718,7 +857,8 @@ export const createFeatureSvgActions = ({
     const ensureFeaturePaths = () => {
       if (!handlerState.pathsByIdMap) {
         recordStructuralMetric('featureDomFullScanCount', 1, { phase: 'interaction' });
-        handlerState.pathsByIdMap = getFeatureElementIndex(svg);
+        // getFeatureElementIndex always returns a Map (the cached index or a new one).
+        handlerState.pathsByIdMap = /** @type {Map<string, Element[]>} */ (getFeatureElementIndex(svg));
       }
       return handlerState.pathsByIdMap;
     };
@@ -805,7 +945,8 @@ export const createFeatureSvgActions = ({
         (ensureFeatureOrthogroupIndex().get(id) || new Set()).forEach((featureId) => {
           setFeatureHover(featureId);
         });
-        (handlerState.comparisonElementsByOrthogroupId.get(id) || []).forEach((element) => {
+        // ensureComparisonIndexes above has set all three comparison maps.
+        (/** @type {Map<string, Element[]>} */ (handlerState.comparisonElementsByOrthogroupId).get(id) || []).forEach((element) => {
           setHoverStyle(element, true);
         });
       };
@@ -814,7 +955,8 @@ export const createFeatureSvgActions = ({
         const id = String(blockId || '').trim();
         if (!id) return;
         ensureComparisonIndexes();
-        (handlerState.comparisonElementsByCollinearityBlockId.get(id) || []).forEach((element) => {
+        // ensureComparisonIndexes above has set all three comparison maps.
+        (/** @type {Map<string, Element[]>} */ (handlerState.comparisonElementsByCollinearityBlockId).get(id) || []).forEach((element) => {
           setHoverStyle(element, true);
         });
       };
@@ -842,7 +984,8 @@ export const createFeatureSvgActions = ({
       const matchFragments = (element) => {
         ensureComparisonIndexes();
         const id = matchAttr(element, 'data-gbdraw-match-id') || matchAttr(element, 'data-gbdraw-pairwise-match-id');
-        return handlerState.comparisonElementsByMatchId.get(id) || [element];
+        // ensureComparisonIndexes above has set all three comparison maps.
+        return /** @type {Map<string, Element[]>} */ (handlerState.comparisonElementsByMatchId).get(id) || [element];
       };
 
       const setMatchHover = (matchElement) => {
@@ -955,6 +1098,7 @@ export const createFeatureSvgActions = ({
         clearAlignmentCandidatePreview();
       };
 
+      /** @param {AlignmentOverlayRequest} request */
       const showAlignmentOverlay = ({ reference, ambiguities, onSelect, onHover }) => {
         clearAlignmentOverlay();
         const scrollRoot = svgContainer.value?.parentElement;
@@ -1018,26 +1162,34 @@ export const createFeatureSvgActions = ({
             y: (rect.top + rect.bottom) / 2 - viewportRect.top
           };
         };
-        const overlay = { element, scrollRoot, frame: 0, observer: null, schedule: null, onSelect, onHover };
+        /** @type {AlignmentOverlay} */
+        const overlay = {
+          element,
+          scrollRoot,
+          frame: 0,
+          observer: null,
+          schedule: () => {
+            if (!overlay.frame) overlay.frame = window.requestAnimationFrame(update);
+          },
+          onSelect,
+          onHover
+        };
         const update = () => {
           overlay.frame = 0;
           if (!element.isConnected || delegatedFeatureHandlers !== handlerState) return;
           const rect = viewport.getBoundingClientRect();
           const referencePoint = geometry(referenceFeature?.element, rect);
           guide.hidden = !referencePoint || referencePoint.x < 0 || referencePoint.x > rect.width;
-          if (!guide.hidden) guide.style.left = referencePoint.x + 'px';
+          if (referencePoint && !guide.hidden) guide.style.left = referencePoint.x + 'px';
           badges.forEach(({ candidate, button }) => {
             const point = geometry(candidate.element, rect);
             button.hidden = !point || point.x < 0 || point.x > rect.width
               || point.y < 0 || point.y > rect.height;
-            if (!button.hidden) {
+            if (point && !button.hidden) {
               button.style.left = point.x + 'px';
               button.style.top = point.y + 'px';
             }
           });
-        };
-        overlay.schedule = () => {
-          if (!overlay.frame) overlay.frame = window.requestAnimationFrame(update);
         };
         scrollRoot.addEventListener('scroll', overlay.schedule, { passive: true });
         window.addEventListener('resize', overlay.schedule);
@@ -1432,6 +1584,7 @@ export const createFeatureSvgActions = ({
     delegatedFeatureHandlers?.clearAlignmentOverlay?.();
   };
 
+  /** @param {{ root?: Element | null, phase?: string, rootGeneration?: number }} [options] */
   const preparePairwiseInteractionAffordances = ({
     root = null,
     phase = 'preview-bind',
@@ -1441,7 +1594,8 @@ export const createFeatureSvgActions = ({
     if (!svg || delegatedFeatureHandlers?.svg !== svg) return false;
     if (delegatedFeatureHandlers.pairwiseAffordancesPrepared) return false;
     recordStructuralMetric('comparisonDomFullScanCount', 1, { phase, rootGeneration });
-    Array.from(svg.querySelectorAll(PAIRWISE_MATCH_SELECTOR)).forEach((element, index) => {
+    // The pairwise match selector matches SVG path elements, which have a style.
+    Array.from(/** @type {NodeListOf<SVGElement>} */ (svg.querySelectorAll(PAIRWISE_MATCH_SELECTOR))).forEach((element, index) => {
       if (element?.style) element.style.cursor = 'pointer';
       element.setAttribute('role', 'button');
       element.setAttribute('tabindex', '0');
@@ -1452,8 +1606,6 @@ export const createFeatureSvgActions = ({
   };
 
   return {
-    applyVisibilityPreviewBySvgId,
-    applyVisibilityPreviewChanges,
     attachSvgFeatureHandlers,
     getFeatureElements,
     getFeatureFillElements,

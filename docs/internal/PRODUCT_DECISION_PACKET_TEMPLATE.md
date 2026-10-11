@@ -89,6 +89,7 @@ the choice.
 - Performance consequence:
 - Compatibility consequence:
 - Architecture consequence:
+- Reaction owner and channel, when one editor domain follows another (R13): `<owner module>`; `port` | `root-projection` | `event`; `<projection function>`; or `N/A`:
 - Evidence available/missing:
 - Residual risk:
 - Route: <PR_LOCAL_ALLOWED | DURABLE_AUTHORITY_REQUIRED | EVIDENCE_REQUIRED | NOT_ALLOWED>

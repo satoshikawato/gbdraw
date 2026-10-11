@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const repoRoot = process.cwd();
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-track-slot-validation-'));
@@ -17,12 +18,25 @@ await cp(
   join(tempRoot, 'utils'),
   { recursive: true }
 );
-// circular-track-slots.js reports through the dependency-free wording owner.
+// circular-track-slots.js reads the conservation-series row helpers.
 await cp(
-  join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'error-normalization.js'),
-  join(tempRoot, 'services', 'error-normalization.js')
+  join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'conservation-series.js'),
+  join(tempRoot, 'services', 'conservation-series.js')
+);
+// linear-track-slots.js reads the current option values.
+await cp(
+  join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'current-option-values.js'),
+  join(tempRoot, 'services', 'current-option-values.js')
 );
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
+// The track-slot leaves the slot editors import.
+for (const leaf of ['depth-track-state.js', 'track-slot-display.js', 'track-slot-validation.js',
+  'circular-track-slot-model.js', 'linear-track-slot-model.js']) {
+  await cp(
+    join(repoRoot, 'gbdraw', 'web', 'js', 'services', leaf),
+    join(tempRoot, 'services', leaf)
+  );
+}
 
 const {
   parseOptionalPixel,
@@ -30,19 +44,26 @@ const {
   assertValidCustomTrackPlan,
   validateCustomTrackPlan
 } = await import(
-  pathToFileURL(join(tempRoot, 'app', 'track-slot-validation.js'))
+  pathToFileURL(join(tempRoot, 'services', 'track-slot-validation.js'))
 );
 const {
-  buildLinearTrackSlotPayload,
   buildLinearTrackSlotSpec,
-  normalizeLinearTrackSlots,
-  parseLinearTrackSlotSpec,
   createLinearTrackSlotEditor
 } = await import(
   pathToFileURL(join(tempRoot, 'app', 'linear-track-slots.js'))
 );
-const { buildCircularTrackSlotPayload, buildCircularTrackSlotSpec, normalizeCircularTrackSlot, parseCircularTrackSlotSpec } = await import(
+const {
+  buildLinearTrackSlotPayload,
+  normalizeLinearTrackSlots,
+  parseLinearTrackSlotSpec
+} = await import(
+  pathToFileURL(join(tempRoot, 'services', 'linear-track-slot-model.js'))
+);
+const { buildCircularTrackSlotSpec } = await import(
   pathToFileURL(join(tempRoot, 'app', 'circular-track-slots.js'))
+);
+const { buildCircularTrackSlotPayload, normalizeCircularTrackSlot, parseCircularTrackSlotSpec } = await import(
+  pathToFileURL(join(tempRoot, 'services', 'circular-track-slot-model.js'))
 );
 
 const feature = (id = 'features', overrides = {}) => ({
@@ -82,7 +103,6 @@ const validate = (overrides = {}) => validateCustomTrackPlan({
   trackType: 'middle',
   depthTrackCount: 0,
   annotationSetIds: [],
-  visibleFeatureUnderlays: false,
   conservationSeries: [],
   ...overrides
 });
@@ -152,84 +172,31 @@ test('limits Linear to one enabled Features row and ignores a disabled duplicate
   assert.equal(valid.rowIssues.size, 0);
 });
 
-test('requires exactly one Circular Features row only for visible feature underlays', () => {
-  const duplicate = validate({
-    mode: 'circular',
-    slots: [feature('a', { side: 'inside' }), feature('b', { side: 'outside' })],
-    axisIndex: 1,
-    visibleFeatureUnderlays: 1
-  });
-  assert.deepEqual(
-    duplicate.globalIssues.map((issue) => issue.code),
-    ['feature_underlay_features_count']
-  );
-
-  const missing = validate({
+// TK-13 (Owner 2026-10-05: match the CLI): whether a stack needs a Features
+// row for underlays depends on the record's features, so the Web plan does
+// not reject a stack for the configured underlay types; Python reports
+// TRACK_INVALID FEATURES_COUNT when the record has underlay features.
+test('accepts a stack without one Features row whatever underlay types are configured (TK-13)', () => {
+  const ticksOnly = validate({
     mode: 'circular',
     slots: [{ id: 'ticks', renderer: 'ticks', enabled: true, side: 'inside', z: 0, params: {} }],
-    axisIndex: 0,
-    visibleFeatureUnderlays: true
+    axisIndex: 0
   });
-  assert.deepEqual(
-    missing.globalIssues.map((issue) => issue.code),
-    ['feature_underlay_features_count']
-  );
-
-  const noUnderlay = validate({
+  assert.deepEqual(ticksOnly.globalIssues, []);
+  const twoCircular = validate({
     mode: 'circular',
     slots: [feature('a', { side: 'inside' }), feature('b', { side: 'outside' })],
-    axisIndex: 1,
-    visibleFeatureUnderlays: false
+    axisIndex: 1
   });
-  assert.equal(noUnderlay.globalIssues.length, 0);
-});
-
-test('requires exactly one Linear Features row for visible feature underlays', () => {
-  const missing = validate({
-    slots: [depth('depth', 0, { side: 'below' })],
-    axisIndex: 0,
-    depthTrackCount: 1,
-    visibleFeatureUnderlays: ['repeat_region']
-  });
-  assert.ok(
-    missing.globalIssues.some((issue) => issue.code === 'feature_underlay_features_count')
-  );
-
-  const exactlyOne = validate({
-    slots: [feature()],
-    axisIndex: 0,
-    visibleFeatureUnderlays: ['repeat_region']
-  });
-  assert.equal(
-    exactlyOne.globalIssues.some((issue) => issue.code === 'feature_underlay_features_count'),
-    false
-  );
-
-  const duplicate = validate({
-    slots: [feature('features_a'), feature('features_b')],
-    axisIndex: 0,
-    visibleFeatureUnderlays: ['repeat_region']
-  });
+  assert.deepEqual(twoCircular.globalIssues, []);
+  const depthOnly = validate({ slots: [depth('depth', 0, { side: 'below' })], axisIndex: 0, depthTrackCount: 1 });
+  assert.deepEqual(depthOnly.globalIssues, []);
+  // Linear draws one Features row in any case.
+  const duplicate = validate({ slots: [feature('features_a'), feature('features_b')], axisIndex: 0 });
   assert.ok(rowCodes(duplicate, 1).includes('features_multiple'));
-  assert.ok(
-    duplicate.globalIssues.some((issue) => issue.code === 'feature_underlay_features_count')
-  );
-
-  const disabledDuplicate = validate({
-    slots: [feature(), feature('disabled_features', { enabled: false })],
-    axisIndex: 0,
-    visibleFeatureUnderlays: ['repeat_region']
-  });
-  assert.equal(disabledDuplicate.rowIssues.size, 0);
-  assert.equal(
-    disabledDuplicate.globalIssues.some(
-      (issue) => issue.code === 'feature_underlay_features_count'
-    ),
-    false
-  );
 });
 
-test('Linear editor live validation uses visible feature-underlay intent', () => {
+test('Linear editor live validation does not read the configured underlay types (TK-13)', () => {
   const state = {
     form: { linear_track_layout: 'middle', show_depth: false },
     adv: {
@@ -246,11 +213,8 @@ test('Linear editor live validation uses visible feature-underlay intent', () =>
     files: { linearSeqs: [] },
     annotationSets: []
   };
-  const editor = createLinearTrackSlotEditor({ state });
-  assert.match(
-    editor.linearTrackGlobalIssues().join(' '),
-    /exactly one enabled Linear Features row/
-  );
+  const editor = createLinearTrackSlotEditor({ state: withDrawings(state) });
+  assert.deepEqual(editor.linearTrackGlobalIssues(), []);
 });
 
 test('rejects an empty enabled Linear stack but preserves Circular axis-only drafts', () => {
@@ -266,8 +230,7 @@ test('rejects an empty enabled Linear stack but preserves Circular axis-only dra
     const circular = validate({
       mode: 'circular',
       slots,
-      axisIndex: slots.length,
-      visibleFeatureUnderlays: false
+      axisIndex: slots.length
     });
     assert.equal(
       circular.globalIssues.some((issue) => issue.code === 'linear_slots_empty'),
@@ -358,8 +321,7 @@ test('derives an omitted Circular feature side from lane_direction', () => {
       side: null,
       params: { lane_direction: 'split' }
     })],
-    axisIndex: 0,
-    visibleFeatureUnderlays: false
+    axisIndex: 0
   });
 
   assert.equal(plan.rowIssues.size, 0);
@@ -582,12 +544,12 @@ test('reports an enabled Depth row on a series without a source in both modes', 
 test('Linear editor shows the row issue after a File clear keeps the series', () => {
   const slots = [feature(), depth('depth_1', 0, { custom: 'manual' }), depth('depth_2', 1)];
   const editor = createLinearTrackSlotEditor({
-    state: {
+    state: withDrawings({
       form: { linear_track_layout: 'middle', show_depth: true },
       adv: { linear_track_slots: slots, linear_track_slots_axis_index: 0, nt: 'GC', depth_tracks: [] },
       linearSeqs: [{ depth: [null, { name: 'b.depth.tsv' }] }],
       annotationSets: []
-    }
+    })
   });
   assert.equal(editor.linearTrackSlotIssue(slots[1], 1), "Linear Depth track 'depth_1' has no logical Depth source.");
   assert.equal(editor.linearTrackSlotIssue(slots[2], 2), '');
@@ -822,7 +784,7 @@ test('omitted pixel fields remain auto and disabled valid drafts retain geometry
 test('invalid depth height remains editable without overwriting its last valid config', () => {
   const slot = depth('depth', 0, { height: '10px' });
   const state = { form: { linear_track_layout: 'middle' }, adv: { linear_track_slots: [slot], depth_tracks: [{ height: 10 }] }, files: { linearSeqs: [] }, annotationSets: [] };
-  const editor = createLinearTrackSlotEditor({ state });
+  const editor = createLinearTrackSlotEditor({ state: withDrawings(state) });
   editor.setLinearTrackSlotHeight(slot, 'px');
   assert.equal(slot.height, 'px');
   assert.equal(editor.linearTrackSlotHeightValue(slot), 'px');

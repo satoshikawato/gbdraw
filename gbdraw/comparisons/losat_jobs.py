@@ -6,9 +6,9 @@ which raw-cache key.
 
 This is the Python owner of the rules that the Web keeps in
 ``planLosatSourceJobs``, ``prepareLosatSourceBatches`` and
-``splitLosatSourceResult`` (``gbdraw/web/js/app/linear-sources.js``), the
+``splitLosatSourceResult`` (``gbdraw/web/js/services/linear-sources.js``), the
 LOSATP record-pair searches of ``buildLosatJobSpecs``
-(``gbdraw/web/js/app/linear-comparisons.js``), the nucleotide FASTA text of
+(``gbdraw/web/js/services/linear-comparisons.js``), the nucleotide FASTA text of
 ``extractLosatFastaFast`` and the nucleotide raw key of
 ``buildLosatCachePayload`` (``gbdraw/web/js/app/run-analysis.js``). The Web
 needs its own copy for the Settings job estimate without Python (CW-01, design
@@ -29,7 +29,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 import re
-from typing import Callable, Hashable, Literal, Mapping, Sequence
+from typing import Callable, Hashable, Literal, Mapping, Sequence, TypedDict, cast
 
 from Bio.SeqRecord import SeqRecord
 
@@ -45,6 +45,14 @@ _FASTA_HEADER = re.compile(r"^>(\S+)([^\r\n]*)", re.MULTILINE)
 
 LosatJobScope = Literal["between-sources", "within-source", "self"]
 RecordPair = tuple[int, int]
+
+
+class _LosatJobDraft(TypedDict):
+    query: tuple[int, ...]
+    subject: tuple[int, ...]
+    args: tuple[str, ...]
+    scope: LosatJobScope
+    specs: list[RecordPair]
 
 
 def sha256_text(text: str) -> str:
@@ -222,7 +230,7 @@ def plan_losat_jobs(
         return tuple(str(arg) for arg in build_args(query, subject))
 
     order: list[tuple[object, ...]] = []
-    drafts: dict[tuple[object, ...], dict[str, object]] = {}
+    drafts: dict[tuple[object, ...], _LosatJobDraft] = {}
     for query_index, subject_index in specs:
         args = args_of(query_index, subject_index)
         query_source = source_ids[query_index]
@@ -268,14 +276,14 @@ def plan_losat_jobs(
             }
             drafts[key] = draft
             order.append(key)
-        draft["specs"].append((int(query_index), int(subject_index)))  # type: ignore[union-attr]
+        draft["specs"].append((int(query_index), int(subject_index)))
     return tuple(
         LosatJob(
-            query_indexes=drafts[key]["query"],  # type: ignore[arg-type]
-            subject_indexes=drafts[key]["subject"],  # type: ignore[arg-type]
-            args=drafts[key]["args"],  # type: ignore[arg-type]
-            scope=drafts[key]["scope"],  # type: ignore[arg-type]
-            specs=tuple(drafts[key]["specs"]),  # type: ignore[arg-type]
+            query_indexes=drafts[key]["query"],
+            subject_indexes=drafts[key]["subject"],
+            args=drafts[key]["args"],
+            scope=drafts[key]["scope"],
+            specs=tuple(drafts[key]["specs"]),
         )
         for key in order
     )
@@ -378,7 +386,7 @@ def split_losat_batch_result(
     Rows keep the runtime order (Web ``splitLosatSourceResult``).
     """
 
-    rows: dict[RecordPair, list[str]] = {tuple(spec): [] for spec in specs}  # type: ignore[misc]
+    rows: dict[RecordPair, list[str]] = {cast(RecordPair, tuple(spec)): [] for spec in specs}
     for line_number, line in enumerate(re.split(r"\r?\n", str(text)), start=1):
         if not line.strip() or line.lstrip().startswith("#"):
             continue

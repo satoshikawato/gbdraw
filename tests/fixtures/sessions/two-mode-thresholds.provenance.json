@@ -1,0 +1,33 @@
+{
+  "purpose": "Positive fixture for the Session 40-42 reader of the 5-field modeProfiles shape with an edited inactive threshold and a flat plot title (PD-OI-086).",
+  "history": "first-parent main",
+  "writer": "gbdraw/web/js/services/config.js Save Session (Web), bytes kept unchanged",
+  "checkout": "git worktree add --detach <dir> <sourceCommit>; python tools/prepare_browser_wheel.py; served with python3 -m http.server <port> --bind 127.0.0.1 --directory <dir>",
+  "tools": {
+    "node": "v26.8.2",
+    "playwright": "1.61.0",
+    "python": "3.13.3"
+  },
+  "inputs": {
+    "TESTA.gb": "TESTA record of tests/fixtures/web_batch_two_records.gb (sha256 eea3934500b19ca9fca528766ae984577bb132716285e8387c04f5a0e3ce2ae5): bytes 0..6916 (the LOCUS line to the first //), sha256 e477b0c7bc42daccca2bfd718c135f24ebc2153230c5e54cb8762a0e00133080",
+    "TESTB.gb": "TESTB record of the same file: bytes 6917..end, sha256 d44e9566f033fbc07f42aa3b94a26c301354f7e5225f0e2a87370c6913f4a962"
+  },
+  "sessions": {
+    "two-mode-thresholds.v42.gbdraw-session.json.gz": {
+      "sourceCommit": "3fd508410d492e20d9963e41d808e9e7078d4d2c",
+      "wheel": "gbdraw-0.14.0-py3-none-any.whl",
+      "sessionVersion": 42,
+      "steps": [
+        "Linear; GenBank File TESTA.gb; Add sequence; GenBank File TESTB.gb; Plot Title FLAT_TITLE; Generate",
+        "Circular without inputs: Circular comparison maximum e-value 1e-3, Circular comparison minimum identity 50",
+        "Linear; Save Session; the Session title prompt answered two-mode-thresholds"
+      ],
+      "expected": {
+        "drawings": "Linear A keeps FLAT_TITLE and its Result; Circular B (C1=A) has e-value 1e-3 and identity 50 and an empty title",
+        "activeDrawing": "Linear"
+      },
+      "sha256": "f533cf6b7f2f674edc9c9307d39836e058982b5c8f6cc1e327274bc93d7bb772",
+      "decompressedSha256": "91f1d1856c91e4f2e82ed7b784286e792498917d51ddea0e8242a6707e53d8c4"
+    }
+  }
+}

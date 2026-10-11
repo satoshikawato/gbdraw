@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import copy
 import json
+import re
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -70,6 +71,11 @@ from gbdraw.layout.similarity_alignment import (
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.shapes import resolve_feature_rendering
+from gbdraw.session_io import (
+    CURRENT_SESSION_TOP_LEVEL_FIELDS,
+    CURRENT_SESSION_VERSION,
+    FLAT_DRAFT_TOP_LEVEL_FIELDS,
+)
 from gbdraw.session_request_codec import (
     CANONICAL_REQUEST_SCHEMA,
     SUPPORTED_CANONICAL_REQUEST_SCHEMAS,
@@ -77,6 +83,7 @@ from gbdraw.session_request_codec import (
     CanonicalRequestDecodingError,
     CanonicalRequestEncodingError,
     EncodedCanonicalRequest,
+    _TOP_LEVEL_FIELDS_V5,
     _read_typed_json_resource,
     decode_canonical_request,
     encode_canonical_request,
@@ -218,6 +225,8 @@ def _payload_for_schema(
 
 
 def _remove_schema6_record_fields(payload: dict[str, Any], schema: int) -> None:
+    if schema < 9:
+        payload["diagramOptions"].pop("featureOverrides", None)
     if schema < 7:
         payload["diagramOptions"].pop("featurePlacements", None)
         for record in payload["records"]:
@@ -262,6 +271,46 @@ def _table() -> pd.DataFrame:
             "caption": ["coding sequence", "transfer RNA"],
         }
     )
+
+
+def test_canonical_text_tables_keep_empty_and_na_like_cells(tmp_path: Path) -> None:
+    # The styling tables are text: an empty label text and a cell that reads
+    # "NA" or "nan" must come back as the text they were saved with, not as
+    # missing values (OV-138). The numeric depth table keeps its dtypes.
+    label_table = pd.DataFrame(
+        {
+            "record_id": ["NC_1", "NC_1", "NC_1"],
+            "feature_type": ["CDS", "CDS", "CDS"],
+            "qualifier": ["hash", "gene", "gene"],
+            "value": ["^f1$", "^NA$", "^nan$"],
+            "label_text": ["", "NA", "nan"],
+        }
+    )
+    depth_table = pd.DataFrame({"record_id": ["NC_1"], "position": [1], "depth": [2.5]})
+    request = LinearDiagramRequest(
+        records=(RecordInput(source=GenBankInputSource(_source_file(tmp_path / "a.gbk"))),),
+        options=LinearDiagramOptions(
+            label_override_table=label_table,
+            colors=ColorOptions(color_table=label_table.copy()),
+            depth_tracks=(DepthTrackInput(source=depth_table, label="Coverage"),),
+        ),
+    )
+    encoded = encode_canonical_request(request)
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "materialized"),
+        output_directory=tmp_path / "out",
+    )
+
+    assert isinstance(decoded, LinearDiagramRequest)
+    pd.testing.assert_frame_equal(decoded.options.label_override_table, label_table)
+    pd.testing.assert_frame_equal(decoded.options.colors.color_table, label_table)
+    assert decoded.options.depth_tracks is not None
+    decoded_depth = decoded.options.depth_tracks[0].source
+    assert isinstance(decoded_depth, pd.DataFrame)
+    assert decoded_depth["position"].dtype.kind == "i"
+    assert decoded_depth["depth"].dtype.kind == "f"
+    assert encode_canonical_request(decoded).payload == encoded.payload
 
 
 def test_schema6_round_trips_circular_batch_grouping_and_outputs(
@@ -323,7 +372,7 @@ def test_schema6_round_trips_unresolved_record_cardinality_and_row(
         )
     )
 
-    assert CANONICAL_REQUEST_SCHEMA == 8
+    assert encoded.payload["schema"] == CANONICAL_REQUEST_SCHEMA
     assert encoded.payload["records"][0]["cardinality"] == "all"
     decoded = decode_canonical_request(
         encoded.payload,
@@ -394,7 +443,7 @@ def test_schema8_round_trips_typed_similarity_alignment_and_translations(
 ) -> None:
     encoded = encode_canonical_request(_aligned_linear_request(tmp_path))
 
-    assert encoded.payload["schema"] == 8
+    assert encoded.payload["schema"] == CANONICAL_REQUEST_SCHEMA
     assert encoded.payload["layout"]["recordTranslations"] == [
         {"recordKey": "record-a", "x": 4.5, "y": -2.0},
         {"recordKey": "record-b", "x": -8.0, "y": 3.25},
@@ -579,24 +628,48 @@ def test_schema7_decodes_alignment_string_only_as_private_legacy_state(
         )
 
 
-def test_schema5_defaults_record_cardinality_to_exactly_one(
-    tmp_path: Path,
+@pytest.mark.parametrize("schema", (2, 5))
+def test_schema5_linear_records_without_selector_or_region_draw_every_record(
+    tmp_path: Path, schema: int
 ) -> None:
+    # OV-149: as Web Load promotes them (session-request.js
+    # promoteRenderRequestToSchema8), a Linear record without selector and
+    # region draws every record of its source; the others draw one record. The
+    # per-card rows of layout.multiRecordPositions become each record's gridRow.
     source = _source_file(tmp_path / "record.gbk")
     encoded = encode_canonical_request(
         LinearDiagramRequest(
-            records=(RecordInput(source=GenBankInputSource(source)),),
+            records=(
+                RecordInput(source=GenBankInputSource(source)),
+                RecordInput(source=GenBankInputSource(source), selector=parse_record_selector("#2")),
+                RecordInput(source=GenBankInputSource(source), region=parse_region_spec("#1:1-10")),
+            ),
+            layout=LinearMultiRecordOptions(multi_record_positions=("#1@2", "#2@1", "#3@1")),
         )
     )
-    payload = _payload_for_schema(encoded, 5)
+    payload = _payload_for_schema(encoded, schema)
+    assert all("cardinality" not in record for record in payload["records"])
 
-    assert "cardinality" not in payload["records"][0]
     decoded = decode_canonical_request(
         payload,
         resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
         output_directory=tmp_path / "output",
     )
-    assert decoded.records[0].cardinality is RecordCardinality.EXACTLY_ONE
+    assert [record.cardinality for record in decoded.records] == [
+        RecordCardinality.ALL, RecordCardinality.EXACTLY_ONE, RecordCardinality.EXACTLY_ONE
+    ]
+    assert [record.presentation.grid_row for record in decoded.records] == [2, 1, 1]
+    assert decoded.layout is not None and decoded.layout.multi_record_positions is None
+
+    circular = encode_canonical_request(
+        CircularDiagramRequest(records=(RecordInput(source=GenBankInputSource(source)),))
+    )
+    decoded_circular = decode_canonical_request(
+        _payload_for_schema(circular, schema),
+        resource_paths=_materialize_resources(circular, tmp_path / "circular"),
+        output_directory=tmp_path / "output",
+    )
+    assert decoded_circular.records[0].cardinality is RecordCardinality.EXACTLY_ONE
 
 
 @pytest.mark.parametrize("schema", (3, 4))
@@ -1581,7 +1654,7 @@ def test_schema2_migrates_removed_feature_table_field(
 ) -> None:
     record = SeqRecord(Seq("ATGC"), id="record", annotations={"molecule_type": "DNA"})
     table = pd.DataFrame(
-        [{"record_id": "record", "feature_type": "CDS", "visible": True}]
+        [{"record_id": "record", "feature_type": "CDS", "visible": "True"}]
     )
     encoded = encode_canonical_request(
         LinearDiagramRequest(
@@ -2697,7 +2770,7 @@ def test_current_canonical_schema_uses_underlay_default_and_round_trips_override
 @pytest.mark.parametrize(
     ("mutator", "message"),
     [
-        (lambda payload: payload.update(schema=9), "Unsupported canonical request schema"),
+        (lambda payload: payload.update(schema=CANONICAL_REQUEST_SCHEMA + 1), "Unsupported canonical request schema"),
         (lambda payload: payload.update(mode="radial"), "Unsupported canonical request mode"),
         (lambda payload: payload.pop("output"), "Missing required field"),
         (lambda payload: payload.update(futureField=True), "Unknown field"),
@@ -2815,7 +2888,7 @@ def test_collinear_inference_choice_round_trips_and_omission_preserves_old_sessi
 def test_in_memory_records_of_one_source_file_share_one_genbank_resource(
     tmp_path: Path,
 ) -> None:
-    """PR5-B1: the Web shape, so a replay keeps one file as one LOSAT source."""
+    """The Web shape: one file is one resource named after it, records by ID."""
 
     def record(record_id: str, source: str | None) -> SeqRecord:
         annotations: dict[str, Any] = {"molecule_type": "DNA"}
@@ -2824,7 +2897,12 @@ def test_in_memory_records_of_one_source_file_share_one_genbank_resource(
         return SeqRecord(Seq("ATGC"), id=record_id, annotations=annotations)
 
     records = (
-        record("A1", "a.gbk"), record("B1", "b.gbk"), record("A2", "a.gbk"), record("M1", None)
+        record("A1", "in/a.gbk"),
+        record("B1", "in/b.gbk"),
+        record("A2", "in/a.gbk"),
+        record("M1", None),
+        record("D", "in/d.gbk"),
+        record("D", "in/d.gbk"),
     )
     encoded = encode_canonical_request(
         LinearDiagramRequest(
@@ -2832,17 +2910,25 @@ def test_in_memory_records_of_one_source_file_share_one_genbank_resource(
         )
     )
 
+    # Record IDs bind the records of one file; a duplicated ID falls back to
+    # the record index, as the Web does for one uploaded multi-record file.
     assert [
         (item["source"]["resourceId"], item["selector"]) for item in encoded.payload["records"]
     ] == [
-        ("record-1-genbank", {"kind": "recordIndex", "index": 0}),
+        ("record-1-genbank", {"kind": "recordId", "value": "A1"}),
         ("record-2-genbank", None),
-        ("record-1-genbank", {"kind": "recordIndex", "index": 1}),
+        ("record-1-genbank", {"kind": "recordId", "value": "A2"}),
         ("record-4-genbank", None),
+        ("record-5-genbank", {"kind": "recordIndex", "index": 0}),
+        ("record-5-genbank", {"kind": "recordIndex", "index": 1}),
     ]
     resources = {resource.resource_id: resource for resource in encoded.resources}
-    assert sorted(resources) == ["record-1-genbank", "record-2-genbank", "record-4-genbank"]
-    assert resources["record-1-genbank"].name == "record-1.gbk"
+    assert sorted(resources) == [
+        "record-1-genbank", "record-2-genbank", "record-4-genbank", "record-5-genbank"
+    ]
+    assert resources["record-1-genbank"].name == "a.gbk"
+    assert resources["record-2-genbank"].name == "record-2.gbk"
+    assert resources["record-5-genbank"].name == "d.gbk"
     assert [
         line.split()[1]
         for line in (resources["record-1-genbank"].content or b"").decode().splitlines()
@@ -2856,6 +2942,203 @@ def test_in_memory_records_of_one_source_file_share_one_genbank_resource(
     )
     assert decoded.records[0].source == decoded.records[2].source
     assert [
-        item.selector.record_index if item.selector is not None else None
+        (item.selector.record_id, item.selector.record_index)
+        if item.selector is not None else None
         for item in decoded.records
-    ] == [0, None, 1, None]
+    ] == [("A1", None), None, ("A2", None), None, (None, 0), (None, 1)]
+
+
+def _identity_request(source: Path) -> LinearDiagramRequest:
+    from gbdraw.annotations import FeatureIdentitySpan
+    from gbdraw.features.overrides import FeatureOverride
+
+    return LinearDiagramRequest(
+        records=(RecordInput(source=GenBankInputSource(source), record_key="k"),),
+        options=LinearDiagramOptions(
+            feature_overrides=(
+                FeatureOverride("k", "fbbbbbbbb~1", label_visibility="on", label_text="B"),
+                FeatureOverride("k", "faaaaaaaa", feature_visibility="exclude_matching"),
+            ),
+            annotations=AnnotationOptions(sets=(AnnotationSet(
+                id="marks",
+                annotations=(RegionAnnotation(
+                    id="a", target=FeatureIdentitySpan("k", "faaaaaaaa", envelope="segments"),
+                ),),
+            ),)),
+        ),
+    )
+
+
+def test_schema9_round_trips_feature_overrides_and_identity_annotation_targets(
+    tmp_path: Path,
+) -> None:
+    request = _identity_request(_source_file(tmp_path / "source.gbk"))
+    encoded = encode_canonical_request(request)
+
+    assert encoded.payload["schema"] == CANONICAL_REQUEST_SCHEMA == 9
+    assert encoded.payload["diagramOptions"]["featureOverrides"] == [
+        {"recordKey": "k", "biologicalFeatureId": "faaaaaaaa",
+         "featureVisibility": "exclude_matching", "labelVisibility": None, "labelText": None},
+        {"recordKey": "k", "biologicalFeatureId": "fbbbbbbbb~1",
+         "featureVisibility": None, "labelVisibility": "on", "labelText": "B"},
+    ]
+    target = encoded.payload["diagramOptions"]["annotations"]["sets"][0]["annotations"][0]["target"]
+    assert target == {"kind": "featureIdentity", "recordKey": "k", "biologicalFeatureId": "faaaaaaaa",
+                      "envelope": "segments", "circularPath": "shortest"}
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
+        output_directory=tmp_path / "output",
+    )
+    assert decoded.options.feature_overrides == request.options.feature_overrides
+    assert decoded.options.annotations == request.options.annotations
+
+
+def test_schema8_request_reads_without_feature_overrides_and_writes_schema9(
+    tmp_path: Path,
+) -> None:
+    source = _source_file(tmp_path / "source.gbk")
+    encoded = encode_canonical_request(
+        LinearDiagramRequest(records=(RecordInput(source=GenBankInputSource(source)),))
+    )
+    resources = _materialize_resources(encoded, tmp_path / "resources")
+    decoded = decode_canonical_request(
+        _payload_for_schema(encoded, 8), resource_paths=resources, output_directory=tmp_path / "output",
+    )
+    assert decoded.options.feature_overrides == ()
+    promoted = encode_canonical_request(decoded).payload
+    assert promoted["schema"] == 9
+    assert promoted["diagramOptions"]["featureOverrides"] == []
+
+
+@pytest.mark.parametrize(
+    "schema,change,message",
+    [
+        (8, lambda options: options.update(featureOverrides=[]), "Unknown field"),
+        (9, lambda options: options.pop("featureOverrides"), "featureOverrides must be an array"),
+        (9, lambda options: options["featureOverrides"][0].update(extra=1), "feature override fields"),
+        (9, lambda options: options["featureOverrides"][0].update(
+            featureVisibility=None, labelVisibility=None, labelText=None
+        ), "at least one edit"),
+        (9, lambda options: options["featureOverrides"].append(
+            dict(options["featureOverrides"][0], labelText="again")
+        ), "Duplicate feature override identity"),
+        (9, lambda options: options["featureOverrides"][0].update(labelText="a\tb"), "one non-blank line"),
+        (8, lambda options: options.pop("featureOverrides"), "Unsupported annotation target kind"),
+    ],
+)
+def test_feature_overrides_require_schema9_and_the_current_row_shape(
+    tmp_path: Path, schema: int, change, message: str
+) -> None:
+    encoded = encode_canonical_request(_identity_request(_source_file(tmp_path / "source.gbk")))
+    payload = copy.deepcopy(encoded.payload)
+    payload["schema"] = schema
+    change(payload["diagramOptions"])
+    with pytest.raises(CanonicalRequestDecodingError, match=message):
+        decode_canonical_request(
+            payload,
+            resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
+            output_directory=tmp_path / "output",
+        )
+
+
+_WEB_SESSION_REQUEST_JS = (
+    Path(__file__).parents[1] / "gbdraw" / "web" / "js" / "services" / "session-request.js"
+)
+
+
+def _jsdoc_typedef_property_names(source: str, typedef_name: str) -> set[str]:
+    """Return the `@property` names of one JSDoc `@typedef`, or fail loudly."""
+    blocks = [
+        block
+        for block in re.findall(r"/\*\*.*?\*/", source, flags=re.DOTALL)
+        if re.search(rf"@typedef\s+\{{[^}}]*\}}\s+{re.escape(typedef_name)}\b", block)
+    ]
+    assert len(blocks) == 1, f"expected exactly one JSDoc @typedef {typedef_name}, found {len(blocks)}"
+    names = re.findall(
+        r"^\s*\*\s*@property\s+\{[^}]*\}\s+\[?([A-Za-z_]\w*)\]?",
+        blocks[0],
+        flags=re.MULTILINE,
+    )
+    assert names, f"JSDoc @typedef {typedef_name} declares no @property"
+    assert len(names) == len(set(names)), f"JSDoc @typedef {typedef_name} repeats a @property"
+    return set(names)
+
+
+def test_web_canonical_render_request_typedef_matches_codec_top_level_fields() -> None:
+    source = _WEB_SESSION_REQUEST_JS.read_text(encoding="utf-8")
+    assert _jsdoc_typedef_property_names(source, "CanonicalRenderRequest") == set(
+        _TOP_LEVEL_FIELDS_V5
+    )
+    assert f"export const CANONICAL_REQUEST_SCHEMA = {CANONICAL_REQUEST_SCHEMA};" in source
+
+
+_WEB_CONFIG_JS = Path(__file__).parents[1] / "gbdraw" / "web" / "js" / "services" / "config.js"
+
+
+def test_web_gbdraw_session_typedef_matches_session_io_fields_and_version() -> None:
+    source = _WEB_CONFIG_JS.read_text(encoding="utf-8")
+    # `files` is accepted only for Sessions older than version 40, and the flat
+    # `config` and `features` only for Sessions older than version 46; the
+    # current writer never writes them and the current reader rejects them.
+    assert _jsdoc_typedef_property_names(source, "GbdrawSession") == (
+        set(CURRENT_SESSION_TOP_LEVEL_FIELDS) - {"files"} - FLAT_DRAFT_TOP_LEVEL_FIELDS
+    )
+    assert f"export const SESSION_VERSION = {CURRENT_SESSION_VERSION};" in source
+
+
+def test_jsdoc_typedef_property_parser_is_strict() -> None:
+    with pytest.raises(AssertionError, match="expected exactly one"):
+        _jsdoc_typedef_property_names("/** @typedef {object} Other\n * @property {number} a\n */", "Missing")
+    with pytest.raises(AssertionError, match="declares no @property"):
+        _jsdoc_typedef_property_names("/**\n * @typedef {object} Empty\n */", "Empty")
+    assert _jsdoc_typedef_property_names(
+        "/**\n * @typedef {object} Mixed\n * @property {string} a\n * @property {number} [b]\n */",
+        "Mixed",
+    ) == {"a", "b"}
+
+
+def test_typed_tree_codec_resolves_type_hints_once_per_class(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import typing
+
+    import gbdraw.session_request_codec as codec_module
+
+    members = tuple(
+        OrthogroupMember(
+            orthogroup_id=f"og_{index}",
+            protein_id=f"p_{index}",
+            record_index=0,
+            feature_index=index,
+            record_id="record",
+            label=f"label {index}",
+            start=index,
+            end=index + 3,
+            strand=1,
+            feature_svg_id=None,
+            source_protein_id=None,
+        )
+        for index in range(200)
+    )
+    hint = tuple[OrthogroupMember, ...]
+    hint_calls = 0
+    real_get_type_hints = typing.get_type_hints
+
+    def count_hints(*args, **kwargs):
+        nonlocal hint_calls
+        hint_calls += 1
+        return real_get_type_hints(*args, **kwargs)
+
+    monkeypatch.setattr(codec_module, "get_type_hints", count_hints)
+
+    encoded = codec_module._encode_typed_tree(members)
+    decoded = codec_module._decode_typed_tree(
+        encoded, hint, path="resource", resource_schema=3
+    )
+    codec_module._validate_dataclass_contract(
+        members[0], path="resource", error="decode"
+    )
+
+    assert decoded == members
+    assert hint_calls <= 1  # One class, however many nodes.

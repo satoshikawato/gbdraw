@@ -397,9 +397,9 @@ def _inspect_popup(page: Page, *, mode: str) -> dict[str, Any]:
     text = popup.inner_text()
     normalized_text = text.casefold()
     required = (
-        ("Similarity group ID", "Members")
+        ("genes in", "records")
         if mode == "orthogroup"
-        else ("Block ID", "Anchors", "Orientation")
+        else ("identity", "gene pair", "Details")
     )
     for token in required:
         if token.casefold() not in normalized_text:
@@ -486,9 +486,9 @@ def _align_to_orthogroup(page: Page, popup: Any, orthogroup_id: str) -> None:
       return !app.similarityAlignmentBusy && (app.similarityAlignmentDialogOpen
         || app.similarityAlignmentError || window.__GBDRAW_HISTORY__.revision.value > before);
     }""", arg=history_before, timeout=GENERATION_TIMEOUT_MS)
-    dialog = page.get_by_role("dialog", name="Select alignment anchors", exact=True)
+    dialog = page.get_by_role("dialog", name="Review alignment", exact=True)
     if dialog.is_visible():
-        expect(dialog.get_by_role("radio", name="Keep current directions", exact=True)).to_be_checked()
+        expect(dialog.get_by_role("radio", name="Keep as is", exact=True)).to_be_checked()
         _apply_alignment_review(page, dialog)
     expect(page.get_by_role("alert", name="Generation Error")).to_have_count(0)
     assert page.evaluate("() => window.__GBDRAW_HISTORY__.revision.value") > history_before
@@ -508,27 +508,29 @@ def _verify_direction_reset(page: Page) -> None:
     before = snapshot()
     popup = _open_orthogroup_alignment_target(page, "og_18")
     popup.get_by_role("button", name="Review alignment options…", exact=True).click()
-    dialog = page.get_by_role("dialog", name="Select alignment anchors", exact=True)
+    dialog = page.get_by_role("dialog", name="Review alignment", exact=True)
     expect(dialog).to_be_visible(timeout=GENERATION_TIMEOUT_MS)
-    expect(dialog.get_by_role("radio", name="Keep current directions", exact=True)).to_be_checked()
-    dialog.get_by_role("radio", name="All selected arrows right", exact=True).check()
+    expect(dialog.get_by_role("radio", name="Keep as is", exact=True)).to_be_checked()
+    dialog.get_by_role("radio", name="All right", exact=True).check()
     changed = page.evaluate("() => window.__GBDRAW_APP__.similarityAlignmentDirectionPreview.records.filter(row => row.beforeReverseComplement !== row.afterReverseComplement).map(row => row.recordKey)")
     assert changed == [before["plan"]["reference"]["recordKey"]], changed
     _apply_alignment_review(page, dialog)
     after = snapshot()
     assert len(after["receipt"]["directions"]) == 1
     assert after["receipt"]["directions"][0]["recordKey"] == changed[0]
-    page.get_by_role("button", name="Open editor", exact=True).click()
+    page.get_by_role("button", name="Editor", exact=True).click()
     expect(page.locator(".right-drawer")).to_have_attribute("aria-hidden", "false")
     page.get_by_role("button", name="Similarity groups").click()
     for combined in (True, False):
         page.get_by_role("button", name="Reset alignment…", exact=True).click()
         reset = page.get_by_role("dialog", name="Reset alignment", exact=True)
-        expect(reset.get_by_role("radio", name="Reset positions", exact=True)).to_be_checked()
-        expect(reset.get_by_role("list", name="Alignment direction restoration targets").get_by_role("listitem")).to_have_count(1)
+        expect(reset.get_by_role("radio", name="Positions only", exact=True)).to_be_checked()
         if combined:
-            reset.get_by_role("radio", name="Reset positions and alignment direction changes", exact=True).check()
-        reset.get_by_role("button", name="Reset", exact=True).click()
+            reset.get_by_role("radio", name="Positions and directions (1 record)", exact=True).check()
+            expect(reset.get_by_role("list", name="Alignment direction restoration targets").get_by_role("listitem")).to_have_count(1)
+        reset.get_by_role(
+            "button", name="Reset positions and directions" if combined else "Reset positions", exact=True
+        ).click()
         expect(reset).to_be_hidden(timeout=GENERATION_TIMEOUT_MS)
         restored = snapshot()
         assert restored["plan"] is None and restored["receipt"] is None
@@ -837,6 +839,13 @@ def capture_bgc_losatp(
                 page, align_orthogroup_id
             )
             alignment_name = screenshot_names["align"]
+            # Appearance and Layout precede the Similarity group section, which
+            # holds Align…; scroll it under the popup header before the capture.
+            similarity = alignment_popup.locator('[data-feature-popup-group="similarity"]')
+            expect(similarity).to_have_count(1)
+            similarity.evaluate("(el) => { const body = el.closest('.feature-popup-body'); if (body) body.scrollTop += el.getBoundingClientRect().top - body.getBoundingClientRect().top; }")
+            expect(similarity.get_by_role("button", name="Align…", exact=True)).to_be_in_viewport()
+            page.wait_for_timeout(250)
             screenshot_bytes[alignment_name] = capture_screenshot(
                 page, output_paths[alignment_name], "Linear"
             )
@@ -898,12 +907,22 @@ def capture_bgc_losatp(
         )
 
         if download_member_fasta:
-            group_row = popup.get_by_role("row").filter(has_text="og_1").first
-            expect(group_row).to_be_visible()
-            group_row.click()
-            fasta_button = page.get_by_title(
-                "Download all member amino-acid FASTA", exact=True
+            # The gene-pair table is closed; selecting a group shows its
+            # members, and the group's Copy menu holds the FASTA downloads.
+            popup.locator("[data-collinear-gene-pairs] > summary").click()
+            group_button = popup.get_by_title(
+                "Show the members of og_1", exact=True
             ).first
+            expect(group_button).to_be_visible()
+            group_button.click()
+            group_view = popup.locator("[data-match-group]")
+            expect(group_view).to_have_count(1)
+            group_view.locator("details.action-menu > summary").filter(
+                has_text="Copy"
+            ).first.click()
+            fasta_button = group_view.get_by_role(
+                "button", name="Download aa FASTA", exact=True
+            )
             expect(fasta_button).to_be_enabled()
             fasta_path, suggested = _download_text_button(
                 page,

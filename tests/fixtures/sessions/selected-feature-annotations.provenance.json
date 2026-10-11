@@ -1,0 +1,32 @@
+{
+  "purpose": "Positive fixture for the Session 44 reader that moves hash= annotation targets made from selected features onto source identities in Session 45 (Owner decision 2026-10-05, residual R-7 of the override-precedence audit).",
+  "history": "first-parent main",
+  "writer": "gbdraw/web/js/services/config.js Save Session (Web), bytes kept unchanged",
+  "checkout": "git worktree add --detach <dir> <sourceCommit>; python tools/prepare_browser_wheel.py; served with python3 -m http.server <port> --bind 127.0.0.1 --directory <dir>",
+  "tools": {
+    "node": "v26.8.2",
+    "playwright": "1.61.1",
+    "python": "3.13.3"
+  },
+  "sessions": {
+    "selected-feature-annotations.v44.gbdraw-session.json.gz": {
+      "sourceCommit": "fe6861f06d0eaaecac0ba4ee6b1c3095019789df",
+      "wheel": "gbdraw-0.14.0-py3-none-any.whl",
+      "sessionVersion": 44,
+      "records": "tests/fixtures/web_batch_two_records.gb (sha256 eea3934500b19ca9fca528766ae984577bb132716285e8387c04f5a0e3ce2ae5) split into TESTA and TESTB as two Linear records. Record 1 is TESTA with a second CDS at 301..600 (/locus_tag=\"TWIN_A\", /product=\"twin product\") inserted before the first (sha256 8d54df8222322dbda83396359bb3bff291334cd72420c2899b3e8f448d689f3b); record 2 is TESTB (sha256 d44e9566f033fbc07f42aa3b94a26c301354f7e5225f0e2a87370c6913f4a962)",
+      "steps": [
+        "Linear; record 2 (TESTB) reverse complement; Generate",
+        "Ctrl-click TESTA CDS 1601..1901 (TESTA_0005), TESTA CDS 301..600 (TWIN_A), and TESTB CDS 2001..2300 (TESTB_0006)",
+        "Region Annotations: Add set, Selected features (feature_1, feature_2, feature_3: hash= targets); Generate",
+        "Save Session"
+      ],
+      "annotations": {
+        "feature_1": "hash=fef810304 on TESTA, drawn at 1600..1901; the hash names one source feature",
+        "feature_2": "hash=f3ccacda4 on TESTA, drawn over both CDS at 300..600; the hash names two source features (f3ccacda4~1, f3ccacda4~2)",
+        "feature_3": "hash=fbc76b20f (the source hash) on the reverse-complemented TESTB; not drawn (feature_selector_unmatched)"
+      },
+      "sha256": "1f34e2509a25d3b69b391577ed865e732666be75cd2c223f7581572abe115814",
+      "decompressedSha256": "5d0886800ca8babc8a3ea0c5b6721f1bdf1e1be157d774d313301473b7b34b50"
+    }
+  }
+}

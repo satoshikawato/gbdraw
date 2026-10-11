@@ -10,10 +10,10 @@ import tempfile
 from pathlib import Path
 from typing import Iterable, Sequence
 
-from svgwrite import Drawing  # type: ignore[reportMissingImports]
+from svgwrite import Drawing
 
-from gbdraw.exceptions import ExportError, GbdrawError, ValidationError  # type: ignore[reportMissingImports]
-from gbdraw.render import export as _export  # type: ignore[reportMissingImports]
+from gbdraw.exceptions import ExportError, GbdrawError, ValidationError
+from gbdraw.render import export as _export
 from gbdraw.render.formats import (
     CAIROSVG_FORMATS,
     INTERACTIVE_SVG_FORMAT,

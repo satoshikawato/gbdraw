@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 from dataclasses import replace
 from tempfile import TemporaryDirectory
-from typing import Optional
+from typing import Any, Literal, Mapping, Optional, Sequence, cast
 from .io.cli_tables import (
     read_circular_track_table,
 )
@@ -32,6 +32,7 @@ from .api.request_render import (
     CircularBatchRequestPlan,
     RequestRenderResult,
     build_request_plan_diagram,
+    diagram_request_output_paths,
     plan_request,
     render_prepared_request,
     render_request,
@@ -48,12 +49,13 @@ from .api.requests import (
     RecordCardinality,
     RenderOutputRequest,
 )
-from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
+from .config.modify import modify_config_dict
 from .layout.record_placement import parse_record_row_position
+from .features.overrides import log_feature_identity_notices
 from .features.shapes import parse_feature_shape_overrides
 from .exceptions import ValidationError
 from .mode_profiles import CIRCULAR_MODE_PROFILE, ComparisonThresholds
-from .tracks import (  # type: ignore[reportMissingImports]
+from .tracks import (
     CircularTrackSlot,
     ScalarSpec,
     circular_track_slots_from_order,
@@ -92,9 +94,9 @@ from .cli_utils.common import (
 )
 from .cli_utils.session import (
     DiagramRunResult,
+    SessionCliRequest,
     RenderedSvg,
     add_session_args,
-    diagram_request_output_paths,
     diagram_request_rendered_svgs,
     parse_session_pre_args,
     preflight_session_sidecar_if_requested,
@@ -106,7 +108,8 @@ from .render.track_slot_metadata import (
     build_track_slot_geometry_run_metadata,
     collect_track_slot_geometry_records,
 )
-from .session_io import load_session, session_to_cli_args
+from .session import SessionDocument, load_session_document
+from .session_io import session_to_cli_args
 
 # Setup for the logging system
 logger = logging.getLogger()
@@ -505,7 +508,7 @@ def _get_args(
         type=float)
     parser.add_argument(
         '--scale_interval',
-        help='Manual scale interval for circular mode (in bp). Overrides automatic calculation.',
+        help='Manual scale interval for circular mode (in bp; must be > 0). Overrides automatic calculation.',
         type=int)
     parser.add_argument(
         '--hide_scale',
@@ -604,6 +607,10 @@ def _get_args(
         parser.error("--gc_content_large_tick_interval must be > 0")
     if args.gc_content_small_tick_interval is not None and args.gc_content_small_tick_interval <= 0:
         parser.error("--gc_content_small_tick_interval must be > 0")
+    if args.scale_interval is not None and args.scale_interval <= 0:
+        if not _allow_legacy_track_transport:
+            parser.error("--scale_interval must be > 0")
+        args.scale_interval = None  # D-04: a released legacy Session drew <= 0 as automatic.
     if args.gc_skew_width is not None and args.gc_skew_width <= 0:
         parser.error("--gc_skew_width must be > 0")
     if args.gc_skew_radius is not None and args.gc_skew_radius <= 0:
@@ -717,6 +724,53 @@ def _get_args(
 
 
 
+def replay_legacy_session(
+    document: SessionDocument,
+    session_request: SessionCliRequest,
+) -> None:
+    """Replay a Session 27-30, which has no canonical request, through CLI arguments."""
+
+    with TemporaryDirectory(prefix="gbdraw-session-") as temp_dir:
+        # Each caller loaded this document from a file and is its only holder;
+        # the replay reads the parsed payload in place.
+        session = document._data
+        run_spec = session_to_cli_args(
+            session,
+            mode="circular",
+            temp_dir=Path(temp_dir),
+            output_override=session_request.output,
+            format_override=session_request.format,
+        )
+        args = _get_args(
+            list(run_spec.args),
+            _allow_legacy_track_transport=True,
+        )
+        if args.conservation_blast and not args.losat and not args.conservation_labels:
+            # D-03, OV-202: an unlabelled ring keeps the file name its original run
+            # drew, which the Session binds; the replay reads a temporary copy.
+            names = {run_spec.args[binding.argIndex]: binding.name for binding in run_spec.file_bindings}
+            args.conservation_labels = [names.get(path, Path(path).name) for path in args.conservation_blast]
+        args.overwrite = session_request.overwrite
+        args.save_session = session_request.save_session
+        args.session_output = session_request.session_output
+        args._allow_legacy_track_transport = True
+        args._require_canonical_session = bool(
+            session_request.save_session
+            or session_request.session_output
+        )
+        run_result = run_circular_from_namespace(args)
+        save_session_sidecar_if_requested(
+            save_session=session_request.save_session,
+            session_output=session_request.session_output,
+            output_prefix=args.output,
+            run_result=run_result,
+            source_session=session,
+            cli_invocation_args=run_spec.cli_invocation_args,
+            file_bindings=run_spec.file_bindings,
+            overwrite=session_request.overwrite,
+        )
+
+
 def circular_main(cmd_args) -> None:
     """
     Main function for generating circular genome diagrams.
@@ -737,51 +791,23 @@ def circular_main(cmd_args) -> None:
     """
     session_request = parse_session_pre_args(cmd_args, mode="circular")
     if session_request is not None:
-        with TemporaryDirectory(prefix="gbdraw-session-") as temp_dir:
-            session = load_session(session_request.session_path)
-            if render_canonical_session_if_present(
-                session,
-                mode="circular",
-                output_override=session_request.output,
-                format_override=session_request.format,
-                overwrite=session_request.overwrite,
-                save_session=session_request.save_session,
-                session_output=session_request.session_output,
-            ):
-                return
-            run_spec = session_to_cli_args(
-                session,
-                mode="circular",
-                temp_dir=Path(temp_dir),
-                output_override=session_request.output,
-                format_override=session_request.format,
-            )
-            args = _get_args(
-                list(run_spec.args),
-                _allow_legacy_track_transport=True,
-            )
-            args.overwrite = session_request.overwrite
-            args.save_session = session_request.save_session
-            args.session_output = session_request.session_output
-            args._allow_legacy_track_transport = True
-            args._require_canonical_session = bool(
-                session_request.save_session
-                or session_request.session_output
-            )
-            run_result = run_circular_from_namespace(args)
-            save_session_sidecar_if_requested(
-                save_session=session_request.save_session,
-                session_output=session_request.session_output,
-                output_prefix=args.output,
-                run_result=run_result,
-                source_session=session,
-                cli_invocation_args=run_spec.cli_invocation_args,
-                file_bindings=run_spec.file_bindings,
-                overwrite=session_request.overwrite,
-            )
+        document = load_session_document(session_request.session_path)
+        if not render_canonical_session_if_present(
+            document,
+            mode="circular",
+            drawing=session_request.drawings[0] if session_request.drawings else None,
+            output_override=session_request.output,
+            format_override=session_request.format,
+            overwrite=session_request.overwrite,
+            save_session=session_request.save_session,
+            session_output=session_request.session_output,
+        ):
+            if session_request.drawings:
+                document.drawing(session_request.drawings[0], mode="circular")
+            replay_legacy_session(document, session_request)
         return
 
-    args: argparse.Namespace = _get_args(cmd_args)
+    args = _get_args(cmd_args)
     if args.losat_output_dir:
         preflight_output_paths(
             (Path(args.losat_output_dir) / LOSAT_CONSERVATION_OUTPUT_NAME,),
@@ -860,7 +886,11 @@ def _cli_ring_options(*, _args: argparse.Namespace, **values) -> CircularDiagram
 def _ring_output_files(run_result: DiagramRunResult, output_dir: Path) -> list[tuple[str, str]]:
     """Per-ring raw TSVs and a ``--conservation_table`` manifest (design 3.7)."""
 
-    options = run_result.canonical_request.options
+    # A Circular run result always carries its Circular request.
+    request = cast(
+        CircularDiagramRequest | CircularBatchRequest, run_result.canonical_request
+    )
+    options = request.options
     rings = tuple(getattr(options, "conservation_search_results", None) or ())
     if not rings:
         raise ValidationError(
@@ -1010,7 +1040,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         else None
     )
     circular_track_order: str | None = None if circular_track_table else args.circular_track_order
-    circular_track_slot_specs: list[str | CircularTrackSlot] = (
+    circular_track_slot_specs: Sequence[str | CircularTrackSlot] = (
         parse_circular_track_slots(
             circular_track_table.slot_specs,
             _allow_legacy_transport=allow_legacy_track_transport,
@@ -1059,7 +1089,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     line_stroke_width: Optional[float] = args.line_stroke_width
     track_type: str = args.track_type
     strandedness = args.separate_strands
-    scale_interval: Optional[int] = args.scale_interval
+    scale_interval = args.scale_interval
     if (
         not multi_record_canvas
         and bool(multi_record_positions)
@@ -1192,7 +1222,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             "put r= and/or w= on the matching circular track slot."
         )
 
-    circular_track_slots_or_none: list[str] | list[CircularTrackSlot] | None = None
+    circular_track_slots_or_none: Sequence[str | CircularTrackSlot] | None = None
     if circular_track_slot_specs:
         circular_track_slots_or_none = circular_track_slot_specs
     elif circular_track_order:
@@ -1276,11 +1306,15 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         annotations=annotation_options,
         output=CircularOutputOptions(
             legend=legend,
-            plot_title_position=plot_title_position,
+            # argparse restricts --plot_title_position to the Circular choices.
+            plot_title_position=cast(
+                'Literal["none", "top", "bottom"]', plot_title_position
+            ),
         ),
         selected_features_set=tuple(selected_features_set),
         feature_visibility_table_file=feature_table_path or None,
         feature_placement_table_file=args.feature_placement_table,
+        feature_override_table_file=args.feature_override_table,
         label_whitelist_file=label_whitelist or None,
         qualifier_priority_file=qualifier_priority_path or None,
         label_override_file=label_table_path or None,
@@ -1318,12 +1352,16 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     )
     request_records = record_manifest.records
 
+    canonical_request: CircularDiagramRequest | CircularBatchRequest
     if multi_record_canvas:
         canonical_request = CircularDiagramRequest(
             records=request_records,
             options=request_options,
             layout=CircularMultiRecordOptions(
-                multi_record_size_mode=multi_record_size_mode,
+                # argparse restricts --multi_record_size_mode to these choices.
+                multi_record_size_mode=cast(
+                    'Literal["linear", "auto", "equal"]', multi_record_size_mode
+                ),
                 multi_record_min_radius_ratio=multi_record_min_radius_ratio,
                 multi_record_column_gap_ratio=multi_record_column_gap_ratio,
                 multi_record_row_gap_ratio=multi_record_row_gap_ratio,
@@ -1400,21 +1438,24 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
 
     outputs: list[RenderedSvg] = []
     track_slot_geometry_records = []
-    session_feature_metadata = []
-    session_biological_feature_metadata = []
+    session_feature_metadata: list[Mapping[str, Any]] = []
+    session_biological_feature_metadata: list[Mapping[str, Any]] = []
     session_interactive_contexts = []
     for result_index, rendered_item in enumerate(rendered_items):
         for warning in rendered_item.annotation_warnings:
             logger.warning("%s: %s/%s record #%s (%s): %s", warning.code,
                 warning.set_id, warning.annotation_id, warning.record_index + 1,
                 warning.record_id, warning.message)
+        log_feature_identity_notices(rendered_item.feature_identity_notices)
         if not rendered_item.output_paths:
             raise ValidationError("Circular request renderer did not produce an SVG output.")
         svg_path = Path(rendered_item.output_paths[0])
+        # Every rendered item (also of a batch) comes from a single-diagram request.
+        item_request = cast(CircularDiagramRequest, rendered_item.request)
         rendered_svg = RenderedSvg(
             output_prefix=str(svg_path.with_suffix("")),
             svg_path=svg_path,
-            result_name=rendered_item.request.output.output_prefix,
+            result_name=item_request.output.output_prefix,
         )
         outputs.append(rendered_svg)
         track_slot_geometry_records.extend(

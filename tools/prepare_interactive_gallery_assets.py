@@ -21,11 +21,19 @@ from gbdraw.render.export import convert_svg_with_cairosvg, get_cairosvg
 from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
 from gbdraw.session_io import load_session, write_session_json
 from gbdraw.web_support.feature_catalog import (
+    ANCHOR_FEATURE_CATALOG_SCHEMA,
     FEATURE_CATALOG_SCHEMA,
+    LEGACY_FEATURE_CATALOG_SCHEMA,
     canonical_catalog_sequence_sources,
     materialize_catalog_nucleotide_sequence,
     promote_legacy_feature_catalog,
     select_feature_catalog_item,
+)
+
+# Interactive SVG metadata embeds one catalog item. Schema 5 adds drawn
+# selector values; published Gallery SVGs written before it carry schema 4.
+INTERACTIVE_CATALOG_SCHEMAS = frozenset(
+    {ANCHOR_FEATURE_CATALOG_SCHEMA, FEATURE_CATALOG_SCHEMA}
 )
 
 
@@ -69,11 +77,21 @@ class GallerySessionExample:
     interactive_step: str = ""
     source_note: str = "Session JSON and generated SVG output are stored with the gallery assets."
     command: str = ""
+    # Refresh builds the Session from ``command`` and its declared inputs
+    # instead of replaying the stored Session. The command runs in
+    # ``command_dir`` (relative to the repository root), where its relative
+    # input paths resolve.
+    session_from_command: bool = False
+    command_dir: str = ""
 
     @property
     def session_path(self) -> Path:
         suffix = ".gbdraw-session.json.gz" if self.compressed_session else ".gbdraw-session.json"
         return SESSION_ROOT / f"{self.id}{suffix}"
+
+    @property
+    def command_cwd(self) -> Path:
+        return REPO_ROOT / self.command_dir
 
     @property
     def session_ref(self) -> str:
@@ -150,8 +168,10 @@ LAMBDA_BASIC_COMMAND = (
 
 BGC_COMMAND = (
     "gbdraw linear --losat losatp --losatp_mode similarity_groups "
-    "--similarity_alignment_feature CAG38695.1 -f interactive_svg "
+    "--similarity_alignment_feature CAF33315.1 -f interactive_svg "
     "--gbk BGC0000708.gbk BGC0000709.gbk BGC0000711.gbk BGC0000712.gbk BGC0000713.gbk "
+    "--reverse_complement 0 --reverse_complement 0 --reverse_complement 0 "
+    "--reverse_complement 0 --reverse_complement 1 "
     "-k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p orange "
     "-d BGC0000708-BGC0000713_default_colors.tsv "
     "-t BGC0000708-BGC0000713_specific_colors.tsv "
@@ -162,11 +182,49 @@ BGC_COMMAND = (
     "--keep_definition_left_aligned --identity 30 --block_stroke_width 2 "
     "--block_stroke_color '#262626' --line_stroke_width 2 --axis_stroke_width 5 "
     "--legend_box_size 20 --legend_font_size 20 --label_font_size 18 --feature_height 75 "
+    "--arrow_shaft_width_ratio 0.6 "
     "--ruler_label_font_size 20 --definition_line_style name:size=20,weight=bold "
     "--definition_line_style subtitle:size=20 "
     "--definition_line_style 'accession:size=20,color=#7b7c7d' "
     "--definition_line_style 'length:size=20,color=#7b7c7d' "
     "-l bottom -o BGC0000708-BGC0000713"
+)
+
+MAJANIVIRUS_COMMAND = (
+    "gbdraw linear --separate_strands --losat_threads 32 --losat losatp "
+    "--losatp_mode similarity_groups --definition_font_size 18 --block_stroke_width 1 "
+    "--line_stroke_width 2 --legend_box_size 18 --legend_font_size 18 "
+    "-d modified_default_colors.tsv -t majani_custom_color_table.tsv --align_center "
+    "--bitscore 100 --evalue 1e-3 --identity 20 --hide_length -f interactive_svg "
+    "--pairwise_match_style curve --keep_definition_left_aligned --comparison_height 25 "
+    "--record_label 'Marsupenaeus japonicus endogenous nimavirus' "
+    "--record_label 'Melicertus latisulcatus majanivirus' "
+    "--record_label 'Penaeus monodon majanivirus A' "
+    "--record_label 'Penaeus semisulcatus majanivirus' "
+    "--record_label 'Penaeus monodon majanivirus B' "
+    "--record_label 'Litopenaeus vannamei majanivirus' "
+    "--record_label 'Trachysalambria curvirostris majanivirus' "
+    "--record_label 'Metapenaeus ensis majanivirus' "
+    "--record_label 'Metapenaeus joyneri majanivirus' "
+    "--gbk MjeNMV.gb MelaMJNV.gb PemoMJNVA.gb PeseMJNV.gb PemoMJNVB.gb LvMJNV.gb "
+    "TrcuMJNV.gb MeenMJNV.gb MejoMJNV.gb "
+    "--reverse_complement 0 --reverse_complement 0 --reverse_complement 0 "
+    "--reverse_complement 0 --reverse_complement 0 --reverse_complement 1 "
+    "--reverse_complement 0 --reverse_complement 0 --reverse_complement 0 "
+    "-o majanivirus_orthogroup"
+)
+
+VNIG_COMMAND = (
+    "gbdraw circular -o Vnig_TUMSAT-TG-2018 --separate_strands "
+    "-k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p orchid --track_type tuckin -l left "
+    "--plot_title '<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018, complete genome' "
+    "--plot_title_position bottom --multi_record_canvas --multi_record_size_mode auto "
+    "--multi_record_min_radius_ratio 0.55 --multi_record_column_gap_ratio 0.1 "
+    "--multi_record_row_gap_ratio 0.05 --multi_record_position '#1@1' "
+    "--multi_record_position '#2@1' --multi_record_position '#3@2' "
+    "--multi_record_position '#4@2' --multi_record_position '#5@2' "
+    "--multi_record_position '#6@2' --gbk GCF_015097735.1_ASM1509773v1_genomic.gbff "
+    "-f interactive_svg"
 )
 
 VIBRIO_HARVEYI_GROUP_COMMAND = (
@@ -190,10 +248,16 @@ VIBRIO_HARVEYI_GROUP_COMMAND = (
 EXAMPLES: tuple[GallerySessionExample, ...] = (
     GallerySessionExample(
         id="HmmtDNA_basic_circular",
-        title="Human mitochondrial genome: first circular figure",
+        title="A first circular genome map (human mitochondrial genome)",
         tags=("Circular", "Interactive SVG"),
-        description="Create a first circular genome figure from one small GenBank record without running a sequence search.",
-        workflow="Circular basics",
+        description=(
+            "The 16,569-bp human mitochondrial genome from one GenBank record, with labeled "
+            "genes and rings for GC content and GC skew. With separate strands, forward-strand "
+            "genes sit on the outer lane and reverse-strand genes on the inner lane, and product "
+            "names are placed outside the circle or inside the longest arrows. Find NADH dehydrogenase subunit 6 and eight "
+            "tRNA genes on the inner lane: they are the genes on the reverse strand."
+        ),
+        workflow="Make a first circular map",
         input_summary="1 GenBank file",
         display_order=10,
         command_kind="runnable",
@@ -202,10 +266,16 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     ),
     GallerySessionExample(
         id="lambda_basic_linear",
-        title="Lambda phage: first linear figure",
+        title="A first linear genome map (phage lambda)",
         tags=("Linear", "Interactive SVG"),
-        description="Create a labeled linear genome figure and learn strand separation, the ruler, and SVG export.",
-        workflow="Linear basics",
+        description=(
+            "The 48,502-bp phage lambda genome as one linear track, with every CDS labeled by "
+            "its product. With separate strands, forward-strand genes sit above the axis and "
+            "reverse-strand genes below it, and a ruler marks positions in kbp. The head and "
+            "tail genes in the first 22 kbp are on the forward strand, while most genes between "
+            "22 and 38 kbp are on the reverse strand."
+        ),
+        workflow="Make a first linear map",
         input_summary="1 GenBank file",
         display_order=20,
         command_kind="runnable",
@@ -214,10 +284,17 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     ),
     GallerySessionExample(
         id="HmmtDNA_ATskew",
-        title="Human mitochondrial genome (AT skew)",
+        title="Strand composition of the human mitochondrial genome (AT skew)",
         tags=("Circular", "Interactive SVG"),
-        description="Add an AT skew ring and qualifier-based labels to a compact circular mitochondrial diagram.",
-        workflow="Circular quantitative tracks",
+        description=(
+            "The human mitochondrial genome with GC content, GC skew, and AT skew rings inside "
+            "the gene ring, each computed in 500-bp windows moved in 50-bp steps. The AT skew "
+            "ring is an extra track that compares A with T, and a qualifier priority table labels "
+            "genes by gene name (ND1, COX1) instead of product. Compare the two skew rings window "
+            "by window; each is drawn around its genome-wide average, so its colors mark windows "
+            "above or below that average."
+        ),
+        workflow="Add an AT skew track",
         input_summary="1 GenBank + 1 qualifier TSV",
         display_order=30,
         command_kind="runnable",
@@ -226,10 +303,17 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     ),
     GallerySessionExample(
         id="tobacco-chloroplast",
-        title="<i>Nicotiana tabacum</i> chloroplast genome regions",
+        title="Quadripartite structure of a chloroplast genome (<i>Nicotiana tabacum</i>)",
         tags=("Circular", "Interactive SVG"),
-        description="Mark LSC, SSC, IRa, and IRb as bracket annotations inside a color-coded chloroplast gene map.",
-        workflow="Circular region annotations",
+        description=(
+            "The 155,943-bp tobacco chloroplast genome with brackets for the large single-copy "
+            "region (LSC), the small single-copy region (SSC), and the two inverted repeats "
+            "(IRa and IRb). An annotation table supplies the four region boundaries, and a color "
+            "table groups genes by function, such as photosystem I, RNA polymerase, and NADH "
+            "dehydrogenase. Genes in the inverted repeats, such as <i>ycf2</i>, <i>ndhB</i>, and "
+            "the rRNA genes, appear twice: once in IRa and once in IRb."
+        ),
+        workflow="Mark genome regions",
         input_summary="1 GenBank + 3 TSV files",
         display_order=40,
         command_kind="runnable",
@@ -238,23 +322,39 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     ),
     GallerySessionExample(
         id="Vnig_TUMSAT-TG-2018",
-        title="<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",
+        title="Every replicon of a multi-replicon bacterial genome on one canvas (<i>Vibrio nigripulchritudo</i>)",
         tags=("Circular", "Multi-record", "Interactive SVG"),
-        description="Arrange two chromosomes and four plasmids from one multi-record GenBank file on a shared circular canvas.",
-        workflow="Circular multi-record canvas",
+        description=(
+            "The complete genome of <i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018 from one "
+            "RefSeq GenBank file: two chromosomes and four plasmids, each drawn as its own circle "
+            "with GC content and GC skew. Automatic sizing gives longer replicons larger circles "
+            "while keeping the small plasmids readable, with the chromosomes in the first row and "
+            "the plasmids in the second. Compare chromosome 1 (4,072,236 bp) with the smallest "
+            "plasmid, pVNTG4 (37,131 bp)."
+        ),
+        workflow="Draw every replicon on one canvas",
         input_summary="1 multi-record GenBank file",
         display_order=50,
         command_kind="runnable",
         command_note="Download the pinned RefSeq assembly named in Files; no sequence search is required.",
+        command=VNIG_COMMAND,
+        session_from_command=True,
+        command_dir="tests/test_inputs",
         compressed_session=True,
         source_note=GZIP_SESSION_SOURCE_NOTE,
     ),
     GallerySessionExample(
         id="hepatoplasmataceae_collinear",
-        title="Hepatoplasmataceae collinear protein-match blocks",
+        title="Shared gene order between neighboring genomes (Hepatoplasmataceae)",
         tags=("Linear", "Collinear groups", "LOSAT", "Interactive SVG"),
-        description="Combine compatible protein-match anchors into collinear blocks across five related genomes.",
-        workflow="LOSATP collinear blocks",
+        description=(
+            "Five Hepatoplasmataceae genomes, one per row. LOSATP collinear blocks join protein "
+            "matches that keep the same local order between neighboring rows: blue for the same "
+            "orientation, red for inverted, darker for higher identity. Long blue blocks join the "
+            "last three genomes, while blocks between the first three rows are short, cross each "
+            "other, and are often inverted."
+        ),
+        workflow="Compare gene order",
         input_summary="5 GenBank files",
         display_order=60,
         command_kind="runnable",
@@ -264,15 +364,25 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     ),
     GallerySessionExample(
         id="vibrio-harveyi-group-collinear",
-        title="<i>Vibrio parahaemolyticus</i> and <i>V. alginolyticus</i> collinearity",
+        title="Collinearity analysis of multi-replicon bacterial genomes (<i>Vibrio</i> spp.)",
         tags=("Linear", "Multi-record", "Collinear groups", "LOSAT", "Interactive SVG"),
-        description="Compare both chromosomes from two Harveyi-clade Vibrio assemblies as two multi-record rows.",
-        workflow="Multi-record LOSATP collinear blocks",
+        description=(
+            "Two <i>Vibrio</i> genomes, each with two chromosomes. Each chromosome is rotated "
+            "in gbdraw to start at its replication initiator gene \u2014 <i>dnaA</i> on "
+            "chromosome I and <i>rctB</i> on chromosome II \u2014 so records that NCBI starts "
+            "at unrelated positions line up. Inversions occur within each chromosome, but "
+            "collinear blocks rarely connect chromosome I to chromosome II."
+        ),
+        workflow="Align replicons at their replication origin",
         input_summary="2 multi-record GenBank files; 4 chromosomes",
         display_order=65,
         command_kind="runnable",
-        command_note="Run from a source checkout so the records table can read the two GBFF files under tests/test_inputs/.",
+        command_note=(
+            "Run from a source checkout: the records table is under "
+            "examples/ and reads the two GBFF files under tests/test_inputs/."
+        ),
         command=VIBRIO_HARVEYI_GROUP_COMMAND,
+        session_from_command=True,
         feature_sources=(
             "GCF_000196095.1_ASM19609v1_genomic.gbff",
             "GCF_000354175.2_ASM35417v2_genomic.gbff",
@@ -286,10 +396,17 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     ),
     GallerySessionExample(
         id="hepatoplasmataceae_orthogroup",
-        title="Hepatoplasmataceae CDS protein-similarity links",
+        title="Protein similarity groups across five genomes (Hepatoplasmataceae)",
         tags=("Linear", "Similarity groups", "LOSAT", "Interactive SVG"),
-        description="Compare the same five genomes with similarity-group links instead of collinear blocks.",
-        workflow="LOSATP similarity groups",
+        description=(
+            "The five Hepatoplasmataceae genomes of the collinear example, linked by LOSATP "
+            "similarity groups instead of collinear blocks. Similarity groups searches every pair "
+            "of genomes and groups proteins that match; links join group members in neighboring "
+            "rows, darker for higher identity. Compare the parallel links between the last three "
+            "genomes with the crossing links between the first three; the links show protein "
+            "similarity, not orthology."
+        ),
+        workflow="Group similar proteins",
         input_summary="5 GenBank files",
         display_order=70,
         command_kind="runnable",
@@ -299,10 +416,20 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     ),
     GallerySessionExample(
         id="BGC0000708-BGC0000713",
-        title="Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
+        title="Protein similarity among aminoglycoside biosynthetic gene clusters (<i>Streptomyces</i> spp.)",
         tags=("Linear", "Similarity groups", "LOSAT", "Interactive SVG"),
-        description="Compare five biosynthetic gene clusters while preserving antiSMASH categories and concise gene labels.",
-        workflow="LOSATP similarity groups and color rules",
+        description=(
+            "Five aminoglycoside biosynthetic gene clusters from MIBiG (lividomycin, two neomycin, "
+            "paromomycin, and ribostamycin), colored by antiSMASH gene kind and linked by LOSATP "
+            "similarity groups at 30% identity or more. The records are aligned on the group of "
+            "the ABC transporter <i>neoU</i> from the first neomycin cluster; the lividomycin "
+            "cluster has two members of that group, and its <i>livU</i> is the anchor. Only the "
+            "lividomycin cluster shows gene labels. A run of core biosynthetic genes links "
+            "through all five clusters, while "
+            "regulatory genes appear only in the two neomycin clusters; the links show protein "
+            "similarity, not phylogenetic orthology."
+        ),
+        workflow="Compare gene clusters by protein similarity",
         input_summary="5 GenBank + 3 color/label TSV files",
         display_order=80,
         command_kind="runnable",
@@ -314,14 +441,22 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     ),
     GallerySessionExample(
         id="majanivirus_orthogroup",
-        title="Majanivirus CDS protein-similarity links",
+        title="Protein similarity across nine majanivirus genomes",
         tags=("Linear", "Similarity groups", "LOSAT", "Interactive SVG"),
-        description="Inspect dense protein-similarity links and product-based feature colors across nine viral genomes.",
-        workflow="LOSATP similarity groups",
+        description=(
+            "Nine majanivirus genomes from penaeid shrimp, one per row, linked by LOSATP similarity "
+            "groups at 20% identity or more. A color table marks WSSV-like proteins, BIRP, and "
+            "tyrosine recombinase by product name. The Litopenaeus vannamei majanivirus genome "
+            "is shown reverse-complemented, so its synteny with the other genomes reads left to "
+            "right. The first five genomes share dense, high-identity links, while links further "
+            "down are paler and sparser; the links show protein similarity, not orthology."
+        ),
+        workflow="Compare many genomes by protein similarity",
         input_summary="9 GenBank + 2 color TSV files",
         display_order=90,
         command_kind="runnable",
         command_note="Download the nine accession-pinned records and both repository-managed color tables from Files.",
+        command=MAJANIVIRUS_COMMAND,
         compressed_session=True,
         source_note=GZIP_SESSION_SOURCE_NOTE,
     ),
@@ -359,21 +494,24 @@ def _session_raw_args(session: dict[str, Any]) -> list[str]:
     if isinstance(args, list):
         return [str(arg) for arg in args]
 
-    config = session.get("config")
-    if isinstance(config, dict):
-        cli_options = config.get("cliOptions")
-        if isinstance(cli_options, dict):
-            raw_args = cli_options.get("rawArgs")
-            if isinstance(raw_args, list):
-                return [str(arg) for arg in raw_args]
+    cli_options = _session_cli_options(session)
+    raw_args = cli_options.get("rawArgs")
+    if isinstance(raw_args, list):
+        return [str(arg) for arg in raw_args]
     return []
+
+
+def _session_cli_options(session: dict[str, Any]) -> dict[str, Any]:
+    # Session 46 keeps a draft's CLI options at the top level.
+    config = session.get("config") if isinstance(session.get("config"), dict) else {}
+    cli_options = session.get("cliOptions", config.get("cliOptions"))
+    return cli_options if isinstance(cli_options, dict) else {}
 
 
 def _session_command(session: dict[str, Any]) -> str:
     cli = _session_cli_invocation(session)
-    config = session.get("config") if isinstance(session.get("config"), dict) else {}
     ui = session.get("ui") if isinstance(session.get("ui"), dict) else {}
-    cli_options = config.get("cliOptions") if isinstance(config.get("cliOptions"), dict) else {}
+    cli_options = _session_cli_options(session)
     mode = str(cli.get("mode") or cli_options.get("mode") or ui.get("mode") or "linear")
     raw_args = _session_raw_args(session)
     if raw_args:
@@ -408,6 +546,21 @@ def _session_feature_sources(session: dict[str, Any]) -> list[str]:
             if not isinstance(binding, dict):
                 continue
             add_name(binding.get("name"))
+
+    # A Web-saved Session has no cliInvocation: name each record's source
+    # resources from webFiles.resourceOriginalNames, in record order.
+    web_files = session.get("webFiles")
+    original_names = web_files.get("resourceOriginalNames") if isinstance(web_files, dict) else None
+    render_request = session.get("renderRequest")
+    records = render_request.get("records") if isinstance(render_request, dict) else None
+    if isinstance(original_names, dict) and isinstance(records, list):
+        for record in records:
+            source = record.get("source") if isinstance(record, dict) else None
+            if not isinstance(source, dict):
+                continue
+            for key, resource_id in source.items():
+                if key.endswith("esourceId") and isinstance(resource_id, str):
+                    add_name(original_names.get(resource_id))
 
     files = session.get("files")
     if isinstance(files, dict):
@@ -458,7 +611,10 @@ def _session_feature_catalog(
     )
     if catalog is None:
         return None
-    if isinstance(catalog, dict) and catalog.get("schema") == 3:
+    if isinstance(catalog, dict) and catalog.get("schema") in (
+        LEGACY_FEATURE_CATALOG_SCHEMA,
+        ANCHOR_FEATURE_CATALOG_SCHEMA,
+    ):
         return promote_legacy_feature_catalog(catalog)
     if (
         not isinstance(catalog, dict)
@@ -466,7 +622,7 @@ def _session_feature_catalog(
         or not isinstance(catalog.get("items"), list)
     ):
         raise ValueError(
-            "Session contains an invalid schema-3/"
+            "Session contains an invalid schema-3, schema-4, or "
             f"schema-{FEATURE_CATALOG_SCHEMA} feature catalog."
         )
     return catalog
@@ -876,7 +1032,7 @@ def _validate_interactive_orthogroup_payload(
     example: GallerySessionExample,
     payload: dict[str, Any],
 ) -> None:
-    if payload.get("schema") == FEATURE_CATALOG_SCHEMA:
+    if payload.get("schema") in INTERACTIVE_CATALOG_SCHEMAS:
         items = payload.get("items")
         if not isinstance(items, list) or len(items) != 1 or not isinstance(
             items[0], dict
@@ -1157,7 +1313,7 @@ def _interactive_svg_measurements(output: str) -> dict[str, int]:
     items = (
         payload.get("items", [])
         if isinstance(payload, dict)
-        and payload.get("schema") == FEATURE_CATALOG_SCHEMA
+        and payload.get("schema") in INTERACTIVE_CATALOG_SCHEMAS
         else []
     )
     if not isinstance(items, list):

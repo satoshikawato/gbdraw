@@ -34,4 +34,10 @@ enriched.at(-1).label = 'known';
 assert.ok(compareVisualSemantics(base, enriched).length);
 assert.deepEqual(compareVisualSemantics(base, enriched, { catalogIds: ['known'] }), []);
 assert.ok(compareVisualSemantics(enriched, base, { catalogIds: ['known'] }).length);
+// A hidden Legend row (D-15-6 (2)) is skipped; a hidden group that is not a Legend row still counts.
+const legendRows = (hidden) => visualSemanticsFromRoot(element('svg', {}, [
+  element('g', { 'data-legend-key': 'CDS' }, [element('text', {}, [], 'CDS')]),
+  ...(hidden ? [element('g', { 'data-legend-key': 'tRNA', display: 'none' }, [element('path', { fill: 'red' }), element('text', {}, [], 'tRNA')])] : [])
+]));
+assert.deepEqual(compareVisualSemantics(legendRows(false), legendRows(true)), []);
 console.log('visual comparator controls passed');

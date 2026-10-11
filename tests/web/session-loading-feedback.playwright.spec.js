@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
-const { gzipSync } = require('node:zlib');
+const { gunzipSync, gzipSync } = require('node:zlib');
 const { openApp } = require('./helpers/app-lifecycle.cjs');
 const { installImportReadGate } = require('./helpers/session-import-gate.cjs');
 
@@ -31,6 +31,21 @@ const replacementSession = {
     'sessions',
     'lambda_basic_linear.gbdraw-session.json'
   )))
+};
+
+// OV-38: the 0.13.0 Gallery Session (version 30, release tag 0.13.0) saved its
+// Circular Custom Track Slots rows with `spacing: null` while the slots were off.
+const galleryV30Bytes = gunzipSync(readFileSync(join(
+  repoRoot, 'tests', 'fixtures', 'sessions', 'BGC0000708-BGC0000713.v30.gbdraw-session.json.gz'
+)));
+const galleryV30Session = (edit = () => {}) => {
+  const document = JSON.parse(galleryV30Bytes);
+  edit(document.config.adv);
+  return {
+    name: 'BGC0000708-BGC0000713.gbdraw-session.json.gz',
+    mimeType: 'application/gzip',
+    buffer: gzipSync(Buffer.from(JSON.stringify(document)))
+  };
 };
 
 const loadBaselineSession = async (page) => {
@@ -169,6 +184,40 @@ test('session loading is painted before import work and prevents duplicate adopt
   await expect(sessionInput).toHaveValue('');
 });
 
+// OV-40: the Session 39 Web writer stored a Label whitelist keyword typed with a
+// tab as an extra cell (tests/fixtures/sessions/whitelist-tab-keyword.provenance.json).
+// Load reads the row as the current writer writes it and names it in the notice.
+test('a Session 39 table row with extra cells loads with a notice that names it', async ({
+  page
+}) => {
+  test.setTimeout(180_000);
+  await openApp(page);
+  const dialogs = [];
+  page.on('dialog', async (dialog) => {
+    dialogs.push(dialog.message());
+    await dialog.accept();
+  });
+  await installLifecycleProbe(page);
+  await page.locator(sessionInputSelector).setInputFiles(join(
+    repoRoot, 'tests', 'fixtures', 'sessions', 'whitelist-tab-keyword.v39.gbdraw-session.json.gz'
+  ));
+  await page.waitForFunction(() => (
+    window.__GBDRAW_SESSION_LOADING_EVENTS__.some(({ name }) => name === 'interactiveReady')
+    && window.__GBDRAW_APP__?.sessionImportPending === false
+  ), null, { timeout: 120_000 });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
+  expect(dialogs).toEqual(['Session loaded successfully! Some table rows of this older Session were read '
+    + 'as the current version writes them. Label whitelist: line 1 had extra cells, joined into the last column '
+    + 'with one space.']);
+  expect(await page.evaluate(() => ({
+    filterMode: window.__GBDRAW_APP__.filterMode,
+    whitelist: JSON.parse(JSON.stringify(window.__GBDRAW_APP__.manualWhitelist))
+  }))).toEqual({
+    filterMode: 'Whitelist',
+    whitelist: [{ feat: 'CDS', qual: 'product', key: 'cytochrome c oxidase' }]
+  });
+});
+
 test('failed session loading clears pending state and preserves the prior session', async ({
   page
 }) => {
@@ -224,4 +273,349 @@ test('failed session loading clears pending state and preserves the prior sessio
   await expect(page.getByRole('alert', { name: 'Operation error' })).toContainText('Use valid JSON.');
   expect(await importSnapshot(page)).toEqual(before);
   await expect(sessionInput).toHaveValue('');
+});
+
+test('a 0.13.0 Gallery Session loads, and its Custom Track Slots turned on name the obsolete field', async ({
+  page
+}) => {
+  test.setTimeout(300_000);
+  await openApp(page);
+  const dialogs = [];
+  page.on('dialog', async (dialog) => {
+    dialogs.push(dialog.message());
+    await dialog.accept();
+  });
+  const sessionInput = page.locator(sessionInputSelector);
+  const loadAndSettle = async (session) => {
+    await installLifecycleProbe(page);
+    await sessionInput.setInputFiles(session);
+    await page.waitForFunction(() => (
+      window.__GBDRAW_SESSION_LOADING_EVENTS__.some(({ name }) => name === 'interactiveReady')
+      && window.__GBDRAW_APP__?.sessionImportPending === false
+    ), null, { timeout: 240_000 });
+  };
+  await loadAndSettle(galleryV30Session());
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
+  expect(dialogs).toHaveLength(1);
+  expect(dialogs[0]).toMatch(/^Session loaded successfully!/);
+  const loaded = await importSnapshot(page);
+  expect(loaded).toMatchObject({ title: 'out', mode: 'linear', selectedResultName: 'out' });
+  expect(loaded.previewHtml).toContain('<svg');
+
+  await loadAndSettle(galleryV30Session((adv) => {
+    adv.circular_track_slots_enabled = true;
+  }));
+  expect(dialogs).toHaveLength(1);
+  await expect(page.getByRole('alert', { name: 'Operation error' })).toContainText(
+    'The track settings are invalid. Track row 1. Field: spacing. Custom Track Slots no longer read this field.'
+  );
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
+    code: 'TRACK_INVALID', context: { field: 'spacing', reason: 'OBSOLETE_TRACK_FIELD', slotIndex: 0 }
+  });
+  expect(await importSnapshot(page)).toEqual(loaded);
+});
+
+// UJ-09 (Owner 2026-10-05): Load Session replaces the work and clears History,
+// so it asks first when History changed since the last Save or Load. Cancel
+// keeps the work and History; with nothing to lose the file picker opens at once.
+test('Load Session asks before it replaces work changed since the last Save or Load', async ({
+  page
+}) => {
+  test.setTimeout(180_000);
+  await openApp(page);
+  await loadBaselineSession(page);
+  const loadButton = page.getByRole('button', { name: 'Load Session', exact: true });
+  const confirm = page.getByRole('dialog', { name: 'Replace the current work?', exact: true });
+  const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  let pickers = 0;
+  page.on('filechooser', () => { pickers += 1; });
+
+  await loadButton.click();
+  await expect.poll(() => pickers).toBe(1);
+  await expect(confirm).toHaveCount(0);
+
+  // An open control transaction asks only when its value changed: focus alone
+  // (the transaction a text control begins on focus) is nothing to lose.
+  await page.evaluate(async () => {
+    window.__focusOnlyTx = await window.__GBDRAW_HISTORY__.begin('Focus only');
+    await window.__GBDRAW_APP__.openSessionFilePicker();
+  });
+  await expect(confirm).toHaveCount(0);
+  await expect.poll(() => pickers).toBe(2);
+  await page.evaluate(async () => {
+    window.__GBDRAW_APP__.form.prefix = 'typed-not-committed';
+    await window.__GBDRAW_APP__.openSessionFilePicker();
+  });
+  await expect(confirm).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(confirm).toHaveCount(0);
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.form.prefix = '';
+    window.__GBDRAW_HISTORY__.cancel(window.__focusOnlyTx);
+  });
+  expect(await undoCount()).toBe(0);
+
+  const prefix = page.locator('#output-prefix');
+  await prefix.fill('unsaved-work');
+  await prefix.press('Tab');
+  await expect.poll(undoCount).toBe(1);
+  await loadButton.click();
+  await expect(confirm).toBeVisible();
+  await expect(confirm).toHaveAttribute('aria-modal', 'true');
+  await expect(confirm.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(confirm).toHaveCount(0);
+  await expect(loadButton).toBeFocused();
+  expect(pickers).toBe(2);
+  expect(await undoCount()).toBe(1);
+  await expect(prefix).toHaveValue('unsaved-work');
+
+  await loadButton.click();
+  const chooserPromise = page.waitForEvent('filechooser');
+  await confirm.getByRole('button', { name: 'Load Session', exact: true }).click();
+  const chooser = await chooserPromise;
+  const loaded = page.waitForEvent('dialog');
+  await chooser.setFiles(baselineSession);
+  const alert = await loaded;
+  expect(alert.message()).toBe('Session loaded successfully!');
+  await alert.accept();
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending === false);
+  await expect.poll(undoCount).toBe(0);
+  await expect(prefix).not.toHaveValue('unsaved-work');
+
+  // A Save is the new point: Load asks again only after a later change.
+  await prefix.fill('saved-work');
+  await prefix.press('Tab');
+  await expect.poll(undoCount).toBe(1);
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Save Session', exact: true }).click();
+  await download;
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionSavePending)).toBe(false);
+  const pickersBefore = pickers;
+  await loadButton.click();
+  await expect.poll(() => pickers).toBe(pickersBefore + 1);
+  await expect(confirm).toHaveCount(0);
+});
+
+// UJ-06 (Owner 2026-10-08): where this origin serves the Gallery catalog
+// (gbdraw.app), the empty state's Load an example lists every catalog entry and
+// loads the chosen one's Session through the Load Session path and its UJ-09
+// question. Without the catalog (the pip GUI) the button is absent.
+const galleryCatalog = JSON.parse(readFileSync(
+  join(repoRoot, 'gbdraw', 'web', 'gallery', 'examples.json'), 'utf8'
+));
+const plainTitle = (title) => title.replace(/<\/?i>/g, '');
+const blockExternalRequests = async (page) => {
+  const external = [];
+  await page.context().route('**/*', (route) => {
+    if (new URL(route.request().url()).hostname === '127.0.0.1') return route.continue();
+    external.push(route.request().url());
+    return route.abort();
+  });
+  return external;
+};
+const exampleControls = (page) => ({
+  example: page.getByRole('button', { name: 'Load an example', exact: true }),
+  header: page.locator('header.app-header').getByRole('button', { name: 'Load example', exact: true }),
+  chooser: page.getByRole('dialog', { name: 'Choose an example', exact: true }),
+  confirm: page.getByRole('dialog', { name: 'Replace the current work?', exact: true })
+});
+// Owner 2026-10-08: an example opens fitted. The rendered SVG lies inside the
+// preview frame, at a zoom other than the 1.0 its Session stored.
+const exampleFit = (page) => page.evaluate(() => {
+  const app = window.__GBDRAW_APP__;
+  const container = app.canvasContainerRef;
+  const frame = container.getBoundingClientRect();
+  const box = app.svgContainer.querySelector('svg').getBoundingClientRect();
+  const left = frame.left + container.clientLeft;
+  const top = frame.top + container.clientTop;
+  const inside = box.left >= left - 1 && box.top >= top - 1
+    && box.right <= left + container.clientWidth + 1 && box.bottom <= top + container.clientHeight + 1;
+  return { inside, zoomChanged: app.zoom !== 1 };
+});
+const expectExampleFitted = (page) => expect.poll(() => exampleFit(page))
+  .toEqual({ inside: true, zoomChanged: true });
+const acceptLoadedSession = async (page, title) => {
+  const loaded = page.waitForEvent('dialog');
+  return async () => {
+    const alert = await loaded;
+    expect(alert.message()).toBe('Session loaded successfully!');
+    await alert.accept();
+    await page.waitForFunction((expected) => (
+      window.__GBDRAW_APP__?.sessionImportPending === false
+      && window.__GBDRAW_APP__.sessionTitle === expected
+      && window.__GBDRAW_APP__.results.length === 1
+    ), title);
+  };
+};
+
+test('Load an example lists every Gallery example and loads the chosen Circular or Linear .gz Session', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const external = await blockExternalRequests(page);
+  // The Linear .gz entry answers with the gzip of the small lambda Session, so
+  // the file-name route of .gz loading runs without a 6 MB download.
+  const gzEntry = galleryCatalog.find((entry) => entry.id === 'majanivirus_orthogroup');
+  expect(gzEntry.session.endsWith('.json.gz')).toBe(true);
+  expect(gzEntry.tags).toContain('Linear');
+  const gzRequests = [];
+  await page.route(`**/gbdraw/web/gallery/${gzEntry.session.slice(2)}`, (route) => {
+    gzRequests.push(route.request().url());
+    return route.fulfill({ status: 200, contentType: 'application/gzip', body: replacementSession.buffer });
+  });
+  await openApp(page);
+  const { example, chooser } = exampleControls(page);
+  await example.click();
+  await expect(chooser).toBeVisible();
+  const items = chooser.locator('[data-gallery-example]');
+  await expect(items).toHaveCount(galleryCatalog.length);
+  expect(await items.evaluateAll((nodes) => nodes.map((node) => node.dataset.galleryExample)))
+    .toEqual(galleryCatalog.map((entry) => entry.id));
+  for (const [index, entry] of galleryCatalog.entries()) {
+    await expect(items.nth(index)).toContainText(plainTitle(entry.title));
+    await expect(items.nth(index)).toContainText(entry.tags.includes('Linear') ? 'Linear' : 'Circular');
+  }
+  await expect(chooser.locator('[data-gallery-example="tobacco-chloroplast"] i'))
+    .toHaveText('Nicotiana tabacum');
+  await expect(chooser.locator('[data-gallery-example="lambda_basic_linear"] img'))
+    .toHaveAttribute('src', /\/gallery\/thumbnails\/lambda_basic_linear\.webp$/);
+
+  const circularLoaded = await acceptLoadedSession(page, 'HmmtDNA_basic_circular');
+  await chooser.locator('[data-gallery-example="HmmtDNA_basic_circular"]').click();
+  await circularLoaded();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('circular');
+  await expectExampleFitted(page);
+
+  await openApp(page);
+  await example.click();
+  const linearLoaded = await acceptLoadedSession(page, 'lambda_basic_linear');
+  await chooser.locator(`[data-gallery-example="${gzEntry.id}"]`).click();
+  await linearLoaded();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('linear');
+  await expectExampleFitted(page);
+  expect(gzRequests).toHaveLength(1);
+  expect(external).toEqual([]);
+});
+
+test('Load an example is absent where this origin serves no Gallery catalog', async ({ page }) => {
+  test.setTimeout(180_000);
+  let catalogRequested;
+  const catalogRead = new Promise((resolve) => { catalogRequested = resolve; });
+  await page.route('**/gallery/examples.json', (route) => {
+    catalogRequested();
+    return route.fulfill({ status: 404, body: 'not found' });
+  });
+  // The 404 is a network log line, not an application error.
+  const diagnostics = await openApp(page, { checkErrors: false });
+  await catalogRead;
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())));
+  expect(diagnostics.pageErrors).toEqual([]);
+  await expect(page.getByText('No Circular Result yet. Configure settings and click Generate.')).toBeVisible();
+  await expect(exampleControls(page).example).toHaveCount(0);
+  await expect(exampleControls(page).header).toHaveCount(0);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorDisplay)).toBeFalsy();
+});
+
+// D-07 (Owner 2026-10-10): the header keeps Load example once a Result exists,
+// so a second example loads through the same chooser and UJ-09 question.
+test('the header Load example stays after an example loads and loads another', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openApp(page);
+  const { example, header, chooser, confirm } = exampleControls(page);
+  await expect(header).toBeVisible();
+  await header.click();
+  const circularLoaded = await acceptLoadedSession(page, 'HmmtDNA_basic_circular');
+  await chooser.locator('[data-gallery-example="HmmtDNA_basic_circular"]').click();
+  await circularLoaded();
+  await expect(example).toHaveCount(0);
+  await expect(header).toBeVisible();
+  await expect(header).toBeEnabled();
+
+  await header.click();
+  await expect(chooser).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(chooser).toHaveCount(0);
+  await expect(header).toBeFocused();
+
+  const prefix = page.locator('#output-prefix');
+  await prefix.fill('unsaved-work');
+  await prefix.press('Tab');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(1);
+  await header.click();
+  await chooser.locator('[data-gallery-example="lambda_basic_linear"]').click();
+  await expect(confirm).toBeVisible();
+  const linearLoaded = await acceptLoadedSession(page, 'lambda_basic_linear');
+  await confirm.getByRole('button', { name: 'Load example', exact: true }).click();
+  await linearLoaded();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('linear');
+  await expectExampleFitted(page);
+  await expect(header).toBeVisible();
+});
+
+test('the example chooser cancels with focus back on Load an example and keeps the UJ-09 question', async ({ page }) => {
+  test.setTimeout(180_000);
+  await openApp(page);
+  const { example, chooser, confirm } = exampleControls(page);
+  const first = chooser.locator('[data-gallery-example]').first();
+  await example.click();
+  await expect(chooser).toHaveAttribute('aria-modal', 'true');
+  await expect(first).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(chooser.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(chooser).toHaveCount(0);
+  await expect(example).toBeFocused();
+  await example.click();
+  await chooser.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(chooser).toHaveCount(0);
+  await expect(example).toBeFocused();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(0);
+
+  const prefix = page.locator('#output-prefix');
+  await prefix.fill('unsaved-work');
+  await prefix.press('Tab');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(1);
+  await example.click();
+  await chooser.locator('[data-gallery-example="HmmtDNA_basic_circular"]').click();
+  await expect(chooser).toHaveCount(0);
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(confirm).toHaveCount(0);
+  await expect(example).toBeFocused();
+  await expect(prefix).toHaveValue('unsaved-work');
+
+  await example.click();
+  await chooser.locator('[data-gallery-example="HmmtDNA_basic_circular"]').click();
+  const loaded = await acceptLoadedSession(page, 'HmmtDNA_basic_circular');
+  await confirm.getByRole('button', { name: 'Load example', exact: true }).click();
+  await loaded();
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(0);
+  await expect(example).toHaveCount(0);
+});
+
+// OV-377/OV-378: the first feature popup after a Session load waits for Python
+// to match the color rules. That wait is not an edit: Save and Load stay
+// available, and the top bar says the popup is being prepared instead of
+// "Applying an edit".
+test('the first feature popup after a Session load says it is preparing and keeps Save and Load available', async ({ page }) => {
+  await openApp(page);
+  const dialogPromise = page.waitForEvent('dialog');
+  await page.locator(sessionInputSelector).setInputFiles(join(
+    repoRoot, 'gbdraw', 'web', 'gallery', 'sessions', 'BGC0000708-BGC0000713.gbdraw-session.json'
+  ));
+  await (await dialogPromise).accept();
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending === false
+    && (window.__GBDRAW_APP__?.results || []).length > 0);
+  // The livE CDS of record 1; no ribbon lies under its centre.
+  const feature = page.locator('.gbdraw-preview-surface svg path[id="fed46a3a6_record_1"]');
+  await feature.click({ force: true });
+  const preparing = page.locator('[data-feature-details-pending]');
+  await expect(preparing).toHaveText('Preparing feature details…');
+  await expect(page.locator('[data-session-busy-reason]')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Save Session', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Load Session', exact: true })).toBeEnabled();
+  await expect(page.locator('.feature-popup')).toBeVisible({ timeout: 180_000 });
+  await expect(preparing).toHaveCount(0);
+  expect(await page.evaluate(() => Boolean(window.__GBDRAW_APP__.clickedPairwiseMatch))).toBe(false);
 });

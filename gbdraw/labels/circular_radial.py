@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, cast
 
 from ..exceptions import ValidationError
 from ..layout.spatial import Aabb, AabbIndex, candidate_aabb_pairs
@@ -64,7 +64,7 @@ def _preferred_angle_rad(label: Mapping[str, Any], total_length: int) -> float:
     return (_TAU * (_preferred_middle(label) / float(total_length))) % _TAU
 
 
-def _radius_of_point(x_coord: object, y_coord: object) -> float:
+def _radius_of_point(x_coord: float, y_coord: float) -> float:
     return math.hypot(float(x_coord), float(y_coord))
 
 
@@ -316,7 +316,8 @@ def _leader_text_collision_count(labels: Sequence[Mapping[str, Any]]) -> int:
     for label_index, label in enumerate(labels):
         for segment in _leader_segments(label):
             for candidate in box_index.query(_segment_aabb(segment)):
-                candidate_index = int(candidate)
+                # Every id inserted into box_index above is a label index (int).
+                candidate_index = cast(int, candidate)
                 if candidate_index == label_index:
                     continue
                 if segment_intersects_polygon(segment, boxes[candidate_index].corners, touching=False):

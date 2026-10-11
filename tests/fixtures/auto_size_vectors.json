@@ -1,0 +1,301 @@
+{
+  "schema": 1,
+  "description": "Auto sizes and the region-drawing size rule, shared by gbdraw.auto_sizes (tests/test_region_drawing.py) and the Web region dialog. Setting keys are those of gbdraw.auto_sizes.auto_setting_values: config override paths without .short/.long, the options window/step/depth_window/depth_step, and circularSlot.<slot>.width. Numbers compare within 1e-9. autoValues and adaptations are the worked examples A-C of the multi-drawing design (region part, section 3.4) plus edge cases; regions use the 16,569 bp human mtDNA record NC_012920.",
+  "autoValues": [
+    {
+      "name": "A source: 5 Mb genome, Circular (long)",
+      "mode": "circular",
+      "recordLengths": [5000000],
+      "expected": {
+        "labels.font_size": 8,
+        "objects.features.block_stroke_width": 0,
+        "objects.features.line_stroke_width": 1,
+        "objects.axis.circular.stroke_width": 1,
+        "objects.legends.font_size": 16,
+        "objects.legends.color_rect_size": 20,
+        "circularSlot.features.width": 18.525,
+        "circularSlot.gc_content.width": 74.1,
+        "circularSlot.depth.width": 37.05,
+        "objects.gc_content.tick_font_size": 8,
+        "window": 10000,
+        "step": 1000,
+        "depth_window": 1000,
+        "depth_step": 100,
+        "objects.scale.interval": 500000
+      }
+    },
+    {
+      "name": "A region: 32,000 bp gene cluster, Linear (short)",
+      "mode": "linear",
+      "recordLengths": [32000],
+      "expected": {
+        "labels.font_size.linear": 24,
+        "canvas.linear.default_cds_height": 80,
+        "objects.features.block_stroke_width": 2,
+        "objects.features.line_stroke_width": 5,
+        "objects.axis.linear.stroke_width": 5,
+        "objects.legends.font_size": 20,
+        "objects.legends.color_rect_size": 24,
+        "objects.definition.linear.font_size": 24,
+        "canvas.linear.default_gc_height": 20,
+        "objects.gc_content.tick_font_size": 8,
+        "window": 1000,
+        "step": 100,
+        "depth_window": 100,
+        "depth_step": 10,
+        "objects.scale.interval": 5000
+      }
+    },
+    {
+      "name": "B source: human mtDNA 16,569 bp, Circular (short)",
+      "mode": "circular",
+      "recordLengths": [16569],
+      "expected": {
+        "labels.font_size": 14,
+        "objects.features.block_stroke_width": 2,
+        "objects.features.line_stroke_width": 5,
+        "objects.axis.circular.stroke_width": 3,
+        "objects.legends.font_size": 20,
+        "objects.legends.color_rect_size": 24,
+        "circularSlot.features.width": 37.05,
+        "circularSlot.gc_content.width": 74.1,
+        "objects.gc_content.tick_font_size": 8,
+        "objects.depth.tick_font_size": 8,
+        "window": 1000,
+        "step": 100,
+        "objects.scale.interval": 1000
+      }
+    },
+    {
+      "name": "B region: ND5 +/- 600 bp = 3,012 bp, Linear (short)",
+      "mode": "linear",
+      "recordLengths": [3012],
+      "expected": {
+        "labels.font_size.linear": 24,
+        "objects.features.block_stroke_width": 2,
+        "objects.features.line_stroke_width": 5,
+        "objects.axis.linear.stroke_width": 5,
+        "objects.legends.font_size": 20,
+        "objects.legends.color_rect_size": 24,
+        "objects.definition.linear.font_size": 24,
+        "objects.gc_content.tick_font_size": 8,
+        "objects.depth.tick_font_size": 7,
+        "window": 1000,
+        "step": 100,
+        "objects.scale.interval": 1000
+      }
+    },
+    {
+      "name": "C source: 200 kb phage, Linear (long)",
+      "mode": "linear",
+      "recordLengths": [200000],
+      "expected": {
+        "canvas.linear.default_cds_height": 20,
+        "labels.font_size.linear": 5,
+        "objects.features.block_stroke_width": 0,
+        "objects.features.line_stroke_width": 1,
+        "objects.axis.linear.stroke_width": 2,
+        "objects.legends.font_size": 16,
+        "objects.legends.color_rect_size": 20,
+        "objects.definition.linear.font_size": 10,
+        "objects.scale.font_size": 16,
+        "objects.scale.ruler_label_font_size": 12,
+        "canvas.linear.default_gc_height": 20,
+        "canvas.linear.depth_height": 10,
+        "objects.gc_content.tick_font_size": 8,
+        "window": 1000,
+        "step": 100,
+        "objects.scale.interval": 50000
+      }
+    },
+    {
+      "name": "C region: 20,000 bp, Linear (short)",
+      "mode": "linear",
+      "recordLengths": [20000],
+      "expected": {
+        "canvas.linear.default_cds_height": 80,
+        "labels.font_size.linear": 24,
+        "objects.features.block_stroke_width": 2,
+        "objects.features.line_stroke_width": 5,
+        "objects.axis.linear.stroke_width": 5,
+        "objects.legends.font_size": 20,
+        "objects.legends.color_rect_size": 24,
+        "objects.definition.linear.font_size": 24,
+        "objects.scale.font_size": 24,
+        "objects.scale.ruler_label_font_size": 20,
+        "canvas.linear.default_gc_height": 20,
+        "canvas.linear.depth_height": 10,
+        "objects.gc_content.tick_font_size": 8,
+        "window": 1000,
+        "step": 100,
+        "objects.scale.interval": 5000
+      }
+    },
+    {
+      "name": "Linear labels take the largest size over the records; the class follows the longest",
+      "mode": "linear",
+      "recordLengths": [200000, 20000],
+      "expected": {
+        "labels.font_size.linear": 24,
+        "canvas.linear.default_cds_height": 20,
+        "objects.scale.interval": 50000
+      }
+    },
+    {
+      "name": "50 kb boundary: 50,000 bp is long",
+      "mode": "circular",
+      "recordLengths": [50000],
+      "expected": {
+        "labels.font_size": 8,
+        "circularSlot.features.width": 18.525,
+        "objects.scale.interval": 5000
+      }
+    }
+  ],
+  "adaptations": [
+    {
+      "name": "A: 5 Mb Circular to 32 kb Linear; mode and class change",
+      "source": {"mode": "circular", "recordLengths": [5000000]},
+      "target": {"mode": "linear", "recordLengths": [32000]},
+      "explicit": {
+        "labels.font_size": 10,
+        "objects.features.block_stroke_width": 0.5,
+        "objects.axis.circular.stroke_width": 2,
+        "objects.legends.font_size": 14,
+        "objects.gc_content.tick_font_size": 7,
+        "window": 5000,
+        "step": 500,
+        "objects.scale.interval": 1000000,
+        "objects.depth.max_depth": 500
+      },
+      "expected": {
+        "kept": {"objects.gc_content.tick_font_size": 7},
+        "reset": [
+          {"setting": "labels.font_size", "explicit": 10, "sourceAuto": 8, "targetAuto": null},
+          {"setting": "objects.features.block_stroke_width", "explicit": 0.5, "sourceAuto": 0, "targetAuto": 2},
+          {"setting": "objects.axis.circular.stroke_width", "explicit": 2, "sourceAuto": 1, "targetAuto": null},
+          {"setting": "objects.legends.font_size", "explicit": 14, "sourceAuto": 16, "targetAuto": 20},
+          {"setting": "window", "explicit": 5000, "sourceAuto": 10000, "targetAuto": 1000},
+          {"setting": "step", "explicit": 500, "sourceAuto": 1000, "targetAuto": 100},
+          {"setting": "objects.scale.interval", "explicit": 1000000, "sourceAuto": 500000, "targetAuto": 5000}
+        ]
+      }
+    },
+    {
+      "name": "B: mtDNA Circular to a 3,012 bp Linear region; only the mode changes",
+      "source": {"mode": "circular", "recordLengths": [16569]},
+      "target": {"mode": "linear", "recordLengths": [3012]},
+      "explicit": {
+        "labels.font_size": 16,
+        "objects.features.block_stroke_width": 1,
+        "objects.legends.font_size": 18,
+        "objects.axis.circular.stroke_width": 2,
+        "window": 500,
+        "step": 50,
+        "objects.scale.interval": 2000,
+        "objects.depth.tick_font_size": 6
+      },
+      "expected": {
+        "kept": {
+          "objects.features.block_stroke_width": 1,
+          "objects.legends.font_size": 18,
+          "window": 500,
+          "step": 50,
+          "objects.scale.interval": 2000
+        },
+        "reset": [
+          {"setting": "labels.font_size", "explicit": 16, "sourceAuto": 14, "targetAuto": null},
+          {"setting": "objects.axis.circular.stroke_width", "explicit": 2, "sourceAuto": 3, "targetAuto": null},
+          {"setting": "objects.depth.tick_font_size", "explicit": 6, "sourceAuto": 8, "targetAuto": 7}
+        ]
+      }
+    },
+    {
+      "name": "C: 200 kb Linear to a 20 kb Linear region; only the class changes",
+      "source": {"mode": "linear", "recordLengths": [200000]},
+      "target": {"mode": "linear", "recordLengths": [20000]},
+      "explicit": {
+        "canvas.linear.default_cds_height": 30,
+        "labels.font_size.linear": 8,
+        "canvas.linear.default_gc_height": 30,
+        "objects.gc_content.tick_font_size": 7,
+        "window": 500,
+        "step": 50,
+        "objects.scale.interval": 25000,
+        "labels.spacing.linear": 3
+      },
+      "expected": {
+        "kept": {
+          "canvas.linear.default_gc_height": 30,
+          "objects.gc_content.tick_font_size": 7,
+          "window": 500,
+          "step": 50
+        },
+        "reset": [
+          {"setting": "canvas.linear.default_cds_height", "explicit": 30, "sourceAuto": 20, "targetAuto": 80},
+          {"setting": "labels.font_size.linear", "explicit": 8, "sourceAuto": 5, "targetAuto": 24},
+          {"setting": "objects.scale.interval", "explicit": 25000, "sourceAuto": 50000, "targetAuto": 5000}
+        ]
+      }
+    },
+    {
+      "name": "The same length and mode keep every size",
+      "source": {"mode": "linear", "recordLengths": [30000]},
+      "target": {"mode": "linear", "recordLengths": [30000]},
+      "explicit": {
+        "labels.font_size.linear": 9,
+        "objects.axis.linear.stroke_width": 1,
+        "window": 300
+      },
+      "expected": {
+        "kept": {"labels.font_size.linear": 9, "objects.axis.linear.stroke_width": 1, "window": 300},
+        "reset": []
+      }
+    },
+    {
+      "name": "A kept track thickness keeps its tick font",
+      "source": {"mode": "circular", "recordLengths": [16569]},
+      "target": {"mode": "circular", "recordLengths": [16569]},
+      "explicit": {"circularSlot.depth.width": 20, "objects.depth.tick_font_size": 5},
+      "expected": {
+        "kept": {"circularSlot.depth.width": 20, "objects.depth.tick_font_size": 5},
+        "reset": []
+      }
+    },
+    {
+      "name": "A dropped track thickness moves its tick font to the target's Auto thickness",
+      "source": {"mode": "circular", "recordLengths": [16569]},
+      "target": {"mode": "linear", "recordLengths": [3012]},
+      "explicit": {"circularSlot.depth.width": 20, "objects.depth.tick_font_size": 5},
+      "expected": {
+        "kept": {},
+        "reset": [
+          {"setting": "circularSlot.depth.width", "explicit": 20, "sourceAuto": 37.05, "targetAuto": null},
+          {"setting": "objects.depth.tick_font_size", "explicit": 5, "sourceAuto": 5, "targetAuto": 7}
+        ]
+      }
+    },
+    {
+      "name": "Circular crop from a long to a short record: the feature width Auto changes, the GC width Auto does not",
+      "source": {"mode": "circular", "recordLengths": [5000000]},
+      "target": {"mode": "circular", "recordLengths": [30000]},
+      "explicit": {"circularSlot.features.width": 30, "circularSlot.gc_content.width": 60},
+      "expected": {
+        "kept": {"circularSlot.gc_content.width": 60},
+        "reset": [
+          {"setting": "circularSlot.features.width", "explicit": 30, "sourceAuto": 18.525, "targetAuto": 37.05}
+        ]
+      }
+    }
+  ],
+  "regions": [
+    {"name": "ND5 with a 600 bp margin", "recordLength": 16569, "start": 12337, "end": 14148, "margin": 600, "expected": {"start": 11737, "end": 14748, "whole": false}},
+    {"name": "A margin stops at position 1", "recordLength": 16569, "start": 100, "end": 2000, "margin": 1000, "expected": {"start": 1, "end": 3000, "whole": false}},
+    {"name": "A margin stops at the record end", "recordLength": 16569, "start": 16000, "end": 16569, "margin": 1000, "expected": {"start": 15000, "end": 16569, "whole": false}},
+    {"name": "The whole record", "recordLength": 16569, "start": 1, "end": 16569, "margin": 0, "expected": {"start": 1, "end": 16569, "whole": true}},
+    {"name": "A margin that reaches both ends gives the whole record", "recordLength": 16569, "start": 500, "end": 16000, "margin": 1000, "expected": {"start": 1, "end": 16569, "whole": true}},
+    {"name": "The control region crosses the origin", "recordLength": 16569, "start": 16024, "end": 576, "margin": 0, "expected": {"error": "crossesOrigin"}},
+    {"name": "A start before position 1", "recordLength": 16569, "start": 0, "end": 10, "margin": 0, "expected": {"error": "outOfRange"}},
+    {"name": "An end after the record end", "recordLength": 16569, "start": 10, "end": 16570, "margin": 0, "expected": {"error": "outOfRange"}}
+  ]
+}

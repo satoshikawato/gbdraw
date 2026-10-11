@@ -9,19 +9,33 @@ from __future__ import annotations
 
 from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
 from copy import deepcopy
-from dataclasses import MISSING, asdict, dataclass, fields, is_dataclass, replace
+from dataclasses import MISSING, Field, asdict, dataclass, fields, is_dataclass, replace
+from functools import lru_cache
 from io import StringIO
 import json
 import math
 from pathlib import Path
 import re
 import types
-from typing import Any, Literal, Mapping, Sequence, Union, get_args, get_origin, get_type_hints
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Literal,
+    Mapping,
+    NoReturn,
+    Sequence,
+    Union,
+    cast,
+    get_args,
+    get_origin,
+    get_type_hints,
+    overload,
+)
 
-from Bio import SeqIO  # type: ignore[reportMissingImports]
-from pandas import DataFrame, read_csv  # type: ignore[reportMissingImports]
+from Bio import SeqIO
+from pandas import DataFrame, read_csv
 
-from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.collinearity import (
     CollinearityAnchor,
     CollinearityBlock,
     CollinearityResult,
@@ -29,7 +43,7 @@ from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
 )
 from gbdraw.analysis.conservation import _default_label as _default_conservation_label
 from gbdraw.analysis.ortholog_paths import OrthologPathCollection
-from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.protein_colinearity import (
     OrthogroupMember,
     OrthogroupNameCandidate,
     OrthogroupResult,
@@ -39,14 +53,14 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
     OrthologPath,
     normalize_protein_blastp_mode,
 )
-from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from gbdraw.config.models import GbdrawConfig
 from gbdraw.comparisons.losat_jobs import record_source_paths
 from gbdraw.exceptions import ValidationError
+from gbdraw.features.overrides import FeatureOverride
 from gbdraw.features.placement import FeaturePlacementOverride
-from gbdraw.io.record_select import RecordSelector
+from gbdraw.io.record_select import RecordSelector, parse_record_selector
 from gbdraw.io.regions import RegionSpec
 from gbdraw.io.comparisons import read_comparison_table
-from gbdraw.io.filenames import safe_embedded_filename, unique_filename
 from gbdraw.core.record_metadata import _read_coord_map
 from gbdraw.linear_comparison import (
     LinearComparison,
@@ -63,6 +77,7 @@ from gbdraw.annotations import (
     AnnotationOptions,
     AnnotationSet,
     CoordinateSpan,
+    FeatureIdentitySpan,
     FeatureSelector,
     FeatureSpan,
     HatchStyle,
@@ -115,10 +130,18 @@ from .layout.similarity_alignment import (
 )
 
 
-CANONICAL_REQUEST_SCHEMA = 8
+if TYPE_CHECKING:
+    from gbdraw.annotations.models import RegionTarget
+    from gbdraw.session_resources import RequestResources, SessionResourceTable
+
+    from .api.options import LosatpMode
+
+
+CANONICAL_REQUEST_SCHEMA = 9
 DISPLAY_PLACEMENT_SCHEMA = 7
+FEATURE_OVERRIDE_SCHEMA = 9
 SUPPORTED_CANONICAL_REQUEST_SCHEMAS = frozenset(
-    {1, 2, 5, 6, 7, CANONICAL_REQUEST_SCHEMA}
+    {1, 2, 5, 6, 7, 8, CANONICAL_REQUEST_SCHEMA}
 )
 UNKNOWN_FIELD_POLICY = "reject"
 
@@ -194,7 +217,7 @@ _TOP_LEVEL_FIELDS = frozenset(
 _TOP_LEVEL_FIELDS_V5 = _TOP_LEVEL_FIELDS | {"grouping"}
 _DEFAULT_CIRCULAR_OPTIONS = CircularDiagramOptions()
 _DEFAULT_LINEAR_OPTIONS = LinearDiagramOptions()
-_SHARED_OPTION_WRONG_MODE_DEFAULTS = {
+_SHARED_OPTION_WRONG_MODE_DEFAULTS: dict[str, dict[str, object]] = {
     "circular": {
         "depth_track_heights": None,
         "pairwise_match_style": "ribbon",
@@ -228,7 +251,7 @@ _LEGACY_SPARSE_FEATURE_TYPES = (
     "misc_RNA",
     "repeat_region",
 )
-_LEGACY_SPARSE_CONFIG_OVERRIDES = {
+_LEGACY_SPARSE_CONFIG_OVERRIDES: dict[str, dict[str, object]] = {
     "circular": {
         "canvas.show_gc": True,
         "canvas.show_skew": True,
@@ -424,7 +447,10 @@ _PROTEIN_SETTINGS_WIRE: tuple[tuple[str, str, str], ...] = (
 # Schemas 1-7 also stored the retired alignment target in the settings.
 _LEGACY_ALIGNMENT_SETTING = "alignOrthogroupFeature"
 _OPTIONAL_PROTEIN_SETTINGS = frozenset({"collinearInferOrthogroups"})
-_WIRE_LOSATP_MODES = {wire: typed for typed, wire in LOSATP_MODE_WIRE.items()}
+_WIRE_LOSATP_MODES = cast(
+    "dict[str, LosatpMode | Literal['none']]",
+    {wire: typed for typed, wire in LOSATP_MODE_WIRE.items()},
+)
 # Settings of a LOSATP search that has not been configured.
 _UNSET_LOSAT_SEARCH = LosatSearchOptions(program="losatp", losatp_mode="none")
 # Circular ring LOSAT intent (encoded only after the planner resolves it) and
@@ -442,6 +468,16 @@ _TABLE_FIELDS = frozenset(
         "qualifier_priority_table",
         "label_override_table",
         "depth_table",
+    }
+)
+# The text styling tables. Every cell is text, as `read_literal_table` reads a
+# table file: an empty cell is "" and "NA" or "nan" is that text.
+_TEXT_TABLE_FIELDS = frozenset(
+    {
+        "feature_visibility_table",
+        "label_whitelist_table",
+        "qualifier_priority_table",
+        "label_override_table",
     }
 )
 _FILE_FIELDS = frozenset(
@@ -552,91 +588,25 @@ class CanonicalRequestResource:
 
 @dataclass(frozen=True)
 class EncodedCanonicalRequest:
-    """JSON-compatible request payload plus its out-of-band resources."""
+    """JSON-compatible request payload plus the resources it added."""
 
     payload: dict[str, Any]
     resources: tuple[CanonicalRequestResource, ...]
 
 
-class _ResourceBuilder:
-    """Collect resources; each gets a file name no other resource uses.
+def encode_canonical_request(
+    request: DiagramRequest,
+    *,
+    table: SessionResourceTable | None = None,
+) -> EncodedCanonicalRequest:
+    """Encode one typed request and normalize all conversion failures.
 
-    A Session materializes its resources side by side by sanitized name, so a
-    name used before (``a/X.fna`` and ``b/X.fna``) takes the next number,
-    ``X.2.fna``, the ``--losat_output_dir`` rule. Other names stay unchanged.
+    The request's resources are allocated in ``table``, a Session's resource
+    table, or alone without one; ``resources`` lists the ones it added.
     """
 
-    def __init__(self) -> None:
-        self._resources: list[CanonicalRequestResource] = []
-        self._ids: set[str] = set()
-        self._names: set[str] = set()
-        self._renamed: set[str] = set()
-
-    def add_path(self, resource_id: str, *, kind: str, value: object) -> str:
-        if not isinstance(value, (str, Path)) or not str(value).strip():
-            raise CanonicalRequestEncodingError(
-                f"Resource {resource_id!r} must identify a materialized file."
-            )
-        path = Path(str(value))
-        if not path.is_file():
-            raise CanonicalRequestEncodingError(
-                f"Canonical request resource is not a file: {path}."
-            )
-        self._add(
-            CanonicalRequestResource(
-                resource_id=resource_id,
-                kind=kind,
-                name=path.name,
-                source_path=path,
-            )
-        )
-        return resource_id
-
-    def add_bytes(
-        self,
-        resource_id: str,
-        *,
-        kind: str,
-        name: str,
-        content: bytes,
-    ) -> str:
-        self._add(
-            CanonicalRequestResource(
-                resource_id=resource_id,
-                kind=kind,
-                name=name,
-                content=content,
-            )
-        )
-        return resource_id
-
-    def renamed(self, resource_id: str) -> bool:
-        """Whether the resource's file name was numbered to stay unique."""
-
-        return resource_id in self._renamed
-
-    def _add(self, resource: CanonicalRequestResource) -> None:
-        if resource.resource_id in self._ids:
-            raise CanonicalRequestEncodingError(
-                f"Duplicate canonical resource ID: {resource.resource_id}."
-            )
-        name = unique_filename(resource.name, self._names, key=safe_embedded_filename)
-        if name != resource.name:
-            resource = replace(resource, name=name)
-            self._renamed.add(resource.resource_id)
-        self._names.add(safe_embedded_filename(name))
-        self._ids.add(resource.resource_id)
-        self._resources.append(resource)
-
-    def result(self) -> tuple[CanonicalRequestResource, ...]:
-        return tuple(self._resources)
-
-
-def encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalRequest:
-    """Encode one typed request and normalize all conversion failures."""
-
     try:
-        return _encode_canonical_request(request)
+        return _encode_canonical_request(request, table=table)
     except CanonicalRequestCodecError:
         raise
     except (TypeError, ValueError, ValidationError) as exc:
@@ -645,7 +615,11 @@ def encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalRequest
         ) from exc
 
 
-def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalRequest:
+def _encode_canonical_request(
+    request: DiagramRequest,
+    *,
+    table: SessionResourceTable | None,
+) -> EncodedCanonicalRequest:
     """Encode without embedding files or changing the session version."""
 
     if not isinstance(
@@ -702,10 +676,13 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
             )
     else:
         _validate_dataclass_contract(request.output, path="output", error="encode")
-    if getattr(request, "layout", None) is not None:
-        _validate_dataclass_contract(request.layout, path="layout", error="encode")
+    layout = getattr(request, "layout", None)
+    if layout is not None:
+        _validate_dataclass_contract(layout, path="layout", error="encode")
 
-    resources = _ResourceBuilder()
+    from gbdraw.session_resources import SessionResourceTable
+
+    resources = (table if table is not None else SessionResourceTable()).request()
     mode: Literal["circular", "linear"] = (
         "circular"
         if isinstance(request, (CircularDiagramRequest, CircularBatchRequest))
@@ -716,11 +693,18 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
         if isinstance(request, (CircularDiagramRequest, CircularBatchRequest))
         else "single"
     )
+    # A Circular batch or grid draft has no per-record selection, crop, or
+    # orientation.
+    records, frames = _encode_records(
+        request.records,
+        resources=resources,
+        per_record=mode == "linear" or grouping == "single",
+    )
     payload = {
         "schema": CANONICAL_REQUEST_SCHEMA,
         "mode": mode,
         "grouping": grouping,
-        "records": _encode_records(request.records, resources=resources),
+        "records": records,
         "diagramOptions": _encode_diagram_options(
             request.options,
             record_count=len(request.records),
@@ -731,7 +715,7 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
             request.options,
             mode=mode,
             resources=resources,
-            frames=_persisted_record_frames(request),
+            frames=frames,
         ),
         "output": (
             [_encode_output(output) for output in request.outputs]
@@ -739,7 +723,7 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
             else _encode_output(request.output)
         ),
     }
-    return EncodedCanonicalRequest(payload=payload, resources=resources.result())
+    return EncodedCanonicalRequest(payload=payload, resources=resources.added())
 
 
 def decode_canonical_request(
@@ -814,7 +798,9 @@ def _decode_canonical_request(
             "renderRequest.records must be a non-empty array."
         )
     records = tuple(
-        _decode_record(value, index=index, schema=schema, resource_paths=resource_paths)
+        _decode_record(
+            value, index=index, mode=mode, schema=schema, resource_paths=resource_paths
+        )
         for index, value in enumerate(raw_records, start=1)
     )
     options_kwargs = _decode_diagram_options(
@@ -848,6 +834,7 @@ def _decode_canonical_request(
             )
 
     if mode == "linear":
+        assert isinstance(options, LinearDiagramOptions)
         output = _decode_output(top["output"], output_directory=output_directory)
         if schema == 1:
             layout_payload = _object(top["layout"], path="renderRequest.layout")
@@ -863,6 +850,18 @@ def _decode_canonical_request(
             )
         if schema == 1:
             similarity_alignment = None
+        if schema < 6 and linear_layout is not None and linear_layout.multi_record_positions:
+            # Schemas 2-5 wrote one ``#<card>@<row>`` per record card; as Web
+            # Load promotes them, each card's row becomes its gridRow, which
+            # the records an ALL card expands to inherit.
+            rows = [token.rpartition("@")[2] for token in linear_layout.multi_record_positions]
+            records = tuple(
+                replace(record, presentation=replace(record.presentation, grid_row=int(row)))
+                if row.isdigit() and int(row) > 0
+                else record
+                for record, row in zip(records, [*rows, *[""] * len(records)])
+            )
+            linear_layout = replace(linear_layout, multi_record_positions=None)
         request = LinearDiagramRequest(
             records=records,
             options=options,
@@ -877,6 +876,7 @@ def _decode_canonical_request(
             )
         return request
 
+    assert isinstance(options, CircularDiagramOptions)
     layout = _decode_circular_layout(top["layout"], schema=schema)
     if schema in {1, 2}:
         grouping = "grid" if layout is not None or len(records) > 1 else "single"
@@ -918,19 +918,139 @@ def _genbank_bytes(records: Sequence[Any], *, index: int) -> bytes:
     return stream.getvalue().encode("utf-8")
 
 
+def _shared_record_selector(
+    record_id: str, *, record_index: int, unique: bool
+) -> RecordSelector:
+    """A record of a shared resource: its ID when unique and usable, else its index."""
+
+    if unique and not record_id.startswith("#"):
+        selector = parse_record_selector(record_id)
+        if selector is not None and selector.record_id == record_id:
+            return selector
+    return RecordSelector(
+        raw=f"#{record_index + 1}", record_id=None, record_index=record_index
+    )
+
+
+# The resources of a source file read by the planner: (resource kind, source field).
+_SOURCE_FILE_RESOURCES: Mapping[str, tuple[tuple[str, str], ...]] = {
+    "genbank": (("genbank", "resourceId"),),
+    "gff_fasta": (("gff3", "gffResourceId"), ("fasta", "fastaResourceId")),
+}
+
+
+def _source_file_transform(record: Any) -> tuple[tuple[int, int] | None, bool] | None:
+    """The crop and orientation that redraw ``record`` from its source file record.
+
+    Each crop and reverse complement the planner applies moves the record's
+    coordinate map (the source base of display base 1 and its step), and a
+    crop marks the record; nothing else changes the bases it draws. Returns the
+    cropped source span (``None`` when uncropped) and whether the drawn record
+    is reverse-complemented, or ``None`` when the map is not a span of the
+    source record.
+    """
+
+    annotations = record.annotations
+    base, step = _read_coord_map(record)
+    length = len(record)
+    source_length = annotations.get("gbdraw_source_length", length)
+    first, last = (base, base + length - 1) if step > 0 else (base - length + 1, base)
+    if not isinstance(source_length, int) or not 1 <= first <= last <= source_length:
+        return None
+    if annotations.get("gbdraw_region_applied"):
+        return (first, last), step < 0
+    if (first, last) != (1, source_length):
+        return None
+    return None, step < 0
+
+
+def _source_file_transforms(
+    records: Sequence[Any], paths: tuple[str, ...], *, per_record: bool
+) -> list[tuple[tuple[int, int] | None, bool]] | None:
+    """Each record's crop and orientation when the records are drawn from their files.
+
+    The planner annotates each record it reads with its source kind and its
+    index among the file's records. Returns ``None`` unless each record of
+    the files is drawn at most once and each is the file's record. Only when
+    ``per_record`` allows it may some records of the files be left undrawn,
+    or a record be cropped or reverse-complemented.
+    """
+
+    annotations = [record.annotations for record in records]
+    kind = annotations[0].get("gbdraw_source_kind")
+    count = annotations[0].get("gbdraw_source_record_count")
+    indexes = sorted(item.get("gbdraw_source_record_index", -1) for item in annotations)
+    if not (
+        len(paths) == len(_SOURCE_FILE_RESOURCES.get(str(kind), ()))
+        and isinstance(count, int)
+        and all(Path(path).is_file() for path in paths)
+        and (indexes == list(range(count)) or (
+            per_record
+            and len(set(indexes)) == len(indexes)
+            and 0 <= indexes[0]
+            and indexes[-1] < count
+        ))
+        and all(
+            item.get("gbdraw_source_kind") == kind
+            and item.get("gbdraw_source_record_count") == count
+            for item in annotations
+        )
+    ):
+        return None
+    found = [_source_file_transform(record) for record in records]
+    if None in found or not (per_record or all(item == (None, False) for item in found)):
+        return None
+    # None is not in found here.
+    return cast("list[tuple[tuple[int, int] | None, bool]]", found)
+
+
+def _source_region(
+    span: tuple[int, int], reverse: bool, selector: RecordSelector | None
+) -> RegionSpec:
+    """A source-coordinate crop of the selected record, reverse-complemented when drawn so."""
+
+    coordinates = f"{span[0]}-{span[1]}" + (":rc" if reverse else "")
+    return RegionSpec(
+        raw=f"{selector.raw}:{coordinates}" if selector is not None else coordinates,
+        file_selector=None,
+        record_id=selector.record_id if selector is not None else None,
+        record_index=selector.record_index if selector is not None else None,
+        start=span[0],
+        end=span[1],
+        reverse_complement=reverse,
+    )
+
+
 def _encode_records(
     records: Sequence[RecordInput],
     *,
-    resources: _ResourceBuilder,
-) -> list[dict[str, Any]]:
+    resources: RequestResources,
+    per_record: bool,
+) -> tuple[list[dict[str, Any]], tuple[tuple[int, bool], ...]]:
     """Encode records; the in-memory records of one source file share a resource.
 
-    The planner projects each displayed record to an in-memory record. Records
-    whose provenance names one source file are written to one GenBank resource
-    and selected by index, the shape the Web writes for one uploaded
-    multi-record file, so a replay keeps one file as one LOSAT source
-    (:func:`gbdraw.comparisons.losat_jobs.losat_source_ids`). Any other
-    in-memory record is its own source and keeps its own resource.
+    The planner projects each displayed record to an in-memory record. When
+    they are records of their source file, each drawn once, that file's own
+    bytes are the resource, and each record's crop (in source coordinates) and
+    orientation are its region and reverse complement, as the Web writes them:
+    the CLI binds the same file for the Web draft, so Session Load sees the
+    request draw from its bound inputs. ``per_record`` says whether the Web
+    draft selects, crops, and orients each record (every Linear record, and a
+    single Circular record); otherwise only every record of the file, each
+    unchanged, reads the file. Other records whose provenance names one source
+    file are written as drawn to one GenBank resource named after that file.
+    Records of a multi-record file are selected by record ID (by index when an
+    ID is repeated or unusable), the shape the Web writes for the records it
+    draws of one uploaded multi-record file, so a replay or Web load keeps one
+    file as one File and one LOSAT source
+    (:func:`gbdraw.comparisons.losat_jobs.losat_source_ids`) and draws only
+    the selected records. Any other in-memory record is its own source and
+    keeps its own resource.
+
+    Also returns each record's persisted comparison frame ``(L, reversed)``
+    (PD-OI-073): a record written as its reverse-complemented sequence has the
+    displayed search frame, so comparison rows that touch it are written in
+    that frame; a source file with a reverse complement keeps its rows.
     """
 
     groups: dict[tuple[str, ...], list[int]] = {}
@@ -939,46 +1059,101 @@ def _encode_records(
             paths = record_source_paths(record.source.record)
             if paths:
                 groups.setdefault(paths, []).append(position)
-    shared: dict[int, tuple[dict[str, Any], RecordSelector]] = {}
-    for members in groups.values():
-        if len(members) < 2:
-            continue
+    shared: dict[int, tuple[dict[str, Any], RecordSelector | None]] = {}
+    transformed: dict[int, RecordInput] = {}
+    for paths, members in groups.items():
         first = members[0] + 1
-        resource_id = resources.add_bytes(
-            f"record-{first}-genbank",
-            kind="genbank",
-            name=f"record-{first}.gbk",
-            content=_genbank_bytes(
-                [records[position].source.record for position in members],  # type: ignore[union-attr]
-                index=first,
-            ),
-        )
-        for record_index, position in enumerate(members):
-            shared[position] = (
-                {"kind": "genbank", "resourceId": resource_id},
-                RecordSelector(
-                    raw=f"#{record_index + 1}",
-                    record_id=None,
-                    record_index=record_index,
+        # Only in-memory sources were grouped above.
+        members_records = [
+            cast(InMemoryRecordSource, records[position].source).record for position in members
+        ]
+        found = _source_file_transforms(members_records, paths, per_record=per_record)
+        if found is not None:
+            file_resources = _SOURCE_FILE_RESOURCES[
+                members_records[0].annotations["gbdraw_source_kind"]
+            ]
+            source_payload: dict[str, Any] = {
+                "kind": "genbank" if len(file_resources) == 1 else "gffFasta"
+            }
+            for path, (kind, field) in zip(paths, file_resources, strict=True):
+                source_payload[field] = resources.add_bytes(
+                    f"record-{first}-{kind}",
+                    kind=kind,
+                    name=Path(path).name,
+                    content=Path(path).read_bytes(),
+                )
+            ids = [str(record.annotations.get("gbdraw_source_record_id", record.id))
+                   for record in members_records]
+            record_indexes = [record.annotations["gbdraw_source_record_index"]
+                              for record in members_records]
+            # The file's other records may share an ID with a drawn record.
+            unique = [bool(record.annotations.get("gbdraw_source_record_id_unique"))
+                      for record in members_records]
+            single = members_records[0].annotations["gbdraw_source_record_count"] == 1
+        elif len(members) > 1:
+            source_payload = {"kind": "genbank", "resourceId": resources.add_bytes(
+                f"record-{first}-genbank",
+                kind="genbank",
+                name=(
+                    Path(paths[0]).name
+                    if len(paths) == 1 and Path(paths[0]).name
+                    else f"record-{first}.gbk"
                 ),
+                content=_genbank_bytes(members_records, index=first),
+            )}
+            ids = [str(record.id) for record in members_records]
+            record_indexes = list(range(len(members)))
+            unique = [ids.count(record_id) == 1 for record_id in ids]
+            single = False
+        else:
+            continue
+        for offset, (position, record_id, record_index, is_unique) in enumerate(
+            zip(members, ids, record_indexes, unique, strict=True)
+        ):
+            selector = None if single else _shared_record_selector(
+                record_id,
+                record_index=record_index,
+                unique=is_unique,
             )
-    return [
+            if found is not None:
+                span, reverse = found[offset]
+                record = records[position]
+                transformed[position] = replace(
+                    record,
+                    region=None if span is None else _source_region(span, reverse, selector),
+                    presentation=replace(
+                        record.presentation, reverse_complement=reverse and span is None
+                    ),
+                )
+                # A crop names its record in the region, as the Web writes it.
+                selector = selector if span is None else None
+            shared[position] = (source_payload, selector)
+    payloads = [
         _encode_record(
-            record,
+            transformed.get(position, record),
             index=position + 1,
             resources=resources,
             shared_source=shared.get(position),
         )
         for position, record in enumerate(records)
     ]
+    frames = tuple(
+        (len(record.source.record), True)
+        if position not in transformed
+        and isinstance(record.source, InMemoryRecordSource)
+        and _read_coord_map(record.source.record)[1] == -1
+        else (0, False)
+        for position, record in enumerate(records)
+    )
+    return payloads, frames
 
 
 def _encode_record(
     record: RecordInput,
     *,
     index: int,
-    resources: _ResourceBuilder,
-    shared_source: tuple[dict[str, Any], RecordSelector] | None = None,
+    resources: RequestResources,
+    shared_source: tuple[dict[str, Any], RecordSelector | None] | None = None,
 ) -> dict[str, Any]:
     source = record.source
     selector = record.selector
@@ -1033,10 +1208,24 @@ def _encode_record(
     }
 
 
+def legacy_record_cardinality(mode: object, record: Mapping[str, Any]) -> RecordCardinality:
+    """The cardinality of a request schema 1-5 record, which saved none.
+
+    As Web Load promotes it (``promoteRenderRequestToSchema8``), a Linear
+    record without selector and region draws every record of its source; any
+    other record draws one.
+    """
+
+    if mode == "linear" and record.get("selector") is None and record.get("region") is None:
+        return RecordCardinality.ALL
+    return RecordCardinality.EXACTLY_ONE
+
+
 def _decode_record(
     value: object,
     *,
     index: int,
+    mode: str,
     schema: int,
     resource_paths: Mapping[str, str | Path],
 ) -> RecordInput:
@@ -1058,6 +1247,7 @@ def _decode_record(
         item["source"], path=f"{path}.source", required={"kind"}, exact=False
     )
     kind = source_payload["kind"]
+    source: GenBankInputSource | GffFastaInputSource
     if kind == "genbank":
         _require_exact_fields(
             source_payload, path=f"{path}.source", required={"kind", "resourceId"}
@@ -1118,7 +1308,7 @@ def _decode_record(
         cardinality=(
             RecordCardinality(item["cardinality"])
             if schema >= 6
-            else RecordCardinality.EXACTLY_ONE
+            else legacy_record_cardinality(mode, item)
         ),
         selector=_decode_selector(item["selector"], path=f"{path}.selector"),
         region=_decode_region(item["region"], path=f"{path}.region"),
@@ -1336,8 +1526,9 @@ def _encode_layout(request: DiagramRequest) -> dict[str, Any]:
                 }
                 for translation in request.layout.record_translations
             ],
+            # encode_canonical_request rejects an unresolved reference first.
             "similarityAlignment": _encode_similarity_alignment_plan(
-                request.similarity_alignment
+                cast("SimilarityAlignmentPlan | None", request.similarity_alignment)
             ),
         }
     if not isinstance(request, CircularDiagramRequest) or request.layout is None:
@@ -1493,6 +1684,7 @@ def _decode_linear_layout(
 
 _PLACEMENT_INPUT_FIELDS = frozenset({
     "feature_placements", "feature_placement_table", "feature_placement_table_file",
+    "feature_overrides", "feature_override_table", "feature_override_table_file",
 })
 
 
@@ -1500,8 +1692,9 @@ def _encode_diagram_options(
     options: CircularDiagramOptions | LinearDiagramOptions,
     *,
     record_count: int,
-    resources: _ResourceBuilder,
+    resources: RequestResources,
 ) -> dict[str, Any]:
+    default_options: CircularDiagramOptions | LinearDiagramOptions
     if isinstance(options, CircularDiagramOptions):
         default_options = _DEFAULT_CIRCULAR_OPTIONS
     elif isinstance(options, LinearDiagramOptions):
@@ -1514,6 +1707,11 @@ def _encode_diagram_options(
             or options.feature_placement_table_file is not None):
         raise CanonicalRequestEncodingError(
             "Feature placement tables must be materialized before canonical encoding."
+        )
+    if (options.feature_override_table is not None
+            or options.feature_override_table_file is not None):
+        raise CanonicalRequestEncodingError(
+            "Feature override tables must be materialized before canonical encoding."
         )
     depth_tracks = _canonical_depth_tracks_for_encoding(
         options,
@@ -1528,13 +1726,14 @@ def _encode_diagram_options(
             }),
         }
         for row in options.feature_placements
-    ]}
+    ], "featureOverrides": [row.to_mapping() for row in options.feature_overrides]}
     for item in fields(options):
         name = item.name
         if name in _COMPARISON_FIELDS or name in _ALL_DEPTH_INPUT_FIELDS or name in _PLACEMENT_INPUT_FIELDS:
             continue
         if name == "conservation_search_results":
-            if getattr(options, name):
+            assert isinstance(options, CircularDiagramOptions)
+            if options.conservation_search_results:
                 # Planner-resolved ring rows are stored as the Web stores them.
                 result["conservationBlastFiles"] = [
                     {
@@ -1554,7 +1753,7 @@ def _encode_diagram_options(
         if _same_default(value, default):
             continue
         result[_option_wire_key(name)] = _encode_option_value(name, value, resources=resources)
-    labels = _ring_labels_of_renamed_files(options, result.get("conservationBlastFiles"), resources)
+    labels = _precomputed_ring_labels(options)
     if labels is not None:
         result["conservationLabels"] = _encode_option_value(
             "conservation_labels", labels, resources=resources
@@ -1567,21 +1766,17 @@ def _encode_diagram_options(
     return result
 
 
-def _ring_labels_of_renamed_files(
+def _precomputed_ring_labels(
     options: CircularDiagramOptions | LinearDiagramOptions,
-    refs: object,
-    resources: _ResourceBuilder,
 ) -> tuple[str, ...] | None:
-    """Ring labels to store when a ring file without a label was renamed.
+    """The drawn label of every precomputed ring, stored so a replay never derives one.
 
-    A ring without a label is labelled with its file name, which a replay reads
-    from the resource name; storing the labels keeps the drawn labels.
+    A Session without them predates D-03 and drew the full file name
+    (``_decode_diagram_options``); a renamed resource would also change it.
     """
 
     files = tuple(getattr(options, "conservation_blast_files", None) or ())
-    if not files or not isinstance(refs, list) or not any(
-        resources.renamed(ref["resourceId"]) for ref in refs if isinstance(ref, Mapping)
-    ):
+    if not files:
         return None
     given = getattr(options, "conservation_labels", None)
     count = max(len(files), len(getattr(options, "conservation_dataframes", None) or ()))
@@ -1603,8 +1798,8 @@ def _decode_diagram_options(
     payload = _object(value, path="renderRequest.diagramOptions")
     if schema in {1, 2}:
         payload = _migrate_legacy_feature_visibility_fields(payload)
-    payload = dict(payload)
-    placements = ()
+    payload = with_automatic_scale_interval(payload)
+    placements: tuple[FeaturePlacementOverride, ...] = ()
     if schema >= DISPLAY_PLACEMENT_SCHEMA:
         if not isinstance(payload.get("featurePlacements"), list):
             raise CanonicalRequestDecodingError("diagramOptions.featurePlacements must be an array.")
@@ -1612,6 +1807,11 @@ def _decode_diagram_options(
                            for row in payload.pop("featurePlacements"))
         for row in placements:
             row.target.validate_mode(mode)
+    overrides: tuple[FeatureOverride, ...] = ()
+    if schema >= FEATURE_OVERRIDE_SCHEMA:
+        if not isinstance(payload.get("featureOverrides"), list):
+            raise CanonicalRequestDecodingError("diagramOptions.featureOverrides must be an array.")
+        overrides = tuple(FeatureOverride.from_mapping(row) for row in payload.pop("featureOverrides"))
     for name, default in _SHARED_OPTION_WRONG_MODE_DEFAULTS[mode].items():
         key = _option_wire_key(name)
         if key in payload and payload[key] == default:
@@ -1644,6 +1844,15 @@ def _decode_diagram_options(
         for key, raw in payload.items()
     }
     decoded["feature_placements"] = placements
+    decoded["feature_overrides"] = overrides
+    if "conservationBlastFiles" in payload and "conservationLabels" not in payload:
+        # Writers before D-03 stored no label for a precomputed ring and drew its file name.
+        files = decoded.get("conservation_blast_files") or ()
+        count = max(len(files), len(decoded.get("conservation_dataframes") or ()))
+        decoded["conservation_labels"] = tuple(
+            Path(files[index]).name if index < len(files) else f"Conservation {index + 1}"
+            for index in range(count)
+        )
     if decoded.get("config_overrides") is not None:
         decoded["config_overrides"] = _decode_config_overrides(
             decoded["config_overrides"],
@@ -1657,6 +1866,36 @@ def _decode_diagram_options(
     if schema in {1, 2}:
         _restore_legacy_sparse_defaults(decoded, mode=mode)
     return decoded
+
+
+def with_automatic_scale_interval(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Return request ``diagramOptions`` with a scale interval <= 0 read as automatic.
+
+    Every request writer drew it so; the CLI, the option objects, and the Web
+    field refuse such a value as input (D-04), but a request keeps its meaning.
+    The decoder and the Web Load check of the stored configuration use it.
+    """
+
+    def automatic(holder: object, key: str) -> object:
+        if not isinstance(holder, Mapping):
+            return holder
+        value = holder.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or value > 0:
+            return holder
+        return {**holder, key: None}
+
+    result = dict(payload)
+    config = result.get("config")
+    if isinstance(config, Mapping) and isinstance(objects := config.get("objects"), Mapping):
+        scale = automatic(objects.get("scale"), "interval")
+        if scale is not objects.get("scale"):
+            result["config"] = {**config, "objects": {**objects, "scale": scale}}
+    overrides = result.get("configOverrides")
+    for key in ("objects.scale.interval", "scale_interval"):
+        overrides = automatic(overrides, key)
+    if overrides is not result.get("configOverrides"):
+        result["configOverrides"] = overrides
+    return result
 
 
 def _migrate_legacy_feature_visibility_fields(
@@ -1973,8 +2212,10 @@ def _legacy_mode_label_scopes(
         raise CanonicalRequestDecodingError(
             f"{path} contains Linear-only label policy {normalized!r}."
         )
-    circular_scope = "outer" if normalized == "all" else "none"
-    return circular_scope, normalized  # type: ignore[return-value]
+    circular_scope: Literal["none", "outer"] = "outer" if normalized == "all" else "none"
+    return circular_scope, cast(
+        'Literal["none", "all", "first", "orthogroup_top"]', normalized
+    )
 
 
 def _retired_config_override(overrides: Mapping[str, Any]) -> str | None:
@@ -2029,7 +2270,7 @@ def _encode_depth_source(
     value: object,
     *,
     name: str,
-    resources: _ResourceBuilder,
+    resources: RequestResources,
 ) -> dict[str, str]:
     if isinstance(value, DataFrame):
         return _table_ref(name, value, resources=resources)
@@ -2251,7 +2492,7 @@ def _canonical_depth_tracks_for_encoding(
 def _encode_depth_tracks(
     value: object,
     *,
-    resources: _ResourceBuilder,
+    resources: RequestResources,
 ) -> list[dict[str, Any]]:
     tracks = _sequence(value, name="depth_tracks")
     encoded: list[dict[str, Any]] = []
@@ -2409,7 +2650,7 @@ def _encode_option_value(
     name: str,
     value: object,
     *,
-    resources: _ResourceBuilder,
+    resources: RequestResources,
 ) -> Any:
     if name == "config":
         if isinstance(value, GbdrawConfig):
@@ -2487,13 +2728,18 @@ def _decode_option_value(
     if name == "tracks":
         return _decode_tracks(value, mode=mode, schema=schema)
     if name == "annotations":
-        return _decode_annotations(value, resource_paths=resource_paths)
+        return _decode_annotations(value, schema=schema, resource_paths=resource_paths)
     if name == "output":
         return _decode_assembly_output(value, mode=mode, schema=schema)
     if name == "depth_tracks":
         return _decode_depth_tracks(value, resource_paths=resource_paths)
     if name in _TABLE_FIELDS:
-        return _decode_table_ref(value, name=name, resource_paths=resource_paths)
+        return _decode_table_ref(
+            value,
+            name=name,
+            resource_paths=resource_paths,
+            text_cells=name in _TEXT_TABLE_FIELDS,
+        )
     if name in _FILE_FIELDS:
         return str(_decode_file_ref(value, name=name, resource_paths=resource_paths))
     if name in _TABLE_SEQUENCE_FIELDS:
@@ -2653,7 +2899,7 @@ def _migrate_legacy_full_config(
     return migrated
 
 
-def _encode_colors(value: object, *, resources: _ResourceBuilder) -> dict[str, Any]:
+def _encode_colors(value: object, *, resources: RequestResources) -> dict[str, Any]:
     if not isinstance(value, ColorOptions):
         raise CanonicalRequestEncodingError("diagramOptions.colors must be ColorOptions.")
     return {
@@ -2706,6 +2952,7 @@ def _decode_colors(
                 payload["colorTable"],
                 name="colors-color-table",
                 resource_paths=resource_paths,
+                text_cells=True,
             )
             if payload["colorTable"] is not None
             else None
@@ -2726,6 +2973,7 @@ def _decode_colors(
                 payload["defaultColors"],
                 name="colors-default-colors",
                 resource_paths=resource_paths,
+                text_cells=True,
             )
             if payload["defaultColors"] is not None
             else None
@@ -2895,7 +3143,7 @@ def _decode_annotation_style(value: object, *, path: str) -> RegionAnnotationSty
     )
 
 
-def _encode_annotations(value: object, *, resources: _ResourceBuilder) -> dict[str, Any]:
+def _encode_annotations(value: object, *, resources: RequestResources) -> dict[str, Any]:
     if not isinstance(value, AnnotationOptions):
         raise CanonicalRequestEncodingError("diagramOptions.annotations must be AnnotationOptions.")
     sets = []
@@ -2903,6 +3151,7 @@ def _encode_annotations(value: object, *, resources: _ResourceBuilder) -> dict[s
         items = []
         for annotation in annotation_set.annotations:
             target = annotation.target
+            target_payload: dict[str, Any]
             if isinstance(target, CoordinateSpan):
                 target_payload = {
                     "kind": "coordinateSpan",
@@ -2921,6 +3170,14 @@ def _encode_annotations(value: object, *, resources: _ResourceBuilder) -> dict[s
                         {"key": selector.key, "value": selector.value}
                         for selector in target.selectors
                     ],
+                    "envelope": target.envelope,
+                    "circularPath": target.circular_path,
+                }
+            elif isinstance(target, FeatureIdentitySpan):
+                target_payload = {
+                    "kind": "featureIdentity",
+                    "recordKey": target.record_key,
+                    "biologicalFeatureId": target.biological_feature_id,
                     "envelope": target.envelope,
                     "circularPath": target.circular_path,
                 }
@@ -2962,6 +3219,7 @@ def _encode_annotations(value: object, *, resources: _ResourceBuilder) -> dict[s
 def _decode_annotations(
     value: object,
     *,
+    schema: int,
     resource_paths: Mapping[str, str | Path],
 ) -> AnnotationOptions:
     path = "renderRequest.diagramOptions.annotations"
@@ -2986,6 +3244,7 @@ def _decode_annotations(
             )
             target_payload = _object(item["target"], path=f"{item_path}.target", required={"kind"}, exact=False)
             kind = target_payload["kind"]
+            target: RegionTarget
             if kind == "coordinateSpan":
                 _require_exact_fields(
                     target_payload,
@@ -3017,6 +3276,18 @@ def _decode_annotations(
                     envelope=target_payload["envelope"],
                     circular_path=target_payload["circularPath"],
                 )
+            elif kind == "featureIdentity" and schema >= FEATURE_OVERRIDE_SCHEMA:
+                _require_exact_fields(
+                    target_payload,
+                    path=f"{item_path}.target",
+                    required={"kind", "recordKey", "biologicalFeatureId", "envelope", "circularPath"},
+                )
+                target = FeatureIdentitySpan(
+                    record_key=target_payload["recordKey"],
+                    biological_feature_id=target_payload["biologicalFeatureId"],
+                    envelope=target_payload["envelope"],
+                    circular_path=target_payload["circularPath"],
+                )
             else:
                 raise CanonicalRequestDecodingError(f"Unsupported annotation target kind at {item_path}: {kind!r}.")
             metadata = _object(item["metadata"], path=f"{item_path}.metadata")
@@ -3037,7 +3308,12 @@ def _decode_annotations(
             )
         )
     table = (
-        _decode_table_ref(payload["table"], name="annotations-table", resource_paths=resource_paths)
+        _decode_table_ref(
+            payload["table"],
+            name="annotations-table",
+            resource_paths=resource_paths,
+            text_cells=True,
+        )
         if payload["table"] is not None else None
     )
     table_file = (
@@ -3070,7 +3346,7 @@ def _encode_track_slot(
     *,
     kind: str,
 ) -> dict[str, Any]:
-    result = {"kind": kind}
+    result: dict[str, Any] = {"kind": kind}
     legacy_spacing = (
         slot.legacy_spacing
         if isinstance(slot, _InternalCircularTrackSlot)
@@ -3102,6 +3378,7 @@ def _encode_track_slot(
                 raw["style_override"] = _encode_annotation_style(raw["style_override"])
         result[_camel(item.name)] = _json_value(raw, path=f"trackSlot.{_camel(item.name)}")
     if legacy_spacing is not None:
+        assert isinstance(slot, CircularTrackSlot)
         if legacy_spacing.unit != "px":
             raise CanonicalRequestEncodingError(
                 "A legacy factor-based Circular spacing value can be replayed "
@@ -3119,6 +3396,26 @@ def _encode_track_slot(
             else legacy_spacing.value
         )
     return result
+
+
+@overload
+def _decode_track_slots(
+    value: object,
+    *,
+    mode: Literal["circular"],
+    schema: int,
+    path: str,
+) -> tuple[str | CircularTrackSlot, ...] | None: ...
+
+
+@overload
+def _decode_track_slots(
+    value: object,
+    *,
+    mode: Literal["linear"],
+    schema: int,
+    path: str,
+) -> tuple[str | LinearTrackSlot, ...] | None: ...
 
 
 def _decode_track_slots(
@@ -3166,7 +3463,7 @@ def _decode_track_slots(
                 legacy_spacing = (
                     decoded_spacing
                     if isinstance(decoded_spacing, ScalarSpec)
-                    else ScalarSpec.parse(decoded_spacing)
+                    else ScalarSpec.parse(str(decoded_spacing))
                 )
         if slot["kind"] != expected_kind:
             raise CanonicalRequestDecodingError(
@@ -3181,7 +3478,8 @@ def _decode_track_slots(
             if mode == "circular"
             else {"height", "spacing"}
         )
-        kwargs = {
+        # Wire values; _validate_dataclass_contract checks the constructed slot.
+        kwargs: dict[str, Any] = {
             name: (
                 _decode_scalar_if_needed(slot[key], path=f"{slot_path}.{key}")
                 if name in scalar_fields
@@ -3299,7 +3597,7 @@ def _encode_resource_matrix(
     value: object,
     *,
     table: bool,
-    resources: _ResourceBuilder,
+    resources: RequestResources,
 ) -> list[list[dict[str, str] | None]]:
     result: list[list[dict[str, str] | None]] = []
     for row_index, row in enumerate(_sequence(value, name=name), start=1):
@@ -3356,26 +3654,6 @@ def _decode_resource_matrix(
     return tuple(result)
 
 
-def _persisted_record_frames(request: Any) -> tuple[tuple[int, bool], ...]:
-    """Return ``(L, reversed)`` of each record as the Session persists it (PD-OI-073).
-
-    A materialized reverse-complemented record is persisted as its reversed
-    sequence, whose search frame is the displayed one, so comparison rows that
-    touch it are written in that frame; a file source with
-    ``reverseComplement`` keeps its rows. Every other record is ``(0, False)``;
-    a Circular request has no comparisons.
-    """
-
-    if not isinstance(getattr(request, "options", None), LinearDiagramOptions):
-        return ()
-    frames = []
-    for record_input in request.records:
-        record = getattr(record_input.source, "record", None)
-        reversed_record = isinstance(record_input.source, InMemoryRecordSource) and _read_coord_map(record)[1] == -1
-        frames.append((len(record), True) if reversed_record else (0, False))
-    return tuple(frames)
-
-
 def _record_frame(frames: tuple[tuple[int, bool], ...], index: int) -> tuple[int, bool]:
     return frames[index] if 0 <= index < len(frames) else (0, False)
 
@@ -3384,7 +3662,7 @@ def _encode_comparisons(
     options: CircularDiagramOptions | LinearDiagramOptions,
     *,
     mode: Literal["circular", "linear"],
-    resources: _ResourceBuilder,
+    resources: RequestResources,
     frames: tuple[tuple[int, bool], ...],
 ) -> list[dict[str, Any]]:
     if mode == "circular":
@@ -3498,17 +3776,17 @@ def _encode_comparisons(
         )
     search = options.losat_search
     pairs = search.pairs if search is not None else None
-    mode = losatp_analysis_mode(search)
+    protein_mode = losatp_analysis_mode(search)
     settings = _encode_protein_settings(options)
     if (
-        mode != "none"
+        protein_mode != "none"
         or pairs is not None
         or settings != _encode_protein_settings(_DEFAULT_LINEAR_OPTIONS)
     ):
         result.append(
             {
                 "kind": "generatedProteinComparison",
-                "mode": mode,
+                "mode": protein_mode,
                 "pairs": [
                     {
                         "queryRecordIndex": int(pair[0]),
@@ -3539,7 +3817,7 @@ def _nucleotide_blast_resource(
     path: object,
     *,
     frames: tuple[tuple[int, bool], tuple[int, bool]],
-    resources: _ResourceBuilder,
+    resources: RequestResources,
 ) -> str:
     """Persist one ``-b`` table, rewritten for a reverse-complemented record.
 
@@ -3594,6 +3872,12 @@ def _decode_comparisons(
                 resource_paths=resource_paths,
             )
             if schema >= 2:
+                query_index = _non_negative_index(
+                    item["queryRecordIndex"], f"{path}.queryRecordIndex"
+                )
+                subject_index = _non_negative_index(
+                    item["subjectRecordIndex"], f"{path}.subjectRecordIndex"
+                )
                 # The resource text stays on the edge, so a re-saved Session
                 # writes the same nucleotideBlast resource.
                 try:
@@ -3602,15 +3886,14 @@ def _decode_comparisons(
                         StringIO(text), label=f"BLAST resource {item['resourceId']!r}"
                     )
                 except (OSError, UnicodeError, ValidationError) as exc:
+                    # The reader's diagnostic plus the record pair the Web names (CI-04).
+                    cause = getattr(exc, "diagnostic", None) or (
+                        None if isinstance(exc, ValidationError) else {"code": "INPUT_UNREADABLE", "field": "comparison"}
+                    )
                     raise CanonicalRequestDecodingError(
-                        f"Could not decode {path}: {exc}"
+                        f"Could not decode {path}: {exc}",
+                        diagnostic=cause and {**cause, "queryRecordIndex": query_index, "subjectRecordIndex": subject_index},
                     ) from exc
-                query_index = _non_negative_index(
-                    item["queryRecordIndex"], f"{path}.queryRecordIndex"
-                )
-                subject_index = _non_negative_index(
-                    item["subjectRecordIndex"], f"{path}.subjectRecordIndex"
-                )
                 explicit_comparisons.append(
                     LinearComparison(query_index, subject_index, table, search_frame_text=text)
                 )
@@ -3904,7 +4187,7 @@ def _table_ref(
     name: str,
     value: object,
     *,
-    resources: _ResourceBuilder,
+    resources: RequestResources,
 ) -> dict[str, str]:
     if not isinstance(value, DataFrame):
         raise CanonicalRequestEncodingError(f"{name} must be a pandas DataFrame.")
@@ -3918,11 +4201,11 @@ def _table_ref(
         raise CanonicalRequestEncodingError(
             f"Could not encode DataFrame resource {name!r} as canonical TSV."
         ) from exc
-    resource_id = _resource_id(name)
-    resources.add_bytes(
-        resource_id,
+    preferred_id = _resource_id(name)
+    resource_id = resources.add_bytes(
+        preferred_id,
         kind="canonical-tsv",
-        name=f"{resource_id}.tsv",
+        name=f"{preferred_id}.tsv",
         content=text.encode("utf-8"),
     )
     return {"resourceId": resource_id, "representation": "canonicalTsv"}
@@ -3932,10 +4215,10 @@ def _file_ref(
     name: str,
     value: object,
     *,
-    resources: _ResourceBuilder,
+    resources: RequestResources,
 ) -> dict[str, str]:
-    resource_id = _resource_id(name)
-    resources.add_path(resource_id, kind=_resource_id(name), value=value)
+    preferred_id = _resource_id(name)
+    resource_id = resources.add_path(preferred_id, kind=preferred_id, value=value)
     return {"resourceId": resource_id, "representation": "file"}
 
 
@@ -3944,6 +4227,7 @@ def _decode_table_ref(
     *,
     name: str,
     resource_paths: Mapping[str, str | Path],
+    text_cells: bool = False,
 ) -> DataFrame:
     ref = _resource_ref(value, path=f"resource reference {name}", representation="canonicalTsv")
     return _read_canonical_table(
@@ -3953,6 +4237,7 @@ def _decode_table_ref(
             resource_paths=resource_paths,
         ),
         context=name,
+        text_cells=text_cells,
     )
 
 
@@ -3986,9 +4271,16 @@ def _resource_ref(
     return ref
 
 
-def _read_canonical_table(file_path: Path, *, context: str) -> DataFrame:
+def _read_canonical_table(
+    file_path: Path, *, context: str, text_cells: bool = False
+) -> DataFrame:
+    # A text table keeps every cell as written (an empty label text stays "");
+    # the numeric tables (depth, comparisons) take pandas' inferred dtypes.
+    text_options: dict[str, Any] = (
+        {"dtype": str, "keep_default_na": False} if text_cells else {}
+    )
     try:
-        table = read_csv(file_path, sep="\t")
+        table = read_csv(file_path, sep="\t", **text_options)
     except Exception as exc:
         raise CanonicalRequestDecodingError(
             f"Could not decode canonical TSV resource for {context}."
@@ -4004,16 +4296,15 @@ def _typed_json_resource(
     kind: str,
     value_kind: str,
     value: object,
-    resources: _ResourceBuilder,
+    resources: RequestResources,
 ) -> str:
     content = encode_canonical_typed_resource(value_kind, value)
-    resources.add_bytes(
+    return resources.add_bytes(
         resource_id,
         kind=kind,
         name=f"{resource_id}.json",
         content=content,
     )
-    return resource_id
 
 
 def encode_canonical_typed_resource(value_kind: str, value: object) -> bytes:
@@ -4201,8 +4492,8 @@ def _decode_typed_tree(
                 f"Unsupported typed resource object at {path}: {tagged['type']!r}."
             )
         raw_fields = _object(tagged["fields"], path=f"{path}.fields")
-        hints = get_type_hints(hint)
-        field_defs = {_camel(item.name): item for item in fields(hint)}
+        hints = _class_type_hints(hint)
+        field_defs = _class_field_defs(hint)
         optional_fields = (
             _SCHEMA1_TYPED_OPTIONAL_FIELDS.get(hint.__name__, frozenset())
             if resource_schema == 1
@@ -4250,7 +4541,7 @@ def _decode_typed_tree(
         ]
         return tuple(decoded) if origin is tuple else decoded
     if origin in {dict, Mapping, MappingABC}:
-        raw = _object(value, path=path)
+        raw_mapping = _object(value, path=path)
         key_hint, value_hint = args if len(args) == 2 else (str, Any)
         if key_hint is not str:
             raise CanonicalRequestDecodingError(
@@ -4263,7 +4554,7 @@ def _decode_typed_tree(
                 path=f"{path}.{key}",
                 resource_schema=resource_schema,
             )
-            for key, item in raw.items()
+            for key, item in raw_mapping.items()
         }
     if origin is Literal:
         if value not in args:
@@ -4385,7 +4676,7 @@ def _json_value(value: object, *, path: str) -> Any:
 def _validate_dataclass_contract(value: object, *, path: str, error: str) -> None:
     if not is_dataclass(value) or isinstance(value, type):
         _raise_contract_error(error, f"{path} must be a dataclass value.")
-    hints = get_type_hints(type(value))
+    hints = _class_type_hints(type(value))
     for item in fields(value):
         raw = getattr(value, item.name)
         hint = hints.get(item.name, Any)
@@ -4442,7 +4733,7 @@ def _matches_type(value: object, hint: object) -> bool:
     return isinstance(hint, type) and isinstance(value, hint)
 
 
-def _raise_contract_error(kind: str, message: str) -> None:
+def _raise_contract_error(kind: str, message: str) -> NoReturn:
     if kind == "encode":
         raise CanonicalRequestEncodingError(message)
     raise CanonicalRequestDecodingError(message)
@@ -4466,6 +4757,17 @@ def _resource_id(value: str) -> str:
     return normalized
 
 
+@lru_cache(maxsize=256)
+def _class_type_hints(cls: type) -> dict[str, Any]:
+    return get_type_hints(cls)
+
+
+@lru_cache(maxsize=256)
+def _class_field_defs(cls: type) -> dict[str, Field[Any]]:
+    return {_camel(item.name): item for item in fields(cls)}
+
+
+@lru_cache(maxsize=1024)
 def _camel(value: str) -> str:
     head, *tail = value.split("_")
     return head + "".join(part[:1].upper() + part[1:] for part in tail)
@@ -4527,4 +4829,5 @@ __all__ = [
     "decode_canonical_request",
     "encode_canonical_typed_resource",
     "encode_canonical_request",
+    "with_automatic_scale_interval",
 ]

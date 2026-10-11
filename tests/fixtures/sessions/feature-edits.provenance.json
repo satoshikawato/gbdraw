@@ -1,0 +1,77 @@
+{
+  "purpose": "Positive fixtures for the Session 44 and Session 31-33 rendered-ID feature-edit readers (design Q4 4.3, PR-Q4-4).",
+  "history": "first-parent main",
+  "writer": "gbdraw/web/js/services/config.js Save Session (Web), bytes kept unchanged",
+  "checkout": "git worktree add --detach <dir> <sourceCommit>; python tools/prepare_browser_wheel.py; served with python3 -m http.server <port> --bind 127.0.0.1 --directory <dir>",
+  "tools": {
+    "node": "v26.8.2",
+    "playwright": "1.61.1",
+    "python": "3.13.3"
+  },
+  "sessions": {
+    "feature-edits-crop-rc.v44.gbdraw-session.json.gz": {
+      "sourceCommit": "fe6861f06d0eaaecac0ba4ee6b1c3095019789df",
+      "wheel": "gbdraw-0.14.0-py3-none-any.whl",
+      "sessionVersion": 44,
+      "records": "tests/fixtures/web_batch_two_records.gb (sha256 eea3934500b19ca9fca528766ae984577bb132716285e8387c04f5a0e3ce2ae5) split into TESTA and TESTB as two Linear records",
+      "steps": [
+        "Linear; TESTA crop 201..3800; TESTB reverse complement; show_labels_linear = all; misc_feature added to the drawn features; Generate",
+        "TESTA misc_feature Feature visibility Off; Generate",
+        "TESTA tRNA label text PROBE_A_TRNA; Generate",
+        "TESTB tRNA Label visibility Off; Generate",
+        "TESTB misc_feature fill #c83366 (This feature only); Generate",
+        "TESTB tRNA Feature visibility Off; Generate",
+        "Save Session"
+      ],
+      "sha256": "ddf4305ce66106f47d1aae2135a2941a3846bdecc0de3b9a68d427e4cfeaed12",
+      "decompressedSha256": "7b2c5615df8d31bc73a69d1c02c1d8bce0b1d2a4ae535177efd93d9657da5f73"
+    },
+    "feature-edits-circular-copies.v44.gbdraw-session.json.gz": {
+      "sourceCommit": "fe6861f06d0eaaecac0ba4ee6b1c3095019789df",
+      "wheel": "gbdraw-0.14.0-py3-none-any.whl",
+      "sessionVersion": 44,
+      "records": "one file holding the TESTA record of tests/fixtures/web_batch_two_records.gb twice (sha256 a40ee226c78e4a3fd75637694bc1fbda402a58152616a4b74d95805993f01199): two records with the same ID",
+      "steps": [
+        "Circular; labels_mode = out; multi_record_canvas = true; Generate",
+        "first copy of TESTA_0002 fill #c83366 (This feature only); Generate",
+        "first copy of TESTA_0005 Label visibility Off; Generate",
+        "first copy of TESTA_0006 label text COPY1_ONLY; Generate",
+        "first copy of TESTA_0001 Feature visibility Off; Generate",
+        "Save Session"
+      ],
+      "sha256": "9586923f7971e7e3ed92729a251906657dffc274281e6d10bb932b5fc0942462",
+      "decompressedSha256": "a6acb559b67e85bfb11957ecfce57f69d9778334564debac71c25dbce03720fa"
+    },
+    "feature-edits-circular.v33.gbdraw-session.json.gz": {
+      "sourceCommit": "b05a6bb89e65b6a0b211a1ee10c1a3a402c21165",
+      "wheel": "gbdraw-0.14.0b0-py3-none-any.whl",
+      "sessionVersion": 33,
+      "records": "tests/test_inputs/HmmtDNA.gbk (sha256 7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f)",
+      "steps": [
+        "Circular; Generate",
+        "ND1 (f406d90f1) Feature visibility Off",
+        "ND2 (fbe3a7c0c) label text V33_LABEL (This feature only)",
+        "COX1 (f48b7bf2f) Label visibility Off",
+        "Save Session (no Generate after the edits)"
+      ],
+      "sha256": "2748a9a17a5234a33b5474f741e7c4d23fad4011303a793a674204a2db6942fb",
+      "decompressedSha256": "01df672fc64c11e0eb5e3658bcdcd2d0a60bf18b1b7077b76fceab9fe49eee4b"
+    },
+    "feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz": {
+      "sourceCommit": "b05a6bb89e65b6a0b211a1ee10c1a3a402c21165",
+      "wheel": "gbdraw-0.14.0b0-py3-none-any.whl",
+      "sessionVersion": 33,
+      "records": "tests/fixtures/web_batch_two_records.gb (sha256 eea3934500b19ca9fca528766ae984577bb132716285e8387c04f5a0e3ce2ae5) split into TESTA and TESTB as two Linear records",
+      "steps": [
+        "Linear; TESTA crop 201..3800; TESTB reverse complement; show_labels_linear = all; Generate",
+        "TESTA_0002 Feature visibility Off; Generate",
+        "TESTB_0002 Feature visibility Off; Generate",
+        "TESTB tRNA label text V33_LINEAR_TRNA (This feature only); Generate",
+        "TESTA_0005 Label visibility Off; Generate",
+        "Save Session"
+      ],
+      "sha256": "6d257070938590e51998087faa87b4657c2334ef282e56f4b0f0781823413f51",
+      "decompressedSha256": "6e46fb36c8b7f0557ab4dce72872e038e964aa7a3e1251ae64b0e254c7af0847"
+    }
+  }
+}

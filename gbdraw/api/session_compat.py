@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import re
 from dataclasses import dataclass, field, fields, is_dataclass, replace
-from typing import Any, Mapping, Sequence
+from pathlib import Path
+from typing import Any, Mapping, Sequence, cast
 
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from pandas import DataFrame
 
 from gbdraw.analysis.protein_colinearity import (
+    ProteinBlastpMode,
     ProteinExtractionResult,
     build_legacy_protein_reference_map,
     is_legacy_protein_losat_cache_entry,
@@ -31,22 +34,27 @@ from gbdraw.layout.similarity_alignment import (
     AlignmentResolutionRationale,
     SimilarityAlignmentPlan,
 )
+from gbdraw.session_drawings import SessionDrawingArtifacts, drawing_draft_config
 from gbdraw.session_io import (
-    CURRENT_SESSION_VERSION,
+    DRAWN_HASH_RULE_SESSION_MAX_VERSION,
+    DrawnFeature,
     classify_raw_losat_cache_entry,
     empty_protein_identity_manifest,
-    validate_session,
+    source_hash_selector_value,
+    unmapped_hash_selector_warning,
 )
 
 from .options import LinearMultiRecordOptions, LinearRecordTranslation
 from .record_planning import (
     ResolvedRecordCollection,
+    ResolvedRecordProvenance,
     project_similarity_alignment_centers,
 )
 
 from .request_render import (
     CircularBatchRenderResult,
     CircularBatchRequestPlan,
+    CircularRequestPlan,
     CurrentRequestArtifacts,
     DiagramRequestPlan,
     LinearRequestPlan,
@@ -54,11 +62,13 @@ from .request_render import (
     PreparedDiagramRequest,
     RequestRenderResult,
     _extract_linear_request_proteins,
-    build_request_plan_diagram,
+    _build_request_plan_diagram,
     plan_request,
     render_prepared_request,
 )
 from .requests import (
+    CircularBatchRequest,
+    CircularDiagramRequest,
     DiagramRequest,
     LinearDiagramRequest,
     _LegacySimilarityAlignment,
@@ -77,6 +87,8 @@ _LEGACY_PROTEIN_REFERENCE_RE = re.compile(
     r"(?:_[2-9][0-9]*)?"
 )
 _FEATURE_ANALYSIS_REFERENCE_RE = re.compile(r"f_[0-9a-f]{64}")
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -128,7 +140,7 @@ class _SessionArtifactSource:
     current_raw_entries: tuple[Mapping[str, Any], ...]
     current_derived_entries: tuple[Mapping[str, Any], ...]
     protein_identity_manifest: Mapping[str, Any] | None
-    protein_source_mode: str | None
+    protein_source_mode: ProteinBlastpMode | None
     legacy_candidates: tuple[Mapping[str, Any], ...]
     legacy_derived_evidence: tuple[Mapping[str, Any], ...]
 
@@ -255,13 +267,13 @@ def _legacy_derived_evidence_entries(
     return tuple(result)
 
 
-def _session_protein_mode(artifacts: Mapping[str, Any]) -> str | None:
-    config = artifacts.get("config")
-    losat = config.get("losat") if isinstance(config, Mapping) else None
+def _session_protein_mode(artifacts: Mapping[str, Any]) -> ProteinBlastpMode | None:
+    # The LOSATP settings are Linear settings.
+    losat = drawing_draft_config(artifacts, "linear").get("losat")
     blastp = losat.get("blastp") if isinstance(losat, Mapping) else None
     configured = blastp.get("mode") if isinstance(blastp, Mapping) else None
     if str(configured or "") in {"pairwise", "orthogroup", "collinear"}:
-        return str(configured)
+        return cast(ProteinBlastpMode, str(configured))
     return None
 
 
@@ -299,14 +311,9 @@ def _read_session_artifact_source(
                 f"losatDerivedCache.entries[{index}]."
             )
 
-    source_manifest = artifacts.get("proteinIdentityManifest")
-    if source_manifest is not None and not isinstance(source_manifest, Mapping):
+    manifest = artifacts.get("proteinIdentityManifest")
+    if manifest is not None and not isinstance(manifest, Mapping):
         raise ValidationError("Session proteinIdentityManifest must be an object.")
-    manifest = (
-        copy.deepcopy(dict(source_manifest))
-        if isinstance(source_manifest, Mapping)
-        else None
-    )
     return _SessionArtifactSource(
         current_raw_entries=tuple(current_raw),
         current_derived_entries=tuple(current_derived),
@@ -595,6 +602,34 @@ def _mapping_items(value: object) -> tuple[Mapping[str, Any], ...]:
     return tuple(item for item in value if isinstance(item, Mapping))
 
 
+def _drawn_features(
+    record: Any, provenance: ResolvedRecordProvenance, ordinal: int
+) -> list[DrawnFeature]:
+    """The features of a planned record, the ``ordinal``-th of its Result.
+
+    Release 0.13.0 and Sessions up to 44 hashed the drawn feature, so a cropped
+    or reverse-complemented record saved hashes of its drawn coordinates; the
+    source feature catalog hashes source coordinates (OV-401). Only these
+    legacy readers compute the drawn hash.
+    """
+
+    catalog = {
+        entry.source_feature_index: entry.stable_feature_id
+        for entry in provenance.source_feature_catalog or ()
+    }
+    drawn: list[DrawnFeature] = []
+    # A feature's source index, or its ordinal in an untransformed record, as
+    # build_source_feature_catalog reads it.
+    for position, feature in enumerate(_iter_source_features(record.features)):
+        index = _source_feature_index(feature)
+        index = position if index is None else index
+        if index in catalog:
+            drawn.append(
+                (catalog[index], compute_feature_hash(feature, record_id=record.id), index, ordinal)
+            )
+    return drawn
+
+
 def _legacy_display_frame_feature_id(
     plan: LinearRequestPlan | None,
     record_key: str,
@@ -602,9 +637,7 @@ def _legacy_display_frame_feature_id(
 ) -> str:
     """Bind a release-0.13.0 display-frame feature ID to its source-frame ID.
 
-    0.13.0 hashed the displayed feature, so a reverse-complemented record saved
-    IDs of its displayed coordinates; the source feature catalog hashes source
-    coordinates. An ID that already names a catalog feature is returned as is.
+    An ID that already names a catalog feature is returned as is.
     """
 
     if plan is None:
@@ -612,19 +645,17 @@ def _legacy_display_frame_feature_id(
     for record, provenance in zip(plan.records, plan.provenance, strict=True):
         if provenance.record_key != record_key:
             continue
-        catalog = {
-            entry.source_feature_index: entry
+        if any(
+            entry.stable_feature_id == feature_id
             for entry in provenance.source_feature_catalog or ()
-        }
-        if any(entry.stable_feature_id == feature_id for entry in catalog.values()):
+        ):
             return feature_id
         matches = {
-            catalog[index].stable_feature_id
-            for feature in _iter_source_features(record.features)
-            if (index := _source_feature_index(feature)) in catalog
-            and compute_feature_hash(feature, record_id=record.id) == feature_id
+            source
+            for source, drawn_hash, _, _ in _drawn_features(record, provenance, 0)
+            if drawn_hash == feature_id
         }
-        return matches.pop() if len(matches) == 1 else feature_id
+        return next(iter(matches)) if len(matches) == 1 else feature_id
     return feature_id
 
 
@@ -711,7 +742,8 @@ def _legacy_alignment_groups(
                     stable_id,
                 )
             else:
-                record_key = member.get("recordKey")
+                # Checked against stable_keys (all str) before use below.
+                record_key = cast(str, member.get("recordKey"))
                 biological_id = member.get("biologicalFeatureId")
                 matches = tuple(
                     feature
@@ -821,7 +853,7 @@ def _legacy_similarity_alignment_plan(
         if record.record_key == reference.record_key:
             status = AlignmentDecisionStatus.REFERENCE
             rationale = AlignmentResolutionRationale.REFERENCE
-            anchor = reference
+            anchor: AlignmentAnchorIdentity | None = reference
         else:
             member = _legacy_alignment_record_member(members, record.record_key)
             status = (
@@ -852,7 +884,7 @@ def _legacy_similarity_alignment_plan(
 
 def promote_legacy_session_similarity_alignment_request(
     request: DiagramRequest,
-    session_artifacts: Mapping[str, Any],
+    drawing: SessionDrawingArtifacts,
     *,
     plan: LinearRequestPlan | None = None,
 ) -> DiagramRequest:
@@ -864,6 +896,7 @@ def promote_legacy_session_similarity_alignment_request(
 
     if not isinstance(request, LinearDiagramRequest):
         return request
+    session_artifacts = drawing.fields
     orthogroup_state = session_artifacts.get("orthogroupState")
     session_target = (
         orthogroup_state.get("selectedOrthogroupAlignmentFeature")
@@ -890,12 +923,8 @@ def promote_legacy_session_similarity_alignment_request(
         raise ValidationError(
             "Legacy Session contains conflicting similarity alignment owners."
         )
-    session_version = session_artifacts.get("version")
-    if (
-        isinstance(session_version, bool)
-        or not isinstance(session_version, int)
-        or session_version >= CURRENT_SESSION_VERSION
-    ):
+    # Session 44 introduced the typed similarity alignment state.
+    if drawing.version >= 44:
         raise ValidationError(
             "Current Sessions must store typed similarity alignment state."
         )
@@ -964,16 +993,6 @@ def promote_legacy_session_similarity_alignment_request(
             ),
         ),
     )
-
-
-def materialize_legacy_similarity_alignment_request(
-    request: DiagramRequest,
-) -> DiagramRequest:
-    """Keep an old-schema projection on the current typed render boundary."""
-
-    if not isinstance(request, LinearDiagramRequest):
-        return request
-    return request
 
 
 def project_legacy_similarity_alignment_for_current_write(
@@ -1069,14 +1088,22 @@ def _replace_plan_request(
     plan: DiagramRequestPlan,
     request: DiagramRequest,
 ) -> DiagramRequestPlan:
-    if not isinstance(plan, LinearRequestPlan):
+    # The replacement request is derived from plan.request, so it has its mode.
+    if isinstance(plan, CircularRequestPlan):
+        assert isinstance(request, CircularDiagramRequest)
         return replace(plan, request=request)
+    if isinstance(plan, CircularBatchRequestPlan):
+        assert isinstance(request, CircularBatchRequest)
+        return replace(plan, request=request)
+    assert isinstance(request, LinearDiagramRequest)
     if plan.request.similarity_alignment == request.similarity_alignment:
         return replace(plan, request=request)
     if plan.request.similarity_alignment is not None:
         raise ValidationError(
             "Session compatibility cannot replace an active similarity alignment plan."
         )
+    # Only legacy promotion adds an alignment here, and it adds a resolved plan.
+    assert isinstance(request.similarity_alignment, SimilarityAlignmentPlan)
     centers = project_similarity_alignment_centers(
         ResolvedRecordCollection(plan.records, plan.provenance),
         request.similarity_alignment,
@@ -1102,7 +1129,7 @@ _MAIN_DISPLAY_FRAME_SESSION_VERSION = 42
 def _main_display_frame_rows_to_search_frame(
     plan: DiagramRequestPlan,
     request: DiagramRequest,
-    session_artifacts: Mapping[str, Any],
+    drawing: SessionDrawingArtifacts,
 ) -> DiagramRequest:
     """Convert main Session comparison rows to the search frame once (PD-OI-073).
 
@@ -1114,12 +1141,10 @@ def _main_display_frame_rows_to_search_frame(
     is converted with its rows.
     """
 
-    version = session_artifacts.get("version")
     if (
         not isinstance(plan, LinearRequestPlan)
         or not isinstance(request, LinearDiagramRequest)
-        or not isinstance(version, int)
-        or version > _MAIN_DISPLAY_FRAME_SESSION_VERSION
+        or drawing.version > _MAIN_DISPLAY_FRAME_SESSION_VERSION
         or not request.options.linear_comparisons
     ):
         return request
@@ -1148,26 +1173,151 @@ def _main_display_frame_rows_to_search_frame(
     return replace(request, options=replace(request.options, linear_comparisons=converted))
 
 
-def _adapt_session_plan(
+# The (qualifier, value) columns of the request tables whose `hash` rows a
+# Web writer of a Session 44 or older filled with drawn hashes: the color
+# table (from the specific color rules) and the label override table (from
+# the label text edits of features without a unique qualifier).
+_HASH_TABLE_COLUMNS = {"color": (1, 2), "label": (2, 3)}
+
+
+def _main_drawn_hash_selectors_to_source(
     plan: DiagramRequestPlan,
-    session_artifacts: Mapping[str, Any],
-) -> AdaptedSessionRequest:
-    source = _read_session_artifact_source(session_artifacts)
+    request: DiagramRequest,
+    drawing: SessionDrawingArtifacts,
+) -> tuple[DiagramRequest, int]:
+    """Name the ``hash`` rows of the color and label override tables of a
+    Session 44 or older by source hash (S6).
+
+    The Web writer of such a Session filled those rows with drawn hashes
+    (rendered IDs in the label override table), which it matched against the
+    drawn feature, so on a cropped or reverse-complemented record they are not
+    the source hashes ``hash=`` names now (OV-401, release D-39). Each value
+    that names features drawn with its hash
+    (:func:`gbdraw.session_io.source_hash_selector_value`) gets their source
+    hash; a table file gets a copy beside it. Returns the request and the
+    number of values that name features of several source hashes, which stay
+    as saved. A request with no record whose drawn hashes differ is returned
+    as is.
+    """
+
+    if drawing.version > DRAWN_HASH_RULE_SESSION_MAX_VERSION:
+        return request, 0
+    drawn = [
+        feature
+        for ordinal, (record, provenance) in enumerate(
+            zip(plan.records, plan.provenance, strict=True), start=1
+        )
+        for feature in _drawn_features(record, provenance, ordinal)
+    ]
+    if all(source == drawn_hash for source, drawn_hash, _, _ in drawn):
+        return request, 0
+    unmapped = 0
+
+    def source_value(value: object) -> str:
+        nonlocal unmapped
+        resolved, source_count = source_hash_selector_value(value, drawn)
+        unmapped += source_count > 1
+        return str(value) if resolved is None else resolved
+
+    def table_text(text: str, table: str) -> str:
+        qualifier_column, value_column = _HASH_TABLE_COLUMNS[table]
+        lines = []
+        for line in text.splitlines(keepends=True):
+            cells = line.rstrip("\r\n").split("\t")
+            ending = line[len(line.rstrip("\r\n")):]
+            if (
+                not line.lstrip().startswith("#")
+                and len(cells) > value_column
+                and cells[qualifier_column].strip().lower() == "hash"
+                and cells[value_column].strip()
+            ):
+                cells[value_column] = source_value(cells[value_column].strip())
+                line = "\t".join(cells) + ending
+            lines.append(line)
+        return "".join(lines)
+
+    def table_file(path: str | None, table: str) -> str | None:
+        if path is None:
+            return None
+        source = Path(path)
+        text = source.read_text(encoding="utf-8")
+        migrated = table_text(text, table)
+        if migrated == text:
+            return path
+        copy_path = source.with_name(f"{source.stem}.source-hash{source.suffix}")
+        copy_path.write_text(migrated, encoding="utf-8")
+        return str(copy_path)
+
+    def table_frame(frame: DataFrame | None, qualifier: str) -> DataFrame | None:
+        if frame is None or qualifier not in frame.columns or "value" not in frame.columns:
+            return frame
+        rows = frame[qualifier].astype(str).str.strip().str.lower() == "hash"
+        if not rows.any():
+            return frame
+        migrated = frame.copy()
+        migrated.loc[rows, "value"] = [
+            source_value(value) for value in migrated.loc[rows, "value"]
+        ]
+        return migrated
+
+    options = request.options
+    changes: dict[str, Any] = {}
+    colors = options.colors
+    if colors is not None:
+        color_table = table_frame(colors.color_table, "qualifier_key")
+        color_table_file = table_file(colors.color_table_file, "color")
+        if color_table is not colors.color_table or color_table_file != colors.color_table_file:
+            changes["colors"] = replace(
+                colors, color_table=color_table, color_table_file=color_table_file
+            )
+    label_table = table_frame(options.label_override_table, "qualifier")
+    if label_table is not options.label_override_table:
+        changes["label_override_table"] = label_table
+    label_file = table_file(options.label_override_file, "label")
+    if label_file != options.label_override_file:
+        changes["label_override_file"] = label_file
+    if not changes:
+        return request, unmapped
+    # Each request type takes its own options type, which mypy cannot pair.
+    return cast(DiagramRequest, replace(cast(Any, request), options=replace(options, **changes))), unmapped
+
+
+def _adapt_session_plan(
+    request: DiagramRequest,
+    plan: DiagramRequestPlan,
+    drawing: SessionDrawingArtifacts,
+) -> tuple[AdaptedSessionRequest, ProteinExtractionResult | None, DiagramRequestPlan]:
+    """Adapt the request and artifacts of ``plan``, the plan of ``request``;
+    also return the protein extraction of the plan when the adaptation ran one,
+    so its build reuses it, and the plan it adapted (``plan``, or ``request``
+    planned again)."""
+
+    source = _read_session_artifact_source(drawing.fields)
+    # Tables and annotation targets are prepared with the plan, so a request
+    # whose hash selectors change is planned again. ``plan.request`` is a
+    # resolved projection (its regions are applied), so the saved request is
+    # the one rewritten and planned.
+    rewritten, unmapped_hash_selectors = _main_drawn_hash_selectors_to_source(
+        plan, request, drawing
+    )
+    if rewritten is not request:
+        plan = plan_request(rewritten)
     request = promote_legacy_session_similarity_alignment_request(
         plan.request,
-        session_artifacts,
+        drawing,
         plan=plan if isinstance(plan, LinearRequestPlan) else None,
     )
-    request = _main_display_frame_rows_to_search_frame(plan, request, session_artifacts)
+    request = _main_display_frame_rows_to_search_frame(plan, request, drawing)
     if request is not plan.request:
         plan = _replace_plan_request(plan, request)
     current_raw = source.current_raw_entries
     manifest = source.protein_identity_manifest
     unresolved = source.legacy_candidates
     id_map: dict[str, str] = {}
+    extraction: ProteinExtractionResult | None = None
 
     if isinstance(plan, LinearRequestPlan):
-        request = materialize_legacy_similarity_alignment_request(request)
+        assert isinstance(request, LinearDiagramRequest)
         reference_ids: set[str] = set()
         for value in _request_protein_artifacts(request):
             reference_ids.update(_legacy_protein_reference_ids(value))
@@ -1252,7 +1402,13 @@ def _adapt_session_plan(
         )
         if unresolved
         else ()
+    ) + (
+        (unmapped_hash_selector_warning(unmapped_hash_selectors, drawing.version),)
+        if unmapped_hash_selectors
+        else ()
     )
+    for warning in warnings[len(warnings) - bool(unmapped_hash_selectors):]:
+        logger.warning("WARNING: %s", warning)
     return AdaptedSessionRequest(
         request=request,
         artifacts=artifacts,
@@ -1262,19 +1418,26 @@ def _adapt_session_plan(
             protein_id_map=id_map,
             warnings=warnings,
         ),
-    )
+    ), extraction, plan
+
+
+def _require_drawing(drawing: object) -> SessionDrawingArtifacts:
+    if not isinstance(drawing, SessionDrawingArtifacts):
+        raise ValidationError(
+            "Session compatibility input must be a drawing of a loaded SessionDocument."
+        )
+    return drawing
 
 
 def adapt_session_request(
     request: DiagramRequest,
-    session_artifacts: Mapping[str, Any],
+    drawing: SessionDrawingArtifacts,
 ) -> AdaptedSessionRequest:
-    """Convert one validated persisted session to the current render contract."""
+    """Convert one drawing of a validated Session to the current render contract."""
 
-    if not isinstance(session_artifacts, Mapping):
-        raise ValidationError("Session compatibility input must be an object.")
-    validate_session(session_artifacts)
-    return _adapt_session_plan(plan_request(request), session_artifacts)
+    return _adapt_session_plan(
+        request, plan_request(request), _require_drawing(drawing)
+    )[0]
 
 
 def _adjust_migration_report(
@@ -1296,35 +1459,37 @@ def _adjust_migration_report(
 
 def build_session_compatible_request_diagram(
     request: DiagramRequest,
-    session_artifacts: Mapping[str, Any],
+    drawing: SessionDrawingArtifacts,
 ) -> PreparedDiagramRequest | PreparedCircularBatchRequest:
-    """Build a released session after adapting it to current artifacts."""
+    """Build one drawing of a released session after adapting its artifacts."""
 
-    if not isinstance(session_artifacts, Mapping):
-        raise ValidationError("Session compatibility input must be an object.")
-    validate_session(session_artifacts)
     prepared, _report = _build_session_compatible_plan(
+        request,
         plan_request(request),
-        session_artifacts,
+        _require_drawing(drawing),
     )
     return prepared
 
 
 def _build_session_compatible_plan(
+    request: DiagramRequest,
     plan: DiagramRequestPlan,
-    session_artifacts: Mapping[str, Any],
+    drawing: SessionDrawingArtifacts,
 ) -> tuple[
     PreparedDiagramRequest | PreparedCircularBatchRequest,
     SessionMigrationReport,
 ]:
-    """Adapt and build one already-resolved session request plan."""
+    """Adapt and build ``plan``, the already-resolved plan of ``request``."""
 
-    adapted = _adapt_session_plan(plan, session_artifacts)
+    adapted, extraction, plan = _adapt_session_plan(request, plan, drawing)
     if adapted.request is not plan.request:
+        # The replacement keeps the records, their inputs and the record keys
+        # that the extraction read.
         plan = _replace_plan_request(plan, adapted.request)
-    prepared = build_request_plan_diagram(
+    prepared = _build_request_plan_diagram(
         plan,
         artifacts=adapted.artifacts,
+        protein_extraction=extraction,
     )
     return prepared, _adjust_migration_report(
         prepared,
@@ -1334,21 +1499,20 @@ def _build_session_compatible_plan(
 
 def render_session_compatible_request(
     request: DiagramRequest,
-    session_artifacts: Mapping[str, Any],
+    drawing: SessionDrawingArtifacts,
     *,
     include_feature_catalog: bool = False,
 ) -> RequestRenderResult | CircularBatchRenderResult:
-    """Render a released session through its sole compatibility adapter."""
+    """Render one drawing of a released session through its sole compatibility adapter."""
 
-    if not isinstance(session_artifacts, Mapping):
-        raise ValidationError("Session compatibility input must be an object.")
-    validate_session(session_artifacts)
+    _require_drawing(drawing)
     plan = plan_request(request)
     batch_outputs_preflighted = isinstance(plan, CircularBatchRequestPlan)
     plan.preflight_outputs()
     prepared, migration_report = _build_session_compatible_plan(
+        request,
         plan,
-        session_artifacts,
+        drawing,
     )
     result = render_prepared_request(
         prepared,
@@ -1490,7 +1654,6 @@ __all__ = [
     "adapt_session_request",
     "build_session_compatible_request_diagram",
     "canonical_payload_for_session_decode",
-    "materialize_legacy_similarity_alignment_request",
     "project_legacy_similarity_alignment_for_current_write",
     "promote_legacy_session_similarity_alignment_request",
     "render_session_compatible_request",

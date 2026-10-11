@@ -8,7 +8,27 @@ from pandas import DataFrame
 
 from gbdraw.features.colors import normalize_specific_color_captions, preprocess_color_tables
 from gbdraw.features.selector_values import iter_specific_color_rules
+from gbdraw.features.visibility import (
+    _first_matching_visibility_rule,
+    compile_feature_visibility_rules,
+)
 from gbdraw.labels.filtering import _build_label_override_rules, _resolve_label_override
+
+
+def _visibility_table(rules: list[dict]) -> DataFrame:
+    return DataFrame([dict(
+        record_id=rule["recordId"], feature_type=rule["featureType"],
+        qualifier=rule["qualifier"], value=rule["value"], action=rule["action"],
+    ) for rule in rules])
+
+
+def _compile_visibility_rows(rules: list[dict]) -> list[dict | None]:
+    """The draft rows as Generate compiles the visibility table, with None for
+    a row that Generate skips as a header. A table Generate rejects raises
+    Generate's error, which names the row."""
+    compile_feature_visibility_rules(_visibility_table(rules))
+    rows = (compile_feature_visibility_rules(_visibility_table([rule])) for rule in rules)
+    return [compiled[0] if compiled else None for compiled in rows]
 
 
 def evaluate_rules_json(features_json: str, rules_json: str, kind: str = "color") -> str:
@@ -28,6 +48,7 @@ def evaluate_rules_json(features_json: str, rules_json: str, kind: str = "color"
             ]
         )
         normalized = normalize_specific_color_captions(table)
+        assert normalized is not None  # a DataFrame input is never None
         captions = list(normalized["caption"]) if len(rules) else []
         return json.dumps(
             {
@@ -48,12 +69,14 @@ def evaluate_rules_json(features_json: str, rules_json: str, kind: str = "color"
             for i, r in enumerate(rules)
         ]
         defaults = DataFrame(columns=["feature_type", "color"])
-        compiled, _ = preprocess_color_tables(DataFrame(rows), defaults)
+        color_rules, _ = preprocess_color_tables(DataFrame(rows), defaults)
+    elif kind == "visibility":
+        visibility_rules = _compile_visibility_rows(rules)
     elif kind == "label":
         rows = [dict(record_id=r["recordId"], feature_type=r["featureType"],
                      qualifier=r["qualifier"], value=r["valueRegex"], label_text=str(i))
                 for i, r in enumerate(rules)]
-        compiled = _build_label_override_rules(DataFrame(rows)) or []
+        label_rules = _build_label_override_rules(DataFrame(rows)) or []
     else:
         raise ValueError("Unknown rule kind")
     matches, winners, priorities = [], [], []
@@ -62,17 +85,23 @@ def evaluate_rules_json(features_json: str, rules_json: str, kind: str = "color"
         selector = item["selector"]
         record = item.get("record", "")
         if kind == "color":
-            ordered = list(iter_specific_color_rules(feature, compiled, record, selector=selector))
-            matched = list(dict.fromkeys(int(match[0]) for match in ordered))
-            ranks = [None] * len(rules)
-            for color, _, rank in ordered:
-                if ranks[int(color)] is None:
-                    ranks[int(color)] = rank
-            priorities.append(ranks)
+            # The rules it matches in yield order, each with its first rank.
+            ranks: dict[int, int] = {}
+            for color, _, rank in iter_specific_color_rules(feature, color_rules, record, selector=selector):
+                ranks.setdefault(int(color), rank)
+            matched = list(ranks)
+            priorities.append(list(ranks.values()))
             matches.append(matched)
             winners.append(matched[0] if matched else -1)
+        elif kind == "visibility":
+            # Every rule this feature matches; the first in table order decides.
+            matches.append([
+                index for index, rule in enumerate(visibility_rules)
+                if rule is not None
+                and _first_matching_visibility_rule(feature, [rule], record, selector=selector)
+            ])
         else:
             winner = _resolve_label_override(feature, feature.type, feature.qualifiers,
-                                             item.get("label", ""), compiled, record, selector=selector)
+                                             item.get("label", ""), label_rules, record, selector=selector)
             winners.append(int(winner) if winner is not None else -1)
     return json.dumps({"matches": matches, "winners": winners, "priorities": priorities})

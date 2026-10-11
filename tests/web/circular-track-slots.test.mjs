@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const repoRoot = process.cwd();
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-circular-track-slots-'));
@@ -17,12 +18,19 @@ await cp(
   join(tempRoot, 'utils'),
   { recursive: true }
 );
-// circular-track-slots.js reports through the dependency-free wording owner.
+// circular-track-slots.js reads the conservation-series row helpers.
 await cp(
-  join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'error-normalization.js'),
-  join(tempRoot, 'services', 'error-normalization.js')
+  join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'conservation-series.js'),
+  join(tempRoot, 'services', 'conservation-series.js')
 );
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
+// The track-slot leaves the slot editors import.
+for (const leaf of ['depth-track-state.js', 'track-slot-display.js', 'track-slot-validation.js', 'circular-track-slot-model.js']) {
+  await cp(
+    join(repoRoot, 'gbdraw', 'web', 'js', 'services', leaf),
+    join(tempRoot, 'services', leaf)
+  );
+}
 
 const { createCircularTrackSlotEditor } = await import(
   pathToFileURL(join(tempRoot, 'app', 'circular-track-slots.js'))
@@ -158,7 +166,7 @@ test('Circular placement actions preserve the Axis boundary and radial sides', (
     ],
     axisIndex: 1
   });
-  const editor = createCircularTrackSlotEditor({ state });
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
 
   assert.equal(editor.canMoveCircularTrackSlot(1, -1), false);
   editor.moveCircularTrackSlot(1, 0);
@@ -181,7 +189,7 @@ const depthFile = (name) => ({ name, size: 1, lastModified: 0 });
 
 test('managed Depth insertion preserves the existing Axis sides', () => {
   const state = createState({ showDepth: true });
-  const editor = createCircularTrackSlotEditor({ state });
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
 
   editor.changeCircularDepthSources(() => {
     state.files.c_depth = [depthFile('depth.tsv')];
@@ -211,7 +219,7 @@ test('managed Depth insertion stays after an on-Axis Tick', () => {
     showDepth: true,
     depthFiles: [depthFile('depth-a.tsv')]
   });
-  const editor = createCircularTrackSlotEditor({ state });
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
 
   editor.changeCircularDepthSources(() => {
     state.files.c_depth = [depthFile('depth-a.tsv'), depthFile('depth-b.tsv')];
@@ -233,7 +241,7 @@ test('managed Depth insertion stays after an on-Axis Tick', () => {
 });
 
 test('managed Depth removal rebases the Axis only when the row is before it', () => {
-  const removeSource = (state) => createCircularTrackSlotEditor({ state }).changeCircularDepthSources(() => {
+  const removeSource = (state) => createCircularTrackSlotEditor({ state: withDrawings(state) }).changeCircularDepthSources(() => {
     state.files.c_depth = [];
   });
   const beforeState = createState({
@@ -268,7 +276,7 @@ test('managed Conservation insertion preserves the existing Axis sides', () => {
     conservationEnabled: true,
     conservationFiles: [{ name: 'pair.tsv', size: 1, lastModified: 0 }]
   });
-  const editor = createCircularTrackSlotEditor({ state });
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
 
   editor.syncCircularConservationSlots();
 
@@ -294,7 +302,7 @@ test('managed Conservation insertion stays after an on-Axis Tick', () => {
     conservationEnabled: true,
     conservationFiles: [{ name: 'pair.tsv', size: 1, lastModified: 0 }]
   });
-  const editor = createCircularTrackSlotEditor({ state });
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
 
   editor.syncCircularConservationSlots();
 
@@ -321,7 +329,7 @@ test('managed Conservation removal rebases the Axis only when the row is before 
     slots: [conservationSlot('outside'), featureSlot(), spacerSlot(), gcSlot()],
     axisIndex: 3
   });
-  createCircularTrackSlotEditor({ state: beforeState }).syncCircularConservationSlots();
+  createCircularTrackSlotEditor({ state: withDrawings(beforeState) }).syncCircularConservationSlots();
   assert.equal(beforeState.adv.circular_track_slots_axis_index, 2);
   assert.deepEqual(slotSides(beforeState), {
     features: 'outside',
@@ -333,7 +341,7 @@ test('managed Conservation removal rebases the Axis only when the row is before 
     slots: [featureSlot(), spacerSlot(), gcSlot(), conservationSlot()],
     axisIndex: 2
   });
-  createCircularTrackSlotEditor({ state: afterState }).syncCircularConservationSlots();
+  createCircularTrackSlotEditor({ state: withDrawings(afterState) }).syncCircularConservationSlots();
   assert.equal(afterState.adv.circular_track_slots_axis_index, 2);
   assert.deepEqual(slotSides(afterState), {
     features: 'outside',
@@ -344,7 +352,7 @@ test('managed Conservation removal rebases the Axis only when the row is before 
 
 test('Circular measure action updates only the owned scalar and preserves slot identity', () => {
   const state = createState();
-  const editor = createCircularTrackSlotEditor({ state });
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
   const slot = state.adv.circular_track_slots[0];
   const key = editor.circularTrackSlotEditorKey(slot);
   const scalar = { value: '1e', unit: 'px' };
@@ -364,14 +372,14 @@ test('Circular measure action updates only the owned scalar and preserves slot i
 
 test('Circular measure action refuses nonfinite numeric leaves before changing a slot', () => {
   const state = createState();
-  const editor = createCircularTrackSlotEditor({ state });
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
   const slot = state.adv.circular_track_slots[0];
   for (const field of ['width', 'radius']) {
     const before = slot[field];
     for (const scalar of [NaN, Infinity, -Infinity,
       { value: NaN, unit: 'px' }, { value: Infinity, unit: 'factor' },
       { value: -Infinity, unit: 'px' }]) {
-      assert.throws(() => editor.updateCircularTrackSlotMeasure(slot, field, scalar), /positive finite px or factor scalar/);
+      assert.throws(() => editor.updateCircularTrackSlotMeasure(slot, field, scalar), /must be a number greater than 0, in px or ×R/);
       assert.strictEqual(slot[field], before);
     }
   }
@@ -393,7 +401,7 @@ const gcRows = (state) => state.adv.circular_track_slots
 // custom stack is in use.
 test('un-hiding GC while the custom stack is off restores the row the hide disabled', () => {
   const state = createState();
-  const editor = createCircularTrackSlotEditor({ state });
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
 
   editor.setCircularGcSuppressed(true);
   editor.setCircularTrackSlotsEnabled(false);
@@ -407,7 +415,7 @@ test('a GC row the user disabled stays disabled across Hide and un-hide', () => 
   const state = createState({
     slots: [featureSlot(), spacerSlot(), { ...gcSlot(), enabled: false }, { ...gcSlot(), id: 'gc_content_2' }]
   });
-  const editor = createCircularTrackSlotEditor({ state });
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
 
   editor.setCircularGcSuppressed(true);
   assert.deepEqual(gcRows(state), [
@@ -429,14 +437,14 @@ test('a GC row the user disabled stays disabled across Hide and un-hide', () => 
 test('Reset and the preset resets omit Ticks while Show Coordinate Scale is off', () => {
   for (const preset of ['tuckin', 'middle', 'spreadout']) {
     const state = createState();
-    createCircularTrackSlotEditor({ state }).resetCircularTrackSlotsToPreset(preset);
+    createCircularTrackSlotEditor({ state: withDrawings(state) }).resetCircularTrackSlotsToPreset(preset);
     assert.equal(state.adv.circular_track_slots.some((slot) => slot.renderer === 'ticks'), false, preset);
   }
 
   const plain = createState();
   const preset = createState();
-  createCircularTrackSlotEditor({ state: plain }).resetCircularTrackSlotsFromSimpleControls();
-  createCircularTrackSlotEditor({ state: preset }).resetCircularTrackSlotsToPreset(preset.form.track_type);
+  createCircularTrackSlotEditor({ state: withDrawings(plain) }).resetCircularTrackSlotsFromSimpleControls();
+  createCircularTrackSlotEditor({ state: withDrawings(preset) }).resetCircularTrackSlotsToPreset(preset.form.track_type);
   assert.deepEqual(plain.adv.circular_track_slots, preset.adv.circular_track_slots);
   assert.equal(plain.adv.circular_track_slots_axis_index, preset.adv.circular_track_slots_axis_index);
 });

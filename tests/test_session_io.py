@@ -26,6 +26,7 @@ from gbdraw.analysis.protein_colinearity import (
 from gbdraw.circular import circular_main
 from gbdraw.linear import (
     _get_args as get_linear_args,
+    linear_main,
 )
 from gbdraw.cli_utils.session import (
     DiagramRunResult,
@@ -44,13 +45,16 @@ from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.options import CircularDiagramOptions, LinearDiagramOptions
 from gbdraw.api.requests import (
     CircularDiagramRequest,
+    GenBankInputSource,
     InMemoryRecordSource,
     LinearDiagramRequest,
     RecordCardinality,
     RecordInput,
     RecordPresentation,
+    RenderOutputRequest,
 )
 from gbdraw.session_io import (
+    CURRENT_FEATURE_CATALOG_SCHEMA,
     CURRENT_SESSION_VERSION,
     DEPTH_FILE_ENCODING,
     LOSAT_DERIVED_CACHE_SCHEMA,
@@ -73,7 +77,13 @@ from gbdraw.session_io import (
     write_session_json,
 )
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
-from gbdraw.session import SessionFormatError, load_session_document
+from gbdraw.io.regions import parse_region_spec
+from gbdraw.session import (
+    SessionFormatError,
+    SessionVersionError,
+    build_session_document,
+    load_session_document,
+)
 
 
 def _file_entry(name: str, content: bytes) -> dict:
@@ -478,10 +488,12 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
 
     assert saved == sidecar
     payload = load_session(sidecar)
-    assert payload["features"] == {}
+    # A CLI-written Session has no Web draft: no flat draft and no mode slices.
+    assert "features" not in payload
+    assert "modes" not in payload
     assert payload["orthogroupState"] == {}
     catalog = payload["editorState"]["featureCatalog"]
-    assert catalog["schema"] == 4
+    assert catalog["schema"] == CURRENT_FEATURE_CATALOG_SCHEMA
     item = catalog["items"][0]
     assert item["resultIndex"] == 0
     assert item["resultName"] == "diagram"
@@ -533,9 +545,9 @@ def test_current_session_version_matches_web_config() -> None:
     if "SESSION_VERSION" in supported_match.group(1):
         web_supported_versions.add(int(match.group(1)))
 
-    assert CURRENT_SESSION_VERSION == 44
+    assert CURRENT_SESSION_VERSION == 46
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
-        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, CURRENT_SESSION_VERSION}
+        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, CURRENT_SESSION_VERSION}
     )
     assert int(match.group(1)) == CURRENT_SESSION_VERSION
     assert web_supported_versions == SUPPORTED_SESSION_VERSIONS
@@ -577,7 +589,7 @@ def test_current_session_feature_catalog_is_single_and_lossless(
     tmp_path: Path,
 ) -> None:
     catalog = {
-        "schema": 4,
+        "schema": CURRENT_FEATURE_CATALOG_SCHEMA,
         "items": [
             {
                 "resultIndex": 0,
@@ -589,6 +601,11 @@ def test_current_session_feature_catalog_is_single_and_lossless(
                         "recordKey": "record-key",
                         "biologicalFeatureId": "feature-1",
                         "fillColor": "#123456",
+                        "drawnSelector": {
+                            "hash": "rendered-feature",
+                            "location": "2..3:+",
+                            "recordLocation": "public-record:2..3:+",
+                        },
                     }
                 ],
                 "biologicalFeatures": [
@@ -629,14 +646,15 @@ def test_current_session_feature_catalog_is_single_and_lossless(
         feature_catalog=catalog,
         canonical_request=_canonical_request("linear"),
     )
-    payload["features"]["selectedFeatureRecordIdx"] = 0
+    payload["modes"] = {"linear": {"config": {"palette": "default"}}}
     path = tmp_path / "schema-3-feature-catalog.gbdraw-session.json"
 
     write_session_json(path, payload)
 
     on_disk = json.loads(path.read_text(encoding="utf-8"))
     assert on_disk["editorState"]["featureCatalog"] == catalog
-    assert on_disk["features"] == {"selectedFeatureRecordIdx": 0}
+    assert on_disk["modes"] == {"linear": {"config": {"palette": "default"}}}
+    assert "features" not in on_disk
     assert on_disk["orthogroupState"] == {}
     assert load_session(path) == on_disk
     assert load_session_document(path).to_dict() == on_disk
@@ -673,17 +691,22 @@ def test_current_session_feature_catalog_is_single_and_lossless(
             missing_empty_catalog,
         )
 
-    for field in ("features", "orthogroupState"):
-        invalid_container = copy.deepcopy(on_disk)
-        invalid_container[field] = []
-        with pytest.raises(
-            ValidationError,
-            match=rf"Session {field} must be an object",
-        ):
-            write_session_json(
-                tmp_path / f"invalid-{field}.json",
-                invalid_container,
-            )
+    invalid_container = copy.deepcopy(on_disk)
+    invalid_container["orthogroupState"] = []
+    with pytest.raises(
+        ValidationError,
+        match=r"Session orthogroupState must be an object",
+    ):
+        write_session_json(
+            tmp_path / "invalid-orthogroupState.json",
+            invalid_container,
+        )
+    # Session 46 keeps the Web draft in the mode slices only.
+    flat_draft = copy.deepcopy(on_disk)
+    flat_draft["features"] = {}
+    with pytest.raises(ValidationError, match="it cannot contain features") as excinfo:
+        write_session_json(tmp_path / "flat-draft.json", flat_draft)
+    assert excinfo.value.diagnostic == {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
 
     interactive_result = copy.deepcopy(on_disk)
     interactive_result["results"][0]["name"] = "out.interactive.svg"
@@ -729,28 +752,15 @@ def test_current_session_feature_catalog_is_single_and_lossless(
             duplicate_feature,
         )
 
-    duplicated_legacy = copy.deepcopy(on_disk)
-    duplicated_legacy["features"]["biologicalFeatures"] = []
-    with pytest.raises(
-        ValidationError,
-        match="derived feature payloads",
-    ):
-        write_session_json(
-            tmp_path / "duplicated-legacy.json",
-            duplicated_legacy,
-        )
-
-    for field in ("featureSelectorSafetyScope", "featureRecordIds"):
+    # A Session 44 draft cannot duplicate the catalog in its flat features.
+    for field in ("biologicalFeatures", "featureSelectorSafetyScope", "featureRecordIds"):
         duplicated_legacy = copy.deepcopy(on_disk)
-        duplicated_legacy["features"][field] = []
+        duplicated_legacy["features"] = {field: []}
         with pytest.raises(
             ValidationError,
             match="derived feature payloads",
         ):
-            write_session_json(
-                tmp_path / f"duplicated-{field}.json",
-                duplicated_legacy,
-            )
+            session_io_module._validate_current_feature_catalog_authority(duplicated_legacy, 44)
 
 
 def test_feature_catalog_compaction_falls_back_for_partial_metadata() -> None:
@@ -878,7 +888,7 @@ def test_current_session_rejects_obsolete_web_state_field_names(
         generated_at=datetime(2026, 7, 30),
         canonical_request=_canonical_request("linear"),
     )
-    payload["config"] = config
+    payload["modes"] = {"linear": {"config": config}}
 
     with pytest.raises(ValidationError, match=re.escape(message)):
         validate_session(payload)
@@ -888,6 +898,7 @@ def test_current_session_rejects_obsolete_web_state_field_names(
     assert not output_path.exists()
 
     payload["version"] = 33
+    payload["config"] = payload.pop("modes")["linear"]["config"]
     payload.get("webFiles", {}).pop("bindings", None)
     payload["renderRequest"]["schema"] = 2
     validate_session(payload)
@@ -948,6 +959,136 @@ def test_released_web_state_field_names_migrate_copy_on_write() -> None:
     validate_current_web_state_field_names(migrated)
 
 
+@pytest.mark.parametrize("schema", [8, CANONICAL_REQUEST_SCHEMA])
+def test_alignment_session_requires_reset_receipt_for_request_schema_8_and_later(schema: int) -> None:
+    # Same rule as services/session-authority.js: renderRequest.schema >= 8.
+    session = {
+        "renderRequest": {
+            "schema": schema,
+            "mode": "linear",
+            "layout": {"similarityAlignment": {"records": [], "reference": {"recordKey": "a"}}},
+        },
+        "editorState": {"featureCatalog": None},
+    }
+    with pytest.raises(ValidationError, match="requires editorState.alignmentResetReceipt"):
+        session_io_module._validate_alignment_reset_receipt(session)
+    session["editorState"]["alignmentResetReceipt"] = None
+    session_io_module._validate_alignment_reset_receipt(session)
+
+
+def test_session_version_46_keys_feature_edits_by_source_identity_per_mode() -> None:
+    # Design Q4: per-feature edits are identity rows. Session 46 keeps each
+    # mode's rows in its own slice (PD-OI-086), so both modes keep their own
+    # row for `record-1` and a row names no mode.
+    payload = build_session_json(
+        SessionBuildContext(
+            mode="circular",
+            output_prefix="out",
+            render_formats=("svg",),
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={},
+        generated_at=datetime(2026, 10, 4),
+        canonical_request=_canonical_request("circular"),
+    )
+    row = {
+        "recordKey": "record-1",
+        "biologicalFeatureId": "feature-1",
+        "featureVisibility": "off",
+        "labelVisibility": None,
+        "labelText": "Edited label",
+        "labelSourceText": "nad1",
+    }
+    source_only = {
+        **row,
+        "biologicalFeatureId": "feature-2",
+        "featureVisibility": None,
+        "labelText": None,
+        "labelSourceText": "nad2",
+    }
+    other_mode = {**row, "labelText": None, "labelSourceText": None}
+
+    def key(feature_id: str) -> str:
+        return json.dumps(["record-1", feature_id], separators=(",", ":"))
+
+    payload["modes"] = {
+        "circular": {"features": {"featureOverrides": {key("feature-1"): row, key("feature-2"): source_only}}},
+        "linear": {"features": {"featureOverrides": {key("feature-1"): other_mode}}},
+    }
+
+    assert payload["version"] == CURRENT_SESSION_VERSION == 46
+    validate_session(payload)
+
+    triple_key = json.dumps(["circular", "record-1", "feature-1"], separators=(",", ":"))
+    for broken_features in (
+        {"featureVisibilityOverrides": {"rendered-1": "off"}},
+        {"featureOverrides": {key("feature-1"): {**row, "recordKey": "record-2"}}},
+        {"featureOverrides": {triple_key: row}},
+        {"featureOverrides": {key("feature-1"): {**row, "scope": "circular"}}},
+        {"featureOverrides": {key("feature-1"): {k: v for k, v in row.items() if k != "labelSourceText"}}},
+        {"featureOverrides": {key("feature-1"): {**row, "featureVisibility": None, "labelText": None,
+                                                 "labelSourceText": None}}},
+        {"featureOverrides": {key("feature-1"): {**row, "labelText": "two\nlines"}}},
+    ):
+        broken = copy.deepcopy(payload)
+        broken["modes"]["circular"]["features"] = broken_features
+        with pytest.raises(ValidationError):
+            validate_session(broken)
+
+
+def test_session_version_46_keeps_feature_placement_drafts_of_each_mode() -> None:
+    # A Linear Session keeps the Circular lane rows in the Circular slice;
+    # each slice's lanes must be sides of its own mode. Session 44 rows (a
+    # JSON pair) belonged to the Session's mode.
+    payload = build_session_json(
+        SessionBuildContext(mode="linear", output_prefix="out", render_formats=("svg",)),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={},
+        generated_at=datetime(2026, 10, 5),
+        canonical_request=_canonical_request("linear"),
+    )
+
+    def placement(side: str | None) -> tuple[str, dict]:
+        target = {"kind": "main"} if side is None else {"kind": "lane", "side": side, "level": 1}
+        row = {"recordKey": "record-1", "biologicalFeatureId": f"f-{side}", "placement": target}
+        return json.dumps(["record-1", f"f-{side}"], separators=(",", ":")), row
+
+    payload["modes"] = {
+        "circular": {"config": {"adv": {}, "featurePlacementOverrides": dict(
+            placement(side) for side in ("outward", None)
+        )}},
+        "linear": {"config": {"adv": {}, "featurePlacementOverrides": dict([placement("above")])}},
+    }
+    validate_session(payload)
+
+    wrong_side_key, wrong_side = placement("outward")
+    above_key, above = placement("above")
+    for broken in (
+        {wrong_side_key: wrong_side},
+        {json.dumps(["linear", "record-1", "f-above"], separators=(",", ":")): above},
+        {above_key: {"scope": "linear", **above}},
+        {wrong_side_key: above},
+    ):
+        invalid = copy.deepcopy(payload)
+        invalid["modes"]["linear"]["config"]["featurePlacementOverrides"] = broken
+        with pytest.raises(ValidationError):
+            validate_session(invalid)
+
+    legacy = copy.deepcopy(payload)
+    legacy["version"] = 44
+    legacy.pop("modes")
+    legacy["editorState"]["featureCatalog"]["schema"] = 4
+    legacy["renderRequest"]["schema"] = 8
+    legacy["renderRequest"]["diagramOptions"].pop("featureOverrides", None)
+    legacy_row = {"recordKey": "record-1", "biologicalFeatureId": "f1", "placement": {"kind": "main"}}
+    legacy["config"] = {"adv": {}, "featurePlacementOverrides": {
+        json.dumps(["record-1", "f1"], separators=(",", ":")): legacy_row
+    }}
+    validate_session(legacy)
+    with pytest.raises(ValidationError, match="Session version 44 cannot contain modes"):
+        validate_session({**legacy, "modes": {}})
+
+
 def test_session_version_44_validates_record_rotation_draft_and_version_42_shape() -> None:
     payload = build_session_json(
         SessionBuildContext(
@@ -960,41 +1101,45 @@ def test_session_version_44_validates_record_rotation_draft_and_version_42_shape
         generated_at=datetime(2026, 9, 23),
         canonical_request=_canonical_request("circular"),
     )
-    payload["config"] = {
-        "adv": {},
-        "recordDisplayDrafts": [
-            {
-                "scope": "circular",
-                "sourceUid": "source-1",
-                "selector": "#1",
-                "recordId": "record-1",
-                "topologyOverride": None,
-                "startCoordinate": 3,
-                "reverseComplementOverride": True,
-                "anchorIntent": {
-                    "schema": 1,
-                    "recordKey": "record-1",
-                    "biologicalFeatureId": "feature-1",
-                    "placement": "anchor",
-                    "anchor": "five-prime",
-                    "offsetBp": -2,
-                    "orientForward": True,
-                },
-            }
-        ],
+    draft = {
+        "sourceUid": "source-1",
+        "selector": "#1",
+        "recordId": "record-1",
+        "topologyOverride": None,
+        "startCoordinate": 3,
+        "reverseComplementOverride": True,
+        "anchorIntent": {
+            "schema": 1,
+            "recordKey": "record-1",
+            "biologicalFeatureId": "feature-1",
+            "placement": "anchor",
+            "anchor": "five-prime",
+            "offsetBp": -2,
+            "orientForward": True,
+        },
     }
+    # Session 46: each mode slice holds its own rows, which name no mode.
+    payload["modes"] = {"circular": {"config": {"adv": {}, "recordDisplayDrafts": [draft]}}}
 
     validate_session(payload)
+    scoped = copy.deepcopy(payload)
+    scoped["modes"]["circular"]["config"]["recordDisplayDrafts"][0]["scope"] = "circular"
+    with pytest.raises(ValidationError, match="Invalid record display draft fields"):
+        validate_session(scoped)
 
     legacy = copy.deepcopy(payload)
     legacy["version"] = 42
+    legacy.pop("modes")
     legacy["editorState"]["featureCatalog"]["schema"] = 3
-    legacy_draft = legacy["config"]["recordDisplayDrafts"][0]
+    legacy_draft = {"scope": "circular", **draft}
     legacy_draft.pop("reverseComplementOverride")
     legacy_draft.pop("anchorIntent")
-    legacy["config"]["adv"] = {
-        "linear_show_accession": True,
-        "linear_show_length": False,
+    legacy["config"] = {
+        "adv": {
+            "linear_show_accession": True,
+            "linear_show_length": False,
+        },
+        "recordDisplayDrafts": [legacy_draft],
     }
     validate_session(legacy)
 
@@ -1011,11 +1156,10 @@ def test_session_version_44_rejects_invalid_record_rotation_anchor_intent() -> N
         generated_at=datetime(2026, 9, 23),
         canonical_request=_canonical_request("circular"),
     )
-    payload["config"] = {
+    payload["modes"] = {"circular": {"config": {
         "adv": {},
         "recordDisplayDrafts": [
             {
-                "scope": "circular",
                 "sourceUid": "source-1",
                 "selector": "#1",
                 "recordId": "record-1",
@@ -1033,7 +1177,7 @@ def test_session_version_44_rejects_invalid_record_rotation_anchor_intent() -> N
                 },
             }
         ],
-    }
+    }}}
 
     with pytest.raises(ValidationError, match="Invalid record display anchor intent"):
         validate_session(payload)
@@ -1380,12 +1524,15 @@ def test_current_writer_requires_typed_request_to_promote_legacy_schema() -> Non
     assert promoted["version"] == CURRENT_SESSION_VERSION
     assert promoted["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
     assert "selectedOrthogroupAlignmentFeature" not in promoted["orthogroupState"]
-    assert promoted["config"]["adv"]["depth_large_tick_interval"] == 10
-    assert promoted["config"]["adv"]["depth_tracks"] == [
-        {"large_tick_interval": 5}
-    ]
+    assert "config" not in promoted
+    for mode in ("circular", "linear"):
+        adv = promoted["modes"][mode]["config"]["adv"]
+        assert adv["depth_large_tick_interval"] == 10
+        assert adv["depth_tracks"] == [{"large_tick_interval": 5}]
+    # LOSATP settings belong to the Linear slice.
+    assert "blastp" not in promoted["modes"]["circular"]["config"].get("losat", {})
     assert (
-        promoted["config"]["losat"]["blastp"]["collinearMaxUnitGap"]
+        promoted["modes"]["linear"]["config"]["losat"]["blastp"]["collinearMaxUnitGap"]
         == 2
     )
 
@@ -1493,33 +1640,45 @@ def test_version_39_writer_promotes_once_and_preserves_web_inventory() -> None:
     assert source["version"] == 39
     assert promoted["version"] == CURRENT_SESSION_VERSION
     assert rewritten["version"] == CURRENT_SESSION_VERSION
+    # The second write copies the first one's mode slices.
+    assert rewritten["modes"] == promoted["modes"]
     for payload in (promoted, rewritten):
         assert "files" not in payload
+        assert "config" not in payload and "features" not in payload
+        circular, linear = (payload["modes"][mode] for mode in ("circular", "linear"))
         assert payload["webFiles"]["linearRecords"] == source["webFiles"][
             "linearRecords"
         ]
         assert payload["webFiles"]["bindings"]["schema"] == 2
         assert "linearCanonicalComparisons" not in payload["webFiles"]["bindings"]
-        assert payload["config"]["linearComparisonPlan"] == {
+        assert linear["config"]["linearComparisonPlan"] == {
             "mode": "adjacent",
             "defaultSource": "losat",
             "edges": [],
         }
-        assert "blastSource" not in payload["config"]
-        assert "comparisons" not in payload["config"]["linearRecordLayout"]
-        assert payload["editorState"]["legend"] == source["editorState"]["legend"]
-        assert payload["editorState"]["featureCatalog"]["schema"] == 4
+        assert "linearComparisonPlan" not in circular["config"]
+        assert "blastSource" not in linear["config"]
+        assert "comparisons" not in linear["config"]["linearRecordLayout"]
+        # The Legend edits go to the saved Result's mode (R1-3).
+        assert linear["editorState"]["legend"] == source["editorState"]["legend"]
+        assert "editorState" not in circular
+        assert "legend" not in payload["editorState"]
+        assert payload["editorState"]["featureCatalog"]["schema"] == CURRENT_FEATURE_CATALOG_SCHEMA
         assert len(payload["editorState"]["featureCatalog"]["items"]) == 1
-        assert payload["features"] == {"selectedFeatureRecordIdx": 0}
+        assert "features" not in circular and "features" not in linear
         assert (
-            payload["config"]["adv"]["circular_track_slots"]
+            circular["config"]["adv"]["circular_track_slots"]
             == source["config"]["adv"]["circular_track_slots"]
         )
-        assert (
-            payload["config"]["adv"]["linear_track_slots"]
-            == source["config"]["adv"]["linear_track_slots"]
-        )
-        assert payload["config"]["modeProfiles"] == source["config"]["modeProfiles"]
+        assert "circular_track_slots" not in linear["config"]["adv"]
+        # Web Load gives each Linear slot its own params (schema 2).
+        assert linear["config"]["adv"]["linear_track_slots"] == [
+            {**slot, "params": {}} for slot in source["config"]["adv"]["linear_track_slots"]
+        ]
+        # The shown mode keeps its flat value; the other mode its saved profile.
+        assert linear["config"]["adv"]["identity"] == source["config"]["adv"]["identity"]
+        assert circular["config"]["adv"]["identity"] == 88
+        assert "modeProfiles" not in circular["config"]
 
 
 def test_genuine_version_39_shape_retains_disabled_layout_upload_draft() -> None:
@@ -1640,9 +1799,10 @@ def test_pre40_web_comparison_draft_migrates_directly_to_final_plan() -> None:
         canonical_request=_canonical_request("linear"),
     )
 
-    assert "blastSource" not in promoted["config"]
-    assert "comparisons" not in promoted["config"]["linearRecordLayout"]
-    assert promoted["config"]["linearComparisonPlan"] == {
+    linear_config = promoted["modes"]["linear"]["config"]
+    assert "blastSource" not in linear_config
+    assert "comparisons" not in linear_config["linearRecordLayout"]
+    assert linear_config["linearComparisonPlan"] == {
         "mode": "selected",
         "defaultSource": "upload",
         "edges": [
@@ -1741,12 +1901,12 @@ def test_current_comparison_authority_rejects_retired_version40_shape() -> None:
         generated_at=datetime(2026, 7, 21),
         canonical_request=_canonical_request("linear"),
     )
-    payload["config"] = {"form": {}, "adv": {}, "blastSource": "losat"}
+    payload["modes"] = {"linear": {"config": {"form": {}, "adv": {}, "blastSource": "losat"}}}
     with pytest.raises(ValidationError, match="retired blastSource"):
         validate_session(payload)
 
-    payload["config"].pop("blastSource")
-    payload["config"]["linearRecordLayout"] = {
+    payload["modes"]["linear"]["config"].pop("blastSource")
+    payload["modes"]["linear"]["config"]["linearRecordLayout"] = {
         "enabled": False,
         "recordGap": 24,
         "rows": [],
@@ -1774,10 +1934,15 @@ def test_current_session_rejects_retired_circular_track_draft_paths(
         generated_at=datetime(2026, 8, 23),
         canonical_request=_canonical_request("circular"),
     )
-    payload["config"] = {"form": {}, "adv": {field: []}}
+    payload["modes"] = {"circular": {"config": {"form": {}, "adv": {field: []}}}}
 
-    with pytest.raises(ValidationError, match=rf"config\.adv\.{field}"):
+    with pytest.raises(ValidationError, match=rf"modes\.circular\.config\.adv cannot contain {field}"):
         validate_session(payload)
+    flat = copy.deepcopy(payload)
+    flat["version"] = 44
+    flat["config"] = flat.pop("modes")["circular"]["config"]
+    with pytest.raises(ValidationError, match=rf"config\.adv\.{field}"):
+        session_io_module._validate_current_retired_active_config_paths(flat)
 
 
 def test_current_comparison_authority_validates_file_bindings() -> None:
@@ -1793,8 +1958,9 @@ def test_current_comparison_authority_validates_file_bindings() -> None:
         canonical_request=_canonical_request("linear"),
     )
     resource_id = next(iter(payload["resources"]))
-    payload["config"] = {"form": {}, "adv": {}}
-    payload["config"]["linearComparisonPlan"] = {
+    # Session 46 keeps the comparison draft in the Linear slice.
+    payload["modes"] = {"linear": {"config": {"form": {}, "adv": {}}}}
+    payload["modes"]["linear"]["config"]["linearComparisonPlan"] = {
         "mode": "selected",
         "defaultSource": "losat",
         "edges": [
@@ -1918,6 +2084,26 @@ def test_future_session_version_fails() -> None:
 
     with pytest.raises(ValidationError, match="newer"):
         validate_session(session)
+
+
+@pytest.mark.parametrize("version", [None, "45"])
+def test_session_without_integer_version_fails_validation(
+    tmp_path: Path,
+    version: object,
+) -> None:
+    # The version check runs before the version-dependent feature-catalog expansion.
+    session: dict[str, object] = {"format": SESSION_FORMAT, "config": {}}
+    if version is not None:
+        session["version"] = version
+    session_path = tmp_path / "session.json"
+    session_path.write_text(json.dumps(session), encoding="utf-8")
+
+    with pytest.raises(ValidationError, match="Session version is required"):
+        load_session(session_path)
+    with pytest.raises(SessionVersionError, match="Session version is required"):
+        load_session_document(session)
+    with pytest.raises(ValidationError, match="Session version is required"):
+        write_session_json(tmp_path / "written.json", session)
 
 
 def test_current_session_rejects_legacy_files_but_version_39_accepts_them() -> None:
@@ -2171,6 +2357,18 @@ def test_session_json_gzip_round_trip(tmp_path: Path) -> None:
 
     assert session_path.read_bytes().startswith(b"\x1f\x8b")
     assert load_session(session_path) == session
+
+
+def test_session_json_gzip_decompresses_to_the_plain_bytes(tmp_path: Path) -> None:
+    import gzip
+
+    session = _minimal_session({})
+    write_session_json(tmp_path / "session.json", session)
+    write_session_json(tmp_path / "session.json.gz", session)
+
+    assert gzip.decompress((tmp_path / "session.json.gz").read_bytes()) == (
+        tmp_path / "session.json"
+    ).read_bytes()
 
 
 def test_embedded_file_materialization_sanitizes_name(tmp_path: Path) -> None:
@@ -3191,15 +3389,11 @@ def test_circular_cli_save_session_round_trip(tmp_path: Path, examples_dir: Path
     assert payload["resources"]["record-1-genbank"]["data"]
     assert "<svg" in payload["results"][0]["content"]
     catalog = payload["editorState"]["featureCatalog"]
-    assert catalog["schema"] == 4
+    assert catalog["schema"] == CURRENT_FEATURE_CATALOG_SCHEMA
     assert len(catalog["items"]) == len(payload["results"]) == 1
     assert catalog["items"][0]["features"]
     assert catalog["items"][0]["biologicalFeatures"]
-    assert not {
-        "extractedFeatures",
-        "biologicalFeatures",
-        "featureCatalog",
-    }.intersection(payload["features"])
+    assert "features" not in payload and "modes" not in payload
     assert "groups" not in payload["orthogroupState"]
     assert payload["cliInvocation"]["mode"] == "circular"
     assert payload["cliInvocation"]["fileBindings"][0]["slot"] == "files.c_gb"
@@ -3223,6 +3417,294 @@ def test_circular_cli_save_session_round_trip(tmp_path: Path, examples_dir: Path
         ]
     )
     assert regenerated_prefix.with_suffix(".svg").exists()
+
+
+def _circular_genbank(*records: tuple[str, str, str]) -> str:
+    """Small circular GenBank records: (record ID, gene, CDS location)."""
+
+    sequence = "".join(
+        f"{index * 60 + 1:>9} {'acgt' * 15}\n" for index in range(6)
+    )
+    return "".join(
+        f"LOCUS       {record_id:<24} 360 bp    DNA     circular UNA 01-JAN-2000\n"
+        "DEFINITION  CLI Session input.\n"
+        f"ACCESSION   {record_id}\nVERSION     {record_id}\nKEYWORDS    .\n"
+        "SOURCE      synthetic construct\n  ORGANISM  synthetic construct\n            .\n"
+        "FEATURES             Location/Qualifiers\n"
+        "     source          1..360\n"
+        f"     CDS             {location}\n"
+        f'                     /gene="{gene}"\n'
+        f'                     /locus_tag="{gene}"\n'
+        '                     /translation="MKKKKKKKKK"\n'
+        f"ORIGIN\n{sequence}//\n"
+        for record_id, gene, location in records
+    )
+
+
+def _cli_session_inputs(tmp_path: Path) -> tuple[Path, Path]:
+    single = tmp_path / "single.gbk"
+    single.write_text(_circular_genbank(("cli_single", "single_gene", "41..125")))
+    multi = tmp_path / "multi.gbk"
+    multi.write_text(_circular_genbank(
+        ("cli_multi_a", "multi_a_gene", "61..150"),
+        ("cli_multi_b", "multi_b_gene", "complement(101..200)"),
+    ))
+    return single, multi
+
+
+def _resource_bytes(session: dict, resource_id: str) -> bytes:
+    return base64.b64decode(session["resources"][resource_id]["data"])
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_cli_session_binds_each_unmodified_input_file_to_its_records(
+    tmp_path: Path, mode: str
+) -> None:
+    """Web Load sees the request draw its records from the bound input files.
+
+    The CLI binds each input file for the Web draft. When the request draws a
+    file's records unchanged, it reads the same resource, which holds the
+    file's own bytes, so record actions need no Generate after Load.
+    """
+
+    single, multi = _cli_session_inputs(tmp_path)
+    session_path = tmp_path / f"{mode}.gbdraw-session.json"
+    prefix = tmp_path / mode
+    main = circular_main if mode == "circular" else linear_main
+    inputs = [str(single)] if mode == "circular" else [str(single), str(multi)]
+    main(["--gbk", *inputs, "-o", str(prefix), "-f", "svg",
+          "--session_output", str(session_path)])
+
+    session = load_session(session_path)
+    bindings = session["webFiles"]["bindings"]
+    records = session["renderRequest"]["records"]
+    if mode == "circular":
+        assert [record["source"] for record in records] == [
+            {"kind": "genbank", "resourceId": bindings["c_gb"]["resourceId"]}
+        ]
+        assert [record["selector"] for record in records] == [None]
+        files = {bindings["c_gb"]["resourceId"]: single}
+    else:
+        first, second = (sequence["gb"]["resourceId"] for sequence in bindings["linearSeqs"])
+        assert [(record["source"]["resourceId"], record["selector"]) for record in records] == [
+            (first, None),
+            (second, {"kind": "recordId", "value": "cli_multi_a"}),
+            (second, {"kind": "recordId", "value": "cli_multi_b"}),
+        ]
+        files = {first: single, second: multi}
+    assert sorted(session["resources"]) == sorted(files)
+    for resource_id, path in files.items():
+        assert _resource_bytes(session, resource_id) == path.read_bytes()
+        assert session["resources"][resource_id]["name"] == path.name
+
+    replay = tmp_path / f"{mode}-replay"
+    main(["--session", str(session_path), "-o", str(replay), "-f", "svg"])
+    assert replay.with_suffix(".svg").read_bytes() == prefix.with_suffix(".svg").read_bytes()
+
+
+def test_cli_session_binds_unmodified_gff_and_fasta_inputs_to_their_record(
+    tmp_path: Path,
+) -> None:
+    inputs = Path(__file__).parent / "test_inputs"
+    session_path = tmp_path / "gff.gbdraw-session.json"
+    circular_main(["--gff", str(inputs / "NC_013668.gff3"), "--fasta",
+                   str(inputs / "NC_013668.fasta"), "-o", str(tmp_path / "gff"),
+                   "-f", "svg", "--session_output", str(session_path)])
+
+    session = load_session(session_path)
+    bindings = session["webFiles"]["bindings"]
+    assert [record["source"] for record in session["renderRequest"]["records"]] == [{
+        "kind": "gffFasta",
+        "gffResourceId": bindings["c_gff"]["resourceId"],
+        "fastaResourceId": bindings["c_fasta"]["resourceId"],
+    }]
+    assert sorted(session["resources"]) == sorted(
+        [bindings["c_gff"]["resourceId"], bindings["c_fasta"]["resourceId"]]
+    )
+    assert _resource_bytes(session, bindings["c_gff"]["resourceId"]) == (
+        inputs / "NC_013668.gff3"
+    ).read_bytes()
+
+
+def _write_records_table(tmp_path: Path) -> Path:
+    table = tmp_path / "records.tsv"
+    table.write_text(
+        "gbk\trecord_id\tregion\treverse_complement\n"
+        "single.gbk\t\t21-300:rc\t0\n"
+        "multi.gbk\tcli_multi_a\t\t1\n"
+        "multi.gbk\tcli_multi_b\t21-300\t1\n",
+        encoding="utf-8",
+    )
+    return table
+
+
+@pytest.mark.parametrize("case", ["options", "table"])
+def test_linear_cli_session_records_crop_and_orientation_on_the_unchanged_input_file(
+    tmp_path: Path, case: str
+) -> None:
+    """A cropped or reversed record reads its input file with a region and orientation.
+
+    The request names the crop (in source coordinates) and the orientation, as
+    the Web writes them, instead of a re-serialized copy of the drawn record.
+    The Web draft that loads the bound input file then draws the same record,
+    and a replay draws the same SVG. Orientation applied before a crop (the
+    CLI order) is written as the equivalent source-coordinate crop.
+    """
+
+    single, multi = _cli_session_inputs(tmp_path)
+    session_path = tmp_path / f"{case}.gbdraw-session.json"
+    prefix = tmp_path / case
+    if case == "options":
+        args = ["--gbk", str(single), str(multi),
+                "--region", "cli_single:21-300", "--region", "cli_multi_b:21-300",
+                "--reverse_complement", "0", "--reverse_complement", "1"]
+        single_region = {"selector": None, "start": 21, "end": 300, "reverseComplement": False}
+    else:
+        args = ["--records_table", str(_write_records_table(tmp_path))]
+        single_region = {"selector": None, "start": 21, "end": 300, "reverseComplement": True}
+    linear_main([*args, "-o", str(prefix), "-f", "svg", "--session_output", str(session_path)])
+
+    session = load_session(session_path)
+    records = session["renderRequest"]["records"]
+    first, second = records[0]["source"]["resourceId"], records[1]["source"]["resourceId"]
+    assert [
+        (record["source"]["resourceId"], record["selector"], record["region"],
+         record["presentation"]["reverseComplement"])
+        for record in records
+    ] == [
+        (first, None, single_region, False),
+        (second, {"kind": "recordId", "value": "cli_multi_a"}, None, True),
+        # Reversed 360 bp record cropped to 21..300 = source 61..340, reversed.
+        (second, None, {"selector": {"kind": "recordId", "value": "cli_multi_b"},
+                        "start": 61, "end": 340, "reverseComplement": True}, False),
+    ]
+    assert _resource_bytes(session, first) == single.read_bytes()
+    assert _resource_bytes(session, second) == multi.read_bytes()
+    if case == "options":
+        bound = [sequence["gb"]["resourceId"]
+                 for sequence in session["webFiles"]["bindings"]["linearSeqs"]]
+        assert bound == [first, second]
+
+    replay = tmp_path / f"{case}-replay"
+    linear_main(["--session", str(session_path), "-o", str(replay), "-f", "svg"])
+    assert replay.with_suffix(".svg").read_bytes() == prefix.with_suffix(".svg").read_bytes()
+
+
+@pytest.mark.parametrize("case", ["options", "table"])
+def test_linear_cli_session_selects_the_drawn_records_of_a_partly_drawn_input_file(
+    tmp_path: Path, case: str
+) -> None:
+    """A file of which the CLI draws some records reads the file and selects them.
+
+    The request reads the input file's own bytes and selects each drawn record
+    by its ID, or by its index when another record of the file has the same
+    ID, as the Web writes the records it draws of one multi-record File. The
+    bound File is that same resource, so Web Load draws only those records,
+    and a replay draws the same SVG.
+    """
+
+    single, multi = _cli_session_inputs(tmp_path)
+    session_path = tmp_path / f"{case}.gbdraw-session.json"
+    prefix = tmp_path / case
+    if case == "options":
+        args = ["--gbk", str(single), str(multi), "--record_id", "", "--record_id", "cli_multi_b"]
+        selected = [{"kind": "recordId", "value": "cli_multi_b"}]
+    else:
+        multi.write_text(_circular_genbank(
+            ("twin", "twin_a_gene", "61..150"),
+            ("cli_unique", "unique_gene", "101..200"),
+            ("twin", "twin_c_gene", "201..300"),
+        ))
+        table = tmp_path / "records.tsv"
+        table.write_text(
+            "gbk\trecord_id\nsingle.gbk\t\nmulti.gbk\t#3\nmulti.gbk\tcli_unique\n",
+            encoding="utf-8",
+        )
+        args = ["--records_table", str(table)]
+        # Only one drawn record is "twin", but the file has two.
+        selected = [{"kind": "recordIndex", "index": 2}, {"kind": "recordId", "value": "cli_unique"}]
+    linear_main([*args, "-o", str(prefix), "-f", "svg", "--session_output", str(session_path)])
+
+    session = load_session(session_path)
+    records = session["renderRequest"]["records"]
+    first, second = records[0]["source"]["resourceId"], records[1]["source"]["resourceId"]
+    assert [(record["source"]["resourceId"], record["selector"], record["region"])
+            for record in records] == [
+        (first, None, None), *((second, selector, None) for selector in selected)
+    ]
+    assert sorted(session["resources"]) == sorted({first, second})
+    assert _resource_bytes(session, first) == single.read_bytes()
+    assert _resource_bytes(session, second) == multi.read_bytes()
+    if case == "options":
+        bound = [sequence["gb"]["resourceId"]
+                 for sequence in session["webFiles"]["bindings"]["linearSeqs"]]
+        assert bound == [first, second]
+
+    replay = tmp_path / f"{case}-replay"
+    linear_main(["--session", str(session_path), "-o", str(replay), "-f", "svg"])
+    assert replay.with_suffix(".svg").read_bytes() == prefix.with_suffix(".svg").read_bytes()
+
+
+@pytest.mark.parametrize("canvas", [False, True])
+def test_circular_cli_session_keeps_cropped_and_reversed_records_as_drawn(
+    tmp_path: Path, canvas: bool
+) -> None:
+    """A Circular batch or grid draft has no per-record crop or orientation.
+
+    So those records keep their drawn copy, which the Web draws as is; only an
+    unchanged record reads its input file. The copy is the replay's source, so
+    its features take the copy's own hashes (OV-415); the rest of the drawing
+    is the same.
+    """
+
+    single, multi = _cli_session_inputs(tmp_path)
+    session_path = tmp_path / "circular.gbdraw-session.json"
+    prefix = tmp_path / "circular"
+    args = ["--records_table", str(_write_records_table(tmp_path))]
+    circular_main([*args, *(["--multi_record_canvas"] if canvas else []), "-o", str(prefix),
+                   "-f", "svg", "--session_output", str(session_path)])
+
+    session = load_session(session_path)
+    records = session["renderRequest"]["records"]
+    assert session["renderRequest"]["grouping"] == ("grid" if canvas else "batch")
+    assert [(record["region"], record["presentation"]["reverseComplement"])
+            for record in records] == [(None, False)] * 3
+    assert {
+        _resource_bytes(session, record["source"]["resourceId"]) for record in records
+    }.isdisjoint({single.read_bytes(), multi.read_bytes()})
+
+    replay = tmp_path / "circular-replay"
+    circular_main(["--session", str(session_path), "-o", str(replay), "-f", "svg"])
+    replayed = sorted(tmp_path.glob("circular-replay*.svg"))
+    assert len(replayed) == (1 if canvas else 3)
+    feature_hash = re.compile(rb"\bf[0-9a-f]{8}\b")
+    for path in replayed:
+        original = tmp_path / path.name.replace("circular-replay", "circular", 1)
+        assert feature_hash.sub(b"f", path.read_bytes()) == feature_hash.sub(
+            b"f", original.read_bytes()
+        )
+
+
+def test_single_circular_session_records_crop_on_the_unchanged_input_file(
+    tmp_path: Path,
+) -> None:
+    """A single Circular request's crop and orientation are the Web form's."""
+
+    single, _multi = _cli_session_inputs(tmp_path)
+    document = build_session_document(CircularDiagramRequest(
+        records=(RecordInput(
+            source=GenBankInputSource(single),
+            region=parse_region_spec("21-300:rc"),
+        ),),
+        output=RenderOutputRequest(output_prefix="single", output_directory=tmp_path),
+        grouping="single",
+    )).to_dict()
+
+    [record] = document["renderRequest"]["records"]
+    assert (record["selector"], record["region"], record["presentation"]["reverseComplement"]) == (
+        None, {"selector": None, "start": 21, "end": 300, "reverseComplement": True}, False
+    )
+    assert _resource_bytes(document, record["source"]["resourceId"]) == single.read_bytes()
 
 
 def test_depth_session_entry_materializes_encoded_payload(tmp_path: Path) -> None:
@@ -3458,13 +3940,13 @@ def _replay_cli_sidecar(source, tmp_path, suffix='.json'):
     ])
     assert source_path.read_bytes() == original
     result = load_session_document(sidecar).to_dict()
-    assert (result['version'], result['webFiles']['bindings']['schema'], result['renderRequest']['schema']) == (44, 2, 8)
+    assert (result['version'], result['webFiles']['bindings']['schema'], result['renderRequest']['schema']) == (CURRENT_SESSION_VERSION, 2, CANONICAL_REQUEST_SCHEMA)
     assert result['renderRequest']['output']['prefix'] == 'replayed'
     assert len(result['renderRequest']['records']) == 1  # Replay consumes committed input.
     assert result['results'][0]['content'] == prefix.with_suffix('.svg').read_text()
     assert result['results'] != source['results']
     catalog = result['editorState']['featureCatalog']
-    assert catalog['schema'] == 4 and len(catalog['items']) == 1
+    assert catalog['schema'] == CURRENT_FEATURE_CATALOG_SCHEMA and len(catalog['items']) == 1
     assert catalog['items'][0]['resultName'] == result['results'][0]['name']
     return result
 
@@ -3601,7 +4083,9 @@ def test_cli_i24f_invalid_bindings_reject_before_render_or_publication(tmp_path,
         svg.write_bytes(b'existing diagram')
         sidecar.write_bytes(b'existing sidecar')
     calls = []
-    monkeypatch.setattr(cli_session, '_render_request', lambda *a, **kw: calls.append(a))
+    import gbdraw.session as session_module
+
+    monkeypatch.setattr(session_module, '_render_session_drawing_plans', lambda *a, **kw: calls.append(a))
     with pytest.raises((ValidationError, SystemExit)):
         circular_main([
             '--session', str(source_path), '-o', str(svg.with_suffix('')),
@@ -3623,7 +4107,7 @@ def test_cli_i24_explicit_null_inventory_survives_without_direct_fields(tmp_path
 
 
 def test_cli_projection_request_only_session_keeps_no_inventory():
-    from gbdraw.cli_utils.session import _project_web_file_inventory
+    from gbdraw.session_migration import _project_web_file_inventory
 
     source = _cli_composite_source()
     del source['webFiles']
@@ -3634,7 +4118,7 @@ def test_cli_projection_request_only_session_keeps_no_inventory():
 @pytest.mark.parametrize('invalid', ['mixed-leaf', 'mixed-composite', 'nested', 'null'])
 def test_internal_composite_transport_rejects_unsupported_shapes(invalid):
     source = _cli_composite_source()
-    from gbdraw.cli_utils.session import _project_web_file_inventory
+    from gbdraw.session_migration import _project_web_file_inventory
 
     load_session_document(source)
     inventory = _project_web_file_inventory(source)
@@ -3649,3 +4133,64 @@ def test_internal_composite_transport_rejects_unsupported_shapes(invalid):
         composite['components'][0] = None
     with pytest.raises(ValidationError):
         session_io_module._attach_current_web_file_bindings({'resources': {}}, inventory)
+
+
+def _linear_session_with_cards(source_session: dict | None = None, **card_fields: str) -> dict:
+    cards = [{"uid": uid, "gb": None, "gff": None, "fasta": None, **card_fields} for uid in ("seq-1", "seq-2")]
+    return build_session_json(
+        SessionBuildContext(
+            mode="linear", output_prefix="out", render_formats=("svg",), source_session=source_session,
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={"linearSeqs": cards},
+        generated_at=datetime(2026, 10, 10),
+        canonical_request=_canonical_request("linear"),
+    )
+
+
+def test_session_mode_slices_keep_records_off_and_reject_unknown_keys() -> None:
+    # Record selection D-05: each slice lists its OFF records once each, a
+    # Linear card uid bound in webFiles or a Circular source selector `#N`.
+    payload = _linear_session_with_cards()
+    modes = payload.setdefault("modes", {})
+    modes.setdefault("linear", {}).setdefault("config", {})["recordsOff"] = ["seq-2"]
+    modes.setdefault("circular", {}).setdefault("config", {})["recordsOff"] = ["#2", "#10"]
+    validate_session(payload)
+
+    for mode, records_off in (
+        ("linear", ["not-a-card"]),
+        ("linear", ["seq-2", "seq-2"]),
+        ("linear", "seq-2"),
+        ("linear", [""]),
+        ("circular", ["contig_2"]),
+        ("circular", ["#0"]),
+        ("circular", [2]),
+    ):
+        invalid = copy.deepcopy(payload)
+        invalid["modes"][mode]["config"]["recordsOff"] = records_off
+        with pytest.raises(ValidationError) as caught:
+            validate_session(invalid)
+        assert caught.value.diagnostic == {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}, (
+            mode, records_off,
+        )
+
+    # A CLI re-save keeps the OFF records of both slices.
+    resaved = build_session_json(
+        SessionBuildContext(mode="linear", output_prefix="again", render_formats=("svg",), source_session=payload),
+        svg_results=(("again", "<svg></svg>"),),
+        embedded_files={"linearSeqs": payload["webFiles"]["bindings"]["linearSeqs"]},
+        generated_at=datetime(2026, 10, 11),
+        canonical_request=_canonical_request("linear"),
+    )
+    assert resaved["modes"]["linear"]["config"]["recordsOff"] == ["seq-2"]
+    assert resaved["modes"]["circular"]["config"]["recordsOff"] == ["#2", "#10"]
+
+
+def test_cli_resave_keeps_file_defaults_of_linear_cards() -> None:
+    # OV-402: the File definition, File subtitle, and inferred definition of a
+    # Linear card survive a CLI re-save, as the Web writer saves them.
+    defaults = {"file_definition": "File def", "file_subtitle": "File sub", "inferred_definition": "Inferred"}
+    payload = _linear_session_with_cards(**defaults)
+    validate_session(payload)
+    for card in payload["webFiles"]["bindings"]["linearSeqs"]:
+        assert {key: card.get(key) for key in defaults} == defaults

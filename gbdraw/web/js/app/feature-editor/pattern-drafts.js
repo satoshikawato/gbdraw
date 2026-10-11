@@ -1,9 +1,19 @@
+// @ts-check
 // Transient display state for existing Color-rule patterns. Canonical rows stay
 // with rule-actions; signatures only recognize unchanged rows after bulk restore.
 const specificRuleRevision = (rule) => JSON.stringify([
   rule.feat, rule.qual, rule.val, rule.color, rule.cap, Boolean(rule.fromFile)
 ]);
 
+/**
+ * @typedef {object} SpecificRulePatternDraftsOptions
+ * @property {() => Record<string, any>[]} rules The canonical Color-rule rows of the shown mode's drawing
+ *   (their owner is rule-actions).
+ * @property {(value?: any) => { value: any }} ref Vue `ref`
+ * @property {() => void} invalidate Tells the rule owner a displayed pattern changed.
+ */
+
+/** @param {SpecificRulePatternDraftsOptions} options */
 export const createSpecificRulePatternDrafts = ({ rules, ref, invalidate }) => {
   const drafts = ref(new Map());
   const fieldIds = new WeakMap();
@@ -17,7 +27,7 @@ export const createSpecificRulePatternDrafts = ({ rules, ref, invalidate }) => {
   const get = (row) => drafts.value.get(row) || null;
   const text = (row) => get(row)?.text ?? row.val;
   const edit = (row, value) => {
-    if (!rules.includes(row)) return null;
+    if (!rules().includes(row)) return null;
     const valueText = String(value ?? '');
     if (get(row)?.text === valueText) return get(row);
     invalidate();
@@ -37,7 +47,7 @@ export const createSpecificRulePatternDrafts = ({ rules, ref, invalidate }) => {
     draft.error = null;
     return draft.revision;
   };
-  const isCurrent = (row, token) => rules.includes(row) && get(row)?.revision === token;
+  const isCurrent = (row, token) => rules().includes(row) && get(row)?.revision === token;
   const suspend = () => {
     invalidate();
     for (const draft of drafts.value.values()) {
@@ -56,12 +66,12 @@ export const createSpecificRulePatternDrafts = ({ rules, ref, invalidate }) => {
     documentRevision += 1;
   };
   const reconcile = () => {
-    for (const row of drafts.value.keys()) if (!rules.includes(row)) drafts.value.delete(row);
+    for (const row of drafts.value.keys()) if (!rules().includes(row)) drafts.value.delete(row);
   };
   const capture = () => {
     suspend();
     return { documentRevision, entries: [...drafts.value].map(([row, draft]) => ({
-      index: rules.indexOf(row), accepted: specificRuleRevision(row), draft: { ...draft }, id: fieldId(row)
+      index: rules().indexOf(row), accepted: specificRuleRevision(row), draft: { ...draft }, id: fieldId(row)
     })) };
   };
   const restore = (snapshot) => {
@@ -69,7 +79,7 @@ export const createSpecificRulePatternDrafts = ({ rules, ref, invalidate }) => {
     suspend();
     drafts.value.clear();
     for (const entry of snapshot.entries) {
-      const row = rules[entry.index];
+      const row = rules()[entry.index];
       if (!row || specificRuleRevision(row) !== entry.accepted) continue;
       fieldIds.set(row, entry.id);
       drafts.value.set(row, { ...entry.draft, revision: ++revision, pending: false });

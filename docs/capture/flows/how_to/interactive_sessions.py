@@ -69,8 +69,8 @@ SESSION_TITLE = "reproducible_work"
 SESSION_FILENAME = f"{SESSION_TITLE}.gbdraw-session.json.gz"
 RELOADED_OUTPUT_PREFIX = "reloaded_diagram"
 RELOADED_SVG_NAME = f"{RELOADED_OUTPUT_PREFIX}.svg"
-CURRENT_SESSION_VERSION = 44
-CURRENT_RENDER_REQUEST_SCHEMA = 8
+CURRENT_SESSION_VERSION = 46
+CURRENT_RENDER_REQUEST_SCHEMA = 9
 STATIC_CAPTURE_HEADER_STYLE = """
 .app-header {
     -webkit-backdrop-filter: none !important;
@@ -837,7 +837,7 @@ def _capture_bgc_popups(
         expect(match_popup).to_be_visible()
         page.wait_for_timeout(250)
         match_text = match_popup.inner_text()
-        for token in ("Similarity group ID", "Members", "og_"):
+        for token in ("genes in", "records", "og_"):
             if token.casefold() not in match_text.casefold():
                 raise AssertionError(
                     f"Similarity-group match popup is missing {token!r}: "
@@ -858,12 +858,19 @@ def _capture_bgc_popups(
         )
         page.wait_for_timeout(250)
         group_text = group_popup.inner_text()
-        for token in ("Similarity group", "og_1", "Members", "Record coverage"):
+        for token in ("Similarity group", "og_1", "5 genes", "genes in"):
             if token.casefold() not in group_text.casefold():
                 raise AssertionError(
                     f"Similarity-group feature popup is missing {token!r}: "
                     f"{group_text!r}"
                 )
+        # The Edit tab lists Appearance and Layout before the Similarity group
+        # section, so bring that section (count line and actions) into view.
+        similarity = group_popup.locator('[data-feature-popup-group="similarity"]')
+        expect(similarity).to_have_count(1)
+        similarity.evaluate("(el) => { const body = el.closest('.feature-popup-body'); if (body) body.scrollTop += el.getBoundingClientRect().top - body.getBoundingClientRect().top; }")
+        expect(similarity).to_contain_text("5 genes in 5 records")
+        page.wait_for_timeout(250)
         screenshot_bytes["group-popup.png"] = capture_screenshot(
             page, output_paths["group-popup.png"], "Linear"
         )
@@ -872,7 +879,7 @@ def _capture_bgc_popups(
         ).click()
         orthogroup_editor = page.locator(".right-drawer")
         expect(orthogroup_editor).to_be_visible()
-        for token in ("23 similarity groups", "og_1", "5 members", "5 records"):
+        for token in ("23 similarity groups", "og_1", "5 genes · 5 records"):
             expect(orthogroup_editor).to_contain_text(token)
         capture.assert_clean()
     finally:

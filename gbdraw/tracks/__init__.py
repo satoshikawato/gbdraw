@@ -1,8 +1,8 @@
 """Circular track-slot input helpers."""
 
-from .parsing import parse_nonnegative_integer  # type: ignore[reportMissingImports]
-from .scalars import ScalarSpec, ScalarUnit  # type: ignore[reportMissingImports]
-from .circular import (  # type: ignore[reportMissingImports]
+from .parsing import parse_nonnegative_integer
+from .scalars import ScalarSpec, ScalarUnit
+from .circular import (
     CircularTrackRendererName,
     CircularTrackSide,
     CircularTrackSlot,
@@ -18,7 +18,7 @@ from .circular import (  # type: ignore[reportMissingImports]
     parse_circular_track_slot,
     parse_circular_track_slots,
 )
-from .linear import (  # type: ignore[reportMissingImports]
+from .linear import (
     LinearTrackRendererName,
     LinearTrackSide,
     LinearTrackSlot,

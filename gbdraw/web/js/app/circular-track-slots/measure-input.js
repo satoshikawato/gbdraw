@@ -1,8 +1,9 @@
+// @ts-check
 import {
   readCircularMeasure,
   writeCircularMeasureValue,
   changeCircularMeasureUnit
-} from './measure-editor.js';
+} from '../../services/circular-track-measure.js';
 
 export const CircularMeasureInput = {
   template: '#circular-measure-input-template',
@@ -19,7 +20,8 @@ export const CircularMeasureInput = {
     const { computed, ref } = window.Vue;
     // Only Auto has a local next-input preference. Manual units come from the slot.
     const autoUnit = ref('factor');
-    const view = computed(() => readCircularMeasure(props.modelValue));
+    const label = computed(() => props.field === 'width' ? 'Width' : 'Radius');
+    const view = computed(() => readCircularMeasure(props.modelValue, label.value));
     const selectedUnit = computed({
       get: () => view.value.isAuto ? autoUnit.value : view.value.selectedUnit,
       set: (unit) => {
@@ -35,7 +37,6 @@ export const CircularMeasureInput = {
       get: () => view.value.valueText,
       set: (text) => emit('update:modelValue', writeCircularMeasureValue(text, selectedUnit.value))
     });
-    const label = computed(() => props.field === 'width' ? 'Width' : 'Radius');
     const accessibleName = computed(() => `Circular track slot ${props.slotId} ${label.value}`);
     const describedBy = computed(() => [
       'circular-measure-help',

@@ -597,10 +597,10 @@ const renderTutorial = (tutorial, sample) => {
   }
 
   clearChildren(tutorialContent);
-  appendText(tutorialContent, 'h2', '', asText(tutorial.title) || plainTitle(sample));
+  appendHtml(tutorialContent, 'h2', '', asText(tutorial.title) || sample.title || sample.id);
 
   const summary = asText(tutorial.summary);
-  if (summary) appendText(tutorialContent, 'p', 'tutorial-summary', summary);
+  if (summary) appendHtml(tutorialContent, 'p', 'tutorial-summary', summary);
 
   renderTextListSection(tutorialContent, 'Requirements', tutorial.requirements);
   if (asArray(tutorial.downloads).length) {
@@ -829,7 +829,7 @@ const renderSampleList = () => {
     body.className = 'sample-card__body';
     appendHtml(body, 'span', 'sample-card__title', sample.title);
     if (sample.description) {
-      appendText(body, 'span', 'sample-card__description', sample.description);
+      appendHtml(body, 'span', 'sample-card__description', sample.description);
     }
     appendText(
       body,
@@ -939,7 +939,7 @@ const selectSample = (id, { updateUrl = true } = {}) => {
 
   selectedId = sample.id;
   selectedTitle.innerHTML = sample.title;
-  selectedDescription.textContent = sample.description || '';
+  selectedDescription.innerHTML = sample.description || '';
   selectedDescription.hidden = !sample.description;
   selectedMeta.textContent = [sample.workflow, sample.inputSummary]
     .filter(Boolean)

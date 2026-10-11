@@ -1,0 +1,3 @@
+gbk	record_label	topology	display_start	region
+../../test_inputs/HmmtDNA.gbk	Human mitochondrion	circular	5000	
+../../test_inputs/NC_001416.gb	Lambda			1-20000:rc

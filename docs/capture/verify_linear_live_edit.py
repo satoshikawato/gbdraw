@@ -51,7 +51,7 @@ def checkpoint(page, name, output):
       return {
         result: s.results.value[s.selectedResultIndex.value]?.content || '',
         mounted: root ? serializeCleanSvg(root) : '',
-        request: getCommittedCanonicalRenderRequest(), draft: await buildConfigData(),
+        request: getCommittedCanonicalRenderRequest(), draft: await buildConfigData(s.activeDrawing()),
         identity: s.extractedFeatures.value.map(f => ({id:f.id, biologicalFeatureId:f.biologicalFeatureId,
           record:f.record_id, start:f.start, end:f.end, strand:f.strand})),
         history: [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()],
@@ -193,7 +193,7 @@ def main():
             )
             assert "comparison" in generated["mounted"].lower()
             # Use the same live Feature editor through its public controls.
-            page.get_by_role("button", name="Open editor", exact=True).click()
+            page.get_by_role("button", name="Editor", exact=True).click()
             page.get_by_label("Auto Reflow", exact=True).uncheck()
             # CSS/placeholder findings: list search and popup label lack associated labels.
             page.get_by_placeholder("Search by feature or annotation...").fill(

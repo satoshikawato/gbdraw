@@ -461,27 +461,27 @@ def read_circular_track_table(
     if explicit_axis_rows:
         axis_row_index = explicit_axis_rows[0].row_index
     else:
-        for row in track_rows:
-            if row.side is None and row.renderer.strip().lower() == "features":
-                axis_row_index = row.row_index
+        for track_row in track_rows:
+            if track_row.side is None and track_row.renderer.strip().lower() == "features":
+                axis_row_index = track_row.row_index
                 break
 
     normalized_rows: list[_TrackRow] = []
-    for row in track_rows:
-        side = row.side
-        if axis_row_index is not None and row.row_index == axis_row_index:
+    for track_row in track_rows:
+        side = track_row.side
+        if axis_row_index is not None and track_row.row_index == axis_row_index:
             side = "axis"
         elif side is None:
             side = "inside"
         normalized_rows.append(
             _TrackRow(
-                row_index=row.row_index,
-                row_number=row.row_number,
-                slot_id=row.slot_id,
-                renderer=row.renderer,
+                row_index=track_row.row_index,
+                row_number=track_row.row_number,
+                slot_id=track_row.slot_id,
+                renderer=track_row.renderer,
                 side=side,
-                params=row.params,
-                values=row.values,
+                params=track_row.params,
+                values=track_row.values,
             )
         )
 
@@ -492,8 +492,8 @@ def read_circular_track_table(
     axis_index = len(outside_rows)
 
     specs: list[str] = []
-    for row in ordered_rows:
-        specs.append(_circular_track_row_to_spec(table_path, row))
+    for track_row in ordered_rows:
+        specs.append(_circular_track_row_to_spec(table_path, track_row))
     try:
         slots = parse_circular_track_slots(
             specs,
@@ -549,7 +549,7 @@ def read_records_table(path: str) -> RecordsTable:
         fasta_path = _resolve_table_path(table_path, fasta_raw) if fasta_raw else ""
         has_gbk_rows = has_gbk_rows or bool(gbk_path)
         has_gff_rows = has_gff_rows or bool(gff_path)
-        for column, resolved_path in (
+        for dependency_column, resolved_path in (
             ("gbk", gbk_path),
             ("gff", gff_path),
             ("fasta", fasta_path),
@@ -559,7 +559,7 @@ def read_records_table(path: str) -> RecordsTable:
                     TablePathDependency(
                         row_index=row.row_index,
                         row_number=row.row_number,
-                        column=column,
+                        column=dependency_column,
                         path=resolved_path,
                     )
                 )
@@ -662,7 +662,7 @@ def read_comparisons_table(path: str) -> ComparisonTable:
                 _cell_error(table_path, row.row_number, "source", "expected table or losat"),
                 diagnostic={"code": "TABLE_INVALID", "field": "source", "row": row.row_number},
             )
-        required_cells = (("query", query), ("subject", subject))
+        required_cells: tuple[tuple[str, str], ...] = (("query", query), ("subject", subject))
         if source == "table":
             required_cells = (("blast", blast_raw), *required_cells)
         elif blast_raw:

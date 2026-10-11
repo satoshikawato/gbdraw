@@ -1,3 +1,4 @@
+// @ts-check
 const PAIRWISE_LEGEND_SELECTOR =
   '[data-gbdraw-role="comparison-legend"][data-gbdraw-orientation="h"], '
   + '[data-gbdraw-role="comparison-legend"][data-gbdraw-orientation="v"], '

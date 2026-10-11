@@ -1,9 +1,12 @@
+// @ts-check
+/**
+ * @import { AnnotationRecordCatalog } from './record-catalog.js'
+ */
 import {
   annotationRecordSelectorValue,
   parseAnnotationRecordSelectorValue
 } from './target-actions.js';
-
-export const ANNOTATION_RECORD_BINDING_KEY = '_gbdraw_web_target_record_key';
+import { ANNOTATION_RECORD_BINDING_KEY } from '../../services/annotation-state.js';
 
 const cleanText = (value) => String(value ?? '').trim();
 
@@ -83,7 +86,7 @@ export const reconcileAnnotationRecordBindings = (sets, catalog) => {
   const records = Array.isArray(catalog?.records) ? catalog.records : [];
   (Array.isArray(sets) ? sets : []).forEach((set) => {
     (Array.isArray(set?.annotations) ? set.annotations : []).forEach((annotation) => {
-      if (!annotation?.target) return;
+      if (!annotation?.target || annotation.target.kind === 'featureIdentity') return;
       const binding = bindingFor(annotation);
       const record = binding
         ? records.find((candidate) => candidate.key === binding)
@@ -120,6 +123,14 @@ export const annotationRecordOptions = (catalog, annotation) => {
   ];
 };
 
+/**
+ * @typedef {object} AnnotationRecordSelectorOptions
+ * @property {() => AnnotationRecordCatalog | null | undefined} getCatalog The current catalog of the mode.
+ */
+
+/**
+ * @param {AnnotationRecordSelectorOptions} options
+ */
 export const createAnnotationRecordSelector = ({ getCatalog }) => {
   const catalog = () => getCatalog?.() || {
     status: 'error', records: [], issues: [], requiresSelection: false

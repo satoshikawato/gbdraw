@@ -1,19 +1,28 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createRulePreparation, ruleMatchesFeature, firstMatchingRule } from '../../gbdraw/web/js/app/rule-matching.js';
+import { createRulePreparation, rebindRuleColorOverrides, runWhenPrepared } from '../../gbdraw/web/js/app/rule-matching.js';
+import { ruleMatcher, ruleMatchesFeature } from '../../gbdraw/web/js/services/rule-matchers.js';
+
+const firstMatchingRule = (feature, rules) => ruleMatcher(rules).first(feature);
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
+import { withDrawings } from './helpers/drawing-state.mjs';
+import { readFileSync } from 'node:fs';
+import { ruleCaptionsAreNormalized } from '../../gbdraw/web/js/services/specific-color-rules.js';
 
 const setup = (evaluate = evaluatePythonRules) => {
   const features = ['NADH', 'β-lactamase', 'ı', 'other'].map((product, i) => ({
     type: 'CDS', svg_id: `f${i}`, qualifiers: { product: [product] }
   }));
   const state = { extractedFeatures: { value: features }, manualSpecificRules: [], svgResultIdentity: { value: 'one' } };
-  return { state, features, preparation: createRulePreparation({ state, evaluate }) };
+  return { state, features, preparation: createRulePreparation({ state: withDrawings(state), evaluate }) };
 };
 const rule = val => ({ feat: 'CDS', qual: 'product', val });
+// One caption in two colors: Python allocates the captions, so the candidate waits for a request.
+const TWO_COLORS = [{ ...rule('NADH'), color: '#112233', cap: 'Shared' }, { ...rule('other'), color: '#445566', cap: 'Shared' }];
+const run = (state, preparation, rules, commit) => runWhenPrepared(state, () => [preparation.prepare(rules)], commit);
 
 test('one prepared Python result supplies synchronous membership without JS regex translation', async () => {
-  const { features, preparation } = setup();
+  const { state, features, preparation } = setup();
   const rules = ['(?i)NADH', '(?P<enzyme>NADH)', 'NADH\\Z', '\\bβ', 'i'].map(rule);
   assert.equal(ruleMatchesFeature(features[0], rules[0]), null);
   assert.equal(await preparation.prepare(rules), true);
@@ -22,7 +31,7 @@ test('one prepared Python result supplies synchronous membership without JS rege
     [false, true, false, false], [false, false, true, false]
   ]);
   let committed = false;
-  preparation.run(rules, () => { committed = true; });
+  run(state, preparation, rules, () => { committed = true; });
   assert.equal(committed, true, 'prepared edits commit before returning');
 });
 
@@ -30,7 +39,7 @@ test('invalid syntax with an empty or unrelated catalog cannot reach the commit'
   const { state, preparation } = setup();
   for (const features of [state.extractedFeatures.value, []]) {
     state.extractedFeatures.value = features;
-    await assert.rejects(() => preparation.run([rule('(?<enzyme>NADH)')], () => assert.fail('invalid commit')));
+    await assert.rejects(() => run(state, preparation, [rule('(?<enzyme>NADH)')], () => assert.fail('invalid commit')));
   }
 });
 
@@ -39,7 +48,7 @@ for (const replace of [s => { s.svgResultIdentity.value = 'two'; }, s => { s.man
     let release;
     const { state, preparation } = setup(payload => new Promise(resolve => { release = () => evaluatePythonRules(payload).then(resolve); }));
     let commits = 0;
-    const pending = preparation.run([rule('NADH')], () => { commits++; });
+    const pending = run(state, preparation, [rule('NADH')], () => { commits++; });
     replace(state);
     await release();
     await pending;
@@ -80,7 +89,7 @@ test('25,000-feature matching is prepared once and reused synchronously', async 
 test('full candidate normalizes captions on matching cache hits and retains provenance', async () => {
   const messages = [];
   const { state, features } = setup();
-  const preparation = createRulePreparation({ state, evaluate: evaluatePythonRules, notify: message => messages.push(message) });
+  const preparation = createRulePreparation({ state: withDrawings(state), evaluate: evaluatePythonRules, notify: message => messages.push(message) });
   const source = [
     { ...rule('NADH'), color: '#112233', cap: 'Shared', fromFile: true },
     { ...rule('other'), color: '#445566', cap: 'Shared' },
@@ -90,10 +99,6 @@ test('full candidate normalizes captions on matching cache hits and retains prov
   const candidate = await preparation.prepareCandidate(source);
   assert.deepEqual(candidate.rules.map(r => r.cap), ['Shared [#112233]', 'Shared [#445566]', 'Shared [#778899]']);
   assert.equal(candidate.rules[0].fromFile, true);
-  assert.deepEqual(candidate.intents, [
-    { caption: 'Shared [#112233]', color: '#112233' },
-    { caption: 'Shared [#445566]', color: '#445566' }
-  ]);
   assert.equal(firstMatchingRule(features[0], candidate.rules).cap, 'Shared [#112233]');
   assert.equal(preparation.prepare(source), true, 'matching remains synchronous');
   preparation.notifyChanges(candidate);
@@ -115,7 +120,7 @@ for (const replace of [s => { s.files.t_color = {}; }, s => { s.results.value = 
     state.results = { value: [] };
     state.legendEntries = { value: [] };
     let release;
-    const preparation = createRulePreparation({ state, evaluate: payload => new Promise(resolve => { release = () => evaluatePythonRules(payload).then(resolve); }) });
+    const preparation = createRulePreparation({ state: withDrawings(state), evaluate: payload => new Promise(resolve => { release = () => evaluatePythonRules(payload).then(resolve); }) });
     const pending = preparation.prepareCandidate([{...rule('NADH'), color:'#112233', cap:'Shared'}]);
     replace(state);
     await release();
@@ -127,7 +132,7 @@ for (const replace of [s => { s.files.t_color = {}; }, s => { s.results.value = 
 test('canceled caption helper cannot admit rules or emit a notification', async () => {
   const {state}=setup();
   const notices=[];
-  const preparation=createRulePreparation({state,evaluate:async()=>{throw new Error('canceled');},notify:value=>notices.push(value)});
+  const preparation=createRulePreparation({state: withDrawings(state),evaluate:async()=>{throw new Error('canceled');},notify:value=>notices.push(value)});
   await assert.rejects(()=>preparation.prepareCandidate([{...rule('NADH'),color:'#112233',cap:'Shared'}]),/canceled/);
   assert.deepEqual(state.manualSpecificRules,[]);
   assert.deepEqual(notices,[]);
@@ -136,23 +141,10 @@ test('canceled caption helper cannot admit rules or emit a notification', async 
 test('historical rule-derived overrides rebind by source caption and color while direct overrides survive',async()=>{
   const {state,preparation}=setup();
   state.featureColorOverrides={a:{caption:'Shared',color:'#112233'},b:{caption:'Shared',color:'#445566'},direct:{caption:'Manual',color:'#abcdef'}};
-  const candidate=await preparation.prepareCandidate([
-    {...rule('NADH'),cap:'Shared',color:'#112233'}, {...rule('other'),cap:'Shared',color:'#445566'}
-  ]);
-  assert.deepEqual(candidate.featureColorOverrides,{a:{caption:'Shared [#112233]',color:'#112233'},b:{caption:'Shared [#445566]',color:'#445566'},direct:state.featureColorOverrides.direct});
+  const source=[{...rule('NADH'),cap:'Shared',color:'#112233'}, {...rule('other'),cap:'Shared',color:'#445566'}];
+  const candidate=await preparation.prepareCandidate(source);
+  assert.deepEqual(rebindRuleColorOverrides(state.featureColorOverrides,source,candidate.rules),{a:{caption:'Shared [#112233]',color:'#112233'},b:{caption:'Shared [#445566]',color:'#445566'},direct:state.featureColorOverrides.direct});
   assert.equal(state.featureColorOverrides.a.caption,'Shared');
-});
-
-
-test('biological safety rows and hidden rendered features do not create unused legends',async()=>{
-  const {state,features,preparation}=setup();
-  state.biologicalFeatures={value:[{type:'CDS',svg_id:'unrendered',qualifiers:{product:['absent']}}]};
-  state.featureVisibilityOverrides={[features[0].svg_id]:'off'};
-  const candidate=await preparation.prepareCandidate([
-    {...rule('absent'),color:'#112233',cap:'Shared'}, {...rule('NADH'),color:'#445566',cap:'Shared'}
-  ]);
-  assert.deepEqual(candidate.rules.map(r=>r.cap),['Shared [#112233]','Shared [#445566]']);
-  assert.deepEqual(candidate.intents,[]);
 });
 
 
@@ -161,16 +153,16 @@ test('Generate preparation forwards its progress observer through caption and me
   const options = { onProgress: event => observations.push(event) };
   const kinds = [];
   const { preparation } = setup(async (payload, received) => {
-    assert.equal(received, options);
+    assert.equal(received.onProgress, options.onProgress);
     kinds.push(payload.kind);
     received.onProgress({ stage: 'preparing-runtime', requestId: 17 });
     return evaluatePythonRules(payload);
   });
   const candidate = await preparation.prepareCandidate([
-    { ...rule('NADH'), color: '#112233', cap: 'NADH' }
+    { ...rule('NADH'), color: '#112233', cap: 'NADH' }, { ...rule('other'), color: '#445566', cap: 'NADH' }
   ], options);
   assert.deepEqual(kinds, ['color-captions', 'color']);
-  assert.equal(candidate.intents[0].caption, 'NADH');
+  assert.equal(candidate.rules[0].cap, 'NADH [#112233]');
   assert.equal(observations.length, 2);
 });
 
@@ -210,7 +202,7 @@ for (const replace of [
     state.files = { c_gb: original, c_conservation_fastas: [original], t_color: null };
     state.linearSeqs = [{ gb: original, gff: null, fasta: null }];
     const catalog = state.extractedFeatures.value;
-    const pending = preparation.prepareCandidate([]);
+    const pending = preparation.prepareCandidate(TWO_COLORS);
     replace(state);
     release();
     assert.equal(await pending, null);
@@ -229,7 +221,7 @@ for (const owner of ['extractedFeatures', 'biologicalFeatures']) {
       return { rules: payload.rules };
     });
     state.biologicalFeatures = { value: state.extractedFeatures.value };
-    const pending = preparation.prepareCandidate([]);
+    const pending = preparation.prepareCandidate(TWO_COLORS);
     state[owner].value = [...state[owner].value];
     release();
     assert.equal(await pending, null);
@@ -255,4 +247,69 @@ test('prepared-rule readiness distinguishes warm config, new predicates, and new
   assert.equal(preparation.isPrepared(), false);
   assert.equal(await preparation.prepare(), true);
   assert.equal(calls, 3);
+});
+
+test('retained rules are matched in the next preparation, in one evaluation', async () => {
+  let evaluations = 0;
+  const { features, preparation } = setup(payload => { evaluations++; return evaluatePythonRules(payload); });
+  const [kept, replaced] = [rule('NADH'), rule('other')];
+  preparation.retain([replaced]);
+  assert.equal(await preparation.prepare([kept]), true);
+  assert.equal(evaluations, 1);
+  assert.deepEqual(features.map(f => ruleMatchesFeature(f, replaced)), [false, false, false, true]);
+  assert.equal(preparation.isPrepared([replaced]), true, 'the replaced rule needs no second evaluation');
+  preparation.retain([]);
+});
+
+
+// U3a 1e (R4, closes OV-238): Python changes captions only when one caption
+// has two or more colors, so rules whose every caption has one color string
+// are their own normalization and send no `color-captions` request; the
+// shared vectors hold the Web answer and Python's (tests/test_web_rule_matching.py).
+const CAPTION_FIXPOINTS = JSON.parse(readFileSync(new URL('../fixtures/specific_color_caption_fixpoints.json', import.meta.url), 'utf8'));
+test('the caption fixpoint vectors give the Web answer', () => {
+  for (const { name, rules, fixpoint } of CAPTION_FIXPOINTS.cases) {
+    assert.equal(ruleCaptionsAreNormalized(rules), fixpoint, name);
+  }
+});
+test('a candidate whose captions each have one color sends no caption request', async () => {
+  const kinds = [];
+  const { preparation } = setup(async (payload) => { kinds.push(payload.kind); return evaluatePythonRules(payload); });
+  const single = [{ ...rule('NADH'), color: '#112233', cap: 'Shared' }, { ...rule('other'), color: '#112233', cap: 'Shared' }];
+  const candidate = await preparation.prepareCandidate(single);
+  assert.deepEqual(kinds, ['color'], 'only the matches');
+  assert.deepEqual(candidate.rules.map(r => r.cap), ['Shared', 'Shared']);
+  assert.deepEqual(candidate.changes, []);
+  kinds.length = 0;
+  const split = await preparation.prepareCandidate([single[0], { ...single[1], color: '#445566' }]);
+  assert.deepEqual(kinds, ['color-captions'], 'two colors under one caption ask Python (the matches are known)');
+  assert.deepEqual(split.rules.map(r => r.cap), ['Shared [#112233]', 'Shared [#445566]']);
+  kinds.length = 0;
+  await preparation.prepareCandidate(split.rules);
+  assert.deepEqual(kinds, [], 'Python\'s captions are a fixpoint: the next run asks nothing (OV-238)');
+});
+
+// OV-377: opening a feature popup prepares rule matches only to read them. It
+// is not an edit, so it does not hold the lock that keeps Save and Load
+// waiting; it still raises `pending`, whose fall refreshes the lists that read
+// the matches. Edit preparations keep holding the lock.
+test('a view preparation raises pending but not the edit lock (OV-377)', async () => {
+  const { state } = setup();
+  state.manualSpecificRules = [rule('NADH')];
+  const pending = { value: false };
+  const blocking = { value: false };
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const preparation = createRulePreparation({ state: withDrawings(state), pending, blocking,
+    evaluate: async (payload) => { await gate; return evaluatePythonRules(payload); } });
+  const viewing = preparation.prepareDrawn({ strict: true, view: true });
+  assert.equal(pending.value, true);
+  assert.equal(blocking.value, false);
+  const editing = preparation.prepare([rule('other')]);
+  assert.equal(blocking.value, true);
+  release();
+  assert.equal(await viewing, true);
+  assert.equal(await editing, true);
+  assert.equal(pending.value, false);
+  assert.equal(blocking.value, false);
 });

@@ -13,12 +13,15 @@ await cp(sourceRoot, join(tempRoot, 'js'), { recursive: true });
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 
 const {
-  buildCanonicalRenderRequest: buildCanonicalRenderRequestRaw,
+  CANONICAL_REQUEST_SCHEMA,
+  buildCanonicalRenderRequest: buildDrawingRenderRequest,
   bindCanonicalTypedResource,
+  canonicalLinearRecordLayout,
+  decodeCanonicalResourceText,
   managedConfigOverridePathsForMode,
   normalizeWebGridColumnOrdering,
   promoteCanonicalRenderRequestToCurrent,
-  projectCommittedEditorIntent,
+  projectCommittedEditorIntent: projectDrawingEditorIntent,
   projectCommittedRecordTransform,
   projectCanonicalSessionRequest
 } = await import(
@@ -28,13 +31,13 @@ const { migrateLegacyOrthogroupMembers } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'legacy-similarity-alignment.js'))
 );
 const { linearRecordLayoutHasSharedRow, reconcileLinearRecordLayout } = await import(
-  pathToFileURL(join(tempRoot, 'js', 'app', 'linear-record-layout.js'))
+  pathToFileURL(join(tempRoot, 'js', 'services', 'linear-record-layout.js'))
 );
 const {
   createDefaultLinearComparisonPlan,
   resolveLinearComparisonPlan
 } = await import(
-  pathToFileURL(join(tempRoot, 'js', 'app', 'linear-comparisons.js'))
+  pathToFileURL(join(tempRoot, 'js', 'services', 'linear-comparisons.js'))
 );
 
 const comparisonSnapshotForState = (requestState, filesData = {}) => resolveLinearComparisonPlan({
@@ -73,6 +76,9 @@ assert.deepEqual(
   ]
 );
 
+// A fixture state is its own drawing.
+const buildCanonicalRenderRequestRaw = (args) => buildDrawingRenderRequest({ drawing: args.state, ...args });
+const projectCommittedEditorIntent = (args) => projectDrawingEditorIntent({ drawing: args.state, ...args });
 const characterizedRequests = [];
 const buildCanonicalRenderRequest = (args) => {
   const result = buildCanonicalRenderRequestRaw({
@@ -85,30 +91,38 @@ const buildCanonicalRenderRequest = (args) => {
   return result;
 };
 const {
-  buildLinearTrackSlotPayload,
   buildLinearTrackSlotSpec,
-  linearTrackAxisIndexForEnabledSlots,
-  migrateLinearTrackSlotsToCurrentSchema,
-  parseLinearTrackSlotSpec,
-  parseLinearTrackSlotSpecs
+  linearTrackAxisIndexForEnabledSlots
 } = await import(
   pathToFileURL(join(tempRoot, 'js', 'app', 'linear-track-slots.js'))
 );
 const {
+  buildLinearTrackSlotPayload,
+  migrateLinearTrackSlotsToCurrentSchema,
+  parseLinearTrackSlotSpec,
+  parseLinearTrackSlotSpecs
+} = await import(
+  pathToFileURL(join(tempRoot, 'js', 'services', 'linear-track-slot-model.js'))
+);
+const {
+  buildCircularTrackSlotSpec
+} = await import(
+  pathToFileURL(join(tempRoot, 'js', 'app', 'circular-track-slots.js'))
+);
+const {
   buildCircularTrackSlotPayload,
-  buildCircularTrackSlotSpec,
   migrateLegacyCircularTrackSlot,
   migrateLegacyCircularTrackSlotSpec,
   parseCircularTrackSlotSpec,
   resolveCircularTrackFeaturePlacement
 } = await import(
-  pathToFileURL(join(tempRoot, 'js', 'app', 'circular-track-slots.js'))
+  pathToFileURL(join(tempRoot, 'js', 'services', 'circular-track-slot-model.js'))
 );
 const { validateTrackSlotBindingInvariants } = await import(
-  pathToFileURL(join(tempRoot, 'js', 'app', 'track-slot-validation.js'))
+  pathToFileURL(join(tempRoot, 'js', 'services', 'track-slot-validation.js'))
 );
 const { orderedConservationSources } = await import(
-  pathToFileURL(join(tempRoot, 'js', 'app', 'conservation-series.js'))
+  pathToFileURL(join(tempRoot, 'js', 'services', 'conservation-series.js'))
 );
 
 assert.equal(linearTrackAxisIndexForEnabledSlots([
@@ -397,10 +411,8 @@ const state = {
   manualBlacklist: ref(''),
   manualWhitelist: [],
   manualPriorityRules: [],
-  labelTextFeatureOverrides: {},
+  featureOverrides: {},
   labelTextBulkOverrides: {},
-  labelTextFeatureOverrideSources: {},
-  labelVisibilityOverrides: {},
   editableLabels: ref([]),
   extractedFeatures: ref([]),
   circularConservation: { reference: 'auto', labels: '', series: [] },
@@ -483,7 +495,80 @@ const filesData = { c_gb: genbank, linearSeqs: [] };
 state.form.multi_record_canvas = true;
 const canonical = buildCanonicalRenderRequest({ state, filesData });
 state.form.multi_record_canvas = false;
-assert.equal(canonical.renderRequest.schema, 8);
+assert.equal(canonical.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
+assert.equal(CANONICAL_REQUEST_SCHEMA, 9);
+// Schema 9 carries per-feature edits by source identity (design Q4); this
+// state has no edits.
+assert.deepEqual(canonical.renderRequest.diagramOptions.featureOverrides, []);
+const schema8Canonical = structuredClone(canonical.renderRequest);
+schema8Canonical.schema = 8;
+delete schema8Canonical.diagramOptions.featureOverrides;
+assert.deepEqual(promoteCanonicalRenderRequestToCurrent(schema8Canonical), canonical.renderRequest);
+const withIdentityRows = structuredClone(canonical);
+withIdentityRows.renderRequest.diagramOptions.featureOverrides = [{
+  recordKey: canonical.renderRequest.records[0].recordKey,
+  biologicalFeatureId: 'f1234abcd',
+  featureVisibility: 'off',
+  labelVisibility: null,
+  labelText: null
+}];
+// The Web reads a request's identity rows into the draft of the request's
+// mode's drawing (PR-Q4-4, R2), keyed by the identity pair (PR-1).
+assert.deepEqual(
+  projectCanonicalSessionRequest(withIdentityRows).semanticFeatureState.featureOverrides,
+  { [JSON.stringify([canonical.renderRequest.records[0].recordKey, 'f1234abcd'])]: {
+    ...withIdentityRows.renderRequest.diagramOptions.featureOverrides[0], labelSourceText: null
+  } }
+);
+const malformedIdentityRows = structuredClone(withIdentityRows);
+malformedIdentityRows.renderRequest.diagramOptions.featureOverrides[0].labelVisibility = 'shown';
+assert.throws(
+  () => projectCanonicalSessionRequest(malformedIdentityRows),
+  { code: 'INPUT_INVALID', context: { field: 'schema', reason: 'FIELDS' } }
+);
+// The writer sends the rows of the drawing's request records (R2). A Linear
+// Session can use the Circular grid's record key (`record-1`) for the same
+// feature (R-1): each mode's drawing holds its own rows (PR-1), so the
+// Circular request carries the Circular drawing's rows only.
+{
+  const recordKey = canonical.renderRequest.records[0].recordKey;
+  assert.equal(recordKey, 'record-1');
+  const edit = (fields) => ({
+    recordKey, biologicalFeatureId: 'f1234abcd', featureVisibility: null,
+    labelVisibility: null, labelText: null, labelSourceText: null, ...fields
+  });
+  state.featureOverrides = {
+    [JSON.stringify([recordKey, 'f1234abcd'])]: edit({
+      labelVisibility: 'on', labelText: 'Renamed', labelSourceText: 'source'
+    }),
+    [JSON.stringify(['linear-seq-other-record', 'f1'])]: {
+      ...edit({ featureVisibility: 'off' }), recordKey: 'linear-seq-other-record', biologicalFeatureId: 'f1'
+    }
+  };
+  state.featurePlacementOverrides = {
+    [JSON.stringify([recordKey, 'f1234abcd'])]: { recordKey, biologicalFeatureId: 'f1234abcd', placement: { kind: 'main' } }
+  };
+  const before = structuredClone([state.featureOverrides, state.featurePlacementOverrides]);
+  state.form.multi_record_canvas = true;
+  const circularOptions = buildCanonicalRenderRequestRaw({ state, filesData }).renderRequest.diagramOptions;
+  assert.deepEqual(circularOptions.featureOverrides, [{
+    recordKey, biologicalFeatureId: 'f1234abcd', featureVisibility: null, labelVisibility: 'on', labelText: 'Renamed'
+  }]);
+  assert.deepEqual(circularOptions.featurePlacements, [
+    { recordKey, biologicalFeatureId: 'f1234abcd', placement: { kind: 'main' } }
+  ]);
+  state.form.multi_record_canvas = false;
+  // The request removes no row of a record it does not draw.
+  assert.deepEqual([state.featureOverrides, state.featurePlacementOverrides], before);
+  state.featureOverrides = {};
+  state.featurePlacementOverrides = {};
+}
+const schema8WithRows = structuredClone(canonical);
+schema8WithRows.renderRequest.schema = 8;
+assert.throws(
+  () => projectCanonicalSessionRequest(schema8WithRows),
+  { code: 'INPUT_INVALID', context: { field: 'featureOverrides', reason: 'SESSION_FORMAT' } }
+);
 assert.equal(canonical.renderRequest.mode, 'circular');
 assert.equal(canonical.renderRequest.grouping, 'grid');
 assert.equal(canonical.renderRequest.records[0].source.resourceId, 'record-1-genbank');
@@ -929,6 +1014,42 @@ assert.equal(gridWithRetainedSingleSelector.renderRequest.grouping, 'grid');
 assert.equal(gridWithRetainedSingleSelector.renderRequest.records.length, 3);
 state.form.circular_record_selector = '';
 
+// Record selection (D-02, DESIGN 2.2): a canvas or batch draws the ON records
+// under stable keys, and grid positions name positions among them. These
+// requests stay out of the characterization below (Raw builder).
+{
+  state.recordsOff = ['#2'];
+  state.adv.multi_record_positions = [
+    { selector: '#1', row: 1 }, { selector: '#2', row: 1 }, { selector: '#3', row: 2 }
+  ];
+  const offGrid = buildCanonicalRenderRequestRaw({ state, filesData }).renderRequest;
+  assert.equal(offGrid.grouping, 'grid');
+  assert.deepEqual(offGrid.records.map((record) => record.recordKey), ['record-1', 'record-3']);
+  assert.deepEqual(offGrid.layout.multiRecordPositions, ['#1@1', '#2@2']);
+
+  state.form.multi_record_canvas = false;
+  state.recordsOff = ['#1', '#3'];
+  const oneOn = buildCanonicalRenderRequestRaw({ state, filesData }).renderRequest;
+  assert.equal(oneOn.grouping, 'batch', 'All records with one ON record stays a batch of one');
+  assert.deepEqual(oneOn.records.map((record) => [record.recordKey, record.region]), [['record-2', null]]);
+
+  // An explicit single choice draws its record, ON or OFF (P-2).
+  state.form.circular_record_selector = '#1';
+  const chosen = buildCanonicalRenderRequestRaw({ state, filesData }).renderRequest;
+  assert.equal(chosen.records.length, 1);
+  assert.deepEqual(chosen.records[0].selector, { kind: 'recordIndex', index: 0 });
+  state.form.circular_record_selector = '';
+
+  state.recordsOff = ['#1', '#2', '#3'];
+  assert.throws(
+    () => buildCanonicalRenderRequestRaw({ state, filesData }),
+    (error) => error.code === 'RECORD_SELECTION' && error.context?.reason === 'NONE_DRAWN'
+  );
+  state.recordsOff = [];
+  state.adv.multi_record_positions = [];
+  state.form.multi_record_canvas = true;
+}
+
 for (const schema of [3, 4]) {
   const branchOnlyCanonical = structuredClone(implicitBatchCanonical);
   branchOnlyCanonical.renderRequest.schema = schema;
@@ -1147,6 +1268,7 @@ state.adv.circular_track_slots = [];
 
 const legacyRepeatCanonical = structuredClone(canonical);
 legacyRepeatCanonical.renderRequest.schema = 2;
+delete legacyRepeatCanonical.renderRequest.diagramOptions.featureOverrides;
 if (2 < 7) {
   delete legacyRepeatCanonical.renderRequest.diagramOptions.featurePlacements;
   legacyRepeatCanonical.renderRequest.records.forEach((record) => delete record.display);
@@ -1269,7 +1391,8 @@ state.featureVisibilityRules.value = [{
   id: 'visibility-1', source: 'manual', recordId: '*', featureType: 'CDS',
   qualifier: 'gene', value: '^alpha$', action: 'off'
 }];
-state.labelTextFeatureOverrides.f1 = 'Renamed alpha';
+// A bulk label edit that no displayed label resolves stays a label-table rule.
+state.labelTextBulkOverrides.alpha = 'Renamed alpha';
 const semanticCanonical = buildCanonicalRenderRequest({
   state,
   filesData: {
@@ -1310,6 +1433,22 @@ assert.deepEqual(
     priority: 'original-priority.tsv'
   }
 );
+// OV-23: a pasted tab or line break in a Label whitelist or Qualifier priority cell
+// must not add a column; the writers normalize like the Feature visibility writer.
+state.manualWhitelist.push({ feat: 'CDS', qual: 'product', key: 'two\twords\nmore ' });
+state.manualPriorityRules.push({ feat: 'tRNA', order: 'product,\tnote' });
+const tabbedCanonical = buildCanonicalRenderRequestRaw({ state, filesData });
+assert.equal(
+  decodeCanonicalResourceText(tabbedCanonical.resources, 'label-whitelist-file'),
+  'CDS\tgene\talpha\nCDS\tproduct\ttwo words more\n'
+);
+assert.equal(
+  decodeCanonicalResourceText(tabbedCanonical.resources, 'qualifier-priority-file'),
+  'CDS\tgene,product\ntRNA\tproduct, note\n'
+);
+state.manualWhitelist.pop();
+state.manualPriorityRules.pop();
+
 state.paletteDefinitions.value = { default: {} };
 state.currentColors.value = {};
 state.manualSpecificRules.splice(0);
@@ -1317,7 +1456,7 @@ state.filterMode.value = 'None';
 state.manualWhitelist.splice(0);
 state.manualPriorityRules.splice(0);
 state.featureVisibilityRules.value = [];
-delete state.labelTextFeatureOverrides.f1;
+delete state.labelTextBulkOverrides.alpha;
 
 const invalidCircularDepthIndex = structuredClone(canonical);
 invalidCircularDepthIndex.renderRequest.diagramOptions.tracks = {
@@ -1344,7 +1483,7 @@ emptyDepthColumn.renderRequest.diagramOptions.depthTrackFiles = [[null]];
 emptyDepthColumn.renderRequest.diagramOptions.depthTrackLabels = ['Empty'];
 assert.throws(
   () => projectCanonicalSessionRequest(emptyDepthColumn),
-  /logical track index 0.*no source/
+  { code: 'DEPTH_INVALID', context: { seriesIndex: 0, reason: 'DEPTH_SERIES_SOURCE' } }
 );
 
 const blastTable = { ...genbank, name: 'hits.tsv', data: btoa('ref\tcmp\t99\t4\t0\t0\t1\t4\t4\t1\t1e-20\t50\n') };
@@ -1659,6 +1798,7 @@ assert.equal(projection.config.adv.identity, 70);
 assert.equal(projection.config.adv.alignment_length, 0);
 const legacyCircularLabelScope = structuredClone(canonical);
 legacyCircularLabelScope.renderRequest.schema = 2;
+delete legacyCircularLabelScope.renderRequest.diagramOptions.featureOverrides;
 if (2 < 7) {
   delete legacyCircularLabelScope.renderRequest.diagramOptions.featurePlacements;
   legacyCircularLabelScope.renderRequest.records.forEach((record) => delete record.display);
@@ -1683,6 +1823,7 @@ assert.equal(
 );
 const legacyOutputCanonical = structuredClone(canonical);
 legacyOutputCanonical.renderRequest.schema = 2;
+delete legacyOutputCanonical.renderRequest.diagramOptions.featureOverrides;
 if (2 < 7) {
   delete legacyOutputCanonical.renderRequest.diagramOptions.featurePlacements;
   legacyOutputCanonical.renderRequest.records.forEach((record) => delete record.display);
@@ -1719,6 +1860,7 @@ assert.throws(
 for (const schema of [1, 2]) {
   const sparseCircularCanonical = structuredClone(canonical);
   sparseCircularCanonical.renderRequest.schema = schema;
+  delete sparseCircularCanonical.renderRequest.diagramOptions.featureOverrides;
   if (schema < 7) {
     delete sparseCircularCanonical.renderRequest.diagramOptions.featurePlacements;
     sparseCircularCanonical.renderRequest.records.forEach((record) => delete record.display);
@@ -1804,6 +1946,7 @@ assert.deepEqual(customTrackProjection.config.adv.circular_track_slots[1], {
 
 const legacyCircularSlotsCanonical = structuredClone(canonical);
 legacyCircularSlotsCanonical.renderRequest.schema = 2;
+delete legacyCircularSlotsCanonical.renderRequest.diagramOptions.featureOverrides;
 if (2 < 7) {
   delete legacyCircularSlotsCanonical.renderRequest.diagramOptions.featurePlacements;
   legacyCircularSlotsCanonical.renderRequest.records.forEach((record) => delete record.display);
@@ -1987,14 +2130,13 @@ const oneSourceFilesData = {
   linearComparisons: []
 };
 const oneSourceRows = [1, 2].map((index) => ({
-  key: JSON.stringify(['linear', 'one-source', `#${index}`]),
+  key: JSON.stringify(['one-source', `#${index}`]),
   scope: 'linear', sourceUid: 'one-source', selector: `#${index}`,
   recordId: 'duplicate', recordLength: 100, detectedTopology: 'circular',
   reverse: false, cropped: false
 }));
 const oneSourceState = {
   ...state,
-  recordDisplayRows: ref(oneSourceRows),
   recordDisplayDrafts: []
 };
 const oneSourceSnapshot = resolveLinearComparisonPlan({
@@ -2004,20 +2146,23 @@ const oneSourceSnapshot = resolveLinearComparisonPlan({
 const unchangedOneSource = buildCanonicalRenderRequest({
   state: oneSourceState,
   filesData: oneSourceFilesData,
+  recordDisplayRows: oneSourceRows,
   comparisonPlanSnapshot: oneSourceSnapshot
 });
-assert.equal(unchangedOneSource.renderRequest.schema, 8);
+assert.equal(unchangedOneSource.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
 assert.equal(unchangedOneSource.renderRequest.records.length, 1);
 assert.equal(unchangedOneSource.renderRequest.records[0].cardinality, 'all');
 
+// A drawing's record display draft (its mode is the drawing's, PR-1).
 oneSourceState.recordDisplayDrafts = [{
-  scope: 'linear', sourceUid: 'one-source', selector: '#2', recordId: 'duplicate',
+  sourceUid: 'one-source', selector: '#2', recordId: 'duplicate',
   topologyOverride: null, startCoordinate: 25, reverseComplementOverride: true,
   anchorIntent: null
 }];
 const transformedOneSource = buildCanonicalRenderRequest({
   state: oneSourceState,
   filesData: oneSourceFilesData,
+  recordDisplayRows: oneSourceRows,
   comparisonPlanSnapshot: oneSourceSnapshot
 });
 assert.deepEqual(
@@ -2039,6 +2184,55 @@ assert.equal(
   Object.values(transformedOneSource.resources).filter((resource) => resource.kind === 'genbank').length,
   1
 );
+
+// OV-278: a Session without a Web draft (CLI, Python, Gallery) selects a
+// non-first record of a shared GenBank file by record ID and gives it a display
+// start. Load projects the start into a draft whose selector is '#1' (the
+// projection does not read the file); Generate draws the record from that
+// start once its File card lists the file's records.
+{
+  const record = (id) => [
+    `LOCUS       ${id}                  60 bp    DNA     circular UNK 01-JAN-1980`,
+    'DEFINITION  fixture.', `ACCESSION   ${id}`, `VERSION     ${id}.1`, 'FEATURES             Location/Qualifiers',
+    'ORIGIN', `        1 ${'atgcatgcat '.repeat(6).trim()}`, '//', ''
+  ].join('\n');
+  const text = record('AAA') + record('BBB');
+  const shared = {
+    kind: 'genbank', name: 'two.gb', type: 'text/plain', size: text.length, lastModified: 0,
+    encoding: 'base64', data: Buffer.from(text).toString('base64')
+  };
+  const selected = (recordKey, id, gridRow, startCoordinate) => ({
+    recordKey, cardinality: 'exactly_one', source: { kind: 'genbank', resourceId: 'shared' },
+    selector: { kind: 'recordId', value: id }, region: null,
+    presentation: { label: null, subtitle: null, reverseComplement: false, gridRow, gridColumn: 1 },
+    display: { isCircular: null, startCoordinate }
+  });
+  const projected = projectCanonicalSessionRequest({
+    renderRequest: {
+      schema: CANONICAL_REQUEST_SCHEMA, mode: 'linear', grouping: 'single',
+      records: [selected('record-1', 'AAA.1', 1, 7), selected('record-2', 'BBB.1', 2, 11)],
+      diagramOptions: { featurePlacements: [], featureOverrides: [] }, output: { prefix: 'ov278' }
+    },
+    resources: { shared },
+    initializeCliInputs: true
+  });
+  const filesData = { linearSeqs: projected.files.linearSeqs, linearComparisons: [] };
+  // Each File card lists every record of its file.
+  const rows = filesData.linearSeqs.flatMap((seq) => ['AAA.1', 'BBB.1'].map((recordId, index) => ({
+    key: JSON.stringify([seq.uid, `#${index + 1}`]), scope: 'linear', sourceUid: seq.uid,
+    selector: `#${index + 1}`, recordId, recordLength: 60, detectedTopology: 'circular', reverse: false, cropped: false
+  })));
+  const loaded = { ...stateForCanonicalProjection(projected), recordDisplayDrafts: structuredClone(projected.config.recordDisplayDrafts) };
+  const generated = buildDrawingRenderRequest({
+    state: loaded, drawing: loaded, filesData, recordDisplayRows: rows,
+    comparisonPlanSnapshot: comparisonSnapshotForState(loaded, filesData)
+  });
+  assert.deepEqual(
+    generated.renderRequest.records.map((entry) => [entry.selector.value, entry.display.startCoordinate]),
+    [['AAA.1', 7], ['BBB.1', 11]],
+    'OV-278: Load then Generate keeps the display start of a record selected by ID'
+  );
+}
 
 const committedBeforeProjection = structuredClone(unchangedOneSource);
 const collectionRecord = unchangedOneSource.renderRequest.records[0];
@@ -2164,7 +2358,15 @@ for (const [label, targetPatch, transformPatch, requestPatch] of [
     }]),
     filterMode: ref('Whitelist'),
     manualWhitelist: [{ feat: 'CDS', qual: 'gene', key: 'alpha' }],
-    generatedLabelOverrideTsv: '*\t*\thash\t^f1$\tRenamed alpha\n'
+    // Live per-feature edits are identity rows; a bulk edit without a known
+    // label stays a label-table rule (design Q4).
+    featureOverrides: {
+      [JSON.stringify([committed.renderRequest.records[0].recordKey, 'f1'])]: {
+        recordKey: committed.renderRequest.records[0].recordKey, biologicalFeatureId: 'f1',
+        featureVisibility: 'off', labelVisibility: null, labelText: 'Renamed f1', labelSourceText: null
+      }
+    },
+    labelTextBulkOverrides: { alpha: 'Renamed alpha' }
   };
   const reflow = projectCommittedEditorIntent({ committed, state: draft });
   assert.deepEqual(committed, committedBefore, 'the committed Session is not modified');
@@ -2174,7 +2376,11 @@ for (const [label, targetPatch, transformPatch, requestPatch] of [
   assert.deepEqual(options.configOverrides, committedOptions.configOverrides);
   assert.match(text(reflow, options.colors.colorTableFile), /\^alpha\$/);
   assert.match(text(reflow, options.featureVisibilityTableFile), /\^beta\$/);
-  assert.match(text(reflow, options.labelOverrideFile), /Renamed alpha/);
+  assert.equal(text(reflow, options.labelOverrideFile), '*\t*\tlabel\t^alpha$\tRenamed alpha\n');
+  assert.deepEqual(options.featureOverrides, [{
+    recordKey: committed.renderRequest.records[0].recordKey, biologicalFeatureId: 'f1',
+    featureVisibility: 'off', labelVisibility: null, labelText: 'Renamed f1'
+  }]);
   assert.equal(options.labelWhitelistFile, committedOptions.labelWhitelistFile);
   Object.keys(committed.resources).forEach((resourceId) => {
     if (!/^(?:colors-|feature-visibility|label-override)/.test(resourceId)) {
@@ -2182,23 +2388,14 @@ for (const [label, targetPatch, transformPatch, requestPatch] of [
     }
   });
 
-  const enableLabels = projectCommittedEditorIntent({ committed, state: draft, labelSelection: true });
-  const labelOptions = enableLabels.renderRequest.diagramOptions;
-  assert.equal(labelOptions.configOverrides['labels.linear.scope'], 'all');
-  assert.deepEqual(labelOptions.configOverrides['labels.filtering.blacklist_keywords'], []);
-  assert.match(text(enableLabels, labelOptions.labelWhitelistFile), /CDS\tgene\talpha/);
-  assert.equal(
-    labelOptions.configOverrides['objects.features.block_stroke_width'],
-    committedOptions.configOverrides['objects.features.block_stroke_width']
-  );
-
   // A Session loaded from an older request schema keeps its request until the
   // next Generate; the reflow promotes it instead of rejecting it.
   const older = structuredClone(committed);
   older.renderRequest.schema = 7;
+  delete older.renderRequest.diagramOptions.featureOverrides;
   const promoted = projectCommittedEditorIntent({ committed: older, state: draft });
   assert.equal(older.renderRequest.schema, 7, 'the committed Session is not modified');
-  assert.equal(promoted.renderRequest.schema, 8);
+  assert.equal(promoted.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
   assert.deepEqual(promoted.renderRequest.records, reflow.renderRequest.records);
   assert.deepEqual(promoted.renderRequest.diagramOptions, reflow.renderRequest.diagramOptions);
 }
@@ -2284,6 +2481,7 @@ delete state.adv.ruler_label_font_size;
 delete state.adv.linear_definition_line_styles;
 const legacyLinearOptions = structuredClone(linearCanonical);
 legacyLinearOptions.renderRequest.schema = 2;
+delete legacyLinearOptions.renderRequest.diagramOptions.featureOverrides;
 if (2 < 7) {
   delete legacyLinearOptions.renderRequest.diagramOptions.featurePlacements;
   legacyLinearOptions.renderRequest.records.forEach((record) => delete record.display);
@@ -2508,13 +2706,14 @@ assert.deepEqual(
 );
 const schema5Arranged = structuredClone(arrangedCanonical.renderRequest);
 schema5Arranged.schema = 5;
+delete schema5Arranged.diagramOptions.featureOverrides;
 schema5Arranged.layout.multiRecordPositions = ['#1@1', '#2@1', '#3@2'];
 schema5Arranged.records.forEach((record) => {
   delete record.cardinality;
   record.presentation.gridRow = null;
 });
 const promotedArranged = promoteCanonicalRenderRequestToCurrent(schema5Arranged);
-assert.equal(promotedArranged.schema, 8);
+assert.equal(promotedArranged.schema, CANONICAL_REQUEST_SCHEMA);
 assert.deepEqual(
   promotedArranged.records.map((record) => [
     record.cardinality,
@@ -2755,6 +2954,7 @@ assert.equal(oldGroups[0].members[0].recordKey, undefined);
 
 const legacyAlignmentRequest = structuredClone(losatPairCanonical.renderRequest);
 legacyAlignmentRequest.schema = 7;
+delete legacyAlignmentRequest.diagramOptions.featureOverrides;
 legacyAlignmentRequest.layout = { recordGapPx: 30 };
 const legacyGenerated = legacyAlignmentRequest.comparisons.find(
   (comparison) => comparison.kind === 'generatedProteinComparison'
@@ -2790,7 +2990,7 @@ const promotedLegacyAlignment = promoteCanonicalRenderRequestToCurrent(
   legacyAlignmentRequest,
   { featureCatalog: legacyFeatureCatalog }
 );
-assert.equal(promotedLegacyAlignment.schema, 8);
+assert.equal(promotedLegacyAlignment.schema, CANONICAL_REQUEST_SCHEMA);
 assert.equal(
   Object.hasOwn(
     promotedLegacyAlignment.comparisons.find(
@@ -3121,6 +3321,7 @@ let sparseLinearCanonical;
 for (const schema of [1, 2]) {
   sparseLinearCanonical = structuredClone(linearCanonical);
   sparseLinearCanonical.renderRequest.schema = schema;
+  delete sparseLinearCanonical.renderRequest.diagramOptions.featureOverrides;
   if (schema < 7) {
     delete sparseLinearCanonical.renderRequest.diagramOptions.featurePlacements;
     sparseLinearCanonical.renderRequest.records.forEach((record) => delete record.display);
@@ -3518,6 +3719,20 @@ assert.throws(
   }),
   /Circular Depth matrix has 1 record rows; expected 2/
 );
+// OV-89: a Depth series that no record gives a source is a Depth failure the
+// user can fix, with the series named (it was UNKNOWN), and it offers to
+// attach a TSV or remove the series (TK-06).
+assert.throws(
+  () => buildCanonicalRenderRequest({
+    state,
+    filesData: {
+      c_gb: combinedGenbank,
+      c_depth: [[depthA, null], [depthB, null]],
+      linearSeqs: []
+    }
+  }),
+  { code: 'DEPTH_INVALID', stage: 'request-validation', context: { seriesIndex: 1, reason: 'DEPTH_SERIES_SOURCE' } }
+);
 
 state.mode.value = 'linear';
 state.adv.plot_title_position = 'bottom';
@@ -3595,7 +3810,7 @@ const emptyCanonicalDepth = structuredClone(sparseDepthCanonical);
 emptyCanonicalDepth.renderRequest.diagramOptions.depthTracks[0].source = [null, null];
 assert.throws(
   () => projectCanonicalSessionRequest(emptyCanonicalDepth),
-  /logical track index 0.*no source/
+  { code: 'DEPTH_INVALID', context: { seriesIndex: 0, reason: 'DEPTH_SERIES_SOURCE' } }
 );
 const circularDepthHeight = structuredClone(circularSparseCanonical);
 circularDepthHeight.renderRequest.diagramOptions.depthTracks[0].height = 12;
@@ -3774,12 +3989,14 @@ const checkLinearCombination = (label, assertion) => {
     linearCombinationFailures.push(`${label}: ${String(error?.message || error)}`);
   }
 };
-checkLinearCombination('underlay without Features', () => assert.throws(
-  () => buildCanonicalRenderRequest({
+// TK-13: the request keeps a stack without a Features row; Python decides from
+// the record's features whether the underlays need one.
+checkLinearCombination('underlay without Features', () => assert.doesNotThrow(
+  () => buildCanonicalRenderRequestRaw({
     state: underlayWithoutFeaturesState,
-    filesData: linearFilesData
-  }),
-  /Visible feature underlays require exactly one enabled(?: Linear)? Features row/i
+    filesData: linearFilesData,
+    comparisonPlanSnapshot: comparisonSnapshotForState(underlayWithoutFeaturesState, linearFilesData)
+  })
 ));
 
 const allDisabledLinearState = linearCombinationRegressionState({
@@ -5022,7 +5239,7 @@ assert.deepEqual(resolvedProteinMarker.pairs, []);
 
 assert.equal(characterizedRequests.length, 83);
 assert.equal(createHash('sha256').update(JSON.stringify(characterizedRequests)).digest('hex'),
-  '6d8276e6b67c5d00f88c46c9994d1c85c2d1be41e7ef6617672f69f304694d91',
+  '11e0b868a984674442a573877db42bd4e1f83202a44b6c4fe92223d2bdfb4e1c',
   'Extraction preserves the 83 characterized request meanings, including topology, tracks and typed comparisons');
 
 const projectSessionIndex = process.argv.indexOf('--project-session');
@@ -5079,10 +5296,14 @@ if (projectSessionIndex >= 0) {
     assert.equal(projectedSession.config.adv.inner_label_y_offset, 0.975);
   }
   if (sessionPath.includes('vibrio-harveyi-group-collinear')) {
-    assert.equal(projectedSession.files.linearSeqs.length, 4);
-    assert.equal(
-      projectedSession.files.linearSeqs[0].gb.name,
-      'NC_004603.1__GCF_000196095.1_ASM19609v1_genomic.gbff'
+    assert.deepEqual(
+      projectedSession.files.linearSeqs.map((sequence) => sequence.gb.name),
+      [
+        'GCF_000196095.1_ASM19609v1_genomic.gbff',
+        'GCF_000196095.1_ASM19609v1_genomic.gbff',
+        'GCF_000354175.2_ASM35417v2_genomic.gbff',
+        'GCF_000354175.2_ASM35417v2_genomic.gbff'
+      ]
     );
     assert.equal(projectedSession.config.adv.block_stroke_width, 0);
     assert.equal(projectedSession.config.adv.line_stroke_width, 1);
@@ -5231,8 +5452,8 @@ const projectionState = {
   currentColors: ref({ CDS: '#abcdef' }), appliedPaletteColors: ref({ CDS: '#abcdef' }),
   selectedPalette: ref('default'), appliedPaletteName: ref('default'),
   canonicalLabelOverrideRows: ref([]), featureVisibilityRules: ref([]),
-  labelTextFeatureOverrides: {}, labelTextBulkOverrides: {}, labelTextFeatureOverrideSources: {},
-  labelVisibilityOverrides: {}, manualSpecificRules: [], manualWhitelist: [], manualPriorityRules: [],
+  featureOverrides: {}, labelTextBulkOverrides: {},
+  manualSpecificRules: [], manualWhitelist: [], manualPriorityRules: [],
   unmanagedConfigOverrides: { 'objects.definition.linear.text_anchor': 'start' },
   linearRecordLayoutEnabled: ref(false), linearRecordRows: []
 };
@@ -5336,4 +5557,185 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
     { schema: 3, kind: 'result', value: { type: 'CollinearityResult', fields: {} } });
   assert.throws(() => bindCanonicalTypedResource(typed, { ...backing, kind: 'orthogroup-result' }), /backing is invalid/);
   assert.throws(() => bindCanonicalTypedResource(typed, { ...backing, size: -1 }), /backing is invalid/);
+}
+
+// OV-40: the Session 39 Web writer stored a Label whitelist keyword typed with a
+// tab as an extra cell (tests/fixtures/sessions/whitelist-tab-keyword.provenance.json).
+// Sessions 31–39 read that row as the current writer writes it and report it;
+// any other Session table failure names the table and the Session.
+{
+  const { legacyTableRowsNotice, legendColorDropNotice } = await import(
+    pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
+  );
+  const { normalizeUserFacingError } = await import(
+    pathToFileURL(join(tempRoot, 'js', 'utils', 'error-normalization.js'))
+  );
+  const session = JSON.parse(gunzipSync(await readFile(join(
+    repoRoot, 'tests', 'fixtures', 'sessions', 'whitelist-tab-keyword.v39.gbdraw-session.json.gz'
+  ))));
+  assert.equal(session.version, 39);
+  const project = (document, repairLegacyTableRows) => projectCanonicalSessionRequest({
+    renderRequest: document.renderRequest, resources: document.resources, webFiles: document.webFiles || {},
+    storedConfig: document.config, repairLegacyTableRows
+  });
+  const repaired = project(session, true);
+  assert.deepEqual(repaired.config.whitelist, [{ feat: 'CDS', qual: 'product', key: 'cytochrome c oxidase' }]);
+  assert.equal(repaired.config.filterMode, 'Whitelist');
+  assert.deepEqual(repaired.legacyTableRepairs, [{ table: 'label-whitelist', row: 1, repair: 'joined' }]);
+  assert.equal(legacyTableRowsNotice(repaired.legacyTableRepairs),
+    'Some table rows of this older Session were read as the current version writes them. '
+    + 'Label whitelist: line 1 had extra cells, joined into the last column with one space.');
+  assert.equal(legacyTableRowsNotice([
+    ...[3, 4, 5, 6, 7, 9, 12].map((row) => ({ table: 'qualifier-priority', row, repair: 'dropped' })),
+    { table: 'label-whitelist', row: 2, repair: 'dropped' },
+    { table: 'default-colors', row: 4, repair: 'invalid' }
+  ]), 'Some table rows of this older Session were read as the current version writes them. '
+    + 'Qualifier priority: lines 3, 4, 5, 6, 7, and 2 more lacked a required column and were dropped. '
+    + 'Label whitelist: line 2 lacked a required column and was dropped. '
+    + 'Default colors: line 4 had a color the table does not accept and was dropped.');
+  assert.equal(legacyTableRowsNotice([]), '');
+  // D-43 (OV-300): the Load notice names each Legend entry dropped for its
+  // color once, marks rows outside the shown list, and caps the list.
+  assert.equal(legendColorDropNotice([{ list: 'entries', caption: 'X' }, { list: 'entries', caption: 'X' }]),
+    'Legend: entry "X" had a color the app does not accept and was dropped.');
+  assert.equal(legendColorDropNotice([
+    ...['A', 'B', 'C', 'D'].map((caption) => ({ list: 'entries', caption })),
+    { list: 'deletedEntries', caption: 'A' }, { list: 'dormantEntries', caption: 'E' },
+    { list: 'entries', caption: 'F' }, { list: 'entries', caption: 'G' }
+  ]), 'Legend: entries "A", "B", "C", "D", "A" (deleted), and 3 more had a color the app does not accept and were dropped.');
+  assert.equal(legendColorDropNotice([{ list: 'dormantEntries', caption: 'E' }]),
+    'Legend: entry "E" (not drawn) had a color the app does not accept and was dropped.');
+  // A caption is free text quoted as other user text is ("5' UTR" contains a ').
+  assert.equal(legendColorDropNotice([{ list: 'entries', caption: "5' UTR" }]),
+    'Legend: entry "5\' UTR" had a color the app does not accept and was dropped.');
+  assert.equal(legendColorDropNotice([]), '');
+  const sessionTableFailure = (document, repairLegacyTableRows) => {
+    try {
+      project(document, repairLegacyTableRows);
+    } catch (error) {
+      return normalizeUserFacingError(error);
+    }
+    return null;
+  };
+  // The strict reader of every other caller names the table.
+  assert.deepEqual(sessionTableFailure(session, false), {
+    ...sessionTableFailure(session, false),
+    code: 'TABLE_INVALID',
+    context: { sessionTable: 'label-whitelist', reason: 'FIELDS', row: 1, columnCount: 3 },
+    summary: 'The table is invalid. Session table: Label whitelist. Line 1. Check the required fields. Required columns: 3.',
+    actions: ['select-input']
+  });
+  const COLOR_GUIDANCE = 'Use none, a supported named color, or a hex color with 3 or 6 digits. '
+    + 'Feature type rows of a Default colors table and configuration colors other than conservation also accept transparent, rgb(), and hsl(); comparison gradient colors take #RGB or #RRGGBB.';
+  // A Specific colors row with an invalid color still fails Load, naming the table.
+  const specificColors = structuredClone(session);
+  const text = 'CDS\tproduct\tkinase\tnot-a-color\n';
+  specificColors.resources['colors-color-table-file'] = {
+    kind: 'colors-color-table-file', name: 'colors-color-table-file-specific-colors.tsv',
+    type: 'text/tab-separated-values', size: Buffer.byteLength(text), lastModified: 0,
+    encoding: 'base64', data: Buffer.from(text).toString('base64')
+  };
+  specificColors.renderRequest.diagramOptions.colors.colorTableFile = {
+    resourceId: 'colors-color-table-file', representation: 'file'
+  };
+  const specificFailure = sessionTableFailure(specificColors, true);
+  assert.equal(specificFailure?.code, 'TABLE_INVALID');
+  assert.deepEqual(specificFailure.context, { sessionTable: 'specific-colors', field: 'color', reason: 'COLOR', row: 1 });
+  assert.equal(specificFailure.summary, 'The table is invalid. Session table: Specific colors. Line 1. Field: color. '
+    + COLOR_GUIDANCE);
+  // OV-272: so does a Default colors row whose color only a document or a
+  // browser decides; the guidance names the forms that table also takes.
+  const defaultColors = structuredClone(session);
+  const defaultText = 'tRNA\trgb(1,2,3)\nCDS\tcurrentColor\n';
+  defaultColors.resources['colors-default-colors-file'] = {
+    kind: 'colors-default-colors-file', name: 'colors-default-colors-file-default-colors.tsv',
+    type: 'text/tab-separated-values', size: Buffer.byteLength(defaultText), lastModified: 0,
+    encoding: 'base64', data: Buffer.from(defaultText).toString('base64')
+  };
+  defaultColors.renderRequest.diagramOptions.colors.defaultColorsFile = {
+    resourceId: 'colors-default-colors-file', representation: 'file'
+  };
+  const defaultFailure = sessionTableFailure(defaultColors, false);
+  assert.deepEqual(defaultFailure?.context, { sessionTable: 'default-colors', field: 'color', reason: 'COLOR', row: 2 });
+  assert.equal(defaultFailure.summary, 'The table is invalid. Session table: Default colors. Line 2. Field: color. '
+    + COLOR_GUIDANCE);
+}
+
+// E1 (REVIEW-2 P-b): Session Load admits the alignment plan and record
+// translations of a Linear Result set kept in `otherModeResult` with the rules
+// the request projection applies to the top-level set.
+{
+  const gallery = JSON.parse(await readFile(
+    join(process.cwd(), 'gbdraw', 'web', 'gallery', 'sessions', 'BGC0000708-BGC0000713.gbdraw-session.json'), 'utf8'
+  ));
+  const request = gallery.renderRequest;
+  assert.equal(request.mode, 'linear');
+  const admitted = canonicalLinearRecordLayout(request);
+  assert.deepEqual(admitted.similarityAlignment, request.layout.similarityAlignment);
+  assert.deepEqual(admitted.recordTranslations, request.layout.recordTranslations);
+  const projected = projectCanonicalSessionRequest({
+    renderRequest: request, resources: gallery.resources, webFiles: gallery.webFiles, deferResourceContent: true
+  }).config.linearRecordLayout;
+  assert.deepEqual(admitted, {
+    similarityAlignment: projected.similarityAlignment, recordTranslations: projected.recordTranslations
+  });
+  const partial = structuredClone(request);
+  partial.layout.recordTranslations = partial.layout.recordTranslations.slice(1);
+  assert.throws(() => canonicalLinearRecordLayout(partial), /does not cover the displayed record keys/);
+  const foreign = structuredClone(request);
+  foreign.layout.similarityAlignment.records[0].recordKey = 'not-a-record';
+  assert.throws(() => canonicalLinearRecordLayout(foreign), /similarityAlignment/);
+  assert.deepEqual(canonicalLinearRecordLayout({ ...request, mode: 'circular' }),
+    { similarityAlignment: null, recordTranslations: [] });
+}
+
+{
+  // D-03 / OV-203: a CLI or Python Session written before D-03 stores no label for a
+  // precomputed ring and drew its full file name, which Load must keep (the Python
+  // decoder reads it the same way). Stored labels, as every Web Session writes them, win.
+  const session = JSON.parse(gunzipSync(await readFile(join(
+    repoRoot, 'tests/fixtures/sessions/precomputed-ring-unlabelled-cli.v44.gbdraw-session.json.gz'
+  ))));
+  assert.equal(Object.hasOwn(session.renderRequest.diagramOptions, 'conservationLabels'), false);
+  const ringLabels = (renderRequest) => projectCanonicalSessionRequest({
+    renderRequest, resources: session.resources
+  }).config.circularConservation.series.map((entry) => entry.label);
+  assert.deepEqual(ringLabels(session.renderRequest), ['caenorhabditis-human.tlosatx.tsv']);
+  const labelled = structuredClone(session.renderRequest);
+  labelled.diagramOptions.conservationLabels = ['Caenorhabditis'];
+  assert.deepEqual(ringLabels(labelled), ['Caenorhabditis']);
+  labelled.diagramOptions.conservationLabels = [''];
+  assert.deepEqual(ringLabels(labelled), ['caenorhabditis-human.tlosatx']);
+}
+
+// OV-133: the GenBank reads with which Web Load names the rendered-ID edits of
+// a Session 31-39 (request projection, then buildLinearRegionExtractionContext)
+// are the vectors the Python twin (session_migration.legacy_source_reads) reads.
+{
+  const { buildLinearRegionExtractionContext } = await import(
+    pathToFileURL(join(tempRoot, 'js', 'services', 'feature-metadata-extraction.js'))
+  );
+  const vectors = JSON.parse(await readFile(
+    join(repoRoot, 'tests', 'fixtures', 'feature-edit-migration-vectors.json'), 'utf8'
+  ));
+  const fixture = async (name) => JSON.parse(gunzipSync(await readFile(join(repoRoot, 'tests', 'fixtures', name))));
+  const cases = [
+    ...vectors.cases.filter((entry) => entry.sourceReads && entry.input.mode === 'linear'),
+    ...vectors.sourceReadCases
+  ];
+  assert.ok(cases.length >= 2);
+  for (const { name, fixture: fixtureName, records, sourceReads } of cases) {
+    const session = await fixture(fixtureName);
+    const renderRequest = records ? { ...session.renderRequest, records } : session.renderRequest;
+    const { linearSeqs } = projectCanonicalSessionRequest({
+      renderRequest, resources: session.resources, webFiles: {}, storedConfig: null
+    }).files;
+    const context = buildLinearRegionExtractionContext(linearSeqs, 'gb');
+    assert.deepEqual(renderRequest.records.map((record, index) => ({
+      resourceId: record.source.resourceId,
+      regionSpec: context.regionSpecs[index]?.displayFile ?? null,
+      recordSelector: context.recordSelectors[index] || null,
+      reverse: context.reverseFlags[index]
+    })), sourceReads, name);
+  }
 }

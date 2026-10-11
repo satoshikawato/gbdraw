@@ -7,9 +7,9 @@ from __future__ import annotations
 
 from typing import Literal, cast
 
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
+from svgwrite.container import Group
 
-from ...canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
+from ...canvas import CircularCanvasConfigurator
 from ...layout.spatial import Aabb
 
 DefinitionPosition = Literal["center", "top", "bottom"]

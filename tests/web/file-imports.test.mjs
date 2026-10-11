@@ -5,15 +5,20 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
-const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js', 'app');
+const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js', 'services');
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-file-imports-'));
-const tempDir = join(tempRoot, 'app');
+const tempDir = join(tempRoot, 'services');
 await mkdir(tempDir);
-await mkdir(join(tempRoot, 'services'));
+await mkdir(join(tempRoot, 'utils'));
+await writeFile(
+  join(tempRoot, 'utils', 'tsv-cell.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'tsv-cell.js'), 'utf8'),
+  'utf8'
+);
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
 await writeFile(
-  join(tempRoot, 'services', 'error-normalization.js'),
-  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'error-normalization.js'), 'utf8'),
+  join(tempRoot, 'utils', 'error-normalization.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'error-normalization.js'), 'utf8'),
   'utf8'
 );
 await writeFile(
@@ -22,8 +27,13 @@ await writeFile(
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'color-utils.js'),
-  await readFile(join(sourceDir, 'color-utils.js'), 'utf8'),
+  join(tempRoot, 'utils', 'color-utils.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'color-utils.js'), 'utf8'),
+  'utf8'
+);
+await writeFile(
+  join(tempRoot, 'utils', 'named-colors.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'named-colors.js'), 'utf8'),
   'utf8'
 );
 await writeFile(
@@ -31,8 +41,13 @@ await writeFile(
   await readFile(join(sourceDir, 'specific-color-rules.js'), 'utf8'),
   'utf8'
 );
+await writeFile(
+  join(tempDir, 'rule-matchers.js'),
+  await readFile(join(sourceDir, 'rule-matchers.js'), 'utf8'),
+  'utf8'
+);
 
-const { parseColorTable, parsePriorityRules, parseSpecificRules, serializeSpecificRules } = await import(
+const { parseColorTable, parsePriorityRules, parseSpecificRules, parseWhitelistRules, serializeSpecificRules } = await import(
   pathToFileURL(join(tempDir, 'file-imports.js'))
 );
 const {
@@ -89,6 +104,11 @@ assert.deepEqual(
 assert.deepEqual(
   parseColorTable('feature_type\tcolor\nCDS\t#54bcf8\n').colors,
   { CDS: '#54bcf8' }
+);
+// The CLI and Python store the label whitelist with a header row.
+assert.deepEqual(
+  parseWhitelistRules('feature_type\tqualifier\tkeyword\nCDS\tproduct\tterminase\n').rules,
+  [{ feat: 'CDS', qual: 'product', key: 'terminase' }]
 );
 
 assert.throws(
@@ -167,12 +187,11 @@ assert.deepEqual(buildLegendIntents(canonicalRules).intents, [
     { code: 'TABLE_INVALID', context: { row: 1, field: 'color', reason: 'COLOR' } },
     value
   );
-  // DOM-free JavaScript cannot resolve a color name; Python validates it.
-  [...domain.valid, ...domain.invalid].forEach((entry) => {
-    if (entry.word) assert.equal(parseColor(entry.value), entry.value.toLowerCase(), entry.value);
-    else if (entry.normalized) assert.equal(parseColor(entry.value), entry.normalized, entry.value);
-    else rejects(entry.value);
-  });
+  const parsesTheDomain = () => {
+    domain.valid.forEach((entry) => assert.equal(parseColor(entry.value), entry.normalized, entry.value));
+    domain.invalid.forEach((entry) => rejects(entry.value));
+  };
+  parsesTheDomain();
   const noneRule = { feat: 'CDS', qual: 'hash', val: 'fx', color: 'none', cap: 'hollow' };
   assert.deepEqual(
     parseSpecificRules(serializeSpecificRules([noneRule])).rules
@@ -180,9 +199,12 @@ assert.deepEqual(buildLegendIntents(canonicalRules).intents, [
     [noneRule]
   );
 
-  const browserColors = new Map(domain.valid
-    .filter((entry) => entry.browser)
-    .map((entry) => [entry.value.toLowerCase(), entry.browser]));
+  // OV-271: a browser canvas, which also reads currentColor and system colors
+  // as Chromium does, does not widen the domain.
+  const browserColors = new Map([
+    ['red', '#ff0000'], ['grey', '#808080'], ['darkgrey', '#a9a9a9'],
+    ['currentcolor', '#000000'], ['buttonface', '#efefef'], ['canvas', '#ffffff']
+  ]);
   let fillStyle = '#000000';
   const context = {
     get fillStyle() { return fillStyle; },
@@ -194,11 +216,110 @@ assert.deepEqual(buildLegendIntents(canonicalRules).intents, [
   };
   globalThis.document = { createElement: () => ({ getContext: () => context }) };
   try {
-    domain.valid.forEach((entry) => {
-      assert.equal(parseColor(entry.value), entry.browser || entry.normalized, entry.value);
-    });
-    domain.invalid.forEach((entry) => rejects(entry.value));
+    parsesTheDomain();
   } finally {
     delete globalThis.document;
   }
 }
+
+{
+  // OV-272, OV-302: the Default colors (-d) domain is shared with Python's
+  // user-color check. A valid row imports as `normalized` (a name as the hex of
+  // the shared table); any other value stops at its line, as -t does; a blank
+  // color cell keeps the palette color, as Python keeps the built-in one.
+  const { normalizeDefaultColor } = await import(pathToFileURL(join(tempRoot, 'utils', 'color-utils.js')));
+  const domain = JSON.parse(await readFile(
+    join(repoRoot, 'tests', 'fixtures', 'default_color_domain.json'),
+    'utf8'
+  ));
+  const rejected = domain.invalid;
+  const importsTheDomain = () => {
+    domain.valid.forEach(({ value, normalized }) => {
+      assert.equal(normalizeDefaultColor?.(value), normalized, value);
+      assert.deepEqual(parseColorTable(`tRNA\t#123456\nCDS\t${value}\n`).colors, { tRNA: '#123456', CDS: normalized }, value);
+    });
+    rejected.forEach(({ value }) => assert.equal(normalizeDefaultColor?.(value), null, value));
+    rejected.filter(({ value }) => value).forEach(({ value }) => assert.throws(
+      () => parseColorTable(`tRNA\t#123456\nCDS\t${value}\n`),
+      { code: 'TABLE_INVALID', context: { row: 2, field: 'color', reason: 'COLOR' } },
+      value
+    ));
+    assert.deepEqual(parseColorTable('tRNA\t#123456\nCDS\t\n'), { colors: { tRNA: '#123456' }, count: 1, repairs: [] });
+  };
+  importsTheDomain();
+  // A browser canvas, which reads system colors and currentColor, does not widen it.
+  let fillStyle = '#000000';
+  const browserColors = new Map([['buttonface', '#efefef'], ['canvas', '#ffffff'], ['currentcolor', '#000000']]);
+  const context = {
+    get fillStyle() { return fillStyle; },
+    set fillStyle(value) { fillStyle = browserColors.get(String(value).toLowerCase()) || String(value); }
+  };
+  globalThis.document = { createElement: () => ({ getContext: () => context }) };
+  try {
+    importsTheDomain();
+  } finally {
+    delete globalThis.document;
+  }
+}
+
+// OV-28: the import parsers reject a row of the wrong width like Python does
+// (OV-25), with the diagnostic the Label override parser uses.
+const wrongWidthDiagnostic = (row, columnCount) => ({
+  code: 'TABLE_INVALID',
+  context: { row, columnCount, reason: 'FIELDS' }
+});
+for (const [name, parse, width, valid] of [
+  ['Label whitelist', parseWhitelistRules, 3, 'CDS\tproduct\tkinase'],
+  ['Qualifier priority', parsePriorityRules, 2, 'CDS\tgene,product'],
+  ['Default colors', parseColorTable, 2, 'CDS\t#54bcf8']
+]) {
+  const cells = valid.split('\t');
+  const longRow = [...cells, 'extra'].join('\t');
+  const shortRow = cells.slice(0, -1).join('\t');
+  assert.throws(() => parse(`${valid}\n${longRow}\n`), wrongWidthDiagnostic(2, width), `${name}: extra column`);
+  assert.throws(() => parse(`${longRow}\n${valid}\n`), wrongWidthDiagnostic(1, width), `${name}: extra column on the first row`);
+  assert.throws(() => parse(`${valid}\n\n${shortRow}\n`), wrongWidthDiagnostic(3, width), `${name}: short row`);
+  assert.throws(() => parse(`${valid}\r\n${longRow}\r\n`), wrongWidthDiagnostic(2, width), `${name}: CRLF`);
+  assert.doesNotThrow(() => parse(`\n${valid}\n\n${valid}\r\n`), `${name}: valid rows and blank lines`);
+}
+// A whitelist keyword may be empty; the row still has three cells.
+assert.deepEqual(parseWhitelistRules('CDS\tproduct\t\n').rules, [{ feat: 'CDS', qual: 'product', key: '' }]);
+
+// OV-40: Sessions 31–39 stored these tables as their Web writer wrote them,
+// before cell values were normalized, so a tab in a value made extra cells and a
+// line break a short row. With legacyRows a parser reads such a row as the
+// current writer writes it: the extra cells join the last field with one space,
+// and a row without a required field is dropped. It lists each such row; every
+// other caller keeps the strict reader above. Python reads the same vectors
+// (tests/test_session_legacy_table_rows.py, OV-148).
+const legacyTableRowVectors = JSON.parse(await readFile(
+  join(repoRoot, 'tests', 'fixtures', 'legacy-table-row-vectors.json'), 'utf8'
+));
+const legacyTableParsers = {
+  'label-whitelist': parseWhitelistRules,
+  'qualifier-priority': parsePriorityRules,
+  'default-colors': parseColorTable
+};
+for (const { name, table, text, repairedText, repairs, valid } of legacyTableRowVectors.cases) {
+  const parse = legacyTableParsers[table];
+  const parsed = parse(text, { legacyRows: true });
+  assert.deepEqual({ ...parsed, repairs: [] }, parse(repairedText), `${name}: legacy rows read as the current writer writes them`);
+  assert.deepEqual(parsed.repairs, repairs, `${name}: repaired rows`);
+  assert.throws(() => parse(text), { code: 'TABLE_INVALID' }, `${name}: strict reader`);
+  assert.deepEqual(parse(`${valid}\n`, { legacyRows: true }), parse(`${valid}\n`), `${name}: a valid row reads the same`);
+}
+// A color name reads as its CSS hex, as in the browser (OV-160).
+assert.deepEqual(parseColorTable('tRNA\tred\t\n', { legacyRows: true }).colors, { tRNA: '#FF0000' });
+
+// OV-26/OV-27: Python skips whole-line comments in these tables too, so the Web
+// parsers and Python agree: an indented or plain `#` line is skipped, a `#` or `"`
+// inside a value is data.
+assert.deepEqual(
+  parseSpecificRules('# note\n  # indented\n\t# tab\nCDS\tproduct\tGene #1\t#ff0000\tCaption #2\n').rules.map((rule) => [rule.val, rule.cap]),
+  [['Gene #1', 'Caption #2']]
+);
+assert.deepEqual(parseColorTable('# note\n  # indented\n\t# tab\nCDS\t#ff0000\n').colors, { CDS: '#ff0000' });
+assert.deepEqual(
+  parsePriorityRules('# note\n  # indented\n\t# tab\nCDS\t"note#1\n').rules,
+  [{ feat: 'CDS', order: '"note#1' }]
+);

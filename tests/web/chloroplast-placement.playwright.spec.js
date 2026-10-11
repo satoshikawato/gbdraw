@@ -85,7 +85,7 @@ test('chloroplast multipart placement survives strand and label changes and sess
   await generate('06-separated-both');
   const expected = await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
-    return JSON.parse(JSON.stringify(state.featurePlacementOverrides));
+    return JSON.parse(JSON.stringify(state.activeDrawing().featurePlacementOverrides));
   });
   const pending = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Save Session', exact: true }).click();
@@ -106,7 +106,7 @@ test('chloroplast multipart placement survives strand and label changes and sess
   await generate('07-restored');
   expect(await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
-    return JSON.parse(JSON.stringify(state.featurePlacementOverrides));
+    return JSON.parse(JSON.stringify(state.activeDrawing().featurePlacementOverrides));
   })).toEqual(expected);
   // The same restored result remains usable at a narrow viewport.
   await page.setViewportSize({ width: 390, height: 844 });

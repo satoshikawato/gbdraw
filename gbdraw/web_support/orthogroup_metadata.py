@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence, cast
 
 from gbdraw.core.record_metadata import (
     _absolute_display_interval,
@@ -427,7 +427,8 @@ def enrich_features_with_orthogroups(
     for group in orthogroups:
         if not isinstance(group, Mapping):
             continue
-        for member in group.get("members", []) or []:
+        # The orthogroup payload is produced by the engine; members is a list.
+        for member in cast("Iterable[object]", group.get("members", []) or []):
             if not isinstance(member, Mapping):
                 continue
             record_index, record_valid = _consistent_nonnegative_alias(
@@ -500,7 +501,7 @@ def enrich_features_with_orthogroups(
             enriched.append(next_feature)
             continue
 
-        lookup_keys = [
+        lookup_keys: list[tuple[object, ...]] = [
             ("record-id", record_index, feature_id)
             for feature_id in feature_ids
         ]
@@ -517,8 +518,8 @@ def enrich_features_with_orthogroups(
             lookup_keys.append(("canonical", *canonical))
         matches: dict[int, dict[str, object]] = {}
         complete = bool(lookup_keys)
-        for key in lookup_keys:
-            candidates = feature_index.get(key, [])
+        for lookup_key in lookup_keys:
+            candidates = feature_index.get(lookup_key, [])
             if len(candidates) != 1:
                 complete = False
                 break

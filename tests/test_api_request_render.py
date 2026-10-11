@@ -23,6 +23,8 @@ from gbdraw.analysis.protein_colinearity import (
     OrthogroupMember,
     OrthogroupResult,
     ProteinBlastpResult,
+    build_protein_losat_cache_key,
+    build_protein_losat_pair_identity,
     extract_web_stable_cds_proteins,
 )
 from gbdraw.api.options import (
@@ -526,6 +528,78 @@ def test_empty_api_derived_result_passes_current_session_validation(
         protein_identity_manifest=manifest.to_dict(),
     )
     assert artifacts.losat_derived_cache_entries == (entry,)
+
+
+def test_current_request_artifacts_validate_the_manifest_once_for_many_raw_entries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import gbdraw.analysis.protein_colinearity as protein_colinearity_module
+
+    records = (
+        _protein_record("source-a", "protein-a"),
+        _protein_record("source-b", "protein-b"),
+    )
+    extraction = extract_web_stable_cds_proteins(
+        records,
+        record_instance_keys=("record-1", "record-2"),
+        record_source_ids=tuple(record.id for record in records),
+    )
+    manifest = extraction.identity_manifest
+    assert manifest is not None
+    pair_identity = build_protein_losat_pair_identity(
+        manifest,
+        query_record_instance_key="record-1",
+        subject_record_instance_key="record-2",
+    )
+    entries = []
+    for index in range(5):
+        args = ["--max-hsps-per-subject", str(index + 1)]
+        entries.append(
+            {
+                "schema": 4,
+                "kind": "raw-losat",
+                "identityKind": "protein",
+                "idEncoding": "runtime-handle-v1",
+                "key": build_protein_losat_cache_key(pair_identity, args=args),
+                "text": "",
+                "program": "blastp",
+                "outfmt": "6",
+                "args": args,
+                "queryProteinSetHash": pair_identity.query_protein_set_hash,
+                "subjectProteinSetHash": pair_identity.subject_protein_set_hash,
+                "queryRuntimeBindingHash": pair_identity.query_runtime_binding_hash,
+                "subjectRuntimeBindingHash": pair_identity.subject_runtime_binding_hash,
+                "queryRecordInstanceKey": "record-1",
+                "subjectRecordInstanceKey": "record-2",
+            }
+        )
+
+    validation_calls = 0
+    real_validate = protein_colinearity_module.validate_protein_identity_manifest
+
+    def count_validation(value):
+        nonlocal validation_calls
+        validation_calls += 1
+        return real_validate(value)
+
+    monkeypatch.setattr(
+        protein_colinearity_module,
+        "validate_protein_identity_manifest",
+        count_validation,
+    )
+    monkeypatch.setattr(
+        request_render_module,
+        "validate_protein_identity_manifest",
+        count_validation,
+    )
+
+    artifacts = CurrentRequestArtifacts(
+        losat_cache_entries=tuple(entries),
+        protein_identity_manifest=manifest.to_dict(),
+    )
+
+    assert len(artifacts.losat_cache_entries) == 5
+    assert validation_calls == 1
 
 
 def test_current_derived_artifacts_require_resolved_manifest_handles() -> None:

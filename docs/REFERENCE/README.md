@@ -2,11 +2,11 @@
 
 # Technical documentation
 
-Use these pages to look up current inputs, controls, options, schemas, API
-contracts, compatibility rules, and output behavior. For a complete learning
-project, start with [Tutorials](../TUTORIALS/README.md). The [FAQ](../FAQ.md)
-answers choice and troubleshooting questions, then links back here for exact
-contracts.
+Use these pages to look up the exact behavior of an input, control, option,
+table column, API call, saved file, or output format. To learn by making a
+complete figure, start with [Tutorials](../TUTORIALS/README.md). The
+[FAQ](../FAQ.md) answers which approach to choose and why something failed,
+then links back here.
 
 ## Interfaces
 
@@ -24,9 +24,7 @@ contracts.
 - [Output formats and export](output-formats-and-export.md)
 - [Interactive SVG and semantic hooks](interactive-svg-and-semantic-hooks.md)
 
-## Detailed inventories and compatibility history
+## Option lists and command templates
 
 - [Generated command-line option inventory](../CLI_Reference.md)
 - [Command recipes](../RECIPES.md)
-- [Session compatibility history](../SESSION_COMPATIBILITY.md)
-- [SVG semantic-hook inventory](../SVG_SEMANTIC_HOOKS.md)

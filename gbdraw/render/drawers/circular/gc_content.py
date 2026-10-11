@@ -2,10 +2,7 @@
 # coding: utf-8
 
 from pandas import DataFrame
-from svgwrite.container import Group
-from svgwrite.path import Path
-from svgwrite.shapes import Circle, Line
-from svgwrite.text import Text
+from gbdraw.svg.elements import Circle, Group, Line, Path, Text
 
 from ....analysis.gc import gc_content_percent_df
 from ....layout.circular_depth_axis import (
@@ -20,7 +17,7 @@ from ....layout.scalar_axis import (
     scalar_axis_tick_values,
     scaled_scalar_fraction,
 )
-from ....svg.circular_tracks import (  # type: ignore[reportMissingImports]
+from ....svg.circular_tracks import (
     generate_circular_gc_content_path_desc,
     generate_circular_scalar_area_path_desc,
 )

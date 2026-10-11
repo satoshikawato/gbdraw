@@ -5,9 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from pandas import DataFrame  # type: ignore[reportMissingImports]
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
-from svgwrite.path import Path  # type: ignore[reportMissingImports]
+from pandas import DataFrame
+from gbdraw.svg.elements import Group, Path
 
 from ....core.color import interpolate_color
 from ....svg.circular_conservation import generate_annular_hsp_path_desc
@@ -126,8 +125,8 @@ class ConservationDrawer:
                 "data-reference-record-id": _row_text(row, "reference_record_id"),
             }
             projected = record_transform is not None and record_transform.start_coordinate is not None
-            spans = ((_row_float(row, "draw_start"), _row_float(row, "draw_end")),)
-            if projected:
+            spans: tuple[tuple[float, float], ...] = ((_row_float(row, "draw_start"), _row_float(row, "draw_end")),)
+            if projected and record_transform is not None:
                 metadata[f"data-{_row_text(row, 'reference_side')}-record-index"] = record_index
                 spans = tuple((part.display_start, part.display_end) for part in
                               record_transform.project_interval(SourceInterval(int(spans[0][0]), int(spans[0][1]))))
@@ -139,7 +138,7 @@ class ConservationDrawer:
                         full_reference=(end - start == total_length if projected else bool(getattr(row, "full_reference", False))),
                     ),
                     fill=self._fill_color(identity), fill_opacity=self.fill_opacity,
-                    stroke=self.stroke_color, stroke_width=self.stroke_width, debug=False,
+                    stroke=self.stroke_color, stroke_width=self.stroke_width,
                 )
                 for attribute, value in metadata.items():
                     path.attribs[attribute] = str(value)

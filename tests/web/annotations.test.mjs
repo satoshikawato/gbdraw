@@ -4,13 +4,16 @@ import { readFile, cp, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-annotations-'));
 await cp(join(process.cwd(), 'gbdraw', 'web', 'js'), join(tempRoot, 'js'), { recursive: true });
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 const load = (path) => import(pathToFileURL(join(tempRoot, 'js', path)));
 
-const { createAnnotationSet, normalizeAnnotationSets } = await load('app/annotations/state.js');
+const {
+  annotationOptionsPayload, createAnnotationSet, draftAnnotationSetsOfRequest, normalizeAnnotationSets
+} = await load('services/annotation-state.js');
 const {
   annotationRecordSelector,
   annotationRecordSelectorFromValue,
@@ -21,22 +24,26 @@ const {
   parseAnnotationRecordSelectorValue
 } = await load('app/annotations/target-actions.js');
 const { buildAnnotationRecordCatalog } = await load('app/annotations/record-catalog.js');
-const { resolveCircularRequestRecordSet } = await load('app/record-options.js');
+const { resolveCircularRequestRecordSet } = await load('services/record-options.js');
 const {
   annotationRecordOptions,
   reconcileAnnotationRecordBindings,
   setAnnotationRecordValue
 } = await load('app/annotations/record-selector.js');
 const { validateAnnotationRecordTargets } = await load('app/annotations/validation.js');
-const { encodeAnnotationTable, parseAnnotationTable, parseAnnotationTableWithNotice } = await load('app/annotations/table-codec.js');
+const {
+  encodeAnnotationTable, encodeAnnotationTableWithNotice, parseAnnotationTable, parseAnnotationTableWithNotice
+} = await load('app/annotations/table-codec.js');
 const { createAnnotationEditor } = await load('app/annotations.js');
-const { buildLinearTrackSlotSpec, normalizeLinearTrackSlots } = await load('app/linear-track-slots.js');
-const { buildCircularTrackSlotSpec, normalizeCircularTrackSlots } = await load('app/circular-track-slots.js');
+const { buildLinearTrackSlotSpec } = await load('app/linear-track-slots.js');
+const { normalizeLinearTrackSlots } = await load('services/linear-track-slot-model.js');
+const { buildCircularTrackSlotSpec } = await load('app/circular-track-slots.js');
+const { normalizeCircularTrackSlots } = await load('services/circular-track-slot-model.js');
 const {
   createLinearComparisonEdge,
   hasLinearComparisonIntent,
   resolveLinearComparisonPlan
-} = await load('app/linear-comparisons.js');
+} = await load('services/linear-comparisons.js');
 
 const set = createAnnotationSet({
   id: 'review',
@@ -81,7 +88,7 @@ test('TSV cannot silently replace invalid known annotation choices', () => {
 
 test('row style edits do not recolor sibling annotations or their inherited default', () => {
   const state = { annotationSets: [], adv: {} };
-  const editor = createAnnotationEditor({ state });
+  const editor = createAnnotationEditor({ state: withDrawings(state) });
   const set = editor.addAnnotationSet();
   const first = editor.addCoordinateAnnotation(set);
   const second = editor.addCoordinateAnnotation(set);
@@ -116,7 +123,7 @@ test('download reads the current rows without mutating state or resolving a cata
     history: ['before', 'after']
   };
   const draftEditor = createAnnotationEditor({
-    state: draftState, getRecordCatalog: () => { throw new Error('Download must not resolve records'); }
+    state: withDrawings(draftState), getRecordCatalog: () => { throw new Error('Download must not resolve records'); }
   });
   const calls = [];
   let blob;
@@ -182,10 +189,12 @@ const state = {
   selectedFeatures: { value: [] },
   adv: { circular_track_slots: [], linear_track_slots: [] }
 };
-const editor = createAnnotationEditor({ state });
+const editor = createAnnotationEditor({ state: withDrawings(state) });
 test('delete and re-add keeps coordinate and selected-feature annotation IDs unique', () => {
-  const state = { annotationSets: [], selectedFeatures: { value: [{ selector: { hash: 'f123' } }] } };
-  const actions = createAnnotationEditor({ state });
+  const state = { annotationSets: [], selectedFeatures: { value: [{
+    scope: 'circular', record_key: 'k', biological_feature_id: 'f123'
+  }] } };
+  const actions = createAnnotationEditor({ state: withDrawings(state) });
   const set = actions.addAnnotationSet();
   for (let i = 0; i < 3; i += 1) actions.addCoordinateAnnotation(set);
   actions.removeAnnotation(set, set.annotations[0]);
@@ -198,15 +207,139 @@ test('delete and re-add keeps coordinate and selected-feature annotation IDs uni
   assert.deepEqual(normalizeAnnotationSets([set])[0].annotations.map((item) => item.id), ids);
 });
 
-test('selected annotations use stable hashes, including features without named qualifiers', () => {
+// Design Q4 PR-Q4-5 (OV-03): a selected feature is named by its source
+// identity, never by a selector value that a crop or a copy changes.
+test('selected annotations name each feature by its source identity', () => {
   const targets = featureTargetsFromSelection([
-    { type: 'D-loop', record_id: 'mt', selector: { hash: 'fcf4827e2' } },
-    { gene: 'duplicated', record_id: 'mt', selector: { hash: 'f1234' } }
+    { type: 'D-loop', scope: 'circular', record_key: 'mt', biological_feature_id: 'fcf4827e2', selector: { hash: 'fcf4827e2' } },
+    { gene: 'duplicated', scope: 'linear', record_key: 'linear-seq-2', biological_feature_id: 'f1234~1',
+      selector: { hash: 'f1234' } }
   ]);
-  assert.deepEqual(targets.map((target) => target.selectors), [
-    [{ key: 'hash', value: 'fcf4827e2' }], [{ key: 'hash', value: 'f1234' }]
+  // A target is of the drawing it is added to, the mode of the Result it was
+  // selected on (R2, OV-21; PR-1), so it names no mode.
+  assert.deepEqual(targets, [
+    { kind: 'featureIdentity', recordKey: 'mt', biologicalFeatureId: 'fcf4827e2',
+      envelope: 'outer_bounds', circularPath: 'shortest' },
+    { kind: 'featureIdentity', recordKey: 'linear-seq-2', biologicalFeatureId: 'f1234~1',
+      envelope: 'outer_bounds', circularPath: 'shortest' }
   ]);
-  assert.throws(() => featureTargetsFromSelection([{}]), /no stable annotation selector/);
+  // A Result without a feature catalog (a Session before 40) has no identities.
+  assert.equal(featureTargetsFromSelection([{ selector: { hash: 'f1234' }, locus_tag: 'A_1' }]), null);
+  const alerts = [];
+  const originalWindow = globalThis.window;
+  globalThis.window = { alert: (message) => alerts.push(message) };
+  try {
+    const legacy = createAnnotationEditor({ state: withDrawings({ annotationSets: [], selectedFeatures: [{ locus_tag: 'A_1' }] }) });
+    const set = legacy.addAnnotationSet();
+    assert.deepEqual(legacy.addSelectedFeatures(set), []);
+    assert.deepEqual(set.annotations, []);
+    assert.deepEqual(alerts, ['Generate the diagram again to annotate the selected features.']);
+  } finally {
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+  }
+});
+
+// Design Q4 6.4: the table writes a selected feature in its current placement.
+test('the TSV writes selected features by drawn record position and drawn hash, and counts the rest', () => {
+  const identity = (recordKey, biologicalFeatureId) => ({
+    kind: 'featureIdentity', scope: 'linear', recordKey, biologicalFeatureId, envelope: 'segments', circularPath: 'reverse'
+  });
+  const sets = [createAnnotationSet({ id: 'marks', annotations: [
+    { id: 'drawn', target: identity('linear-seq-2', 'fb5977f81'), mark: 'band' },
+    { id: 'cropped', target: identity('linear-seq-2', 'f0000000a'), mark: 'band' }
+  ] })];
+  const drawnPlacement = (target) => (target.biologicalFeatureId === 'fb5977f81' ? { recordIndex: 1, hash: 'f3b928d8c' } : null);
+  const encoded = encodeAnnotationTableWithNotice(sets, { drawnPlacement });
+  assert.equal(encoded.placedFeatureIdentityCount, 1);
+  assert.equal(encoded.skippedFeatureIdentityCount, 1);
+  const [header, row, ...rest] = encoded.text.trim().split('\n').map((line) => line.split('\t'));
+  assert.deepEqual(rest, []);
+  const cell = (name) => row[header.indexOf(name)];
+  assert.deepEqual(['id', 'record', 'feature_selector', 'envelope', 'circular_path'].map(cell),
+    ['drawn', '#2', 'hash=f3b928d8c', 'segments', 'reverse']);
+  assert.deepEqual(parseAnnotationTable(encoded.text)[0].annotations[0].target, {
+    kind: 'featureSpan', record: { kind: 'recordIndex', index: 1 },
+    selectors: [{ key: 'hash', value: 'f3b928d8c' }], envelope: 'segments', circularPath: 'reverse'
+  });
+  // Without a placement (Run Info has none) no selected-feature row is written.
+  assert.equal(encodeAnnotationTableWithNotice(sets).skippedFeatureIdentityCount, 2);
+});
+
+// A request carries the selected-feature targets of its records only; the
+// drawing keeps the others (design Q4 3.2, R2).
+test('the request carries only the selected-feature targets of its records', () => {
+  const identity = (recordKey, biologicalFeatureId) => ({
+    kind: 'featureIdentity', recordKey, biologicalFeatureId
+  });
+  const sets = [createAnnotationSet({ id: 'marks', annotations: [
+    { id: 'here', target: identity('linear-seq-1', 'fa'), mark: 'band' },
+    { id: 'expanded', target: identity('linear-seq-2:3', 'fb'), mark: 'band' },
+    { id: 'circular', target: identity('circular-A-#1', 'fc'), mark: 'band' },
+    { id: 'coordinates', target: coordinateTarget({ start: 1, end: 5 }), mark: 'band' }
+  ] })];
+  const records = [
+    { recordKey: 'linear-seq-1', cardinality: 'exactly_one' },
+    { recordKey: 'linear-seq-2', cardinality: 'all' }
+  ];
+  const payload = annotationOptionsPayload(sets, records);
+  assert.deepEqual(payload.sets[0].annotations.map((item) => item.id), ['here', 'expanded', 'coordinates']);
+  assert.equal(sets[0].annotations.length, 4);
+});
+
+// R2, OV-21: both modes can use the same record key for the same feature
+// (`record-1` in a Gallery or Python Session). PR-1: each mode's drawing holds
+// its own annotation sets, so a target needs no mode; each drawing's request
+// carries its own targets as request schema 9 has them, and a request's sets
+// project back onto the same request.
+test('each drawing\'s selected-feature target reaches its own request', () => {
+  const MODES = ['circular', 'linear'];
+  const records = [{ recordKey: 'record-1', cardinality: 'exactly_one' }];
+  const target = { kind: 'featureIdentity', recordKey: 'record-1', biologicalFeatureId: 'f1',
+    envelope: 'outer_bounds', circularPath: 'shortest' };
+  const drawings = Object.fromEntries(MODES.map((mode) => [mode, [createAnnotationSet({ id: 'marks', annotations: [{
+    id: mode, target, mark: 'highlight'
+  }] })]]));
+  const before = JSON.stringify(drawings);
+  MODES.forEach((mode) => {
+    const payload = annotationOptionsPayload(drawings[mode], records);
+    assert.deepEqual(payload.sets[0].annotations.map((item) => [item.id, item.target]), [[mode, target]]);
+    // A Session written from a request (CLI, Python) gives the drawing of the
+    // request's mode the request's sets.
+    const draft = draftAnnotationSetsOfRequest(payload.sets);
+    assert.deepEqual(draft[0].annotations.map((item) => item.target), [target]);
+    assert.deepEqual(annotationOptionsPayload(draft, records), payload);
+  });
+  assert.equal(JSON.stringify(drawings), before);
+});
+
+// The draft owner rejects a selected-feature target without a feature
+// identity; a target that a Session 40-44 migration scoped keeps its mode
+// until the Session 46 split moves it into that mode's drawing.
+test('a selected-feature target needs a feature identity', () => {
+  const set = (target) => [{ id: 'marks', annotations: [{ id: 'one', target }] }];
+  const identity = { kind: 'featureIdentity', recordKey: 'record-1', biologicalFeatureId: 'f1' };
+  assert.throws(() => normalizeAnnotationSets(set({ ...identity, recordKey: '' })), /schema|INPUT_INVALID|invalid/i);
+  assert.throws(() => normalizeAnnotationSets(set({ ...identity, biologicalFeatureId: '' })), /schema|INPUT_INVALID|invalid/i);
+  assert.equal(Object.hasOwn(normalizeAnnotationSets(set(identity))[0].annotations[0].target, 'scope'), false);
+  assert.equal(normalizeAnnotationSets(set({ ...identity, scope: 'linear' }))[0].annotations[0].target.scope, 'linear');
+  assert.equal(Object.hasOwn(normalizeAnnotationSets(set({ ...identity, scope: 'batch' }))[0].annotations[0].target, 'scope'), false);
+});
+
+// The editor names a target's feature from the shown Result, which is of the
+// shown drawing's mode (E1).
+test('the editor names a selected-feature target from the shown Result', () => {
+  const feature = { scope: 'circular', record_key: 'record-1', biological_feature_id: 'f1', type: 'CDS',
+    locus_tag: 'LT_1', start: 0, end: 30, strand: 1, record_idx: 0, drawnSelector: { hash: 'f1' } };
+  const actions = createAnnotationEditor({ state: withDrawings({
+    annotationSets: [], selectedFeatures: { value: [] },
+    extractedFeatures: { value: [feature] }, biologicalFeatures: { value: [feature] }
+  }) });
+  const item = (biologicalFeatureId) => ({ target: {
+    kind: 'featureIdentity', recordKey: 'record-1', biologicalFeatureId
+  } });
+  assert.doesNotMatch(actions.featureTargetCaption(item('f1')), /not in the current diagram/);
+  assert.equal(actions.featureTargetCaption(item('f2')), 'f2 (not in the current diagram)');
 });
 const created = editor.addAnnotationSet('review');
 const addedCoordinate = editor.addCoordinateAnnotation(created, { start: 5, end: 8 });
@@ -317,8 +450,6 @@ assert.deepEqual(emptySourceCatalog.issues[0], { code: 'NO_RECORDS', context: { 
 
 const gbComparisonCatalog = buildAnnotationRecordCatalog({
   mode: 'linear',
-  inputType: 'gb',
-  loadComparison: true,
   linearSources: [
     { sourceKey: 'gb-a', hasInput: true, status: 'ready', selector: '', records: [{ recordId: 'A1' }, { recordId: 'A2' }] },
     { sourceKey: 'gb-b', hasInput: true, status: 'ready', selector: '', records: [{ recordId: 'B1' }, { recordId: 'B2' }] }
@@ -327,12 +458,12 @@ const gbComparisonCatalog = buildAnnotationRecordCatalog({
 assert.deepEqual(gbComparisonCatalog.records.map((record) => record.recordId), ['A1', 'A2', 'B1', 'B2']);
 assert.deepEqual(gbComparisonCatalog.records.map((record) => record.sourceIndex), [0, 0, 1, 1]);
 const singleGbComparisonCatalog = buildAnnotationRecordCatalog({
-  mode: 'linear', inputType: 'gb', loadComparison: true,
+  mode: 'linear',
   linearSources: [{ sourceKey: 'gb-only', hasInput: true, status: 'ready', selector: '', records: [{ recordId: 'A1' }, { recordId: 'A2' }] }]
 });
 assert.deepEqual(singleGbComparisonCatalog.records.map((record) => record.recordId), ['A1', 'A2']);
 const gffComparisonCatalog = buildAnnotationRecordCatalog({
-  mode: 'linear', inputType: 'gff', loadComparison: true,
+  mode: 'linear',
   linearSources: [{ sourceKey: 'gff-only', hasInput: true, status: 'ready', selector: '', records: [{ recordId: 'G1' }, { recordId: 'G2' }] }]
 });
 assert.deepEqual(gffComparisonCatalog.records.map((record) => record.recordId), ['G1', 'G2']);
@@ -495,12 +626,24 @@ for (const entry of importCases) {
   });
 }
 
+test('quotes in a label are part of the value through Web write and Web read', () => {
+  // The same vector tests/test_annotations.py reads through read_annotation_table (OV-24).
+  const vector = importCases.find((entry) => entry.name === 'quotes are part of a label');
+  const expected = ['"lead', '"quoted"', 'a"b', 'plain'];
+  const sets = parseAnnotationTable(vector.table);
+  assert.deepEqual(sets[0].annotations.map((annotation) => annotation.label), expected);
+  const encoded = encodeAnnotationTable(sets);
+  const [header, ...rows] = encoded.trimEnd().split('\n').map((line) => line.split('\t'));
+  assert.deepEqual(rows.map((row) => row[header.indexOf('label')]), expected);
+  assert.deepEqual(parseAnnotationTable(encoded), sets);
+});
+
 test('file import commits once, separates notices, and preserves draft/Result on failure or stale completion', async () => {
   const state = { annotationSets: [createAnnotationSet({ id: 'before', annotations: [
     { id: 'old', target: coordinateTarget({ start: 1, end: 3 }), mark: 'band' }
   ] })], results: [{ content: '<svg/>', warnings: ['resolved warning'] }] };
   const notices = [];
-  const editor = createAnnotationEditor({ state, onImportNotice: (notice) => notices.push(notice) });
+  const editor = createAnnotationEditor({ state: withDrawings(state), onImportNotice: (notice) => notices.push(notice) });
   const alerts = [];
   const oldAlert = globalThis.alert;
   globalThis.alert = (message) => alerts.push(message);
@@ -522,13 +665,15 @@ test('file import commits once, separates notices, and preserves draft/Result on
       await editor.importAnnotationTableFile({ target: input });
       assert.equal(JSON.stringify(state), before);
       assert.equal(commits, 1);
-      assert.equal(notices.at(-1), '');
+      // FL-14: the panel notice reports the error; no native alert.
+      assert.match(notices.at(-1), /^Could not import annotations: /);
     }
     const before = JSON.stringify(state);
     input.files = [{ text: async () => { throw new Error('read failure'); } }];
     await editor.importAnnotationTableFile({ target: input });
     assert.equal(JSON.stringify(state), before);
-    assert.match(alerts.at(-1), /read failure/);
+    assert.match(notices.at(-1), /^Could not import annotations: read failure/);
+    assert.deepEqual(alerts, []);
     let finish;
     input.files = [{ text: () => new Promise((resolve) => { finish = resolve; }) }];
     const pending = editor.importAnnotationTableFile({ target: input });
@@ -567,10 +712,106 @@ test('file import commits once, separates notices, and preserves draft/Result on
   }
 });
 
-test('record reconciliation failure cannot partially replace an imported draft', () => {
+test('record reconciliation failure cannot partially replace an imported draft', async () => {
   const state = { annotationSets: [createAnnotationSet({ id: 'original' })] };
   const before = JSON.stringify(state);
-  const editor = createAnnotationEditor({ state, getRecordCatalog: () => { throw new Error('catalog unavailable'); } });
-  assert.throws(() => editor.importAnnotationTable(importCases[0].table), /catalog unavailable/);
+  const editor = createAnnotationEditor({ state: withDrawings(state), getRecordCatalog: () => { throw new Error('catalog unavailable'); } });
+  await assert.rejects(() => editor.importAnnotationTable(importCases[0].table), /catalog unavailable/);
   assert.equal(JSON.stringify(state), before);
+});
+
+// FL-14: the editor keeps the ids valid and says which id it stored.
+test('an id edit that the editor changes names the stored id in the panel notice', () => {
+  const state = { annotationSets: [
+    createAnnotationSet({ id: 'annotations', annotations: [
+      { id: 'region_1', target: coordinateTarget({ start: 1, end: 3 }), mark: 'band' },
+      { id: 'region_2', target: coordinateTarget({ start: 5, end: 9 }), mark: 'band' }
+    ] }),
+    createAnnotationSet({ id: 'second' })
+  ], adv: { circular_track_slots: [], linear_track_slots: [] } };
+  const notices = [];
+  const editor = createAnnotationEditor({ state: withDrawings(state), onImportNotice: (notice) => notices.push(notice) });
+  const [first, second] = state.annotationSets;
+  editor.renameAnnotation(first, first.annotations[1], 'region_1');
+  assert.equal(first.annotations[1].id, 'region_1_2');
+  assert.equal(notices.at(-1), 'Annotation id "region_1" is used by another annotation of this set, so it was saved as "region_1_2".');
+  editor.renameAnnotation(first, first.annotations[1], '  ');
+  assert.equal(first.annotations[1].id, 'region');
+  assert.equal(notices.at(-1), 'Annotation id cannot be empty, so it was saved as "region".');
+  editor.renameAnnotation(first, first.annotations[1], 'kept');
+  assert.equal(notices.at(-1), '');
+  editor.renameAnnotationSet(second, 'annotations');
+  assert.equal(second.id, 'annotations_2');
+  assert.equal(notices.at(-1), 'Set id "annotations" is used by another set, so it was saved as "annotations_2".');
+  editor.renameAnnotationSet(second, '');
+  assert.equal(second.id, 'annotations_2');
+  assert.equal(notices.at(-1), 'Set id cannot be empty, so it was saved as "annotations_2".');
+});
+
+// FL-14: a table without rows would remove every set, so the import asks.
+test('an import that would remove every set asks first, and Cancel keeps the sets', async () => {
+  const state = { annotationSets: [createAnnotationSet({ id: 'kept', annotations: [
+    { id: 'old', target: coordinateTarget({ start: 1, end: 3 }), mark: 'band' }
+  ] })] };
+  const editor = createAnnotationEditor({ state: withDrawings(state), onImportNotice: () => {} });
+  const before = JSON.stringify(state);
+  const canceled = editor.importAnnotationTable('');
+  assert.deepEqual({ ...editor.annotationReplaceAllDialog }, { show: true, setCount: 1 });
+  editor.handleAnnotationReplaceAllChoice('cancel');
+  await canceled;
+  assert.equal(editor.annotationReplaceAllDialog.show, false);
+  assert.equal(JSON.stringify(state), before);
+  const removed = editor.importAnnotationTable('');
+  editor.handleAnnotationReplaceAllChoice('remove');
+  await removed;
+  assert.deepEqual(state.annotationSets, []);
+  await editor.importAnnotationTable('');
+  assert.equal(editor.annotationReplaceAllDialog.show, false, 'no set to remove: no question');
+});
+
+test('an annotation bound to an OFF record stays in the draft and leaves the request (record selection)', () => {
+  const source = (sourceKey, recordId, extra = {}) => ({
+    sourceKey, hasInput: true, status: 'ready', selector: '', records: [{ selector: '#1', recordId, recordLength: 100 }], ...extra
+  });
+  const allOn = buildAnnotationRecordCatalog({
+    mode: 'linear', linearSources: [source('a', 'RecA'), source('b', 'RecB'), source('c', 'RecC')]
+  });
+  const offB = buildAnnotationRecordCatalog({
+    mode: 'linear',
+    linearSources: [source('a', 'RecA'), source('b', 'RecB', { drawn: false }), source('c', 'RecC')]
+  });
+  // The drawn records only, with sources counted among the drawn cards.
+  assert.deepEqual(offB.records.map((record) => [record.recordId, record.sourceIndex]), [['RecA', 0], ['RecC', 1]]);
+  assert.deepEqual(offB.omittedRecordKeys, [allOn.records[1].key]);
+  assert.deepEqual(allOn.omittedRecordKeys, []);
+  // An OFF card that cannot be read is no issue of the drawing; a drawn one keeps its card number.
+  const pending = buildAnnotationRecordCatalog({
+    mode: 'linear',
+    linearSources: [source('a', 'RecA'), { sourceKey: 'b', hasInput: true, status: 'loading', drawn: false }, { sourceKey: 'c', hasInput: false }]
+  });
+  assert.deepEqual(pending.issues, [{ code: 'INPUT_REQUIRED', context: { inputOrdinal: 3 } }]);
+
+  const sets = [createAnnotationSet({
+    id: 'off', annotations: [{ id: 'on-b', target: coordinateTarget({ start: 1, end: 5 }), label: '', mark: 'band' }]
+  })];
+  setAnnotationRecordValue(allOn, sets[0].annotations[0], allOn.records[1].key);
+  const before = structuredClone(sets);
+  assert.equal(validateAnnotationRecordTargets(sets, offB), null);
+  reconcileAnnotationRecordBindings(sets, offB);
+  assert.deepEqual(sets, before, 'the binding to the OFF record is kept');
+  assert.deepEqual(annotationOptionsPayload(sets, [], offB.omittedRecordKeys).sets[0].annotations, []);
+  assert.equal(annotationOptionsPayload(sets, [], allOn.omittedRecordKeys).sets[0].annotations.length, 1);
+
+  // Circular: the OFF records of the file.
+  const circular = buildAnnotationRecordCatalog({
+    mode: 'circular',
+    circularSource: {
+      sourceKey: 'circ', hasInput: true, status: 'ready',
+      records: [{ selector: '#1', recordId: 'C1', recordLength: 10 }],
+      omittedRecords: [{ selector: '#2', recordId: 'C2', recordLength: 20 }]
+    }
+  });
+  assert.deepEqual(circular.records.map((record) => record.recordId), ['C1']);
+  assert.equal(circular.omittedRecordKeys.length, 1);
+  assert.match(circular.omittedRecordKeys[0], /^circ::\[1,"C2",20\]$/);
 });

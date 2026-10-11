@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const context = vm.createContext({ console });
 vm.runInContext(readFileSync(new URL('../../gbdraw/web/vendor/vue/vue.global.js', import.meta.url), 'utf8'), context);
@@ -25,7 +26,7 @@ test('group lookup reuses valid identities and invalidates on ID edits, new alia
     clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'),
     svgContainer: ref(null), linearSeqs: reactive([]), extractedFeatures: ref([]), biologicalFeatures: ref([])
   };
-  const editor = createOrthogroupEditor({ state });
+  const editor = createOrthogroupEditor({ state: withDrawings(state) });
   const group = state.orthogroups.value[0];
   assert.equal(editor.getOrthogroupById('one'), group);
   const rows = editor.orthogroupRows.value;
@@ -87,4 +88,28 @@ test('group names follow exact member sets and unmatched names stay dormant (CO-
   assert.deepEqual(restored, {
     names: { og_3: 'LivC', og_4: 'LivB' }, descriptions: { og_3: 'transporter' }, dormant: {}
   }, 'a dormant name returns when its member set forms one group again');
+});
+
+test('member tables name each record in plain text, as the diagram heading reads (OV-369)', () => {
+  const state = {
+    orthogroups: ref([]),
+    orthogroupNameOverrides: reactive({}), orthogroupDescriptionOverrides: reactive({}),
+    selectedOrthogroupId: ref(''), orthogroupSearch: ref(''), orthogroupSortMode: ref('id'),
+    clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'),
+    svgContainer: ref(null), extractedFeatures: ref([]), biologicalFeatures: ref([]),
+    linearSeqs: reactive([
+      { uid: 'record-1', definition: '<i>Streptomyces lividus</i> CBS 844.73', gb: { name: 'BGC0000708' } },
+      { uid: 'record-2', definition: '', file_definition: '<i>S. fradiae</i>', gb: { name: 'BGC0000709' } },
+      { uid: 'record-3', definition: '', gb: { name: 'BGC0000711' } }
+    ])
+  };
+  // A member's record index names a record of the Result's request, whose
+  // recordKey is the card uid (record selection).
+  const getCommittedRequest = () => ({ records: state.linearSeqs.map(({ uid }) => ({ recordKey: uid })) });
+  const editor = createOrthogroupEditor({ state: withDrawings(state), getCommittedRequest });
+  const rows = editor.groupOrthogroupMembersByRecord([
+    { recordIndex: 0 }, { recordIndex: 1 }, { recordIndex: 2 }
+  ]);
+  assert.deepEqual(rows.map(({ recordLabel }) => recordLabel),
+    ['Streptomyces lividus CBS 844.73', 'S. fradiae', 'BGC0000711']);
 });

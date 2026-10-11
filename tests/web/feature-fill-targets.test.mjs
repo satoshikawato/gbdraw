@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   FEATURE_PART_BLOCK, filterFeatureFillTargets, getFeaturePart
-} from '../../gbdraw/web/js/app/feature-dom.js';
+} from '../../gbdraw/web/js/services/feature-dom.js';
 
 const element = (id, part, fill) => ({
   getAttribute: key => ({ id, 'data-gbdraw-feature-part': part, fill })[key] ?? null

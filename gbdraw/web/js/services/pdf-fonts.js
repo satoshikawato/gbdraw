@@ -1,3 +1,4 @@
+// @ts-check
 const styles = { normal: 'Regular', bold: 'Bold', italic: 'Italic', bolditalic: 'BoldItalic' };
 const payloads = new Map();
 

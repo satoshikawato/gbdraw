@@ -17,7 +17,7 @@ from dataclasses import replace
 import io
 import logging
 import re
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Sequence, cast
 
 from Bio.SeqRecord import SeqRecord
 
@@ -200,7 +200,8 @@ def resolve_linear_nucleotide_losat(
         }
         cached = {pair: cache.cached_entry(key) for pair, key in keys.items()}
         if all(entry is not None for entry in cached.values()):
-            split = {pair: str(entry["text"]) for pair, entry in cached.items()}  # type: ignore[index]
+            # The all() above guarantees that no entry is None.
+            split = {pair: str(cast("dict[str, object]", entry)["text"]) for pair, entry in cached.items()}
         else:
             logger.info(
                 "INFO: %s source job %d/%d (%d query x %d subject record(s)).",

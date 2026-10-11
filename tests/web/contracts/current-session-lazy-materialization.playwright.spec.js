@@ -4,6 +4,7 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const {
+  CURRENT_SESSION_VERSION,
   evaluateWithRetainedPromise,
   getDiagramWorkerActivity,
   openApp
@@ -269,7 +270,7 @@ test('synthetic current session restores and exports without materializing resou
   expect(preview.structural).toEqual(ZERO_PREVIEW_METRICS);
   expect(preview.historyBaseline).toEqual(ZERO_ARTIFACT_HISTORY_BASELINE);
 
-  const intentHistory = await page.evaluate(async () => {
+  const intentHistory = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const history = window.__GBDRAW_HISTORY__;
     const loadedValue = Boolean(app.form.show_scale);
@@ -322,15 +323,9 @@ test('synthetic current session restores and exports without materializing resou
   ]) {
     expect(exported.resources[resourceId]).toEqual(syntheticSource.resources[resourceId]);
   }
-  expect(exported.resources['unused-lazy-contract']).toEqual({
-    kind: 'web-file',
-    name: 'unused-lazy-contract.txt',
-    type: 'text/plain',
-    size: 7,
-    lastModified: 0,
-    encoding: 'base64',
-    data: Buffer.from('unused\n').toString('base64')
-  });
+  // Save writes only the resources a request or a binding names, as the
+  // Python writer does (E1, REVIEW-1 m4); the unused one is dropped unread.
+  expect(exported.resources).not.toHaveProperty('unused-lazy-contract');
 });
 
 test('neutral cached conservation session regenerates three ordered rings offline', async ({
@@ -528,7 +523,7 @@ test('two rings of one sequence save and restore with one cached LOSAT table', a
           errorLog: app.errorLog ? JSON.parse(JSON.stringify(app.errorLog)) : null,
           content,
           comparisonNames: state.files.c_conservation_fastas.map(({ name }) => name),
-          labels: state.circularConservation.series.map(({ label }) => label),
+          labels: state.activeDrawing().circularConservation.series.map(({ label }) => label),
           cacheKeys: Array.from(state.losatCache.value.keys()),
           cacheInfo: state.losatCacheInfo.value.map(({ key, filename }) => ({ key, filename })),
           slots: [...documentRoot.querySelectorAll(
@@ -731,7 +726,7 @@ test('a GenBank ring file reuses the FASTA ring search, records the Web runtime,
         errorLog: app.errorLog,
         content,
         losatCalls: window.__GBDRAW_RING_PROBE__.losatCalls,
-        labels: state.circularConservation.series.map(({ label }) => label),
+        labels: state.activeDrawing().circularConservation.series.map(({ label }) => label),
         rows: Object.fromEntries(entries.map(([key, entry]) => [key, entry.text])),
         cacheKeys: entries.map(([key]) => key)
       };
@@ -762,7 +757,7 @@ test('a GenBank ring file reuses the FASTA ring search, records the Web runtime,
     await page.evaluate(async (rows) => {
       const { state } = await import('/gbdraw/web/js/state.js');
       window.__GBDRAW_RING_PROBE__.rows = rows;
-      state.losat.executionMode = 'serial';
+      state.losatExecution.executionMode = 'serial';
       state.losatCache.value = new Map();
       state.losatCacheInfo.value = [];
       window.__GBDRAW_RING_PROBE__.searchRun = null;
@@ -916,7 +911,7 @@ test('GenBank and DDBJ ring rows added without a label take the CLI default labe
     expect(cli.status, cli.stderr).toBe(0);
     const cliLabels = JSON.parse(cli.stdout);
     expect(cliLabels).toEqual([
-      'synthetic comparison c', 'Synthetic organism c', 'synthetic comparison c', 'ring-fasta.fa'
+      'synthetic comparison c', 'Synthetic organism c', 'synthetic comparison c', 'ring-fasta'
     ]);
 
     const run = await evaluateWithRetainedPromise(page, async (inputs) => {
@@ -926,14 +921,14 @@ test('GenBank and DDBJ ring rows added without a label take the CLI default labe
         const file = new File([text], name, { type: 'text/plain', lastModified: 0 });
         app.addCircularConservationComparisonFile({ target: { files: [file], value: '' } });
         // Typed before the reader answers: the typed label wins.
-        if (typed) state.circularConservation.series[state.circularConservation.series.length - 1].label = typed;
+        if (typed) state.activeDrawing().circularConservation.series[state.activeDrawing().circularConservation.series.length - 1].label = typed;
       }
       // Generate waits for the pending reads, then draws the rows' labels.
       const result = await app.runAnalysis();
       return {
         result,
         errorLog: app.errorLog,
-        labels: state.circularConservation.series.map(({ label }) => label)
+        labels: state.activeDrawing().circularConservation.series.map(({ label }) => label)
       };
     }, ringFiles);
     expect(run.result, JSON.stringify(run.errorLog)).toEqual({ status: 'ok' });
@@ -980,7 +975,7 @@ test('GenBank and DDBJ ring rows added without a label take the CLI default labe
         status: result?.status,
         message: result?.message,
         errorLog: window.__GBDRAW_APP__.errorLog,
-        labels: state.circularConservation.series.map(({ label }) => label)
+        labels: state.activeDrawing().circularConservation.series.map(({ label }) => label)
       };
     }, savedText);
     expect(restored.status, `${restored.message} ${JSON.stringify(restored.errorLog)}`).toBe('ok');
@@ -1211,7 +1206,9 @@ test('Generate materializes only required resources and reuses one Worker', asyn
   expect(worker.constructions).toBe(1);
   expect(worker.initializations).toBe(1);
   expect(worker.helpers).toBeGreaterThanOrEqual(1);
-  expect(worker.runs).toBe(2);
+  // Two Generates, and the automatic rerender of the color edit, which adds a
+  // Legend row (OV-42, OV-43, #857).
+  expect(worker.runs).toBe(3);
   expect(worker.instances).toHaveLength(1);
   expect(worker.instances[0].terminated).toBe(false);
 });
@@ -1315,7 +1312,6 @@ test('render-only Generate reuses preparation and remains undoable', async ({ pa
     interactiveContextCacheMissCount: 1,
     interactiveContextBuildCount: 1,
     interactiveFeatureTraversalCount: 1,
-    selectorSafetyScopeBuildCount: 0,
     preparedInputCacheMutationViolationCount: 0
   });
   expect(secondPython?.metrics).toMatchObject({
@@ -1326,7 +1322,6 @@ test('render-only Generate reuses preparation and remains undoable', async ({ pa
     interactiveContextCacheHitCount: 1,
     interactiveContextBuildCount: 0,
     interactiveFeatureTraversalCount: 0,
-    selectorSafetyScopeBuildCount: 0,
     preparedInputCacheMutationViolationCount: 0,
     featureCatalogSvgParseCount: 1,
     featureCatalogFullDomTraversalCount: 1
@@ -1645,7 +1640,7 @@ test('a frozen v39 session round-trips through the legacy migration path', async
   expect(saveOutcome.result.status, JSON.stringify(saveOutcome.errorLog)).toBe('saved');
   const roundTripPath = await (await downloadPromise).path();
   const roundTrip = JSON.parse(gunzipSync(readFileSync(roundTripPath)).toString('utf8'));
-  expect(roundTrip.version).toBe(44);
+  expect(roundTrip.version).toBe(CURRENT_SESSION_VERSION);
   expect(roundTrip.results).toHaveLength(1);
   expect(roundTrip.editorState.featureCatalog).toBeTruthy();
 

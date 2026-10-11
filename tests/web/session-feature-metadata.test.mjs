@@ -7,10 +7,8 @@ import { pathToFileURL } from 'node:url';
 const repoRoot = process.cwd();
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-session-feature-metadata-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
-await mkdir(join(tempDir, 'app'), { recursive: true });
-await mkdir(join(tempDir, 'app', 'legend'), { recursive: true });
-await mkdir(join(tempDir, 'app', 'legend-layout'), { recursive: true });
 await mkdir(join(tempDir, 'services'), { recursive: true });
+await mkdir(join(tempDir, 'utils'), { recursive: true });
 
 const copyModule = async (sourceRelative, targetRelative) => {
   await writeFile(
@@ -20,15 +18,13 @@ const copyModule = async (sourceRelative, targetRelative) => {
   );
 };
 
-await copyModule('gbdraw/web/js/app/session-feature-metadata.js', 'app/session-feature-metadata.js');
-await copyModule('gbdraw/web/js/app/feature-metadata-extraction.js', 'app/feature-metadata-extraction.js');
-await copyModule('gbdraw/web/js/app/losat-normalization.js', 'app/losat-normalization.js');
-await copyModule('gbdraw/web/js/app/feature-dom.js', 'app/feature-dom.js');
-await copyModule('gbdraw/web/js/app/legend/utils.js', 'app/legend/utils.js');
-await copyModule(
-  'gbdraw/web/js/app/legend-layout/transform-utils.js',
-  'app/legend-layout/transform-utils.js'
-);
+await copyModule('gbdraw/web/js/services/session-feature-recovery.js', 'services/session-feature-recovery.js');
+await copyModule('gbdraw/web/js/services/feature-metadata-extraction.js', 'services/feature-metadata-extraction.js');
+await copyModule('gbdraw/web/js/services/losat-normalization.js', 'services/losat-normalization.js');
+await copyModule('gbdraw/web/js/services/feature-dom.js', 'services/feature-dom.js');
+await copyModule('gbdraw/web/js/services/legend-svg.js', 'services/legend-svg.js');
+await copyModule('gbdraw/web/js/services/result-paint-bases.js', 'services/result-paint-bases.js');
+await copyModule('gbdraw/web/js/services/svg-transform.js', 'services/svg-transform.js');
 await copyModule('gbdraw/web/js/services/diagram-generation.js', 'services/diagram-generation.js');
 await copyModule('gbdraw/web/js/services/bounded-json-transport.js', 'services/bounded-json-transport.js');
 await copyModule(
@@ -48,7 +44,7 @@ await copyModule(
   'services/resource-payload-owner.js'
 );
 await copyModule('gbdraw/web/js/services/diagram-worker-protocol.js', 'services/diagram-worker-protocol.js');
-await copyModule('gbdraw/web/js/services/error-normalization.js', 'services/error-normalization.js');
+await copyModule('gbdraw/web/js/utils/error-normalization.js', 'utils/error-normalization.js');
 await copyModule('gbdraw/web/js/services/byte-utils.js', 'services/byte-utils.js');
 await copyModule('gbdraw/web/js/services/file-content-cache.js', 'services/file-content-cache.js');
 await copyModule('gbdraw/web/js/services/depth-file-codec.js', 'services/depth-file-codec.js');
@@ -76,9 +72,10 @@ const {
   alignRecoveredFeatureIdsToRenderedSvg,
   buildSessionFeatureRecoveryPlan,
   classifyFeatureMetadataState,
+  extractSessionSourceFeatures,
   migrateFeatureOverrideState,
   normalizeRecordIndex
-} = await import(pathToFileURL(join(tempDir, 'app', 'session-feature-metadata.js')));
+} = await import(pathToFileURL(join(tempDir, 'services', 'session-feature-recovery.js')));
 const { collectRenderedFeatureIdentitiesFromSvgRoot } = await import(
   pathToFileURL(join(tempDir, 'services', 'session-feature-metadata.js'))
 );
@@ -86,9 +83,13 @@ const { admitLegacyImportedResults, createLegacyImportResultSource } = await imp
   pathToFileURL(join(tempDir, 'services', 'svg-result-ingestion.js'))
 );
 const { extractFeatureMetadataForPreview } = await import(
-  pathToFileURL(join(tempDir, 'app', 'feature-metadata-extraction.js'))
+  pathToFileURL(join(tempDir, 'services', 'feature-metadata-extraction.js'))
 );
-const { normalizeGenerationResponse } = await import(pathToFileURL(join(tempDir, 'services', 'diagram-generation.js')));
+const {
+  DiagramGenerationCanceledError,
+  deserializeWorkerError,
+  normalizeGenerationResponse
+} = await import(pathToFileURL(join(tempDir, 'services', 'diagram-generation.js')));
 
 {
   const gffFile = { name: 'record.gff3' };
@@ -607,10 +608,13 @@ for (const invalidRecordIndex of [
     }
   });
   assert.deepEqual(migrated.featureState.featureColorOverrides, { 'new-id': { color: '#111111' } });
-  assert.deepEqual(migrated.featureState.featureVisibilityOverrides, { 'new-svg': 'off' });
-  assert.deepEqual(migrated.featureState.labelTextFeatureOverrides, { 'new-svg': 'renamed' });
-  assert.deepEqual(migrated.featureState.labelTextFeatureOverrideSources, { 'new-id': 'manual' });
-  assert.deepEqual(migrated.featureState.labelVisibilityOverrides, { 'new-svg': 'hidden' });
+  // Rendered-ID Feature visibility and label edits keep their saved keys here:
+  // services/feature-edit-migration.js moves them onto source identities.
+  assert.deepEqual(migrated.featureState.featureVisibilityOverrides, { 'old-svg': 'off' });
+  assert.deepEqual(migrated.featureState.labelTextFeatureOverrides, { 'old-svg': 'renamed' });
+  assert.deepEqual(migrated.featureState.labelTextFeatureOverrideSources, { 'old-id': 'manual' });
+  assert.deepEqual(migrated.featureState.labelVisibilityOverrides, { 'old-svg': 'hidden' });
+  assert.equal(migrated.skippedOverrideCount, 0);
   assert.deepEqual(migrated.editorState.featureStrokes.overrides, {
     'new-svg': { strokeColor: '#222222', strokeWidth: 2 }
   });
@@ -701,6 +705,32 @@ for (const invalidRecordIndex of [
   assert.equal(plan.status, 'ready');
   assert.equal(plan.reason, 'not-needed');
   assert.equal(extractionCalls, 0);
+}
+
+// OV-39: a Session without a feature catalog reads its sources again. A source
+// that Python reports it cannot read falls back to the saved metadata (null);
+// a runtime failure (Worker start, transport, cancellation) fails the Load
+// instead of dropping the Session's feature edits as unmatched.
+{
+  const snapshot = { mode: 'linear', lInputType: 'gb', linearSeqs: [{ gb: { name: 'a.gb' } }] };
+  const reading = (read) => extractSessionSourceFeatures({ snapshot, readFeatureExtractionDataImpl: read });
+  const failing = (error) => reading(async () => { throw error; });
+  const read = await reading(async () => ({ features: [{ id: 'a', svg_id: 'stable-a', record_id: 'A' }], record_ids: ['A'] }));
+  assert.deepEqual(read.extractedFeatures.map((feature) => feature.svg_id), ['stable-a']);
+  assert.equal(await extractSessionSourceFeatures({ snapshot: { ...snapshot, linearSeqs: [{}] } }), null);
+  assert.equal(await reading(async () => ({ error: 'unreadable' })), null);
+  for (const [code, stage] of [['RECORD_SELECTION', 'helper'], ['REGION_INVALID', 'helper'], ['INPUT_UNREADABLE', 'helper'],
+    ['NO_RECORDS', 'helper'], ['VALIDATION_UNCLASSIFIED', 'helper'], ['RENDER_FAILED', 'render']]) {
+    assert.equal(await failing(deserializeWorkerError({ code, operation: 'feature-extraction', stage })), null, code);
+  }
+  for (const error of [
+    deserializeWorkerError({ code: 'WORKER_INIT', stage: 'initialization' }, { operation: 'feature-extraction' }),
+    deserializeWorkerError({ code: 'RESULT_INVALID', operation: 'feature-extraction', stage: 'result-admission' }),
+    deserializeWorkerError({ code: 'UNKNOWN', operation: 'feature-extraction', stage: 'unknown' }),
+    new DiagramGenerationCanceledError()
+  ]) {
+    await assert.rejects(failing(error), (thrown) => thrown === error, error.code || error.name);
+  }
 }
 
 console.log('session feature metadata tests passed');

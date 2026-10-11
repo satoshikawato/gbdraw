@@ -1,3 +1,4 @@
+// @ts-check
 export const SVG_SANITIZE_OPTIONS = Object.freeze({
   USE_PROFILES: { svg: true },
   ADD_TAGS: [

@@ -11,7 +11,7 @@ re-exports have been removed.
 
 These notes record what changed in this release. For the currently supported
 persisted versions and migration boundaries, see
-[Session and request compatibility](./SESSION_COMPATIBILITY.md).
+[Session and request compatibility](./REFERENCE/session-and-request-compatibility.md).
 
 ## Python/Web session version 44
 
@@ -83,7 +83,7 @@ Record rotation and manual feature placement are included in the shared format.
 - `Diagram.save(path)` writes exactly the requested path. It does not create an
   additional base SVG when saving another format.
 
-See the [Python API guide](./PYTHON_API.md) for executable examples.
+See the [Python API guide](./REFERENCE/python-api.md) for executable examples.
 
 ## Architecture/API Phase 0–2 and beta cleanup
 

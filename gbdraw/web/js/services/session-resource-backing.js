@@ -1,3 +1,4 @@
+// @ts-check
 import {
   base64DecodedLastByte,
   base64ToBytesInTasks,
@@ -235,6 +236,16 @@ export const adoptedSessionResourceDescriptor = (table, resourceId) => (
   requireBacking(table, resourceId).descriptor
 );
 
+/**
+ * @typedef {Readonly<Record<string, never>>} SessionResourceTable Opaque handle from adoptCurrentSessionResources
+ * @typedef {{ name?: unknown, type?: unknown, lastModified?: unknown }} SessionResourceFileMetadata
+ */
+
+/**
+ * @param {SessionResourceTable} table
+ * @param {string} resourceId
+ * @param {SessionResourceFileMetadata} [metadata]
+ */
 export const createSessionResourceFileView = (table, resourceId, metadata = {}) => {
   const backing = requireBacking(table, resourceId);
   const view = Object.freeze({
@@ -249,6 +260,11 @@ export const createSessionResourceFileView = (table, resourceId, metadata = {}) 
   return view;
 };
 
+/**
+ * @param {SessionResourceTable} table
+ * @param {Array<SessionResourceFileMetadata & { resourceId: string }>} components
+ * @param {SessionResourceFileMetadata} [metadata]
+ */
 export const createCombinedSessionResourceFileView = (
   table,
   components,
@@ -288,7 +304,7 @@ export const createCombinedSessionResourceFileView = (
       readBytes: () => materializeBytes(backing)
     }))),
     sourceBackings: backings,
-    bytesPromise: null,
+    bytesPromise: /** @type {Promise<Uint8Array> | null} */ (null),
     textPromise: null,
     filePromise: null,
     dirty: false

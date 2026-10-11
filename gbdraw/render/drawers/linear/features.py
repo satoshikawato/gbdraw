@@ -1,14 +1,16 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from __future__ import annotations
+
 from typing import Optional
 
-from svgwrite.container import Group
-from svgwrite.path import Path
+from gbdraw.svg.elements import Group, Path
 
 from ....configurators import FeatureDrawingConfigurator
-from ....features.ids import compute_feature_object_hash, make_linear_rendered_feature_id
+from ....features.ids import make_linear_rendered_feature_id
 from ....layout.linear import LinearFeatureLaneGeometry
+from ....svg.arrows import ArrowHeadLengthRatio
 from ....svg.ids import instance_svg_id
 from ....svg.linear_features import (
     create_arrow_path_linear,
@@ -30,7 +32,7 @@ class FeatureDrawer:
         self.intron_stroke_color: str = feature_config.line_stroke_color
         self.intron_stroke_width: float = feature_config.line_stroke_width
         arrow_geometry = getattr(feature_config, "arrow_geometry", None)
-        self.head_length_ratio = getattr(
+        self.head_length_ratio: ArrowHeadLengthRatio = getattr(
             arrow_geometry,
             "head_length_ratio",
             "auto",
@@ -41,7 +43,7 @@ class FeatureDrawer:
 
     @staticmethod
     def get_feature_data_id(feature_object) -> Optional[str]:
-        return compute_feature_object_hash(feature_object)
+        return feature_object.feature_hash
 
     def draw_path(
         self,
@@ -74,7 +76,6 @@ class FeatureDrawer:
             stroke_width=stroke_width,
             stroke_linejoin="round",
             stroke_linecap=stroke_linecap,
-            debug=False,
         )
         if feature_data_id:
             path.attribs["data-gbdraw-feature-id"] = feature_data_id
@@ -97,7 +98,7 @@ class FeatureDrawer:
                 path.attribs["data-gbdraw-feature-part"] = feature_part
         if stroke_path is not None:
             path.attribs["stroke"] = "none"
-            outline = Path(d=stroke_path, debug=False)
+            outline = Path(d=stroke_path)
             outline.attribs.update({key: value for key, value in path.attribs.items() if key != "d"})
             outline.attribs.update(fill="none", stroke=stroke_color, **{"stroke-linecap": "butt"})
             if "id" in outline.attribs:
@@ -230,7 +231,7 @@ class FeaturePathGenerator:
         track_layout: str = "middle",
         track_axis_gap: float | None = None,
         feature_lane_geometry: LinearFeatureLaneGeometry | None = None,
-        head_length_ratio: str | float = "auto",
+        head_length_ratio: ArrowHeadLengthRatio = "auto",
         shaft_width_ratio: float = 1.0,
     ) -> None:
         self.genome_length = genome_length

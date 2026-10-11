@@ -10,7 +10,7 @@ const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-losat-cache-'));
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
 await writeFile(
   join(tempRoot, 'losat-cache.js'),
-  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'losat-cache.js'), 'utf8'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'losat-cache.js'), 'utf8'),
   'utf8'
 );
 

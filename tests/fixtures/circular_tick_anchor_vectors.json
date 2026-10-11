@@ -1,0 +1,356 @@
+{
+ "cases": [
+  {
+   "tickLabelLayout": "label_out_tick_in",
+   "explicitWidthPx": null,
+   "axisRadiusPx": 390.0,
+   "geometry": {
+    "side": "inside",
+    "widthPx": 0.0,
+    "radiusFactor": 0.9249365651709403
+   },
+   "anchorFactor": 0.9374365651709402
+  },
+  {
+   "tickLabelLayout": "label_out_tick_in",
+   "explicitWidthPx": 7.8,
+   "axisRadiusPx": 390.0,
+   "geometry": {
+    "side": "inside",
+    "widthPx": 7.8,
+    "radiusFactor": 0.9274365651709401
+   },
+   "anchorFactor": 0.9374365651709402
+  },
+  {
+   "tickLabelLayout": "label_out_tick_in",
+   "explicitWidthPx": null,
+   "axisRadiusPx": 390.0,
+   "geometry": {
+    "side": "outside",
+    "widthPx": 0.0,
+    "radiusFactor": 1.0225
+   },
+   "anchorFactor": 1.035
+  },
+  {
+   "tickLabelLayout": "label_out_tick_in",
+   "explicitWidthPx": 7.8,
+   "axisRadiusPx": 390.0,
+   "geometry": {
+    "side": "outside",
+    "widthPx": 7.8,
+    "radiusFactor": 1.0199999999999998
+   },
+   "anchorFactor": 1.03
+  },
+  {
+   "tickLabelLayout": "label_in_tick_out",
+   "explicitWidthPx": null,
+   "axisRadiusPx": 390.0,
+   "geometry": {
+    "side": "inside",
+    "widthPx": 0.0,
+    "radiusFactor": 0.9775
+   },
+   "anchorFactor": 0.9650000000000001
+  },
+  {
+   "tickLabelLayout": "label_in_tick_out",
+   "explicitWidthPx": 7.8,
+   "axisRadiusPx": 390.0,
+   "geometry": {
+    "side": "inside",
+    "widthPx": 7.8,
+    "radiusFactor": 0.9800000000000001
+   },
+   "anchorFactor": 0.9700000000000001
+  },
+  {
+   "tickLabelLayout": "label_in_tick_out",
+   "explicitWidthPx": null,
+   "axisRadiusPx": 390.0,
+   "geometry": {
+    "side": "outside",
+    "widthPx": 0.0,
+    "radiusFactor": 1.0225
+   },
+   "anchorFactor": 1.01
+  },
+  {
+   "tickLabelLayout": "label_in_tick_out",
+   "explicitWidthPx": 7.8,
+   "axisRadiusPx": 390.0,
+   "geometry": {
+    "side": "outside",
+    "widthPx": 7.8,
+    "radiusFactor": 1.0199999999999998
+   },
+   "anchorFactor": 1.01
+  },
+  {
+   "tickLabelLayout": "tick_only",
+   "explicitWidthPx": null,
+   "axisRadiusPx": 390.0,
+   "geometry": {
+    "side": "inside",
+    "widthPx": 0.0,
+    "radiusFactor": 0.9775
+   },
+   "anchorFactor": 0.9900000000000001
+  },
+  {
+   "tickLabelLayout": "tick_only",
+   "explicitWidthPx": 7.8,
+   "axisRadiusPx": 390.0,
+   "geometry": {
+    "side": "inside",
+    "widthPx": 7.8,
+    "radiusFactor": 0.9700000000000002
+   },
+   "anchorFactor": 0.9800000000000001
+  },
+  {
+   "tickLabelLayout": "tick_only",
+   "explicitWidthPx": null,
+   "axisRadiusPx": 390.0,
+   "geometry": {
+    "side": "outside",
+    "widthPx": 0.0,
+    "radiusFactor": 1.0225
+   },
+   "anchorFactor": 1.01
+  },
+  {
+   "tickLabelLayout": "tick_only",
+   "explicitWidthPx": 7.8,
+   "axisRadiusPx": 390.0,
+   "geometry": {
+    "side": "outside",
+    "widthPx": 7.8,
+    "radiusFactor": 1.0199999999999998
+   },
+   "anchorFactor": 1.01
+  },
+  {
+   "tickLabelLayout": "label_only",
+   "explicitWidthPx": null,
+   "axisRadiusPx": 390.0,
+   "geometry": {
+    "side": "inside",
+    "widthPx": 0.0,
+    "radiusFactor": 0.9900000000000001
+   },
+   "anchorFactor": 0.9900000000000001
+  },
+  {
+   "tickLabelLayout": "label_only",
+   "explicitWidthPx": 7.8,
+   "axisRadiusPx": 390.0,
+   "geometry": {
+    "side": "inside",
+    "widthPx": 7.8,
+    "radiusFactor": 0.9800000000000001
+   },
+   "anchorFactor": 0.9800000000000001
+  },
+  {
+   "tickLabelLayout": "label_only",
+   "explicitWidthPx": null,
+   "axisRadiusPx": 390.0,
+   "geometry": {
+    "side": "outside",
+    "widthPx": 0.0,
+    "radiusFactor": 1.01
+   },
+   "anchorFactor": 1.01
+  },
+  {
+   "tickLabelLayout": "label_only",
+   "explicitWidthPx": 7.8,
+   "axisRadiusPx": 390.0,
+   "geometry": {
+    "side": "outside",
+    "widthPx": 7.8,
+    "radiusFactor": 1.01
+   },
+   "anchorFactor": 1.01
+  },
+  {
+   "tickLabelLayout": "label_out_tick_in",
+   "explicitWidthPx": null,
+   "axisRadiusPx": 200.0,
+   "geometry": {
+    "side": "inside",
+    "widthPx": 0.0,
+    "radiusFactor": 0.8725013020833333
+   },
+   "anchorFactor": 0.8875013020833333
+  },
+  {
+   "tickLabelLayout": "label_out_tick_in",
+   "explicitWidthPx": 7.8,
+   "axisRadiusPx": 200.0,
+   "geometry": {
+    "side": "inside",
+    "widthPx": 7.8,
+    "radiusFactor": 0.8680013020833333
+   },
+   "anchorFactor": 0.8875013020833333
+  },
+  {
+   "tickLabelLayout": "label_out_tick_in",
+   "explicitWidthPx": null,
+   "axisRadiusPx": 200.0,
+   "geometry": {
+    "side": "outside",
+    "widthPx": 0.0,
+    "radiusFactor": 1.025
+   },
+   "anchorFactor": 1.04
+  },
+  {
+   "tickLabelLayout": "label_out_tick_in",
+   "explicitWidthPx": 7.8,
+   "axisRadiusPx": 200.0,
+   "geometry": {
+    "side": "outside",
+    "widthPx": 7.8,
+    "radiusFactor": 1.0295
+   },
+   "anchorFactor": 1.0490000000000002
+  },
+  {
+   "tickLabelLayout": "label_in_tick_out",
+   "explicitWidthPx": null,
+   "axisRadiusPx": 200.0,
+   "geometry": {
+    "side": "inside",
+    "widthPx": 0.0,
+    "radiusFactor": 0.975
+   },
+   "anchorFactor": 0.96
+  },
+  {
+   "tickLabelLayout": "label_in_tick_out",
+   "explicitWidthPx": 7.8,
+   "axisRadiusPx": 200.0,
+   "geometry": {
+    "side": "inside",
+    "widthPx": 7.8,
+    "radiusFactor": 0.9704999999999999
+   },
+   "anchorFactor": 0.951
+  },
+  {
+   "tickLabelLayout": "label_in_tick_out",
+   "explicitWidthPx": null,
+   "axisRadiusPx": 200.0,
+   "geometry": {
+    "side": "outside",
+    "widthPx": 0.0,
+    "radiusFactor": 1.025
+   },
+   "anchorFactor": 1.01
+  },
+  {
+   "tickLabelLayout": "label_in_tick_out",
+   "explicitWidthPx": 7.8,
+   "axisRadiusPx": 200.0,
+   "geometry": {
+    "side": "outside",
+    "widthPx": 7.8,
+    "radiusFactor": 1.0295
+   },
+   "anchorFactor": 1.01
+  },
+  {
+   "tickLabelLayout": "tick_only",
+   "explicitWidthPx": null,
+   "axisRadiusPx": 200.0,
+   "geometry": {
+    "side": "inside",
+    "widthPx": 0.0,
+    "radiusFactor": 0.975
+   },
+   "anchorFactor": 0.99
+  },
+  {
+   "tickLabelLayout": "tick_only",
+   "explicitWidthPx": 7.8,
+   "axisRadiusPx": 200.0,
+   "geometry": {
+    "side": "inside",
+    "widthPx": 7.8,
+    "radiusFactor": 0.951
+   },
+   "anchorFactor": 0.9704999999999999
+  },
+  {
+   "tickLabelLayout": "tick_only",
+   "explicitWidthPx": null,
+   "axisRadiusPx": 200.0,
+   "geometry": {
+    "side": "outside",
+    "widthPx": 0.0,
+    "radiusFactor": 1.025
+   },
+   "anchorFactor": 1.01
+  },
+  {
+   "tickLabelLayout": "tick_only",
+   "explicitWidthPx": 7.8,
+   "axisRadiusPx": 200.0,
+   "geometry": {
+    "side": "outside",
+    "widthPx": 7.8,
+    "radiusFactor": 1.0295
+   },
+   "anchorFactor": 1.01
+  },
+  {
+   "tickLabelLayout": "label_only",
+   "explicitWidthPx": null,
+   "axisRadiusPx": 200.0,
+   "geometry": {
+    "side": "inside",
+    "widthPx": 0.0,
+    "radiusFactor": 0.99
+   },
+   "anchorFactor": 0.99
+  },
+  {
+   "tickLabelLayout": "label_only",
+   "explicitWidthPx": 7.8,
+   "axisRadiusPx": 200.0,
+   "geometry": {
+    "side": "inside",
+    "widthPx": 7.8,
+    "radiusFactor": 0.9704999999999999
+   },
+   "anchorFactor": 0.9704999999999999
+  },
+  {
+   "tickLabelLayout": "label_only",
+   "explicitWidthPx": null,
+   "axisRadiusPx": 200.0,
+   "geometry": {
+    "side": "outside",
+    "widthPx": 0.0,
+    "radiusFactor": 1.01
+   },
+   "anchorFactor": 1.01
+  },
+  {
+   "tickLabelLayout": "label_only",
+   "explicitWidthPx": 7.8,
+   "axisRadiusPx": 200.0,
+   "geometry": {
+    "side": "outside",
+    "widthPx": 7.8,
+    "radiusFactor": 1.01
+   },
+   "anchorFactor": 1.01
+  }
+ ]
+}

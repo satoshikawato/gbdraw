@@ -5,10 +5,9 @@ from collections import Counter
 from typing import Optional
 
 from Bio.SeqRecord import SeqRecord
-from svgwrite.container import Group
-from svgwrite.shapes import Line
-from svgwrite.text import Text
+from gbdraw.svg.elements import Group, Line, Text
 
+from ....auto_sizes import linear_tick_interval
 from ....canvas import LinearCanvasConfigurator
 from ....core.record_metadata import _read_coord_map
 from ...drawers.linear.features import FeatureDrawer
@@ -24,7 +23,6 @@ from .feature_identity import LinearFeatureDomIndex
 from .length_bar import (
     RULER_LABEL_OFFSET,
     RULER_TICK_LENGTH,
-    auto_linear_tick_interval,
     format_linear_tick_label,
 )
 
@@ -87,12 +85,7 @@ class SeqRecordGroup:
         cfg = render_context.profile.config
         self._cfg = cfg
 
-        label_scope = render_context.profile.label_scope
-        self.show_labels = (
-            label_scope == "all"
-            or label_scope == "orthogroup_top"
-            or (label_scope == "first" and self.record_index == 0)
-        )
+        self.show_labels = render_context.profile.record_has_labels(self.record_index)
 
         self.label_stroke_color = cfg.labels.stroke_color.label_stroke_color
         # Keep legacy behavior: linear label leader line width uses the "long" value.
@@ -113,7 +106,7 @@ class SeqRecordGroup:
         self.scale_font_weight = scale_cfg.font_weight
         self.scale_font_family = cfg.objects.text.font_family
         self.scale_interval = scale_cfg.interval
-        self.auto_scale_interval = auto_linear_tick_interval(max(1, int(self.canvas_config.longest_genome)))
+        self.auto_scale_interval = linear_tick_interval(max(1, int(self.canvas_config.longest_genome)))
         self.scale_label_context_length = max(1, int(self.canvas_config.longest_genome))
         self.axis_stroke_width = self._cfg.objects.axis.linear.stroke_width.for_length_param(self.length_param)
         self.record_group: Group = self.setup_record_group()
@@ -282,7 +275,7 @@ class SeqRecordGroup:
         feature_group = group
         has_feature_shift = abs(self.feature_offset_y) > 1e-9
         if has_feature_shift:
-            feature_group = Group(id=f"{self.record_group_id}_features", debug=False)
+            feature_group = Group(id=f"{self.record_group_id}_features")
 
         # Process labels if enabled
         if self.show_labels and self.draw_features_enabled:
@@ -386,7 +379,7 @@ class SeqRecordGroup:
         arrow_length: float = self.canvas_config.arrow_length
 
         separate_strands = self.separate_strands
-        record_group: Group = Group(id=self.record_group_id, debug=False)
+        record_group: Group = Group(id=self.record_group_id)
         record_group.attribs["data-gbdraw-record-id"] = str(self.gb_record.id)
         record_group.attribs["data-gbdraw-record-index"] = str(self.record_index)
 
@@ -401,11 +394,11 @@ class SeqRecordGroup:
             record_group.attribs["data-gbdraw-record-source-step"] = str(source_step)
 
         if self.sequence_width is not None:
-            genome_size_normalization_factor = 1.0
+            genome_size_normalization_factor: float = 1.0
         elif self.normalize_length:
             genome_size_normalization_factor = 1.0
         else:
-            genome_size_normalization_factor: float = record_length / longest_genome
+            genome_size_normalization_factor = record_length / longest_genome
 
         feature_dict = self.feature_layers.foreground_features
         label_list = []
@@ -422,15 +415,18 @@ class SeqRecordGroup:
                     separate_strands,
                     self.track_layout,
                     self.canvas_config.track_axis_gap,
-                    cfg=self._cfg,
+                    profile=self.render_context.profile,
                     label_font_size=self.label_font_size,
                     orthogroup_label_member_ids=self.orthogroup_label_member_ids,
                     orthogroup_label_top_member_ids=self.orthogroup_label_top_member_ids,
+                    labels_overrides_only=not self.render_context.profile.labels_in_scope(
+                        self.record_index
+                    ),
                     feature_lane_geometry=self.feature_lane_geometry,
                     record_transform=self.record_transform,
                 )
 
-        record_group: Group = self.draw_record(
+        record_group = self.draw_record(
             feature_dict,
             record_length,
             cds_height,

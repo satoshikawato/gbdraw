@@ -4,7 +4,7 @@
 
 ## Capability matrix
 
-| Evidence or mode | Web app | Command line and Python | Result shown |
+| Comparison input or mode | Web app | Command line and Python | Result shown |
 |---|---|---|---|
 | Uploaded BLAST outfmt 6/7 | **Upload BLAST TSV** | Prepared table input | One retained row per Linear link or Circular span |
 | LOSATN | Browser nucleotide search | Linear and Circular rings: `--losat losatn` (Python `losat="losatn"`) | Local nucleotide-alignment spans |
@@ -13,7 +13,7 @@
 | LOSATP **Similarity groups** | Browser protein search | `orthogroup` compatibility token | Search-derived group membership and links |
 | LOSATP **Collinear blocks** | Browser protein search | `collinear` protein-search mode | Ordered blocks built from compatible anchors |
 | Selected mixed edges | Per-edge browser plan | `--comparisons_table` rows with `source` `losat` or `table` | Only the selected record pairs |
-| Circular similarity rings | Uploaded or browser-generated evidence | Prepared conservation inputs | Ordered evidence tracks around one reference |
+| Circular similarity rings | Uploaded or browser-generated results | Prepared conservation inputs | Ordered rings around one reference |
 
 LOSATN compares nucleotide sequence directly. TLOSATX translates both sides
 and is useful when coding similarity remains after nucleotide divergence.
@@ -44,17 +44,17 @@ mode** menu selects **Similarity groups**, **Collinear blocks**, or **Pairwise
 matches**. LOSATN, TLOSATX, and LOSATP Pairwise matches can run on selected
 LOSAT edges. Similarity groups
 and Collinear blocks require an all-adjacent LOSAT plan because they expand
-evidence across the record set. Changing either mode control preserves inactive
+the search across the whole record set. Changing either mode control preserves inactive
 program, presentation, and appearance drafts. It does not set **Match style**
 as a side effect. **Comparison appearance** remains reachable for every active
 Linear comparison, so set **Curve** directly after selecting the intended
 LOSATP mode.
 
-Similarity groups always uses all-vs-all search evidence across the loaded
-records and does not read the Collinear evidence-scope field. For Collinear
+Similarity groups always uses all-vs-all search results across the loaded
+records and does not read the Collinear **Evidence scope** field. For Collinear
 blocks, fresh state and **Reset Settings** use **Adjacent pairs**. A saved
-**All records** value is restored from a session. Search evidence and display
-topology are separate, so all-record search evidence can still produce links
+**All records** value is restored from a session. Search scope and display
+topology are separate, so an all-record search can still produce links
 only between adjacent display rows.
 
 ## Filters and direction
@@ -65,7 +65,7 @@ alignment length is an integer. Protein modes can also limit candidates or
 hits per query. Collinear mode adds anchor, unit-gap, diagonal-drift, scope,
 and conflict rules. Its unit mode is `auto`, `cds`, or `locus`; anchor mode is
 `all`, `one_to_one`, or `rbh`; and merge orientation is `strand`, `order`, or
-`either`. `max_conflicts` defaults to `1` and limits how many retained singleton
+`either`. `max_conflicts` defaults to `1` and limits how many kept singleton
 anchors may lie inside both order intervals when two compatible clusters
 merge. Those singleton anchors remain in the result.
 
@@ -77,7 +77,7 @@ scheduling, and thread count when an exact result must be reproduced.
 LOSATP Pairwise search keeps at most one HSP for each query-subject protein
 combination in its raw result. The display-stage `max_hits` setting
 (`--losatp_max_hits` on the command line) is a separate limit: it
-defaults to `5` and retains the strongest distinct subject proteins for each
+defaults to `5` and keeps the strongest distinct subject proteins for each
 query protein after the display thresholds are applied. Similarity-group and
 Collinear construction use **Member hits per protein**, a separate limit on
 threshold-qualified directional subject hits. Changing a derived limit does
@@ -93,18 +93,18 @@ round trip. An explicitly blank Collinear value stays unbounded.
 Web Collinear blocks defaults **Infer orthogroups with self-comparisons** to
 OFF. OFF searches between records and builds blocks from the selected anchors
 without orthogroup inference. ON adds within-record searches and orthogroup
-inference, including paralog evidence. Similarity groups always performs that
-inference. Older Collinear Sessions that lack the checkbox setting retain ON
-for reproducibility. The Python and CLI omission defaults retain their previous
+inference, including paralog matches. Similarity groups always performs that
+inference. Older Collinear Sessions that lack the checkbox setting keep ON
+for reproducibility. The Python and CLI defaults when the setting is omitted keep their previous
 behavior; typed requests can explicitly set `collinear_infer_orthogroups=False`.
 
 The Web app, the CLI, and the Python API treat one source file as one genome
 when they run LOSATN, TLOSATX, or LOSATP. Records from two different files are
 searched as one job per directed file pair, and the E-value database is the
 subject file. A comparison between two records of the same file searches that
-file without the query record, and a requested within-record search
-(Similarity groups, or Collinear with inference ON) searches the record alone,
-so a record never searches itself unless that search was requested. Records of
+file without the query record. A requested within-record search (Similarity
+groups, or Collinear with inference ON) searches the record alone. A record
+therefore never searches itself unless that search was requested. Records of
 one multi-record file therefore get the same E-values and raw cache keys in all
 three. Run Info states this scope. Settings shows the job count from the same
 plan that Generate runs.
@@ -116,11 +116,11 @@ again, and is listed with **Clear** in the Similarity group panel. Session files
 store saved names in `webEdits.orthogroupDormantOverrides`; older Sessions have
 none.
 
-Prepared rows retain `qseqid`, `sseqid`, `pident`, `length`, `mismatch`,
+Prepared rows keep `qseqid`, `sseqid`, `pident`, `length`, `mismatch`,
 `gapopen`, `qstart`, `qend`, `sstart`, `send`, `evalue`, and `bitscore` from
 the first 12 columns; extra columns are ignored. Query and subject are
 directional. In Linear mode, a row that names the other endpoint or another
-displayed record is rejected, a version suffix difference is accepted, and IDs
+displayed record is rejected. A version suffix difference is accepted. IDs
 that match no displayed record keep the positional pair with a warning (logged
 by the CLI, shown beside the Result in the web app). See
 [Comparison and numeric tables](input-formats-and-tsv-schemas.md#comparison-and-numeric-tables).
@@ -143,7 +143,7 @@ Open **Selected pairs (N)** to change the source or uploaded file for one pair,
 omit a pair, or select **Add** and define an explicit non-adjacent pair. The
 pair sections are grouped there instead of appearing between record cards.
 Each included uploaded edge needs its own active file. An omitted edge
-contributes no evidence and does not reserve a search job. Retained inactive
+contributes no comparison results and does not reserve a search job. Retained inactive
 files and raw-result names do not reactivate an edge.
 
 A selected or mixed plan can use LOSATN, TLOSATX, or LOSATP Pairwise matches.
@@ -154,7 +154,7 @@ to change to the compatible all-adjacent topology; opening or closing
 
 Search scope and display topology are separate. A Similarity group can include
 members from several records even when links are drawn only between adjacent
-rows. Collinear search can use adjacent or all-record evidence while the
+rows. Collinear search can use adjacent pairs or all records while the
 finished diagram limits ribbon endpoints for readability.
 
 ## Result meanings and limits
@@ -171,14 +171,14 @@ finished diagram limits ribbon endpoints for readability.
   not infer evolutionary conservation for every base inside a span.
 
 Pairwise links use filled `ribbon` geometry by default. `curve` bends the same
-mapped spans; it does not change the evidence. Collinear color modes can encode
+mapped spans; it does not change the underlying matches. Collinear color modes can encode
 orientation, average identity, or both. Changing an anchor, gap, scope, or
 color calculation setting creates a different derived result.
 
 An empty comparison can mean that the search produced no rows, every row
 failed a filter, endpoints did not map to displayed records or features, the
 wrong Circular reference side was selected, or CDS translations were unusable.
-Inspect warnings and raw evidence before relaxing thresholds.
+Inspect warnings and the raw search rows before relaxing thresholds.
 
 ## Raw results and cache identity
 
@@ -191,5 +191,5 @@ A reusable cache entry binds sequence content, selected proteins, record and
 feature identities, direction, program, and meaningful search arguments.
 Changing display labels or filenames does not invalidate the biological
 search; changing input content, selected features, direction, program, or
-search settings does. Reuse is an optimization. Keep exported raw results as
-the evidence record.
+search settings does. Reuse is an optimization. Keep the exported raw results
+as the record of what was searched and found.

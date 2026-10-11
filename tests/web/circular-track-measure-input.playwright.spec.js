@@ -3,7 +3,8 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { execFileSync } = require('node:child_process');
-const { openApp, reveal, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
+const { openApp, reveal, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { promoteRequest } = require('./helpers/request-schema.cjs');
 
 const fixture = resolve('gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
 const sessionInput = 'input[type="file"][accept^=".json,"]';
@@ -67,7 +68,7 @@ const snapshot = page => page.evaluate(async () => {
   const digest = async text => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))))
     .map(value => value.toString(16).padStart(2, '0')).join('');
   return {
-    config: config.buildConfigData(),
+    config: config.buildConfigData(state.activeDrawing()),
     request: config.getCommittedCanonicalRenderRequest(),
     resultHashes: await Promise.all(state.results.value.map(result => digest(result.content))),
     history: [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()]
@@ -254,7 +255,7 @@ test('plain input and complete suffix paste share the codec; invalid text stays 
     await expect(input).toHaveAttribute('aria-invalid', 'true');
     expect(await scalar(page)).toEqual({ value: text, unit: 'px' });
     const errorId = (await input.getAttribute('aria-describedby')).split(' ').find(id => id.endsWith('-error'));
-    await expect(page.locator(`#${errorId}`)).toContainText('positive finite');
+    await expect(page.locator(`#${errorId}`)).toContainText('Width must be a number greater than 0, in px or ×R.');
     await selectUnit(page, 'factor');
     await expect(input).toHaveValue(text);
     expect(await scalar(page)).toEqual({ value: text, unit: 'factor' });
@@ -362,7 +363,7 @@ test('DOM edits Save and fresh Load retain draft apart from committed Result; fa
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionSavePending);
   expect(await snapshot(page)).toEqual(edited);
   const saved = JSON.parse(gunzipSync(readFileSync(path)));
-  const row = saved.config.adv.circular_track_slots.find(slot => slot.id === 'gc_content');
+  const row = saved.modes.circular.config.adv.circular_track_slots.find(slot => slot.id === 'gc_content');
   expect(row.width).toEqual({ value: '1.', unit: 'px' });
   const fresh = await browser.newPage({ baseURL: testInfo.project.use.baseURL });
   try {
@@ -375,11 +376,11 @@ test('DOM edits Save and fresh Load retain draft apart from committed Result; fa
     await testInfo.attach('fresh-result.svg', { body: await fresh.evaluate(() => window.__GBDRAW_APP__.results[0].content), contentType: 'image/svg+xml' });
     await testInfo.attach('original-result.svg', { body: saved.results[0].content, contentType: 'image/svg+xml' });
     expect(restored.config.adv.circular_track_slots).toEqual(edited.config.adv.circular_track_slots);
-    expect(restored.request).toEqual(before.request);
+    expect(restored.request).toEqual(await promoteRequest(fresh, before.request));
     expect(restored.resultHashes).toEqual(before.resultHashes);
     await expectCounts(fresh, 0);
     const rejected = structuredClone(saved);
-    rejected.config.adv.circular_track_slots.find(slot => slot.id === 'gc_content').width = { value: '1e', unit: 'px' };
+    rejected.modes.circular.config.adv.circular_track_slots.find(slot => slot.id === 'gc_content').width = { value: '1e', unit: 'px' };
     await load(fresh, { name: 'invalid.gbdraw-session.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(rejected)) }, false);
     expect(await snapshot(fresh)).toEqual(restored);
     await expect(valueControl(fresh, 'gc_content', 'Width')).toHaveValue('1.');
@@ -421,7 +422,7 @@ test('typed and legacy scalars display without writes; decimal, exponent, and pr
     expect(await workerCounts(page)).toEqual(workers);
     await edit(page, text);
     const projected = await page.evaluate(async () => {
-      const { buildCircularTrackSlotPayload } = await import('./js/app/circular-track-slots.js');
+      const { buildCircularTrackSlotPayload } = await import('./js/services/circular-track-slot-model.js');
       return buildCircularTrackSlotPayload(window.__GBDRAW_APP__.adv.circular_track_slots.find(row => row.id === 'gc_content')).width;
     });
     expect(projected).toEqual(value === null ? null : { value, unit });
@@ -548,26 +549,30 @@ for (const continuation of ['disabled', 'inactive biological']) {
     if (continuation === 'disabled') await page.evaluate(() => {
       window.__GBDRAW_APP__.adv.circular_track_slots.find(row => row.id === 'gc_content').enabled = false;
     });
+    // E1: each mode keeps its own Result. The Circular Result and its committed
+    // request stay with Circular; Linear, which has no Result, shows none. The
+    // Circular slots are the Circular drawing's (PR-1).
+    const circular = await snapshot(page);
     if (continuation === 'inactive biological') await page.getByRole('button', { name: 'Linear', exact: true }).click();
     const before = await snapshot(page);
+    if (continuation === 'inactive biological') {
+      expect(before.request).toBeNull();
+      expect(before.resultHashes).toEqual([]);
+    }
     const saved = await save(page, testInfo, continuation.replaceAll(' ', '-'));
-    expect(saved.document.config.adv.circular_track_slots).toEqual(before.config.adv.circular_track_slots);
+    expect(saved.document.modes.circular.config.adv.circular_track_slots).toEqual(circular.config.adv.circular_track_slots);
     await freshLoad(browser, testInfo, saved.path, async fresh => {
       const restored = await snapshot(fresh);
-      expect(restored.config.adv.circular_track_slots).toEqual(before.config.adv.circular_track_slots);
-      expect(restored.request).toEqual(before.request);
-      expect(restored.resultHashes).toEqual(before.resultHashes);
+      expect(restored.config.adv.circular_track_slots).toEqual(circular.config.adv.circular_track_slots);
+      expect(restored.request).toEqual(await promoteRequest(fresh, circular.request));
+      expect(restored.resultHashes).toEqual(circular.resultHashes);
       if (continuation === 'inactive biological') {
-        await expect(fresh.getByRole('button', { name: 'Linear', exact: true }))
+        // The saved mode has no Result, so the Session opens on the mode that has one.
+        await expect(fresh.getByRole('button', { name: 'Circular', exact: true }))
           .toHaveAttribute('aria-pressed', 'true');
-        expect(restored.config.modeProfiles.activeMode).toBe('linear');
-        await fresh.getByRole('button', { name: 'Circular', exact: true }).click();
       }
       await openPanel(fresh);
       await expect(valueControl(fresh, 'gc_content', 'Width')).toHaveValue('0.12345678901234567');
-      if (continuation === 'inactive biological') {
-        expect(before.config.modeProfiles.activeMode).toBe('linear');
-      }
     });
   });
 }
@@ -580,7 +585,7 @@ test('source-free settings Save and fresh Load retain an inactive disabled scala
       const app = window.__GBDRAW_APP__;
       app.adv.circular_track_slots_enabled = true;
       app.adv.circular_track_slots = slots.filter(row => row.renderer !== 'annotations');
-    }, JSON.parse(readFileSync(fixture, 'utf8')).config.adv.circular_track_slots);
+    }, JSON.parse(readFileSync(fixture, 'utf8')).modes.circular.config.adv.circular_track_slots);
     await openPanel(page);
     await edit(page, '1e-12');
     await selectUnit(page, 'px');
@@ -618,6 +623,7 @@ test('CLI-origin Session continues through numeric edits, Generate, Save and fre
   const path = `${prefix}.gbdraw-session.json`;
   const cli = JSON.parse(readFileSync(path, 'utf8'));
   expect(cli.config).toBeUndefined();
+  expect(cli.modes).toBeUndefined();
   await load(page, path);
   const before = await snapshot(page);
   expect(before.request).toEqual(cli.renderRequest);
@@ -662,7 +668,7 @@ test('nonfinite numeric action writes are rejected before History; finite, Auto,
       } catch (caught) { error = caught.message; }
       return { error, same: row.width === before };
     }, kind);
-    expect(rejected.error).toMatch(/positive finite px or factor scalar/);
+    expect(rejected.error).toMatch(/must be a number greater than 0, in px or ×R/);
     expect(rejected.same).toBe(true);
     expect(await snapshot(page)).toEqual(baseline);
     expect(await workerCounts(page)).toEqual(workers);
@@ -690,8 +696,8 @@ test('nonfinite numeric action writes are rejected before History; finite, Auto,
     }, kind);
     expect(await scalar(page)).toEqual(expected);
     const edited = await snapshot(page);
-    await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
-    await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
     expect(await scalar(page)).toEqual(expected);
     const restored = await snapshot(page);
     expect(restored).toEqual(edited);

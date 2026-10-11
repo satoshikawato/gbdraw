@@ -2,13 +2,15 @@
 # coding: utf-8
 
 import re
-from typing import Optional, Tuple
+from typing import Any, Mapping, Optional, Tuple
 
 from pandas import DataFrame
 from Bio.SeqFeature import SeqFeature
 
+from gbdraw.exceptions import ValidationError
+
 from .ids import compute_feature_hash as compute_feature_hash
-from .selector_values import feature_matches_specific_color_rule, find_specific_color_rule
+from .selector_values import ColorRuleList, feature_matches_specific_color_rule, find_specific_color_rule
 
 
 def normalize_specific_color_captions(
@@ -30,12 +32,19 @@ def normalize_specific_color_captions(
         for value in color_table["caption"].fillna("")
     ]
     colors = [str(value).strip() for value in color_table["color"]]
-    normalized_colors = [
-        "none"
-        if color.lower() == "none"
-        else normalize_hex_color(resolve_color_to_hex(color))
-        for color in colors
-    ]
+    normalized_colors = []
+    for row, color in enumerate(colors, start=1):
+        if color.lower() == "none":
+            normalized_colors.append("none")
+            continue
+        try:
+            normalized_colors.append(normalize_hex_color(resolve_color_to_hex(color)))
+        except (ValueError, ValidationError) as exc:  # a caption groups none, names, #RGB/#RRGGBB colors only
+            raise ValidationError(
+                f"Invalid color {color!r} in the color table (row {row}). "
+                "A color table with captions uses none, an SVG color name, #RGB, or #RRGGBB.",
+                diagnostic={"code": "TABLE_INVALID", "field": "color", "reason": "COLOR", "row": row},
+            ) from exc
     groups: dict[str, set[str]] = {}
     for caption, color in zip(captions, normalized_colors):
         if caption.strip():
@@ -86,6 +95,9 @@ def preprocess_color_tables(color_table: DataFrame, default_colors: DataFrame) -
             caption = getattr(row, 'caption', '') or ''
             rule_list.append((pattern, row.color, caption))
 
+    for qualifier_rules in color_map.values():
+        for key, rule_list in qualifier_rules.items():
+            qualifier_rules[key] = ColorRuleList(rule_list)
     return color_map, default_color_map
 
 
@@ -99,8 +111,8 @@ def preprocess_color_tables(color_table: DataFrame, default_colors: DataFrame) -
 
 def get_color_with_info(
     feature: SeqFeature,
-    color_map: dict,
-    default_color_map: dict,
+    color_map: Mapping[str, Any],
+    default_color_map: Mapping[str, str],
     record_id: Optional[str] = None,
 ) -> Tuple[str, Optional[str]]:
     """
@@ -123,7 +135,12 @@ def get_color_with_info(
     return default_color_map.get(feature.type, "#d3d3d3"), None
 
 
-def get_color(feature: SeqFeature, color_map: dict, default_color_map: dict, record_id: Optional[str] = None) -> str:
+def get_color(
+    feature: SeqFeature,
+    color_map: Mapping[str, Any],
+    default_color_map: Mapping[str, str],
+    record_id: Optional[str] = None,
+) -> str:
     """
     Determines the color for a given feature based on its type and qualifiers.
 
@@ -137,10 +154,12 @@ def get_color(feature: SeqFeature, color_map: dict, default_color_map: dict, rec
 
 def precompute_used_color_rules(
     records,
-    color_map: dict,
-    default_color_map: dict,
+    color_map: Mapping[str, Any],
+    default_color_map: Mapping[str, str],
     selected_features_set: set,
     feature_visibility_rules: list[dict] | None = None,
+    record_features=(),
+    include_hidden: bool = False,
 ) -> tuple[set, set]:
     """
     Pre-compute which color rules will be used for a set of records.
@@ -152,6 +171,8 @@ def precompute_used_color_rules(
         color_map: Preprocessed color map from preprocess_color_tables
         default_color_map: Preprocessed default color map
         selected_features_set: Set of feature types to consider
+        include_hidden: Also match the features the draft hides, so the result names
+            every rule row the records can produce (Legend row facts).
 
     Returns:
         (used_rules, default_used_features)
@@ -159,20 +180,25 @@ def precompute_used_color_rules(
         default_used_features: Set of feature types that fell back to default color
     """
     from Bio.SeqRecord import SeqRecord
+    from .overrides import feature_override_lookup
     from .visibility import should_render_feature
     if isinstance(records, SeqRecord):
         records = [records]
 
     used_rules: set = set()
     default_used_features: set = set()
-    for record in records:
+    for index, record in enumerate(records):
+        override_of = feature_override_lookup(
+            record, record_features[index].overrides if record_features else None
+        )
         for feature in record.features:
-            if not should_render_feature(
+            if not include_hidden and not should_render_feature(
                 feature,
                 selected_features_set,
                 feature_visibility_rules=feature_visibility_rules,
                 record_id=record.id,
                 specific_color_rules=color_map,
+                feature_override=override_of(feature),
             ):
                 continue
             color, caption = get_color_with_info(feature, color_map, default_color_map, record_id=record.id)

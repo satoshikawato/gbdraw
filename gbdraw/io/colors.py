@@ -2,6 +2,7 @@
 # coding: utf-8
 
 import logging
+import re
 import sys
 
 # tomllib is available in Python 3.11+; use tomli as fallback for 3.10
@@ -11,13 +12,14 @@ else:
     import tomli as tomllib
 
 from importlib import resources
-from typing import Optional
+from typing import Mapping, Optional
 
 import pandas as pd
 from pandas import DataFrame
 
 from ..core.color import normalize_hex_color
 from ..exceptions import InputFileError, ParseError, ValidationError
+from .table_text import LEGACY_TABLE_ROWS, read_literal_table
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +143,7 @@ _COLOR_NAME_MAP = {
     "plum": "#DDA0DD",
     "powderblue": "#B0E0E6",
     "purple": "#800080",
+    "rebeccapurple": "#663399",
     "red": "#FF0000",
     "rosybrown": "#BC8F8F",
     "royalblue": "#4169E1",
@@ -148,7 +151,7 @@ _COLOR_NAME_MAP = {
     "salmon": "#FA8072",
     "sandybrown": "#F4A460",
     "seagreen": "#2E8B57",
-    "seashell": "#2E8B57",
+    "seashell": "#FFF5EE",
     "sienna": "#A0522D",
     "silver": "#C0C0C0",
     "skyblue": "#87CEEB",
@@ -172,22 +175,101 @@ _COLOR_NAME_MAP = {
 }
 
 
+def named_color_hex(color_name: str) -> str | None:
+    """The hex code of an SVG/CSS color name (any case), or ``None``."""
+
+    return _COLOR_NAME_MAP.get(color_name.lower())
+
+
+_HEX_COLOR = re.compile(r"#(?:[0-9A-Fa-f]{3,4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})")
+_COLOR_FUNCTION = re.compile(r"(rgba?|hsla?)\((.*)\)", re.IGNORECASE | re.DOTALL)
+_CSS_NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
+_CSS_NUMBER_OR_PERCENT = re.compile(rf"{_CSS_NUMBER}%?")
+_CSS_HUE = re.compile(rf"{_CSS_NUMBER}(?:deg|grad|rad|turn)?", re.IGNORECASE)
+_PAINT_KEYWORDS = frozenset({"none", "transparent"})
+# svgwrite's paint type takes these too, but the embedding document decides
+# their color, so a user color is never one of them (OV-272).
+_DOCUMENT_PAINT_KEYWORDS = frozenset({"currentcolor", "inherit"})
+USER_COLOR_FORMS = "none, an SVG color name, #RGB, #RRGGBB, rgb(), or hsl()"
+
+
+def _is_css_color_function(text: str) -> bool:
+    match = _COLOR_FUNCTION.fullmatch(text)
+    if match is None:
+        return False
+    arguments = match.group(2).strip()
+    if "," in arguments:
+        parts = [part.strip() for part in arguments.split(",")]
+        if "/" in arguments or len(parts) not in (3, 4):
+            return False
+        channels, alpha = parts[:3], parts[3:]
+    else:
+        channel_text, _slash, alpha_text = arguments.partition("/")
+        channels = channel_text.split()
+        alpha = alpha_text.split() if _slash else []
+        if len(channels) != 3 or (_slash and len(alpha) != 1):
+            return False
+    first = _CSS_HUE if match.group(1).lower().startswith("hsl") else _CSS_NUMBER_OR_PERCENT
+    return bool(first.fullmatch(channels[0])) and all(
+        _CSS_NUMBER_OR_PERCENT.fullmatch(part) for part in (*channels[1:], *alpha)
+    )
+
+
+def is_user_color(value: object) -> bool:
+    """Whether ``value`` is a documented user color.
+
+    ``none``, ``transparent`` and color names in any letter case,
+    #RGB/#RGBA/#RRGGBB/#RRGGBBAA, and rgb()/rgba()/hsl()/hsla(): the forms the
+    web app checks with the same vectors (tests/fixtures/default_color_domain.json).
+    Not ``currentColor`` or ``inherit`` (OV-272), and not the other values of
+    svgwrite's ``paint`` type: ``url()`` references, ``icc-color()``, and an
+    empty value (Owner decision 2026-10-10, D-38).
+    """
+
+    if not isinstance(value, str):
+        return False
+    text = value.strip()
+    lowered = text.lower()
+    return lowered not in _DOCUMENT_PAINT_KEYWORDS and (
+        lowered in _PAINT_KEYWORDS
+        or lowered in _COLOR_NAME_MAP
+        or _HEX_COLOR.fullmatch(text) is not None
+        or _is_css_color_function(text)
+    )
+
+
+def check_user_color(
+    value: object,
+    *,
+    where: str,
+    diagnostic: Mapping[str, object],
+) -> None:
+    """Raise ``ValidationError`` unless ``value`` is a documented user color."""
+
+    if not is_user_color(value):
+        raise ValidationError(
+            f"Invalid color {value!r} {where}. Use {USER_COLOR_FORMS}.",
+            diagnostic=diagnostic,
+        )
+
+
 def resolve_color_to_hex(color_str: str) -> str:
     if not isinstance(color_str, str):
-        logger.error(f"Invalid color value (not a string): {color_str}.")
         raise ValidationError(f"Invalid color value (not a string): {color_str}.")
 
     if color_str.startswith("#"):
+        check_user_color(
+            color_str,
+            where="(hex colors have 3, 4, 6, or 8 digits)",
+            diagnostic={"code": "INPUT_INVALID", "reason": "COLOR"},
+        )
         return color_str
 
-    hex_code = _COLOR_NAME_MAP.get(color_str.lower())
+    hex_code = named_color_hex(color_str)
 
     if hex_code:
         return hex_code
 
-    logger.error(
-        f"Unknown color name: {color_str}. Please use a valid SVG color name or hex code."
-    )
     raise ValidationError(
         f"Unknown color name: {color_str}. Please use a valid SVG color name or hex code."
     )
@@ -223,16 +305,21 @@ def load_default_colors(
     if user_defined_default_colors:
         try:
             user_df = (
-                pd.read_csv(
+                read_literal_table(
                     user_defined_default_colors,
-                    sep="\t",
                     names=column_names,
-                    header=None,
-                    dtype=str,
+                    label="default colors file",
+                    legacy_rows=LEGACY_TABLE_ROWS["default-colors"],
+                    engine="c",
                 ).set_index("feature_type")
             )
-            # Drop rows with missing colour cells
-            missing = user_df["color"].isna()
+            # A `feature_type<TAB>color` header row (the Web writes one) names the columns.
+            header = (user_df.index.astype(str).str.strip().str.lower() == "feature_type") & (
+                user_df["color"].astype(str).str.strip().str.lower() == "color"
+            )
+            user_df = user_df[~header]
+            # Drop rows with a missing or blank colour cell, as the web import does
+            missing = user_df["color"].isna() | user_df["color"].astype(str).str.strip().eq("")
             if missing.any():
                 for ft in user_df[missing].index.tolist():
                     logger.warning(
@@ -256,6 +343,8 @@ def load_default_colors(
             raise InputFileError(
                 f"Override file '{user_defined_default_colors}' not found"
             )
+        except ParseError:
+            raise
         except Exception as exc:
             logger.error(
                 f"ERROR: failed to read '{user_defined_default_colors}' – {exc}"
@@ -289,17 +378,15 @@ def read_color_table(color_table_file: str) -> Optional[DataFrame]:
         return None
 
     try:
-        df = pd.read_csv(
+        df = read_literal_table(
             color_table_file,
-            sep="\t",
-            header=None,
             names=required_cols,
-            dtype=str,
+            label="color table",
             keep_default_na=False,  # "None", "NA" and "null" are values, not blanks
             na_values=[""],
-            on_bad_lines="error",  # raise on any row with wrong number of fields
-            engine="python",  # required for on_bad_lines
         )
+    except ParseError:
+        raise
     except pd.errors.ParserError as e:
         logger.error(f"ERROR: Malformed line in '{color_table_file}': {e}")
         raise ParseError(f"Malformed line in '{color_table_file}': {e}") from e
@@ -337,7 +424,11 @@ def read_color_table(color_table_file: str) -> Optional[DataFrame]:
 
 
 __all__ = [
+    "USER_COLOR_FORMS",
+    "check_user_color",
+    "is_user_color",
     "load_default_colors",
+    "named_color_hex",
     "read_color_table",
     "resolve_color_to_hex",
 ]

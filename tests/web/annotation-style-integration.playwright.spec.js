@@ -8,16 +8,16 @@ const { reveal, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cj
 const inspect = (page, mode) => page.evaluate(async mode => {
   const { state: s } = await import('./js/state.js');
   const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
-  const { getAllFeatureLegendGroups } = await import('./js/app/legend/utils.js');
+  const { getAllFeatureLegendGroups } = await import('./js/services/legend-svg.js');
   const svg = s.results.value[s.selectedResultIndex.value].content;
   const root = new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement;
   return {
     svg, request: getCommittedCanonicalRenderRequest(),
     warnings: JSON.parse(JSON.stringify(s.annotationWarnings.value)),
-    annotations: JSON.parse(JSON.stringify(s.annotationSets)),
+    annotations: JSON.parse(JSON.stringify(s.activeDrawing().annotationSets)),
     geometry: JSON.parse(JSON.stringify(s.trackSlotResolvedGeometry.value)),
-    slots: JSON.parse(JSON.stringify(s.adv[`${mode}_track_slots`])),
-    rules: JSON.parse(JSON.stringify(s.manualSpecificRules.map(rule => ({ ...rule, fromFile: Boolean(rule.fromFile) })))),
+    slots: JSON.parse(JSON.stringify(s.activeDrawing().adv[`${mode}_track_slots`])),
+    rules: JSON.parse(JSON.stringify(s.activeDrawing().manualSpecificRules.map(rule => ({ ...rule, fromFile: Boolean(rule.fromFile) })))),
     legends: getAllFeatureLegendGroups(root).map(group => [...group.querySelectorAll('g[data-legend-key]')].map(entry => ({
       caption: entry.getAttribute('data-legend-key'), color: entry.querySelector('path[fill]')?.getAttribute('fill')
     }))),
@@ -41,9 +41,17 @@ const drawingSignature = (page, svg) => page.evaluate(async svg => {
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
 }, svg);
 const artifact = value => ({ svg: value.svg, warnings: value.warnings, request: value.request, geometry: value.geometry });
+// A rule edit or a History step that changes the Legend asks for the automatic
+// rerender (OV-42, OV-43, #857); the Result is read once Python has drawn it.
+const rerendered = async page => {
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.processing && !window.__GBDRAW_APP__.labelReflowProcessing);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.processing && !window.__GBDRAW_APP__.labelReflowProcessing);
+};
 const history = async (page, name) => {
   await page.getByRole('button', { name, exact: true }).click();
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_HISTORY__.restoring.value && !window.__GBDRAW_HISTORY__.capturing.value)).toBe(true);
+  await rerendered(page);
 };
 const colorFile = page => page.evaluate(async () => {
   const file = window.__GBDRAW_APP__.files.t_color;
@@ -82,8 +90,8 @@ for (const width of [1440, 390]) {
           const a = window.__GBDRAW_APP__;
           const { encodeAnnotationTable, parseAnnotationTable } = await import('./js/app/annotations/table-codec.js');
           const { featureTarget } = await import('./js/app/annotations/target-actions.js');
-          const { getFeatureGenerationHash } = await import('./js/app/feature-utils.js');
-          const ids = a.extractedFeatures.filter(feature => feature.type === 'CDS').slice(0, 2).map(getFeatureGenerationHash);
+          const { getFeatureColorRuleHash } = await import('./js/services/feature-utils.js');
+          const ids = a.extractedFeatures.filter(feature => feature.type === 'CDS').slice(0, 2).map(getFeatureColorRuleHash);
           const sets = JSON.parse(JSON.stringify(a.annotationSets));
           if (!sets.length) sets.push(...parseAnnotationTable('set_id\tid\tmark\trecord\tstart\tend\tlabel\ncomparison_region\tanchor\tbracket\t#1\t1\t1000\tCluster start\n'));
           const record = sets[0].annotations[0].target.record;
@@ -115,6 +123,7 @@ for (const width of [1440, 390]) {
         const originalColorFile = await colorFile(page);
         await colorInput.setInputFiles({ name: 'integration-colors.tsv', mimeType: 'text/plain', buffer: Buffer.from(input.colors) });
         await page.evaluate(async () => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files.t_color); });
+        await rerendered(page);
         const imported = await inspect(page, mode);
         expect(imported.undoCount).toBe(beforeImport.undoCount + 1);
         await history(page, 'Undo');
@@ -165,6 +174,7 @@ for (const width of [1440, 390]) {
           const a = window.__GBDRAW_APP__;
           await a.setSpecificRuleField(a.manualSpecificRules.findIndex(rule => rule.val === id), 'cap', 'Integration primary');
         }, input.ids[0]);
+        await rerendered(page);
         const live = await inspect(page, mode);
         expect(live.undoCount).toBe(combined.undoCount + 1);
         expect(live.legends[0]).toContainEqual({ caption: 'Integration primary', color: '#112233' });
@@ -212,8 +222,8 @@ for (const width of [1440, 390]) {
         const saved = JSON.parse(gunzipSync(await download(page, 'Save Session', sessionPath)));
         expect(saved.runMetadata.annotationWarnings).toEqual(final.warnings);
         expect(saved.renderRequest).toEqual(final.request);
-        expect(saved.config.adv[`${mode}_track_slots`].find(slot => slot.id === 'gc_content').enabled).toBe(false);
-        expect(JSON.stringify(saved.config.annotationSets)).not.toContain('PRIVATE-AUX-CELL');
+        expect(saved.modes[mode].config.adv[`${mode}_track_slots`].find(slot => slot.id === 'gc_content').enabled).toBe(false);
+        expect(JSON.stringify(saved.modes[mode].config.annotationSets)).not.toContain('PRIVATE-AUX-CELL');
         restored = await load(browser, sessionPath, { width, height: 1000 });
         const loaded = await inspect(restored, mode);
         expect(artifact(loaded)).toEqual(artifact(final)); expect(loaded.rules).toEqual(final.rules);

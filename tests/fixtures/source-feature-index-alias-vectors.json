@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "description": "A schema 3 biological feature's stored source feature index and the index the promotion gives it (OV-274): Python promote_legacy_feature_catalog (gbdraw/web_support/feature_catalog.py, tests/test_web_feature_catalog.py) and JS migrateLegacyFeatureCatalog (services/feature-catalog.js, tests/web/feature-catalog.test.mjs) read these cases. A blank or whitespace-only alias is not supplied, as a blank text alias is, so the `<stableFeatureId>~<N>` suffix supplies the index; a supplied value is kept as stored, right or not, for validation to judge.",
+  "cases": [
+    { "name": "absent alias takes the suffix", "feature": { "stableFeatureId": "s", "biologicalFeatureId": "s~3" }, "promotedSourceFeatureIndex": 3 },
+    { "name": "null alias takes the suffix", "feature": { "stableFeatureId": "s", "biologicalFeatureId": "s~3", "sourceFeatureIndex": null }, "promotedSourceFeatureIndex": 3 },
+    { "name": "empty-string alias takes the suffix", "feature": { "stableFeatureId": "s", "biologicalFeatureId": "s~3", "sourceFeatureIndex": "" }, "promotedSourceFeatureIndex": 3 },
+    { "name": "whitespace-only alias takes the suffix (OV-274)", "feature": { "stableFeatureId": "s", "biologicalFeatureId": "s~3", "sourceFeatureIndex": "  " }, "promotedSourceFeatureIndex": 3 },
+    { "name": "whitespace-only legacy alias key takes the suffix", "feature": { "stableFeatureId": "s", "biologicalFeatureId": "s~3", "featureIndex": "\t" }, "promotedSourceFeatureIndex": 3 },
+    { "name": "stored index is kept over the suffix", "feature": { "stableFeatureId": "s", "biologicalFeatureId": "s~3", "sourceFeatureIndex": 9 }, "promotedSourceFeatureIndex": 9 },
+    { "name": "stored padded text index is kept as stored", "feature": { "stableFeatureId": "s", "biologicalFeatureId": "s~3", "sourceFeatureIndex": " 9 " }, "promotedSourceFeatureIndex": " 9 " },
+    { "name": "stored invalid index is kept for validation", "feature": { "stableFeatureId": "s", "biologicalFeatureId": "s~3", "sourceFeatureIndex": "x" }, "promotedSourceFeatureIndex": "x" },
+    { "name": "no suffix supplies nothing", "feature": { "stableFeatureId": "s", "biologicalFeatureId": "s", "sourceFeatureIndex": "  " }, "promotedSourceFeatureIndex": "  " }
+  ]
+}

@@ -3,7 +3,9 @@ import { test } from 'node:test';
 import { execFileSync } from 'node:child_process';
 import { createFeatureRuleActions } from '../../gbdraw/web/js/app/feature-editor/rule-actions.js';
 import { DiagramGenerationCanceledError } from '../../gbdraw/web/js/services/diagram-generation.js';
-import { createRulePreparation, ruleMatchesFeature } from '../../gbdraw/web/js/app/rule-matching.js';
+import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
+import { ruleMatchesFeature } from '../../gbdraw/web/js/services/rule-matchers.js';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const nativeEvaluate = async payload => {
   const response = JSON.parse(execFileSync(process.env.PYTHON || 'python', ['-c', `
@@ -29,29 +31,26 @@ const setup = ({ features = [{ type: 'CDS', svg_id: 'one', qualifiers: { product
     results: { value: [{ name: 'figure', content: '<svg>accepted</svg>' }] },
     svgResultIdentity: { value: 'accepted' }, mode: { value: 'circular' }, generatedMode: { value: 'circular' },
     fileLegendCaptions: { value: new Set() }, addedLegendCaptions: { value: new Set() },
-    legendEntries: { value: [] }, files: { t_color: null }
+    legendEntries: { value: [] }, files: { t_color: null }, legendColorOverrides: {}
   };
   const calls = [], history = [];
   let available = true;
   let finalize = async () => {};
-  const preparation = createRulePreparation({ state, evaluate: payload => { calls.push(payload.kind); return evaluate(payload); } });
+  const preparation = createRulePreparation({ state: withDrawings(state), evaluate: payload => { calls.push(payload.kind); return evaluate(payload); } });
   const transact = async (label, commit) => {
     const before = JSON.stringify(state.manualSpecificRules);
     await commit();
     if (before !== JSON.stringify(state.manualSpecificRules)) history.push(label);
     await finalize();
   };
-  const actions = createFeatureRuleActions({ state, ref: value => ({ value }), computed: get => ({ get value() { return get(); } }),
+  const actions = createFeatureRuleActions({ state: withDrawings(state), ref: value => ({ value }), computed: get => ({ get value() { return get(); } }),
     rulePreparation: preparation, isPatternEditAvailable: () => available, nextTick: async () => {},
-    history: { runUndoableCheckpoint: transact, runUndoable: transact },
-    legendActions: { syncFileLegendEntries: async (_, { isCurrent, commit, transact: transaction }) => {
-      if (!isCurrent()) return;
-      await transaction({ add: [], remove: [] }, () => {
-        if (!isCurrent()) return;
-        commit();
-        state.results.value = [{ name: 'figure', content: JSON.stringify(state.manualSpecificRules) }];
-      });
-    } }, svgActions: { applyPaletteToSvg() {}, applySpecificRulesToSvg() {} }
+    runUndoableCheckpoint: transact, runUndoable: transact,
+    prepareFileLegendEntries: async (_, { isCurrent }) => isCurrent() && {
+      diff: { add: [], remove: [] },
+      isCurrent: () => true,
+      apply: () => { state.results.value = [{ name: 'figure', content: JSON.stringify(state.manualSpecificRules) }]; }
+    }, projectPaletteAndRules: () => true
   });
   const row = state.manualSpecificRules[0];
   const stable = () => ({ canonical: JSON.stringify(state.manualSpecificRules), result: state.results.value, history: history.length });
@@ -76,7 +75,7 @@ for (const features of [[], [{ type: 'tRNA', svg_id: 'other', qualifiers: { prod
     assert.equal(s.actions.specificRulePattern(s.row), 'NADH');
     assert.equal(s.actions.specificRulePatternDraft(s.row), null);
     assert.deepEqual(s.stable(), before);
-    assert.deepEqual(s.calls, ['color-captions', 'color', 'color-captions', 'color']);
+    assert.deepEqual(s.calls, ['color', 'color'], 'uncaptioned rules send no caption request (OV-238)');
   });
 }
 
@@ -102,7 +101,7 @@ for (const failure of [
     assert.equal(s.actions.specificRulePatternDraft(s.state.manualSpecificRules[0]), null);
     assert.notEqual(s.stable().result, before.result);
     assert.equal(s.history.length, 1);
-    assert.deepEqual(s.calls, ['color-captions', 'color-captions', 'color-captions', 'color']);
+    assert.deepEqual(s.calls, ['color', 'color', 'color']);
   });
 }
 
@@ -216,14 +215,14 @@ test('25,000 features use the existing single matching evaluation, cached retry 
   const start = performance.now();
   await s.actions.setSpecificRuleField(0, 'val', '(?P<enzyme>NADH)');
   assert.equal(s.history.length, 1);
-  assert.deepEqual(s.calls, ['color-captions', 'color']);
+  assert.deepEqual(s.calls, ['color']);
   assert.equal(features.filter(f => ruleMatchesFeature(f, s.state.manualSpecificRules[0])).length, 12500);
   assert.equal(s.preparation.prepare(), true);
   const row = s.state.manualSpecificRules[0];
   s.actions.editSpecificRulePattern(row, '[never evaluated');
   s.actions.revertSpecificRulePattern(row);
-  assert.deepEqual(s.calls, ['color-captions', 'color']);
-  console.log(JSON.stringify({ featureCount: features.length, preparationMs: performance.now() - start, matchingCalls: 1, captionCalls: 1, history: s.history.length }));
+  assert.deepEqual(s.calls, ['color']);
+  console.log(JSON.stringify({ featureCount: features.length, preparationMs: performance.now() - start, matchingCalls: 1, captionCalls: 0, history: s.history.length }));
 });
 
 
@@ -279,3 +278,15 @@ for (const operation of ['save', 'load']) {
     assert.equal(s.actions.specificRulePatternDraft(s.row), null);
   });
 }
+
+// GX-10: the rule editor's name for an unnamed feature writes its 1-based
+// range, as its popup caption does (`formatFeatureRange`).
+test('an unnamed feature is named by its 1-based range in the rule editor', () => {
+  const { actions } = setup();
+  assert.equal(actions.getIndividualFeatureLabel({ type: 'tRNA', start: 576, end: 647 }), 'tRNA at 577..647');
+  assert.equal(actions.getIndividualFeatureLabel({
+    type: 'CDS', start: 90, end: 400,
+    location_parts: [{ start: 90, end: 120 }, { start: 300, end: 400, display: '301..400' }]
+  }), 'CDS at 91..120, 301..400');
+  assert.equal(actions.getIndividualFeatureLabel({ type: 'CDS', product: 'named', start: 0, end: 9 }), 'named');
+});

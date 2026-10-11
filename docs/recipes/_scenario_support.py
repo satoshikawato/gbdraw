@@ -270,9 +270,20 @@ def load_chapter(
     return chapter
 
 
+def destination_page(chapter: Mapping[str, Any]) -> str | None:
+    """Return a scenario's public page path without its section anchor."""
+    destination = chapter.get("destination")
+    return None if destination is None else str(destination).partition("#")[0]
+
+
+def executable_source(chapter: Mapping[str, Any]) -> str | None:
+    """Return the Markdown file that holds a scenario's executable block."""
+    return chapter["execution"].get("source", destination_page(chapter))
+
+
 def extract_executable_block(chapter: dict[str, Any], *, language: str) -> str:
     scenario_id = chapter["id"]
-    relative_source = chapter["execution"].get("source", chapter.get("destination"))
+    relative_source = executable_source(chapter)
     if not relative_source:
         raise RecipeContractError(f"{scenario_id} has no executable source.")
     source_path = (REPO_ROOT / relative_source).resolve()

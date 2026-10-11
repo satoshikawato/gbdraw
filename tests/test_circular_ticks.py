@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import pytest
 
+from gbdraw.api.config import apply_config_overrides
+from gbdraw.render.groups.linear.length_bar import format_linear_tick_label
 from gbdraw.svg.circular_ticks import (
     generate_circular_tick_labels,
     get_circular_tick_path_radius_bounds,
     resolve_circular_tick_label_geometry,
     set_tick_label_anchor_value,
 )
+
+# The packaged labels.length_threshold.circular.
+LENGTH_THRESHOLD = int(apply_config_overrides(None, None).labels.length_threshold.circular)
 
 
 def _tick_label_kwargs() -> dict:
@@ -24,6 +29,7 @@ def _tick_label_kwargs() -> dict:
         "tick_side": "inside",
         "tick_length_px": 10.0,
         "tick_width": 2.0,
+        "length_threshold": LENGTH_THRESHOLD,
     }
 
 
@@ -69,6 +75,7 @@ def test_circular_tick_label_outside_uses_margin_from_tick_band() -> None:
         strandedness=base_kwargs["strandedness"],
         tick_side=base_kwargs["tick_side"],
         tick_length_px=base_kwargs["tick_length_px"],
+        length_threshold=LENGTH_THRESHOLD,
     )
 
     for tick, label_text in ((1_000_000, "1.0 Mbp"), (3_000_000, "3.0 Mbp")):
@@ -96,6 +103,7 @@ def test_circular_tick_label_inside_uses_legacy_center_offset_clearance() -> Non
         strandedness=base_kwargs["strandedness"],
         tick_side=base_kwargs["tick_side"],
         tick_length_px=base_kwargs["tick_length_px"],
+        length_threshold=LENGTH_THRESHOLD,
     )
 
     path_radii = []
@@ -130,6 +138,7 @@ def test_circular_tick_label_textpath_uses_middle_anchor() -> None:
         tick_side="inside",
         tick_length_px=10.0,
         tick_width=2.0,
+        length_threshold=LENGTH_THRESHOLD,
     )
     text_elements = [element.tostring() for element in elements if element.elementname == "text"]
 
@@ -142,3 +151,58 @@ def test_circular_tick_label_textpath_uses_middle_anchor() -> None:
     assert 'text-anchor="middle"' in text_elements[2]
     assert 'startOffset="50%"' in text_elements[2]
     assert 'dominant-baseline="text-after-edge"' in text_elements[2]
+
+
+def test_circular_tick_labels_resolve_an_interval_below_one_kbp() -> None:
+    # OV-201: a 500 bp interval read "0 kbp, 1 kbp, 1 kbp"; the labels now keep
+    # the decimals the interval needs, as Linear tick labels do.
+    elements = generate_circular_tick_labels(
+        100.0,
+        16_569,
+        "large",
+        [500, 1_000, 1_500, 2_250],
+        "none",
+        "black",
+        14.0,
+        "normal",
+        "Arial",
+        "tuckin",
+        True,
+        96,
+        label_side="outside",
+        tick_side="inside",
+        tick_length_px=10.0,
+        tick_width=2.0,
+        tick_interval=250,
+        length_threshold=LENGTH_THRESHOLD,
+    )
+    texts = [element.tostring() for element in elements if element.elementname == "text"]
+
+    assert [">0.5 kbp<" in texts[0], ">1 kbp<" in texts[1], ">1.5 kbp<" in texts[2], ">2.25 kbp<" in texts[3]] == [
+        True,
+        True,
+        True,
+        True,
+    ]
+
+
+@pytest.mark.parametrize(
+    ("position", "context_length", "interval", "expected"),
+    [
+        (2_250, 16_569, 250, "2.25 kbp"),
+        (4_500, 16_569, 1_500, "4.5 kbp"),
+        (1_200, 1_500, 100, "1.2 kbp"),
+        (1_500_000, 4_641_652, 500_000, "1.5 Mbp"),
+        (40_000, 48_502, 5_000, "40 kbp"),
+    ],
+)
+def test_linear_tick_labels_resolve_their_interval(
+    position: int, context_length: int, interval: int, expected: str
+) -> None:
+    # OV-201: Linear rounded 2250 to "2.2 kbp" (interval 250) and 4500 to
+    # "4 kbp" (interval 1500); automatic intervals keep their labels.
+    assert (
+        format_linear_tick_label(position, context_length=context_length, tick_interval=interval)
+        == expected
+    )
+from gbdraw.api.config import apply_config_overrides

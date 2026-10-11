@@ -320,6 +320,10 @@
   ],
   "related": [
     {
+      "label": "Tutorial: Draw a labeled circular map of the human mitochondrial genome",
+      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/first-circular-genome-diagram.md"
+    },
+    {
       "label": "Next: add an AT skew track",
       "href": "./#HmmtDNA_ATskew"
     },

@@ -68,11 +68,11 @@ Direct `main` hotfixes are unsupported; urgent changes still enter through
 | Hosted bundle construction | `tools/prepare_cloudflare_pages.py` |
 | Production deployment | Cloudflare Workers Builds and `wrangler.toml` |
 
-`tools/check-promotion-readiness.mjs` is the planned checker implementation
-owner. It does not exist yet and must be introduced in a checker-only pull
-request before a later pull request wires it to a workflow or evidence producer.
-The table declares ownership; it does not claim that unwritten or unwired
-behavior is already executable.
+`tools/check-promotion-readiness.mjs` verifies exact-SHA workflow evidence and
+promotion result-tree identity. `Promotion / gate` in `web-base-policy.yml` runs
+it from trusted `main`, and `Release / gate` uses it to require exact-candidate
+Gallery readiness. The table declares ownership; it does not claim that
+unwritten or unwired behavior is already executable.
 
 After the operational protection cutover, the complete required-status set for
 pull requests to `dev` is:
@@ -94,15 +94,41 @@ a pull request branch to be up to date with `dev`, so a pull request that
 passed on an older base can merge without another CI cycle. Two rules replace
 the up-to-date requirement:
 
-- After a pull request that changes a governance, policy, checker, or
-  authority file merges into `dev`, update every other open pull request to
-  `dev` with `gh pr update-branch <number>`, and merge it only after its
-  required checks pass again. These files are the
-  [current guard scope](#current-guard-scope),
-  `docs/internal/SELECTIVE_CI.md`, `tools/ci-impact.mjs`, and
-  `tools/ci-impact-policy.mjs`. Both required checks run trusted code from the
-  pull request base, so a result computed on the older base applied the old
-  rules.
+- After a pull request that changes how the required checks judge a pull
+  request merges into `dev`, update every other open pull request to `dev`
+  with `gh pr update-branch <number>`, and merge it only after its required
+  checks pass again. Both required checks run trusted code from the pull
+  request base, so a result computed on the older base applied the old rules.
+  These files are:
+  - the checker: `tools/check-web-change-budget.mjs`,
+    `tools/web-architecture-detectors.mjs`,
+    `tools/web-architecture-evaluation.mjs`,
+    `tools/web-owner-graph-detectors.mjs`,
+    `tools/web-product-impact-evaluation.mjs`,
+    `tools/web-product-impact-decision-source.mjs`,
+    `tools/web-change-source.mjs`, `tools/web-promotion-context.mjs`, and
+    `tools/check-promotion-readiness.mjs`;
+  - the rule data that the checker reads from the base:
+    `tools/web-change-policy.json`, `tools/web-architecture-rules.json`,
+    `tools/web-architecture-violations.json`,
+    `tools/web-product-impact-map.json`, `tools/web-product-decisions.json`,
+    and `tools/web-owner-graph.json`;
+  - the CI plan: `tools/ci-impact.mjs` and `tools/ci-impact-policy.mjs`;
+  - the workflows of the two required checks: `.github/workflows/test.yml` and
+    `.github/workflows/web-base-policy.yml`.
+- A change to `tools/web-design-rule-guards.json` updates only the open pull
+  requests that change a file named by an added, removed, or changed entry.
+  The checker reads the registry only to classify changes to those files.
+- Any other change needs no update of open pull requests. This covers a guard
+  test such as `tests/web/architecture-contracts.test.mjs`, the rule text in
+  `gbdraw/web/CLAUDE.md`, and the policy, contract, and template documents of
+  the [current guard scope](#current-guard-scope) and
+  `docs/internal/SELECTIVE_CI.md`. The checks classify these files by path and
+  do not read their content from the base, and integrated `dev` staging runs
+  a changed guard test on the merged SHA. If the required checks of such an
+  open pull request run again later, the trusted base check compares the
+  newer `dev` tree with the pull request head, so it can report those files as
+  part of the pull request. Update the pull request then.
 - Integrated `dev` staging is the safety net after merge. It runs on each
   exact merged SHA and finds conflicts between pull requests that passed on
   different bases.
@@ -225,6 +251,20 @@ reclassified as one combined runtime-and-guard implementation. Promotion does
 not weaken that separation: it accepts aggregation only from trusted exact-SHA
 evidence and verified tree identity.
 
+Exact-SHA evidence is a successful `Dev staging / gate` or
+`Gallery readiness / gate` aggregate from the push run for that SHA. The run may
+earn part of it through light-change inheritance: when the push leaves the tree
+unchanged, or changes only metadata, documentation, policy documentation, and
+leaf tests, and the direct parent has its own successful aggregate, the run
+executes only the jobs the change needs and inherits the rest
+([selective CI](./SELECTIVE_CI.md#light-change-inheritance)). Promotion
+checklist evidence outside these aggregates, such as the release-tier run,
+recipe and sweep runs, and generated-artifact checks, may come from an ancestor
+of the promotion head under the
+[carry-forward rule](./WEB_PERIODIC_AUDIT.md#carrying-evidence-forward). Neither
+rule changes `Promotion / gate`, which still requires both aggregates on the
+exact promotion head.
+
 ## Self-authorization separation
 
 Checker implementation consists of:
@@ -233,6 +273,7 @@ Checker implementation consists of:
 tools/check-web-change-budget.mjs
 tools/web-architecture-detectors.mjs
 tools/web-architecture-evaluation.mjs
+tools/web-owner-graph-detectors.mjs
 tools/web-change-source.mjs
 tools/web-promotion-context.mjs
 tools/check-promotion-readiness.mjs
@@ -243,9 +284,12 @@ Authority and evidence producers consist of:
 ```text
 docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md
 docs/internal/WEB_CHANGE_POLICY.md
+gbdraw/web/CLAUDE.md
 tools/web-change-policy.json
 tools/web-architecture-rules.json
 tools/web-architecture-violations.json
+tools/web-design-rule-guards.json
+tools/web-owner-graph.json
 .github/workflows/test.yml
 .github/workflows/gallery-publication.yml
 .github/workflows/web-base-policy.yml
@@ -271,8 +315,8 @@ The following rules apply:
   evidence producer that invokes or feeds it.
 
 `tools/check-promotion-readiness.mjs` is checker implementation, not authority
-data. Its first implementation therefore belongs in a checker-only pull request;
-workflow wiring follows after that implementation is merged and characterized.
+data. It changes in checker-only pull requests, separately from the workflows
+that invoke it.
 
 ### Current guard scope
 
@@ -296,6 +340,10 @@ tools/web-change-source.mjs
 tools/web-promotion-context.mjs
 tools/check-promotion-readiness.mjs
 tools/web-change-policy.json
+tools/web-design-rule-guards.json
+tools/web-owner-graph.json
+tools/web-owner-graph-detectors.mjs
+gbdraw/web/CLAUDE.md
 docs/internal/WEB_CHANGE_POLICY.md
 tests/web/architecture-contracts.test.mjs
 tests/web/architecture-ratchet-fixtures.test.mjs
@@ -311,6 +359,35 @@ tests/web/web-promotion-context.test.mjs
 Mapped Product Impact contracts are classified from the trusted base map when
 an affected concern is evaluated. They do not need a duplicated static path
 list in this policy.
+
+### Design-rule co-change
+
+`gbdraw/web/CLAUDE.md` holds the numbered Web design rules (R1, R2, …). Each rule names the
+guard tests that enforce it, and some guards carry an allowlist or a baseline
+literal that the rule's text authorizes (a shrink-only count, a map of counts
+per module, a set of exempt exports, or a map of exempt writers per module).
+`tools/web-design-rule-guards.json` registers, per rule, the heading, the
+guard paths, and those literals (`path`, `symbol`, `kind`). The checker reads
+the registry from the trusted base.
+
+- A diff that changes `gbdraw/web/CLAUDE.md` or the registry and any
+  production runtime path fails the Gate ("production runtime files and Web
+  guard/CI files changed together"). Rule text and registration change in an
+  authority-only pull request, before or after the runtime change they
+  describe.
+- A diff that changes production runtime paths may contract a registered
+  allowlist in the same guard test (remove an entry, lower a count) and passes;
+  the report lists the contraction.
+- A diff that expands a registered allowlist, or leaves it unreadable, alongside
+  production runtime paths fails the Gate with `design-rule.co-change`. The
+  expansion goes to its own authority-only pull request, which is Review
+  REQUIRED ("registered design-rule allowlists expanded") and names the rule
+  and the reason for the new entry.
+- A malformed registry fails closed and is Review REQUIRED.
+
+Adding a test case to a guard test is neither an expansion nor a contraction
+and is not restricted by this rule. A new allowlist or baseline literal in a
+guard test is registered in the same authority-only pull request that adds it.
 
 ### Product Impact separation
 

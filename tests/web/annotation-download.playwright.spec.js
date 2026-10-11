@@ -61,7 +61,7 @@ for (const width of [1440, 390]) {
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180000 });
     expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
     await page.evaluate(async () => {
-      const { normalizeAnnotationSets } = await import('./js/app/annotations/state.js');
+      const { normalizeAnnotationSets } = await import('./js/services/annotation-state.js');
       const { coordinateTarget, featureTarget } = await import('./js/app/annotations/target-actions.js');
       const app = window.__GBDRAW_APP__;
       app.annotationSets.splice(0, app.annotationSets.length, ...normalizeAnnotationSets([
@@ -238,13 +238,26 @@ for (const width of [1440, 390]) {
     await writeFile(testInfo.outputPath('python-reader.txt'), native);
     await generateAndWaitForResult(page);
     expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(controlSvg);
-    // All malformed inputs must leave the complete prior artifact and draft intact.
+    // All malformed inputs must leave the complete prior artifact and draft
+    // intact; the panel notice names the error, without a browser alert (FL-14).
+    const alertCount = dialogs.length;
     for (const entry of cases.filter((entry) => !entry.valid)) {
       const before = await importSnapshot(page);
       await upload(entry.table);
       expect(await importSnapshot(page), entry.name).toEqual(before);
-      await expect(status).toBeEmpty();
+      await expect(status).toContainText('Could not import annotations:');
     }
+    // A table without rows would remove every set: the import asks, and
+    // Cancel keeps the sets and records no History step (FL-14).
+    const beforeEmpty = await importSnapshot(page);
+    await fileInput.setInputFiles({ name: 'empty.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from('') });
+    const removeAll = page.getByRole('dialog', { name: 'Remove All Annotation Sets' });
+    await expect(removeAll).toBeVisible();
+    await expect(removeAll).toContainText(`removes all ${beforeEmpty.draft.length} annotation set(s)`);
+    await removeAll.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(removeAll).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.capturing.value)).toBe(false);
+    expect(await importSnapshot(page)).toEqual(beforeEmpty);
     // Exercise actual file-reader rejection and an edit during a delayed read.
     const beforeFailure = await importSnapshot(page);
     await page.evaluate(() => {
@@ -253,7 +266,8 @@ for (const width of [1440, 390]) {
     });
     await upload(good.table);
     expect(await importSnapshot(page)).toEqual(beforeFailure);
-    expect(dialogs.at(-1)).toContain('S01 file-read failure');
+    await expect(status).toContainText('Could not import annotations: S01 file-read failure');
+    expect(dialogs.length).toBe(alertCount);
     await page.evaluate(() => {
       File.prototype.arrayBuffer = function () { return new Promise((resolve) => { window.__finishAnnotationRead = () => resolve(window.__annotationReadOriginal.call(this)); }); };
     });
@@ -276,9 +290,9 @@ for (const width of [1440, 390]) {
     const sessionPath = testInfo.outputPath('annotations.gbdraw-session.json.gz');
     await sessionDownload.saveAs(sessionPath);
     const session = JSON.parse(gunzipSync(await readFile(sessionPath)));
-    expect(session.config.annotationSets).toEqual(await page.evaluate(() => JSON.parse(JSON.stringify(window.__GBDRAW_APP__.annotationSets))));
+    expect(session.modes[session.ui.mode].config.annotationSets).toEqual(await page.evaluate(() => JSON.parse(JSON.stringify(window.__GBDRAW_APP__.annotationSets))));
     expect(JSON.stringify(session)).not.toContain('PRIVATE-CELL');
-    for (const name of good.ignored) expect(JSON.stringify(session.config.annotationSets)).not.toContain(name);
+    for (const name of good.ignored) expect(JSON.stringify(session.modes[session.ui.mode].config.annotationSets)).not.toContain(name);
     expect(JSON.stringify(session)).not.toContain('Ignored annotation table columns:');
     const context = await browser.newContext({ baseURL: new URL(page.url()).origin, viewport: { width, height: 960 } });
     try {

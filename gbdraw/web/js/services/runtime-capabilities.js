@@ -1,3 +1,4 @@
+// @ts-check
 export const DIAGRAM_ENGINE_COMPATIBILITY_MESSAGE =
   'The diagram engine is incompatible with this Web app. Reload the page; if the problem persists, contact the site administrator.';
 
@@ -5,8 +6,8 @@ export const EXPECTED_WEB_RUNTIME_CAPABILITIES = Object.freeze({
   schema: 1,
   renderProtocol: 2,
   request: Object.freeze({
-    currentSchema: 8,
-    supportedSchemas: Object.freeze([1, 2, 5, 6, 7, 8]),
+    currentSchema: 9,
+    supportedSchemas: Object.freeze([1, 2, 5, 6, 7, 8, 9]),
     unknownFieldPolicy: 'reject'
   }),
   resources: Object.freeze({

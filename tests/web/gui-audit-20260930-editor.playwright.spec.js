@@ -2,7 +2,7 @@
 // A test marked test.fail(true, '<ID>') asserts the correct behavior of a
 // current defect; the PR that fixes the audit ID removes the mark.
 const { test, expect } = require('@playwright/test');
-const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const {
   HMMT_SESSION,
   featurePresentation,
@@ -10,6 +10,7 @@ const {
   loadSessionFile,
   openBatch,
   openFresh,
+  openWithGenBank,
   selectResult,
   settle,
   switchMode
@@ -18,6 +19,11 @@ const fs = require('node:fs/promises');
 const { download, generate, load } = require('./helpers/mode-transition.cjs');
 
 test.describe.configure({ retries: 0 });
+
+// A feature a live edit hides keeps its glyph with display none until the
+// rerender that the edit asks for (a rule that changes the Legend) leaves it
+// out of the drawing, as Generate does.
+const notDrawn = (value) => value === null || /\|hidden$/.test(value);
 
 test('batch drawer lists and edits the features of the displayed Result', async ({ page }) => {
   test.setTimeout(300_000);
@@ -35,7 +41,7 @@ test('batch drawer lists and edits the features of the displayed Result', async 
 test('batch record-wide color and visibility scopes reach the other Result when it is displayed', async ({ page }) => {
   test.setTimeout(300_000);
   await openBatch(page);
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const colored = app.extractedFeatures.find((feature) => feature.locus_tag === 'TESTA_0001');
     await app.openFeatureEditorFromList(colored, null);
@@ -50,19 +56,19 @@ test('batch record-wide color and visibility scopes reach the other Result when 
   await settle(page);
   const edited = await featurePresentation(page, ['TESTA_0001', 'TESTA_0004']);
   expect(edited.TESTA_0001.mounted).toBe('#ff0000|shown');
-  expect(edited.TESTA_0004.mounted).toMatch(/\|hidden$/);
+  expect(notDrawn(edited.TESTA_0004.mounted)).toBe(true);
   await selectResult(page, 1);
   const displayed = await featurePresentation(page, ['TESTB_0001', 'TESTB_0002', 'TESTB_0004']);
   expect(displayed.TESTB_0001.mounted).toBe('#ff0000|shown');
   expect(displayed.TESTB_0002.mounted).toBe('#ff0000|shown');
-  expect(displayed.TESTB_0004.mounted).toMatch(/\|hidden$/);
+  expect(notDrawn(displayed.TESTB_0004.mounted)).toBe(true);
 });
 
 test('batch live legend deletion reaches the other Result when it is displayed', async ({ page }) => {
   test.setTimeout(300_000);
   await openBatch(page);
   expect(await legendCaptions(page)).toContain('GC content');
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     await app.deleteLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'GC content'));
   });
@@ -79,7 +85,7 @@ test('batch edits shown on another Result reach its export, its Session, and Und
   await openBatch(page);
   const undoCountBefore = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
   const original = await featurePresentation(page, ['TESTA_0001', 'TESTA_0004', 'TESTB_0001', 'TESTB_0004']);
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const colored = app.extractedFeatures.find((feature) => feature.locus_tag === 'TESTA_0001');
     await app.openFeatureEditorFromList(colored, null);
@@ -101,7 +107,7 @@ test('batch edits shown on another Result reach its export, its Session, and Und
 
   const [exportDownload] = await Promise.all([
     page.waitForEvent('download'),
-    page.evaluate(() => window.__GBDRAW_APP__.downloadSVG())
+    evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.downloadSVG())
   ]);
   const exported = await fs.readFile(await exportDownload.path(), 'utf8');
   expect(exported).not.toContain('data-legend-key="GC content"');
@@ -126,7 +132,7 @@ test('batch edits shown on another Result reach its export, its Session, and Und
   // Undo back to the Generate also restores the Result selection of that
   // step; each Result then shows its original look when displayed.
   while (await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()) > undoCountBefore) {
-    await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
     await settle(page);
   }
   const displayed = await page.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex);
@@ -146,7 +152,7 @@ test('batch edits shown on another Result reach its export, its Session, and Und
 test('Selected features annotations generate for a Circular multi-record batch', async ({ page }) => {
   test.setTimeout(300_000);
   await openBatch(page);
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     app.selectedFeatureIds = app.extractedFeatures.filter((feature) => feature.type === 'CDS')
       .slice(0, 2).map((feature) => feature.svg_id);
@@ -173,12 +179,12 @@ test('Reset fill after a canceled reset dialog uses the reset feature type defau
     return [...app.svgContainer.querySelector('svg').querySelectorAll(`[data-gbdraw-feature-id="${CSS.escape(feature.svg_id)}"]`)]
       .map((element) => element.getAttribute('fill')).find((value) => value && value !== 'none');
   }, product);
-  const openAndReset = (product) => page.evaluate(async (name) => {
+  const openAndReset = (product) => evaluateWithRetainedPromise(page, async (name) => {
     const app = window.__GBDRAW_APP__;
     await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.product === name), null);
     await app.resetClickedFeatureFillColor();
   }, product);
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     Object.assign(app.newSpecRule, { feat: 'rRNA', qual: 'product', val: '^s-rRNA$', color: '#ff00ff', cap: 'small rRNA' });
     await app.addSpecificRule();
@@ -188,7 +194,7 @@ test('Reset fill after a canceled reset dialog uses the reset feature type defau
   await openAndReset('tRNA-Leu');
   await settle(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.resetColorDialog.show)).toBe(true);
-  await page.evaluate(() => window.__GBDRAW_APP__.handleResetColorChoice('cancel'));
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.handleResetColorChoice('cancel'));
   await settle(page);
   await openAndReset('s-rRNA');
   await settle(page);
@@ -205,7 +211,7 @@ test('Redo of an Exact product hide hides the feature again', async ({ page }) =
   const display = () => page.evaluate((featureId) => [...window.__GBDRAW_APP__.svgContainer.querySelector('svg')
     .querySelectorAll(`[data-gbdraw-feature-id="${CSS.escape(featureId)}"]`)]
     .some((element) => element.getAttribute('display') === 'none'), id);
-  await page.evaluate(async (featureId) => {
+  await evaluateWithRetainedPromise(page, async (featureId) => {
     const app = window.__GBDRAW_APP__;
     await app.openFeatureEditorFromList(app.extractedFeatures.find((feature) => feature.svg_id === featureId), null);
     await app.updateClickedFeatureVisibility('off');
@@ -213,10 +219,10 @@ test('Redo of an Exact product hide hides the feature again', async ({ page }) =
   await page.getByRole('button', { name: /Exact product/ }).click();
   await settle(page);
   expect(await display()).toBe(true);
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settle(page);
   expect(await display()).toBe(false);
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
   await settle(page);
   expect(await display()).toBe(true);
 });
@@ -226,7 +232,7 @@ test('a rename of a legend entry without features survives Generate', async ({ b
   const page = await load(browser, HMMT_SESSION);
   try {
     await generate(page);
-    await page.evaluate(async () => {
+    await evaluateWithRetainedPromise(page, async () => {
       const app = window.__GBDRAW_APP__;
       await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'GC content'), 'GC percent');
     });
@@ -263,7 +269,7 @@ test('renaming a feature legend entry to an existing caption offers the conflict
   const page = await load(browser, HMMT_SESSION);
   try {
     await generate(page);
-    await page.evaluate(async () => {
+    await evaluateWithRetainedPromise(page, async () => {
       const app = window.__GBDRAW_APP__;
       await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'tRNA'), 'rRNA')
         .catch(() => {});
@@ -353,7 +359,7 @@ test('a horizontal legend keeps a sort and a featureless rename through Generate
     await page.locator('.right-drawer').getByRole('button', { name: 'Legend' }).click();
     await page.locator('.right-drawer').getByTitle('Sort Z-A', { exact: true }).click();
     await settle(page);
-    await page.evaluate(async () => {
+    await evaluateWithRetainedPromise(page, async () => {
       const app = window.__GBDRAW_APP__;
       await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'GC content'), 'GC percent');
     });
@@ -430,13 +436,13 @@ test('an Undo of a checkpoint edit keeps the feature catalog across a mode round
   page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
   try {
     const featureCount = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.length);
-    await page.evaluate(async () => {
+    await evaluateWithRetainedPromise(page, async () => {
       const app = window.__GBDRAW_APP__;
       const feature = app.extractedFeatures.find((item) => item.type === 'CDS');
       await app.setFeatureColorValue(feature, '#123456');
     });
     await settle(page);
-    await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
     await settle(page);
     await switchMode(page, 'linear');
     await switchMode(page, 'circular');
@@ -475,7 +481,7 @@ test('a label reflow leaves Applies on Generate draft settings out of the Result
     await generate(page);
     const before = await resultFacts();
     expect(before.definition.join(' ')).toContain('Homo sapiens');
-    await page.evaluate(async () => {
+    await evaluateWithRetainedPromise(page, async () => {
       const app = window.__GBDRAW_APP__;
       Object.assign(app.form, { species: 'Leaked species' });
       Object.assign(app.adv, { def_font_size: 31, block_stroke_width: 7 });
@@ -502,60 +508,832 @@ test('a label reflow leaves Applies on Generate draft settings out of the Result
   }
 });
 
-// N-16 Owner-delegated: Enable Labels keeps its documented live effect. Its
-// label selection is committed with the reflowed Result, so the next label
-// reflow (from the committed Session) keeps the labels.
-test('Enable Labels applies its label selection through the reflow and keeps it', async ({ browser }) => {
+// OV-36 (R1(c), Owner-delegated recommended choice): a successful Generate
+// draws every edit, so it clears the note of an earlier failed live edit. A
+// failed Generate leaves the Result as it was, so the note stays.
+test('a successful Generate clears the note of a failed live edit, and a failed Generate keeps it', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openBatch(page);
+  const note = page.locator('[data-live-application-feedback]');
+  const resultContents = () => page.evaluate(() => window.__GBDRAW_APP__.results.map((result) => result.content));
+  const reflowFailed = () => page.evaluate(() => Boolean(window.__GBDRAW_APP__.labelReflowLastError));
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => {
+      throw new Error('OV-36 forced failure');
+    };
+    state.labelReflowForceRequestSeq.value += 1;
+  });
+  await expect.poll(reflowFailed, { timeout: 120_000 }).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.labelReflowProcessing)).toBe(false);
+  await expect(note).toContainText('Live edit failed');
+  const shown = await resultContents();
+  expect(await evaluateWithRetainedPromise(page, async () => (
+    (await window.__GBDRAW_APP__.runAnalysis())?.status
+  ))).toBe('error');
+  await settle(page);
+  expect(await resultContents()).toEqual(shown);
+  expect(await reflowFailed()).toBe(true);
+  await expect(note).toContainText('Live edit failed');
+  await page.evaluate(() => { delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse; });
+  await generateAndWaitForResult(page);
+  await settle(page);
+  expect(await reflowFailed()).toBe(false);
+  await expect(note).toHaveCount(0);
+});
+
+// Owner request (2026-10-04): a Label visibility choice in the feature popup
+// applies whatever Show Labels selects. The live reflow and Generate draw the
+// same labels (N-16, PD-OI-066).
+const labelEditorState = (page, scopePath) => page.evaluate(async (path) => {
+  const { state } = await import('./js/state.js');
+  const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
+  const result = state.results.value[state.selectedResultIndex.value];
+  const root = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
+  return {
+    processing: state.labelReflowProcessing.value || state.processing.value,
+    reflowError: state.labelReflowLastError.value,
+    error: state.errorLog.value,
+    labels: [...root.querySelectorAll('text[data-label-feature-id]')]
+      .filter((node) => node.getAttribute('display') !== 'none')
+      .map((node) => [node.getAttribute('data-label-feature-id'), node.textContent]),
+    scope: getCommittedCanonicalRenderRequest()?.diagramOptions?.configOverrides?.[path]
+  };
+}, scopePath);
+
+// `choice` answers the Label Not Shown dialog that a text edit on an
+// unlabeled feature opens; `asked` reports whether it opened.
+const applyPopupLabel = (page, featureId, text, visibility, choice = null) => evaluateWithRetainedPromise(page, async (edit) => {
+  const app = window.__GBDRAW_APP__;
+  const feature = app.extractedFeatures.find((item) => item.svg_id === edit.featureId);
+  await app.openFeatureEditorFromList(feature, null);
+  await window.Vue.nextTick();
+  const hint = document.querySelector('.feature-popup')?.textContent
+    .includes('This feature has no label in the current Result.');
+  app.clickedFeature.labelVisibility = edit.visibility;
+  if (edit.text !== null) app.clickedFeature.labelText = edit.text;
+  // Label Not Shown keeps the Apply open until its choice; no choice cancels.
+  let applying = true;
+  const applied = Promise.resolve(app.updateClickedFeatureLabelText()).finally(() => { applying = false; });
+  while (applying && !app.hiddenLabelTextDialog.show) await new Promise((resolve) => setTimeout(resolve, 20));
+  await window.Vue.nextTick();
+  const asked = app.hiddenLabelTextDialog.show
+    && Boolean([...document.querySelectorAll('h3')].find((node) => node.textContent === 'Label Not Shown'));
+  if (asked) await app.handleHiddenLabelTextChoice(edit.choice || 'cancel');
+  await applied;
+  app.clickedFeature = null;
+  return { hint, asked };
+}, { featureId, text, visibility, choice });
+
+test('Label visibility On shows only its label under Show Labels None, live and after Generate', async ({ browser }) => {
   test.setTimeout(600_000);
   const page = await load(browser, HMMT_SESSION);
-  const labelState = () => page.evaluate(async () => {
-    const { state } = await import('./js/state.js');
-    const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
-    const result = state.results.value[state.selectedResultIndex.value];
-    const root = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
-    return {
-      processing: state.labelReflowProcessing.value,
-      error: state.labelReflowLastError.value,
-      labels: [...root.querySelectorAll('text[data-label-feature-id]')].map((node) => node.textContent),
-      scope: getCommittedCanonicalRenderRequest()?.diagramOptions?.configOverrides?.['labels.circular.scope']
-    };
-  });
-  const editLabel = (text) => page.evaluate(async (label) => {
-    const app = window.__GBDRAW_APP__;
-    const feature = app.extractedFeatures.find((item) => item.type === 'CDS');
-    await app.openFeatureEditorFromList(feature, null);
-    app.clickedFeature.labelText = label;
-    const update = app.updateClickedFeatureLabelText();
-    for (let attempt = 0; attempt < 100 && !app.globalLabelModeDialog.show; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
-    if (app.globalLabelModeDialog.show) app.handleGlobalLabelModeChoice('show_all');
-    await update;
-    app.clickedFeature = null;
-  }, text);
+  const labelState = () => labelEditorState(page, 'labels.circular.scope');
   try {
     await page.evaluate(() => { window.__GBDRAW_APP__.form.labels_mode = 'none'; });
     await generate(page);
     expect((await labelState()).labels).toEqual([]);
+    const [forced, textOnly, shown] = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures
+      .filter((item) => item.type === 'CDS').slice(0, 3).map((item) => item.svg_id));
+    expect(await applyPopupLabel(page, forced, 'FORCED_LABEL', 'on')).toEqual({ hint: true, asked: false });
+    await expect.poll(async () => {
+      const state = await labelState();
+      return state.processing ? null : state.labels;
+    }, { timeout: 300_000 }).toEqual([[forced, 'FORCED_LABEL']]);
+    expect((await labelState()).reflowError).toBeNull();
     expect((await labelState()).scope).toBe('none');
-    await editLabel('ENABLED_LABEL');
+    // Label text alone keeps Default visibility. Keep hidden leaves the feature
+    // unlabeled; Show this label sets On. Generate draws the same labels.
+    expect(await applyPopupLabel(page, textOnly, 'TEXT_ONLY_LABEL', 'default', 'text_only'))
+      .toEqual({ hint: true, asked: true });
+    expect(await applyPopupLabel(page, shown, 'SHOWN_LABEL', 'default', 'show'))
+      .toEqual({ hint: true, asked: true });
+    const expected = [[forced, 'FORCED_LABEL'], [shown, 'SHOWN_LABEL']]
+      .sort(([left], [right]) => left.localeCompare(right));
+    const sortedLabels = (state) => [...state.labels].sort(([left], [right]) => left.localeCompare(right));
     await expect.poll(async () => {
       const state = await labelState();
-      return !state.processing && state.labels.includes('ENABLED_LABEL');
-    }, { timeout: 300_000 }).toBe(true);
-    expect((await labelState()).scope).toBe('outer');
-    const enabledCount = (await labelState()).labels.length;
-    expect(enabledCount).toBeGreaterThan(1);
-    await page.evaluate(() => { window.__GBDRAW_APP__.autoLabelReflowEnabled = true; });
-    await editLabel('SECOND_LABEL');
-    await expect.poll(async () => {
-      const state = await labelState();
-      return !state.processing && state.labels.includes('SECOND_LABEL');
-    }, { timeout: 300_000 }).toBe(true);
+      return state.processing ? null : sortedLabels(state);
+    }, { timeout: 300_000 }).toEqual(expected);
+    await generate(page);
     const after = await labelState();
-    expect(after.error).toBeNull();
-    expect(after.labels.length).toBe(enabledCount);
+    expect(sortedLabels(after)).toEqual(expected);
+    expect(after.scope).toBe('none');
   } finally {
     await page.context().close();
   }
 });
+
+test('Label visibility On and Off apply under First Record Only, live and after Generate', async ({ browser }) => {
+  test.setTimeout(600_000);
+  const page = await load(browser, 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json');
+  const labelState = () => labelEditorState(page, 'labels.linear.scope');
+  try {
+    await generate(page);
+    const before = await labelState();
+    expect(before.scope).toBe('first');
+    const neoR = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures
+      .find((item) => item.product === 'putative regulator, NeoR')?.svg_id);
+    expect(neoR).toMatch(/_record_2$/);
+    expect(before.labels.some(([featureId]) => featureId === neoR)).toBe(false);
+    const [hidden] = before.labels.find(([featureId]) => /_record_1$/.test(featureId));
+
+    expect(await applyPopupLabel(page, neoR, 'NeoR', 'on')).toEqual({ hint: true, asked: false });
+    await expect.poll(async () => {
+      const state = await labelState();
+      return state.processing ? null : state.labels.filter(([featureId]) => featureId === neoR);
+    }, { timeout: 300_000 }).toEqual([[neoR, 'NeoR']]);
+    expect(await applyPopupLabel(page, hidden, null, 'off')).toEqual({ hint: false, asked: false });
+    await expect.poll(async () => {
+      const state = await labelState();
+      return state.processing ? null : state.labels.some(([featureId]) => featureId === hidden);
+    }, { timeout: 300_000 }).toBe(false);
+    expect((await labelState()).reflowError).toBeNull();
+
+    await generate(page);
+    const after = await labelState();
+    expect(after.scope).toBe('first');
+    expect(after.labels.filter(([featureId]) => featureId === neoR)).toEqual([[neoR, 'NeoR']]);
+    expect(after.labels.some(([featureId]) => featureId === hidden)).toBe(false);
+    expect(after.labels.filter(([featureId]) => !/_record_1$/.test(featureId))).toEqual([[neoR, 'NeoR']]);
+  } finally {
+    await page.context().close();
+  }
+});
+
+// FINDINGS OV-05 (color), PD-OI-069: Python matches a `hash` rule by the hash
+// without the `__instance_` suffix, so a This feature only fill on a duplicated
+// record uses that hash and survives Generate on every copy of the record.
+test('a This feature only fill on a duplicated record survives Generate', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, `${__dirname}/../fixtures/b_dup_ids.gb`, () => {
+    Object.assign(window.__GBDRAW_APP__.form, { labels_mode: 'out', multi_record_canvas: true });
+  });
+  await generateAndWaitForResult(page);
+  await settle(page);
+  const copies = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures
+    .filter((feature) => feature.type === 'CDS' && feature.locus_tag === 'TESTA_0002')
+    .map((feature) => feature.svg_id).sort());
+  expect(copies).toHaveLength(2);
+  expect(copies[0]).toContain('__instance_');
+  const fills = () => page.evaluate((ids) => {
+    const root = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+    const hidden = (element) => {
+      for (let node = element; node && node.nodeType === 1; node = node.parentNode) {
+        const style = node.getAttribute('style') || '';
+        if (node.getAttribute('display') === 'none' || /display\s*:\s*none/.test(style)) return true;
+      }
+      return false;
+    };
+    return ids.map((id) => [...root.querySelectorAll(
+      `path[data-gbdraw-feature-id="${CSS.escape(id)}"], path[data-gbdraw-rendered-feature-id="${CSS.escape(id)}"]`
+    )].filter((element) => !hidden(element))
+      .map((element) => element.getAttribute('fill')).find((value) => value && value !== 'none') || null);
+  }, copies);
+  await evaluateWithRetainedPromise(page, async (id) => {
+    const app = window.__GBDRAW_APP__;
+    await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.svg_id === id), null);
+    await app.updateClickedFeatureColor('#c83366');
+    if (app.featureStyleScopeDialog.show) await app.handleFeatureStyleScopeChoice('single');
+    app.clickedFeature = null;
+  }, copies[0]);
+  await settle(page);
+  const rules = await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map((rule) => rule.val));
+  expect(rules).toEqual([copies[0].replace(/__instance_.*$/, '')]);
+  const live = await fills();
+  expect(live[0]).toBe('#c83366');
+  await generateAndWaitForResult(page);
+  await settle(page);
+  expect((await fills())[0]).toBe('#c83366');
+});
+
+const FORCED_LABEL_FIXTURE = 'tests/fixtures/forced_label_underlay.gb';
+
+const featureIdsByLocator = (page) => page.evaluate(() => {
+  const features = window.__GBDRAW_APP__.extractedFeatures;
+  const find = (predicate) => features.find(predicate)?.svg_id;
+  return {
+    fl1: find((item) => item.locus_tag === 'FL1'),
+    fl2: find((item) => item.locus_tag === 'FL2'),
+    repeat: find((item) => item.type === 'repeat_region'),
+    dup: find((item) => item.product === 'dup beta')
+  };
+});
+
+const waitForLabelReflow = (page) => expect.poll(async () => (
+  await labelEditorState(page, 'labels.circular.scope')
+).processing, { timeout: 300_000 }).toBe(false);
+
+// OV-05 (design Q4): Label visibility On for one of two features with the same
+// type and location is an identity row for that feature, so the live reflow and
+// Generate draw its label only. Before identity rows the shared hash row drew
+// neither label and Generate failed with LABEL_NOT_DRAWN.
+test('a Label visibility On for one of two same-location features draws only its label', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
+    window.__GBDRAW_APP__.form.labels_mode = 'none';
+  });
+  await generate(page);
+  const { dup } = await featureIdsByLocator(page);
+  expect(dup).toContain('__instance_');
+  const labelState = () => labelEditorState(page, 'labels.circular.scope');
+
+  expect(await applyPopupLabel(page, dup, null, 'on')).toEqual({ hint: true, asked: false });
+  await waitForLabelReflow(page);
+  const live = await labelState();
+  expect(live.reflowError).toBeNull();
+  expect(live.labels.map(([featureId]) => featureId)).toEqual([dup]);
+
+  await generate(page);
+  expect(await labelState()).toMatchObject({ error: null, reflowError: null, labels: live.labels });
+});
+
+// Owner decisions Q1 and Q2 (2026-10-04; FINDINGS OV-06, OV-07, OV-10): an
+// Apply of Label visibility On asks when the diagram cannot draw the label.
+// Each choice is one History step and Cancel records none; Generate does not
+// fail on an On that cannot be drawn, and draws it once it can.
+const labelOnFacts = (page) => page.evaluate(async () => {
+  const { state } = await import('./js/state.js');
+  // Per-feature edits by the rendered ID of a feature seen in view. A feature
+  // that a later reflow no longer draws keeps its edits in the facts, so a
+  // read does not depend on whether that reflow has ended.
+  const seen = (window.__labelOnFactIds ||= new Map());
+  state.extractedFeatures.value.forEach((feature) => {
+    seen.set(feature.svg_id, JSON.stringify([feature.record_key, feature.biological_feature_id]));
+  });
+  const edits = (field) => Object.fromEntries([...seen].flatMap(([svgId, key]) => {
+    const value = state.activeDrawing().featureOverrides[key]?.[field];
+    return value === null || value === undefined ? [] : [[svgId, value]];
+  }));
+  return {
+    undo: window.__GBDRAW_HISTORY__.getUndoCount(),
+    redo: window.__GBDRAW_HISTORY__.getRedoCount(),
+    labelVisibility: edits('labelVisibility'),
+    labelText: edits('labelText'),
+    featureVisibility: edits('featureVisibility')
+  };
+});
+
+// Applies Label visibility On (and optional text) in the feature popup. The
+// Apply settles after the dialog it opens is answered.
+const startLabelOn = (page, featureId, text = null) => evaluateWithRetainedPromise(page, async (edit) => {
+  const app = window.__GBDRAW_APP__;
+  await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.svg_id === edit.featureId), null);
+  await window.Vue.nextTick();
+  app.clickedFeature.labelVisibility = 'on';
+  if (edit.text !== null) app.clickedFeature.labelText = edit.text;
+  window.__labelOnApply = app.updateClickedFeatureLabelText();
+}, { featureId, text });
+
+const answerLabelOn = async (page, title, choice) => {
+  const dialog = page.getByRole('dialog', { name: title, exact: true });
+  await expect(dialog).toBeVisible({ timeout: 120_000 });
+  await dialog.getByRole('button', { name: choice, exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await evaluateWithRetainedPromise(page, async () => {
+    await window.__labelOnApply;
+    window.__GBDRAW_APP__.clickedFeature = null;
+  });
+};
+
+// The popup note on why the feature has no label (requirement of Q1, Q2).
+const popupLabelHint = (page, featureId) => evaluateWithRetainedPromise(page, async (id) => {
+  const app = window.__GBDRAW_APP__;
+  await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.svg_id === id), null);
+  await window.Vue.nextTick();
+  const hint = document.querySelector('[data-label-visibility-hint]')?.textContent.trim() || '';
+  app.clickedFeature = null;
+  return hint;
+}, featureId);
+
+const hideFeature = (page, featureId) => evaluateWithRetainedPromise(page, async (id) => {
+  const app = window.__GBDRAW_APP__;
+  await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.svg_id === id), null);
+  app.clickedFeature.featureVisibility = 'off';
+  await app.updateClickedFeatureVisibility('off');
+  if (app.featureVisibilityScopeDialog.show) await app.handleFeatureVisibilityScopeChoice('feature');
+  app.clickedFeature = null;
+}, featureId);
+
+// Auto Reflow is off, so a hidden feature stays in the Result until a choice
+// below queues the label reflow, which draws it no more. The features are not
+// the first CDS: hiding that one changes the Legend, which asks for the
+// rerender at once (OV-42).
+test('Label visibility On for a hidden feature shows the feature and label or keeps the feature hidden', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
+    window.__GBDRAW_APP__.form.labels_mode = 'none';
+  });
+  await generate(page);
+  const { fl2: first, dup: second } = await featureIdsByLocator(page);
+  const labelState = () => labelEditorState(page, 'labels.circular.scope');
+  await hideFeature(page, first);
+  const hidden = await labelOnFacts(page);
+  expect(hidden.featureVisibility).toEqual({ [first]: 'off' });
+
+  await startLabelOn(page, first, 'FL1_SHOWN');
+  await answerLabelOn(page, 'Feature Is Hidden', 'Cancel');
+  expect(await labelOnFacts(page)).toEqual(hidden);
+
+  await startLabelOn(page, first, 'FL1_SHOWN');
+  await answerLabelOn(page, 'Feature Is Hidden', 'Show feature and label');
+  expect(await labelOnFacts(page)).toEqual({
+    ...hidden,
+    undo: hidden.undo + 1,
+    redo: 0,
+    labelVisibility: { [first]: 'on' },
+    labelText: { [first]: 'FL1_SHOWN' },
+    featureVisibility: { [first]: 'on' }
+  });
+  await waitForLabelReflow(page);
+  expect(await labelState()).toMatchObject({ reflowError: null, labels: [[first, 'FL1_SHOWN']] });
+
+  await hideFeature(page, second);
+  expect(await popupLabelHint(page, second)).toBe('This feature has no label in the current Result. The feature is hidden.');
+  const shown = await labelOnFacts(page);
+  await startLabelOn(page, second, 'FL2_KEPT');
+  await answerLabelOn(page, 'Feature Is Hidden', 'Keep feature hidden');
+  expect(await labelOnFacts(page)).toEqual({
+    ...shown,
+    undo: shown.undo + 1,
+    redo: 0,
+    labelVisibility: { [first]: 'on', [second]: 'on' },
+    labelText: { [first]: 'FL1_SHOWN', [second]: 'FL2_KEPT' },
+    featureVisibility: { [first]: 'on', [second]: 'off' }
+  });
+  await waitForLabelReflow(page);
+  expect(await labelState()).toMatchObject({ reflowError: null, labels: [[first, 'FL1_SHOWN']] });
+
+  await generate(page);
+  expect(await labelState()).toMatchObject({ error: null, reflowError: null, labels: [[first, 'FL1_SHOWN']] });
+});
+
+// The given features that the mounted Result draws.
+const drawnFeatureIds = (page, featureIds) => page.evaluate((ids) => {
+  const root = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+  return ids.filter((id) => [...root.querySelectorAll(`[data-gbdraw-feature-id="${CSS.escape(id)}"]`)]
+    .some((element) => !element.closest('[display="none"]')));
+}, featureIds);
+
+// R-2 (FINDINGS, remaining issue of #764; Owner Q2, R3, R4): a visibility rule
+// that Generate applies hides the feature for the Label On dialog too. The
+// rules here, as a loaded visibility TSV can give them, name a record ID with a
+// locus_tag regex in another letter case, and the drawn hash in upper case.
+// The dialog, the popup note, the live preview, and Generate answer "is this
+// feature drawn?" with Python's rule.
+const addVisibilityRule = (page, fields) => evaluateWithRetainedPromise(page, async (ruleFields) => {
+  const app = window.__GBDRAW_APP__;
+  await app.addFeatureVisibilityRule();
+  const index = app.featureVisibilityManualRules.length - 1;
+  for (const [field, value] of Object.entries(ruleFields)) await app.setFeatureVisibilityRuleField(index, field, value);
+}, fields);
+
+// The per-feature edits of one source feature, read by its identity.
+const identityEdits = (page, identity) => page.evaluate(async (key) => {
+  const { state } = await import('./js/state.js');
+  const row = state.activeDrawing().featureOverrides[key] || {};
+  return { featureVisibility: row.featureVisibility ?? null, labelVisibility: row.labelVisibility ?? null };
+}, identity);
+
+test('Label visibility On for a feature that a visibility rule hides asks first, and live equals Generate', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
+    window.__GBDRAW_APP__.form.labels_mode = 'none';
+  });
+  await generate(page);
+  const { fl1, fl2 } = await featureIdsByLocator(page);
+  const fl2Identity = await page.evaluate(async (id) => {
+    const { featureIdentityKeyOf } = await import('./js/services/feature-placement.js');
+    return featureIdentityKeyOf(window.__GBDRAW_APP__.extractedFeatures.find((item) => item.svg_id === id));
+  }, fl2);
+  const labelState = () => labelEditorState(page, 'labels.circular.scope');
+  const shown = async () => ({ labels: (await labelState()).labels, drawn: await drawnFeatureIds(page, [fl1, fl2]) });
+
+  await addVisibilityRule(page, { recordId: 'FORCEDLBL', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' });
+  const before = await labelOnFacts(page);
+  await startLabelOn(page, fl1, 'FL1_SHOWN');
+  await answerLabelOn(page, 'Feature Is Hidden', 'Show feature and label');
+  // OV-48b: the facts name features by the rendered IDs of the Result in view.
+  // The rule edit's rerender leaves fl1 out of that Result until the Label On
+  // rerender draws it again, so the stored edit shows once that rerender ends.
+  await expect.poll(() => labelOnFacts(page), { timeout: 120_000 }).toEqual({
+    ...before,
+    undo: before.undo + 1,
+    redo: 0,
+    labelVisibility: { [fl1]: 'on' },
+    labelText: { [fl1]: 'FL1_SHOWN' },
+    featureVisibility: { [fl1]: 'on' }
+  });
+  await waitForLabelReflow(page);
+  const live = await shown();
+  expect(live).toEqual({ labels: [[fl1, 'FL1_SHOWN']], drawn: [fl1, fl2] });
+  await generate(page);
+  expect((await labelState()).reflowError).toBeNull();
+  expect(await shown()).toEqual(live);
+
+  await addVisibilityRule(page, { recordId: '*', featureType: '*', qualifier: 'hash', value: `^${fl2.toUpperCase()}$`, action: 'off' });
+  expect(await popupLabelHint(page, fl2)).toBe('This feature has no label in the current Result. The feature is hidden.');
+  await startLabelOn(page, fl2, 'FL2_KEPT');
+  await answerLabelOn(page, 'Feature Is Hidden', 'Keep feature hidden');
+  expect(await identityEdits(page, fl2Identity)).toEqual({ featureVisibility: null, labelVisibility: 'on' });
+  await waitForLabelReflow(page);
+  const kept = await shown();
+  expect(kept).toEqual({ labels: [[fl1, 'FL1_SHOWN']], drawn: [fl1] });
+  await generate(page);
+  expect((await labelState()).reflowError).toBeNull();
+  expect(await shown()).toEqual(kept);
+});
+
+// OV-19 (PD-OI-066, R1, R10, R11): a Feature Visibility rule edit in the
+// Features panel is live like the other composition edits. Adding, editing,
+// moving, and deleting a rule show on the Result at once as Generate draws it,
+// and each is one Undo step that Undo and Redo project. A regular expression
+// that Generate rejects stays in the draft and reports Generate's error; the
+// Result stays as the failed Generate leaves it.
+test('a Feature Visibility rule edit shows on the Result at once, as Generate draws it', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, FORCED_LABEL_FIXTURE);
+  await generate(page);
+  const { fl1, fl2 } = await featureIdsByLocator(page);
+  // The edit shows on the mounted Result at once; a rerender it asks for (an
+  // edit that changes the Legend, or draws a feature the Result lacks) then
+  // draws the same features, so the check waits for it (OV-42).
+  const drawn = async () => { await settle(page); return drawnFeatureIds(page, [fl1, fl2]); };
+  const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  const edit = (action, ...args) => evaluateWithRetainedPromise(page, ({ name, values }) => window.__GBDRAW_APP__[name](...values),
+    { name: action, values: args });
+  const reportedError = () => page.evaluate(async () => {
+    const error = (await import('./js/state.js')).state.errorLog.value;
+    return error && { code: error.code, row: error.context?.row };
+  });
+  expect(await drawn()).toEqual([fl1, fl2]);
+
+  await addVisibilityRule(page, { recordId: 'FORCEDLBL', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' });
+  expect(await drawn()).toEqual([fl2]);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  expect(await drawn()).toEqual([fl1, fl2]);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
+  expect(await drawn()).toEqual([fl2]);
+
+  await edit('setFeatureVisibilityRuleField', 0, 'action', 'show');
+  expect(await drawn()).toEqual([fl1, fl2]);
+  await addVisibilityRule(page, { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl', action: 'off' });
+  expect(await drawn()).toEqual([fl1]);
+  const beforeMove = await undoCount();
+  await edit('moveFeatureVisibilityRuleUp', 1);
+  expect(await undoCount()).toBe(beforeMove + 1);
+  expect(await drawn()).toEqual([]);
+
+  const breakRegex = async () => {
+    await edit('setFeatureVisibilityRuleField', 1, 'value', '^fl1(');
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.featureVisibilityManualRules[1].value)).toBe('^fl1(');
+    expect(await drawn()).toEqual([]);
+  };
+  const fixRegex = () => edit('setFeatureVisibilityRuleField', 1, 'value', '^fl1$');
+  await breakRegex();
+  const liveError = await reportedError();
+  expect(liveError).toEqual({ code: 'REGEX_SYNTAX', row: 2 });
+  await fixRegex();
+  expect(await reportedError()).toBeNull();
+  expect(await drawn()).toEqual([]);
+  await breakRegex();
+  expect(await reportedError()).toEqual(liveError);
+  await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
+  await expect.poll(() => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return { processing: state.processing.value, operation: state.errorLog.value?.operation };
+  }), { timeout: 180_000 }).toEqual({ processing: false, operation: 'generate' });
+  expect(await reportedError()).toEqual(liveError);
+  expect(await drawn()).toEqual([]);
+  await fixRegex();
+
+  const beforeDelete = await undoCount();
+  await edit('removeFeatureVisibilityRule', 0);
+  expect(await undoCount()).toBe(beforeDelete + 1);
+  const live = await drawn();
+  expect(live).toEqual([fl1, fl2]);
+  await generate(page);
+  expect(await drawn()).toEqual(live);
+});
+
+// OV-19: the popup note reads Python's matches of the edited rules, also when
+// the edit leaves the Result as it was.
+test('the feature popup note follows a Feature Visibility rule edit', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
+    window.__GBDRAW_APP__.form.labels_mode = 'none';
+  });
+  await generate(page);
+  const { fl1, fl2 } = await featureIdsByLocator(page);
+  await addVisibilityRule(page, { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' });
+  await addVisibilityRule(page, { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl2$', action: 'off' });
+  expect(await drawnFeatureIds(page, [fl1, fl2])).toEqual([]);
+  await evaluateWithRetainedPromise(page, async (id) => {
+    const app = window.__GBDRAW_APP__;
+    await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.svg_id === id), null);
+  }, fl2);
+  const note = page.locator('[data-label-visibility-hint]');
+  const hidden = 'This feature has no label in the current Result. The feature is hidden.';
+  await expect(note).toHaveText(hidden);
+  // The first rule now hides FL2 too; Python has not matched its new regex yet.
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.setFeatureVisibilityRuleField(0, 'value', '^fl[12]$'));
+  expect(await drawnFeatureIds(page, [fl1, fl2])).toEqual([]);
+  await expect(note).toHaveText(hidden);
+});
+
+// R3 (found with OV-19): Load Feature Edits TSV projects visibility as a History
+// apply does, so a feature whose edit it clears follows the rules at once.
+test('Load Feature Edits TSV applies the visibility rules to a feature whose edit it clears', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, FORCED_LABEL_FIXTURE);
+  await generate(page);
+  const { fl1, fl2 } = await featureIdsByLocator(page);
+  await addVisibilityRule(page, { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' });
+  await evaluateWithRetainedPromise(page, async (id) => {
+    const app = window.__GBDRAW_APP__;
+    await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.svg_id === id), null);
+    app.clickedFeature.featureVisibility = 'on';
+    await app.updateClickedFeatureVisibility('on');
+    await app.handleFeatureVisibilityScopeChoice('feature');
+    app.clickedFeature = null;
+  }, fl1);
+  await generate(page);
+  expect(await drawnFeatureIds(page, [fl1, fl2])).toEqual([fl1, fl2]);
+  await evaluateWithRetainedPromise(page, async () => {
+    const text = 'record\tfeature_selector\tfeature_visibility\tlabel_visibility\tlabel_text\n';
+    const files = [new File([text], 'edits.tsv', { type: 'text/plain' })];
+    await window.__GBDRAW_APP__.loadFeatureEditTable({ target: { files, value: '' } });
+  });
+  expect(await drawnFeatureIds(page, [fl1, fl2])).toEqual([fl2]);
+  await generate(page);
+  expect(await drawnFeatureIds(page, [fl1, fl2])).toEqual([fl2]);
+});
+
+// The given features whose label the mounted Result shows.
+const labeledFeatureIds = (page, featureIds) => page.evaluate((ids) => {
+  const root = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+  return ids.filter((id) => [...root.querySelectorAll(`text[data-label-feature-id="${CSS.escape(id)}"]`)]
+    .some((element) => !element.closest('[display="none"]')));
+}, featureIds);
+const autoReflowOff = (page) => page.evaluate(() => window.__GBDRAW_APP__.autoLabelReflowEnabled === false);
+
+// OV-35 (Owner 2026-10-05): a feature that a Feature Visibility rule hides
+// takes its label with it, as Generate draws it, also with Auto Reflow off and
+// before the editor has bound the labels. The rule edit, Undo and Redo (History
+// apply), and Generate show the same features and labels.
+test('a Feature Visibility rule that hides a feature hides its label too', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
+    window.__GBDRAW_APP__.form.labels_mode = 'out';
+  });
+  await generate(page);
+  expect(await autoReflowOff(page)).toBe(true);
+  const { fl1, fl2 } = await featureIdsByLocator(page);
+  const shown = async () => ({
+    drawn: await drawnFeatureIds(page, [fl1, fl2]),
+    labeled: await labeledFeatureIds(page, [fl1, fl2])
+  });
+  const all = { drawn: [fl1, fl2], labeled: [fl1, fl2] };
+  const withoutFl1 = { drawn: [fl2], labeled: [fl2] };
+  expect(await shown()).toEqual(all);
+
+  await addVisibilityRule(page, { recordId: 'FORCEDLBL', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' });
+  expect(await shown()).toEqual(withoutFl1);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  expect(await shown()).toEqual(all);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
+  expect(await shown()).toEqual(withoutFl1);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.setFeatureVisibilityRuleField(0, 'action', 'show'));
+  expect(await shown()).toEqual(all);
+  // The rerender this edit asks for draws the feature too.
+  await waitForLabelReflow(page);
+  expect(await shown()).toEqual(all);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.setFeatureVisibilityRuleField(0, 'action', 'off'));
+  expect(await shown()).toEqual(withoutFl1);
+  await generate(page);
+  expect(await shown()).toEqual(withoutFl1);
+});
+
+// OV-48: Generate always wins over the automatic rerender. An edit that asks
+// for a rerender while Generate runs waits for it (the rerender would take the
+// newer generation token and end Generate with no Result and no message), and
+// the rerender then runs once, so the edit is drawn.
+test('an automatic rerender requested during Generate waits for it and then runs once', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
+    window.__GBDRAW_APP__.form.labels_mode = 'out';
+  });
+  await generate(page);
+  const { fl1, fl2 } = await featureIdsByLocator(page);
+  const glyphPresent = (id) => page.evaluate((featureId) => Boolean(window.__GBDRAW_APP__.svgContainer
+    .querySelector(`[data-gbdraw-feature-id="${CSS.escape(featureId)}"]`)), id);
+  expect(await glyphPresent(fl1)).toBe(true);
+
+  // Hold the first Python response (Generate's); count every response.
+  await page.evaluate(() => {
+    window.__OV48_RESPONSES__ = 0;
+    window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => {
+      window.__OV48_RESPONSES__ += 1;
+      if (window.__OV48_RESPONSES__ > 1) return undefined;
+      return new Promise((resolve) => { window.__OV48_RELEASE__ = resolve; });
+    };
+  });
+  const key = await page.evaluate(async () => (await import('./js/state.js')).state.resultGenerationKey.value);
+  await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => typeof window.__OV48_RELEASE__), { timeout: 180_000 }).toBe('function');
+  expect(await page.evaluate(async () => (await import('./js/state.js')).state.processing.value)).toBe(true);
+
+  // An edit during Generate asks for the rerender; it must not start now.
+  await addVisibilityRule(page, { recordId: 'FORCEDLBL', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' });
+  await page.evaluate(async () => { await window.Vue.nextTick(); });
+  expect(await page.evaluate(() => window.__OV48_RESPONSES__)).toBe(1);
+
+  await page.evaluate(() => window.__OV48_RELEASE__());
+  await expect.poll(() => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return { key: state.resultGenerationKey.value, processing: state.processing.value, error: state.errorLog.value };
+  }), { timeout: 180_000 }).toEqual({ key: key + 1, processing: false, error: null });
+  await waitForLabelReflow(page);
+  await expect.poll(() => page.evaluate(() => window.__OV48_RESPONSES__), { timeout: 180_000 }).toBe(2);
+  expect(await glyphPresent(fl1)).toBe(false);
+  expect(await drawnFeatureIds(page, [fl1, fl2])).toEqual([fl2]);
+  expect(await labeledFeatureIds(page, [fl1, fl2])).toEqual([fl2]);
+  expect((await labelEditorState(page, 'labels.circular.scope')).reflowError).toBeNull();
+  expect(await page.evaluate(() => window.__OV48_RESPONSES__)).toBe(2);
+});
+
+// OV-34: with Auto Reflow off, deleting the rule that hid a feature at Generate
+// draws the feature and its label live (the automatic rerender), as Generate
+// draws them.
+test('deleting a Feature Visibility rule draws the feature it hid at Generate', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
+    window.__GBDRAW_APP__.form.labels_mode = 'out';
+  });
+  await generate(page);
+  expect(await autoReflowOff(page)).toBe(true);
+  const { fl1, fl2 } = await featureIdsByLocator(page);
+  await addVisibilityRule(page, { recordId: 'FORCEDLBL', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' });
+  await generate(page);
+  const shown = async () => ({
+    drawn: await drawnFeatureIds(page, [fl1, fl2]),
+    labeled: await labeledFeatureIds(page, [fl1, fl2])
+  });
+  expect(await shown()).toEqual({ drawn: [fl2], labeled: [fl2] });
+  expect(await page.evaluate((id) => Boolean(window.__GBDRAW_APP__.svgContainer
+    .querySelector(`[data-gbdraw-feature-id="${CSS.escape(id)}"]`)), fl1)).toBe(false);
+
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.removeFeatureVisibilityRule(0));
+  await expect.poll(shown, { timeout: 300_000 }).toEqual({ drawn: [fl1, fl2], labeled: [fl1, fl2] });
+  await waitForLabelReflow(page);
+  expect((await labelEditorState(page, 'labels.circular.scope')).reflowError).toBeNull();
+  await generate(page);
+  expect(await shown()).toEqual({ drawn: [fl1, fl2], labeled: [fl1, fl2] });
+});
+
+// OV-35 on Result display (R3): a rule edited while one batch Result is shown
+// hides the feature and its label on the other Result when it is displayed.
+test('a Feature Visibility rule hides the label on the other batch Result when it is displayed', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openBatch(page);
+  const ids = await page.evaluate(() => Object.fromEntries(window.__GBDRAW_APP__.extractedFeatures
+    .filter((feature) => /_000[14]$/.test(feature.locus_tag || ''))
+    .map((feature) => [feature.locus_tag, feature.svg_id])));
+  const shownOn = async (tags) => {
+    const featureIds = tags.map((tag) => ids[tag]);
+    return { drawn: await drawnFeatureIds(page, featureIds), labeled: await labeledFeatureIds(page, featureIds) };
+  };
+  expect(await shownOn(['TESTA_0001', 'TESTA_0004'])).toEqual({
+    drawn: [ids.TESTA_0001, ids.TESTA_0004], labeled: [ids.TESTA_0001, ids.TESTA_0004]
+  });
+  await addVisibilityRule(page, { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '_0004$', action: 'off' });
+  expect(await shownOn(['TESTA_0001', 'TESTA_0004'])).toEqual({ drawn: [ids.TESTA_0001], labeled: [ids.TESTA_0001] });
+  await selectResult(page, 1);
+  expect(await shownOn(['TESTB_0001', 'TESTB_0004'])).toEqual({ drawn: [ids.TESTB_0001], labeled: [ids.TESTB_0001] });
+});
+
+test('Label visibility On for an underlay feature is kept without a label until the rendering changes', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
+    window.__GBDRAW_APP__.form.labels_mode = 'none';
+  });
+  await generate(page);
+  const { repeat } = await featureIdsByLocator(page);
+  const labelState = () => labelEditorState(page, 'labels.circular.scope');
+  const before = await labelOnFacts(page);
+
+  await startLabelOn(page, repeat, 'RPT_FORCED');
+  await answerLabelOn(page, 'Label Cannot Be Drawn', 'Cancel');
+  expect(await labelOnFacts(page)).toEqual(before);
+
+  await startLabelOn(page, repeat, 'RPT_FORCED');
+  await answerLabelOn(page, 'Label Cannot Be Drawn', 'Keep without label');
+  expect(await labelOnFacts(page)).toEqual({
+    ...before,
+    undo: before.undo + 1,
+    redo: 0,
+    labelVisibility: { [repeat]: 'on' },
+    labelText: { [repeat]: 'RPT_FORCED' }
+  });
+  await waitForLabelReflow(page);
+  expect(await labelState()).toMatchObject({ reflowError: null, labels: [] });
+  expect(await popupLabelHint(page, repeat)).toBe(
+    'This feature has no label in the current Result. Labels are not drawn for features drawn as "Underlay". '
+    + 'Its Label visibility "On" applies when the label can be drawn.'
+  );
+
+  await generate(page);
+  expect(await labelState()).toMatchObject({ error: null, labels: [] });
+  await page.evaluate(() => window.__GBDRAW_APP__.setFeatureShape('repeat_region', 'rectangle'));
+  await generate(page);
+  expect(await labelState()).toMatchObject({ error: null, labels: [[repeat, 'RPT_FORCED']] });
+});
+
+// Generate keeps Label Rendering = Embedded Only only while Show Labels draws labels.
+test('Label visibility On that does not fit with Embedded Only asks after the reflow', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
+    const app = window.__GBDRAW_APP__;
+    app.form.labels_mode = 'out';
+    app.adv.label_rendering = 'embedded_only';
+  });
+  await generate(page);
+  const { fl1 } = await featureIdsByLocator(page);
+  const labelState = () => labelEditorState(page, 'labels.circular.scope');
+  const committedRendering = () => page.evaluate(async () => (await import('./js/services/config.js'))
+    .getCommittedCanonicalRenderRequest()?.diagramOptions?.configOverrides?.['labels.rendering']);
+  expect(await committedRendering()).toBe('embedded_only');
+  const initialLabels = (await labelState()).labels;
+  expect(initialLabels.some(([featureId]) => featureId === fl1)).toBe(true);
+  const longText = 'A_LABEL_TEXT_FAR_TOO_LONG_TO_FIT_INSIDE_ITS_FEATURE_'.repeat(4);
+  const before = await labelOnFacts(page);
+
+  // Cancel restores the label intent and redraws the label it showed before.
+  await startLabelOn(page, fl1, longText);
+  await answerLabelOn(page, 'Label Does Not Fit', 'Cancel');
+  expect(await labelOnFacts(page)).toEqual(before);
+  await waitForLabelReflow(page);
+  expect(await labelState()).toMatchObject({ reflowError: null, labels: initialLabels });
+
+  await startLabelOn(page, fl1, longText);
+  await answerLabelOn(page, 'Label Does Not Fit', 'Keep without label');
+  expect(await labelOnFacts(page)).toEqual({
+    ...before,
+    undo: before.undo + 1,
+    redo: 0,
+    labelVisibility: { [fl1]: 'on' },
+    labelText: { [fl1]: longText }
+  });
+  await waitForLabelReflow(page);
+  const kept = initialLabels.filter(([featureId]) => featureId !== fl1);
+  expect(await labelState()).toMatchObject({ reflowError: null, labels: kept });
+  expect(await popupLabelHint(page, fl1)).toBe(
+    'This feature has no label in the current Result. With "Label Rendering" = "Embedded Only", '
+    + 'a label is drawn only when it fits inside its feature. '
+    + 'Its Label visibility "On" applies when the label can be drawn.'
+  );
+
+  await generate(page);
+  expect(await labelState()).toMatchObject({ error: null, labels: kept });
+  expect(await committedRendering()).toBe('embedded_only');
+});
+
+// R-4 (FINDINGS, residual of #764): the Label Not Shown dialog opens when a text
+// edit leaves a feature without a label, and its first sentence names the reason
+// the popup note names. The two reasons below differ: a feature drawn as
+// Underlay, and Show Labels None.
+const editTextOnly = (page, locator, text) => evaluateWithRetainedPromise(page, async (edit) => {
+  const app = window.__GBDRAW_APP__;
+  const feature = app.extractedFeatures.find((item) => item.locus_tag === edit.locator || item.type === edit.locator);
+  await app.openFeatureEditorFromList(feature, null);
+  await window.Vue.nextTick();
+  const note = document.querySelector('[data-label-visibility-hint]')?.textContent.trim() || '';
+  app.clickedFeature.labelText = edit.text;
+  // Label Not Shown keeps the Apply open until its choice.
+  let applying = true;
+  const applied = Promise.resolve(app.updateClickedFeatureLabelText()).finally(() => { applying = false; });
+  while (applying && !app.hiddenLabelTextDialog.show) await new Promise((resolve) => setTimeout(resolve, 20));
+  await window.Vue.nextTick();
+  const heading = [...document.querySelectorAll('h3')].find((node) => node.textContent === 'Label Not Shown');
+  const dialog = heading?.parentElement.querySelector('p').textContent.trim() || null;
+  if (app.hiddenLabelTextDialog.show) await app.handleHiddenLabelTextChoice('text_only');
+  await applied;
+  app.clickedFeature = null;
+  return { note, dialog };
+}, { locator, text });
+
+for (const [name, mode, locator, sentence] of [
+  ['a feature drawn as Underlay', 'out', 'repeat_region', 'Labels are not drawn for features drawn as "Underlay".'],
+  ['Show Labels None', 'none', 'FL1', 'Labels are set to "None"']
+]) {
+  test(`the Label Not Shown dialog names the reason: ${name}`, async ({ page }) => {
+    test.setTimeout(300_000);
+    await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {});
+    await page.evaluate((labelsMode) => { window.__GBDRAW_APP__.form.labels_mode = labelsMode; }, mode);
+    await generate(page);
+    const { note, dialog } = await editTextOnly(page, locator, 'EDITED_TEXT');
+    expect(note).toContain(sentence);
+    expect(dialog).toContain(`This feature has no label in the current Result. ${sentence}`);
+    expect(dialog).not.toContain('With the current Show Labels and label filter settings');
+  });
+}

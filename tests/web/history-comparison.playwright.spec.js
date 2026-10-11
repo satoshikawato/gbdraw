@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { load, generate } = require('./helpers/mode-transition.cjs');
+const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 test('comparison off has its own Undo step after a record definition edit', async ({ browser }) => {
   test.setTimeout(300000);
@@ -13,7 +14,7 @@ test('comparison off has its own Undo step after a record definition edit', asyn
     await definition.press('Tab');
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(baseline + 1);
     const before = await page.evaluate(async () => ({
-      plan: (await import('./js/services/config.js')).buildConfigData().linearComparisonPlan,
+      plan: (await import('./js/services/config.js')).buildConfigData((await import('./js/state.js')).state.activeDrawing()).linearComparisonPlan,
       result: window.__GBDRAW_APP__.results[0].content
     }));
     await page.getByRole('button', { name: 'Set no comparison', exact: true }).click();
@@ -21,7 +22,8 @@ test('comparison off has its own Undo step after a record definition edit', asyn
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(baseline + 2);
     await page.getByRole('button', { name: 'Undo', exact: true }).click();
     await expect.poll(() => page.evaluate(async () =>
-      (await import('./js/services/config.js')).buildConfigData().linearComparisonPlan)).toEqual(before.plan);
+      (await import('./js/services/config.js')).buildConfigData((await import('./js/state.js')).state.activeDrawing()).linearComparisonPlan))
+      .toEqual(before.plan);
     await expect(definition).toHaveValue('HISTORY_RECORD_TWO');
     expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(before.result);
     await page.getByRole('button', { name: 'Redo', exact: true }).click();
@@ -33,7 +35,7 @@ test('comparison off has its own Undo step after a record definition edit', asyn
     await losat.focus();
     await losat.press('Enter');
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(baseline + 3);
-    await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
     expect(await page.evaluate(() => window.__GBDRAW_APP__.linearComparisonPlan.mode)).toBe('none');
     await expect(definition).toHaveValue('HISTORY_RECORD_TWO');
     expect(page.externalRequests).toEqual([]);

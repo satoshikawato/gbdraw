@@ -16,16 +16,16 @@ import math
 import re
 from collections import Counter
 from dataclasses import dataclass, replace
-from typing import Any, Optional, Sequence, Mapping, Literal, cast
+from typing import TYPE_CHECKING, Any, Optional, Sequence, Mapping, Literal, cast
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
-from svgwrite import Drawing  # type: ignore[reportMissingImports]
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame
+from svgwrite import Drawing
+from gbdraw.svg.elements import Group
 
-from gbdraw.analysis.depth import depth_df as build_depth_df  # type: ignore[reportMissingImports]
-from gbdraw.analysis.gc import circular_dinucleotide_content_df  # type: ignore[reportMissingImports]
-from gbdraw.analysis.depth_tracks import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.depth import depth_df as build_depth_df
+from gbdraw.analysis.gc import circular_dinucleotide_content_df
+from gbdraw.analysis.depth_tracks import (
     DepthTrackData,
     DepthTrackSpec,
     build_depth_track_dataframes,
@@ -37,14 +37,14 @@ from gbdraw.analysis.depth_tracks import (  # type: ignore[reportMissingImports]
     normalize_depth_tracks,
     representative_depth_tracks,
 )
-from gbdraw.analysis.conservation import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.conservation import (
     ConservationLoadResult,
     ConservationTrack,
     load_conservation_sources,
     normalize_conservation_reference,
     normalize_conservation_tracks_for_record,
 )
-from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.protein_colinearity import (
     LosatpCacheManager,
     OrthogroupMembershipMode,
     OrthogroupResult,
@@ -56,7 +56,7 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
     build_rbh_orthogroup_protein_blastp_comparisons,
     normalize_orthogroup_membership_mode,
 )
-from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.collinearity import (
     CollinearityBlock,
     CollinearityAnchorMode,
     CollinearityColorMode,
@@ -70,13 +70,14 @@ from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
     normalize_collinearity_color_mode,
     normalize_collinearity_search_scope,
 )
-from gbdraw.config.models.objects import (  # type: ignore[reportMissingImports]
+from gbdraw.config.models.objects import (
     normalize_pairwise_match_style,
 )
-from gbdraw.analysis.collinearity_units import CollinearityUnitMode  # type: ignore[reportMissingImports]
-from gbdraw.analysis.skew import skew_df  # type: ignore[reportMissingImports]
-from gbdraw.api.config import apply_config_overrides  # type: ignore[reportMissingImports]
-from gbdraw.api.options import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.collinearity_units import CollinearityUnitMode
+from gbdraw.analysis.skew import skew_df
+from gbdraw.api.config import apply_config_overrides
+from gbdraw.auto_sizes import depth_sliding_window, determine_length_parameter, sliding_window
+from gbdraw.api.options import (
     AnnotationOptions,
     CircularDiagramOptions,
     CircularMultiRecordOptions,
@@ -95,22 +96,22 @@ from gbdraw.layout.linear_multi_record import record_pairs_between_adjacent_rows
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.similarity_alignment import SimilarityAlignmentPlan
 from gbdraw.layout.record_placement import resolve_record_row_positions
-from gbdraw.canvas import CircularCanvasConfigurator, LinearCanvasConfigurator  # type: ignore[reportMissingImports]
-from gbdraw.config.models import (  # type: ignore[reportMissingImports]
+from gbdraw.canvas import CircularCanvasConfigurator, LinearCanvasConfigurator
+from gbdraw.config.models import (
     CircularRenderProfile,
     GbdrawConfig,
     LinearRenderProfile,
 )
-from gbdraw.config.models.labels import LabelsFilteringConfig  # type: ignore[reportMissingImports]
-from gbdraw.io.colors import load_default_colors, read_color_table  # type: ignore[reportMissingImports]
-from gbdraw.labels.filtering import (  # type: ignore[reportMissingImports]
+from gbdraw.config.models.labels import LabelsFilteringConfig
+from gbdraw.io.colors import load_default_colors, read_color_table
+from gbdraw.labels.filtering import (
     DERIVED_LABEL_FILTERING_KEYS,
     read_filter_list_file,
     read_label_override_file,
     read_qualifier_priority_file,
 )
-from gbdraw.features.visibility import read_feature_visibility_file  # type: ignore[reportMissingImports]
-from gbdraw.configurators import (  # type: ignore[reportMissingImports]
+from gbdraw.features.visibility import read_feature_visibility_file
+from gbdraw.configurators import (
     BlastMatchConfigurator,
     DepthConfigurator,
     FeatureDrawingConfigurator,
@@ -118,16 +119,17 @@ from gbdraw.configurators import (  # type: ignore[reportMissingImports]
     GcSkewConfigurator,
     LegendDrawingConfigurator,
 )
-from gbdraw.core.sequence import create_dict_for_sequence_lengths  # type: ignore[reportMissingImports]
-from gbdraw.diagrams.circular.assemble import (  # type: ignore[reportMissingImports]
+from gbdraw.core.sequence import create_dict_for_sequence_lengths
+from gbdraw.core.numeric import compensated_sum
+from gbdraw.diagrams.circular.assemble import (
     CircularAssemblyResult,
     _assemble_circular_diagram_result,
     build_circular_legend_table,
     plan_circular_annotation_slots,
 )
-from gbdraw.diagrams.linear import assemble_linear_diagram  # type: ignore[reportMissingImports]
-from gbdraw.features.placement import ResolvedPlacementInputs
-from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
+from gbdraw.diagrams.linear import assemble_linear_diagram
+from gbdraw.features.placement import ResolvedRecordFeatureInputs
+from gbdraw.exceptions import ValidationError
 from gbdraw.layout.composition import (
     CompositionItem,
     CompositionRequest,
@@ -143,16 +145,17 @@ from gbdraw.mode_profiles import (
     LINEAR_MODE_PROFILE,
 )
 from gbdraw.annotations import ResolvedAnnotationBundle, resolve_annotations
-from gbdraw.legend.table import (  # type: ignore[reportMissingImports]
+from gbdraw.legend.row_facts import LegendRowFacts, attach_legend_row_facts
+from gbdraw.legend.table import (
     configure_pairwise_identity_legend_from_comparisons,
 )
-from gbdraw.render.groups.circular import DefinitionGroup, LegendGroup  # type: ignore[reportMissingImports]
+from gbdraw.render.groups.circular import DefinitionGroup, LegendGroup
 from gbdraw.render.composition import (
     COMPOSITION_ROLE_ATTRIBUTE,
     apply_composition_plan,
 )
 from gbdraw.svg.ids import definition_group_svg_id, instance_svg_id
-from gbdraw.tracks import (  # type: ignore[reportMissingImports]
+from gbdraw.tracks import (
     CircularTrackSlot,
     LinearTrackSlot,
     ScalarSpec,
@@ -164,9 +167,14 @@ from gbdraw.tracks import (  # type: ignore[reportMissingImports]
     parse_linear_track_slots,
     parse_nonnegative_integer,
 )
-from gbdraw.tracks.parsing import slot_dinucleotide  # type: ignore[reportMissingImports]
+from gbdraw.tracks.parsing import slot_dinucleotide
 
 from .prepared import ResolvedFeatureInputs, resolve_feature_inputs
+
+
+if TYPE_CHECKING:
+    from gbdraw.analysis.conservation import ConservationSearchResult
+
 
 DEFAULT_SELECTED_FEATURES = DEFAULT_FEATURE_TYPES
 
@@ -442,7 +450,7 @@ def _build_circular_dinucleotide_skew_dataframes(
 
 
 def _has_conservation_inputs(
-    conservation_blast_files: Sequence[str] | None,
+    conservation_blast_files: Sequence[str | ConservationSearchResult] | None,
     conservation_dataframes: Sequence[DataFrame] | None,
 ) -> bool:
     return bool(conservation_blast_files or conservation_dataframes)
@@ -472,7 +480,7 @@ def _build_conservation_blast_config(
 def _load_conservation_result(
     records: Sequence[SeqRecord],
     *,
-    conservation_blast_files: Sequence[str] | None,
+    conservation_blast_files: Sequence[str | ConservationSearchResult] | None,
     conservation_dataframes: Sequence[DataFrame] | None,
     conservation_labels: Sequence[str] | None,
     conservation_colors: Sequence[str] | None,
@@ -555,11 +563,12 @@ def _insert_conservation_slots(
 ) -> list[CircularTrackSlot]:
     if not conservation_slots:
         return list(base_slots)
+    out: list[CircularTrackSlot]
     if axis_index is not None:
         out = list(base_slots)
         out[axis_index:axis_index] = conservation_slots
         return out
-    out: list[CircularTrackSlot] = []
+    out = []
     inserted = False
     for slot in base_slots:
         out.append(slot)
@@ -661,27 +670,11 @@ def _resolve_circular_window_step(
     step: int | None,
 ) -> tuple[int, int]:
     """Resolve circular window/step with record-length defaults."""
-    resolved_window = window
-    resolved_step = step
-    seq_length = len(record.seq)
-
-    if resolved_window is None:
-        if seq_length < 1_000_000:
-            resolved_window = cfg.objects.sliding_window.default[0]
-        elif seq_length < 10_000_000:
-            resolved_window = cfg.objects.sliding_window.up1m[0]
-        else:
-            resolved_window = cfg.objects.sliding_window.up10m[0]
-
-    if resolved_step is None:
-        if seq_length < 1_000_000:
-            resolved_step = cfg.objects.sliding_window.default[1]
-        elif seq_length < 10_000_000:
-            resolved_step = cfg.objects.sliding_window.up1m[1]
-        else:
-            resolved_step = cfg.objects.sliding_window.up10m[1]
-
-    return int(resolved_window), int(resolved_step)
+    auto_window, auto_step = sliding_window(len(record.seq), cfg)
+    return (
+        int(window) if window is not None else auto_window,
+        int(step) if step is not None else auto_step,
+    )
 
 
 def _validate_depth_bounds(min_depth: float | None, max_depth: float | None) -> None:
@@ -764,9 +757,10 @@ def _resolve_depth_window_step(
 
     _validate_positive_optional("depth_window", depth_window)
     _validate_positive_optional("depth_step", depth_step)
+    auto_depth_window, auto_depth_step = depth_sliding_window(window, step)
     return (
-        int(depth_window) if depth_window is not None else max(100, int(window) // 10),
-        int(depth_step) if depth_step is not None else max(1, int(step) // 10),
+        int(depth_window) if depth_window is not None else auto_depth_window,
+        int(depth_step) if depth_step is not None else auto_depth_step,
     )
 
 
@@ -920,7 +914,7 @@ def _pack_circular_record_bounds(
         rows.append(tuple(range(cursor, len(record_bounds))))
 
     row_widths = tuple(
-        sum(record_bounds[index].width for index in row)
+        compensated_sum(record_bounds[index].width for index in row)
         + max(0, len(row) - 1) * float(column_gap_px)
         for row in rows
     )
@@ -929,7 +923,7 @@ def _pack_circular_record_bounds(
         for row in rows
     )
     grid_width = max(row_widths)
-    grid_height = sum(row_heights) + max(0, len(rows) - 1) * float(row_gap_px)
+    grid_height = compensated_sum(row_heights) + max(0, len(rows) - 1) * float(row_gap_px)
 
     translations: list[tuple[float, float] | None] = [None] * len(record_bounds)
     row_top = 0.0
@@ -1271,17 +1265,12 @@ def _has_mixed_short_and_long_records(
     length_threshold: int,
 ) -> bool:
     """Return whether record lengths span both short and long buckets."""
-    has_short = False
-    has_long = False
     threshold = int(length_threshold)
-    for record_length in record_lengths:
-        if int(record_length) < threshold:
-            has_short = True
-        else:
-            has_long = True
-        if has_short and has_long:
-            return True
-    return False
+    size_classes = {
+        determine_length_parameter(int(record_length), threshold)
+        for record_length in record_lengths
+    }
+    return len(size_classes) > 1
 
 
 def _harmonize_multi_record_circular_style_cfg(
@@ -1581,6 +1570,15 @@ def _invoke_protein_analysis_helper(
     raise ValidationError(f"Unsupported protein analysis mode: {mode!r}.")
 
 
+def _shows_identity_labels(record_features: Sequence[ResolvedRecordFeatureInputs]) -> bool:
+    """Whether an identity-addressed edit shows a label outside the display scope."""
+    return any(
+        override.label_visibility == "on"
+        for inputs in record_features
+        for override in inputs.overrides.values()
+    )
+
+
 def assemble_linear_diagram_from_records(
     records: Sequence[SeqRecord],
     *,
@@ -1644,7 +1642,7 @@ def assemble_linear_diagram_from_records(
     identity: float = LINEAR_MODE_PROFILE.comparison.identity,
     alignment_length: int = LINEAR_MODE_PROFILE.comparison.alignment_length,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
-    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
+    _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _return_build_result: bool = False,
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
     _alignment_anchor_centers: Sequence[float | None] | None = None,
@@ -1841,7 +1839,9 @@ def assemble_linear_diagram_from_records(
             cfg = replace(cfg, canvas=replace(cfg.canvas, show_depth=show_depth))
     _validate_gc_content_config(cfg.objects.gc_content)
     _validate_depth_config(cfg.objects.depth)
-    profile = LinearRenderProfile(cfg)
+    profile = LinearRenderProfile(
+        cfg, identity_label_overrides=_shows_identity_labels(_resolved_record_features)
+    )
 
     if selected_features_set is None:
         selected_features_set = DEFAULT_SELECTED_FEATURES
@@ -1986,21 +1986,9 @@ def assemble_linear_diagram_from_records(
     longest_genome = max(len(record.seq) for record in records)
 
     # Match legacy CLI behavior: linear window/step are based on the longest genome.
-    if window is None:
-        if longest_genome < 1_000_000:
-            window = cfg.objects.sliding_window.default[0]
-        elif longest_genome < 10_000_000:
-            window = cfg.objects.sliding_window.up1m[0]
-        else:
-            window = cfg.objects.sliding_window.up10m[0]
-
-    if step is None:
-        if longest_genome < 1_000_000:
-            step = cfg.objects.sliding_window.default[1]
-        elif longest_genome < 10_000_000:
-            step = cfg.objects.sliding_window.up1m[1]
-        else:
-            step = cfg.objects.sliding_window.up10m[1]
+    auto_window, auto_step = sliding_window(longest_genome, cfg)
+    window = auto_window if window is None else window
+    step = auto_step if step is None else step
     resolved_depth_window, resolved_depth_step = _resolve_depth_window_step(
         window=int(window),
         step=int(step),
@@ -2017,7 +2005,6 @@ def assemble_linear_diagram_from_records(
         profile=profile,
         default_colors_df=default_colors,
     )
-    blast_config.collinearity_color_mode = normalized_collinearity_color_mode
     additional_color_modes = (
         {normalized_collinearity_color_mode}
         if collinearity_blocks is not None or normalized_protein_blastp_mode == "collinear"
@@ -2050,7 +2037,7 @@ def assemble_linear_diagram_from_records(
         specific_color_rules=resolved_feature_inputs.specific_color_rules,
         default_color_map=resolved_feature_inputs.default_color_map,
         canvas_config=canvas_config,
-        placements=_resolved_placement_inputs,
+        record_features=_resolved_record_features,
     )
     gc_config = GcContentConfigurator(
         window=window,
@@ -2129,7 +2116,7 @@ def assemble_circular_diagram_from_record(
     gb_record: SeqRecord,
     *,
     cfg: GbdrawConfig,
-    conservation_blast_files: Sequence[str] | None = None,
+    conservation_blast_files: Sequence[str | ConservationSearchResult] | None = None,
     conservation_dataframes: Sequence[DataFrame] | None = None,
     conservation_reference: Literal["query", "subject", "auto"] | str = "auto",
     conservation_labels: Sequence[str] | None = None,
@@ -2188,7 +2175,7 @@ def assemble_circular_diagram_from_record(
     _annotation_record_index: int = 0,
     _definition_group_id: str | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
-    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
+    _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
     """Builds and assembles a circular diagram for a single record.
@@ -2336,7 +2323,9 @@ def assemble_circular_diagram_from_record(
         show_skew=bool(show_skew),
     )
     cfg = replace(cfg, canvas=canvas_cfg)
-    profile = CircularRenderProfile(cfg)
+    profile = CircularRenderProfile(
+        cfg, identity_label_overrides=_shows_identity_labels(_resolved_record_features)
+    )
 
     conservation_mode = normalize_conservation_reference(conservation_reference)
     if _precomputed_conservation_tracks is not None:
@@ -2397,24 +2386,10 @@ def assemble_circular_diagram_from_record(
                 axis_index=circular_track_axis_index,
             )
 
-    seq_length = len(gb_record.seq)
-
     # Match legacy CLI behavior: circular window/step are based on the record length.
-    if window is None:
-        if seq_length < 1_000_000:
-            window = cfg.objects.sliding_window.default[0]
-        elif seq_length < 10_000_000:
-            window = cfg.objects.sliding_window.up1m[0]
-        else:
-            window = cfg.objects.sliding_window.up10m[0]
-
-    if step is None:
-        if seq_length < 1_000_000:
-            step = cfg.objects.sliding_window.default[1]
-        elif seq_length < 10_000_000:
-            step = cfg.objects.sliding_window.up1m[1]
-        else:
-            step = cfg.objects.sliding_window.up10m[1]
+    auto_window, auto_step = sliding_window(len(gb_record.seq), cfg)
+    window = auto_window if window is None else window
+    step = auto_step if step is None else step
     resolved_depth_window, resolved_depth_step = _resolve_depth_window_step(
         window=int(window),
         step=int(step),
@@ -2521,7 +2496,7 @@ def assemble_circular_diagram_from_record(
         specific_color_rules=resolved_feature_inputs.specific_color_rules,
         default_color_map=resolved_feature_inputs.default_color_map,
         canvas_config=canvas_config,
-        placements=_resolved_placement_inputs,
+        record_features=_resolved_record_features,
     )
     legend_config = LegendDrawingConfigurator(
         color_table=color_table,
@@ -2593,7 +2568,7 @@ def assemble_circular_diagram_from_records(
     records: Sequence[SeqRecord],
     *,
     cfg: GbdrawConfig,
-    conservation_blast_files: Sequence[str] | None = None,
+    conservation_blast_files: Sequence[str | ConservationSearchResult] | None = None,
     conservation_dataframes: Sequence[DataFrame] | None = None,
     conservation_reference: Literal["query", "subject", "auto"] | str = "auto",
     conservation_labels: Sequence[str] | None = None,
@@ -2648,7 +2623,7 @@ def assemble_circular_diagram_from_records(
     identity: float = CIRCULAR_MODE_PROFILE.comparison.identity,
     alignment_length: int = CIRCULAR_MODE_PROFILE.comparison.alignment_length,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
-    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
+    _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing:
@@ -2821,7 +2796,9 @@ def assemble_circular_diagram_from_records(
         cfg,
         record_lengths=record_lengths,
     )
-    profile = CircularRenderProfile(cfg)
+    profile = CircularRenderProfile(
+        cfg, identity_label_overrides=_shows_identity_labels(_resolved_record_features)
+    )
     conservation_mode = normalize_conservation_reference(conservation_reference)
     conservation_load_result = _load_conservation_result(
         records,
@@ -2999,7 +2976,7 @@ def assemble_circular_diagram_from_records(
             ),
             _precomputed_conservation_tracks=record_conservation_tracks,
             _resolved_feature_inputs=resolved_feature_inputs,
-            _resolved_placement_inputs=(_resolved_placement_inputs[record_index],) if _resolved_placement_inputs else (),
+            _resolved_record_features=(_resolved_record_features[record_index],) if _resolved_record_features else (),
             _record_transform=(_record_transforms[record_index] if _record_transforms is not None else None),
         )
         result = _require_circular_assembly_result(sub_canvas)
@@ -3052,54 +3029,55 @@ def assemble_circular_diagram_from_records(
             plot_title=normalized_plot_title or None,
         )
 
+    legend_canvas_config = CircularCanvasConfigurator(
+        output_prefix=output_prefix,
+        profile=profile,
+        legend=legend_effective,
+        gb_record=records[0],
+    )
+    legend_window, legend_step = _resolve_circular_window_step(
+        records[0],
+        cfg,
+        window=window,
+        step=step,
+    )
+    gc_config = GcContentConfigurator(
+        window=legend_window,
+        step=legend_step,
+        dinucleotide=dinucleotide,
+        profile=profile,
+        default_colors_df=default_colors,
+    )
+    skew_config = GcSkewConfigurator(
+        window=legend_window,
+        step=legend_step,
+        dinucleotide=dinucleotide,
+        profile=profile,
+        default_colors_df=default_colors,
+    )
+    depth_config = (
+        DepthConfigurator(
+            window=legend_window,
+            step=legend_step,
+            profile=profile,
+        )
+        if cfg.canvas.show_depth
+        else None
+    )
+    feature_config = FeatureDrawingConfigurator(
+        color_table=color_table,
+        default_colors=default_colors,
+        selected_features_set=list(selected_features_set),
+        profile=profile,
+        feature_table=feature_table,
+        feature_shapes=feature_shapes,
+        feature_visibility_rules=resolved_feature_inputs.feature_visibility_rules,
+        specific_color_rules=resolved_feature_inputs.specific_color_rules,
+        default_color_map=resolved_feature_inputs.default_color_map,
+        canvas_config=legend_canvas_config,
+        record_features=_resolved_record_features,
+    )
     if legend_effective != "none":
-        legend_canvas_config = CircularCanvasConfigurator(
-            output_prefix=output_prefix,
-            profile=profile,
-            legend=legend_effective,
-            gb_record=records[0],
-        )
-        legend_window, legend_step = _resolve_circular_window_step(
-            records[0],
-            cfg,
-            window=window,
-            step=step,
-        )
-        gc_config = GcContentConfigurator(
-            window=legend_window,
-            step=legend_step,
-            dinucleotide=dinucleotide,
-            profile=profile,
-            default_colors_df=default_colors,
-        )
-        skew_config = GcSkewConfigurator(
-            window=legend_window,
-            step=legend_step,
-            dinucleotide=dinucleotide,
-            profile=profile,
-            default_colors_df=default_colors,
-        )
-        depth_config = (
-            DepthConfigurator(
-                window=legend_window,
-                step=legend_step,
-                profile=profile,
-            )
-            if cfg.canvas.show_depth
-            else None
-        )
-        feature_config = FeatureDrawingConfigurator(
-            color_table=color_table,
-            default_colors=default_colors,
-            selected_features_set=list(selected_features_set),
-            profile=profile,
-            feature_table=feature_table,
-            feature_shapes=feature_shapes,
-            feature_visibility_rules=resolved_feature_inputs.feature_visibility_rules,
-            specific_color_rules=resolved_feature_inputs.specific_color_rules,
-            default_color_map=resolved_feature_inputs.default_color_map,
-            canvas_config=legend_canvas_config,
-        )
         legend_slots, legend_annotations = plan_circular_annotation_slots(
             resolved_annotations,
             records,
@@ -3154,6 +3132,14 @@ def assemble_circular_diagram_from_records(
                 legend_table,
             ).get_group()
 
+    legend_row_facts = LegendRowFacts(
+        records=records,
+        feature_config=feature_config,
+        gc_config=gc_config,
+        skew_config=skew_config,
+        legend_table=legend_table,
+    )
+
     merged_canvas = Drawing(
         filename=f"{output_prefix}.svg",
         size=(f"{grid_layout.bounds.width}px", f"{grid_layout.bounds.height}px"),
@@ -3162,12 +3148,13 @@ def assemble_circular_diagram_from_records(
         ),
         debug=False,
     )
+    attach_legend_row_facts(merged_canvas, legend_row_facts)
     used_ids: set[str] = set()
     record_targets: list[Group] = []
     grid_overlay_obstacles: list[Aabb] = []
 
     for record_index, result in enumerate(record_results):
-        record_group = Group(id=f"record_{record_index}", debug=False)
+        record_group = Group(id=f"record_{record_index}")
         record_group.attribs["data-gbdraw-record-id"] = str(records[record_index].id)
         record_group.attribs["data-gbdraw-record-index"] = str(record_index)
         record_dx, record_dy = grid_layout.translations[record_index]
@@ -3305,7 +3292,7 @@ def build_circular_diagram(
     _precomputed_depth_track_specs: Sequence[DepthTrackSpec] | None = None,
     _precomputed_depth_track_count: int | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
-    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
+    _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transform: RecordDisplayTransform | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing:
@@ -3357,10 +3344,11 @@ def build_circular_diagram(
         conservation_colors=options.conservation_colors,
         conservation_ring_width=options.conservation_ring_width,
         conservation_ring_gap=options.conservation_ring_gap,
-        evalue=options.evalue,
-        bitscore=options.bitscore,
-        identity=options.identity,
-        alignment_length=options.alignment_length,
+        # The builder options resolved omitted thresholds from the mode profile.
+        evalue=cast(float, options.evalue),
+        bitscore=cast(float, options.bitscore),
+        identity=cast(float, options.identity),
+        alignment_length=cast(int, options.alignment_length),
         species=options.species,
         strain=options.strain,
         plot_title=options.plot_title,
@@ -3379,7 +3367,7 @@ def build_circular_diagram(
         _precomputed_depth_track_specs=_precomputed_depth_track_specs,
         _precomputed_depth_track_count=_precomputed_depth_track_count,
         _resolved_feature_inputs=_resolved_feature_inputs,
-        _resolved_placement_inputs=_resolved_placement_inputs,
+        _resolved_record_features=_resolved_record_features,
         _record_transform=_record_transform,
     )
 
@@ -3393,7 +3381,7 @@ def _build_linear_diagram(
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
-    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
+    _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _return_build_result: bool = False,
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
     _alignment_anchor_centers: Sequence[float | None] | None = None,
@@ -3472,12 +3460,13 @@ def _build_linear_diagram(
             else "bottom"
         ),
         plot_title_font_size=options.plot_title_font_size,
-        evalue=options.evalue,
-        bitscore=options.bitscore,
-        identity=options.identity,
-        alignment_length=options.alignment_length,
+        # The builder options resolved omitted thresholds from the mode profile.
+        evalue=cast(float, options.evalue),
+        bitscore=cast(float, options.bitscore),
+        identity=cast(float, options.identity),
+        alignment_length=cast(int, options.alignment_length),
         _resolved_feature_inputs=_resolved_feature_inputs,
-        _resolved_placement_inputs=_resolved_placement_inputs,
+        _resolved_record_features=_resolved_record_features,
         _record_transforms=_record_transforms,
         _alignment_anchor_centers=_alignment_anchor_centers,
         _return_build_result=_return_build_result,
@@ -3493,7 +3482,7 @@ def build_linear_diagram(
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
-    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
+    _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
     _alignment_anchor_centers: Sequence[float | None] | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
@@ -3509,7 +3498,7 @@ def build_linear_diagram(
         protein_extraction=protein_extraction,
         _resolved_feature_inputs=_resolved_feature_inputs,
         _resolved_annotations=_resolved_annotations,
-        _resolved_placement_inputs=_resolved_placement_inputs,
+        _resolved_record_features=_resolved_record_features,
         _record_transforms=_record_transforms,
         _alignment_anchor_centers=_alignment_anchor_centers,
     )
@@ -3525,7 +3514,7 @@ def build_linear_diagram_result(
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
-    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
+    _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
     _alignment_anchor_centers: Sequence[float | None] | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
@@ -3541,7 +3530,7 @@ def build_linear_diagram_result(
         protein_extraction=protein_extraction,
         _resolved_feature_inputs=_resolved_feature_inputs,
         _resolved_annotations=_resolved_annotations,
-        _resolved_placement_inputs=_resolved_placement_inputs,
+        _resolved_record_features=_resolved_record_features,
         _record_transforms=_record_transforms,
         _alignment_anchor_centers=_alignment_anchor_centers,
         _return_build_result=True,
@@ -3557,7 +3546,7 @@ def build_circular_multi_diagram(
     options: CircularDiagramOptions | None = None,
     layout: CircularMultiRecordOptions | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
-    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
+    _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing:
@@ -3634,12 +3623,13 @@ def build_circular_multi_diagram(
         circular_track_axis_index=tracks.circular_track_axis_index if tracks else None,
         annotation_options=options.annotations,
         _resolved_annotations=_resolved_annotations,
-        evalue=options.evalue,
-        bitscore=options.bitscore,
-        identity=options.identity,
-        alignment_length=options.alignment_length,
+        # The builder options resolved omitted thresholds from the mode profile.
+        evalue=cast(float, options.evalue),
+        bitscore=cast(float, options.bitscore),
+        identity=cast(float, options.identity),
+        alignment_length=cast(int, options.alignment_length),
         _resolved_feature_inputs=_resolved_feature_inputs,
-        _resolved_placement_inputs=_resolved_placement_inputs,
+        _resolved_record_features=_resolved_record_features,
         _record_transforms=_record_transforms,
     )
 

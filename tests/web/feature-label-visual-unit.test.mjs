@@ -1,13 +1,37 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createFeatureLabelActions } from '../../gbdraw/web/js/app/feature-editor/label-actions.js';
+import { LABEL_ABSENCE_REASONS, createFeatureLabelActions } from '../../gbdraw/web/js/app/feature-editor/label-actions.js';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 installFakeSvgDom();
 globalThis.CSS ||= { escape: (value) => String(value) };
 
 const ref = (value) => ({ value });
+
+// Per-feature label and visibility edits are identity rows of the drawing of
+// the Result's mode (design Q4, R2; PR-1: the drawing is the mode, so a row
+// has no scope).
+const featureFor = (featureId, type = 'CDS') => ({
+  svg_id: featureId, type, scope: 'linear', record_key: 'record-1', biological_feature_id: `bio-${featureId}`
+});
+const keyFor = (featureId) => JSON.stringify(['record-1', `bio-${featureId}`]);
+const rowFor = (featureId, fields = {}) => ({
+  recordKey: 'record-1',
+  biologicalFeatureId: `bio-${featureId}`,
+  featureVisibility: null,
+  labelVisibility: null,
+  labelText: null,
+  labelSourceText: null,
+  ...fields
+});
+const setRow = (state, featureId, fields) => {
+  state.featureOverrides[keyFor(featureId)] = rowFor(featureId, {
+    ...(state.featureOverrides[keyFor(featureId)] || {}), ...fields
+  });
+};
+const rowOf = (state, featureId) => state.featureOverrides[keyFor(featureId)] || null;
 
 const labelSvg = ({
   featureId = 'feature:one/[a]',
@@ -37,15 +61,14 @@ const buildHarness = ({
   featureId = 'feature:one/[a]',
   labelKey = 'label-1',
   visibilityOverrides = {},
-  rulePreparation = {}
+  rulePreparation = {},
+  evaluateLabelRules = async () => ({ winners: [] }),
+  diagramOptions = null
 } = {}) => {
   const mutations = { commit: 0 };
   const state = {
     mode: ref('linear'),
     generatedMode: ref('linear'),
-    form: { show_labels_linear: 'all' },
-    filterMode: ref('None'),
-    manualWhitelist: [],
     results: ref([{ content: '<svg></svg>' }]),
     selectedResultIndex: ref(0),
     svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? svg : null) }),
@@ -56,40 +79,38 @@ const buildHarness = ({
       text: '',
       sourceText: ''
     }]),
-    extractedFeatures: ref([]),
+    extractedFeatures: ref([featureFor(featureId)]),
     clickedFeature: ref({
       svg_id: featureId,
-      feat: { type: 'CDS' },
+      feat: featureFor(featureId),
       labelText: '',
       labelSourceText: '',
       labelVisibility: 'default',
       hasEditableLabel: true
     }),
     labelTextScopeDialog: { show: false },
-    labelTextFeatureOverrides: {},
+    hiddenLabelTextDialog: { show: false, featureId: '', reason: '' },
+    labelOnDialog: { show: false, reason: '', featureType: '' },
+    featureOverrides: Object.fromEntries(Object.entries(visibilityOverrides).map(([id, mode]) => [
+      keyFor(id), rowFor(id, { labelVisibility: mode })
+    ])),
     labelTextBulkOverrides: {},
-    labelTextFeatureOverrideSources: {},
-    labelVisibilityOverrides: { ...visibilityOverrides },
-    labelOverrideBuildWarning: ref(''),
-    globalLabelModeDialog: { show: false },
     autoLabelReflowEnabled: ref(false),
     labelReflowRequestSeq: ref(0),
-    labelReflowRequestReason: ref(''),
     labelReflowForceRequestSeq: ref(0),
-    labelReflowForceRequestReason: ref(''),
     labelReflowLastError: ref(null)
   };
   const actions = createFeatureLabelActions({
     ref, computed: get => ({ get value() { return get(); } }),
-    state,
-    previewRuntime: {
-      commitActiveResultEdit(reason) {
-        assert.equal(reason, 'feature-label');
-        mutations.commit += 1;
-        return true;
-      }
+    state: withDrawings(state),
+    commitActiveResultEdit(reason) {
+      assert.equal(reason, 'feature-label');
+      mutations.commit += 1;
+      return true;
     },
-    rulePreparation
+    rulePreparation,
+    evaluateLabelRules,
+    getCommittedRequest: () => (diagramOptions ? { diagramOptions } : null)
   });
   return { actions, mutations, state, svg };
 };
@@ -177,6 +198,207 @@ test('one action serializes combined text and visual-unit visibility changes onc
   assert.deepEqual(harness.mutations, { commit: 1 });
 });
 
+// Label Not Shown asks before anything is written (Owner Q1, Q2, as On asks):
+// the Apply stays open until the choice, and Cancel writes nothing.
+test('a text edit asks whether to show a label only when the feature has none', async () => {
+  const featureId = 'feature:one/[a]';
+  const labeled = buildHarness();
+  Object.assign(labeled.state.clickedFeature.value, { labelText: 'Renamed', labelSourceText: 'Original' });
+  await labeled.actions.updateClickedFeatureLabelText();
+  assert.equal(labeled.state.hiddenLabelTextDialog.show, false);
+
+  const harness = buildHarness();
+  harness.state.editableLabels.value = [];
+  Object.assign(harness.state.clickedFeature.value, { labelText: 'Renamed', labelSourceText: 'Original' });
+  const canceled = harness.actions.updateClickedFeatureLabelText();
+  assert.deepEqual({ ...harness.state.hiddenLabelTextDialog }, { show: true, featureId, reason: '' });
+  assert.equal(rowOf(harness.state, featureId)?.labelText ?? null, null);
+  harness.actions.handleHiddenLabelTextChoice('cancel');
+  await canceled;
+  assert.equal(harness.state.hiddenLabelTextDialog.show, false);
+  assert.equal(rowOf(harness.state, featureId)?.labelText ?? null, null);
+  assert.equal(harness.state.labelReflowForceRequestSeq.value + harness.state.labelReflowRequestSeq.value, 0);
+
+  const kept = harness.actions.updateClickedFeatureLabelText();
+  assert.equal(harness.state.hiddenLabelTextDialog.show, true);
+  harness.actions.handleHiddenLabelTextChoice('text_only');
+  await kept;
+  assert.deepEqual({ ...harness.state.hiddenLabelTextDialog }, { show: false, featureId: '', reason: '' });
+  assert.equal(rowOf(harness.state, featureId).labelText, 'Renamed');
+  // "Keep hidden (apply text only)" keeps Label visibility unset (design Q4 6.2).
+  assert.equal(rowOf(harness.state, featureId).labelVisibility, null);
+  assert.equal(harness.state.labelReflowForceRequestSeq.value, 0);
+
+  harness.state.clickedFeature.value.labelText = 'Renamed again';
+  const shown = harness.actions.updateClickedFeatureLabelText();
+  assert.equal(harness.state.hiddenLabelTextDialog.show, true);
+  harness.actions.handleHiddenLabelTextChoice('show');
+  await shown;
+  assert.equal(harness.state.hiddenLabelTextDialog.show, false);
+  assert.equal(rowOf(harness.state, featureId).labelVisibility, 'on');
+  assert.equal(harness.state.clickedFeature.value.labelVisibility, 'on');
+  assert.equal(rowOf(harness.state, featureId).labelText, 'Renamed again');
+  assert.equal(harness.state.labelReflowForceRequestSeq.value, 1);
+  assert.equal(harness.state.labelReflowRequestSeq.value, 0);
+});
+
+// R-4 (FINDINGS, residual of #764): the Label Not Shown dialog and the popup
+// note state the one reason that decides why the diagram draws no label.
+const absenceCases = [
+  ['hidden', { rows: { featureVisibility: 'off' } }, ' The feature is hidden.'],
+  ['underlay', { type: 'repeat_region' }, ' Labels are not drawn for features drawn as "Underlay".'],
+  ['scope_none', { scope: 'none' },
+    ' Labels are set to "None" ("Show Labels" or "Label Mode"), so only a feature with Label visibility "On" has one.'],
+  ['scope_first', { scope: 'first', recordIdx: 1 },
+    ' "Show Labels" is "First Record Only", so labels are drawn only in the first record unless a feature has Label visibility "On".'],
+  ['scope_orthogroup_top', { scope: 'orthogroup_top' },
+    ' "Show Labels" is "Top Similarity Group Record", so labels are drawn only for the features that setting selects, unless a feature has Label visibility "On".'],
+  ['whitelist', { whitelist: 'labelWhitelistFile' }, ' A label whitelist is set, and labels are drawn only for the features it lists.'],
+  // The CLI and Python write the whitelist as `labelWhitelistTable`.
+  ['whitelist', { whitelist: 'labelWhitelistTable' }, ' A label whitelist is set, and labels are drawn only for the features it lists.'],
+  ['blacklist', { blacklist: ['putative'] },
+    ' A label blacklist is set, and a label whose text contains one of its keywords is not drawn.'],
+  ['embedded_only', { rendering: 'embedded_only' },
+    ' With "Label Rendering" = "Embedded Only", a label is drawn only when it fits inside its feature.'],
+  ['', {}, '']
+];
+const absenceHarness = ({ type = 'CDS', rows, scope = 'all', recordIdx = 0, whitelist, blacklist, rendering = 'auto' }) => {
+  const featureId = 'feature:one/[a]';
+  const feature = { ...featureFor(featureId, type), record_idx: recordIdx };
+  const configOverrides = {
+    'labels.rendering': rendering,
+    'labels.circular.scope': scope,
+    ...(blacklist ? { 'labels.filtering.blacklist_keywords': blacklist } : {})
+  };
+  const harness = buildHarness({
+    diagramOptions: { featureShapes: {}, configOverrides, ...(whitelist ? { [whitelist]: { resourceId: 'w' } } : {}) }
+  });
+  harness.state.featureVisibilityManualRules = [];
+  harness.state.editableLabels.value = [];
+  if (rows) setRow(harness.state, featureId, rows);
+  Object.assign(harness.state.clickedFeature.value, {
+    feat: feature, labelText: 'Renamed', labelSourceText: 'Original'
+  });
+  harness.state.extractedFeatures.value = [feature];
+  return { ...harness, feature, featureId };
+};
+
+for (const [reason, options, sentence] of absenceCases) {
+  test(`the Label Not Shown dialog names the reason "${reason || 'unknown'}" as the popup note does`, async () => {
+    const { actions, state } = absenceHarness(options);
+    const none = 'This feature has no label in the current Result.';
+    // The popup note, before the edit is applied.
+    state.clickedFeature.value.labelText = '';
+    assert.equal(actions.clickedFeatureLabelHint.value.startsWith(`${none}${sentence}`), true);
+    state.clickedFeature.value.labelText = 'Renamed';
+    const applied = actions.updateClickedFeatureLabelText();
+    assert.equal(state.hiddenLabelTextDialog.show, true);
+    assert.equal(state.hiddenLabelTextDialog.reason, reason);
+    const message = actions.hiddenLabelTextMessage.value;
+    assert.equal(message.startsWith(`${none}${sentence || ' '}`), true, message);
+    assert.match(message, /The edited text will not appear/);
+    actions.handleHiddenLabelTextChoice('cancel');
+    await applied;
+  });
+}
+
+test('every reason the resolver can return has a sentence, and every sentence a reason', async () => {
+  const returned = new Set();
+  for (const [, options] of absenceCases) {
+    const { actions, state } = absenceHarness(options);
+    const applied = actions.updateClickedFeatureLabelText();
+    returned.add(state.hiddenLabelTextDialog.reason);
+    actions.handleHiddenLabelTextChoice('cancel');
+    await applied;
+  }
+  returned.delete('');
+  assert.deepEqual([...returned].sort(), Object.keys(LABEL_ABSENCE_REASONS).sort());
+  Object.values(LABEL_ABSENCE_REASONS).forEach((sentence) => assert.equal(typeof sentence, 'string'));
+});
+
+// "Show this label" applies Label visibility On through the Q1 and Q2 dialogs.
+for (const [reason, options] of [['underlay', { type: 'repeat_region' }], ['hidden', { rows: { featureVisibility: 'off' } }]]) {
+  test(`"Show this label" for the reason "${reason}" asks the Label On question`, async () => {
+    const { actions, state, featureId } = absenceHarness(options);
+    const applied = actions.updateClickedFeatureLabelText();
+    assert.equal(state.hiddenLabelTextDialog.reason, reason);
+    const shown = actions.handleHiddenLabelTextChoice('show');
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(state.labelOnDialog.show, true);
+    assert.equal(state.labelOnDialog.reason, reason);
+    actions.handleLabelOnChoice('cancel');
+    assert.equal(await shown, false);
+    await applied;
+    assert.equal(rowOf(state, featureId)?.labelVisibility ?? null, null);
+    assert.equal(rowOf(state, featureId)?.labelText ?? null, null);
+  });
+}
+
+// Owner decisions Q1 and Q2 (2026-10-04): the popup note names why the
+// committed request draws no label, and On only where it can be drawn.
+test('the popup note names why the diagram draws no label for the feature', () => {
+  const featureId = 'feature:one/[a]';
+  const diagramOptions = { featureShapes: { repeat_region: 'underlay' }, configOverrides: { 'labels.rendering': 'auto' } };
+  const harness = buildHarness({ diagramOptions });
+  const { state, actions } = harness;
+  const clicked = state.clickedFeature.value;
+  const hint = () => actions.clickedFeatureLabelHint.value;
+  const none = 'This feature has no label in the current Result.';
+  const onDrawable = ' Its Label visibility "On" applies when the label can be drawn.';
+
+  clicked.labelKey = 'label-1';
+  assert.equal(hint(), '');
+  clicked.labelKey = '';
+  assert.equal(hint(), `${none} Choose On to show it.`);
+  clicked.labelVisibility = 'off';
+  assert.equal(hint(), '');
+  clicked.labelVisibility = 'on';
+  setRow(state, featureId, { labelVisibility: 'on' });
+  assert.equal(hint(), `${none}${onDrawable}`);
+
+  clicked.feat = featureFor(featureId, 'repeat_region');
+  assert.equal(hint(), `${none} Labels are not drawn for features drawn as "Underlay".${onDrawable}`);
+  delete state.featureOverrides[keyFor(featureId)];
+  clicked.labelVisibility = 'default';
+  assert.equal(hint(), `${none} Labels are not drawn for features drawn as "Underlay".`);
+
+  clicked.feat = featureFor(featureId);
+  diagramOptions.configOverrides['labels.rendering'] = 'embedded_only';
+  assert.equal(hint(), `${none} With "Label Rendering" = "Embedded Only", a label is drawn only when it fits inside its feature.`);
+
+  // A hidden feature hides its label too, so the note shows with a label key.
+  setRow(state, featureId, { featureVisibility: 'off', labelVisibility: 'on' });
+  clicked.labelKey = 'label-1';
+  assert.equal(hint(), `${none} The feature is hidden. Its Label visibility "On" applies when the feature is shown.`);
+});
+
+test('Label visibility On for an underlay feature waits for Keep without label or Cancel', async () => {
+  const featureId = 'feature:one/[a]';
+  const harness = buildHarness({ diagramOptions: { featureShapes: {}, configOverrides: {} } });
+  const { state, actions } = harness;
+  harness.state.editableLabels.value = [];
+  Object.assign(state.clickedFeature.value, {
+    feat: featureFor(featureId, 'repeat_region'), labelVisibility: 'on', labelText: 'RPT'
+  });
+  const canceled = actions.updateClickedFeatureLabelText();
+  assert.deepEqual({ ...state.labelOnDialog }, { show: true, reason: 'underlay', featureType: 'repeat_region' });
+  actions.handleLabelOnChoice('cancel');
+  assert.equal(await canceled, false);
+  assert.equal(state.labelOnDialog.show, false);
+  assert.deepEqual(state.featureOverrides, {});
+  assert.equal(state.clickedFeature.value.labelVisibility, 'default');
+
+  Object.assign(state.clickedFeature.value, { labelVisibility: 'on', labelText: 'RPT' });
+  const kept = actions.updateClickedFeatureLabelText();
+  actions.handleLabelOnChoice('keep');
+  await kept;
+  assert.deepEqual(state.featureOverrides, {
+    [keyFor(featureId)]: rowFor(featureId, { labelVisibility: 'on', labelText: 'RPT' })
+  });
+  assert.equal(state.labelReflowForceRequestSeq.value, 1);
+});
+
 for (const [name, options, labelKey] of [
   ['missing schema marker', { marker: null }, 'label-1'],
   ['unsupported schema marker', { marker: '2' }, 'label-1'],
@@ -195,7 +417,7 @@ for (const [name, options, labelKey] of [
     });
     assert.deepEqual(harness.mutations, { commit: 0 });
     assert.equal(harness.state.labelReflowForceRequestSeq.value, 1);
-    assert.equal(harness.state.labelReflowForceRequestReason.value, 'label-visibility-apply');
+    assert.equal(harness.state.labelReflowRequestSeq.value, 0);
   });
 }
 
@@ -212,10 +434,7 @@ test('stored override on a metadata-free Result fails closed without partial mut
   });
   assert.deepEqual(harness.mutations, { commit: 0 });
   assert.equal(harness.state.labelReflowForceRequestSeq.value, 1);
-  assert.equal(
-    harness.state.labelReflowForceRequestReason.value,
-    'label-visibility-binding-refresh'
-  );
+  assert.equal(harness.state.labelReflowRequestSeq.value, 0);
 });
 
 test('mounting Results with disjoint features keeps every label override (FE-01)', () => {
@@ -232,21 +451,13 @@ test('mounting Results with disjoint features keeps every label override (FE-01)
   const { state, actions } = harness;
   let mounted = resultA;
   state.svgContainer.value = { querySelector: (selector) => (selector === 'svg' ? mounted : null) };
-  Object.assign(state.labelTextFeatureOverrides, { fb: 'EDITED_B' });
-  Object.assign(state.labelTextFeatureOverrideSources, { fb: 'source' });
+  setRow(state, 'fb', { labelText: 'EDITED_B', labelSourceText: 'source', labelVisibility: 'off' });
   Object.assign(state.labelTextBulkOverrides, { source: 'BULK' });
-  Object.assign(state.labelVisibilityOverrides, { fb: 'off' });
-  const before = JSON.stringify([
-    state.labelTextFeatureOverrides, state.labelTextFeatureOverrideSources,
-    state.labelTextBulkOverrides, state.labelVisibilityOverrides
-  ]);
+  const before = JSON.stringify([state.featureOverrides, state.labelTextBulkOverrides]);
   for (const next of [resultB, resultA, resultB]) {
     mounted = next;
     actions.syncLabelEditor({ queueIncompleteVisibility: false });
-    assert.equal(JSON.stringify([
-      state.labelTextFeatureOverrides, state.labelTextFeatureOverrideSources,
-      state.labelTextBulkOverrides, state.labelVisibilityOverrides
-    ]), before);
+    assert.equal(JSON.stringify([state.featureOverrides, state.labelTextBulkOverrides]), before);
   }
 });
 
@@ -255,7 +466,7 @@ test('mounting Results with disjoint features keeps every label override (FE-01)
 test('a hidden feature hides its label through the stored visibility projection', () => {
   const featureId = 'feature:one/[a]';
   const harness = buildHarness();
-  harness.state.featureVisibilityOverrides = { [featureId]: 'off' };
+  setRow(harness.state, featureId, { featureVisibility: 'off' });
   harness.state.featureVisibilityManualRules = [];
   harness.actions.reconcileLabelOverrides();
   exactParts(harness.svg, featureId).forEach((part) => {
@@ -263,7 +474,7 @@ test('a hidden feature hides its label through the stored visibility projection'
   });
   assert.equal(harness.svg.querySelector('[data-part="unrelated"]').getAttribute('display'), null);
 
-  delete harness.state.featureVisibilityOverrides[featureId];
+  delete harness.state.featureOverrides[keyFor(featureId)];
   harness.actions.reconcileLabelOverrides();
   exactParts(harness.svg, featureId).forEach((part) => {
     assert.equal(part.getAttribute('display'), null);
@@ -274,22 +485,62 @@ test('a feature visibility edit commits its label once and queues the label refl
   const featureId = 'feature:one/[a]';
   const harness = buildHarness();
   harness.state.autoLabelReflowEnabled.value = true;
-  harness.state.featureVisibilityOverrides = { [featureId]: 'off' };
-  assert.equal(harness.actions.applyFeatureVisibilityToLabels('feature-visibility'), true);
+  setRow(harness.state, featureId, { featureVisibility: 'off' });
+  assert.equal(harness.actions.applyFeatureVisibilityToLabels(), true);
   exactParts(harness.svg, featureId).forEach((part) => {
     assert.equal(part.getAttribute('display'), 'none');
   });
   assert.deepEqual(harness.mutations, { commit: 1 });
   assert.equal(harness.state.labelReflowRequestSeq.value, 1);
-  assert.equal(harness.state.labelReflowRequestReason.value, 'feature-visibility');
   assert.equal(harness.state.labelReflowForceRequestSeq.value, 0);
 
-  harness.state.featureVisibilityOverrides = {};
-  assert.equal(harness.actions.applyFeatureVisibilityToLabels('feature-visibility', { reflow: false }), true);
+  delete harness.state.featureOverrides[keyFor(featureId)];
+  assert.equal(harness.actions.applyFeatureVisibilityToLabels({ reflow: false }), true);
   exactParts(harness.svg, featureId).forEach((part) => {
     assert.equal(part.getAttribute('display'), null);
   });
   assert.equal(harness.state.labelReflowRequestSeq.value, 1, 'a declined reflow is not queued');
+});
+
+// U2BFIX2 review M1 (OV-200): with Embedded Only only Python decides whether a
+// label text fits, so a projected text asks for the rerender; a label the
+// projection hides needs none. A loaded table projects the feature visibility
+// and the labels in one follow, which queues one request.
+const EMBEDDED_ONLY = { configOverrides: { 'labels.rendering': 'embedded_only' } };
+test('with Embedded Only, a projected label text asks for one rerender and a hidden label for none', () => {
+  const featureId = 'feature:one/[a]';
+  const hidden = buildHarness({ diagramOptions: EMBEDDED_ONLY });
+  setRow(hidden.state, featureId, { labelVisibility: 'off' });
+  assert.equal(hidden.actions.reconcileLabelOverrides(), true);
+  assert.equal(hidden.state.labelReflowForceRequestSeq.value, 0, 'a hidden label');
+
+  const edited = buildHarness({ diagramOptions: EMBEDDED_ONLY });
+  const { state, actions } = edited;
+  setRow(state, featureId, { labelText: 'edited' });
+  assert.equal(actions.reconcileLabelOverrides(), true);
+  assert.equal(state.labelReflowForceRequestSeq.value, 1, 'a changed text');
+  state.autoLabelReflowEnabled.value = true;
+  setRow(state, featureId, { labelText: 'edited again' });
+  assert.equal(actions.applyFeatureVisibilityToLabels({ reflow: true, labels: true }), true);
+  assert.deepEqual([state.labelReflowForceRequestSeq.value, state.labelReflowRequestSeq.value], [2, 0],
+    'one request for the loaded table');
+});
+
+// U2BFIX2 review L3 (OV-237): the labels of a Result no popup bound are bound
+// once per mounted root; a later projection (a History step) does not bind
+// them again.
+test('the label projection binds the labels of a mounted root once', () => {
+  const svg = new DOMParser().parseFromString(
+    '<svg><path data-gbdraw-feature-id="fa" d="M0 0" /></svg>', 'image/svg+xml'
+  ).documentElement;
+  const harness = buildHarness({ svg, featureId: 'fa' });
+  /** @type {string[]} */
+  const scans = [];
+  const query = svg.querySelectorAll.bind(svg);
+  svg.querySelectorAll = (selector) => { scans.push(selector); return query(selector); };
+  harness.actions.reconcileLabelOverrides();
+  harness.actions.reconcileLabelOverrides();
+  assert.equal(scans.filter((selector) => selector.includes('dominant-baseline')).length, 1);
 });
 
 // B6 (R2, R3): a Label TSV import writes the label intent of every batch Result
@@ -310,20 +561,35 @@ test('a Label TSV import writes the label intent of every batch Result once (B6)
   const harness = buildHarness({
     svg: displayed,
     featureId: 'fa',
-    rulePreparation: {
-      snapshot: () => ({}),
-      isCurrent: () => true,
-      async evaluate({ features, rules }) {
-        evaluated.push(features.map((feature) => feature.label));
-        return { winners: features.map((feature) => rules.findIndex((rule) => (
-          new RegExp(rule.valueRegex).test(feature.label)
-        ))) };
-      }
+    rulePreparation: { snapshot: () => ({}), isCurrent: () => true },
+    async evaluateLabelRules({ features, rules }) {
+      evaluated.push(features.map((feature) => feature.label));
+      return { winners: features.map((feature) => rules.findIndex((rule) => (
+        new RegExp(rule.valueRegex).test(feature.label)
+      ))) };
     }
   });
   const { state, actions } = harness;
   state.errorLog = ref(null);
-  state.results.value = [{ content: '<svg></svg>' }, { content: `<svg>${batchLabel('fb', 'beta')}</svg>` }];
+  state.results.value = [
+    { name: 'a.svg', content: '<svg></svg>' },
+    { name: 'b.svg', content: `<svg>${batchLabel('fb', 'beta')}</svg>` }
+  ];
+  // The other Result's labels reach their features through its catalog item.
+  const item = (resultIndex, featureId) => ({
+    resultIndex,
+    resultName: `${'ab'[resultIndex]}.svg`,
+    recordKeys: ['record-1'],
+    features: [{ svgId: featureId, recordKey: 'record-1', biologicalFeatureId: `bio-${featureId}`, fillColor: '', drawnSelector: null }],
+    biologicalFeatures: [{
+      recordKey: 'record-1', biologicalFeatureId: `bio-${featureId}`, type: 'CDS',
+      anchorProfile: { precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+' }
+    }],
+    orthogroups: [],
+    annotations: [],
+    comparisonMatches: []
+  });
+  state.featureCatalog = ref({ schema: 5, items: [item(0, 'fa'), item(1, 'fb')] });
   const messages = [];
   globalThis.window = { alert: (message) => messages.push(message) };
   try {
@@ -333,13 +599,60 @@ test('a Label TSV import writes the label intent of every batch Result once (B6)
     delete globalThis.window;
   }
   assert.deepEqual(evaluated, [['alpha', 'beta']], 'one evaluation covers the labels of both Results');
-  assert.deepEqual(state.labelTextFeatureOverrides, { fb: 'IMPORTED_B' });
+  assert.deepEqual(state.featureOverrides, {
+    [keyFor('fa')]: rowFor('fa', { labelSourceText: 'alpha' }),
+    [keyFor('fb')]: rowFor('fb', { labelText: 'IMPORTED_B', labelSourceText: 'beta' })
+  });
   assert.deepEqual(state.labelTextBulkOverrides, { alpha: 'BULK_A' });
-  assert.deepEqual(state.labelTextFeatureOverrideSources, { fa: 'alpha', fb: 'beta' });
   assert.equal(displayed.querySelector('text').textContent, 'BULK_A');
   assert.deepEqual(harness.mutations, { commit: 1 });
   assert.deepEqual(messages, ['Loaded 2 row(s). Applied to 2 label(s).']);
 });
+
+// OV-131: a Label TSV that applies to no label changes nothing. The import
+// replaces the label edits only when it applies, so the bulk and per-feature
+// label edits stay, no state change reaches History, and the message says why.
+const KEPT = 'The existing label edits were kept.';
+for (const [name, body, tsv, message] of [
+  ['no row matches a label', batchLabel('fa', 'alpha', 'dominant-baseline="central" '),
+    '*\t*\tproduct\t^no such product$\tZZ\n',
+    `Loaded 1 row(s). Not applied: no row matched a label of the diagram. ${KEPT}`],
+  ['the displayed Result has no label', '', '*\t*\tproduct\t.*\tZZ\n',
+    `Loaded 1 row(s). Not applied: no row matched a label of the diagram. ${KEPT}`],
+  ['every match lacks a feature key',
+    '<text dominant-baseline="central" data-label-source-text="alpha">alpha</text>',
+    '*\tCDS\tlabel\t^alpha$\tZZ\n',
+    `Loaded 1 row(s). Not applied: the 1 matched label(s) lacked a feature key. ${KEPT}`]
+]) {
+  test(`a Label TSV import keeps the label edits when ${name} (OV-131)`, async () => {
+    const svg = new DOMParser().parseFromString(`<svg>${body}</svg>`, 'image/svg+xml').documentElement;
+    const harness = buildHarness({
+      svg,
+      featureId: 'fa',
+      rulePreparation: { snapshot: () => ({}), isCurrent: () => true },
+      async evaluateLabelRules({ features, rules }) {
+        return { winners: features.map((feature) => rules.findIndex((rule) => (
+          rule.qualifier === 'label' && new RegExp(rule.valueRegex).test(feature.label)
+        ))) };
+      }
+    });
+    const { state, actions } = harness;
+    state.errorLog = ref(null);
+    state.labelTextBulkOverrides.ND1 = 'MyLabel';
+    setRow(state, 'fa', { labelText: 'EDITED', labelSourceText: 'alpha' });
+    const before = structuredClone({ rows: state.featureOverrides, bulk: state.labelTextBulkOverrides });
+    const messages = [];
+    globalThis.window = { alert: (text) => messages.push(text) };
+    try {
+      await actions.loadLabelOverrideTable({ target: { files: [{ text: async () => tsv }], value: 'labels.tsv' } });
+    } finally {
+      delete globalThis.window;
+    }
+    assert.deepEqual({ rows: state.featureOverrides, bulk: state.labelTextBulkOverrides }, before);
+    assert.deepEqual(harness.mutations, { commit: 0 });
+    assert.deepEqual(messages, [message]);
+  });
+}
 
 // The display of a Result projects the current label intent, also when an
 // Undo or another import removed the intent it was last shown with.
