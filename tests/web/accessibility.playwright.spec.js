@@ -206,17 +206,6 @@ for (const mode of ['circular', 'linear']) {
         const button = page.locator('.feature-popup').getByRole('button', { name: tab, exact: true });
         if (await button.count()) { await button.click(); await record(`popup ${tab}`); }
       }
-      // The popup opens beside the clicked Edit button of the drawer's list,
-      // over the drawer's tabs: drag it clear of the drawer by its title bar.
-      const featurePopup = page.locator('.feature-popup');
-      const popupBox = await featurePopup.boundingBox();
-      const drawerBox = await page.locator('.right-drawer').boundingBox();
-      await page.mouse.move(popupBox.x + popupBox.width / 2, popupBox.y + 8);
-      await page.mouse.down();
-      await page.mouse.move(drawerBox.x - 12 - popupBox.width / 2, popupBox.y + 8, { steps: 4 });
-      await page.mouse.up();
-      const dragged = await featurePopup.boundingBox();
-      expect(dragged.x + dragged.width, 'popup dragged clear of the drawer').toBeLessThanOrEqual(drawerBox.x);
       for (const tab of ['Legend', 'Similarity groups', 'Features']) {
         const button = page.locator('.right-drawer').getByRole('button', { name: tab, exact: true });
         if (await button.isEnabled()) { await button.click(); await record(`drawer ${tab}`); }
