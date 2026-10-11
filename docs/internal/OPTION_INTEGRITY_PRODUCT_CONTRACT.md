@@ -1640,12 +1640,11 @@ Scenario revision `5` narrows the `customLayoutRule` below in the same way: a Fi
   revision `2`) and `A / KEEP_ANCHOR_PLAN` (scenario revision `3`)
 - Normative outcome: exactly the two approved `PRODUCT_DECISION` receipts
   below, read together.
-- Scenario of revision `3` (as presented to the Owner): an active plan
-  exists; the user changes a Generate-time comparison setting (Bitscore,
-  E-value, Minimum identity, Minimum length, or a LOSATP grouping setting)
-  so that a Generate regroups and the plan's reference or a target is no
-  longer a unique member of the plan's Similarity Group; every anchor feature
-  still exists in its record.
+- Scenario of revision `3`: an active plan exists; the user changes a
+  Generate-time comparison setting (Bitscore, E-value, Minimum identity,
+  Minimum length, or a LOSATP grouping setting) so that a Generate regroups
+  and the plan's reference or a target is no longer a unique member of the
+  plan's Similarity Group; every anchor feature still exists in its record.
 - Decision source (scenario revision `2`): The complete five `PRODUCT_DECISION` texts for the
   record-owned orientation follow-up to issue `#586`, explicitly approved
   as written by `satoshikawato` on `2026-09-26`, with this concern's

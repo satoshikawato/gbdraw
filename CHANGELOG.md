@@ -77,10 +77,9 @@ write-up of a release.
   example a higher **Minimum identity**) keeps the alignment, and every later
   **Generate Diagram** draws it while its anchor features exist. Before, the
   Generate after such a change was blocked with "Alignment needs repair". When
-  an anchor feature itself is gone, the repair notice now says which one ("The
-  alignment reference feature is no longer found in its record.") instead of
-  "The clicked feature is not a unique member of this Similarity Group."
-  (OV-341, OV-342).
+  an anchor feature itself is gone, the repair notice now says whether the
+  reference or an aligned target feature is gone instead of "The clicked
+  feature is not a unique member of this Similarity Group." (OV-341, OV-342).
 - Feature popup (web app): while the first popup after a page or Session load
   waits for Python to match the color rules, the toolbar shows **Preparing
   feature details…**, and **Save Session** and **Load Session** stay available.

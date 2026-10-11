@@ -886,13 +886,28 @@ test('a regrouped Similarity Group keeps the plan while its anchors resolve (OV-
   assert.equal(fixture.actions.repair.value, null);
   assert.equal(fixture.actions.notice.value, '');
 
-  // A Session-loaded plan that the shown Result did not draw, whose group is gone.
+  // A plan that the shown Result did not draw, whose group left the catalog.
   const loaded = create({ getCommittedRequest: () => renderRequest });
   await startReview(loaded);
   await loaded.actions.applyDraft();
   loaded.state.similarityAlignmentPlan.value = structuredClone(plan);
   loaded.currentGroup.id = 'no-longer-in-catalog';
   assert.deepEqual(await loaded.actions.validateBeforeGenerate(), { status: 'ok' });
+});
+
+test('a gone target next to a regrouped target blocks without a helper call (OV-342)', async () => {
+  const fixture = create();
+  await startReview(fixture);
+  await fixture.actions.applyDraft();
+  const calls = fixture.helperCalls.length;
+  // target-a left record b; target-c is still in record c but left the group.
+  fixture.currentGroup.members = [reference];
+  fixture.state.featureCatalog.value.items[0].biologicalFeatures = [reference, targetC];
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(),
+    { status: 'blocked', reason: 'stale-reference' });
+  assert.equal(fixture.actions.notice.value,
+    'Alignment needs repair: An aligned target feature is no longer found in its record.');
+  assert.equal(fixture.helperCalls.length, calls);
 });
 
 test('a regrouped plan whose reference feature is gone names it in the repair notice (OV-342)', async () => {
