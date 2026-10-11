@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { DrawingState } from '../state.js' */
 /** @import { ChangeTrackLayout } from './track-slot-edits.js' */
+/** @import { AskChoice } from './app-messages.js' */
 import {
   CONSERVATION_SLOT_MANAGER,
   isManagedConservationSlot,
@@ -579,6 +580,8 @@ const circularGeometryShortcutsForState = (drawing) => ({
  * @typedef {object} CircularTrackSlotEditorOptions
  * @property {Record<string, any>} state the Web state; its shape belongs to `state.js`
  * @property {ChangeTrackLayout} [changeTrackLayout] R10 port (default: apply directly)
+ * @property {AskChoice} [askChoice] The root's choice dialog: hiding a GC track the custom stack draws asks first (UX-A07).
+ * @property {(label: string, fn: () => unknown) => unknown} [runUndoable] History's undoable step, which the chosen hide runs in.
  */
 
 // `changeTrackLayout` is the feature placement owner's transition, injected as
@@ -587,7 +590,9 @@ const circularGeometryShortcutsForState = (drawing) => ({
 /**
  * @param {CircularTrackSlotEditorOptions} options
  */
-export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (apply) => apply() }) => {
+export const createCircularTrackSlotEditor = ({
+  state, changeTrackLayout = (apply) => apply(), askChoice = async () => 'cancel', runUndoable = (_label, fn) => fn()
+}) => {
   const editorKeys = new WeakMap();
   let nextEditorKey = 1;
   const circularTrackSlotEditorKey = (slot) => {
@@ -1291,21 +1296,26 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     ));
   };
 
-  /** @param {DrawingState} drawing */
-  const confirmCircularSuppressOverride = (drawing, renderer) => {
-    if (!drawing.adv.circular_track_slots_enabled) return true;
-    const activeSlots = activeCircularTrackSlotsForRenderer(drawing, renderer);
-    if (activeSlots.length === 0) return true;
-
-    const trackLabel = SUPPRESS_TRACK_LABEL_BY_RENDERER[renderer] || 'selected';
-    const plural = activeSlots.length === 1 ? '' : 's';
-    const message = [
-      `Custom Track Slots currently include ${activeSlots.length} enabled ${trackLabel} track${plural}.`,
-      `Hiding ${trackLabel} will disable ${activeSlots.length === 1 ? 'that custom track slot' : 'those custom track slots'} and override the custom track settings.`,
-      '',
-      'Continue?'
-    ].join('\n');
-    return globalThis.confirm ? globalThis.confirm(message) : true;
+  /**
+   * Hiding a GC track turns off the enabled custom stack rows that draw it, so
+   * it asks first (UX-A07); null when no row would change.
+   * @param {DrawingState} drawing
+   * @param {string} renderer
+   * @returns {Promise<string> | null}
+   */
+  const askCircularSuppressOverride = (drawing, renderer) => {
+    if (!drawing.adv.circular_track_slots_enabled) return null;
+    const count = activeCircularTrackSlotsForRenderer(drawing, renderer).length;
+    if (count === 0) return null;
+    const trackLabel = SUPPRESS_TRACK_LABEL_BY_RENDERER[renderer] || 'this track';
+    return askChoice({
+      title: `Hide ${trackLabel}?`,
+      description: count === 1
+        ? `Your custom track stack has 1 ${trackLabel} track. Hiding ${trackLabel} turns that track off.`
+        : `Your custom track stack has ${count} ${trackLabel} tracks. Hiding ${trackLabel} turns those tracks off.`,
+      actions: [{ id: 'hide', label: `Hide ${trackLabel}`, tone: 'primary' }],
+      cancelLabel: `Keep ${trackLabel}`
+    });
   };
 
   /** @typedef {{ target?: { checked: boolean } | null } | null} CircularSuppressToggleEvent The checkbox change event of a Suppress control. */
@@ -1328,13 +1338,21 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
       return;
     }
 
-    if (nextChecked && !confirmCircularSuppressOverride(drawing, renderer)) {
+    const apply = () => {
+      drawing.form[formKey] = nextChecked;
+      normalizeSlotsInPlace();
+    };
+    const asked = nextChecked ? askCircularSuppressOverride(drawing, renderer) : null;
+    if (asked) {
+      // The checkbox shows the kept value until the choice; the chosen hide is one History step.
       if (event?.target) event.target.checked = previousChecked;
-      return;
+      return asked.then((choice) => (
+        choice === 'hide' && !state.sessionOperationAvailability?.() && Boolean(drawing.form[formKey]) === previousChecked
+          ? runUndoable(SUPPRESS_CONTROL_LABEL_BY_RENDERER[renderer] || 'Hide track', apply)
+          : false
+      ));
     }
-    drawing.form[formKey] = nextChecked;
-    normalizeSlotsInPlace();
-
+    apply();
     if (event?.target) event.target.checked = nextChecked;
   };
 
@@ -1372,13 +1390,13 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   /** @param {CircularSuppressToggleEvent} [event] */
   const setCircularGcSuppressed = (checked, event = null) => {
     const drawing = state.drawings.circular;
-    setCircularSuppressControl(drawing, 'gc_content', checked, event);
+    return setCircularSuppressControl(drawing, 'gc_content', checked, event);
   };
 
   /** @param {CircularSuppressToggleEvent} [event] */
   const setCircularSkewSuppressed = (checked, event = null) => {
     const drawing = state.drawings.circular;
-    setCircularSuppressControl(drawing, 'gc_skew', checked, event);
+    return setCircularSuppressControl(drawing, 'gc_skew', checked, event);
   };
 
   const setCircularTrackSlotEnabled = (slot, enabled) => {

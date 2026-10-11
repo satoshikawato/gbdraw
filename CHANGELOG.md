@@ -31,7 +31,7 @@ write-up of a release.
   a popup while Layout edit is off. The legend-entry popup shows the feature
   count and the rule behind the color, and edits the color and legend name or
   removes the row. The record popup lists the accession, organism, length,
-  orientation, display start, region, and alignment, and edits the definition
+  reverse complement, display start, region, and alignment, and edits the definition
   text and Reverse complement, which apply on Generate.
 - Web app: the Editor's Features list uses one compact row per feature that
   expands to its label text field; the label and feature-edit TSV actions move
@@ -40,6 +40,21 @@ write-up of a release.
 - Interactive SVG: the similarity-group section of a match popup shows the
   group name and gene count, the members, and the identifiers under
   **Technical details**, as in the web app.
+- Web app: confirmations use the app's own dialog with named buttons instead of
+  the browser's OK/Cancel box: **Reset Settings** lists what it resets, and a
+  risky color rule pattern, a repeated or large Session download, a large
+  reproducibility download, and hiding a GC track of a custom stack each name
+  their action. Load Session, Save Session, and table imports and exports report
+  in a dismissible notice above the Result instead of a browser alert; Session
+  warnings show as a list.
+- Web app: the feature-edit choice dialogs (color and stroke scope, label
+  visibility, label text scope, Legend name, palette colors, Feature placement
+  reset) show one primary choice, group the shared scopes, and name each option
+  by its outcome; a Legend name conflict shows the name **Keep both** gives.
+- Web app: feature search fits one row, shows **Qualifier key** only for
+  qualifier search, labels the regex toggle **Regular expression**, and shows a
+  match count only after a search. **Reset Layout** is unavailable until
+  something moved, and **Canvas padding** fields show their unit (px).
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 

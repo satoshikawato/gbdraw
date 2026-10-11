@@ -29,7 +29,7 @@ const layoutState = (page, key) => page.evaluate(async (overrideKey) => {
 }, key);
 const dialog = (page) => page.getByRole('dialog', { name: 'Reset Feature placements?', exact: true });
 const resetButton = (page) => dialog(page).getByRole('button', { name: 'Reset 1 placement to Auto', exact: true });
-const cancelButton = (page) => dialog(page).getByRole('button', { name: 'Cancel change', exact: true });
+const cancelButton = (page) => dialog(page).getByRole('button', { name: 'Keep current layout', exact: true });
 const openStack = async (page, mode) => {
   const toggle = await reveal(page.locator(`[aria-controls="${mode}-custom-track-slots-panel"]`));
   if (await page.locator(`#${mode}-custom-track-slots-panel`).count() === 0) await toggle.click();
@@ -54,7 +54,7 @@ test('Circular custom stack Reset and row moves ask before dropping a lane place
     // Preset Reset: the dialog asks before the stack changes; Cancel keeps it.
     const tuckin = page.getByRole('button', { name: 'Reset to Tuckin', exact: true });
     await tuckin.click();
-    await expect(dialog(page)).toContainText('Reset to Tuckin leaves 1 Feature placement without its lane.');
+    await expect(dialog(page)).toContainText('Reset to Tuckin removes the lane for 1 feature you placed manually.');
     await expect(resetButton(page)).toBeFocused();
     expect(await layoutState(page, key)).toEqual(placed);
     await page.screenshot({ path: testInfo.outputPath('preset-reset-dialog.png') });
@@ -65,7 +65,7 @@ test('Circular custom stack Reset and row moves ask before dropping a lane place
 
     // Row reorder: Reset applies the move and removes the row as one step.
     await stackRow(page, 'circular').locator('button[title="Move outside Axis"]').click();
-    await expect(dialog(page)).toContainText('Move outside Axis leaves 1 Feature placement without its lane.');
+    await expect(dialog(page)).toContainText('Move outside Axis removes the lane for 1 feature you placed manually.');
     expect(await layoutState(page, key)).toEqual(placed);
     await resetButton(page).click();
     await expect(dialog(page)).toBeHidden();
@@ -103,7 +103,7 @@ test('Linear Use custom stack asks before dropping a Linear lane, and Circular S
 
     // Use custom stack: Cancel keeps the checkbox off; Reset is one step.
     await custom.click();
-    await expect(dialog(page)).toContainText('Changing Use custom stack to On leaves 1 Feature placement without its lane.');
+    await expect(dialog(page)).toContainText('Changing Use custom stack to On removes the lane for 1 feature you placed manually.');
     await expect(custom).not.toBeChecked();
     expect(await layoutState(page, key)).toEqual(placed);
     await page.keyboard.press('Escape');

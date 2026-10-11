@@ -135,11 +135,8 @@ test('Circular single-record presentation selects, transforms, titles, and round
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
-  const dialogPromise = page.waitForEvent('dialog', { timeout: 180000 });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 180000 });
   await expect(page.getByLabel('Circular record', { exact: true })).toHaveValue('BGC0000709');
   await expect(page.getByLabel('Circular region start')).toHaveValue('1000');
   await expect(page.getByLabel('Circular region end')).toHaveValue('12000');
@@ -301,9 +298,8 @@ test('Loaded Session shows the saved record selector as uninspected, not as miss
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
-  const dialogPromise = page.waitForEvent('dialog', { timeout: 180000 });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
-  await (await dialogPromise).accept();
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 180000 });
 
   const select = page.getByLabel('Circular record', { exact: true });
   await expect(select).toHaveValue('NC_012920.1');

@@ -491,7 +491,12 @@ const CHOICE_DIALOGS = [
   ['labelOnDialog', { reason: 'hidden', featureType: 'CDS' }, 'Feature Is Hidden'],
   ['featureStyleScopeDialog', { kind: 'fill' }, 'Color Change Scope'],
   ['legendRenameDialog', { mode: 'scope', oldCaption: 'CDS', newCaption: 'Coding', siblingCount: 1 }, 'Legend Name Scope'],
-  ['resetColorDialog', { siblingCount: 1, caption: 'CDS' }, 'Reset Fill Color']
+  ['resetColorDialog', { siblingCount: 1, caption: 'CDS' }, 'Reset Fill Color'],
+  // The app's prompt that replaced the native confirm() boxes.
+  ['choicePrompt', {
+    title: 'Add this color rule?', description: 'The pattern may be slow.',
+    actions: [{ id: 'add', label: 'Add rule', tone: 'primary' }], cancelLabel: 'Edit pattern'
+  }, 'Add this color rule?']
 ];
 
 // UI-02, UI-03, UI-04: each choice dialog is a named modal that takes focus,

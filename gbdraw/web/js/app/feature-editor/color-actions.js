@@ -593,6 +593,7 @@ export const createFeatureColorActions = ({
     legendRenameDialog.siblingCount = 0;
     legendRenameDialog.mergeAvailable = true;
     legendRenameDialog.deletedTargetKey = '';
+    legendRenameDialog.suffixCaption = '';
     legendRenameDialog.pendingRequest = null;
   });
 
@@ -891,8 +892,9 @@ export const createFeatureColorActions = ({
    * @param {string} targetColor The color the target row shows.
    * @param {boolean | null} mergeAvailable
    * @param {PythonLegendKey | ''} deletedTargetKey The key of a deleted target row, else ''.
+   * @param {string} suffixCaption The name "Keep both" gives the renamed row.
    */
-  const openLegendRenameTargetDialog = (request, targetEntry, targetColor, mergeAvailable, deletedTargetKey) => {
+  const openLegendRenameTargetDialog = (request, targetEntry, targetColor, mergeAvailable, deletedTargetKey, suffixCaption) => {
     legendRenameDialog.show = true;
     legendRenameDialog.mode = 'target';
     legendRenameDialog.oldCaption = request.oldCaption;
@@ -903,6 +905,7 @@ export const createFeatureColorActions = ({
     legendRenameDialog.siblingCount = request.siblingCount || 0;
     legendRenameDialog.mergeAvailable = mergeAvailable;
     legendRenameDialog.deletedTargetKey = deletedTargetKey;
+    legendRenameDialog.suffixCaption = suffixCaption;
     legendRenameDialog.pendingRequest = request;
   };
 
@@ -998,7 +1001,8 @@ export const createFeatureColorActions = ({
           targetEntry,
           targetColor,
           mergeAllowed,
-          deletedTarget ? legendEntryKey(deletedTarget) : ''
+          deletedTarget ? legendEntryKey(deletedTarget) : '',
+          getUniqueLegendCaption(drawing, newCaption, { ignoreCaptions: [oldCaption] })
         );
         return;
       }

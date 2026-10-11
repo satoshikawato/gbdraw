@@ -210,17 +210,16 @@ def main():
                 assert status(page)['history']==before['history']+1
                 evidence['modes'].append({'mode':mode,'operations':operations,'generateMetrics':after['metrics'],'exports':exports,'restoredDeltas':restored['deltas'],'postLoadGenerateMetrics':post_load['metrics']})
                 print(mode+': OFF hover/pan, keyboard ON/drag, modifiers, Undo/Redo, Generate, Session, SVG/interactive/PNG/PDF PASS',flush=True)
-            # Touch has the same persistent explanation and native toggle, without hover.
+            # Touch has the same explanation (screen-reader text and button title) and native toggle, without hover.
             touch=browser.new_context(viewport={'width':390,'height':844},has_touch=True,is_mobile=True,accept_downloads=True)
             tp=touch.new_page(); tp.on('dialog',lambda d:d.accept()); tp.goto(url)
             tp.wait_for_function('() => window.__GBDRAW_APP__ && Object.keys(window.__GBDRAW_APP__.paletteDefinitions||{}).length')
             continuity.load_session(tp,ROOT/'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json')
-            help_text=tp.locator('#preview-layout-help'); help_text.scroll_into_view_if_needed(); assert help_text.is_visible()
-            assert help_text.evaluate("""e => {
-              const r=e.getBoundingClientRect(), x=r.x+r.width/2, y=r.y+r.height/2;
-              return x>=0 && x<innerWidth && y>=0 && y<innerHeight
-                && Boolean(document.elementFromPoint(x,y)?.closest('#preview-layout-help'));
-            }""")
+            # The explanation is screen-reader text (sr-only) that the Layout edit
+            # button describes; the button's title says it in short for hover.
+            help_text=tp.locator('#preview-layout-help'); assert help_text.count()==1
+            assert 'Turn on Layout edit' in help_text.inner_text()
+            assert tp.get_by_role('button',name='Toggle layout edit mode').get_attribute('title').startswith('Turn on to move a legend, title, or Linear scale.')
             tp.screenshot(path=str(args.evidence_dir/'touch-help.png'))
 
             tb=tp.get_by_role('button',name='Toggle layout edit mode'); tb.scroll_into_view_if_needed(); tb.tap()

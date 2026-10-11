@@ -413,12 +413,11 @@ const committedRecordKeys = (page) => page.evaluate(async () => {
 // metadata no longer lists.
 test('a Linear Session 33 with crop and reverse complement keeps its feature edits', async ({ page }) => {
   test.setTimeout(300_000);
-  const alerts = [];
-  page.on('dialog', (dialog) => alerts.push(dialog.message()));
   await openFresh(page);
   await loadSession(page, LINEAR_V33);
   const [testa, testb] = await committedRecordKeys(page);
-  expect(alerts).toEqual(['Session loaded successfully!']);
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
+  await expect(page.locator('[data-app-notice] li')).toHaveCount(0);
   expect(await featureOverrideRows(page)).toEqual([
     [testa, 'fef810304', null, 'off', null],
     [testa, 'ffa1f4c4a', 'off', null, null],
@@ -450,12 +449,11 @@ const writeUnmatchedEditSession = (testInfo) => {
 test('loading an older Session counts only the feature edits it drops', async ({ page }, testInfo) => {
   test.setTimeout(300_000);
   const file = writeUnmatchedEditSession(testInfo);
-  const alerts = [];
-  page.on('dialog', (dialog) => alerts.push(dialog.message()));
   await openFresh(page);
   await loadSession(page, file);
-  expect(alerts).toEqual([
-    'Session loaded successfully! 1 feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.'
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
+  await expect(page.locator('[data-app-notice] li')).toHaveText([
+    '1 feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.'
   ]);
   expect((await featureOverrideRows(page)).length).toBe(4);
 });
@@ -467,8 +465,6 @@ test('loading an older Session counts only the feature edits it drops', async ({
 test('an older Session whose sources cannot be read again fails to load and keeps the previous Session', async ({ page }, testInfo) => {
   test.setTimeout(300_000);
   const file = writeUnmatchedEditSession(testInfo);
-  const alerts = [];
-  page.on('dialog', (dialog) => alerts.push(dialog.message()));
   await openFresh(page);
   const runtimeAssets = /pyodide\.asm\.(?:js|wasm)(?:\?|$)/;
   await page.context().route(runtimeAssets, (route) => route.abort());
@@ -483,11 +479,10 @@ test('an older Session whose sources cannot be read again fails to load and keep
   });
   const previous = await loaded();
   expect(previous.rows.length).toBe(3);
-  alerts.length = 0;
   await page.locator('input[accept^=".json,"]').setInputFiles(file);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
   await settle(page);
-  expect(alerts).toEqual([]);
+  await expect(page.locator('[data-app-notice]', { hasText: 'Session loaded' })).toHaveCount(0);
   expect(await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
     const { code, stage, actions } = state.errorLog.value || {};
@@ -500,8 +495,9 @@ test('an older Session whose sources cannot be read again fails to load and keep
   // Retry once the runtime can start: the Load drops only the unmatched edit.
   await page.context().unroute(runtimeAssets);
   await loadSession(page, file);
-  expect(alerts).toEqual([
-    'Session loaded successfully! 1 feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.'
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
+  await expect(page.locator('[data-app-notice] li')).toHaveText([
+    '1 feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.'
   ]);
   expect((await featureOverrideRows(page)).length).toBe(4);
   await expect(page.getByRole('alert')).toHaveCount(0);
@@ -522,14 +518,11 @@ const previewLabelCount = (page, text) => page.locator('.origin-top svg text').f
 // `record_location` row matches the source values there.
 test('a Label TSV record_location row applies to a catalog 4 Result drawn with source coordinates', async ({ page }) => {
   test.setTimeout(300_000);
-  const alerts = [];
-  page.on('dialog', (dialog) => alerts.push(dialog.message()));
   await openFresh(page);
   await loadSession(page, 'tests/fixtures/sessions/lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
-  alerts.length = 0;
   await importLabelTsv(page, 'NC_001416.1\tCDS\trecord_location\t^NC_001416\\.1:190\\.\\.736:\\+$\tTSV_RL\n');
   await settle(page);
-  expect(alerts).toEqual(['Loaded 1 row(s). Applied to 1 label(s).']);
+  await expect(page.locator('[data-app-notice] p')).toHaveText('Loaded 1 row(s). Applied to 1 label(s).');
   expect(await previewLabelCount(page, /^TSV_RL$/)).toBe(1);
 });
 
@@ -538,25 +531,21 @@ test('a Label TSV record_location row applies to a catalog 4 Result drawn with s
 // label edits it would have replaced; after Generate it applies.
 test('a Label TSV location row waits for Generate on a catalog 4 Result of cropped records', async ({ page }) => {
   test.setTimeout(300_000);
-  const alerts = [];
-  page.on('dialog', (dialog) => alerts.push(dialog.message()));
   await openFresh(page);
   await loadSession(page, 'tests/fixtures/sessions/feature-edits-crop-rc.v44.gbdraw-session.json.gz');
   const before = await featureOverrideRows(page);
-  alerts.length = 0;
   const row = '*\ttRNA\trecord_location\t^TESTA:\tTSV_TRNA\n';
   await importLabelTsv(page, row);
   await settle(page);
-  expect(alerts).toHaveLength(1);
-  expect(alerts[0]).toMatch(/^Loaded 1 row\(s\)\. Not applied: .*Generate/);
+  await expect(page.locator('[data-app-notice] p')).toHaveText('Loaded 1 row(s). Not applied.');
+  await expect(page.locator('[data-app-notice] li')).toHaveText([/Generate the diagram again, then load the table\.$/]);
   expect(await featureOverrideRows(page)).toEqual(before);
   expect(await previewLabelCount(page, /^PROBE_A_TRNA$/)).toBe(1);
   await generateAndWaitForResult(page);
   await settle(page);
-  alerts.length = 0;
   await importLabelTsv(page, row);
   await settle(page);
-  expect(alerts).toEqual(['Loaded 1 row(s). Applied to 1 label(s).']);
+  await expect(page.locator('[data-app-notice] p')).toHaveText('Loaded 1 row(s). Applied to 1 label(s).');
   expect(await previewLabelCount(page, /^TSV_TRNA$/)).toBe(1);
 });
 
@@ -565,12 +554,11 @@ test('a Label TSV location row waits for Generate on a catalog 4 Result of cropp
 // the copy that was edited, and Load says the next Generate draws the others.
 test('loading a Session 44 says which Feature visibility edits now apply to one copy', async ({ page }) => {
   test.setTimeout(300_000);
-  const alerts = [];
-  page.on('dialog', (dialog) => alerts.push(dialog.message()));
   await openFresh(page);
   await loadSession(page, 'tests/fixtures/sessions/feature-edits-circular-copies.v44.gbdraw-session.json.gz');
-  expect(alerts).toEqual([
-    'Session loaded successfully! 1 Feature visibility edit(s) from an older Session hid every feature with '
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
+  await expect(page.locator('[data-app-notice] li')).toHaveText([
+    '1 Feature visibility edit(s) from an older Session hid every feature with '
       + 'the same hash, such as each copy of a duplicated record. Each now applies only to the feature that '
       + 'was edited, so the next Generate draws the others.'
   ]);

@@ -63,7 +63,8 @@ const buildHarness = ({
   visibilityOverrides = {},
   rulePreparation = {},
   evaluateLabelRules = async () => ({ winners: [] }),
-  diagramOptions = null
+  diagramOptions = null,
+  showNotice = () => {}
 } = {}) => {
   const mutations = { commit: 0 };
   const state = {
@@ -110,6 +111,7 @@ const buildHarness = ({
     },
     rulePreparation,
     evaluateLabelRules,
+    showNotice,
     getCommittedRequest: () => (diagramOptions ? { diagramOptions } : null)
   });
   return { actions, mutations, state, svg };
@@ -561,9 +563,12 @@ test('a Label TSV import writes the label intent of every batch Result once (B6)
   ).documentElement;
   displayed.querySelector('text').textContent = 'alpha';
   const evaluated = [];
+  // The outcome shows in the app's notice banner, not a native alert (UX-A07).
+  const messages = [];
   const harness = buildHarness({
     svg: displayed,
     featureId: 'fa',
+    showNotice: (notice) => messages.push(notice),
     rulePreparation: { snapshot: () => ({}), isCurrent: () => true },
     async evaluateLabelRules({ features, rules }) {
       evaluated.push(features.map((feature) => feature.label));
@@ -593,14 +598,8 @@ test('a Label TSV import writes the label intent of every batch Result once (B6)
     comparisonMatches: []
   });
   state.featureCatalog = ref({ schema: 5, items: [item(0, 'fa'), item(1, 'fb')] });
-  const messages = [];
-  globalThis.window = { alert: (message) => messages.push(message) };
-  try {
-    const tsv = '*\tCDS\tlabel\t^beta$\tIMPORTED_B\n*\t*\tlabel\t^alpha$\tBULK_A\n';
-    await actions.loadLabelOverrideTable({ target: { files: [{ text: async () => tsv }], value: 'labels.tsv' } });
-  } finally {
-    delete globalThis.window;
-  }
+  const tsv = '*\tCDS\tlabel\t^beta$\tIMPORTED_B\n*\t*\tlabel\t^alpha$\tBULK_A\n';
+  await actions.loadLabelOverrideTable({ target: { files: [{ text: async () => tsv }], value: 'labels.tsv' } });
   assert.deepEqual(evaluated, [['alpha', 'beta']], 'one evaluation covers the labels of both Results');
   assert.deepEqual(state.featureOverrides, {
     [keyFor('fa')]: rowFor('fa', { labelSourceText: 'alpha' }),
@@ -609,29 +608,31 @@ test('a Label TSV import writes the label intent of every batch Result once (B6)
   assert.deepEqual(state.labelTextBulkOverrides, { alpha: 'BULK_A' });
   assert.equal(displayed.querySelector('text').textContent, 'BULK_A');
   assert.deepEqual(harness.mutations, { commit: 1 });
-  assert.deepEqual(messages, ['Loaded 2 row(s). Applied to 2 label(s).']);
+  assert.deepEqual(messages, [{ text: 'Loaded 2 row(s). Applied to 2 label(s).', items: [] }]);
 });
 
 // OV-131: a Label TSV that applies to no label changes nothing. The import
 // replaces the label edits only when it applies, so the bulk and per-feature
 // label edits stay, no state change reaches History, and the message says why.
-const KEPT = 'The existing label edits were kept.';
+const KEPT = 'Loaded 1 row(s). Not applied; the existing label edits were kept.';
 for (const [name, body, tsv, message] of [
   ['no row matches a label', batchLabel('fa', 'alpha', 'dominant-baseline="central" '),
     '*\t*\tproduct\t^no such product$\tZZ\n',
-    `Loaded 1 row(s). Not applied: no row matched a label of the diagram. ${KEPT}`],
+    { text: KEPT, items: ['No row matched a label of the diagram.'] }],
   ['the displayed Result has no label', '', '*\t*\tproduct\t.*\tZZ\n',
-    `Loaded 1 row(s). Not applied: no row matched a label of the diagram. ${KEPT}`],
+    { text: KEPT, items: ['No row matched a label of the diagram.'] }],
   ['every match lacks a feature key',
     '<text dominant-baseline="central" data-label-source-text="alpha">alpha</text>',
     '*\tCDS\tlabel\t^alpha$\tZZ\n',
-    `Loaded 1 row(s). Not applied: the 1 matched label(s) lacked a feature key. ${KEPT}`]
+    { text: KEPT, items: ['The 1 matched label(s) lacked a feature key.'] }]
 ]) {
   test(`a Label TSV import keeps the label edits when ${name} (OV-131)`, async () => {
     const svg = new DOMParser().parseFromString(`<svg>${body}</svg>`, 'image/svg+xml').documentElement;
+    const messages = [];
     const harness = buildHarness({
       svg,
       featureId: 'fa',
+      showNotice: (notice) => messages.push(notice),
       rulePreparation: { snapshot: () => ({}), isCurrent: () => true },
       async evaluateLabelRules({ features, rules }) {
         return { winners: features.map((feature) => rules.findIndex((rule) => (
@@ -644,13 +645,7 @@ for (const [name, body, tsv, message] of [
     state.labelTextBulkOverrides.ND1 = 'MyLabel';
     setRow(state, 'fa', { labelText: 'EDITED', labelSourceText: 'alpha' });
     const before = structuredClone({ rows: state.featureOverrides, bulk: state.labelTextBulkOverrides });
-    const messages = [];
-    globalThis.window = { alert: (text) => messages.push(text) };
-    try {
-      await actions.loadLabelOverrideTable({ target: { files: [{ text: async () => tsv }], value: 'labels.tsv' } });
-    } finally {
-      delete globalThis.window;
-    }
+    await actions.loadLabelOverrideTable({ target: { files: [{ text: async () => tsv }], value: 'labels.tsv' } });
     assert.deepEqual({ rows: state.featureOverrides, bulk: state.labelTextBulkOverrides }, before);
     assert.deepEqual(harness.mutations, { commit: 0 });
     assert.deepEqual(messages, [message]);

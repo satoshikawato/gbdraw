@@ -125,8 +125,9 @@ const exportTable = async (page, file) => {
   return readFileSync(file, 'utf8');
 };
 
-const loadTable = async (page, file, alerts) => {
-  const expected = alerts.length + 1;
+// The Load notice replaces the one of the last Load or export, so wait for a
+// text that starts with `Loaded `; its list items are the warnings.
+const loadTable = async (page, file) => {
   await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('features'));
   await openTableMenu(page);
   const [chooser] = await Promise.all([
@@ -134,9 +135,10 @@ const loadTable = async (page, file, alerts) => {
     page.getByRole('button', { name: 'Load Feature Edits TSV', exact: true }).click()
   ]);
   await chooser.setFiles(file);
-  await expect.poll(() => alerts.length, { timeout: 120_000 }).toBe(expected);
+  const notice = page.locator('[data-app-notice]');
+  await expect(notice.locator('p')).toContainText('Loaded ', { timeout: 120_000 });
   await settle(page);
-  return alerts.at(-1);
+  return { text: await notice.locator('p').innerText(), items: await notice.locator('li').allInnerTexts() };
 };
 
 // The Source recipe of a Result drawn without feature edits reads only the
@@ -159,8 +161,6 @@ const resultSvg = async (page, file) => {
 
 test('Export and Load Feature Edits TSV carry per-feature edits by identity, also to the CLI', async ({ page }, testInfo) => {
   test.setTimeout(600_000);
-  const alerts = [];
-  page.on('dialog', (dialog) => alerts.push(dialog.message()));
   await openLinear(page);
   const baseline = await sourceRecipe(page);
   const baselineSvg = await resultSvg(page, testInfo.outputPath('baseline.gui.svg'));
@@ -232,11 +232,9 @@ test('Export and Load Feature Edits TSV carry per-feature edits by identity, als
 
   // A new page has new record keys; the table names records by #index.
   const fresh = await page.context().newPage();
-  fresh.on('dialog', (dialog) => alerts.push(dialog.message()));
   await openLinear(fresh);
   expect(await draftRows(fresh)).toEqual([]);
-  alerts.length = 0;
-  expect(await loadTable(fresh, table, alerts)).toBe('Loaded 3 row(s). Applied 3 feature edit(s).');
+  expect(await loadTable(fresh, table)).toEqual({ text: 'Loaded 3 row(s). Applied 3 feature edit(s).', items: [] });
   expect(await draftRows(fresh)).toEqual(edits);
   await expectDrawsEdits(fresh, 'mounted');
 
@@ -257,13 +255,11 @@ test('Export and Load Feature Edits TSV carry per-feature edits by identity, als
 
 test('Load Feature Edits TSV counts rows that name no record or feature and rejects a malformed table', async ({ page }, testInfo) => {
   test.setTimeout(300_000);
-  const alerts = [];
-  page.on('dialog', (dialog) => alerts.push(dialog.message()));
   await openLinear(page);
   await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('features'));
   await openTableMenu(page);
   await page.getByRole('button', { name: 'Export Feature Edits TSV', exact: true }).click();
-  await expect.poll(() => alerts.at(-1)).toBe('No feature edits to export.');
+  await expect(page.locator('[data-app-notice] p')).toHaveText('There are no feature edits to export.');
 
   const list = await features(page);
   const target = pick(list, 2, 'tRNA');
@@ -275,9 +271,10 @@ test('Load Feature Edits TSV counts rows that name no record or feature and reje
     '#1\thash=f00000000\toff\t\t',
     ''
   ].join('\n'));
-  alerts.length = 0;
-  expect(await loadTable(page, table, alerts)).toBe('Loaded 3 row(s). Applied 1 feature edit(s). '
-    + '2 row(s) name no record or feature of the current diagram and were not applied.');
+  expect(await loadTable(page, table)).toEqual({
+    text: 'Loaded 3 row(s). Applied 1 feature edit(s).',
+    items: ['2 row(s) name no record or feature of the current diagram and were not applied.']
+  });
   expect(await draftRows(page)).toEqual([[2, target.identity, 'off', null, null]]);
 
   const malformed = testInfo.outputPath('malformed.tsv');

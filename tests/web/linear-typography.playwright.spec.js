@@ -40,11 +40,8 @@ const saveSession = async (page, title) => {
 };
 
 const importSession = async (page, path) => {
-  const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
   await page.locator(sessionInputSelector).first().setInputFiles(path);
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120000 });
   await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
 };
 
@@ -396,8 +393,8 @@ test('Auto disclosure names draft fields and navigates without changing Result o
   await focusAfterHistoryCapture(page, length);
   await length.selectOption('show');
   const resultBeforeReset = (await snapshot()).results;
-  page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+  await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
   await expect(accession).toHaveValue('auto');
   await expect(length).toHaveValue('auto');
   expect((await snapshot()).results).toEqual(resultBeforeReset);

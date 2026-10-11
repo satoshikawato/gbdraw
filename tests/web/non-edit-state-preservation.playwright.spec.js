@@ -247,8 +247,9 @@ const ROWS = [
       await openWithGenBank(page, HMMT, labelsOut);
       await generateAndWaitForResult(page);
       await editFirstCdsLabel(page, 'RESET_LABEL');
-      // openWithGenBank accepts the confirmation dialog.
+      // Reset Settings asks first; its reset action confirms.
       await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+      await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
       await settle(page);
     },
     operation: async (page) => {

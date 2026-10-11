@@ -58,7 +58,7 @@ test('a palette switch keeps a user default color after asking; Cancel changes n
 
   await select.selectOption(next);
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText(`from the "${before.palette}" palette`);
+  await expect(dialog).toContainText(`Keep your 1 changed color from the "${before.palette}" palette (`);
   await expect(dialog).not.toContainText('is dropped');
   await expect(select).toHaveValue(before.palette);
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -112,7 +112,7 @@ test('Default colors Reset asks before it discards a user default color', async 
   expect(await facts(page)).toEqual(before);
 
   await reset.click();
-  await dialog.getByRole('button', { name: "Reset to the palette's colors", exact: true }).click();
+  await dialog.getByRole('button', { name: "Use the palette's colors", exact: true }).click();
   await expect(dialog).toHaveCount(0);
   const paletteCds = await page.evaluate(() => (
     window.__GBDRAW_APP__.paletteDefinitions[window.__GBDRAW_APP__.selectedPalette].CDS
@@ -235,7 +235,7 @@ test('a palette row offers and keeps the color it shows after palette edits', as
   });
   const colors = page.locator('summary[aria-label="Colors"]');
   if ((await colors.locator('..').getAttribute('open')) === null) await colors.click();
-  // The "Use existing" color the scope dialog offers for a CDS feature; Cancel changes nothing.
+  // The `Use the "<caption>" Legend color` choice the scope dialog offers for a CDS feature; Cancel changes nothing.
   const offered = () => evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     await app.openFeatureEditorFromList(app.filteredFeatures.find((item) => item.locus_tag === 'FL1'), null);
@@ -270,7 +270,7 @@ test('a palette row offers and keeps the color it shows after palette edits', as
 
   await page.locator('h4[aria-label="DEFAULT COLORS"]').locator('..').getByRole('button', { name: 'Reset', exact: true }).click();
   await page.getByRole('dialog', { name: 'Reset default colors' })
-    .getByRole('button', { name: "Reset to the palette's colors", exact: true }).click();
+    .getByRole('button', { name: "Use the palette's colors", exact: true }).click();
   await expectShown(original, 'Default colors Reset');
 
   const next = await page.evaluate(() => window.__GBDRAW_APP__.paletteNames.find((name) => (

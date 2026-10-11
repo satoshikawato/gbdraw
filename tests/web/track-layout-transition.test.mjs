@@ -291,5 +291,10 @@ test('the stack editors are created once, with the transition', () => {
   const sites = sources(`${WEB}/js`).flatMap((path) => [...readFileSync(path, 'utf8')
     .matchAll(/create(?:Circular|Linear)TrackSlotEditor\(\{([^}]*)\}\)/g)]
     .map((match) => [relative(`${WEB}/js`, path), match[1].replace(/\s+/g, ' ').trim()]));
-  assert.deepEqual(sites, [['app/app-setup.js', 'state, changeTrackLayout'], ['app/app-setup.js', 'state, changeTrackLayout']]);
+  // The Circular editor also takes the choice dialog and History's undoable step,
+  // which its Hide GC content / skew question uses.
+  assert.deepEqual(sites, [
+    ['app/app-setup.js', 'state, changeTrackLayout, askChoice, runUndoable: history.runUndoable'],
+    ['app/app-setup.js', 'state, changeTrackLayout']
+  ]);
 });

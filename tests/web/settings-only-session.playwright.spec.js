@@ -46,12 +46,11 @@ const save = async (page, testInfo, label) => {
   }
 };
 
-const loadFile = async (page, file, message = 'Session loaded successfully!') => {
-  const dialog = typeof message === 'string' ? page.waitForEvent('dialog') : null;
+const loadFile = async (page, file, message = 'Session loaded') => {
   const input = page.locator('input[accept^=".json,"]');
   await input.setInputFiles(file);
-  if (dialog) {
-    expect((await dialog).message()).toBe(message);
+  if (typeof message === 'string') {
+    await expect(page.locator('[data-app-notice]')).toContainText(message);
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
     return;
   }
@@ -158,9 +157,8 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
     await assertDiagramWorkerIdle(page);
 
     const restored = await fresh();
-    const loaded = restored.waitForEvent('dialog');
     await restored.locator('input[accept^=".json,"]').setInputFiles(saved.file);
-    expect((await loaded).message()).toBe('Session loaded successfully!');
+    await expect(restored.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
     await restored.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
     const after = await snapshot(restored);
     assertSourceFree(after);

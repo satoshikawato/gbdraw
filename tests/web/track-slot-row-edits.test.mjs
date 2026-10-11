@@ -73,9 +73,9 @@ const circularRow = (id, renderer, params = {}, side = 'inside') => ({ id, rende
 const linearRow = (id, renderer, params = {}, side = 'below') => ({ id, renderer, enabled: true, side, height: '', spacing: '', z: 0, params });
 
 const MODES = {
-  circular: (slots, options) => {
+  circular: (slots, options, askChoice = async () => 'hide') => {
     const state = circularState(slots, options);
-    const editor = createCircularTrackSlotEditor({ state });
+    const editor = createCircularTrackSlotEditor({ state, askChoice });
     return {
       state,
       editor,
@@ -182,34 +182,35 @@ test('circular: a renderer change back to Ticks leaves a valid Ticks row', () =>
 
 // TK-09: Hide GC Skew draws no GC skew in the simple path; in the custom stack
 // it disables only the rows of the drawing's dinucleotide.
-test('circular: Hide GC Skew disables only the GC skew rows and names them in the right number', () => {
-  const messages = [];
-  const previousConfirm = globalThis.confirm;
-  globalThis.confirm = (message) => { messages.push(message); return true; };
-  try {
-    const editor = MODES.circular([
-      ...ROWS.circular(),
-      circularRow('gc_skew_2', 'dinucleotide_skew', { nt: 'AT' })
-    ]);
-    editor.editor.setCircularSkewSuppressed(true);
-    const rows = Object.fromEntries(editor.slots().map((slot) => [slot.id, slot.enabled]));
-    assert.equal(rows.gc_skew, false);
-    assert.equal(rows.gc_skew_2, true, 'the AT skew row stays enabled');
-    assert.equal(editor.editor.circularTrackSlotSuppressMessage(editor.slots().find((slot) => slot.id === 'gc_skew_2')), '');
-    assert.equal(messages.length, 1);
-    assert.match(messages[0], /include 1 enabled GC skew track\./);
-    assert.match(messages[0], /will disable that custom track slot and/);
+test('circular: Hide GC Skew disables only the GC skew rows and names them in the right number', async () => {
+  // The app's choice dialog asks (UX-A07); the stub records the question and hides.
+  const questions = [];
+  const editor = MODES.circular([
+    ...ROWS.circular(),
+    circularRow('gc_skew_2', 'dinucleotide_skew', { nt: 'AT' })
+  ], undefined, async (request) => { questions.push(request); return 'hide'; });
+  await editor.editor.setCircularSkewSuppressed(true);
+  const rows = Object.fromEntries(editor.slots().map((slot) => [slot.id, slot.enabled]));
+  assert.equal(rows.gc_skew, false);
+  assert.equal(rows.gc_skew_2, true, 'the AT skew row stays enabled');
+  assert.equal(editor.editor.circularTrackSlotSuppressMessage(editor.slots().find((slot) => slot.id === 'gc_skew_2')), '');
+  assert.equal(questions.length, 1);
+  assert.equal(questions[0].title, 'Hide GC skew?');
+  assert.match(questions[0].description, /has 1 GC skew track\. Hiding GC skew turns that track off\./);
+  assert.deepEqual(questions[0].actions.map((action) => action.label), ['Hide GC skew']);
 
-    editor.editor.setCircularSkewSuppressed(false);
-    assert.equal(editor.slots().every((slot) => slot.enabled), true);
+  await editor.editor.setCircularSkewSuppressed(false);
+  assert.equal(editor.slots().every((slot) => slot.enabled), true);
 
-    editor.editor.duplicateCircularTrackSlot(editor.slots().findIndex((slot) => slot.id === 'gc_skew'));
-    editor.editor.setCircularSkewSuppressed(true);
-    assert.match(messages[1], /include 2 enabled GC skew tracks\./);
-    assert.match(messages[1], /will disable those custom track slots and/);
-  } finally {
-    globalThis.confirm = previousConfirm;
-  }
+  editor.editor.duplicateCircularTrackSlot(editor.slots().findIndex((slot) => slot.id === 'gc_skew'));
+  await editor.editor.setCircularSkewSuppressed(true);
+  assert.match(questions[1].description, /has 2 GC skew tracks\. Hiding GC skew turns those tracks off\./);
+
+  // Keep leaves the setting and the rows unchanged.
+  const kept = MODES.circular(ROWS.circular(), undefined, async () => 'cancel');
+  assert.equal(await kept.editor.setCircularSkewSuppressed(true), false);
+  assert.equal(kept.state.form.suppress_skew, false);
+  assert.equal(kept.slots().every((slot) => slot.enabled), true);
 });
 
 // TK-07: `1.5` or `-1` became track index 1 without a message.
@@ -253,9 +254,7 @@ test('circular: an invalid Depth track index stays visible with a field error an
 test('circular: Dinucleotide and row dinucleotide edits re-run the Hide GC Skew projection', async () => {
   const { applyCircularSuppressControlsToSlots } = await import(pathToFileURL(join(tempRoot, 'app', 'circular-track-slots.js')));
   const { applyCircularTrackOrderPlacements } = await import(pathToFileURL(join(tempRoot, 'services', 'circular-track-slot-model.js')));
-  const previousConfirm = globalThis.confirm;
-  globalThis.confirm = () => true;
-  try {
+  {
     const editor = MODES.circular(ROWS.circular());
     const { state } = editor;
     const requestSlots = () => applyCircularSuppressControlsToSlots(
@@ -264,7 +263,7 @@ test('circular: Dinucleotide and row dinucleotide edits re-run the Hide GC Skew 
       state.adv.nt
     );
     const enabled = () => editor.slots().find((slot) => slot.id === 'gc_skew').enabled;
-    editor.editor.setCircularSkewSuppressed(true);
+    await editor.editor.setCircularSkewSuppressed(true);
     assert.equal(enabled(), false);
 
     editor.editor.setCircularDinucleotide('AT');
@@ -277,7 +276,5 @@ test('circular: Dinucleotide and row dinucleotide edits re-run the Hide GC Skew 
     assert.equal(row.params.nt, 'AT');
     assert.equal(enabled(), false, 'the row now uses the Dinucleotide setting');
     assert.deepEqual(JSON.parse(JSON.stringify(editor.slots())), JSON.parse(JSON.stringify(requestSlots())));
-  } finally {
-    globalThis.confirm = previousConfirm;
   }
 });

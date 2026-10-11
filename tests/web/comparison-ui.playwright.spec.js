@@ -113,8 +113,8 @@ test('fresh and reset Linear use Curve without overwriting an explicit style', a
   });
   await expect(style).toHaveValue('ribbon');
 
-  page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+  await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.pairwise_match_style)).toBe('curve');
   await page.getByRole('button', { name: 'Circular', exact: true }).click();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.pairwise_match_style)).toBe('ribbon');
@@ -517,7 +517,6 @@ test('imported comparison resolutions are explicit and create one History entry 
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
     .toBe(historyBefore + 1);
 
-  const dialogPromise = page.waitForEvent('dialog');
   await page.locator(
     'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
   ).setInputFiles({
@@ -525,9 +524,7 @@ test('imported comparison resolutions are explicit and create one History entry 
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(decisionRequiredComparisonSession()))
   });
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
   await expect(resolution).toContainText('Saved comparison needs a decision');
   await expect(resolution).toContainText('missing a required resource');
   await expect(resolution.getByRole('button', { name: 'Inherit saved comparison' }))
@@ -627,7 +624,6 @@ test('preserved imported comparison generates only after explicit inheritance', 
   test.setTimeout(300000);
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  const dialogPromise = page.waitForEvent('dialog');
   await page.locator(
     'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
   ).setInputFiles({
@@ -635,9 +631,7 @@ test('preserved imported comparison generates only after explicit inheritance', 
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(preservedComparisonSession()))
   });
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
 
   const resolution = page.locator('[data-imported-comparison-resolution]');
   await expect(resolution).toContainText('Saved comparison preserved as read-only');
@@ -1144,7 +1138,6 @@ test('comparison controls drive appearance and current Session round trips', { t
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  const dialogPromise = page.waitForEvent('dialog', { timeout: 180000 });
   await page.locator(
     'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
   ).setInputFiles({
@@ -1152,9 +1145,7 @@ test('comparison controls drive appearance and current Session round trips', { t
     mimeType: 'application/gzip',
     buffer: sessionBuffer
   });
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 180000 });
   await page.waitForFunction(() => {
     const app = window.__GBDRAW_APP__;
     return app?.mode === 'linear'
@@ -1203,8 +1194,8 @@ test('comparison controls drive appearance and current Session round trips', { t
   await expect(candidate).toHaveValue('');
   await expect(memberHits).toHaveValue('');
 
-  page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+  await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     await app.setLinearComparisonGlobalAction('losat');
@@ -1596,7 +1587,6 @@ test('unmatched uploaded table IDs show a notice that follows the Result through
   expect(await page.evaluate(() => window.__GBDRAW_APP__.comparisonWarnings)).toEqual([]);
 
   // Loading the saved Session restores the notice with its Result.
-  page.once('dialog', (dialog) => dialog.accept());
   await page.locator('input[accept^=".json,"]').first().setInputFiles(await saved.path());
   await expect(notice).toBeVisible();
   await expect(notice).toContainText(message);

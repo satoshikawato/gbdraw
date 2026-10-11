@@ -132,8 +132,6 @@ test('OV-03: an annotation of a selected feature on a cropped record stays on it
 // its source-record hash also in a cropped record (OV-401).
 test('the annotation TSV writes a selected feature by its current record position and feature hash', async ({ page }, testInfo) => {
   test.setTimeout(300_000);
-  const alerts = [];
-  page.on('dialog', (dialog) => alerts.push(dialog.message()));
   await openLinear(page, [COLLIDE], cropTesta);
   await generate(page);
   const features = await catalog(page);
@@ -145,17 +143,16 @@ test('the annotation TSV writes a selected feature by its current record positio
   await generate(page);
 
   const tsvPath = testInfo.outputPath('annotations.tsv');
-  alerts.length = 0;
   await download(page, 'Download TSV', tsvPath);
   const [header, row, ...rest] = readFileSync(tsvPath, 'utf8').trim().split('\n').map((line) => line.split('\t'));
   expect(rest).toEqual([]);
   const cell = (name) => row[header.indexOf(name)];
   expect([cell('record'), cell('feature_selector'), cell('envelope'), cell('circular_path')])
     .toEqual(['#1', `hash=${X.identity}`, 'outer_bounds', 'shortest']);
-  expect(alerts).toEqual([
+  await expect(panel(page).getByRole('status')).toHaveText(
     '1 annotation(s) of selected features were written as record=#<position> and feature_selector=hash=<feature hash>. '
       + 'They name the same features only while the record order stays as drawn.'
-  ]);
+  );
 
   // The table imported back draws the same annotation in the same placement.
   await panel(page).locator('input[type=file]').setInputFiles(tsvPath);
@@ -338,14 +335,13 @@ test('OV-21: an annotation of a selected Circular feature stays out of Linear re
 test('R-7: a Session 44 hash annotation of one untransformed feature moves to its identity, and Generate draws the source-hash annotation main left out', async ({ page }, testInfo) => {
   test.setTimeout(360_000);
   const SESSION = 'tests/fixtures/sessions/selected-feature-annotations.v44.gbdraw-session.json.gz';
-  const dialogs = [];
-  page.on('dialog', (dialog) => dialogs.push(dialog.message()));
   await openFresh(page);
   await page.locator('input[accept^=".json,"]').setInputFiles(SESSION);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180_000 });
   await settle(page);
-  expect(dialogs).toEqual(['Session loaded successfully! 1 annotation(s) from an older Session named a feature by '
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
+  await expect(page.locator('[data-app-notice] li')).toHaveText(['1 annotation(s) from an older Session named a feature by '
     + 'hash=. Each now names that feature by its source, so it stays on the feature when the crop or orientation changes.']);
   const testa = await page.evaluate(async () => {
     const { getCommittedCanonicalRenderRequest } = await import('/gbdraw/web/js/services/config.js');

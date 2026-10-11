@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { ShowNotice } from '../app-messages.js' */
 /** @import { DrawingState } from '../../state.js' */
 import {
   applyFeatureVisibilityOverrideChanges,
@@ -43,6 +44,7 @@ import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/
  * @property {import('../rule-matching.js').RulePreparation | null} [rulePreparation]
  * @property {() => ({ diagramOptions?: Record<string, any> } | null)} [getCommittedRequest]
  *   The committed canonical request (Python owns the option fields, R7).
+ * @property {ShowNotice} [showNotice] The root's notice banner: a table import or export reports there (UX-A07).
  */
 
 // The paint domain this owner shows through the port.
@@ -58,7 +60,8 @@ export const createFeatureVisibilityActions = ({
   ports,
   selectResult,
   rulePreparation = null,
-  getCommittedRequest = () => null
+  getCommittedRequest = () => null,
+  showNotice = () => {}
 }) => {
   // The preview owner selects the Result a History command targets (R13).
   if (typeof selectResult !== 'function') {
@@ -591,7 +594,7 @@ export const createFeatureVisibilityActions = ({
     const drawing = state.activeDrawing();
     const text = serializeFeatureVisibilityRules(visibilityRuleRows(drawing));
     if (!text.trim()) {
-      alert('No valid feature visibility rules to export.');
+      showNotice({ text: 'There are no complete Feature visibility rules to export.' });
       return;
     }
     downloadTextFile('gbdraw_feature_visibility_table.tsv', text);

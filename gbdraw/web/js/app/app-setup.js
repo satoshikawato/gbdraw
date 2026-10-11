@@ -125,6 +125,7 @@ import {
 import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
 import { createDialogChoice, setupHistoryInputs } from './history-inputs.js';
+import { createChoicePrompt, createNoticeBanner } from './app-messages.js';
 import { setupHistoryShortcuts } from './history-shortcuts.js';
 import { createPreviewRuntime } from './preview-runtime.js';
 import {
@@ -1440,6 +1441,12 @@ export const createAppSetup = () => {
   }));
   // The choice in flight of a popup choice dialog: its busy state and its close (D-12).
   const dialogChoice = createDialogChoice({ mutationPending: history.mutationPending, runUndoable: history.runUndoable, ref });
+  // UX-A07, UX-C12: confirmations ask with the app's choice dialog, and an
+  // operation's outcome shows in the notice banner (no native confirm or alert).
+  const choicePrompt = createChoicePrompt({ reactive });
+  const noticeBanner = createNoticeBanner({ reactive });
+  const askChoice = choicePrompt.ask;
+  const showNotice = noticeBanner.show;
   const recordDisplayControls = createRecordDisplayControls({ state, computed, watch,
     linearRecordsFor: linearRecordSelector.recordsFor,
     linearRecordStatusFor: linearRecordSelector.statusFor,
@@ -1630,7 +1637,9 @@ export const createAppSetup = () => {
     projectPaletteAndRules,
     projectFeatureEdits: () => projectMountedEditorIntent({ visibility: true, rerender: true, reflow: true, labels: true }),
     readUserDefaultColor: resultsManager.readUserDefaultColor,
-    setDefaultColor: resultsManager.setDefaultColor
+    setDefaultColor: resultsManager.setDefaultColor,
+    askChoice,
+    showNotice
   });
   legendRowRulePorts.commitLegendRowRules = featureActions.commitSpecificRules;
   specificRuleRestorePorts.captureSpecificRulePatternDrafts = featureActions.captureSpecificRulePatternDrafts;
@@ -1779,11 +1788,11 @@ export const createAppSetup = () => {
       })
     })(change);
   };
-  const circularTrackSlotEditor = createCircularTrackSlotEditor({ state, changeTrackLayout });
+  const circularTrackSlotEditor = createCircularTrackSlotEditor({ state, changeTrackLayout, askChoice, runUndoable: history.runUndoable });
   const linearTrackSlotEditor = createLinearTrackSlotEditor({ state, changeTrackLayout });
   const annotationImportNotice = ref('');
   const annotationEditor = createAnnotationEditor({
-    state, getRecordCatalog: getAnnotationRecordCatalog, retireLegendStylesOfUnnamedCaptions, reactive,
+    state, getRecordCatalog: getAnnotationRecordCatalog, retireLegendStylesOfUnnamedCaptions, askChoice,
     onImportNotice: (notice) => { annotationImportNotice.value = notice; }
   });
   watch(
@@ -2904,6 +2913,8 @@ export const createAppSetup = () => {
     readDraftSignature: () => history.getCurrentIntentSignature(),
     closeLabelTextScopeDialog: featureActions.closeLabelTextScopeDialog,
     clearLabelBuildNotices: featureActions.clearLabelBuildNotices,
+    askChoice,
+    showNotice,
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts,
     getCommittedCanonicalSession,
@@ -3119,7 +3130,21 @@ export const createAppSetup = () => {
     'Load Session', () => sessionInput.value?.click()
   );
   let nextSessionPreviewToken = 1;
-  const importSession = (event) => importSessionFromFile(event, {
+  // Q10 (Owner 2026-10-10): a loaded Session says so in the notice banner, with
+  // what the load changed as a list (UX-C12).
+  const importSession = async (event) => {
+    const name = String(event?.target?.files?.[0]?.name || '');
+    // The notice of an earlier operation does not stand for this load.
+    if (name) noticeBanner.dismiss();
+    const result = await loadSessionFromFile(event);
+    if (result?.status === 'ok') {
+      showNotice({ text: name ? `Session loaded: ${name}` : 'Session loaded.', items: result.warnings || [] });
+    } else if (result?.status === 'legacy') {
+      showNotice({ text: 'Configuration loaded from an older gbdraw. Save Session to keep it in the current format.' });
+    }
+    return result;
+  };
+  const loadSessionFromFile = (event) => importSessionFromFile(event, {
     availability: sessionSaveLoadAvailability,
     transformLegacyResultSvg,
     beforeImport: async () => {
@@ -3913,6 +3938,19 @@ export const createAppSetup = () => {
       ? handleFeatureStrokeScopeChoiceWithHistory(choice, ...rest)
       : handleFeatureColorScopeChoiceWithHistory(choice, ...rest)
   );
+  // UX-A05: the label scopes the Color/Stroke Change Scope dialog offers; a
+  // label that repeats the Legend name, or the other label, is not offered.
+  const featureStyleScopeLabelOptions = computed(() => {
+    const text = (/** @type {unknown} */ value) => String(value || '').trim().toLowerCase();
+    const dialog = featureStyleScopeDialog;
+    const legend = text(dialog.legendName);
+    const display = text(dialog.displayLabel);
+    const annotation = text(dialog.annotationLabel);
+    return {
+      displayLabel: dialog.displayLabelSiblingCount > 0 && display !== '' && display !== legend,
+      annotationLabel: dialog.annotationLabelSiblingCount > 0 && annotation !== '' && annotation !== legend && annotation !== display
+    };
+  });
   const handleLegendNameCommitWithHistory = undoableAction('Rename legend item', handleLegendNameCommit);
   // The Legend tab's grip reorders a row by drag or by the Up and Down arrow
   // keys; neither is a click, so each move records its own History step.
@@ -4606,15 +4644,31 @@ export const createAppSetup = () => {
   const { resetAllPositions, resetCanvasPadding } = legendLayout;
 
   // Reset Settings resets both drawings (PD-OI-070); the Linear records and
-  // comparisons are the Linear drawing's.
+  // comparisons are the Linear drawing's. The button asks first and says what
+  // the reset keeps (UX-A07); `resetSettings` itself does not ask.
+  const requestResetSettings = async () => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
+    const choice = await askChoice({
+      title: 'Reset all settings?',
+      description: 'Circular and Linear both return to their default settings. This also removes your edits:',
+      items: [
+        'Colors, color rules, and the palette',
+        'Labels, Feature visibility, and Feature placements',
+        'Legend names, deleted Legend rows, and Region Annotations',
+        'Linear record definitions, subtitles, regions, reverse complement, and alignment'
+      ],
+      note: 'Uploaded files, the records you chose, File defaults, and Depth files stay. Undo brings the settings back.',
+      actions: [{ id: 'reset', label: 'Reset all settings', tone: 'danger' }],
+      cancelLabel: 'Keep settings'
+    });
+    if (choice !== 'reset') return false;
+    return resetSettings();
+  };
   const resetSettings = () => {
     const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
-    const proceed = window.confirm(
-      'Reset all settings to the webapp defaults?\n\nUploaded files and current results will be kept.'
-    );
-    if (!proceed) return false;
 
     // OV-287, OV-289, OV-290 (PD-OI-066): the displayed Result shows the
     // reset draft as the next Generate draws it. One projection of the editor
@@ -4678,6 +4732,16 @@ export const createAppSetup = () => {
     resetLayoutState(state);
     resetPreviewViewport({ resetZoom: true });
   };
+
+  // UX-B11: Reset Layout has something to reset once an element moved, the
+  // canvas padding changed, or the view was panned or zoomed.
+  const layoutResetAvailable = computed(() => {
+    const moved = (/** @type {{ x: number, y: number }} */ offset) => Boolean(Number(offset.x) || Number(offset.y));
+    const padding = state.activeDrawing().canvasPadding;
+    return [state.diagramOffset, state.legendCurrentOffset, state.plotTitleUserOffset, state.lengthBarUserOffset, canvasPan].some(moved)
+      || zoom.value !== 1
+      || ['top', 'right', 'bottom', 'left'].some((side) => Number(padding[side]));
+  });
 
   const isInteractiveTarget = (target) => {
     if (!target) return false;
@@ -5113,6 +5177,7 @@ export const createAppSetup = () => {
 
   const saveSessionWithTitle = () => exportSession(null, {
     availability: sessionSaveLoadAvailability,
+    askChoice,
     recordDisplayRows: recordDisplayControls.allRows,
     // Save writes every Result: the other mode's slot goes beside the shown one (E1).
     readOtherModeArtifact: () => artifactSlots[mode.value === 'linear' ? 'circular' : 'linear'],
@@ -5157,7 +5222,11 @@ export const createAppSetup = () => {
     },
     onError: (error) => { errorLog.value = normalizeUserFacingError(error); },
     // UJ-09: a saved download is the History position Load Session compares with.
-    onSaved: () => history.markSavePoint()
+    // Q8 (Owner 2026-10-10): the notice names the file the download started.
+    onSaved: (/** @type {{ filename: string }} */ { filename }) => {
+      history.markSavePoint();
+      showNotice({ text: `Session saved: ${filename}. Find it in your browser's downloads.` });
+    }
   });
 
   const openFeatureEditorFromList = (feat, event) => {
@@ -6053,8 +6122,6 @@ export const createAppSetup = () => {
     annotationImportNotice,
     specificRuleNotice,
     importAnnotationTableFile: undoableAction('Import annotations', annotationEditor.importAnnotationTableFile),
-    annotationReplaceAllDialog: annotationEditor.annotationReplaceAllDialog,
-    handleAnnotationReplaceAllChoice: annotationEditor.handleAnnotationReplaceAllChoice,
     renameAnnotation: annotationEditor.renameAnnotation,
     setAnnotationStyle: annotationEditor.setAnnotationStyle,
     canDownloadAnnotationTable: annotationEditor.canDownloadAnnotationTable,
@@ -6617,6 +6684,7 @@ export const createAppSetup = () => {
     setClickedFeatureStrokeWidthValue: setClickedFeatureStrokeWidthValueWithHistory,
     resetClickedFeatureStroke: resetClickedFeatureStrokeWithHistory,
     featureStyleScopeDialog,
+    featureStyleScopeLabelOptions,
     featureVisibilityScopeDialog,
     handleColorScopeChoice: handleColorScopeChoiceWithHistory,
     handleFeatureStyleScopeChoice: handleFeatureStyleScopeChoiceWithHistory,
@@ -6687,6 +6755,7 @@ export const createAppSetup = () => {
     resetAllStrokes: editEditorIntent('Reset all strokes', resetAllStrokes),
     resetAllPositions: undoableAction('Reset positions', resetAllPositions),
     resetLayout: undoableAction('Reset layout', resetLayout),
+    layoutResetAvailable,
     canvasPadding: drawingMember('canvasPadding'),
     showCanvasControls,
     resetCanvasPadding,
@@ -6720,6 +6789,7 @@ export const createAppSetup = () => {
     runInfoReproducibilityText,
     runInfoHasCliHelperFiles,
     resetSettings,
+    requestResetSettings,
     saveSessionWithTitle,
     editSessionTitle,
     importSession,
@@ -6733,6 +6803,10 @@ export const createAppSetup = () => {
     exampleSessionPending,
     sessionReplaceDialog,
     resolveSessionReplacement,
+    choicePrompt: choicePrompt.prompt,
+    resolveChoicePrompt: choicePrompt.resolve,
+    notice: noticeBanner.notice,
+    dismissNotice: noticeBanner.dismiss,
     circularRecordPresentationPanel,
     canUndoHistory,
     canRedoHistory,

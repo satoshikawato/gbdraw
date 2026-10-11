@@ -2,6 +2,7 @@
 /** @import { DrawingState } from '../state.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { PreviousResultRestoreOptions, ReadinessExpectation, ReadinessExpectationOptions, ReadyReceipt } from './preview-runtime.js' */
+/** @import { AskChoice, ShowNotice } from './app-messages.js' */
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
 import { keepResultNames } from '../services/result-normalization.js';
@@ -257,18 +258,6 @@ export const losatExportBytesExceedLimit = (
   totalBytes,
   limitBytes = LOSAT_EXPORT_CONFIRM_THRESHOLD_BYTES
 ) => Number(totalBytes) > Number(limitBytes);
-
-export const confirmHydratedLosatExport = (
-  totalBytes,
-  confirmDownload = globalThis.confirm,
-  limitBytes = LOSAT_EXPORT_CONFIRM_THRESHOLD_BYTES
-) => (
-  !losatExportBytesExceedLimit(totalBytes, limitBytes) ||
-  typeof confirmDownload !== 'function' ||
-  Boolean(confirmDownload(
-    `Raw LOSAT TSV export will download about ${(totalBytes / (1024 * 1024)).toFixed(1)} MB. Continue?`
-  ))
-);
 
 /**
  * @typedef {object} LosatCacheMetadata
@@ -1240,6 +1229,8 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
  * @property {(options?: { rerender?: boolean }) => void} clearLabelBuildNotices The label owner's port.
  * @property {typeof prepareCandidateRenderCommit} [prepareCandidateCommit] Test seam.
+ * @property {AskChoice} [askChoice] The root's choice dialog: a large download asks first (UX-A07).
+ * @property {ShowNotice} [showNotice] The root's notice banner.
  */
 
 /** @param {RunAnalysisOptions} options */
@@ -1278,7 +1269,9 @@ export const createRunAnalysis = ({
   // R13: the label owner's ports (app/feature-editor/label-actions.js).
   closeLabelTextScopeDialog,
   clearLabelBuildNotices,
-  prepareCandidateCommit = prepareCandidateRenderCommit
+  prepareCandidateCommit = prepareCandidateRenderCommit,
+  askChoice = async () => 'cancel',
+  showNotice = () => {}
 }) => {
   const {
     processing,
@@ -1515,9 +1508,9 @@ export const createRunAnalysis = ({
     };
   };
 
-  const downloadCliHelperFiles = () => {
+  const downloadCliHelperFiles = async () => {
     if (!latestCliHelperFiles.length) {
-      alert('No reproducibility files are available for the latest run.');
+      showNotice({ text: 'The latest run has no reproducibility files to download.' });
       return;
     }
     const materializedFiles = latestCliHelperFiles.map((file) => ({
@@ -1537,12 +1530,11 @@ export const createRunAnalysis = ({
       (sum, file) => sum + String(file.data ?? '').length,
       0
     );
-    if (totalChars > 50 * 1024 * 1024) {
-      const proceed = confirm(
-        `CLI helper file export will download about ${(totalChars / (1024 * 1024)).toFixed(1)} MB. Continue?`
-      );
-      if (!proceed) return;
-    }
+    if (totalChars > 50 * 1024 * 1024 && await askChoice({
+      title: 'Download large reproducibility files?',
+      description: `The ZIP holds about ${(totalChars / (1024 * 1024)).toFixed(1)} MB of input and helper files.`,
+      actions: [{ id: 'download', label: 'Download', tone: 'primary' }]
+    }) !== 'download') return;
     downloadBlob(createZipBlob(materializedFiles), latestCliHelperArchiveName);
   };
 
@@ -5798,7 +5790,11 @@ export const createRunAnalysis = ({
       hydratedEntries.map((item) => item.hydrated)
     );
 
-    if (!confirmHydratedLosatExport(totalBytes)) return;
+    if (losatExportBytesExceedLimit(totalBytes) && await askChoice({
+      title: 'Download large LOSAT tables?',
+      description: `The raw LOSAT TSV files total about ${(totalBytes / (1024 * 1024)).toFixed(1)} MB.`,
+      actions: [{ id: 'download', label: 'Download', tone: 'primary' }]
+    }) !== 'download') return;
 
     for (const { entry, idx, hydrated } of hydratedEntries) {
       const filename = entry.filename || `losat_pair_${idx + 1}.tsv`;

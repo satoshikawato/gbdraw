@@ -247,12 +247,12 @@ test('a Track Preset change that drops a lane placement asks first (OV-09)', asy
     const preset = await reveal(page.locator('#circular-track-preset'));
     const dialog = placementDialog(page);
     const reset = dialog.getByRole('button', { name: 'Reset 1 placement to Auto', exact: true });
-    const cancel = dialog.getByRole('button', { name: 'Cancel change', exact: true });
+    const cancel = dialog.getByRole('button', { name: 'Keep current layout', exact: true });
 
     // Cancel and Escape keep the preset and the placement and record no step.
     await preset.selectOption('spreadout');
     await expect(dialog).toBeVisible();
-    await expect(dialog).toContainText('Changing Track Preset to Spreadout leaves 1 Feature placement without its lane.');
+    await expect(dialog).toContainText('Changing Track Preset to Spreadout removes the lane for 1 feature you placed manually.');
     await expect(reset).toBeFocused();
     await expect(preset).toHaveValue('middle');
     await page.screenshot({ path: testInfo.outputPath('track-preset-dialog.png') });
@@ -305,9 +305,9 @@ test('Separate Strands on with an Above lane placement asks first (OV-09)', asyn
     expect(placed).toMatchObject({ separate: false, row: 'above' });
     const dialog = placementDialog(page);
     await strands.click();
-    await expect(dialog).toContainText('Changing Separate Strands to On leaves 1 Feature placement without its lane.');
+    await expect(dialog).toContainText('Changing Separate Strands to On removes the lane for 1 feature you placed manually.');
     await expect(strands).not.toBeChecked();
-    await dialog.getByRole('button', { name: 'Cancel change', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Keep current layout', exact: true }).click();
     await expect(strands).not.toBeChecked();
     expect(await layoutState(page, key)).toEqual(placed);
     await strands.click();

@@ -156,10 +156,13 @@ after every section, and its bar stays fixed at the bottom of the panel.
 
 **Save Session** asks for a **Session title** when none is set and downloads
 `<title>.gbdraw-session.json.gz`. Saving again under the same file name first
-asks whether to download that file again. When the compressed Session is larger
-than 50 MiB, Save reports its size and asks whether to continue. **Cancel** in
-either dialog saves nothing. **Load Session** accepts `.gbdraw-session.json` and
-`.gbdraw-session.json.gz` files. On gbdraw.app, **Load example** in the header
+asks whether to **Download again**. When the compressed Session is larger
+than 50 MiB, Save names its size and asks before it downloads. **Cancel** in
+either dialog saves nothing. When the download starts, a notice above the Result
+names the file. **Load Session** accepts `.gbdraw-session.json` and
+`.gbdraw-session.json.gz` files; after a load, the notice names the loaded file
+and lists any warnings about older Session content. Dismiss the notice with its
+close button; the next notice replaces it. On gbdraw.app, **Load example** in the header
 and **Load an example** in the empty Preview list the Gallery examples and load
 the chosen one's Session, asking first when the current work has unsaved
 changes. The local `gbdraw gui` ships no Gallery and shows neither button.
@@ -857,13 +860,15 @@ qualifiers, but not nucleotide or amino-acid sequences or `/translation`
 values; select **Nucleotide** or **Amino acid** to search sequences, including
 IUPAC codes. **Location** matches the displayed 1-based INSDC location, such as
 `3901..4000, 1..200 (+)` for an origin-spanning feature. Search may use a
-literal value or **Regex (JavaScript, i)**, and the previous and next controls
-move through rendered matches. The line under the search row names the active
+literal value or **Regular expression**, and the previous and next controls
+move through rendered matches. **Qualifier key** appears when the **Field** menu
+is set to qualifier search. Before a search the status shows nothing; after one
+it shows the active match, such as `2 of 5 matches`, or `No matches`. The line under the search row names the active
 match's record and the field it matched, such as
 `Record NC_022349.1 · Matched Qualifier gene: dnaA`. Regex search is case-insensitive JavaScript in
 both the app and downloaded Interactive SVG. Python-only syntax such as
 `(?P<name>...)` is rejected here; the message identifies JavaScript regex and
-explains returning to word search by turning Regex off.
+explains returning to word search by turning **Regular expression** off.
 
 A normal feature click opens its identity, location, strand, qualifiers, and
 available sequence actions. The first popup after a page or Session load can
@@ -941,8 +946,8 @@ app header, as the feature popup does.
 Ctrl-click selects features for bulk color, legend-caption, visibility, and
 stroke edits. Use the visible **Apply** action to make an edit part of the
 editor state. Renaming a legend entry, with or without features, to the caption of another
-entry of a different color asks you to choose **Merge**, **Suffix**, or
-**Cancel**. If a specific color rule already uses the caption, the entries are
+entry of a different color asks you to choose **Merge into "<name>"**, **Keep
+both** (the dialog shows the numbered name the renamed entry gets), or **Cancel**. If a specific color rule already uses the caption, the entries are
 told apart as that rule describes instead. In the color scope, legend name, and
 **Reset fill color** dialogs, whether a fill color in the popup or the Features
 list, a popup stroke edit, or a legend rename opens them, each choice is one
@@ -951,7 +956,9 @@ disabled and shows **Applying an edit…** until the edit is applied. The first
 choice after a page or Session load can wait several seconds while the Python
 runtime starts. A legend row that a rule draws with a hex suffix, such as
 `rRNA [#ff0000]`, belongs to that rule: renaming it or changing its color edits
-the rule, and the generated `rRNA` row stays a legend-only row. **Apply to all label** and **Apply to all source label** become
+the rule, and the generated `rRNA` row stays a legend-only row. The color scope dialog offers **This feature only** first, then,
+under **All features with the same**, the matching **Color rule**, **Legend item**, **Label**, and **Source label**
+with their feature counts. **Label** and **Source label** become
 one anchored qualifier rule only when the selected features share one feature
 type, qualifier, and value and that rule matches exactly the intended loaded
 features. Otherwise the editor keeps one exact `hash` rule per biological
@@ -1078,11 +1085,11 @@ matches it decides. Then **Feature Types** decides. A feature of a type that
 **Feature Types** does not select is still drawn when a specific color rule
 matches it.
 - For a feature drawn as **Underlay**, **Label Cannot Be Drawn** offers **Keep
-  without label**, which saves **On** for when the label can be drawn, for
+  Label On**, which saves **On** for when the label can be drawn, for
   example after you choose another rendering for its feature type.
 - With **Label Rendering** set to **Embedded Only**, the label rerender runs
   first. When the label does not fit inside its feature, **Label Does Not Fit**
-  offers **Keep without label**; **Cancel** restores the previous label settings.
+  offers **Keep Label On**; **Cancel** restores the previous label settings.
 
 A choice is one **Undo** step, and **Cancel** changes nothing. No choice changes
 **Show Labels**, **Label Rendering**, or a feature rendering. Generate does not
@@ -1119,8 +1126,8 @@ centred in the canvas, at the largest whole percent that fits. With **Editor**
 open beside the canvas, it fits the part of the canvas the Editor leaves free.
 
 To adjust a legend, plot title, or Linear scale, select **Layout edit** in the
-lower control row, then drag the item in the Preview. The explanation beside
-the Preview export buttons also names these targets. With **Layout edit** off,
+lower control row, then drag the item in the Preview. The button's tooltip
+names these targets. With **Layout edit** off,
 dragging pans the canvas; hovering over an eligible item points to the toggle.
 The button also works with tap, Space, or Enter. These decoration drags do
 not alter biological coordinates; the existing record positioning controls
@@ -1131,6 +1138,9 @@ diagram keeps each supported item's manual offset relative to its new automatic
 position, including after a second Generate. If the new diagram cannot match a
 moved item, the previous Result stays available. Use that item's position
 reset or **Reset Layout**, or restore the matching settings, then Generate again.
+**Reset Layout** returns moved items, canvas padding, pan, and zoom to their
+defaults; it is unavailable until one of them changed. **Canvas padding** values
+are in pixels.
 An offset near an edge may still clip or overlap another item; adjust canvas
 padding, which Generate keeps, or reset its position. A Linear legend side
 change does not move the legend in place, because the generated layout uses
@@ -1145,8 +1155,8 @@ also restore those rows, so a custom stack keeps its ring rows and the next
 Generate gives the loaded diagram. Ctrl+Z undoes and Ctrl+Shift+Z or Ctrl+Y redoes (Cmd on macOS), also while a
 select has focus. In a text field these keys keep the browser's text undo. Undo and Redo, like a failed Session Load, restore each setting exactly as
 it was: a setting that was not set, such as a track slot side or the Circular
-multi-record legend position, stays unset. **Reset Settings** is broader than undo and requires
-confirmation. Every Legend rename, of a feature row or a track row such as GC content, returns
+multi-record legend position, stays unset. **Reset Settings** is broader than undo and asks
+first; its dialog lists what it resets and what stays, and **Reset all settings** applies it. Every Legend rename, of a feature row or a track row such as GC content, returns
 to the caption Python draws. In Linear it also clears each record's **Definition**, **Subtitle**,
 crop, and reverse complement, and the comparison alignment plan; the Files, each
 row's selected record, the file defaults, and Depth assignments stay. **Undo**
@@ -1172,14 +1182,14 @@ colors.
   same way; either choice drops the queued palette and applies at once.
 - **Reset** in **Default colors** asks before it discards your colors. Editing
   a color in the list asks nothing.
-- In the popup's color scope dialog, **Apply to all "<type>"** sets that
+- In the popup's color scope dialog, **Legend item "<type>"** sets that
   feature type's default color when the Legend row's caption is the feature
   type and no specific color rule or per-feature color draws a feature of the
   row. Every feature of that type without its own color or rule takes it, also
   hidden features and features shown later. The dialog says so and names your
   earlier color when it replaces one. While a palette is queued (**Instant
   Preview** off), the Result shows the new color at once, and the dialog says
-  so. On any other row, **Apply to all** changes the row's rules or writes
+  so. On any other row, **Legend item** changes the row's rules or writes
   one rule per feature.
 - Each choice in these dialogs is one History step, and **Cancel** records none.
 
@@ -1327,7 +1337,7 @@ custom stack Reset, or a custom stack row edit (adding, deleting, enabling,
 moving, or changing its renderer, lane, or placement).
 The other mode's placements are its own and never change. **Reset N
 placements to Auto** applies the change and sets exactly those placements to
-Auto as one undoable step; **Cancel change**, Escape, or a click outside keeps
+Auto as one undoable step; **Keep current layout**, Escape, or a click outside keeps
 the setting and the placements. Loading a Session, Undo, Redo, and **Reset
 Settings** (which also clears placements) do not ask; if their result has a lane
 the slot cannot draw, Generate names the feature.

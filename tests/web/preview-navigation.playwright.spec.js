@@ -94,7 +94,9 @@ test('background pan preserves screen displacement after text selection and zoom
   });
   const evidence = [];
   for (const zoom of [0.3, 1, 2.8]) {
-    await page.getByRole('button', { name: 'Reset layout', exact: true }).click();
+    // Nothing has moved before the first round, so Reset layout starts disabled.
+    if (evidence.length === 0) await expect(page.getByRole('button', { name: 'Reset layout', exact: true })).toBeDisabled();
+    else await page.getByRole('button', { name: 'Reset layout', exact: true }).click();
     const direction = zoom < 1 ? 'Zoom out' : 'Zoom in';
     for (let i = 0; i < Math.round(Math.abs(zoom - 1) * 10); i += 1) {
       await page.getByRole('button', { name: direction, exact: true }).click();

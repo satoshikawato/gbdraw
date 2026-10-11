@@ -294,11 +294,10 @@ INTEGRATION_OBSERVER = r"""(() => {
 
 
 def integration_import(page, fixture):
-    with page.expect_event('dialog', timeout=120_000) as event:
-        page.locator('input[accept^=".json,"]').first.set_input_files(str(fixture))
-    dialog = event.value
-    assert dialog.message == 'Session loaded successfully!', dialog.message
-    dialog.accept()
+    page.locator('input[accept^=".json,"]').first.set_input_files(str(fixture))
+    page.locator('[data-app-notice]').filter(has_text='Session loaded').wait_for(
+        state='visible', timeout=120_000
+    )
     page.wait_for_function('() => window.__GBDRAW_APP__.results.length > 0')
 
 

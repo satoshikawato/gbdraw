@@ -109,9 +109,8 @@ const load = async (browser, file, viewport, requirePreview = true) => {
   page.on('pageerror', error => errors.push(String(error)));
   page.on('dialog', async dialog => { dialogs.push(dialog.message()); await dialog.accept(); });
   await openApp(page);
-  const dialog = page.waitForEvent('dialog', { timeout: 180_000 });
   await page.locator('input[accept^=".json,"]').setInputFiles(file);
-  expect((await dialog).message()).toBe('Session loaded successfully!');
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 180_000 });
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending)).toBe(true);
   if (requirePreview) await expect(page.locator('.origin-top svg')).toBeVisible();
   return { context, page, external, errors, dialogs };

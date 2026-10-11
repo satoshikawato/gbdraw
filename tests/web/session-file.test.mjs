@@ -4,7 +4,7 @@ import { gunzipSync } from 'node:zlib';
 
 const {
   compressSessionData,
-  confirmLargeSessionBlob
+  largeSessionDownloadMegabytes
 } = await import('../../gbdraw/web/js/services/session-file.js');
 const { downloadBlob } = await import('../../gbdraw/web/js/services/text-download.js');
 
@@ -101,22 +101,11 @@ const largeBlob = new Blob(
   [new Uint8Array((50 * 1024 * 1024) + (512 * 1024))],
   { type: 'application/gzip' }
 );
-let confirmationMessage = '';
-assert.equal(
-  confirmLargeSessionBlob(largeBlob, (message) => {
-    confirmationMessage = message;
-    return false;
-  }),
-  false
-);
-assert.equal(
-  confirmationMessage,
-  'Compressed session size is 50.5 MB. Continue?'
-);
-assert.equal(
-  confirmLargeSessionBlob(largeBlob, () => true),
-  true
-);
+// A Session over 50 MB asks first in the app's choice dialog (UX-A07), which
+// names its size; a smaller one downloads without asking.
+assert.equal(largeSessionDownloadMegabytes(largeBlob).toFixed(1), '50.5');
+assert.equal(largeSessionDownloadMegabytes(new Blob([new Uint8Array(1024)])), null);
+assert.throws(() => largeSessionDownloadMegabytes('not a blob'), TypeError);
 
 let downloadedBlob = null;
 let downloadedName = null;
