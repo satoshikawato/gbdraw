@@ -201,6 +201,11 @@ write-up of a release.
   that the web draft leaves implicit: a definition-line `font_weight` of
   `normal` or a feature rendering at its default (OV-398).
 - Editing (web app): an edit to a Feature visibility rule made while a label rerender is running is drawn as **Generate Diagram** draws it; before, the shown Result could keep the older rule until the next Generate (#987).
+- Editing (web app): a color edit no longer adds a Legend row live for a color
+  rule that no feature drawn on the shown Result matches, such as a rule for a
+  feature of the other Result of a batch or a feature that a Feature visibility
+  rule hides; before, the row showed until the next **Generate Diagram**
+  (OV-344).
 - Web app: **Load example** is now also in the header, after **Load Session**, so a
   second Gallery example can be loaded once a Result is shown. It opens the same chooser
   as the **Load an example** button in the empty Preview, which stays. At 769 to about
