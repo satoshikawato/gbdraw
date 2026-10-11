@@ -4,6 +4,7 @@
 // Escape returns focus to the diagram item. With Layout edit on, no popup opens.
 const { test, expect } = require('@playwright/test');
 const { HMMT_SESSION, loadSessionFile, openFresh, settle } = require('./helpers/audit-browser.cjs');
+const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -123,7 +124,7 @@ test('a record definition opens its popup; its edits write the record settings',
   await settle(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].record_subtitle)).toBe('Popup subtitle');
   expect(await undoCount(page)).toBe(before + 3);
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settle(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].record_subtitle || '')).not.toBe('Popup subtitle');
 });
