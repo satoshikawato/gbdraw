@@ -658,8 +658,10 @@ def apply_capture_action(page, action: dict[str, Any]) -> None:
     elif action_type == "wait":
         page.wait_for_timeout(int(action.get("ms") or 250))
     elif action_type == "resetSettings":
-        page.once("dialog", lambda dialog: dialog.accept())
         page.get_by_role("button", name="Reset Settings", exact=True).click()
+        confirm = page.get_by_role("dialog", name="Reset all settings?")
+        confirm.get_by_role("button", name="Reset all settings", exact=True).click()
+        confirm.wait_for(state="hidden")
         page.wait_for_timeout(500)
     elif action_type == "generate":
         generate_and_wait(page, int(action.get("timeout") or DEFAULT_GENERATE_TIMEOUT_MS))

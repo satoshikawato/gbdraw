@@ -2202,15 +2202,17 @@
               },
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.feature-popup'); const leaf = (key) => Array.from(popup?.querySelectorAll('*') || []).find((node) => node.children.length === 0 && node.textContent?.trim() === key); const geneRow = leaf('gene')?.closest('.border-b'); const geneKindRow = leaf('gene_kind')?.closest('.border-b'); if (!popup || !geneRow || !geneKindRow) throw new Error('Compact qualifier rows not found.'); popup.children[0]?.setAttribute('data-capture', 'qualifier-popup-header'); popup.children[1]?.setAttribute('data-capture', 'qualifier-popup-tabs'); geneRow.setAttribute('data-capture', 'qualifier-gene-row'); geneKindRow.setAttribute('data-capture', 'qualifier-gene-kind-row'); document.activeElement?.blur();"
+                "script": "const popup = document.querySelector('.feature-popup'); const leaf = (key) => Array.from(popup?.querySelectorAll('*') || []).find((node) => node.children.length === 0 && node.textContent?.trim() === key); const geneKey = leaf('gene'); const geneKindKey = leaf('gene_kind'); if (!popup || !geneKey?.nextElementSibling || !geneKindKey?.nextElementSibling) throw new Error('Qualifier rows not found.'); popup.children[0]?.setAttribute('data-capture', 'qualifier-popup-header'); popup.children[1]?.setAttribute('data-capture', 'qualifier-popup-tabs'); geneKey.setAttribute('data-capture', 'qualifier-gene-key'); geneKey.nextElementSibling.setAttribute('data-capture', 'qualifier-gene-value'); geneKindKey.setAttribute('data-capture', 'qualifier-gene-kind-key'); geneKindKey.nextElementSibling.setAttribute('data-capture', 'qualifier-gene-kind-value'); geneKey.scrollIntoView({ block: 'start' }); document.activeElement?.blur();"
               }
             ],
             "clipSelectors": [
               "[data-gbdraw-feature-id='fed46a3a6_record_1']",
               "[data-capture='qualifier-popup-header']",
               "[data-capture='qualifier-popup-tabs']",
-              "[data-capture='qualifier-gene-row']",
-              "[data-capture='qualifier-gene-kind-row']"
+              "[data-capture='qualifier-gene-key']",
+              "[data-capture='qualifier-gene-value']",
+              "[data-capture='qualifier-gene-kind-key']",
+              "[data-capture='qualifier-gene-kind-value']"
             ],
             "highlightSelector": "[data-gbdraw-feature-id='fed46a3a6_record_1']",
             "cropPadding": {
