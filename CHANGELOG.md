@@ -12,6 +12,38 @@ write-up of a release.
 
 ## [Unreleased]
 
+## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
+
+- Added circular-record display-start rotation and manual feature lane placement.
+- Improved Run Info / Exact replay, Save Session resource preservation, preview
+  navigation, and Generate processing-stage feedback.
+- Includes the beta's package-root Python API and current session/request
+  compatibility, plus isolated wheel/sdist installation and local GUI packaging fixes.
+- See the [full release notes](./docs/RELEASE_NOTES_0.14.0.md) for migration,
+  compatibility, and installation availability. Publication dates are recorded
+  in [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases).
+
+- Web Comparison card (Linear): **Settings** lists the mode, the result filters
+  and the appearance first, then **Search limits** and **Performance** (formerly
+  **Runtime and reproducibility**). **Selected pairs** shows each pair as one row
+  with its source, file, problem and **Save Raw LOSAT TSV**; the separate **Raw
+  LOSAT results** list in **Advanced comparison and layout** is gone. Pair-plan
+  problems appear once, in a **Fix before Generate** list with an action each.
+  The Collinear **Evidence scope** setting is now **Search between**.
+- Web errors appear once, at their cause: a failed Generate no longer repeats the
+  "last successful result" notice, a Linear comparison error offers **Show in
+  Comparison**, an invalid colour-rule pattern shows its cause under the field,
+  and a failed Session load shows **Session not loaded** with the reason.
+- **BLAST TSV missing** lists one row per pair with its own **Choose file…**,
+  then **Generate** or **Skip these comparisons and Generate**.
+- The first Generate shows each runtime preparation step ("step 2 of 5, ...").
+- Fixed: a Session load error raised in Circular stayed on screen after switching
+  to Linear (OV-372).
+- Fixed: the records of one multi-record File were named differently in
+  **Record Layout**, **Selected pairs** and the **BLAST TSV missing** dialog
+  (one by its definition, the next by its accession); each now shows the File's
+  definition plus its accession, and the accession stays visible in narrow rows
+  (OV-436). The Align panel keeps its own form, which always adds the accession.
 - Web app sidebar: the input, Colors, Region Annotations, Titles, Layout and
   Custom Track Slots cards are more compact. Each setting that applies on
   Generate keeps a short **Applies on Generate** marker. The Colors card uses
@@ -27,18 +59,6 @@ write-up of a release.
   say **Not inspected** instead of **Loading records...** (OV-379). After
   Inspect, **Display start** shows the current start instead of an empty field
   (OV-374).
-
-## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
-
-- Added circular-record display-start rotation and manual feature lane placement.
-- Improved Run Info / Exact replay, Save Session resource preservation, preview
-  navigation, and Generate processing-stage feedback.
-- Includes the beta's package-root Python API and current session/request
-  compatibility, plus isolated wheel/sdist installation and local GUI packaging fixes.
-- See the [full release notes](./docs/RELEASE_NOTES_0.14.0.md) for migration,
-  compatibility, and installation availability. Publication dates are recorded
-  in [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases).
-
 - SVG feature IDs: a feature of a cropped or reverse-complemented record
   (`--region`, `--reverse_complement`, **Reverse complement**, or a direction
   chosen in **Review alignment options…**) is now drawn with its source-record

@@ -361,6 +361,19 @@ export const FileUploader = {
   }
 };
 
+// A record's name in a narrow row: the name shrinks with an ellipsis and its
+// detail (the accession) never does, so records of one File stay distinct
+// (OV-436). The tooltip and the text hold the whole name.
+export const RecordName = {
+  props: { prefix: { type: String, default: '' }, name: { type: String, default: '' }, detail: { type: String, default: '' } },
+  /** @param {{ prefix: string, name: string, detail: string }} props */
+  setup(props) {
+    const title = computed(() => [props.prefix, [props.name, props.detail].filter(Boolean).join(' · ')].filter(Boolean).join(' '));
+    return { title };
+  },
+  template: `<span class="record-name" :title="title"><span v-if="prefix" class="record-name-part">{{ prefix + ' ' }}</span><span class="record-name-main">{{ name }}</span><span v-if="detail" class="record-name-part" data-record-name-detail>{{ ' · ' + detail }}</span></span>`
+};
+
 export const RecordDisplayControl = {
   template: '#record-display-control-template',
   props: ['row', 'controller'],
@@ -385,9 +398,11 @@ export const RecordDisplayControl = {
   }
 };
 
+// `compact` shows the error beside its field: the summary and a small Details
+// disclosure with the same diagnostics and Copy (PD-OI-046).
 export const OperationError = {
   template: '#operation-error-template',
-  props: ['error', 'recovery'],
+  props: { error: { type: null, default: null }, recovery: { type: null, default: null }, compact: Boolean },
   setup(props) {
     const model = computed(() => normalizeUserFacingError(props.error));
     const title = computed(() => operationErrorTitle(model.value?.operation));
@@ -428,7 +443,7 @@ export const OperationError = {
 // actions; a row emits them with the arguments it passed before.
 export const SpecificRuleRows = {
   template: '#specific-rule-rows-template',
-  components: { OperationError },
+  components: { OperationError, HelpTip },
   props: ['rules', 'featureKeys', 'available', 'patternText', 'patternDraft', 'fieldId'],
   emits: ['set-field', 'move-up', 'move-down', 'remove', 'edit-pattern', 'retry-pattern', 'revert-pattern']
 };

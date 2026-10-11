@@ -119,7 +119,7 @@ for (const mode of ['circular', 'linear']) {
         context:{position:1,positionUnit:'python-character',reason:'UNTERMINATED_SET'}},recovery:'preserved'});
       expect(await snapshot()).toEqual(before);
       const alert = page.getByRole('alert', {name:'Generation Error'});
-      await expect(alert).toContainText('last successful Result and committed request are unchanged');
+      await expect(alert).toContainText('Showing the last successful Result; your changes were not applied.');
       await inspectSafeDetails(page, alert, failed.error);
       await alert.screenshot({path:info.outputPath('operation-error-alert.png')});
       await page.locator('.preview-feature-search').screenshot({path:info.outputPath('search-controls.png')});
@@ -299,12 +299,12 @@ test('table import failures retain exact cause and concrete retry without a draf
   const uploader=page.getByLabel('Specific rules file',{exact:true});
   await uploader.setInputFiles({name:'PRIVATE_FILE_SENTINEL.tsv',mimeType:'text/plain',buffer:Buffer.from('CDS\tproduct\t(?<enzyme>NADH)\t#ff0000\t\n')});
   const alert=page.getByRole('alert',{name:'Rule error'});
-  await expect(alert).toContainText('Python regular expression is invalid',{timeout:180000});
+  await expect(alert).toContainText('Not a valid regular expression',{timeout:180000});
   await expect(alert.getByRole('button',{name:'Retry table import',exact:true})).toBeVisible();
   await page.evaluate(()=>{window.__S03_PREVIOUS_IMPORT_ERROR__=window.__GBDRAW_APP__.errorLog;});
   await alert.getByRole('button',{name:'Retry table import',exact:true}).click();
   await page.waitForFunction(()=>window.__GBDRAW_APP__.errorLog!==window.__S03_PREVIOUS_IMPORT_ERROR__ && !window.__GBDRAW_APP__.files.t_color);
-  await expect(alert).toContainText('Python regular expression is invalid',{timeout:180000});
+  await expect(alert).toContainText('Not a valid regular expression',{timeout:180000});
   expect(await page.evaluate(()=>window.__GBDRAW_APP__.svgContent)).toBe(before.svg);
   expect(await page.evaluate(()=>JSON.stringify(window.__GBDRAW_APP__.manualSpecificRules))).toBe(before.rules);
   expect(await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount())).toBe(before.history);
@@ -327,9 +327,9 @@ test('Label TSV retry retains its real reselect input and accepted History', asy
   await page.getByRole('button',{name:'Load Label TSV',exact:true}).click();
   await (await picker).setFiles({name:'PRIVATE_LABEL_SENTINEL.tsv',mimeType:'text/plain',buffer:Buffer.from('*\tCDS\tproduct\t(?<enzyme>NADH)\tPRIVATE_LABEL_SENTINEL\n')});
   const alert=page.getByRole('alert',{name:'Rule error'});
-  await expect(alert).toContainText('Python regular expression is invalid',{timeout:180000});
+  await expect(alert).toContainText('Not a valid regular expression',{timeout:180000});
   await page.evaluate(()=>window.__GBDRAW_APP__.retryLabelImportFailure());
-  await expect(alert).toContainText('Python regular expression is invalid');
+  await expect(alert).toContainText('Not a valid regular expression');
   expect(await page.evaluate(()=>window.__GBDRAW_APP__.svgContent)).toBe(before.svg);
   expect(await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount())).toBe(before.history);
   const pending=page.waitForEvent('filechooser');

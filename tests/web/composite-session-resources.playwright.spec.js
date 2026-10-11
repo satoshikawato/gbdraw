@@ -335,7 +335,7 @@ test('Session import rejects malformed composite bindings without replacing exis
       await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending), { timeout: loadTimeout }).toBe(false);
       const error=await page.evaluate(()=>window.__GBDRAW_APP__.errorLog);
       expect(error).toMatchObject({code:'INPUT_INVALID',stage:'request-validation'});
-      await expect(page.getByRole('alert',{name:'Operation error'})).toBeVisible();
+      await expect(page.getByRole('alert',{name:'Session not loaded'})).toBeVisible();
       expect(JSON.stringify(error)).not.toMatch(/logical\.gb|part\.gb|missing/);
       expect(await snapshot(page)).toEqual({ ...before, error });
       expect(await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount())).toBe(beforeHistory);

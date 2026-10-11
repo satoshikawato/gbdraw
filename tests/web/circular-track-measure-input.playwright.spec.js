@@ -35,10 +35,10 @@ const load = async (page, file = fixture, accepted = true) => {
   if (accepted) {
     await expect.poll(() => dialogs.get(page).length, { timeout: 180_000 }).toBeGreaterThan(before);
   } else {
-    // Rejected Load reports an operation alert and clears the input at the
-    // import owner's finally boundary before the preserved state is compared.
+    // Rejected Load reports the Session not loaded alert and clears the input at
+    // the import owner's finally boundary before the preserved state is compared.
     await expect.poll(() => input.inputValue()).toBe('');
-    await expect(page.getByRole('alert', { name: 'Operation error' })).toBeVisible();
+    await expect(page.getByRole('alert', { name: 'Session not loaded' })).toBeVisible();
     const error = await page.evaluate(() => window.__GBDRAW_APP__.errorLog);
     expect(error.stage).toBe('request-validation');
     expect(JSON.stringify(error)).not.toMatch(/1e|gc_content|invalid\.gbdraw-session/);

@@ -188,7 +188,7 @@ and [Circular source records](./REFERENCE/web-app.md#circular-source-records-and
 Save and Load need the Session to stay unchanged, so edits, **Generate Diagram**,
 and the other Session button wait until **Saving session…** or **Loading
 session…** disappears. Scrolling, preview pan and zoom, and feature search stay
-available. If Load reports an **Operation error**, check that a plain Session
+available. If Load reports **Session not loaded**, check that a plain Session
 file is at most 200 MiB and that a gzip Session expands to at most 512 MiB. See
 [Save and Load Sessions](./REFERENCE/web-app.md#save-and-load-sessions).
 

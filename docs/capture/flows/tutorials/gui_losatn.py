@@ -38,8 +38,10 @@ from flows.web_capture import (
     capture_screenshot,
     fit_complete_linear_preview,
     generate_and_inspect,
+    linear_raw_result,
     open_browser_capture,
     open_linear_comparison_disclosure,
+    open_linear_raw_filename,
     select_linear_losat_mode,
     wait_for_app_shell,
 )
@@ -183,11 +185,8 @@ def capture_gui_losatn(
         output_prefix.fill("lambda-de3-losatn")
         expect(output_prefix).to_have_value("lambda-de3-losatn")
 
-        advanced = open_linear_comparison_disclosure(
-            page,
-            "advanced",
-            "Advanced comparison and layout",
-        )
+        # The Raw LOSAT result sits in its pair row under Selected pairs.
+        raw_result = linear_raw_result(page, 1, 2)
 
         execution = settings.get_by_role(
             "combobox", name="LOSAT execution", exact=True
@@ -208,7 +207,7 @@ def capture_gui_losatn(
             "combobox", name="LOSAT threads per run", exact=True
         )
         expect(threads_per_run).to_be_disabled()
-        raw_filename = advanced.get_by_role(
+        raw_filename = open_linear_raw_filename(raw_result).get_by_role(
             "textbox", name="Raw LOSAT filename for #1 to #2", exact=True
         )
         raw_filename.fill(EXPECTED_GUI_LOSATN_TSV)
@@ -229,7 +228,7 @@ def capture_gui_losatn(
             page, output_paths["04-comparison-result.png"], "Linear"
         )
 
-        tsv_button = advanced.get_by_role(
+        tsv_button = raw_result.get_by_role(
             "button", name="Save Raw LOSAT TSV for #1 to #2", exact=True
         )
         expect(tsv_button).to_be_enabled()

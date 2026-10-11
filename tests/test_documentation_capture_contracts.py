@@ -622,7 +622,8 @@ def test_gui_losatn_flow_runs_the_real_serial_one_thread_journey() -> None:
         "select_linear_losat_mode(",
         'label="LOSATN"',
         'mode_key="blastn"',
-        '"Advanced comparison and layout"',
+        "raw_result = linear_raw_result(page, 1, 2)",
+        "open_linear_raw_filename(raw_result)",
         'name="LOSAT execution", exact=True',
         'name="LOSAT total threads", exact=True',
         'name="LOSAT parallel runs", exact=True',
@@ -1227,10 +1228,10 @@ def test_gui_losatn_tutorial_preserves_the_approved_five_step_journey() -> None:
     for value in (
         "`NC_001416.1` (48,502 bp)",
         "`NC_042057.1` (42,925 bp)",
-        "| Settings / Runtime and reproducibility | Execution | Serial |",
-        "| Settings / Runtime and reproducibility | Total threads | 1 |",
-        "| Settings / Runtime and reproducibility | Parallel runs | 1 run |",
-        "| Settings / Runtime and reproducibility | Threads per run | Fixed at 1 |",
+        "| Settings / Performance | Execution | Serial |",
+        "| Settings / Performance | Total threads | 1 |",
+        "| Settings / Performance | Parallel runs | 1 run |",
+        "| Settings / Performance | Threads per run | Fixed at 1 |",
         "| Settings | LOSAT Mode | LOSATN |",
         "| Settings | LOSATN task | `megablast` |",
         "| Settings / Comparison appearance | Match height | `120` |",
@@ -1241,7 +1242,8 @@ def test_gui_losatn_tutorial_preserves_the_approved_five_step_journey() -> None:
     ):
         assert value in tutorial
 
-    assert "Raw LOSAT results" in tutorial
+    assert "Raw LOSAT results" not in tutorial
+    assert "| Selected pairs / File name | Raw LOSAT filename |" in tutorial
 
     next_steps = tutorial.index("## Next steps")
     for related_target in (

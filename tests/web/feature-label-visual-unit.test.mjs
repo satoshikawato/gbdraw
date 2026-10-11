@@ -654,6 +654,89 @@ for (const [name, body, tsv, message] of [
   });
 }
 
+// OV-447, OV-449 (Owner decisions): a Label TSV load is declined with a
+// notice that names the cause when, while the table is being evaluated, a
+// label is edited (the edit stays), the displayed diagram is replaced, or
+// another input of the rule preparation changes. A label edit in the app also
+// makes the rule preparation stale (a new feature row); its own notice is
+// shown. A load a newer load replaced ends without a notice.
+const heldLabelImport = ({ preparationFollowsRows = false } = {}) => {
+  const svg = new DOMParser().parseFromString(
+    `<svg>${batchLabel('fa', 'alpha', 'dominant-baseline="central" ')}</svg>`, 'image/svg+xml'
+  ).documentElement;
+  svg.querySelector('text').textContent = 'alpha';
+  const evaluations = [];
+  const preparation = { inputs: 0 };
+  const snapshot = () => `${preparation.inputs}:${preparationFollowsRows ? Object.keys(harness.state.featureOverrides).length : 0}`;
+  const harness = buildHarness({
+    svg,
+    featureId: 'fa',
+    rulePreparation: { snapshot, isCurrent: (before) => before === snapshot() },
+    evaluateLabelRules: ({ features }) => new Promise((resolve) => {
+      evaluations.push(() => resolve({ winners: features.map(() => 0) }));
+    })
+  });
+  harness.state.errorLog = ref(null);
+  const messages = [];
+  const target = () => ({ files: [{ text: async () => '*\t*\tlabel\t^alpha$\tFROM_TABLE\n' }], value: 'labels.tsv' });
+  const load = async (input, during) => {
+    const pending = harness.actions.loadLabelOverrideTable({ target: input });
+    while (!evaluations.length) await new Promise((resolve) => setTimeout(resolve, 0));
+    await during?.();
+    evaluations.splice(0).forEach((release) => release());
+    await pending;
+  };
+  const withAlerts = async (run) => {
+    globalThis.window = { alert: (text) => messages.push(text) };
+    try { await run(); } finally { delete globalThis.window; }
+  };
+  return { harness, messages, target, load, withAlerts, preparation };
+};
+for (const preparationFollowsRows of [false, true]) {
+  test(`a Label TSV load is declined with a notice when a label is edited while it is evaluated (OV-447, preparation ${preparationFollowsRows ? 'stale' : 'current'})`, async () => {
+    const { harness, messages, target, load, withAlerts } = heldLabelImport({ preparationFollowsRows });
+    const { state } = harness;
+    const input = target();
+    await withAlerts(() => load(input, () => { setRow(state, 'fa', { labelText: 'EDITED', labelSourceText: 'alpha' }); }));
+    assert.deepEqual(messages, ['Loaded 1 row(s). Not applied: a label or feature visibility edit was made while the table '
+      + 'loaded. The edit was kept. Load the table again.']);
+    assert.deepEqual(state.featureOverrides, { [keyFor('fa')]: rowFor('fa', { labelText: 'EDITED', labelSourceText: 'alpha' }) });
+    assert.deepEqual(state.labelTextBulkOverrides, {});
+    assert.deepEqual(harness.mutations, { commit: 0 }, 'the declined load reaches no History step');
+    assert.equal(input.value, '', 'the same file can be picked again');
+  });
+}
+for (const [cause, change, notice] of [
+  ['the displayed diagram is replaced', ({ harness }) => {
+    const next = new DOMParser().parseFromString(`<svg>${batchLabel('fa', 'alpha')}</svg>`, 'image/svg+xml').documentElement;
+    harness.state.svgContainer.value = { querySelector: (selector) => (selector === 'svg' ? next : null) };
+  }, 'the displayed diagram changed while the table loaded'],
+  ['a color rule or another rule input changes', ({ preparation }) => { preparation.inputs += 1; },
+    "colors, color rules, the Legend, or the diagram's inputs changed while the table loaded"]
+]) {
+  test(`a Label TSV load is declined with a notice when ${cause} while it is evaluated (OV-449)`, async () => {
+    const held = heldLabelImport();
+    const { harness, messages, target, load, withAlerts } = held;
+    const input = target();
+    await withAlerts(() => load(input, () => change(held)));
+    assert.deepEqual(messages, [`Loaded 1 row(s). Not applied: ${notice}. Load the table again.`]);
+    assert.deepEqual([harness.state.featureOverrides, harness.state.labelTextBulkOverrides], [{}, {}]);
+    assert.equal(harness.svg.querySelector('text').textContent, 'alpha');
+    assert.deepEqual(harness.mutations, { commit: 0 }, 'the declined load reaches no History step');
+    assert.equal(input.value, '', 'the same file can be picked again');
+  });
+}
+test('a Label TSV load a newer load replaced ends without a notice, also after a label edit (OV-447)', async () => {
+  const { harness, messages, target, load, withAlerts } = heldLabelImport();
+  const { state, actions } = harness;
+  await withAlerts(() => load(target(), () => {
+    setRow(state, 'fa', { labelText: 'EDITED', labelSourceText: 'alpha' });
+    actions.loadLabelOverrideTable({ target: { files: [{ text: () => new Promise(() => {}) }], value: 'newer.tsv' } });
+  }));
+  assert.deepEqual(messages, []);
+  assert.deepEqual(harness.mutations, { commit: 0 });
+});
+
 // The display of a Result projects the current label intent, also when an
 // Undo or another import removed the intent it was last shown with.
 test('displaying a Result shows the current label intent when none remains (B6, R3)', () => {

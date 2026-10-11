@@ -206,7 +206,7 @@ def _configure_all_record_collinear(
     )
     final_boundary = selected_pairs.get_by_role(
         "region",
-        name="Comparison boundary from display row 4 to 5",
+        name="Pairs between rows 4 and 5",
         exact=True,
     )
     expect(final_boundary).to_be_visible()
@@ -262,7 +262,7 @@ def _configure_all_record_collinear(
     settings.get_by_label("Collinear color mode", exact=True).select_option(
         "orientation_identity"
     )
-    settings.get_by_label("Collinear evidence scope", exact=True).select_option(
+    settings.get_by_label("Collinear search between", exact=True).select_option(
         evidence_scope
     )
     settings.get_by_label(
@@ -592,10 +592,14 @@ def _assert_input_capture_framing(page: Page) -> None:
 
 
 def _frame_collinear_settings(settings: Any) -> None:
-    """Show LOSATP, Collinear blocks, inference, hit limits, and scope together."""
+    """Show LOSATP, Collinear blocks, inference, and scope together.
+
+    Search limits (Max target seqs, Member hits per protein) sit below the
+    result filters, so they are outside this frame.
+    """
 
     losat_mode = settings.get_by_role("group", name="LOSAT Mode", exact=True)
-    evidence_scope = settings.get_by_label("Collinear evidence scope", exact=True)
+    evidence_scope = settings.get_by_label("Collinear search between", exact=True)
     settings_pane = _center_span_in_scroll_pane(
         losat_mode, evidence_scope, include_first_heading=True
     )
@@ -609,14 +613,6 @@ def _frame_collinear_settings(settings: Any) -> None:
             settings.get_by_role("combobox", name="LOSATP mode", exact=True),
         ),
         (
-            "Max target seqs",
-            settings.get_by_label("LOSATP Max target seqs", exact=True),
-        ),
-        (
-            "Member hits per protein",
-            settings.get_by_label("Member hits per protein", exact=True),
-        ),
-        (
             "orthogroup inference",
             settings.get_by_role(
                 "checkbox",
@@ -624,7 +620,7 @@ def _frame_collinear_settings(settings: Any) -> None:
                 exact=True,
             ),
         ),
-        ("Evidence scope", evidence_scope),
+        ("Search between", evidence_scope),
     ):
         _assert_box_unclipped(
             name, _require_bounding_box(locator, name), settings_pane
