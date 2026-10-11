@@ -987,6 +987,17 @@ export const createFeatureLabelActions = ({
   // are one step each and Cancel writes nothing and records none.
   /** @type {((choice: string) => unknown) | null} */
   let answerHiddenLabelTextDialog = null;
+  // The one close of the dialog. A dialog hidden without a choice (Reset label
+  // edits, an applied Load Label TSV, a mode switch) is answered as Cancel:
+  // the text is not written and the History step of its Apply ends (OV-462).
+  const closeHiddenLabelTextDialog = (choice = 'cancel') => {
+    const answer = answerHiddenLabelTextDialog;
+    answerHiddenLabelTextDialog = null;
+    hiddenLabelTextDialog.show = false;
+    hiddenLabelTextDialog.featureId = '';
+    hiddenLabelTextDialog.reason = '';
+    return answer?.(choice);
+  };
 
   // One popup Label edit: the overrides, then the displayed Result.
   /** @param {DrawingState} drawing */
@@ -996,7 +1007,7 @@ export const createFeatureLabelActions = ({
       && normalizeVisibilityMode(row?.labelVisibility) === 'default'
       && normalizeFeatureOverrideLabelText(edit.text) !== normalizeFeatureOverrideLabelText(String(row?.labelText ?? edit.sourceText))
       && !getEditableLabelByFeatureId(featureId)) {
-      answerHiddenLabelTextDialog?.('cancel');
+      closeHiddenLabelTextDialog();
       hiddenLabelTextDialog.featureId = featureId;
       hiddenLabelTextDialog.reason = labelAbsenceReason(drawing, feature, getCommittedRequest()?.diagramOptions);
       hiddenLabelTextDialog.show = true;
@@ -1077,20 +1088,11 @@ export const createFeatureLabelActions = ({
     return apply();
   };
 
-  const closeHiddenLabelTextDialog = () => {
-    hiddenLabelTextDialog.show = false;
-    hiddenLabelTextDialog.featureId = '';
-    hiddenLabelTextDialog.reason = '';
-  };
-
   // The Label Not Shown dialog answers the Apply that opened it.
   const handleHiddenLabelTextChoice = (choice) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const answer = answerHiddenLabelTextDialog;
-    answerHiddenLabelTextDialog = null;
-    closeHiddenLabelTextDialog();
-    return answer?.(choice);
+    return closeHiddenLabelTextDialog(choice);
   };
 
   // Owner decisions Q1 and Q2 (2026-10-04): applying Label visibility On asks
@@ -1525,6 +1527,7 @@ export const createFeatureLabelActions = ({
     applyFeatureVisibilityToLabels,
     clearLabelBuildNotices,
     clickedFeatureLabelHint,
+    closeHiddenLabelTextDialog,
     closeLabelTextScopeDialog,
     hiddenLabelTextMessage,
     downloadLabelOverrideTable,

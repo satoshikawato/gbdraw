@@ -3049,6 +3049,7 @@ export const createAppSetup = () => {
     resetPreviewViewport,
     resetRightDrawer: rightDrawerActions.resetRightDrawer,
     closeLabelTextScopeDialog: featureActions.closeLabelTextScopeDialog,
+    closeHiddenLabelTextDialog: featureActions.closeHiddenLabelTextDialog,
     clearLabelBuildNotices: featureActions.clearLabelBuildNotices,
     previewRuntime,
     preparePaletteDefinitions: paletteLoader.loadPaletteAsset

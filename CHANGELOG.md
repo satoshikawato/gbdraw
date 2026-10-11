@@ -214,15 +214,23 @@ write-up of a release.
   changed while the table was loading: a label or feature visibility edit
   (which is kept), a replaced diagram, or changed colors, color rules, Legend,
   or inputs. Load the table again (OV-447, OV-449, #1008).
-- Web: an edit made while an earlier one is still being applied (for example
-  a color or Legend edit while **Load Label TSV** is still loading its table)
-  now applies at once and is its own Undo step under its own name, and what
-  the earlier edit writes afterwards is an Undo step under that edit's name.
-  Before, the two were one step named after the earlier edit, and what the
-  earlier edit wrote after the later one was lost on Undo then Redo. The steps
-  follow the order of the writes. Text typed in a field, or a Legend or
-  diagram drag, made meanwhile still goes into the earlier edit's step
-  (OV-460).
+- Web: an undoable action started while an earlier one is still being applied
+  (for example a record display edit while **Load Label TSV** is still loading
+  its table) now applies at once and is its own Undo step under its own name,
+  and what the earlier action writes afterwards is an Undo step under that
+  action's name. Before, the two were one step named after the earlier action,
+  and what the earlier action wrote after the later one was lost on Undo then
+  Redo. The steps follow the order of the writes. As before, a change made
+  meanwhile in a plain control (a text, number, or color field, a checkbox, a
+  radio button, or a select) or by a Legend or diagram drag goes into the
+  earlier action's step, and so does any edit made while a **Specific Table
+  (-t)** upload, **Reset Settings**, or a color rule change that adds or
+  removes a Legend row is being applied (OV-460, OV-461).
+- Web: when **Load Label TSV** is applied while the Label Not Shown dialog is
+  open, the dialog is cancelled and the edited label text is not written.
+  Before, the dialog disappeared without an answer, and Undo, Redo, Save and
+  Load could stay unavailable until the next undoable edit or Generate
+  (OV-462).
 - Gallery publication (maintainer tooling): `tools/refresh_gallery_sessions.py`
   publishes a Session that the web app saved. It rebuilds the request from the
   request's own color, whitelist, and priority tables rather than from the

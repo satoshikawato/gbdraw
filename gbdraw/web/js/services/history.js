@@ -147,8 +147,8 @@ const checkpointSvgBytes = (checkpoint) => (
  *   label: string,
  *   before: any,
  *   closed: boolean,
- *   committed?: boolean,
- *   runsAction?: boolean,
+ *   committedAt?: number,
+ *   actions?: { label: string, stepLabel?: string }[],
  *   source: string,
  *   owner?: any,
  *   deferAdapterCommit?: boolean,
@@ -157,6 +157,8 @@ const checkpointSvgBytes = (checkpoint) => (
  *   beforeIntentCheckpoint?: any
  * }} HistoryTransaction
  *   An open Undo transaction: an intent edit (`begin`), an artifact checkpoint, or an artifact replacement.
+ *   `committedAt`: the intent generation at which a commit closed it. `actions`: the `runUndoable`
+ *   calls that ran on it, each with the step name it started with.
  * @typedef {{ path: string[], before: any, after: any, beforeHas: boolean, afterHas: boolean }} HistoryIntentChange
  *   One changed leaf of an intent; `path[0]` is the domain.
  * @typedef {{
@@ -275,6 +277,11 @@ export const createHistoryManager = ({
   let currentCheckpoint = null;
   let currentCheckpointSignature = '';
   let currentFileIds = new Set();
+  // OV-463: advanced where the intent changes outside the intent steps: an
+  // artifact replacement commits (the last recorded intent is not refreshed)
+  // or a baseline replaces the stacks. An action's later write is recorded
+  // from the last recorded intent only within the generation of its step.
+  let intentGeneration = 0;
   let totalEntryBytes = 0;
   // OV-112: adjacent artifact replacements name one artifact (entry k's `after`
   // is entry k+1's `before`), so its bytes count once while any live entry
@@ -540,6 +547,7 @@ export const createHistoryManager = ({
     const intentRecord = await captureIntent();
     clearStack(undoStack);
     clearRedo();
+    intentGeneration += 1;
     setCurrentCheckpoint(checkpointRecord);
     setCurrentIntent(intentRecord);
     enforceLimits();
@@ -595,6 +603,7 @@ export const createHistoryManager = ({
     if (!isCurrent()) return false;
     clearStack(undoStack);
     clearRedo();
+    intentGeneration += 1;
     markSavePoint();
     currentCheckpoint = null;
     currentCheckpointSignature = '';
@@ -667,9 +676,12 @@ export const createHistoryManager = ({
     // action's transaction while its `fn` awaits. What `fn` wrote afterwards
     // is the action's remainder, recorded as a step of its own. A cancelled
     // transaction has none, an open checkpoint captures it, and a restore
-    // owns the stacks while it runs.
+    // owns the stacks while it runs. OV-463: nor is there one under an open
+    // artifact replacement or in a later intent generation, where the last
+    // recorded intent also lacks what the replacement or the baseline changed.
     const recordsRemainder = () => Boolean(
-      action && transaction.committed && !activeCheckpoint && !restoring.value
+      action && transaction.committedAt === intentGeneration
+      && !activeCheckpoint && !activeReplacement && !restoring.value
     );
     const settled = () => transaction.closed && !recordsRemainder();
     if (settled()) return false;
@@ -680,7 +692,7 @@ export const createHistoryManager = ({
     if (busy) { cancel(transaction); return busy; }
     if (!transaction.closed) {
       transaction.closed = true;
-      transaction.committed = true;
+      transaction.committedAt = intentGeneration;
       if (activeTransaction === transaction) { activeTransaction = null; touchTransaction(); }
       return recordIntentStep(
         action ? { ...transaction, label: action.stepLabel ?? transaction.label } : transaction,
@@ -753,14 +765,18 @@ export const createHistoryManager = ({
     // step from here on. A call the running action makes itself keeps the
     // name: one made synchronously inside its `fn`, or one that says so
     // (`joinsOpenStep`). Each action commits under the name it started with.
-    if (open?.runsAction && !actionCallDepth && !options.joinsOpenStep) open.label = label;
-    const action = { label, stepLabel: tx?.label };
+    // OV-464: a call that joins belongs to the action that started on the
+    // step with its label, and commits under the name that action started
+    // with, whatever a later action has named the step since.
+    if (open?.actions && !actionCallDepth && !options.joinsOpenStep) open.label = label;
+    const joined = options.joinsOpenStep ? open?.actions?.find((started) => started.label === label) : null;
+    const action = { label, stepLabel: joined ? joined.stepLabel : tx?.label };
 
     try {
       const busy = mutationAvailability();
       if (busy) { cancel(tx); return busy; }
-      // The step closes when an action on it ends, so the mark is never cleared.
-      if (tx) tx.runsAction = true;
+      // The step closes when an action on it ends, so the list is never cleared.
+      if (tx) (tx.actions ??= []).push(action);
       const result = await callAction(fn);
       await commitIntent(tx, options, action);
       return result;
@@ -1005,6 +1021,7 @@ export const createHistoryManager = ({
       'after'
     );
     transaction.closed = true;
+    intentGeneration += 1;
     currentFileIds = artifactHandleFileIds(after);
     clearCurrentCheckpoint();
 

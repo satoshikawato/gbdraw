@@ -2447,7 +2447,8 @@ for (const previousSuppressed of [false, true]) {
     return { held, release };
   };
   const tick = () => new Promise((resolve) => setImmediate(resolve));
-  const createActionHarness = async () => {
+  /** @param {(harness: Record<string, any>) => Record<string, any>} [owners] More History owners (the artifact owner). */
+  const createActionHarness = async (owners = () => ({})) => {
     const harness = { intent: structuredClone(START), restoreHeld: null };
     harness.history = createHistoryManager({
       buildIntent: () => structuredClone(harness.intent),
@@ -2456,7 +2457,8 @@ for (const previousSuppressed of [false, true]) {
         harness.intent = structuredClone(restored);
       },
       buildCheckpoint: () => structuredClone(harness.intent),
-      applyCheckpoint: (checkpoint) => { harness.intent = structuredClone(checkpoint); }
+      applyCheckpoint: (checkpoint) => { harness.intent = structuredClone(checkpoint); },
+      ...owners(harness)
     });
     await harness.history.initializeIntentBaseline();
     harness.undoAll = async () => {
@@ -2704,6 +2706,276 @@ for (const previousSuppressed of [false, true]) {
     assert.deepEqual(h.intent, START);
     await h.redoAll();
     assert.deepEqual(h.intent, { label: 'EDITED', table: null, color: 'red' });
+  }
+
+  // OV-463: the action's later write is recorded from the last recorded
+  // intent, which a Generate does not refresh and a Session Load replaces.
+  // After either, or while a Generate is open, the write is in no step.
+  const artifactOf = (id) => ({ id, identity: { fingerprint: id, compactSignature: id }, retainedBytes: 8, fileIds: [] });
+  // Generate replaces the Result, and the Legend entries follow the Result.
+  const withResult = (harness) => {
+    harness.artifact = artifactOf('a');
+    harness.generate = (held = null) => harness.history.runUndoableArtifactReplacement('Generate diagram', async () => {
+      harness.artifact = artifactOf('b');
+      harness.intent.color = 'legend-of-b';
+      await held;
+      return { status: 'ok' };
+    }, { shouldCommit: (result) => result.status === 'ok' });
+    return {
+      captureGeneratedArtifactHandle: () => harness.artifact,
+      restoreGeneratedArtifactHandle: async (handle) => {
+        harness.artifact = handle;
+        harness.intent.color = handle.id === 'a' ? 'red' : 'legend-of-b';
+      }
+    };
+  };
+  for (const write of [() => {}, undefined]) {
+    // Generate settles the load's step and ends; the load then ends, declined
+    // (it writes nothing) or not.
+    const h = await createActionHarness(withResult);
+    const load = h.heldLoad(write);
+    await tick();
+    await h.generate();
+    load.release();
+    await load.done;
+    assert.equal(h.history.getUndoCount(), 1, 'Generate\'s changes are not a step of the load');
+    assert.equal(h.history.undoLabel(), 'Generate diagram');
+    await h.history.undo();
+    assert.deepEqual([h.artifact.id, h.intent.color], ['a', 'red'], 'one Undo returns the Result and what follows it');
+    await h.history.redo();
+    assert.deepEqual([h.artifact.id, h.intent.color], ['b', 'legend-of-b']);
+
+    // An action that starts after the Generate records its later write again.
+    const later = h.heldLoad(() => { h.intent.table = 'later'; });
+    await tick();
+    await h.history.runUndoable('Change label text', () => { h.intent.label = 'EDITED'; });
+    later.release();
+    await later.done;
+    assert.equal(h.history.getUndoCount(), 3);
+    assert.equal(h.history.undoLabel(), 'Load label edits');
+    await h.history.undo();
+    assert.deepEqual(h.intent, { label: 'EDITED', table: write ? null : 'applied', color: 'legend-of-b' },
+      'the step holds only what that action wrote');
+  }
+  {
+    // The load ends while the Generate is still open.
+    const h = await createActionHarness(withResult);
+    const load = h.heldLoad();
+    const generating = hold();
+    await tick();
+    const generated = h.generate(generating.held);
+    await tick();
+    load.release();
+    await load.done;
+    assert.equal(h.history.getUndoCount(), 0, 'no step under the open Generate');
+    generating.release();
+    await generated;
+    assert.deepEqual(await h.undoAll(), ['Generate diagram']);
+  }
+  for (const baseline of ['initializeIntentBaseline', 'captureBaseline']) {
+    // A Session Load replaces the baseline after the load's step was
+    // committed; what the stale load writes is not a step of the new Session.
+    const h = await createActionHarness();
+    const load = h.heldLoad();
+    await tick();
+    await h.history.runUndoable('Change label text', () => { h.intent.label = 'EDITED'; });
+    h.intent = { label: 'session', table: null, color: 'session' };
+    await h.history[baseline]('Loaded session');
+    load.release();
+    await load.done;
+    assert.equal(h.history.getUndoCount(), 0);
+    assert.equal(await h.history.hasChangesSinceSavePoint(), false);
+  }
+
+  // OV-464: a call that joins commits under the step name of the action it
+  // belongs to (the one started on the step with its label), also when a
+  // later action has renamed the step. Here: a popup recolor from a color
+  // input, then Reset color while the recolor's rule write is prepared.
+  {
+    const h = await createActionHarness();
+    const ruleAction = (label, write) => {
+      const prepared = hold();
+      const done = h.history.runUndoable(label, async () => {
+        await prepared.held;
+        await h.history.runUndoable(label, write, { joinsOpenStep: true });
+      });
+      return { done, release: prepared.release };
+    };
+    await h.history.begin('Change color', { source: 'input-adapter', owner: { tagName: 'INPUT' } });
+    const recolor = ruleAction('Change feature color', () => { h.intent.color = 'blue'; });
+    await tick();
+    await h.history.begin('Change setting', { source: 'input-adapter', owner: { tagName: 'BUTTON' } });
+    const reset = ruleAction('Reset feature color', () => { h.intent.color = 'red'; h.intent.table = 'reset'; });
+    await tick();
+    recolor.release();
+    await recolor.done;
+    reset.release();
+    await reset.done;
+    assert.equal(h.history.mutationPending(), false);
+    assert.deepEqual(await h.undoAll(), ['Reset feature color', 'Change color'],
+      'the recolor keeps the name its step started with');
+    assert.deepEqual(h.intent, START);
+
+    // The same two actions while a load runs: each is a step under its own
+    // name, and so is what the load writes afterwards.
+    const load = h.heldLoad();
+    await tick();
+    const first = ruleAction('Change feature color', () => { h.intent.color = 'blue'; });
+    await tick();
+    const second = ruleAction('Reset feature color', () => { h.intent.label = 'reset'; });
+    await tick();
+    first.release();
+    await first.done;
+    second.release();
+    await second.done;
+    load.release();
+    await load.done;
+    assert.deepEqual(await h.undoAll(), ['Load label edits', 'Reset feature color', 'Change feature color']);
+    assert.deepEqual(h.intent, START);
+    await h.redoAll();
+    assert.deepEqual(h.intent, { label: 'reset', table: 'applied', color: 'blue' });
+  }
+
+  // Three overlapping actions: every write is in a step under the name of
+  // the action that committed it, and Undo then Redo keeps all of them.
+  {
+    const h = await createActionHarness();
+    const load = h.heldLoad();
+    const recoloring = hold();
+    await tick();
+    const recolor = h.history.runUndoable('Change feature color', async () => {
+      h.intent.color = 'pre';
+      await recoloring.held;
+      h.intent.color = 'blue';
+    });
+    await tick();
+    await h.history.runUndoable('Change label text', () => { h.intent.label = 'EDITED'; });
+    recoloring.release();
+    await recolor;
+    load.release();
+    await load.done;
+    assert.deepEqual(await h.undoAll(), ['Load label edits', 'Change feature color', 'Change label text']);
+    assert.deepEqual(h.intent, START);
+    await h.redoAll();
+    assert.deepEqual(h.intent, { label: 'EDITED', table: 'applied', color: 'blue' });
+  }
+
+  // An action that throws after another edit committed its step: what it
+  // wrote before the throw is in no step, and no step stays open.
+  {
+    const h = await createActionHarness();
+    const failing = hold();
+    const load = h.history.runUndoable('Load label edits', async () => {
+      await failing.held;
+      h.intent.table = 'partial';
+      throw new Error('load failed');
+    });
+    await tick();
+    await h.history.runUndoable('Change label text', () => { h.intent.label = 'EDITED'; });
+    failing.release();
+    await assert.rejects(load, /load failed/);
+    assert.equal(h.history.mutationPending(), false);
+    assert.deepEqual(await h.undoAll(), ['Change label text']);
+  }
+
+  // Random interleavings of async actions (with and without a rule write
+  // that joins), synchronous edits, typing, drags, commands, checkpoints,
+  // Undo and Redo, from a fixed seed. Every action writes when it starts and
+  // again when it ends. After all of them: no step is open, Undo of
+  // everything gives the start, and Redo of those steps gives the end.
+  {
+    let seed = 20261012;
+    const random = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    const pick = (list) => list[Math.floor(random() * list.length)];
+    const KEYS = ['a', 'b', 'c', 'd'];
+    const FUZZ_START = { a: 0, b: 0, c: 0, d: 0, command: 0 };
+    for (let run = 0; run < 600; run += 1) {
+      const traverses = run % 2 === 1;
+      let intent = structuredClone(FUZZ_START);
+      let counter = 0;
+      const log = [];
+      const history = createHistoryManager({
+        buildIntent: () => structuredClone(intent),
+        applyIntent: async (restored) => { intent = structuredClone(restored); },
+        buildCheckpoint: () => structuredClone(intent),
+        applyCheckpoint: (checkpoint) => { intent = structuredClone(checkpoint); }
+      });
+      await history.initializeIntentBaseline();
+      const write = (who) => { const key = pick(KEYS); intent[key] = ++counter; log.push(`${who} writes ${key}`); };
+      const actions = [];
+      const startAction = (joins) => {
+        const id = `action ${actions.length + 1}`;
+        const held = hold();
+        log.push(`${id} starts`);
+        const done = history.runUndoable(id, async () => {
+          write(id);
+          await held.held;
+          if (joins) await history.runUndoable(id, () => write(`${id} rule`), { joinsOpenStep: true });
+          else write(id);
+        });
+        actions.push({ id, done, release: held.release, ended: false });
+      };
+      const end = async (action) => { action.ended = true; log.push(`${action.id} ends`); action.release(); await action.done; };
+      const controls = [{ id: 'input 1', tx: null }, { id: 'input 2', tx: null }];
+      const type = async (control) => {
+        if (!control.tx || control.tx.closed) control.tx = await history.begin(`Edit ${control.id}`, { source: 'input-adapter', owner: control });
+        write(control.id);
+      };
+      // The input adapter commits on blur unless an action owns the commit.
+      const blur = async (control) => {
+        const tx = control.tx;
+        if (!tx || tx.deferAdapterCommit) return;
+        control.tx = null;
+        if (!tx.closed) { log.push(`${control.id} commits`); await history.commit(tx); }
+      };
+      const kinds = ['start', 'startJoining', 'edit', 'type', 'type', 'blur', 'drag', 'command', 'checkpoint'];
+      for (let step = 4 + Math.floor(random() * 8); step > 0; step -= 1) {
+        const running = actions.filter((action) => !action.ended);
+        const kind = pick([...kinds, ...(running.length ? ['end', 'end', 'end'] : []),
+          ...(traverses ? ['undo', 'redo', 'heldCheckpoint'] : [])]);
+        if ((kind === 'start' || kind === 'startJoining') && actions.length < 3) startAction(kind === 'startJoining');
+        else if (kind === 'edit') { log.push('edit'); await history.runUndoable('edit', () => write('edit')); }
+        else if (kind === 'type') await type(pick(controls));
+        else if (kind === 'blur') await blur(pick(controls));
+        else if (kind === 'drag') {
+          const tx = await history.begin('drag', { owner: Symbol('drag') });
+          write('drag');
+          await history.commit(tx);
+        } else if (kind === 'command') {
+          const before = intent.command;
+          const after = ++counter;
+          log.push('command');
+          await history.runUndoableCommand('command', () => ({
+            apply: () => { intent.command = after; }, revert: () => { intent.command = before; }
+          }));
+        } else if (kind === 'checkpoint') await history.runUndoableCheckpoint('checkpoint', () => write('checkpoint'));
+        else if (kind === 'undo' && history.canUndo()) { log.push('undo'); await history.undo(); }
+        else if (kind === 'redo' && history.canRedo()) { log.push('redo'); await history.redo(); }
+        else if (kind === 'heldCheckpoint' && running.length) {
+          // An action ends inside a checkpoint that is still open.
+          const held = hold();
+          const checkpoint = history.runUndoableCheckpoint('held checkpoint', async () => { write('held checkpoint'); await held.held; });
+          await tick();
+          await end(pick(running));
+          held.release();
+          await checkpoint;
+        } else if (kind === 'end' && running.length) await end(pick(running));
+        await tick();
+      }
+      for (const action of actions) if (!action.ended) await end(action);
+      for (const control of controls) await blur(control);
+      await tick();
+      const trace = `run ${run}: ${log.join('; ')}`;
+      // A control transaction an ended action deferred is settled by the next owner.
+      if (history.mutationPending()) await history.commit(await history.begin('settle', { owner: Symbol('settle') }));
+      assert.equal(history.mutationPending() || Boolean(history.historyAvailability()), false, trace);
+      const ended = structuredClone(intent);
+      let undone = 0;
+      while (history.canUndo()) { await history.undo(); undone += 1; }
+      assert.deepEqual(intent, FUZZ_START, trace);
+      for (; undone > 0; undone -= 1) await history.redo();
+      assert.deepEqual(intent, ended, trace);
+    }
   }
   console.log('history action remainder tests passed');
 }
