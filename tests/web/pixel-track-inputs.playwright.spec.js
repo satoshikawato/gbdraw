@@ -45,11 +45,19 @@ for (const width of [1440, 390]) {
           return native.call(this, message, ...args);
         };
       });
+      if (mode === 'linear') {
+        // The BGC Session draws no GC track; show it so the stack has a GC row.
+        await (await reveal(page.getByLabel('Show GC Content', { exact: true }))).check();
+      }
       console.log(`pixel ${mode}/${width}: open stack`);
       const panel = await openStack(page, mode);
       const wrapper = panel.locator('..');
       await expect(wrapper.getByLabel('Use custom stack', { exact: true })).toBeVisible();
       await wrapper.getByLabel('Use custom stack', { exact: true }).check();
+      if (mode === 'linear') {
+        // Reset copies the simple controls, including the GC track, into the stack.
+        await wrapper.getByRole('button', { name: 'Reset', exact: true }).click();
+      }
       console.log(`pixel ${mode}/${width}: stack enabled`);
       const row = page.locator(`[data-capture="${mode}-track-slot-gc_content"]`);
       const titles = mode === 'linear' ? ['Height', 'Spacing'] : ['Inner gap', 'Outer gap'];
