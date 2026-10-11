@@ -1079,6 +1079,12 @@ test('a collinear ribbon without a collinear group scope pairs its genes by simi
   await genePairs.locator('> summary').click();
   await expect(genePairs.locator('tbody tr')).toHaveCount(15);
   await expect(genePairs.locator('tbody tr').first()).toContainText('og_34');
+  // The popup body is the only scroll region: an opened table grows the body.
+  expect(await popup.locator('.pairwise-match-popup-body').evaluate((body) => (
+    [...body.querySelectorAll('*')].filter((element) => (
+      /auto|scroll/.test(getComputedStyle(element).overflowY) && element.scrollHeight > element.clientHeight + 1
+    )).map((element) => element.className)
+  ))).toEqual([]);
 });
 
 // Scroll recovery checks keep the same center hit oracle as M01. A short

@@ -5954,7 +5954,7 @@
                                          ]"></action-menu>
                             <details v-if="clickedOrthogroupDetail" class="match-disclosure" data-similarity-members>
                                 <summary>{{ clickedOrthogroupDetail.memberCount }} members</summary>
-                                <div class="match-disclosure-body max-h-64 overflow-auto custom-scrollbar">
+                                <div class="match-disclosure-body">
                                     <table class="match-table">
                                         <thead>
                                             <tr>
@@ -6157,7 +6157,7 @@
                                                 <i class="ph ph-table" aria-hidden="true"></i><span>Copy table</span>
                                             </button>
                                         </div>
-                                        <div class="max-h-80 overflow-auto custom-scrollbar">
+                                        <div>
                                             <table class="match-table">
                                                 <thead>
                                                     <tr>
@@ -6324,7 +6324,7 @@
                                                    { label: 'Copy member table', title: 'Copy member table', icon: 'ph-table', disabled: !pairwiseGroupView.memberCopyText, run: () => copyText(pairwiseGroupView.memberCopyText) }
                                                  ]"></action-menu>
                                 </div>
-                                <div v-if="pairwiseGroupView.memberRows.length" class="max-h-96 overflow-auto custom-scrollbar">
+                                <div v-if="pairwiseGroupView.memberRows.length">
                                     <table class="match-table">
                                         <thead>
                                             <tr>
