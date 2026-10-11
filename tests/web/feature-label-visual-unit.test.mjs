@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { LABEL_ABSENCE_REASONS, createFeatureLabelActions } from '../../gbdraw/web/js/app/feature-editor/label-actions.js';
+import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
@@ -314,6 +316,78 @@ test('every reason the resolver can return has a sentence, and every sentence a 
   returned.delete('');
   assert.deepEqual([...returned].sort(), Object.keys(LABEL_ABSENCE_REASONS).sort());
   Object.values(LABEL_ABSENCE_REASONS).forEach((sentence) => assert.equal(typeof sentence, 'string'));
+});
+
+// The popup's Apply as app-setup.js runs it, in a step of the real History
+// manager, up to the open Label Not Shown dialog.
+const applyInHistoryStep = async (options = {}) => {
+  const harness = buildHarness(options);
+  harness.state.editableLabels.value = [];
+  Object.assign(harness.state.clickedFeature.value, { labelText: 'Renamed', labelSourceText: 'Original' });
+  const history = createHistoryManager({
+    buildIntent: () => structuredClone(harness.state.featureOverrides),
+    applyIntent: () => {}, buildCheckpoint: () => ({}), applyCheckpoint: () => {}
+  });
+  await history.initializeIntentBaseline();
+  const step = { ended: false };
+  // app-setup.js: `undoableAction('Change label text', updateClickedFeatureLabelText)`.
+  step.done = history.runUndoable('Change label text', () => harness.actions.updateClickedFeatureLabelText())
+    .then(() => { step.ended = true; });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(harness.state.hiddenLabelTextDialog.show, true);
+  assert.equal(history.mutationPending(), true, 'the step of the Apply is open while the dialog asks');
+  return { ...harness, history, step };
+};
+
+// OV-462: the dialog can be hidden without a choice. Hiding it answers it as
+// Cancel, so the History step of the Apply that opened it ends; before, the
+// step stayed open (no Undo, Redo, Save or Load) until the next undoable action.
+const loadedLabelSvg = () => new DOMParser().parseFromString([
+  '<svg><path data-gbdraw-feature-id="fa" d="M0 0" />',
+  '<text dominant-baseline="central" data-label-feature-id="fa" data-gbdraw-label-binding-schema="1" ',
+  'data-label-source-text="alpha">alpha</text></svg>'
+].join(''), 'image/svg+xml').documentElement;
+for (const [hidden, hide, options] of [
+  ['Reset label edits', (actions) => actions.resetAllLabelTextOverrides()],
+  ['a Load Label TSV that applies', async (actions, state) => {
+    globalThis.window = { alert: () => {} };
+    try {
+      await actions.loadLabelOverrideTable({ target: { files: [{ text: async () => '*\tCDS\tlabel\t^alpha$\tLOADED\n' }], value: 'labels.tsv' } });
+    } finally {
+      delete globalThis.window;
+    }
+    assert.equal(rowOf(state, 'fa').labelText, 'LOADED', 'the table was applied');
+  }, {
+    svg: loadedLabelSvg(), featureId: 'fa', rulePreparation: { snapshot: () => ({}), isCurrent: () => true },
+    evaluateLabelRules: async ({ features }) => ({ winners: features.map(() => 0) })
+  }],
+  // The port a mode switch calls (watchers.js `resetModeTransientUi`).
+  ['closing it from another owner', (actions) => actions.closeHiddenLabelTextDialog()]
+]) {
+  test(`${hidden} answers an open Label Not Shown dialog as Cancel, and its History step ends`, async () => {
+    const { actions, state, history, step } = await applyInHistoryStep(options);
+    await hide(actions, state);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(step.ended, true, 'the Apply that opened the dialog ends');
+    assert.deepEqual({ ...state.hiddenLabelTextDialog }, { show: false, featureId: '', reason: '' });
+    assert.equal(history.mutationPending(), false);
+    assert.notEqual(rowOf(state, state.clickedFeature.value.svg_id)?.labelText, 'Renamed', 'the text is not written');
+  });
+}
+
+// The choice is a second `runUndoable` call on the step of the Apply. It joins
+// that step (`joinsOpenStep` in app-setup.js): one step, under the Apply's name.
+test('the Label Not Shown choice and the Apply that opened the dialog are one History step under the Apply\'s name', async () => {
+  const wiring = readFileSync(new URL('../../gbdraw/web/js/app/app-setup.js', import.meta.url), 'utf8')
+    .match(/const handleHiddenLabelTextChoiceWithHistory = undoableAction\('([^']+)', handleHiddenLabelTextChoice(, \{ joinsOpenStep: true \})?\);/);
+  assert.ok(wiring, 'app-setup.js wires the choice through undoableAction');
+  const [, label, joins] = wiring;
+  const { actions, state, history, step } = await applyInHistoryStep();
+  await history.runUndoable(label, () => actions.handleHiddenLabelTextChoice('text_only'), joins ? { joinsOpenStep: true } : {});
+  await step.done;
+  assert.equal(rowOf(state, 'feature:one/[a]').labelText, 'Renamed');
+  assert.equal(history.getUndoCount(), 1);
+  assert.equal(history.undoLabel(), 'Change label text');
 });
 
 // "Show this label" applies Label visibility On through the Q1 and Q2 dialogs.

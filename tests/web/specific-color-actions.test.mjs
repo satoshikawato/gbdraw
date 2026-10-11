@@ -4,6 +4,7 @@ import { createFeatureRuleActions } from '../../gbdraw/web/js/app/feature-editor
 import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
 import { createLegendManager } from '../../gbdraw/web/js/app/legend.js';
 import { createFeatureColorActions } from '../../gbdraw/web/js/app/feature-editor/color-actions.js';
+import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { readFileSync } from 'node:fs';
 import {
   diffLegendIntents, generatedLegendRow, legendRowRules, ruleCommitLegendRows, ruleLegendCaptions
@@ -13,7 +14,8 @@ import { setFeatureVisibilityOverride } from '../../gbdraw/web/js/services/featu
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
-const setup = (evaluate = evaluatePythonRules) => {
+/** @param {((state: Record<string, any>) => Record<string, any>) | null} [createHistory] The History manager the rule owner commits through; a recorder of its steps by default. */
+const setup = (evaluate = evaluatePythonRules, createHistory = null) => {
   const state = {
     manualSpecificRules: [], extractedFeatures: { value: [
       { type: 'CDS', svg_id: 'a', qualifiers: { gene: ['a'] } },
@@ -48,9 +50,10 @@ const setup = (evaluate = evaluatePythonRules) => {
       transactionScopes.push(scope);
     }
   };
+  const history = createHistory?.(state);
   const actions = createFeatureRuleActions({ref:value=>({value}),computed:get=>({get value(){return get();}}),state: withDrawings(state), rulePreparation:preparation,
-    runUndoableCheckpoint: transact('checkpoint'),
-    runUndoable: transact('intent'),
+    runUndoableCheckpoint: history?.runUndoableCheckpoint || transact('checkpoint'),
+    runUndoable: history?.runUndoable || transact('intent'),
     prepareFileLegendEntries: async (intents, {isCurrent,previousFileIntents}) => {
     previousIntents=previousFileIntents;
     await prepareLegend(intents);
@@ -61,7 +64,7 @@ const setup = (evaluate = evaluatePythonRules) => {
       state.results.value=[{name:'figure',content:'after'}];
     } };
   }, projectPaletteAndRules:()=>true, ports:{requestAutomaticRerender:()=>{rerenders+=1;return true;}}, nextTick:async()=>{}, watch});
-  return {state,actions,preparation,notices,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents, rerenders:()=>rerenders, setRerendering};
+  return {state,actions,history,preparation,notices,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents, rerenders:()=>rerenders, setRerendering};
 };
 // Review 3 (OV-262 in the Features drawer): with the type's default color
 // Auto, the drawer's color input shows the applied palette's color, as
@@ -644,8 +647,8 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
 // Add, or an edit made while an Add is pending, waits for it and applies to
 // the table that holds its rule; an Add waits for a pending edit the same way.
 // Each write is its own History step (R11).
-const queuedRuleWrites = () => {
-  const s=setup();
+const queuedRuleWrites = (createHistory = null) => {
+  const s=setup(undefined, createHistory);
   s.state.errorLog={value:null};
   s.state.manualSpecificRules.push(
     {feat:'CDS',qual:'gene',val:'b',color:'#445566',cap:''},
@@ -756,6 +759,29 @@ test('a popup recolor of a rule made while an Add is pending applies after it (O
   await Promise.all([add,recolored]);
   assert.deepEqual(table(),['b #000000 ','zz #778899 ',added]);
   assert.deepEqual(s.transactions,['Add specific color rule','Change specific color rule']);
+}));
+// OV-460: a color action's rule write is a second `runUndoable` call, made
+// after the Python preparation, on the step its action runs on. It joins that
+// step (`joinsOpenStep`, set by color-actions.js and passed to History by
+// rule-actions.js): one step, under the name the step had when the action
+// started, here the color input's.
+test('a popup recolor of a rule and its rule write are one History step under the step\'s name', () => withDocument(async () => {
+  const {s,held,table}=queuedRuleWrites(state=>createHistoryManager({
+    buildIntent:()=>JSON.parse(JSON.stringify(state.manualSpecificRules)),
+    applyIntent:()=>{},buildCheckpoint:()=>({}),applyCheckpoint:()=>{}}));
+  await s.history.initializeIntentBaseline();
+  const popup=popupFor(s);
+  Object.assign(s.state.featureStyleScopeDialog,{show:true,feat:s.state.extractedFeatures.value[1],color:'#000000',
+    matchingRule:s.state.manualSpecificRules[0]});
+  // app/history-inputs.js: the control begins the step. app-setup.js: the action runs on it.
+  await s.history.begin('Change color',{source:'input-adapter',owner:{tagName:'INPUT'}});
+  const [recolored,release]=await held(s.history.runUndoable('Change feature color',()=>popup.handleColorScopeChoice('rule')));
+  assert.equal(s.history.mutationPending(),true,'the step is open while the rule write is prepared');
+  release();
+  await recolored;
+  assert.deepEqual(table(),['b #000000 ','zz #778899 ']);
+  assert.equal(s.history.getUndoCount(),1);
+  assert.equal(s.history.undoLabel(),'Change color');
 }));
 test('a Legend recolor of a rule row made while an Add is pending applies after it (OV-444)', () => withDocument(async () => {
   const {s,held,table}=queuedRuleWrites();

@@ -242,6 +242,7 @@ export const createFeatureEditor = ({
     syncLabelEditor: labelActions.syncLabelEditor,
     // R13: label owner ports the root hands Generate and the watchers.
     closeLabelTextScopeDialog: labelActions.closeLabelTextScopeDialog,
+    closeHiddenLabelTextDialog: labelActions.closeHiddenLabelTextDialog,
     clearLabelBuildNotices: labelActions.clearLabelBuildNotices,
     ...featureEditTableActions,
     downloadLabelOverrideTable: labelActions.downloadLabelOverrideTable,

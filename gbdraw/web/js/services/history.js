@@ -147,6 +147,8 @@ const checkpointSvgBytes = (checkpoint) => (
  *   label: string,
  *   before: any,
  *   closed: boolean,
+ *   committedAt?: number,
+ *   actions?: { label: string, stepLabel?: string }[],
  *   source: string,
  *   owner?: any,
  *   deferAdapterCommit?: boolean,
@@ -155,6 +157,8 @@ const checkpointSvgBytes = (checkpoint) => (
  *   beforeIntentCheckpoint?: any
  * }} HistoryTransaction
  *   An open Undo transaction: an intent edit (`begin`), an artifact checkpoint, or an artifact replacement.
+ *   `committedAt`: the intent generation at which a commit closed it. `actions`: the `runUndoable`
+ *   calls that ran on it, each with the step name it started with.
  * @typedef {{ path: string[], before: any, after: any, beforeHas: boolean, afterHas: boolean }} HistoryIntentChange
  *   One changed leaf of an intent; `path[0]` is the domain.
  * @typedef {{
@@ -267,11 +271,18 @@ export const createHistoryManager = ({
     artifactFingerprintComparisonCount: 0,
     artifactReplacementHistoryEntryCount: 0
   };
+  /** @type {HistoryIntent | null} */
   let currentIntent = null;
   let currentIntentSignature = '';
   let currentCheckpoint = null;
   let currentCheckpointSignature = '';
   let currentFileIds = new Set();
+  // OV-463: advanced where the intent changes outside the intent steps: an
+  // artifact replacement commits or ends without committing (the last
+  // recorded intent is not refreshed) or a baseline replaces the stacks. An
+  // action's later write is recorded from the last recorded intent only
+  // within the generation of its step.
+  let intentGeneration = 0;
   let totalEntryBytes = 0;
   // OV-112: adjacent artifact replacements name one artifact (entry k's `after`
   // is entry k+1's `before`), so its bytes count once while any live entry
@@ -291,9 +302,10 @@ export const createHistoryManager = ({
   const touchTransaction = () => {
     transactionRevision.value += 1;
   };
-  const intentCommitOwnedByAction = () => Boolean(
-    activeTransaction && !activeTransaction.closed && activeTransaction.deferAdapterCommit
+  const openTransaction = () => (
+    activeTransaction && !activeTransaction.closed ? activeTransaction : null
   );
+  const intentCommitOwnedByAction = () => Boolean(openTransaction()?.deferAdapterCommit);
 
   // D-28 (PD-OI-082): an open artifact replacement or checkpoint, or an action
   // that still owns its intent commit, owns the current state. Undo, Redo, and
@@ -505,7 +517,7 @@ export const createHistoryManager = ({
   };
   const hasChangesSinceSavePoint = async () => {
     if (topEntry(undoStack) !== savePoint.undo || topEntry(redoStack) !== savePoint.redo) return true;
-    const open = activeTransaction && !activeTransaction.closed ? activeTransaction : null;
+    const open = openTransaction();
     if (!open) return false;
     // A text control begins on focus; focus alone changes nothing.
     return (await captureIntent()).signature !== open.beforeSignature;
@@ -536,6 +548,7 @@ export const createHistoryManager = ({
     const intentRecord = await captureIntent();
     clearStack(undoStack);
     clearRedo();
+    intentGeneration += 1;
     setCurrentCheckpoint(checkpointRecord);
     setCurrentIntent(intentRecord);
     enforceLimits();
@@ -548,7 +561,7 @@ export const createHistoryManager = ({
   const begin = async (label = 'Edit', options = {}) => {
     if (mutationAvailability()) return null;
     if (restoring.value || capturing.value) return null;
-    const open = activeTransaction && !activeTransaction.closed ? activeTransaction : null;
+    const open = openTransaction();
     if (open) {
       if (
         options.owner === undefined
@@ -556,7 +569,8 @@ export const createHistoryManager = ({
         || open.deferAdapterCommit
       ) return open;
       await settlePendingIntent();
-      if (activeTransaction && !activeTransaction.closed) return activeTransaction;
+      const reopened = openTransaction();
+      if (reopened) return reopened;
     }
 
     const before = await captureIntent();
@@ -585,11 +599,12 @@ export const createHistoryManager = ({
 
   const initializeIntentBaseline = async (_label = 'Intent baseline', { isCurrent = () => true } = {}) => {
     if (restoring.value) return false;
-    if (activeTransaction && !activeTransaction.closed) cancel(activeTransaction);
+    cancel(openTransaction());
     const intentRecord = await captureIntent();
     if (!isCurrent()) return false;
     clearStack(undoStack);
     clearRedo();
+    intentGeneration += 1;
     markSavePoint();
     currentCheckpoint = null;
     currentCheckpointSignature = '';
@@ -617,20 +632,19 @@ export const createHistoryManager = ({
     };
   };
 
-  const commit = async (transaction, options = {}) => {
-    if (!transaction || transaction.closed) return false;
-    const afterRecord = await captureIntent();
-    // A concurrent settlement may have committed it during the capture.
-    if (transaction.closed) return false;
-    const busy = mutationAvailability();
-    if (busy) { cancel(transaction); return busy; }
-    transaction.closed = true;
-    if (activeTransaction === transaction) { activeTransaction = null; touchTransaction(); }
+  /**
+   * The bookkeeping of every intent step.
+   * @param {Pick<HistoryTransaction, 'label' | 'before' | 'beforeSignature' | 'beforeFileIds'>} from
+   *   The transaction, or the last recorded intent when an action records its remainder.
+   * @param {Awaited<ReturnType<typeof captureIntent>>} afterRecord
+   * @param {{ label?: string }} options
+   */
+  const recordIntentStep = (from, afterRecord, options) => {
     setCurrentIntent(afterRecord);
 
-    const entry = buildPatchEntry(transaction, afterRecord, options);
+    const entry = buildPatchEntry(from, afterRecord, options);
     if (!entry) {
-      emitHistoryDiagnostic({ type: 'commit', scope: 'intent', label: transaction.label, created: false });
+      emitHistoryDiagnostic({ type: 'commit', scope: 'intent', label: from.label, created: false });
       releaseUnreferencedFiles();
       touch();
       return false;
@@ -651,12 +665,68 @@ export const createHistoryManager = ({
     return true;
   };
 
+  /**
+   * @param {HistoryTransaction | null} transaction
+   * @param {{ label?: string }} [options]
+   * @param {{ label: string, stepLabel?: string } | null} [action]
+   *   The `runUndoable` action whose `fn` has ended: its own label, and the name of the step it commits.
+   */
+  const commitIntent = async (transaction, options = {}, action = null) => {
+    if (!transaction) return false;
+    // OV-460: a joined action, a drag end, or a settlement may commit an
+    // action's transaction while its `fn` awaits. What `fn` wrote afterwards
+    // is the action's remainder, recorded as a step of its own. A cancelled
+    // transaction has none, an open checkpoint captures it, and a restore
+    // owns the stacks while it runs. OV-463: nor is there one under an open
+    // artifact replacement or in a later intent generation, where the last
+    // recorded intent also lacks what the replacement or the baseline changed.
+    const recordsRemainder = () => Boolean(
+      action && transaction.committedAt === intentGeneration
+      && !activeCheckpoint && !activeReplacement && !restoring.value
+    );
+    const settled = () => transaction.closed && !recordsRemainder();
+    if (settled()) return false;
+    const afterRecord = await captureIntent();
+    // A concurrent settlement may have committed it during the capture.
+    if (settled()) return false;
+    const busy = mutationAvailability();
+    if (busy) { cancel(transaction); return busy; }
+    if (!transaction.closed) {
+      transaction.closed = true;
+      transaction.committedAt = intentGeneration;
+      if (activeTransaction === transaction) { activeTransaction = null; touchTransaction(); }
+      return recordIntentStep(
+        action ? { ...transaction, label: action.stepLabel ?? transaction.label } : transaction,
+        afterRecord,
+        options
+      );
+    }
+    if (!action || afterRecord.signature === currentIntentSignature) return false;
+    const remainder = {
+      label: action.label,
+      before: currentIntent,
+      beforeSignature: currentIntentSignature,
+      beforeFileIds: currentFileIds
+    };
+    // A transaction opened meanwhile (a control the user is typing in)
+    // continues from here, so its step does not repeat the remainder.
+    const open = openTransaction();
+    if (open) {
+      open.before = afterRecord.intent;
+      open.beforeSignature = afterRecord.signature;
+      open.beforeFileIds = afterRecord.fileIds;
+    }
+    return recordIntentStep(remainder, afterRecord, options);
+  };
+
+  const commit = (transaction, options = {}) => commitIntent(transaction, options);
+
   // R11: the one path that commits the open intent before another owner, a
   // checkpoint, an artifact replacement, a command, Undo, or Redo takes the
   // state. The input adapter skips its own commit of a settled transaction.
   const settlePendingIntent = async () => {
-    const pending = activeTransaction;
-    if (!pending || pending.closed) return;
+    const pending = openTransaction();
+    if (!pending) return;
     const previousDeferred = Boolean(pending.deferAdapterCommit);
     pending.deferAdapterCommit = true;
     try {
@@ -667,21 +737,49 @@ export const createHistoryManager = ({
     }
   };
 
+  // The `runUndoable` calls whose `fn` is being called (not awaited) now.
+  let actionCallDepth = 0;
+  /** @param {() => unknown} fn */
+  const callAction = (fn) => {
+    actionCallDepth += 1;
+    try { return fn(); } finally { actionCallDepth -= 1; }
+  };
+
+  /**
+   * One undoable step around `fn`, committed when `fn` ends.
+   * @param {string} label
+   * @param {() => unknown} fn
+   * @param {{ joinsOpenStep?: boolean, owner?: unknown, source?: string, label?: string }} [options]
+   *   `joinsOpenStep`: the call is part of the action that runs on the open step.
+   */
   const runUndoable = async (label, fn, options = {}) => {
     const sessionBusy = mutationAvailability();
     if (sessionBusy) return sessionBusy;
     if (typeof fn !== 'function') return undefined;
     if (restoring.value || capturing.value || activeCheckpoint) return fn();
 
-    const usesActiveTransaction = Boolean(activeTransaction && !activeTransaction.closed);
-    const tx = usesActiveTransaction ? activeTransaction : await begin(label, options);
+    const open = openTransaction();
+    const tx = open || await begin(label, options);
     if (tx) { tx.deferAdapterCommit = true; touchTransaction(); }
+    // OV-460: an edit made while another action is still running on the open
+    // step applies at once and is a step under its own name: it names the
+    // step from here on. A call the running action makes itself keeps the
+    // name: one made synchronously inside its `fn`, or one that says so
+    // (`joinsOpenStep`). Each action commits under the name it started with.
+    // OV-464: a call that joins belongs to the action that started on the
+    // step with its label, and commits under the name that action started
+    // with, whatever a later action has named the step since.
+    if (open?.actions && !actionCallDepth && !options.joinsOpenStep) open.label = label;
+    const joined = options.joinsOpenStep ? open?.actions?.find((started) => started.label === label) : null;
+    const action = { label, stepLabel: joined ? joined.stepLabel : tx?.label };
 
     try {
       const busy = mutationAvailability();
       if (busy) { cancel(tx); return busy; }
-      const result = await fn();
-      await commit(tx, options);
+      // The step closes when an action on it ends, so the list is never cleared.
+      if (tx) (tx.actions ??= []).push(action);
+      const result = await callAction(fn);
+      await commitIntent(tx, options, action);
       return result;
     } catch (error) {
       cancel(tx);
@@ -717,7 +815,7 @@ export const createHistoryManager = ({
           })();
     };
 
-    if (!activeTransaction || activeTransaction.closed) return captureBefore();
+    if (!openTransaction()) return captureBefore();
     return settlePendingIntent().then(captureBefore);
   };
 
@@ -785,6 +883,7 @@ export const createHistoryManager = ({
           && !options.shouldCommit(result)
         ) {
           if (tx) tx.closed = true;
+          intentGeneration += 1;
           releaseUnreferencedFiles();
           return result;
         }
@@ -792,6 +891,7 @@ export const createHistoryManager = ({
         return result;
       } catch (error) {
         if (tx) tx.closed = true;
+        intentGeneration += 1;
         releaseUnreferencedFiles();
         throw error;
       } finally {
@@ -924,6 +1024,7 @@ export const createHistoryManager = ({
       'after'
     );
     transaction.closed = true;
+    intentGeneration += 1;
     currentFileIds = artifactHandleFileIds(after);
     clearCurrentCheckpoint();
 
@@ -1038,6 +1139,7 @@ export const createHistoryManager = ({
         && !options.shouldCommit(result)
       ) {
         if (transaction) transaction.closed = true;
+        intentGeneration += 1;
         releaseUnreferencedFiles();
         touch();
         return result;

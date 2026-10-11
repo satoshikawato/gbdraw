@@ -3100,6 +3100,7 @@ export const createAppSetup = () => {
     resetPreviewViewport,
     resetRightDrawer: rightDrawerActions.resetRightDrawer,
     closeLabelTextScopeDialog: featureActions.closeLabelTextScopeDialog,
+    closeHiddenLabelTextDialog: featureActions.closeHiddenLabelTextDialog,
     clearLabelBuildNotices: featureActions.clearLabelBuildNotices,
     previewRuntime,
     preparePaletteDefinitions: paletteLoader.loadPaletteAsset
@@ -3873,7 +3874,8 @@ export const createAppSetup = () => {
   };
 
   const { requestPaletteChange, selectPalette, requestResetColors } = resultsManager;
-  const undoableAction = (label, fn) => (...args) => history.runUndoable(label, () => fn(...args));
+  /** @param {{ joinsOpenStep?: boolean }} [options] History's options for the step. */
+  const undoableAction = (label, fn, options) => (...args) => history.runUndoable(label, () => fn(...args), options);
   // Python's report of the per-feature edits the Results do not draw (design
   // Q4 3.4): dormant edits outside the crop or display, edits whose feature
   // the source does not have, and the edits a source-replacing Generate removed.
@@ -4034,7 +4036,8 @@ export const createAppSetup = () => {
   };
   const updateClickedFeatureLabelTextWithHistory = undoableAction('Change label text', updateClickedFeatureLabelText);
   const handleLabelTextScopeChoiceWithHistory = undoableAction('Change label text', handleLabelTextScopeChoice);
-  const handleHiddenLabelTextChoiceWithHistory = undoableAction('Change label visibility', handleHiddenLabelTextChoice);
+  // The Label Not Shown choice answers the label edit whose step is open: one step, under that step's name.
+  const handleHiddenLabelTextChoiceWithHistory = undoableAction('Change label visibility', handleHiddenLabelTextChoice, { joinsOpenStep: true });
   const requestLabelTextChangeByFeatureIdWithHistory = undoableAction(
     'Change label text',
     requestLabelTextChangeByFeatureId
