@@ -8,7 +8,7 @@ const { test, expect } = require('@playwright/test');
 const { execFileSync } = require('node:child_process');
 const { mkdirSync, readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
-const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
+const { answerChoicePrompt, evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
 const { openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { semanticSnapshot, settleLive } = require('./helpers/live-generate-parity.cjs');
 const { popup, closeEditor, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
@@ -147,9 +147,11 @@ const history = async (page, step) => {
   await settleLive(page);
 };
 
-const save = async (page, path) => {
+// `again`: the page already downloaded this Session file name, so the Save asks first.
+const save = async (page, path, { again = false } = {}) => {
   const download = page.waitForEvent('download', { timeout: 180_000 });
   await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
+  if (again) await answerChoicePrompt(page, 'Download the Session again?', 'download');
   await (await download).saveAs(path);
   return JSON.parse(gunzipSync(readFileSync(path)));
 };
@@ -988,7 +990,7 @@ test('the displayed Result belongs to the shown mode after every mode path', asy
     await check(page, `Redo ${step + 1}`);
   }
   const bothFile = info.outputPath('both.gbdraw-session.json.gz');
-  await save(page, bothFile);
+  await save(page, bothFile, { again: true });
 
   const fresh = await freshPage(browser);
   try {

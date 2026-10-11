@@ -592,7 +592,18 @@ const expectSessionLoadedWithoutWarnings = async (page, { timeout = 120_000 } = 
   await expect(page.locator('[data-app-notice] li')).toHaveCount(0);
 };
 
+// The app asks in its own dialog, which no browser `dialog` handler answers:
+// the spec names the question it expects and the action it takes (the
+// action's id; the dialog's keep button is not an action). The question of a
+// Save comes after the Save's preparation, hence the long wait.
+const answerChoicePrompt = async (page, title, action, { timeout = 120_000 } = {}) => {
+  const prompt = page.locator('[data-choice-prompt]');
+  await expect(prompt.getByRole('heading', { name: title, exact: true })).toBeVisible({ timeout });
+  await prompt.locator(`[data-choice-prompt-action="${action}"]`).click();
+};
+
 module.exports = {
+  answerChoicePrompt,
   expectSessionLoadedWithoutWarnings,
   CURRENT_FEATURE_CATALOG_SCHEMA,
   CURRENT_REQUEST_SCHEMA,

@@ -3,7 +3,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { gunzipSync } = require('node:zlib');
-const { openApp, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { answerChoicePrompt, openApp, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { promoteRequest } = require('./helpers/request-schema.cjs');
 
 const fixture = path.join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
@@ -19,9 +19,11 @@ const load = async (page, file) => {
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
 };
 
-const save = async (page, file) => {
+// `again`: the page already downloaded this Session file name, so the Save asks first.
+const save = async (page, file, { again = false } = {}) => {
   const pending = page.waitForEvent('download', { timeout: 120_000 });
   await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
+  if (again) await answerChoicePrompt(page, 'Download the Session again?', 'download');
   await (await pending).saveAs(file);
   return JSON.parse(gunzipSync(await fs.readFile(file)));
 };
@@ -99,7 +101,7 @@ test('failed Generate retains only valid same-source bindings in Save and fresh 
 
   const workerAfterFailure = await getDiagramWorkerActivity(page);
   const failedFile = info.outputPath('failed.gbdraw-session.json.gz');
-  const failedSaved = await save(page, failedFile);
+  const failedSaved = await save(page, failedFile, { again: true });
   expect(await exportSvg(page)).toBe(oldExport);
   const workerAfterSaveAndExport = await getDiagramWorkerActivity(page);
   expect(workerAfterSaveAndExport.runs).toBe(workerAfterFailure.runs);
@@ -258,7 +260,7 @@ test('failed multi-record Generate retains a validated binding to the selected s
   expect(failed.annotations[0].record).toEqual(before.annotations[0].record);
   expect(failed.annotations[0].key).toMatch(/::\[1,"RecB",300\]$/);
   const failedFile = info.outputPath('multi-failed.gbdraw-session.json.gz');
-  const failedSaved = await save(page, failedFile);
+  const failedSaved = await save(page, failedFile, { again: true });
   expect(resourceHashes(failedSaved)).toEqual(resourceHashes(beforeSaved));
   expect(failedSaved.renderRequest).toEqual(beforeSaved.renderRequest);
   expect(failedSaved.results).toEqual(beforeSaved.results);

@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
-const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, assertDiagramWorkerIdle, generateAndWaitForResult, getDiagramWorkerActivity, openApp, reveal, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, assertDiagramWorkerIdle, generateAndWaitForResult, getDiagramWorkerActivity, openApp, reveal, answerChoicePrompt, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 const { capture, assertCoherent, settle } = require('./helpers/visual-state.cjs');
 const path = require('node:path');
 
@@ -25,12 +25,14 @@ const assertSourceFree = state => {
   expect(state.committed).toBeNull();
 };
 
-const save = async (page, testInfo, label) => {
+// `again`: the page already downloaded this Session file name, so the Save asks first.
+const save = async (page, testInfo, label, { again = false } = {}) => {
   let downloaded;
   const listener = download => { downloaded = download; };
   page.on('download', listener);
   try {
     await page.getByRole('button', { name: 'Save Session', exact: true }).click();
+    if (again) await answerChoicePrompt(page, 'Download the Session again?', 'download');
     // Await operation settlement, then assert once. Preserve the product error
     // as the red witness instead of reporting only a download timeout.
     await expect.poll(async () => Boolean(downloaded || (await snapshot(page)).error), { timeout: 180_000 }).toBe(true);
@@ -251,7 +253,7 @@ test('settings-only Load replaces existing work and rejected candidates preserve
   })).toEqual(runMetadata);
   expect((await snapshot(page)).circularSources[0]).toBe(true);
   expect((await snapshot(page)).committed.renderRequest).toEqual(promoted);
-  const full = await save(page, testInfo, 'full-control');
+  const full = await save(page, testInfo, 'full-control', { again: true });
   const before = await snapshot(page);
   const visual = await capture(page, testInfo, 'before-rejected-loads');
   await assertCoherent(visual, 'prior valid Session');
