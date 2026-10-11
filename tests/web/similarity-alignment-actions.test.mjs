@@ -1115,6 +1115,10 @@ test('Review and the active-plan inspector use names, never internal keys or has
     ['Genome B · Record 2', 'gene-target-a · target-a'],
     ['Genome B · Record 3', 'CDS 41..60 bp']
   ]);
+  // <record-name> lays the parts out: the name shrinks, the detail stays whole.
+  assert.deepEqual(inspector.records.map(({ recordName, recordDetail }) => [recordName, recordDetail]), [
+    ['Genome A', 'ACC-A'], ['Genome B', 'Record 2'], ['Genome B', 'Record 3']
+  ]);
 });
 
 // UX-B06: the drawer reference options name the record and the gene, not the

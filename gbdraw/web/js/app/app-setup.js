@@ -763,6 +763,11 @@ export const createAppSetup = () => {
   // Every panel names a record the same way (OV-436).
   const linearRecordNameMap = computed(() => linearRecordNames(linearSeqs));
   const linearComparisonRecordLabel = (uid) => linearRecordNameMap.value.get(uid)?.label || 'Record';
+  // The parts <record-name> lays out: the name shrinks, the accession stays whole.
+  const linearComparisonRecordName = (uid) => {
+    const entry = linearRecordNameMap.value.get(uid);
+    return { name: entry?.name || 'Record', detail: entry?.accession || '' };
+  };
   const openLinearComparisonDisclosure = async (disclosureKey) => {
     if (!disclosureKey) return null;
     const details = /** @type {HTMLDetailsElement[]} */ ([...document.querySelectorAll('[data-linear-comparison-disclosure]')])
@@ -4292,7 +4297,7 @@ export const createAppSetup = () => {
       .filter((issue) => issue.code === 'missing-upload').map((issue) => issue.edgeKey));
     return missingBlastTsvDialog.pairs.map((pair) => {
       const found = linearComparisonPairForEdgeKey(pair.edgeKey);
-      return { ...pair, records: found ? `${linearComparisonRecordLabel(found.queryUid)} → ${linearComparisonRecordLabel(found.subjectUid)}` : '',
+      return { ...pair, queryUid: found?.queryUid || '', subjectUid: found?.subjectUid || '',
         fileName: found?.draft?.fileActive ? String(found.draft.file?.name || '') : '', missing: missing.has(pair.edgeKey) };
     });
   });
@@ -6075,6 +6080,7 @@ export const createAppSetup = () => {
     hasActiveLinearUploadIntent: drawingMember('hasActiveLinearUploadIntent'),
     linearComparisonTimeline,
     linearComparisonRecordLabel,
+    linearComparisonRecordName,
     linearLosatCacheInfoByEdgeKey,
     linearLayoutTokens,
     syncLinearRecordLayout,

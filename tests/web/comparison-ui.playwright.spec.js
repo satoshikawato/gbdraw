@@ -1816,15 +1816,40 @@ test('Record Layout and Selected pairs name every record of a multi-record File 
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180000 });
   const definitions = await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((sequence) => sequence.definition));
   await page.locator('details[data-linear-comparison-disclosure="advanced"]').evaluate((details) => { details.open = true; });
-  const layoutNames = page.locator('[data-linear-comparison-disclosure="advanced"] [title]').filter({ hasText: /^#\d/ });
+  const layoutNames = page.locator('[data-linear-record-layout-name]');
   await expect(layoutNames).toHaveText([
     /^#1 Vibrio parahaemolyticus · NC_004603\.1/,
     /^#2 Vibrio parahaemolyticus · NC_004605\.1/,
     /^#3 Vibrio alginolyticus · NC_022349\.1/,
     /^#4 Vibrio alginolyticus · NC_022359\.1/
   ]);
-  await expect(selectedPairs(page).locator('[data-edge-key] legend').first())
+  await selectedPairs(page).evaluate((details) => { details.open = true; });
+  const pairRow = selectedPairs(page).locator('[data-linear-comparison-pair-row]').first();
+  await expect(pairRow.locator('legend'))
     .toHaveText('#1 → #3 Vibrio parahaemolyticus · NC_004603.1 → Vibrio alginolyticus · NC_022349.1');
+  // Source and target each take a line of their own.
+  await expect(pairRow.locator('[data-linear-comparison-pair-names] > div')).toHaveText([
+    '#1 Vibrio parahaemolyticus · NC_004603.1',
+    '→ #3 Vibrio alginolyticus · NC_022349.1'
+  ]);
+  // At the default 320 px sidebar the name shrinks, never the accession: each
+  // accession is whole and inside its row.
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.sidebarWidth)).toBe(320);
+  const accessionGeometry = (row) => row.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return [...element.querySelectorAll('[data-record-name-detail]')].map((detail) => {
+      const rect = detail.getBoundingClientRect();
+      return { text: detail.textContent, whole: detail.scrollWidth <= detail.clientWidth + 1,
+        inside: rect.width > 0 && rect.left >= box.left - 1 && rect.right <= box.right + 1 };
+    });
+  });
+  for (const [row, accessions] of [
+    [layoutNames.nth(0), [' · NC_004603.1']],
+    [layoutNames.nth(1), [' · NC_004605.1']],
+    [pairRow, [' · NC_004603.1', ' · NC_022349.1']]
+  ]) {
+    expect(await accessionGeometry(row)).toEqual(accessions.map((text) => ({ text, whole: true, inside: true })));
+  }
   // The records' own Definitions (the diagram headings) are unchanged.
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((sequence) => sequence.definition)))
     .toEqual(definitions);

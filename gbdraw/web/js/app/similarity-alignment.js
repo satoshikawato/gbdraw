@@ -361,9 +361,12 @@ const inspectActivePlan = (plan, { linearSeqs = [], catalog = null, request = nu
       recordLabel: referenceRecord?.label
     },
     records: plan.records.map((decision) => {
+      const recordName = names.get(decision.recordKey);
       return {
         recordKey: decision.recordKey,
-        recordLabel: names.get(decision.recordKey)?.label,
+        recordLabel: recordName?.label,
+        recordName: recordName?.name,
+        recordDetail: recordName?.detail,
         anchorLabel: decision.anchor ? nameOf(decision.anchor).label : 'Skip',
         status: decision.status,
         rationale: decision.rationale,

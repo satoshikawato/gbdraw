@@ -135,6 +135,10 @@
             height: 2.5rem;
             width: auto;
         }
+        /* <record-name>: the name shrinks with an ellipsis; the prefix and the accession stay whole (OV-436). */
+        .record-name { display: inline-flex; max-width: 100%; min-width: 0; vertical-align: bottom; white-space: nowrap; }
+        .record-name-main { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        .record-name-part { flex: none; white-space: pre; }
         #app-boot-splash .gbdraw-loader {
             width: 2rem;
             height: 2rem;
@@ -2161,7 +2165,7 @@
                             <details class="mt-2 min-w-0 rounded border border-slate-200 bg-white/70 p-2" :data-linear-record-options="seq.uid">
                                 <summary role="button" :aria-label="`Record options for sequence ${idx + 1}`" class="linear-secondary-summary" :class="{ 'opacity-60': !recordSelection.isDrawn('linear', seq.uid) }">
                                     <i class="ph ph-sliders-horizontal" aria-hidden="true"></i>
-                                    <span v-if="source.records.length > 1" class="min-w-0 truncate" :title="linearComparisonRecordLabel(seq.uid)">{{ linearComparisonRecordLabel(seq.uid) }}</span>
+                                    <record-name v-if="source.records.length > 1" v-bind="linearComparisonRecordName(seq.uid)"></record-name>
                                     <span v-else>Record options</span>
                                     <span
                                         v-if="!recordSelection.isDrawn('linear', seq.uid)"
@@ -2752,9 +2756,9 @@
                                         class="min-w-0 rounded border px-1.5 py-1 space-y-1"
                                     >
                                         <legend class="sr-only">#{{ pair.queryIndex + 1 }} → #{{ pair.subjectIndex + 1 }} {{ linearComparisonRecordLabel(pair.queryUid) }} → {{ linearComparisonRecordLabel(pair.subjectUid) }}</legend>
-                                        <div class="flex min-w-0 items-center gap-1 text-[10px] font-semibold text-slate-700" aria-hidden="true">
-                                            <span class="shrink-0">#{{ pair.queryIndex + 1 }} → #{{ pair.subjectIndex + 1 }}</span>
-                                            <span class="min-w-0 flex-1 truncate font-normal text-slate-500" :title="`${linearComparisonRecordLabel(pair.queryUid)} → ${linearComparisonRecordLabel(pair.subjectUid)}`">{{ linearComparisonRecordLabel(pair.queryUid) }} → {{ linearComparisonRecordLabel(pair.subjectUid) }}</span>
+                                        <div class="min-w-0 text-[10px] text-slate-700" aria-hidden="true" data-linear-comparison-pair-names>
+                                            <div class="min-w-0"><record-name :prefix="`#${pair.queryIndex + 1}`" v-bind="linearComparisonRecordName(pair.queryUid)"></record-name></div>
+                                            <div class="min-w-0"><record-name :prefix="`→ #${pair.subjectIndex + 1}`" v-bind="linearComparisonRecordName(pair.subjectUid)"></record-name></div>
                                         </div>
                                         <p v-if="linearComparisonUi.pairIssueText[pair.edgeKey]" data-linear-comparison-pair-issue class="text-[10px] font-semibold text-red-700">{{ linearComparisonUi.pairIssueText[pair.edgeKey] }}</p>
                                         <div class="linear-pair-source" data-comparison-focus="pair-row">
@@ -2904,7 +2908,7 @@
                                 </label>
                                 <div v-if="linearRecordLayoutEnabled" class="min-w-0 space-y-1.5">
                                     <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_4.5rem] gap-1" v-for="(seq, idx) in linearSeqs" :key="`layout-${seq.uid}`" :class="{ 'opacity-60': !recordSelection.isDrawn('linear', seq.uid) }">
-                                        <div class="min-w-0 self-center truncate text-[10px] font-semibold text-slate-600" :title="linearComparisonRecordLabel(seq.uid)">#{{ idx + 1 }} {{ linearComparisonRecordLabel(seq.uid) }}<span v-if="!recordSelection.isDrawn('linear', seq.uid)" data-record-off-badge class="ml-1 rounded bg-slate-200 px-1 text-[9px] text-slate-700">OFF</span></div>
+                                        <div class="flex min-w-0 items-center self-center text-[10px] font-semibold text-slate-600" data-linear-record-layout-name><record-name :prefix="`#${idx + 1}`" v-bind="linearComparisonRecordName(seq.uid)"></record-name><span v-if="!recordSelection.isDrawn('linear', seq.uid)" data-record-off-badge class="ml-1 shrink-0 rounded bg-slate-200 px-1 text-[9px] text-slate-700">OFF</span></div>
                                         <input type="number" min="1" :value="linearRecordRowFor(seq.uid, idx + 1)" @input="setLinearRecordRow(seq.uid, $event.target.value)" class="form-input form-input-compact min-w-0" :aria-label="`Linear record row for sequence ${idx + 1}`" :disabled="!semanticMutationAvailable">
                                         <div class="col-span-2 grid min-w-0 grid-cols-2 gap-1">
                                             <button type="button" class="btn btn-secondary min-w-0 px-1 py-0.5 text-[10px]" @click="moveLinearRecordWithinRow(seq.uid, -1)" :disabled="!semanticMutationAvailable">Up</button>
@@ -7200,7 +7204,7 @@
                                                 :data-alignment-record-key="record.recordKey"
                                                 class="flex items-start gap-2 px-2 py-1">
                                                 <div class="min-w-0 flex-1">
-                                                    <div class="truncate font-medium text-slate-700" :title="record.recordLabel">{{ record.recordLabel }}</div>
+                                                    <div class="min-w-0 font-medium text-slate-700"><record-name :name="record.recordName" :detail="record.recordDetail"></record-name></div>
                                                     <div class="truncate" :title="`${record.anchorLabel} · ${record.rationaleLabel}`">{{ record.anchorLabel }} <span class="text-slate-500">· {{ record.rationaleLabel }}</span></div>
                                                 </div>
                                                 <span v-if="record.reversedFromSource"
@@ -7847,7 +7851,8 @@
                 <li v-for="row in missingBlastTsvRows" :key="row.edgeKey" :data-missing-blast-tsv-row="row.edgeKey" class="flex min-w-0 items-center gap-2 px-2 py-1.5 text-sm">
                     <span class="min-w-0 flex-1">
                         <span class="block font-semibold text-slate-800">{{ row.label }}</span>
-                        <span class="block truncate text-xs text-slate-500" :title="row.records">{{ row.records }}</span>
+                        <span v-if="row.queryUid" class="block min-w-0 text-xs text-slate-500"><record-name :prefix="`#${row.queryIndex + 1}`" v-bind="linearComparisonRecordName(row.queryUid)"></record-name></span>
+                        <span v-if="row.subjectUid" class="block min-w-0 text-xs text-slate-500"><record-name :prefix="`→ #${row.subjectIndex + 1}`" v-bind="linearComparisonRecordName(row.subjectUid)"></record-name></span>
                         <span class="block truncate text-xs" :class="row.missing ? 'text-red-700' : 'text-green-700'">{{ row.missing ? 'No file' : row.fileName }}</span>
                     </span>
                     <button type="button" data-history-ignore :disabled="!semanticMutationAvailable" @click="chooseLinearComparisonPairFile(row.edgeKey)" :aria-label="`Choose BLAST TSV for ${row.label}`" class="btn btn-secondary btn-sm shrink-0">{{ row.missing ? 'Choose file…' : 'Change…' }}</button>

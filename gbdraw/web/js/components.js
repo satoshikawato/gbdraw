@@ -360,6 +360,18 @@ export const FileUploader = {
   }
 };
 
+// A record's name in a narrow row: the name shrinks with an ellipsis and its
+// detail (the accession) never does, so records of one File stay distinct
+// (OV-436). The tooltip and the text hold the whole name.
+export const RecordName = {
+  props: { prefix: { type: String, default: '' }, name: { type: String, default: '' }, detail: { type: String, default: '' } },
+  setup(props) {
+    const title = computed(() => [props.prefix, [props.name, props.detail].filter(Boolean).join(' · ')].filter(Boolean).join(' '));
+    return { title };
+  },
+  template: `<span class="record-name" :title="title"><span v-if="prefix" class="record-name-part">{{ prefix + ' ' }}</span><span class="record-name-main">{{ name }}</span><span v-if="detail" class="record-name-part" data-record-name-detail>{{ ' · ' + detail }}</span></span>`
+};
+
 export const RecordDisplayControl = {
   template: '#record-display-control-template',
   props: ['row', 'controller'],
