@@ -181,6 +181,7 @@ export const createFeatureEditor = ({
     setFeatureShape: ruleActions.setFeatureShape,
     addSpecificRule: ruleActions.addSpecificRule,
     commitSpecificRules: ruleActions.commitSpecificRules,
+    importSpecificRules: ruleActions.importSpecificRules,
     followRestoredSpecificRules: ruleActions.followRestoredRules,
     applySpecificRulePreset: ruleActions.applySpecificRulePreset,
     clearAllSpecificRules: ruleActions.clearAllSpecificRules,
