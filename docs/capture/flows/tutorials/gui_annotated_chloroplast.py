@@ -271,10 +271,10 @@ def _configure_gallery_slots(page: Page) -> tuple[dict[str, Any], ...]:
     annotation_slot = page.get_by_role(
         "group", name="Circular track slot annotations", exact=True
     )
-    annotation_slot.get_by_label("Annotation set", exact=True).select_option(
+    annotation_slot.get_by_label(re.compile(r"Annotation set$")).select_option(
         "plastome_regions"
     )
-    annotation_slot.get_by_label("Annotation placement", exact=True).select_option(
+    annotation_slot.get_by_label(re.compile(r"Annotation placement$")).select_option(
         "inside"
     )
     annotation_slot = page.get_by_role(
@@ -296,7 +296,7 @@ def _configure_gallery_slots(page: Page) -> tuple[dict[str, Any], ...]:
     annotation_slot.get_by_role("combobox", name="Circular track slot plastome_regions Radius unit", exact=True).select_option("factor")
     annotation_slot.get_by_title("Inner gap", exact=True).fill("1")
     annotation_slot.get_by_title("Outer gap", exact=True).fill("1")
-    annotation_slot.get_by_label("Show annotation labels", exact=True).check()
+    annotation_slot.get_by_label(re.compile(r"Show annotation labels$")).check()
     annotation_slot.locator(
         'select:has(option[value="compress"])'
     ).select_option("compress")

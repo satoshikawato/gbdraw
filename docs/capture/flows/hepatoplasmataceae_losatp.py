@@ -920,7 +920,9 @@ def _move_popup_opposite_match(page: Page, popup: Any, first_match: Any) -> None
         if match_center_x < VIEWPORT_WIDTH / 2
         else POPUP_MARGIN_PX
     )
-    target_y = POPUP_MARGIN_PX
+    # A popup stays below the app header, so its top corner is the header's bottom edge plus the popup margin.
+    header_box = _require_bounding_box(page.get_by_role("banner").first, "app header")
+    target_y = header_box["y"] + header_box["height"] + POPUP_MARGIN_PX
 
     drag_x = popup_box["x"] + 24
     drag_y = popup_box["y"] + 24

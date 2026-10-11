@@ -157,10 +157,10 @@ def _configure_slots(page: Page) -> tuple[dict[str, Any], ...]:
     annotation = page.get_by_role(
         "group", name="Circular track slot annotations", exact=True
     )
-    annotation.get_by_label("Annotation set", exact=True).select_option(
+    annotation.get_by_label(re.compile(r"Annotation set$")).select_option(
         "mitochondrial_regions"
     )
-    annotation.get_by_label("Annotation placement", exact=True).select_option(
+    annotation.get_by_label(re.compile(r"Annotation placement$")).select_option(
         "inside"
     )
     slot_id = annotation.get_by_label(
@@ -173,7 +173,7 @@ def _configure_slots(page: Page) -> tuple[dict[str, Any], ...]:
     annotation.get_by_role(
         "textbox", name="Circular track slot mitochondrial_regions Width value", exact=True
     ).fill("24px")
-    annotation.get_by_label("Show annotation labels", exact=True).check()
+    annotation.get_by_label(re.compile(r"Show annotation labels$")).check()
     annotation.locator('select:has(option[value="compress"])').select_option(
         "compress"
     )
