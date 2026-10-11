@@ -31,11 +31,18 @@ write-up of a release.
     is drawn by this rule too and keeps its stored boundary.
   - A Circular record of 50,000 to 74,999 bp drawn alone or beside shorter
     records now gets the short styles.
-  - On a Circular Multi-Record Canvas, a record of 50,000 to 74,999 bp beside
-    one of 75 kb or longer keeps the long feature, track, and label font
-    sizes, but its label leader lines are now 1.5 px wide, its outer labels
-    move slightly, and the legend takes the short sizes (20 px text) when
-    that record is the first one.
+  - A Circular Multi-Record Canvas with records of both size classes now
+    takes every Auto size of every record, and of the legend, from the long
+    class (OV-492). A record of 50,000 to 74,999 bp beside one of 75 kb or
+    longer is drawn as before. A record under 50 kb beside a long one
+    changes: its label leader lines are 0.5 px wide like the long ones
+    (OV-483; they were 1.5 px beside the 8 pt long label font), and its
+    labels sit at the long class's distances. When that record is the first
+    one, the legend changes too: 16 px text and 20 px swatches, where the
+    first record's class gave 20 px and 24 px. Before, such a canvas copied a
+    fixed list of long sizes to its short records and left their other sizes
+    short. A Session saved earlier is drawn by this rule too and keeps its
+    stored boundary.
   - A Session that stores its whole configuration, such as one written by
     `--session_output`, keeps the boundary it was saved with.
 

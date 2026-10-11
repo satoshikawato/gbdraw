@@ -142,6 +142,16 @@
       }
     },
     {
+      "name": "Circular canvas with both size classes: every record takes the long sizes",
+      "mode": "circular",
+      "recordLengths": [306008, 50466],
+      "expected": {
+        "labels.font_size": 8,
+        "labels.stroke_width": 0.5,
+        "objects.axis.circular.stroke_width": 1
+      }
+    },
+    {
       "name": "Circular 75 kb boundary: 74,999 bp is short",
       "mode": "circular",
       "recordLengths": [74999],

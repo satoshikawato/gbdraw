@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from functools import reduce
+from operator import getitem
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -306,6 +308,7 @@ def test_mixed_circular_canvas_reports_the_harmonized_long_styles(cfg: GbdrawCon
         canvas = CircularCanvasConfigurator(output_prefix="t", profile=profile, legend="none", gb_record=_record(length))
         for path in (
             "labels.font_size",
+            "labels.stroke_width",
             "objects.axis.circular.stroke_width",
             "objects.features.block_stroke_width",
             "objects.features.line_stroke_width",
@@ -328,6 +331,37 @@ def test_mixed_circular_canvas_reports_the_harmonized_long_styles(cfg: GbdrawCon
         for slot in slots:
             assert slot.width is not None
             assert values[f"circularSlot.{slot.id}.width"] == slot.width.value, (length, slot.id)
+
+
+def _short_long_paths(node: object, path: tuple[str, ...] = ()) -> list[tuple[str, ...]]:
+    if not isinstance(node, dict):
+        return []
+    found = [path] if {"short", "long"} <= node.keys() else []
+    return found + [hit for key, value in node.items() for hit in _short_long_paths(value, (*path, key))]
+
+
+@pytest.mark.parametrize("lengths", [(306_008, 50_466), (30_000, 200_000)])
+def test_mixed_circular_canvas_gives_every_record_the_long_class(cfg: GbdrawConfig, lengths: tuple[int, ...]) -> None:
+    """OV-492: the canvas config resolves the long value of every short/long node for every record.
+
+    This checks the config, not its readers; the render check of the readers is
+    test_multi_record_canvas_draws_a_short_record_beside_a_long_one_as_long.
+    """
+    canvas_cfg = diagram_api._harmonize_multi_record_circular_style_cfg(cfg, record_lengths=lengths)
+    packaged, resolved = asdict(cfg), asdict(canvas_cfg)
+    paths = _short_long_paths(packaged)
+    assert ("labels", "radius_factor", "tuckin", "single") in paths
+    assert ("canvas", "circular", "track_dict") in paths
+    for length in lengths:
+        size = determine_length_parameter(length, int(canvas_cfg.labels.length_threshold.circular))
+        assert size == DrawnExtent("circular", lengths).size_class(cfg)
+        for path in paths:
+            assert reduce(getitem, path, resolved)[size] == reduce(getitem, path, packaged)["long"], (length, path)
+
+
+@pytest.mark.parametrize("lengths", [(30_000,), (30_000, 60_000), (200_000, 80_000), (200_000,)])
+def test_circular_canvas_of_one_size_class_keeps_its_config(cfg: GbdrawConfig, lengths: tuple[int, ...]) -> None:
+    assert diagram_api._harmonize_multi_record_circular_style_cfg(cfg, record_lengths=lengths) is cfg
 
 
 def test_dependent_tick_fonts_follow_a_given_track_thickness(cfg: GbdrawConfig) -> None:

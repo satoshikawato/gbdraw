@@ -1034,7 +1034,6 @@ def test_feature_width_75_auto_repositions_ticks_outside_feature_band_when_overl
         captured["tick_label_side"] = kwargs.get("label_side")
         captured["tick_side"] = kwargs.get("tick_side")
         captured["tick_length_px"] = kwargs.get("tick_length_px")
-        captured["tick_track_channel_override"] = kwargs.get("tick_track_channel_override")
         return canvas
 
     monkeypatch.setattr(circular_assemble_module, "add_axis_group_on_canvas", fake_add_axis_group_on_canvas)
@@ -1124,7 +1123,6 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
         captured["tick_label_side"] = kwargs.get("label_side")
         captured["tick_side"] = kwargs.get("tick_side")
         captured["tick_length_px"] = kwargs.get("tick_length_px")
-        captured["tick_track_channel_override"] = kwargs.get("tick_track_channel_override")
         return canvas
 
     fake_add_gc_content_group_on_canvas = make_numeric_track_capture(captured, width_key='gc_width', norm_key='gc_norm')
