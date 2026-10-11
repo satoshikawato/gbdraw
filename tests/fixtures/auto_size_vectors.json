@@ -142,13 +142,23 @@
       }
     },
     {
-      "name": "50 kb boundary: 50,000 bp is long",
+      "name": "100 kb boundary: 99,999 bp is short",
       "mode": "circular",
-      "recordLengths": [50000],
+      "recordLengths": [99999],
+      "expected": {
+        "labels.font_size": 14,
+        "circularSlot.features.width": 37.05,
+        "objects.scale.interval": 10000
+      }
+    },
+    {
+      "name": "100 kb boundary: 100,000 bp is long",
+      "mode": "circular",
+      "recordLengths": [100000],
       "expected": {
         "labels.font_size": 8,
         "circularSlot.features.width": 18.525,
-        "objects.scale.interval": 5000
+        "objects.scale.interval": 10000
       }
     }
   ],

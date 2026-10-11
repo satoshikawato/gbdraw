@@ -44,7 +44,7 @@ def _tick_kwargs(font_size: float) -> dict:
         "tick_side": "inside",
         "tick_length_px": 10.0,
         "tick_width": 2.0,
-        "length_threshold": 50_000,
+        "length_threshold": 100_000,
     }
 
 
@@ -313,7 +313,7 @@ def test_every_cairosvg_export_path_converts_the_rewritten_svg(
         for element in generate_circular_tick_labels(
             80.0, 10_000, "large", [5_000], "none", "black", 14.0, "normal", FONT_FAMILY,
             "tuckin", True, 96, label_side="outside", tick_side="inside",
-            tick_length_px=10.0, tick_width=2.0, length_threshold=50_000,
+            tick_length_px=10.0, tick_width=2.0, length_threshold=100_000,
         ):
             group.add(element)
         canvas.add(group)

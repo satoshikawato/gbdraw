@@ -21,6 +21,7 @@ import {
   formatRadiusFactorAuto,
   isManualSlotValue,
   normalizeOptionalText,
+  sizeClassForRecordLengths,
   tickAnchorRadiusFactor
 } from '../services/track-slot-display.js';
 import { featureSlotEdits } from './track-slot-edits.js';
@@ -106,7 +107,6 @@ const PRESET_LABELS = {
   middle: 'Middle',
   spreadout: 'Spreadout'
 };
-const PREVIEW_LENGTH_THRESHOLD_BP = 50000;
 const PREVIEW_RADIUS_PX = 390;
 const PREVIEW_TRACK_RATIO = 0.19;
 const PREVIEW_TRACK_DICT = {
@@ -190,8 +190,7 @@ const getPreviewLengthParam = (state) => {
   const lengths = getPreviewRecordEntries(state)
     .map((entry) => Number(entry?.record_length ?? entry?.length ?? 0))
     .filter((value) => Number.isFinite(value) && value > 0);
-  if (lengths.length === 0) return 'long';
-  return Math.max(...lengths) < PREVIEW_LENGTH_THRESHOLD_BP ? 'short' : 'long';
+  return sizeClassForRecordLengths(lengths) || 'long';
 };
 
 /** @param {DrawingState} drawing */

@@ -155,7 +155,7 @@ def _add_block_stroke_args(parser: argparse.ArgumentParser) -> None:
         type=str)
     parser.add_argument(
         '--block_stroke_width',
-        help='Block stroke width (optional; float; default: 2 pt for genomes <= 50 kb, 0 pt for genomes >= 50 kb)',
+        help='Block stroke width (optional; float; default: 2 pt for genomes < 100 kb, 0 pt for genomes >= 100 kb)',
         type=float)
 
 
@@ -432,11 +432,11 @@ def _add_gc_content_axis_args(parser: argparse.ArgumentParser) -> None:
 def _add_legend_size_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--legend_box_size',
-        help='Legend box size (optional; float; default: 24 (pixels, 96 dpi) for genomes <= 50 kb, 20 for genomes >= 50 kb).',
+        help='Legend box size (optional; float; default: 24 (pixels, 96 dpi) for genomes < 100 kb, 20 for genomes >= 100 kb).',
         type=float)
     parser.add_argument(
         '--legend_font_size',
-        help='Legend font size (optional; float; default: 20 (pt) for genomes <= 50 kb, 16 for genomes >= 50 kb).',
+        help='Legend font size (optional; float; default: 20 (pt) for genomes < 100 kb, 16 for genomes >= 100 kb).',
         type=float)
 
 

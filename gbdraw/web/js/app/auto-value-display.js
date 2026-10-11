@@ -1,9 +1,7 @@
 // @ts-check
 /** @import { DrawingState } from '../state.js' */
-import { normalizeOptionalText } from '../services/track-slot-display.js';
+import { normalizeOptionalText, sizeClassForRecordLengths } from '../services/track-slot-display.js';
 import { requireCurrentLinearTrackLayout } from '../services/current-option-values.js';
-
-const LENGTH_THRESHOLD_BP = 50000;
 
 const DEFAULTS = Object.freeze({
   circular: {
@@ -148,11 +146,7 @@ const circularRecordLengths = (state) => {
     .filter((value) => Number.isFinite(value) && value > 0);
 };
 
-const activeCircularLengthParam = (state) => {
-  const lengths = circularRecordLengths(state);
-  if (lengths.length === 0) return null;
-  return Math.max(...lengths) < LENGTH_THRESHOLD_BP ? 'short' : 'long';
-};
+const activeCircularLengthParam = (state) => sizeClassForRecordLengths(circularRecordLengths(state));
 
 const activeLengthParam = (state) => {
   const mode = String(state?.mode?.value || state?.mode || 'circular');

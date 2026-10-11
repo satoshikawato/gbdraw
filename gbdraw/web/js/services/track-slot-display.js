@@ -13,6 +13,19 @@ const roundDisplayNumber = (value, digits = 1) => {
 
 export const isManualSlotValue = (value) => normalizeOptionalText(value) !== null;
 
+// The packaged labels.length_threshold of gbdraw/data/config.toml (both modes).
+const SIZE_CLASS_THRESHOLD_BP = 100000;
+
+/**
+ * The size class that picks the short or long Auto sizes: that of the longest record.
+ * @param {number[]} recordLengths
+ * @returns {'short' | 'long' | null} null when no length is known
+ */
+export const sizeClassForRecordLengths = (recordLengths) => {
+  if (recordLengths.length === 0) return null;
+  return Math.max(...recordLengths) < SIZE_CLASS_THRESHOLD_BP ? 'short' : 'long';
+};
+
 /**
  * The note an Auto field shows: a value measured in the last render, or,
  * before one, an estimate marked as such (TK-15).

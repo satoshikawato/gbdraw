@@ -12,6 +12,12 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Raised the short/long size boundary of the Auto sizes from 50 kb to 100 kb in
+  Circular and Linear diagrams. A record of 50,000 to 99,999 bp (in Linear, a
+  diagram whose longest record is in that range) now gets the short styles:
+  larger labels, features, strokes, and legend. Set the sizes explicitly to keep
+  the previous look.
+
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
 - Added circular-record display-start rotation and manual feature lane placement.
