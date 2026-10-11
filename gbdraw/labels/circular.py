@@ -620,6 +620,8 @@ def _optimize_top_bottom_leader_start_points(labels: list[dict], total_length: i
 
 def _assign_leader_start_points(labels: list[dict], total_length: int) -> list[dict]:
     """Populate `leader_start_x/y` used for drawing the first leader segment."""
+    if any(label.get("leader_points") is not None for label in labels):
+        return labels  # study prototype labels carry their own leader geometry
     for label in labels:
         leader_x, leader_y = _leader_start_point(label, total_length)
         label["leader_start_x"] = leader_x
@@ -4261,6 +4263,9 @@ def rearrange_labels_fc(
         x_radius = feature_radius * x_radius_factor * (2 - x_radius_offset)
         y_radius = feature_radius * y_radius_factor * (2 - y_radius_offset)
 
+    if is_outer:  # study prototype A2: widen the outer label band
+        x_radius *= _PROTO_STATE["band_scale"]
+        y_radius *= _PROTO_STATE["band_scale"]
     # Optional "arena" override: scale the ellipse so it fits the desired outer radius (px).
     if arena_outer_radius is not None:
         arena_outer_radius = float(arena_outer_radius)
@@ -4456,7 +4461,38 @@ def _is_label_embedded_in_segment(
     return (start_offset > eps) and (end_offset < (feature_span - eps))
 
 
-def prepare_label_list(
+_PROTO_STATE: dict = {"band_scale": 1.0, "drop": frozenset(), "bypass": False}
+
+
+def _proto_design_from_env() -> str:
+    import os
+
+    return os.environ.get("GBDRAW_LABEL_PROTO", "").strip().upper()
+
+
+def prepare_label_list(*args, **kwargs):
+    """Study prototype dispatcher: design A wraps today's placement; B-E replace it (see labels/proto)."""
+    design = _proto_design_from_env()
+    if not design.startswith("A") or _PROTO_STATE["bypass"]:
+        return _prepare_label_list_today(*args, **kwargs)
+    from .proto import run_design_a
+
+    def render_today(font_size: float | None = None, band_scale: float = 1.0, drop=frozenset()):
+        call_kwargs = dict(kwargs)
+        if font_size is not None:
+            call_kwargs["label_font_size"] = float(font_size)
+            call_kwargs["_candidate_cache"] = None
+        saved = dict(_PROTO_STATE)
+        _PROTO_STATE.update(band_scale=float(band_scale), drop=frozenset(drop), bypass=True)
+        try:
+            return _prepare_label_list_today(*args, **call_kwargs)
+        finally:
+            _PROTO_STATE.update(saved)
+
+    return run_design_a(design, render_today, total_length=int(args[1]))
+
+
+def _prepare_label_list_today(
     feature_dict,
     total_length,
     radius,
@@ -4569,7 +4605,7 @@ def prepare_label_list(
 
     for input_order, (stable_id, feature_object) in enumerate(feature_dict.items()):
         candidate = candidates_by_id.get(str(stable_id))
-        if candidate is None:
+        if candidate is None or str(stable_id) in _PROTO_STATE["drop"]:
             continue
         else:
             feature_label_text = candidate.text
@@ -4757,6 +4793,22 @@ def prepare_label_list(
                     label_entry["is_inner"] = True
                     inner_labels.append(label_entry)
 
+    _proto_design = _proto_design_from_env()
+    if _proto_design and _proto_design[0] in "BCDE" and not _PROTO_STATE["bypass"]:
+        from .proto import run_design
+
+        _arc = cfg.labels
+        _off = cfg.labels.unified_adjustment.outer_labels
+        return embedded_labels + run_design(
+            _proto_design,
+            outer_labels,
+            total_length=int(total_length),
+            radius=float(radius),
+            gap_px=label_spacing_px,
+            font_size=float(font_size),
+            arc_x_radius=float(radius) * _arc.arc_x_radius_factor[track_type][strands][length_param] * _off.x_radius_offset,
+            arc_y_radius=float(radius) * _arc.arc_y_radius_factor[track_type][strands][length_param] * _off.y_radius_offset,
+        )
     if profile.label_placement == "radial":
         outer_reserved_radius_px = 0.0
         if outer_arena is not None:

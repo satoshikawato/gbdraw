@@ -95,7 +95,21 @@ class LabelsGroup:
                 continue
             leader_start_x = label.get("leader_start_x", label["start_x"])
             leader_start_y = label.get("leader_start_y", label["start_y"])
-            if self.phase in {"all", "leaders"}:
+            if self.phase in {"all", "leaders"} and label.get("leader_points") is not None:
+                # study prototype: polyline leaders (and extra strokes such as brackets)
+                polylines = [label["leader_points"], *label.get("leader_extra", ())]
+                for polyline in polylines:
+                    for seg_start, seg_end in zip(polyline, polyline[1:]):
+                        segment = Line(
+                            start=(float(seg_start[0]), float(seg_start[1])),
+                            end=(float(seg_end[0]), float(seg_end[1])),
+                            stroke=self.label_stroke_color,
+                            stroke_width=self.label_stroke_width,
+                            stroke_linecap="round",
+                        )
+                        bind_label_part(segment, label["feature_id"])
+                        group.add(segment)
+            elif self.phase in {"all", "leaders"}:
                 line_path = Line(
                     start=(label["middle_x"], label["middle_y"]),
                     end=(leader_start_x, leader_start_y),

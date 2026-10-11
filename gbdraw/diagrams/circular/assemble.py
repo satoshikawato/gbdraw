@@ -702,6 +702,16 @@ def _external_label_paint_bounds_local(
             float(label.get("feature_anchor_y", label.get("feature_middle_y", 0.0))),
         ),
     )
+    if label.get("leader_points") is not None:  # study prototype
+        proto_points = [
+            (float(point[0]), float(point[1]))
+            for polyline in (label["leader_points"], *label.get("leader_extra", ()))
+            for point in polyline
+        ]
+        if proto_points:
+            leader_points = tuple(proto_points)
+        else:
+            leader_points = ((text_bounds.min_x, text_bounds.min_y), (text_bounds.max_x, text_bounds.max_y))
     leader_bounds = Aabb(
         min(point[0] for point in leader_points),
         min(point[1] for point in leader_points),
