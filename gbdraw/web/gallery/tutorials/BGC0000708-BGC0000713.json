@@ -183,8 +183,8 @@
               "linearComparisonPlan.defaultSource": "losat",
               "losatProgram": "blastp",
               "losat.blastp.mode": "orthogroup",
-              "losat.executionMode": "auto",
-              "losat.totalThreadBudget": "safe",
+              "losatExecution.executionMode": "auto",
+              "losatExecution.totalThreadBudget": "safe",
               "adv.min_bitscore": 50,
               "adv.evalue": "0.01",
               "adv.identity": 30,
@@ -332,12 +332,6 @@
               "linearComparisonResolution.edges.0.edgeKey": "record-1->record-2",
               "linearComparisonResolution.edges.0.source": "losat"
             },
-            "visibleControls": [
-              {
-                "selector": "[data-edge-key='record-1->record-2'] input[type='radio']:checked",
-                "checked": true
-              }
-            ],
             "visibleText": [
               "#1",
               "Streptomyces lividus CBS 844.73",
@@ -352,17 +346,17 @@
           "title": "First raw LOSAT result",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-03-04-first-raw-result.webp",
-            "alt": "Raw LOSAT result controls for sequence 1 to sequence 2 with the filename field, result status, and Save Raw LOSAT TSV action.",
-            "caption": "Open Advanced comparison and layout to manage the first pair's raw filename, readiness status, and TSV download."
+            "alt": "Selected pairs row for sequence 1 to sequence 2 with the File name disclosure open and the Raw LOSAT filename field empty.",
+            "caption": "Open File name on pair #1 → #2 to set the Raw LOSAT filename. Save Raw LOSAT TSV appears in this row after Generate."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
             "viewport": {"width": 1600, "height": 1100},
-            "selector": "[data-linear-raw-result='record-1->record-2']",
+            "selector": "[data-edge-key='record-1->record-2']",
             "cropPadding": 14,
-            "waitForSelector": "[data-linear-raw-result='record-1->record-2']",
-            "openDetails": ["Advanced comparison and layout"],
+            "waitForSelector": "[data-edge-key='record-1->record-2']",
+            "openDetails": ["Selected pairs", "File name"],
             "actions": [
               {
                 "type": "evaluate",
@@ -380,7 +374,7 @@
                 "value": ""
               }
             ],
-            "visibleText": ["Raw LOSAT filename", "Raw result", "Save Raw LOSAT TSV"]
+            "visibleText": ["File name", "Raw LOSAT filename"]
           }
         }
       ]

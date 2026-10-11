@@ -214,14 +214,14 @@ FIRST_COMPARISON_BOUNDARY_CAPTURE = {
 
 FIRST_RAW_RESULT_CAPTURE = {
     "src": "./media/BGC0000708-BGC0000713/manual-03-04-first-raw-result.webp",
-    "selector": "[data-linear-raw-result='record-1->record-2']",
+    "selector": "[data-edge-key='record-1->record-2']",
     "viewport": {"width": 1600, "height": 1100},
     "state": {
         "mode": "linear",
         "linearComparisonResolution.edges.0.edgeKey": "record-1->record-2",
         "linearComparisonResolution.edges.0.source": "losat",
     },
-    "visible_text": {"Raw LOSAT filename", "Raw result", "Save Raw LOSAT TSV"},
+    "visible_text": {"File name", "Raw LOSAT filename"},
 }
 
 
@@ -348,18 +348,9 @@ def test_first_linear_comparison_boundary_has_an_exact_capture_contract() -> Non
     assert expected["state"].items() <= capture["assertAppState"].items()
     assert expected["visible_text"] <= set(capture["visibleText"])
     assert capture["openDetails"] == ["Selected pairs"]
-    assert capture["visibleControls"] == [
-        {
-            "selector": (
-                "[data-edge-key='record-1->record-2'] "
-                "input[type='radio']:checked"
-            ),
-            "checked": True,
-        },
-    ]
 
 
-def test_first_raw_result_has_an_exact_advanced_capture_contract() -> None:
+def test_first_raw_result_has_an_exact_selected_pairs_capture_contract() -> None:
     sample = load_ready_examples("BGC0000708-BGC0000713")[0]
     tutorial = _load_tutorial(sample)
     expected = FIRST_RAW_RESULT_CAPTURE
@@ -379,7 +370,7 @@ def test_first_raw_result_has_an_exact_advanced_capture_contract() -> None:
     assert capture["waitForSelector"] == expected["selector"]
     assert capture["viewport"] == expected["viewport"]
     assert capture["cropPadding"] == 14
-    assert capture["openDetails"] == ["Advanced comparison and layout"]
+    assert capture["openDetails"] == ["Selected pairs", "File name"]
     assert expected["state"].items() <= capture["assertAppState"].items()
     assert expected["visible_text"] <= set(capture["visibleText"])
     assert capture["visibleControls"] == [
