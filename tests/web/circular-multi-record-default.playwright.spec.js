@@ -61,15 +61,15 @@ test('Web Circular default legend uses custom slot labels and added skew slots',
   await reveal(panel);
   if (await panel.getAttribute('aria-expanded') !== 'true') await panel.click();
   await page.getByText('Use custom stack', { exact: true }).locator('input').check();
-  const label = page.getByRole('group', { name: 'Circular track slot gc_content', exact: true })
-    .getByRole('textbox', { name: 'Track legend label' });
+  const label = await reveal(page.getByRole('group', { name: 'Circular track slot gc_content', exact: true })
+    .getByRole('textbox', { name: 'Track legend label', includeHidden: true }));
   await label.fill('MY GC');
   await label.press('Tab');
   await page.getByRole('combobox', { name: 'New circular track renderer', exact: true }).selectOption('dinucleotide_skew');
   await page.getByRole('button', { name: /Add track/ }).click();
   const newId = await page.evaluate(() => window.__GBDRAW_APP__.adv.circular_track_slots.at(-1).id);
-  const nucleotide = page.getByRole('group', { name: `Circular track slot ${newId}`, exact: true })
-    .getByRole('textbox', { name: 'Track dinucleotide' });
+  const nucleotide = await reveal(page.getByRole('group', { name: `Circular track slot ${newId}`, exact: true })
+    .getByRole('textbox', { name: 'Track dinucleotide', includeHidden: true }));
   await nucleotide.fill('AT');
   await nucleotide.press('Tab');
 

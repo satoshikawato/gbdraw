@@ -7,6 +7,7 @@ import {
 } from './utils/color-utils.js';
 
 import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidance } from './utils/error-normalization.js';
+import { italicSegments } from './utils/markup-preview.js';
 
 const { ref, reactive, computed, nextTick, watch, useId, onMounted } = window.Vue;
 
@@ -387,8 +388,10 @@ export const RecordDisplayControl = {
         error.value = '';
       } catch (failure) {
         error.value = failure.message;
-        event.target.value = props.controller.draftFor(props.row).startCoordinate ?? '';
       }
+      // The field shows the model's start after every change: a rejected value
+      // goes back, and a cleared field shows the current start (OV-421).
+      event.target.value = props.controller.surfaceFor(props.row).displayStart ?? '';
     };
     return { error, setStart, controlAvailable: computed(() => !state.sessionOperationAvailability()), draft: computed(() => props.controller.draftFor(props.row)),
       surface: computed(() => props.controller.surfaceFor(props.row)) };
@@ -443,4 +446,15 @@ export const SpecificRuleRows = {
   components: { OperationError, HelpTip },
   props: ['rules', 'featureKeys', 'available', 'patternText', 'patternDraft', 'fieldId'],
   emits: ['set-field', 'move-up', 'move-down', 'remove', 'edit-pattern', 'retry-pattern', 'revert-pattern']
+};
+
+// The preview of record or title text with italic markup, shown under its
+// field; nothing when the text has no markup.
+export const MarkupPreview = {
+  props: ['text'],
+  template: `<p v-if="segments.length" class="markup-preview" :title="segments.map((part) => part.text).join('')" data-markup-preview><span class="sr-only">Preview: </span><span v-for="(part, index) in segments" :key="index" :class="{ italic: part.italic }">{{ part.text }}</span></p>`,
+  /** @param {{ text?: string | null }} props */
+  setup(props) {
+    return { segments: computed(() => italicSegments(props.text)) };
+  }
 };

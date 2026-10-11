@@ -130,7 +130,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const expected = ['MjeNMV.gb', 'MelaMJNV.gb', 'PemoMJNVA.gb', 'PeseMJNV.gb', 'PemoMJNVB.gb', 'LvMJNV.gb', 'TrcuMJNV.gb', 'MeenMJNV.gb', 'MejoMJNV.gb']; const names = (app?.linearSeqs || []).map((seq) => seq.gb?.name || ''); if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error('Majanivirus GenBank order was not restored.'); const seq = app.linearSeqs[0]; seq.definition = 'Marsupenaeus japonicus endogenous nimavirus'; const row = document.querySelector('[data-linear-record-card=\"record-1\"]'); const options = row?.querySelector('[data-linear-record-options=\"record-1\"]'); if (!row || !options) throw new Error('Majanivirus Linear input row 1 was not found.'); options.open = true; const label = Array.from(row.querySelectorAll('div')).find((node) => node.textContent?.trim() === 'Organism / strain (optional)' && node.nextElementSibling?.matches('input[type=\"text\"]')); const input = label?.nextElementSibling; if (!input) throw new Error('Majanivirus Organism / strain input was not found.'); input.dataset.capture = 'majanivirus-organism-input'; row.dataset.capture = 'majanivirus-record-row'; row.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const expected = ['MjeNMV.gb', 'MelaMJNV.gb', 'PemoMJNVA.gb', 'PeseMJNV.gb', 'PemoMJNVB.gb', 'LvMJNV.gb', 'TrcuMJNV.gb', 'MeenMJNV.gb', 'MejoMJNV.gb']; const names = (app?.linearSeqs || []).map((seq) => seq.gb?.name || ''); if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error('Majanivirus GenBank order was not restored.'); const seq = app.linearSeqs[0]; seq.definition = 'Marsupenaeus japonicus endogenous nimavirus'; const row = document.querySelector('[data-linear-record-card=\"record-1\"]'); const options = row?.querySelector('[data-linear-record-options=\"record-1\"]'); if (!row || !options) throw new Error('Majanivirus Linear input row 1 was not found.'); options.open = true; const label = Array.from(row.querySelectorAll('div')).find((node) => node.textContent?.trim() === 'Organism / strain (optional)' && node.nextElementSibling?.matches('input[type=\"text\"]')); const input = label?.nextElementSibling; if (!input) throw new Error('Majanivirus Organism / strain input was not found.'); input.dataset.capture = 'majanivirus-organism-input'; const fileCard = row.closest('[data-linear-source-card]'); if (!fileCard) throw new Error('Linear file card was not found.'); fileCard.dataset.capture = 'majanivirus-record-row'; fileCard.scrollIntoView({ block: 'center' });"
               },
               {"type": "evaluate", "script": "window.__GBDRAW_APP__.sidebarWidth = 600;"}
             ],
@@ -323,7 +323,7 @@
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
-          ["Track Layout", "Middle"],
+          ["Track Layout", "Features on axis"],
           ["Align to Center", "On"],
           ["Separate Strands", "On"],
           ["Lock Definition Column", "On"],
@@ -338,8 +338,8 @@
           "title": "Linear layout controls",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-04-01-linear-layout.webp",
-            "alt": "Linear Layout card with Middle, Separate Strands, Align to Center, and Lock Definition Column selected.",
-            "caption": "Set Track Layout to Middle and enable Separate Strands, Align to Center, and Lock Definition Column."
+            "alt": "Linear Layout card with Features on axis, Separate Strands, Align to Center, and Lock Definition Column selected.",
+            "caption": "Set Track Layout to Features on axis and enable Separate Strands, Align to Center, and Lock Definition Column."
           },
           "capture": {
             "source": "webapp",
@@ -364,9 +364,9 @@
             "crop": "openSelect",
             "cropPadding": {
               "top": 54,
-              "right": 80,
+              "right": 16,
               "bottom": 24,
-              "left": 80
+              "left": 16
             },
             "openSelect": {
               "selector": "#legend-position",
@@ -411,8 +411,8 @@
           "title": "Specific product rules",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-06-01-specific-rules-all.webp",
-            "alt": "SPECIFIC RULES (-t) controls with all three majanivirus CDS product rules.",
-            "caption": "Enter the WSSV-like proteins, BIRP, and tyrosine recombinase rows together in SPECIFIC RULES (-t)."
+            "alt": "SPECIFIC RULES controls with all three majanivirus CDS product rules.",
+            "caption": "Enter the WSSV-like proteins, BIRP, and tyrosine recombinase rows together in SPECIFIC RULES."
           },
           "capture": {
             "source": "webapp",
@@ -433,7 +433,7 @@
               },
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 480; const heading = Array.from(document.querySelectorAll('h4')).find((node) => node.textContent?.includes('SPECIFIC RULES')); const header = heading?.parentElement; const rows = header?.nextElementSibling; if (!header || !rows) throw new Error('Majanivirus specific-rules rows not found.'); header.setAttribute('data-capture', 'majanivirus-specific-rules-header'); rows.setAttribute('data-capture', 'majanivirus-specific-rules-rows'); rows.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 480; document.querySelectorAll('[data-color-rule-editor]').forEach((editor) => { editor.open = true; }); const heading = Array.from(document.querySelectorAll('h4')).find((node) => node.textContent?.includes('SPECIFIC RULES')); const header = heading?.parentElement; const rows = header?.parentElement?.querySelector('[data-color-rule-row]')?.parentElement; if (!header || !rows) throw new Error('Majanivirus specific-rules rows not found.'); header.setAttribute('data-capture', 'majanivirus-specific-rules-header'); rows.setAttribute('data-capture', 'majanivirus-specific-rules-rows'); rows.scrollIntoView({ block: 'center' });"
               }
             ],
             "clipSelectors": ["[data-capture='majanivirus-specific-rules-header']", "[data-capture='majanivirus-specific-rules-rows']"],

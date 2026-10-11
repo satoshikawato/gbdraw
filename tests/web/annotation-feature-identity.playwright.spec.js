@@ -73,7 +73,7 @@ const annotateSelection = async (page, svgIds) => {
   }
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.selectedFeatureCount)).toBe(svgIds.length);
   const annotations = panel(page);
-  if (await annotations.getAttribute('open') === null) await annotations.locator('summary').press('Enter');
+  if (await annotations.getAttribute('open') === null) await annotations.locator('summary').first().press('Enter');
   await annotations.getByRole('button', { name: /Add set/ }).click();
   await annotations.getByRole('button', { name: /Selected features/ }).click();
   await settle(page);
@@ -115,7 +115,7 @@ test('OV-03: an annotation of a selected feature on a cropped record stays on it
     envelope: 'outer_bounds', circularPath: 'shortest'
   }]);
   await expect(panel(page).locator('[data-annotation-feature-identity]'))
-    .toHaveText('Selected feature: misc_feature at 2401..2500');
+    .toHaveText('misc_feature at 2401..2500');
 
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
@@ -225,8 +225,8 @@ test('an annotation of one same-coordinate feature in one copy of a record stays
         .find((feature) => feature.biological_feature_id === identity.id && feature.record_key === identity.key));
     }, { id: twin.identity, key: secondKey });
     const annotations = panel(fresh);
-    await annotations.locator('summary').press('Enter');
-    await expect(annotations.locator('[data-annotation-feature-identity]')).toHaveText(`Selected feature: ${caption}`);
+    await annotations.locator('summary').first().press('Enter');
+    await expect(annotations.locator('[data-annotation-feature-identity]')).toHaveText(caption);
     await generate(fresh);
     expect(await drawnAnnotations(fresh)).toEqual(drawn);
   } finally {

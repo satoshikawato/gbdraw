@@ -237,6 +237,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
     handlePaletteColorsChoice,
     cancelPaletteColorsDialog: closePaletteColorsDialog,
     readUserDefaultColor,
+    userDefaultColorRows,
     setDefaultColor,
     applyPaletteDraftToPreview,
     syncPaletteDraftState

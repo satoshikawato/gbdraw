@@ -296,7 +296,7 @@ test('table import failures retain exact cause and concrete retry without a draf
   await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(),'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
   await page.waitForFunction(()=>!window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.extractedFeatures.length);
   const before=await page.evaluate(()=>({svg:window.__GBDRAW_APP__.svgContent,rules:JSON.stringify(window.__GBDRAW_APP__.manualSpecificRules),history:window.__GBDRAW_HISTORY__.getUndoCount()}));
-  const uploader=page.getByLabel('Specific Table (-t)',{exact:true});
+  const uploader=page.getByLabel('Specific rules file',{exact:true});
   await uploader.setInputFiles({name:'PRIVATE_FILE_SENTINEL.tsv',mimeType:'text/plain',buffer:Buffer.from('CDS\tproduct\t(?<enzyme>NADH)\t#ff0000\t\n')});
   const alert=page.getByRole('alert',{name:'Rule error'});
   await expect(alert).toContainText('Not a valid regular expression',{timeout:180000});

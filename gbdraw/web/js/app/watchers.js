@@ -406,9 +406,7 @@ export const setupWatchers = ({
     const drawing = state.activeDrawing();
     try {
       const { colors, count } = parseColorTable(text);
-      Object.entries(colors).forEach(([key, color]) => {
-        drawing.currentColors.value[key] = color;
-      });
+      drawing.currentColors.value = { ...drawing.currentColors.value, ...colors };
       console.log(`Loaded ${count} colors from file.`);
     } catch (e) {
       errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });

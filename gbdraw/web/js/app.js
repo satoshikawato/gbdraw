@@ -11,6 +11,7 @@ import {
   HelpTip,
   FileUploader,
   GbdrawLoader,
+  MarkupPreview,
   RecordName
 } from './components.js';
 import { CircularMeasureInput } from './app/circular-track-slots/measure-input.js';
@@ -21,7 +22,7 @@ import { formatFeatureLocation } from './services/feature-utils.js';
 const { createApp } = window.Vue;
 
 const app = createApp({
-  components: { ActionMenu, ChoiceDialog, OperationError, SpecificRuleRows, CircularMeasureInput, DepthTrackIndexInput, RecordDisplayControl, AutoValueField, ColorValueControl, FileUploader, GbdrawLoader, HelpTip, RecordName },
+  components: { ActionMenu, ChoiceDialog, OperationError, SpecificRuleRows, CircularMeasureInput, DepthTrackIndexInput, RecordDisplayControl, AutoValueField, ColorValueControl, FileUploader, GbdrawLoader, HelpTip, MarkupPreview, RecordName },
   methods: { formatFeatureLocation },
   setup: createAppSetup
 });

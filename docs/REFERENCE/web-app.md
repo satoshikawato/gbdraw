@@ -52,7 +52,7 @@ the rich feature popup are shared. A saved Session keeps each mode's settings
 
 A Circular GenBank upload uses **GenBank/DDBJ File**. Each Linear **File** card
 starts with its **GenBank / DDBJ File** uploader, or its matched GFF3 and FASTA
-uploaders, followed by **File defaults (applied to all records)** and a closed
+uploaders, followed by **Names for all records in this file** and a closed
 **Record options** disclosure. Use the up and down buttons in a File header to
 move that source. Every record in a multi-record GenBank or GFF3 + FASTA source
 moves together, while the record order inside the source stays unchanged. When
@@ -72,8 +72,8 @@ schemas](input-formats-and-tsv-schemas.md) for the file format.
 
 The **Add sequence** action and the **Remove** action shown for multiple Files
 add or remove whole File cards. Clearing a populated Linear primary uploader
-opens a choice: **Clear file only** keeps a pristine blank File in the same
-position, while **Delete card**
+opens a choice: **Empty this slot** keeps a pristine blank File in the same
+position, while **Remove file**
 removes that File and all records it supplied. Either operation removes its
 record selectors, crop and reverse-complement drafts, labels, Depth file assignments,
 comparison endpoints, and source-derived state as one undoable change. The only
@@ -194,7 +194,7 @@ After that Generate, Save writes the current Session format.
 
 A loaded Circular Session shows its saved Result without reading the embedded
 source again. **Source records** shows **Records not inspected**, and **Record**
-lists no records. Select **Inspect source records** to list them and show their
+says **Not inspected**. Select **Inspect source records** to list them and show their
 rotation rows; the Result and Undo history do not change. **Generate Diagram**
 inspects the source before rendering, and uploading a new file inspects it at
 once. Loading a saved preview does not start LOSATP. The diagram engine starts
@@ -287,6 +287,11 @@ inactive track values. Loading it shows the saved preview; Generate applies
 the restored draft. Invalid drafts cannot be saved as valid Sessions.
 
 ### Custom Track Slots
+
+Each Circular row keeps its inner and outer gap in a disclosure under the row;
+for a GC or AT content or skew row it also holds the dinucleotide, the legend
+label and, for skew, the two colors. Its summary names the dinucleotide and says
+when a gap or a skew color is set.
 
 **Use custom stack** draws the saved stack. Turning it on for the first time
 uses the saved default stack as it is, including its **Ticks** row. **Reset**
@@ -418,7 +423,12 @@ within the record. These settings apply on **Generate Diagram**.
 **Region Annotations** offers the records the next Circular Generate draws. One
 selected record offers that record alone; **All records**, or **Multi-Record
 Canvas** on, offers every record, and each annotation then needs an explicit
-target record, which binds it to that record.
+target record, which binds it to that record. When only one record can be the
+target, or the source records are not inspected yet, the row names its record
+instead of offering a select. Each row shows its name, span and fill color,
+then its target kind (**Coordinates** or **Feature**) and record; the **Style**
+disclosure, whose summary names the mark and label, holds the mark, label, lane,
+**Line color** and hatch.
 
 ## Circular multi-record canvas
 
@@ -1006,9 +1016,10 @@ feature is drawn. When other edits name a feature that the source does not
 have, the notice above the diagram offers **Remove N unmatched feature edits**.
 
 **Region Annotations → Selected features** makes one annotation per selected
-feature that names the source feature the same way; the editor shows it as
-**Selected feature:** and the feature's caption. Generate draws it on that
-feature after crop, reverse complement, record order, or record copy changes.
+feature that names the source feature the same way; its row shows the
+feature's caption, and its target kind reads **Selected feature**. Generate
+draws it on that feature after crop, reverse complement, record order, or
+record copy changes.
 When the feature is not drawn, for example outside the crop, Generate skips
 the annotation and reports it in the annotation notice; the annotation stays.
 The annotation belongs to the annotation set of the mode the feature was
@@ -1150,6 +1161,13 @@ Info Source recipe write `-p` and only your colors as `-d`. Colors are compared
 ignoring case, with `#abc` equal to `#aabbcc`, and **Auto** is not one of your
 colors.
 
+The Colors card lists, under **Colors in this figure or changed**, the default
+colors of the feature types the loaded features include, GC content and skew
+when they are shown, the comparison colors when a Linear figure compares rows,
+and every one of your colors; the others wait under **More colors (N)**. A color
+you edit stays in the list where you edit it. The lists are regrouped when the
+features, the shown tracks, the palette, or the color table change.
+
 - Choosing another palette while you have your own colors asks **Keep my N
   colors** (the new palette plus your colors), **Use the palette's colors**, or
   **Cancel**, which changes nothing. Without your colors the palette changes at
@@ -1212,6 +1230,11 @@ Python matching semantics for live preparation and Generate. This differs from
 Feature Search and Interactive SVG search. TSV columns and pattern semantics
 are specified in [Input formats and TSV schemas](input-formats-and-tsv-schemas.md#styling-tables).
 
+Each specific color rule is one line: its color, then a summary of feature
+type, qualifier, pattern and legend caption. The summary opens the rule's
+editor with those fields and the **Move rule up**, **Move rule down** and
+**Delete rule** buttons.
+
 A rejected edit to an existing Color rule's pattern stays visible in that field as **Not applied**, with its cause, a compact **Details** disclosure, **Retry**, and **Revert** under the field. A syntax error names the character position counted from one.
 The displayed text is a temporary draft; the accepted rule, Result and History
 remain unchanged. Syntax errors are distinguished from runtime initialization
@@ -1234,11 +1257,13 @@ fields; new rules, TSV imports, presets and Search keep their own input behavior
 
 After **Load Session**, a Circular record's rotation row appears once you select
 **Inspect source records** or **Generate Diagram**. A Linear File card whose
-record rows are not shown offers **Load record rotation controls**. For a
+record rows are not shown offers **Inspect records**; until then its **Record**
+select says **Not inspected**. For a
 complete record, use its rotation row in Circular mode or **Record options** in
-Linear mode. **Detected** reports the source topology;
+Linear mode. The row names the topology the file states;
 **Circular record** overrides it and **Reset to detected** removes that override.
-Enter a 1-based source coordinate in **Display start**. It becomes the base at
+**Display start** shows the current start. Enter a 1-based source coordinate to
+change it. It becomes the base at
 12 o'clock in Circular or at the left edge of a wrapped Linear record after
 **Generate Diagram**. **Reset start** restores no additional shift, which differs
 from explicit 1 when reverse complemented.

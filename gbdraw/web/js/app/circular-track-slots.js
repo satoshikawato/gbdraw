@@ -136,9 +136,9 @@ const formatPresetName = (preset) => PRESET_LABELS[normalizeCircularTrackPreset(
 
 const laneDirectionLabel = (laneDirection) => {
   const lane = normalizeLaneDirection(laneDirection);
-  if (lane === 'outside') return 'feature stack outside axis';
-  if (lane === 'split') return 'feature stack centered on axis';
-  return 'feature stack inside axis';
+  if (lane === 'outside') return 'Features outside axis';
+  if (lane === 'split') return 'Features centered on axis';
+  return 'Features inside axis';
 };
 
 const previewWidthPxForRenderer = (renderer, lengthParam) => {
@@ -589,6 +589,25 @@ const circularGeometryShortcutsForState = (drawing) => ({
  */
 export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (apply) => apply() }) => {
   const editorKeys = new WeakMap();
+  // A slot's Gaps disclosure stays open while its row is rebuilt (Generate and
+  // Session load replace the slot objects, so the row is keyed anew).
+  /** @type {Set<string>} */
+  const openSlotOptions = new Set();
+  /** @param {{ id?: unknown } | null | undefined} slot */
+  const circularTrackSlotOptionsOpen = (slot) => openSlotOptions.has(String(slot?.id));
+  /** @param {{ id?: unknown } | null | undefined} slot @param {Event} event */
+  const setCircularTrackSlotOptionsOpen = (slot, event) => {
+    const details = /** @type {HTMLDetailsElement} */ (event.currentTarget);
+    if (details.open) openSlotOptions.add(String(slot?.id));
+    else openSlotOptions.delete(String(slot?.id));
+  };
+  // What the closed disclosure holds; a GC or AT track names its dinucleotide.
+  /** @param {{ renderer?: unknown, params?: { nt?: unknown } } | null | undefined} slot */
+  const circularTrackSlotOptionsSummary = (slot) => {
+    if (slot?.renderer !== 'dinucleotide_content' && slot?.renderer !== 'dinucleotide_skew') return 'Gaps';
+    const nt = String(slot?.params?.nt || '').trim().toUpperCase() || 'GC';
+    return `${nt} · legend label, gaps${slot.renderer === 'dinucleotide_skew' ? ', colors' : ''}`;
+  };
   let nextEditorKey = 1;
   const circularTrackSlotEditorKey = (slot) => {
     if (!slot || typeof slot !== 'object') return 'circular-slot-invalid';
@@ -1657,31 +1676,35 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     isManualSlotValue(circularSlotManualValue(slot, field))
   );
 
+  // What the preset draws where, in words; the radius ratios stay
+  // with the slot fields' Auto values.
   const circularTrackPresetSummary = () => {
     const drawing = state.drawings.circular;
     const preset = normalizeCircularTrackPreset(drawing.form.track_type);
     const lengthParam = getPreviewLengthParam(state);
     const lane = laneDirectionForPreset(preset);
-    const pieces = [
-      laneDirectionLabel(lane),
-      `feature r ${previewFeatureRadiusRatio(preset, lengthParam, drawing).toFixed(2)}x`
-    ];
     const slotLike = (id, renderer) => ({ id, renderer });
+    /** @type {string[]} */
+    const inside = [];
+    /** @type {string[]} */
+    const outside = [];
+    /** @param {string} name @param {number | null} ratio */
+    const place = (name, ratio) => {
+      if (ratio !== null) (ratio < 1 ? inside : outside).push(name);
+    };
     if (Boolean(drawing.form.show_depth)) {
-      const depthRatio = getPresetRadiusRatio(slotLike('depth', 'depth'), 'depth', preset, lengthParam, drawing);
-      if (depthRatio !== null) pieces.push(`depth r ${depthRatio.toFixed(2)}x`);
+      place('depth', getPresetRadiusRatio(slotLike('depth', 'depth'), 'depth', preset, lengthParam, drawing));
     }
     if (!Boolean(drawing.form.suppress_gc)) {
-      const gcRatio = getPresetRadiusRatio(slotLike('gc_content', 'dinucleotide_content'), 'dinucleotide_content', preset, lengthParam, drawing);
-      if (gcRatio !== null) pieces.push(`GC r ${gcRatio.toFixed(2)}x`);
+      place('GC content', getPresetRadiusRatio(slotLike('gc_content', 'dinucleotide_content'), 'dinucleotide_content', preset, lengthParam, drawing));
     }
     if (!Boolean(drawing.form.suppress_skew)) {
-      const skewRatio = getPresetRadiusRatio(slotLike('gc_skew', 'dinucleotide_skew'), 'dinucleotide_skew', preset, lengthParam, drawing);
-      if (skewRatio !== null) pieces.push(`skew r ${skewRatio.toFixed(2)}x`);
+      place('GC skew', getPresetRadiusRatio(slotLike('gc_skew', 'dinucleotide_skew'), 'dinucleotide_skew', preset, lengthParam, drawing));
     }
     return {
-      label: `${formatPresetName(preset)} preset`,
-      detail: `${lengthParam} defaults: ${pieces.join(' · ')}`,
+      label: formatPresetName(preset),
+      detail: [laneDirectionLabel(lane), inside.length ? `${inside.join(', ')} inside` : '', outside.length ? `${outside.join(', ')} outside` : '']
+        .filter(Boolean).join(' · ')
     };
   };
 
@@ -1702,6 +1725,9 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   return {
     circularTrackRenderers: UI_RENDERERS,
     circularTrackSlotEditorKey,
+    circularTrackSlotOptionsOpen,
+    setCircularTrackSlotOptionsOpen,
+    circularTrackSlotOptionsSummary,
     circularTrackRendererLabel,
     normalizeCircularTrackSlots: normalizeSlotsInPlace,
     syncCircularConservationSlots,

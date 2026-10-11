@@ -192,10 +192,10 @@ def _set_gallery_quality_presentation(
     palette = page.get_by_label("Palette", exact=True)
     palette.select_option("orange")
     expect(palette).to_have_value("orange")
-    page.get_by_label("Override File (-d)", exact=True).set_input_files(
+    page.get_by_label("Default colors file", exact=True).set_input_files(
         BGC_DEFAULT_COLORS
     )
-    page.get_by_label("Specific Table (-t)", exact=True).set_input_files(
+    page.get_by_label("Specific rules file", exact=True).set_input_files(
         BGC_SPECIFIC_COLORS
     )
     toggle_disclosure(colors)

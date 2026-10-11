@@ -163,7 +163,7 @@ test('Linear File removal choices are atomic, undoable, and preserve one slot', 
   });
 
   const sources = page.locator('[data-linear-source-card]');
-  const dialog = page.getByRole('dialog', { name: 'Clear or delete File?' });
+  const dialog = page.getByRole('dialog', { name: /^Remove .*\?$/ });
   await expect(sources).toHaveCount(2);
   const baseline = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
   const firstRemove = sources.first().getByRole('button', { name: 'Remove GenBank / DDBJ File', exact: true });
@@ -179,7 +179,7 @@ test('Linear File removal choices are atomic, undoable, and preserve one slot', 
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('first.gbk');
   await expect(dialog).toContainText('2 records');
-  const clearFile = dialog.getByRole('button', { name: 'Clear file only', exact: true });
+  const clearFile = dialog.getByRole('button', { name: 'Empty this slot', exact: true });
   const cancel = dialog.getByRole('button', { name: 'Cancel', exact: true });
   await expect(clearFile).toBeFocused();
   await page.keyboard.press('Shift+Tab');
@@ -199,7 +199,7 @@ test('Linear File removal choices are atomic, undoable, and preserve one slot', 
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(baseline);
 
   await firstRemove.click();
-  await dialog.getByRole('button', { name: 'Clear file only', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Empty this slot', exact: true }).click();
   await expect(sources).toHaveCount(2);
   await expect(sources.first().getByRole('button', { name: 'Choose GenBank / DDBJ File', exact: true })).toBeFocused();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((sequence) => ({
@@ -230,13 +230,13 @@ test('Linear File removal choices are atomic, undoable, and preserve one slot', 
 
   const globalRemove = page.getByRole('button', { name: 'Remove last sequence', exact: true });
   await globalRemove.click();
-  const globalDialog = page.getByRole('dialog', { name: 'Remove last File?' });
+  const globalDialog = page.getByRole('dialog', { name: /^Remove .*\?$/ });
   await expect(globalDialog).toBeVisible();
   await expect(globalDialog).toContainText('last.gbk');
   await globalDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(baseline);
   await globalRemove.click();
-  await globalDialog.getByRole('button', { name: 'Delete card', exact: true }).click();
+  await globalDialog.getByRole('button', { name: 'Remove file', exact: true }).click();
   await expect(sources).toHaveCount(1);
   await expect(sources.first().getByRole('button', { name: 'Choose GenBank / DDBJ File', exact: true })).toBeFocused();
   await expectHistory(page, baseline + 1, 0, 'Delete Linear File');

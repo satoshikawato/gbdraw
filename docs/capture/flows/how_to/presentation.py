@@ -780,12 +780,12 @@ def capture_gui_styling(
         palette = page.get_by_label("Palette", exact=True)
         palette.select_option("soft_pastels")
         expect(palette).to_have_value("soft_pastels")
-        page.get_by_label("Override File (-d)", exact=True).set_input_files(
+        page.get_by_label("Default colors file", exact=True).set_input_files(
             DEFAULT_COLOR_RULE_PATH
         )
         expect(
             page.get_by_role(
-                "group", name="Override File (-d) selection", exact=True
+                "group", name="Default colors file selection", exact=True
             )
         ).to_contain_text(DEFAULT_COLOR_RULE_PATH.name)
         toggle_disclosure(colors_panel)

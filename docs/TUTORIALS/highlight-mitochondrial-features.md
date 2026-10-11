@@ -82,7 +82,7 @@ sapiens</i>`, Track Preset to **Middle**, and leave **Separate Strands** off.
 ### Step 2: Set colors, labels, and feature appearance
 
 Open **Colors**. Leave Palette on **default** and load
-`presentation_colors.tsv` as **Specific Table (-t)**.
+`presentation_colors.tsv` as **Specific rules file**.
 
 Open **Labels**, select **Both**, choose **Whitelist**, and load
 `presentation_labels.tsv` as **Whitelist File**. Load

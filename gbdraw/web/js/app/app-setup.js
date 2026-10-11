@@ -103,7 +103,7 @@ import {
   recordStructuralMetric
 } from '../services/runtime-test-hooks.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
-import { appliedFeatureColors, colorValueMode, normalizeOptionalHexColor, toNativeColorInputValue } from '../utils/color-utils.js';
+import { appliedFeatureColors, COMPARISON_COLOR_KEYS, colorValueMode, normalizeOptionalHexColor, toNativeColorInputValue } from '../utils/color-utils.js';
 import { createFeatureEditor } from './feature-editor.js';
 import { PAIRWISE_MATCH_SELECTOR, groupCountText } from './pairwise-match-popup.js';
 import { createFeatureSelection } from './feature-selection.js';
@@ -151,7 +151,7 @@ import { validateAnnotationRecordTargets } from './annotations/validation.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import { createLosatSettings } from './losat-settings.js';
 import { createAutoValueDisplay } from './auto-value-display.js';
-import { createLinearRecordSelector } from './linear-record-selector.js';
+import { createLinearRecordSelector, RECORDS_NOT_INSPECTED_LABEL } from './linear-record-selector.js';
 import { createLinearTypographyController } from './linear-typography.js';
 import {
   buildDisambiguatedRecordEntries,
@@ -1839,7 +1839,20 @@ export const createAppSetup = () => {
     state, state.drawings.circular
   ));
   const losatSettings = createLosatSettings({ state });
-  const autoValueDisplay = createAutoValueDisplay(state);
+  // Auto values follow the longest record the next Linear Generate draws, once
+  // every drawn record is read and none is cropped; until then they name their rule.
+  const autoValueDisplay = createAutoValueDisplay(state, {
+    linearRecordLengths: () => {
+      const lengths = state.drawings.linear.drawnLinearSeqs.value.map((seq) => {
+        if (String(seq.region_start ?? '').trim() || String(seq.region_end ?? '').trim()) return NaN;
+        const records = linearRecordSelector.recordsFor(seq);
+        const selection = resolveDisambiguatedRecordSelection(records, seq.region_record_id);
+        const record = selection.record || (selection.status === 'unspecified' && records.length === 1 ? records[0] : null);
+        return Number(record?.recordLength);
+      });
+      return lengths.length && lengths.every((length) => length > 0) ? lengths : [];
+    }
+  });
   const depthTrackDefaultColors = [
     '#4A90E2',
     '#E45756',
@@ -5174,9 +5187,12 @@ export const createAppSetup = () => {
     // Without an inspected catalog the saved selector is unverified, not missing.
     const inspected = circularRecordDiscoveryState.value.status === 'ready';
     const drawnCount = circularDrawnRecordCount.value;
-    const automaticLabel = entries.length > 1 || drawing.adv.circular_grouping_intent === 'batch'
-      ? (drawnCount < entries.length ? `${drawnCount} of ${entries.length} records (separate diagrams)` : 'All records (separate diagrams)')
-      : 'Automatic (only record)';
+    // OV-379: a source whose records are not read says so, as the Linear select does.
+    const automaticLabel = circularRecordDiscoveryState.value.status === 'deferred'
+      ? RECORDS_NOT_INSPECTED_LABEL
+      : entries.length > 1 || drawing.adv.circular_grouping_intent === 'batch'
+        ? (drawnCount < entries.length ? `${drawnCount} of ${entries.length} records (separate diagrams)` : 'All records (separate diagrams)')
+        : 'Automatic (only record)';
     return [
       { value: '', label: automaticLabel, synthetic: false },
       ...(current && selection.status !== 'resolved'
@@ -5904,7 +5920,33 @@ export const createAppSetup = () => {
     })
     : computed(() => state.activeDrawing()[key]));
 
+  // The default colors of the feature types the shown figure draws,
+  // and the user's own default colors, come first; the others wait under More.
+  // The values are read untracked, so editing a color never moves it to the
+  // other grid; the grouping follows the drawn types, the palette, the keys,
+  // and a replaced color table (Reset, palette change, Session load, an
+  // imported Default colors file).
+  const defaultColorGroups = computed(() => {
+    const drawing = state.activeDrawing();
+    /** @type {Record<string, string>} */
+    const colors = drawing.currentColors.value || {};
+    const keys = Object.keys(colors);
+    const drawn = new Set((state.extractedFeatures.value || [])
+      .map((/** @type {{ type?: string }} */ feature) => String(feature?.type || '')));
+    if (!drawn.size) return { primary: keys, more: /** @type {string[]} */ ([]) };
+    const circular = mode.value === 'circular';
+    if (circular ? !drawing.form.suppress_gc : drawing.form.show_gc) drawn.add('gc_content');
+    if (circular ? !drawing.form.suppress_skew : drawing.form.show_skew) ['skew_high', 'skew_low'].forEach((key) => drawn.add(key));
+    if (!circular && state.linearSeqs.length > 1 && linearComparisonGlobalAction.value !== 'none') {
+      COMPARISON_COLOR_KEYS.forEach((key) => drawn.add(key));
+    }
+    resultsManager.userDefaultColorRows(drawing, toRaw(colors)).forEach(([key]) => drawn.add(key));
+    const primary = keys.filter((key) => key === 'default' || drawn.has(key));
+    return { primary, more: keys.filter((key) => !drawn.has(key) && key !== 'default') };
+  });
+
   return {
+    defaultColorGroups,
     recordDisplayControls,
     featureRecordRotationDraft: featureRecordRotation.draft,
     recordActionsExpanded,
@@ -6020,8 +6062,9 @@ export const createAppSetup = () => {
     setAnnotationRecord: annotationEditor.setRecordValue,
     annotationRecordRequired: annotationEditor.recordIsRequired,
     annotationRecordMissing: annotationEditor.recordIsMissing,
-    annotationRecordDisabled: annotationEditor.recordIsDisabled,
     annotationRecordMissingMessage: annotationEditor.recordMissingMessage,
+    annotationRecordShowsSelect: annotationEditor.recordShowsSelect,
+    annotationRecordCaption: annotationEditor.recordCaptionFor,
     circularConservationLayoutWarning,
     circularConservationFastaInput,
     circularConservationSeriesRows,
@@ -6161,6 +6204,9 @@ export const createAppSetup = () => {
     toggleLinearTrackSlotsPanel,
     circularTrackRenderers: circularTrackSlotEditor.circularTrackRenderers,
     circularTrackSlotEditorKey: circularTrackSlotEditor.circularTrackSlotEditorKey,
+    circularTrackSlotOptionsOpen: circularTrackSlotEditor.circularTrackSlotOptionsOpen,
+    setCircularTrackSlotOptionsOpen: circularTrackSlotEditor.setCircularTrackSlotOptionsOpen,
+    circularTrackSlotOptionsSummary: circularTrackSlotEditor.circularTrackSlotOptionsSummary,
     updateCircularTrackSlotMeasure: circularTrackSlotEditor.updateCircularTrackSlotMeasure,
     circularTrackRendererLabel: circularTrackSlotEditor.circularTrackRendererLabel,
     resetCircularTrackSlotsFromSimpleControls: circularTrackSlotEditor.resetCircularTrackSlotsFromSimpleControls,

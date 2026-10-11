@@ -403,7 +403,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
     app.linearSourceRemovalDialog.origin = 'card';
     app.linearSourceRemovalDialog.open = true;
   });
-  const removalDialog = page.getByRole('dialog', { name: 'Clear or delete File?' });
+  const removalDialog = page.getByRole('dialog', { name: /^Remove .*\?$/ });
   await expect(removalDialog).toBeVisible();
   await removalDialog.getByRole('button', { name: 'Cancel' }).focus();
   await page.keyboard.press('Escape');
