@@ -2510,8 +2510,8 @@
                                 <button type="button" aria-label="Use uploaded BLAST TSV for all adjacent pairs" :aria-pressed="linearComparisonGlobalAction === 'upload'" @click="setLinearComparisonGlobalAction('upload')" :class="linearComparisonGlobalAction === 'upload' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm" :disabled="!semanticMutationAvailable">Upload BLAST TSV</button>
                             </div>
                             <p v-if="!canRunLinearLosat" class="ui-hint">Run LOSAT requires at least 2 loaded sequences.</p>
-                            <!-- The pressed action shows the intent; only Custom needs a badge. Screen readers hear the issue count here (UX-C05). -->
-                            <div class="flex min-w-0 flex-wrap items-center gap-1.5 empty:hidden" role="status" aria-live="polite" data-linear-comparison-status>
+                            <!-- The pressed action shows the intent; only Custom needs a badge. Screen readers hear the issue count here (UX-C05); without the badge the row takes no space. -->
+                            <div :class="linearComparisonUi.intentKey === 'custom' ? 'flex min-w-0 flex-wrap items-center gap-1.5' : 'sr-only'" role="status" aria-live="polite" data-linear-comparison-status>
                                 <span v-if="linearComparisonUi.intentKey === 'custom'" class="rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700">Custom</span>
                                 <span v-if="linearComparisonUi.issues.length" class="sr-only">{{ linearComparisonUi.issues.length }} {{ linearComparisonUi.issues.length === 1 ? 'issue' : 'issues' }} to fix before Generate</span>
                             </div>

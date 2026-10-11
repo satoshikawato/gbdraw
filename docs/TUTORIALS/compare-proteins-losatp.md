@@ -74,8 +74,8 @@ comparison ribbons.
 In **Comparison**, select **Run LOSAT** explicitly. Open **Settings** and choose
 the **LOSATP** button in **LOSAT Mode**, then choose **Similarity groups** from
 the **LOSATP mode** menu. Under **Comparison appearance**, set **Match style**
-to **Curve**, then enter the filter values and the deterministic **Runtime and
-reproducibility** values.
+to **Curve**, then enter the filter values and the deterministic
+**Performance** values.
 
 | Section | Control | Value |
 |---|---|---|

@@ -343,7 +343,7 @@
         },
         {
           "dataDependent": true,
-          "title": "First raw LOSAT result",
+          "title": "Raw LOSAT file name",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-03-04-first-raw-result.webp",
             "alt": "Selected pairs row for sequence 1 to sequence 2 with the File name disclosure open and the Raw LOSAT filename field empty.",

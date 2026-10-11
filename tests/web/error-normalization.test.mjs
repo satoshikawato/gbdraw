@@ -32,6 +32,12 @@ const obsoleteSlots = normalizeUserFacingError({ code: 'INPUT_INVALID', stage: '
   { operation: 'session-load' });
 assert.match(obsoleteSlots.summary, /Recreate Custom Track Slots with the current schema\..*Load a supported Session file/);
 assert.equal(operationErrorTitle('session-load'), 'Session not loaded');
+// The LOSATP-mode reason is true with and without an Upload pair: a Selected
+// plan whose pairs all run LOSAT raises it too.
+const selectedPairs = normalizeUserFacingError({ code: 'COMPARISON_INPUT', stage: 'request-validation',
+  context: { reason: 'SELECTED_PAIRS_NEED_PAIRWISE' } });
+assert.match(selectedPairs.summary, / Similarity groups and Collinear blocks compare every adjacent pair with LOSAT, so they do not run on pairs set one by one in Selected pairs\. Choose Run LOSAT for all pairs, or choose Pairwise matches\.$/);
+assert.doesNotMatch(selectedPairs.summary, /does not run LOSAT/);
 assert.equal(normalized.context.row, 2);
 assert.deepEqual(normalized.actions, ['edit-pattern', 'retry']);
 assert.doesNotMatch(JSON.stringify(normalized), /PRIVATE_SENTINEL/);

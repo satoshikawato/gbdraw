@@ -2009,7 +2009,7 @@ export const requireLinearComparisonPlanSnapshot = (snapshot) => {
   }
   const issue = Array.isArray(snapshot.errors) ? snapshot.errors[0] : null;
   if (issue || String(snapshot.error || '').trim()) {
-    // A LOSATP-mode issue names the first pair that does not run LOSAT (UX-C05).
+    // A LOSATP-mode issue names the first Upload pair, when the plan has one (UX-C05).
     const edge = snapshot.edges.find((item) => item?.id && item.id === issue?.edgeId)
       || (issue?.code === 'selected-losat-requires-pairwise'
         ? snapshot.edges.find((item) => item?.source === 'upload') : undefined);

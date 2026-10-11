@@ -1321,7 +1321,7 @@ test('structured comparison errors open and focus their owning disclosure', asyn
   expect(selectedCollinear.result.status).toBe('error');
   expect(selectedCollinear.reason).toBe('SELECTED_PAIRS_NEED_PAIRWISE');
   // The Generate error names the pair whose source breaks the LOSATP mode.
-  await expect(page.getByRole('alert', { name: 'Generation Error' })).toContainText('Pair: #2 to #3. A pair that does not run LOSAT');
+  await expect(page.getByRole('alert', { name: 'Generation Error' })).toContainText('Pair: #2 to #3. Similarity groups and Collinear blocks compare every adjacent pair with LOSAT, so they do not run on pairs set one by one in Selected pairs.');
   expect(selectedCollinear.issueCodes).toEqual(['selected-losat-requires-pairwise', 'missing-upload']);
   await expect(missingTsvDialog).toHaveCount(0);
   await expect(comparisonSettings(page)).toHaveAttribute('open', '');
@@ -1354,6 +1354,17 @@ test('structured comparison errors open and focus their owning disclosure', asyn
   await issues.getByRole('button', { name: 'Run LOSAT for all pairs', exact: true }).click();
   await settled();
   expect(await history()).toEqual({ count: before.count + 1, label: 'Change comparisons', mode: 'collinear', plan: 'adjacent' });
+  // A LOSAT runtime failure has no pair issue: Show in Comparison opens
+  // Settings at Execution.
+  await expect(issues).toHaveCount(0);
+  for (const code of ['LOSAT_THREADING_UNAVAILABLE', 'LOSAT_RUNTIME']) {
+    await comparisonSettings(page).evaluate((details) => { details.open = false; });
+    await page.evaluate((errorCode) => { window.__GBDRAW_APP__.errorLog = { code: errorCode, stage: 'comparison' }; }, code);
+    await page.getByRole('button', { name: 'Show in Comparison', exact: true }).click();
+    await expect(comparisonSettings(page)).toHaveAttribute('open', '');
+    await expect(page.getByRole('combobox', { name: 'LOSAT execution' })).toBeFocused();
+  }
+  await page.evaluate(() => { window.__GBDRAW_APP__.errorLog = null; });
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   expect(await history()).toEqual(before);
 });

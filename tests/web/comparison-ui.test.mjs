@@ -556,6 +556,24 @@ test('the LOSATP-mode issue names the pairs set to Upload BLAST TSV (UX-C05)', (
   assert.equal(new Set(projection.issues.map((issue) => issue.key)).size, 3);
 });
 
+test('the LOSATP-mode issue of a Selected plan whose pairs all run LOSAT states its cause', () => {
+  const projection = projectLinearComparisonUi({
+    plan: { mode: 'selected', defaultSource: 'losat', edges: [] },
+    resolution: {
+      edges: [
+        { id: 'p', edgeKey: 'a->b', queryIndex: 0, subjectIndex: 1, source: 'losat' },
+        { id: 'q', edgeKey: 'b->c', queryIndex: 1, subjectIndex: 2, source: 'losat' }
+      ],
+      errors: [{ code: 'selected-losat-requires-pairwise', edgeId: '', edgeKey: '', message: 'unused' }]
+    },
+    losatProgram: 'blastp',
+    blastpMode: 'collinear',
+    filters: linearDefaults
+  });
+  assert.equal(projection.issues[0].text, 'The pairs are set one by one in Selected pairs. '
+    + 'Similarity groups and Collinear blocks compare every adjacent pair with LOSAT.');
+});
+
 test('projection does not mutate plan, resolution, filters, or retained file references', () => {
   const retained = file('immutable.tsv');
   const plan = {

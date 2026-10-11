@@ -217,7 +217,7 @@ _json.dumps(_get_web_runtime_capabilities(), sort_keys=True)
   return JSON.parse(String(raw));
 };
 
-// The first-use preparation steps, reported as they start (Q9): a real step
+// The first-use preparation steps, reported as they start: a real step
 // count, not a time estimate.
 const RUNTIME_PREPARATION_STEPS = Object.freeze([
   'loading Python', 'loading the package installer', 'checking packages', 'installing packages', 'starting gbdraw'

@@ -205,7 +205,8 @@ const recordNames = ({ recordKeys, request = null, linearSeqs = [], catalog = nu
     const id = displayText(feature?.record_id, feature?.recordId);
     if (key && id && !accessions.has(key)) accessions.set(key, id);
   });
-  // A record without its own Definition takes its File's, as in every panel (OV-436).
+  // A record without its own Definition takes its File's (OV-436). The accession and
+  // the label stay this panel's own: the accession is always added and is the short name.
   const fileNames = linearRecordNames(Array.isArray(linearSeqs) ? linearSeqs : []);
   const parts = recordKeys.map((recordKey, index) => {
     const record = request?.records?.find((entry) => entry?.recordKey === recordKey);

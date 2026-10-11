@@ -25,14 +25,14 @@ write-up of a release.
   and a failed Session load shows **Session not loaded** with the reason.
 - **BLAST TSV missing** lists one row per pair with its own **Choose file…**,
   then **Generate** or **Skip these comparisons and Generate**.
-- The first Generate shows each runtime preparation step ("step 2 of 5, ...");
-  the start-up and Generate spinners show the gbdraw logo.
+- The first Generate shows each runtime preparation step ("step 2 of 5, ...").
 - Fixed: a Session load error raised in Circular stayed on screen after switching
   to Linear (OV-372).
 - Fixed: the records of one multi-record File were named differently in
-  **Record Layout**, **Selected pairs** and the other panels (one by its
-  definition, the next by its accession); each now shows the File's definition
-  plus its accession (OV-436).
+  **Record Layout**, **Selected pairs** and the **BLAST TSV missing** dialog
+  (one by its definition, the next by its accession); each now shows the File's
+  definition plus its accession, and the accession stays visible in narrow rows
+  (OV-436). The Align panel keeps its own form, which always adds the accession.
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 

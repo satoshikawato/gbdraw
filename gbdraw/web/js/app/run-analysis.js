@@ -196,7 +196,7 @@ const DIAGRAM_PROGRESS_MESSAGES = Object.freeze({
   finalizing: 'Finalizing diagram results...'
 });
 // The status line of a diagram Worker stage. The first-use runtime preparation
-// names its real step (Q9): "step 2 of 5, loading the package installer".
+// names its real step: "step 2 of 5, loading the package installer".
 /** @param {{ stage?: string, step?: number, total?: number, label?: string }} progress */
 const diagramProgressMessage = ({ stage = '', step, total, label } = {}) => {
   const message = DIAGRAM_PROGRESS_MESSAGES[/** @type {keyof typeof DIAGRAM_PROGRESS_MESSAGES} */ (stage)] || '';

@@ -413,11 +413,12 @@ const issueActions = (code, pairLabel) => Object.freeze((code === 'missing-uploa
 const pairLabelOf = (edge) => (Number.isInteger(edge?.queryIndex) && Number.isInteger(edge?.subjectIndex)
   ? `#${edge.queryIndex + 1} → #${edge.subjectIndex + 1}` : '');
 
-// A Selected plan breaks the LOSATP mode because some pair does not run LOSAT:
-// the text names the pairs set to Upload BLAST TSV (UX-C05).
+// A Selected plan breaks the LOSATP mode: the text names the pairs set to
+// Upload BLAST TSV, or says that the pairs are set one by one when every one
+// of them runs LOSAT (UX-C05).
 const selectedPairsText = (edges) => {
   const uploads = edges.filter((edge) => edge?.source === LINEAR_COMPARISON_SOURCES.UPLOAD).map(pairLabelOf).filter(Boolean);
-  const cause = uploads.length === 0 ? ''
+  const cause = uploads.length === 0 ? 'The pairs are set one by one in Selected pairs. '
     : `${uploads.length === 1 ? 'Pair' : 'Pairs'} ${uploads.join(', ')} ${uploads.length === 1 ? 'is' : 'are'} set to Upload BLAST TSV, so not every pair runs LOSAT. `;
   return `${cause}Similarity groups and Collinear blocks compare every adjacent pair with LOSAT.`;
 };
