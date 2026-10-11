@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `39`
+- Contract revision: `40`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -536,6 +536,44 @@ Status: active Product authority
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
+- Revision 40 changes: `PD-OI-085` gains scenario revision `2`
+  (`RENAME_ROTATION_APPLY_BUTTONS`), `PD-OI-089` gains scenario revision `2`,
+  and `PD-OI-061` gains scenario revision `3`. Each renames visible labels
+  and changes no behavior. They come from the Product Decision Owner
+  `satoshikawato`'s replies of `2026-10-11` on the redesigned feature popup
+  and choice dialogs of the Web app.
+  - Reply 1, to the review questions on the Before/After pairs of the
+    redesign, one of which recommended the two new rotation button names:
+    「全部推奨通りでいいです。」
+  - Reply 2, to the question 「回転ボタンと合わせて、この内容でよいか確認をお願いします。」
+    asked with the receipt fields recorded below for the three records:
+    「変えていいです。」
+  - `PD-OI-085`: the rotation buttons **Apply on Generate** and **Apply and
+    regenerate** are named **Apply when I Generate** and **Apply now**. The
+    record title and the concern key keep their wording.
+  - `PD-OI-089` and `OIC-029`: the Color/Stroke Change Scope option
+    `Apply to all "<legend name>" (N)` is named
+    `Legend item "<legend name>" (N)`. The default-color line of `OIC-029` is
+    unchanged.
+  - `PD-OI-061` and `OIC-028`: the Legend Name Conflict choices **Suffix** and
+    **Merge** are named `Keep both: name it "<name 2>"` and
+    `Merge into "<name>"`. `PD-OI-088`, whose acceptance contract is
+    `OIC-028`, is unchanged; the row changes only those two names.
+  - The confirmed fields of each receipt are its choice, rationale,
+    preservation, retirement scope, and accepted residual risk; the three
+    receipts share the owner and the decision date of that confirmation. The
+    concern key is the record's and the scenario revision is its next one.
+    The confirmed fields for `PD-OI-089` and `PD-OI-061` name no choice code;
+    their `Choice` field carries the confirmed statement of the label change,
+    and no code is added. Wrapped lines of the confirmed text are joined; no
+    other character differs.
+  - Each earlier receipt keeps its text and its full scope. Where it or an
+    earlier revision entry names an old label, it means the control that now
+    carries the new label. The new receipts retire the old visible labels
+    only.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that show the new labels are in the same pull request, and
+    the Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -3046,19 +3084,34 @@ Decision date: 2026-09-30
 ### PD-OI-061: Legend rename collisions for every entry
 
 - Concern key: `web.legend.rename-collision`
-- Scenario revision: `2`
-- Supersedes: `PD-OI-061`, scenario revision `1` (`A / DIALOG-FOR-ALL-ENTRIES`).
+- Scenario revision: `3`
+- Supersedes: `PD-OI-061`, scenario revision `2`
+  (`B / MERGE-SAME-FEATURE-TYPE-ONLY`), only by renaming the two choices of
+  the Legend Name Conflict dialog; every scenario-2 term stays in force.
+  Scenario revision `2` superseded scenario revision `1`
+  (`A / DIALOG-FOR-ALL-ENTRIES`).
 - Status: `ACCEPTED`
-- Selected outcome: `B / MERGE-SAME-FEATURE-TYPE-ONLY`
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
-  and its nine-field JSON representation below.
-- Decision source: the Owner replies of `2026-10-06` quoted verbatim in the
-  Revision 32 entry above. The Owner approved the receipt text below as
-  written ("OKです"). Dependent runtime (OV-62) is changed in the same pull
-  request, by the static Product Contract co-change route; this record supplies
-  no runtime acceptance evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
+- Selected outcomes: `B / MERGE-SAME-FEATURE-TYPE-ONLY` (scenario revision
+  `2`) and the label change of scenario revision `3`, whose receipt names no
+  choice code
+- Normative outcome: exactly the two approved `PRODUCT_DECISION` receipts and
+  their nine-field JSON representations below, read together. Where the
+  scenario-2 receipt names **Suffix** and **Merge**, it means the choices now
+  labelled `Keep both: name it "<name 2>"` and `Merge into "<name>"`.
+- Decision source (scenario revision `2`): the Owner replies of `2026-10-06`
+  quoted verbatim in the Revision 32 entry above. The Owner approved the
+  receipt text below as written ("OKです"). Dependent runtime (OV-62) is
+  changed in the same pull request, by the static Product Contract co-change
+  route; this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
   `783436b02c70f043f89dc07b4bf8d56e0869e996507f72fedbbecd0301c8f322`.
+- Decision source (scenario revision `3`): the Owner replies of `2026-10-11`
+  quoted verbatim in the Revision 40 entry above. The second receipt and JSON
+  below reproduce the confirmed fields without translation or additional
+  terms. The runtime that shows the new names merges with it (static Product
+  Contract co-change).
+- Receipt SHA-256 (scenario revision `3`; UTF-8, excluding the final newline):
+  `49700940a1fd4c44418edbee246c8a2000e30fce3600b4f1875e92b2f47730bc`.
 - Acceptance contracts: `OIC-006`. These obligations and the complete
   selected outcome are jointly required; their citation does not claim
   completed dependent-runtime checks.
@@ -3087,6 +3140,35 @@ Decision date: 2026-10-06
   "acceptedResidualRisk": "別の feature type の項目に同じ名前を付けたいときは、Suffix の付いた名前（例: \"CDS (1)\"）になる。描画が名付けた項目（例: \"other proteins\"）は、その feature type が分かるまで Suffix と Cancel だけを示す。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-06"
+}
+```
+
+Scenario revision `3` receipt, confirmed by `satoshikawato` on `2026-10-11`:
+
+```text
+PRODUCT_DECISION
+Concern: web.legend.rename-collision
+Scenario revision: 3
+Choice: Legend Name Conflict choice "Suffix" -> "Keep both: name it "<name 2>"" (shows the resulting name); "Merge" stays as "Merge into "<name>"".
+Rationale: UX-A10 (show what the suffix is).
+Must preserve: Options and effects unchanged.
+May retire: the old visible labels only.
+Accepted residual risk: older docs/videos show the old labels.
+Owner: satoshikawato
+Decision date: 2026-10-11
+```
+
+```json
+{
+  "concern": "web.legend.rename-collision",
+  "scenarioRevision": 3,
+  "choice": "Legend Name Conflict choice \"Suffix\" -> \"Keep both: name it \"<name 2>\"\" (shows the resulting name); \"Merge\" stays as \"Merge into \"<name>\"\".",
+  "rationale": "UX-A10 (show what the suffix is).",
+  "mustPreserve": "Options and effects unchanged.",
+  "mayRetire": "the old visible labels only.",
+  "acceptedResidualRisk": "older docs/videos show the old labels.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-11"
 }
 ```
 
@@ -4167,21 +4249,36 @@ Decision date: 2026-09-30
 ### PD-OI-085: Feature-popup record rotation Apply on Generate
 
 - Concern key: `web.feature-popup.record-rotation-apply-on-generate`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-085`, scenario revision `1` (`A / APPLY_ON_GENERATE`),
+  only by renaming the two rotation buttons; every scenario-1 term stays in
+  force.
 - Status: `ACCEPTED`
-- Selected outcome: `A / APPLY_ON_GENERATE`
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
-  and its nine-field JSON representation below.
-- Decision source: the Owner answers of `2026-10-04` quoted verbatim in the
-  Revision 30 entry above (`OD-2`, `OD-3`, `OD-4`), and Appendix A of
+- Selected outcomes: `A / APPLY_ON_GENERATE` (scenario revision `1`) and
+  `RENAME_ROTATION_APPLY_BUTTONS` (scenario revision `2`)
+- Normative outcome: exactly the two approved `PRODUCT_DECISION` receipts and
+  their nine-field JSON representations below, read together. Where the
+  scenario-1 receipt names **Apply on Generate** and **Apply and regenerate**,
+  it means the buttons now labelled **Apply when I Generate** and
+  **Apply now**.
+- Decision source (scenario revision `1`): the Owner answers of `2026-10-04`
+  quoted verbatim in the Revision 30 entry above (`OD-2`, `OD-3`, `OD-4`), and
+  Appendix A of
   [`POPUP_RECORD_ACTIONS_AND_VIBRIO_SESSION_PLAN_2026-10-04.md`](./POPUP_RECORD_ACTIONS_AND_VIBRIO_SESSION_PLAN_2026-10-04.md).
   The receipt fields restate those answers and the plan presented in that
   session; the Owner did not separately review the receipt wording. This record
   does not supersede another decision; `PD-OI-032` retains its scope. Dependent
   runtime requires this authority merged into its base; this amendment supplies
   no runtime acceptance evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
+- Receipt SHA-256 (scenario revision `1`; UTF-8, excluding the final newline):
   `38f89876744c098aa5695b570a0250c6f672272594aafc6c1e1e739b69712f40`.
+- Decision source (scenario revision `2`): the Owner replies of `2026-10-11`
+  quoted verbatim in the Revision 40 entry above. The second receipt and JSON
+  below reproduce the confirmed fields without translation or additional
+  terms. The runtime that shows the new names merges with it (static Product
+  Contract co-change).
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
+  `2942593046d32fe65bc3ed1c858fc57073518154adaa961be45e2f0b9b23c66d`.
 - Acceptance contracts: `OIC-021`, `OIC-024`. These obligations and the
   complete selected outcome are jointly required; their citation does not claim
   completed dependent-runtime checks.
@@ -4210,6 +4307,35 @@ Decision date: 2026-10-04
   "acceptedResidualRisk": "予約したまま Generate しないと、表示中の Result と設定がずれたままになる。既存の pending Generate 通知と popup での予約値表示で補う。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-04"
+}
+```
+
+Scenario revision `2` receipt, confirmed by `satoshikawato` on `2026-10-11`:
+
+```text
+PRODUCT_DECISION
+Concern: web.feature-popup.record-rotation-apply-on-generate
+Scenario revision: 2
+Choice: RENAME_ROTATION_APPLY_BUTTONS — "Apply on Generate" -> "Apply when I Generate"; "Apply and regenerate" -> "Apply now"
+Rationale: 「regenerate」が Generate ボタンと紛らわしい（UX 監査 UX-B09）。ボタン名でそれぞれの結果を示す。
+Must preserve: 両ボタンの動作は変えない（Apply when I Generate は sidebar と同じ未適用の record display 設定に予約するだけで Result を再生成しない。Apply now は最後の committed request から対象 record だけの candidate を作り、他の record の予約は予約のまま残す）。PD-OI-032 の対象特定・anchor・offset・orientation・feature-end・適用前 preview・理由表示。各ボタンのアクセシブル名は表示名と同じ。
+May retire: 旧ボタン名「Apply on Generate」「Apply and regenerate」の表示のみ（動作は退役しない）。
+Accepted residual risk: 旧ボタン名で書かれた既存の資料（v0.14.0 リリースノートの記述、収録済みのチュートリアル動画）と画面の表記が一致しない。
+Owner: satoshikawato
+Decision date: 2026-10-11
+```
+
+```json
+{
+  "concern": "web.feature-popup.record-rotation-apply-on-generate",
+  "scenarioRevision": 2,
+  "choice": "RENAME_ROTATION_APPLY_BUTTONS — \"Apply on Generate\" -> \"Apply when I Generate\"; \"Apply and regenerate\" -> \"Apply now\"",
+  "rationale": "「regenerate」が Generate ボタンと紛らわしい（UX 監査 UX-B09）。ボタン名でそれぞれの結果を示す。",
+  "mustPreserve": "両ボタンの動作は変えない（Apply when I Generate は sidebar と同じ未適用の record display 設定に予約するだけで Result を再生成しない。Apply now は最後の committed request から対象 record だけの candidate を作り、他の record の予約は予約のまま残す）。PD-OI-032 の対象特定・anchor・offset・orientation・feature-end・適用前 preview・理由表示。各ボタンのアクセシブル名は表示名と同じ。",
+  "mayRetire": "旧ボタン名「Apply on Generate」「Apply and regenerate」の表示のみ（動作は退役しない）。",
+  "acceptedResidualRisk": "旧ボタン名で書かれた既存の資料（v0.14.0 リリースノートの記述、収録済みのチュートリアル動画）と画面の表記が一致しない。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-11"
 }
 ```
 
@@ -4308,18 +4434,32 @@ Decision date: 2026-10-09
 ### PD-OI-089: Default colors a user edits win over the palette
 
 - Concern key: `web.default-colors-over-palette`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-089`, scenario revision `1`
+  (`A / USER_DEFAULT_COLORS_OVER_PALETTE`), only by renaming one option of
+  the Color/Stroke Change Scope dialog; every scenario-1 term stays in force.
 - Status: `ACCEPTED`
-- Selected outcome: `A / USER_DEFAULT_COLORS_OVER_PALETTE`
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
-  and its nine-field JSON representation below.
-- Decision source: the Owner replies of `2026-10-09` quoted verbatim in the
-  Revision 36 entry above. The receipt and JSON below reproduce all nine
-  fields without translation or additional terms. This record does not
-  supersede or narrow another decision. The runtime that implements it merges
-  with it (static Product Contract co-change).
-- Receipt SHA-256 (UTF-8, excluding the final newline):
+- Selected outcomes: `A / USER_DEFAULT_COLORS_OVER_PALETTE` (scenario revision
+  `1`) and the label change of scenario revision `2`, whose receipt names no
+  choice code
+- Normative outcome: exactly the two approved `PRODUCT_DECISION` receipts and
+  their nine-field JSON representations below, read together. Where the
+  scenario-1 receipt names **Apply to all** on a Legend row, it means the
+  option now labelled `Legend item "<legend name>" (N)`.
+- Decision source (scenario revision `1`): the Owner replies of `2026-10-09`
+  quoted verbatim in the Revision 36 entry above. The receipt and JSON below
+  reproduce all nine fields without translation or additional terms. This
+  record does not supersede or narrow another decision. The runtime that
+  implements it merges with it (static Product Contract co-change).
+- Receipt SHA-256 (scenario revision `1`; UTF-8, excluding the final newline):
   `131d1bb0cacdcdc031387e6bff6c35672c4cb468a64220dba04dc70460e0ef78`.
+- Decision source (scenario revision `2`): the Owner replies of `2026-10-11`
+  quoted verbatim in the Revision 40 entry above. The second receipt and JSON
+  below reproduce the confirmed fields without translation or additional
+  terms. The runtime that shows the new name merges with it (static Product
+  Contract co-change).
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
+  `68eb7c40ac71b1363789062e85b82f7171603a9a026a331fc4019d862346c07d`.
 - Acceptance contracts: `OIC-029`. These obligations and the complete selected
   outcome are jointly required.
 
@@ -4347,6 +4487,35 @@ Decision date: 2026-10-09
   "acceptedResidualRisk": "利用者の色は保存せず導出するので、新しいパレットの色と同じになった色はそれ以降パレットに従う。パレットの定義が版で変わると、以前の既定値と同じ色も利用者の色として数える。Specific color rule と既定の色の feature が同じ色で一つの行にあるときと、その型の feature が一つだけのとき（Apply to all が出ない）は、今までどおり rule を書く。Apply to all は画面にない（非表示や他の record・Result の）その型の feature の色も変える。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-09"
+}
+```
+
+Scenario revision `2` receipt, confirmed by `satoshikawato` on `2026-10-11`:
+
+```text
+PRODUCT_DECISION
+Concern: web.default-colors-over-palette
+Scenario revision: 2
+Choice: Color/Stroke Change Scope option "Apply to all "<legend name>" (N)" on a Legend row -> "Legend item "<legend name>" (N)" under the group heading for features that share it.
+Rationale: UX-A05 (one label per group, no repeated "Apply to all").
+Must preserve: Options and effects unchanged; OIC-029's default-colour line ("Sets the <type> default color …" / "Replaces your <type> default color ■ #hex.") kept verbatim.
+May retire: the old visible labels only.
+Accepted residual risk: older docs/videos show the old labels.
+Owner: satoshikawato
+Decision date: 2026-10-11
+```
+
+```json
+{
+  "concern": "web.default-colors-over-palette",
+  "scenarioRevision": 2,
+  "choice": "Color/Stroke Change Scope option \"Apply to all \"<legend name>\" (N)\" on a Legend row -> \"Legend item \"<legend name>\" (N)\" under the group heading for features that share it.",
+  "rationale": "UX-A05 (one label per group, no repeated \"Apply to all\").",
+  "mustPreserve": "Options and effects unchanged; OIC-029's default-colour line (\"Sets the <type> default color …\" / \"Replaces your <type> default color ■ #hex.\") kept verbatim.",
+  "mayRetire": "the old visible labels only.",
+  "acceptedResidualRisk": "older docs/videos show the old labels.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-11"
 }
 ```
 
@@ -4478,8 +4647,8 @@ Decision date: 2026-10-10
 | `OIC-025` | `PD-OI-038`: one SVG and Editor retain live commit/rerender, all tabs, availability, History/Session/Export, camera, keyboard, visibility-only Close/Escape, selected tab and Result recovery. At 390×844/740 the canvas uses the available full width and at least 200 px height; content scroll, reachable header/Close/toolbar, short-viewport/soft-keyboard access, and wide side drawer remain required. Pointer/keyboard/browser verification is required; duplicated Preview/SVG/editor is not accepted. |
 | `OIC-026` | `PD-OI-035` and `PD-OI-039`: identity, keyboard Select/Skip, non-rendered candidates, no position-only selection, desktop canvas, focus and transient overlay exclusion remain required with all PD-OI-031/034 outcomes. Compact review retains visible, operable canvas at full available width and at least 200 px height at 390×844/740, scrollable candidates and reachable Apply/Cancel, local no-Worker draft edits, atomic batch validation, failure/error/retry and artifact/orientation/History recovery. Narrow review closes Editor through its owner while retaining tab, disables reopening with a reason until review ends, then permits explicit reopen; wide drag remains. Browser verification must show presentation changes leave draft and Result unchanged. |
 | `OIC-027` | `PD-OI-066`: a live-edited Result agrees with a Result freshly generated from the same draft in the meaning (position, color, text, and visibility) of every edited element, including after Session load and export. Settings shown as Applies on Generate do not change the Result before Generate. A live edit that the Generate compiler cannot reproduce is shown as Applies on Generate instead. |
-| `OIC-028` | `PD-OI-088`: the color scope, Legend name, and Reset fill color dialogs, whether opened from the feature popup's fill color, the Features drawer color input, a popup stroke edit, or a Legend panel rename (Merge/Suffix), open from the saved rules before the rules a choice may add are prepared. A choice is one History step and Cancel records none. From a choice until its step ends, the dialog stays open, its choices and Cancel are disabled, it states that the edit is applying, and no second choice, Cancel, Escape, or backdrop click starts or closes anything; the dialog closes when the step ends. |
-| `OIC-029` | `PD-OI-089`: a user default color is a Default colors value that differs from the selected palette's color (case, named colors, and `#rgb` compared as one color; Auto is none). A palette switch with user colors opens one dialog: Keep my N colors (the new palette plus the user colors), Use the palette's colors, or Cancel (no change, no History step, the select shows the old palette); without user colors it switches as one step. Switching back to the applied palette while another is queued asks the same when user colors exist; the queued palette is dropped and the kept colors apply now. Default colors Reset with user colors asks first. Dialog bodies name up to three keys. Apply to all on a Legend row that no Specific color rule draws sets that feature type's default color as one History step and writes no Specific color rule; the scope dialog shows under it "Sets the <type> default color (<type> features without their own color or rule, also hidden ones)." or, when the type has a user color, "Replaces your <type> default color ■ #hex." While a palette is queued, that choice sets the color in the queued palette's colors and in the shown Result now. Generate and the Source recipe write `-p` and only the user colors as `-d`. |
+| `OIC-028` | `PD-OI-088`: the color scope, Legend name, and Reset fill color dialogs, whether opened from the feature popup's fill color, the Features drawer color input, a popup stroke edit, or a Legend panel rename (`Merge into "<name>"` or `Keep both: name it "<name 2>"`), open from the saved rules before the rules a choice may add are prepared. A choice is one History step and Cancel records none. From a choice until its step ends, the dialog stays open, its choices and Cancel are disabled, it states that the edit is applying, and no second choice, Cancel, Escape, or backdrop click starts or closes anything; the dialog closes when the step ends. |
+| `OIC-029` | `PD-OI-089`: a user default color is a Default colors value that differs from the selected palette's color (case, named colors, and `#rgb` compared as one color; Auto is none). A palette switch with user colors opens one dialog: Keep my N colors (the new palette plus the user colors), Use the palette's colors, or Cancel (no change, no History step, the select shows the old palette); without user colors it switches as one step. Switching back to the applied palette while another is queued asks the same when user colors exist; the queued palette is dropped and the kept colors apply now. Default colors Reset with user colors asks first. Dialog bodies name up to three keys. `Legend item "<legend name>" (N)` on a Legend row that no Specific color rule draws sets that feature type's default color as one History step and writes no Specific color rule; the scope dialog shows under it "Sets the <type> default color (<type> features without their own color or rule, also hidden ones)." or, when the type has a user color, "Replaces your <type> default color ■ #hex." While a palette is queued, that choice sets the color in the queued palette's colors and in the shown Result now. Generate and the Source recipe write `-p` and only the user colors as `-d`. |
 | `OIC-030` | `PD-OI-090`: an edit, Generate, failure, cancel, or Undo/Redo in one drawing leaves every other drawing's settings, Legend edits, History, and Result unchanged, and Reset all drawings is the only action that resets more than the shown drawing; a drawing switch writes no setting and is not an Undo step; Save and a fresh Load restore every saved drawing, its Result, and the drawing that was shown; each Session 27-44 fixture and each Session 46 fixture converts with no saved value lost and its first drawing renders as the old Session replays; a Session 46 or 47 preview-only Load starts no Python Worker; the Python and CLI replay and render one or all drawings with distinct output paths; a region drawing keeps the source coordinates and carries over exactly what `PD-OI-090` lists. |
 
 These new acceptance entries are obligations for dependent runtime work, not
