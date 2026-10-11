@@ -117,8 +117,8 @@ write-up of a release.
     the Auto values beside the size fields and the Circular track preview
     follow that boundary, as Generate does.
   - The aminoglycoside BGC Gallery figure is unchanged. Its tutorial now
-    types Head Length Ratio 0.64 in the last step, and its intermediate
-    previews show the short Auto sizes.
+    types Head Length Ratio 0.64 in step 10, **Finish the figure**, and its
+    intermediate previews show the short Auto sizes.
 - Web Comparison card (Linear): **Settings** lists the mode, the result filters
   and the appearance first, then **Search limits** and **Performance** (formerly
   **Runtime and reproducibility**). **Selected pairs** shows each pair as one row
