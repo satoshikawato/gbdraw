@@ -129,7 +129,7 @@ export const buildLegendEntryView = ({ entry, index, color, rules, featureCount,
   return {
     kind: /** @type {const} */ ('legend-entry'),
     identity: `legend:${key}`,
-    dialogLabel: `Legend entry: ${caption}`,
+    dialogLabel: `Legend item: ${caption}`,
     index,
     caption,
     color,

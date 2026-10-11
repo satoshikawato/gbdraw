@@ -954,7 +954,7 @@ export const createFeatureColorActions = ({
     }
 
     // D-06 (PD-OI-061): a rename onto another entry of a different color asks
-    // Merge, Suffix, or Cancel, with or without features. A target owned by a
+    // Merge, Keep both (suffix), or Cancel, with or without features. A target owned by a
     // specific-color rule keeps the PD-OI-042 caption disambiguation instead.
     // R15-3 (OV-285): a rename onto a deleted row's caption always asks, as onto
     // a listed row; its Merge is a Restore of that row, then the merge.

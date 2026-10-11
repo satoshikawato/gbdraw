@@ -925,13 +925,13 @@ downloads are available only when the required source sequence and metadata
 are present.
 
 With **Layout edit** off, a click on a Legend row in the preview, or Enter
-while it has keyboard focus, opens the legend-entry popup. It shows the legend name,
+while it has keyboard focus, opens the Legend item popup. It shows the legend name,
 the number of features drawn with it (**Counting features…** until the color
 rules are matched), the color, and where the color comes from: the color rule
 or rules that draw the row, the feature type's default color, or colors set on
 individual features. **Color** and **Legend name** edit the row as the Legend
-tab does, with the same **Merge**, **Suffix**, or **Cancel** choice for a name
-another row uses, and **Remove from legend** moves the row to the Legend tab's
+tab does, with the same **Merge into "<name>"**, **Keep both**, or **Cancel**
+choice for a name another row uses, and **Remove from legend** moves the row to the Legend tab's
 **Deleted items**. A click on a record definition (the Linear record label on
 the left, or the Circular center text) opens the record popup. It lists the
 **Accession**, **Organism**, **Length**, **Reverse complement**, **Display start**, and

@@ -85,7 +85,7 @@ test('the legend-entry view names the rule behind the color and the feature coun
   assert.equal(ruled.subtitle, '16 features');
   assert.equal(ruled.colorSource, 'From this color rule:');
   assert.deepEqual(ruled.ruleLines, ['CDS where gene_kind matches “biosynthetic$”']);
-  assert.equal(ruled.dialogLabel, 'Legend entry: Core biosynthetic genes');
+  assert.equal(ruled.dialogLabel, 'Legend item: Core biosynthetic genes');
 
   const byType = buildLegendEntryView({
     entry: { caption: 'tRNA' }, index: 0, color: '#ff0000', featureCount: null, featureTypes: new Set(['tRNA']), rules: []

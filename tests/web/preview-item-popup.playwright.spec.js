@@ -46,7 +46,7 @@ test('a Legend row opens its popup; rename, remove, keyboard, and Layout edit', 
   await loadSessionFile(page, HMMT_SESSION);
 
   const legendPoint = await clickCentre(legendRow(page, 'tRNA').locator('path').first());
-  const dialog = page.getByRole('dialog', { name: 'Legend entry: tRNA', exact: true });
+  const dialog = page.getByRole('dialog', { name: 'Legend item: tRNA', exact: true });
   await expect(dialog).toBeVisible();
   await expectPlacedBeside(page, legendPoint);
   await expect(dialog.locator('[data-preview-legend-color-source]')).toHaveText('Default color of tRNA features');
@@ -59,7 +59,7 @@ test('a Legend row opens its popup; rename, remove, keyboard, and Layout edit', 
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption)))
     .toContain('Transfer RNA');
   expect(await undoCount(page)).toBe(before + 1);
-  await expect(page.getByRole('dialog', { name: 'Legend entry: Transfer RNA', exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Legend item: Transfer RNA', exact: true })).toBeVisible();
 
   // Remove from legend: the row moves to the deleted list and the popup closes.
   await popup(page).getByRole('button', { name: 'Remove from legend', exact: true }).click();

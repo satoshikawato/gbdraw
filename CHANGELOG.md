@@ -28,7 +28,7 @@ write-up of a release.
 - Web app on a phone: the docked Editor uses most of the space between the
   canvas and the Generate bar (about 400 px instead of 200 px at 390x844).
 - Web app: a click on a Legend row or a record definition in the preview opens
-  a popup while Layout edit is off. The legend-entry popup shows the feature
+  a popup while Layout edit is off. The Legend item popup shows the feature
   count and the rule behind the color, and edits the color and legend name or
   removes the row. The record popup lists the accession, organism, length,
   reverse complement, display start, region, and alignment, and edits the definition
