@@ -5905,6 +5905,7 @@
                                 <span class="match-popup-badge">{{ clickedFeature.orthogroupId }}</span>
                                 <span v-if="clickedOrthogroupDetail && clickedOrthogroupDetail.displayName && clickedOrthogroupDetail.displayName !== clickedOrthogroupDetail.id"
                                       class="text-sm font-semibold text-slate-700">{{ clickedOrthogroupDetail.displayName }}</span>
+                                <span v-if="clickedOrthogroupDetail && clickedOrthogroupDetail.scopeLabel" class="text-xs text-slate-500">{{ clickedOrthogroupDetail.scopeLabel }}</span>
                                 <span class="text-xs text-slate-600">{{ clickedOrthogroupDetail ? clickedOrthogroupDetail.countText : `${clickedFeature.orthogroupMemberCount} ${Number(clickedFeature.orthogroupMemberCount) === 1 ? 'gene' : 'genes'}` }}</span>
                             </div>
                             <div v-if="canUseClickedOrthogroupActions" class="grid grid-cols-2 items-start gap-2">
@@ -5941,16 +5942,18 @@
                                     </div>
                                 </div>
                             </div>
-                            <action-menu v-if="clickedOrthogroupDetail" label="More" icon="ph-dots-three" title="Highlight, copy, or download this group"
+                            <action-menu v-if="canUseClickedOrthogroupActions || clickedOrthogroupDetail" label="More" icon="ph-dots-three" title="Highlight, copy, or download this group"
                                          :items="[
                                            ...(canUseClickedOrthogroupActions ? [
                                              { label: 'Highlight', title: 'Highlight similarity group', icon: 'ph-target', run: highlightClickedOrthogroup },
                                              { label: 'Clear highlight', title: 'Clear similarity-group highlight', icon: 'ph-eraser', run: clearOrthogroupHighlight }
                                            ] : []),
+                                           ...(clickedOrthogroupDetail ? [
                                            { label: orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'nt', 'Copy nt', null, 'feature-popup'), title: 'Copy all member nucleotide FASTA', icon: 'ph-copy', live: true, disabled: !clickedOrthogroupDetail.ntSequenceCount, run: () => copyOrthogroupSequences(clickedOrthogroupDetail.id, 'nt', 'feature-popup') },
                                            { label: 'Download nt', title: 'Download all member nucleotide FASTA', icon: 'ph-download-simple', disabled: !clickedOrthogroupDetail.ntSequenceCount, run: () => downloadOrthogroupSequences(clickedOrthogroupDetail.id, 'nt') },
                                            { label: orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'aa', 'Copy aa', null, 'feature-popup'), title: 'Copy all member amino-acid FASTA', icon: 'ph-copy', live: true, disabled: !clickedOrthogroupDetail.aaSequenceCount, run: () => copyOrthogroupSequences(clickedOrthogroupDetail.id, 'aa', 'feature-popup') },
                                            { label: 'Download aa', title: 'Download all member amino-acid FASTA', icon: 'ph-download-simple', disabled: !clickedOrthogroupDetail.aaSequenceCount, run: () => downloadOrthogroupSequences(clickedOrthogroupDetail.id, 'aa') }
+                                           ] : [])
                                          ]"></action-menu>
                             <details v-if="clickedOrthogroupDetail" class="match-disclosure" data-similarity-members>
                                 <summary>{{ clickedOrthogroupDetail.genesText }}</summary>
@@ -6926,7 +6929,7 @@
                             <i class="ph ph-paint-brush" aria-hidden="true"></i>
                             <span>Features</span>
                         </button>
-                        <!-- The title is the tooltip and the accessible description of the disabled tab (D-24). -->
+                        <!-- The title is the tooltip and the accessible description of the disabled tab. -->
                         <button @click="openRightDrawerTab('orthogroups')" :aria-pressed="rightDrawerTab === 'orthogroups'" aria-controls="right-drawer-panel-orthogroups"
                                 :disabled="!isRightDrawerTabAvailable('orthogroups')"
                                 :title="isRightDrawerTabAvailable('orthogroups') ? null : 'Similarity groups appear after a Linear comparison with Similarity groups turned on.'"

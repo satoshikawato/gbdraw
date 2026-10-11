@@ -699,6 +699,16 @@ test('preview similarity-group copy actions report isolated accessible outcomes'
   await popupGroupAaCopy.click();
   await expect(popupGroupAaCopy).toHaveText(/Copied!/);
   await expect(popupMemberAaCopy).toHaveText(/^\s*Copy aa\s*$/);
+  // The same menu highlights the group's members and clears the highlight.
+  const highlightedCount = () => page.evaluate(() => (
+    [...document.querySelectorAll('[data-gbdraw-feature-id]')]
+      .filter((element) => element.getAttribute('stroke') === '#2563eb').length
+  ));
+  expect(await highlightedCount()).toBe(0);
+  await featurePopup.getByRole('button', { name: 'Highlight', exact: true }).click();
+  await expect.poll(highlightedCount).toBeGreaterThan(0);
+  await featurePopup.getByRole('button', { name: 'Clear highlight', exact: true }).click();
+  await expect.poll(highlightedCount).toBe(0);
   await featurePopup.getByRole('button', { name: 'Close feature popup' }).click();
 
   expect(await evaluateWithRetainedPromise(page, async () => {
@@ -713,6 +723,25 @@ test('preview similarity-group copy actions report isolated accessible outcomes'
   await expect(featurePopup.locator(
     'button[title="Copy all member amino-acid FASTA"]'
   )).toHaveText(/Copy aa/);
+});
+
+test('the feature popup names a record-specific similarity group', async ({ page }) => {
+  test.setTimeout(180000);
+  expect((await loadGallerySession(page, 'vibrio-harveyi-group-collinear.gbdraw-session.json.gz')).status).toBe('ok');
+  const opened = await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    const feature = app.extractedFeatures.find((candidate) => {
+      if (!candidate?.orthogroupId || candidate?.type !== 'CDS') return false;
+      const group = app.orthogroups.find((entry) => entry.id === candidate.orthogroupId);
+      return group && app.orthogroupScope(group) === 'record_local';
+    });
+    if (!feature) return false;
+    await app.openFeatureEditorFromList(feature, null);
+    return Boolean(app.clickedFeature);
+  });
+  expect(opened).toBe(true);
+  await expect(page.locator('.feature-popup [data-similarity-summary]'))
+    .toContainText('Record-specific similarity group');
 });
 
 for (const liveCase of [
@@ -1085,6 +1114,15 @@ test('a collinear ribbon without a collinear group scope pairs its genes by simi
   await genePairs.locator('> summary').click();
   await expect(genePairs.locator('tbody tr')).toHaveCount(15);
   await expect(genePairs.locator('tbody tr').first()).toContainText('og_34');
+  // Choosing a group in the table lists its members; choosing it again hides them.
+  const groupButton = genePairs.locator('tbody tr').first().locator('button[title="Show the members of og_34"]');
+  await expect(popup.locator('[data-match-group]')).toHaveCount(0);
+  await groupButton.click();
+  await expect(groupButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(popup.locator('[data-match-group]')).toContainText('og_34');
+  await groupButton.click();
+  await expect(groupButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(popup.locator('[data-match-group]')).toHaveCount(0);
   // The popup body is the only scroll region: an opened table grows the body.
   expect(await popup.locator('.pairwise-match-popup-body').evaluate((body) => (
     [...body.querySelectorAll('*')].filter((element) => (
@@ -1436,7 +1474,7 @@ test('similarity-group rows update every displayed field and retain current clic
   await expect(row('s05_row_changed')).toContainText('Updated group');
 });
 
-// D-24 (Q7): without Similarity groups the tab stays visible and disabled, and
+// Q7: without Similarity groups the tab stays visible and disabled, and
 // says why in its tooltip and accessible description.
 test('an unavailable Similarity groups tab states why in its tooltip', async ({ page }) => {
   expect((await loadGallerySession(page, 'HmmtDNA_basic_circular.gbdraw-session.json')).status).toBe('ok');

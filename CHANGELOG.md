@@ -70,7 +70,7 @@ write-up of a release.
   a new alignment selects.
 - Similarity groups (web app): the disabled **Similarity groups** tab, for
   example in Circular, says in its tooltip that Similarity groups appear after
-  a Linear comparison with Similarity groups turned on (D-24). The group's
+  a Linear comparison with Similarity groups turned on. The group's
   **Display name** and **Description** fields are now named by their labels
   for assistive technology (OV-427).
 - Similarity groups (web app): member tables in the feature popup, ribbon

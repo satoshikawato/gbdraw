@@ -206,7 +206,7 @@ export const ActionMenu = {
         <i class="ph ph-caret-down action-menu-caret" aria-hidden="true"></i>
       </summary>
       <div class="action-menu-items">
-        <button v-for="item in items" :key="item.title || item.label" type="button" class="action-menu-item"
+        <button v-for="(item, index) in items" :key="index + '-' + item.label" type="button" class="action-menu-item"
                 :disabled="item.disabled" :title="item.title || item.label"
                 :aria-live="item.live ? 'polite' : null" :aria-atomic="item.live ? 'true' : null"
                 @click="item.run()">

@@ -438,7 +438,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
       { flush: 'sync' }
     );
     // The open Similarity groups list shows the selected group's row, whoever
-    // selected it: a new alignment plan (D-40), Show in editor, or the user.
+    // selected it: a new alignment plan (OV-381), Show in editor, or the user.
     // The tab panel's v-show applies after post watchers, hence nextTick.
     watch(
       () => [selectedOrthogroupId.value, showRightDrawer?.value && rightDrawerTab?.value === 'orthogroups'],

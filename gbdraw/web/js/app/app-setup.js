@@ -4482,7 +4482,10 @@ export const createAppSetup = () => {
       ntSequenceCount: orthogroupActions.getOrthogroupSequenceCount(group, 'nt'),
       aaSequenceCount: orthogroupActions.getOrthogroupSequenceCount(group, 'aa'),
       currentMember,
-      membersByRecord
+      membersByRecord,
+      scopeLabel: orthogroupActions.orthogroupScope(group) === 'global'
+        ? ''
+        : orthogroupActions.orthogroupScopeLabel(group)
     };
   });
 
