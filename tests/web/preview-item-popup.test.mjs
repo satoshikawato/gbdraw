@@ -3,13 +3,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {
-  buildLegendEntryView,
-  buildRecordDefinitionView,
-  createPreviewItemPopup,
-  previewItemTarget,
-  readDrawnDefinitionLines
-} from '../../gbdraw/web/js/app/preview-item-popup.js';
+import { createPreviewItemPopup, previewItemTarget } from '../../gbdraw/web/js/app/preview-item-popup.js';
 
 class FakeElement {
   constructor(attributes = {}, { parent = null, text = '', children = [] } = {}) {
@@ -76,102 +70,47 @@ test('a click on a Legend row or a record definition names its popup item', () =
   assert.equal(previewItemTarget(line, { contains: () => false }), null);
 }));
 
-test('the legend-entry view names the rule behind the color and the feature count', () => {
-  const entry = { caption: 'Core biosynthetic genes', color: '#d62728' };
-  const ruled = buildLegendEntryView({
-    entry, index: 2, color: '#d62728', featureCount: 16, featureTypes: new Set(['CDS']),
-    rules: [{ feat: 'CDS', qual: 'gene_kind', val: 'biosynthetic$' }]
-  });
-  assert.equal(ruled.subtitle, '16 features');
-  assert.equal(ruled.colorSource, 'From this color rule:');
-  assert.deepEqual(ruled.ruleLines, ['CDS where gene_kind matches “biosynthetic$”']);
-  assert.equal(ruled.dialogLabel, 'Legend item: Core biosynthetic genes');
-
-  const byType = buildLegendEntryView({
-    entry: { caption: 'tRNA' }, index: 0, color: '#ff0000', featureCount: null, featureTypes: new Set(['tRNA']), rules: []
-  });
-  assert.equal(byType.subtitle, 'Counting features…');
-  assert.equal(byType.colorSource, 'Default color of tRNA features');
-  const single = buildLegendEntryView({
-    entry: { caption: 'x' }, index: 0, color: '#000000', featureCount: 1, featureTypes: new Set(), rules: []
-  });
-  assert.equal(single.subtitle, '1 feature');
-  assert.equal(single.colorSource, 'Set on individual features');
-});
-
-test('the record-definition view lists the facts of the displayed Result', () => {
-  const view = buildRecordDefinitionView({
-    scope: 'linear', recordIndex: 0, recordId: 'BGC0000708',
-    drawn: { name: 'Streptomyces sp.', subtitle: 'neocarzinostatin', accession: 'BGC0000708', length: '28,450 bp' },
-    record: { recordKey: 'uid-1', presentation: { reverseComplement: true }, display: { startCoordinate: 1200 }, region: { start: 10, end: 2000 } },
-    draft: null,
-    alignment: { recordKey: 'uid-1', status: 'aligned', anchorLabel: 'neoU' },
-    alignmentShown: true
-  });
-  assert.deepEqual(view.facts, [
-    { label: 'Accession', value: 'BGC0000708' },
-    { label: 'Organism', value: 'Streptomyces sp.' },
-    { label: 'Length', value: '28,450 bp' },
-    { label: 'Reverse complement', value: 'Yes' },
-    { label: 'Display start', value: '1,200' },
-    { label: 'Region', value: '10..2,000' },
-    { label: 'Alignment', value: 'Aligned on neoU' }
-  ]);
-  assert.equal(view.subtitle, 'neocarzinostatin · BGC0000708');
-  const circular = buildRecordDefinitionView({
-    scope: 'circular', recordIndex: 0, recordId: 'NC_012920.1', drawn: {}, record: null, draft: null, alignment: null, alignmentShown: false
-  });
-  assert.equal(circular.facts.find((fact) => fact.label === 'Region').value, 'Whole record');
-  assert.equal(circular.facts.some((fact) => fact.label === 'Alignment'), false);
-});
-
-test('a Circular definition without line kinds reads its name, accession, and length lines', () => {
-  const texts = ['Homo sapiens', 'mitochondrion', 'NC_012920.1', '16,569 bp', '44.36% GC']
-    .map((line) => new FakeElement({ tag: 'text' }, { text: line }));
-  const group = new FakeElement({}, { children: texts });
-  assert.deepEqual(readDrawnDefinitionLines(group, 'NC_012920.1'), {
-    length: '16,569 bp', name: 'Homo sapiens', subtitle: 'mitochondrion', accession: 'NC_012920.1'
-  });
-  const linear = new FakeElement({}, {
-    children: [
-      new FakeElement({ 'data-definition-line-kind': 'name' }, { text: 'Streptomyces' }),
-      new FakeElement({ 'data-definition-line-kind': 'length' }, { text: '28 kbp' })
-    ]
-  });
-  assert.deepEqual(readDrawnDefinitionLines(linear, 'x'), { name: 'Streptomyces', length: '28 kbp' });
-});
-
-const createPopup = ({ mode = 'linear', busy = null } = {}) => {
+const createPopup = ({
+  mode = 'linear', busy = null, circularPresentation = false,
+  entries = [{ caption: 'tRNA', originalCaption: 'tRNA', color: '#ff0000' }],
+  renameLegendRow = null, legendRenameSettled = async () => {},
+  requestRecords = [{ recordKey: 'uid-1', presentation: { label: 'Old name' } }],
+  recordRows = [{ scope: 'linear', sourceUid: 'uid-1', recordId: 'R1', canonicalRecordKey: 'uid-1' }],
+  rules = [], featureTypes = ['tRNA'], featureCount = 22, definitionGroup = null, alignment = null
+} = {}) => {
   const steps = [];
-  const form = { species: 'Homo sapiens', strain: '', circular_reverse: false };
+  const form = {
+    species: 'Homo sapiens', strain: '', circular_reverse: false, circular_record_label: 'Label X', circular_record_subtitle: ''
+  };
   const sequence = { uid: 'uid-1', definition: 'Old name', record_subtitle: '', region_reverse: false };
-  const entries = [{ caption: 'tRNA', originalCaption: 'tRNA', color: '#ff0000' }];
   const state = {
     clickedPairwiseMatch: { value: null },
-    svgContainer: { value: null },
+    svgContainer: { value: definitionGroup && { querySelector: () => definitionGroup } },
     mode: { value: mode },
     linearSeqs: [sequence],
-    extractedFeatures: { value: [{ type: 'tRNA' }] },
+    extractedFeatures: { value: featureTypes.map((type) => ({ type })) },
     activeDrawing: () => ({ form, legendEntries: { value: entries } })
   };
   const popup = createPreviewItemPopup({
     state,
     computed: (getter) => ({ get value() { return getter(); } }),
     readLegendEntryColor: (entry) => entry.color,
-    readLegendRowRules: () => [],
-    countLegendCaptionFeatures: () => 22,
-    getCommittedRequest: () => ({ records: [{ recordKey: 'uid-1', presentation: { label: 'Old name' } }] }),
-    readAlignmentInspector: () => null,
-    readCircularReverseAvailable: () => true,
+    readLegendRowRules: () => rules,
+    countLegendCaptionFeatures: () => featureCount,
+    getCommittedRequest: () => ({ records: requestRecords }),
+    readCommittedRecordRows: () => recordRows,
+    readAlignmentInspector: () => alignment && { records: [alignment] },
+    readCircularReverseAvailable: () => circularPresentation,
     runUndoable: (label, apply) => { steps.push(label); apply(); return true; },
     sessionBusy: () => busy,
-    renameLegendRow: (index, caption) => {
+    renameLegendRow: renameLegendRow || ((index, caption) => {
       steps.push('Rename legend item');
       Object.assign(entries[index], { caption, originalCaption: caption });
       return true;
-    }
+    }),
+    legendRenameSettled
   });
-  return { popup, state, steps, form, sequence };
+  return { popup, state, steps, form, sequence, entries };
 };
 
 test('the popup view follows the open item and counts once the matches are ready', () => {
@@ -215,4 +154,145 @@ test('the legend popup follows its row when a rename changes the row key', async
   assert.deepEqual(steps, ['Rename legend item']);
   assert.deepEqual(state.clickedPairwiseMatch.value.previewItem, { kind: 'legend-entry', key: 'Transfer RNA' });
   assert.equal(popup.view.value.title, 'Transfer RNA');
+});
+
+// A rename onto another row's name asks Merge, Keep both, or Cancel; the
+// rename returns once the dialog is open. The popup keeps its row until the
+// choice is answered, then follows it (AB review F1).
+test('the legend popup follows its row through the name-conflict choice', async () => {
+  const conflict = (choice) => {
+    let answer;
+    const entries = [
+      { caption: 'Regulatory genes', originalCaption: 'Regulatory genes' },
+      { caption: 'Core biosynthetic genes', originalCaption: 'Core biosynthetic genes' }
+    ];
+    const settled = new Promise((resolve) => { answer = resolve; });
+    const created = createPopup({ entries, renameLegendRow: async () => true, legendRenameSettled: () => settled });
+    created.state.clickedPairwiseMatch.value = { previewItem: { kind: 'legend-entry', key: 'Regulatory genes' }, matchesReady: true };
+    const renamed = created.popup.renameLegendRow(0, 'Core biosynthetic genes');
+    const choose = async () => {
+      assert.equal(created.popup.view.value.title, 'Regulatory genes', 'the popup waits for the choice');
+      if (choice === 'keep both') Object.assign(entries[0], { caption: 'Core biosynthetic genes 2', originalCaption: 'Core biosynthetic genes 2' });
+      if (choice === 'merge') entries.splice(0, 1);
+      answer();
+      await renamed;
+      return created.popup.view.value.title;
+    };
+    return choose;
+  };
+  assert.equal(await (conflict('cancel'))(), 'Regulatory genes');
+  assert.equal(await (conflict('keep both'))(), 'Core biosynthetic genes 2');
+  assert.equal(await (conflict('merge'))(), 'Core biosynthetic genes');
+});
+
+// A Circular record with its own Record label draws that label, not Species
+// (AB review F2): the popup edits the field the Result draws.
+test('a Circular record popup edits the Record label when the record has its own', () => {
+  const own = createPopup({ mode: 'circular', circularPresentation: true });
+  own.state.clickedPairwiseMatch.value = { previewItem: { kind: 'record-definition', recordIndex: 0, recordId: 'R1' } };
+  const view = own.popup.view.value;
+  assert.equal(view.draft.nameLabel, 'Record label');
+  assert.equal(view.draft.name, 'Label X');
+  own.popup.setRecordField(view, 'name', 'Label Y');
+  own.popup.setRecordField(view, 'subtitle', 'plasmid');
+  assert.equal(own.form.circular_record_label, 'Label Y');
+  assert.equal(own.form.circular_record_subtitle, 'plasmid');
+  assert.equal(own.form.species, 'Homo sapiens');
+
+  const shared = createPopup({ mode: 'circular' });
+  shared.state.clickedPairwiseMatch.value = { previewItem: { kind: 'record-definition', recordIndex: 0, recordId: 'R1' } };
+  assert.equal(shared.popup.view.value.draft.nameLabel, 'Species');
+  assert.equal(shared.popup.view.value.draft.reverseAvailable, false);
+});
+
+// A Linear file that draws several records: the drawn record id names the
+// request record and its File card, not the drawn index (AB review F6).
+test('a Linear record popup finds its request record and File card by record id', () => {
+  const requestRecords = [
+    { recordKey: 'uid-1', cardinality: 'all', presentation: { label: 'Old name' } },
+    { recordKey: 'uid-2', cardinality: 'exactly_one', presentation: { label: 'Other', reverseComplement: true } }
+  ];
+  const recordRows = [
+    { scope: 'linear', sourceUid: 'uid-1', recordId: 'R1', canonicalRecordKey: 'uid-1' },
+    { scope: 'linear', sourceUid: 'uid-1', recordId: 'R2', canonicalRecordKey: 'uid-1' },
+    { scope: 'linear', sourceUid: 'uid-2', recordId: 'R3', canonicalRecordKey: 'uid-2' }
+  ];
+  const { popup, state } = createPopup({ requestRecords, recordRows });
+  // The second drawn record (index 1) is R2 of the first file, not request record 1.
+  state.clickedPairwiseMatch.value = { previewItem: { kind: 'record-definition', recordIndex: 1, recordId: 'R2' } };
+  const view = popup.view.value;
+  assert.equal(view.draft.sequenceUid, 'uid-1');
+  assert.equal(view.facts.find((fact) => fact.label === 'Reverse complement').value, 'No');
+  state.clickedPairwiseMatch.value = { previewItem: { kind: 'record-definition', recordIndex: 1, recordId: 'unknown' } };
+  assert.equal(popup.view.value.draft, null);
+});
+
+/** Opens the popup of `item` and returns its view. */
+const openView = (created, previewItem, matchesReady = true) => {
+  created.state.clickedPairwiseMatch.value = { previewItem, matchesReady };
+  return created.popup.view.value;
+};
+
+test('the legend-entry view names the rule behind the color and the feature count', () => {
+  const ruled = openView(createPopup({
+    entries: [{ caption: 'Core biosynthetic genes', color: '#d62728' }], featureTypes: ['CDS'], featureCount: 16,
+    rules: [{ feat: 'CDS', qual: 'gene_kind', val: 'biosynthetic$' }]
+  }), { kind: 'legend-entry', key: 'Core biosynthetic genes' });
+  assert.equal(ruled.subtitle, '16 features');
+  assert.equal(ruled.colorSource, 'From this color rule:');
+  assert.deepEqual(ruled.ruleLines, ['CDS where gene_kind matches “biosynthetic$”']);
+  assert.equal(ruled.dialogLabel, 'Legend item: Core biosynthetic genes');
+
+  const byType = openView(createPopup(), { kind: 'legend-entry', key: 'tRNA' }, false);
+  assert.equal(byType.subtitle, 'Counting features…');
+  assert.equal(byType.colorSource, 'Default color of tRNA features');
+  const single = openView(createPopup({ entries: [{ caption: 'x', color: '#000000' }], featureTypes: [], featureCount: 1 }),
+    { kind: 'legend-entry', key: 'x' });
+  assert.equal(single.subtitle, '1 feature');
+  assert.equal(single.colorSource, 'Set on individual features');
+});
+
+test('the record-definition view lists the facts of the displayed Result', () => {
+  const definitionGroup = new FakeElement({}, {
+    children: [
+      new FakeElement({ 'data-definition-line-kind': 'name' }, { text: 'Streptomyces sp.' }),
+      new FakeElement({ 'data-definition-line-kind': 'subtitle' }, { text: 'neocarzinostatin' }),
+      new FakeElement({ 'data-definition-line-kind': 'accession' }, { text: 'BGC0000708' }),
+      new FakeElement({ 'data-definition-line-kind': 'length' }, { text: '28,450 bp' })
+    ]
+  });
+  const view = openView(createPopup({
+    definitionGroup,
+    requestRecords: [{
+      recordKey: 'uid-1', presentation: { reverseComplement: true }, display: { startCoordinate: 1200 }, region: { start: 10, end: 2000 }
+    }],
+    recordRows: [{ scope: 'linear', sourceUid: 'uid-1', recordId: 'BGC0000708', canonicalRecordKey: 'uid-1' }],
+    alignment: { recordKey: 'uid-1', status: 'aligned', anchorLabel: 'neoU' }
+  }), { kind: 'record-definition', recordIndex: 0, recordId: 'BGC0000708' });
+  assert.deepEqual(view.facts, [
+    { label: 'Accession', value: 'BGC0000708' },
+    { label: 'Organism', value: 'Streptomyces sp.' },
+    { label: 'Length', value: '28,450 bp' },
+    { label: 'Reverse complement', value: 'Yes' },
+    { label: 'Display start', value: '1,200' },
+    { label: 'Region', value: '10..2,000' },
+    { label: 'Alignment', value: 'Aligned on neoU' }
+  ]);
+  assert.equal(view.subtitle, 'neocarzinostatin · BGC0000708');
+  const circular = openView(createPopup({ mode: 'circular', requestRecords: [] }),
+    { kind: 'record-definition', recordIndex: 0, recordId: 'NC_012920.1' });
+  assert.equal(circular.facts.find((fact) => fact.label === 'Region').value, 'Whole record');
+  assert.equal(circular.facts.some((fact) => fact.label === 'Alignment'), false);
+});
+
+test('a Circular definition without line kinds reads its name, accession, and length lines', () => {
+  const definitionGroup = new FakeElement({}, {
+    children: ['Homo sapiens', 'mitochondrion', 'NC_012920.1', '16,569 bp', '44.36% GC']
+      .map((line) => new FakeElement({ tag: 'text' }, { text: line }))
+  });
+  const view = openView(createPopup({ mode: 'circular', requestRecords: [], definitionGroup }),
+    { kind: 'record-definition', recordIndex: 0, recordId: 'NC_012920.1' });
+  assert.equal(view.title, 'Homo sapiens');
+  assert.equal(view.subtitle, 'mitochondrion · NC_012920.1');
+  assert.equal(view.facts.find((fact) => fact.label === 'Length').value, '16,569 bp');
 });

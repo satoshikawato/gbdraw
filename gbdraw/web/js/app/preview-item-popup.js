@@ -29,11 +29,13 @@ import {
  *   region?: RegionLike | null
  * }} RequestRecordLike
  * @typedef {{ recordKey?: unknown, status?: unknown, anchorLabel?: unknown, rationaleLabel?: unknown }} AlignmentDecisionLike
+ * @typedef {{ scope?: unknown, sourceUid?: unknown, recordId?: unknown, canonicalRecordKey?: unknown }} CommittedRecordRowLike
  * @typedef {'linear' | 'circular'} RecordScope
  * @typedef {'name' | 'subtitle' | 'reverse'} RecordField
  * @typedef {{
  *   name: string, subtitle: string, reverse: boolean, reverseAvailable: boolean,
- *   nameLabel: string, subtitleLabel: string, sequenceUid: string
+ *   nameLabel: string, subtitleLabel: string, sequenceUid: string,
+ *   fields: Record<RecordField, string>, settingsSelector: string
  * }} RecordDraft
  * @typedef {ReturnType<typeof buildLegendEntryView>} LegendEntryView
  * @typedef {ReturnType<typeof buildRecordDefinitionView>} RecordDefinitionView
@@ -64,11 +66,15 @@ import {
  *   The request of the displayed Result.
  * @property {() => { records?: readonly AlignmentDecisionLike[] } | null} readAlignmentInspector
  *   The active similarity alignment as the drawer inspects it, or null.
+ * @property {() => ReadonlyArray<CommittedRecordRowLike>} readCommittedRecordRows
+ *   The drawn records of the displayed Result's request, with their File cards.
  * @property {() => boolean} readCircularReverseAvailable Whether the Circular reverse setting is editable.
  * @property {(label: string, apply: () => void) => unknown} runUndoable History's one undoable step.
  * @property {() => unknown} sessionBusy A reason settings cannot change now, else a falsy value.
  * @property {(index: number, caption: string) => unknown} renameLegendRow
  *   The Legend panel's rename of row `index`, as one History step.
+ * @property {() => Promise<unknown>} legendRenameSettled
+ *   Resolves once the rename's choice dialog, if one is open, is answered.
  */
 
 const NUMBER = new Intl.NumberFormat('en-US');
@@ -104,7 +110,7 @@ export const previewItemTarget = (target, svg) => {
 };
 
 /** @param {ColorRuleLike} rule */
-export const colorRuleText = (rule) => {
+const colorRuleText = (rule) => {
   const feature = text(rule?.feat) || 'Any feature';
   const qualifier = text(rule?.qual);
   const pattern = text(rule?.val);
@@ -117,7 +123,7 @@ export const colorRuleText = (rule) => {
  * @param {{ entry: LegendEntry, index: number, color: string, rules: readonly ColorRuleLike[],
  *   featureCount: number | null, featureTypes: ReadonlySet<string> }} input
  */
-export const buildLegendEntryView = ({ entry, index, color, rules, featureCount, featureTypes }) => {
+const buildLegendEntryView = ({ entry, index, color, rules, featureCount, featureTypes }) => {
   const caption = text(entry.caption);
   const key = text(legendEntryKey(entry));
   const ruleLines = rules.map(colorRuleText);
@@ -167,7 +173,7 @@ const alignmentText = (decision) => {
  *   drawn: Record<string, string>, record: RequestRecordLike | null, draft: RecordDraft | null,
  *   alignment: AlignmentDecisionLike | null, alignmentShown: boolean }} input
  */
-export const buildRecordDefinitionView = ({
+const buildRecordDefinitionView = ({
   scope, recordIndex, recordId, drawn, record, draft, alignment, alignmentShown
 }) => {
   const accession = text(drawn.accession) || text(recordId);
@@ -201,7 +207,7 @@ export const buildRecordDefinitionView = ({
  * The texts of a definition group's lines by kind (`data-definition-line-kind`).
  * @param {Element | null | undefined} group @param {string} recordId
  */
-export const readDrawnDefinitionLines = (group, recordId) => {
+const readDrawnDefinitionLines = (group, recordId) => {
   /** @type {Record<string, string>} */
   const lines = {};
   group?.querySelectorAll('[data-definition-line-kind]').forEach((element) => {
@@ -221,21 +227,32 @@ export const readDrawnDefinitionLines = (group, recordId) => {
   return lines;
 };
 
-/** @type {Record<RecordScope, Record<RecordField, string>>} */
-const RECORD_FIELDS = {
-  linear: { name: 'definition', subtitle: 'record_subtitle', reverse: 'region_reverse' },
-  circular: { name: 'species', subtitle: 'strain', reverse: 'circular_reverse' }
+// The settings a record popup edits: those the sidebar writes for the drawn
+// definition. A Circular record selected on its own draws its Record label and
+// Subtitle, which win over the drawing's Species and Strain.
+const LINEAR_FIELDS = { name: 'definition', subtitle: 'record_subtitle', reverse: 'region_reverse' };
+const CIRCULAR_RECORD = {
+  fields: { name: 'circular_record_label', subtitle: 'circular_record_subtitle', reverse: 'circular_reverse' },
+  nameLabel: 'Record label', subtitleLabel: 'Subtitle',
+  settingsSelector: '[data-circular-record-presentation] input[type="text"]'
+};
+const CIRCULAR_DRAWING = {
+  fields: { name: 'species', subtitle: 'strain', reverse: 'circular_reverse' },
+  nameLabel: 'Species', subtitleLabel: 'Strain', settingsSelector: '#circular-species'
 };
 
 /** @param {PreviewItemPopupOptions} options */
 export const createPreviewItemPopup = ({
   state, computed, readLegendEntryColor, readLegendRowRules, countLegendCaptionFeatures,
-  getCommittedRequest, readAlignmentInspector, readCircularReverseAvailable, runUndoable, sessionBusy, renameLegendRow
+  getCommittedRequest, readCommittedRecordRows, readAlignmentInspector, readCircularReverseAvailable, runUndoable, sessionBusy, renameLegendRow,
+  legendRenameSettled
 }) => {
+  /** @returns {LegendEntry[]} */
+  const legendEntries = () => state.activeDrawing().legendEntries.value || [];
+
   /** @param {string} key @param {boolean} matchesReady */
   const legendView = (key, matchesReady) => {
-    /** @type {LegendEntry[]} */
-    const entries = state.activeDrawing().legendEntries.value || [];
+    const entries = legendEntries();
     const index = entries.findIndex((entry) => text(legendEntryKey(entry)) === key || text(entry.caption) === key);
     const entry = entries[index];
     if (!entry) return null;
@@ -261,19 +278,22 @@ export const createPreviewItemPopup = ({
     reverseAvailable: true,
     nameLabel: 'Organism / strain',
     subtitleLabel: 'Subtitle',
-    sequenceUid: sequence.uid
+    sequenceUid: sequence.uid,
+    fields: LINEAR_FIELDS,
+    settingsSelector: `[data-linear-record-card=${JSON.stringify(sequence.uid)}] [data-linear-record-options] input[type="text"]`
   };
 
   /** @returns {RecordDraft} */
   const circularDraft = () => {
     const form = state.activeDrawing().form;
+    const ownRecord = readCircularReverseAvailable();
+    const target = ownRecord ? CIRCULAR_RECORD : CIRCULAR_DRAWING;
     return {
-      name: text(form.species),
-      subtitle: text(form.strain),
+      ...target,
+      name: text(form[target.fields.name]),
+      subtitle: text(form[target.fields.subtitle]),
       reverse: Boolean(form.circular_reverse),
-      reverseAvailable: readCircularReverseAvailable(),
-      nameLabel: 'Species',
-      subtitleLabel: 'Strain',
+      reverseAvailable: ownRecord,
       sequenceUid: ''
     };
   };
@@ -282,10 +302,18 @@ export const createPreviewItemPopup = ({
   const recordView = ({ recordIndex, recordId }) => {
     /** @type {RecordScope} */
     const scope = state.mode.value === 'circular' ? 'circular' : 'linear';
-    const record = getCommittedRequest()?.records?.[recordIndex] || null;
-    const sequence = scope === 'linear'
-      ? state.linearSeqs.find((entry) => entry.uid === text(record?.recordKey)) || null
-      : null;
+    const records = getCommittedRequest()?.records || [];
+    // A Linear file may draw several records (one request record, or one
+    // `<uid>:<n>` record each), so the drawn record's id, not its index, names
+    // its request record and File card; an ambiguous id names neither.
+    const rows = scope === 'linear'
+      ? readCommittedRecordRows().filter((row) => row.scope === 'linear' && text(row.recordId) === recordId)
+      : [];
+    const row = rows.length === 1 ? rows[0] : null;
+    const record = scope === 'linear'
+      ? records.find((entry) => row && entry.recordKey === row.canonicalRecordKey) || null
+      : records[recordIndex] || null;
+    const sequence = record ? state.linearSeqs.find((entry) => entry.uid === text(row?.sourceUid)) || null : null;
     const group = state.svgContainer.value?.querySelector(
       `[data-gbdraw-role^="record-definition"][data-gbdraw-record-index="${recordIndex}"]`
     );
@@ -322,7 +350,8 @@ export const createPreviewItemPopup = ({
   const setRecordField = (recordView, field, value) => {
     const target = recordTarget(recordView);
     if (!target || sessionBusy()) return null;
-    const key = RECORD_FIELDS[recordView.scope][field];
+    const key = recordView.draft?.fields[field];
+    if (!key) return null;
     const next = field === 'reverse' ? Boolean(value) : String(value ?? '');
     if (target[key] === next) return null;
     return runUndoable(field === 'reverse' ? 'Change Reverse complement' : 'Edit record definition', () => {
@@ -330,40 +359,42 @@ export const createPreviewItemPopup = ({
     });
   };
 
-  // Opens the record's settings in the sidebar and focuses its first field.
+  // Opens the record's settings in the sidebar (each enclosing section) and
+  // focuses the field the popup's first text box edits.
   /** @param {RecordDefinitionView} recordView */
   const showRecordSettings = (recordView) => {
-    const uid = recordView.draft?.sequenceUid;
+    const selector = recordView.draft?.settingsSelector;
     /** @type {HTMLElement | null} */
-    let field = null;
-    if (recordView.scope === 'linear' && uid) {
-      const card = document.querySelector(`[data-linear-record-card="${CSS.escape(uid)}"]`);
-      card?.closest('details')?.setAttribute('open', '');
-      const options = card?.querySelector('[data-linear-record-options]');
-      options?.setAttribute('open', '');
-      field = options?.querySelector('input[type="text"]') || null;
-    } else if (recordView.scope === 'circular') {
-      field = document.getElementById('circular-species');
-    }
+    const field = selector ? document.querySelector(selector) : null;
     if (!field) return false;
+    for (let section = field.closest('details'); section; section = section.parentElement?.closest('details') || null) {
+      section.setAttribute('open', '');
+    }
     state.clickedPairwiseMatch.value = null;
     field.scrollIntoView({ block: 'center' });
     field.focus({ preventScroll: true });
     return true;
   };
 
-  // A rename can change the row's key; the open popup then follows the row by
-  // its new caption (after a Merge or Suffix choice too, when one row has it).
+  // A rename may ask a choice first (a name another row has) and may change
+  // the row's key. Once the choice is answered, the open popup follows the
+  // row: it stays on a row that kept its name (Cancel), else moves to the name
+  // the rename added (a rename, or Keep both), else to the row it joined (Merge).
   /** @param {number} index @param {string} caption */
   const renameLegendEntry = async (index, caption) => {
+    const opened = state.clickedPairwiseMatch.value;
+    const before = legendEntries();
+    const oldCaption = text(before[index]?.caption);
+    const known = new Set(before.map((entry) => text(entry.caption)));
     const result = await renameLegendRow(index, caption);
-    const open = state.clickedPairwiseMatch.value;
-    if (open?.previewItem?.kind !== 'legend-entry') return result;
-    /** @type {LegendEntry[]} */
-    const entries = state.activeDrawing().legendEntries.value || [];
-    const named = entries.filter((entry) => text(entry.caption) === text(caption));
-    const entry = named.length === 1 ? named[0] : entries[index];
-    if (entry) open.previewItem = { kind: 'legend-entry', key: text(legendEntryKey(entry)) };
+    await legendRenameSettled();
+    if (state.clickedPairwiseMatch.value !== opened || opened?.previewItem?.kind !== 'legend-entry') return result;
+    const entries = legendEntries();
+    const added = entries.filter((entry) => !known.has(text(entry.caption)));
+    const entry = entries.find((row) => text(row.caption) === oldCaption)
+      || (added.length === 1 ? added[0] : null)
+      || entries.find((row) => text(row.caption) === text(caption));
+    if (entry) opened.previewItem = { kind: 'legend-entry', key: text(legendEntryKey(entry)) };
     return result;
   };
 

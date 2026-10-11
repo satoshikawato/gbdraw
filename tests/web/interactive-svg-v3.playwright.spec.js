@@ -12,7 +12,8 @@ const {
   evaluateWithRetainedPromise,
   generateAndWaitForResult,
   openApp,
-  waitForAppShell
+  waitForAppShell,
+  expectSessionLoadedWithoutWarnings,
 } = require('./helpers/app-lifecycle.cjs');
 
 const installDiagramRequestObserver = (page) => page.addInitScript(() => {
@@ -700,7 +701,7 @@ const installRecordReadCounter = (page) => page.addInitScript(() => {
 
 const loadSessionFile = async (page, sessionPath) => {
   await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
+  await expectSessionLoadedWithoutWarnings(page);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending))
     .toBe(false);
 };

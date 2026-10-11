@@ -558,6 +558,11 @@ def load_web_app_session(page, session_path: Path) -> None:
         )
     except Exception as error:
         raise RuntimeError(f"Could not load capture session: {error}") from error
+    if page.locator("[data-app-notice] li").count():
+        raise RuntimeError(
+            "Could not load capture session: "
+            f"{page.locator('[data-app-notice]').inner_text()}"
+        )
     page.wait_for_function(
         """
         () => {

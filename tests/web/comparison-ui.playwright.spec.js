@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
-const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 
 const bgcSessionPath = 'tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json';
 
@@ -524,7 +524,7 @@ test('imported comparison resolutions are explicit and create one History entry 
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(decisionRequiredComparisonSession()))
   });
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
+  await expectSessionLoadedWithoutWarnings(page);
   await expect(resolution).toContainText('Saved comparison needs a decision');
   await expect(resolution).toContainText('missing a required resource');
   await expect(resolution.getByRole('button', { name: 'Inherit saved comparison' }))
@@ -631,7 +631,7 @@ test('preserved imported comparison generates only after explicit inheritance', 
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(preservedComparisonSession()))
   });
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
+  await expectSessionLoadedWithoutWarnings(page);
 
   const resolution = page.locator('[data-imported-comparison-resolution]');
   await expect(resolution).toContainText('Saved comparison preserved as read-only');
@@ -1145,7 +1145,7 @@ test('comparison controls drive appearance and current Session round trips', { t
     mimeType: 'application/gzip',
     buffer: sessionBuffer
   });
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 180000 });
+  await expectSessionLoadedWithoutWarnings(page, { timeout: 180000 });
   await page.waitForFunction(() => {
     const app = window.__GBDRAW_APP__;
     return app?.mode === 'linear'

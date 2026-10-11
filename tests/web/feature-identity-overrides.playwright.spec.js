@@ -9,7 +9,7 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
-const { generateAndWaitForResult, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { generateAndWaitForResult, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, openFresh, settle } = require('./helpers/audit-browser.cjs');
 const { download } = require('./helpers/mode-transition.cjs');
 
@@ -416,7 +416,7 @@ test('a Linear Session 33 with crop and reverse complement keeps its feature edi
   await openFresh(page);
   await loadSession(page, LINEAR_V33);
   const [testa, testb] = await committedRecordKeys(page);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
+  await expectSessionLoadedWithoutWarnings(page);
   await expect(page.locator('[data-app-notice] li')).toHaveCount(0);
   expect(await featureOverrideRows(page)).toEqual([
     [testa, 'fef810304', null, 'off', null],

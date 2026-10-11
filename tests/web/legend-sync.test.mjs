@@ -550,7 +550,7 @@ const mockLegendEntry = (caption, color, x) => {
   assert.equal(shows, 1);
   sortActions.sortLegendEntries('asc');
   assert.equal(shows, 1, 'an order already listed records nothing');
-  sortActions.moveLegendEntryDown(0);
+  sortActions.moveLegendEntry(0, 1);
   assert.deepEqual(listed(), ['Beta', 'Alpha', 'Own1']);
   assert.equal(shows, 2);
   sortActions.sortLegendEntriesByDefault();

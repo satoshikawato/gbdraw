@@ -160,7 +160,7 @@ import {
 } from './session-file.js';
 import { importSessionFile } from './session-import-client.js';
 import { convertMainSessionComparisonFrames } from './main-session-comparison-frame.js';
-import { downloadBlob } from './text-download.js';
+import { askBeforeLargeDownload, downloadBlob } from './text-download.js';
 import { normalizeAnnotationSets } from './annotation-state.js';
 import { applySpecificRuleProvenance } from './specific-color-rules.js';
 import { normalizeLegacyLegendEntryGroups } from './svg-result-normalization.js';
@@ -293,6 +293,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { ArtifactSlot } from './artifact-slot.js' */
 /** @import { FeatureOverrideDraft } from './feature-placement.js' */
 /** @import { DrawingState } from '../state.js' */
+/** @import { DownloadChoicePort } from './text-download.js' */
 
 /**
  * The editor state of a Session's committed Result: the Legend's original
@@ -4776,18 +4777,10 @@ const buildOtherModeResult = (other, renderRequest) => {
   };
 };
 
-/**
- * The composition root's choice dialog (R13): resolves to the chosen action's
- * id, or `cancel`. Save asks with it before a repeated or a large download (UX-A07).
- * @typedef {(request: {
- *   title: string, description?: string,
- *   actions: { id: string, label: string, tone?: 'primary' | 'secondary' | 'danger' }[]
- * }) => Promise<string>} SessionSaveChoicePort
- */
-
+// `askChoice`: the root's choice dialog; Save asks with it before a repeated or a large download (UX-A07).
 /**
  * @typedef {{
- *   askChoice?: SessionSaveChoicePort,
+ *   askChoice?: DownloadChoicePort,
  *   drawing: DrawingState,
  *   linearRecordCatalog?: any,
  *   omittedAnnotationRecordKeys?: string[],
@@ -4985,11 +4978,10 @@ const exportSessionDocument = async (
   });
   if (!isCurrent()) return { status: 'canceled' };
   const largeMegabytes = largeSessionDownloadMegabytes(compressed);
-  if (largeMegabytes !== null && await askChoice({
+  if (largeMegabytes !== null && !await askBeforeLargeDownload(askChoice, {
     title: 'Download a large Session?',
-    description: `The Session file is ${largeMegabytes.toFixed(1)} MB.`,
-    actions: [{ id: 'download', label: 'Download', tone: 'primary' }]
-  }) !== 'download') {
+    description: `The Session file is ${largeMegabytes.toFixed(1)} MB.`
+  })) {
     recordSessionLifecycleEvent('session-save-download-canceled', {
       reason: 'large-download',
       compressedSize: compressed.size

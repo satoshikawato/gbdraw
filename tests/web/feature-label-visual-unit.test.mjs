@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { LABEL_ABSENCE_CAUSES, LABEL_ABSENCE_REASONS, createFeatureLabelActions } from '../../gbdraw/web/js/app/feature-editor/label-actions.js';
+import { LABEL_ABSENCE_REASONS, createFeatureLabelActions } from '../../gbdraw/web/js/app/feature-editor/label-actions.js';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
@@ -291,7 +291,7 @@ for (const [reason, options, sentence] of absenceCases) {
     const none = 'This feature has no label in the current Result.';
     // The popup note, before the edit is applied, names the same reason in a few words (UX-A03).
     state.clickedFeature.value.labelText = '';
-    const cause = LABEL_ABSENCE_CAUSES[reason];
+    const cause = LABEL_ABSENCE_REASONS[reason]?.cause;
     assert.equal(actions.clickedFeatureLabelHint.value.startsWith(`No label shown${cause ? ` (${cause})` : ''}.`), true,
       actions.clickedFeatureLabelHint.value);
     state.clickedFeature.value.labelText = 'Renamed';
@@ -317,8 +317,10 @@ test('every reason the resolver can return has a sentence, and every sentence a 
   }
   returned.delete('');
   assert.deepEqual([...returned].sort(), Object.keys(LABEL_ABSENCE_REASONS).sort());
-  assert.deepEqual(Object.keys(LABEL_ABSENCE_CAUSES).sort(), Object.keys(LABEL_ABSENCE_REASONS).sort());
-  Object.values(LABEL_ABSENCE_REASONS).forEach((sentence) => assert.equal(typeof sentence, 'string'));
+  Object.values(LABEL_ABSENCE_REASONS).forEach(({ sentence, cause }) => {
+    assert.equal(typeof sentence, 'string');
+    assert.equal(typeof cause, 'string');
+  });
 });
 
 // "Show this label" applies Label visibility On through the Q1 and Q2 dialogs.

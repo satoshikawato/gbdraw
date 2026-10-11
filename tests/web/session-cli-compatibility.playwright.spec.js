@@ -5,7 +5,7 @@ const { createHash } = require('node:crypto');
 const { gunzipSync } = require('node:zlib');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
-const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, evaluateWithRetainedPromise, generateAndWaitForResult, openApp, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 
 const root = process.cwd();
 const mito = path.join(root, 'tests/fixtures/sessions/cli-web-mito.gb');
@@ -110,7 +110,7 @@ const load = async (browser, file, viewport, requirePreview = true) => {
   page.on('dialog', async dialog => { dialogs.push(dialog.message()); await dialog.accept(); });
   await openApp(page);
   await page.locator('input[accept^=".json,"]').setInputFiles(file);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 180_000 });
+  await expectSessionLoadedWithoutWarnings(page, { timeout: 180_000 });
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending)).toBe(true);
   if (requirePreview) await expect(page.locator('.origin-top svg')).toBeVisible();
   return { context, page, external, errors, dialogs };

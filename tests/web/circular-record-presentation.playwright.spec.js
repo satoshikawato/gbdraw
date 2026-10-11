@@ -5,7 +5,8 @@ const {
   evaluateWithRetainedPromise,
   generateAndWaitForResult,
   openApp,
-  waitForAppShell
+  waitForAppShell,
+  expectSessionLoadedWithoutWarnings,
 } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -136,7 +137,7 @@ test('Circular single-record presentation selects, transforms, titles, and round
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 180000 });
+  await expectSessionLoadedWithoutWarnings(page, { timeout: 180000 });
   await expect(page.getByLabel('Circular record', { exact: true })).toHaveValue('BGC0000709');
   await expect(page.getByLabel('Circular region start')).toHaveValue('1000');
   await expect(page.getByLabel('Circular region end')).toHaveValue('12000');

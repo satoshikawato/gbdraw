@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
-const { CURRENT_REQUEST_SCHEMA, openApp } = require('../helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, openApp, expectSessionLoadedWithoutWarnings } = require('../helpers/app-lifecycle.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -64,7 +64,7 @@ const loadSessionThroughUi = async (page, sessionPath) => {
   await page.getByRole('button', { name: 'Load Session' }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles(sessionPath);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 180_000 });
+  await expectSessionLoadedWithoutWarnings(page, { timeout: 180_000 });
   await expect.poll(() => page.evaluate(() => ({
     mode: window.__GBDRAW_APP__?.mode,
     processing: window.__GBDRAW_APP__?.processing,

@@ -16,9 +16,10 @@ const listModules = async (dir) => (await Promise.all(
   })
 )).flat();
 
-// A call of the browser's own dialog, with or without `window.`/`globalThis.`;
-// method calls such as `dialog.confirm(` and names such as `askConfirm(` do not count.
-const NATIVE_DIALOG_CALL = /(?<![\w$.])(?:(?:window|globalThis)\.)?(alert|confirm)\s*\(/;
+// A call of the browser's own dialog, or any use of it through `window.` or
+// `globalThis.` (`confirmFn = globalThis.confirm` calls it later); method
+// calls such as `dialog.confirm(` and names such as `askConfirm(` do not count.
+const NATIVE_DIALOG_CALL = /(?<![\w$.])(?:(?:window|globalThis|self)\.(?:alert|confirm)\b|(?:alert|confirm)\s*\()/;
 
 test('UX-A07, UX-C12: the Web app asks and reports in its own dialog and notice, never alert() or confirm()', async () => {
   const offenders = [];
@@ -30,6 +31,13 @@ test('UX-A07, UX-C12: the Web app asks and reports in its own dialog and notice,
     });
   }
   assert.deepEqual(offenders, []);
+  // The pattern finds the indirect use that the base code had.
+  for (const code of ['alert("x")', 'window.confirm("x")', 'const confirmFn = globalThis.confirm;', 'self.alert']) {
+    assert.equal(NATIVE_DIALOG_CALL.test(code), true, code);
+  }
+  for (const code of ['dialog.confirm(x)', 'askConfirm(x)', 'confirmLargeDownload(x)', 'window.confirmed']) {
+    assert.equal(NATIVE_DIALOG_CALL.test(code), false, code);
+  }
 });
 
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-app-messages-'));

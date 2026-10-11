@@ -3,7 +3,7 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { execFileSync } = require('node:child_process');
-const { openApp, reveal, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { openApp, reveal, getDiagramWorkerActivity, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 const { promoteRequest } = require('./helpers/request-schema.cjs');
 
 const fixture = resolve('gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
@@ -32,7 +32,7 @@ const load = async (page, file = fixture, accepted = true) => {
   const input = page.locator(sessionInput);
   await input.setInputFiles(file);
   if (accepted) {
-    await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 180_000 });
+    await expectSessionLoadedWithoutWarnings(page, { timeout: 180_000 });
   } else {
     // Rejected Load reports an operation alert and clears the input at the
     // import owner's finally boundary before the preserved state is compared.

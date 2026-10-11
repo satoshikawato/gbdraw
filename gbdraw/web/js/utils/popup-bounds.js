@@ -1,8 +1,9 @@
 // @ts-check
 
 // The area a popup or floating panel may cover: below the app header
-// (`header.app-header`, OV-384: its buttons stay reachable) and above the app
-// footer (`[data-app-footer]`) when they are on screen, else the viewport. The
+// (`header.app-header`, OV-384: its buttons stay reachable) and the notice
+// banner (`[data-app-notice]`, so its text and Dismiss stay readable), and above
+// the app footer (`[data-app-footer]`) when they are on screen, else the viewport. The
 // feature and match popups, their drags and resizes, their first placement,
 // and the alignment palette read these limits.
 /** @returns {number} */
@@ -16,15 +17,18 @@ const popupViewportBottom = () => {
 
 /** @returns {number} */
 const popupViewportTop = () => {
-  const headerBottom = document.querySelector('header.app-header')?.getBoundingClientRect().bottom;
-  return typeof headerBottom === 'number' && headerBottom > 0
-    ? Math.min(headerBottom, popupViewportBottom() - 1)
-    : 0;
+  const bottoms = ['header.app-header', '[data-app-notice]']
+    .map((selector) => document.querySelector(selector)?.getBoundingClientRect().bottom)
+    .filter(/** @returns {bottom is number} */ (bottom) => typeof bottom === 'number' && bottom > 0);
+  return bottoms.length ? Math.min(Math.max(...bottoms), popupViewportBottom() - 1) : 0;
 };
 
 /**
  * @typedef {{ top: number, bottom: number, left: number, right: number }} PopupBounds
  * @typedef {{ x: number, y: number, maxHeight: number }} PopupPlacement
+ * A clicked point, and the rectangle of the clicked item when the popup must
+ * not cover more than the point (a Circular center definition).
+ * @typedef {{ x: number, y: number, avoid?: PopupBounds | null }} PopupAnchor
  */
 
 /** @returns {PopupBounds} */
@@ -45,9 +49,10 @@ const clamp = (/** @type {number} */ value, /** @type {number} */ min, /** @type
  * or above it, so it does not cover what was clicked. When no side has room
  * for most of it, it covers the point. `height` is the popup's expected
  * height (its content, at most the bounds); `maxHeight` keeps a popup placed
- * above the point from growing over it. Without a point it is centred.
+ * above the point from growing over it. Without a point it is centred. With
+ * `point.avoid`, the popup stays beside, below, or above that whole rectangle.
  * @param {{
- *   point: { x: number, y: number } | null,
+ *   point: PopupAnchor | null,
  *   width: number,
  *   height: number,
  *   bounds: PopupBounds,
@@ -67,14 +72,18 @@ export const placePopupNearPoint = ({ point, width, height, bounds, minHeight = 
   const at = (/** @type {number} */ x, /** @type {number} */ y, end = bottom) => ({ x, y, maxHeight: Math.max(0, end - y) });
   if (!point) return at(clamp((left + right - w) / 2, left, right - w), clamp((top + bottom - h) / 2, top, bottom - h));
   const { x: px, y: py } = point;
+  const avoid = {
+    left: Math.min(px, point.avoid?.left ?? px), right: Math.max(px, point.avoid?.right ?? px),
+    top: Math.min(py, point.avoid?.top ?? py), bottom: Math.max(py, point.avoid?.bottom ?? py)
+  };
   const besideY = clamp(py - h / 2, top, bottom - h);
-  const rightX = Math.max(left, px + gap);
+  const rightX = Math.max(left, avoid.right + gap);
   if (rightX + w <= right) return at(rightX, besideY);
-  const leftX = Math.min(right - w, px - gap - w);
+  const leftX = Math.min(right - w, avoid.left - gap - w);
   if (leftX >= left) return at(leftX, besideY);
   const x = clamp(px - w / 2, left, right - w);
-  const belowY = Math.max(top, py + gap);
-  const aboveEnd = Math.min(bottom, py - gap);
+  const belowY = Math.max(top, avoid.bottom + gap);
+  const aboveEnd = Math.min(bottom, avoid.top - gap);
   const below = bottom - belowY;
   const above = aboveEnd - top;
   const useBelow = below >= h || (above < h && below >= above);

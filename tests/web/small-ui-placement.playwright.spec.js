@@ -275,3 +275,21 @@ test('OV-384 the feature popup never covers the header buttons', async ({ browse
     await page.context().close();
   }
 });
+
+// OV-430: the closed Editor drawer lies right of the Result card. The card is
+// not a scroll container, so no scroll (a click's scroll-into-view, a focus)
+// moves the Result sideways out of reach.
+test('OV-430 the Result card cannot be scrolled sideways by the closed Editor drawer', async ({ browser }) => {
+  test.setTimeout(300000);
+  const page = await open(browser);
+  try {
+    const card = page.getByRole('region', { name: 'Result Preview', exact: true });
+    await expect(page.locator('.right-drawer[aria-hidden="true"]')).toHaveCount(1);
+    expect(await card.evaluate((element) => {
+      element.scrollLeft = 400;
+      return element.scrollLeft;
+    })).toBe(0);
+  } finally {
+    await page.context().close();
+  }
+});

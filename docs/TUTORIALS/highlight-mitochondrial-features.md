@@ -112,8 +112,9 @@ top, and put the legend on the right.
 
 ![Web-app settings for highlighted mitochondrial features and the D-loop bracket](../images/t-gui-10/presentation-settings.png)
 
-Select **Generate Diagram**. Open the result editor, choose **Features**, and
-load `presentation_label_overrides.tsv` with **Load Label TSV**. The editor
+Select **Generate Diagram**. Open the result editor, choose **Features**, open
+**Import / export**, and load `presentation_label_overrides.tsv` with
+**Load Label TSV** under **Labels**. The editor
 applies the two rRNA replacements and reflows their label placement. Close the
 editor.
 

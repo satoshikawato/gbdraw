@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
-const { evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, openApp, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 const { loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -477,7 +477,7 @@ const reloadSession = async (page, file, mode, legendSide) => {
   );
   await expect(sessionInput).toHaveCount(1);
   await sessionInput.setInputFiles(file);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 180000 });
+  await expectSessionLoadedWithoutWarnings(page, { timeout: 180000 });
   await page.waitForFunction(
     () => window.__GBDRAW_SESSION_IMPORT_COMPLETE__ !== null,
     null,

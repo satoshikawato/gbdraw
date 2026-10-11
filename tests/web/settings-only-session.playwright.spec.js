@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
-const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, assertDiagramWorkerIdle, generateAndWaitForResult, getDiagramWorkerActivity, openApp, reveal } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, assertDiagramWorkerIdle, generateAndWaitForResult, getDiagramWorkerActivity, openApp, reveal, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 const { capture, assertCoherent, settle } = require('./helpers/visual-state.cjs');
 const path = require('node:path');
 
@@ -51,6 +51,7 @@ const loadFile = async (page, file, message = 'Session loaded') => {
   await input.setInputFiles(file);
   if (typeof message === 'string') {
     await expect(page.locator('[data-app-notice]')).toContainText(message);
+    await expect(page.locator('[data-app-notice] li')).toHaveCount(0);
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
     return;
   }
@@ -158,7 +159,7 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
 
     const restored = await fresh();
     await restored.locator('input[accept^=".json,"]').setInputFiles(saved.file);
-    await expect(restored.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
+    await expectSessionLoadedWithoutWarnings(restored);
     await restored.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
     const after = await snapshot(restored);
     assertSourceFree(after);

@@ -109,29 +109,34 @@ export const labelDrawingBlocker = (feature, diagramOptions) => {
   return labelsEmbeddedOnly(diagramOptions) ? 'embedded_only' : '';
 };
 // Why the diagram draws no label for a feature (`labelAbsenceReason`): the one
-// table of sentences the popup note and the Label Not Shown dialog both render.
+// table of reasons, as the sentence the Label Not Shown dialog renders and the
+// few words of the popup note (UX-A03).
 export const LABEL_ABSENCE_REASONS = Object.freeze({
-  hidden: ' The feature is hidden.',
-  underlay: ' Labels are not drawn for features drawn as "Underlay".',
-  scope_none: ' Labels are set to "None" ("Show Labels" or "Label Mode"), so only a feature with Label visibility "On" has one.',
-  scope_first: ' "Show Labels" is "First Record Only", so labels are drawn only in the first record unless a feature has Label visibility "On".',
-  scope_orthogroup_top: ' "Show Labels" is "Top Similarity Group Record", so labels are drawn only for the features that setting selects, unless a feature has Label visibility "On".',
-  whitelist: ' A label whitelist is set, and labels are drawn only for the features it lists.',
-  blacklist: ' A label blacklist is set, and a label whose text contains one of its keywords is not drawn.',
-  embedded_only: ' With "Label Rendering" = "Embedded Only", a label is drawn only when it fits inside its feature.'
+  hidden: { sentence: ' The feature is hidden.', cause: 'the feature is hidden' },
+  underlay: { sentence: ' Labels are not drawn for features drawn as "Underlay".', cause: 'drawn as Underlay' },
+  scope_none: {
+    sentence: ' Labels are set to "None" ("Show Labels" or "Label Mode"), so only a feature with Label visibility "On" has one.',
+    cause: 'Show Labels = None'
+  },
+  scope_first: {
+    sentence: ' "Show Labels" is "First Record Only", so labels are drawn only in the first record unless a feature has Label visibility "On".',
+    cause: 'Show Labels = First Record Only'
+  },
+  scope_orthogroup_top: {
+    sentence: ' "Show Labels" is "Top Similarity Group Record", so labels are drawn only for the features that setting selects, unless a feature has Label visibility "On".',
+    cause: 'Show Labels = Top Similarity Group Record'
+  },
+  whitelist: { sentence: ' A label whitelist is set, and labels are drawn only for the features it lists.', cause: 'not in the label whitelist' },
+  blacklist: {
+    sentence: ' A label blacklist is set, and a label whose text contains one of its keywords is not drawn.',
+    cause: 'matches the label blacklist'
+  },
+  embedded_only: {
+    sentence: ' With "Label Rendering" = "Embedded Only", a label is drawn only when it fits inside its feature.',
+    cause: 'does not fit; Label Rendering = Embedded Only'
+  }
 });
 const LABEL_ABSENT_PREFIX = 'This feature has no label in the current Result.';
-// The popup's one-line note names the same reasons in a few words (UX-A03).
-export const LABEL_ABSENCE_CAUSES = Object.freeze({
-  hidden: 'the feature is hidden',
-  underlay: 'drawn as Underlay',
-  scope_none: 'Show Labels = None',
-  scope_first: 'Show Labels = First Record Only',
-  scope_orthogroup_top: 'Show Labels = Top Similarity Group Record',
-  whitelist: 'not in the label whitelist',
-  blacklist: 'matches the label blacklist',
-  embedded_only: 'does not fit; Label Rendering = Embedded Only'
-});
 // No reason found: the Show Labels scope and the label filters decide the rest.
 const LABEL_ABSENCE_UNKNOWN = ' The current Show Labels and label filter settings draw none.';
 
@@ -1237,13 +1242,13 @@ export const createFeatureLabelActions = ({
     } else if (!blocker) {
       return '';
     }
-    const cause = LABEL_ABSENCE_CAUSES[labelAbsenceReason(drawing, feature, diagramOptions)];
+    const cause = LABEL_ABSENCE_REASONS[labelAbsenceReason(drawing, feature, diagramOptions)]?.cause;
     return `No label shown${cause ? ` (${cause})` : ''}.${next}`;
   });
 
   // The Label Not Shown dialog: the same reason sentence as the popup note.
   const hiddenLabelTextMessage = computed(() => (
-    `${LABEL_ABSENT_PREFIX}${LABEL_ABSENCE_REASONS[hiddenLabelTextDialog.reason] || LABEL_ABSENCE_UNKNOWN}`
+    `${LABEL_ABSENT_PREFIX}${LABEL_ABSENCE_REASONS[hiddenLabelTextDialog.reason]?.sentence || LABEL_ABSENCE_UNKNOWN}`
     + ' The edited text will not appear unless you show this label.'
   ));
 

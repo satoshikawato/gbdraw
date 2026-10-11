@@ -409,6 +409,12 @@ export const createRecordDisplayControls = ({
       refreshCommittedRows();
       return { request: getCommittedRequest(), sources: sources.value, boundSources, matchesSavedSource };
     },
+    // The drawn records of the committed request, each with its File card
+    // (`sourceUid`) and its request record (`canonicalRecordKey`).
+    committedRecordRows: () => {
+      refreshCommittedRows();
+      return committedRows;
+    },
     rowsFor: (uid) => rows.value.filter((row) => row.sourceUid === uid),
     setTopology: (row, value) => {
       const drawing = state.activeDrawing();

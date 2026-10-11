@@ -3103,26 +3103,16 @@ export const createAppSetup = () => {
   // UJ-09 (Owner 2026-10-05): loading a Session replaces the work and clears
   // History, so every route that loads one asks first when History changed
   // since the last Save or Load. Cancel loads nothing.
-  const sessionReplaceDialog = reactive({ show: false, actionLabel: '' });
-  /** @type {(() => void) | null} */
-  let pendingSessionReplacement = null;
   /** @param {string} actionLabel @param {() => void} proceed */
   const confirmSessionReplacement = async (actionLabel, proceed) => {
-    if (!await history.hasChangesSinceSavePoint()) {
-      proceed();
-      return;
-    }
-    pendingSessionReplacement = proceed;
-    sessionReplaceDialog.actionLabel = actionLabel;
-    sessionReplaceDialog.show = true;
-  };
-  /** @param {'load' | 'cancel'} choice */
-  const resolveSessionReplacement = (choice) => {
-    const proceed = pendingSessionReplacement;
-    pendingSessionReplacement = null;
-    sessionReplaceDialog.show = false;
+    if (await history.hasChangesSinceSavePoint() && await askChoice({
+      title: 'Replace the current work?',
+      description: 'Loading a Session replaces the current settings and Results and clears Undo history. '
+        + 'Changes since the last Save Session or Load Session are lost.',
+      actions: [{ id: 'load', label: actionLabel, tone: 'primary' }]
+    }) !== 'load') return;
     // The file picker opens inside the click that confirmed.
-    if (choice === 'load') proceed?.();
+    proceed();
   };
   // The template's hidden file input (`ref="sessionInput"`).
   const sessionInput = ref(null);
@@ -3253,8 +3243,6 @@ export const createAppSetup = () => {
     updateLegendEntryColor,
     deleteLegendEntry,
     moveLegendEntry,
-    moveLegendEntryUp,
-    moveLegendEntryDown,
     sortLegendEntries,
     sortLegendEntriesByDefault,
     resetLegendPosition,
@@ -3810,8 +3798,9 @@ export const createAppSetup = () => {
     // 3. Mode.
     mode.value = nextMode;
     // 4. Transient UI. "Showing the last successful result" named the
-    // departing mode's Result.
+    // departing mode's Result, and the notice the departing mode's work.
     resetModeTransientUi();
+    noticeBanner.dismiss();
     previewFeatureSearch.switchModeSearch(previousMode, nextMode);
     failedGeneratePreservedResult.value = false;
     // 5. Presentation: the arriving Result is shown as a selection.
@@ -4656,7 +4645,8 @@ export const createAppSetup = () => {
         'Colors, color rules, and the palette',
         'Labels, Feature visibility, and Feature placements',
         'Legend names, deleted Legend rows, and Region Annotations',
-        'Linear record definitions, subtitles, regions, reverse complement, and alignment'
+        'Linear record definitions, subtitles, regions, reverse complement, and alignment',
+        'Linear comparisons, which turn off; their uploaded tables stay'
       ],
       note: 'Uploaded files, the records you chose, File defaults, and Depth files stay. Undo brings the settings back.',
       actions: [{ id: 'reset', label: 'Reset all settings', tone: 'danger' }],
@@ -4669,6 +4659,9 @@ export const createAppSetup = () => {
     const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
+    // A notice (a loaded Session's warnings, a table import) described the
+    // settings the reset replaces. Generate keeps it: it describes the Session.
+    noticeBanner.dismiss();
 
     // OV-287, OV-289, OV-290 (PD-OI-066): the displayed Result shows the
     // reset draft as the next Generate draws it. One projection of the editor
@@ -5331,12 +5324,16 @@ export const createAppSetup = () => {
     countLegendCaptionFeatures: featureActions.countLegendCaptionFeatures,
     getCommittedRequest: getCommittedCanonicalRenderRequest,
     readAlignmentInspector: () => similarityAlignmentActions.activePlanInspector.value,
+    readCommittedRecordRows: recordDisplayControls.committedRecordRows,
     readCircularReverseAvailable: () => circularSingleRecordPresentationEnabled.value,
     runUndoable: history.runUndoable,
     sessionBusy: sessionOperationAvailability,
     // The popup sits outside the app root that records the Legend panel's text
     // edits, so its rename records its own step.
-    renameLegendRow: undoableAction('Rename legend item', renameLegendEntry)
+    renameLegendRow: undoableAction('Rename legend item', renameLegendEntry),
+    legendRenameSettled: () => (legendRenameDialog.show ? new Promise((resolve) => {
+      const stop = watch(() => legendRenameDialog.show, (shown) => { if (!shown) { stop(); resolve(undefined); } });
+    }) : Promise.resolve())
   });
 
   const circularRecordSelectionEnabled = computed(() => semanticMutationAvailable.value
@@ -6733,8 +6730,7 @@ export const createAppSetup = () => {
       'Restore legend item', () => restoreDeletedLegendEntries([index])
     ),
     restoreAllDeletedLegendEntries: () => restoreLegendItems('Restore legend items', () => restoreDeletedLegendEntries(null)),
-    moveLegendEntryUp,
-    moveLegendEntryDown,
+    moveLegendEntry,
     legendReorder,
     handleLegendReorderKey,
     startLegendReorder,
@@ -6801,8 +6797,6 @@ export const createAppSetup = () => {
     closeExampleChooser,
     loadExampleSession,
     exampleSessionPending,
-    sessionReplaceDialog,
-    resolveSessionReplacement,
     choicePrompt: choicePrompt.prompt,
     resolveChoicePrompt: choicePrompt.resolve,
     notice: noticeBanner.notice,

@@ -1174,6 +1174,11 @@ def _load_current_session(page: Page, path: Path) -> None:
     expect(page.locator("[data-app-notice]")).to_contain_text(
         "Session loaded", timeout=ACTION_TIMEOUT_MS
     )
+    if page.locator("[data-app-notice] li").count():
+        raise AssertionError(
+            "Session reload showed warnings: "
+            f"{page.locator('[data-app-notice]').inner_text()}"
+        )
 
 
 def _set_history_marker(page: Page, marker: str) -> Any:

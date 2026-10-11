@@ -12,7 +12,8 @@ const {
   evaluateWithRetainedPromise,
   generateAndWaitForResult,
   getDiagramWorkerActivity,
-  openApp
+  openApp,
+  expectSessionLoadedWithoutWarnings,
 } = require('./helpers/app-lifecycle.cjs');
 
 const fixture = path.join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
@@ -26,7 +27,7 @@ const load = async (page, file) => {
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
   const error = await page.evaluate(() => window.__GBDRAW_APP__.errorLog);
   expect(error, `Load ${path.basename(file)} failed`).toBeNull();
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
+  await expectSessionLoadedWithoutWarnings(page);
 };
 
 const save = async (page, file) => {

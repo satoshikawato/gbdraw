@@ -5,7 +5,7 @@ const { promisify } = require('node:util');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { createHash } = require('node:crypto');
-const { CURRENT_REQUEST_SCHEMA, openApp, waitForAppShell, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, openApp, waitForAppShell, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 
@@ -83,7 +83,7 @@ const definitionLines = (page) => page.evaluate(() => {
 
 const loadDefinitionSession = async (page, path) => {
   await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
+  await expectSessionLoadedWithoutWarnings(page);
 };
 
 test('Linear automatic replicon names follow Generate and preserve saved subtitles', async ({ page }, testInfo) => {
@@ -1530,7 +1530,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
   await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120000 });
+  await expectSessionLoadedWithoutWarnings(page);
   expect(await page.evaluate(() => window.__GBDRAW_RECORD_RESOURCE_READS__)).toBe(0);
 
   await page.evaluate(() => {
@@ -1711,7 +1711,7 @@ test('Automatic Linear per-record rows survive fresh Load with contiguous biolog
   await restoredPage.getByRole('button', { name: 'Load Session' }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles(sessionPath);
-  await expect(restoredPage.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120000 });
+  await expectSessionLoadedWithoutWarnings(restoredPage);
 
   await expect(restoredPage.locator('[data-linear-record-card]')).toHaveCount(4);
   await restoredPage.getByRole('button', {
@@ -2056,7 +2056,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
   await page.locator('input[accept^=".json,"]').setInputFiles(sessionPath);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120000 });
+  await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(() => window.__GBDRAW_APP__?.losatCacheInfo?.length === 1);
   const restored = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
@@ -3341,7 +3341,7 @@ test('@comparison-contract File source order moves multi-record blocks through p
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
+  await expectSessionLoadedWithoutWarnings(page);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
     .map((seq) => seq.region_record_id))).toEqual(['LowerA', 'LowerB', 'LowerC', 'UpperA', 'UpperB']);
   await expect(page.locator('[data-linear-source-card]').nth(0)).toContainText('lower.gbff');

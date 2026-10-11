@@ -52,3 +52,14 @@ test('on a phone the popup covers the point at full height when no side holds mo
 test('without a point the popup is centred in the bounds', () => {
   assert.deepEqual(placePopupNearPoint({ point: null, width: 460, height: 400, bounds: desktop }), { x: 570, y: 312, maxHeight: 644 });
 });
+
+// A record definition popup leaves the whole clicked definition uncovered: a
+// click on the left of a Circular center text still opens it right of the text.
+test('a popup leaves the clicked item rectangle uncovered', () => {
+  const avoid = { left: 700, right: 900, top: 450, bottom: 560 };
+  const placed = placePopupNearPoint({ point: { x: 720, y: 500, avoid }, width: 400, height: 500, bounds: desktop });
+  assert.equal(placed.x, 912);
+  const narrow = { ...desktop, right: 1200 };
+  const left = placePopupNearPoint({ point: { x: 880, y: 500, avoid }, width: 400, height: 500, bounds: narrow });
+  assert.equal(left.x, 700 - 12 - 400);
+});

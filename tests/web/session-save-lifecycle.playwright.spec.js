@@ -305,4 +305,31 @@ test('Save Session is single-flight, paints pending state, and releases every se
     'session-save-pending-cleared'
   ]);
   await expect(saveButton).toBeEnabled();
+
+  // A Session file over 50 MB asks before its download (UX-A07): Cancel
+  // downloads nothing, Download saves. Every Blob reports 60 MB here.
+  await page.evaluate(() => {
+    const { get } = Object.getOwnPropertyDescriptor(Blob.prototype, 'size');
+    Object.defineProperty(Blob.prototype, 'size', {
+      configurable: true,
+      get() { return Math.max(get.call(this), 60 * 1024 * 1024); }
+    });
+  });
+  const large = page.getByRole('dialog', { name: 'Download a large Session?' });
+  for (const choice of ['Cancel', 'Download']) {
+    await resetSaveProbe(page);
+    await page.evaluate(() => { window.__GBDRAW_SAVE_PROMISES__ = [window.__GBDRAW_APP__.saveSessionWithTitle()]; });
+    await page.getByRole('dialog', { name: 'Download the Session again?' })
+      .getByRole('button', { name: 'Download again', exact: true }).click();
+    await expect(large).toContainText('The Session file is 60.0 MB.');
+    const downloaded = choice === 'Download' ? page.waitForEvent('download') : null;
+    await large.getByRole('button', { name: choice, exact: true }).click();
+    await expect(large).toHaveCount(0);
+    const status = await evaluateWithRetainedPromise(page, async () => (await window.__GBDRAW_SAVE_PROMISES__[0])?.status);
+    expect(status).toBe(choice === 'Download' ? 'saved' : 'canceled');
+    if (downloaded) await downloaded;
+    const probe = await saveProbe(page);
+    const canceled = probe.events.filter(({ name }) => name === 'session-save-download-canceled');
+    expect(canceled.map(({ reason }) => reason)).toEqual(choice === 'Download' ? [] : ['large-download']);
+  }
 });

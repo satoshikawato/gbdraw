@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
-const { CURRENT_SESSION_VERSION, evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_SESSION_VERSION, evaluateWithRetainedPromise, openApp, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const genbankPath = join(repoRoot, 'tests/test_inputs/HmmtDNA.gbk');
@@ -41,7 +41,7 @@ const saveSession = async (page, title) => {
 
 const importSession = async (page, path) => {
   await page.locator(sessionInputSelector).first().setInputFiles(path);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120000 });
+  await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
 };
 

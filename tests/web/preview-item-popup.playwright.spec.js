@@ -119,3 +119,77 @@ test('a record definition opens its popup; its edits write the record settings',
   await settle(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].record_subtitle || '')).not.toBe('Popup subtitle');
 });
+
+// A Circular record selected on its own draws its Record label, so the popup
+// edits that field (AB review F2), and the popup leaves the whole center
+// definition uncovered, not only the clicked point.
+test('a Circular center definition opens beside the definition and edits the Record label', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openFresh(page);
+  await loadSessionFile(page, HMMT_SESSION);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.circularSingleRecordPresentationEnabled)).toBe(true);
+
+  const definition = page.locator('.gbdraw-preview-surface [data-gbdraw-role^="record-definition"]').first();
+  const recordPoint = await clickCentre(definition.locator('text').first());
+  const dialog = popup(page);
+  await expect(dialog).toBeVisible();
+  await expectPlacedBeside(page, recordPoint);
+  await expect.poll(async () => {
+    const [a, b] = [await dialog.boundingBox(), await definition.boundingBox()];
+    return a.x >= b.x + b.width || a.x + a.width <= b.x || a.y >= b.y + b.height || a.y + a.height <= b.y;
+  }).toBe(true);
+
+  const before = await undoCount(page);
+  await dialog.getByLabel('Record label', { exact: true }).fill('Popup label');
+  await dialog.getByLabel('Record label', { exact: true }).press('Tab');
+  await settle(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.form.circular_record_label)).toBe('Popup label');
+  expect(await undoCount(page)).toBe(before + 1);
+});
+
+// A rename onto another row's name asks first; the popup keeps its row until
+// the choice, stays on it after Cancel, and follows it after Keep both (AB review F1).
+test('a Legend popup rename onto another name follows the row through the choice', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openFresh(page);
+  await loadSessionFile(page, HMMT_SESSION);
+  const target = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries
+    .map((entry) => entry.caption).find((caption) => caption !== 'tRNA'));
+  await clickCentre(legendRow(page, 'tRNA').locator('path').first());
+  const tRNA = page.getByRole('dialog', { name: 'Legend item: tRNA', exact: true });
+  const choice = page.getByRole('dialog').filter({ has: page.locator('#legend-rename-title') });
+
+  // The pointer still rests on the row: the "Turn on Layout edit" hover hint
+  // does not show over the popup the click opened.
+  await expect(tRNA).toBeVisible();
+  await expect(page.locator('.preview-layout-hint')).toBeHidden();
+
+  // The "Session loaded" notice stays readable above the popup, and its
+  // Dismiss closes the notice only.
+  const notice = page.locator('[data-app-notice]');
+  await expect(notice).toContainText('Session loaded');
+  expect((await tRNA.boundingBox()).y).toBeGreaterThanOrEqual((await notice.boundingBox()).y + (await notice.boundingBox()).height - 0.5);
+  await notice.getByRole('button', { name: 'Dismiss notice', exact: true }).click();
+  await expect(notice).toHaveCount(0);
+  await expect(tRNA).toBeVisible();
+  expect(await page.evaluate(() => document.activeElement?.classList.contains('result-pane'))).toBe(true);
+
+  const rename = async () => {
+    await tRNA.getByLabel('Legend name', { exact: true }).fill(target);
+    await tRNA.getByLabel('Legend name', { exact: true }).press('Enter');
+    await expect(choice).toBeVisible();
+    await expect(tRNA).toBeVisible();
+  };
+
+  await rename();
+  await choice.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(choice).toHaveCount(0);
+  await expect(tRNA).toBeVisible();
+
+  await rename();
+  const keepBoth = choice.getByRole('button', { name: /^Keep both: name it / });
+  const suffix = (await keepBoth.innerText()).match(/"(.+)"/)[1];
+  await keepBoth.click();
+  await settle(page);
+  await expect(page.getByRole('dialog', { name: `Legend item: ${suffix}`, exact: true })).toBeVisible();
+});

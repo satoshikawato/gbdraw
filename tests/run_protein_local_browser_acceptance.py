@@ -298,6 +298,9 @@ def integration_import(page, fixture):
     page.locator('[data-app-notice]').filter(has_text='Session loaded').wait_for(
         state='visible', timeout=120_000
     )
+    assert page.locator('[data-app-notice] li').count() == 0, (
+        page.locator('[data-app-notice]').inner_text()
+    )
     page.wait_for_function('() => window.__GBDRAW_APP__.results.length > 0')
 
 

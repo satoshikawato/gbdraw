@@ -415,7 +415,8 @@ const clickedFeature = ref(null); // {id, svg_id, label, location, color, feat}
 // A popup's position. A popup opened at a clicked point keeps that `anchor`
 // until it is placed with its rendered size (OV-371); `maxHeight` (0: none)
 // keeps a popup placed above the point from growing over it.
-/** @typedef {{ x: number, y: number, maxHeight: number, anchor: { x: number, y: number } | null }} PopupPosition */
+/** @import { PopupAnchor } from './utils/popup-bounds.js' */
+/** @typedef {{ x: number, y: number, maxHeight: number, anchor: PopupAnchor | null }} PopupPosition */
 const clickedFeaturePos = /** @type {PopupPosition} */ (reactive({ x: 0, y: 0, maxHeight: 0, anchor: null }));
 const clickedPairwiseMatch = ref(null); // {title, subtitle, sections}
 const clickedPairwiseMatchPos = /** @type {PopupPosition} */ (reactive({ x: 0, y: 0, maxHeight: 0, anchor: null }));

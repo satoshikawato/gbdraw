@@ -347,6 +347,10 @@ def _import_session(page: Any, path: Path, checks: AcceptanceChecks) -> None:
     page.locator("[data-app-notice]").filter(has_text="Session loaded").wait_for(
         state="visible", timeout=120_000
     )
+    checks.require(
+        page.locator("[data-app-notice] li").count() == 0,
+        f"Import notice carried warnings: {page.locator('[data-app-notice]').inner_text()!r}",
+    )
     page.wait_for_function(
         """() => {
           const app = window.__GBDRAW_APP__;

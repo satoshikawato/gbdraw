@@ -226,15 +226,20 @@ export const createFeatureSvgActions = ({
   };
 
   // OV-371: a popup opened at a clicked point is placed beside it with an
-  // expected size; app-setup places it again with its rendered size.
+  // expected size; app-setup places it again with its rendered size. `avoid`
+  // is the clicked item's rectangle, which the popup leaves uncovered.
   /**
    * @param {PopupPosition} pos
    * @param {{ clientX?: number, clientY?: number } | null | undefined} eventLike
    * @param {number} width
+   * @param {DOMRect | null} [avoid]
    */
-  const placePopupAt = (pos, eventLike, width) => {
+  const placePopupAt = (pos, eventLike, width, avoid = null) => {
     const anchor = Number.isFinite(eventLike?.clientX) && Number.isFinite(eventLike?.clientY)
-      ? { x: Number(eventLike?.clientX), y: Number(eventLike?.clientY) }
+      ? {
+          x: Number(eventLike?.clientX), y: Number(eventLike?.clientY),
+          avoid: avoid && { left: avoid.left, top: avoid.top, right: avoid.right, bottom: avoid.bottom }
+        }
       : null;
     Object.assign(pos, placePopupNearPoint({ point: anchor, width, height: 520, bounds: popupViewportBounds() }), { anchor });
   };
@@ -788,7 +793,7 @@ export const createFeatureSvgActions = ({
     const opened = { previewItem: item, matchesReady: item.kind !== 'legend-entry' };
     clickedPairwiseMatch.value = opened;
     // The preview-item popup is 400 px wide (`.preview-item-popup`).
-    placePopupAt(clickedPairwiseMatchPos, anchor, 400);
+    placePopupAt(clickedPairwiseMatchPos, anchor, 400, rect);
     if (item.kind === 'legend-entry') {
       const openedKey = item.key;
       reportRuleRunFailure(state, 'feature-extraction', () => runWhenPrepared(

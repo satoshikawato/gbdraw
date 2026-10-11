@@ -438,6 +438,8 @@ export const setupGlobalUiEvents = ({
       && !e.target.closest('.pairwise-match-popup')
       && !e.target.closest('.label-popup')
       && !e.target.closest('[data-similarity-alignment-overlay]')
+      // The notice banner's Dismiss is not a click on the diagram.
+      && !e.target.closest('[data-app-notice]')
     ) {
       if (clickedFeature.value) clickedFeature.value = null;
       if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;

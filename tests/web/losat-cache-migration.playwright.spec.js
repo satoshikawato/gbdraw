@@ -9,7 +9,7 @@ const {
 const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
-const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const fixtureDir = join(repoRoot, 'tests', 'fixtures', 'sessions');
@@ -39,7 +39,7 @@ const readSession = (path) => JSON.parse(expandedSessionBytes(path).toString('ut
 
 const importSession = async (page, path) => {
   await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120000 });
+  await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(() => {
     const app = window.__GBDRAW_APP__;
     return app?.mode === 'linear' && app?.linearSeqs?.length === 5;

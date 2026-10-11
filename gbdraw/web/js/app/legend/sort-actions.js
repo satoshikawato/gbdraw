@@ -32,8 +32,8 @@ export const createLegendSortActions = ({ state, showLegendStructure }) => {
   /** @param {DrawingState} drawing */
   const getVisibleLegendOrder = (drawing) => drawing.legendEntries.value.map((entry) => entry.caption).filter(Boolean);
 
-  // Moves the row at `from` to `to` (the Legend panel's arrows, its drag
-  // handle, and the handle's arrow keys).
+  // Moves the row at `from` to `to` (the Legend panel's drag handle and the
+  // handle's arrow keys).
   /** @param {number} from @param {number} to */
   const moveLegendEntry = (from, to) => {
     const drawing = state.activeDrawing();
@@ -45,11 +45,6 @@ export const createLegendSortActions = ({ state, showLegendStructure }) => {
     nextOrder.splice(to, 0, ...nextOrder.splice(from, 1));
     applyLegendEntryOrder(drawing, nextOrder);
   };
-
-  /** @param {number} idx */
-  const moveLegendEntryUp = (idx) => moveLegendEntry(idx, idx - 1);
-  /** @param {number} idx */
-  const moveLegendEntryDown = (idx) => moveLegendEntry(idx, idx + 1);
 
   const sortLegendEntries = (direction = 'asc') => {
     const drawing = state.activeDrawing();
@@ -100,8 +95,6 @@ export const createLegendSortActions = ({ state, showLegendStructure }) => {
 
   return {
     moveLegendEntry,
-    moveLegendEntryDown,
-    moveLegendEntryUp,
     sortLegendEntries,
     sortLegendEntriesByDefault
   };

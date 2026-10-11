@@ -108,7 +108,7 @@ import { createZipBlob } from '../utils/zip.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import { cloneJsonData, cloneJsonValue } from '../services/json-clone.js';
 import { bytesToBase64, bytesToText } from '../services/byte-utils.js';
-import { downloadBlob, downloadTextFile } from '../services/text-download.js';
+import { askBeforeLargeDownload, downloadBlob, downloadTextFile } from '../services/text-download.js';
 import {
   normalizeCircularPlotTitlePosition,
   normalizeLinearPlotTitlePosition
@@ -1530,11 +1530,10 @@ export const createRunAnalysis = ({
       (sum, file) => sum + String(file.data ?? '').length,
       0
     );
-    if (totalChars > 50 * 1024 * 1024 && await askChoice({
+    if (totalChars > 50 * 1024 * 1024 && !await askBeforeLargeDownload(askChoice, {
       title: 'Download large reproducibility files?',
-      description: `The ZIP holds about ${(totalChars / (1024 * 1024)).toFixed(1)} MB of input and helper files.`,
-      actions: [{ id: 'download', label: 'Download', tone: 'primary' }]
-    }) !== 'download') return;
+      description: `The ZIP holds about ${(totalChars / (1024 * 1024)).toFixed(1)} MB of input and helper files.`
+    })) return;
     downloadBlob(createZipBlob(materializedFiles), latestCliHelperArchiveName);
   };
 
@@ -5790,11 +5789,10 @@ export const createRunAnalysis = ({
       hydratedEntries.map((item) => item.hydrated)
     );
 
-    if (losatExportBytesExceedLimit(totalBytes) && await askChoice({
+    if (losatExportBytesExceedLimit(totalBytes) && !await askBeforeLargeDownload(askChoice, {
       title: 'Download large LOSAT tables?',
-      description: `The raw LOSAT TSV files total about ${(totalBytes / (1024 * 1024)).toFixed(1)} MB.`,
-      actions: [{ id: 'download', label: 'Download', tone: 'primary' }]
-    }) !== 'download') return;
+      description: `The raw LOSAT TSV files total about ${(totalBytes / (1024 * 1024)).toFixed(1)} MB.`
+    })) return;
 
     for (const { entry, idx, hydrated } of hydratedEntries) {
       const filename = entry.filename || `losat_pair_${idx + 1}.tsv`;

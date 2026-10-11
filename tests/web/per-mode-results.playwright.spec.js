@@ -238,7 +238,8 @@ const LEGEND_EDITS = [
     name: 'a moved row',
     edit: (page) => page.evaluate(() => {
       const app = window.__GBDRAW_APP__;
-      app.moveLegendEntryUp(app.legendEntries.findIndex((entry) => entry.caption === 'repeat_region'));
+      const index = app.legendEntries.findIndex((entry) => entry.caption === 'repeat_region');
+      app.moveLegendEntry(index, index - 1);
     }),
     byDefault: CIRCULAR_ROWS
   }

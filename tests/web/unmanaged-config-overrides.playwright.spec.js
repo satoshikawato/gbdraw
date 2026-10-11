@@ -7,7 +7,8 @@ const {
   evaluateWithRetainedPromise,
   generateAndWaitForResult,
   openApp,
-  waitForAppShell
+  waitForAppShell,
+  expectSessionLoadedWithoutWarnings,
 } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -69,6 +70,7 @@ test('GUI-unmanaged config survives disclosure, Generate, save/reload, reset, an
   expect(await loadSessionPayload(page, preservedSession)).toContain(
     'Session loaded: unmanaged-config.gbdraw-session.json'
   );
+  await expect(page.locator('[data-app-notice] li')).toHaveCount(0);
   const disclosure = page.locator('[data-unmanaged-config-override]');
   await expect(disclosure).toHaveCount(1);
   await expect(disclosure).toContainText(unmanagedPath);
@@ -99,7 +101,7 @@ test('GUI-unmanaged config survives disclosure, Generate, save/reload, reset, an
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
   await page.locator('input[accept^=".json,"]').first().setInputFiles(saved.path);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 180000 });
+  await expectSessionLoadedWithoutWarnings(page, { timeout: 180000 });
   await expect(disclosure).toContainText(unmanagedPath);
 
   await disclosure.getByRole('button', { name: `Reset preserved setting ${unmanagedPath}` })

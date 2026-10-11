@@ -73,6 +73,7 @@ test('unsafe keys, malformed JSON/gzip, fatal UTF-8 and Worker crash preserve th
   await openApp(page);
   await load(page, baseline);
   await expect(page.locator('[data-app-notice]')).toContainText('Session loaded: session.json', { timeout: 120_000 });
+  await expect(page.locator('[data-app-notice] li')).toHaveCount(0);
   await retained(page);
   for (const [index, buffer] of [Buffer.from('{"nested":{"__proto__":{}}}'), Buffer.from('{private broken'),
     Buffer.from([0xff]), Buffer.from([0x1f, 0x8b, 1, 2, 3]), gzipSync(Buffer.from([0xc3]))].entries()) {

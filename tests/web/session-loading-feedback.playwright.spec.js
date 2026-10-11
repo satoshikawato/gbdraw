@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync, gzipSync } = require('node:zlib');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { openApp, expectSessionLoadedWithoutWarnings, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { installImportReadGate } = require('./helpers/session-import-gate.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -50,7 +50,7 @@ const galleryV30Session = (edit = () => {}) => {
 
 const loadBaselineSession = async (page) => {
   await page.locator(sessionInputSelector).setInputFiles(baselineSession);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
+  await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(() => (
     window.__GBDRAW_APP__?.sessionTitle === 'HmmtDNA_basic_circular'
   ));
@@ -160,6 +160,7 @@ test('session loading is painted before import work and prevents duplicate adopt
   await expect(sessionInput).toHaveValue('');
   expect(dialogs).toEqual([]);
   await expect(notice).toContainText(`Session loaded: ${replacementSession.name}`, { timeout: 120_000 });
+  await expect(page.locator('[data-app-notice] li')).toHaveCount(0);
   const after = await importSnapshot(page);
   expect(after.title).toBe('lambda_basic_linear');
   expect(after.mode).toBe('linear');
@@ -179,6 +180,7 @@ test('session loading is painted before import work and prevents duplicate adopt
   ));
   expect(dialogs).toEqual([]);
   await expect(notice).toContainText(`Session loaded: ${replacementSession.name}`, { timeout: 120_000 });
+  await expect(page.locator('[data-app-notice] li')).toHaveCount(0);
   await expect(sessionInput).toHaveValue('');
 });
 
@@ -378,7 +380,7 @@ test('Load Session asks before it replaces work changed since the last Save or L
   await confirm.getByRole('button', { name: 'Load Session', exact: true }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles(baselineSession);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
+  await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending === false);
   await expect.poll(undoCount).toBe(0);
   await expect(prefix).not.toHaveValue('unsaved-work');
@@ -437,7 +439,7 @@ const expectExampleFitted = (page) => expect.poll(() => exampleFit(page))
   .toEqual({ inside: true, zoomChanged: true });
 const acceptLoadedSession = async (page, title) => {
   return async () => {
-    await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
+    await expectSessionLoadedWithoutWarnings(page);
     await page.waitForFunction((expected) => (
       window.__GBDRAW_APP__?.sessionImportPending === false
       && window.__GBDRAW_APP__.sessionTitle === expected
@@ -614,4 +616,28 @@ test('the first feature popup after a Session load says it is preparing and keep
   await expect(page.locator('.feature-popup')).toBeVisible({ timeout: 180_000 });
   await expect(preparing).toHaveCount(0);
   expect(await page.evaluate(() => Boolean(window.__GBDRAW_APP__.clickedPairwiseMatch))).toBe(false);
+});
+
+// The Load notice describes the loaded Session: Generate keeps it; a mode
+// switch and Reset Settings, which replace what it describes, clear it. A
+// live region that is always rendered announces it.
+test('the Load notice stays across Generate and clears on a mode switch and Reset Settings', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openApp(page);
+  await loadBaselineSession(page);
+  const notice = page.locator('[data-app-notice]');
+  await expect(page.locator('[data-app-notice-announcer]')).toHaveText(/^Session loaded/);
+  await generateAndWaitForResult(page);
+  await expect(notice).toContainText('Session loaded');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.setDiagramMode('linear'))).toEqual({ status: 'ok' });
+  await expect(notice).toHaveCount(0);
+  await expect(page.locator('[data-app-notice-announcer]')).toHaveCount(1);
+
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.setDiagramMode('circular'))).toEqual({ status: 'ok' });
+  await loadBaselineSession(page);
+  await page.evaluate(() => { window.__GBDRAW_APP__.requestResetSettings(); });
+  const reset = page.getByRole('dialog', { name: 'Reset all settings?', exact: true });
+  await expect(reset).toContainText('Linear comparisons, which turn off; their uploaded tables stay');
+  await reset.getByRole('button', { name: 'Reset all settings', exact: true }).click();
+  await expect(notice).toHaveCount(0);
 });

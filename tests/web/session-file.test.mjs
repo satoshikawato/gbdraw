@@ -6,7 +6,7 @@ const {
   compressSessionData,
   largeSessionDownloadMegabytes
 } = await import('../../gbdraw/web/js/services/session-file.js');
-const { downloadBlob } = await import('../../gbdraw/web/js/services/text-download.js');
+const { askBeforeLargeDownload, downloadBlob } = await import('../../gbdraw/web/js/services/text-download.js');
 
 const compressedJsonText = async (value) => gunzipSync(
   Buffer.from(await (await compressSessionData(value)).arrayBuffer())
@@ -106,6 +106,16 @@ const largeBlob = new Blob(
 assert.equal(largeSessionDownloadMegabytes(largeBlob).toFixed(1), '50.5');
 assert.equal(largeSessionDownloadMegabytes(new Blob([new Uint8Array(1024)])), null);
 assert.throws(() => largeSessionDownloadMegabytes('not a blob'), TypeError);
+
+// The question of every large download (Session, LOSAT tables, CLI helper
+// files): one Download action; only Download downloads, Cancel and Escape
+// (`cancel`) do not.
+const asked = [];
+const askAnswering = (answer) => async (request) => { asked.push(request); return answer; };
+const question = { title: 'Download a large Session?', description: 'The Session file is 50.5 MB.' };
+assert.equal(await askBeforeLargeDownload(askAnswering('download'), question), true);
+assert.equal(await askBeforeLargeDownload(askAnswering('cancel'), question), false);
+assert.deepEqual(asked[0], { ...question, actions: [{ id: 'download', label: 'Download', tone: 'primary' }] });
 
 let downloadedBlob = null;
 let downloadedName = null;

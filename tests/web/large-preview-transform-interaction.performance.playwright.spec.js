@@ -5,7 +5,8 @@ const os = require('node:os');
 const { join, resolve } = require('node:path');
 const {
   getDiagramWorkerActivity,
-  openApp
+  openApp,
+  expectSessionLoadedWithoutWarnings,
 } = require('./helpers/app-lifecycle.cjs');
 const {
   aggregateResponsivenessSamples,
@@ -773,7 +774,7 @@ const loadExactSession = async (page, { browserFetch = false } = {}) => {
   await page.evaluate(() => new Promise((resolveFrame) => (
     requestAnimationFrame(() => requestAnimationFrame(resolveFrame))
   )));
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
+  await expectSessionLoadedWithoutWarnings(page);
 };
 
 const openExactApp = async (page, { structural = false } = {}) => {

@@ -585,7 +585,15 @@ const assertSingleWorkerRun = async (page) => {
   return activity;
 };
 
+// A Session Load succeeded with no warning: the notice says "Session loaded"
+// and lists nothing (each warning of a Load is one list item of the notice).
+const expectSessionLoadedWithoutWarnings = async (page, { timeout = 120_000 } = {}) => {
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout });
+  await expect(page.locator('[data-app-notice] li')).toHaveCount(0);
+};
+
 module.exports = {
+  expectSessionLoadedWithoutWarnings,
   CURRENT_FEATURE_CATALOG_SCHEMA,
   CURRENT_REQUEST_SCHEMA,
   CURRENT_SESSION_VERSION,

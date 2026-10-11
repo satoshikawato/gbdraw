@@ -162,7 +162,9 @@ either dialog saves nothing. When the download starts, a notice above the Result
 names the file. **Load Session** accepts `.gbdraw-session.json` and
 `.gbdraw-session.json.gz` files; after a load, the notice names the loaded file
 and lists any warnings about older Session content. Dismiss the notice with its
-close button; the next notice replaces it. On gbdraw.app, **Load example** in the header
+close button; the next notice replaces it. Generate keeps it, since it describes
+the loaded Session; **Reset Settings** and a switch between Circular and Linear
+clear it. Popups open below the notice, so it stays readable. On gbdraw.app, **Load example** in the header
 and **Load an example** in the empty Preview list the Gallery examples and load
 the chosen one's Session, asking first when the current work has unsaved
 changes. The local `gbdraw gui` ships no Gallery and shows neither button.
@@ -883,7 +885,8 @@ when the feature has no gene), the product on up to two lines when it differs,
 and `<record ID> · <location> (<strand>)` with thousands separators; parts of a
 split location are separated by `; `.
 
-**Edit** has three groups. **Appearance** changes the current Result:
+**Edit** has three groups. **Appearance** changes the current Result, as its
+heading says (**Updates the current Result**):
 **Fill Color**, **Stroke**, the **Label** row (label text, **Label visibility**,
 and **Apply Label** on one line), **Feature visibility**, and **Legend name**,
 which can also be chosen from the legend rules. When the feature has no label,
@@ -936,9 +939,13 @@ choice for a name another row uses, and **Remove from legend** moves the row to 
 the left, or the Circular center text) opens the record popup. It lists the
 **Accession**, **Organism**, **Length**, **Reverse complement**, **Display start**, and
 **Region** of the displayed Result and, in Linear, its **Alignment**. Its
-definition text fields and **Reverse complement** write the same settings as
-the record's sidebar fields and apply on Generate; **Show in settings**
-opens and focuses those fields. Each edit is one **Undo** step. With **Layout
+definition text fields and **Reverse complement** write the settings the
+Result's definition comes from and apply on Generate: in Linear, the record's
+File card fields; in Circular, **Record label** and **Subtitle** when one record
+is selected, otherwise **Species** and **Strain**. **Show in settings** opens and
+focuses the first of those fields. When a Linear file's records cannot be told
+apart by their record ID, the popup lists the facts only and points to the File
+card. Each edit is one **Undo** step. With **Layout
 edit** on, a press on these items drags them instead. The comparison legend
 opens no popup. Both popups open beside the clicked item and stay below the
 app header, as the feature popup does.
@@ -1009,11 +1016,7 @@ feature has one, the product, the location, the **Visibility** checkbox, and
 to its feature type and, for a labelled feature, its label text field. **Import
 / export** under the list holds **Export Label TSV**, **Load Label TSV**, and
 **Reset Label Edits** under **Labels**, and the Feature Edits TSV actions under
-**Features**. The Legend tab lists one row per entry: a grip, the swatch, the
-caption, stroke options, and remove. Drag a row by its grip, or focus the grip
-and press the Up or Down arrow, to move it; each move is one **Undo** step.
-**Reset position** and **Reset strokes** sit with the sort buttons above the
-rows. Each row's **Visibility** checkbox shows whether the
+**Features**. Each row's **Visibility** checkbox shows whether the
 feature is drawn; checking it sets the feature's **Feature visibility** to
 **On**, which beats the feature types and the visibility rules, and unchecking
 it sets **Off**. To return a feature to **Default**, use its popup. **Edit** and
@@ -1026,6 +1029,12 @@ not have are removed; an edit that replaces every label with the same text
 stays. An edit of a feature outside the crop stays and applies again when the
 feature is drawn. When other edits name a feature that the source does not
 have, the notice above the diagram offers **Remove N unmatched feature edits**.
+
+The Legend tab lists one row per entry: a grip, the swatch, the caption, stroke
+options, and **Remove from legend**. Drag a row by its grip, or focus the grip
+and press the Up or Down arrow, to move it; each move is one **Undo** step.
+**Reset position** and **Reset strokes** sit with the sort buttons above the
+rows.
 
 **Region Annotations → Selected features** makes one annotation per selected
 feature that names the source feature the same way; the editor shows it as
@@ -1158,7 +1167,8 @@ it was: a setting that was not set, such as a track slot side or the Circular
 multi-record legend position, stays unset. **Reset Settings** is broader than undo and asks
 first; its dialog lists what it resets and what stays, and **Reset all settings** applies it. Every Legend rename, of a feature row or a track row such as GC content, returns
 to the caption Python draws. In Linear it also clears each record's **Definition**, **Subtitle**,
-crop, and reverse complement, and the comparison alignment plan; the Files, each
+crop, and reverse complement, and the comparison alignment plan, and turns the
+Linear comparisons off (their uploaded tables stay); the Files, each
 row's selected record, the file defaults, and Depth assignments stay. **Undo**
 restores them. Generate when the exported figure should include draft settings.
 

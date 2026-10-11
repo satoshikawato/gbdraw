@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
-const { evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, openApp, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const genbankPath = join(repoRoot, 'tests/test_inputs/HmmtDNA.gbk');
@@ -311,7 +311,7 @@ test('Arrow controls render in both modes and survive a session round trip', asy
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120000 });
+  await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(
     () => (
       window.__GBDRAW_APP__?.mode === 'linear'

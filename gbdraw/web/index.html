@@ -892,6 +892,10 @@
             font-size: 12px;
             line-height: 1.3;
         }
+        /* Empty, the line takes no space; its status stays a live region. */
+        .preview-feature-search .gfs-status-line.is-empty {
+            margin-top: 0;
+        }
         .preview-feature-search .gfs-count {
             flex: none;
             color: #1e293b;
@@ -5199,9 +5203,9 @@
              @mousedown="startResizing"
              title="Drag to resize"></div>
 
-        <div class="result-pane flex-1 space-y-4 flex flex-col h-full overflow-y-auto min-w-0">
+        <div class="result-pane flex-1 space-y-4 flex flex-col h-full overflow-y-auto min-w-0 focus:outline-none" tabindex="-1">
             <!-- UX-A07, UX-C12: the outcome of Load Session, Save Session, or a table import or export; warnings as a list -->
-            <div v-if="notice.text" data-app-notice role="status" aria-live="polite"
+            <div v-if="notice.text" data-app-notice
                  :class="['app-notice', notice.tone === 'warning' ? 'is-warning' : 'is-info']">
                 <i :class="notice.tone === 'warning' ? 'ph ph-warning' : 'ph ph-check-circle'" aria-hidden="true"></i>
                 <div class="min-w-0 flex-1 break-words">
@@ -5210,7 +5214,7 @@
                         <li v-for="(item, index) in notice.items" :key="index">{{ item }}</li>
                     </ul>
                 </div>
-                <button type="button" data-history-ignore @click="dismissNotice" class="app-notice-dismiss" title="Dismiss" aria-label="Dismiss notice">
+                <button type="button" data-history-ignore @click="$event.currentTarget.closest('.result-pane')?.focus({ preventScroll: true }); dismissNotice()" class="app-notice-dismiss" title="Dismiss" aria-label="Dismiss notice">
                     <i class="ph ph-x" aria-hidden="true"></i>
                 </button>
             </div>
@@ -5241,7 +5245,7 @@
                 </div>
             </operation-error>
 
-            <div v-if="results.length > 0" role="region" aria-label="Result Preview" :class="{ 'alignment-review-compact': similarityAlignmentCompact && similarityAlignmentDialogOpen }" class="card p-0 flex flex-col flex-grow overflow-hidden relative">
+            <div v-if="results.length > 0" role="region" aria-label="Result Preview" :class="{ 'alignment-review-compact': similarityAlignmentCompact && similarityAlignmentDialogOpen }" class="card p-0 flex flex-col flex-grow overflow-clip relative">
                 <div class="card-header mb-0 py-2 pl-5 pr-6 border-b border-slate-200 flex justify-between items-center shrink-0 flex-wrap gap-x-2 gap-y-1">
                     <div class="flex items-center gap-3 flex-wrap min-w-0">
                         <h2 class="flex items-center gap-2 text-[15px] font-semibold text-slate-800 min-w-0">
@@ -5443,7 +5447,7 @@
                                     title="Clear search"
                                     aria-label="Clear search">Clear</button>
                         </div>
-                        <div v-show="previewFeatureSearchStatusText || previewFeatureSearchActiveDetail" class="gfs-status-line">
+                        <div class="gfs-status-line" :class="{ 'is-empty': !previewFeatureSearchStatusText && !previewFeatureSearchActiveDetail }">
                             <span class="gfs-count" role="status" aria-label="Feature search status">{{ previewFeatureSearchStatusText }}</span>
                             <span v-if="previewFeatureSearchActiveDetail" class="gfs-match-detail" :title="previewFeatureSearchActiveDetail">{{ previewFeatureSearchActiveDetail }}</span>
                         </div>
@@ -5576,8 +5580,10 @@
                          :style="featureSelectionMarqueeStyle"></div>
 
                     <!-- Zoom and Canvas controls -->
-                    <!-- Preview-only target hint; the toolbar also explains keyboard/touch activation. -->
-                    <div v-if="svgContent && !layoutRepositionMode" class="preview-layout-hint drag-hint absolute top-4 left-4 bg-white/90 shadow rounded-lg px-4 py-2 z-20 border border-slate-200" aria-hidden="true">
+                    <!-- Preview-only target hint; the toolbar also explains keyboard/touch activation.
+                         CSS shows it while a layout target is hovered; a popup that a click on that target
+                         opened (a Legend row, a record definition) hides it. -->
+                    <div v-if="svgContent && !layoutRepositionMode && !clickedPairwiseMatch && !clickedFeature" class="preview-layout-hint drag-hint absolute top-4 left-4 bg-white/90 shadow rounded-lg px-4 py-2 z-20 border border-slate-200" aria-hidden="true">
                         <p class="text-sm text-slate-600">Turn on Layout edit to move this item</p>
                     </div>
 
@@ -5706,7 +5712,7 @@
                         <div class="feature-popup-body custom-scrollbar" data-nodrag="true">
                         <div v-if="!richFeaturePopup || clickedFeature.activeTab === 'edit'" class="space-y-3">
                         <section aria-labelledby="feature-popup-appearance-heading" data-feature-popup-group="appearance">
-                            <h3 id="feature-popup-appearance-heading" class="feature-popup-heading">Appearance</h3>
+                            <h3 id="feature-popup-appearance-heading" class="feature-popup-heading">Appearance <span class="ui-hint font-normal normal-case tracking-normal" data-feature-popup-live-marker>Updates the current Result</span></h3>
                             <div class="feature-popup-grid">
                         <div>
                             <label class="text-xs font-medium text-slate-500 block mb-1">Fill Color</label>
@@ -6267,11 +6273,12 @@
                                                    class="form-checkbox"> Reverse complement
                                         </label>
                                     </section>
-                                    <div class="match-actions">
+                                    <div v-if="previewItemView.draft" class="match-actions">
                                         <button type="button" class="match-link" @click="showPreviewRecordSettings(previewItemView)">
                                             Show in settings
                                         </button>
                                     </div>
+                                    <p v-else class="match-muted" data-preview-record-unmatched>Edit this record in its File card in the sidebar.</p>
                                 </div>
                                 <p v-else class="match-muted">This item is no longer in the diagram.</p>
                             </template>
@@ -7904,19 +7911,6 @@
                 </p>
             </section>
         </div>
-        <!-- UJ-09: loading a Session asks before it replaces unsaved work -->
-        <choice-dialog v-if="sessionReplaceDialog.show" labelledby="session-replace-title" describedby="session-replace-description"
-             @cancel="resolveSessionReplacement('cancel')" @keydown.tab="trapDialogFocus"
-             class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
-            <h2 id="session-replace-title" class="text-base font-bold text-slate-800">Replace the current work?</h2>
-            <p id="session-replace-description" class="mt-2 text-sm leading-relaxed text-slate-600">
-                Loading a Session replaces the current settings and Results and clears Undo history. Changes since the last Save Session or Load Session are lost.
-            </p>
-            <div class="mt-4 flex justify-end gap-2">
-                <button type="button" data-history-ignore @click="resolveSessionReplacement('cancel')" class="btn btn-secondary btn-sm">Cancel</button>
-                <button type="button" data-history-ignore @click="resolveSessionReplacement('load')" class="btn btn-primary btn-sm">{{ sessionReplaceDialog.actionLabel }}</button>
-            </div>
-        </choice-dialog>
         <!-- D-54: Generate asks about pairs set to Upload BLAST TSV without a file -->
         <choice-dialog v-if="missingBlastTsvDialog.show" :busy="dialogChoicePending" labelledby="missing-blast-tsv-title" describedby="missing-blast-tsv-description"
              @cancel="resolveMissingBlastTsv('cancel')" @keydown.tab="trapDialogFocus"
@@ -8041,7 +8035,9 @@
                 </button>
             </div>
         </choice-dialog>
-        <!-- UX-A07: the app's confirmations (Reset Settings, a risky color rule pattern, a repeated or large download) -->
+        <!-- The notice banner's live region: always rendered, so a screen reader announces each new notice. -->
+        <p class="sr-only" role="status" aria-live="polite" data-app-notice-announcer>{{ notice.text }}<template v-for="(item, index) in notice.items" :key="index"> {{ item }}</template></p>
+        <!-- UX-A07: the app's confirmations (Reset Settings, replacing unsaved work with a Session, a risky color rule pattern, a repeated or large download) -->
         <choice-dialog v-if="choicePrompt.show" labelledby="choice-prompt-title" describedby="choice-prompt-description"
              data-choice-prompt
              @cancel="resolveChoicePrompt('cancel')" @keydown.tab="trapDialogFocus"

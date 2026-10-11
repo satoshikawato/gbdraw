@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 const { join, resolve } = require('node:path');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -265,7 +266,7 @@ test('frozen v39 session is admitted once with usable composition geometry', asy
     'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
   );
   await input.setInputFiles(frozenV39Session);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120000 });
+  await expectSessionLoadedWithoutWarnings(page);
 
   await page.waitForFunction(() => {
     const app = window.__GBDRAW_APP__;

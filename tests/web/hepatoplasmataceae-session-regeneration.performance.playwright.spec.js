@@ -6,7 +6,8 @@ const { join, resolve } = require('node:path');
 const {
   CURRENT_FEATURE_CATALOG_SCHEMA,
   getDiagramWorkerActivity,
-  openApp
+  openApp,
+  expectSessionLoadedWithoutWarnings,
 } = require('./helpers/app-lifecycle.cjs');
 const {
   evaluateSessionRegenerationContract
@@ -301,7 +302,7 @@ const loadSessionThroughUi = async (page) => {
   await page.evaluate(() => new Promise((resolveFrame) => (
     requestAnimationFrame(() => requestAnimationFrame(resolveFrame))
   )));
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
+  await expectSessionLoadedWithoutWarnings(page);
 };
 
 const inspectSavedPreview = (page) => page.evaluate(async () => {

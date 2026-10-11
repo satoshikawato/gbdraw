@@ -23,6 +23,10 @@ for (const mode of ['circular', 'linear']) {
         expect(box.x).toBeGreaterThanOrEqual(0);
         expect(box.x + box.width).toBeLessThanOrEqual(390);
       }
+      // Each group says when its edits apply (PD-OI-037).
+      await expect(page.locator('.feature-popup [data-feature-popup-group="appearance"] h3'))
+        .toContainText('Updates the current Result');
+      await expect(page.locator('.feature-popup [data-feature-popup-group="layout"]')).toContainText('Applies on Generate');
       // The rotation disclosure in the Layout group stays reachable at 390 px.
       const rotate = page.locator('.feature-popup')
         .getByRole('button', { name: 'Rotate record using this feature', exact: true });
