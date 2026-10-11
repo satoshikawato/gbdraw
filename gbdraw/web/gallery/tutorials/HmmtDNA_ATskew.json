@@ -491,7 +491,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.35; if (app.canvasPan) { app.canvasPan.x = -120; app.canvasPan.y = -40; } }"
+                "script": "async () => { document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview'; app.zoom = 1.35; const frame = () => new Promise((resolve) => setTimeout(() => requestAnimationFrame(resolve), 300)); await frame(); for (let i = 0; i < 6; i += 1) { const rect = document.querySelector(\"[data-gbdraw-feature-id='fbdb78069']\")?.getBoundingClientRect(); if (!rect) throw new Error(\"Pan target [data-gbdraw-feature-id='fbdb78069'] was not found.\"); const dx = 820 - rect.left; const dy = 300 - rect.top; if (Math.abs(dx) < 1 && Math.abs(dy) < 1) break; app.canvasPan.x += dx; app.canvasPan.y += dy; await frame(); } }"
               },
               {
                 "type": "waitForFunction",
