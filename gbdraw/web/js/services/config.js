@@ -156,7 +156,7 @@ import {
 } from './gallery-session-migration.js';
 import {
   compressSessionData,
-  confirmLargeSessionBlob
+  largeSessionDownloadMegabytes
 } from './session-file.js';
 import { importSessionFile } from './session-import-client.js';
 import { convertMainSessionComparisonFrames } from './main-session-comparison-frame.js';
@@ -4777,7 +4777,17 @@ const buildOtherModeResult = (other, renderRequest) => {
 };
 
 /**
+ * The composition root's choice dialog (R13): resolves to the chosen action's
+ * id, or `cancel`. Save asks with it before a repeated or a large download (UX-A07).
+ * @typedef {(request: {
+ *   title: string, description?: string,
+ *   actions: { id: string, label: string, tone?: 'primary' | 'secondary' | 'danger' }[]
+ * }) => Promise<string>} SessionSaveChoicePort
+ */
+
+/**
  * @typedef {{
+ *   askChoice?: SessionSaveChoicePort,
  *   drawing: DrawingState,
  *   linearRecordCatalog?: any,
  *   omittedAnnotationRecordKeys?: string[],
@@ -4797,6 +4807,7 @@ const buildOtherModeResult = (other, renderRequest) => {
 const exportSessionDocument = async (
   titleOverride = null,
   {
+    askChoice = async () => 'cancel',
     drawing, linearRecordCatalog = null, omittedAnnotationRecordKeys = [], recordDisplayRows = null, modes, savedUi,
     isCurrent, artifact, otherArtifact
   }
@@ -4809,8 +4820,12 @@ const exportSessionDocument = async (
         : '';
   const sessionFilename = buildSessionFilename(resolvedTitle);
   if (lastSessionFilename && lastSessionFilename === sessionFilename) {
-    const proceed = confirm(`Download "${sessionFilename}" again? Your browser may overwrite or rename the file.`);
-    if (!proceed) {
+    const choice = await askChoice({
+      title: 'Download the Session again?',
+      description: `"${sessionFilename}" was already downloaded. Your browser may replace that file or save this one under a new name.`,
+      actions: [{ id: 'download', label: 'Download again', tone: 'primary' }]
+    });
+    if (choice !== 'download' || !isCurrent()) {
       recordSessionLifecycleEvent('session-save-download-canceled', {
         reason: 'repeat-download'
       });
@@ -4969,7 +4984,12 @@ const exportSessionDocument = async (
     compressedSize: compressed.size
   });
   if (!isCurrent()) return { status: 'canceled' };
-  if (!confirmLargeSessionBlob(compressed)) {
+  const largeMegabytes = largeSessionDownloadMegabytes(compressed);
+  if (largeMegabytes !== null && await askChoice({
+    title: 'Download a large Session?',
+    description: `The Session file is ${largeMegabytes.toFixed(1)} MB.`,
+    actions: [{ id: 'download', label: 'Download', tone: 'primary' }]
+  }) !== 'download') {
     recordSessionLifecycleEvent('session-save-download-canceled', {
       reason: 'large-download',
       compressedSize: compressed.size
@@ -5014,7 +5034,6 @@ const importSessionDocument = async (e, options = {}) => {
     if (isLegacyConfigPayload(data)) {
       // A legacy configuration names no mode: it is the shown mode's settings.
       applyLegacyConfigPayload(state.drawings[state.mode.value === 'linear' ? 'linear' : 'circular'], data);
-      alert('Legacy configuration loaded. Save as a session to use the current format.');
       return { status: 'legacy' };
     }
 
@@ -5772,16 +5791,17 @@ const importSessionDocument = async (e, options = {}) => {
       isCurrent: options.isCurrent
     });
     if (!options.isCurrent()) throw new Error('Session loading was canceled.');
-    alert(['Session loaded successfully!',
-      droppedFeatureEditCount > 0 ? FEATURE_EDIT_MIGRATION_WARNING(droppedFeatureEditCount) : '',
-      narrowedFeatureVisibilityCount > 0 ? FEATURE_VISIBILITY_NARROWED_NOTICE(narrowedFeatureVisibilityCount) : '',
-      migratedAnnotationTargetCount > 0 ? ANNOTATION_TARGET_MIGRATION_NOTICE(migratedAnnotationTargetCount) : '',
-      unmappedHashSelectorCount > 0 ? HASH_SELECTOR_UNMAPPED_NOTICE(unmappedHashSelectorCount) : '',
-      legacyTableRowsNotice(canonicalProjection?.legacyTableRepairs),
-      legendColorDropNotice(droppedLegendColors)
-    ].filter(Boolean).join(' '));
     return {
       status: 'ok',
+      // UX-C12: what the load changed, for the caller's notice; one line each.
+      warnings: [
+        droppedFeatureEditCount > 0 ? FEATURE_EDIT_MIGRATION_WARNING(droppedFeatureEditCount) : '',
+        narrowedFeatureVisibilityCount > 0 ? FEATURE_VISIBILITY_NARROWED_NOTICE(narrowedFeatureVisibilityCount) : '',
+        migratedAnnotationTargetCount > 0 ? ANNOTATION_TARGET_MIGRATION_NOTICE(migratedAnnotationTargetCount) : '',
+        unmappedHashSelectorCount > 0 ? HASH_SELECTOR_UNMAPPED_NOTICE(unmappedHashSelectorCount) : '',
+        legacyTableRowsNotice(canonicalProjection?.legacyTableRepairs),
+        legendColorDropNotice(droppedLegendColors)
+      ].filter(Boolean),
       data,
       decompressedCharacters: candidate.characters,
       degradedRecovery: Boolean(currentRecoveryError),
@@ -5929,7 +5949,7 @@ export const exportSession = (titleOverride = null, options = {}) => {
     const result = await exportSessionDocument(title, {
       ...options, ...prepared, drawing, modes, savedUi, isCurrent, artifact, otherArtifact
     });
-    if (result?.status === 'saved') options.onSaved?.();
+    if (result?.status === 'saved') options.onSaved?.(result);
     return result;
   }).catch((error) => {
     recordSessionLifecycleEvent('session-save-error');

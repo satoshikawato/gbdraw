@@ -4,6 +4,7 @@
 /** @import { VisibilityActionsPorts } from './feature-editor/visibility-actions.js' */
 /** @import { FeatureSelectionPort, PrepareDrawnFeatureMatchesPort, PreviewTransformInteractionPort } from './feature-editor/svg-actions.js' */
 /** @import { ReadUserDefaultColorPort, SetDefaultColorPort } from './feature-editor/color-actions.js' */
+/** @import { AskChoice, ShowNotice } from './app-messages.js' */
 import { createFeatureColorActions } from './feature-editor/color-actions.js';
 import { createFeatureLabelActions } from './feature-editor/label-actions.js';
 import { createFeatureRuleActions } from './feature-editor/rule-actions.js';
@@ -58,6 +59,8 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  *   The root's Python evaluation of Label TSV rows against the displayed labels (R7).
  * @property {ReadUserDefaultColorPort} readUserDefaultColor
  * @property {SetDefaultColorPort} setDefaultColor
+ * @property {AskChoice} askChoice The root's choice dialog (UX-A07).
+ * @property {ShowNotice} showNotice The root's notice banner: a table import or export reports there (UX-A07).
  */
 
 /** @param {FeatureEditorOptions} options */
@@ -86,7 +89,9 @@ export const createFeatureEditor = ({
   projectFeatureEdits,
   evaluateLabelRules,
   readUserDefaultColor,
-  setDefaultColor
+  setDefaultColor,
+  askChoice,
+  showNotice
 }) => {
   const { ref, computed, watch, reactive } = window.Vue;
   // R13: the label owner's reactions, registered once it exists; the owners
@@ -94,7 +99,7 @@ export const createFeatureEditor = ({
   const editorPorts = /** @type {FeatureEditorPorts} */ ({});
   const ruleActions = createFeatureRuleActions({
     state, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules,
-    ports: editorPorts, getCommittedRequest, ref, computed, watch, isPatternEditAvailable
+    ports: editorPorts, getCommittedRequest, ref, computed, watch, isPatternEditAvailable, askChoice, showNotice
   });
   const featureSvgActions = createFeatureSvgActions({
     state,
@@ -126,10 +131,11 @@ export const createFeatureEditor = ({
     ports: editorPorts,
     selectResult,
     rulePreparation,
-    getCommittedRequest
+    getCommittedRequest,
+    showNotice
   });
   const labelActions = createFeatureLabelActions({
-    state, commitActiveResultEdit, rulePreparation, ref, computed, watch, nextTick, getCommittedRequest,
+    state, commitActiveResultEdit, rulePreparation, ref, computed, watch, nextTick, getCommittedRequest, showNotice,
     setFeatureVisibility: visibilityActions.setFeatureVisibility,
     prepareDrawnFeatureMatches: visibilityActions.prepareDrawnFeatureMatches,
     evaluateLabelRules
@@ -142,7 +148,7 @@ export const createFeatureEditor = ({
   // the root's projection (`projectFeatureEdits`) projects it.
   const featureEditTableActions = createFeatureEditTableActions({
     state, ref, computed, getCommittedSession, readResourceRecordCount, readFeatureOverrideTable,
-    projectFeatureEdits
+    projectFeatureEdits, showNotice
   });
   /** @param {Record<string, any>} feat
    *  @param {{ clientX: number, clientY: number } | null} [eventLike] */

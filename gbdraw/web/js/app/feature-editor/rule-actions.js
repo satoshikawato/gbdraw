@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { DrawingState, LegendEntry } from '../../state.js' */
 /** @import { PythonLegendKey } from '../../services/legend-svg.js' */
+/** @import { AskChoice, ShowNotice } from '../app-messages.js' */
 import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { runWhenPrepared } from '../rule-matching.js';
@@ -73,10 +74,12 @@ import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegend
  * @property {(source: { value: any }, callback: (value: any) => void) => () => void} watch
  *   Vue `watch`; a rule commit waits on it for an automatic rerender in flight.
  * @property {() => boolean} [isPatternEditAvailable] False while a Session import is pending.
+ * @property {AskChoice} [askChoice] The root's choice dialog: a pattern that may match slowly asks first (UX-A07).
+ * @property {ShowNotice} [showNotice] The root's notice banner.
  */
 
 /** @param {FeatureRuleActionsOptions} options */
-export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true }) => {
+export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {} }) => {
   const {
     newColorFeat,
     newColorVal,
@@ -484,7 +487,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     const drawing = state.activeDrawing();
     const text = serializeSpecificRules(drawing.manualSpecificRules);
     if (!text.trim()) {
-      alert('No specific rules to export.');
+      showNotice({ text: 'There are no color rules to export.' });
       return;
     }
     downloadTextFile('gbdraw_specific_rules.tsv', text);
@@ -611,20 +614,25 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     if (sessionBusy) return sessionBusy;
     if (!newSpecRule.val) return;
 
-    if (newSpecRule.val.length > 50) {
-      if (!confirm('Regular expression is quite long (>50 chars). This might impact performance. Continue?')) {
-        return;
-      }
-    }
-
-    if (/\(.+[\+\*]\)[\+\*]/.test(newSpecRule.val) || /\(.*\)\+/.test(newSpecRule.val)) {
-      if (
-        !confirm(
-          'This regular expression contains patterns that may freeze the browser (ReDoS risk). Are you sure you want to add it?'
-        )
-      ) {
-        return;
-      }
+    // UX-A07: one question names every reason the pattern may match slowly.
+    const pattern = String(newSpecRule.val);
+    const risks = [
+      pattern.length > 50 ? 'It is longer than 50 characters.' : '',
+      /\(.+[\+\*]\)[\+\*]/.test(pattern) || /\(.*\)\+/.test(pattern)
+        ? 'It repeats a group, as in (a+)+, which can make the page stop responding.'
+        : ''
+    ].filter(Boolean);
+    if (risks.length > 0) {
+      const choice = await askChoice({
+        title: 'Add this color rule?',
+        description: 'This pattern may make color matching slow:',
+        items: risks,
+        actions: [{ id: 'add', label: 'Add rule', tone: 'primary' }],
+        cancelLabel: 'Edit pattern'
+      });
+      if (choice !== 'add' || newSpecRule.val !== pattern) return;
+      const busy = state.sessionOperationAvailability?.();
+      if (busy) return busy;
     }
 
     const rule = {
@@ -648,7 +656,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     if (!presetId) return;
     const preset = specificRulePresets.find((entry) => entry.id === presetId);
     if (!preset) {
-      alert('Unknown preset selected.');
+      showNotice({ text: 'That rule preset is not available.', tone: 'warning' });
       return;
     }
 

@@ -1525,6 +1525,11 @@
             .btn-secondary { @apply border hover:bg-slate-50; color: var(--ui-text-2); background-color: var(--ui-surface); border-color: var(--ui-line-strong); }
             .btn-danger { @apply border border-red-200 bg-white text-red-600 hover:bg-red-50; }
             .btn-sm { @apply px-2 py-1 text-xs; }
+            .app-notice { @apply flex shrink-0 items-start gap-2 rounded border px-3 py-2 text-xs; }
+            .app-notice > i { @apply mt-0.5 shrink-0 text-sm; }
+            .app-notice.is-info { @apply border-blue-200 bg-blue-50 text-blue-900; }
+            .app-notice.is-warning { @apply border-amber-200 bg-amber-50 text-amber-900; }
+            .app-notice-dismiss { @apply -my-1 -mr-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded hover:bg-white/70; }
             .btn-icon-sm { @apply inline-flex h-6 w-6 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed; }
             .app-config-button { @apply flex items-center gap-0.5 rounded border px-1 py-0.5 font-bold whitespace-nowrap transition-colors; font-size: 11px; color: #475569; background-color: var(--ui-surface); border-color: var(--ui-line); }
             .app-config-button:hover:not(:disabled) { color: var(--ui-accent); border-color: var(--ui-accent); }
@@ -1584,7 +1589,7 @@
                     </button>
                 </div>
                 <div class="app-file-actions ml-2 flex gap-0.5 border-l border-slate-300 pl-2">
-                    <button data-history-managed @click="resetSettings" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" title="Reset Settings" aria-label="Reset Settings" :disabled="!semanticMutationAvailable">
+                    <button data-history-managed @click="requestResetSettings" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" title="Reset Settings" aria-label="Reset Settings" :disabled="!semanticMutationAvailable">
                         <i class="ph ph-arrow-clockwise" aria-hidden="true"></i> Reset Settings
                     </button>
                     <button data-history-ignore @click="saveSessionWithTitle" :disabled="!sessionSaveAvailable" :aria-busy="sessionSavePending" class="app-config-button disabled:opacity-40 disabled:cursor-wait" title="Save the current Result and settings draft without generating" aria-label="Save Session" aria-describedby="session-save-help">
@@ -5117,6 +5122,20 @@
              title="Drag to resize"></div>
 
         <div class="result-pane flex-1 space-y-4 flex flex-col h-full overflow-y-auto min-w-0">
+            <!-- UX-A07, UX-C12: the outcome of Load Session, Save Session, or a table import or export; warnings as a list -->
+            <div v-if="notice.text" data-app-notice role="status" aria-live="polite"
+                 :class="['app-notice', notice.tone === 'warning' ? 'is-warning' : 'is-info']">
+                <i :class="notice.tone === 'warning' ? 'ph ph-warning' : 'ph ph-check-circle'" aria-hidden="true"></i>
+                <div class="min-w-0 flex-1 break-words">
+                    <p class="font-semibold">{{ notice.text }}</p>
+                    <ul v-if="notice.items.length" class="mt-1 list-disc space-y-0.5 pl-4">
+                        <li v-for="(item, index) in notice.items" :key="index">{{ item }}</li>
+                    </ul>
+                </div>
+                <button type="button" data-history-ignore @click="dismissNotice" class="app-notice-dismiss" title="Dismiss" aria-label="Dismiss notice">
+                    <i class="ph ph-x" aria-hidden="true"></i>
+                </button>
+            </div>
             <p v-if="labelReflowProcessing || labelReflowLastError" data-live-application-feedback role="status" aria-live="polite" class="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 shrink-0">{{ labelReflowProcessing ? 'Live edit applying: geometry is being updated. Direct edits already applied are kept.' : labelReflowLastError.note }}</p>
 
             <p v-if="sessionSaveNeedsGenerate && !processing" data-session-save-needs-generate role="status" aria-live="polite" class="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 shrink-0">This Result comes from a Session saved by an older gbdraw. Generate once before Save Session.</p>
@@ -7904,25 +7923,25 @@
                 </div>
             </section>
         </div>
-        <!-- Region Annotations: an imported table without rows removes every set (FL-14) -->
-        <choice-dialog v-if="annotationReplaceAllDialog.show" labelledby="annotation-replace-all-title" describedby="annotation-replace-all-description"
-             @cancel="handleAnnotationReplaceAllChoice('cancel')" @keydown.tab="trapDialogFocus"
-             class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
-                <h3 id="annotation-replace-all-title" class="text-lg font-bold text-slate-800 mb-2">Remove All Annotation Sets</h3>
-                <p id="annotation-replace-all-description" class="text-sm text-slate-600 mb-4">
-                    The imported table has no annotation rows. Importing it removes all {{ annotationReplaceAllDialog.setCount }} annotation set(s).
-                </p>
-                <button @click="handleAnnotationReplaceAllChoice('remove')"
-                        data-history-managed
-                        class="w-full px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                    <i class="ph ph-trash text-lg" aria-hidden="true"></i>
-                    <span>Remove all sets</span>
-                </button>
-                <button @click="handleAnnotationReplaceAllChoice('cancel')"
-                        data-history-managed
-                        class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium" :disabled="!semanticMutationAvailable">
-                    Cancel
-                </button>
+        <!-- UX-A07: the app's confirmations (Reset Settings, a risky color rule pattern, a repeated or large download) -->
+        <choice-dialog v-if="choicePrompt.show" labelledby="choice-prompt-title" describedby="choice-prompt-description"
+             data-choice-prompt
+             @cancel="resolveChoicePrompt('cancel')" @keydown.tab="trapDialogFocus"
+             class="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-4">
+            <h2 id="choice-prompt-title" class="text-base font-bold text-slate-800">{{ choicePrompt.title }}</h2>
+            <div id="choice-prompt-description" class="mt-2 text-sm leading-relaxed text-slate-600">
+                <p v-if="choicePrompt.description">{{ choicePrompt.description }}</p>
+                <ul v-if="choicePrompt.items.length" class="mt-1 list-disc space-y-0.5 pl-5">
+                    <li v-for="(item, index) in choicePrompt.items" :key="index">{{ item }}</li>
+                </ul>
+                <p v-if="choicePrompt.note" class="mt-2">{{ choicePrompt.note }}</p>
+            </div>
+            <div class="mt-4 flex flex-wrap justify-end gap-2">
+                <button type="button" data-history-ignore @click="resolveChoicePrompt('cancel')" class="btn btn-secondary btn-sm">{{ choicePrompt.cancelLabel }}</button>
+                <button v-for="action in choicePrompt.actions" :key="action.id" type="button" data-history-managed
+                        :data-choice-prompt-action="action.id" @click="resolveChoicePrompt(action.id)"
+                        :class="['btn btn-sm', action.tone === 'danger' ? 'btn-danger' : (action.tone === 'primary' ? 'btn-primary' : 'btn-secondary')]">{{ action.label }}</button>
+            </div>
         </choice-dialog>
     </Teleport>
 </div>

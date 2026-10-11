@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { ShowNotice } from '../app-messages.js' */
 /** @import { DrawingState } from '../../state.js' */
 import { diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, ruleFeaturePayload } from '../rule-matching.js';
@@ -446,6 +447,7 @@ const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => 
  *   The visibility owner's preparation of the rule matches `resolveFeatureDrawn` reads (Label On asks the blocker of it).
  * @property {(payload: Record<string, any>, options?: Record<string, any>) => Promise<Record<string, any>>} evaluateLabelRules
  *   The root's Python evaluation of Label TSV rows against the displayed labels (R7).
+ * @property {ShowNotice} [showNotice] The root's notice banner: a table import or export reports there (UX-A07).
  */
 
 /** @param {FeatureLabelActionsOptions} options */
@@ -460,7 +462,8 @@ export const createFeatureLabelActions = ({
   getCommittedRequest = () => null,
   setFeatureVisibility = null,
   prepareDrawnFeatureMatches = () => true,
-  evaluateLabelRules
+  evaluateLabelRules,
+  showNotice = () => {}
 }) => {
   const {
     mode,
@@ -1409,7 +1412,7 @@ export const createFeatureLabelActions = ({
         || input.files?.[0] !== file || !rulePreparation.isCurrent(before)
         || (svgContainer.value?.querySelector('svg') || null) !== sourceSvg) return;
       if (!svg) {
-        window.alert(`Loaded ${rows.length} row(s). No diagram is currently displayed.`);
+        showNotice({ text: `Loaded ${rows.length} row(s). No diagram is shown, so nothing was applied.`, tone: 'warning' });
         return;
       }
       // A `location` or `record_location` row cannot be decided for a label
@@ -1422,9 +1425,11 @@ export const createFeatureLabelActions = ({
         && (row.featureType === '*' || row.featureType === String(feature.type ?? ''))
       ))).length;
       if (undecided > 0) {
-        window.alert(`Loaded ${rows.length} row(s). Not applied: location and record_location rows cannot be `
-          + `matched to ${undecided} label(s) on cropped, reverse-complemented, or rotated records until the `
-          + 'diagram records where it drew them. Generate the diagram again, then load the table.');
+        showNotice({ text: `Loaded ${rows.length} row(s). Not applied.`, items: [
+          `location and record_location rows cannot be matched to ${undecided} label(s) on cropped, `
+            + 'reverse-complemented, or rotated records until the diagram records where it drew them. '
+            + 'Generate the diagram again, then load the table.'
+        ] });
         return;
       }
 
@@ -1446,9 +1451,11 @@ export const createFeatureLabelActions = ({
         return [{ entry, matchedRow, tracked }];
       });
       if (applicable.length === 0) {
-        window.alert(`Loaded ${rows.length} row(s). Not applied: ${skippedNonTrackableCount > 0
-          ? `the ${skippedNonTrackableCount} matched label(s) lacked a feature key`
-          : 'no row matched a label of the diagram'}. The existing label edits were kept.`);
+        showNotice({ text: `Loaded ${rows.length} row(s). Not applied; the existing label edits were kept.`, items: [
+          skippedNonTrackableCount > 0
+            ? `The ${skippedNonTrackableCount} matched label(s) lacked a feature key.`
+            : 'No row matched a label of the diagram.'
+        ] });
         return;
       }
       clearOverrides(drawing);
@@ -1465,13 +1472,13 @@ export const createFeatureLabelActions = ({
       closeHiddenLabelTextDialog();
       queueLabelReflow(Boolean(syncLabelEditor({ queueIncompleteVisibility: false })?.rerender));
 
-      let message = `Loaded ${rows.length} row(s). Applied to ${applicable.length} label(s).`;
-      if (skippedNonTrackableCount > 0) {
-        message += ` ${skippedNonTrackableCount} match(es) lacked a feature key and were not applied.`;
-      }
+      const message = `Loaded ${rows.length} row(s). Applied to ${applicable.length} label(s).`;
+      const skipped = skippedNonTrackableCount > 0
+        ? [`${skippedNonTrackableCount} match(es) lacked a feature key and were not applied.`]
+        : [];
       if (state.errorLog?.value === labelImportFailure.value?.error) state.errorLog.value = null;
       labelImportFailure.value = null;
-      window.alert(message);
+      showNotice({ text: message, items: skipped });
     } catch (error) {
       if (revision !== labelImportRevision || input.files?.[0] !== file || !rulePreparation.isCurrent(before)
         || state.errorLog?.value !== previousError) return;
@@ -1497,7 +1504,7 @@ export const createFeatureLabelActions = ({
         .map((sourceText) => `*\t*\tlabel\t^${escapeRegexLiteral(sourceText)}$\t${
           normalizeTsvCell(drawing.labelTextBulkOverrides[sourceText])}`);
     if (rows.length === 0) {
-      window.alert('No label rules to export. Export Feature Edits TSV writes per-feature label edits.');
+      showNotice({ text: 'There are no label rules to export. Export Feature Edits TSV writes per-feature label edits.' });
       return;
     }
     const selectedIdx = selectedResultIndex.value;

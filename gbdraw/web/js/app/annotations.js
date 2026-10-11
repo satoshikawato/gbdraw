@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { AskChoice } from './app-messages.js' */
 /**
  * @import { AnnotationRecordCatalog } from './annotations/record-catalog.js'
  * @import { AnnotationSet } from '../services/annotation-state.js'
@@ -49,7 +50,7 @@ const nextAnnotationId = (annotations, prefix) => {
  *   the last import or id edit.
  * @property {<T>(change: () => T) => T} [retireLegendStylesOfUnnamedCaptions] Runs a track data change and
  *   retires the Legend styles of the captions it no longer names (OV-65).
- * @property {<T extends object>(value: T) => T} [reactive] Makes the dialog state reactive (Vue's `reactive`).
+ * @property {AskChoice} [askChoice] The root's choice dialog: an import that removes every set asks first.
  */
 
 /**
@@ -57,7 +58,7 @@ const nextAnnotationId = (annotations, prefix) => {
  */
 export const createAnnotationEditor = ({
   state, getRecordCatalog, onImportNotice, retireLegendStylesOfUnnamedCaptions = (change) => change(),
-  reactive = (value) => value
+  askChoice = async () => 'cancel'
 }) => {
   const recordSelector = createAnnotationRecordSelector({ getCatalog: getRecordCatalog });
   // The catalog feature of a selected-feature target in the current Results:
@@ -158,7 +159,7 @@ export const createAnnotationEditor = ({
     if (!set) return [];
     const targets = featureTargetsFromSelection(state.selectedFeatures?.value ?? state.selectedFeatures ?? []);
     if (!targets) {
-      window.alert('Generate the diagram again to annotate the selected features.');
+      onImportNotice?.('Generate the diagram again to annotate the selected features.');
       return [];
     }
     return targets.map((target) => {
@@ -202,21 +203,12 @@ export const createAnnotationEditor = ({
   // An import replaces every set. A table without rows would remove them all,
   // so it asks first (FL-14); the caller's History step stays open until the
   // choice, and Cancel changes nothing.
-  const replaceAllDialog = reactive({ show: false, setCount: 0 });
-  /** @type {((choice: string) => void) | null} */
-  let answerReplaceAllDialog = null;
-  const askReplaceAll = (setCount) => {
-    answerReplaceAllDialog?.('cancel');
-    replaceAllDialog.setCount = setCount;
-    replaceAllDialog.show = true;
-    return new Promise((resolve) => { answerReplaceAllDialog = resolve; });
-  };
-  const handleReplaceAllChoice = (choice) => {
-    const answer = answerReplaceAllDialog;
-    answerReplaceAllDialog = null;
-    replaceAllDialog.show = false;
-    answer?.(choice);
-  };
+  /** @param {number} setCount */
+  const askReplaceAll = (setCount) => askChoice({
+    title: 'Remove all annotation sets?',
+    description: `The imported table has no annotation rows. Importing it removes all ${setCount} annotation ${setCount === 1 ? 'set' : 'sets'}.`,
+    actions: [{ id: 'remove', label: 'Remove all sets', tone: 'danger' }]
+  });
   const importAnnotationTable = async (text) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -240,7 +232,7 @@ export const createAnnotationEditor = ({
       placed > 0 ? `${placed} annotation(s) of selected features were written as record=#<position> and feature_selector=hash=<feature hash>. They name the same features only while the record order stays as drawn.` : '',
       skipped > 0 ? `${skipped} annotation(s) of selected features that the current diagram does not draw were not exported.` : ''
     ].filter(Boolean).join(' ');
-    if (notice) window.alert(notice);
+    onImportNotice?.(notice);
   };
   const importAnnotationTableFile = async (event) => {
     const drawing = state.activeDrawing();
@@ -277,7 +269,6 @@ export const createAnnotationEditor = ({
     addAnnotationSet, renameAnnotationSet, setAnnotationSetLegendLabel, duplicateAnnotationSet, removeAnnotationSet,
     addCoordinateAnnotation, addSelectedFeatures, removeAnnotation, renameAnnotation, setAnnotationStyle, setAnnotationTargetKind,
     importAnnotationTable, importAnnotationTableFile, replaceAnnotationSets: replaceSets,
-    annotationReplaceAllDialog: replaceAllDialog, handleAnnotationReplaceAllChoice: handleReplaceAllChoice,
     canDownloadAnnotationTable, downloadAnnotationTable, featureTargetCaption,
     recordOptionsFor: recordSelector.optionsFor,
     recordValueFor: recordSelector.valueFor,
