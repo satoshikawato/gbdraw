@@ -518,10 +518,10 @@ def test_gallery_session_arrow_geometry_variants_only_change_feature_paths(
             reproduced_arrow_geometry_variants[
                 "tutorial_9_arrow_geometry_linear"
             ],
-            # The BGC Session draws shaft 0.6; the variant draws 0.5. Features
-            # short enough to be drawn as a head only have no shaft to change;
-            # the short Auto head of a diagram under 100 kb leaves 110 others.
-            110,
+            # The BGC Session draws shaft 0.6 and head 0.64; the variant draws
+            # shaft 0.5 and the Auto head. Features short enough to be drawn as
+            # a head only in the Session have no shaft or head to change.
+            118,
         ),
     )
     for source_path, variant_path, expected_changed_paths in pairs:
