@@ -181,7 +181,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.form.track_type = 'middle'; app.form.separate_strands = true; app.form.suppress_gc = false; app.form.suppress_skew = false; app.form.labels_mode = 'out'; app.adv.circular_track_slots_enabled = false; const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('summary')?.textContent?.replace(/\\s+/g, ' ').trim().startsWith('Layout')); const summary = card?.querySelector('summary'); const preset = Array.from(card?.querySelectorAll('label') || []).find((node) => node.textContent.includes('Track Preset'))?.closest('div'); const options = Array.from(card?.querySelectorAll('label') || []).find((node) => node.textContent.includes('Separate Strands'))?.closest('.grid'); if (!summary || !preset || !options) throw new Error('Circular layout controls were not found.'); summary.dataset.capture = 'hmmt-layout-summary'; preset.dataset.capture = 'hmmt-layout-preset'; options.dataset.capture = 'hmmt-layout-options'; preset.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; app.form.track_type = 'middle'; app.form.separate_strands = true; app.form.suppress_gc = false; app.form.suppress_skew = false; app.form.labels_mode = 'out'; app.adv.circular_track_slots_enabled = false; const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('summary')?.textContent?.replace(/\\s+/g, ' ').trim().startsWith('Layout')); const summary = card?.querySelector('summary'); const preset = Array.from(card?.querySelectorAll('label') || []).find((node) => node.textContent.includes('Track Preset'))?.closest('div'); const options = Array.from(card?.querySelectorAll('label') || []).find((node) => node.textContent.includes('Separate Strands'))?.closest('[data-layout-options]'); if (!summary || !preset || !options) throw new Error('Circular layout controls were not found.'); summary.dataset.capture = 'hmmt-layout-summary'; preset.dataset.capture = 'hmmt-layout-preset'; options.dataset.capture = 'hmmt-layout-options'; preset.scrollIntoView({ block: 'center' });"
               }
             ],
             "clipSelectors": [
@@ -244,9 +244,9 @@
             "crop": "openSelect",
             "cropPadding": {
               "top": 54,
-              "right": 80,
+              "right": 16,
               "bottom": 24,
-              "left": 80
+              "left": 16
             },
             "openSelect": {
               "selectedLabel": "Out",

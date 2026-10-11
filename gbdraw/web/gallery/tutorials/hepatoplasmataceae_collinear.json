@@ -84,7 +84,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const expected = ['AP027078.gb', 'AP027131.gb', 'AP027133.gb', 'AP027132.gb', 'NZ_CP006932.gb']; const names = (app?.linearSeqs || []).map((seq) => seq.gb?.name || ''); if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error('Hepatoplasmataceae GenBank order was not restored.'); const row = document.querySelector('[data-linear-record-card=\"record-1\"]'); const options = row?.querySelector('[data-linear-record-options=\"record-1\"]'); if (!row || !options) throw new Error('Hepatoplasmataceae Linear input row 1 was not found.'); options.open = true; row.dataset.capture = 'hepatoplasmataceae-record-row'; row.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const expected = ['AP027078.gb', 'AP027131.gb', 'AP027133.gb', 'AP027132.gb', 'NZ_CP006932.gb']; const names = (app?.linearSeqs || []).map((seq) => seq.gb?.name || ''); if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error('Hepatoplasmataceae GenBank order was not restored.'); const row = document.querySelector('[data-linear-record-card=\"record-1\"]'); const options = row?.querySelector('[data-linear-record-options=\"record-1\"]'); if (!row || !options) throw new Error('Hepatoplasmataceae Linear input row 1 was not found.'); options.open = true; const fileCard = row.closest('[data-linear-source-card]'); if (!fileCard) throw new Error('Linear file card was not found.'); fileCard.dataset.capture = 'hepatoplasmataceae-record-row'; fileCard.scrollIntoView({ block: 'center' });"
               }
             ],
             "selector": "[data-capture='hepatoplasmataceae-record-row']",
@@ -102,7 +102,7 @@
     },
     {
       "title": "Use browser LOSAT",
-      "body": "In Comparison, choose Run LOSAT. Open Settings when you need to review the browser runtime controls under Runtime and reproducibility.",
+      "body": "In Comparison, choose Run LOSAT. Open Settings when you need to review the browser runtime controls under Performance.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -147,10 +147,10 @@
         },
         {
           "dataDependent": true,
-          "title": "Runtime and reproducibility",
+          "title": "Performance",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-03-02-runtime-reproducibility.webp",
-            "alt": "Runtime and reproducibility controls showing Auto execution, Safe total threads, and automatic run allocation.",
+            "alt": "Performance controls showing Auto execution, Safe total threads, and automatic run allocation.",
             "caption": "Open Comparison › Settings to review the execution and thread allocation used by browser LOSAT."
           },
           "capture": {
@@ -165,11 +165,11 @@
               },
               {
                 "type": "waitForFunction",
-                "script": "() => Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).some((section) => section.textContent.includes('Runtime and reproducibility'))"
+                "script": "() => Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).some((section) => section.textContent.includes('Performance'))"
               },
               {
                 "type": "evaluate",
-                "script": "const section = Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).find((node) => node.textContent.includes('Runtime and reproducibility')); if (!section) throw new Error('Runtime and reproducibility section was not found.'); section.dataset.capture = 'hep-collinear-runtime'; section.scrollIntoView({ block: 'center' });"
+                "script": "const section = Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).find((node) => node.textContent.includes('Performance')); if (!section) throw new Error('Performance section was not found.'); section.dataset.capture = 'hep-collinear-runtime'; section.scrollIntoView({ block: 'center' });"
               }
             ],
             "selector": "[data-capture='hep-collinear-runtime']",
@@ -182,7 +182,7 @@
               "losatExecution.totalThreadBudget": "safe",
               "losatExecution.threadsPerJob": "auto"
             },
-            "visibleText": ["Runtime and reproducibility", "Parallel runs"],
+            "visibleText": ["Performance", "Parallel runs"],
             "visibleControls": [
               {"selector": "[data-capture='hep-collinear-runtime'] select[aria-label='LOSAT execution']", "value": "auto"},
               {"selector": "[data-capture='hep-collinear-runtime'] select[aria-label='LOSAT total threads']", "value": "safe"},
@@ -203,13 +203,13 @@
           ["Max unit gap", "0"],
           ["Min block genes", "1"],
           ["Color mode", "Orientation + identity"],
-          ["Evidence scope", "Adjacent pairs"],
+          ["Search between", "Adjacent pairs"],
           ["Diagonal drift", "0"],
           ["Merge conflicts", "1"],
           ["Bitscore", "50"],
           ["E-value", "1e-2"],
-          ["Minimum Identity", "0"],
-          ["Minimum Length", "0"]
+          ["Min identity (%)", "0"],
+          ["Min length", "0"]
         ]
       },
       "note": "These settings combine compatible runs of protein-match anchors from gbdraw similarity groups into collinear blocks.",
@@ -355,11 +355,11 @@
     },
     {
       "title": "Set the diagram layout",
-      "body": "Use the ajisai palette, a Middle track layout, and a ruler. Center the records, separate the strands, and show GC content and GC skew.",
+      "body": "Use the ajisai palette, the Features on axis track layout, and a ruler. Center the records, separate the strands, and show GC content and GC skew.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
-          ["Track Layout", "Middle"],
+          ["Track Layout", "Features on axis"],
           ["Align to Center", "On"],
           ["Separate Strands", "On"],
           ["Show Coordinate Scale", "On"],
@@ -392,14 +392,15 @@
             "crop": "openSelect",
             "cropPadding": {
               "top": 145,
-              "right": 130,
+              "right": 16,
               "bottom": 24,
-              "left": 80
+              "left": 16
             },
             "openSelect": {
               "selectedLabel": "Ruler (Ticks)",
               "options": ["Bar (Simple)", "Ruler (Ticks)"],
-              "label": "Scale Style"
+              "label": "Scale Style",
+              "selector": "select[aria-label='Linear scale style']"
             },
             "openDetails": ["Axis & Scale"],
             "assertAppState": {
@@ -413,7 +414,7 @@
                 "checked": true
               },
               {
-                "label": "Scale Style",
+                "selector": "select[aria-label='Linear scale style']",
                 "value": "Ruler (Ticks)"
               }
             ]
@@ -422,8 +423,8 @@
         {
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-05-02-layout-overview.webp",
-            "alt": "Layout card with Middle track layout and the center alignment, separate strands, GC content, and GC skew options selected.",
-            "caption": "Set Track Layout to Middle and select Align to Center, Separate Strands, Show GC Content, and Show GC Skew."
+            "alt": "Layout card with the Features on axis track layout and the center alignment, separate strands, GC content, and GC skew options selected.",
+            "caption": "Set Track Layout to Features on axis and select Align to Center, Separate Strands, Show GC Content, and Show GC Skew."
           },
           "capture": {
             "source": "webapp",

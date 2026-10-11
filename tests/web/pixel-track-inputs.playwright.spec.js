@@ -60,6 +60,8 @@ for (const width of [1440, 390]) {
       }
       console.log(`pixel ${mode}/${width}: stack enabled`);
       const row = page.locator(`[data-capture="${mode}-track-slot-gc_content"]`);
+      // Circular gaps sit under the row's Gaps disclosure.
+      if (mode === 'circular') await row.locator('[data-track-slot-more] > summary').click();
       const titles = mode === 'linear' ? ['Height', 'Spacing'] : ['Inner gap', 'Outer gap'];
       const fields = mode === 'linear' ? ['height', 'spacing'] : ['inner_gap_px', 'outer_gap_px'];
       const inputs = titles.map(title => row.getByTitle(title, { exact: true }));

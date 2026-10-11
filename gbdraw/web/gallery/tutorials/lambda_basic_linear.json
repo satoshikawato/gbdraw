@@ -212,7 +212,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.form.separate_strands = true; app.form.show_labels_linear = 'all'; app.form.scale_style = 'ruler'; app.form.legend = 'left'; app.adv.linear_track_slots_enabled = false; const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('summary')?.textContent?.replace(/\\s+/g, ' ').trim().startsWith('Layout')); const summary = card?.querySelector('summary'); const options = Array.from(card?.querySelectorAll('label') || []).find((node) => node.textContent.includes('Separate Strands'))?.closest('.grid'); if (!summary || !options) throw new Error('Linear layout controls were not found.'); summary.dataset.capture = 'lambda-layout-summary'; options.dataset.capture = 'lambda-layout-options'; options.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; app.form.separate_strands = true; app.form.show_labels_linear = 'all'; app.form.scale_style = 'ruler'; app.form.legend = 'left'; app.adv.linear_track_slots_enabled = false; const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('summary')?.textContent?.replace(/\\s+/g, ' ').trim().startsWith('Layout')); const summary = card?.querySelector('summary'); const options = Array.from(card?.querySelectorAll('label') || []).find((node) => node.textContent.includes('Separate Strands'))?.closest('[data-layout-options]'); if (!summary || !options) throw new Error('Linear layout controls were not found.'); summary.dataset.capture = 'lambda-layout-summary'; options.dataset.capture = 'lambda-layout-options'; options.scrollIntoView({ block: 'center' });"
               }
             ],
             "clipSelectors": [
@@ -259,9 +259,9 @@
             "crop": "openSelect",
             "cropPadding": {
               "top": 54,
-              "right": 80,
+              "right": 16,
               "bottom": 24,
-              "left": 80
+              "left": 16
             },
             "openSelect": {
               "selectedLabel": "All Records",
@@ -311,9 +311,9 @@
             "crop": "openSelect",
             "cropPadding": {
               "top": 145,
-              "right": 130,
+              "right": 16,
               "bottom": 24,
-              "left": 80
+              "left": 16
             },
             "openSelect": {
               "selectedLabel": "Ruler (Ticks)",
@@ -321,7 +321,8 @@
                 "Bar (Simple)",
                 "Ruler (Ticks)"
               ],
-              "label": "Scale Style"
+              "label": "Scale Style",
+              "selector": "select[aria-label='Linear scale style']"
             },
             "assertAppState": {
               "mode": "linear",
@@ -334,7 +335,7 @@
                 "checked": true
               },
               {
-                "label": "Scale Style",
+                "selector": "select[aria-label='Linear scale style']",
                 "value": "Ruler (Ticks)"
               }
             ]
@@ -374,9 +375,9 @@
             "crop": "openSelect",
             "cropPadding": {
               "top": 54,
-              "right": 100,
+              "right": 16,
               "bottom": 24,
-              "left": 100
+              "left":  16
             },
             "openSelect": {
               "selector": "#legend-position",

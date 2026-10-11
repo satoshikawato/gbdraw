@@ -154,10 +154,13 @@ let worker = null;
 let workerInitialized = false;
 /** @type {ReturnType<typeof validateWebRuntimeCapabilities> | null} */
 let workerCapabilities = null;
+/** @typedef {Readonly<{ step: number, total: number, label: string }>} RuntimePreparationStep */
 /**
  * The pending Worker initialization: its promise, the reject that settles it,
- * and the listener cleanup. Null while no initialization is in flight.
- * @type {{ promise: Promise<Worker>, reject: (error: unknown) => void, cleanup: () => void } | null}
+ * the listener cleanup, and the preparation step listeners with the last
+ * step reported. Null while no initialization is in flight.
+ * @type {{ promise: Promise<Worker>, reject: (error: unknown) => void, cleanup: () => void,
+ *   lastStep: RuntimePreparationStep | null, stepListeners: Set<(step: RuntimePreparationStep) => void> } | null}
  */
 let initState = null;
 /**
@@ -257,10 +260,21 @@ const terminateWorker = (error = null) => {
   resourceTransport.reset();
 };
 
-const ensureWorkerInitialized = () => {
+/**
+ * @param {((step: RuntimePreparationStep) => void) | null} [onStep]
+ *   Each first-use preparation step as the Worker starts it; a caller that
+ *   joins a running initialization first receives the current step.
+ */
+const ensureWorkerInitialized = (onStep = null) => {
   const currentWorker = getWorker();
   if (workerInitialized) return Promise.resolve(currentWorker);
-  if (initState?.promise) return initState.promise;
+  if (initState?.promise) {
+    if (typeof onStep === 'function') {
+      initState.stepListeners.add(onStep);
+      if (initState.lastStep) onStep(initState.lastStep);
+    }
+    return initState.promise;
+  }
 
   const id = `diagram-init-${Date.now()}-${nextRequestId}`;
   let resolveInit;
@@ -285,6 +299,12 @@ const ensureWorkerInitialized = () => {
 
   function handleMessage(event) {
     const data = event.data || {};
+    if (data.type === 'init-progress' && data.id === id && initState) {
+      const step = Object.freeze({ step: Number(data.step) || 0, total: Number(data.total) || 0, label: String(data.label || '') });
+      initState.lastStep = step;
+      initState.stepListeners.forEach((listener) => listener(step));
+      return;
+    }
     if (data.type !== 'init' || data.id !== id) return;
     cleanup();
     initState = null;
@@ -313,7 +333,8 @@ const ensureWorkerInitialized = () => {
   currentWorker.addEventListener('message', handleMessage);
   currentWorker.addEventListener('error', handleError);
   currentWorker.addEventListener('messageerror', handleMessageError);
-  initState = { promise, reject: rejectInit, cleanup };
+  initState = { promise, reject: rejectInit, cleanup, lastStep: null,
+    stepListeners: new Set(typeof onStep === 'function' ? [onStep] : []) };
   recordStructuralMetric('workerInitializationCount');
   currentWorker.postMessage(buildInitPayload(id));
 
@@ -370,9 +391,10 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) =
     reject: rejectRequest
   };
   activeRequest = request;
-  const reportProgress = (stage) => {
+  /** @param {string} stage @param {RuntimePreparationStep | null} [step] */
+  const reportProgress = (stage, step = null) => {
     if (!request.settled && activeRequest === request && typeof onProgress === 'function') {
-      onProgress({ requestId, stage });
+      onProgress({ requestId, stage, ...(step || {}) });
     }
   };
 
@@ -382,7 +404,7 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) =
       const initializationWasWarm = workerInitialized;
       if (!initializationWasWarm) reportProgress('preparing-runtime');
       const initializationStartedAt = globalThis.performance?.now?.() ?? Date.now();
-      const currentWorker = await ensureWorkerInitialized();
+      const currentWorker = await ensureWorkerInitialized((step) => reportProgress('preparing-runtime', step));
       recordSessionLifecycleEvent('worker-initialization-resolved', {
         reused: initializationWasWarm,
         durationMs: initializationWasWarm
@@ -536,10 +558,10 @@ const runAuxiliaryWorkerRequest = ({
     let request = null;
     let failureStage = 'initialization';
     try {
-      if (!workerInitialized && typeof onProgress === 'function') {
-        onProgress({ requestId, stage: 'preparing-runtime' });
-      }
-      const currentWorker = await ensureWorkerInitialized();
+      const reportStep = typeof onProgress === 'function'
+        ? (/** @type {RuntimePreparationStep | null} */ step) => onProgress({ requestId, stage: 'preparing-runtime', ...(step || {}) }) : null;
+      if (!workerInitialized) reportStep?.(null);
+      const currentWorker = await ensureWorkerInitialized(reportStep);
       request = {
         requestId,
         cleanup: null,

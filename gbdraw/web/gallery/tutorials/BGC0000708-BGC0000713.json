@@ -88,7 +88,7 @@
     },
     {
       "title": "Add the first cluster",
-      "body": "Under File 1, upload BGC0000708.gbk as the GenBank / DDBJ File. In File defaults, enter the organism and the subtitle; they name every record of the file in the figure. Type the <i> tags literally: the SVG uses them to italicize the taxon name.",
+      "body": "Under File 1, upload BGC0000708.gbk as the GenBank / DDBJ File. In Names for all records in this file, enter the organism and the subtitle; they name every record of the file in the figure. Type the <i> tags literally: the SVG uses them to italicize the taxon name.",
       "table": {
         "columns": [
           "Field",
@@ -126,8 +126,8 @@
           "dataDependent": true,
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-02-01-file1-defaults.webp",
-            "alt": "File 1 card with BGC0000708.gbk loaded and File defaults filled with the literal <i>Streptomyces lividus</i> CBS 844.73 and Lividomycin biosynthetic gene cluster.",
-            "caption": "BGC0000708.gbk in File 1, with its File defaults typed in."
+            "alt": "File 1 card with BGC0000708.gbk loaded and names for all records filled with the literal <i>Streptomyces lividus</i> CBS 844.73 and Lividomycin biosynthetic gene cluster.",
+            "caption": "BGC0000708.gbk in File 1, with the names for all its records typed in."
           },
           "capture": {
             "source": "webapp",
@@ -166,7 +166,7 @@
             "visibleText": [
               "File 1",
               "BGC0000708.gbk",
-              "File defaults (applied to all records)"
+              "Names for all records in this file"
             ],
             "visibleControls": [
               {
@@ -184,7 +184,7 @@
     },
     {
       "title": "Add the other four clusters, one at a time",
-      "body": "Click Add sequence, upload the next file into the new File slot, and fill its File defaults before you add the next one. Keep this order: the comparison links adjacent rows.",
+      "body": "Click Add sequence, upload the next file into the new File slot, and fill in the names for all its records before you add the next one. Keep this order: the comparison links adjacent rows.",
       "table": {
         "columns": [
           "File",
@@ -266,7 +266,7 @@
           "dataDependent": true,
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-03-01-file5-defaults.webp",
-            "alt": "File 5 card with BGC0000713.gbk loaded, its File defaults filled, and the Add sequence button below it.",
+            "alt": "File 5 card with BGC0000713.gbk loaded, the names for all its records filled, and the Add sequence button below it.",
             "caption": "The last file, BGC0000713.gbk, in File 5. Add sequence adds the next slot."
           },
           "capture": {
@@ -307,7 +307,7 @@
             "visibleText": [
               "File 5",
               "BGC0000713.gbk",
-              "File defaults (applied to all records)",
+              "Names for all records in this file",
               "Add sequence"
             ],
             "visibleControls": [
@@ -384,7 +384,7 @@
     },
     {
       "title": "Link the clusters with LOSATP similarity groups",
-      "body": "Under Comparison, click Run LOSAT and open Settings. Press LOSATP to compare the encoded proteins, and set LOSATP mode to Similarity groups: gbdraw groups similar proteins across all five clusters and links the group members in adjacent rows. Set Minimum identity to 30 so that weak matches are not drawn. Click Generate Diagram; LOSAT runs in the browser and takes a few seconds for these clusters.",
+      "body": "Under Comparison, click Run LOSAT and open Settings. Press LOSATP to compare the encoded proteins, and set LOSATP mode to Similarity groups: gbdraw groups similar proteins across all five clusters and links the group members in adjacent rows. Set Min identity (%) to 30 so that weak matches are not drawn. Click Generate Diagram; LOSAT runs in the browser and takes a few seconds for these clusters.",
       "table": {
         "columns": [
           "Setting",
@@ -400,7 +400,7 @@
             "Similarity groups"
           ],
           [
-            "Minimum identity",
+            "Min identity (%)",
             "30 (default 0)"
           ]
         ]
@@ -439,8 +439,8 @@
           "title": "Comparison settings",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-05-01-comparison-settings.webp",
-            "alt": "Comparison card with Run LOSAT active, Settings open, LOSATP pressed, LOSATP mode set to Similarity groups, and Minimum identity 30.",
-            "caption": "Run LOSAT, LOSATP, Similarity groups, and Minimum identity 30."
+            "alt": "Comparison card with Run LOSAT active, Settings open, LOSATP pressed, LOSATP mode set to Similarity groups, and Min identity (%) 30.",
+            "caption": "Run LOSAT, LOSATP, Similarity groups, and Min identity (%) 30."
           },
           "capture": {
             "source": "webapp",
@@ -495,7 +495,7 @@
                 "value": "Similarity groups"
               },
               {
-                "label": "Minimum identity",
+                "label": "Min identity (%)",
                 "value": 30
               }
             ]
@@ -687,7 +687,7 @@
               },
               {
                 "type": "waitForFunction",
-                "script": "() => { const select = document.querySelector('[data-linear-record-card=record-5] select'); return Boolean(select) && !select.textContent.includes('Loading records'); }"
+                "script": "() => { const select = document.querySelector('select[aria-label=\"Record selector for sequence 5\"]'); return Boolean(select) && !select.disabled && select.textContent.includes('BGC0000713'); }"
               }
             ],
             "clipSelectors": [
@@ -1097,7 +1097,7 @@
     },
     {
       "title": "Color the genes by antiSMASH gene kind",
-      "body": "Every CDS is still the same blue, so the figure does not show which genes are biosynthetic. These MIBiG records carry antiSMASH gene_kind qualifiers. Open Colors, choose the orange palette, and set the CDS default color to #dddddd for genes that no rule matches. The palette also turns the ribbons blue, so the red core genes stand out against them. Then add the four SPECIFIC RULES (-t) below, one row at a time, and click Generate Diagram.",
+      "body": "Every CDS is still the same blue, so the figure does not show which genes are biosynthetic. These MIBiG records carry antiSMASH gene_kind qualifiers. Open Colors, choose the orange palette, and set the CDS default color to #dddddd for genes that no rule matches. The palette also turns the ribbons blue, so the red core genes stand out against them. Then add the four SPECIFIC RULES below, one row at a time, and click Generate Diagram.",
       "table": {
         "columns": [
           "Setting",
@@ -1311,8 +1311,8 @@
           "dataDependent": true,
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-08-01-specific-rules-all.webp",
-            "alt": "SPECIFIC RULES (-t) controls showing four CDS gene_kind rules for biosynthetic$, biosynthetic-additional, transport, and regulatory categories.",
-            "caption": "The four gene_kind rules in SPECIFIC RULES (-t)."
+            "alt": "SPECIFIC RULES controls showing four CDS gene_kind rules for biosynthetic$, biosynthetic-additional, transport, and regulatory categories.",
+            "caption": "The four gene_kind rules in SPECIFIC RULES."
           },
           "capture": {
             "source": "webapp",
@@ -1327,7 +1327,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 420; const heading = Array.from(document.querySelectorAll('h4')).find((node) => node.textContent?.includes('SPECIFIC RULES')); const header = heading?.parentElement; const rows = header?.parentElement?.querySelector(':scope > div.space-y-1'); if (!header || !rows || rows.getBoundingClientRect().height < 1) throw new Error('BGC specific-rules rows not found.'); header.setAttribute('data-capture', 'bgc-specific-rules-header'); rows.setAttribute('data-capture', 'bgc-specific-rules-rows'); rows.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 420; document.querySelectorAll('[data-color-rule-editor]').forEach((editor) => { editor.open = true; }); const heading = Array.from(document.querySelectorAll('h4')).find((node) => node.textContent?.includes('SPECIFIC RULES')); const header = heading?.parentElement; const rows = header?.parentElement?.querySelector('[data-color-rule-row]')?.parentElement; if (!header || !rows || rows.getBoundingClientRect().height < 1) throw new Error('BGC specific-rules rows not found.'); header.setAttribute('data-capture', 'bgc-specific-rules-header'); rows.setAttribute('data-capture', 'bgc-specific-rules-rows'); header.style.scrollMarginTop = '120px'; header.scrollIntoView({ block: 'start' });"
               }
             ],
             "clipSelectors": [
@@ -1960,7 +1960,7 @@
               ],
               [
                 "Files 1 to 5",
-                "BGC0000708, BGC0000709, BGC0000711, BGC0000712, BGC0000713 (.gbk), File defaults as in steps 2 and 3"
+                "BGC0000708, BGC0000709, BGC0000711, BGC0000712, BGC0000713 (.gbk), Names for all records as in steps 2 and 3"
               ],
               [
                 "File 5 › Reverse complement",
@@ -1972,7 +1972,7 @@
               ],
               [
                 "Result filters",
-                "Bitscore 50, E-value 1e-2, Minimum identity 30, Minimum length 0"
+                "Bitscore 50, E-value 1e-2, Min identity (%) 30, Min length 0"
               ],
               [
                 "Alignment",
@@ -1983,7 +1983,7 @@
                 "orange; #dddddd"
               ],
               [
-                "SPECIFIC RULES (-t)",
+                "SPECIFIC RULES",
                 "the four CDS gene_kind rules of step 8"
               ],
               [
@@ -2044,7 +2044,7 @@
               ],
               [
                 "Track Layout; Legend position; Lock Definition Column",
-                "Middle; Bottom; On (defaults)"
+                "Features on axis; Bottom; On (defaults)"
               ],
               [
                 "Titles & Record Labels › Plot Title",
@@ -2288,7 +2288,7 @@
     },
     {
       "title": "The generated diagram differs from the Gallery image",
-      "body": "Compare your settings with the Full settings table in step 10: LOSATP mode, Minimum identity, record orientation, alignment, color rules, labels, Separate Strands, and the finishing values."
+      "body": "Compare your settings with the Full settings table in step 10: LOSATP mode, Min identity (%), record orientation, alignment, color rules, labels, Separate Strands, and the finishing values."
     }
   ],
   "related": [

@@ -52,7 +52,7 @@ the rich feature popup are shared. A saved Session keeps each mode's settings
 
 A Circular GenBank upload uses **GenBank/DDBJ File**. Each Linear **File** card
 starts with its **GenBank / DDBJ File** uploader, or its matched GFF3 and FASTA
-uploaders, followed by **File defaults (applied to all records)** and a closed
+uploaders, followed by **Names for all records in this file** and a closed
 **Record options** disclosure. Use the up and down buttons in a File header to
 move that source. Every record in a multi-record GenBank or GFF3 + FASTA source
 moves together, while the record order inside the source stays unchanged. When
@@ -72,8 +72,8 @@ schemas](input-formats-and-tsv-schemas.md) for the file format.
 
 The **Add sequence** action and the **Remove** action shown for multiple Files
 add or remove whole File cards. Clearing a populated Linear primary uploader
-opens a choice: **Clear file only** keeps a pristine blank File in the same
-position, while **Delete card**
+opens a choice: **Empty this slot** keeps a pristine blank File in the same
+position, while **Remove file**
 removes that File and all records it supplied. Either operation removes its
 record selectors, crop and reverse-complement drafts, labels, Depth file assignments,
 comparison endpoints, and source-derived state as one undoable change. The only
@@ -110,7 +110,7 @@ settings. The app does not show a separate always-on application status.
 
 | Operation label | When the Result changes |
 |---|---|
-| **Applies on Generate** | A successful **Generate Diagram** applies crop, row layout, Definition Lock, scale label sizes, track slots, **Species**, **Strain**, plot title and record-label settings, the legend position, swatch size, and font size, the Linear comparison **Result filters** (**Bitscore**, **E-value**, **Minimum identity**, **Minimum length**), and the global block, line, axis, and scale stroke colors and widths. |
+| **Applies on Generate** | A successful **Generate Diagram** applies crop, row layout, Definition Lock, scale label sizes, track slots, **Species**, **Strain**, plot title and record-label settings, the legend position, swatch size, and font size, the Linear comparison **Result filters** (**Bitscore**, **E-value**, **Min identity (%)**, **Min length**), and the global block, line, axis, and scale stroke colors and widths. |
 | **Live edit** | Feature color, label text, and visibility, including **Feature Visibility** rules, update the current Result directly; geometry changes may rerender automatically. A label rerender uses the settings of the last Generate plus the current feature, label, color, and legend edits. Legend text, order, stroke, and removal, and stroke edits on selected features, are live. Palette selection is live when **Instant Preview** is on. |
 | **Apply required** | Alignment choices stay in the review draft until **Apply** succeeds. |
 
@@ -177,8 +177,13 @@ generation finishes.**
 A plain Session file larger than 200 MiB, or a gzip Session that expands beyond
 512 MiB, is rejected. Save needs browser gzip compression. Load needs Web
 Workers and, for `.gz` files, gzip decompression. A rejected or failed Save or
-Load shows an **Operation error** and keeps the current Result, settings, and
-Undo history.
+Load shows its error and keeps the current Result, settings, and Undo history.
+A failed Load shows its reason and correction under **Session not loaded**,
+unless a more specific step names the error: for example, that the file is not
+valid JSON, or that Custom Track Slots must be recreated with the current
+schema. An error of one diagram mode is cleared
+when you switch to the other mode, except an error that names the other mode's
+Result.
 
 Before the first **Generate Diagram**, Save needs every input of the active
 mode, the same check that Generate uses; an empty card or a missing FASTA is
@@ -189,7 +194,7 @@ After that Generate, Save writes the current Session format.
 
 A loaded Circular Session shows its saved Result without reading the embedded
 source again. **Source records** shows **Records not inspected**, and **Record**
-lists no records. Select **Inspect source records** to list them and show their
+says **Not inspected**. Select **Inspect source records** to list them and show their
 rotation rows; the Result and Undo history do not change. **Generate Diagram**
 inspects the source before rendering, and uploading a new file inspects it at
 once. Loading a saved preview does not start LOSATP. The diagram engine starts
@@ -199,16 +204,22 @@ the configuration that a command-line Session stores.
 ### Operation errors and diagnostics
 
 A failed operation shows a short cause and correction or recovery action under
-its own heading, such as **Generation Error**, **Alignment error**, or an export
-error. The summary stays visible. **Details** is optional and initially closed;
-it can be opened with the keyboard. **Copy diagnostics** copies only the safe
+its own heading, such as **Generation Error**, **Alignment error**, **Session
+not loaded**, or an export error. When Generate fails, the error says once that
+the last successful Result is shown and the changes were not applied. A Linear
+comparison error offers **Show in Comparison**, which focuses the control of
+the first issue. The summary stays visible. **Details** is optional and initially closed;
+it can be opened with the keyboard. An error shown beside its own field, such
+as an invalid Color rule pattern, is compact: the summary under the field and a
+small **Details** disclosure with the same diagnostics and buttons, followed by
+the field's **Retry** and **Revert**. **Copy diagnostics** copies only the safe
 information displayed there, after an explicit action. If Clipboard access is
 unavailable or rejected, **Select diagnostics** selects the text for manual
 copying; the cause and recovery controls stay available.
 
 Diagnostics contain a short failure code, the operation, the stage where the
 failure is known to have happened, and allowed context such as the field, table
-row, or Python character position. They also report any failure while cleaning
+row, or character position. They also report any failure while cleaning
 up. The summary names the location it knows: **Sequence N**,
 **Line N**, **Track row N**, **Depth series N**, the setting path, or the
 available radial band in px for a Circular track that does not fit. The panel
@@ -221,6 +232,11 @@ the same inputs fail the same way. Original patterns, sequences, file or record
 names, paths, SVG, raw exception text, traceback, stdout and stderr are excluded
 from diagnostics and automatic console output. A saved Session can contain
 private inputs, so share one only deliberately.
+
+While Generate runs, the status line names its stage. The first Generate of a
+page also prepares the diagram runtime and shows each preparation step as it
+starts, for example **Preparing diagram runtime (first use): step 4 of 5,
+installing packages...**; it is a step count, not a time estimate.
 
 After a failed Generate, the message tells you which case applies: no successful
 Result yet, the previous Result unchanged, the rollback completed, or the
@@ -271,6 +287,11 @@ inactive track values. Loading it shows the saved preview; Generate applies
 the restored draft. Invalid drafts cannot be saved as valid Sessions.
 
 ### Custom Track Slots
+
+Each Circular row keeps its inner and outer gap in a disclosure under the row;
+for a GC or AT content or skew row it also holds the dinucleotide, the legend
+label and, for skew, the two colors. Its summary names the dinucleotide and says
+when a gap or a skew color is set.
 
 **Use custom stack** draws the saved stack. Turning it on for the first time
 uses the saved default stack as it is, including its **Ticks** row. **Reset**
@@ -402,7 +423,12 @@ within the record. These settings apply on **Generate Diagram**.
 **Region Annotations** offers the records the next Circular Generate draws. One
 selected record offers that record alone; **All records**, or **Multi-Record
 Canvas** on, offers every record, and each annotation then needs an explicit
-target record, which binds it to that record.
+target record, which binds it to that record. When only one record can be the
+target, or the source records are not inspected yet, the row names its record
+instead of offering a select. Each row shows its name, span and fill color,
+then its target kind (**Coordinates** or **Feature**) and record; the **Style**
+disclosure, whose summary names the mark and label, holds the mark, label, lane,
+**Line color** and hatch.
 
 ## Circular multi-record canvas
 
@@ -591,27 +617,39 @@ select **LOSATN**, **LOSATP**, or **TLOSATX**. When **LOSATP** is active,
 the **LOSATP mode** menu selects
 **Similarity groups**, **Collinear blocks**, or **Pairwise matches**. Selected
 or mixed pair plans allow LOSATN, TLOSATX, and LOSATP Pairwise matches.
-Similarity groups and Collinear blocks require all-adjacent LOSAT; **Use all
-adjacent LOSAT** changes the topology only after an explicit selection.
+Similarity groups and Collinear blocks require all-adjacent LOSAT; with
+selected pairs those options read **(all pairs only)** and cannot be chosen.
+
+Problems in the pair plan appear once, in the **Fix before Generate** list under
+the Comparison commands. Each entry names its cause and offers the action that
+fixes it: **Choose file** or **Show pair** focuses the pair, **Run LOSAT for all
+pairs** returns to all-adjacent LOSAT, and **Use Pairwise matches** switches the
+LOSATP mode. A pair with a problem is also marked in its row.
 
 Open the initially closed **Selected pairs (N)** disclosure to change a pair's
-source, bind an uploaded table, omit a pair, or add a non-adjacent pair. Pair
-editors are not inserted between record cards. An uploaded edge participates
-only when it has an active file; an omitted edge draws no link and starts no
-search. When **Generate Diagram** finds pairs set to **Upload BLAST TSV**
-without a file, the **BLAST TSV missing** dialog lists them: **Choose BLAST TSV
-for #i → #j…** opens the first pair's file chooser (then select **Generate
-Diagram** again), and **Set to No comparison and Generate** sets every listed
-pair to **No comparison** as one undoable step and generates. Any other problem
-in the pair plan is reported as an error instead.
+source, bind an uploaded table, omit a pair, or add a non-adjacent pair. Each
+pair is one row: its records, a three-way **No comparison** / **Run LOSAT** /
+**Upload BLAST TSV** choice, the file chooser for an uploaded table, and, for a
+LOSAT pair whose raw result is kept, **Save Raw LOSAT TSV**. **File name** opens
+the pair's **Raw LOSAT filename**. Rows between the same two display rows are
+grouped under **Rows i–j** only when there is more than one pair. Pair editors
+are not inserted between record cards. An uploaded edge participates only when
+it has an active file; an omitted edge draws no link and starts no search. When
+**Generate Diagram** finds pairs set to **Upload BLAST TSV** without a file, the
+**BLAST TSV missing** dialog lists one row per pair with its own **Choose
+file…**. When every pair has a file, **Generate** runs. **Skip these
+comparisons and Generate** sets the pairs still without a file to **No
+comparison** as one undoable step and generates. Any other problem in the pair
+plan is reported as an error instead.
 
 **Settings** shows only controls used by the active LOSAT program and, for
 LOSATP, its presentation. LOSATN shows **LOSATN task**. TLOSATX keeps each record's
 active genetic code in that record's **Record options**. LOSATP **Pairwise
 matches** shows **Max hits per protein**; **Similarity groups** shows **Member
 hits per protein**; **Collinear blocks** shows its primary block, scope, and
-color controls. **Max target seqs** is visible in **Settings** for every LOSATP
-mode and controls the raw search limit. Both it and **Member hits per protein**
+color controls. **Result filters** and **Comparison appearance** follow, then
+**Search limits** and **Performance**. **Max target seqs** is visible under
+**Search limits** for every LOSATP mode and controls the raw search limit. Both it and **Member hits per protein**
 initially use `5` in Collinear and are unbounded in Similarity groups. Each mode
 remembers its own edited values. Blank means unbounded.
 
@@ -630,17 +668,17 @@ An older Session that did not save the field keeps its former Ribbon appearance.
 A Curve or Ribbon saved explicitly stays as saved.
 
 Similarity groups always runs an all-vs-all protein search across
-the loaded records and has no **Evidence scope** selector. Collinear blocks uses
-**Evidence scope**. Fresh pages and **Reset Settings** default that control to
-**Adjacent pairs**. A session that explicitly saved **All records** restores
-that value. **Evidence scope** controls how far the search expands, not which record
-pairs get displayed links.
+the loaded records and has no **Search between** selector. Collinear blocks
+uses **Search between** to choose the record pairs that LOSATP searches:
+**Adjacent pairs** or **All records**. Fresh pages and **Reset Settings**
+default it to **Adjacent pairs**. A session that explicitly saved **All
+records** restores that value. **Search between** controls how far the search
+expands, not which record pairs get displayed links.
 
 **Advanced comparison and layout** is closed by default. It holds **Record Layout**, cache controls,
-and advanced Collinear search details. Its **Raw LOSAT results** section
-groups each pair's filename, whether its raw result is kept, and its **Save Raw LOSAT
-TSV** action. LOSAT **Execution** and thread allocation are in **Settings**
-under **Runtime and reproducibility**. Closing any of these disclosures does
+and advanced Collinear search details. Each pair's raw result file is in its
+**Selected pairs** row. LOSAT **Execution** and thread allocation are in
+**Settings** under **Performance**. Closing any of these disclosures does
 not disable comparison work or discard its values.
 
 TLOSATX translates each sequence with its selected genetic code. In Linear
@@ -650,9 +688,9 @@ Circular mode, **Reference gencode** applies to the displayed subject. Each
 comparison row's **Comparison gencode** control applies to that comparison
 sequence, which the search passes as its query.
 
-The common Linear filters are **Bitscore**, **E-value**, **Minimum identity**,
-and **Minimum length**. Collinear settings include **Max unit gap**, **Min
-block genes**, **Diagonal drift**, **Merge conflicts**, **Evidence scope**
+The common Linear filters are **Bitscore**, **E-value**, **Min identity (%)**,
+and **Min length**. Collinear settings include **Max unit gap**, **Min
+block genes**, **Diagonal drift**, **Merge conflicts**, **Search between**
 (**Adjacent pairs** or **All records**), and **Color mode** (**Average
 identity**, **Orientation**, or **Orientation + identity**). Scientific
 meanings and limits belong to the comparison reference below.
@@ -978,9 +1016,10 @@ feature is drawn. When other edits name a feature that the source does not
 have, the notice above the diagram offers **Remove N unmatched feature edits**.
 
 **Region Annotations → Selected features** makes one annotation per selected
-feature that names the source feature the same way; the editor shows it as
-**Selected feature:** and the feature's caption. Generate draws it on that
-feature after crop, reverse complement, record order, or record copy changes.
+feature that names the source feature the same way; its row shows the
+feature's caption, and its target kind reads **Selected feature**. Generate
+draws it on that feature after crop, reverse complement, record order, or
+record copy changes.
 When the feature is not drawn, for example outside the crop, Generate skips
 the annotation and reports it in the annotation notice; the annotation stays.
 The annotation belongs to the annotation set of the mode the feature was
@@ -1122,6 +1161,13 @@ Info Source recipe write `-p` and only your colors as `-d`. Colors are compared
 ignoring case, with `#abc` equal to `#aabbcc`, and **Auto** is not one of your
 colors.
 
+The Colors card lists, under **Colors in this figure or changed**, the default
+colors of the feature types the loaded features include, GC content and skew
+when they are shown, the comparison colors when a Linear figure compares rows,
+and every one of your colors; the others wait under **More colors (N)**. A color
+you edit stays in the list where you edit it. The lists are regrouped when the
+features, the shown tracks, the palette, or the color table change.
+
 - Choosing another palette while you have your own colors asks **Keep my N
   colors** (the new palette plus your colors), **Use the palette's colors**, or
   **Cancel**, which changes nothing. Without your colors the palette changes at
@@ -1184,7 +1230,12 @@ Python matching semantics for live preparation and Generate. This differs from
 Feature Search and Interactive SVG search. TSV columns and pattern semantics
 are specified in [Input formats and TSV schemas](input-formats-and-tsv-schemas.md#styling-tables).
 
-A rejected edit to an existing Color rule's pattern stays visible in that field as **Not applied**, with its cause and **Retry** / **Revert** controls.
+Each specific color rule is one line: its color, then a summary of feature
+type, qualifier, pattern and legend caption. The summary opens the rule's
+editor with those fields and the **Move rule up**, **Move rule down** and
+**Delete rule** buttons.
+
+A rejected edit to an existing Color rule's pattern stays visible in that field as **Not applied**, with its cause, a compact **Details** disclosure, **Retry**, and **Revert** under the field. A syntax error names the character position counted from one.
 The displayed text is a temporary draft; the accepted rule, Result and History
 remain unchanged. Syntax errors are distinguished from runtime initialization
 or preparation failures. Correcting the text and applying it, or a successful
@@ -1206,11 +1257,13 @@ fields; new rules, TSV imports, presets and Search keep their own input behavior
 
 After **Load Session**, a Circular record's rotation row appears once you select
 **Inspect source records** or **Generate Diagram**. A Linear File card whose
-record rows are not shown offers **Load record rotation controls**. For a
+record rows are not shown offers **Inspect records**; until then its **Record**
+select says **Not inspected**. For a
 complete record, use its rotation row in Circular mode or **Record options** in
-Linear mode. **Detected** reports the source topology;
+Linear mode. The row names the topology the file states;
 **Circular record** overrides it and **Reset to detected** removes that override.
-Enter a 1-based source coordinate in **Display start**. It becomes the base at
+**Display start** shows the current start. Enter a 1-based source coordinate to
+change it. It becomes the base at
 12 o'clock in Circular or at the left edge of a wrapped Linear record after
 **Generate Diagram**. **Reset start** restores no additional shift, which differs
 from explicit 1 when reverse complemented.

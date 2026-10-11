@@ -372,7 +372,7 @@ test('Gallery renders the Hepatoplasmataceae orthogroup tutorial and media', asy
       'gbdraw builds its similarity groups from searches across all record pairs, then draws links between adjacent displayed records.'
     )
   ).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: 'Minimum Identity 0' })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'Min identity (%) 0' })).toBeVisible();
   await expect(page.getByText('gbdraw group ID, display name, and the count of genes and records')).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
   await expect(mediaImages).toHaveCount(11);
@@ -426,7 +426,7 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
   ).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Palette orange' }).first()).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Default CDS color #dddddd' })).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: 'Minimum identity 30 (default 0)' })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'Min identity (%) 30 (default 0)' })).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', { name: 'File 5 › Record options › Reverse complement On' })
   ).toBeVisible();

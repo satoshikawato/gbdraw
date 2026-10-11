@@ -28,8 +28,8 @@ delete replayEnv.PYTHONHOME;
 // A long page promise awaited inside page.evaluate can be collected by the inspector (OV-327).
 const setApp = (page, body) => evaluateWithRetainedPromise(page, body);
 const slotLabel = async (page, slot, text) => {
-  const field = page.getByRole('group', { name: `Circular track slot ${slot}`, exact: true })
-    .getByRole('textbox', { name: 'Track legend label' });
+  const field = await reveal(page.getByRole('group', { name: `Circular track slot ${slot}`, exact: true })
+    .getByRole('textbox', { name: 'Track legend label', includeHidden: true }));
   await field.fill(text);
   await field.press('Tab');
 };

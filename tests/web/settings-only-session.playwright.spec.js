@@ -62,12 +62,12 @@ const loadFile = async (page, file, message = 'Session loaded successfully!') =>
   const actual = await page.evaluate(() => window.__GBDRAW_APP__.errorLog);
   const expected = await page.evaluate(async field => {
     const { normalizeUserFacingError } = await import('./js/utils/error-normalization.js');
-    return normalizeUserFacingError({ code: 'INPUT_INVALID', stage: 'request-validation',
+    return normalizeUserFacingError({ code: 'INPUT_INVALID', operation: 'session-load', stage: 'request-validation',
       context: { field, reason: 'FIELDS' } });
   }, message.field);
   expect(actual).toEqual(expected);
   expect(JSON.stringify(actual)).not.toMatch(/absent|axis_stroke_color|Invalid managed flag|newer than/);
-  await expect(page.getByRole('alert', { name: 'Operation error' })).toContainText(expected.summary);
+  await expect(page.getByRole('alert', { name: 'Session not loaded' })).toContainText(expected.summary);
   return actual;
 };
 

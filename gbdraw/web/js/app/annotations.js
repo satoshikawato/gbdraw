@@ -285,8 +285,9 @@ export const createAnnotationEditor = ({
       || recordSelector.setValue(annotation, value),
     recordIsRequired: recordSelector.isRequired,
     recordIsMissing: recordSelector.isMissing,
-    recordIsDisabled: recordSelector.isDisabled,
     recordMissingMessage: recordSelector.missingMessage,
+    recordShowsSelect: recordSelector.showsSelect,
+    recordCaptionFor: recordSelector.captionFor,
     reconcileRecordBindings: reconcileRecords
   };
 };

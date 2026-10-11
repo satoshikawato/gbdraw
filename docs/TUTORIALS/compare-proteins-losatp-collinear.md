@@ -98,16 +98,15 @@ settings in Step 3.
 ### Step 3: Configure LOSATP Collinear
 
 In **Comparison**, select **Run LOSAT** explicitly. Open **Selected pairs (4)**
-and find **Comparison boundary: display row 4 to 5**. Confirm that its pair
-connects sequence 4 (`AP027132.gb`) to sequence 5 (`NZ_CP006932.gb`), then
-close the disclosure.
+and find the last pair, **#4 → #5**. Confirm that it connects sequence 4
+(`AP027132.gb`) to sequence 5 (`NZ_CP006932.gb`), then close the disclosure.
 
 Open **Settings** and choose the **LOSATP** button in **LOSAT Mode**. Choose
 **Pairwise matches** from the **LOSATP mode** menu and set **Match style** to
 **Curve** under **Comparison appearance**; Collinear blocks keeps that style but
 hides the control. Then choose **Collinear blocks** from the **LOSATP mode**
 menu, select **Infer orthogroups with self-comparisons**, clear **Max target
-seqs** so it shows **Unbounded**, and set the remaining block, runtime, and
+seqs** so it shows **Unbounded**, and set the remaining block, Performance, and
 result-filter values. Continue past **Generate Diagram**, open **Advanced
 comparison and layout**, and set the advanced Collinear values.
 
@@ -115,7 +114,7 @@ Fresh Web Collinear settings leave **Infer orthogroups with self-comparisons**
 off and set **Max target seqs** to `5`. The Gallery figure and the
 command-line and Python workflows infer orthogroups with self-comparisons from
 an unbounded search, so change both values to reproduce it. Fresh and Reset
-Collinear settings default **Evidence scope** to **Adjacent pairs**, which is
+Collinear settings default **Search between** to **Adjacent pairs**, which is
 also the value used by this checked recipe and output.
 
 | Section | Control | Value |
@@ -123,19 +122,19 @@ also the value used by this checked recipe and output.
 | Settings | LOSAT Mode | LOSATP |
 | Settings / Comparison appearance | Match style (set in Pairwise matches) | Curve |
 | Settings | LOSATP mode | Collinear blocks |
-| Settings / Runtime and reproducibility | Execution | Auto |
-| Settings / Runtime and reproducibility | Total threads | Safe |
-| Settings / Runtime and reproducibility | Parallel runs | Auto |
-| Settings / Runtime and reproducibility | Threads per run | Auto |
-| Settings | Max target seqs | Blank (**Unbounded**) |
-| Settings | Member hits per protein | `5` |
+| Settings / Performance | Execution | Auto |
+| Settings / Performance | Total threads | Safe |
+| Settings / Performance | Parallel runs | Auto |
+| Settings / Performance | Threads per run | Auto |
+| Settings / Search limits | Max target seqs | Blank (**Unbounded**) |
+| Settings / Search limits | Member hits per protein | `5` |
 | Settings | Infer orthogroups with self-comparisons | Selected |
 | Settings | Max unit gap | `0` |
 | Settings | Min block genes | `1` |
 | Settings | Color mode | Orientation + identity |
-| Settings | Evidence scope | Adjacent pairs |
+| Settings | Search between | Adjacent pairs |
 | Settings / Result filters | Bitscore / E-value | `50` / `0.01` |
-| Settings / Result filters | Minimum identity / length | `0` / `0` |
+| Settings / Result filters | Min identity (%) / Min length | `0` / `0` |
 | Advanced comparison and layout / Advanced collinear search | Diagonal drift | `0` |
 | Advanced comparison and layout / Advanced collinear search | Merge conflicts | `1` |
 | Advanced comparison and layout / Advanced collinear search | Paralog links per group | `2` |
@@ -190,7 +189,7 @@ select **SVG** to save `losatp_collinear.svg`.
 ### Variant: use all-record evidence
 
 Keep **Adjacent pairs** for the checked result above. To build blocks from
-every record pair, change **Evidence scope** to **All records** in Step 3. A
+every record pair, change **Search between** to **All records** in Step 3. A
 fresh five-record run executes 25 directional and self search jobs. Block
 construction uses evidence from every record pair, while the finished ribbons
 still connect adjacent display rows.
