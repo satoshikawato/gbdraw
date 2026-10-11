@@ -848,11 +848,12 @@ def capture_gui_annotation_tracks(
         legend_label = page.get_by_placeholder("Set legend label (optional)")
         legend_label.fill("Plastome structural regions")
         expect(legend_label).to_have_value("Plastome structural regions")
-        expect(page.get_by_label("Annotation target record", exact=True)).to_have_count(4)
+        # A one-record input names the record instead of offering a select.
+        expect(page.get_by_label("Annotation target record", exact=True)).to_have_count(0)
         lane_controls = page.get_by_label("Annotation lane", exact=True)
         expect(lane_controls).to_have_count(4)
         for index, lane in enumerate((0, 1, 0, 1)):
-            lane_control = lane_controls.nth(index)
+            lane_control = open_ancestor_details(lane_controls.nth(index))
             lane_control.fill(str(lane))
             expect(lane_control).to_have_value(str(lane))
         rendered_lanes = tuple(

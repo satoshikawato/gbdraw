@@ -17,6 +17,9 @@ test('FL-11 the preset panel says what Bakta changes and that the palette is unc
     await expect(effects).toHaveCount(1);
     await effects.evaluate(element => { for (let node = element.closest('details'); node; node = node.parentElement?.closest('details')) node.open = true; });
     await expect(effects).toContainText('the palette is unchanged');
+    // The Bakta side effects show when Bakta is the chosen preset.
+    await expect(effects).not.toContainText('Bakta');
+    await page.getByLabel('Preset scheme', { exact: true }).selectOption('bakta');
     await expect(effects).toContainText('Bakta also sets the CDS default color to #cccccc');
     await expect(effects).toContainText('Legend box size and font size to 12');
     await expect(effects).not.toContainText('update the palette');
@@ -40,7 +43,7 @@ test('FL-12 two or more specific rules show one line on what Move rule up/down o
     await expect(hint).toHaveCount(1);
     await hint.evaluate(element => { for (let node = element.closest('details'); node; node = node.parentElement?.closest('details')) node.open = true; });
     await expect(hint).toBeVisible();
-    await expect(hint).toContainText('same qualifier key');
+    await expect(hint).toContainText('Rules on the same qualifier: the first match wins.');
   } finally {
     await page.context().close();
   }

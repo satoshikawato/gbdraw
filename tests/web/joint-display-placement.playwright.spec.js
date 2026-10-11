@@ -257,7 +257,7 @@ for (const mode of ['circular', 'linear']) {
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending), { timeout: 180000 }).toBe(false);
     if (mode === 'linear') {
       await expandLinearRecordControls(page);
-      await page.getByRole('button', { name: 'Load record rotation controls', exact: true }).first().click();
+      await page.getByRole('button', { name: 'Inspect records', exact: true }).first().click();
     } else {
       await page.locator('[data-circular-inspect]').click();
     }

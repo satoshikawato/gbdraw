@@ -115,6 +115,9 @@ const formatFactor = (value) => {
 
 const withAuto = (text) => (String(text || '').trim() ? `${text} (auto)` : '');
 
+// UX-C13: an Auto value that depends on genome size shows the value for the
+// current genome; before its length is known, it says so instead of listing
+// the short- and long-genome values side by side.
 /** @param {string | null} [activeLength] */
 const formatShortLong = (values, formatter, activeLength = null) => {
   if (!values || typeof values !== 'object') return '';
@@ -125,12 +128,7 @@ const formatShortLong = (values, formatter, activeLength = null) => {
   const longText = formatter(values.long);
   if (!shortText || !longText) return '';
   if (shortText === longText) return withAuto(shortText);
-  const unitMatch = shortText.match(/^(.+?)\s+([A-Za-z%]+)$/);
-  const longUnitMatch = longText.match(/^(.+?)\s+([A-Za-z%]+)$/);
-  if (unitMatch && longUnitMatch && unitMatch[2] === longUnitMatch[2]) {
-    return `${unitMatch[1]}/${longUnitMatch[1]} ${unitMatch[2]} (s/l auto)`;
-  }
-  return `${shortText}/${longText} (s/l auto)`;
+  return 'Auto (by genome size)';
 };
 
 const normalizeLengthParam = (value) => {

@@ -382,7 +382,7 @@ def capture_gui_feature_highlight(
         colors = page.get_by_label("Colors", exact=True)
         toggle_disclosure(colors)
         expect(page.get_by_label("Palette", exact=True)).to_have_value("default")
-        page.get_by_label("Specific Table (-t)", exact=True).set_input_files(
+        page.get_by_label("Specific rules file", exact=True).set_input_files(
             tables["colors"]
         )
         page.wait_for_function(

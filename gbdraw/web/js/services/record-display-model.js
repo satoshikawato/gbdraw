@@ -145,13 +145,18 @@ export const recordDisplaySurface = (row, draft = {}, { cropped = false, reverse
   if (override !== null && typeof override !== 'boolean') throw new Error('Topology override must be boolean or null.');
   const effectiveCircular = override ?? row.detectedTopology === 'circular';
   const lengthKnown = Number.isSafeInteger(row.recordLength) && row.recordLength > 0;
+  const startEnabled = effectiveCircular && lengthKnown && !cropped;
+  const currentStart = reverse ? (lengthKnown ? row.recordLength : null) : 1;
   return {
     effectiveCircular,
-    startEnabled: effectiveCircular && lengthKnown && !cropped,
+    startEnabled,
     disabledReason: cropped ? 'Display start is unavailable for a cropped record.'
       : !lengthKnown ? 'Record length is unavailable.'
         : !effectiveCircular ? 'Display start requires a circular record.' : '',
-    currentStart: reverse ? (lengthKnown ? row.recordLength : null) : 1
+    currentStart,
+    // OV-374: the Display start field shows the start the record is drawn
+    // from, the requested one or the current one, never an empty field.
+    displayStart: draft.startCoordinate != null && startEnabled ? draft.startCoordinate : currentStart
   };
 };
 

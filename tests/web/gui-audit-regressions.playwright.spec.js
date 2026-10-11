@@ -41,8 +41,8 @@ test('new annotation IDs still select their editor row after deletion and regene
   await panel.getByTitle('Delete annotation', { exact: true }).first().click();
   await add.click();
   for (let i = 0; i < 3; i += 1) {
-    await panel.getByPlaceholder('Start (1-based)', { exact: true }).nth(i).fill(String(1000 + i * 3000));
-    await panel.getByPlaceholder('End (inclusive)', { exact: true }).nth(i).fill(String(2000 + i * 3000));
+    await panel.getByLabel('Annotation start (1-based)', { exact: true }).nth(i).fill(String(1000 + i * 3000));
+    await panel.getByLabel('Annotation end (inclusive)', { exact: true }).nth(i).fill(String(2000 + i * 3000));
   }
   await panel.getByTitle('Fill color', { exact: true }).first().fill('#ff0000');
   await expect(panel.getByTitle('Fill color', { exact: true }).nth(1)).toHaveValue('#94a3b8');
@@ -363,12 +363,12 @@ test('invalid annotation coordinates preserve the draft and the last successful 
   }
   expect(dialogs).toEqual([]);
   const oldResult = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
-  await panel.getByPlaceholder('Start (1-based)', { exact: true }).fill('1.5');
-  await panel.getByPlaceholder('Start (1-based)', { exact: true }).press('Tab');
+  await panel.getByLabel('Annotation start (1-based)', { exact: true }).fill('1.5');
+  await panel.getByLabel('Annotation start (1-based)', { exact: true }).press('Tab');
   expect((await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).status).toBe('error');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({ code: 'ANNOTATION_TARGET', context: { reason: 'POSITIVE_INTEGER' },
     summary: expect.stringContaining('integer greater than zero') });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(oldResult);
-  await panel.getByPlaceholder('Start (1-based)', { exact: true }).fill('1');
+  await panel.getByLabel('Annotation start (1-based)', { exact: true }).fill('1');
   await generateAndWaitForResult(page);
 });

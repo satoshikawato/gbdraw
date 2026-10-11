@@ -104,7 +104,7 @@ test('native upload automatically inspects one, two, duplicate and DDBJ records 
     await uploadNative(page, text, name);
     await waitStatus(page, 'ready');
     expect((await snapshot(page)).rows).toEqual(expected);
-    await expect(page.getByRole('button', { name: 'Load record rotation controls' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Inspect records' })).toHaveCount(0);
     await expect(page.getByRole('spinbutton', { name: /^Display start/ })).toHaveCount(expected.length);
     await assertDiagramWorkerIdle(page);
   }

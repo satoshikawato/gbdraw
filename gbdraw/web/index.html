@@ -1505,6 +1505,9 @@
             .group-heading { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ui-muted); }
             .input-label { @apply flex items-center gap-1; margin-bottom: 3px; font-size: 12px; font-weight: 500; line-height: 1.3; color: var(--ui-text-2); }
             .ui-hint { font-size: 11px; line-height: 1.45; color: var(--ui-muted); }
+            /* UX-C11: one marker for settings that the next Generate applies (R1). */
+            .markup-preview { @apply mt-0.5 truncate text-[10px] text-slate-600; }
+            .apply-note { @apply inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-1.5 py-px text-[10px] font-medium leading-4 text-slate-500; }
 
             .form-input { @apply block w-full rounded-lg border bg-slate-50 p-2 text-sm transition-all focus:border-blue-500 focus:ring-blue-500; border-color: var(--ui-line); color: var(--ui-text-2); }
             /* After .form-input: its padding would clip the compact fields, and its background would hide
@@ -1647,6 +1650,7 @@
                             <file-uploader label="FASTA File" :model-value="files.c_fasta" @update:model-value="setCircularSourceFile('c_fasta', $event)" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"></file-uploader>
                         </div>
                         <section aria-label="Source records" class="space-y-2">
+                            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                             <p data-circular-discovery-status role="status" aria-live="polite" class="text-xs text-slate-600">
                                 <span v-if="circularRecordDiscoveryState.status === 'deferred'">Records not inspected</span>
                                 <span v-else-if="circularRecordDiscoveryState.status === 'loading'">Inspecting source records…</span>
@@ -1655,6 +1659,7 @@
                                 <span v-else>{{ cInputType === 'gff' ? 'Upload both GFF3 and FASTA files to inspect records.' : 'Upload a source file to inspect records.' }}</span>
                             </p>
                             <button v-if="circularRecordDiscoveryState.hasInput" data-circular-inspect type="button" data-history-ignore @click="inspectCircularSourceRecords" :aria-disabled="!circularRecordInspectionEnabled" :aria-busy="circularRecordDiscoveryState.status === 'loading'" :class="circularRecordInspectionEnabled ? 'text-blue-600' : 'text-slate-400'" class="text-xs">{{ circularRecordDiscoveryState.status === 'error' ? 'Retry source inspection' : circularRecordDiscoveryState.status === 'ready' ? 'Inspect source records again' : 'Inspect source records' }}</button>
+                            </div>
                             <div>
                                 <div class="flex items-center justify-between gap-2">
                                     <span class="input-label text-[10px]">Record <help-tip id="help-circular-record" text="Select one stable record identity for a single Circular diagram. Leave this on All records to keep separate-diagram batch output."></help-tip></span>
@@ -1687,8 +1692,8 @@
                                 <p v-if="!form.multi_record_canvas && circularRecordDiscoveryState.status === 'ready' && !circularSingleRecordPresentationEnabled" class="ui-hint mt-1">Select one record to edit crop, orientation, and title lines.</p>
                             </div>
                         </section>
-                        <section aria-label="Record rotation" class="space-y-2">
-                            <p class="ui-hint">Applies on Generate: record rotation.</p>
+                        <section v-if="recordDisplayControls.rowsFor('circular').length" aria-label="Record rotation" class="space-y-2">
+                            <div class="flex items-center justify-between gap-2"><span class="input-label text-[10px]">Topology and display start</span><span class="apply-note" data-applies-on-generate="record-rotation">Applies on Generate</span></div>
                             <record-display-control v-for="row in recordDisplayControls.rowsFor('circular')" :key="row.key" :row="row" :controller="recordDisplayControls"></record-display-control>
                         </section>
                         <details ref="circularRecordPresentationPanel" data-circular-record-presentation class="rounded border border-slate-200 bg-white/70 p-2">
@@ -1725,17 +1730,17 @@
                                     </div>
                                     <div class="pt-1 border-t border-slate-200 border-dashed">
                                         <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
-                                            <i class="ph ph-crop" aria-hidden="true"></i> Region (optional) <span class="ui-hint font-normal">Applies on Generate</span>
+                                            <i class="ph ph-crop" aria-hidden="true"></i> <span class="whitespace-nowrap">Region (optional)</span> <span class="apply-note ml-auto">Applies on Generate</span>
                                             <help-tip id="help-circular-region" text="Use 1-based inclusive coordinates within the selected record. Both values are required and must be within record bounds."></help-tip>
                                         </div>
                                         <div class="grid grid-cols-2 gap-2">
                                             <div>
                                                 <label class="text-[9px] block">Start</label>
-                                                <input type="number" min="1" step="1" v-model.number="form.circular_region_start" :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled" aria-label="Circular region start" :aria-describedby="`help-circular-region${circularSingleRecordPresentationEnabled ? '' : ' circular-record-presentation-reason'}`" placeholder="1000" class="form-input px-1 py-0.5 text-xs">
+                                                <input type="number" min="1" step="1" v-model.number="form.circular_region_start" :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled" aria-label="Circular region start" :aria-describedby="`help-circular-region${circularSingleRecordPresentationEnabled ? '' : ' circular-record-presentation-reason'}`" placeholder="1" class="form-input px-1 py-0.5 text-xs">
                                             </div>
                                             <div>
                                                 <label class="text-[9px] block">End</label>
-                                                <input type="number" min="1" step="1" v-model.number="form.circular_region_end" :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled" aria-label="Circular region end" :aria-describedby="`help-circular-region${circularSingleRecordPresentationEnabled ? '' : ' circular-record-presentation-reason'}`" placeholder="9000" class="form-input px-1 py-0.5 text-xs">
+                                                <input type="number" min="1" step="1" v-model.number="form.circular_region_end" :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled" aria-label="Circular region end" :aria-describedby="`help-circular-region${circularSingleRecordPresentationEnabled ? '' : ' circular-record-presentation-reason'}`" placeholder="Record end" class="form-input px-1 py-0.5 text-xs">
                                             </div>
                                         </div>
                                     </div>
@@ -1749,9 +1754,10 @@
                             <summary aria-label="Depth TSV tracks">
                                 <i class="ph ph-chart-bar" aria-hidden="true"></i>
                                 Depth TSV tracks
+                                <help-tip text="A tab-separated read-depth table drawn as a track. With several records, one file is used for the same series of every record; a Session keeps any per-record blanks."></help-tip>
                                 <span v-if="hasCircularDepthFiles" class="ml-auto text-[10px] font-semibold text-slate-500">{{ depthTrackCountLabel(files.c_depth) }}</span>
                             </summary>
-                            <p class="ui-hint pt-1">In multi-record Circular mode, this uploader assigns a file to the same logical series for every record. Sparse matrices loaded from a session retain record-specific blank cells.</p>
+                            <p v-if="circularRecordDiscoveryState.records.length > 1" class="ui-hint pt-1">Each file is used for every record.</p>
                             <div v-if="!hasCircularDepthFiles" class="pt-1">
                                 <file-uploader
                                     label="Depth TSV"
@@ -1978,7 +1984,7 @@
                                 ></file-uploader>
                             </div>
                             <div class="mt-2 p-2 bg-white/70 rounded border border-slate-200 space-y-1.5" :data-linear-source-defaults="source.uid">
-                                <div class="text-[10px] font-bold text-slate-500">File defaults (applied to all records)</div>
+                                <div class="text-[10px] font-bold text-slate-500">Names for all records in this file</div>
                                 <div>
                                     <label class="text-[9px] font-semibold text-slate-500 block mb-0.5">Organism / strain</label>
                                     <input
@@ -1990,6 +1996,7 @@
                                         class="form-input px-1 py-0.5 text-xs"
                                         :disabled="!semanticMutationAvailable"
                                     >
+                                    <markup-preview :text="getLinearSourceDefaultDefinition(source)"></markup-preview>
                                 </div>
                                 <div>
                                     <label class="text-[9px] font-semibold text-slate-500 block mb-0.5">Subtitle / title (optional)</label>
@@ -2120,7 +2127,7 @@
                                         :disabled="!semanticMutationAvailable"
                                     > Draw this record
                                 </label>
-                                <span class="ui-hint">Applies on Generate</span>
+                                <span class="apply-note">Applies on Generate</span>
                                 <button
                                     v-if="!recordSelection.isDrawn('linear', seq.uid)"
                                     type="button"
@@ -2135,7 +2142,7 @@
                                 <div class="text-[10px] font-bold text-white bg-slate-500 px-1.5 py-0.5 rounded-full shrink-0">#{{ idx + 1 }}</div>
                             </div>
 
-                                    <button v-if="(lInputType === 'gff' ? seq.gff && seq.fasta : seq.gb) && !recordDisplayControls.rowsFor(seq.uid).length" type="button" @click="refreshLinearRecordSelectors" class="text-xs text-blue-600" :disabled="!semanticMutationAvailable">Load record rotation controls</button>
+                                    <button v-if="(lInputType === 'gff' ? seq.gff && seq.fasta : seq.gb) && !recordDisplayControls.rowsFor(seq.uid).length" type="button" @click="refreshLinearRecordSelectors" class="text-xs text-blue-600" :disabled="!semanticMutationAvailable">Inspect records</button>
                                     <record-display-control v-for="row in recordDisplayControls.rowsFor(seq.uid)" :key="row.key" :row="row" :controller="recordDisplayControls"></record-display-control>
 
                             <details v-if="source.records.length > 1" class="rounded border border-slate-200 bg-white/70 p-2">
@@ -2144,7 +2151,6 @@
                                     Per-record Depth TSV
                                     <span v-if="hasLinearDepthFiles(seq)" class="ml-auto text-[10px] font-semibold text-slate-500">{{ depthTrackCountLabel(seq.depth) }}</span>
                                 </summary>
-                                <p class="ui-hint pt-1">Change this record without renumbering global series. Different or missing files are reported in the File-level depth summary.</p>
                                 <div class="space-y-1.5 pt-1">
                                     <div class="space-y-1.5">
                                         <div v-for="track in linearDepthTrackRows()" :key="`${seq.uid}-depth-${track.key}`" class="rounded border border-slate-200 bg-slate-50 p-2 space-y-1">
@@ -2167,6 +2173,7 @@
                                     <button v-if="seq.definition && getLinearSourceDefaultDefinition(source)" type="button" @click="resetLinearRecordDefinition(seq)" class="text-[9px] font-normal text-slate-500 hover:text-slate-700" :disabled="!semanticMutationAvailable">Reset to default</button>
                                 </div>
                                 <input type="text" v-model="seq.definition" :aria-label="`Definition for sequence ${idx + 1}`" :placeholder="resolveLinearRecordEffectiveDefinition(seq, source) || 'e.g., Escherichia coli O157:H7 Sakai'" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
+                                <markup-preview :text="seq.definition || resolveLinearRecordEffectiveDefinition(seq, source)"></markup-preview>
                             </div>
                             <div class="mt-2">
                                 <div class="flex items-center justify-between text-[10px] text-slate-500 font-bold mb-1">
@@ -2178,12 +2185,12 @@
                             </div>
                             <div class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
-                                    <i class="ph ph-crop" aria-hidden="true"></i> Region (optional) <span class="ui-hint font-normal">Applies on Generate</span>
+                                    <i class="ph ph-crop" aria-hidden="true"></i> <span class="whitespace-nowrap">Region (optional)</span> <span class="apply-note ml-auto">Applies on Generate</span>
                                     <help-tip :id="`help-linear-region-${seq.uid}`" text="Show only a sub-region (1-based, inclusive). For multi-record files, specify the record ID or #index."></help-tip>
                                 </div>
                                 <div class="grid grid-cols-1 gap-2">
-                                    <div class="flex flex-wrap items-end gap-2">
-                                        <div class="min-w-0 flex-1 basis-24">
+                                    <div class="grid grid-cols-1 gap-1">
+                                        <div class="min-w-0">
                                             <label class="text-[9px] block">Record (optional)</label>
                                             <select
                                                 :value="seq.region_record_id"
@@ -2207,7 +2214,7 @@
                                                 {{ linearRecordSelectorWarning(seq) }}
                                             </p>
                                         </div>
-                                        <label class="flex shrink-0 items-center gap-2 text-[10px] text-slate-600 pb-1">
+                                        <label class="flex shrink-0 items-center gap-2 text-[10px] text-slate-600">
                                             <input type="checkbox"
                                                    v-model="seq.region_reverse"
                                                    :aria-label="`Reverse complement for sequence ${idx + 1}`"
@@ -2217,11 +2224,11 @@
                                     <div class="grid grid-cols-2 gap-2">
                                         <div>
                                             <label class="text-[9px] block">Start</label>
-                                            <input type="number" min="1" :value="seq.region_start ?? ''" @change="setLinearRecordCrop(seq, 'region_start', $event.target.value)" :aria-label="`Region start for sequence ${idx + 1}`" :aria-describedby="`help-linear-region-${seq.uid}`" placeholder="1028779" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="1" :value="seq.region_start ?? ''" @change="setLinearRecordCrop(seq, 'region_start', $event.target.value)" :aria-label="`Region start for sequence ${idx + 1}`" :aria-describedby="`help-linear-region-${seq.uid}`" placeholder="1" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
                                         </div>
                                         <div>
                                             <label class="text-[9px] block">End</label>
-                                            <input type="number" min="1" :value="seq.region_end ?? ''" @change="setLinearRecordCrop(seq, 'region_end', $event.target.value)" :aria-label="`Region end for sequence ${idx + 1}`" :aria-describedby="`help-linear-region-${seq.uid}`" placeholder="1035047" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="1" :value="seq.region_end ?? ''" @change="setLinearRecordCrop(seq, 'region_end', $event.target.value)" :aria-label="`Region end for sequence ${idx + 1}`" :aria-describedby="`help-linear-region-${seq.uid}`" placeholder="Record end" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
                                         </div>
                                     </div>
                                 </div>
@@ -2755,11 +2762,12 @@
                         </div>
 
                         <template v-if="mode === 'circular'">
-                            <p class="ui-hint">Applies on Generate: Species and Strain.</p>
+                            <p class="apply-note" data-applies-on-generate="species-strain"><i class="ph ph-clock" aria-hidden="true"></i> Applies on Generate</p>
                             <div class="grid grid-cols-2 gap-1.5">
                                 <div>
                                     <span class="input-label"><label for="circular-species">Species</label> <help-tip id="help-species" text="Species name used in the circular center label when no custom plot title is set."></help-tip></span>
                                     <input id="circular-species" type="text" v-model="form.species" aria-describedby="help-species" class="form-input" placeholder="e.g., Escherichia coli" :disabled="!semanticMutationAvailable">
+                                    <markup-preview :text="form.species"></markup-preview>
                                 </div>
                                 <div>
                                     <span class="input-label">Strain <help-tip id="help-strain" text="Strain or isolate name used in the circular center label."></help-tip></span>
@@ -2937,17 +2945,22 @@
                                     <button aria-label="Delete set" type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeAnnotationSet(set)" title="Delete set" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                 </div>
                                 <input :value="set.legendLabel" @input="setAnnotationSetLegendLabel(set, $event.target.value)" aria-label="Set legend label" class="form-input px-1 py-0.5 text-[10px]" placeholder="Set legend label (optional)" :disabled="!semanticMutationAvailable">
-                                <div v-for="item in set.annotations" :key="item.id" class="rounded border p-1.5 space-y-1" :class="selectedAnnotation?.setId === set.id && selectedAnnotation?.id === item.id ? 'border-blue-400 bg-blue-50 ring-1 ring-blue-200' : 'border-slate-200 bg-slate-50'">
-                                    <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1">
-                                        <input :value="item.id" @change="renameAnnotation(set, item, $event.target.value)" aria-label="Annotation id" class="form-input px-1 py-0.5 text-[10px]" placeholder="annotation_id" :disabled="!semanticMutationAvailable">
-                                        <select :value="item.target.kind" @change="setAnnotationTargetKind(item, $event.target.value)" aria-label="Annotation target kind" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable">
-                                            <option value="coordinateSpan">Coordinates</option><option value="featureSpan">Feature</option>
-                                            <option v-if="item.target.kind === 'featureIdentity'" value="featureIdentity" disabled>Selected feature</option>
-                                        </select>
+                                <div v-for="item in set.annotations" :key="item.id" data-annotation-row class="rounded border p-1.5 space-y-1" :class="selectedAnnotation?.setId === set.id && selectedAnnotation?.id === item.id ? 'border-blue-400 bg-blue-50 ring-1 ring-blue-200' : 'border-slate-200 bg-slate-50'">
+                                    <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1.15fr)_1.5rem_1.5rem] items-center gap-1" :class="{ '!grid-cols-[minmax(0,1fr)_minmax(0,1fr)_1.5rem_1.5rem]': item.target.kind === 'featureIdentity' }">
+                                        <input :value="item.id" @change="renameAnnotation(set, item, $event.target.value)" aria-label="Annotation id" class="form-input px-1 py-0.5 text-[10px]" placeholder="Name" :disabled="!semanticMutationAvailable">
+                                        <template v-if="item.target.kind === 'coordinateSpan'">
+                                            <input type="number" min="1" v-model.number="item.target.start" aria-label="Annotation start (1-based)" class="form-input px-1 py-0.5 text-[10px]" placeholder="Start" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="1" v-model.number="item.target.end" aria-label="Annotation end (inclusive)" class="form-input px-1 py-0.5 text-[10px]" placeholder="End" :disabled="!semanticMutationAvailable">
+                                        </template>
+                                        <template v-else-if="item.target.kind === 'featureSpan'">
+                                            <input v-model.trim="item.target.selectors[0].key" aria-label="Annotation qualifier" class="form-input px-1 py-0.5 text-[10px]" placeholder="Qualifier" :disabled="!semanticMutationAvailable">
+                                            <input v-model.trim="item.target.selectors[0].value" aria-label="Annotation feature value" class="form-input px-1 py-0.5 text-[10px]" placeholder="Value" :disabled="!semanticMutationAvailable">
+                                        </template>
+                                        <p v-else class="min-w-0 truncate text-[10px] text-slate-600" data-annotation-feature-identity :title="annotationFeatureCaption(item)">{{ annotationFeatureCaption(item) }}</p>
+                                        <input type="color" :value="(item.style || set.defaultStyle).fill || '#94a3b8'" @input="setAnnotationStyle(set, item, 'fill', $event.target.value)" class="form-input h-6 w-6 p-0" title="Fill color" aria-label="Annotation fill color" :disabled="!semanticMutationAvailable">
                                         <button aria-label="Delete annotation" type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeAnnotation(set, item)" title="Delete annotation" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                     </div>
-                                    <p v-if="item.target.kind === 'featureIdentity'" class="text-[10px] text-slate-600 break-words" data-annotation-feature-identity>Selected feature: {{ annotationFeatureCaption(item) }}</p>
-                                    <div v-if="item.target.kind !== 'featureIdentity'">
+                                    <div v-if="item.target.kind !== 'featureIdentity' && annotationRecordShowsSelect(item)">
                                         <label class="mb-0.5 flex items-center gap-1 text-[9px] text-slate-500">
                                             Target record
                                             <span v-if="annotationRecordRequired()" class="font-semibold text-red-600">Required</span>
@@ -2968,27 +2981,30 @@
                                         </select>
                                         <p v-if="annotationRecordMissing(item)" class="mt-0.5 text-[9px] text-red-600">{{ annotationRecordMissingMessage(item) }}</p>
                                     </div>
-                                    <div v-if="item.target.kind === 'coordinateSpan'" class="grid grid-cols-2 gap-1">
-                                        <input type="number" min="1" v-model.number="item.target.start" aria-label="Annotation start (1-based)" class="form-input px-1 py-0.5 text-[10px]" placeholder="Start (1-based)" :disabled="!semanticMutationAvailable">
-                                        <input type="number" min="1" v-model.number="item.target.end" aria-label="Annotation end (inclusive)" class="form-input px-1 py-0.5 text-[10px]" placeholder="End (inclusive)" :disabled="!semanticMutationAvailable">
-                                    </div>
-                                    <div v-else-if="item.target.kind === 'featureSpan'" class="grid grid-cols-2 gap-1">
-                                        <input v-model.trim="item.target.selectors[0].key" aria-label="Annotation qualifier" class="form-input px-1 py-0.5 text-[10px]" placeholder="Qualifier (e.g. locus_tag)" :disabled="!semanticMutationAvailable">
-                                        <input v-model.trim="item.target.selectors[0].value" aria-label="Annotation feature value" class="form-input px-1 py-0.5 text-[10px]" placeholder="Feature value" :disabled="!semanticMutationAvailable">
-                                    </div>
-                                    <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1">
-                                        <input v-model="item.label" aria-label="Annotation label" class="form-input px-1 py-0.5 text-[10px]" placeholder="Label" :disabled="!semanticMutationAvailable">
-                                        <select v-model="item.mark" aria-label="Annotation mark" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option value="highlight">Highlight (behind features)</option><option value="band">Band (annotation lane)</option><option value="line">Line</option><option value="bracket">Bracket</option></select>
-                                        <div class="flex items-center gap-0.5">
-                                            <input type="number" min="0" v-model.number="item.lane" :disabled="!semanticMutationAvailable || (item.mark === 'highlight')" class="form-input w-14 px-1 py-0.5 text-[10px] disabled:bg-slate-100 disabled:text-slate-400" placeholder="Auto" aria-label="Annotation lane" :aria-describedby="`help-annotation-lane-${item.id}`">
-                                            <help-tip :id="`help-annotation-lane-${item.id}`" label="Help: Annotation lane" text="Collision-avoidance row for Line, Bracket, and Band. Leave blank for Auto; use 0 for the first row, 1 for the second, and so on. Highlight always covers the full feature band."></help-tip>
+                                    <p v-else-if="item.target.kind !== 'featureIdentity' && annotationRecordCaption(item)" data-annotation-record-caption class="text-[9px] text-slate-500">{{ annotationRecordCaption(item) }}</p>
+                                    <details class="text-[10px]" data-annotation-style>
+                                        <summary :aria-label="`Style of annotation ${item.id}`" class="cursor-pointer text-[10px] text-slate-500"><i class="ph ph-pencil-simple" aria-hidden="true"></i> <span class="capitalize">{{ item.mark }}</span><template v-if="item.label"> · {{ item.label }}</template></summary>
+                                        <div class="mt-1 space-y-1">
+                                            <div class="grid grid-cols-2 gap-1">
+                                                <select :value="item.target.kind" @change="setAnnotationTargetKind(item, $event.target.value)" aria-label="Annotation target kind" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable">
+                                                    <option value="coordinateSpan">Coordinates</option><option value="featureSpan">Feature</option>
+                                                    <option v-if="item.target.kind === 'featureIdentity'" value="featureIdentity" disabled>Selected feature</option>
+                                                </select>
+                                                <select v-model="item.mark" aria-label="Annotation mark" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option value="highlight">Highlight (behind features)</option><option value="band">Band (annotation lane)</option><option value="line">Line</option><option value="bracket">Bracket</option></select>
+                                            </div>
+                                            <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-1">
+                                                <input v-model="item.label" aria-label="Annotation label" class="form-input px-1 py-0.5 text-[10px]" placeholder="Label" :disabled="!semanticMutationAvailable">
+                                                <div class="flex items-center gap-0.5">
+                                                    <input type="number" min="0" v-model.number="item.lane" :disabled="!semanticMutationAvailable || (item.mark === 'highlight')" class="form-input w-14 px-1 py-0.5 text-[10px] disabled:bg-slate-100 disabled:text-slate-400" placeholder="Auto" aria-label="Annotation lane" :aria-describedby="`help-annotation-lane-${item.id}`">
+                                                    <help-tip :id="`help-annotation-lane-${item.id}`" label="Help: Annotation lane" text="Collision-avoidance row for Line, Bracket, and Band. Leave blank for Auto; use 0 for the first row, 1 for the second, and so on. Highlight always covers the full feature band."></help-tip>
+                                                </div>
+                                            </div>
+                                            <div class="flex items-center gap-2">
+                                                <label class="flex items-center gap-1 text-[10px] text-slate-600">Line <input type="color" :value="(item.style || set.defaultStyle).stroke" @input="setAnnotationStyle(set, item, 'stroke', $event.target.value)" class="form-input h-6 w-8 p-0" title="Stroke color" aria-label="Annotation stroke color" :disabled="!semanticMutationAvailable"></label>
+                                                <label class="flex items-center gap-1 text-[10px]"><input type="checkbox" :checked="Boolean((item.style || set.defaultStyle).hatch)" @change="setAnnotationStyle(set, item, 'hatch', $event.target.checked ? { angle: 45, spacing: 5, color: (item.style || set.defaultStyle).stroke, width: 1, cross: false } : null)" :disabled="!semanticMutationAvailable"> Hatch</label>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div class="grid grid-cols-3 gap-1 items-center">
-                                        <input type="color" :value="(item.style || set.defaultStyle).stroke" @input="setAnnotationStyle(set, item, 'stroke', $event.target.value)" class="form-input h-7 p-0" title="Stroke color" aria-label="Annotation stroke color" :disabled="!semanticMutationAvailable">
-                                        <input type="color" :value="(item.style || set.defaultStyle).fill || '#94a3b8'" @input="setAnnotationStyle(set, item, 'fill', $event.target.value)" class="form-input h-7 p-0" title="Fill color" aria-label="Annotation fill color" :disabled="!semanticMutationAvailable">
-                                        <label class="flex items-center gap-1 text-[10px]"><input type="checkbox" :checked="Boolean((item.style || set.defaultStyle).hatch)" @change="setAnnotationStyle(set, item, 'hatch', $event.target.checked ? { angle: 45, spacing: 5, color: (item.style || set.defaultStyle).stroke, width: 1, cross: false } : null)" :disabled="!semanticMutationAvailable"> Hatch</label>
-                                    </div>
+                                    </details>
                                 </div>
                                 <div class="flex gap-1">
                                     <button type="button" class="btn btn-secondary text-[10px] flex-1" @click="addCoordinateAnnotation(set)" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> Coordinates</button>
@@ -3212,7 +3228,7 @@
                                         <option value="below">Below</option>
                                     </select>
                                 </div>
-                                <div class="grid grid-cols-2 gap-y-1 gap-x-1 p-1 bg-slate-50 rounded-lg">
+                                <div class="grid grid-cols-1 gap-y-1 p-1.5 bg-slate-50 rounded-lg" data-layout-options>
                                     <div class="flex items-center text-xs">
                                         <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                             <input type="checkbox" :checked="form.separate_strands" @change="featurePlacementActions.changeLayoutSetting($event, 'separate_strands')" class="form-checkbox" aria-label="Separate Strands" aria-describedby="help-linear-separate-strands" :disabled="!semanticMutationAvailable">
@@ -3227,8 +3243,8 @@
                                         </label>
                                         <help-tip id="help-linear-resolve-feature-overlaps" text="Overlapping genomic features are assigned to additional lanes; other tracks are repacked automatically."></help-tip>
                                     </div>
-                                    <label class="text-xs">Feature overlap tolerance (bp)
-                                        <input type="number" min="0" step="1" v-model.number="adv.feature_overlap_tolerance_bp" aria-label="Feature overlap tolerance (bp)" class="w-20 rounded border p-1" :disabled="!semanticMutationAvailable">
+                                    <label class="ml-6 flex items-center gap-2 text-[11px] text-slate-600">Feature overlap tolerance (bp)
+                                        <input type="number" min="0" step="1" v-model.number="adv.feature_overlap_tolerance_bp" aria-label="Feature overlap tolerance (bp)" class="form-input form-input-compact w-20" :disabled="!semanticMutationAvailable">
                                     </label>
 
                                     <div class="flex items-center text-xs">
@@ -3297,7 +3313,7 @@
                                                 </button>
                                                 <help-tip id="help-linear-custom-track-slots" label="Help: Custom Track Slots" text="Edit the explicit linear track stack. Opening or closing this panel does not enable or alter the stack. Arrows reorder within the current side; Axis buttons move rows across the boundary."></help-tip>
                                             </div>
-                                            <p id="linear-custom-track-slots-timing" class="ui-hint">Applies on Generate</p>
+                                            <p id="linear-custom-track-slots-timing" class="apply-note">Applies on Generate</p>
                                         </div>
                                         <div class="flex items-center gap-2">
                                             <label class="inline-flex items-center gap-1 text-[10px] font-medium text-slate-600 cursor-pointer select-none" title="Use the saved custom stack for rendering. Disabling it preserves the stack for later use.">
@@ -3570,7 +3586,7 @@
                                         <option value="spreadout">Spreadout</option>
                                     </select>
                                 </div>
-                                <div class="grid grid-cols-2 gap-y-1 gap-x-1 p-1 bg-slate-50 rounded-lg">
+                                <div class="grid grid-cols-1 gap-y-1 p-1.5 bg-slate-50 rounded-lg" data-layout-options>
                                     <label
                                         class="option-label flex items-center gap-2 text-xs select-none"
                                         :class="enabledOptionClass"
@@ -3587,8 +3603,8 @@
                                         <input type="checkbox" v-model="adv.resolve_overlaps" class="form-checkbox" :disabled="!semanticMutationAvailable">
                                         <span>Resolve Overlaps</span>
                                     </label>
-                                    <label class="text-xs">Feature overlap tolerance (bp)
-                                        <input type="number" min="0" step="1" v-model.number="adv.feature_overlap_tolerance_bp" aria-label="Feature overlap tolerance (bp)" class="w-20 rounded border p-1" :disabled="!semanticMutationAvailable">
+                                    <label class="ml-6 flex items-center gap-2 text-[11px] text-slate-600">Feature overlap tolerance (bp)
+                                        <input type="number" min="0" step="1" v-model.number="adv.feature_overlap_tolerance_bp" aria-label="Feature overlap tolerance (bp)" class="form-input form-input-compact w-20" :disabled="!semanticMutationAvailable">
                                     </label>
 
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" title="Place multiple records on one shared circular canvas.">
@@ -3632,7 +3648,7 @@
                                                 </button>
                                                 <help-tip id="help-circular-custom-track-slots" label="Help: Custom Track Slots" text="Edit the explicit circular stack. Opening or closing this panel does not enable or alter the stack. Rows above Axis render outside and rows below Axis render inside."></help-tip>
                                             </div>
-                                            <p id="circular-custom-track-slots-timing" class="ui-hint">Applies on Generate</p>
+                                            <p id="circular-custom-track-slots-timing" class="apply-note">Applies on Generate</p>
                                         </div>
                                         <div class="flex items-center gap-2">
                                             <label class="inline-flex items-center gap-1 text-[10px] font-medium text-slate-600 cursor-pointer select-none" title="Use the saved custom stack for rendering. Disabling it preserves the stack for later use.">
@@ -3651,11 +3667,7 @@
                                         </div>
                                     </div>
                                     <div v-if="circularTrackSlotsPanelOpen" id="circular-custom-track-slots-panel" class="space-y-1.5">
-                                        <p id="circular-measure-help" class="ui-hint">
-                                            Width and Radius: px or ×R, where R is the base circular radius.
-                                            Paste 20px or 65% (0.65 ×R). Changing units keeps the number;
-                                            changes apply on the next Generate. Blank means Auto; its unit selection is for the next input only.
-                                        </p>
+                                        <p class="flex items-center gap-1 text-[10px] text-slate-500">Width and Radius: px or ×R <help-tip id="circular-measure-help" label="Help: Width and Radius" text="Width and Radius: px or ×R, where R is the base circular radius. Paste 20px or 65% (0.65 ×R). Changing units keeps the number; changes apply on the next Generate. Blank means Auto; its unit selection is for the next input only."></help-tip></p>
                                         <div v-if="!adv.circular_track_slots_enabled" class="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-700">
                                             Custom stack is saved but inactive; generation uses the simple track controls.
                                         </div>
@@ -3777,22 +3789,6 @@
                                                             :auto-text="circularTrackSlotGeometryAutoText(entry.slot, entry.index, field)"
                                                             @update:model-value="updateCircularTrackSlotMeasure(entry.slot, field, $event)"
                                                         ></circular-measure-input>
-                                                        <div class="track-slot-field">
-                                                            <span class="track-slot-field-label">inner gap <help-tip :id="`help-circular-slot-inner-gap-${entry.index}`" text="Physical radial gap on the side closer to the center, in pixels (px optional; nonnegative). Leave blank for auto."></help-tip></span>
-                                                            <div class="track-slot-value-field track-slot-pixel-field">
-                                                                <span v-if="!circularTrackSlotGeometryHasManual(entry.slot, 'inner_gap_px')" class="track-slot-auto-placeholder">{{ circularTrackSlotGeometryAutoText(entry.slot, entry.index, 'inner_gap_px') }}</span>
-                                                                <input v-model.trim="entry.slot.inner_gap_px" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Inner gap" :aria-label="`Circular track slot ${entry.slot.id} Inner gap`" :aria-describedby="`help-circular-slot-inner-gap-${entry.index}`" placeholder="px optional" :disabled="!semanticMutationAvailable">
-                                                                <span v-if="circularTrackSlotGeometryUnitSuffix(entry.slot, 'inner_gap_px')" class="track-slot-unit-suffix">{{ circularTrackSlotGeometryUnitSuffix(entry.slot, 'inner_gap_px') }}</span>
-                                                            </div>
-                                                        </div>
-                                                        <div class="track-slot-field">
-                                                            <span class="track-slot-field-label">outer gap <help-tip :id="`help-circular-slot-outer-gap-${entry.index}`" text="Physical radial gap on the side farther from the center, in pixels (px optional; nonnegative). Leave blank for auto."></help-tip></span>
-                                                            <div class="track-slot-value-field track-slot-pixel-field">
-                                                                <span v-if="!circularTrackSlotGeometryHasManual(entry.slot, 'outer_gap_px')" class="track-slot-auto-placeholder">{{ circularTrackSlotGeometryAutoText(entry.slot, entry.index, 'outer_gap_px') }}</span>
-                                                                <input v-model.trim="entry.slot.outer_gap_px" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Outer gap" :aria-label="`Circular track slot ${entry.slot.id} Outer gap`" :aria-describedby="`help-circular-slot-outer-gap-${entry.index}`" placeholder="px optional" :disabled="!semanticMutationAvailable">
-                                                                <span v-if="circularTrackSlotGeometryUnitSuffix(entry.slot, 'outer_gap_px')" class="track-slot-unit-suffix">{{ circularTrackSlotGeometryUnitSuffix(entry.slot, 'outer_gap_px') }}</span>
-                                                            </div>
-                                                        </div>
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'features'" class="grid grid-cols-1 gap-1">
                                                         <select
@@ -3877,44 +3873,67 @@
                                                             <input v-model.trim="entry.slot.params.legend_label" :aria-label="`Circular track slot ${entry.slot.id} Track legend label`" :aria-describedby="`help-circular-slot-legend-label-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" :placeholder="circularTrackSlotLegendLabelPlaceholder(entry.slot)" :disabled="!semanticMutationAvailable">
                                                         </div>
                                                     </div>
-                                                    <div v-if="entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
-                                                        <div class="flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1 py-0.5">
-                                                            <input
-                                                                type="color"
-                                                                :disabled="!semanticMutationAvailable"
-                                                                class="h-6 w-7 shrink-0 rounded border border-slate-200 bg-white p-0"
-                                                                :value="circularTrackSlotSkewColorValue(entry.slot, 'positive_color')"
-                                                                @input="setCircularTrackSlotSkewColor(entry.slot, 'positive_color', $event.target.value)"
-                                                                title="Positive skew color" :aria-label="`Circular track slot ${entry.slot.id} Positive skew color`"
-                                                            >
-                                                            <span class="min-w-0 flex-1 truncate text-[9px] text-slate-500">{{ circularTrackSlotHasSkewColorOverride(entry.slot, 'positive_color') ? 'Custom +' : 'Inherited +' }}</span>
-                                                            <button :aria-label="`Circular track slot ${entry.slot.id} Inherit positive skew color`"
-                                                                type="button"
-                                                                class="btn btn-secondary h-6 w-6 p-0 text-[10px]"
-                                                                :disabled="!semanticMutationAvailable || (!circularTrackSlotHasSkewColorOverride(entry.slot, 'positive_color'))"
-                                                                @click="clearCircularTrackSlotSkewColor(entry.slot, 'positive_color')"
-                                                                title="Inherit positive skew color"
-                                                            ><i class="ph ph-x" aria-hidden="true"></i></button>
+                                                    <details class="track-slot-more" :data-track-slot-more="entry.slot.id" :open="circularTrackSlotOptionsOpen(entry.slot)" @toggle="setCircularTrackSlotOptionsOpen(entry.slot, $event)">
+                                                        <summary class="cursor-pointer text-[10px] text-slate-500">{{ entry.slot.renderer === 'dinucleotide_skew' ? 'Gaps and colors' : 'Gaps' }}<span v-if="entry.slot.inner_gap_px || entry.slot.outer_gap_px" class="text-slate-700"> · set</span><span v-if="entry.slot.renderer === 'dinucleotide_skew' && (circularTrackSlotHasSkewColorOverride(entry.slot, 'positive_color') || circularTrackSlotHasSkewColorOverride(entry.slot, 'negative_color'))" class="text-slate-700"> · custom colors</span></summary>
+                                                        <div class="mt-1 space-y-1">
+                                                            <div class="grid grid-cols-2 gap-1">
+                                                                <div class="track-slot-field">
+                                                                    <span class="track-slot-field-label">inner gap <help-tip :id="`help-circular-slot-inner-gap-${entry.index}`" text="Physical radial gap on the side closer to the center, in pixels (px optional; nonnegative). Leave blank for auto."></help-tip></span>
+                                                                    <div class="track-slot-value-field track-slot-pixel-field">
+                                                                        <span v-if="!circularTrackSlotGeometryHasManual(entry.slot, 'inner_gap_px')" class="track-slot-auto-placeholder">{{ circularTrackSlotGeometryAutoText(entry.slot, entry.index, 'inner_gap_px') }}</span>
+                                                                        <input v-model.trim="entry.slot.inner_gap_px" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Inner gap" :aria-label="`Circular track slot ${entry.slot.id} Inner gap`" :aria-describedby="`help-circular-slot-inner-gap-${entry.index}`" placeholder="px optional" :disabled="!semanticMutationAvailable">
+                                                                        <span v-if="circularTrackSlotGeometryUnitSuffix(entry.slot, 'inner_gap_px')" class="track-slot-unit-suffix">{{ circularTrackSlotGeometryUnitSuffix(entry.slot, 'inner_gap_px') }}</span>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="track-slot-field">
+                                                                    <span class="track-slot-field-label">outer gap <help-tip :id="`help-circular-slot-outer-gap-${entry.index}`" text="Physical radial gap on the side farther from the center, in pixels (px optional; nonnegative). Leave blank for auto."></help-tip></span>
+                                                                    <div class="track-slot-value-field track-slot-pixel-field">
+                                                                        <span v-if="!circularTrackSlotGeometryHasManual(entry.slot, 'outer_gap_px')" class="track-slot-auto-placeholder">{{ circularTrackSlotGeometryAutoText(entry.slot, entry.index, 'outer_gap_px') }}</span>
+                                                                        <input v-model.trim="entry.slot.outer_gap_px" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Outer gap" :aria-label="`Circular track slot ${entry.slot.id} Outer gap`" :aria-describedby="`help-circular-slot-outer-gap-${entry.index}`" placeholder="px optional" :disabled="!semanticMutationAvailable">
+                                                                        <span v-if="circularTrackSlotGeometryUnitSuffix(entry.slot, 'outer_gap_px')" class="track-slot-unit-suffix">{{ circularTrackSlotGeometryUnitSuffix(entry.slot, 'outer_gap_px') }}</span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        <div v-if="entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
+                                                            <div class="flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1 py-0.5">
+                                                                <input
+                                                                    type="color"
+                                                                    :disabled="!semanticMutationAvailable"
+                                                                    class="h-6 w-7 shrink-0 rounded border border-slate-200 bg-white p-0"
+                                                                    :value="circularTrackSlotSkewColorValue(entry.slot, 'positive_color')"
+                                                                    @input="setCircularTrackSlotSkewColor(entry.slot, 'positive_color', $event.target.value)"
+                                                                    title="Positive skew color" :aria-label="`Circular track slot ${entry.slot.id} Positive skew color`"
+                                                                >
+                                                                <span class="min-w-0 flex-1 truncate text-[9px] text-slate-500">{{ circularTrackSlotHasSkewColorOverride(entry.slot, 'positive_color') ? 'Custom +' : 'Inherited +' }}</span>
+                                                                <button :aria-label="`Circular track slot ${entry.slot.id} Inherit positive skew color`"
+                                                                    type="button"
+                                                                    class="btn btn-secondary h-6 w-6 p-0 text-[10px]"
+                                                                    :disabled="!semanticMutationAvailable || (!circularTrackSlotHasSkewColorOverride(entry.slot, 'positive_color'))"
+                                                                    @click="clearCircularTrackSlotSkewColor(entry.slot, 'positive_color')"
+                                                                    title="Inherit positive skew color"
+                                                                ><i class="ph ph-x" aria-hidden="true"></i></button>
+                                                            </div>
+                                                            <div class="flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1 py-0.5">
+                                                                <input
+                                                                    type="color"
+                                                                    :disabled="!semanticMutationAvailable"
+                                                                    class="h-6 w-7 shrink-0 rounded border border-slate-200 bg-white p-0"
+                                                                    :value="circularTrackSlotSkewColorValue(entry.slot, 'negative_color')"
+                                                                    @input="setCircularTrackSlotSkewColor(entry.slot, 'negative_color', $event.target.value)"
+                                                                    title="Negative skew color" :aria-label="`Circular track slot ${entry.slot.id} Negative skew color`"
+                                                                >
+                                                                <span class="min-w-0 flex-1 truncate text-[9px] text-slate-500">{{ circularTrackSlotHasSkewColorOverride(entry.slot, 'negative_color') ? 'Custom -' : 'Inherited -' }}</span>
+                                                                <button :aria-label="`Circular track slot ${entry.slot.id} Inherit negative skew color`"
+                                                                    type="button"
+                                                                    class="btn btn-secondary h-6 w-6 p-0 text-[10px]"
+                                                                    :disabled="!semanticMutationAvailable || (!circularTrackSlotHasSkewColorOverride(entry.slot, 'negative_color'))"
+                                                                    @click="clearCircularTrackSlotSkewColor(entry.slot, 'negative_color')"
+                                                                    title="Inherit negative skew color"
+                                                                ><i class="ph ph-x" aria-hidden="true"></i></button>
+                                                            </div>
                                                         </div>
-                                                        <div class="flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1 py-0.5">
-                                                            <input
-                                                                type="color"
-                                                                :disabled="!semanticMutationAvailable"
-                                                                class="h-6 w-7 shrink-0 rounded border border-slate-200 bg-white p-0"
-                                                                :value="circularTrackSlotSkewColorValue(entry.slot, 'negative_color')"
-                                                                @input="setCircularTrackSlotSkewColor(entry.slot, 'negative_color', $event.target.value)"
-                                                                title="Negative skew color" :aria-label="`Circular track slot ${entry.slot.id} Negative skew color`"
-                                                            >
-                                                            <span class="min-w-0 flex-1 truncate text-[9px] text-slate-500">{{ circularTrackSlotHasSkewColorOverride(entry.slot, 'negative_color') ? 'Custom -' : 'Inherited -' }}</span>
-                                                            <button :aria-label="`Circular track slot ${entry.slot.id} Inherit negative skew color`"
-                                                                type="button"
-                                                                class="btn btn-secondary h-6 w-6 p-0 text-[10px]"
-                                                                :disabled="!semanticMutationAvailable || (!circularTrackSlotHasSkewColorOverride(entry.slot, 'negative_color'))"
-                                                                @click="clearCircularTrackSlotSkewColor(entry.slot, 'negative_color')"
-                                                                title="Inherit negative skew color"
-                                                            ><i class="ph ph-x" aria-hidden="true"></i></button>
                                                         </div>
-                                                    </div>
+                                                    </details>
                                                 </div>
                                             </div>
                                             <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1">
@@ -4016,7 +4035,7 @@
                 <div class="card">
                     <details>
                         <summary aria-label="Titles and Record Labels"><i class="ph ph-textbox" aria-hidden="true"></i> Titles &amp; Record Labels <help-tip text="Adjust the plot title and record-label text."></help-tip></summary>
-                        <p class="ui-hint mt-2">Applies on Generate: plot title and record-label settings.</p>
+                        <p class="apply-note mt-2" data-applies-on-generate="titles"><i class="ph ph-clock" aria-hidden="true"></i> Applies on Generate</p>
                         <div class="mt-2 space-y-4 pt-2 border-t border-slate-200">
                             <section aria-labelledby="plot-title-settings-heading" class="space-y-2">
                                 <h4 id="plot-title-settings-heading" class="group-heading">Plot Title</h4>
@@ -4030,6 +4049,7 @@
                                     <auto-value-field :visible="autoValueVisible(form.plot_title, 'plotTitle')" :text="autoValueText('plotTitle')">
                                         <input type="text" v-model="form.plot_title" class="form-input form-input-compact auto-value-input" aria-label="Plot Title" aria-describedby="help-title-text" :placeholder="mode === 'circular' ? '' : 'Optional plot title'" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
+                                    <markup-preview :text="form.plot_title" class="!whitespace-normal !overflow-visible"></markup-preview>
                                 </div>
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
@@ -4080,10 +4100,9 @@
                                             </select>
                                         </div>
                                         <details class="mt-1" :data-definition-line-style="row.key">
-                                            <summary :aria-label="row.label + ' style'" class="text-[10px]">Style</summary>
-                                            <p v-if="isDefinitionLineStyleMuted(row)" class="ui-hint pt-1.5">This line is hidden; its style applies when it is shown.</p>
-                                            <div class="grid grid-cols-1 gap-2 pt-1.5">
-                                                <label class="input-label text-[9px]">Size
+                                            <summary :aria-label="row.label + ' style'" class="text-[10px]">Style<span v-if="isDefinitionLineStyleMuted(row)" class="ui-hint" title="Its style applies when the line is shown."> (line hidden)</span></summary>
+                                            <div class="grid grid-cols-[4rem_auto_minmax(0,1fr)] items-end gap-1.5 pt-1.5">
+                                                <label class="input-label !block text-[9px]">Size
                                                     <input type="number" min="0.1" step="0.5" :value="getDefinitionLineStyleSize(row.key)" @input="setDefinitionLineStyleSize(row.key, $event.target.value)" class="form-input form-input-compact px-1" placeholder="Default" :aria-label="row.label + ' style size'" :disabled="!semanticMutationAvailable">
                                                 </label>
                                                 <div>
@@ -4128,7 +4147,7 @@
                                     <option value="none">None</option>
                                 </select>
                             </div>
-                            <p class="ui-hint">Applies on Generate: legend position, swatch size, and font size.</p>
+                            <p class="apply-note" data-applies-on-generate="legend"><i class="ph ph-clock" aria-hidden="true"></i> Applies on Generate</p>
                             <div class="grid grid-cols-2 gap-1.5">
                                 <div>
                                     <span class="input-label text-[10px]">Swatch size <help-tip id="help-legend-swatch-size" text="Size of the color boxes in the legend."></help-tip></span>
@@ -4153,8 +4172,7 @@
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="bg-blue-50/60 border border-blue-200 rounded-lg p-3">
                                 <div class="flex items-center justify-between mb-2">
-                                    <h4 class="group-heading" aria-label="PRESET SCHEMES">PRESET SCHEMES <help-tip id="help-colors-preset-schemes" text="Replaces the specific rules (-t) with the preset's rules. The palette is unchanged. Bakta also sets the CDS default color (-d) to #cccccc and the Legend box size and font size to 12."></help-tip></h4>
-                                    <span class="text-[9px] font-semibold text-blue-600">Affects -d &amp; -t</span>
+                                    <h4 class="group-heading" aria-label="PRESET SCHEMES">PRESET SCHEMES <help-tip id="help-colors-preset-schemes" text="Replaces the specific rules with the preset's rules. The palette is unchanged. Bakta also sets the CDS default color to #cccccc and the Legend box size and font size to 12."></help-tip></h4>
                                 </div>
                                 <div class="flex items-center gap-2">
                                     <select v-model="selectedSpecificPreset" aria-label="Preset scheme" aria-describedby="help-colors-preset-schemes" class="form-input text-xs h-7 py-1 flex-grow bg-white" :disabled="!semanticMutationAvailable">
@@ -4167,7 +4185,7 @@
                                         <span v-else>Apply</span>
                                     </button>
                                 </div>
-                                <p data-preset-scheme-effects class="text-[9px] text-slate-500 mt-2">Preset schemes replace existing specific rules; the palette is unchanged. Bakta also sets the CDS default color to #cccccc and the Legend box size and font size to 12.</p>
+                                <p data-preset-scheme-effects class="ui-hint mt-1.5">Replaces the specific rules; the palette is unchanged.<template v-if="selectedSpecificPreset === 'bakta'"> Bakta also sets the CDS default color to #cccccc and the Legend box size and font size to 12.</template></p>
                             </div>
 
                             <div>
@@ -4187,13 +4205,19 @@
                                         Palette <span class="font-semibold">{{ pendingPaletteName }}</span> is queued for the next Generate. This notice covers palette selection only.
                                     </div>
                                 </div>
-                                <p data-palette-application-help class="ui-hint mb-1">{{ paletteInstantPreviewEnabled ? 'Live edit: palette selection updates the current Result.' : 'Applies on Generate: palette selection updates swatches only; the current Result keeps its applied palette.' }}</p>
+                                <div class="mb-1 flex items-center justify-between gap-2">
+                                    <span class="input-label text-[10px] !mb-0">Palette</span>
+                                    <span data-palette-application-help class="apply-note">{{ paletteInstantPreviewEnabled ? 'Live edit' : 'Applies on Generate' }}</span>
+                                </div>
                                 <select :value="selectedPalette" @change="requestPaletteChange($event)" aria-label="Palette" class="form-input form-input-compact mb-2" :disabled="!semanticMutationAvailable">
                                     <option v-for="p in paletteNames" :value="p">{{ p }}</option>
                                 </select>
-                                <p data-default-color-application-help class="ui-hint mb-1">{{ hasPendingPaletteDraft ? 'Applies on Generate: default color edits update the queued palette swatches.' : 'Live edit: individual default colors update the current Result.' }}</p>
+                                <div class="mb-1 flex items-center justify-between gap-2">
+                                    <span class="input-label text-[10px] !mb-0">Colors in this figure</span>
+                                    <span data-default-color-application-help class="apply-note">{{ hasPendingPaletteDraft ? 'Applies on Generate' : 'Live edit' }}</span>
+                                </div>
                                 <div class="grid grid-cols-2 gap-1.5 bg-white p-2 rounded border border-slate-200">
-                                    <div v-for="(color, feat) in currentColors" :key="feat" class="min-w-0">
+                                    <div v-for="feat in defaultColorGroups.primary" :key="feat" class="min-w-0">
                                         <span class="text-[9px] text-slate-500 truncate block mb-0.5" :title="feat">{{ feat }}</span>
                                         <color-value-control
                                             v-model="currentColors[feat]"
@@ -4202,6 +4226,19 @@
                                         </color-value-control>
                                     </div>
                                 </div>
+                                <details v-if="defaultColorGroups.more.length" class="mt-1.5" data-default-colors-more>
+                                    <summary class="cursor-pointer text-[10px] text-slate-500">More colors ({{ defaultColorGroups.more.length }})</summary>
+                                    <div class="mt-1 grid grid-cols-2 gap-1.5 bg-white p-2 rounded border border-slate-200">
+                                        <div v-for="feat in defaultColorGroups.more" :key="feat" class="min-w-0">
+                                            <span class="text-[9px] text-slate-500 truncate block mb-0.5" :title="feat">{{ feat }}</span>
+                                            <color-value-control
+                                                v-model="currentColors[feat]"
+                                                :fallback="paletteDefinitions?.[selectedPalette]?.[feat] || '#cccccc'"
+                                                :aria-label="`${feat} feature color`">
+                                            </color-value-control>
+                                        </div>
+                                    </div>
+                                </details>
 
                                 <div class="mt-2 p-2 bg-slate-50 rounded border border-slate-200 flex gap-2 items-end">
                                     <div class="flex-grow">
@@ -4219,11 +4256,10 @@
                                     </button>
                                 </div>
                                 <div class="mt-2">
-                                    <div class="ui-hint text-center mb-1">- OR UPLOAD FILE -</div>
-                                    <file-uploader label="Override File (-d)" v-model="files.d_color" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                    <file-uploader label="Default colors file" v-model="files.d_color" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                     <div class="ui-hint mt-1">
-                                        <help-tip text="Tab-separated value (TSV) file that overrides the color palette. Feature types not specified will use the selected palette colors."></help-tip>
-                                        Override default feature colors.
+                                        <help-tip text="Tab-separated value (TSV) file of feature type and color. Feature types not listed keep the selected palette colors."></help-tip>
+                                        Optional TSV of default colors.
                                     </div>
                                 </div>
                             </div>
@@ -4231,7 +4267,7 @@
                             <div data-history-managed>
                                 <p v-if="ruleMatchingPending" role="status" class="text-xs text-slate-500">Checking color rules…</p>
                                 <div class="flex items-center justify-between mb-2">
-                                    <h4 class="group-heading" aria-label="SPECIFIC RULES (-t)">SPECIFIC RULES (-t) <help-tip text="Color features matching qualifier values with case-insensitive Python regex. Examples: (?i)NADH and (?P&lt;name&gt;NADH). Choose a suggested qualifier or type any qualifier name."></help-tip></h4>
+                                    <h4 class="group-heading" aria-label="SPECIFIC RULES">SPECIFIC RULES <help-tip text="Color features whose qualifier value matches a regular expression, for example NADH or (?i)nadh. Choose a suggested qualifier or type any qualifier name. When rules use the same qualifier, the first matching row wins; Move rule up and down changes that order. Rules on different qualifiers are tried in the order the qualifiers appear on the feature."></help-tip></h4>
                                     <div v-if="manualSpecificRules.length > 0" class="flex items-center gap-2">
                                         <button @click="downloadSpecificRulesTsv" class="text-[10px] text-blue-600 hover:text-blue-700 hover:underline"><i class="ph ph-download-simple" aria-hidden="true"></i> TSV</button>
                                         <button @click="clearAllSpecificRules" class="text-[10px] text-red-600 hover:text-red-700 hover:underline" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i> Clear All</button>
@@ -4243,13 +4279,8 @@
                                 </datalist>
 
                                 <p role="status" aria-live="polite" aria-atomic="true" class="mb-2 text-[10px] text-slate-600 break-words">{{ specificRuleNotice }}</p>
-                                <p v-if="manualSpecificRules.length > 1" data-specific-rule-order-hint class="mb-2 text-[10px] text-slate-500 break-words">When rules overlap, the first matching row for one qualifier key wins, so Move rule up/down changes the result only between rules with the same qualifier key. Rules with different qualifier keys are tried in the order the keys appear on the feature, whatever the row order.</p>
-                                <specific-rule-rows :rules="manualSpecificRules" :feature-keys="featureKeys" :available="semanticMutationAvailable"
-                                    :pattern-text="specificRulePattern" :pattern-draft="specificRulePatternDraft" :field-id="specificRulePatternFieldId"
-                                    @set-field="setSpecificRuleField" @move-up="moveSpecificRuleUp" @move-down="moveSpecificRuleDown" @remove="removeSpecificRule"
-                                    @edit-pattern="editSpecificRulePattern" @retry-pattern="retrySpecificRulePattern" @revert-pattern="revertSpecificRulePattern"></specific-rule-rows>
-
-                                <div class="bg-slate-50 p-2 rounded border border-slate-200">
+                                <p v-if="new Set(manualSpecificRules.map((rule) => rule.qual)).size < manualSpecificRules.length" data-specific-rule-order-hint class="mb-2 ui-hint break-words">Rules on the same qualifier: the first match wins.</p>
+                                <div class="mb-2 bg-slate-50 p-2 rounded border border-slate-200" data-specific-rule-add>
                                     <div class="grid grid-cols-2 gap-1 mb-1">
                                         <select v-model="newSpecRule.feat" aria-label="New color rule feature type" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
                                             <option v-for="k in featureKeys" :value="k">{{ k }}</option>
@@ -4257,21 +4288,25 @@
                                         <input v-model="newSpecRule.qual" list="specific-rule-qualifier-options" placeholder="Qualifier (choose or type)" aria-label="Qualifier name" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div class="flex gap-1 mb-1">
-                                        <input v-model="newSpecRule.val" data-new-specific-rule-pattern aria-label="New color rule pattern" placeholder="Python regex (e.g. (?i)NADH)" class="form-input form-input-compact flex-grow" :disabled="!semanticMutationAvailable">
+                                        <input v-model="newSpecRule.val" data-new-specific-rule-pattern aria-label="New color rule pattern" placeholder="Regular expression (e.g. NADH)" class="form-input form-input-compact flex-grow" :disabled="!semanticMutationAvailable">
                                         <input type="color" v-model="newSpecRule.color" aria-label="New color rule color" class="h-6 w-7 p-0 border rounded cursor-pointer shrink-0" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div class="flex gap-1">
-                                        <input v-model="newSpecRule.cap" aria-label="New color rule legend caption" placeholder="Legend Caption (Optional)" class="form-input form-input-compact flex-grow" :disabled="!semanticMutationAvailable">
-                                        <button aria-label="Add color rule" @click="addSpecificRule" class="btn btn-secondary text-xs h-7 px-3" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i></button>
+                                        <input v-model="newSpecRule.cap" aria-label="New color rule legend caption" placeholder="Legend caption (optional)" class="form-input form-input-compact min-w-0 flex-grow" :disabled="!semanticMutationAvailable">
+                                        <button aria-label="Add color rule" @click="addSpecificRule" class="btn btn-secondary h-7 whitespace-nowrap px-2 text-xs" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> Add color rule</button>
                                     </div>
                                 </div>
 
+                                <specific-rule-rows :rules="manualSpecificRules" :feature-keys="featureKeys" :available="semanticMutationAvailable"
+                                    :pattern-text="specificRulePattern" :pattern-draft="specificRulePatternDraft" :field-id="specificRulePatternFieldId"
+                                    @set-field="setSpecificRuleField" @move-up="moveSpecificRuleUp" @move-down="moveSpecificRuleDown" @remove="removeSpecificRule"
+                                    @edit-pattern="editSpecificRulePattern" @retry-pattern="retrySpecificRulePattern" @revert-pattern="revertSpecificRulePattern"></specific-rule-rows>
+
                                 <div class="mt-2">
-                                    <div class="ui-hint text-center mb-1">- OR UPLOAD FILE -</div>
-                                    <file-uploader label="Specific Table (-t)" v-model="files.t_color" :after-change="waitForAuxiliaryFileImport" :artifact-history="true" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                    <file-uploader label="Specific rules file" v-model="files.t_color" :after-change="waitForAuxiliaryFileImport" :artifact-history="true" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                     <div class="ui-hint mt-1">
-                                        <help-tip text="TSV file that overrides the color palette for specific features based on qualifiers."></help-tip>
-                                        Override colors for specific features.
+                                        <help-tip text="TSV file of rules: feature type, qualifier, regular expression, color, and optional legend caption."></help-tip>
+                                        Optional TSV of specific rules.
                                     </div>
                                 </div>
                             </div>
@@ -4446,7 +4481,7 @@
                                             <input type="number" min="0.01" step="0.5" v-model.number="adv.feature_width_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use the Features row width, or Reset to copy this value into the stack.' : ''" aria-label="Feature Track Width" aria-describedby="help-feature-feature-track-width" class="form-input form-input-compact auto-value-input">
                                         </auto-value-field>
                                     </div>
-                                    <p class="ui-hint">Applies on Generate: block and line stroke colors and widths.</p>
+                                    <p class="apply-note" data-applies-on-generate="stroke"><i class="ph ph-clock" aria-hidden="true"></i> Applies on Generate</p>
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>
                                             <span class="input-label text-[10px]">Block Stroke Color <help-tip id="help-feature-block-stroke-color" text="Use Auto for the configured default, None for no outline, or Color for an explicit value."></help-tip></span>
@@ -4711,7 +4746,7 @@
                 <div v-if="mode === 'linear'" class="card">
                     <details>
                         <summary aria-label="Axis &amp; Scale"><i class="ph ph-ruler" aria-hidden="true"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings plus the linear scale bar or ruler style."></help-tip></summary>
-                        <p class="ui-hint mt-2">Applies on Generate: scale visibility, style, interval, label sizes, and axis and scale line colors and widths.</p>
+                        <p class="apply-note mt-2" data-applies-on-generate="axis-scale"><i class="ph ph-clock" aria-hidden="true"></i> Applies on Generate</p>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex items-center text-xs">
                                 <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
@@ -4851,7 +4886,7 @@
                 <div v-if="mode === 'circular'" class="card">
                     <details>
                         <summary aria-label="Axis &amp; Scale"><i class="ph ph-paint-brush" aria-hidden="true"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings and the circular scale interval."></help-tip></summary>
-                        <p class="ui-hint mt-2">Applies on Generate: scale visibility, interval, label sizes, and axis line colors and widths.</p>
+                        <p class="apply-note mt-2" data-applies-on-generate="axis-scale"><i class="ph ph-clock" aria-hidden="true"></i> Applies on Generate</p>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex items-center text-xs">
                                 <label
@@ -7732,42 +7767,33 @@
                 data-linear-source-removal-dialog
                 class="w-full max-w-md rounded-xl border border-slate-200 bg-white p-4 shadow-2xl"
             >
-                <h2 id="linear-source-removal-title" class="text-base font-bold text-slate-800">
-                    {{ linearSourceRemovalDialog.origin === 'global' ? 'Remove last File?' : 'Clear or delete File?' }}
-                </h2>
+                <h2 id="linear-source-removal-title" class="break-all text-base font-bold text-slate-800">Remove {{ linearSourceRemovalTargetName }}?</h2>
                 <p id="linear-source-removal-description" class="mt-2 text-sm leading-relaxed text-slate-600">
-                    <strong class="break-all text-slate-800">{{ linearSourceRemovalTargetName }}</strong>
-                    contains {{ linearSourceRemovalTarget?.records?.length || 0 }} record{{ (linearSourceRemovalTarget?.records?.length || 0) === 1 ? '' : 's' }}.
-                    <template v-if="linearSourceRemovalDialog.origin === 'card'">
-                        Clear file only leaves a pristine blank File in this position. Delete card removes the whole File.
-                    </template>
-                    <template v-else>
-                        Removing it deletes the whole File card.
-                    </template>
+                    It contains {{ linearSourceRemovalTarget?.records?.length || 0 }} record{{ (linearSourceRemovalTarget?.records?.length || 0) === 1 ? '' : 's' }}.
                 </p>
                 <p v-if="!linearSourceRemovalTarget" class="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
                     This File is no longer available. Cancel and try again.
                 </p>
-                <div class="mt-4 grid min-w-0 gap-2" :class="linearSourceRemovalDialog.origin === 'card' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'">
+                <div class="mt-4 flex min-w-0 flex-wrap justify-end gap-2">
+                    <button type="button" @click="cancelLinearSourceRemoval" class="btn btn-secondary min-w-0 px-3 py-2 text-xs font-bold">Cancel</button>
                     <button
                         v-if="linearSourceRemovalDialog.origin === 'card'"
                         type="button"
                         data-linear-source-removal-primary
                         :disabled="!semanticMutationAvailable || (!linearSourceRemovalTarget)"
                         @click="applyLinearSourceRemoval('clear')"
-                        class="btn btn-secondary min-w-0 py-2 text-xs font-bold"
-                    >Clear file only</button>
+                        class="btn btn-secondary min-w-0 px-3 py-2 text-xs font-bold"
+                    >Empty this slot</button>
                     <button
                         type="button"
                         :data-linear-source-removal-primary="linearSourceRemovalDialog.origin === 'global' ? '' : undefined"
                         :disabled="!semanticMutationAvailable || (!linearSourceRemovalTarget || !linearSourceRemovalCanDelete)"
                         @click="applyLinearSourceRemoval('delete')"
-                        class="btn btn-danger min-w-0 py-2 text-xs font-bold"
-                    >Delete card</button>
-                    <button type="button" @click="cancelLinearSourceRemoval" class="btn btn-secondary min-w-0 py-2 text-xs font-bold">Cancel</button>
+                        class="btn min-w-0 border border-red-600 bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
+                    >Remove file</button>
                 </div>
                 <p v-if="linearSourceRemovalDialog.origin === 'card' && !linearSourceRemovalCanDelete" class="ui-hint mt-2">
-                    The only File cannot be deleted; use Clear file only to keep one input slot.
+                    The only File cannot be removed. Empty this slot to keep one input.
                 </p>
             </section>
         </div>
@@ -7981,48 +8007,61 @@
 
 <script type="text/x-template" id="specific-rule-rows-template">
 <div class="space-y-1 mb-3">
-    <div v-for="(rule, i) in rules" :key="fieldId(rule)" data-color-rule-row class="bg-white p-1.5 rounded border border-slate-200 text-[10px] space-y-1">
-        <div class="grid grid-cols-12 gap-1 items-center">
-            <select :value="rule.feat" @change="$emit('set-field', i, 'feat', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} feature type`" class="form-input form-input-compact col-span-4" :disabled="!available">
-                <option v-for="k in featureKeys" :value="k">{{ k }}</option>
-            </select>
-            <input :value="rule.qual" @change="$emit('set-field', i, 'qual', $event.target.value, $event.target)" list="specific-rule-qualifier-options" placeholder="Qualifier (choose or type)" aria-label="Qualifier name" class="form-input form-input-compact col-span-4" :disabled="!available">
-            <input type="color" :value="rule.color" @change="$emit('set-field', i, 'color', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} color`" class="h-6 w-full p-0 border rounded cursor-pointer col-span-1" :disabled="!available">
-            <div class="col-span-3 flex items-center justify-end gap-0.5">
-                <button aria-label="Move rule up" @click="$emit('move-up', i)" :disabled="!available || (i === 0)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule up"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
-                <button aria-label="Move rule down" @click="$emit('move-down', i)" :disabled="!available || (i === rules.length - 1)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule down"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
-                <button aria-label="Delete rule" @click="$emit('remove', i)" class="h-6 w-6 text-red-500 hover:text-red-700" title="Delete rule" :disabled="!available"><i class="ph ph-trash" aria-hidden="true"></i></button>
+    <div v-for="(rule, i) in rules" :key="fieldId(rule)" data-color-rule-row class="flex items-start gap-1 bg-white p-1 rounded border border-slate-200 text-[10px]">
+        <input type="color" :value="rule.color" @change="$emit('set-field', i, 'color', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} color`" class="h-6 w-6 shrink-0 p-0 border rounded cursor-pointer" :disabled="!available">
+        <details class="min-w-0 flex-1" data-color-rule-editor>
+            <summary class="flex min-w-0 cursor-pointer items-center gap-1 py-1 text-slate-700">
+                <span class="min-w-0 truncate"><span class="text-slate-500">{{ rule.feat }} ·</span> {{ rule.qual }} = <span class="font-mono">{{ patternText(rule) }}</span></span>
+                <span v-if="patternDraft(rule)" class="shrink-0 font-semibold text-amber-700">Not applied</span>
+                <span v-else-if="rule.cap" class="ml-auto max-w-[40%] shrink-0 truncate text-slate-500" :title="rule.cap">{{ rule.cap }}</span>
+            </summary>
+            <div class="mt-1 space-y-1">
+                <div class="grid grid-cols-2 gap-1">
+                    <select :value="rule.feat" @change="$emit('set-field', i, 'feat', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} feature type`" class="form-input form-input-compact" :disabled="!available">
+                        <option v-for="k in featureKeys" :value="k">{{ k }}</option>
+                    </select>
+                    <input :value="rule.qual" @change="$emit('set-field', i, 'qual', $event.target.value, $event.target)" list="specific-rule-qualifier-options" placeholder="Qualifier (choose or type)" aria-label="Qualifier name" class="form-input form-input-compact" :disabled="!available">
+                </div>
+                <input :id="fieldId(rule)" :disabled="!available" :value="patternText(rule)" @input="$emit('edit-pattern', rule, $event.target.value)" @change="$emit('retry-pattern', rule)" :aria-label="`Color rule ${i + 1} pattern`" :aria-describedby="patternDraft(rule) ? `${fieldId(rule)}-status` : undefined" :aria-invalid="patternDraft(rule)?.error?.code === 'REGEX_SYNTAX' ? 'true' : undefined" :aria-busy="patternDraft(rule)?.pending ? 'true' : undefined" placeholder="Regular expression" data-history-ignore class="form-input form-input-compact w-full font-mono">
+                <input :value="rule.cap" @change="$emit('set-field', i, 'cap', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} legend caption`" placeholder="Legend caption" class="form-input form-input-compact w-full" :disabled="!available">
+                <div v-if="patternDraft(rule)" :id="`${fieldId(rule)}-status`" class="rounded border border-amber-200 bg-amber-50 p-2 text-xs break-words" data-color-rule-pattern-status data-history-ignore>
+                    <p role="status" aria-live="polite" class="font-semibold">Not applied<span v-if="patternDraft(rule).pending"> — Checking color rule…</span></p>
+                    <p class="mt-1">Save Session and Generate use the last accepted rule. Export uses the current Result. This draft is not saved.</p>
+                    <operation-error v-if="patternDraft(rule).error" :error="patternDraft(rule).error" class="mt-2"></operation-error>
+                    <div class="mt-2 flex flex-wrap gap-2">
+                        <button type="button" @click="$emit('retry-pattern', rule)" :disabled="!available || patternDraft(rule).pending" class="btn btn-secondary btn-sm">Retry</button>
+                        <button type="button" :disabled="!available" @pointerdown.prevent @click="$emit('revert-pattern', rule, $event.currentTarget.closest('[data-color-rule-row]').querySelector('input[data-history-ignore]'))" class="btn btn-secondary btn-sm">Revert</button>
+                    </div>
+                </div>
+                <div class="flex items-center justify-end gap-0.5">
+                    <button aria-label="Move rule up" @click="$emit('move-up', i)" :disabled="!available || (i === 0)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule up"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
+                    <button aria-label="Move rule down" @click="$emit('move-down', i)" :disabled="!available || (i === rules.length - 1)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule down"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
+                    <button aria-label="Delete rule" @click="$emit('remove', i)" class="h-6 w-6 text-red-500 hover:text-red-700" title="Delete rule" :disabled="!available"><i class="ph ph-trash" aria-hidden="true"></i></button>
+                </div>
             </div>
-        </div>
-        <div class="grid grid-cols-12 gap-1">
-            <input :id="fieldId(rule)" :disabled="!available" :value="patternText(rule)" @input="$emit('edit-pattern', rule, $event.target.value)" @change="$emit('retry-pattern', rule)" :aria-label="`Color rule ${i + 1} pattern`" :aria-describedby="patternDraft(rule) ? `${fieldId(rule)}-status` : undefined" :aria-invalid="patternDraft(rule)?.error?.code === 'REGEX_SYNTAX' ? 'true' : undefined" :aria-busy="patternDraft(rule)?.pending ? 'true' : undefined" placeholder="Python regex" data-history-ignore class="form-input form-input-compact col-span-7 font-mono">
-            <input :value="rule.cap" @change="$emit('set-field', i, 'cap', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} legend caption`" placeholder="Legend Caption" class="form-input form-input-compact col-span-5" :disabled="!available">
-        </div>
-        <div v-if="patternDraft(rule)" :id="`${fieldId(rule)}-status`" class="rounded border border-amber-200 bg-amber-50 p-2 text-xs break-words" data-color-rule-pattern-status data-history-ignore>
-            <p role="status" aria-live="polite" class="font-semibold">Not applied<span v-if="patternDraft(rule).pending"> — Checking color rule…</span></p>
-            <p class="mt-1">Save Session and Generate use the last accepted rule. Export uses the current Result. This draft is not saved.</p>
-            <operation-error v-if="patternDraft(rule).error" :error="patternDraft(rule).error" class="mt-2"></operation-error>
-            <div class="mt-2 flex flex-wrap gap-2">
-                <button type="button" @click="$emit('retry-pattern', rule)" :disabled="!available || patternDraft(rule).pending" class="btn btn-secondary btn-sm">Retry</button>
-                <button type="button" :disabled="!available" @pointerdown.prevent @click="$emit('revert-pattern', rule, $event.currentTarget.closest('[data-color-rule-row]').querySelector('input[data-history-ignore]'))" class="btn btn-secondary btn-sm">Revert</button>
-            </div>
-        </div>
+        </details>
     </div>
     <div v-if="rules.length === 0" class="ui-hint italic text-center py-2">No rules added</div>
 </div>
 </script>
 
 <script type="text/x-template" id="record-display-control-template">
-  <div class="rounded border border-slate-200 p-2 text-xs space-y-1" :data-record-rotation="row.key">
-    <div class="font-semibold">{{ row.recordId }} {{ row.selector }} · {{ row.recordLength }} bp</div>
-    <div>Detected: {{ row.detectedTopology }}</div>
-    <label class="flex gap-2"><input data-history-managed type="checkbox" :disabled="!controlAvailable" :checked="surface.effectiveCircular" @change="controller.setTopology(row, $event.target.checked)" :aria-label="`Circular record ${row.recordId} ${row.selector}`"> Circular record</label>
-    <button data-history-managed type="button" :disabled="!controlAvailable" class="text-blue-600" @click="controller.setTopology(row, null)">Reset to detected</button>
-    <label class="block">Display start <input data-history-managed type="number" min="1" :max="row.recordLength" :value="draft.startCoordinate" :disabled="!controlAvailable || !surface.startEnabled" @change="setStart($event)" :aria-label="`Display start ${row.recordId} ${row.selector}`" class="w-24 rounded border p-1"></label>
+  <div class="rounded border border-slate-200 bg-white/70 p-2 text-xs space-y-1.5" :data-record-rotation="row.key">
+    <div class="flex min-w-0 items-baseline justify-between gap-2">
+      <span class="min-w-0 truncate font-semibold text-slate-700" :title="row.recordId">{{ row.recordId }}</span>
+      <span class="shrink-0 text-[10px] text-slate-500">{{ row.selector }} · {{ Number(row.recordLength).toLocaleString('en-US') }} bp</span>
+    </div>
+    <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <label class="flex items-center gap-1.5"><input data-history-managed type="checkbox" class="form-checkbox" :disabled="!controlAvailable" :checked="surface.effectiveCircular" @change="controller.setTopology(row, $event.target.checked)" :aria-label="`Circular record ${row.recordId} ${row.selector}`"> Circular record</label>
+      <span class="ui-hint">(file: {{ row.detectedTopology }})</span>
+      <button v-if="draft.topologyOverride != null" data-history-managed type="button" :disabled="!controlAvailable" class="ml-auto text-[10px] text-blue-600" @click="controller.setTopology(row, null)">Reset to detected</button>
+    </div>
+    <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <label class="flex items-center gap-1.5">Display start <input data-history-managed type="number" min="1" :max="row.recordLength" :value="surface.displayStart" :disabled="!controlAvailable || !surface.startEnabled" @change="setStart($event)" :aria-label="`Display start ${row.recordId} ${row.selector}`" class="form-input form-input-compact w-24"></label>
+      <button v-if="draft.startCoordinate != null" data-history-managed type="button" :disabled="!controlAvailable" @click="controller.resetStart(row)" class="ml-auto text-[10px] text-blue-600">Reset start</button>
+    </div>
     <div v-if="error" role="alert" class="text-red-600">{{ error }}</div>
-    <div>Current start: {{ draft.startCoordinate != null && surface.startEnabled ? draft.startCoordinate : surface.currentStart }}</div>
-    <div v-if="!surface.startEnabled" class="text-slate-500">{{ surface.disabledReason }}</div>
-    <button data-history-managed type="button" :disabled="!controlAvailable" @click="controller.resetStart(row)" class="text-blue-600">Reset start</button>
+    <div v-if="!surface.startEnabled" class="ui-hint">{{ surface.disabledReason }}</div>
   </div>
 </script>
 

@@ -98,8 +98,8 @@ Match the Interactive SVG Gallery presentation with these display settings:
 | Control | Value |
 |---|---|
 | Palette | Orange |
-| Override File (-d) | `BGC0000708-BGC0000713_default_colors.tsv` |
-| Specific Table (-t) | `BGC0000708-BGC0000713_specific_colors.tsv` |
+| Default colors file | `BGC0000708-BGC0000713_default_colors.tsv` |
+| Specific rules file | `BGC0000708-BGC0000713_specific_colors.tsv` |
 | Show Labels | First record |
 | Priority File (TSV) | `cds_gene_qualifier_priority.tsv` |
 | Label Font Size | `18` |

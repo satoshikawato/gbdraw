@@ -52,7 +52,7 @@ the rich feature popup are shared. A saved Session keeps each mode's settings
 
 A Circular GenBank upload uses **GenBank/DDBJ File**. Each Linear **File** card
 starts with its **GenBank / DDBJ File** uploader, or its matched GFF3 and FASTA
-uploaders, followed by **File defaults (applied to all records)** and a closed
+uploaders, followed by **Names for all records in this file** and a closed
 **Record options** disclosure. Use the up and down buttons in a File header to
 move that source. Every record in a multi-record GenBank or GFF3 + FASTA source
 moves together, while the record order inside the source stays unchanged. When
@@ -72,8 +72,8 @@ schemas](input-formats-and-tsv-schemas.md) for the file format.
 
 The **Add sequence** action and the **Remove** action shown for multiple Files
 add or remove whole File cards. Clearing a populated Linear primary uploader
-opens a choice: **Clear file only** keeps a pristine blank File in the same
-position, while **Delete card**
+opens a choice: **Empty this slot** keeps a pristine blank File in the same
+position, while **Remove file**
 removes that File and all records it supplied. Either operation removes its
 record selectors, crop and reverse-complement drafts, labels, Depth file assignments,
 comparison endpoints, and source-derived state as one undoable change. The only
@@ -189,7 +189,7 @@ After that Generate, Save writes the current Session format.
 
 A loaded Circular Session shows its saved Result without reading the embedded
 source again. **Source records** shows **Records not inspected**, and **Record**
-lists no records. Select **Inspect source records** to list them and show their
+says **Not inspected**. Select **Inspect source records** to list them and show their
 rotation rows; the Result and Undo history do not change. **Generate Diagram**
 inspects the source before rendering, and uploading a new file inspects it at
 once. Loading a saved preview does not start LOSATP. The diagram engine starts
@@ -402,7 +402,10 @@ within the record. These settings apply on **Generate Diagram**.
 **Region Annotations** offers the records the next Circular Generate draws. One
 selected record offers that record alone; **All records**, or **Multi-Record
 Canvas** on, offers every record, and each annotation then needs an explicit
-target record, which binds it to that record.
+target record, which binds it to that record. When only one record can be the
+target, or the source records are not inspected yet, the row names its record
+instead of offering a select. Each row shows its name, span and fill color;
+**Style of annotation** holds the mark, label, lane, line color and hatch.
 
 ## Circular multi-record canvas
 
@@ -1205,11 +1208,13 @@ fields; new rules, TSV imports, presets and Search keep their own input behavior
 
 After **Load Session**, a Circular record's rotation row appears once you select
 **Inspect source records** or **Generate Diagram**. A Linear File card whose
-record rows are not shown offers **Load record rotation controls**. For a
+record rows are not shown offers **Inspect records**; until then its **Record**
+select says **Not inspected**. For a
 complete record, use its rotation row in Circular mode or **Record options** in
-Linear mode. **Detected** reports the source topology;
+Linear mode. The row names the topology the file states;
 **Circular record** overrides it and **Reset to detected** removes that override.
-Enter a 1-based source coordinate in **Display start**. It becomes the base at
+**Display start** shows the current start. Enter a 1-based source coordinate to
+change it. It becomes the base at
 12 o'clock in Circular or at the left edge of a wrapped Linear record after
 **Generate Diagram**. **Reset start** restores no additional shift, which differs
 from explicit 1 when reverse complemented.
