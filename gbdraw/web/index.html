@@ -1446,6 +1446,32 @@
             padding: 0.375rem 0.5rem;
             white-space: normal;
         }
+        /* A pair's source as one segmented row of three radios (UX-C02). */
+        .linear-pair-source {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            border: 1px solid var(--ui-line, #cbd5e1);
+            border-radius: 0.375rem;
+            overflow: hidden;
+        }
+        .linear-pair-source > label {
+            cursor: pointer;
+            padding: 0.25rem 0.25rem;
+            text-align: center;
+            font-size: 0.6875rem;
+            font-weight: 600;
+            line-height: 1.1;
+            color: #334155;
+            background: #fff;
+        }
+        /* The radio covers its segment, so a pointer on the segment is a pointer on the radio. */
+        .linear-pair-source > label { position: relative; }
+        .linear-pair-source-input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+        .linear-pair-source > label + label { border-left: 1px solid var(--ui-line, #cbd5e1); }
+        .linear-pair-source > label.is-active { background: #eff6ff; color: #1d4ed8; box-shadow: inset 0 -2px 0 #3b82f6; }
+        .linear-pair-source > label:focus-within { outline: 2px solid #3b82f6; outline-offset: -2px; }
+        .linear-pair-file-name > summary::before { width: 0.75rem; height: 0.75rem; }
+        .linear-pair-file-name[open] > summary { margin-bottom: 0.25rem; }
         .linear-losat-mode-actions {
             display: flex;
             flex-wrap: nowrap;
@@ -2439,15 +2465,23 @@
                                 <button type="button" aria-label="Use uploaded BLAST TSV for all adjacent pairs" :aria-pressed="linearComparisonGlobalAction === 'upload'" @click="setLinearComparisonGlobalAction('upload')" :class="linearComparisonGlobalAction === 'upload' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm" :disabled="!semanticMutationAvailable">Upload BLAST TSV</button>
                             </div>
                             <p v-if="!canRunLinearLosat" class="ui-hint">Run LOSAT requires at least 2 loaded sequences.</p>
-                            <!-- The pressed action shows the intent; only Custom and real errors need a badge. -->
+                            <!-- The pressed action shows the intent; only Custom needs a badge. -->
                             <div class="flex min-w-0 flex-wrap items-center gap-1.5 empty:hidden" role="status" aria-live="polite" data-linear-comparison-status>
                                 <span v-if="linearComparisonUi.intentKey === 'custom'" class="rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700">Custom</span>
-                                <span v-if="linearComparisonUi.errorBadge" class="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700">{{ linearComparisonUi.errorBadge.label }}</span>
                             </div>
                             <p v-if="linearComparisonUi.emptyPlanNotice" data-linear-comparison-empty-notice class="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] leading-snug text-amber-800">{{ linearComparisonUi.emptyPlanNotice }}</p>
-                            <p v-if="!linearComparisonResolution.valid" class="rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[10px] text-red-700">
-                                {{ linearComparisonResolution.error }}
-                            </p>
+                            <!-- UX-C05: every issue once, worded at its cause, with the action that fixes it. -->
+                            <div v-if="linearComparisonUi.issues.length" data-linear-comparison-issues role="group" aria-label="Comparison issues" class="rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[10px] leading-snug text-red-800">
+                                <p class="font-semibold">Fix before Generate</p>
+                                <ul class="mt-1 space-y-1.5">
+                                    <li v-for="issue in linearComparisonUi.issues" :key="issue.key" :data-linear-comparison-issue="issue.issueCode">
+                                        <span>{{ issue.text }}</span>
+                                        <span class="ml-1 inline-flex flex-wrap gap-x-2">
+                                            <button v-for="action in issue.actions" :key="action.key" type="button" data-history-ignore class="font-semibold text-blue-700 underline disabled:opacity-40" @click="runLinearComparisonIssueAction(issue, action.key)" :disabled="action.key !== 'show' && !semanticMutationAvailable">{{ action.label }}</button>
+                                        </span>
+                                    </li>
+                                </ul>
+                            </div>
 
                             <details
                                 data-linear-comparison-disclosure="settings"
@@ -2456,7 +2490,6 @@
                                 <summary role="button" aria-label="Comparison Settings" class="linear-primary-label">
                                     <i class="ph ph-sliders-horizontal" aria-hidden="true"></i>
                                     Settings
-                                    <span v-if="linearComparisonUi.errorDisclosureKeys.includes('settings')" class="ml-auto rounded bg-red-100 px-1.5 py-0.5 text-[10px] text-red-700">{{ linearComparisonUi.errorBadge?.label }}</span>
                                 </summary>
                                 <div data-capture="linear-losat-settings" class="min-w-0 space-y-3 pt-2">
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('losat-mode')">
@@ -2494,12 +2527,8 @@
                                             aria-describedby="help-comparison-losatp-mode"
                                             class="form-input px-2 py-1.5 text-xs"
                                          :disabled="!semanticMutationAvailable">
-                                            <option v-for="modeOption in linearComparisonUi.losatpModes" :key="modeOption.key" :value="modeOption.key" :disabled="!modeOption.selectable">{{ modeOption.label }}</option>
+                                            <option v-for="modeOption in linearComparisonUi.losatpModes" :key="modeOption.key" :value="modeOption.key" :disabled="!modeOption.selectable">{{ modeOption.label }}{{ modeOption.selectable ? '' : ' (all pairs only)' }}</option>
                                         </select>
-                                        <div v-if="linearComparisonUi.losatpModes.some(modeOption => !modeOption.selectable)" class="mt-1 rounded border border-amber-200 bg-amber-50 p-2 text-[10px] leading-snug text-amber-800">
-                                            Similarity groups and Collinear blocks require an all-adjacent LOSAT topology.
-                                            <button type="button" class="mt-1 font-bold underline" @click="setLinearComparisonGlobalAction('losat')" :disabled="!semanticMutationAvailable">Use all adjacent LOSAT</button>
-                                        </div>
                                     </div>
 
                                     <p v-if="linearComparisonUi.sectionKeys.settings.length === 0" class="ui-hint">Choose Run LOSAT or Upload BLAST TSV to configure comparisons.</p>
@@ -2513,43 +2542,6 @@
                                         </select>
                                     </div>
 
-                                    <section v-if="linearComparisonUi.sectionKeys.settings.includes('losat-runtime')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
-                                        <div class="linear-primary-label">Runtime and reproducibility</div>
-                                        <div class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
-                                            <div>
-                                                <span class="linear-primary-label mb-1">Execution <help-tip id="help-comparison-execution" text="Auto chooses threaded LOSAT only when browser support and workload allow it."></help-tip></span>
-                                                <select v-model="losatExecution.executionMode" aria-label="LOSAT execution" aria-describedby="help-comparison-execution" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
-                                                    <option value="auto">Auto ({{ losatEffectiveExecutionMode }})</option>
-                                                    <option value="serial">Serial</option>
-                                                    <option value="threaded">{{ losatThreadedOptionLabel }}</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label class="linear-primary-label mb-1">Total threads</label>
-                                                <select v-model="losatExecution.totalThreadBudget" aria-label="LOSAT total threads" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
-                                                    <option value="safe">Safe ({{ losatSafeThreadBudget }})</option>
-                                                    <option value="available">Available ({{ losatHardwareThreads }})</option>
-                                                    <option v-for="option in losatTotalThreadBudgetOptions" :key="`losat-budget-${option.value}`" :value="option.value">{{ option.label }}</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label class="linear-primary-label mb-1">Parallel runs</label>
-                                                <select v-model="losatExecution.parallelWorkers" aria-label="LOSAT parallel runs" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
-                                                    <option :value="undefined">Auto ({{ losatAutoPairWorkers }} {{ losatAutoPairWorkers === 1 ? 'run' : 'runs' }})</option>
-                                                    <option v-for="option in losatPairWorkerOptions" :key="`losat-pair-workers-${option.value}`" :value="option.value">{{ option.label }}</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label class="linear-primary-label mb-1">Threads per run</label>
-                                                <select v-model="losatExecution.threadsPerJob" aria-label="LOSAT threads per run" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable || (losatThreadsPerJobFixed)">
-                                                    <option value="auto">Auto ({{ losatEffectiveThreadsPerJob }})</option>
-                                                    <option v-for="option in losatThreadOptions" :key="`losat-threads-${option.value}`" :value="option.value">{{ option.label }}</option>
-                                                </select>
-                                            </div>
-                                        </div>
-                                        <div class="ui-hint flex min-w-0 items-start gap-1"><i class="ph ph-cpu mt-0.5" aria-hidden="true"></i><span>{{ losatThreadingPlanSummary }}</span></div>
-                                    </section>
-
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('record-genetic-codes')" class="rounded border border-slate-200 bg-slate-50 p-2 text-[10px] leading-snug text-slate-600">
                                         Set the translation table for each sequence in its <strong>Record options</strong>. A missing active TLOSATX code is shown on the closed record summary.
                                     </div>
@@ -2557,16 +2549,6 @@
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('blastp-max-hits')">
                                         <span class="linear-primary-label mb-1">Pairwise display max hits <help-tip id="help-comparison-pairwise-display-max-hits" text="Maximum filtered matches displayed per query protein in Pairwise mode. This does not limit LOSATP candidates or Similarity/Collinear member evidence."></help-tip></span>
                                         <input type="number" min="1" step="1" v-model.number="losat.blastp.maxHits" aria-label="Pairwise display max hits per protein" aria-describedby="help-comparison-pairwise-display-max-hits" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
-                                    </div>
-
-                                    <div v-if="linearComparisonUi.sectionKeys.settings.includes('losatp-candidate')">
-                                        <span class="linear-primary-label mb-1">Max target seqs <help-tip id="help-comparison-max-target-seqs" text="Raw LOSATP search limit per query protein (--max-target-seqs). Leave blank for an unbounded search. Changing this value requires matching raw search results. Defaults: 5 for Collinear, unbounded for Similarity groups. Each mode remembers its own hit limits."></help-tip></span>
-                                        <input type="number" min="1" step="1" placeholder="Unbounded" v-model.number="losat.blastp.candidateLimit" aria-label="LOSATP Max target seqs" aria-describedby="help-comparison-max-target-seqs" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
-                                    </div>
-
-                                    <div v-if="linearComparisonUi.sectionKeys.settings.includes('member-hits')">
-                                        <span class="linear-primary-label mb-1">Member hits per protein <help-tip id="help-comparison-member-hits-per-protein" text="Maximum directional subject hits used to construct Similarity groups and Collinear blocks after result filtering. Leave blank to keep all hits passing the result filters. This does not limit raw LOSATP candidates or Pairwise display matches."></help-tip></span>
-                                        <input type="number" min="1" step="1" placeholder="Unbounded" v-model.number="losat.blastp.orthogroupMemberMaxHits" aria-label="Member hits per protein" aria-describedby="help-comparison-member-hits-per-protein" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                     </div>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('collinear-primary')" class="flex items-start text-xs">
@@ -2603,10 +2585,6 @@
                                         </div>
                                     </div>
 
-                                    <div v-if="linearComparisonUi.sectionKeys.settings.includes('upload-readiness')" class="rounded border border-slate-200 bg-slate-50 p-2 text-[10px] leading-snug text-slate-600">
-                                        Upload readiness: {{ linearComparisonUi.sourceBreakdown.upload }} active upload pair{{ linearComparisonUi.sourceBreakdown.upload === 1 ? '' : 's' }}. Assign files under Selected pairs.
-                                    </div>
-
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('result-filters')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
                                         <div class="linear-primary-label">Result filters</div>
                                         <p class="ui-hint">Applies on Generate: comparison result filters.</p>
@@ -2620,11 +2598,11 @@
                                                 <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? comparisonProfileDefault('linear', 'evalue') : String($event.target.value).trim()" aria-label="Linear comparison maximum e-value" class="form-input px-2 py-1.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'evalue'))" :disabled="!semanticMutationAvailable">
                                             </div>
                                             <div>
-                                                <label class="linear-primary-label mb-1">Minimum identity</label>
+                                                <label class="linear-primary-label mb-1">Min identity (%)</label>
                                                 <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? comparisonProfileDefault('linear', 'identity') : Number($event.target.value)" aria-label="Linear comparison minimum identity" class="form-input px-2 py-1.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'identity'))" :disabled="!semanticMutationAvailable">
                                             </div>
                                             <div>
-                                                <label class="linear-primary-label mb-1">Minimum length</label>
+                                                <label class="linear-primary-label mb-1">Min length</label>
                                                 <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('linear', 'alignment_length') : Number($event.target.value)" aria-label="Linear comparison minimum alignment length" class="form-input px-2 py-1.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'alignment_length'))" :disabled="!semanticMutationAvailable">
                                             </div>
                                         </div>
@@ -2649,6 +2627,56 @@
                                             </div>
                                         </div>
                                     </div>
+
+                                    <section v-if="linearComparisonUi.sectionKeys.settings.includes('losatp-candidate') || linearComparisonUi.sectionKeys.settings.includes('member-hits')" data-linear-comparison-search-limits class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
+                                        <div class="linear-primary-label">Search limits</div>
+                                        <div class="grid min-w-0 grid-cols-1 gap-2">
+                                    <div v-if="linearComparisonUi.sectionKeys.settings.includes('losatp-candidate')">
+                                        <span class="linear-primary-label mb-1">Max target seqs <help-tip id="help-comparison-max-target-seqs" text="Raw LOSATP search limit per query protein (--max-target-seqs). Leave blank for an unbounded search. Changing this value requires matching raw search results. Defaults: 5 for Collinear, unbounded for Similarity groups. Each mode remembers its own hit limits."></help-tip></span>
+                                        <input type="number" min="1" step="1" placeholder="Unbounded" v-model.number="losat.blastp.candidateLimit" aria-label="LOSATP Max target seqs" aria-describedby="help-comparison-max-target-seqs" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                    </div>
+                                    <div v-if="linearComparisonUi.sectionKeys.settings.includes('member-hits')">
+                                        <span class="linear-primary-label mb-1">Member hits per protein <help-tip id="help-comparison-member-hits-per-protein" text="Maximum directional subject hits used to construct Similarity groups and Collinear blocks after result filtering. Leave blank to keep all hits passing the result filters. This does not limit raw LOSATP candidates or Pairwise display matches."></help-tip></span>
+                                        <input type="number" min="1" step="1" placeholder="Unbounded" v-model.number="losat.blastp.orthogroupMemberMaxHits" aria-label="Member hits per protein" aria-describedby="help-comparison-member-hits-per-protein" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                    </div>
+                                        </div>
+                                    </section>
+
+                                    <section v-if="linearComparisonUi.sectionKeys.settings.includes('losat-runtime')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
+                                        <div class="linear-primary-label">Performance</div>
+                                        <div class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+                                            <div>
+                                                <span class="linear-primary-label mb-1">Execution <help-tip id="help-comparison-execution" text="Auto chooses threaded LOSAT only when browser support and workload allow it."></help-tip></span>
+                                                <select v-model="losatExecution.executionMode" aria-label="LOSAT execution" aria-describedby="help-comparison-execution" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                                    <option value="auto">Auto ({{ losatEffectiveExecutionMode }})</option>
+                                                    <option value="serial">Serial</option>
+                                                    <option value="threaded">{{ losatThreadedOptionLabel }}</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <span class="linear-primary-label mb-1">Total threads <help-tip id="help-comparison-total-threads" text="By default, LOSAT can use up to half the number of cores available."></help-tip></span>
+                                                <select v-model="losatExecution.totalThreadBudget" aria-label="LOSAT total threads" aria-describedby="help-comparison-total-threads" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                                    <option value="safe">Safe ({{ losatSafeThreadBudget }})</option>
+                                                    <option value="available">Available ({{ losatHardwareThreads }})</option>
+                                                    <option v-for="option in losatTotalThreadBudgetOptions" :key="`losat-budget-${option.value}`" :value="option.value">{{ option.label }}</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="linear-primary-label mb-1">Parallel runs</label>
+                                                <select v-model="losatExecution.parallelWorkers" aria-label="LOSAT parallel runs" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                                    <option :value="undefined">Auto ({{ losatAutoPairWorkers }} {{ losatAutoPairWorkers === 1 ? 'run' : 'runs' }})</option>
+                                                    <option v-for="option in losatPairWorkerOptions" :key="`losat-pair-workers-${option.value}`" :value="option.value">{{ option.label }}</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="linear-primary-label mb-1">Threads per run</label>
+                                                <select v-model="losatExecution.threadsPerJob" aria-label="LOSAT threads per run" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable || (losatThreadsPerJobFixed)">
+                                                    <option value="auto">Auto ({{ losatEffectiveThreadsPerJob }})</option>
+                                                    <option v-for="option in losatThreadOptions" :key="`losat-threads-${option.value}`" :value="option.value">{{ option.label }}</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </section>
                                 </div>
                             </details>
 
@@ -2661,34 +2689,36 @@
                                 <i class="ph ph-list-checks" aria-hidden="true"></i>
                                 Selected pairs ({{ linearComparisonUi.activePairCount }})
                                 <span v-if="linearComparisonUi.retainedDormantDraftCount" class="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800">{{ linearComparisonUi.retainedDormantDraftCount }} retained</span>
-                                <span v-if="linearComparisonUi.errorDisclosureKeys.includes('selected-pairs')" class="ml-auto rounded bg-red-100 px-1.5 py-0.5 text-[10px] text-red-700">{{ linearComparisonUi.errorBadge?.label }}</span>
                             </summary>
                             <div class="min-w-0 space-y-2 pt-2">
                                 <template v-for="displayRow in linearComparisonTimeline.rows" :key="`linear-comparison-row-${displayRow.row}`">
+                                <!-- UX-C02: one pair list. A boundary with one pair needs no heading; each pair is a row with its source,
+                                     its file, its issue and, after LOSAT ran, its raw result. -->
                                 <section
                                     v-if="displayRow.boundaryAfter"
                                     :data-linear-comparison-boundary="`${displayRow.boundaryAfter.upperRow}->${displayRow.boundaryAfter.lowerRow}`"
-                                    class="min-w-0 rounded-lg border border-blue-200 bg-blue-50/50 p-2 space-y-2"
-                                    :aria-label="`Comparison boundary from display row ${displayRow.boundaryAfter.upperRow} to ${displayRow.boundaryAfter.lowerRow}`"
+                                    class="min-w-0 space-y-1.5"
+                                    :aria-label="`Pairs between rows ${displayRow.boundaryAfter.upperRow} and ${displayRow.boundaryAfter.lowerRow}`"
                                 >
-                                    <div class="text-[10px] font-bold uppercase tracking-wide text-blue-700">Comparison boundary: display row {{ displayRow.boundaryAfter.upperRow }} to {{ displayRow.boundaryAfter.lowerRow }}</div>
+                                    <div v-if="displayRow.boundaryAfter.pairs.length > 1" class="text-[10px] font-semibold text-slate-500">Rows {{ displayRow.boundaryAfter.upperRow }}–{{ displayRow.boundaryAfter.lowerRow }}</div>
                                     <fieldset
                                         v-for="pair in displayRow.boundaryAfter.pairs"
                                         :key="pair.edgeKey"
                                         :data-edge-key="pair.edgeKey"
                                         :data-linear-comparison-pair-row="pair.edgeKey"
-                                        class="min-w-0 rounded border border-slate-200 bg-white p-2 space-y-2"
+                                        :class="linearComparisonUi.pairIssueText[pair.edgeKey] ? 'border-red-300 bg-red-50/40' : 'border-slate-200 bg-white'"
+                                        class="min-w-0 rounded border px-1.5 py-1 space-y-1"
                                     >
-                                        <legend class="max-w-full px-1 text-[10px] font-semibold text-slate-700">
-                                            <span class="flex min-w-0 items-center gap-1">
-                                                <span class="shrink-0">#{{ pair.queryIndex + 1 }} → #{{ pair.subjectIndex + 1 }}</span>
-                                                <span class="min-w-0 truncate text-slate-500" :title="`${linearComparisonRecordLabel(pair.queryUid)} → ${linearComparisonRecordLabel(pair.subjectUid)}`">{{ linearComparisonRecordLabel(pair.queryUid) }} → {{ linearComparisonRecordLabel(pair.subjectUid) }}</span>
-                                            </span>
-                                        </legend>
-                                        <div class="flex min-w-0 flex-wrap gap-x-3 gap-y-2 text-xs font-semibold" data-comparison-focus="pair-row">
-                                            <label class="flex items-center gap-1 cursor-pointer"><input type="radio" :name="`linear-gap-${pair.edgeKey}`" :checked="pair.source === 'none'" @change="setLinearComparisonGapAction(pair.edgeKey, 'none')" class="text-blue-600" :disabled="!semanticMutationAvailable"> No comparison</label>
-                                            <label class="flex items-center gap-1 cursor-pointer"><input type="radio" :name="`linear-gap-${pair.edgeKey}`" :checked="pair.source === 'losat'" @change="setLinearComparisonGapAction(pair.edgeKey, 'losat')" class="text-blue-600" :disabled="!semanticMutationAvailable"> Run LOSAT</label>
-                                            <label class="flex items-center gap-1 cursor-pointer"><input type="radio" :name="`linear-gap-${pair.edgeKey}`" :checked="pair.source === 'upload'" @change="setLinearComparisonGapAction(pair.edgeKey, 'upload')" class="text-blue-600" :disabled="!semanticMutationAvailable"> Upload BLAST TSV</label>
+                                        <legend class="sr-only">#{{ pair.queryIndex + 1 }} → #{{ pair.subjectIndex + 1 }} {{ linearComparisonRecordLabel(pair.queryUid) }} → {{ linearComparisonRecordLabel(pair.subjectUid) }}</legend>
+                                        <div class="flex min-w-0 items-center gap-1 text-[10px] font-semibold text-slate-700" aria-hidden="true">
+                                            <span class="shrink-0">#{{ pair.queryIndex + 1 }} → #{{ pair.subjectIndex + 1 }}</span>
+                                            <span class="min-w-0 flex-1 truncate font-normal text-slate-500" :title="`${linearComparisonRecordLabel(pair.queryUid)} → ${linearComparisonRecordLabel(pair.subjectUid)}`">{{ linearComparisonRecordLabel(pair.queryUid) }} → {{ linearComparisonRecordLabel(pair.subjectUid) }}</span>
+                                        </div>
+                                        <p v-if="linearComparisonUi.pairIssueText[pair.edgeKey]" data-linear-comparison-pair-issue class="text-[10px] font-semibold text-red-700">{{ linearComparisonUi.pairIssueText[pair.edgeKey] }}</p>
+                                        <div class="linear-pair-source" data-comparison-focus="pair-row">
+                                            <label :class="pair.source === 'none' ? 'is-active' : ''"><input type="radio" :name="`linear-gap-${pair.edgeKey}`" :checked="pair.source === 'none'" @change="setLinearComparisonGapAction(pair.edgeKey, 'none')" class="linear-pair-source-input" :disabled="!semanticMutationAvailable"> No comparison</label>
+                                            <label :class="pair.source === 'losat' ? 'is-active' : ''"><input type="radio" :name="`linear-gap-${pair.edgeKey}`" :checked="pair.source === 'losat'" @change="setLinearComparisonGapAction(pair.edgeKey, 'losat')" class="linear-pair-source-input" :disabled="!semanticMutationAvailable"> Run LOSAT</label>
+                                            <label :class="pair.source === 'upload' ? 'is-active' : ''"><input type="radio" :name="`linear-gap-${pair.edgeKey}`" :checked="pair.source === 'upload'" @change="setLinearComparisonGapAction(pair.edgeKey, 'upload')" class="linear-pair-source-input" :disabled="!semanticMutationAvailable"> Upload BLAST TSV</label>
                                         </div>
                                         <div v-if="pair.source === 'upload'" class="min-w-0 space-y-1">
                                             <file-uploader
@@ -2715,16 +2745,51 @@
                                             <span class="min-w-0 flex-1 truncate" :title="pair.draft.file.name">Retained, inactive BLAST TSV: {{ pair.draft.file.name }}</span>
                                             <button type="button" class="btn btn-secondary shrink-0 px-1 py-0.5 text-[9px]" :aria-label="`Reuse BLAST TSV for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}`" @click="reuseLinearComparisonFile(pair.draft.id)" :disabled="!semanticMutationAvailable">Reuse TSV</button>
                                         </div>
-                                    </section>
+                                        <div v-if="pair.source === 'losat'" :data-linear-raw-result="pair.edgeKey" class="flex min-w-0 flex-wrap items-start gap-x-2 gap-y-1">
+                                            <button
+                                                v-if="linearLosatCacheInfoByEdgeKey[pair.edgeKey]"
+                                                type="button"
+                                                :aria-label="`Save Raw LOSAT TSV for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}`"
+                                                @click="downloadLosatPair(pair.edgeKey, pair.draft?.losatFilenameActive ? pair.draft.losatFilename : pair.resolved?.losatFilenameActive ? pair.resolved.losatFilename : '')"
+                                                class="btn btn-secondary px-1.5 py-0.5 text-[10px]"
+                                            ><i class="ph ph-download-simple" aria-hidden="true"></i> Save Raw LOSAT TSV</button>
+                                            <details class="linear-pair-file-name min-w-0 flex-1">
+                                                <summary class="text-[10px] font-normal text-slate-500">File name</summary>
+                                                <label class="linear-primary-label block" :for="`linear-raw-name-${pair.edgeKey}`">Raw LOSAT filename</label>
+                                                <input
+                                                    :id="`linear-raw-name-${pair.edgeKey}`"
+                                                    type="text"
+                                                    :value="pair.draft?.losatFilename || pair.resolved?.losatFilename || ''"
+                                                    :placeholder="getLosatPairDefaultName(pair.edgeKey)"
+                                                    :title="getLosatPairDefaultName(pair.edgeKey)"
+                                                    @change="setResolvedLinearComparisonLosatFilename(pair.edgeKey, $event.target.value)"
+                                                    :aria-label="`Raw LOSAT filename for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}`"
+                                                    class="form-input form-input-compact min-w-0"
+                                                 :disabled="!semanticMutationAvailable">
+                                                <button
+                                                    v-if="pair.draft?.losatFilenameActive || pair.resolved?.losatFilenameActive"
+                                                    type="button"
+                                                    class="max-w-full text-left text-[10px] text-amber-700"
+                                                    :aria-label="`Use automatic Raw LOSAT filename for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}`"
+                                                    @click="deactivateResolvedLinearComparisonLosatFilename(pair.edgeKey)"
+                                                    :disabled="!semanticMutationAvailable"
+                                                >Use automatic filename</button>
+                                            </details>
+                                        </div>
+                                        <div v-else-if="pair.draft?.losatFilename" :data-linear-raw-result="pair.edgeKey" class="flex min-w-0 flex-wrap items-center justify-between gap-1 rounded bg-amber-50 px-1.5 py-1 text-[9px] text-amber-800">
+                                            <span class="min-w-0 flex-1 truncate" :title="pair.draft.losatFilename">Retained, inactive filename: {{ pair.draft.losatFilename }}</span>
+                                            <button type="button" class="btn btn-secondary shrink-0 px-1 py-0.5 text-[9px]" :aria-label="`Reuse Raw LOSAT filename for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}`" @click="reuseLinearComparisonLosatFilename(pair.draft.id)" :disabled="!semanticMutationAvailable">Reuse name</button>
+                                        </div>
+                                    </fieldset>
+                                </section>
                                 </template>
-                                <p class="ui-hint">Edit pair sources and retained files without changing record order.</p>
                                 <button type="button" class="btn btn-secondary min-w-0 w-full px-1.5 py-1 text-[9px] whitespace-normal" @click="addLinearComparison()" :disabled="!semanticMutationAvailable">Add</button>
                                 <div class="grid min-w-0 grid-cols-1 gap-1">
                                     <button type="button" class="btn btn-secondary min-w-0 px-1 py-1 text-[9px] whitespace-normal" @click="addLinearComparisonBatch(false)" :disabled="!semanticMutationAvailable">Zipped adjacent pairs</button>
                                     <button type="button" class="btn btn-secondary min-w-0 px-1 py-1 text-[9px] whitespace-normal" @click="addLinearComparisonBatch(true)" :disabled="!semanticMutationAvailable">All adjacent-row pairs (cross-product)</button>
                                     <button type="button" class="btn btn-danger min-w-0 px-1 py-1 text-[9px] whitespace-normal" @click="clearSelectedLinearComparisons()" :disabled="!semanticMutationAvailable">Omit all</button>
                                 </div>
-                                <div v-if="linearComparisonTimeline.unplacedDrafts.length === 0" class="ui-hint rounded border border-dashed border-slate-200 p-2">No unplaced drafts.</div>
+
                                 <fieldset
                                     v-for="unplaced in linearComparisonTimeline.unplacedDrafts"
                                     :key="unplaced.draft.id"
@@ -2739,6 +2804,12 @@
                                     <ul class="space-y-0.5 text-[9px] leading-snug text-amber-800">
                                         <li v-for="issue in unplaced.issues" :key="`${unplaced.draft.id}-${issue.code}`">{{ issue.message }}</li>
                                     </ul>
+                                    <div v-if="unplaced.draft.losatFilename" :data-linear-raw-unplaced="unplaced.draft.id" class="min-w-0 space-y-1">
+                                        <label class="linear-primary-label block" :for="`linear-raw-name-unplaced-${unplaced.draft.id}`">Retained Raw LOSAT filename</label>
+                                        <input :id="`linear-raw-name-unplaced-${unplaced.draft.id}`" type="text" :value="unplaced.draft.losatFilename" @change="setLinearComparisonLosatFilename(unplaced.draft.id, $event.target.value)" :aria-label="`Raw LOSAT filename for unplaced comparison ${unplaced.draft.id}`" class="form-input form-input-compact min-w-0" :disabled="!semanticMutationAvailable">
+                                        <button v-if="!unplaced.draft.losatFilenameActive" type="button" class="btn btn-secondary w-full px-1 py-0.5 text-[9px]" @click="reuseLinearComparisonLosatFilename(unplaced.draft.id)" :disabled="!semanticMutationAvailable">Reuse name and LOSAT</button>
+                                        <button v-else type="button" class="btn btn-secondary w-full px-1 py-0.5 text-[9px]" @click="deactivateLinearComparisonLosatFilename(unplaced.draft.id)" :disabled="!semanticMutationAvailable">Use automatic filename</button>
+                                    </div>
                                     <button type="button" class="btn btn-danger min-w-0 w-full px-1 py-0.5 text-[9px]" :aria-label="`Omit unplaced comparison ${unplaced.draft.id}`" @click="omitLinearComparison(unplaced.draft.id)" :disabled="!semanticMutationAvailable">Omit</button>
                             </div>
                         </details>
@@ -2806,70 +2877,8 @@
 
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('losat-cache')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
                                 <div class="linear-primary-label">LOSAT cache</div>
-                                <p class="ui-hint">{{ losatCacheInfo.length }} cached raw result{{ losatCacheInfo.length === 1 ? '' : 's' }}. Matching canonical inputs and settings reuse cached TSV data.</p>
+                                <p class="ui-hint">{{ losatCacheInfo.length }} LOSAT result{{ losatCacheInfo.length === 1 ? ' is' : 's are' }} cached and reused when the inputs and settings match.</p>
                                 <button type="button" @click="clearLosatCache" class="btn btn-danger w-full text-xs" :disabled="!semanticMutationAvailable || (losatCacheInfo.length === 0)"><i class="ph ph-trash" aria-hidden="true"></i> Clear Cache</button>
-                            </section>
-
-                            <section v-if="linearComparisonUi.sectionKeys.advanced.includes('raw-results')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
-                                <div class="flex min-w-0 flex-wrap items-center gap-1.5">
-                                    <div class="linear-primary-label">Raw LOSAT results</div>
-                                    <span v-if="linearComparisonUi.retainedRawResultDraftCount" class="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">{{ linearComparisonUi.retainedRawResultDraftCount }} retained</span>
-                                </div>
-                                <template v-for="displayRow in linearComparisonTimeline.rows" :key="`linear-raw-row-${displayRow.row}`">
-                                    <template v-if="displayRow.boundaryAfter">
-                                        <template v-for="pair in displayRow.boundaryAfter.pairs" :key="`linear-raw-${pair.edgeKey}`">
-                                            <div v-if="pair.source === 'losat' || pair.draft?.losatFilename" :data-linear-raw-result="pair.edgeKey" class="min-w-0 space-y-1.5 rounded border border-slate-200 bg-white p-2">
-                                                <div class="flex min-w-0 items-center gap-1 text-xs font-semibold text-slate-700">
-                                                    <span class="shrink-0">#{{ pair.queryIndex + 1 }} → #{{ pair.subjectIndex + 1 }}</span>
-                                                    <span class="min-w-0 truncate text-[10px] font-normal text-slate-500" :title="`${linearComparisonRecordLabel(pair.queryUid)} → ${linearComparisonRecordLabel(pair.subjectUid)}`">{{ linearComparisonRecordLabel(pair.queryUid) }} → {{ linearComparisonRecordLabel(pair.subjectUid) }}</span>
-                                                </div>
-                                                <template v-if="pair.source === 'losat'">
-                                                    <label class="linear-primary-label block">Raw LOSAT filename</label>
-                                                    <input
-                                                        type="text"
-                                                        :value="pair.draft?.losatFilename || pair.resolved?.losatFilename || ''"
-                                                        :placeholder="getLosatPairDefaultName(pair.edgeKey)"
-                                                        @change="setResolvedLinearComparisonLosatFilename(pair.edgeKey, $event.target.value)"
-                                                        :aria-label="`Raw LOSAT filename for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}`"
-                                                        class="form-input min-w-0 px-2 py-1.5 text-xs"
-                                                     :disabled="!semanticMutationAvailable">
-                                                    <div class="ui-hint min-w-0 truncate" :title="getLosatPairDefaultName(pair.edgeKey)">Default: {{ getLosatPairDefaultName(pair.edgeKey) }}</div>
-                                                    <button
-                                                        v-if="pair.draft?.losatFilenameActive || pair.resolved?.losatFilenameActive"
-                                                        type="button"
-                                                        class="max-w-full text-left text-[10px] text-amber-700"
-                                                        :aria-label="`Use automatic Raw LOSAT filename for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}`"
-                                                        @click="deactivateResolvedLinearComparisonLosatFilename(pair.edgeKey)"
-                                                        :disabled="!semanticMutationAvailable"
-                                                    >Use automatic filename</button>
-                                                    <div class="text-[10px] text-slate-500">{{ linearLosatCacheInfoByEdgeKey[pair.edgeKey] ? 'Raw result ready' : 'Raw result not ready' }}</div>
-                                                    <button
-                                                        type="button"
-                                                        :aria-label="`Save Raw LOSAT TSV for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}`"
-                                                        @click="downloadLosatPair(pair.edgeKey, pair.draft?.losatFilenameActive ? pair.draft.losatFilename : pair.resolved?.losatFilenameActive ? pair.resolved.losatFilename : '')"
-                                                        class="btn btn-secondary min-w-0 w-full text-xs whitespace-normal"
-                                                        :disabled="!linearLosatCacheInfoByEdgeKey[pair.edgeKey]"
-                                                    ><i class="ph ph-download-simple" aria-hidden="true"></i> Save Raw LOSAT TSV</button>
-                                                </template>
-                                                <div v-else class="flex min-w-0 flex-wrap items-center justify-between gap-1 rounded bg-amber-50 px-1.5 py-1 text-[10px] text-amber-800">
-                                                    <span class="min-w-0 flex-1 truncate" :title="pair.draft.losatFilename">Retained, inactive filename: {{ pair.draft.losatFilename }}</span>
-                                                    <button type="button" class="btn btn-secondary shrink-0 px-1 py-0.5 text-[10px]" :aria-label="`Reuse Raw LOSAT filename for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}`" @click="reuseLinearComparisonLosatFilename(pair.draft.id)" :disabled="!semanticMutationAvailable">Reuse name</button>
-                                                </div>
-                                            </div>
-                                        </template>
-                                    </template>
-                                </template>
-                                <template v-for="unplaced in linearComparisonTimeline.unplacedDrafts" :key="`linear-raw-unplaced-${unplaced.draft.id}`">
-                                    <div v-if="unplaced.draft.losatFilename" :data-linear-raw-unplaced="unplaced.draft.id" class="min-w-0 space-y-1.5 rounded border border-amber-200 bg-amber-50 p-2">
-                                        <div class="text-xs font-semibold text-amber-800">Unplaced comparison draft</div>
-                                        <label class="linear-primary-label block">Retained Raw LOSAT filename</label>
-                                        <input type="text" :value="unplaced.draft.losatFilename" @change="setLinearComparisonLosatFilename(unplaced.draft.id, $event.target.value)" :aria-label="`Raw LOSAT filename for unplaced comparison ${unplaced.draft.id}`" class="form-input min-w-0 px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
-                                        <div class="flex min-w-0 flex-wrap gap-1">
-                                            <button v-if="!unplaced.draft.losatFilenameActive" type="button" class="btn btn-secondary flex-1 px-1 py-1 text-[10px]" @click="reuseLinearComparisonLosatFilename(unplaced.draft.id)" :disabled="!semanticMutationAvailable">Reuse name and LOSAT</button>
-                                            <button v-else type="button" class="btn btn-secondary flex-1 px-1 py-1 text-[10px]" @click="deactivateLinearComparisonLosatFilename(unplaced.draft.id)" :disabled="!semanticMutationAvailable">Use automatic filename</button>
-                                        </div>
-                                    </div>
-                                </template>
                             </section>
 
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('collinear-details')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
@@ -5125,6 +5134,7 @@
                 :error="errorLog" :recovery="errorDisplay.operation === 'generate' || errorDisplay.operation === 'align' ? generationFailureRecovery : null"
                 class="card border-l-4 border-l-red-500 bg-red-50 mb-0 shrink-0">
                 <div class="mt-2 flex flex-wrap gap-2">
+                    <button v-if="mode === 'linear' && errorDisplay.actions.includes('edit-comparison')" type="button" data-history-ignore @click="showLinearComparisonCause" class="btn btn-secondary btn-sm">Show in Comparison</button>
                     <button v-if="errorDisplay.operation === 'generate' && errorDisplay.actions.includes('retry')" type="button" @click="runAnalysis" :disabled="processing" class="btn btn-secondary btn-sm">Retry Generate</button>
                     <button v-if="canRetryAuxiliaryImportFailure" type="button" @click="retryAuxiliaryImportFailure" :disabled="!semanticMutationAvailable" class="btn btn-secondary btn-sm">Retry table import</button>
                     <button v-if="canRetryLabelImportFailure" type="button" @click="retryLabelImportFailure" class="btn btn-secondary btn-sm">Retry Label TSV import</button>
@@ -5226,7 +5236,8 @@
                     <p class="font-semibold">Comparison table rows were placed by position.</p>
                     <p v-for="(warning, index) in comparisonWarnings" :key="index">{{ warning.message }}</p>
                 </div>
-                <div v-if="failedGeneratePreservedResult"
+                <!-- While the Generate error card shows, its recovery line is this notice (UX-C05). -->
+                <div v-if="failedGeneratePreservedResult && (failedGeneratePreservedResult === 'current' || !(errorDisplay && (errorDisplay.operation === 'generate' || errorDisplay.operation === 'align')))"
                      role="status"
                      class="-mx-4 border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0">
                     <p class="font-semibold">Showing the last successful result.</p>
@@ -7784,18 +7795,27 @@
                 <button type="button" data-history-ignore @click="resolveSessionReplacement('load')" class="btn btn-primary btn-sm">{{ sessionReplaceDialog.actionLabel }}</button>
             </div>
         </choice-dialog>
-        <!-- D-54: Generate asks about pairs set to Upload BLAST TSV without a file -->
+        <!-- Generate asks about pairs set to Upload BLAST TSV without a file: one row per pair (UX-A06) -->
         <choice-dialog v-if="missingBlastTsvDialog.show" :busy="dialogChoicePending" labelledby="missing-blast-tsv-title" describedby="missing-blast-tsv-description"
              @cancel="resolveMissingBlastTsv('cancel')" @keydown.tab="trapDialogFocus"
              class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
             <h2 id="missing-blast-tsv-title" class="text-base font-bold text-slate-800">BLAST TSV missing</h2>
-            <p id="missing-blast-tsv-description" class="mt-2 text-sm leading-relaxed text-slate-600">
-                These pairs are set to Upload BLAST TSV but have no file: {{ missingBlastTsvDialog.pairs.map((pair) => pair.label).join(', ') }}.
-            </p>
-            <div class="mt-4 flex flex-col gap-2">
-                <button type="button" data-history-ignore @click="resolveMissingBlastTsv('choose')" class="btn btn-primary btn-sm">Choose BLAST TSV for {{ missingBlastTsvDialog.pairs[0]?.label }}…</button>
-                <button type="button" data-history-managed :disabled="!semanticMutationAvailable" @click="resolveMissingBlastTsv('none')" class="btn btn-secondary btn-sm">Set to No comparison and Generate</button>
+            <p id="missing-blast-tsv-description" class="mt-2 text-sm leading-relaxed text-slate-600">Choose a BLAST TSV for each pair, or skip these comparisons.</p>
+            <ul class="mt-3 divide-y divide-slate-200 rounded border border-slate-200" data-missing-blast-tsv-rows>
+                <li v-for="row in missingBlastTsvRows" :key="row.edgeKey" :data-missing-blast-tsv-row="row.edgeKey" class="flex min-w-0 items-center gap-2 px-2 py-1.5 text-sm">
+                    <span class="min-w-0 flex-1">
+                        <span class="block font-semibold text-slate-800">{{ row.label }}</span>
+                        <span class="block truncate text-xs text-slate-500" :title="row.records">{{ row.records }}</span>
+                        <span class="block truncate text-xs" :class="row.missing ? 'text-red-700' : 'text-green-700'">{{ row.missing ? 'No file' : row.fileName }}</span>
+                    </span>
+                    <input type="file" class="hidden" data-history-managed accept=".tsv,.tab,.txt,.out,.blast,text/tab-separated-values,text/plain,text/*" :aria-label="`BLAST TSV for ${row.label}`" @change="chooseMissingBlastTsvFile(row.edgeKey, $event)">
+                    <button type="button" data-history-ignore :disabled="!semanticMutationAvailable" @click="$event.currentTarget.previousElementSibling.click()" :aria-label="`Choose BLAST TSV for ${row.label}`" class="btn btn-secondary btn-sm shrink-0">{{ row.missing ? 'Choose file…' : 'Change…' }}</button>
+                </li>
+            </ul>
+            <div class="mt-4 flex flex-wrap justify-end gap-2">
                 <button type="button" data-history-ignore @click="resolveMissingBlastTsv('cancel')" class="btn btn-secondary btn-sm">Cancel</button>
+                <button v-if="missingBlastTsvRows.some((row) => row.missing)" type="button" data-history-managed :disabled="!semanticMutationAvailable" @click="resolveMissingBlastTsv('none')" class="btn btn-secondary btn-sm">Skip these comparisons and Generate</button>
+                <button v-else type="button" data-history-ignore :disabled="processing" @click="resolveMissingBlastTsv('generate')" class="btn btn-primary btn-sm">Generate</button>
             </div>
         </choice-dialog>
         <!-- Record selection (D-02, D-10): the records of one file, drawn or left out -->
@@ -7995,16 +8015,19 @@
             </div>
         </div>
         <div class="grid grid-cols-12 gap-1">
-            <input :id="fieldId(rule)" :disabled="!available" :value="patternText(rule)" @input="$emit('edit-pattern', rule, $event.target.value)" @change="$emit('retry-pattern', rule)" :aria-label="`Color rule ${i + 1} pattern`" :aria-describedby="patternDraft(rule) ? `${fieldId(rule)}-status` : undefined" :aria-invalid="patternDraft(rule)?.error?.code === 'REGEX_SYNTAX' ? 'true' : undefined" :aria-busy="patternDraft(rule)?.pending ? 'true' : undefined" placeholder="Python regex" data-history-ignore class="form-input form-input-compact col-span-7 font-mono">
+            <input :id="fieldId(rule)" :disabled="!available" :value="patternText(rule)" @input="$emit('edit-pattern', rule, $event.target.value)" @change="$emit('retry-pattern', rule)" :aria-label="`Color rule ${i + 1} pattern`" :aria-describedby="patternDraft(rule) ? `${fieldId(rule)}-status` : undefined" :aria-invalid="patternDraft(rule)?.error?.code === 'REGEX_SYNTAX' ? 'true' : undefined" :aria-busy="patternDraft(rule)?.pending ? 'true' : undefined" placeholder="Python regex" data-history-ignore :class="patternDraft(rule)?.error?.code === 'REGEX_SYNTAX' ? 'border-red-500' : ''" class="form-input form-input-compact col-span-7 font-mono">
             <input :value="rule.cap" @change="$emit('set-field', i, 'cap', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} legend caption`" placeholder="Legend Caption" class="form-input form-input-compact col-span-5" :disabled="!available">
         </div>
-        <div v-if="patternDraft(rule)" :id="`${fieldId(rule)}-status`" class="rounded border border-amber-200 bg-amber-50 p-2 text-xs break-words" data-color-rule-pattern-status data-history-ignore>
-            <p role="status" aria-live="polite" class="font-semibold">Not applied<span v-if="patternDraft(rule).pending"> — Checking color rule…</span></p>
-            <p class="mt-1">Save Session and Generate use the last accepted rule. Export uses the current Result. This draft is not saved.</p>
-            <operation-error v-if="patternDraft(rule).error" :error="patternDraft(rule).error" class="mt-2"></operation-error>
-            <div class="mt-2 flex flex-wrap gap-2">
-                <button type="button" @click="$emit('retry-pattern', rule)" :disabled="!available || patternDraft(rule).pending" class="btn btn-secondary btn-sm">Retry</button>
-                <button type="button" :disabled="!available" @pointerdown.prevent @click="$emit('revert-pattern', rule, $event.currentTarget.closest('[data-color-rule-row]').querySelector('input[data-history-ignore]'))" class="btn btn-secondary btn-sm">Revert</button>
+        <!-- UX-C04: the pattern's state under its field, once; the rule for what Save, Generate and Export use sits in the help tip. -->
+        <div v-if="patternDraft(rule)" :id="`${fieldId(rule)}-status`" class="space-y-0.5 break-words text-[10px] leading-snug" data-color-rule-pattern-status data-history-ignore>
+            <div class="flex items-center gap-1 text-amber-800">
+                <p role="status" aria-live="polite" class="font-semibold">Not applied<span v-if="patternDraft(rule).pending"> — Checking color rule…</span></p>
+                <help-tip :id="`${fieldId(rule)}-policy`" text="Until the pattern is accepted, Save Session and Generate use the last accepted rule, and Export uses the current Result. The draft is not saved."></help-tip>
+            </div>
+            <operation-error v-if="patternDraft(rule).error" compact :error="patternDraft(rule).error"></operation-error>
+            <div class="flex flex-wrap gap-3">
+                <button v-if="patternDraft(rule).error?.code !== 'REGEX_SYNTAX'" type="button" @click="$emit('retry-pattern', rule)" :disabled="!available || patternDraft(rule).pending" class="font-semibold text-blue-700 underline disabled:opacity-40">Retry</button>
+                <button type="button" :disabled="!available" @pointerdown.prevent @click="$emit('revert-pattern', rule, $event.currentTarget.closest('[data-color-rule-row]').querySelector('input[data-history-ignore]'))" class="font-semibold text-blue-700 underline disabled:opacity-40">Revert</button>
             </div>
         </div>
     </div>
@@ -8027,7 +8050,14 @@
 </script>
 
     <script type="text/x-template" id="operation-error-template">
-        <div v-if="model" role="alert" :aria-label="title" class="min-w-0 break-words">
+        <div v-if="model && compact" role="alert" :aria-label="title" class="min-w-0 break-words text-[11px] leading-snug text-red-700">
+            <p>{{ model.summary }}</p>
+            <slot></slot>
+            <button type="button" @click="copyDiagnostics" class="mt-0.5 text-[10px] text-slate-500 underline hover:text-slate-700">Copy details for a bug report</button>
+            <textarea v-if="manualCopy" ref="diagnosticText" :value="diagnostics" readonly aria-label="Safe diagnostics" rows="4" class="mt-1 w-full min-w-0 resize-y rounded border border-red-100 bg-white p-1 font-mono text-[10px] text-red-800" data-history-ignore></textarea>
+            <p role="status" aria-live="polite" class="text-[10px] text-slate-500">{{ copyStatus }}</p>
+        </div>
+        <div v-else-if="model" role="alert" :aria-label="title" class="min-w-0 break-words">
             <p class="font-bold text-red-700">{{ title }}</p>
             <p class="mt-1 text-sm text-red-800">{{ model.summary }}</p>
             <p v-if="recoveryText" class="mt-1 text-xs text-red-800">{{ recoveryText }}</p>

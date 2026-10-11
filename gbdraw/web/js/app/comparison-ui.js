@@ -43,7 +43,6 @@ const LINEAR_COMPARISON_SECTION_KEYS = Object.freeze({
     BLASTP_MAX_HITS: 'blastp-max-hits',
     MEMBER_HITS: 'member-hits',
     COLLINEAR_PRIMARY: 'collinear-primary',
-    UPLOAD_READINESS: 'upload-readiness',
     RESULT_FILTERS: 'result-filters',
     COMPARISON_APPEARANCE: 'comparison-appearance'
   }),
@@ -54,7 +53,6 @@ const LINEAR_COMPARISON_SECTION_KEYS = Object.freeze({
   ADVANCED: Object.freeze({
     RECORD_LAYOUT: 'record-layout',
     LOSAT_CACHE: 'losat-cache',
-    RAW_RESULTS: 'raw-results',
     COLLINEAR_DETAILS: 'collinear-details'
   })
 });
@@ -251,20 +249,6 @@ const retainedDormantDraftCount = (plan, activeEdges) => {
   }).length;
 };
 
-const retainedRawResultDraftCount = (plan, activeEdges) => {
-  const activeById = new Map(activeEdges.map((edge) => [String(edge?.id || ''), edge]));
-  return plan.edges.filter((draft) => {
-    const retainedName = String(draft.losatFilename || '').trim();
-    if (!retainedName) return false;
-    const active = activeById.get(String(draft.id || ''));
-    return !(
-      active?.source === LINEAR_COMPARISON_SOURCES.LOSAT &&
-      draft.losatFilenameActive === true &&
-      String(active.losatFilename || '') === retainedName
-    );
-  }).length;
-};
-
 const valuesEquivalent = (left, right) => {
   const leftNumber = Number(left);
   const rightNumber = Number(right);
@@ -361,9 +345,6 @@ const projectSettingsSectionKeys = ({
       );
     }
   }
-  if (planned.hasUpload) {
-    keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.UPLOAD_READINESS);
-  }
   keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.RESULT_FILTERS);
   keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.COMPARISON_APPEARANCE);
   return Object.freeze(keys);
@@ -375,8 +356,7 @@ const projectSectionKeys = ({
   losatModeKey,
   losatpModeKey,
   selectedTopology,
-  dormantDraftCount,
-  dormantRawResultDraftCount
+  dormantDraftCount
 }) => {
   const settings = projectSettingsSectionKeys({
     intentKey,
@@ -398,9 +378,6 @@ const projectSectionKeys = ({
   if (planned.hasLosat) {
     advanced.push(LINEAR_COMPARISON_SECTION_KEYS.ADVANCED.LOSAT_CACHE);
   }
-  if (planned.hasLosat || dormantRawResultDraftCount > 0) {
-    advanced.push(LINEAR_COMPARISON_SECTION_KEYS.ADVANCED.RAW_RESULTS);
-  }
   if (
     planned.hasLosat &&
     !selectedTopology &&
@@ -416,34 +393,44 @@ const projectSectionKeys = ({
   });
 };
 
-const projectErrorRouting = (errors) => {
-  const targets = Object.freeze((Array.isArray(errors) ? errors : []).flatMap((issue) => {
+// One entry per issue, worded at its cause, with the actions that fix it
+// (UX-C05). The Comparison card lists them once; the pair row of a pair issue
+// carries its short text.
+const ISSUE_ACTIONS = Object.freeze({
+  'missing-upload': Object.freeze([Object.freeze({ key: 'show', label: 'Choose file' })]),
+  'selected-losat-requires-pairwise': Object.freeze([
+    Object.freeze({ key: 'all-losat', label: 'Run LOSAT for all pairs' }),
+    Object.freeze({ key: 'pairwise', label: 'Use Pairwise matches' })
+  ])
+});
+const SHOW_PAIR_ACTIONS = Object.freeze([Object.freeze({ key: 'show', label: 'Show pair' })]);
+
+const projectIssues = (errors, edges) => {
+  const edgeByKey = new Map((Array.isArray(edges) ? edges : []).map((edge) => [String(edge?.edgeKey || ''), edge]));
+  return Object.freeze((Array.isArray(errors) ? errors : []).flatMap((issue, index) => {
     const code = String(issue?.code || '').trim();
     const route = ISSUE_ROUTES[code];
     if (!route) return [];
+    const edgeKey = String(issue?.edgeKey || '');
+    const edge = edgeByKey.get(edgeKey);
+    const pairLabel = Number.isInteger(edge?.queryIndex) && Number.isInteger(edge?.subjectIndex)
+      ? `#${edge.queryIndex + 1} → #${edge.subjectIndex + 1}` : '';
+    const pairText = code === 'missing-upload' ? 'No BLAST file' : String(issue?.message || '');
+    const text = code === 'selected-losat-requires-pairwise'
+      ? 'Similarity groups and Collinear blocks compare every adjacent pair with LOSAT.'
+      : pairLabel ? `${pairLabel}: ${pairText}.`.replace(/\.\.$/, '.') : String(issue?.message || '');
     return [Object.freeze({
+      key: `${code}-${edgeKey || index}`,
       issueCode: code,
       disclosureKey: route.disclosureKey,
       focusTargetKey: route.focusTargetKey,
       edgeId: String(issue?.edgeId || ''),
-      edgeKey: String(issue?.edgeKey || '')
+      edgeKey,
+      text,
+      pairText: pairLabel ? pairText : '',
+      actions: ISSUE_ACTIONS[code] || SHOW_PAIR_ACTIONS
     })];
   }));
-  const disclosureKeys = Object.freeze([
-    ...new Set(targets.map((target) => target.disclosureKey))
-  ]);
-  const count = targets.length;
-  return Object.freeze({
-    badge: count === 0
-      ? null
-      : Object.freeze({
-        count,
-        label: `${count} comparison issue${count === 1 ? '' : 's'}`
-      }),
-    primaryDisclosureKey: targets[0]?.disclosureKey || null,
-    disclosureKeys,
-    targets
-  });
 };
 
 const projectTopology = (plan, activePairCount) => {
@@ -549,7 +536,6 @@ export const projectLinearComparisonUi = ({
   const sourceBreakdown = projectSourceBreakdown(activeEdges);
   const activePairCount = activeEdges.length;
   const dormantDraftCount = retainedDormantDraftCount(normalizedPlan, activeEdges);
-  const dormantRawResultDraftCount = retainedRawResultDraftCount(normalizedPlan, activeEdges);
   const topology = projectTopology(normalizedPlan, activePairCount);
   const filterSummary = projectFilterSummary(filters);
   const sectionKeys = projectSectionKeys({
@@ -558,10 +544,9 @@ export const projectLinearComparisonUi = ({
     losatModeKey,
     losatpModeKey,
     selectedTopology,
-    dormantDraftCount,
-    dormantRawResultDraftCount
+    dormantDraftCount
   });
-  const errorRouting = projectErrorRouting(resolution?.errors);
+  const issues = projectIssues(resolution?.errors, activeEdges);
 
   return Object.freeze({
     intentKey,
@@ -580,11 +565,10 @@ export const projectLinearComparisonUi = ({
     filterSummary: filterSummary.text,
     filterSummaryIsDefault: filterSummary.isDefault,
     retainedDormantDraftCount: dormantDraftCount,
-    retainedRawResultDraftCount: dormantRawResultDraftCount,
     sectionKeys,
-    errorBadge: errorRouting.badge,
-    errorDisclosureKey: errorRouting.primaryDisclosureKey,
-    errorDisclosureKeys: errorRouting.disclosureKeys,
-    errorTargets: errorRouting.targets
+    issues,
+    pairIssueText: Object.freeze(Object.fromEntries(issues
+      .filter((issue) => issue.edgeKey && issue.pairText)
+      .map((issue) => [issue.edgeKey, issue.pairText])))
   });
 };

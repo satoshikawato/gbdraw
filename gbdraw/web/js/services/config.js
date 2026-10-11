@@ -5789,7 +5789,7 @@ const importSessionDocument = async (e, options = {}) => {
     };
   } catch (err) {
     if (err?.name === 'AbortError' && !commitStarted) return { status: 'canceled' };
-    const error = normalizeCaughtError(err, { stage: 'request-validation' });
+    const error = normalizeCaughtError(err, { operation: 'session-load', stage: 'request-validation' });
     const currentAlert = state.errorLog.value;
     const canNotify = currentAlert === previousAlert || currentAlert === null;
     if (commitStarted && rollbackSnapshot) {

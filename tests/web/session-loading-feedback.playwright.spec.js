@@ -275,6 +275,23 @@ test('failed session loading clears pending state and preserves the prior sessio
   await expect(sessionInput).toHaveValue('');
 });
 
+// OV-372: a Session load error raised in Circular named a file the other mode
+// never saw; it stayed on screen after the switch to Linear.
+test('a Session load error does not follow a switch to the other diagram mode', async ({ page }) => {
+  test.setTimeout(120_000);
+  await openApp(page);
+  await page.locator(sessionInputSelector).setInputFiles({
+    name: 'not-a-session.gbdraw-session.json', mimeType: 'application/json', buffer: Buffer.from('{not valid JSON')
+  });
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending === false
+    && window.__GBDRAW_APP__?.errorLog !== null);
+  await expect(page.locator('.result-pane [role="alert"]')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
+  await expect(page.locator('.result-pane [role="alert"]')).toHaveCount(0);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
+});
+
 test('a 0.13.0 Gallery Session loads, and its Custom Track Slots turned on name the obsolete field', async ({
   page
 }) => {

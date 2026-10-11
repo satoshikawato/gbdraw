@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { normalizeCircularGeometryShortcuts } from '../../gbdraw/web/js/services/circular-track-slot-model.js';
-import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
+import { diagnosticError, normalizeCaughtError, normalizeUserFacingError, operationErrorTitle } from '../../gbdraw/web/js/utils/error-normalization.js';
 import { deserializeWorkerError, normalizeGenerationResponse } from '../../gbdraw/web/js/services/diagram-generation.js';
 globalThis.self = {};
 const { serializeError, callJsonHelper, resolveGenerationCleanupOutcome } = await import('../../gbdraw/web/js/workers/diagram-generation-worker.js');
@@ -20,7 +20,14 @@ const source = { code: 'REGEX_SYNTAX', operation: 'evaluateRules', stage: 'rule-
 const normalized = normalizeUserFacingError(source);
 assert.deepEqual(roundtrip(source), normalized);
 assert.deepEqual(normalizeUserFacingError(normalized), normalized);
-assert.match(normalized.summary, /Python character position 1/);
+// People count characters from one; the context keeps Python's zero-based index (UX-C04).
+assert.match(normalized.summary, /^Not a valid regular expression\..* At character 2\.$/);
+assert.equal(normalized.context.position, 1);
+// A file chosen in Load Session that is not JSON says so, without "Field: schema" (UX-C04).
+const notSession = normalizeUserFacingError({ code: 'INPUT_INVALID', stage: 'parse', context: { field: 'schema', reason: 'JSON_FORMAT' } },
+  { operation: 'session-load' });
+assert.equal(notSession.summary, 'This file is not a gbdraw Session: it is not valid JSON. The current settings and Results are unchanged.');
+assert.equal(operationErrorTitle('session-load'), 'Session not loaded');
 assert.equal(normalized.context.row, 2);
 assert.deepEqual(normalized.actions, ['edit-pattern', 'retry']);
 assert.doesNotMatch(JSON.stringify(normalized), /PRIVATE_SENTINEL/);
@@ -220,7 +227,7 @@ assert.equal(alignCause.operation,'align');
 assert.deepEqual(alignCause.context,normalized.context);
 assert.deepEqual(alignCause.secondary,normalized.secondary);
 assert.deepEqual(normalizeUserFacingError(alignCause),alignCause);
-assert.equal((alignCause.summary.match(/Python regular expression is invalid/g)||[]).length,1);
+assert.equal((alignCause.summary.match(/Not a valid regular expression/g)||[]).length,1);
 
 // Native boundary diagnostics retain corrections while discarding private IDs.
 for (const [message, code, context] of [

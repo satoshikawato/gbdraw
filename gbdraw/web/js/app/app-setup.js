@@ -791,8 +791,7 @@ export const createAppSetup = () => {
     /** @type {HTMLElement | null | undefined} */ (container?.querySelector('input, select, button'))?.focus();
   };
 
-  const focusLinearComparisonIssue = async () => {
-    const target = linearComparisonUi.value.errorTargets[0];
+  const focusLinearComparisonIssue = async (target = linearComparisonUi.value.issues[0]) => {
     if (!target) return false;
     const details = await openLinearComparisonDisclosure(target.disclosureKey);
     /** @type {HTMLElement | null} */
@@ -813,6 +812,22 @@ export const createAppSetup = () => {
       : marked?.querySelector?.('input, select, button, [tabindex]');
     /** @type {HTMLElement | null | undefined} */ (focusable || container?.querySelector?.('input, select, button, [tabindex]'))?.focus();
     return true;
+  };
+
+  // An action of an entry in the Comparison card's issue list (UX-C05).
+  const runLinearComparisonIssueAction = (issue, actionKey) => {
+    if (actionKey === 'all-losat') return setLinearComparisonGlobalAction('losat');
+    if (actionKey === 'pairwise') return setLinearComparisonLosatpMode('pairwise');
+    return focusLinearComparisonIssue(issue);
+  };
+
+  // The Generate error's "Show in Comparison" (UX-C05): the first issue's
+  // control, or the Comparison card when the cause has no control.
+  const showLinearComparisonCause = async () => {
+    if (await focusLinearComparisonIssue()) return;
+    const card = /** @type {HTMLElement | null} */ (document.querySelector('[data-linear-comparison-card]'));
+    card?.scrollIntoView({ block: 'nearest' });
+    /** @type {HTMLElement | null | undefined} */ (card?.querySelector('button:not([disabled])'))?.focus();
   };
 
   const setLinearComparisonGlobalAction = async (action) => {
@@ -3773,6 +3788,11 @@ export const createAppSetup = () => {
     resetModeTransientUi();
     previewFeatureSearch.switchModeSearch(previousMode, nextMode);
     failedGeneratePreservedResult.value = false;
+    // OV-372: an operation error belongs to the mode it was raised in, except
+    // one that names the arriving mode's Result (PD-OI-079).
+    if (errorLog.value && normalizeUserFacingError(errorLog.value)?.context?.diagramMode !== nextMode) {
+      errorLog.value = null;
+    }
     // 5. Presentation: the arriving Result is shown as a selection.
     previewRuntime.presentSelectedResult({ modeArrival: true });
     return true;
@@ -4235,8 +4255,9 @@ export const createAppSetup = () => {
   });
   recordDragAlignmentPorts.beforeRecordDrag = similarityAlignmentActions.beforeRecordDrag;
   recordDragAlignmentPorts.afterRecordDrag = similarityAlignmentActions.afterRecordDrag;
-  // D-54: Generate asks about Upload pairs without a file. Choose opens the first
-  // pair's file chooser; No comparison is one History step, then Generate.
+  // Generate asks about Upload pairs without a file (UX-A06): each pair's row
+  // takes its own file; Skip sets the pairs still without one to No comparison
+  // in one History step, then Generates.
   const missingBlastTsvDialog = reactive({ show: false, pairs: /** @type {ReturnType<typeof missingUploadPairsToResolve>} */ ([]) });
   const closeMissingBlastTsvDialog = () => { missingBlastTsvDialog.show = false; };
   const setMissingBlastTsvPairsToNone = dialogChoice.withHistory(
@@ -4251,20 +4272,32 @@ export const createAppSetup = () => {
     },
     closeMissingBlastTsvDialog
   );
-  /** @param {'choose' | 'none' | 'cancel'} choice */
+  // The dialog's rows: the pairs it opened with, each with its file as it is now.
+  const missingBlastTsvRows = computed(() => {
+    const missing = new Set((state.drawings.linear.linearComparisonResolution.value?.errors || [])
+      .filter((issue) => issue.code === 'missing-upload').map((issue) => issue.edgeKey));
+    return missingBlastTsvDialog.pairs.map((pair) => {
+      const found = linearComparisonPairForEdgeKey(pair.edgeKey);
+      return { ...pair, records: found ? `${linearComparisonRecordLabel(found.queryUid)} → ${linearComparisonRecordLabel(found.subjectUid)}` : '',
+        fileName: found?.draft?.fileActive ? String(found.draft.file?.name || '') : '', missing: missing.has(pair.edgeKey) };
+    });
+  });
+  /** @param {string} edgeKey @param {Event} event */
+  const chooseMissingBlastTsvFile = (edgeKey, event) => {
+    const input = /** @type {HTMLInputElement} */ (event.target);
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return undefined;
+    return history.runUndoable('Change uploaded file', () => setLinearComparisonCardFile(edgeKey, file));
+  };
+  /** @param {'generate' | 'none' | 'cancel'} choice */
   const resolveMissingBlastTsv = async (choice) => {
-    if (choice !== 'choose') {
-      return await setMissingBlastTsvPairsToNone(choice) === true ? runAnalysis() : undefined;
+    if (choice === 'generate') {
+      if (dialogChoice.pending.value) return undefined;
+      closeMissingBlastTsvDialog();
+      return runAnalysis();
     }
-    if (dialogChoice.pending.value) return undefined;
-    closeMissingBlastTsvDialog();
-    // The file chooser opens inside the click that chose it.
-    void openLinearComparisonDisclosure('selected-pairs');
-    const uploader = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('[data-linear-comparison-pair-upload]')])
-      .find((element) => element.dataset.linearComparisonPairUpload === missingBlastTsvDialog.pairs[0]?.edgeKey);
-    /** @type {HTMLElement | null | undefined} */ (uploader?.querySelector('[role="button"]'))?.focus();
-    /** @type {HTMLInputElement | null | undefined} */ (uploader?.querySelector('input[type="file"]'))?.click();
-    return undefined;
+    return await setMissingBlastTsvPairsToNone(choice) === true ? runAnalysis() : undefined;
   };
   const similarityAlignmentCanvasHover = ref(null);
   similarityAlignmentPorts.refreshCanvas = () => {
@@ -5884,6 +5917,10 @@ export const createAppSetup = () => {
     semanticMutationAvailable,
     dialogChoicePending,
     missingBlastTsvDialog,
+    missingBlastTsvRows,
+    chooseMissingBlastTsvFile,
+    showLinearComparisonCause,
+    runLinearComparisonIssueAction,
     resolveMissingBlastTsv,
     sessionSaveAvailable,
     sessionLoadAvailable,

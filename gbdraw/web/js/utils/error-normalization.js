@@ -3,7 +3,7 @@ const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction'
   'convertLosatpPairsToGenomicPayload', 'extractCdsProteinFasta', 'extractFirstFasta',
   'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'measureLegendText',
   'promoteLegacyLosatpCache', 'readComparisonSequence', 'readFeatureOverrideTable', 'resolveLegacyProteinReferences',
-  'resolveSimilarityAlignment', 'validateConfigOverrides', 'session-save']);
+  'resolveSimilarityAlignment', 'validateConfigOverrides', 'session-save', 'session-load']);
 const STAGES = new Set(['unknown', 'initialization', 'resource-staging', 'request-validation',
   'helper', 'rule-validation', 'losat', 'render', 'result-admission', 'cleanup', 'export-capture', 'export-conversion', 'font-validation', 'transport', 'read', 'parse']);
 const FIELDS = new Set(`legend title scale decorations pattern record_selector region start end sourceStart sourceEnd recordLength
@@ -78,6 +78,8 @@ const REASONS = Object.freeze({
   SEARCH_FRAME: 'Use comparison coordinates within the selected and cropped record, counted on its source strand.',
   LOSAT_OPTION_PROGRAM: 'Use only the options of the selected LOSAT program.',
   LOSAT_PLAN: 'Choose record pairs that the LOSAT search can run: two or more records, LOSAT rows only with a LOSAT program, and LOSATP Pairwise for selected pairs.',
+  // A Selected plan with a LOSATP mode that compares every adjacent pair (UX-C05).
+  SELECTED_PAIRS_NEED_PAIRWISE: 'Similarity groups and Collinear blocks compare every adjacent pair with LOSAT. Choose Run LOSAT for all pairs, or choose Pairwise matches.',
   LOSAT_TASK: 'Choose a LOSATN task that the selected LOSAT runtime supports.',
   RING_LOSAT_PROGRAM: 'Choose LOSATN or TLOSATX for similarity rings.',
   RING_LOSAT_INPUT: 'Give one comparison sequence file per ring, without BLAST tables, and use the displayed records as the subject.',
@@ -172,7 +174,7 @@ const DEFINITIONS = Object.freeze({
   MODE_SETTING: ['A preserved session setting does not apply to this diagram mode.', ['edit-input']],
   // The Session's Reset alignment evidence is bound to the records and plan of the latest Align.
   ALIGNMENT_RESET_EVIDENCE: ['The Reset alignment evidence of the latest Align does not match the current records or alignment plan. Undo the changes made after Align, or select Align… again.', ['edit-input']],
-  REGEX_SYNTAX: ['The Python regular expression is invalid.', ['edit-pattern', 'retry']],
+  REGEX_SYNTAX: ['Not a valid regular expression.', ['edit-pattern', 'retry']],
   RESOURCE_INVALID: ['Input resource preparation failed. Reselect the input and retry.', ['select-input', 'retry']],
   HELPER_PROTOCOL: ['The helper request is invalid. Retry the operation.', ['retry', 'save-session']],
   RUNTIME_INCOMPATIBLE: ['The diagram engine is incompatible with this Web app. Reload the page and retry; contact the site administrator if it continues.', ['reload', 'retry']],
@@ -519,15 +521,21 @@ export const normalizeUserFacingError = (value, {
   const band = innerPx !== undefined && outerPx !== undefined ? ` Available band: ${innerPx}–${outerPx} px.` : '';
   const guidance = REASONS[result.context.reason] || DEFINITIONS[result.code][2] || '';
   const field = result.context.field ? ` Field: ${FIELD_LABELS[result.context.field] || result.context.field}.` : '';
-  const position = result.context.position !== undefined ? ` Python character position ${result.context.position} (zero-based).` : '';
+  // The context keeps Python's zero-based index; people count from one.
+  const position = result.context.position !== undefined ? ` At character ${result.context.position + 1}.` : '';
   const columns = result.context.columnCount !== undefined ? ` Required columns: ${result.context.columnCount}.` : '';
   const count = result.context.recordCount !== undefined ? ` Loaded records: ${result.context.recordCount}.` : '';
   const exception = result.context.exceptionType ? ` Python exception: ${result.context.exceptionType}.` : '';
   const schemaGuidance = result.code === 'INPUT_INVALID' && result.context.field === 'schema'
     ? ' Load a supported Session file or recreate it with the current writer.' : '';
+  // A file chosen in Load Session that is not a Session says so (UX-C04).
+  const notASession = result.operation === 'session-load' && result.context.field === 'schema'
+    && result.code === 'INPUT_INVALID'
+    ? `This file is not a gbdraw Session${result.context.reason === 'JSON_FORMAT' ? ': it is not valid JSON' : ' this version can read'}. The current settings and Results are unchanged.`
+    : '';
   const continuation = result.operation === 'align' && result.context.field === 'direction'
     && result.context.reason === 'SOURCE_VIEW_CONFLICT' ? ' Review the updated preview and Apply again.' : '';
-  result.summary = `${message}${locators}${field}${guidance ? ` ${guidance}` : ''}${band}${position}${columns}${count}${exception}${continuation}${schemaGuidance}`
+  result.summary = (notASession || `${message}${locators}${field}${guidance ? ` ${guidance}` : ''}${band}${position}${columns}${count}${exception}${continuation}${schemaGuidance}`)
     .slice(0, Number.isSafeInteger(summaryLimit) ? Math.max(0, Math.min(summaryLimit, 1000)) : 1000);
   const detail = [`Code: ${result.code}`, `Operation: ${result.operation}`, `Stage: ${result.stage}`,
     ...Object.entries(result.context).map(([key, item]) => `${key}: ${item}`),
@@ -575,7 +583,7 @@ export const liveEditFailure = (error) => {
 
 // Presentation of finite operation and transaction facts stays with public wording.
 export const operationErrorTitle = (operation) => ({
-  generate: 'Generation Error', align: 'Alignment error', evaluateRules: 'Rule error',
+  generate: 'Generation Error', align: 'Alignment error', evaluateRules: 'Rule error', 'session-load': 'Session not loaded',
   'export-svg': 'SVG export error', 'export-png': 'PNG export error', 'export-pdf': 'PDF export error',
   listSequenceRecords: 'Input error', listGffFastaRecords: 'Input error', readComparisonSequence: 'Input error',
   readFeatureOverrideTable: 'Feature edits TSV error',
@@ -583,7 +591,8 @@ export const operationErrorTitle = (operation) => ({
 }[operation] || 'Operation error');
 export const generationRecoveryGuidance = (recovery) => ({
   'no-result': 'No successful Result is available yet. Correct the cause and retry.',
-  preserved: 'The last successful Result and committed request are unchanged.',
-  restored: 'The last successful Result and committed request were restored. Correct the cause and retry.',
+  // The one notice that the shown Result is the last successful one (PD-OI-016, UX-C05).
+  preserved: 'Showing the last successful Result; your changes were not applied.',
+  restored: 'Showing the last successful Result again; your changes were not applied. Correct the cause and retry.',
   'restore-failed': 'Restoration could not complete. Save a Session if available, then reload before retrying.'
 }[recovery] || '');

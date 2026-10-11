@@ -2103,7 +2103,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
       losatpMode: 'collinear',
       filterSummary: expect.stringContaining('E-value <= '),
       settings: [
-        'losat-mode', 'losat-runtime', 'blastn-task', 'upload-readiness',
+        'losat-mode', 'losat-runtime', 'blastn-task',
         'result-filters', 'comparison-appearance'
       ]
     }

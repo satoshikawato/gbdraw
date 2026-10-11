@@ -2000,7 +2000,7 @@ const generatedProteinSettings = (drawing, losatExecution, baseline = {}) => {
 
 // The correction of a resolver issue the comparison panel reports (CI-06).
 const PLAN_ISSUE_REASONS = Object.freeze({
-  'missing-upload': 'BLAST_TSV_REQUIRED', 'selected-losat-requires-pairwise': 'LOSAT_PLAN'
+  'missing-upload': 'BLAST_TSV_REQUIRED', 'selected-losat-requires-pairwise': 'SELECTED_PAIRS_NEED_PAIRWISE'
 });
 
 export const requireLinearComparisonPlanSnapshot = (snapshot) => {

@@ -370,9 +370,11 @@ export const RecordDisplayControl = {
   }
 };
 
+// `compact` shows the error beside its field: the summary and a Copy details
+// button, without the Details disclosure (UX-C04).
 export const OperationError = {
   template: '#operation-error-template',
-  props: ['error', 'recovery'],
+  props: { error: { type: null, default: null }, recovery: { type: null, default: null }, compact: Boolean },
   setup(props) {
     const model = computed(() => normalizeUserFacingError(props.error));
     const title = computed(() => operationErrorTitle(model.value?.operation));
@@ -382,9 +384,12 @@ export const OperationError = {
     const details = ref(null);
     const diagnosticText = ref(null);
     const copyStatus = ref('');
+    // Compact only: the diagnostics text shown when the clipboard is unavailable.
+    const manualCopy = ref(false);
     watch(() => props.error, () => {
       if (details.value) details.value.open = false;
       copyStatus.value = '';
+      manualCopy.value = false;
     }, { flush: 'sync' });
     const selectDiagnostics = () => {
       diagnosticText.value?.focus();
@@ -393,17 +398,18 @@ export const OperationError = {
     const copyDiagnostics = async () => {
       const displayed = props.error;
       const text = diagnostics.value;
-      if (!details.value?.open || !text) return;
+      if (!(props.compact || details.value?.open) || !text) return;
       try {
         if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
         await navigator.clipboard.writeText(text);
         if (props.error === displayed) copyStatus.value = 'Diagnostics copied.';
       } catch (_) {
         if (props.error !== displayed) return;
+        manualCopy.value = Boolean(props.compact);
         copyStatus.value = 'Clipboard unavailable. Select diagnostics and copy manually.';
       }
     };
-    return { model, title, recoveryText, diagnostics, details, diagnosticText, copyStatus,
+    return { model, title, recoveryText, diagnostics, details, diagnosticText, copyStatus, manualCopy,
       copyDiagnostics, selectDiagnostics };
   }
 };
@@ -413,7 +419,7 @@ export const OperationError = {
 // actions; a row emits them with the arguments it passed before.
 export const SpecificRuleRows = {
   template: '#specific-rule-rows-template',
-  components: { OperationError },
+  components: { OperationError, HelpTip },
   props: ['rules', 'featureKeys', 'available', 'patternText', 'patternDraft', 'fieldId'],
   emits: ['set-field', 'move-up', 'move-down', 'remove', 'edit-pattern', 'retry-pattern', 'revert-pattern']
 };

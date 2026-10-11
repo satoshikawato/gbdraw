@@ -189,6 +189,23 @@ const DEFAULT_LINEAR_BLAST_FILTERS = Object.freeze(
   comparisonFiltersForMode('linear')
 );
 
+
+const DIAGRAM_PROGRESS_MESSAGES = Object.freeze({
+  'preparing-runtime': 'Preparing diagram runtime (first use)...',
+  'preparing-resources': 'Preparing diagram input resources...',
+  rendering: 'Rendering diagram...',
+  finalizing: 'Finalizing diagram results...'
+});
+// The status line of a diagram Worker stage. The first-use runtime preparation
+// names its real step (Q9): "step 2 of 5, loading the package installer".
+/** @param {{ stage?: string, step?: number, total?: number, label?: string }} progress */
+const diagramProgressMessage = ({ stage = '', step, total, label } = {}) => {
+  const message = DIAGRAM_PROGRESS_MESSAGES[/** @type {keyof typeof DIAGRAM_PROGRESS_MESSAGES} */ (stage)] || '';
+  return stage === 'preparing-runtime' && step && total && label
+    ? `Preparing diagram runtime (first use): step ${step} of ${total}, ${label}...`
+    : message;
+};
+
 export const afterPaint = ({ requestFrame = globalThis.requestAnimationFrame } = {}) => {
   if (typeof requestFrame !== 'function') return Promise.resolve();
   return new Promise((resolve) => {
@@ -2253,13 +2270,8 @@ export const createRunAnalysis = ({
         processingStatus.value = String(message || '');
       }
     };
-    const onDiagramProgress = ({ stage }) => {
-      const message = {
-        'preparing-runtime': 'Preparing diagram runtime (first use)...',
-        'preparing-resources': 'Preparing diagram input resources...',
-        rendering: 'Rendering diagram...',
-        finalizing: 'Finalizing diagram results...'
-      }[stage];
+    const onDiagramProgress = (progress) => {
+      const message = diagramProgressMessage(progress);
       if (message) setProcessingStatus(message);
     };
     const throwIfGenerationCanceled = () => {
@@ -5293,13 +5305,8 @@ export const createRunAnalysis = ({
         kind: 'target-record-transform',
         shouldAdmit: () => generationToken === latestGenerationToken
           && !generationCancelRequested.value,
-        onProgress: ({ stage }) => {
-          const message = {
-            'preparing-runtime': 'Preparing diagram runtime (first use)...',
-            'preparing-resources': 'Preparing diagram input resources...',
-            rendering: 'Rendering diagram...',
-            finalizing: 'Finalizing diagram results...'
-          }[stage];
+        onProgress: (progress) => {
+          const message = diagramProgressMessage(progress);
           if (message && generationToken === latestGenerationToken) {
             processingStatus.value = message;
           }

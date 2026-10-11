@@ -179,10 +179,6 @@ export const createLosatSettings = ({ state }) => {
     losatThreadingPrecondition().state === 'available' ? 'Threaded' : 'Threaded (unavailable here)'
   ));
 
-  const losatThreadingPlanSummary = computed(() =>
-    'By default, LOSAT can use up to half the number of cores available.'
-  );
-
   /** @param {LosatSettingsDrawing} drawing */
   const hasValidLosatIntent = (drawing) => {
     const resolution = readResolution(drawing);
@@ -218,7 +214,6 @@ export const createLosatSettings = ({ state }) => {
     losatEstimatedJobCount,
     losatMaxPairWorkers,
     losatAutoPairWorkers,
-    losatPairWorkerOptions,
-    losatThreadingPlanSummary
+    losatPairWorkerOptions
   };
 };
