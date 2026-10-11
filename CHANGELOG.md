@@ -125,7 +125,9 @@ write-up of a release.
   with its source, file, problem and **Save Raw LOSAT TSV**; the separate **Raw
   LOSAT results** list in **Advanced comparison and layout** is gone. Pair-plan
   problems appear once, in a **Fix before Generate** list with an action each.
-  The Collinear **Evidence scope** setting is now **Search between**.
+  The Collinear **Evidence scope** setting is now **Search between**. An open pair
+  **File name** field takes its own row under **Save Raw LOSAT TSV** instead of
+  the narrow column beside it.
 - Web errors appear once, at their cause: a failed Generate no longer repeats the
   "last successful result" notice, a Linear comparison error offers **Show in
   Comparison**, an invalid colour-rule pattern shows its cause under the field,

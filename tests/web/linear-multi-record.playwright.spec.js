@@ -4297,3 +4297,27 @@ FEATURES             Location/Qualifiers
   await expect(page.getByLabel('Definition for sequence 1'))
     .toHaveAttribute('placeholder', '<i>Escherichia coli</i> O157:H7 str. Sakai');
 });
+
+// OV-499: the open disclosure stayed in the column beside Save Raw LOSAT TSV,
+// about 75 px of a 320 px sidebar, so its label wrapped one word per line.
+test('an open pair File name disclosure takes the whole row under Save Raw LOSAT TSV', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  const bytes = [...readFileSync('gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json')];
+  await evaluateWithRetainedPromise(page, async (sessionBytes) => {
+    const file = new File([new Uint8Array(sessionBytes)], 'BGC0000708-BGC0000713.gbdraw-session.json');
+    await window.__GBDRAW_APP__.importSession({ target: { files: [file], value: '' } });
+  }, bytes);
+  const rawResult = page.locator('[data-linear-raw-result]').first();
+  await rawResult.evaluate((element) => {
+    for (let owner = element.closest('details'); owner; owner = owner.parentElement?.closest('details')) owner.open = true;
+  });
+  await expect(rawResult.getByRole('button', { name: /^Save Raw LOSAT TSV/ })).toBeVisible();
+  await openRawFilename(rawResult);
+  const widths = await rawResult.evaluate((element) => ({
+    row: element.clientWidth,
+    field: element.querySelector('details input[type="text"]').getBoundingClientRect().width
+  }));
+  expect(widths.field).toBeGreaterThan(widths.row - 8);
+});

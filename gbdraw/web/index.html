@@ -1591,6 +1591,8 @@
         .linear-pair-source > label:focus-within { outline: 2px solid #3b82f6; outline-offset: -2px; }
         .linear-pair-file-name > summary::before { width: 0.75rem; height: 0.75rem; }
         .linear-pair-file-name[open] > summary { margin-bottom: 0.25rem; }
+        /* Open, it takes its own row under Save Raw LOSAT TSV (OV-499). */
+        .linear-pair-file-name[open] { flex-basis: 100%; }
         .linear-losat-mode-actions {
             display: flex;
             flex-wrap: nowrap;
