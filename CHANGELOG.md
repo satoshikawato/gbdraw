@@ -12,11 +12,16 @@ write-up of a release.
 
 ## [Unreleased]
 
-- Raised the short/long size boundary of the Auto sizes from 50 kb to 100 kb in
-  Circular and Linear diagrams. A record of 50,000 to 99,999 bp (in Linear, a
-  diagram whose longest record is in that range) now gets the short styles:
-  larger labels, features, strokes, and legend. Set the sizes explicitly to keep
-  the previous look.
+- Raised the short/long size boundary of the Auto sizes from 50 kb: Linear
+  diagrams now use 100 kb and Circular diagrams 75 kb. A record of 50 kb has too
+  few features for the long styles, which are sized for whole genomes. Only
+  Auto sizes change, and only for a Linear diagram whose longest record is
+  50,000 to 99,999 bp or a Circular record of 50,000 to 74,999 bp: these now
+  get the short styles (larger labels, features, strokes, and legend). Circular
+  stays at 75 kb because the short label size overprints outer labels on denser
+  records near 100 kb. Set the sizes explicitly to keep the previous look. A
+  Session that stores its whole configuration, such as one written by
+  `--session_output`, keeps the boundary it was saved with.
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
