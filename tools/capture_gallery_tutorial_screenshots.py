@@ -56,6 +56,22 @@ DEFAULT_MAX_FILE_SIZE_KB = 2400
 DEFAULT_WEBP_QUALITY = 95
 DEFAULT_DEVICE_SCALE_FACTOR = 3
 DEFAULT_VIEWPORT = {"width": 1280, "height": 900}
+DEFAULT_GENERATE_TIMEOUT_MS = 1_800_000
+CAPTURE_ACTION_TYPES = frozenset(
+    {
+        "click",
+        "fill",
+        "select",
+        "check",
+        "uncheck",
+        "waitForSelector",
+        "waitForFunction",
+        "evaluate",
+        "wait",
+        "resetSettings",
+        "generate",
+    }
+)
 CAPTURE_SELECT_MENU_SELECTOR = ".gbdraw-capture-select-menu"
 CAPTURE_SELECT_CONTROL_SELECTOR = ".gbdraw-capture-select-control"
 
@@ -343,6 +359,20 @@ def add_capture_contract_validation(
     visible_controls = capture.get("visibleControls")
     visible_text = capture.get("visibleText")
 
+    if "replayThrough" in capture:
+        replay_through = capture.get("replayThrough")
+        if (
+            not isinstance(replay_through, int)
+            or isinstance(replay_through, bool)
+            or context.section != "manualSteps"
+            or not 1 <= replay_through <= context.step_index
+        ):
+            result.errors.append(
+                f"{context.label}: capture.replayThrough must name a manual step from 1 to this step."
+            )
+        if as_text(capture.get("source")).lower() not in {"webapp", "web-app", "app"}:
+            result.errors.append(f"{context.label}: capture.replayThrough needs a webapp capture.")
+
     if assert_app_state is not None and not isinstance(assert_app_state, dict):
         result.errors.append(f"{context.label}: capture.assertAppState must be an object.")
     elif isinstance(assert_app_state, dict):
@@ -430,6 +460,25 @@ def add_capture_contract_validation(
         )
 
 
+def add_step_replay_validation(
+    result: ValidationResult,
+    context: TutorialContext,
+    step: dict[str, Any],
+) -> None:
+    if "replay" not in step:
+        return
+    replay = step.get("replay")
+    if context.section != "manualSteps" or not isinstance(replay, list):
+        result.errors.append(f"{context.label}: replay must be an array on a manual step.")
+        return
+    for index, action in enumerate(replay, start=1):
+        action_type = as_text(action.get("type")) if isinstance(action, dict) else ""
+        if action_type not in CAPTURE_ACTION_TYPES or action_type == "resetSettings":
+            result.errors.append(
+                f"{context.label}: replay action {index} has an unsupported type: {action_type or action!r}"
+            )
+
+
 def validate_tutorial_media(
     samples: list[dict[str, Any]],
     *,
@@ -455,6 +504,7 @@ def validate_tutorial_media(
                 and not media_entries(step.get("media"))
             ):
                 result.errors.append(f"{context.label}: step is missing operations.")
+            add_step_replay_validation(result, context, step)
             for entry in media_entries(step.get("media")):
                 add_media_validation(
                     result,
@@ -601,8 +651,47 @@ def apply_capture_action(page, action: dict[str, Any]) -> None:
             page.evaluate(script)
     elif action_type == "wait":
         page.wait_for_timeout(int(action.get("ms") or 250))
+    elif action_type == "resetSettings":
+        page.once("dialog", lambda dialog: dialog.accept())
+        page.get_by_role("button", name="Reset Settings", exact=True).click()
+        page.wait_for_timeout(500)
+    elif action_type == "generate":
+        generate_and_wait(page, int(action.get("timeout") or DEFAULT_GENERATE_TIMEOUT_MS))
     else:
         raise RuntimeError(f"Unsupported capture action: {action_type}")
+
+
+def generate_and_wait(page, timeout_ms: int) -> None:
+    previous_run = page.evaluate("() => String(window.__GBDRAW_APP__?.lastRunInfo?.startedAtIso || '')")
+    page.get_by_role("button", name="Generate Diagram", exact=True).click()
+    page.wait_for_function(
+        """
+        (previous) => {
+          const app = window.__GBDRAW_APP__;
+          if (!app || app.processing) return false;
+          const run = String(app.lastRunInfo?.startedAtIso || '');
+          return Boolean(app.errorLog) || Boolean(run && run !== previous && (app.results || []).length > 0);
+        }
+        """,
+        arg=previous_run,
+        timeout=timeout_ms,
+    )
+    error = page.evaluate("() => window.__GBDRAW_APP__?.errorLog?.summary || window.__GBDRAW_APP__?.errorLog || null")
+    if error:
+        raise RuntimeError(f"Generate Diagram failed: {error}")
+
+
+def replay_tutorial_steps(page, sample: dict[str, Any], through: int) -> None:
+    """Reset Settings, then perform the reader's actions of manual steps 1..through."""
+
+    tutorial_path = resolve_gallery_reference(as_text(sample.get("tutorial")))
+    if tutorial_path is None:
+        raise RuntimeError(f"Tutorial path for {sample.get('id')} is not local.")
+    steps = as_array(read_json(tutorial_path).get("manualSteps"))[:through]
+    apply_capture_action(page, {"type": "resetSettings"})
+    for step in steps:
+        for action in as_array(step.get("replay") if isinstance(step, dict) else None):
+            apply_capture_action(page, action)
 
 
 def open_capture_details(page, titles: Any) -> None:
@@ -1180,6 +1269,9 @@ def prepare_capture_page(page, base_url: str, sample: dict[str, Any], capture: d
         session_path = resolve_gallery_reference(session_ref)
         if session_path is not None and session_path.exists():
             load_web_app_session(page, session_path)
+        replay_through = capture.get("replayThrough")
+        if isinstance(replay_through, int):
+            replay_tutorial_steps(page, sample, replay_through)
     else:
         raise RuntimeError(f"Unsupported capture source: {source}")
 

@@ -444,7 +444,7 @@ def test_bgc_gallery_session_keeps_curated_presentation_and_styles(
         assert set(expected_labels) <= texts, location
         assert set(expected_subtitles) <= texts, location
         assert rule_captions <= texts, location
-        assert {"#d3d3d3", *rule_colors} <= fills, location
+        assert {"#dddddd", *rule_colors} <= fills, location
         assert "livZ" in texts, location
         assert len(definitions) == 5, location
         for definition in definitions:
