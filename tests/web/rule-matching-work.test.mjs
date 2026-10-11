@@ -111,7 +111,7 @@ test('"All features with legend item" over K features with K hash rules does O(K
       readUserDefaultColor: () => null, setDefaultColor: () => assert.fail('the row is drawn by rules'),
       ruleActions: {
         runWithRuleMatches: (_, commit) => commit(),
-        commitSpecificRules: async (next) => { committed = next; return true; },
+        commitSpecificRules: async (build) => { committed = build(rules, (row, patch) => ({ ...row, ...patch })); return true; },
         countFeaturesMatchingRule: () => 0, findExistingColorForCaption: () => null,
         findFeaturesWithSameDisplayedLabel: () => [], findFeaturesWithSameIndividualLabel: () => [],
         findFeaturesWithSameLegendItem: (feature) => features.filter((other) => other !== feature),

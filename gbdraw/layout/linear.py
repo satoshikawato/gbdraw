@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 import math
 from typing import TYPE_CHECKING, Iterable, Literal, Mapping, Sequence
 
+from ..config.models.canvas import linear_axis_ruler_applies
+
 from ._immutable import freeze_layout_mapping
 
 if TYPE_CHECKING:
@@ -138,11 +140,10 @@ class LinearRecordRenderContext:
     @property
     def axis_ruler_enabled(self) -> bool:
         cfg = self.profile.config
-        return (
-            bool(cfg.objects.scale.show)
-            and bool(self.profile.ruler_on_axis)
-            and str(cfg.objects.scale.style).strip().lower() == "ruler"
-            and self.feature_track_layout in {"above", "below"}
+        return bool(self.profile.ruler_on_axis) and linear_axis_ruler_applies(
+            show_scale=cfg.objects.scale.show,
+            scale_style=cfg.objects.scale.style,
+            track_layout=self.feature_track_layout,
         )
 
 

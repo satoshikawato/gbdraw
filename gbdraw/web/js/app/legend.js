@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { DrawingState, LegendEntry } from '../state.js' */
+/** @import { SpecificRuleBuild } from '../services/specific-color-rules.js' */
 import { createLegendDragActions } from './legend/drag-actions.js';
 import { createLegendEntryActions } from './legend/entry-actions.js';
 import { createLegendLayoutActions } from './legend/layout-actions.js';
@@ -17,7 +18,8 @@ import { displayedLegendRowContext } from '../services/feature-visibility.js';
 /**
  * @typedef {object} LegendManagerOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
- * @property {(rows: Array<Record<string, any>>, label?: string) => Promise<any>} commitLegendRowRules
+ * @property {(build: SpecificRuleBuild, label?: string) => Promise<any>} commitLegendRowRules
+ *   The rule owner's write of the rule table (`commitSpecificRules`).
  *   The rule owner's commit of the specific-color rules that a Legend row edit changes (R13).
  * @property {((label?: string, options?: { source?: string, owner?: unknown }) => Promise<any>) | null} [beginHistoryTransaction]
  *   History's begin of one step (R11); resolves to the transaction, or null when History is busy.
@@ -74,7 +76,7 @@ export const createLegendManager = ({
       const drawing = state.activeDrawing();
       const rowRules = rowRulesAt(drawing, index);
       if (rowRules.length) {
-        return commitLegendRowRules(drawing.manualSpecificRules.map(rule => rowRules.includes(rule) ? { ...rule, color } : { ...rule }), 'Change legend color');
+        return commitLegendRowRules((current, revise) => current.map(rule => (rowRules.includes(rule) ? revise(rule, { color }) : rule)), 'Change legend color');
       }
       return entryActions.updateLegendEntryColor(index, color);
     },

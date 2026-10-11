@@ -139,12 +139,17 @@ for (const width of [1440, 390]) {
         expect(await drawingSignature(page, importRedone.svg)).toBe(await drawingSignature(page, imported.svg));
         expect(importRedone.rules).toEqual(imported.rules);
         expect(await colorFile(page)).toEqual({ name: 'integration-colors.tsv', text: input.colors });
-        if (mode === 'linear') await page.evaluate(setId => {
-          const slots = window.__GBDRAW_APP__.adv.linear_track_slots;
-          slots.push({ id: 'integration_annotations', renderer: 'annotations', enabled: true, side: 'above', height: '40px', spacing: '5px', z: 0, params: { set_id: setId, overflow: 'error', show_labels: true } });
-        }, input.setId);
+        // The BGC Session draws no GC track; show it so Reset gives the stack a GC row.
+        if (mode === 'linear') await (await reveal(page.getByLabel('Show GC Content', { exact: true }))).check();
         const panel = await openStack(page, mode);
         await panel.locator('..').getByLabel('Use custom stack', { exact: true }).check();
+        if (mode === 'linear') {
+          await panel.locator('..').getByRole('button', { name: 'Reset', exact: true }).click();
+          await page.evaluate(setId => {
+            const slots = window.__GBDRAW_APP__.adv.linear_track_slots;
+            slots.push({ id: 'integration_annotations', renderer: 'annotations', enabled: true, side: 'above', height: '40px', spacing: '5px', z: 0, params: { set_id: setId, overflow: 'error', show_labels: true } });
+          }, input.setId);
+        }
         const row = page.locator(`[data-capture="${mode}-track-slot-gc_content"]`);
         // Circular gaps sit under the row's Gaps disclosure.
         if (mode === 'circular') await row.locator('[data-track-slot-more] > summary').click();

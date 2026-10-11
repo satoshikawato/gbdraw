@@ -10,9 +10,6 @@ import {
   parseWhitelistRules
 } from '../services/file-imports.js';
 import {
-  prepareSpecificColorImport
-} from '../services/specific-color-rules.js';
-import {
   normalizeCircularPlotTitlePosition,
   resolveCircularLayoutPreference
 } from '../services/layout-preferences.js';
@@ -56,8 +53,8 @@ export const runRecordDiscoveryWatcher = async ({
  *   The Legend owner's reaction to a rebuilt Legend.
  * @property {{
  *   syncLabelEditor: (options?: Record<string, any>) => void,
- *   commitSpecificRules: (rules: Record<string, any>[], label?: string, options?: Record<string, any>) => Promise<any>
- * }} featureActions The feature editor's label reaction and its commit of the specific color rules.
+ *   importSpecificRules: (text: string, options?: { drawing?: DrawingState, isCurrent?: () => boolean }) => Promise<number | false>
+ * }} featureActions The feature editor's label reaction and the rule owner's import of a rules TSV.
  * @property {{ applyCanvasPadding: () => void, refreshDiagramDragAffordances: () => void }} legendLayout
  *   The Legend layout owner's canvas padding and drag affordances.
  * @property {{ applyPaletteDraftToPreview: () => void, syncPaletteDraftState: () => void }} resultsManager
@@ -420,9 +417,9 @@ export const setupWatchers = ({
   watchFileImport('t_color', async (text, isCurrent) => {
     const drawing = state.activeDrawing();
     try {
-      const prepared = prepareSpecificColorImport(text, drawing.manualSpecificRules);
-      if (!await featureActions.commitSpecificRules(prepared.nextRules, 'Import specific color rules', { drawing, isCurrent })) return false;
-      console.log(`Loaded ${prepared.importedCount} rules from file.`);
+      const importedCount = await featureActions.importSpecificRules(text, { drawing, isCurrent });
+      if (importedCount === false) return false;
+      console.log(`Loaded ${importedCount} rules from file.`);
     } catch (e) {
       if (isCurrent()) errorLog.value = normalizeUserFacingError(e, { operation: 'evaluateRules', stage: 'rule-validation' });
       return false;

@@ -377,6 +377,13 @@ test('Reset Settings clears Linear per-record display text and the alignment pla
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.sessionSaveAvailable, null, { timeout: 300_000 });
   await settle(page);
+  // The Gallery Session names its clusters in File defaults; give one record
+  // its own display text so Reset has per-record text to clear.
+  await page.getByRole('button', { name: 'Record options for sequence 1', exact: true }).click();
+  await page.getByLabel('Definition for sequence 1', { exact: true }).fill('<i>Streptomyces lividus</i>');
+  await page.getByLabel('Subtitle / title for sequence 1', { exact: true }).fill('Lividomycin cluster');
+  await page.getByLabel('Subtitle / title for sequence 1', { exact: true }).press('Tab');
+  await settle(page);
   const before = await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
     return state.linearSeqs.map((sequence) => sequence.record_subtitle || '');
