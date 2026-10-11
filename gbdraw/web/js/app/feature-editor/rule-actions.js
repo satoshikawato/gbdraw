@@ -76,7 +76,7 @@ import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegend
  * @property {(source: { value: any }, callback: (value: any) => void) => () => void} watch
  *   Vue `watch`; a rule commit waits on it for an automatic rerender in flight.
  * @property {() => boolean} [isPatternEditAvailable] False while a Session import is pending.
- * @property {AskChoice} [askChoice] The root's choice dialog: a pattern that may match slowly asks first (UX-A07).
+ * @property {AskChoice} [askChoice] The root's choice dialog: a pattern that may match slowly asks first.
  * @property {ShowNotice} [showNotice] The root's notice banner.
  */
 
@@ -674,7 +674,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     if (sessionBusy) return sessionBusy;
     if (!newSpecRule.val) return;
 
-    // UX-A07: one question names every reason the pattern may match slowly.
+    // One question names every reason the pattern may match slowly.
     const pattern = String(newSpecRule.val);
     const risks = [
       pattern.length > 50 ? 'It is longer than 50 characters.' : '',

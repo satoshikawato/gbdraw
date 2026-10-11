@@ -35,7 +35,7 @@
  */
 
 /**
- * UX-A07: a confirmation asks with the app's choice dialog, never a native
+ * A confirmation asks with the app's choice dialog, never a native
  * `confirm()`. One question shows at a time: a new question cancels the open one.
  * @param {{ reactive: <T extends object>(value: T) => T }} options Vue's `reactive`.
  */
@@ -76,21 +76,28 @@ export const createChoicePrompt = ({ reactive }) => {
 };
 
 /**
- * UX-A07, UX-C12: the outcome of an operation that has no place of its own
+ * The outcome of an operation that has no place of its own
  * (Load Session, Save Session, a table import or export) shows in one notice
  * banner above the Result, never in a native `alert()`. Warnings show as a list.
  * @param {{ reactive: <T extends object>(value: T) => T }} options Vue's `reactive`.
  */
 export const createNoticeBanner = ({ reactive }) => {
-  const notice = reactive({ text: '', items: /** @type {string[]} */ ([]), tone: /** @type {NoticeTone} */ ('info') });
+  const notice = reactive({
+    text: '', items: /** @type {string[]} */ ([]), tone: /** @type {NoticeTone} */ ('info'), announcement: ''
+  });
   /** @type {ShowNotice} */
   const show = ({ text, items = [], tone }) => {
+    const shown = items.filter(Boolean);
+    const spoken = [text, ...shown].join(' ');
     Object.assign(notice, {
       text,
-      items: items.filter(Boolean),
-      tone: tone || (items.some(Boolean) ? 'warning' : 'info')
+      items: shown,
+      tone: tone || (shown.length ? 'warning' : 'info'),
+      // The status region speaks a change of its text only: a notice that
+      // repeats the shown one differs from it by a trailing no-break space.
+      announcement: notice.announcement === spoken ? `${spoken}\u00A0` : spoken
     });
   };
-  const dismiss = () => { Object.assign(notice, { text: '', items: [], tone: 'info' }); };
+  const dismiss = () => { Object.assign(notice, { text: '', items: [], tone: 'info', announcement: '' }); };
   return { notice, show, dismiss };
 };

@@ -110,18 +110,26 @@ test('a record definition opens its popup; its edits write the record settings',
   await settle(page);
   expect(await undoCount(page)).toBe(before + 1);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].region_reverse)).toBe(true);
+  // Enter commits a text field and keeps focus in it; leaving the field afterwards commits nothing more.
+  const name = dialog.getByLabel('Organism / strain', { exact: true });
+  await name.fill('Popup organism');
+  await name.press('Enter');
+  await settle(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].definition)).toBe('Popup organism');
+  await expect(name).toBeFocused();
+  expect(await undoCount(page)).toBe(before + 2);
   await dialog.getByLabel('Subtitle', { exact: true }).fill('Popup subtitle');
   await dialog.getByLabel('Subtitle', { exact: true }).press('Tab');
   await settle(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].record_subtitle)).toBe('Popup subtitle');
-  expect(await undoCount(page)).toBe(before + 2);
+  expect(await undoCount(page)).toBe(before + 3);
   await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
   await settle(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].record_subtitle || '')).not.toBe('Popup subtitle');
 });
 
 // A Circular record selected on its own draws its Record label, so the popup
-// edits that field (AB review F2), and the popup leaves the whole center
+// edits that field, and the popup leaves the whole center
 // definition uncovered, not only the clicked point.
 test('a Circular center definition opens beside the definition and edits the Record label', async ({ page }) => {
   test.setTimeout(300_000);
@@ -147,10 +155,16 @@ test('a Circular center definition opens beside the definition and edits the Rec
   await settle(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.form.circular_record_label)).toBe('Popup label');
   expect(await undoCount(page)).toBe(before + 1);
+  const subtitle = dialog.getByLabel('Subtitle', { exact: true });
+  await subtitle.fill('Popup subtitle');
+  await subtitle.press('Enter');
+  await settle(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.form.circular_record_subtitle)).toBe('Popup subtitle');
+  await expect(subtitle).toBeFocused();
 });
 
 // A rename onto another row's name asks first; the popup keeps its row until
-// the choice, stays on it after Cancel, and follows it after Keep both (AB review F1).
+// the choice, stays on it after Cancel, and follows it after Keep both.
 // OV-431: the Enter that commits the name does not also press the dialog's focused choice.
 test('a Legend popup rename onto another name follows the row through the choice', async ({ page }) => {
   test.setTimeout(300_000);
@@ -188,6 +202,9 @@ test('a Legend popup rename onto another name follows the row through the choice
   await choice.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(choice).toHaveCount(0);
   await expect(tRNA).toBeVisible();
+  // Focus returns to the field the name was typed in, which shows the row's name again.
+  await expect(tRNA.getByLabel('Legend name', { exact: true })).toBeFocused();
+  await expect(tRNA.getByLabel('Legend name', { exact: true })).toHaveValue('tRNA');
 
   await rename();
   const keepBoth = choice.getByRole('button', { name: /^Keep both: name it / });

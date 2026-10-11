@@ -289,7 +289,7 @@ for (const [reason, options, sentence] of absenceCases) {
   test(`the Label Not Shown dialog names the reason "${reason || 'unknown'}" as the popup note does`, async () => {
     const { actions, state } = absenceHarness(options);
     const none = 'This feature has no label in the current Result.';
-    // The popup note, before the edit is applied, names the same reason in a few words (UX-A03).
+    // The popup note, before the edit is applied, names the same reason in a few words.
     state.clickedFeature.value.labelText = '';
     const cause = LABEL_ABSENCE_REASONS[reason]?.cause;
     assert.equal(actions.clickedFeatureLabelHint.value.startsWith(`No label shown${cause ? ` (${cause})` : ''}.`), true,
@@ -344,7 +344,7 @@ for (const [reason, options] of [['underlay', { type: 'repeat_region' }], ['hidd
 
 // Owner decisions Q1 and Q2 (2026-10-04): the popup note names why the
 // committed request draws no label, and On only where it can be drawn, in one
-// line (UX-A03).
+// line.
 test('the popup note names why the diagram draws no label for the feature', () => {
   const featureId = 'feature:one/[a]';
   const diagramOptions = { featureShapes: { repeat_region: 'underlay' }, configOverrides: { 'labels.rendering': 'auto' } };
@@ -565,7 +565,7 @@ test('a Label TSV import writes the label intent of every batch Result once (B6)
   ).documentElement;
   displayed.querySelector('text').textContent = 'alpha';
   const evaluated = [];
-  // The outcome shows in the app's notice banner, not a native alert (UX-A07).
+  // The outcome shows in the app's notice banner, not a native alert.
   const messages = [];
   const harness = buildHarness({
     svg: displayed,

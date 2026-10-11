@@ -44,7 +44,7 @@ import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/
  * @property {import('../rule-matching.js').RulePreparation | null} [rulePreparation]
  * @property {() => ({ diagramOptions?: Record<string, any> } | null)} [getCommittedRequest]
  *   The committed canonical request (Python owns the option fields, R7).
- * @property {ShowNotice} [showNotice] The root's notice banner: a table import or export reports there (UX-A07).
+ * @property {ShowNotice} [showNotice] The root's notice banner: a table import or export reports there.
  */
 
 // The paint domain this owner shows through the port.

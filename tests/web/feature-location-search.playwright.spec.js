@@ -50,7 +50,7 @@ test('feature list, popup, hover, and Location search use 1-based INSDC location
     const app = window.__GBDRAW_APP__;
     await app.openFeatureEditorFromList(app.extractedFeatures.find((feature) => feature.svg_id === id), null);
   }, ids.LOC_0002);
-  // The header line names the record and the location with grouped digits (UX-B12).
+  // The header line names the record and the location with grouped digits.
   await expect(page.locator('[data-feature-popup-summary]')).toHaveText('LOCTEST · 1,101..1,200; 1..200 (+)');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.clickedFeature.location)).toBe(SPLIT);
   // The CDS has a gene and a locus tag but no protein_id, so Details has no

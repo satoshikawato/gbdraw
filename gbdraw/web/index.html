@@ -775,21 +775,21 @@
             text-transform: uppercase;
             letter-spacing: 0.05em;
         }
-        /* UX-B12: the product line under the title wraps to two lines. */
+        /* The product line under the title wraps to two lines. */
         .feature-popup-product {
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
             overflow: hidden;
         }
-        /* A one-line note under a popup control (UX-A03). */
+        /* A one-line note under a popup control. */
         .feature-popup-note {
             margin-top: 0.25rem;
             font-size: 0.75rem;
             line-height: 1rem;
             color: #b45309;
         }
-        /* Details and Qualifiers: each value beside its key (UX-B05). */
+        /* Details and Qualifiers: each value beside its key. */
         .feature-popup-fields {
             display: grid;
             grid-template-columns: minmax(6rem, max-content) minmax(0, 1fr);
@@ -922,7 +922,7 @@
             border-color: #1d4ed8;
             color: #ffffff;
         }
-        /* UX-B10: the count and the active match share one readable line under the controls. */
+        /* The count and the active match share one readable line under the controls. */
         .preview-feature-search .gfs-status-line {
             display: flex;
             flex-wrap: wrap;
@@ -1644,7 +1644,7 @@
             .app-notice > i { @apply mt-0.5 shrink-0 text-sm; }
             .app-notice.is-info { @apply border-blue-200 bg-blue-50 text-blue-900; }
             .app-notice.is-warning { @apply border-amber-200 bg-amber-50 text-amber-900; }
-            /* UX-A05: a choice dialog shows one primary option; the others share one secondary style. */
+            /* A choice dialog shows one primary option; the others share one secondary style. */
             .choice-option { @apply flex w-full items-start gap-2 rounded-lg border px-4 py-2 text-left text-sm font-bold transition-colors; color: var(--ui-text-2); background-color: var(--ui-surface); border-color: var(--ui-line-strong); }
             .choice-option:hover { @apply bg-slate-50; }
             .choice-option > i { @apply mt-0.5 shrink-0 text-lg; }
@@ -5245,7 +5245,7 @@
              title="Drag to resize"></div>
 
         <div class="result-pane flex-1 space-y-4 flex flex-col h-full overflow-y-auto min-w-0 focus:outline-none" tabindex="-1">
-            <!-- UX-A07, UX-C12: the outcome of Load Session, Save Session, or a table import or export; warnings as a list -->
+            <!-- The outcome of Load Session, Save Session, or a table import or export; warnings as a list -->
             <div v-if="notice.text" data-app-notice
                  :class="['app-notice', notice.tone === 'warning' ? 'is-warning' : 'is-info']">
                 <i :class="notice.tone === 'warning' ? 'ph ph-warning' : 'ph ph-check-circle'" aria-hidden="true"></i>
@@ -6271,7 +6271,7 @@
                                         <label for="preview-legend-caption" class="feature-popup-heading block">Legend name</label>
                                         <input id="preview-legend-caption" type="text" :value="previewItemView.caption"
                                                @change="renameLegendEntryInPopup(previewItemView.index, $event.target.value)"
-                                               @keydown.enter.prevent="$event.target.blur()"
+                                               @keydown.enter.prevent="commitPreviewItemField"
                                                :disabled="!semanticMutationAvailable"
                                                class="form-input w-full text-xs">
                                     </section>
@@ -6296,14 +6296,14 @@
                                         <label class="block text-xs text-slate-600">{{ previewItemView.draft.nameLabel }}
                                             <input type="text" :value="previewItemView.draft.name"
                                                    @change="setPreviewRecordField(previewItemView, 'name', $event.target.value)"
-                                                   @keydown.enter.prevent="$event.target.blur()"
+                                                   @keydown.enter.prevent="commitPreviewItemField"
                                                    :disabled="!semanticMutationAvailable"
                                                    class="form-input mt-0.5 w-full text-xs">
                                         </label>
                                         <label class="block text-xs text-slate-600">{{ previewItemView.draft.subtitleLabel }}
                                             <input type="text" :value="previewItemView.draft.subtitle"
                                                    @change="setPreviewRecordField(previewItemView, 'subtitle', $event.target.value)"
-                                                   @keydown.enter.prevent="$event.target.blur()"
+                                                   @keydown.enter.prevent="commitPreviewItemField"
                                                    :disabled="!semanticMutationAvailable"
                                                    class="form-input mt-0.5 w-full text-xs">
                                         </label>
@@ -6618,7 +6618,7 @@
                             </button>
                     </choice-dialog>
 
-                    <!-- Label Text Scope Dialog (UX-A09) -->
+                    <!-- Label Text Scope Dialog -->
                     <choice-dialog v-if="labelTextScopeDialog.show" labelledby="label-text-scope-title" describedby="label-text-scope-description"
                          @cancel="handleLabelTextScopeChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
@@ -6682,7 +6682,7 @@
                             </button>
                     </choice-dialog>
 
-                    <!-- Label Visibility On Dialog: Owner decisions Q1 and Q2 (2026-10-04); wording UX-A02 -->
+                    <!-- Label Visibility On Dialog: Owner decisions Q1 and Q2 (2026-10-04) -->
                     <choice-dialog v-if="labelOnDialog.show" labelledby="label-on-dialog-title" describedby="label-on-dialog-description"
                          @cancel="handleLabelOnChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center">
@@ -6731,7 +6731,7 @@
                             </button>
                     </choice-dialog>
 
-                    <!-- Feature Style Scope Dialog (UX-A05): the narrow scope first, the shared scopes grouped -->
+                    <!-- Feature Style Scope Dialog: the narrow scope first, the shared scopes grouped -->
                     <choice-dialog v-if="featureStyleScopeDialog.show" :busy="dialogChoicePending" labelledby="feature-style-scope-title"
                          @cancel="handleFeatureStyleScopeChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
@@ -6813,7 +6813,7 @@
                             </button>
                     </choice-dialog>
 
-                    <!-- Legend Rename Dialog (UX-A10) -->
+                    <!-- Legend Rename Dialog -->
                     <choice-dialog v-if="legendRenameDialog.show" :busy="dialogChoicePending" labelledby="legend-rename-title" describedby="legend-rename-description"
                          @cancel="handleLegendRenameChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[65] flex items-center justify-center">
@@ -8077,8 +8077,8 @@
             </div>
         </choice-dialog>
         <!-- The notice banner's live region: always rendered, so a screen reader announces each new notice. -->
-        <p class="sr-only" role="status" aria-live="polite" data-app-notice-announcer>{{ notice.text }}<template v-for="(item, index) in notice.items" :key="index"> {{ item }}</template></p>
-        <!-- UX-A07: the app's confirmations (Reset Settings, replacing unsaved work with a Session, a risky color rule pattern, a repeated or large download) -->
+        <p class="sr-only" role="status" aria-live="polite" data-app-notice-announcer>{{ notice.announcement }}</p>
+        <!-- The app's confirmations (Reset Settings, replacing unsaved work with a Session, a risky color rule pattern, a repeated or large download) -->
         <choice-dialog v-if="choicePrompt.show" labelledby="choice-prompt-title" describedby="choice-prompt-description"
              data-choice-prompt
              @cancel="resolveChoicePrompt('cancel')" @keydown.tab="trapDialogFocus"

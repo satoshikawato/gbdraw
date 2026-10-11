@@ -336,7 +336,7 @@
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-08-01-feature-popup.webp",
             "alt": "Zoomed Vibrio multi-record crop with the clicked CDS on chromosome 1 and its feature popup.",
-            "caption": "The popup reports the selected chromosome CDS location, protein ID, qualifiers, and sequence."
+            "caption": "The popup header gives the selected chromosome CDS location, and the Details tab its length and protein ID; the Qualifiers and Sequence tabs hold the rest."
           },
           "capture": {
             "source": "webapp",

@@ -9,7 +9,7 @@ const JSON_TASK_BUDGET_MS = 16;
 export const SESSION_DOWNLOAD_CONFIRM_THRESHOLD_BYTES = 50 * 1024 * 1024;
 
 /**
- * A compressed Session above the threshold asks before its download (UX-A07);
+ * A compressed Session above the threshold asks before its download;
  * the caller asks with the app's choice dialog.
  * @param {Blob} blob The compressed Session.
  * @returns {number | null} Its size in MB when the download asks first, else null.

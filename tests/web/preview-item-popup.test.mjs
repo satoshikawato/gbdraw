@@ -1,6 +1,7 @@
 // The legend-entry and record-definition popups of the preview: what a click
 // reaches, what each popup shows, and the setting a record edit writes.
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { createPreviewItemPopup, previewItemTarget } from '../../gbdraw/web/js/app/preview-item-popup.js';
@@ -71,7 +72,7 @@ test('a click on a Legend row or a record definition names its popup item', () =
 }));
 
 const createPopup = ({
-  mode = 'linear', busy = null, circularPresentation = false, recordLabel = '',
+  mode = 'linear', busy = null, circularBlock = 'not-inspected', recordLabel = '',
   entries = [{ caption: 'tRNA', originalCaption: 'tRNA', color: '#ff0000' }],
   renameLegendRow = null, legendRenameSettled = async () => {},
   requestRecords = [{ recordKey: 'uid-1', presentation: { label: 'Old name' } }],
@@ -100,7 +101,7 @@ const createPopup = ({
     getCommittedRequest: () => ({ records: requestRecords }),
     readCommittedRecordRows: () => recordRows,
     readAlignmentInspector: () => alignment && { records: [alignment] },
-    readCircularReverseAvailable: () => circularPresentation,
+    readCircularOwnRecordBlock: () => circularBlock,
     runUndoable: (label, apply) => { steps.push(label); apply(); return true; },
     sessionBusy: () => busy,
     renameLegendRow: renameLegendRow || ((index, caption) => {
@@ -158,7 +159,7 @@ test('the legend popup follows its row when a rename changes the row key', async
 
 // A rename onto another row's name asks Merge, Keep both, or Cancel; the
 // rename returns once the dialog is open. The popup keeps its row until the
-// choice is answered, then follows it (AB review F1).
+// choice is answered, then follows it.
 test('the legend popup follows its row through the name-conflict choice', async () => {
   const conflict = (choice) => {
     let answer;
@@ -185,10 +186,10 @@ test('the legend popup follows its row through the name-conflict choice', async 
   assert.equal(await (conflict('merge'))(), 'Core biosynthetic genes');
 });
 
-// A Circular record with its own Record label draws that label, not Species
-// (AB review F2): the popup edits the field the Result draws.
+// A Circular record with its own Record label draws that label, not Species,
+// so the popup edits the field the Result draws.
 test('a Circular record popup edits the Record label when the record has its own', () => {
-  const own = createPopup({ mode: 'circular', circularPresentation: true, recordLabel: 'Label X' });
+  const own = createPopup({ mode: 'circular', circularBlock: '', recordLabel: 'Label X' });
   own.state.clickedPairwiseMatch.value = { previewItem: { kind: 'record-definition', recordIndex: 0, recordId: 'R1' } };
   const view = own.popup.view.value;
   assert.equal(view.draft.nameLabel, 'Record label');
@@ -199,19 +200,36 @@ test('a Circular record popup edits the Record label when the record has its own
   assert.equal(own.form.circular_record_subtitle, 'plasmid');
   assert.equal(own.form.species, 'Homo sapiens');
 
-  // OV-431: a Record label drawn while its fields are unavailable (records not
-  // inspected) overrides Species, so the popup offers no name field.
+  // OV-432: a Record label drawn while its fields are unavailable overrides
+  // Species, so the popup offers no name field.
   const shared = createPopup({ mode: 'circular', recordLabel: 'Label X' });
   shared.state.clickedPairwiseMatch.value = { previewItem: { kind: 'record-definition', recordIndex: 0, recordId: 'R1' } };
   assert.equal(shared.popup.view.value.draft, null);
-  assert.match(shared.popup.view.value.editHint, /^Inspect source records/);
   shared.form.circular_record_label = '';
   assert.equal(shared.popup.view.value.draft.nameLabel, 'Species');
   assert.equal(shared.popup.view.value.draft.reverseAvailable, false);
 });
 
+// The popup says why the Record label cannot be edited, in the sentence the
+// sidebar shows for the same cause where it has one.
+test('a Circular record popup without its own fields names the cause', () => {
+  const sidebar = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const hint = (circularBlock) => {
+    const { popup, state } = createPopup({ mode: 'circular', circularBlock, recordLabel: 'Label X' });
+    state.clickedPairwiseMatch.value = { previewItem: { kind: 'record-definition', recordIndex: 0, recordId: 'R1' } };
+    assert.equal(popup.view.value.draft, null);
+    return popup.view.value.editHint;
+  };
+  assert.equal(hint('not-inspected'), 'Inspect source records in the sidebar to edit this record\'s label.');
+  assert.equal(hint('multi-record-canvas'), 'Multi-Record Canvas uses a grid. Turn it off to select one record.');
+  assert.equal(hint('no-single-record'), 'Select one record to edit crop, orientation, and title lines.');
+  for (const cause of ['multi-record-canvas', 'no-single-record']) {
+    assert.ok(sidebar.includes(`>${hint(cause)}</p>`), `the sidebar shows the ${cause} sentence`);
+  }
+});
+
 // A Linear file that draws several records: the drawn record id names the
-// request record and its File card, not the drawn index (AB review F6).
+// request record and its File card, not the drawn index.
 test('a Linear record popup finds its request record and File card by record id', () => {
   const requestRecords = [
     { recordKey: 'uid-1', cardinality: 'all', presentation: { label: 'Old name' } },

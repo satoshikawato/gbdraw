@@ -75,7 +75,7 @@ In **Search features**, choose **Qualifier value**, enter `gene` as the
 qualifier key, search for `COX1`, and open the active feature. Confirm its
 location in the feature popup.
 
-![COX1 search result opened in the feature-details popup](../images/t-gui-09/04-feature-search.png)
+![COX1 search result opened in the feature popup, with its location under the gene name](../images/t-gui-09/04-feature-search.png)
 
 Close the popup and clear the search.
 

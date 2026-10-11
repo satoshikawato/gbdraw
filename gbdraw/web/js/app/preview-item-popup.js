@@ -69,7 +69,8 @@ import {
  *   The active similarity alignment as the drawer inspects it, or null.
  * @property {() => ReadonlyArray<CommittedRecordRowLike>} readCommittedRecordRows
  *   The drawn records of the displayed Result's request, with their File cards.
- * @property {() => boolean} readCircularReverseAvailable Whether the Circular reverse setting is editable.
+ * @property {() => CircularOwnRecordBlock | ''} readCircularOwnRecordBlock
+ *   Why a Circular record's own fields (Record label, Subtitle, Reverse complement) are unavailable, or ''.
  * @property {(label: string, apply: () => void) => unknown} runUndoable History's one undoable step.
  * @property {() => unknown} sessionBusy A reason settings cannot change now, else a falsy value.
  * @property {(index: number, caption: string) => unknown} renameLegendRow
@@ -172,10 +173,10 @@ const alignmentText = (decision) => {
  * Generate.
  * @param {{ scope: RecordScope, recordIndex: number, recordId: string,
  *   drawn: Record<string, string>, record: RequestRecordLike | null, draft: RecordDraft | null,
- *   alignment: AlignmentDecisionLike | null, alignmentShown: boolean }} input
+ *   editHint: string, alignment: AlignmentDecisionLike | null, alignmentShown: boolean }} input
  */
 const buildRecordDefinitionView = ({
-  scope, recordIndex, recordId, drawn, record, draft, alignment, alignmentShown
+  scope, recordIndex, recordId, drawn, record, draft, editHint, alignment, alignmentShown
 }) => {
   const accession = text(drawn.accession) || text(recordId);
   const organism = text(drawn.name) || plain(record?.presentation?.label) || accession;
@@ -201,9 +202,7 @@ const buildRecordDefinitionView = ({
     subtitle: [text(drawn.subtitle), accession].filter(Boolean).join(' · '),
     facts,
     draft,
-    editHint: scope === 'linear'
-      ? 'Edit this record in its File card in the sidebar.'
-      : 'Inspect source records in the sidebar to edit this record\'s label.'
+    editHint
   };
 };
 
@@ -244,11 +243,20 @@ const CIRCULAR_DRAWING = {
   fields: { name: 'species', subtitle: 'strain', reverse: 'circular_reverse' },
   nameLabel: 'Species', subtitleLabel: 'Strain', settingsSelector: '#circular-species'
 };
+// What a popup without edit fields says instead. A Circular record's sentence
+// names the cause; the second and third are the sidebar's for the same cause.
+const LINEAR_EDIT_HINT = 'Edit this record in its File card in the sidebar.';
+const CIRCULAR_EDIT_HINTS = {
+  'not-inspected': 'Inspect source records in the sidebar to edit this record\'s label.',
+  'multi-record-canvas': 'Multi-Record Canvas uses a grid. Turn it off to select one record.',
+  'no-single-record': 'Select one record to edit crop, orientation, and title lines.'
+};
+/** @typedef {keyof typeof CIRCULAR_EDIT_HINTS} CircularOwnRecordBlock */
 
 /** @param {PreviewItemPopupOptions} options */
 export const createPreviewItemPopup = ({
   state, computed, readLegendEntryColor, readLegendRowRules, countLegendCaptionFeatures,
-  getCommittedRequest, readCommittedRecordRows, readAlignmentInspector, readCircularReverseAvailable, runUndoable, sessionBusy, renameLegendRow,
+  getCommittedRequest, readCommittedRecordRows, readAlignmentInspector, readCircularOwnRecordBlock, runUndoable, sessionBusy, renameLegendRow,
   legendRenameSettled
 }) => {
   /** @returns {LegendEntry[]} */
@@ -287,14 +295,13 @@ export const createPreviewItemPopup = ({
     settingsSelector: `[data-linear-record-card=${JSON.stringify(sequence.uid)}] [data-linear-record-options] input[type="text"]`
   };
 
-  /** @returns {RecordDraft | null} */
-  const circularDraft = () => {
+  /** @param {boolean} ownRecord @returns {RecordDraft | null} */
+  const circularDraft = (ownRecord) => {
     const form = state.activeDrawing().form;
-    const ownRecord = readCircularReverseAvailable();
     const target = ownRecord ? CIRCULAR_RECORD : CIRCULAR_DRAWING;
-    // A Record label drawn while its sidebar fields are unavailable (a loaded
-    // Session's records are not inspected yet) overrides Species and Strain:
-    // the popup offers neither (OV-431).
+    // A Record label drawn while its sidebar fields are unavailable (for
+    // example, a loaded Session's records are not inspected yet) overrides
+    // Species and Strain: the popup offers neither (OV-432).
     if (!ownRecord && (text(form.circular_record_label) || text(form.circular_record_subtitle))) return null;
     return {
       ...target,
@@ -332,13 +339,15 @@ export const createPreviewItemPopup = ({
     const group = state.svgContainer.value?.querySelector(
       `[data-gbdraw-role^="record-definition"][data-gbdraw-record-index="${recordIndex}"]`
     );
+    const circularBlock = scope === 'circular' ? readCircularOwnRecordBlock() : '';
     return buildRecordDefinitionView({
       scope,
       recordIndex,
       recordId,
       drawn: readDrawnDefinitionLines(group, recordId),
       record,
-      draft: scope === 'linear' ? linearDraft(sequence) : circularDraft(),
+      draft: scope === 'linear' ? linearDraft(sequence) : circularDraft(!circularBlock),
+      editHint: scope === 'linear' ? LINEAR_EDIT_HINT : (circularBlock && CIRCULAR_EDIT_HINTS[circularBlock]),
       alignment: scope === 'linear'
         ? readAlignmentInspector()?.records?.find((decision) => decision.recordKey === record?.recordKey) || null
         : null,
@@ -413,5 +422,10 @@ export const createPreviewItemPopup = ({
     return result;
   };
 
-  return { view, setRecordField, showRecordSettings, renameLegendRow: renameLegendEntry };
+  // Enter in a popup text field commits it as leaving the field does and keeps
+  // focus in the field, so a choice the commit asks returns focus there.
+  /** @param {Event} event */
+  const commitField = (event) => { event.target?.dispatchEvent(new Event('change')); };
+
+  return { view, setRecordField, showRecordSettings, renameLegendRow: renameLegendEntry, commitField };
 };

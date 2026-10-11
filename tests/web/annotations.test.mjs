@@ -225,7 +225,7 @@ test('selected annotations name each feature by its source identity', () => {
   ]);
   // A Result without a feature catalog (a Session before 40) has no identities.
   assert.equal(featureTargetsFromSelection([{ selector: { hash: 'f1234' }, locus_tag: 'A_1' }]), null);
-  // The panel notice says why, not a native alert (UX-A07).
+  // The panel notice says why, not a native alert.
   const notices = [];
   const legacy = createAnnotationEditor({
     state: withDrawings({ annotationSets: [], selectedFeatures: [{ locus_tag: 'A_1' }] }),
@@ -750,7 +750,7 @@ test('an import that would remove every set asks first, and Cancel keeps the set
   const state = { annotationSets: [createAnnotationSet({ id: 'kept', annotations: [
     { id: 'old', target: coordinateTarget({ start: 1, end: 3 }), mark: 'band' }
   ] })] };
-  // The app's choice dialog asks (UX-A07); the stub answers in turn.
+  // The app's choice dialog asks; the stub answers in turn.
   const questions = [];
   const answers = ['cancel', 'remove'];
   const askChoice = async (request) => { questions.push(request); return answers.shift(); };

@@ -101,7 +101,7 @@ const largeBlob = new Blob(
   [new Uint8Array((50 * 1024 * 1024) + (512 * 1024))],
   { type: 'application/gzip' }
 );
-// A Session over 50 MB asks first in the app's choice dialog (UX-A07), which
+// A Session over 50 MB asks first in the app's choice dialog, which
 // names its size; a smaller one downloads without asking.
 assert.equal(largeSessionDownloadMegabytes(largeBlob).toFixed(1), '50.5');
 assert.equal(largeSessionDownloadMegabytes(new Blob([new Uint8Array(1024)])), null);

@@ -140,7 +140,7 @@ assert.equal(isIgnoredTarget(targetMatching('data-history-scope="transient"')), 
 
 const indexHtml = await readFile(indexPath, 'utf8');
 [
-  // UX-A07: Reset Settings asks first; the chosen reset is one History step.
+  // Reset Settings asks first; the chosen reset is one History step.
   '@click="requestResetSettings"',
   '@click="runAnalysis"',
   '@click="openSessionFilePicker"',

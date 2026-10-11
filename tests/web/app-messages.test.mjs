@@ -21,7 +21,7 @@ const listModules = async (dir) => (await Promise.all(
 // calls such as `dialog.confirm(` and names such as `askConfirm(` do not count.
 const NATIVE_DIALOG_CALL = /(?<![\w$.])(?:(?:window|globalThis|self)\.(?:alert|confirm)\b|(?:alert|confirm)\s*\()/;
 
-test('UX-A07, UX-C12: the Web app asks and reports in its own dialog and notice, never alert() or confirm()', async () => {
+test('the Web app asks and reports in its own dialog and notice, never alert() or confirm()', async () => {
   const offenders = [];
   for (const path of await listModules(webJsRoot)) {
     const lines = (await readFile(path, 'utf8')).split('\n');
@@ -63,10 +63,29 @@ test('the choice prompt resolves to the chosen action, and a new question cancel
 test('the notice banner shows warnings as a list and is cleared by dismiss', () => {
   const { notice, show, dismiss } = createNoticeBanner({ reactive });
   show({ text: 'Session loaded: a.gbdraw-session.json', items: ['', 'One warning'] });
-  assert.deepEqual({ ...notice }, { text: 'Session loaded: a.gbdraw-session.json', items: ['One warning'], tone: 'warning' });
+  assert.deepEqual({ ...notice }, {
+    text: 'Session loaded: a.gbdraw-session.json', items: ['One warning'], tone: 'warning',
+    announcement: 'Session loaded: a.gbdraw-session.json One warning'
+  });
   show({ text: 'Session saved: a.gbdraw-session.json.' });
   assert.equal(notice.tone, 'info');
   assert.deepEqual(notice.items, []);
   dismiss();
   assert.equal(notice.text, '');
+  assert.equal(notice.announcement, '');
+});
+
+// A live region speaks only a change of its text, so a notice that repeats
+// the shown one changes the announced text and keeps the visible one.
+test('a repeated notice is announced again', () => {
+  const { notice, show } = createNoticeBanner({ reactive });
+  const spoken = [];
+  for (let count = 0; count < 3; count += 1) {
+    show({ text: 'Label table saved.' });
+    spoken.push(notice.announcement);
+  }
+  assert.equal(notice.text, 'Label table saved.');
+  assert.deepEqual(spoken.map((entry) => entry.trim()), Array(3).fill('Label table saved.'));
+  assert.notEqual(spoken[0], spoken[1]);
+  assert.notEqual(spoken[1], spoken[2]);
 });

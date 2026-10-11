@@ -580,7 +580,7 @@ const circularGeometryShortcutsForState = (drawing) => ({
  * @typedef {object} CircularTrackSlotEditorOptions
  * @property {Record<string, any>} state the Web state; its shape belongs to `state.js`
  * @property {ChangeTrackLayout} [changeTrackLayout] R10 port (default: apply directly)
- * @property {AskChoice} [askChoice] The root's choice dialog: hiding a GC track the custom stack draws asks first (UX-A07).
+ * @property {AskChoice} [askChoice] The root's choice dialog: hiding a GC track the custom stack draws asks first.
  * @property {(label: string, fn: () => unknown) => unknown} [runUndoable] History's undoable step, which the chosen hide runs in.
  */
 
@@ -1298,7 +1298,7 @@ export const createCircularTrackSlotEditor = ({
 
   /**
    * Hiding a GC track turns off the enabled custom stack rows that draw it, so
-   * it asks first (UX-A07); null when no row would change.
+   * it asks first; null when no row would change.
    * @param {DrawingState} drawing
    * @param {string} renderer
    * @returns {Promise<string> | null}

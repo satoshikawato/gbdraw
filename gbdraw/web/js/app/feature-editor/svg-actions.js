@@ -317,7 +317,7 @@ export const createFeatureSvgActions = ({
     return rows;
   };
 
-  // Details lists what the popup header and the Edit tab do not show (UX-B05):
+  // Details lists what the popup header and the Edit tab do not show:
   // the header names the feature, its product, record, and location, and the
   // Similarity group section its group.
   const buildDetailRows = (feat) => [

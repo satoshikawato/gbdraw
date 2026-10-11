@@ -183,7 +183,7 @@ test('circular: a renderer change back to Ticks leaves a valid Ticks row', () =>
 // TK-09: Hide GC Skew draws no GC skew in the simple path; in the custom stack
 // it disables only the rows of the drawing's dinucleotide.
 test('circular: Hide GC Skew disables only the GC skew rows and names them in the right number', async () => {
-  // The app's choice dialog asks (UX-A07); the stub records the question and hides.
+  // The app's choice dialog asks; the stub records the question and hides.
   const questions = [];
   const editor = MODES.circular([
     ...ROWS.circular(),

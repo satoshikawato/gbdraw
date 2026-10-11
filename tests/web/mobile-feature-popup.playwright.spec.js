@@ -35,7 +35,7 @@ for (const mode of ['circular', 'linear']) {
       const actions = page.locator('.feature-popup')
         .getByRole('region', { name: 'Rotate record using this feature', exact: true });
       // HmmtDNA is circular; the lambda seed is a linear record, whose one
-      // reason replaces the controls and the Apply buttons (UX-B09).
+      // reason replaces the controls and the Apply buttons.
       const controls = mode === 'circular'
         ? [actions.getByRole('radio', { name: 'Start of the record', exact: true }),
           actions.getByRole('button', { name: 'Apply when I Generate', exact: true }),

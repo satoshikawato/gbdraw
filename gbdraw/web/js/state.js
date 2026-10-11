@@ -509,7 +509,7 @@ const legendRenameDialog = reactive({
   // R15-3 (OV-285): the Python key of the deleted row the new caption names;
   // '' when the target is listed. Its Merge restores that row first.
   deletedTargetKey: /** @type {PythonLegendKey | ''} */ (''),
-  suffixCaption: '', // the name "Keep both" gives the renamed row (UX-A10)
+  suffixCaption: '', // the name "Keep both" gives the renamed row
   pendingRequest: null
 });
 

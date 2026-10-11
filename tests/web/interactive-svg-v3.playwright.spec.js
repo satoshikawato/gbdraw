@@ -929,7 +929,7 @@ test('Linear CLI Session keeps --region and --reverse_complement through Load an
   await expect(reversed.getByRole('button', { name: 'Apply now' })).toBeEnabled();
   await closePopup();
   // A cropped record cannot rotate, and says so (PD-OI-032 item 7): the crop is
-  // in the Session, so the row is disabled with its reason (UX-B09).
+  // in the Session, so the row is disabled with its reason.
   await openFeaturePopup('cropped_gene');
   await expect(page.getByRole('button', { name: ROTATE_RECORD, exact: true })).toBeDisabled();
   await expect(page.locator('#feature-record-rotation-unavailable'))

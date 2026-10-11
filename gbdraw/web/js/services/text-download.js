@@ -31,7 +31,7 @@ export const downloadTextFile = (
  */
 
 /**
- * UX-A07: a large download (a Session, LOSAT tables, CLI helper files) asks
+ * A large download (a Session, LOSAT tables, CLI helper files) asks
  * first; it starts only when **Download** is chosen.
  * @param {DownloadChoicePort} ask @param {{ title: string, description: string }} question
  * @returns {Promise<boolean>} Whether to download.

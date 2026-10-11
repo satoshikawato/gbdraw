@@ -1229,7 +1229,7 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
  * @property {(options?: { rerender?: boolean }) => void} clearLabelBuildNotices The label owner's port.
  * @property {typeof prepareCandidateRenderCommit} [prepareCandidateCommit] Test seam.
- * @property {AskChoice} [askChoice] The root's choice dialog: a large download asks first (UX-A07).
+ * @property {AskChoice} [askChoice] The root's choice dialog: a large download asks first.
  * @property {ShowNotice} [showNotice] The root's notice banner.
  */
 

@@ -59,7 +59,7 @@ export const replaceFeatureEdits = (featureOverrides, rows, records) => {
  * @property {((payload: Record<string, any>) => Promise<{ result?: any }>) | null} [readFeatureOverrideTable]
  *   The diagram helper that reads a Feature Edits TSV (R7).
  * @property {() => any} projectFeatureEdits The root's projection of loaded feature edits onto the displayed Result (R3).
- * @property {ShowNotice} [showNotice] The root's notice banner: a table import or export reports there (UX-A07).
+ * @property {ShowNotice} [showNotice] The root's notice banner: a table import or export reports there.
  */
 
 /** @param {FeatureEditTableOptions} options */

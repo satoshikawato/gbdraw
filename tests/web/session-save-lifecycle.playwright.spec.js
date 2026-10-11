@@ -306,7 +306,7 @@ test('Save Session is single-flight, paints pending state, and releases every se
   ]);
   await expect(saveButton).toBeEnabled();
 
-  // A Session file over 50 MB asks before its download (UX-A07): Cancel
+  // A Session file over 50 MB asks before its download: Cancel
   // downloads nothing, Download saves. Every Blob reports 60 MB here.
   await page.evaluate(() => {
     const { get } = Object.getOwnPropertyDescriptor(Blob.prototype, 'size');

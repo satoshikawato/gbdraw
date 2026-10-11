@@ -110,7 +110,7 @@ export const labelDrawingBlocker = (feature, diagramOptions) => {
 };
 // Why the diagram draws no label for a feature (`labelAbsenceReason`): the one
 // table of reasons, as the sentence the Label Not Shown dialog renders and the
-// few words of the popup note (UX-A03).
+// few words of the popup note.
 export const LABEL_ABSENCE_REASONS = Object.freeze({
   hidden: { sentence: ' The feature is hidden.', cause: 'the feature is hidden' },
   underlay: { sentence: ' Labels are not drawn for features drawn as "Underlay".', cause: 'drawn as Underlay' },
@@ -463,7 +463,7 @@ const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => 
  *   The visibility owner's preparation of the rule matches `resolveFeatureDrawn` reads (Label On asks the blocker of it).
  * @property {(payload: Record<string, any>, options?: Record<string, any>) => Promise<Record<string, any>>} evaluateLabelRules
  *   The root's Python evaluation of Label TSV rows against the displayed labels (R7).
- * @property {ShowNotice} [showNotice] The root's notice banner: a table import or export reports there (UX-A07).
+ * @property {ShowNotice} [showNotice] The root's notice banner: a table import or export reports there.
  */
 
 /** @param {FeatureLabelActionsOptions} options */
@@ -1219,7 +1219,7 @@ export const createFeatureLabelActions = ({
 
   // The popup note when the displayed Result draws no label for the clicked
   // feature: why the diagram cannot draw it (Owner Q1, Q2), or that On shows it,
-  // in one line (UX-A03).
+  // in one line.
   const clickedFeatureLabelHint = computed(() => {
     const drawing = state.activeDrawing();
     const clicked = clickedFeature.value;

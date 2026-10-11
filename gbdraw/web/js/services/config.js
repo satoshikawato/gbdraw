@@ -4777,7 +4777,7 @@ const buildOtherModeResult = (other, renderRequest) => {
   };
 };
 
-// `askChoice`: the root's choice dialog; Save asks with it before a repeated or a large download (UX-A07).
+// `askChoice`: the root's choice dialog; Save asks with it before a repeated or a large download.
 /**
  * @typedef {{
  *   askChoice?: DownloadChoicePort,
@@ -5785,7 +5785,7 @@ const importSessionDocument = async (e, options = {}) => {
     if (!options.isCurrent()) throw new Error('Session loading was canceled.');
     return {
       status: 'ok',
-      // UX-C12: what the load changed, for the caller's notice; one line each.
+      // What the load changed, for the caller's notice; one line each.
       warnings: [
         droppedFeatureEditCount > 0 ? FEATURE_EDIT_MIGRATION_WARNING(droppedFeatureEditCount) : '',
         narrowedFeatureVisibilityCount > 0 ? FEATURE_VISIBILITY_NARROWED_NOTICE(narrowedFeatureVisibilityCount) : '',

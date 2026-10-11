@@ -1441,7 +1441,7 @@ export const createAppSetup = () => {
   }));
   // The choice in flight of a popup choice dialog: its busy state and its close (D-12).
   const dialogChoice = createDialogChoice({ mutationPending: history.mutationPending, runUndoable: history.runUndoable, ref });
-  // UX-A07, UX-C12: confirmations ask with the app's choice dialog, and an
+  // Confirmations ask with the app's choice dialog, and an
   // operation's outcome shows in the notice banner (no native confirm or alert).
   const choicePrompt = createChoicePrompt({ reactive });
   const noticeBanner = createNoticeBanner({ reactive });
@@ -3023,7 +3023,7 @@ export const createAppSetup = () => {
     recordActionsExpanded.value = !recordActionsExpanded.value;
     if (recordActionsExpanded.value) featureRecordRotation.readRecords();
   };
-  // UX-B09: a record that rotation cannot use (a linear or cropped record)
+  // A record that rotation cannot use (a linear or cropped record)
   // shows the rotation row disabled with this reason; a record a Session Load
   // left unread is read when the row opens.
   const featureRecordRotationUnavailable = computed(() => {
@@ -3111,7 +3111,8 @@ export const createAppSetup = () => {
         + 'Changes since the last Save Session or Load Session are lost.',
       actions: [{ id: 'load', label: actionLabel, tone: 'primary' }]
     }) !== 'load') return;
-    // The file picker opens inside the click that confirmed.
+    // `proceed` may open the file picker: the user activation of the click that
+    // asked, or of the click that confirmed, still holds after these awaits.
     proceed();
   };
   // The template's hidden file input (`ref="sessionInput"`).
@@ -3120,8 +3121,8 @@ export const createAppSetup = () => {
     'Load Session', () => sessionInput.value?.click()
   );
   let nextSessionPreviewToken = 1;
-  // Q10 (Owner 2026-10-10): a loaded Session says so in the notice banner, with
-  // what the load changed as a list (UX-C12).
+  // A loaded Session says so in the notice banner, with what the load changed
+  // as a list.
   const importSession = async (event) => {
     const name = String(event?.target?.files?.[0]?.name || '');
     // The notice of an earlier operation does not stand for this load.
@@ -3927,7 +3928,7 @@ export const createAppSetup = () => {
       ? handleFeatureStrokeScopeChoiceWithHistory(choice, ...rest)
       : handleFeatureColorScopeChoiceWithHistory(choice, ...rest)
   );
-  // UX-A05: the label scopes the Color/Stroke Change Scope dialog offers; a
+  // The label scopes the Color/Stroke Change Scope dialog offers; a
   // label that repeats the Legend name, or the other label, is not offered.
   const featureStyleScopeLabelOptions = computed(() => {
     const text = (/** @type {unknown} */ value) => String(value || '').trim().toLowerCase();
@@ -4634,7 +4635,7 @@ export const createAppSetup = () => {
 
   // Reset Settings resets both drawings (PD-OI-070); the Linear records and
   // comparisons are the Linear drawing's. The button asks first and says what
-  // the reset keeps (UX-A07); `resetSettings` itself does not ask.
+  // the reset keeps; `resetSettings` itself does not ask.
   const requestResetSettings = async () => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
@@ -4726,7 +4727,7 @@ export const createAppSetup = () => {
     resetPreviewViewport({ resetZoom: true });
   };
 
-  // UX-B11: Reset Layout has something to reset once an element moved, the
+  // Reset Layout has something to reset once an element moved, the
   // canvas padding changed, or the view was panned or zoomed.
   const layoutResetAvailable = computed(() => {
     const moved = (/** @type {{ x: number, y: number }} */ offset) => Boolean(Number(offset.x) || Number(offset.y));
@@ -5069,7 +5070,7 @@ export const createAppSetup = () => {
     }
   );
 
-  // UX-B12: the popup header names the gene (else the feature label), then
+  // The popup header names the gene (else the feature label), then
   // its product, then "<record ID> · <location>" with grouped digits (parts
   // joined by "; ", since a grouped number holds a comma), all from payload
   // fields only.
@@ -5085,7 +5086,7 @@ export const createAppSetup = () => {
     return [cf?.recordId, location].filter(Boolean).join(' · ');
   });
 
-  // One Copy per tab (UX-B05): the header lines and the rows, or every qualifier.
+  // One Copy per tab: the header lines and the rows, or every qualifier.
   const copyClickedFeatureDetails = () => {
     const cf = clickedFeature.value;
     if (!cf) return;
@@ -5230,7 +5231,7 @@ export const createAppSetup = () => {
     },
     onError: (error) => { errorLog.value = normalizeUserFacingError(error); },
     // UJ-09: a saved download is the History position Load Session compares with.
-    // Q8 (Owner 2026-10-10): the notice names the file the download started.
+    // The notice names the file the download started.
     onSaved: (/** @type {{ filename: string }} */ { filename }) => {
       history.markSavePoint();
       showNotice({ text: `Session saved: ${filename}. Find it in your browser's downloads.` });
@@ -5317,16 +5318,19 @@ export const createAppSetup = () => {
     return '';
   });
 
-  const circularSingleRecordPresentationEnabled = computed(() => {
+  // Why a Circular record's own fields (crop, orientation, title lines) are
+  // unavailable, in the order the sidebar explains it; '' when they are not.
+  const circularOwnRecordBlock = computed(() => {
     const drawing = state.activeDrawing();
-    if (mode.value !== 'circular' || drawing.form.multi_record_canvas
-      || drawing.adv.circular_grouping_intent === 'batch'
-      || circularRecordDiscoveryState.value.status !== 'ready') return false;
+    if (drawing.form.multi_record_canvas) return 'multi-record-canvas';
+    if (circularRecordDiscoveryState.value.status !== 'ready') return 'not-inspected';
     const entries = circularRecordPresentationEntries();
     const selection = resolveDisambiguatedRecordSelection(entries, drawing.form.circular_record_selector);
-    return selection.status === 'resolved'
-      || (selection.status === 'unspecified' && entries.length === 1);
+    return drawing.adv.circular_grouping_intent !== 'batch'
+      && (selection.status === 'resolved' || (selection.status === 'unspecified' && entries.length === 1))
+      ? '' : 'no-single-record';
   });
+  const circularSingleRecordPresentationEnabled = computed(() => mode.value === 'circular' && !circularOwnRecordBlock.value);
 
   // The legend-entry and record-definition popups (match popup frame): views
   // of the displayed Result and the settings; their edits are the Legend
@@ -5340,7 +5344,7 @@ export const createAppSetup = () => {
     getCommittedRequest: getCommittedCanonicalRenderRequest,
     readAlignmentInspector: () => similarityAlignmentActions.activePlanInspector.value,
     readCommittedRecordRows: recordDisplayControls.committedRecordRows,
-    readCircularReverseAvailable: () => circularSingleRecordPresentationEnabled.value,
+    readCircularOwnRecordBlock: () => circularOwnRecordBlock.value,
     runUndoable: history.runUndoable,
     sessionBusy: sessionOperationAvailability,
     // The popup sits outside the app root that records the Legend panel's text
@@ -6731,6 +6735,7 @@ export const createAppSetup = () => {
     setPreviewRecordField: previewItemPopup.setRecordField,
     showPreviewRecordSettings: previewItemPopup.showRecordSettings,
     renameLegendEntryInPopup: previewItemPopup.renameLegendRow,
+    commitPreviewItemField: previewItemPopup.commitField,
     deletedLegendEntryColor,
     updateLegendEntryColor: updateLegendEntryColorShown,
     renameLegendEntry,

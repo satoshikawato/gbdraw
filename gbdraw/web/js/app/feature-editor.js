@@ -59,8 +59,8 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  *   The root's Python evaluation of Label TSV rows against the displayed labels (R7).
  * @property {ReadUserDefaultColorPort} readUserDefaultColor
  * @property {SetDefaultColorPort} setDefaultColor
- * @property {AskChoice} askChoice The root's choice dialog (UX-A07).
- * @property {ShowNotice} showNotice The root's notice banner: a table import or export reports there (UX-A07).
+ * @property {AskChoice} askChoice The root's choice dialog.
+ * @property {ShowNotice} showNotice The root's notice banner: a table import or export reports there.
  */
 
 /** @param {FeatureEditorOptions} options */

@@ -158,7 +158,7 @@ export const createPreviewFeatureSearch = ({
   ));
   const previewFeatureSearchStatusText = computed(() => {
     if (previewFeatureSearchError.value) return previewFeatureSearchError.value;
-    // UX-B10: no count before a search; after one, the active match of all.
+    // No count before a search; after one, the active match of all.
     if (!String(previewFeatureSearchQuery.value || '').trim()) return '';
     const total = previewFeatureSearchMatches.value.length;
     if (!total) return 'No matches';
