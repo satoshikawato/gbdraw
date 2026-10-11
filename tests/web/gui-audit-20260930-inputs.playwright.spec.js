@@ -215,15 +215,17 @@ test('replacing a cropped Linear file with a multi-record file expands it and cl
   const rows = () => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((sequence) => ({
     start: sequence.region_start ?? null,
     end: sequence.region_end ?? null,
-    definition: sequence.definition || ''
+    definition: sequence.definition || '',
+    file: sequence.file_definition || ''
   })));
   // D-32: replacing one record with one record keeps its crop and Definition.
   await uploadLinear(page, 0, 'second.gb', SECOND_RECORD_TEXT);
-  expect(await rows()).toEqual([{ start: 100, end: 3000, definition: 'Genome A custom' }]);
+  expect(await rows()).toEqual([{ start: 100, end: 3000, definition: 'Genome A custom', file: '' }]);
   await uploadLinear(page, 0, 'two.gb', BATCH_TEXT);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length), { timeout: 30_000 }).toBe(2);
-  expect(await rows())
-    .toEqual([{ start: null, end: null, definition: '' }, { start: null, end: null, definition: '' }]);
+  // The replaced file's record name does not become the new File's name.
+  const cleared = { start: null, end: null, definition: '', file: '' };
+  expect(await rows()).toEqual([cleared, cleared]);
   await generateAndWaitForResult(page);
 });
 

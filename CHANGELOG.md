@@ -54,6 +54,9 @@ write-up of a release.
   Auto window and step values show the value for the current genome once its
   records are read. Text with `<i>` markup shows an italic preview. Removing a
   Linear File asks **Empty this slot** or **Remove file**.
+- Web app (Linear): a name typed on an empty File card is kept when its file is
+  chosen. For a file with several records it becomes the File-level name
+  (OV-486).
 - Web app (Linear): a File with one record shows that record's **Organism /
   strain** and **Subtitle / title** on the File card instead of **Names for all
   records in this file**. A File with two or more records, or a one-record File

@@ -304,6 +304,57 @@ test('a one-record File that holds a File names value keeps the File names block
   await expect(cardNames).toHaveCount(0);
 });
 
+// OV-486: an empty card shows the record's own name fields. A name typed there
+// stays the record's when the file has one record, and becomes the File's name
+// when the upload expands the card to several records.
+const twoRecordGff = ['recA', 'recB'].map((id) => [
+  `${id}\ttest\tregion\t1\t300\t.\t+\t.\tID=${id}`,
+  `${id}\ttest\tgene\t1\t90\t.\t+\t.\tID=gene_${id}`,
+  `${id}\ttest\tCDS\t1\t90\t.\t+\t0\tID=cds_${id};Parent=gene_${id};product=test protein`
+].join('\n')).join('\n');
+const typedFirstUploads = [
+  { kind: 'a one-record GenBank file', files: [['one.gb', namedGenbank('ONE_REC', 'Aeromonas hydrophila')]],
+    names: [['Typed first', 'Typed subtitle', '', '']] },
+  { kind: 'a two-record GenBank file',
+    files: [['two.gb', namedGenbank('TWO_A', 'Aeromonas hydrophila') + namedGenbank('TWO_B', 'Aeromonas caviae')]],
+    names: [['', '', 'Typed first', 'Typed subtitle'], ['', '', 'Typed first', 'Typed subtitle']] },
+  { kind: 'two-record GFF3 + FASTA files', gff: true,
+    files: [['two.gff3', `##gff-version 3\n${twoRecordGff}\n`], ['two.fasta', `>recA\n${'atg'.repeat(100)}\n>recB\n${'atg'.repeat(100)}\n`]],
+    names: [['', '', 'Typed first', 'Typed subtitle'], ['', '', 'Typed first', 'Typed subtitle']] }
+];
+for (const { kind, files, gff = false, names } of typedFirstUploads) {
+  test(`a name typed on an empty File card is kept after ${kind} is chosen`, async ({ page }) => {
+    test.setTimeout(240000);
+    await openApp(page);
+    await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    if (gff) await page.locator('input[type="radio"][value="gff"]:visible').check();
+    const card = page.locator('[data-linear-source-card]').first();
+    await page.getByLabel('Definition for sequence 1', { exact: true }).fill('Typed first');
+    await page.getByLabel('Subtitle / title for sequence 1', { exact: true }).fill('Typed subtitle');
+    await page.getByLabel('Subtitle / title for sequence 1', { exact: true }).press('Tab');
+    for (const [index, [name, content]] of files.entries()) {
+      await card.locator('input[type="file"]').nth(index).setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from(content) });
+    }
+    // A GenBank upload is read when every record has its inferred name; GFF3 + FASTA infer none.
+    await expect.poll(() => page.evaluate((isGff) => {
+      const seqs = window.__GBDRAW_APP__.linearSeqs;
+      return (isGff ? seqs.length > 1 : seqs.every((seq) => seq.inferred_definition)) ? seqs.length : 0;
+    }, gff), { timeout: 180000 }).toBe(names.length);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((seq) => (
+      [seq.definition, seq.record_subtitle, seq.file_definition, seq.file_subtitle])))).toEqual(names);
+    // The card shows the name where it now lives, and Generate draws it.
+    await expect(names.length > 1 ? page.getByLabel('Default definition for file 1', { exact: true })
+      : page.getByLabel('Definition for sequence 1', { exact: true })).toHaveValue('Typed first');
+    await page.evaluate(() => Object.assign(window.__GBDRAW_APP__.form, {
+      legend: 'none', show_gc: false, show_skew: false, show_labels_linear: 'none'
+    }));
+    await generateAndWaitForResult(page);
+    const drawn = await drawnDefinitionLines(page);
+    expect(drawn).toEqual(expect.arrayContaining(['Typed first', 'Typed subtitle']));
+    expect(drawn.filter((text) => text.includes('Aeromonas'))).toEqual([]);
+  });
+}
+
 // Unchanged behaviour: this case passes before and after the one-record change.
 test('a File with two records keeps its File names block and per-record names', async ({ page }) => {
   test.setTimeout(240000);

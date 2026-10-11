@@ -72,7 +72,9 @@ Uploading a GenBank file gives each of its records a **Definition** inferred
 from that record's own `/organism` and `/strain` qualifiers, so a File of
 several organisms shows each organism's name. The **Organism / strain** and
 **Subtitle / title** fields stay yours to fill: a subtitle names one replicon
-rather than the whole file. The prominent
+rather than the whole file. A name typed on an empty card is kept when its
+file is chosen: it stays the record's name for a one-record file and becomes
+the File-level name for a file with several records. The prominent
 **Add sequence** action appears below the Linear File list. A GenBank file may
 contain several biological records. GFF3 input requires the matching FASTA
 sequence and exact sequence-ID agreement. See [Input formats and TSV
