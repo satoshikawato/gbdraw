@@ -451,7 +451,7 @@
     },
     {
       "title": "Inspect a feature",
-      "body": "Click the RNR2 l-rRNA feature in the interactive SVG and open Details to inspect its label, record, feature type, and location.",
+      "body": "Click the RNR2 l-rRNA feature in the interactive SVG and open Details to inspect its feature type and length. The popup header gives the label, record, and location.",
       "operations": [
         {
           "media": {

@@ -551,13 +551,13 @@
   "postGenerationEdits": [
     {
       "title": "Inspect a CDS feature",
-      "body": "Click the DnaA CDS and open Details to inspect its label, record ID, feature type, location, gbdraw group ID, and protein ID.",
+      "body": "Click the DnaA CDS and open Details to inspect its feature type, length, and protein ID. The popup header gives the label, record ID, and location.",
       "operations": [
         {
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/post-01-01-feature-popup.webp",
-            "alt": "Highlighted DnaA CDS beside a compact Details popup with its AP027078.1 record ID, feature type, location, gbdraw group ID, and protein ID.",
-            "caption": "The Details tab identifies the DnaA CDS as a member of gbdraw group og_1 in AP027078.1."
+            "alt": "Highlighted DnaA CDS beside a Details popup with the AP027078.1 record ID and location in its header, then the feature type, length, and protein ID.",
+            "caption": "The Details tab lists the feature type, length, and protein ID of the DnaA CDS in AP027078.1."
           },
           "capture": {
             "source": "webapp",
@@ -591,11 +591,11 @@
               {"type": "wait", "ms": 250},
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.feature-popup'); const text = String(popup?.textContent || '').replace(/\\s+/g, ' ').toLowerCase(); for (const expected of ['chromosomal replication initiator protein dnaa', 'ap027078.1', 'cds', '101..1513 (+)', 'og_1', 'bdu67348.1']) { if (!text.includes(expected)) throw new Error(`Feature popup is missing: ${expected}`); } const labels = ['Record ID', 'Feature type', 'Location', 'Similarity group ID', 'Protein ID']; const detailRows = Array.from(popup?.querySelectorAll('.feature-popup-body .border-b') || []); const rows = labels.map((label) => detailRows.find((row) => row.firstElementChild?.textContent?.trim() === label)); if (rows.some((row) => !row)) throw new Error('Compact DnaA detail rows not found.'); popup.children[0]?.setAttribute('data-capture', 'dnaa-popup-header'); popup.children[1]?.setAttribute('data-capture', 'dnaa-popup-tabs'); rows.forEach((row, index) => row.setAttribute('data-capture', `dnaa-popup-row-${index + 1}`)); document.activeElement?.blur();"
+                "script": "const popup = document.querySelector('.feature-popup'); const text = String(popup?.textContent || '').replace(/\\s+/g, ' ').toLowerCase(); for (const expected of ['chromosomal replication initiator protein dnaa', 'ap027078.1', 'cds', '101..1,513 (+)', 'bdu67348.1']) { if (!text.includes(expected)) throw new Error(`Feature popup is missing: ${expected}`); } const details = popup?.querySelector('[data-feature-popup-details]'); if (!details) throw new Error('DnaA detail list not found.'); popup.children[0]?.setAttribute('data-capture', 'dnaa-popup-header'); popup.children[1]?.setAttribute('data-capture', 'dnaa-popup-tabs'); details.setAttribute('data-capture', 'dnaa-popup-details'); document.activeElement?.blur();"
               }
             ],
             "highlightSelector": "[data-gbdraw-stable-feature-id='fe826bac7']",
-            "clipSelectors": ["[data-capture='dnaa-popup-header']", "[data-capture='dnaa-popup-tabs']", "[data-capture^='dnaa-popup-row-']"],
+            "clipSelectors": ["[data-capture='dnaa-popup-header']", "[data-capture='dnaa-popup-tabs']", "[data-capture='dnaa-popup-details']"],
             "cropPadding": {
               "top": 18,
               "right": 180,
