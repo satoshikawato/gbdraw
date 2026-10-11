@@ -177,8 +177,11 @@ generation finishes.**
 A plain Session file larger than 200 MiB, or a gzip Session that expands beyond
 512 MiB, is rejected. Save needs browser gzip compression. Load needs Web
 Workers and, for `.gz` files, gzip decompression. A rejected or failed Save or
-Load shows an **Operation error** and keeps the current Result, settings, and
-Undo history.
+Load shows its error and keeps the current Result, settings, and Undo history.
+A file that is not a Session shows **Session not loaded** with the reason, for
+example that the file is not valid JSON. An error of one diagram mode is cleared
+when you switch to the other mode, except an error that names the other mode's
+Result.
 
 Before the first **Generate Diagram**, Save needs every input of the active
 mode, the same check that Generate uses; an empty card or a missing FASTA is
@@ -199,8 +202,11 @@ the configuration that a command-line Session stores.
 ### Operation errors and diagnostics
 
 A failed operation shows a short cause and correction or recovery action under
-its own heading, such as **Generation Error**, **Alignment error**, or an export
-error. The summary stays visible. **Details** is optional and initially closed;
+its own heading, such as **Generation Error**, **Alignment error**, **Session
+not loaded**, or an export error. When Generate fails, the error says once that
+the last successful Result is shown and the changes were not applied. A Linear
+comparison error offers **Show in Comparison**, which focuses the control of
+the first issue. The summary stays visible. **Details** is optional and initially closed;
 it can be opened with the keyboard. **Copy diagnostics** copies only the safe
 information displayed there, after an explicit action. If Clipboard access is
 unavailable or rejected, **Select diagnostics** selects the text for manual
@@ -208,7 +214,7 @@ copying; the cause and recovery controls stay available.
 
 Diagnostics contain a short failure code, the operation, the stage where the
 failure is known to have happened, and allowed context such as the field, table
-row, or Python character position. They also report any failure while cleaning
+row, or character position. They also report any failure while cleaning
 up. The summary names the location it knows: **Sequence N**,
 **Line N**, **Track row N**, **Depth series N**, the setting path, or the
 available radial band in px for a Circular track that does not fit. The panel
@@ -221,6 +227,11 @@ the same inputs fail the same way. Original patterns, sequences, file or record
 names, paths, SVG, raw exception text, traceback, stdout and stderr are excluded
 from diagnostics and automatic console output. A saved Session can contain
 private inputs, so share one only deliberately.
+
+While Generate runs, the status line names its stage. The first Generate of a
+page also prepares the diagram runtime and shows each preparation step as it
+starts, for example **Preparing diagram runtime (first use): step 4 of 5,
+installing packages...**; it is a step count, not a time estimate.
 
 After a failed Generate, the message tells you which case applies: no successful
 Result yet, the previous Result unchanged, the rollback completed, or the
@@ -590,27 +601,39 @@ select **LOSATN**, **LOSATP**, or **TLOSATX**. When **LOSATP** is active,
 the **LOSATP mode** menu selects
 **Similarity groups**, **Collinear blocks**, or **Pairwise matches**. Selected
 or mixed pair plans allow LOSATN, TLOSATX, and LOSATP Pairwise matches.
-Similarity groups and Collinear blocks require all-adjacent LOSAT; **Use all
-adjacent LOSAT** changes the topology only after an explicit selection.
+Similarity groups and Collinear blocks require all-adjacent LOSAT; with
+selected pairs those options read **(all pairs only)** and cannot be chosen.
+
+Problems in the pair plan appear once, in the **Fix before Generate** list under
+the Comparison commands. Each entry names its cause and offers the action that
+fixes it: **Choose file** or **Show pair** focuses the pair, **Run LOSAT for all
+pairs** returns to all-adjacent LOSAT, and **Use Pairwise matches** switches the
+LOSATP mode. A pair with a problem is also marked in its row.
 
 Open the initially closed **Selected pairs (N)** disclosure to change a pair's
-source, bind an uploaded table, omit a pair, or add a non-adjacent pair. Pair
-editors are not inserted between record cards. An uploaded edge participates
-only when it has an active file; an omitted edge draws no link and starts no
-search. When **Generate Diagram** finds pairs set to **Upload BLAST TSV**
-without a file, the **BLAST TSV missing** dialog lists them: **Choose BLAST TSV
-for #i → #j…** opens the first pair's file chooser (then select **Generate
-Diagram** again), and **Set to No comparison and Generate** sets every listed
-pair to **No comparison** as one undoable step and generates. Any other problem
-in the pair plan is reported as an error instead.
+source, bind an uploaded table, omit a pair, or add a non-adjacent pair. Each
+pair is one row: its records, a three-way **No comparison** / **Run LOSAT** /
+**Upload BLAST TSV** choice, the file chooser for an uploaded table, and, for a
+LOSAT pair whose raw result is kept, **Save Raw LOSAT TSV**. **File name** opens
+the pair's **Raw LOSAT filename**. Rows between the same two display rows are
+grouped under **Rows i–j** only when there is more than one pair. Pair editors
+are not inserted between record cards. An uploaded edge participates only when
+it has an active file; an omitted edge draws no link and starts no search. When
+**Generate Diagram** finds pairs set to **Upload BLAST TSV** without a file, the
+**BLAST TSV missing** dialog lists one row per pair with its own **Choose
+file…**. When every pair has a file, **Generate** runs. **Skip these
+comparisons and Generate** sets the pairs still without a file to **No
+comparison** as one undoable step and generates. Any other problem in the pair
+plan is reported as an error instead.
 
 **Settings** shows only controls used by the active LOSAT program and, for
 LOSATP, its presentation. LOSATN shows **LOSATN task**. TLOSATX keeps each record's
 active genetic code in that record's **Record options**. LOSATP **Pairwise
 matches** shows **Max hits per protein**; **Similarity groups** shows **Member
 hits per protein**; **Collinear blocks** shows its primary block, scope, and
-color controls. **Max target seqs** is visible in **Settings** for every LOSATP
-mode and controls the raw search limit. Both it and **Member hits per protein**
+color controls. **Result filters** and **Comparison appearance** follow, then
+**Search limits** and **Performance**. **Max target seqs** is visible under
+**Search limits** for every LOSATP mode and controls the raw search limit. Both it and **Member hits per protein**
 initially use `5` in Collinear and are unbounded in Similarity groups. Each mode
 remembers its own edited values. Blank means unbounded.
 
@@ -636,10 +659,9 @@ that value. **Evidence scope** controls how far the search expands, not which re
 pairs get displayed links.
 
 **Advanced comparison and layout** is closed by default. It holds **Record Layout**, cache controls,
-and advanced Collinear search details. Its **Raw LOSAT results** section
-groups each pair's filename, whether its raw result is kept, and its **Save Raw LOSAT
-TSV** action. LOSAT **Execution** and thread allocation are in **Settings**
-under **Runtime and reproducibility**. Closing any of these disclosures does
+and advanced Collinear search details. Each pair's raw result file is in its
+**Selected pairs** row. LOSAT **Execution** and thread allocation are in
+**Settings** under **Performance**. Closing any of these disclosures does
 not disable comparison work or discard its values.
 
 TLOSATX translates each sequence with its selected genetic code. In Linear
@@ -1183,7 +1205,7 @@ Python matching semantics for live preparation and Generate. This differs from
 Feature Search and Interactive SVG search. TSV columns and pattern semantics
 are specified in [Input formats and TSV schemas](input-formats-and-tsv-schemas.md#styling-tables).
 
-A rejected edit to an existing Color rule's pattern stays visible in that field as **Not applied**, with its cause and **Retry** / **Revert** controls.
+A rejected edit to an existing Color rule's pattern stays visible in that field as **Not applied**, with its cause under the field, **Revert**, and **Copy details for a bug report**. **Retry** is offered when the failure was not in the pattern itself. A syntax error names the character position counted from one.
 The displayed text is a temporary draft; the accepted rule, Result and History
 remain unchanged. Syntax errors are distinguished from runtime initialization
 or preparation failures. Correcting the text and applying it, or a successful

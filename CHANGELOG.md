@@ -12,6 +12,22 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Web Comparison card (Linear): **Settings** lists the mode, the result filters
+  and the appearance first, then **Search limits** and **Performance** (formerly
+  **Runtime and reproducibility**). **Selected pairs** shows each pair as one row
+  with its source, file, problem and **Save Raw LOSAT TSV**; the separate **Raw
+  LOSAT results** list in **Advanced comparison and layout** is gone. Pair-plan
+  problems appear once, in a **Fix before Generate** list with an action each.
+- Web errors appear once, at their cause: a failed Generate no longer repeats the
+  "last successful result" notice, a Linear comparison error offers **Show in
+  Comparison**, an invalid colour-rule pattern shows its cause under the field,
+  and a file that is not a Session shows **Session not loaded** with the reason.
+- **BLAST TSV missing** lists one row per pair with its own **Choose file…**,
+  then **Generate** or **Skip these comparisons and Generate**.
+- The first Generate shows each runtime preparation step ("step 2 of 5, ...").
+- Fixed: a Session load error raised in Circular stayed on screen after switching
+  to Linear (OV-372).
+
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
 - Added circular-record display-start rotation and manual feature lane placement.
