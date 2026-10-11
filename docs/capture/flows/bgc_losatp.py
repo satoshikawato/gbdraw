@@ -30,8 +30,10 @@ from flows.web_capture import (
     capture_screenshot,
     fit_complete_linear_preview,
     generate_and_inspect,
+    linear_raw_result,
     open_browser_capture,
     open_linear_comparison_disclosure,
+    open_linear_raw_filename,
     select_linear_losat_mode,
     set_feature_search_visible,
     wait_for_app_shell,
@@ -869,21 +871,27 @@ def capture_bgc_losatp(
         else:
             fit_complete_linear_preview(page, target_zoom="40%")
         if scenario_id == "H-GUI-07":
-            raw_result = advanced.locator('[data-linear-raw-result]').first
+            # Save Raw LOSAT TSV appears in the pair row once the result is cached.
+            raw_result = linear_raw_result(page, 1, 2)
             raw_result.evaluate(
                 "(element) => element.scrollIntoView({ block: 'center' })"
             )
-            expect(raw_result).to_contain_text("Raw result ready")
+            expect(
+                raw_result.get_by_role(
+                    "button", name="Save Raw LOSAT TSV for #1 to #2", exact=True
+                )
+            ).to_be_visible()
         name = screenshot_names["result"]
         screenshot_bytes[name] = capture_screenshot(
             page, output_paths[name], "Linear"
         )
 
         if raw_tsv_name is not None:
-            raw_name = advanced.get_by_role(
+            raw_result = linear_raw_result(page, 1, 2)
+            raw_name = open_linear_raw_filename(raw_result).get_by_role(
                 "textbox", name="Raw LOSAT filename for #1 to #2", exact=True
             )
-            raw_button = advanced.get_by_role(
+            raw_button = raw_result.get_by_role(
                 "button", name="Save Raw LOSAT TSV for #1 to #2", exact=True
             )
             expect(raw_button).to_be_enabled()

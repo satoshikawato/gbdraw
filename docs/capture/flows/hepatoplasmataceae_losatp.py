@@ -209,7 +209,7 @@ def _configure_all_record_collinear(
     )
     final_boundary = selected_pairs.get_by_role(
         "region",
-        name="Comparison boundary from display row 4 to 5",
+        name="Pairs between rows 4 and 5",
         exact=True,
     )
     expect(final_boundary).to_be_visible()
