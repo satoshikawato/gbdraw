@@ -1405,9 +1405,16 @@ export const createFeatureLabelActions = ({
         ))
       });
       if (state.sessionOperationAvailability?.()) return state.sessionOperationAvailability();
-      if (revision !== labelImportRevision || labelIntent !== labelIntentSignature(drawing)
-        || input.files?.[0] !== file || !rulePreparation.isCurrent(before)
+      if (revision !== labelImportRevision || input.files?.[0] !== file
         || (svgContainer.value?.querySelector('svg') || null) !== sourceSvg) return;
+      // OV-447 (Owner 2026-10-11): an edit of the label intent made while the
+      // table was evaluated stays; the load is declined and says so.
+      if (labelIntent !== labelIntentSignature(drawing)) {
+        window.alert(`Loaded ${rows.length} row(s). Not applied: a label or feature visibility edit was made while the `
+          + 'table loaded. The edit was kept. Load the table again.');
+        return;
+      }
+      if (!rulePreparation.isCurrent(before)) return;
       if (!svg) {
         window.alert(`Loaded ${rows.length} row(s). No diagram is currently displayed.`);
         return;
