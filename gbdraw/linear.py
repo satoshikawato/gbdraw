@@ -66,9 +66,14 @@ from .analysis.protein_colinearity import (
 )
 from .config.modify import modify_config_dict
 from .config.models.objects import normalize_pairwise_match_style
+from .config.models.canvas import linear_axis_ruler_applies
 from .features.shapes import parse_feature_shape_overrides
 from .exceptions import ValidationError
-from .mode_profiles import ComparisonThresholds, LINEAR_MODE_PROFILE
+from .mode_profiles import (
+    ComparisonThresholds,
+    LINEAR_MODE_PROFILE,
+    resolve_mode_profile_overrides,
+)
 from .tracks import (
     linear_track_slots_from_order,
     normalize_linear_track_slots_with_axis,
@@ -1405,24 +1410,13 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             "WARNING: --ruler_on_axis is ignored when --hide_scale is set."
         )
         ruler_on_axis = False
-    elif ruler_on_axis and not (scale_style == "ruler" and track_layout in {"above", "below"}):
+    elif ruler_on_axis and not linear_axis_ruler_applies(
+        show_scale=show_scale, scale_style=scale_style, track_layout=track_layout
+    ):
         logger.warning(
             "WARNING: --ruler_on_axis is ignored unless --scale_style ruler and --track_layout above|below are set."
         )
         ruler_on_axis = False
-    axis_stroke_color: str = (
-        args.axis_stroke_color
-        if args.axis_stroke_color is not None
-        else (
-            LINEAR_MODE_PROFILE.linear_ruler_axis_color or "dimgray"
-            if ruler_on_axis
-            else LINEAR_MODE_PROFILE.linear_axis_color or "lightgray"
-        )
-    )
-    if ruler_on_axis and scale_stroke_color is None:
-        scale_stroke_color = axis_stroke_color
-    if ruler_on_axis and scale_label_color is None:
-        scale_label_color = axis_stroke_color
     axis_stroke_width: Optional[float] = args.axis_stroke_width
     line_stroke_color: Optional[str] = args.line_stroke_color
     line_stroke_width: Optional[float] = args.line_stroke_width
@@ -1444,7 +1438,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "objects.features.block_stroke_color": block_stroke_color,
         "objects.features.arrow_geometry.head_length_ratio": arrow_head_length_ratio,
         "objects.features.arrow_geometry.shaft_width_ratio": arrow_shaft_width_ratio,
-        "objects.axis.linear.stroke_color": axis_stroke_color,
+        "objects.axis.linear.stroke_color": args.axis_stroke_color,
         "objects.definition.linear.show_replicon": definition_show_replicon,
         "objects.definition.linear.show_accession": definition_show_accession,
         "objects.definition.linear.show_length": definition_show_length,
@@ -1552,13 +1546,18 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "objects.legends.font_size.long",
     ):
         override_candidates[size_path] = legend_font_size
+    # The Linear profile supplies the auto axis color, and the override owner
+    # derives unset ruler colors from it, as for API and Web requests.
     config_dict = modify_config_dict(
         config_dict,
-        {
-            path: value
-            for path, value in override_candidates.items()
-            if value is not None
-        },
+        resolve_mode_profile_overrides(
+            "linear",
+            {
+                path: value
+                for path, value in override_candidates.items()
+                if value is not None
+            },
+        ),
     )
 
     if args.records_table:

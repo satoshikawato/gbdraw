@@ -129,6 +129,14 @@ export const managedAdvStateForMode = (mode) => ({
 
 const managedStateForMode = (mode) => ({ ...managedAdvStateForMode(mode), plot_title: '' });
 
+// Whether Ruler on Axis can draw; otherwise the flag is ignored, as in
+// `linear_axis_ruler_applies` (gbdraw/config/models/canvas.py).
+export const linearAxisRulerApplies = (form) => (
+  form.show_scale !== false &&
+  form.scale_style === 'ruler' &&
+  ['above', 'below'].includes(form.linear_track_layout)
+);
+
 export const effectiveLinearAxisColor = ({
   axisColor = null,
   rulerOnAxis = false,

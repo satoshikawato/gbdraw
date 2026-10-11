@@ -16,6 +16,7 @@ from typing import Any, Literal, Mapping, Union, cast, get_args, get_origin, get
 from gbdraw.exceptions import ValidationError
 
 from .models import GbdrawConfig
+from .models.canvas import linear_axis_ruler_applies
 from .models.objects import circular_definition_interval_for_font
 from .models.root import validate_style_leaf
 
@@ -23,6 +24,9 @@ from .models.root import validate_style_leaf
 _UNSAFE_CONFIG_KEYS = frozenset({"__proto__", "constructor", "prototype"})
 _CIRCULAR_DEFINITION_FONT = "objects.definition.circular.font_size"
 _CIRCULAR_DEFINITION_INTERVAL = "objects.definition.circular.interval"
+_LINEAR_RULER_ON_AXIS = "canvas.linear.ruler_on_axis"
+_LINEAR_AXIS_COLOR = "objects.axis.linear.stroke_color"
+_AXIS_RULER_COLORS = ("objects.scale.stroke_color", "objects.scale.label_color")
 
 
 def _assert_safe_config_value(value: object, *, path: str) -> None:
@@ -358,7 +362,29 @@ def _apply_validated_config_overrides(
     validated.sort(key=lambda item: item[0] != "labels.filtering.raw")
     for path, value in validated:
         _set_raw_config_path(updated, path, value)
+
+    # Ruler ticks and labels drawn on the Linear axis follow the axis color
+    # unless the same overrides set them (the documented CLI contract). Like
+    # the interval above, this is the one rule for the CLI, API, and Web.
+    if dict(validated).get(_LINEAR_RULER_ON_AXIS) is True and linear_axis_ruler_applies(
+        show_scale=_raw_config_value(updated, "objects.scale.show"),
+        scale_style=_raw_config_value(updated, "objects.scale.style"),
+        track_layout=_raw_config_value(updated, "canvas.linear.track_layout"),
+    ):
+        axis_color = _raw_config_value(updated, _LINEAR_AXIS_COLOR)
+        for path in _AXIS_RULER_COLORS:
+            if path not in paths and axis_color is not None:
+                _set_raw_config_path(updated, path, axis_color)
     return updated
+
+
+def _raw_config_value(raw_config: Mapping[str, Any], path: str) -> object:
+    value: object = raw_config
+    for key in path.split("."):
+        if not isinstance(value, MappingABC):
+            return None
+        value = value.get(key)
+    return value
 
 
 def modify_config_dict(

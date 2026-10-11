@@ -22,6 +22,20 @@ def _positive_finite_float(value: Any, *, field_name: str) -> float:
     return parsed
 
 
+def linear_axis_ruler_applies(
+    *,
+    show_scale: object,
+    scale_style: object,
+    track_layout: object,
+) -> bool:
+    """Whether ``ruler_on_axis`` can draw: a shown ruler scale, tracks above or below."""
+    return (
+        bool(show_scale)
+        and str(scale_style).strip().lower() == "ruler"
+        and str(track_layout).strip().lower() in {"above", "below"}
+    )
+
+
 def validate_feature_overlap_tolerance(value: Any) -> int:
     """The shared bp tolerance is a nonnegative integer, never a boolean."""
     if isinstance(value, bool) or not isinstance(value, Integral) or value < 0:
@@ -233,4 +247,5 @@ __all__ = [
     "CircularCanvasConfig",
     "LinearCanvasConfig",
     "LinearTrackLayoutMode",
+    "linear_axis_ruler_applies",
 ]
