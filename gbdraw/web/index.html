@@ -754,7 +754,7 @@
             padding: 0 7px;
         }
         .preview-feature-search .gfs-query {
-            flex: 1 1 126px;
+            flex: 1 1 110px;
         }
         .preview-feature-search .gfs-select {
             flex: 0 0 104px;
@@ -762,9 +762,6 @@
         }
         .preview-feature-search .gfs-qualifier {
             flex: 1 1 104px;
-        }
-        .preview-feature-search .gfs-qualifier:disabled {
-            opacity: 0.48;
         }
         .preview-feature-search .gfs-toggle {
             display: inline-flex;
@@ -836,9 +833,9 @@
             min-width: 0;
             margin-top: 5px;
             overflow: hidden;
-            color: #64748b;
-            font-size: 10px;
-            line-height: 1.2;
+            color: #334155;
+            font-size: 12px;
+            line-height: 1.3;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
@@ -1529,6 +1526,14 @@
             .app-notice > i { @apply mt-0.5 shrink-0 text-sm; }
             .app-notice.is-info { @apply border-blue-200 bg-blue-50 text-blue-900; }
             .app-notice.is-warning { @apply border-amber-200 bg-amber-50 text-amber-900; }
+            /* UX-A05: a choice dialog shows one primary option; the others share one secondary style. */
+            .choice-option { @apply flex w-full items-start gap-2 rounded-lg border px-4 py-2 text-left text-sm font-bold transition-colors; color: var(--ui-text-2); background-color: var(--ui-surface); border-color: var(--ui-line-strong); }
+            .choice-option:hover { @apply bg-slate-50; }
+            .choice-option > i { @apply mt-0.5 shrink-0 text-lg; }
+            .choice-option.is-primary { @apply border-transparent text-white hover:bg-blue-700; background-color: var(--ui-accent); }
+            .choice-option-note { @apply -mt-1 px-1 text-xs font-normal text-slate-600; }
+            .choice-group-label { @apply mt-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500; }
+            .choice-cancel { @apply mt-3 w-full px-4 py-2 text-sm font-medium text-slate-500 hover:text-slate-700; }
             .app-notice-dismiss { @apply -my-1 -mr-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded hover:bg-white/70; }
             .btn-icon-sm { @apply inline-flex h-6 w-6 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed; }
             .app-config-button { @apply flex items-center gap-0.5 rounded border px-1 py-0.5 font-bold whitespace-nowrap transition-colors; font-size: 11px; color: #475569; background-color: var(--ui-surface); border-color: var(--ui-line); }
@@ -5203,7 +5208,7 @@
                     </div>
                     <span id="session-export-help" class="sr-only">Save stores the current Result and settings draft. Export outputs the current Result. Neither applies pending settings.</span>
                     <div v-if="resultPanelTab === 'preview'" class="preview-toolbar flex gap-x-2 gap-y-1 items-center flex-wrap mr-2" aria-describedby="session-export-help">
-                        <p id="preview-layout-help" class="basis-full text-xs text-slate-600">Turn on Layout edit to move a legend, title, or Linear scale. When off, drag to pan. Use the Layout edit button with click, tap, Space, or Enter.</p>
+                        <p id="preview-layout-help" class="sr-only">Turn on Layout edit to move a legend, title, or Linear scale. When off, drag to pan. Use the Layout edit button with click, tap, Space, or Enter.</p>
                         <div class="flex items-center gap-2 bg-white px-3 py-1 rounded border border-slate-300">
                             <span class="text-sm font-bold text-slate-700">DPI</span>
                             <select v-model="downloadDpi" aria-label="PNG DPI" class="text-sm bg-transparent border-none focus:ring-0 p-0 text-slate-600 font-mono outline-none cursor-pointer">
@@ -5317,6 +5322,18 @@
                                     {{ field.label }}
                                 </option>
                             </select>
+                            <input v-if="previewFeatureSearchQualifierEnabled"
+                                   type="text"
+                                   v-model="previewFeatureSearchQualifierKey"
+                                   data-history-ignore
+                                   @keydown.enter.prevent="applyPreviewFeatureSearch"
+                                   class="gfs-input gfs-qualifier"
+                                   placeholder="Qualifier key"
+                                   aria-label="Qualifier key">
+                            <label class="gfs-toggle" title="Search with a JavaScript regular expression; upper and lower case match alike.">
+                                <input type="checkbox" v-model="previewFeatureSearchUseRegex" data-history-ignore>
+                                <span>Regular expression</span>
+                            </label>
                             <button type="button"
                                     @click.stop="applyPreviewFeatureSearch"
                                     :disabled="!previewFeatureSearchCanSearch"
@@ -5325,21 +5342,6 @@
                                     aria-label="Search features">
                                 Search
                             </button>
-                        </div>
-                        <div class="gfs-row">
-                            <input v-if="richFeaturePopup !== false"
-                                   type="text"
-                                   v-model="previewFeatureSearchQualifierKey"
-                                   data-history-ignore
-                                   @keydown.enter.prevent="applyPreviewFeatureSearch"
-                                   :disabled="!previewFeatureSearchQualifierEnabled"
-                                   class="gfs-input gfs-qualifier"
-                                   placeholder="Qualifier key"
-                                   aria-label="Qualifier key">
-                            <label class="gfs-toggle">
-                                <input type="checkbox" v-model="previewFeatureSearchUseRegex" data-history-ignore>
-                                <span title="JavaScript regular expression, case-insensitive. Turn off Regex to return to word search.">Regex (JavaScript, i)</span>
-                            </label>
                             <button type="button"
                                     @click.stop="goToPreviousPreviewFeatureSearchMatch"
                                     data-history-ignore
@@ -5369,7 +5371,7 @@
                                     aria-label="Clear search">Clear</button>
                             <span class="gfs-count" role="status" aria-label="Feature search status">{{ previewFeatureSearchStatusText }}</span>
                         </div>
-                        <div class="gfs-match-detail" :title="previewFeatureSearchActiveDetail">
+                        <div v-if="previewFeatureSearchActiveDetail" class="gfs-match-detail" :title="previewFeatureSearchActiveDetail">
                             {{ previewFeatureSearchActiveDetail }}
                         </div>
                     </div>
@@ -5515,7 +5517,7 @@
 
                     <!-- Canvas padding controls panel -->
                     <div v-if="showCanvasControls && svgContent"
-                         class="preview-canvas-padding absolute bottom-20 left-1/2 -translate-x-1/2 bg-white shadow-lg rounded-lg p-3 z-20 border border-slate-200 w-48">
+                         class="preview-canvas-padding absolute bottom-20 left-1/2 -translate-x-1/2 bg-white shadow-lg rounded-lg p-3 z-20 border border-slate-200 w-56">
                         <div class="flex items-center justify-between mb-2">
                             <span class="text-xs font-bold text-slate-700">Canvas Padding</span>
                             <button @click="resetCanvasPadding" class="text-[10px] text-blue-600 hover:text-blue-800" :disabled="!semanticMutationAvailable">Reset</button>
@@ -5523,29 +5525,29 @@
                         <div class="grid grid-cols-3 gap-1 text-center">
                             <div></div>
                             <div>
-                                <label class="text-[9px] text-slate-500 block">Top</label>
-                                <input type="number" v-model.number="canvasPadding.top" step="10" class="w-full text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable">
+                                <label for="canvas-padding-top" class="text-[10px] text-slate-500 block">Top</label>
+                                <span class="flex items-center gap-0.5"><input id="canvas-padding-top" type="number" v-model.number="canvasPadding.top" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
                             </div>
                             <div></div>
                             <div>
-                                <label class="text-[9px] text-slate-500 block">Left</label>
-                                <input type="number" v-model.number="canvasPadding.left" step="10" class="w-full text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable">
+                                <label for="canvas-padding-left" class="text-[10px] text-slate-500 block">Left</label>
+                                <span class="flex items-center gap-0.5"><input id="canvas-padding-left" type="number" v-model.number="canvasPadding.left" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
                             </div>
                             <div class="flex items-center justify-center">
                                 <i class="ph ph-selection-background text-slate-300 text-lg" aria-hidden="true"></i>
                             </div>
                             <div>
-                                <label class="text-[9px] text-slate-500 block">Right</label>
-                                <input type="number" v-model.number="canvasPadding.right" step="10" class="w-full text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable">
+                                <label for="canvas-padding-right" class="text-[10px] text-slate-500 block">Right</label>
+                                <span class="flex items-center gap-0.5"><input id="canvas-padding-right" type="number" v-model.number="canvasPadding.right" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
                             </div>
                             <div></div>
                             <div>
-                                <label class="text-[9px] text-slate-500 block">Bottom</label>
-                                <input type="number" v-model.number="canvasPadding.bottom" step="10" class="w-full text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable">
+                                <label for="canvas-padding-bottom" class="text-[10px] text-slate-500 block">Bottom</label>
+                                <span class="flex items-center gap-0.5"><input id="canvas-padding-bottom" type="number" v-model.number="canvasPadding.bottom" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
                             </div>
                             <div></div>
                         </div>
-                        <p class="ui-hint mt-2 text-center">Add space around the diagram</p>
+                        <p class="ui-hint mt-2 text-center">Space around the diagram, in pixels</p>
                     </div>
 
                     <div class="preview-canvas absolute inset-0 overflow-auto flex p-2 custom-scrollbar"
@@ -6415,59 +6417,59 @@
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
                             <h3 id="feature-visibility-scope-title" class="text-lg font-bold text-slate-800 mb-2">Feature Visibility Scope</h3>
                             <p id="feature-visibility-scope-description" class="text-sm text-slate-600 mb-4">
-                                Choose how to apply this visibility mode.
+                                Apply this visibility to:
                             </p>
                             <div class="flex flex-col gap-2">
-                                <button v-for="scope in featureVisibilityScopeDialog.scopes"
+                                <button v-for="(scope, index) in featureVisibilityScopeDialog.scopes"
                                         :key="`feature-visibility-scope-${scope.id}`"
                                         @click="handleFeatureVisibilityScopeChoice(scope.id)"
                                         data-history-managed
-                                        class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left flex items-start gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-funnel text-lg mt-0.5" aria-hidden="true"></i>
+                                        :class="['choice-option', { 'is-primary': index === 0 }]" :disabled="!semanticMutationAvailable">
+                                    <i class="ph ph-funnel" aria-hidden="true"></i>
                                     <span class="min-w-0">
                                         <span class="block truncate">{{ scope.label }}</span>
-                                        <span class="block text-[11px] font-normal text-slate-500">{{ scope.description }}</span>
+                                        <span class="block text-xs font-normal opacity-80">{{ scope.description }}</span>
                                     </span>
                                 </button>
                             </div>
                             <button @click="handleFeatureVisibilityScopeChoice('cancel')"
                                     data-history-managed
-                                    class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium" :disabled="!semanticMutationAvailable">
+                                    class="choice-cancel" :disabled="!semanticMutationAvailable">
                                 Cancel
                             </button>
                     </choice-dialog>
 
-                    <!-- Label Text Scope Dialog -->
+                    <!-- Label Text Scope Dialog (UX-A09) -->
                     <choice-dialog v-if="labelTextScopeDialog.show" labelledby="label-text-scope-title" describedby="label-text-scope-description"
                          @cancel="handleLabelTextScopeChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
                             <h3 id="label-text-scope-title" class="text-lg font-bold text-slate-800 mb-2">Label Text Scope</h3>
                             <p id="label-text-scope-description" class="text-sm text-slate-600 mb-4">
-                                Choose how to apply the label text change for "<span class="font-mono text-slate-700">{{ labelTextScopeDialog.sourceText }}</span>".
+                                Change "<span class="font-semibold text-slate-800">{{ labelTextScopeDialog.sourceText }}</span>" to "<span class="font-semibold text-slate-800">{{ labelTextScopeDialog.newText }}</span>"?
                             </p>
 
                             <div class="flex flex-col gap-2">
                                 <button @click="handleLabelTextScopeChoice('single')"
                                         data-history-managed
-                                        class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-user text-lg" aria-hidden="true"></i>
+                                        :aria-describedby="labelTextScopeDialog.featureId ? null : 'label-text-scope-single-note'"
+                                        class="choice-option is-primary" :disabled="!semanticMutationAvailable">
+                                    <i class="ph ph-user" aria-hidden="true"></i>
                                     <span>This label only</span>
                                 </button>
+                                <p v-if="!labelTextScopeDialog.featureId" id="label-text-scope-single-note" class="choice-option-note">
+                                    Lost when you Generate again.
+                                </p>
                                 <button @click="handleLabelTextScopeChoice('all')"
                                         data-history-managed
-                                        class="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-users text-lg" aria-hidden="true"></i>
-                                    <span>All matching source labels ({{ labelTextScopeDialog.matchingCount }})</span>
+                                        class="choice-option" :disabled="!semanticMutationAvailable">
+                                    <i class="ph ph-users" aria-hidden="true"></i>
+                                    <span>All {{ labelTextScopeDialog.matchingCount }} labels reading "{{ labelTextScopeDialog.sourceText }}"</span>
                                 </button>
                             </div>
 
-                            <p v-if="!labelTextScopeDialog.featureId" class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mt-3">
-                                This label is not linked to a feature ID. "This label only" is applied to the current SVG but may not persist after re-generate.
-                            </p>
-
                             <button @click="handleLabelTextScopeChoice('cancel')"
                                     data-history-managed
-                                    class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium" :disabled="!semanticMutationAvailable">
+                                    class="choice-cancel" :disabled="!semanticMutationAvailable">
                                 Cancel
                             </button>
                     </choice-dialog>
@@ -6483,25 +6485,25 @@
                             <div class="flex flex-col gap-2">
                                 <button @click="handleHiddenLabelTextChoice('show')"
                                         data-history-managed
-                                        class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-eye text-lg" aria-hidden="true"></i>
+                                        class="choice-option is-primary" :disabled="!semanticMutationAvailable">
+                                    <i class="ph ph-eye" aria-hidden="true"></i>
                                     <span>Show this label</span>
                                 </button>
                                 <button @click="handleHiddenLabelTextChoice('text_only')"
                                         data-history-managed
-                                        class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-eye-slash text-lg" aria-hidden="true"></i>
+                                        class="choice-option" :disabled="!semanticMutationAvailable">
+                                    <i class="ph ph-eye-slash" aria-hidden="true"></i>
                                     <span>Keep hidden (apply text only)</span>
                                 </button>
                             </div>
                             <button @click="handleHiddenLabelTextChoice('cancel')"
                                     data-history-managed
-                                    class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium" :disabled="!semanticMutationAvailable">
+                                    class="choice-cancel" :disabled="!semanticMutationAvailable">
                                 Cancel
                             </button>
                     </choice-dialog>
 
-                    <!-- Label Visibility On Dialog: Owner decisions Q1 and Q2 (2026-10-04) -->
+                    <!-- Label Visibility On Dialog: Owner decisions Q1 and Q2 (2026-10-04); wording UX-A02 -->
                     <choice-dialog v-if="labelOnDialog.show" labelledby="label-on-dialog-title" describedby="label-on-dialog-description"
                          @cancel="handleLabelOnChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center">
@@ -6509,86 +6511,83 @@
                                 {{ labelOnDialog.reason === 'hidden' ? 'Feature Is Hidden' : (labelOnDialog.reason === 'underlay' ? 'Label Cannot Be Drawn' : 'Label Does Not Fit') }}
                             </h3>
                             <p id="label-on-dialog-description" class="text-sm text-slate-600 mb-4">
-                                <template v-if="labelOnDialog.reason === 'hidden'">
-                                    This feature is hidden, so its label is not drawn. "Show feature and label" sets this feature's "Feature visibility" and "Label visibility" to "On". "Keep feature hidden" saves "Label visibility" "On", which applies when the feature is shown.
-                                </template>
-                                <template v-else-if="labelOnDialog.reason === 'underlay'">
-                                    Labels are not drawn for features drawn as "Underlay" (<span class="font-mono">{{ labelOnDialog.featureType }}</span> in "Feature Types"). "Keep without label" saves "Label visibility" "On", which applies when the label can be drawn, for example after you choose another rendering for this feature type.
-                                </template>
-                                <template v-else>
-                                    With "Label Rendering" = "Embedded Only", a label is drawn only inside its feature, and this label does not fit. "Keep without label" saves "Label visibility" "On", which applies when the label can be drawn. "Cancel" restores the previous label settings.
-                                </template>
+                                <template v-if="labelOnDialog.reason === 'hidden'">This feature is hidden, so its label cannot be drawn.</template>
+                                <template v-else-if="labelOnDialog.reason === 'underlay'">Labels are not drawn on <span class="font-semibold">{{ labelOnDialog.featureType }}</span> features, because Feature Types draws them as Underlay.</template>
+                                <template v-else>This label does not fit inside its feature, and Label Rendering draws labels only inside features.</template>
                             </p>
                             <div class="flex flex-col gap-2">
                                 <template v-if="labelOnDialog.reason === 'hidden'">
                                     <button @click="handleLabelOnChoice('show')"
                                             data-history-managed
-                                            class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                        <i class="ph ph-eye text-lg" aria-hidden="true"></i>
+                                            class="choice-option is-primary" :disabled="!semanticMutationAvailable">
+                                        <i class="ph ph-eye" aria-hidden="true"></i>
                                         <span>Show feature and label</span>
                                     </button>
                                     <button @click="handleLabelOnChoice('keep')"
                                             data-history-managed
-                                            class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                        <i class="ph ph-eye-slash text-lg" aria-hidden="true"></i>
+                                            aria-describedby="label-on-keep-note"
+                                            class="choice-option" :disabled="!semanticMutationAvailable">
+                                        <i class="ph ph-eye-slash" aria-hidden="true"></i>
                                         <span>Keep feature hidden</span>
                                     </button>
+                                    <p id="label-on-keep-note" class="choice-option-note">Its label shows when you show the feature.</p>
                                 </template>
-                                <button v-else @click="handleLabelOnChoice('keep')"
-                                        data-history-managed
-                                        class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-tag text-lg" aria-hidden="true"></i>
-                                    <span>Keep without label</span>
-                                </button>
+                                <template v-else>
+                                    <button @click="handleLabelOnChoice('keep')"
+                                            data-history-managed
+                                            aria-describedby="label-on-keep-note"
+                                            class="choice-option is-primary" :disabled="!semanticMutationAvailable">
+                                        <i class="ph ph-tag" aria-hidden="true"></i>
+                                        <span>Keep Label On</span>
+                                    </button>
+                                    <p id="label-on-keep-note" class="choice-option-note">
+                                        {{ labelOnDialog.reason === 'underlay' ? 'The label shows if you draw this feature type another way.' : 'The label shows when it fits.' }}
+                                    </p>
+                                </template>
                             </div>
                             <button @click="handleLabelOnChoice('cancel')"
                                     data-history-managed
-                                    class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium" :disabled="!semanticMutationAvailable">
+                                    class="choice-cancel" :disabled="!semanticMutationAvailable">
                                 Cancel
                             </button>
                     </choice-dialog>
 
-                    <!-- Feature Style Scope Dialog -->
-                    <choice-dialog v-if="featureStyleScopeDialog.show" :busy="dialogChoicePending" labelledby="feature-style-scope-title" describedby="feature-style-scope-description"
+                    <!-- Feature Style Scope Dialog (UX-A05): the narrow scope first, the shared scopes grouped -->
+                    <choice-dialog v-if="featureStyleScopeDialog.show" :busy="dialogChoicePending" labelledby="feature-style-scope-title"
                          @cancel="handleFeatureStyleScopeChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
-                            <h3 id="feature-style-scope-title" class="text-lg font-bold text-slate-800 mb-2">
+                            <h3 id="feature-style-scope-title" class="text-lg font-bold text-slate-800 mb-3">
                                 {{ featureStyleScopeDialog.kind === 'stroke' ? 'Stroke Change Scope' : 'Color Change Scope' }}
                             </h3>
-                            <p id="feature-style-scope-description" class="text-sm text-slate-600 mb-4">
-                                <template v-if="featureStyleScopeDialog.matchingRule">
-                                    This feature matches the rule "<span class="font-bold text-blue-600">{{ featureStyleScopeDialog.matchingRule?.cap || featureStyleScopeDialog.matchingRule?.val }}</span>" ({{ featureStyleScopeDialog.ruleMatchCount }} features).
-                                    <template v-if="featureStyleScopeDialog.siblingCount > 0">
-                                        <br>Legend item "<span class="font-bold text-green-600">{{ featureStyleScopeDialog.legendName }}</span>" is shared by {{ featureStyleScopeDialog.siblingCount + 1 }} features.
-                                    </template>
-                                </template>
-                                <template v-else-if="featureStyleScopeDialog.siblingCount > 0">
-                                    There are <span class="font-bold text-blue-600">{{ featureStyleScopeDialog.siblingCount }}</span> other features sharing the legend item "<span class="font-bold text-blue-600">{{ featureStyleScopeDialog.legendName }}</span>".
-                                </template>
-                                <template v-else>
-                                    How do you want to apply the {{ featureStyleScopeDialog.kind === 'stroke' ? 'stroke' : 'color' }} change?
-                                </template>
-                            </p>
 
                             <div class="flex flex-col gap-2">
-                                <!-- Apply to all features matching the rule (when rule exists) -->
+                                <button @click="handleFeatureStyleScopeChoice('single')"
+                                        data-history-managed
+                                        class="choice-option is-primary" :disabled="!semanticMutationAvailable">
+                                    <i class="ph ph-user" aria-hidden="true"></i>
+                                    <span>This feature only</span>
+                                </button>
+
+                                <p v-if="featureStyleScopeDialog.matchingRule || featureStyleScopeDialog.siblingCount > 0 || featureStyleScopeLabelOptions.displayLabel || featureStyleScopeLabelOptions.annotationLabel"
+                                   class="choice-group-label">All features with the same</p>
+
                                 <button v-if="featureStyleScopeDialog.matchingRule"
                                         @click="handleFeatureStyleScopeChoice('rule')"
                                         data-history-managed
-                                        class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-users text-lg" aria-hidden="true"></i>
-                                    <span>Apply to all "{{ featureStyleScopeDialog.matchingRule?.cap || featureStyleScopeDialog.matchingRule?.val }}" ({{ featureStyleScopeDialog.ruleMatchCount }})</span>
+                                        class="choice-option" :disabled="!semanticMutationAvailable">
+                                    <i class="ph ph-funnel" aria-hidden="true"></i>
+                                    <span>Color rule "{{ featureStyleScopeDialog.matchingRule?.cap || featureStyleScopeDialog.matchingRule?.val }}" ({{ featureStyleScopeDialog.ruleMatchCount }})</span>
                                 </button>
 
-                                <!-- Apply to all features with same legend item (when siblings exist) -->
                                 <button v-if="featureStyleScopeDialog.siblingCount > 0"
                                         @click="handleFeatureStyleScopeChoice('caption')"
                                         data-history-managed
-                                        class="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-users-three text-lg" aria-hidden="true"></i>
-                                    <span>Apply to all "{{ featureStyleScopeDialog.legendName }}" ({{ featureStyleScopeDialog.siblingCount + 1 }})</span>
+                                        :aria-describedby="featureStyleScopeDialog.defaultColorType ? 'feature-style-scope-default-color' : null"
+                                        class="choice-option" :disabled="!semanticMutationAvailable">
+                                    <i class="ph ph-list-bullets" aria-hidden="true"></i>
+                                    <span>Legend item "{{ featureStyleScopeDialog.legendName }}" ({{ featureStyleScopeDialog.siblingCount + 1 }})</span>
                                 </button>
-                                <p v-if="featureStyleScopeDialog.siblingCount > 0 && featureStyleScopeDialog.defaultColorType" data-default-color-scope-line class="-mt-1 px-1 text-xs text-slate-600">
+                                <p v-if="featureStyleScopeDialog.siblingCount > 0 && featureStyleScopeDialog.defaultColorType" id="feature-style-scope-default-color" data-default-color-scope-line class="choice-option-note">
                                     <template v-if="featureStyleScopeDialog.replacedDefaultColor">
                                         Replaces your {{ featureStyleScopeDialog.defaultColorType }} default color
                                         <span class="inline-block w-3 h-3 align-middle rounded border border-slate-300" :style="{ backgroundColor: featureStyleScopeDialog.replacedDefaultColor }"></span>
@@ -6600,60 +6599,42 @@
                                     <template v-if="hasPendingPaletteDraft">Applies now, also over the queued palette.</template>
                                 </p>
 
-                                <!-- Apply to this feature only -->
-                                <button @click="handleFeatureStyleScopeChoice('single')"
-                                        data-history-managed
-                                        class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-user text-lg" aria-hidden="true"></i>
-                                    <span>This feature only</span>
-                                </button>
-
-                                <!-- Apply to all features with same rendered label text -->
-                                <button v-if="
-                                          featureStyleScopeDialog.displayLabelSiblingCount > 0 &&
-                                          String(featureStyleScopeDialog.displayLabel || '').trim() !== '' &&
-                                          String(featureStyleScopeDialog.displayLabel || '').trim().toLowerCase() !== String(featureStyleScopeDialog.legendName || '').trim().toLowerCase()
-                                        "
+                                <button v-if="featureStyleScopeLabelOptions.displayLabel"
                                         @click="handleFeatureStyleScopeChoice('displayLabel')"
                                         data-history-managed
-                                        class="w-full px-4 py-2 bg-teal-100 hover:bg-teal-200 text-teal-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-users text-lg" aria-hidden="true"></i>
-                                    <span>Apply to all label "{{ featureStyleScopeDialog.displayLabel }}" ({{ featureStyleScopeDialog.displayLabelSiblingCount + 1 }})</span>
+                                        class="choice-option" :disabled="!semanticMutationAvailable">
+                                    <i class="ph ph-tag" aria-hidden="true"></i>
+                                    <span>Label "{{ featureStyleScopeDialog.displayLabel }}" ({{ featureStyleScopeDialog.displayLabelSiblingCount + 1 }})</span>
                                 </button>
 
-                                <!-- Apply to all features with same source annotation label -->
-                                <button v-if="
-                                          featureStyleScopeDialog.annotationLabelSiblingCount > 0 &&
-                                          String(featureStyleScopeDialog.annotationLabel || '').trim() !== '' &&
-                                          String(featureStyleScopeDialog.annotationLabel || '').trim().toLowerCase() !== String(featureStyleScopeDialog.legendName || '').trim().toLowerCase() &&
-                                          String(featureStyleScopeDialog.annotationLabel || '').trim().toLowerCase() !== String(featureStyleScopeDialog.displayLabel || '').trim().toLowerCase()
-                                        "
+                                <button v-if="featureStyleScopeLabelOptions.annotationLabel"
                                         @click="handleFeatureStyleScopeChoice('annotationLabel')"
                                         data-history-managed
-                                        class="w-full px-4 py-2 bg-cyan-100 hover:bg-cyan-200 text-cyan-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-users text-lg" aria-hidden="true"></i>
-                                    <span>Apply to all source label "{{ featureStyleScopeDialog.annotationLabel }}" ({{ featureStyleScopeDialog.annotationLabelSiblingCount + 1 }})</span>
+                                        class="choice-option" :disabled="!semanticMutationAvailable">
+                                    <i class="ph ph-file-text" aria-hidden="true"></i>
+                                    <span>Source label "{{ featureStyleScopeDialog.annotationLabel }}" ({{ featureStyleScopeDialog.annotationLabelSiblingCount + 1 }})</span>
                                 </button>
 
-                                <!-- Use existing caption color (if available) -->
-                                <button v-if="featureStyleScopeDialog.kind === 'fill' && featureStyleScopeDialog.existingCaptionColor"
-                                        @click="handleFeatureStyleScopeChoice('useExisting')"
-                                        data-history-managed
-                                        class="w-full px-4 py-2 bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <span class="w-5 h-5 rounded border border-purple-300 shrink-0"
-                                          :style="{ backgroundColor: featureStyleScopeDialog.existingCaptionColor }"></span>
-                                    <span>Use existing "{{ featureStyleScopeDialog.legendName }}" color</span>
-                                </button>
+                                <template v-if="featureStyleScopeDialog.kind === 'fill' && featureStyleScopeDialog.existingCaptionColor">
+                                    <p class="choice-group-label">Or keep the Legend color</p>
+                                    <button @click="handleFeatureStyleScopeChoice('useExisting')"
+                                            data-history-managed
+                                            class="choice-option" :disabled="!semanticMutationAvailable">
+                                        <span class="w-5 h-5 rounded border border-slate-300 shrink-0"
+                                              :style="{ backgroundColor: featureStyleScopeDialog.existingCaptionColor }"></span>
+                                        <span>Use the "{{ featureStyleScopeDialog.legendName }}" Legend color</span>
+                                    </button>
+                                </template>
                             </div>
 
                             <button @click="handleFeatureStyleScopeChoice('cancel')"
                                     data-history-managed
-                                    class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium" :disabled="!semanticMutationAvailable">
+                                    class="choice-cancel" :disabled="!semanticMutationAvailable">
                                 Cancel
                             </button>
                     </choice-dialog>
 
-                    <!-- Legend Rename Dialog -->
+                    <!-- Legend Rename Dialog (UX-A10) -->
                     <choice-dialog v-if="legendRenameDialog.show" :busy="dialogChoicePending" labelledby="legend-rename-title" describedby="legend-rename-description"
                          @cancel="handleLegendRenameChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[65] flex items-center justify-center">
@@ -6661,42 +6642,40 @@
                                 {{ legendRenameDialog.mode === 'scope' ? 'Legend Name Scope' : 'Legend Name Conflict' }}
                             </h3>
                             <p v-if="legendRenameDialog.mode === 'scope'" id="legend-rename-description" class="text-sm text-slate-600 mb-4">
-                                Legend item "<span class="font-bold text-blue-600">{{ legendRenameDialog.oldCaption }}</span>" is currently shared by
-                                {{ legendRenameDialog.siblingCount + 1 }} features.
-                                <br>Apply the rename to "<span class="font-bold text-emerald-600">{{ legendRenameDialog.newCaption }}</span>" for this feature only, or for all current uses?
+                                Rename "<span class="font-semibold text-slate-800">{{ legendRenameDialog.oldCaption }}</span>" to "<span class="font-semibold text-slate-800">{{ legendRenameDialog.newCaption }}</span>"?
                             </p>
-                            <p v-else-if="!legendRenameDialog.mergeAvailable" id="legend-rename-description" class="text-sm text-slate-600 mb-4">
-                                "<span class="font-bold text-blue-600">{{ legendRenameDialog.newCaption }}</span>" {{ legendRenameDialog.deletedTargetKey ? 'is a deleted Legend item' : 'already exists' }}, and "{{ legendRenameDialog.oldCaption }}" is not the same type of item, so the two cannot be merged.
-                                <br>Keep "{{ legendRenameDialog.oldCaption }}" as its own Legend item with a suffix, or cancel.
-                            </p>
-                            <p v-else id="legend-rename-description" class="text-sm text-slate-600 mb-4">
-                                "<span class="font-bold text-blue-600">{{ legendRenameDialog.newCaption }}</span>" {{ legendRenameDialog.deletedTargetKey ? 'is a deleted Legend item.' : 'already exists with a different color.' }}
-                                <br>Existing color:
-                                <span class="inline-flex items-center gap-2 font-mono text-slate-700">
-                                    <span class="w-4 h-4 rounded border border-slate-300 inline-block"
-                                          :style="{ backgroundColor: legendRenameDialog.targetColor }"></span>
-                                    {{ legendRenameDialog.targetColor }}
-                                </span>
-                                <br>Current color:
-                                <span class="inline-flex items-center gap-2 font-mono text-slate-700">
-                                    <span class="w-4 h-4 rounded border border-slate-300 inline-block"
-                                          :style="{ backgroundColor: legendRenameDialog.currentColor }"></span>
-                                    {{ legendRenameDialog.currentColor }}
-                                </span>
-                            </p>
+                            <div v-else id="legend-rename-description" class="text-sm text-slate-600 mb-4">
+                                <p v-if="!legendRenameDialog.mergeAvailable">
+                                    "{{ legendRenameDialog.newCaption }}" {{ legendRenameDialog.deletedTargetKey ? 'is a deleted Legend item' : 'already exists' }} and draws a different feature type, so the two cannot be merged.
+                                </p>
+                                <p v-else>
+                                    "{{ legendRenameDialog.newCaption }}" {{ legendRenameDialog.deletedTargetKey ? 'is a deleted Legend item.' : 'already exists with another color.' }}
+                                </p>
+                                <ul class="mt-2 space-y-1">
+                                    <li class="flex items-center gap-2">
+                                        <span class="w-4 h-4 rounded border border-slate-300 inline-block shrink-0" :style="{ backgroundColor: legendRenameDialog.targetColor }"></span>
+                                        <span class="font-semibold text-slate-800">{{ legendRenameDialog.targetCaption || legendRenameDialog.newCaption }}</span>
+                                    </li>
+                                    <li class="flex items-center gap-2">
+                                        <span class="w-4 h-4 rounded border border-slate-300 inline-block shrink-0" :style="{ backgroundColor: legendRenameDialog.currentColor }"></span>
+                                        <span class="font-semibold text-slate-800">{{ legendRenameDialog.oldCaption }}</span>
+                                        <span class="text-xs text-slate-500">(the item you renamed)</span>
+                                    </li>
+                                </ul>
+                            </div>
 
                             <div v-if="legendRenameDialog.mode === 'scope'" class="flex flex-col gap-2">
                                 <button @click="handleLegendRenameChoice('single')"
                                         data-history-managed
-                                        class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-user text-lg" aria-hidden="true"></i>
+                                        class="choice-option is-primary" :disabled="!semanticMutationAvailable">
+                                    <i class="ph ph-user" aria-hidden="true"></i>
                                     <span>This feature only</span>
                                 </button>
                                 <button @click="handleLegendRenameChoice('group')"
                                         data-history-managed
-                                        class="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-users-three text-lg" aria-hidden="true"></i>
-                                    <span>All current "{{ legendRenameDialog.oldCaption }}"</span>
+                                        class="choice-option" :disabled="!semanticMutationAvailable">
+                                    <i class="ph ph-users-three" aria-hidden="true"></i>
+                                    <span>All {{ legendRenameDialog.siblingCount + 1 }} "{{ legendRenameDialog.oldCaption }}" features</span>
                                 </button>
                             </div>
 
@@ -6704,27 +6683,27 @@
                                 <button v-if="legendRenameDialog.mergeAvailable"
                                         @click="handleLegendRenameChoice('merge')"
                                         data-history-managed
-                                        class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-arrows-merge text-lg" aria-hidden="true"></i>
-                                    <span v-if="legendRenameDialog.deletedTargetKey">Restore the deleted row and merge into it (adopt its color)</span>
-                                    <span v-else>Merge into existing "{{ legendRenameDialog.targetCaption }}" and adopt its color</span>
+                                        class="choice-option is-primary" :disabled="!semanticMutationAvailable">
+                                    <span class="w-5 h-5 rounded border border-white/70 shrink-0" :style="{ backgroundColor: legendRenameDialog.targetColor }"></span>
+                                    <span v-if="legendRenameDialog.deletedTargetKey">Restore "{{ legendRenameDialog.targetCaption }}" and merge into it</span>
+                                    <span v-else>Merge into "{{ legendRenameDialog.targetCaption }}"</span>
                                 </button>
                                 <button @click="handleLegendRenameChoice('suffix')"
                                         data-history-managed
-                                        class="w-full px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-text-t text-lg" aria-hidden="true"></i>
-                                    <span>Keep current color and add a suffix</span>
+                                        :class="['choice-option', { 'is-primary': !legendRenameDialog.mergeAvailable }]" :disabled="!semanticMutationAvailable">
+                                    <span class="w-5 h-5 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: legendRenameDialog.currentColor }"></span>
+                                    <span>Keep both: name it "{{ legendRenameDialog.suffixCaption }}"</span>
                                 </button>
                             </div>
 
                             <button @click="handleLegendRenameChoice('cancel')"
                                     data-history-managed
-                                    class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium" :disabled="!semanticMutationAvailable">
+                                    class="choice-cancel" :disabled="!semanticMutationAvailable">
                                 Cancel
                             </button>
                     </choice-dialog>
 
-                    <!-- Palette Colors Dialog (D-15) -->
+                    <!-- Palette Colors Dialog (D-15); wording UX-A12 -->
                     <choice-dialog v-if="paletteColorsDialog.show" :busy="dialogChoicePending" labelledby="palette-colors-title" describedby="palette-colors-description"
                          @cancel="handlePaletteColorsChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
@@ -6733,11 +6712,10 @@
                             </h3>
                             <p id="palette-colors-description" class="text-sm text-slate-600 mb-4">
                                 <template v-if="paletteColorsDialog.kind === 'reset'">
-                                    This discards your {{ paletteColorsDialog.count }} default {{ paletteColorsDialog.count === 1 ? 'color' : 'colors' }} ({{ paletteColorsDialog.keysText }})
-                                    and uses the "<span class="font-bold text-blue-600">{{ paletteColorsDialog.toPalette }}</span>" palette's colors.
+                                    Replace your {{ paletteColorsDialog.count }} changed {{ paletteColorsDialog.count === 1 ? 'color' : 'colors' }} ({{ paletteColorsDialog.keysText }}) with the colors of the "{{ paletteColorsDialog.toPalette }}" palette?
                                 </template>
                                 <template v-else>
-                                    You changed {{ paletteColorsDialog.count }} default {{ paletteColorsDialog.count === 1 ? 'color' : 'colors' }} from the "<span class="font-bold text-blue-600">{{ paletteColorsDialog.fromPalette }}</span>" palette ({{ paletteColorsDialog.keysText }}).
+                                    Keep your {{ paletteColorsDialog.count }} changed {{ paletteColorsDialog.count === 1 ? 'color' : 'colors' }} ({{ paletteColorsDialog.keysText }})?
                                     <template v-if="paletteColorsDialog.droppedPalette">The queued "{{ paletteColorsDialog.droppedPalette }}" palette is dropped and the colors apply now.</template>
                                 </template>
                             </p>
@@ -6745,29 +6723,29 @@
                             <div v-if="paletteColorsDialog.kind === 'reset'" class="flex flex-col gap-2">
                                 <button @click="handlePaletteColorsChoice('reset')"
                                         data-history-managed
-                                        class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-arrow-counter-clockwise text-lg" aria-hidden="true"></i>
-                                    <span>Reset to the palette's colors</span>
+                                        class="choice-option is-primary" :disabled="!semanticMutationAvailable">
+                                    <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i>
+                                    <span>Use the palette's colors</span>
                                 </button>
                             </div>
                             <div v-else class="flex flex-col gap-2">
                                 <button @click="handlePaletteColorsChoice('keep')"
                                         data-history-managed
-                                        class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-push-pin text-lg" aria-hidden="true"></i>
-                                    <span>Keep my {{ paletteColorsDialog.count }} {{ paletteColorsDialog.count === 1 ? 'color' : 'colors' }}</span>
+                                        class="choice-option is-primary" :disabled="!semanticMutationAvailable">
+                                    <i class="ph ph-push-pin" aria-hidden="true"></i>
+                                    <span>Keep my colors</span>
                                 </button>
                                 <button @click="handlePaletteColorsChoice('palette')"
                                         data-history-managed
-                                        class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-palette text-lg" aria-hidden="true"></i>
+                                        class="choice-option" :disabled="!semanticMutationAvailable">
+                                    <i class="ph ph-palette" aria-hidden="true"></i>
                                     <span>Use the palette's colors</span>
                                 </button>
                             </div>
 
                             <button @click="handlePaletteColorsChoice('cancel')"
                                     data-history-managed
-                                    class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium" :disabled="!semanticMutationAvailable">
+                                    class="choice-cancel" :disabled="!semanticMutationAvailable">
                                 Cancel
                             </button>
                     </choice-dialog>
@@ -6783,33 +6761,28 @@
                             </p>
 
                             <div class="flex flex-col gap-2">
-                                <!-- Reset all features with same caption -->
                                 <button @click="handleResetColorChoice('all')"
                                         data-history-managed
-                                        class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-users text-lg" aria-hidden="true"></i>
+                                        class="choice-option is-primary" :disabled="!semanticMutationAvailable">
+                                    <i class="ph ph-users" aria-hidden="true"></i>
                                     <span>Reset all "{{ resetColorDialog.caption }}" ({{ resetColorDialog.siblingCount + 1 }})</span>
                                 </button>
-
-                                <!-- Reset this feature only with new legend entry -->
                                 <button @click="handleResetColorChoice('this_with_legend')"
                                         data-history-managed
-                                        class="w-full px-4 py-2 bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-user-plus text-lg" aria-hidden="true"></i>
+                                        class="choice-option" :disabled="!semanticMutationAvailable">
+                                    <i class="ph ph-user-plus" aria-hidden="true"></i>
                                     <span>This only + add legend entry</span>
                                 </button>
-
-                                <!-- Reset this feature only -->
                                 <button @click="handleResetColorChoice('this')"
                                         data-history-managed
-                                        class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-user text-lg" aria-hidden="true"></i>
+                                        class="choice-option" :disabled="!semanticMutationAvailable">
+                                    <i class="ph ph-user" aria-hidden="true"></i>
                                     <span>This feature only</span>
                                 </button>
                             </div>
 
                             <button @click="handleResetColorChoice('cancel')"
-                                    class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium" :disabled="!semanticMutationAvailable">
+                                    class="choice-cancel" :disabled="!semanticMutationAvailable">
                                 Cancel
                             </button>
                     </choice-dialog>
@@ -7387,9 +7360,9 @@
                     <div v-show="resultPanelTab === 'preview'" class="preview-controls flex items-center gap-2">
                         <!-- Reset preview layout button -->
                         <button v-if="svgContent" @click="resetLayout"
-                                class="flex items-center gap-2 px-3 py-2 bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm"
-                                title="Reset layout"
-                                aria-label="Reset layout" :disabled="!semanticMutationAvailable">
+                                class="flex items-center gap-2 px-3 py-2 bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
+                                :title="layoutResetAvailable ? 'Return moved elements, canvas padding, pan, and zoom to their defaults' : 'Nothing moved yet'"
+                                aria-label="Reset layout" :disabled="!semanticMutationAvailable || !layoutResetAvailable">
                             <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i>
                             <span>Reset Layout</span>
                         </button>
@@ -7397,7 +7370,7 @@
                         <button v-if="svgContent" @click="layoutRepositionMode = !layoutRepositionMode"
                                 class="flex items-center gap-2 px-3 py-2 bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm"
                                 :class="{ 'bg-amber-50 text-amber-700 border-amber-300': layoutRepositionMode }"
-                                :title="layoutRepositionMode ? 'Disable layout edit mode' : 'Enable layout edit mode'"
+                                :title="layoutRepositionMode ? 'Layout edit is on: drag a legend, title, or Linear scale to move it. Turn off to pan.' : 'Turn on to move a legend, title, or Linear scale. While off, dragging pans the view.'"
                                 :aria-pressed="layoutRepositionMode"
                                 aria-label="Toggle layout edit mode"
                                 aria-describedby="preview-layout-help">
@@ -7907,22 +7880,26 @@
             </div>
         </choice-dialog>
         <!-- Q3: a layout edit that would leave lane Feature placements undrawable -->
-        <div v-if="featurePlacementActions.layoutChange.open" class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4"
-             @click.self="featurePlacementActions.resolveLayoutChange('cancel')" @keydown.esc.prevent.stop="featurePlacementActions.resolveLayoutChange('cancel')" @keydown.tab="trapDialogFocus">
-            <section role="dialog" aria-modal="true" aria-labelledby="placement-layout-change-title" aria-describedby="placement-layout-change-description"
-                     class="w-full max-w-md rounded-xl border border-slate-200 bg-white p-4 shadow-2xl">
-                <h2 id="placement-layout-change-title" class="text-base font-bold text-slate-800">Reset Feature placements?</h2>
-                <p id="placement-layout-change-description" class="mt-2 text-sm leading-relaxed text-slate-600">
-                    <template v-if="featurePlacementActions.layoutChange.value">Changing {{ featurePlacementActions.layoutChange.setting }} to {{ featurePlacementActions.layoutChange.value }}</template><template v-else>{{ featurePlacementActions.layoutChange.setting }}</template>
-                    leaves {{ featurePlacementActions.layoutChange.count }} Feature placement{{ featurePlacementActions.layoutChange.count === 1 ? ' without its lane' : 's without their lanes' }}.
-                </p>
-                <div class="mt-4 grid min-w-0 gap-2 sm:grid-cols-2">
-                    <button type="button" data-history-managed data-placement-layout-primary :disabled="!semanticMutationAvailable" @click="featurePlacementActions.resolveLayoutChange('reset')"
-                            class="min-w-0 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">Reset {{ featurePlacementActions.layoutChange.count }} placement{{ featurePlacementActions.layoutChange.count === 1 ? '' : 's' }} to Auto</button>
-                    <button type="button" data-history-managed @click="featurePlacementActions.resolveLayoutChange('cancel')" class="min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel change</button>
-                </div>
-            </section>
-        </div>
+        <choice-dialog v-if="featurePlacementActions.layoutChange.open" labelledby="placement-layout-change-title" describedby="placement-layout-change-description"
+             @cancel="featurePlacementActions.resolveLayoutChange('cancel')" @keydown.tab="trapDialogFocus"
+             class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
+            <h2 id="placement-layout-change-title" class="text-base font-bold text-slate-800">Reset Feature placements?</h2>
+            <p id="placement-layout-change-description" class="mt-2 mb-4 text-sm leading-relaxed text-slate-600">
+                <template v-if="featurePlacementActions.layoutChange.value">Changing {{ featurePlacementActions.layoutChange.setting }} to {{ featurePlacementActions.layoutChange.value }}</template><template v-else>{{ featurePlacementActions.layoutChange.setting }}</template>
+                removes the lane for {{ featurePlacementActions.layoutChange.count }} feature{{ featurePlacementActions.layoutChange.count === 1 ? '' : 's' }} you placed manually.
+            </p>
+            <div class="flex flex-col gap-2">
+                <button type="button" data-history-managed data-placement-layout-primary :disabled="!semanticMutationAvailable" @click="featurePlacementActions.resolveLayoutChange('reset')"
+                        class="choice-option is-primary">
+                    <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i>
+                    <span>Reset {{ featurePlacementActions.layoutChange.count }} placement{{ featurePlacementActions.layoutChange.count === 1 ? '' : 's' }} to Auto</span>
+                </button>
+                <button type="button" data-history-managed @click="featurePlacementActions.resolveLayoutChange('cancel')" class="choice-option">
+                    <i class="ph ph-push-pin" aria-hidden="true"></i>
+                    <span>Keep current layout</span>
+                </button>
+            </div>
+        </choice-dialog>
         <!-- UX-A07: the app's confirmations (Reset Settings, a risky color rule pattern, a repeated or large download) -->
         <choice-dialog v-if="choicePrompt.show" labelledby="choice-prompt-title" describedby="choice-prompt-description"
              data-choice-prompt

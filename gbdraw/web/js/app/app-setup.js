@@ -3920,6 +3920,19 @@ export const createAppSetup = () => {
       ? handleFeatureStrokeScopeChoiceWithHistory(choice, ...rest)
       : handleFeatureColorScopeChoiceWithHistory(choice, ...rest)
   );
+  // UX-A05: the label scopes the Color/Stroke Change Scope dialog offers; a
+  // label that repeats the Legend name, or the other label, is not offered.
+  const featureStyleScopeLabelOptions = computed(() => {
+    const text = (/** @type {unknown} */ value) => String(value || '').trim().toLowerCase();
+    const dialog = featureStyleScopeDialog;
+    const legend = text(dialog.legendName);
+    const display = text(dialog.displayLabel);
+    const annotation = text(dialog.annotationLabel);
+    return {
+      displayLabel: dialog.displayLabelSiblingCount > 0 && display !== '' && display !== legend,
+      annotationLabel: dialog.annotationLabelSiblingCount > 0 && annotation !== '' && annotation !== legend && annotation !== display
+    };
+  });
   const handleLegendNameCommitWithHistory = undoableAction('Rename legend item', handleLegendNameCommit);
   // R15-3 (OV-285): the Merge of a rename onto a deleted row's caption is the
   // Restore of that row (by its Python key), then the merge, in one History
@@ -4646,6 +4659,16 @@ export const createAppSetup = () => {
     resetLayoutState(state);
     resetPreviewViewport({ resetZoom: true });
   };
+
+  // UX-B11: Reset Layout has something to reset once an element moved, the
+  // canvas padding changed, or the view was panned or zoomed.
+  const layoutResetAvailable = computed(() => {
+    const moved = (/** @type {{ x: number, y: number }} */ offset) => Boolean(Number(offset.x) || Number(offset.y));
+    const padding = state.activeDrawing().canvasPadding;
+    return [state.diagramOffset, state.legendCurrentOffset, state.plotTitleUserOffset, state.lengthBarUserOffset, canvasPan].some(moved)
+      || zoom.value !== 1
+      || ['top', 'right', 'bottom', 'left'].some((side) => Number(padding[side]));
+  });
 
   const isInteractiveTarget = (target) => {
     if (!target) return false;
@@ -6564,6 +6587,7 @@ export const createAppSetup = () => {
     setClickedFeatureStrokeWidthValue: setClickedFeatureStrokeWidthValueWithHistory,
     resetClickedFeatureStroke: resetClickedFeatureStrokeWithHistory,
     featureStyleScopeDialog,
+    featureStyleScopeLabelOptions,
     featureVisibilityScopeDialog,
     handleColorScopeChoice: handleColorScopeChoiceWithHistory,
     handleFeatureStyleScopeChoice: handleFeatureStyleScopeChoiceWithHistory,
@@ -6624,6 +6648,7 @@ export const createAppSetup = () => {
     resetAllStrokes: editEditorIntent('Reset all strokes', resetAllStrokes),
     resetAllPositions: undoableAction('Reset positions', resetAllPositions),
     resetLayout: undoableAction('Reset layout', resetLayout),
+    layoutResetAvailable,
     canvasPadding: drawingMember('canvasPadding'),
     showCanvasControls,
     resetCanvasPadding,
