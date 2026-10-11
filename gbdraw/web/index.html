@@ -6230,7 +6230,7 @@
                                         <label for="preview-legend-caption" class="feature-popup-heading block">Legend name</label>
                                         <input id="preview-legend-caption" type="text" :value="previewItemView.caption"
                                                @change="renameLegendEntryInPopup(previewItemView.index, $event.target.value)"
-                                               @keydown.enter="$event.target.blur()"
+                                               @keydown.enter.prevent="$event.target.blur()"
                                                :disabled="!semanticMutationAvailable"
                                                class="form-input w-full text-xs">
                                     </section>
@@ -6255,14 +6255,14 @@
                                         <label class="block text-xs text-slate-600">{{ previewItemView.draft.nameLabel }}
                                             <input type="text" :value="previewItemView.draft.name"
                                                    @change="setPreviewRecordField(previewItemView, 'name', $event.target.value)"
-                                                   @keydown.enter="$event.target.blur()"
+                                                   @keydown.enter.prevent="$event.target.blur()"
                                                    :disabled="!semanticMutationAvailable"
                                                    class="form-input mt-0.5 w-full text-xs">
                                         </label>
                                         <label class="block text-xs text-slate-600">{{ previewItemView.draft.subtitleLabel }}
                                             <input type="text" :value="previewItemView.draft.subtitle"
                                                    @change="setPreviewRecordField(previewItemView, 'subtitle', $event.target.value)"
-                                                   @keydown.enter="$event.target.blur()"
+                                                   @keydown.enter.prevent="$event.target.blur()"
                                                    :disabled="!semanticMutationAvailable"
                                                    class="form-input mt-0.5 w-full text-xs">
                                         </label>
@@ -6278,7 +6278,7 @@
                                             Show in settings
                                         </button>
                                     </div>
-                                    <p v-else class="match-muted" data-preview-record-unmatched>Edit this record in its File card in the sidebar.</p>
+                                    <p v-else class="match-muted" data-preview-record-unmatched>{{ previewItemView.editHint }}</p>
                                 </div>
                                 <p v-else class="match-muted">This item is no longer in the diagram.</p>
                             </template>

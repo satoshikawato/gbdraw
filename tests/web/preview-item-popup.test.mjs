@@ -71,7 +71,7 @@ test('a click on a Legend row or a record definition names its popup item', () =
 }));
 
 const createPopup = ({
-  mode = 'linear', busy = null, circularPresentation = false,
+  mode = 'linear', busy = null, circularPresentation = false, recordLabel = '',
   entries = [{ caption: 'tRNA', originalCaption: 'tRNA', color: '#ff0000' }],
   renameLegendRow = null, legendRenameSettled = async () => {},
   requestRecords = [{ recordKey: 'uid-1', presentation: { label: 'Old name' } }],
@@ -80,7 +80,7 @@ const createPopup = ({
 } = {}) => {
   const steps = [];
   const form = {
-    species: 'Homo sapiens', strain: '', circular_reverse: false, circular_record_label: 'Label X', circular_record_subtitle: ''
+    species: 'Homo sapiens', strain: '', circular_reverse: false, circular_record_label: recordLabel, circular_record_subtitle: ''
   };
   const sequence = { uid: 'uid-1', definition: 'Old name', record_subtitle: '', region_reverse: false };
   const state = {
@@ -188,7 +188,7 @@ test('the legend popup follows its row through the name-conflict choice', async 
 // A Circular record with its own Record label draws that label, not Species
 // (AB review F2): the popup edits the field the Result draws.
 test('a Circular record popup edits the Record label when the record has its own', () => {
-  const own = createPopup({ mode: 'circular', circularPresentation: true });
+  const own = createPopup({ mode: 'circular', circularPresentation: true, recordLabel: 'Label X' });
   own.state.clickedPairwiseMatch.value = { previewItem: { kind: 'record-definition', recordIndex: 0, recordId: 'R1' } };
   const view = own.popup.view.value;
   assert.equal(view.draft.nameLabel, 'Record label');
@@ -199,8 +199,13 @@ test('a Circular record popup edits the Record label when the record has its own
   assert.equal(own.form.circular_record_subtitle, 'plasmid');
   assert.equal(own.form.species, 'Homo sapiens');
 
-  const shared = createPopup({ mode: 'circular' });
+  // OV-431: a Record label drawn while its fields are unavailable (records not
+  // inspected) overrides Species, so the popup offers no name field.
+  const shared = createPopup({ mode: 'circular', recordLabel: 'Label X' });
   shared.state.clickedPairwiseMatch.value = { previewItem: { kind: 'record-definition', recordIndex: 0, recordId: 'R1' } };
+  assert.equal(shared.popup.view.value.draft, null);
+  assert.match(shared.popup.view.value.editHint, /^Inspect source records/);
+  shared.form.circular_record_label = '';
   assert.equal(shared.popup.view.value.draft.nameLabel, 'Species');
   assert.equal(shared.popup.view.value.draft.reverseAvailable, false);
 });
@@ -225,6 +230,20 @@ test('a Linear record popup finds its request record and File card by record id'
   assert.equal(view.facts.find((fact) => fact.label === 'Reverse complement').value, 'No');
   state.clickedPairwiseMatch.value = { previewItem: { kind: 'record-definition', recordIndex: 1, recordId: 'unknown' } };
   assert.equal(popup.view.value.draft, null);
+});
+
+// A loaded Session has read no record list yet: the drawn index names the
+// record while every request record draws exactly one.
+test('a Linear record popup without record rows uses the drawn index of one-record files only', () => {
+  const item = { previewItem: { kind: 'record-definition', recordIndex: 0, recordId: 'R1' } };
+  const one = createPopup({
+    requestRecords: [{ recordKey: 'uid-1', cardinality: 'exactly_one', presentation: { label: 'Old name' } }], recordRows: []
+  });
+  one.state.clickedPairwiseMatch.value = item;
+  assert.equal(one.popup.view.value.draft.sequenceUid, 'uid-1');
+  const whole = createPopup({ requestRecords: [{ recordKey: 'uid-1', cardinality: 'all' }], recordRows: [] });
+  whole.state.clickedPairwiseMatch.value = item;
+  assert.equal(whole.popup.view.value.draft, null);
 });
 
 /** Opens the popup of `item` and returns its view. */

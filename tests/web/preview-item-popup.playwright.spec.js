@@ -127,7 +127,9 @@ test('a Circular center definition opens beside the definition and edits the Rec
   test.setTimeout(300_000);
   await openFresh(page);
   await loadSessionFile(page, HMMT_SESSION);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.circularSingleRecordPresentationEnabled)).toBe(true);
+  // A loaded Session's records are not inspected; the Record label fields open once they are.
+  await page.locator('[data-circular-inspect]').click();
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularSingleRecordPresentationEnabled)).toBe(true);
 
   const definition = page.locator('.gbdraw-preview-surface [data-gbdraw-role^="record-definition"]').first();
   const recordPoint = await clickCentre(definition.locator('text').first());
@@ -149,6 +151,7 @@ test('a Circular center definition opens beside the definition and edits the Rec
 
 // A rename onto another row's name asks first; the popup keeps its row until
 // the choice, stays on it after Cancel, and follows it after Keep both (AB review F1).
+// OV-431: the Enter that commits the name does not also press the dialog's focused choice.
 test('a Legend popup rename onto another name follows the row through the choice', async ({ page }) => {
   test.setTimeout(300_000);
   await openFresh(page);

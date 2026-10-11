@@ -945,7 +945,9 @@ File card fields; in Circular, **Record label** and **Subtitle** when one record
 is selected, otherwise **Species** and **Strain**. **Show in settings** opens and
 focuses the first of those fields. When a Linear file's records cannot be told
 apart by their record ID, the popup lists the facts only and points to the File
-card. Each edit is one **Undo** step. With **Layout
+card. A Circular record that draws a **Record label** before its file's records
+are inspected (after a Session load) lists the facts only and points to
+**Inspect source records**. Each edit is one **Undo** step. With **Layout
 edit** on, a press on these items drags them instead. The comparison legend
 opens no popup. Both popups open beside the clicked item and stay below the
 app header, as the feature popup does.

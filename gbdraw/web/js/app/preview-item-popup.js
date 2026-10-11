@@ -24,6 +24,7 @@ import {
  * @typedef {{ start?: unknown, end?: unknown }} RegionLike
  * @typedef {{
  *   recordKey?: unknown,
+ *   cardinality?: unknown,
  *   presentation?: { label?: unknown, subtitle?: unknown, reverseComplement?: unknown } | null,
  *   display?: { startCoordinate?: unknown } | null,
  *   region?: RegionLike | null
@@ -199,7 +200,10 @@ const buildRecordDefinitionView = ({
     title: organism,
     subtitle: [text(drawn.subtitle), accession].filter(Boolean).join(' · '),
     facts,
-    draft
+    draft,
+    editHint: scope === 'linear'
+      ? 'Edit this record in its File card in the sidebar.'
+      : 'Inspect source records in the sidebar to edit this record\'s label.'
   };
 };
 
@@ -283,11 +287,15 @@ export const createPreviewItemPopup = ({
     settingsSelector: `[data-linear-record-card=${JSON.stringify(sequence.uid)}] [data-linear-record-options] input[type="text"]`
   };
 
-  /** @returns {RecordDraft} */
+  /** @returns {RecordDraft | null} */
   const circularDraft = () => {
     const form = state.activeDrawing().form;
     const ownRecord = readCircularReverseAvailable();
     const target = ownRecord ? CIRCULAR_RECORD : CIRCULAR_DRAWING;
+    // A Record label drawn while its sidebar fields are unavailable (a loaded
+    // Session's records are not inspected yet) overrides Species and Strain:
+    // the popup offers neither (OV-431).
+    if (!ownRecord && (text(form.circular_record_label) || text(form.circular_record_subtitle))) return null;
     return {
       ...target,
       name: text(form[target.fields.name]),
@@ -305,15 +313,22 @@ export const createPreviewItemPopup = ({
     const records = getCommittedRequest()?.records || [];
     // A Linear file may draw several records (one request record, or one
     // `<uid>:<n>` record each), so the drawn record's id, not its index, names
-    // its request record and File card; an ambiguous id names neither.
+    // its request record and File card; an ambiguous id names neither. A file's
+    // record list is read on demand (a loaded Session has none yet): without
+    // rows the index names the record only when every request record draws
+    // exactly one, and that record's key is its File card's.
     const rows = scope === 'linear'
       ? readCommittedRecordRows().filter((row) => row.scope === 'linear' && text(row.recordId) === recordId)
       : [];
     const row = rows.length === 1 ? rows[0] : null;
-    const record = scope === 'linear'
-      ? records.find((entry) => row && entry.recordKey === row.canonicalRecordKey) || null
-      : records[recordIndex] || null;
-    const sequence = record ? state.linearSeqs.find((entry) => entry.uid === text(row?.sourceUid)) || null : null;
+    const byIndex = scope !== 'linear'
+      || (!rows.length && records.every((entry) => entry.cardinality === 'exactly_one'));
+    const record = (row
+      ? records.find((entry) => entry.recordKey === row.canonicalRecordKey)
+      : byIndex && records[recordIndex]) || null;
+    const sequence = record
+      ? state.linearSeqs.find((entry) => entry.uid === text(row ? row.sourceUid : record.recordKey)) || null
+      : null;
     const group = state.svgContainer.value?.querySelector(
       `[data-gbdraw-role^="record-definition"][data-gbdraw-record-index="${recordIndex}"]`
     );

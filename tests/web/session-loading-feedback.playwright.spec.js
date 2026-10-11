@@ -347,9 +347,10 @@ test('Load Session asks before it replaces work changed since the last Save or L
   });
   await expect(confirm).toHaveCount(0);
   await expect.poll(() => pickers).toBe(2);
-  await page.evaluate(async () => {
+  await page.evaluate(() => {
     window.__GBDRAW_APP__.form.prefix = 'typed-not-committed';
-    await window.__GBDRAW_APP__.openSessionFilePicker();
+    // The picker call waits for the choice, so it is not awaited here.
+    void window.__GBDRAW_APP__.openSessionFilePicker();
   });
   await expect(confirm).toBeVisible();
   await page.keyboard.press('Escape');
