@@ -55,7 +55,12 @@ write-up of a release.
     short. A Session saved earlier is drawn by this rule too and keeps its
     stored boundary.
   - A Session that stores its whole configuration, such as one written by
-    `--session_output`, keeps the boundary it was saved with.
+    `--session_output`, keeps the boundary it was saved with. In the Web app,
+    the Auto values beside the size fields and the Circular track preview
+    follow that boundary, as Generate does.
+  - The aminoglycoside BGC Gallery figure is unchanged. Its tutorial now
+    types Head Length Ratio 0.64 in the last step, and its intermediate
+    previews show the short Auto sizes.
 - Web Comparison card (Linear): **Settings** lists the mode, the result filters
   and the appearance first, then **Search limits** and **Performance** (formerly
   **Runtime and reproducibility**). **Selected pairs** shows each pair as one row
