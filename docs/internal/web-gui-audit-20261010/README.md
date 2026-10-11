@@ -117,7 +117,7 @@ S2 とオーケストレーターがレビュー中に記録した。リリー�
 - `deploy_web.yml` の `npm run test:web:vibrio-generate` は dev では動かない。release tier の `Tests` dispatch の側で走る。
 - OV-325 の Gallery 公開側（上記）。
 - 画面の目視は contact sheet のレビューだけで、2026-09-30 のような領域別の手動操作は行っていない。
-- #999 で再設計した similarity の popup、Reset alignment dialog、Similarity groups タブは、どの journey も開かない。#999 自身の Playwright spec（`similarity-alignment-ui.playwright.spec.js` など）と node test が PR の CI と run 5 の Playwright shard で通っている。
+- #999 で再設計した similarity の popup、Reset alignment dialog、Similarity groups タブは、どの journey も開かない。#999 自身の Playwright spec（`similarity-alignment-ui.playwright.spec.js` など）は PR の CI と run 5 の Playwright shard で、node test は PR の CI と run 5 の Browser job で通っている。
 
 ## 証拠と再現方法
 
@@ -210,7 +210,7 @@ run 38119476099（`Tests`、`workflow_dispatch`、`tier=release`）を dev `1517
 - recipes 40/40。sweep 4 本: finding 0（`sweep-parity` は circular HmmtDNA 0 DIFF/32、linear MJNV 0 DIFF/26）。
 - どの journey も対応づけていない capability は `packaging` と `full`（run 1 から変わらない）。
 - dev への push（`1517afde`）の `Tests`、`Gallery publication`、CodeQL も成功。
-- contact sheet: run 3 から新しい異常はない。J6 の step 03〜05 にも repair の通知は出ない（match 数 77 → 37）。#999 で変わった画面（feature popup の Similarity group 部分、ribbon popup、Reset alignment dialog、Similarity groups タブ）を開く journey はなく、写っているのは J4 の Editor のタブ列だけである（run 3 と同じ）。J3 は run 4 と run 5 の両方で、Session の Load と Generate のすべての step が run 3 の約 1.4 倍かかった（例: v30 BGC の Generate 14.6 s → 22.3 s）。BGC 以外の HmmtDNA でも同じ比率で遅く、同じコードの run 5 では J1、J5、J6 の Generate が run 3 より速いため、性能の後退ではなく runner の差と判断した
+- contact sheet: run 3 から新しい異常はない。J6 の step 03〜05 にも repair の通知は出ない（match 数 77 → 37）。#999 で変わった画面（feature popup の Similarity group 部分、ribbon popup、Reset alignment dialog、Similarity groups タブ）を開く journey はなく、写っているのは J4 の Editor のタブ列だけである（run 3 と同じ）。J3 は run 4 と run 5 の両方で、Session の Load と Generate のすべての step が run 3 の約 1.4 倍かかった（例: v30 BGC の Generate 14.6 s → 22.3 s）。BGC 以外の HmmtDNA でも同じ比率で遅く、同じ run 5 の J1、J5、J6 の Generate は run 3 より速いため、性能の後退ではなく runner の差と判断した。
 - 新しい問題: なし。
 
 レビューは `evidence/rt4-review.md`、`evidence/rt5-review.md`、`evidence/rt5-journeys.md`（montage は `evidence/rt5-montage/`）、ログは `logs/rt4/`、`logs/rt5/`。

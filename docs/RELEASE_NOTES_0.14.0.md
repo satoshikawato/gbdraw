@@ -216,10 +216,12 @@ reset, use **Undo** first. Saving and loading a Session keeps what Reset needs.
 When an older Session lacks it, or when Align changed no direction, the dialog
 says which. **Undo** and **Redo** restore the whole Result.
 
-The feature popup's **Similarity group** section, the similarity-group and
-collinear-block ribbon popups, and the Editor's **Similarity groups** tab now
-lead with one summary line. Copy and download actions are in a **Copy** menu
-and a **FASTA** menu per member, and **Reset Rename** is now **Reset name**.
+The feature popup's **Similarity group** section and the similarity-group and
+collinear-block ribbon popups now lead with one summary line, and so does the
+Editor's **Similarity groups** tab while an alignment is active. Each member
+has a **FASTA** menu, the group's FASTA copy and download are in one **Copy**
+menu (**More** in the feature popup), and **Reset Rename** is now **Reset
+name**.
 
 In Python, pass the resolved plan in a typed request. On the command line,
 `--similarity_alignment_feature` takes an exact reference feature only when
