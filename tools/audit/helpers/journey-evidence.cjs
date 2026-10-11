@@ -15,13 +15,13 @@ const { join } = require('node:path');
 const BUSY_LIMIT_MS = 60_000;
 
 // True when no Generate, reflow, Session load or save, or rule match is running,
-// and no visible element is marked busy or spinning.
+// and no visible element is marked busy or shows the loading logo.
 const idleInPage = () => {
   const app = window.__GBDRAW_APP__;
   if (app && (app.processing || app.labelReflowProcessing || app.sessionImportPending
     || app.sessionSavePending || app.ruleMatchingPending)) return false;
   const visible = (element) => element.getClientRects().length > 0 && getComputedStyle(element).visibility !== 'hidden';
-  return ![...document.querySelectorAll('[aria-busy="true"], .animate-spin')].some(visible);
+  return ![...document.querySelectorAll('[aria-busy="true"], .gbdraw-loader')].some(visible);
 };
 
 const busyInPage = () => {
@@ -31,7 +31,7 @@ const busyInPage = () => {
       .filter((name) => app[name])
     : [];
   const visible = (element) => element.getClientRects().length > 0 && getComputedStyle(element).visibility !== 'hidden';
-  const elements = [...document.querySelectorAll('[aria-busy="true"], .animate-spin')].filter(visible)
+  const elements = [...document.querySelectorAll('[aria-busy="true"], .gbdraw-loader')].filter(visible)
     .map((element) => `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ''}`
       + ` "${(element.getAttribute('aria-label') || element.textContent || '').trim().slice(0, 40)}"`);
   return { flags, elements };
