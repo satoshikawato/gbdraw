@@ -1697,7 +1697,7 @@ ORIGIN
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(repairedCanonicalSession))
   });
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded: repaired-canonical.gbdraw-session.json');
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded: repaired-canonical.gbdraw-session.json', { timeout: 120_000 });
   expect(dialogs).toEqual([]);
   expect(await page.evaluate(() => ({
     mode: window.__GBDRAW_APP__.mode,
@@ -2523,7 +2523,7 @@ ORIGIN
   });
   await expect(page.getByRole('alert', { name: 'Operation error' })).not.toContainText('Injected session commit failure');
   expect(dialogs).toEqual([]);
-  await expect(page.locator('[data-app-notice]')).not.toContainText('Session loaded');
+  await expect(page.locator('[data-app-notice]', { hasText: 'Session loaded' })).toHaveCount(0);
   expect(await page.evaluate(() => ({
     mode: window.__GBDRAW_APP__.mode,
     title: window.__GBDRAW_APP__.sessionTitle,

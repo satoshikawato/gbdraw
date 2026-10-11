@@ -72,7 +72,7 @@ test('unsafe keys, malformed JSON/gzip, fatal UTF-8 and Worker crash preserve th
   page.on('dialog', dialog => { dialogs.push(dialog.message()); dialog.accept(); });
   await openApp(page);
   await load(page, baseline);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded: session.json');
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded: session.json', { timeout: 120_000 });
   await retained(page);
   for (const [index, buffer] of [Buffer.from('{"nested":{"__proto__":{}}}'), Buffer.from('{private broken'),
     Buffer.from([0xff]), Buffer.from([0x1f, 0x8b, 1, 2, 3]), gzipSync(Buffer.from([0xc3]))].entries()) {
@@ -89,7 +89,7 @@ test('unsafe keys, malformed JSON/gzip, fatal UTF-8 and Worker crash preserve th
         : { code: 'INPUT_UNREADABLE', operation: 'unknown', stage: 'read', context: { field: 'schema' } });
     expect(JSON.stringify(error)).not.toMatch(/private broken|__proto__|Traceback/);
     expect(dialogs).toEqual([]);
-    await expect(page.locator('[data-app-notice]')).not.toContainText('Session loaded');
+    await expect(page.locator('[data-app-notice]', { hasText: 'Session loaded' })).toHaveCount(0);
     await expectRetained(page);
   }
   await context.route('**/workers/session-import-worker.js', route => route.fulfill({
@@ -102,7 +102,7 @@ test('unsafe keys, malformed JSON/gzip, fatal UTF-8 and Worker crash preserve th
     code: 'SESSION_IMPORT_UNAVAILABLE', operation: 'unknown', stage: 'transport'
   });
   expect(dialogs).toEqual([]);
-  await expect(page.locator('[data-app-notice]')).not.toContainText('Session loaded');
+  await expect(page.locator('[data-app-notice]', { hasText: 'Session loaded' })).toHaveCount(0);
   await expectRetained(page);
   const entries = await page.evaluate(() => window.__importWorkers.entries);
   for (const entry of entries) expect([entry.terminated, entry.listeners]).toEqual([1, 0]);

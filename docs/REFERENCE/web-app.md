@@ -1131,7 +1131,7 @@ Info Source recipe write `-p` and only your colors as `-d`. Colors are compared
 ignoring case, with `#abc` equal to `#aabbcc`, and **Auto** is not one of your
 colors.
 
-- Choosing another palette while you have your own colors asks **Keep my
+- Choosing another palette while you have your own colors asks **Keep my N
   colors** (the new palette plus your colors), **Use the palette's colors**, or
   **Cancel**, which changes nothing. Without your colors the palette changes at
   once. Switching back to the applied palette while another is queued asks the

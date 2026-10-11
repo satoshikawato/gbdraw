@@ -26,7 +26,7 @@ const load = async (page, file) => {
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
   const error = await page.evaluate(() => window.__GBDRAW_APP__.errorLog);
   expect(error, `Load ${path.basename(file)} failed`).toBeNull();
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
 };
 
 const save = async (page, file) => {

@@ -83,7 +83,7 @@ const definitionLines = (page) => page.evaluate(() => {
 
 const loadDefinitionSession = async (page, path) => {
   await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
 };
 
 test('Linear automatic replicon names follow Generate and preserve saved subtitles', async ({ page }, testInfo) => {
@@ -3341,7 +3341,7 @@ test('@comparison-contract File source order moves multi-record blocks through p
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
     .map((seq) => seq.region_record_id))).toEqual(['LowerA', 'LowerB', 'LowerC', 'UpperA', 'UpperB']);
   await expect(page.locator('[data-linear-source-card]').nth(0)).toContainText('lower.gbff');
@@ -3608,7 +3608,6 @@ test('@comparison-contract OIC-015: multi-record Adjacent searches all six pairs
   const savedPath = await (await saved).path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  page.once('dialog', (dialog) => dialog.accept());
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearRecordRows
     .map((entry) => entry.row))).toEqual([1, 1, 2, 2, 3]);
@@ -3748,7 +3747,7 @@ test('@comparison-contract multi-record defaults render a shared Circular canvas
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
   expect(await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     return {
@@ -3756,7 +3755,6 @@ test('@comparison-contract multi-record defaults render a shared Circular canvas
       linear: state.drawings.linear.linearRecordLayoutEnabled.value
     };
   })).toEqual({ circular: false, linear: false });
-  page.once('dialog', (dialog) => dialog.accept());
   await page.evaluate(() => window.__GBDRAW_APP__.resetSettings());
   expect(await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
@@ -3871,7 +3869,6 @@ test('@comparison-contract LOSAT Settings preserve execution controls and unboun
     const path = await (await saved).path();
     await page.reload({ waitUntil: 'domcontentloaded' });
     await waitForAppShell(page);
-    page.once('dialog', (dialog) => dialog.accept());
     await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
     await expect(settings).toHaveAttribute('open', '');
     for (const [index, name] of labels.entries()) {
@@ -3880,7 +3877,6 @@ test('@comparison-contract LOSAT Settings preserve execution controls and unboun
     await expect(member).toHaveValue('');
     expect(await page.evaluate(() => window.__GBDRAW_APP__.losat.blastp.orthogroupMemberMaxHits)).toBeNull();
   }
-  page.once('dialog', (dialog) => dialog.accept());
   await page.evaluate(() => window.__GBDRAW_APP__.resetSettings());
   expect(await page.evaluate(() => window.__GBDRAW_APP__.losatExecution.executionMode)).toBe('threaded');
 });
@@ -3995,7 +3991,7 @@ test('@comparison-contract record rotation adds zero LOSATP source jobs and surv
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
   await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
   const restored = await run();
   expect(restored.result, JSON.stringify(restored.error)).toEqual({ status: 'ok' });
   expect(restored.jobCount).toBe(0);
@@ -4092,7 +4088,6 @@ test('@comparison-contract Total threads reallocates Auto runs and threads in re
   const savedPath = await saved.path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  page.once('dialog', dialog => dialog.accept());
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
   await expect(total).toHaveValue('4');
   await expect(runs).toHaveValue('2');

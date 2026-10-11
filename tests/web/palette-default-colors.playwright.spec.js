@@ -53,12 +53,12 @@ test('a palette switch keeps a user default color after asking; Cancel changes n
   const next = await page.evaluate(() => window.__GBDRAW_APP__.paletteNames.find((name) => (
     name !== window.__GBDRAW_APP__.selectedPalette
   )));
-  // D-24: the dialog names the palette it changes to.
+  // D-24: the dialog names both palettes.
   const dialog = page.getByRole('dialog', { name: `Change palette to "${next}"`, exact: true });
 
   await select.selectOption(next);
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText('Keep your 1 changed color (');
+  await expect(dialog).toContainText(`Keep your 1 changed color from the "${before.palette}" palette (`);
   await expect(dialog).not.toContainText('is dropped');
   await expect(select).toHaveValue(before.palette);
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -67,7 +67,7 @@ test('a palette switch keeps a user default color after asking; Cancel changes n
   expect(await facts(page)).toEqual(before);
 
   await select.selectOption(next);
-  await dialog.getByRole('button', { name: 'Keep my colors', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Keep my 1 color', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await expect(select).toHaveValue(next);
   const kept = await facts(page);
@@ -94,7 +94,7 @@ test('a palette switch keeps a user default color after asking; Cancel changes n
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
   await expect(select).toHaveValue(next);
   // Generate records its own History step, so the parity check comes last.
-  await expectLiveEqualsGenerate(page, { label: 'Keep my colors' });
+  await expectLiveEqualsGenerate(page, { label: 'Keep my 1 color' });
 });
 
 test('Default colors Reset asks before it discards a user default color', async ({ page }) => {
@@ -215,7 +215,7 @@ test('while a palette is queued, Apply to all shows its color now and switching 
   await expect(dialog).toBeVisible();
   // D-24: switching back drops the queued palette, and the colors apply now.
   await expect(dialog).toContainText(`The queued "${next}" palette is dropped and the colors apply now.`);
-  await dialog.getByRole('button', { name: 'Keep my colors', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Keep my 1 color', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await expect(select).toHaveValue(applied);
   expect(await queued()).toMatchObject({ pending: '', applied: USER_CDS, cds: USER_CDS });

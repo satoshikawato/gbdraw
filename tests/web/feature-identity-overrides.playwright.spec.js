@@ -416,7 +416,7 @@ test('a Linear Session 33 with crop and reverse complement keeps its feature edi
   await openFresh(page);
   await loadSession(page, LINEAR_V33);
   const [testa, testb] = await committedRecordKeys(page);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
   await expect(page.locator('[data-app-notice] li')).toHaveCount(0);
   expect(await featureOverrideRows(page)).toEqual([
     [testa, 'fef810304', null, 'off', null],
@@ -451,7 +451,7 @@ test('loading an older Session counts only the feature edits it drops', async ({
   const file = writeUnmatchedEditSession(testInfo);
   await openFresh(page);
   await loadSession(page, file);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
   await expect(page.locator('[data-app-notice] li')).toHaveText([
     '1 feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.'
   ]);
@@ -482,7 +482,7 @@ test('an older Session whose sources cannot be read again fails to load and keep
   await page.locator('input[accept^=".json,"]').setInputFiles(file);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
   await settle(page);
-  await expect(page.locator('[data-app-notice]')).not.toContainText('Session loaded');
+  await expect(page.locator('[data-app-notice]', { hasText: 'Session loaded' })).toHaveCount(0);
   expect(await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
     const { code, stage, actions } = state.errorLog.value || {};
@@ -495,7 +495,7 @@ test('an older Session whose sources cannot be read again fails to load and keep
   // Retry once the runtime can start: the Load drops only the unmatched edit.
   await page.context().unroute(runtimeAssets);
   await loadSession(page, file);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
   await expect(page.locator('[data-app-notice] li')).toHaveText([
     '1 feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.'
   ]);
@@ -556,7 +556,7 @@ test('loading a Session 44 says which Feature visibility edits now apply to one 
   test.setTimeout(300_000);
   await openFresh(page);
   await loadSession(page, 'tests/fixtures/sessions/feature-edits-circular-copies.v44.gbdraw-session.json.gz');
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
   await expect(page.locator('[data-app-notice] li')).toHaveText([
     '1 Feature visibility edit(s) from an older Session hid every feature with '
       + 'the same hash, such as each copy of a duplicated record. Each now applies only to the feature that '

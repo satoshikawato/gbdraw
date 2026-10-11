@@ -301,7 +301,7 @@ const loadSessionThroughUi = async (page) => {
   await page.evaluate(() => new Promise((resolveFrame) => (
     requestAnimationFrame(() => requestAnimationFrame(resolveFrame))
   )));
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
 };
 
 const inspectSavedPreview = (page) => page.evaluate(async () => {

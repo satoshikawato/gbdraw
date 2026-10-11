@@ -6713,7 +6713,7 @@
                             </button>
                     </choice-dialog>
 
-                    <!-- Palette Colors Dialog (D-15); wording UX-A12 -->
+                    <!-- Palette Colors Dialog: choices and counts per the Product Contract row OIC-029 -->
                     <choice-dialog v-if="paletteColorsDialog.show" :busy="dialogChoicePending" labelledby="palette-colors-title" describedby="palette-colors-description"
                          @cancel="handlePaletteColorsChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
@@ -6725,7 +6725,7 @@
                                     Replace your {{ paletteColorsDialog.count }} changed {{ paletteColorsDialog.count === 1 ? 'color' : 'colors' }} ({{ paletteColorsDialog.keysText }}) with the colors of the "{{ paletteColorsDialog.toPalette }}" palette?
                                 </template>
                                 <template v-else>
-                                    Keep your {{ paletteColorsDialog.count }} changed {{ paletteColorsDialog.count === 1 ? 'color' : 'colors' }} ({{ paletteColorsDialog.keysText }})?
+                                    Keep your {{ paletteColorsDialog.count }} changed {{ paletteColorsDialog.count === 1 ? 'color' : 'colors' }} from the "{{ paletteColorsDialog.fromPalette }}" palette ({{ paletteColorsDialog.keysText }})?
                                     <template v-if="paletteColorsDialog.droppedPalette">The queued "{{ paletteColorsDialog.droppedPalette }}" palette is dropped and the colors apply now.</template>
                                 </template>
                             </p>
@@ -6743,7 +6743,7 @@
                                         data-history-managed
                                         class="choice-option is-primary" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-push-pin" aria-hidden="true"></i>
-                                    <span>Keep my colors</span>
+                                    <span>Keep my {{ paletteColorsDialog.count }} {{ paletteColorsDialog.count === 1 ? 'color' : 'colors' }}</span>
                                 </button>
                                 <button @click="handlePaletteColorsChoice('palette')"
                                         data-history-managed

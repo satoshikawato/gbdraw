@@ -46,7 +46,7 @@ const load = async (page, file = fixture, accepted = true) => {
     !window.__GBDRAW_APP__.sessionImportPending
     && (!accepted || window.__C619_EVENTS__.filter(event => event.name === 'interactiveReady').length > readyBefore)
   ), { readyBefore, accepted });
-  if (!accepted) await expect(page.locator('[data-app-notice]')).not.toContainText('Session loaded');
+  if (!accepted) await expect(page.locator('[data-app-notice]', { hasText: 'Session loaded' })).toHaveCount(0);
 };
 const openPanel = async page => {
   const button = page.locator('button[aria-controls="circular-custom-track-slots-panel"]');

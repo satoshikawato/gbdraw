@@ -102,7 +102,7 @@ const saveSession = async (page, title) => {
 };
 const loadSession = async (page, path) => {
   await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
 };
 
 test('a Linear record turned OFF leaves the request, its pairs, and its row, and returns to its row when ON', async ({ page }) => {

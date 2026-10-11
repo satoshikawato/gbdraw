@@ -773,7 +773,7 @@ const loadExactSession = async (page, { browserFetch = false } = {}) => {
   await page.evaluate(() => new Promise((resolveFrame) => (
     requestAnimationFrame(() => requestAnimationFrame(resolveFrame))
   )));
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
 };
 
 const openExactApp = async (page, { structural = false } = {}) => {

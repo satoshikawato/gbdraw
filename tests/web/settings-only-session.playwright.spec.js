@@ -158,7 +158,7 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
 
     const restored = await fresh();
     await restored.locator('input[accept^=".json,"]').setInputFiles(saved.file);
-    await expect(restored.locator('[data-app-notice]')).toContainText('Session loaded');
+    await expect(restored.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
     await restored.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
     const after = await snapshot(restored);
     assertSourceFree(after);

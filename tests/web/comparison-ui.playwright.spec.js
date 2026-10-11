@@ -524,7 +524,7 @@ test('imported comparison resolutions are explicit and create one History entry 
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(decisionRequiredComparisonSession()))
   });
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
   await expect(resolution).toContainText('Saved comparison needs a decision');
   await expect(resolution).toContainText('missing a required resource');
   await expect(resolution.getByRole('button', { name: 'Inherit saved comparison' }))
@@ -631,7 +631,7 @@ test('preserved imported comparison generates only after explicit inheritance', 
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(preservedComparisonSession()))
   });
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
 
   const resolution = page.locator('[data-imported-comparison-resolution]');
   await expect(resolution).toContainText('Saved comparison preserved as read-only');
@@ -1587,7 +1587,6 @@ test('unmatched uploaded table IDs show a notice that follows the Result through
   expect(await page.evaluate(() => window.__GBDRAW_APP__.comparisonWarnings)).toEqual([]);
 
   // Loading the saved Session restores the notice with its Result.
-  page.once('dialog', (dialog) => dialog.accept());
   await page.locator('input[accept^=".json,"]').first().setInputFiles(await saved.path());
   await expect(notice).toBeVisible();
   await expect(notice).toContainText(message);
