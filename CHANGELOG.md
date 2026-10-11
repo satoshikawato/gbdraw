@@ -104,7 +104,7 @@ write-up of a release.
   before choosing its file keeps the active alignment, because the pair has no
   new data yet. Before, the alignment was cleared at once with "Alignment
   cleared: comparison configuration changed." Choosing a file, another
-  program or mode, or any other comparison change still clears it (OV-380).
+  program, or another mode still clears it (OV-380).
 - Feature popup (web app): while the first popup after a page or Session load
   waits for Python to match the color rules, the toolbar shows **Preparing
   feature details…**, and **Save Session** and **Load Session** stay available.

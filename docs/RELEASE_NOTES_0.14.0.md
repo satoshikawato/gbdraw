@@ -202,8 +202,11 @@ Result stay.
 
 The alignment is saved with every anchor and **Skip** choice. A record's
 direction is its **Reverse complement** setting. Generate, reordering
-records, and a manual **Reverse complement** keep the alignment. A comparison change
-clears it, except that choosing **Upload BLAST TSV** for a pair keeps it until a file is chosen.
+records, and a manual **Reverse complement** keep the alignment. Changing a
+pair's source or file, the comparison program, or the LOSATP mode clears it,
+except that choosing **Upload BLAST TSV** for a pair keeps it until a file is
+chosen. Result filters such as **Minimum identity** keep it, even when they
+change the Similarity Groups.
 **Reset alignment…** moves records back
 to where they were just before the latest Align, and can also undo the
 direction changes that Align made; its preview lists later manual edits that
