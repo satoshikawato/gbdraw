@@ -14,8 +14,7 @@ import {
   resolveDisplayProteinId
 } from '../services/feature-utils.js';
 import { downloadTextFile } from '../services/text-download.js';
-import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
-import { resolveLinearRecordEffectiveDefinition } from '../services/linear-sources.js';
+import { linearRecordNames } from '../services/linear-sources.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import {
   ORTHOGROUP_ID_KEYS,
@@ -654,6 +653,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
       const uid = String(requestRecords[recordIndex]?.recordKey ?? '');
       return uid ? linearSeqs.find((sequence) => sequence.uid === uid) : undefined;
     };
+    const names = linearRecordNames(linearSeqs);
     const byRecord = new Map();
     (Array.isArray(members) ? members : []).forEach((member) => {
       const recordIndex = nonnegativeIntegerAliasStatus(member, RECORD_INDEX_KEYS);
@@ -665,15 +665,9 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
       .sort((left, right) => left[0] - right[0])
       .map(([recordIndex, members]) => ({
         recordIndex,
-        // The record's drawn definition as plain text (the diagram heading
-        // renders its markup), else its file name (OV-369).
+        // The record as every panel names it (OV-369, OV-436).
         recordLabel: recordIndex >= 0
-          ? plainTextLinearRecordLabel(
-              resolveLinearRecordEffectiveDefinition(cardOf(recordIndex)) ||
-              cardOf(recordIndex)?.gb?.name ||
-              cardOf(recordIndex)?.gff?.name ||
-              `Record ${recordIndex + 1}`
-            )
+          ? names.get(String(cardOf(recordIndex)?.uid ?? ''))?.label || `Record ${recordIndex + 1}`
           : 'Record',
         members
       }));

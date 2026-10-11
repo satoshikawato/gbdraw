@@ -335,6 +335,30 @@ def open_linear_comparison_disclosure(
     return details
 
 
+def linear_raw_result(
+    page: Page, query_index: int, subject_index: int
+) -> Locator:
+    """Open Selected pairs and return the Raw LOSAT row of one LOSAT pair."""
+
+    open_linear_comparison_disclosure(page, "selected-pairs", "Selected pairs")
+    row = linear_pair(page, query_index, subject_index).locator(
+        "[data-linear-raw-result]"
+    )
+    expect(row).to_have_count(1)
+    return row
+
+
+def open_linear_raw_filename(raw_result: Locator) -> Locator:
+    """Open the closed File name disclosure of a Raw LOSAT row."""
+
+    details = raw_result.locator("details")
+    expect(details).to_have_count(1)
+    if details.get_attribute("open") is None:
+        details.locator("summary").click()
+    expect(details).to_have_attribute("open", "")
+    return details
+
+
 def select_linear_losat_mode(
     settings: Locator, *, label: str, mode_key: str
 ) -> Locator:

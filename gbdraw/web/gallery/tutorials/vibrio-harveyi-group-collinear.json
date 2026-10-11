@@ -313,7 +313,7 @@
           ]
         ]
       },
-      "note": "Evidence scope stays at Adjacent pairs: every chromosome in one row is compared with every chromosome in the next row, four pairs here. LOSAT runs only in this step; the later Generates reuse its results.",
+      "note": "Search between stays at Adjacent pairs: every chromosome in one row is compared with every chromosome in the next row, four pairs here. LOSAT runs only in this step; the later Generates reuse its results.",
       "replay": [
         {
           "type": "click",

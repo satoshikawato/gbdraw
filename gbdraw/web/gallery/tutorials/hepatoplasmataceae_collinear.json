@@ -102,7 +102,7 @@
     },
     {
       "title": "Use browser LOSAT",
-      "body": "In Comparison, choose Run LOSAT. Open Settings when you need to review the browser runtime controls under Runtime and reproducibility.",
+      "body": "In Comparison, choose Run LOSAT. Open Settings when you need to review the browser runtime controls under Performance.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -147,10 +147,10 @@
         },
         {
           "dataDependent": true,
-          "title": "Runtime and reproducibility",
+          "title": "Performance",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-03-02-runtime-reproducibility.webp",
-            "alt": "Runtime and reproducibility controls showing Auto execution, Safe total threads, and automatic run allocation.",
+            "alt": "Performance controls showing Auto execution, Safe total threads, and automatic run allocation.",
             "caption": "Open Comparison › Settings to review the execution and thread allocation used by browser LOSAT."
           },
           "capture": {
@@ -165,11 +165,11 @@
               },
               {
                 "type": "waitForFunction",
-                "script": "() => Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).some((section) => section.textContent.includes('Runtime and reproducibility'))"
+                "script": "() => Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).some((section) => section.textContent.includes('Performance'))"
               },
               {
                 "type": "evaluate",
-                "script": "const section = Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).find((node) => node.textContent.includes('Runtime and reproducibility')); if (!section) throw new Error('Runtime and reproducibility section was not found.'); section.dataset.capture = 'hep-collinear-runtime'; section.scrollIntoView({ block: 'center' });"
+                "script": "const section = Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).find((node) => node.textContent.includes('Performance')); if (!section) throw new Error('Performance section was not found.'); section.dataset.capture = 'hep-collinear-runtime'; section.scrollIntoView({ block: 'center' });"
               }
             ],
             "selector": "[data-capture='hep-collinear-runtime']",
@@ -182,7 +182,7 @@
               "losatExecution.totalThreadBudget": "safe",
               "losatExecution.threadsPerJob": "auto"
             },
-            "visibleText": ["Runtime and reproducibility", "Parallel runs"],
+            "visibleText": ["Performance", "Parallel runs"],
             "visibleControls": [
               {"selector": "[data-capture='hep-collinear-runtime'] select[aria-label='LOSAT execution']", "value": "auto"},
               {"selector": "[data-capture='hep-collinear-runtime'] select[aria-label='LOSAT total threads']", "value": "safe"},
@@ -203,13 +203,13 @@
           ["Max unit gap", "0"],
           ["Min block genes", "1"],
           ["Color mode", "Orientation + identity"],
-          ["Evidence scope", "Adjacent pairs"],
+          ["Search between", "Adjacent pairs"],
           ["Diagonal drift", "0"],
           ["Merge conflicts", "1"],
           ["Bitscore", "50"],
           ["E-value", "1e-2"],
-          ["Minimum Identity", "0"],
-          ["Minimum Length", "0"]
+          ["Min identity (%)", "0"],
+          ["Min length", "0"]
         ]
       },
       "note": "These settings combine compatible runs of protein-match anchors from gbdraw similarity groups into collinear blocks.",

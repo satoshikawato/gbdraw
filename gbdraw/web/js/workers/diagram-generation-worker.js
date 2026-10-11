@@ -217,7 +217,14 @@ _json.dumps(_get_web_runtime_capabilities(), sort_keys=True)
   return JSON.parse(String(raw));
 };
 
+// The first-use preparation steps, reported as they start: a real step
+// count, not a time estimate.
+const RUNTIME_PREPARATION_STEPS = Object.freeze([
+  'loading Python', 'loading the package installer', 'checking packages', 'installing packages', 'starting gbdraw'
+]);
+
 const initializeRuntime = async ({
+  id = null,
   pyodideIndexUrl,
   pyodideModuleUrl,
   localWheelUrls = [],
@@ -232,23 +239,32 @@ const initializeRuntime = async ({
     throw new Error('Diagram generation worker requires the gbdraw wheel URL.');
   }
 
+  /** @param {number} index */
+  const reportStep = (index) => self.postMessage({
+    id, type: 'init-progress', step: index + 1, total: RUNTIME_PREPARATION_STEPS.length, label: RUNTIME_PREPARATION_STEPS[index]
+  });
   runtimePromise = (async () => {
+    reportStep(0);
     const { loadPyodide } = await import(pyodideModuleUrl);
     const pyodide = await loadPyodide({
       indexURL: pyodideIndexUrl,
       packageBaseUrl: pyodideIndexUrl
     });
+    reportStep(1);
     await pyodide.loadPackage('micropip');
     const micropip = pyodide.pyimport('micropip');
 
+    reportStep(2);
     await Promise.all(
       localWheelUrls.map((url, index) =>
         ensureLocalAsset(url, `Pyodide dependency wheel #${index + 1}`)
       )
     );
     await ensureLocalAsset(gbdrawWheelUrl, 'gbdraw browser wheel');
+    reportStep(3);
     await micropip.install(localWheelUrls);
     await micropip.install(gbdrawWheelUrl);
+    reportStep(4);
     await pyodide.runPythonAsync(PYTHON_HELPERS);
 
     const capabilities = readRuntimeCapabilities(pyodide);
