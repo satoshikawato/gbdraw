@@ -2801,6 +2801,18 @@ for (const previousSuppressed of [false, true]) {
     assert.equal(await h.history.hasChangesSinceSavePoint(), false);
   }
   {
+    const h = await createActionHarness();
+    const load = h.heldLoad(() => {});
+    await tick();
+    await assert.rejects(h.history.runUndoableCheckpoint('Change uploaded file', async () => {
+      h.intent.table = 'failed';
+      throw new Error('import failed');
+    }), /import failed/);
+    load.release();
+    await load.done;
+    assert.equal(h.history.getUndoCount(), 0, 'a checkpoint that throws is in no step');
+  }
+  {
     const h = await createActionHarness(withResult);
     const load = h.heldLoad(() => {});
     await tick();
@@ -2864,7 +2876,7 @@ for (const previousSuppressed of [false, true]) {
   // belongs to the first of them, whichever rule write arrives first.
   for (const order of [[0, 1], [1, 0]]) {
     const g = await createActionHarness();
-    const ruleAction2 = (_, label, write) => {
+    const sameLabelAction = (label, write) => {
       const prepared = hold();
       const done = g.history.runUndoable(label, async () => {
         await prepared.held;
@@ -2873,10 +2885,10 @@ for (const previousSuppressed of [false, true]) {
       return { done, release: prepared.release };
     };
     await g.history.begin('Change color', { source: 'input-adapter', owner: { tagName: 'INPUT' } });
-    const one = ruleAction2(null, 'Change feature color', () => { g.intent.color = 'blue'; });
+    const one = sameLabelAction('Change feature color', () => { g.intent.color = 'blue'; });
     await tick();
     await g.history.begin('Change color', { source: 'input-adapter', owner: { tagName: 'INPUT' } });
-    const two = ruleAction2(null, 'Change feature color', () => { g.intent.table = 'two'; });
+    const two = sameLabelAction('Change feature color', () => { g.intent.table = 'two'; });
     await tick();
     for (const index of order) {
       [one, two][index].release();
