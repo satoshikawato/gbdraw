@@ -3,7 +3,7 @@
 /** @import { PreparedFileLegend, RuleActionsPorts } from './feature-editor/rule-actions.js' */
 /** @import { VisibilityActionsPorts } from './feature-editor/visibility-actions.js' */
 /** @import { FeatureSelectionPort, PrepareDrawnFeatureMatchesPort, PreviewTransformInteractionPort } from './feature-editor/svg-actions.js' */
-/** @import { ReadUserDefaultColorPort, SetDefaultColorPort } from './feature-editor/color-actions.js' */
+/** @import { ReadTrackLegendRowsPort, ReadUserDefaultColorPort, SetDefaultColorPort } from './feature-editor/color-actions.js' */
 /** @import { AskChoice, ShowNotice } from './app-messages.js' */
 import { createFeatureColorActions } from './feature-editor/color-actions.js';
 import { createFeatureLabelActions } from './feature-editor/label-actions.js';
@@ -34,6 +34,7 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  *   Closes a choice dialog once the History step of its choice ends (D-12).
  * @property {() => ({ mode?: string, diagramOptions?: Record<string, any> } | null)} getCommittedRequest
  *   The committed canonical request (Python owns the option fields, R7).
+ * @property {ReadTrackLegendRowsPort} readTrackLegendRows
  * @property {() => Record<string, any> | null} [getCommittedSession] The committed canonical Session.
  * @property {((resourceId: string, kind: string) => any) | null} [readResourceRecordCount]
  *   Counts the records of a committed resource.
@@ -73,6 +74,7 @@ export const createFeatureEditor = ({
   runUndoableCheckpoint,
   closeAfterDialogChoice,
   getCommittedRequest,
+  readTrackLegendRows,
   getCommittedSession = () => null,
   readResourceRecordCount = null,
   readFeatureOverrideTable = null,
@@ -120,7 +122,8 @@ export const createFeatureEditor = ({
     getFeatureFillElements: featureSvgActions.getFeatureFillElements,
     closeAfterDialogChoice,
     readUserDefaultColor,
-    setDefaultColor
+    setDefaultColor,
+    readTrackLegendRows
   });
   // The visibility owner comes before the label owner, which receives its
   // transition as a port: Show feature and label (Owner Q2) sets Feature

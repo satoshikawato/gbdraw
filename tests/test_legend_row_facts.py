@@ -33,6 +33,8 @@ from gbdraw.api import (
 )
 from gbdraw.api.request_render import render_request
 from gbdraw.legend.row_facts import collect_legend_row_facts
+from gbdraw.diagrams.circular.assemble import _sync_legend_table_for_circular_slots
+from gbdraw.diagrams.linear.assemble import _sync_legend_table_for_linear_slots
 from gbdraw.legend.table import _generated_legend_fills
 
 _COLOR_COLUMNS = ["feature_type", "qualifier_key", "value", "color", "caption"]
@@ -294,3 +296,39 @@ def test_generated_legend_rows_take_no_input_the_web_pin_lacks():
         "feature_specific_colors", "features_present", "default_colors", "used_color_rules",
         "default_used_features", "gc_config", "skew_config", "depth_config", "show_gc", "show_skew", "show_depth",
     ]
+
+
+TRACK_SLOT_ROWS = json.loads(
+    (Path(__file__).parent / "fixtures" / "legend_track_slot_rows.json").read_text(encoding="utf-8")
+)["cases"]
+
+
+@pytest.mark.parametrize("case", TRACK_SLOT_ROWS, ids=[case["name"] for case in TRACK_SLOT_ROWS])
+def test_track_slot_legend_rows_are_the_rows_the_web_reads_from_the_slots(case):
+    """The Web app reads each of these rows' slot and fill from the request's slots (OV-484)."""
+    palette = case["palette"]
+
+    def track(high, low):
+        return SimpleNamespace(
+            dinucleotide=case["dinucleotide"], high_fill_color=high, low_fill_color=low, stroke_color="none", stroke_width=0
+        )
+
+    gc_config = track(palette["gc_content"], palette["gc_content"])
+    skew_config = track(palette["skew_high"], palette["skew_low"])
+    slots = [SimpleNamespace(**slot) for slot in case["slots"]]
+    if case["mode"] == "circular":
+        table = _sync_legend_table_for_circular_slots(
+            {}, circular_track_slots=slots, gc_config=gc_config, skew_config=skew_config,
+            depth_config=None, depth_df=None, cfg=SimpleNamespace(),
+        )
+    else:
+        defaults = _generated_legend_fills(
+            {}, [], pd.DataFrame(columns=["feature_type", "color"]), used_color_rules=None, default_used_features=set(),
+            gc_config=gc_config, skew_config=skew_config, depth_config=None,
+            show_gc=True, show_skew=True, show_depth=False,
+        )
+        table = _sync_legend_table_for_linear_slots(
+            {key: {"fill": fill} for key, fill in defaults.items()},
+            linear_track_slots=slots, skew_config=skew_config, depth_tracks=None,
+        )
+    assert [[key, row["fill"]] for key, row in table.items()] == [[key, fill] for key, _, _, fill in case["rows"]]

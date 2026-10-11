@@ -445,15 +445,17 @@ test('a rule captioned with a track row draws its own row, and the commit leaves
   assert.deepEqual([...ruleCommitLegendRows({ ...context, rules: [live, next] }).takenKeys], []);
 });
 
-// The Python rows the Web app reads from their keys, with the palette key of
-// their fill, are those Python generates (tests/test_legend_row_facts.py).
+// The Python rows the Web app reads from their keys are those Python
+// generates (tests/test_legend_row_facts.py): a present type's row with the
+// palette key of its fill, or a track's row, whose fill the track rows of the
+// request give (tests/web/track-legend-row-colors.test.mjs).
 test('the generated Legend rows read from their keys are Python\'s', () => {
   const { cases } = JSON.parse(readFileSync(new URL('../fixtures/legend_generated_rows.json', import.meta.url), 'utf8'));
   for (const { name, features_present: types, rows } of cases) {
     for (const [key, paletteKey] of rows) {
       const row = generatedLegendRow(key);
-      assert.equal(row.paletteKey, paletteKey, `${name}: ${key}`);
-      assert.ok(row.track || types.includes(row.paletteKey), `${name}: ${key} is a track row or a present type's row`);
+      assert.equal(row.track, !types.includes(paletteKey), `${name}: ${key} is a track row or a present type's row`);
+      assert.equal(row.paletteKey, row.track ? '' : paletteKey, `${name}: ${key}`);
     }
   }
   assert.deepEqual(generatedLegendRow('Group'), { track: false, paletteKey: 'Group' }, 'any other key names a type\'s row');

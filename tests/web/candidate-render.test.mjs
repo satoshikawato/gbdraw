@@ -534,7 +534,7 @@ test('a live Legend fill and stroke of a renamed row address Python\'s key only'
     originalLegendOrder: ['CDS', 'tRNA'],
     legendColorOverrides: { Proteins: '#ff0000' },
     legendStrokeOverrides: { Proteins: { strokeColor: '#00ff00' } },
-    livePreview: { domains: ['legendFills', 'featureStrokes', 'legendStrokes'], paletteColors: { tRNA: '#0000ff' } }
+    livePreview: { trackRows: new Map(), domains: ['legendFills', 'featureStrokes', 'legendStrokes'], paletteColors: { tRNA: '#0000ff' } }
   }).operationsByResult[0];
   assert.deepEqual(operations.legendFills.map(({ caption, color }) => [caption, color]), [['CDS', '#ff0000'], ['tRNA', '#0000ff']]);
   assert.deepEqual(operations.legendStrokes.map(({ caption }) => caption), ['CDS']);

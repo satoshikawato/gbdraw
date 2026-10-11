@@ -50,6 +50,31 @@ const renameLegendRow = async (page, caption, name) => {
   await settleLive(page);
 };
 
+// OV-484: custom track slots with two more skew slots, a GC skew slot (its rows
+// repeat the first slot's label: "GC skew (+) (2)") and an AT skew slot with
+// its own colors, then Generate.
+const addSkewSlots = async (page) => {
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const linear = app.mode === 'linear';
+    if (linear) app.form.show_skew = true;
+    const slots = () => (linear ? app.adv.linear_track_slots : app.adv.circular_track_slots);
+    const add = () => {
+      const before = new Set(slots().map((slot) => slot.id));
+      if (linear) app.addLinearTrackSlot('dinucleotide_skew'); else app.addCircularTrackSlot('dinucleotide_skew');
+      return slots().find((slot) => !before.has(slot.id));
+    };
+    if (linear) app.setLinearTrackSlotsEnabled(true); else app.setCircularTrackSlotsEnabled(true);
+    if (!slots().some((slot) => slot.renderer === 'dinucleotide_skew')) add();
+    Object.assign(add().params, { nt: 'GC' });
+    Object.assign(add().params, { nt: 'AT', positive_color: '#deaf6e', negative_color: '#7294e3' });
+  });
+  await generate(page);
+  const rows = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => [entry.caption, entry.color]));
+  expect(rows).toEqual(expect.arrayContaining([['AT skew (+)', '#deaf6e'], ['AT skew (-)', '#7294e3']]));
+  expect(rows.map(([caption]) => caption)).toEqual(expect.arrayContaining(['GC skew (+)', 'GC skew (+) (2)', 'GC skew (-) (2)']));
+};
+
 // The edit kinds. Each appears at least once in the matrix.
 const KINDS = [
   'visibility rule add', 'visibility rule action', 'visibility rule delete', 'feature Off', 'feature On',
@@ -486,6 +511,16 @@ const CASES = [
     setup: (page) => editorLegendRows(page, [['Manual row', '#118833']]),
     run: (page) => switchPalette(page, 'alpine_retreat')
   },
+  // OV-484: the Legend rows of a skew slot with its own colors keep them
+  // through a palette change, and the rows of a second slot of one label
+  // follow the palette as the first slot's do.
+  ...['circular', 'linear'].map((mode) => ({
+    kind: 'palette',
+    edit: 'Palette change with skew slots of their own colors and of one label',
+    states: { mode, results: 'single', reflow: 'off', labels: 'unbound' },
+    setup: addSkewSlots,
+    run: (page) => switchPalette(page, 'alpine_retreat')
+  })),
   // Review U2BFIX #5: a Legend row delete (a writer not yet migrated to the
   // edit port) with a palette change, a Legend row stroke, and a Legend row
   // color shown through the port.

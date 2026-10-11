@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { trackLegendRows } from '../../gbdraw/web/js/services/track-legend-rows.js';
 import { fixture } from './helpers/svg-style-fixture.mjs';
 
 test('depth OFF and ON publish parent visibility at the style owner', () => {
@@ -10,15 +11,20 @@ test('depth OFF and ON publish parent visibility at the style owner', () => {
     assert.equal(JSON.parse(state.results.value[0].content).depth.display, enabled ? undefined : 'none');
   }
 });
-// OV-108 (PD-OI-086): each mode has its own drawing, so the palette styles a
-// Result with the skew slot colors of the drawing of that Result's mode.
-test('a palette keeps the skew slot colors of the drawing of the displayed Result (OV-108)', () => {
-  const { actions, state, skewFills } = fixture({ default: '#d3d3d3', skew_high: '#abcdef', skew_low: '#fedcba' }, []);
-  const circular = { ...state.drawings.circular, adv: {
-    circular_track_slots_enabled: true,
-    circular_track_slots: [{ id: 'gc_skew', renderer: 'dinucleotide_skew', params: { positive_color: '#112233', negative_color: '#445566' } }]
-  } };
-  const linear = { ...state.drawings.circular, adv: { linear_track_slots_enabled: false, linear_track_slots: [] } };
+// OV-108 (PD-OI-086), OV-488: the palette styles a Result with the skew slot
+// colors of the request that drew it, whichever mode is shown; the track slots
+// of neither drawing reach it before Generate (R1).
+test('a palette keeps the skew slot colors of the request that drew the displayed Result (OV-108)', () => {
+  const trackRows = trackLegendRows({ mode: 'circular', diagramOptions: { dinucleotide: 'GC', tracks: { circularTrackSlots: [
+    { id: 'gc_skew', renderer: 'dinucleotide_skew', enabled: true, params: { positive_color: '#112233', negative_color: '#445566' } }
+  ] } } });
+  const { actions, state, skewFills } = fixture({ default: '#d3d3d3', skew_high: '#abcdef', skew_low: '#fedcba' }, [], { trackRows });
+  const draft = (mode, colors) => ({ ...state.drawings.circular, adv: {
+    [`${mode}_track_slots_enabled`]: true,
+    [`${mode}_track_slots`]: [{ id: 'gc_skew', renderer: 'dinucleotide_skew', params: colors }]
+  } });
+  const circular = draft('circular', { positive_color: '#00aa00' });
+  const linear = draft('linear', { negative_color: '#0000aa' });
   Object.defineProperties(state, {
     drawings: { value: Object.freeze({ circular, linear }), configurable: true },
     activeDrawing: { value: () => (state.mode.value === 'linear' ? linear : circular), configurable: true }

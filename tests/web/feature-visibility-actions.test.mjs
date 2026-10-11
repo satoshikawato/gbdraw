@@ -34,6 +34,7 @@ const visibilityPort = (state, getCommittedRequest, show, addressing = () => dis
     livePreview: {
       domains,
       paletteColors: {},
+      trackRows: new Map(),
       drawnContext: featureDrawnContext(state.activeDrawing(), { diagramOptions: getCommittedRequest()?.diagramOptions })
     }
   }).operationsByResult[0].featureVisibility.map(({ renderedId }) => renderedId));

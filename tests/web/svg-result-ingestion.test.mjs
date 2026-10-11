@@ -1216,7 +1216,7 @@ const previewPlan = (admission, {
     catalogAdmission: admission,
     legendEntries: [{ caption: 'CDS', originalCaption: 'CDS', color: '#aaaaaa' }],
     originalLegendOrder: ['CDS'],
-    livePreview: { domains, paletteColors, drawnContext, pythonRows, features: [...admission.renderedFeaturesByResult[0].values()] },
+    livePreview: { trackRows: new Map(), domains, paletteColors, drawnContext, pythonRows, features: [...admission.renderedFeaturesByResult[0].values()] },
     ...options
   }).operationsByResult[0]
 );
@@ -1400,7 +1400,7 @@ test('each edit kind runs exactly the compile stages of its allowlist', () => {
         legendColorOverrides: { Proteins: '#334455' },
         legendStrokeOverrides: { Proteins: { strokeColor: '#e63946' } },
         manualSpecificRules: [rule],
-        livePreview: domains && { domains, paletteColors: { CDS: '#00ff00' }, drawnContext: context }
+        livePreview: domains && { trackRows: new Map(), domains, paletteColors: { CDS: '#00ff00' }, drawnContext: context }
       });
       assert.equal(ruleReads > 0, allowed.includes('rules'), `${kind}: a specific-color rule match is read only by the rules stage`);
       const compiles = metrics.filter(({ name }) => name === 'editorPlanCompile');
@@ -1421,7 +1421,7 @@ test('a Result without a feature catalog receives the editor operations of its f
   const operations = compileDirectEditorMutationPlan({
     catalogAdmission: addressing,
     featureStrokeOverrides: { [featureOverrideKey(feature)]: { strokeColor: '#e63946', strokeWidth: 3 } },
-    livePreview: { domains: ['featureStrokes', 'featureFills'], paletteColors: { CDS: '#00ff00' }, drawnContext: null }
+    livePreview: { trackRows: new Map(), domains: ['featureStrokes', 'featureFills'], paletteColors: { CDS: '#00ff00' }, drawnContext: null }
   }).operationsByResult[0];
   const mounted = buildSvgRoot();
   reconcileMountedResult(mounted, operations, { domains: ['featureStrokes', 'featureFills'] });
@@ -1442,7 +1442,7 @@ test('a Result without a feature catalog takes Python\'s fills from the displaye
     catalogAdmission: displayedFeatureAddressing([feature], ['diagram.svg'], 0, mounted),
     legendEntries: [{ caption: 'CDS', color: '#aaaaaa' }],
     legendStrokeOverrides: { CDS: { strokeColor: '#e63946' } },
-    livePreview: { domains, paletteColors: { CDS: '#AAAAAA' }, drawnContext: null }
+    livePreview: { trackRows: new Map(), domains, paletteColors: { CDS: '#AAAAAA' }, drawnContext: null }
   }).operationsByResult[0];
   assert.deepEqual(operations.featureFills, []);
   reconcileMountedResult(mounted, operations, { domains });

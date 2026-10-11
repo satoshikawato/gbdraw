@@ -53,7 +53,7 @@ test('a popup fill reset without a dialog commits inside its History step', asyn
     signatureFor: (value) => { stages.push('history:signature'); return JSON.stringify(value); },
     applyIntent: () => {}, buildCheckpoint: () => ({}), applyCheckpoint: () => {}
   });
-  const actions = createFeatureColorActions({
+  const actions = createFeatureColorActions({ readTrackLegendRows: () => new Map(),
     state, nextTick: async () => {}, onLegendGeometryChanged: () => {}, extractLegendEntries: () => {},
     getFeatureElements: () => [], getFeatureFillElements: () => [],
     ruleActions: {

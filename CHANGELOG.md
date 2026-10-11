@@ -57,6 +57,12 @@ write-up of a release.
   downloaded Interactive SVG, whose invalid-pattern message now names it), and
   shows a match count only after a search. **Reset Layout** is unavailable until
   something moved, and **Canvas padding** fields show their unit (px).
+- Web app fixes: the Editor's Legend tab showed the default skew colors on the
+  rows of a skew track with its own colors, and a live palette change repainted
+  those rows in the preview legend; both now keep the track's colors (OV-484).
+  The Legend rows of a second skew track with the same label now follow a live
+  palette change, and a palette change no longer applies a track slot color
+  that still waits for Generate (OV-488).
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 

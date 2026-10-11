@@ -32,6 +32,7 @@ import { createDefaultLosatpHitLimits } from '../services/session-active-config-
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from './record-display-options.js';
 import { createPreviewItemPopup } from './preview-item-popup.js';
 import { legendRowRules } from '../services/specific-color-rules.js';
+import { trackLegendRows } from '../services/track-legend-rows.js';
 import { isCurrentFeature } from '../services/feature-identity.js';
 import {
   createFeatureRecordRotationAction,
@@ -1556,18 +1557,23 @@ export const createAppSetup = () => {
   /** @type {{ projectPaletteAndRules: FeatureEditorOptions['projectPaletteAndRules'] }} */
   // Null only until the root registers the port below; the palette watcher reads it after setup.
   const paletteRulePorts = { projectPaletteAndRules: /** @type {never} */ (null) };
+  // OV-484: the track rows of the request that drew the displayed Result, the
+  // one reader of a track row's slot and color for the Legend panel, the live
+  // compile, the feature popup and the palette's track painter.
+  const readTrackLegendRows = () => trackLegendRows(getCommittedCanonicalRenderRequest());
   const svgActions = createSvgStyles({
     state,
     watch,
     nextTick,
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
-    projectPaletteAndRules: (...args) => paletteRulePorts.projectPaletteAndRules(...args)
+    projectPaletteAndRules: (...args) => paletteRulePorts.projectPaletteAndRules(...args),
+    readTrackLegendRows
   });
   // OV-276, OV-282 (D-26): a Legend panel row shows the color the palette
   // gives its swatch on the displayed Result (the live compile's, by Python's
   // rows), derived and never written into the rows. A new Result brings new
   // Python rows.
-  const legendRowColors = computed(() => displayedLegendRowColors(state, state.activeDrawing()));
+  const legendRowColors = computed(() => displayedLegendRowColors(state, state.activeDrawing(), readTrackLegendRows()));
   /** @param {Parameters<LegendRowColorOf>[0]} entry */
   const legendEntryColor = (entry) => legendRowColors.value.listed(entry);
   /** @param {Parameters<LegendRowColorOf>[0]} entry */
@@ -1620,6 +1626,7 @@ export const createAppSetup = () => {
     runUndoableCheckpoint: history.runUndoableCheckpoint,
     closeAfterDialogChoice: dialogChoice.closeAfterChoice,
     getCommittedRequest: getCommittedCanonicalRenderRequest,
+    readTrackLegendRows,
     getCommittedSession: getCommittedCanonicalSession,
     readResourceRecordCount: readCommittedResourceRecordCount,
     readFeatureOverrideTable: (payload) => runDiagramHelperOperation(
@@ -3543,6 +3550,7 @@ export const createAppSetup = () => {
       livePreview: domains ? {
         domains,
         paletteColors: appliedFeatureColors(state),
+        trackRows: readTrackLegendRows(),
         ...legendRowsOf(displayedLegendRowContext(state, drawing)),
         drawnContext: domains.includes('featureVisibility')
           ? featureDrawnContext(drawing, { diagramOptions: getCommittedCanonicalRenderRequest()?.diagramOptions })

@@ -126,7 +126,7 @@ let legendSiblings = [featureB, hashOnlyFeature];
 let matchingRegexRule = specificRule;
 const preparedRuleSets = [];
 const runWithRuleMatchesForActions = runWithRuleMatchesOf(createRulePreparation({ state: withDrawings(preparationState), evaluate: evaluatePythonRules }), preparationState);
-const actions = createFeatureColorActions({
+const actions = createFeatureColorActions({ readTrackLegendRows: () => new Map(),
   state: withDrawings({
     results: ref([]),
     selectedResultIndex: ref(0),
@@ -799,7 +799,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     state: withDrawings({ extractedFeatures: resetFeatures, biologicalFeatures: resetFeatures, manualSpecificRules: resetRules }),
     evaluate: evaluatePythonRules
   });
-  const resetActions = createFeatureColorActions({
+  const resetActions = createFeatureColorActions({ readTrackLegendRows: () => new Map(),
     state: withDrawings({
       results: ref([]),
       selectedResultIndex: ref(0),
@@ -885,7 +885,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     const originalOrder = ref([...order]);
     const featureList = ref(features);
     const renameState = { extractedFeatures: featureList, biologicalFeatures: featureList, manualSpecificRules: rules };
-    const renameActions = createFeatureColorActions({
+    const renameActions = createFeatureColorActions({ readTrackLegendRows: () => new Map(),
       state: withDrawings({
         results: ref([]), selectedResultIndex: ref(0), appliedPaletteColors: ref({ tRNA: '#e8b441' }),
         manualSpecificRules: rules, extractedFeatures: featureList, biologicalFeatures: featureList,
@@ -1188,7 +1188,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   const fl1Features = ref([fl1]);
   const fl1Rules = [];
   const fl1State = { extractedFeatures: fl1Features, biologicalFeatures: fl1Features, manualSpecificRules: fl1Rules };
-  const fl1Actions = createFeatureColorActions({
+  const fl1Actions = createFeatureColorActions({ readTrackLegendRows: () => new Map(),
     state: withDrawings({
       results: ref([]), selectedResultIndex: ref(0), appliedPaletteColors: ref({ CDS: '#cccccc' }),
       manualSpecificRules: fl1Rules, extractedFeatures: fl1Features, biologicalFeatures: fl1Features,

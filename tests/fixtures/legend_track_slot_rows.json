@@ -1,0 +1,80 @@
+{
+  "description": "The Legend rows Python draws for the content and skew tracks of a request with explicit track slots (gbdraw/diagrams/circular/assemble.py::_sync_legend_table_for_circular_slots, gbdraw/diagrams/linear/assemble.py::_sync_legend_table_for_linear_slots), each as [key, palette key of its fill, the slot that draws it (null: no explicit slot), fill]. `palette` gives the gc_content, skew_high and skew_low colors of the Generate. Python's answer is the keys and fills, in order (tests/test_legend_row_facts.py); the Web app's is the slot, the palette key and the fill it reads for each key (services/track-legend-rows.js::trackLegendRows, tests/web/track-legend-row-colors.test.mjs). The rows of a request without explicit slots are in legend_generated_rows.json.",
+  "cases": [
+    {
+      "name": "circular: a GC skew slot and an AT skew slot with its own colors and label",
+      "mode": "circular",
+      "dinucleotide": "GC",
+      "palette": {"gc_content": "#8daf38", "skew_high": "#f6a8f1", "skew_low": "#bd96df"},
+      "slots": [
+        {"id": "features", "renderer": "features", "enabled": true, "params": {"lane_direction": "split"}},
+        {"id": "gc_content", "renderer": "dinucleotide_content", "enabled": true, "params": {}},
+        {"id": "gc_skew", "renderer": "dinucleotide_skew", "enabled": true, "params": {}},
+        {"id": "a_skew_2", "renderer": "dinucleotide_skew", "enabled": true, "params": {"nt": "AT", "positive_color": "#deaf6e", "negative_color": "#7294e3", "legend_label": "AT skew"}},
+        {"id": "ticks", "renderer": "ticks", "enabled": true, "params": {}}
+      ],
+      "rows": [
+        ["GC content", "gc_content", "gc_content", "#8daf38"],
+        ["GC skew (+)", "skew_high", "gc_skew", "#f6a8f1"],
+        ["GC skew (-)", "skew_low", "gc_skew", "#bd96df"],
+        ["AT skew (+)", "skew_high", "a_skew_2", "#deaf6e"],
+        ["AT skew (-)", "skew_low", "a_skew_2", "#7294e3"]
+      ]
+    },
+    {
+      "name": "circular: two skew slots of one label, the second with one own color, and a disabled slot",
+      "mode": "circular",
+      "dinucleotide": "GC",
+      "palette": {"gc_content": "#a0a0a0", "skew_high": "#111111", "skew_low": "#222222"},
+      "slots": [
+        {"id": "gc_skew", "renderer": "dinucleotide_skew", "enabled": true, "params": {}},
+        {"id": "off", "renderer": "dinucleotide_skew", "enabled": false, "params": {"positive_color": "#00ff00"}},
+        {"id": "gc_skew_3", "renderer": "dinucleotide_skew", "enabled": true, "params": {"negative_color": "#ff00ff"}}
+      ],
+      "rows": [
+        ["GC skew (+)", "skew_high", "gc_skew", "#111111"],
+        ["GC skew (-)", "skew_low", "gc_skew", "#222222"],
+        ["GC skew (+) (2)", "skew_high", "gc_skew_3", "#111111"],
+        ["GC skew (-) (2)", "skew_low", "gc_skew_3", "#ff00ff"]
+      ]
+    },
+    {
+      "name": "circular: a custom label without own colors, another dinucleotide for content, and a skew slot of one color",
+      "mode": "circular",
+      "dinucleotide": "GC",
+      "palette": {"gc_content": "#a0a0a0", "skew_high": "#111111", "skew_low": "#222222"},
+      "slots": [
+        {"id": "at_content", "renderer": "dinucleotide_content", "enabled": true, "params": {"nt": "at"}},
+        {"id": "named", "renderer": "dinucleotide_skew", "enabled": true, "params": {"legend_label": " Strand bias "}},
+        {"id": "one_color", "renderer": "dinucleotide_skew", "enabled": true, "params": {"nt": "AT", "positive_color": "#123456", "negative_color": "#123456"}}
+      ],
+      "rows": [
+        ["AT content", "gc_content", "at_content", "#a0a0a0"],
+        ["Strand bias (+)", "skew_high", "named", "#111111"],
+        ["Strand bias (-)", "skew_low", "named", "#222222"],
+        ["AT skew", "skew_high", "one_color", "#123456"]
+      ]
+    },
+    {
+      "name": "linear: the default content row stays, and two skew slots replace the default skew rows",
+      "mode": "linear",
+      "dinucleotide": "GC",
+      "palette": {"gc_content": "#a0a0a0", "skew_high": "#111111", "skew_low": "#222222"},
+      "slots": [
+        {"id": "gc_content", "renderer": "dinucleotide_content", "enabled": true, "params": {"nt": "AT"}},
+        {"id": "gc_skew", "renderer": "dinucleotide_skew", "enabled": true, "params": {}},
+        {"id": "at_skew", "renderer": "dinucleotide_skew", "enabled": true, "params": {"nt": "AT", "positive_color": "#deaf6e"}},
+        {"id": "gc_skew_2", "renderer": "dinucleotide_skew", "enabled": true, "params": {"negative_color": "#7294e3"}}
+      ],
+      "rows": [
+        ["GC content", "gc_content", null, "#a0a0a0"],
+        ["GC skew (+)", "skew_high", "gc_skew", "#111111"],
+        ["GC skew (-)", "skew_low", "gc_skew", "#222222"],
+        ["AT skew (+)", "skew_high", "at_skew", "#deaf6e"],
+        ["AT skew (-)", "skew_low", "at_skew", "#222222"],
+        ["GC skew (+) (2)", "skew_high", "gc_skew_2", "#111111"],
+        ["GC skew (-) (2)", "skew_low", "gc_skew_2", "#7294e3"]
+      ]
+    }
+  ]
+}

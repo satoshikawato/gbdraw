@@ -7,7 +7,8 @@ import { withDrawings } from './drawing-state.mjs';
 
 const ref = value => ({ value });
 globalThis.XMLSerializer = class { serializeToString(svg) { return svg.snapshot(); } };
-export const fixture = (colors, rules) => {
+// `trackRows`: the track rows of the request that drew the Result (services/track-legend-rows.js).
+export const fixture = (colors, rules, { trackRows = new Map() } = {}) => {
   const attrs = { id: 'f1', 'data-gbdraw-feature-id': 'f1', 'data-gbdraw-feature-part': 'block', fill: '#000000' };
   const feature = { svg_id: 'f1', type: 'unlisted_type', start: 1, end: 10, qualifiers: { gene: ['sample'] } };
   const path = { getAttribute: key => attrs[key] ?? null, setAttribute: (key, value) => { attrs[key] = value; } };
@@ -34,6 +35,6 @@ export const fixture = (colors, rules) => {
   // Style edits commit through the app's preview runtime (R1).
   const previewRuntime = createPreviewRuntime({ state, serializeSvg: serializeCleanSvg });
   const actions = createSvgStyles({ state, watch() {}, nextTick: fn => fn(),
-    commitActiveResultEdit: previewRuntime.commitActiveResultEdit });
+    commitActiveResultEdit: previewRuntime.commitActiveResultEdit, readTrackLegendRows: () => trackRows });
   return { actions, state, attrs, depthAttrs, skewFills, ready };
 };
