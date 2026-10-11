@@ -605,6 +605,12 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     }
   };
 
+  // OV-445: an Add commits once its rules are prepared, and a newer commit
+  // supersedes a pending one. A second Add waits for the pending Add and builds
+  // on the rules it committed, so each Add keeps its rule as its own History
+  // step (R11).
+  /** @type {Promise<unknown>} */
+  let pendingAdd = Promise.resolve();
   const addSpecificRule = async () => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -634,9 +640,12 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       color: String(newSpecRule.color || '#000000'),
       cap: String(newSpecRule.cap || '')
     };
-    return commitPrepared(drawing, [...drawing.manualSpecificRules, rule], 'Add specific color rule', () => {
+    const input = document.querySelector?.('[data-new-specific-rule-pattern]');
+    const added = pendingAdd.then(() => commitPrepared(drawing, [...drawing.manualSpecificRules, rule], 'Add specific color rule', () => {
       if (newSpecRule.val === rule.val) newSpecRule.val = '';
-    }, document.querySelector?.('[data-new-specific-rule-pattern]'));
+    }, input));
+    pendingAdd = added.catch(() => {});
+    return added;
   };
 
   const applySpecificRulePreset = async () => {

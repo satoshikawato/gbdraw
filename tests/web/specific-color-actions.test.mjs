@@ -636,3 +636,33 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   assert.equal(await actions.commitSpecificRules([tagRule('A', 'gamma'), tagRule('B', 'beta')]), true);
   assert.equal(rerenders, first + 2, 'a rename of part of the row asks Python');
 });
+
+// OV-445: Add commits after its rules are prepared, so a second Add can start
+// while the first is pending (a double click, or Add on a row filled during
+// the first commit). Each Add keeps its rule and is its own History step
+// (R11): the second builds on the rules the first committed.
+for (const second of ['a', 'b']) {
+  test(`a second Add while the first is pending adds both rules, one History step each (OV-445, pattern ${second})`, async () => {
+    const s=setup();
+    s.state.errorLog={value:null};
+    const previousDocument=globalThis.document;
+    globalThis.document={querySelector:()=>null};
+    try {
+      let release, started;
+      const ready=new Promise(resolve=>{started=resolve;});
+      s.setLegendPreparation(()=>new Promise(resolve=>{release=resolve;started();}));
+      const first=s.actions.addSpecificRule();
+      await ready;
+      s.setLegendPreparation(async()=>{});
+      s.state.newSpecRule.val=second;
+      const next=s.actions.addSpecificRule();
+      release();
+      assert.deepEqual(await Promise.all([first,next]),[true,true]);
+      assert.deepEqual(s.state.manualSpecificRules.map(rule=>rule.val),['a',second]);
+      assert.deepEqual(s.transactions,['Add specific color rule','Add specific color rule']);
+      assert.equal(s.state.newSpecRule.val,'','the pattern of the last Add is cleared');
+    } finally {
+      globalThis.document=previousDocument;
+    }
+  });
+}
