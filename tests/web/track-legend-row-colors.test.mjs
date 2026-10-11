@@ -7,7 +7,8 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 import { compileDirectEditorMutationPlan, draftLegendPanelColors } from '../../gbdraw/web/js/app/candidate-render.js';
-import { drawnTracks, skewTrackColor, trackLegendRows, trackRowColor } from '../../gbdraw/web/js/services/track-legend-rows.js';
+import { buildLinearTrackSlotPayload, normalizeLinearTrackSlots } from '../../gbdraw/web/js/services/linear-track-slot-model.js';
+import { drawnTracks, loadedTracks, skewTrackColor, trackLegendRows, trackRowColor } from '../../gbdraw/web/js/services/track-legend-rows.js';
 import { fixture as paintFixture } from './helpers/svg-style-fixture.mjs';
 
 const readJson = (path) => JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8'));
@@ -123,6 +124,35 @@ test('a palette edit paints the skew track of a request without slots', () => {
   const { actions, skewFills } = paintFixture({ default: '#d3d3d3', skew_high: '#abcdef', skew_low: '#fedcba' }, []);
   actions.applyPaletteToSvg();
   assert.deepEqual(skewFills, ['#abcdef', '#fedcba']);
+});
+
+// A Result loaded without a request (a Session 27 to 30, which the Web shows
+// from its saved settings) is described by the track settings it was loaded
+// with. Its SVG is the old writer's: the skew group carries no slot id.
+test('the tracks of a Result loaded without a request are those of its loaded settings', () => {
+  for (const mode of ['circular', 'linear']) {
+    for (const dinucleotide of ['GC', 'AT']) {
+      const tracks = loadedTracks({ mode, dinucleotide, slots: null });
+      assert.deepEqual(tracks, drawnTracks(requestOf({ mode, dinucleotide, slots: null })), `${mode} ${dinucleotide}`);
+      assert.deepEqual(['positive', 'negative'].map((side) => skewTrackColor(tracks, null, side, PALETTE)),
+        [PALETTE.skew_high, PALETTE.skew_low], `${mode} ${dinucleotide}`);
+    }
+  }
+  assert.deepEqual(loadedTracks(null), [], 'no loaded settings name no track');
+  // Linear slots as the form holds them after Load: the tracks are those of
+  // the request Generate writes from the same slots.
+  const slots = normalizeLinearTrackSlots([
+    { id: 'features', renderer: 'features', enabled: true, side: 'overlay', params: {} },
+    { id: 'own', renderer: 'dinucleotide_skew', enabled: true, side: 'below', params: { positive_color: '#ff0000', negative_color: '#0000ff' } },
+    { id: 'named', renderer: 'dinucleotide_skew', enabled: true, side: 'below', params: { nt: 'GC', legend_label: 'Skew' } },
+    { id: 'off', renderer: 'dinucleotide_skew', enabled: false, side: 'below', params: {} }
+  ], 'AT', 'middle');
+  const tracks = loadedTracks({ mode: 'linear', dinucleotide: 'AT', slots });
+  assert.deepEqual(tracks, drawnTracks(requestOf({
+    mode: 'linear', dinucleotide: 'AT', slots: slots.filter((slot) => slot.enabled).map(buildLinearTrackSlotPayload)
+  })));
+  assert.deepEqual(tracks.map(({ slotId, label, positiveColor }) => [slotId, label, positiveColor]),
+    [[null, 'AT content', null], ['own', 'AT skew', '#ff0000'], ['named', 'Skew', null]]);
 });
 
 // What the tracks read of a request is checked: a request of an older schema

@@ -386,6 +386,44 @@ await test('a 0.13.0 CLI Linear protein sidecar keeps the adjacent LOSATP plan i
   assert.deepEqual([none.plan, none.comparisons], [DEFAULT_PLAN, []]);
 });
 
+// A Session 27 to 30 has no request, so Load records the track settings its
+// Result was drawn with; a Session with a request records none.
+await test('Load of a 0.13.0 Session records the track settings of its Result', async () => {
+  const { getCommittedCanonicalRenderRequest, getLoadedTrackSettings } = await import('../../gbdraw/web/js/services/config.js');
+  const read = async name => gunzipSync(await readFile(path.join(root, 'tests/fixtures/sessions', name)));
+  assert.equal((await load(await read('scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz'))).status, 'ok');
+  assert.equal(getCommittedCanonicalRenderRequest(), null);
+  assert.deepEqual(getLoadedTrackSettings(), { mode: 'circular', dinucleotide: 'GC', slots: null });
+  // The record is the shown mode's Result: the other mode has none.
+  state.mode.value = 'linear';
+  assert.equal(getLoadedTrackSettings(), null);
+  state.mode.value = 'circular';
+  // Linear Custom Track Slots of a Session 30 load (the schema 1 slots are
+  // migrated), so its skew slot with its own colors describes the Result.
+  const session = JSON.parse(await read('BGC0000708-BGC0000713.v30.gbdraw-session.json.gz'));
+  session.config.adv.linear_track_slots_enabled = true;
+  session.config.adv.linear_track_slots.push({ id: 'own', renderer: 'dinucleotide_skew', enabled: true, side: 'below',
+    height: '', spacing: '', z: 0, params: { nt: 'AT', positive_color: '#ff0000', negative_color: '#0000ff' } });
+  const loaded = await load(Buffer.from(JSON.stringify(session)));
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.equal(getCommittedCanonicalRenderRequest(), null);
+  const settings = getLoadedTrackSettings();
+  assert.equal(settings.mode, 'linear');
+  assert.deepEqual(settings.slots.map(({ id, enabled, params }) => [id, enabled, params.positive_color]),
+    [['features', true, undefined], ['own', true, '#ff0000']]);
+  // A later edit of the form's slots leaves the record of the shown Result.
+  state.activeDrawing().adv.linear_track_slots[1].params.positive_color = '#00ff00';
+  assert.equal(getLoadedTrackSettings().slots[1].params.positive_color, '#ff0000');
+  // A failed Load keeps the Session that stays loaded, and its record.
+  const broken = structuredClone(session);
+  broken.config.adv.circular_track_slots_enabled = true;
+  assert.equal((await load(Buffer.from(JSON.stringify(broken)))).status, 'error');
+  assert.equal(getLoadedTrackSettings().slots[1].params.positive_color, '#ff0000');
+  assert.equal((await load(await read('HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz'))).status, 'ok');
+  assert.ok(getCommittedCanonicalRenderRequest());
+  assert.equal(getLoadedTrackSettings(), null);
+});
+
 // OV-38: the Web writers of Sessions 27–33 (release tags 0.12.0–0.13.0 and
 // main before Session 39) saved every schema-4 Circular track slot row with
 // `spacing: null`. With Custom Track Slots off the null is lossless, so the

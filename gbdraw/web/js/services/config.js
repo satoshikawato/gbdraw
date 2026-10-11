@@ -290,6 +290,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { FeatureCatalog } from './feature-catalog.js' */
 /** @import { LegacyResultNormalization, SavedResultEdits } from './svg-result-ingestion.js' */
 /** @import { SessionResourceSource } from './session-resources.js' */
+/** @import { LoadedTrackSettings } from './track-legend-rows.js' */
 /** @import { ArtifactSlot } from './artifact-slot.js' */
 /** @import { FeatureOverrideDraft } from './feature-placement.js' */
 /** @import { DrawingState } from '../state.js' */
@@ -1016,6 +1017,12 @@ const setCommittedCanonicalSession = (next) => {
   committedCanonicalSession = next;
   committedCanonicalRevision.value += 1;
 };
+// OV-484: the track settings a Result loaded without a request was drawn with
+// (a Session 27 to 30). Load is the one writer, and only a Load replaces or
+// clears the record; it is read while the Result's mode has no committed
+// request, so Generate, a History step and a mode switch leave it as it is.
+/** @type {LoadedTrackSettings | null} */
+let loadedTrackSettings = null;
 /** @type {ReturnType<typeof adoptCurrentSessionResources> | null} */
 let activeSessionResourceTable = null;
 /** @type {Record<string, any> | null} */
@@ -3663,6 +3670,12 @@ export const getCommittedCanonicalRenderRequest = () => {
 
 export const getCommittedCanonicalSession = () => committedCanonicalSession;
 
+// The recorded track settings of the shown mode's loaded Result; the other mode has none.
+export const getLoadedTrackSettings = () => {
+  void committedCanonicalRevision.value;
+  return loadedTrackSettings?.mode === state.mode.value ? loadedTrackSettings : null;
+};
+
 // The Linear Accession and Length visibility the shown Result was drawn with.
 export const getCommittedLinearDefinitionVisibility = () => (
   linearDefinitionVisibilityOf(getCommittedCanonicalRenderRequest())
@@ -4165,6 +4178,7 @@ const captureSessionImportSnapshot = () => ({
     ? committedCanonicalSession
     : cloneCanonicalSession(committedCanonicalSession),
   activeSessionResourceTable,
+  loadedTrackSettings,
   errorLog: state.errorLog.value,
   resultPanelTab: state.resultPanelTab.value,
   transients: captureSessionImportTransientState()
@@ -4197,6 +4211,7 @@ const restoreSessionImportSnapshot = async (snapshot) => {
     state.legacyProteinRawCandidates.value = cloneJsonData(snapshot.legacyProteinRawCandidates);
     state.legacyProteinDerivedEvidence.value = cloneJsonData(snapshot.legacyProteinDerivedEvidence);
     state.losatCacheInfo.value = cloneJsonData(snapshot.losatCacheInfo);
+    loadedTrackSettings = snapshot.loadedTrackSettings;
     setCommittedCanonicalSession(isAdoptedCanonicalSession(snapshot.committedCanonicalSession)
       ? snapshot.committedCanonicalSession
       : cloneCanonicalSession(snapshot.committedCanonicalSession));
@@ -4241,6 +4256,7 @@ const resetSessionBaseline = () => {
   activePreviewRuntime?.clearActiveRuntime?.();
   preservedCliOptions = null;
   setCommittedCanonicalSession(null);
+  loadedTrackSettings = null;
   activeSessionResourceTable = null;
   adoptedProteinIdentityManifest = null;
   state.sessionResourceDiscoveryDeferred.value = false;
@@ -5769,7 +5785,18 @@ const importSessionDocument = async (e, options = {}) => {
       semanticFileWatchersSuppressedBeforeImport;
     await nextTick();
     if (!currentSchemaSession) {
-      setCommittedCanonicalSession(cloneCanonicalSession(data));
+      const committed = cloneCanonicalSession(data);
+      if (!committed) {
+        /** @type {LoadedTrackSettings['mode']} */
+        const mode = state.mode.value;
+        const { adv } = state.drawings[mode];
+        loadedTrackSettings = Object.freeze({
+          mode,
+          dinucleotide: adv.nt,
+          slots: adv[`${mode}_track_slots_enabled`] ? cloneJsonData(adv[`${mode}_track_slots`]) : null
+        });
+      }
+      setCommittedCanonicalSession(committed);
       activeSessionResourceTable = null;
     }
     recordSessionLifecycleEvent('interactiveReady', {

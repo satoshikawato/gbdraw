@@ -839,6 +839,38 @@ for (const mode of ['circular', 'linear']) {
   });
 }
 
+// A Session 30 (gbdraw 0.13.0) has no request: the Web shows its saved Result,
+// described by the track settings Load recorded. A palette change repaints its
+// skew track and the track's Legend rows as Generate then draws them.
+test('Palette change repaints the skew track and its Legend rows of a loaded Session 30 Result', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openFresh(page);
+  // A CLI Session of 0.13.0 lists no extracted features, so the Load is awaited by its Result.
+  await page.locator('input[accept^=".json,"]').setInputFiles('tests/fixtures/sessions/scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz');
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
+    && window.__GBDRAW_APP__.svgContainer?.querySelector('g#skew'), null, { timeout: 60_000 });
+  await settleLive(page);
+  expect(await page.evaluate(async () => (await import('/gbdraw/web/js/services/config.js')).getCommittedCanonicalRenderRequest()),
+    'the loaded Result has no request').toBeNull();
+  const skew = () => page.evaluate(() => {
+    const fills = (selector) => [...window.__GBDRAW_APP__.svgContainer.querySelectorAll(selector)]
+      .map((shape) => String(shape.getAttribute('fill') || '').toLowerCase()).filter((fill) => fill && fill !== 'none' && fill !== 'white');
+    return {
+      track: fills('g#skew > path, g#gc_skew > path, g[data-gbdraw-slot-renderer="dinucleotide_skew"] path'),
+      rows: ['GC skew (+)', 'GC skew (-)'].map((key) => fills(`g[data-legend-key="${key}"] :is(rect, path)`)[0])
+    };
+  });
+  const drawn = await skew();
+  expect(drawn.track.length, 'the loaded Result draws a skew track').toBe(2);
+  expect(drawn.rows, 'the track\'s Legend rows show its fills').toEqual(drawn.track);
+  await switchPalette(page, 'alpine_retreat');
+  const live = await skew();
+  expect(live.track, 'the palette repaints the skew track').not.toEqual(drawn.track);
+  expect(live.rows, 'the palette repaints the track\'s Legend rows').toEqual(live.track);
+  await generate(page);
+  expect(live, 'the live edit shows what Generate draws').toEqual(await skew());
+});
+
 // OV-144 (D-07, PD-OI-062): the executor's record of Python's strokes travels
 // with a Result through Save Session and Load, so a stroke edit removed after
 // Load leaves a batch Result that showed it when that Result is shown again.

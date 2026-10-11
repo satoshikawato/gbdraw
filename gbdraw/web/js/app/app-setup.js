@@ -32,7 +32,7 @@ import { createDefaultLosatpHitLimits } from '../services/session-active-config-
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from './record-display-options.js';
 import { createPreviewItemPopup } from './preview-item-popup.js';
 import { legendRowRules } from '../services/specific-color-rules.js';
-import { drawnTracks } from '../services/track-legend-rows.js';
+import { drawnTracks, loadedTracks } from '../services/track-legend-rows.js';
 import { isCurrentFeature } from '../services/feature-identity.js';
 import {
   createFeatureRecordRotationAction,
@@ -59,6 +59,7 @@ import {
   disposeSessionOperations,
   getCommittedCanonicalSession,
   getCommittedCanonicalRenderRequest,
+  getLoadedTrackSettings,
   getCommittedLinearDefinitionVisibility,
   readCommittedResourceRecordCount,
   assertActiveModeInputs,
@@ -1559,8 +1560,12 @@ export const createAppSetup = () => {
   const paletteRulePorts = { projectPaletteAndRules: /** @type {never} */ (null) };
   // OV-484: the tracks of the request that drew the displayed Result, the one
   // reader of a track's slot and colors for the Legend panel, the live compile,
-  // the feature popup and the palette's track painter.
-  const readDrawnTracks = () => drawnTracks(getCommittedCanonicalRenderRequest());
+  // the feature popup and the palette's track painter. A Result loaded without
+  // a request (a Session 27 to 30) is described by the track settings Load recorded.
+  const readDrawnTracks = () => {
+    const request = getCommittedCanonicalRenderRequest();
+    return request ? drawnTracks(request) : loadedTracks(getLoadedTrackSettings());
+  };
   const svgActions = createSvgStyles({
     state,
     watch,

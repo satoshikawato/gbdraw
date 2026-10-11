@@ -46,6 +46,16 @@ import { normalizeOptionalText } from './track-slot-display.js';
  * @property {string | null} negativeColor A skew slot's own `negative_color`; null: the palette's.
  */
 
+/**
+ * The track settings a Result was drawn with, where no request states them: the Web shows a
+ * Session 27 to 30 (gbdraw 0.13.0 and earlier) from its saved settings and its saved preview.
+ * @typedef {object} LoadedTrackSettings
+ * @property {'circular' | 'linear'} mode
+ * @property {string} dinucleotide
+ * @property {readonly TrackRowSlot[] | null} slots The mode's Custom Track Slots as loaded; null (the slots
+ *   are off): the default tracks.
+ */
+
 /** @typedef {'gc_content' | 'skew_high' | 'skew_low'} TrackPaletteKey The palette key of a track's fill. */
 
 /**
@@ -85,18 +95,13 @@ const trackRequestView = (request) => {
 };
 
 /**
- * The content and skew tracks the request that drew a Result draws, in
- * Python's order. None for a value that is no request (null: the Result of a
- * Session 27 to 30, which holds none, so the slots that drew it are not known
- * here) and for slot entries the slot parsers reject (as Session load would):
- * no track is named, so no row and no skew track takes a color here.
- * @param {unknown} request
+ * The content and skew tracks a mode draws from its track slots, in Python's order.
+ * @param {'circular' | 'linear'} mode
+ * @param {string} defaultNt The dinucleotide of a slot that names none.
+ * @param {readonly TrackRowSlot[] | null} slots null: the default tracks.
  * @returns {readonly DrawnTrack[]}
  */
-export const drawnTracks = (request) => {
-  const view = trackRequestView(request);
-  if (!view) return [];
-  const { mode, defaultNt, entries } = view;
+const slotTracks = (mode, defaultNt, slots) => {
   /** @param {DrawnTrack['kind']} kind @param {TrackRowSlot | null} slot @returns {DrawnTrack} */
   const track = (kind, slot) => {
     const params = slot?.params ?? {};
@@ -109,20 +114,42 @@ export const drawnTracks = (request) => {
       negativeColor: kind === 'skew' ? normalizeOptionalText(params.negative_color) : null
     };
   };
-  if (!entries) return [track('content', null), track('skew', null)];
+  if (!slots) return [track('content', null), track('skew', null)];
+  // Linear slots replace only the skew rows: the content row stays the default one.
+  const drawn = slots.filter((slot) => slot.enabled && TRACK_KIND[slot.renderer] && !(mode === 'linear' && TRACK_KIND[slot.renderer] === 'content'));
+  return [...(mode === 'linear' ? [track('content', null)] : []), ...drawn.map((slot) => track(TRACK_KIND[slot.renderer], slot))];
+};
+/**
+ * The content and skew tracks the request that drew a Result draws. None for a
+ * value that is no request (a Result loaded without one is read with
+ * `loadedTracks`) and for slot entries the slot parsers reject (as Session
+ * load would): no track is named, so no row and no skew track takes a color here.
+ * @param {unknown} request
+ * @returns {readonly DrawnTrack[]}
+ */
+export const drawnTracks = (request) => {
+  const view = trackRequestView(request);
+  if (!view) return [];
+  const { mode, defaultNt, entries } = view;
   try {
-    /** @type {TrackRowSlot[]} */
-    const slots = mode === 'linear'
+    return slotTracks(mode, defaultNt, entries && (mode === 'linear'
       ? parseLinearTrackSlotSpecs(entries, defaultNt)
       : entries.map((entry, index) => (typeof entry === 'string'
-          ? parseCircularTrackSlotSpec(entry, index, defaultNt) : normalizeCircularTrackSlot(entry, index, defaultNt)));
-    // Linear slots replace only the skew rows: the content row stays the default one.
-    const drawn = slots.filter((slot) => slot.enabled && TRACK_KIND[slot.renderer] && !(mode === 'linear' && TRACK_KIND[slot.renderer] === 'content'));
-    return [...(mode === 'linear' ? [track('content', null)] : []), ...drawn.map((slot) => track(TRACK_KIND[slot.renderer], slot))];
+          ? parseCircularTrackSlotSpec(entry, index, defaultNt) : normalizeCircularTrackSlot(entry, index, defaultNt)))));
   } catch {
     return [];
   }
 };
+
+/**
+ * The content and skew tracks of a Result that was loaded without a request, from the track
+ * settings Load recorded for it. No settings name no track.
+ * @param {LoadedTrackSettings | null} settings
+ * @returns {readonly DrawnTrack[]}
+ */
+export const loadedTracks = (settings) => (
+  settings ? slotTracks(settings.mode, normalizeNt(settings.dinucleotide), settings.slots) : []
+);
 
 /**
  * The palette key and the own color of one side of a track.
