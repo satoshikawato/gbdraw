@@ -398,6 +398,202 @@
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
             overflow-wrap: anywhere;
         }
+        /* Similarity popups (UX-B01..B03): a lead line, small ID badges, closed
+           disclosures for secondary content, and action menus that open in place. */
+        .match-lead {
+            margin-bottom: 0.75rem;
+            color: #1e293b;
+            font-size: 13px;
+            line-height: 1.45;
+        }
+        .match-lead-note,
+        .match-muted {
+            color: #475569;
+            font-size: 11px;
+        }
+        .match-lead-facts {
+            margin-top: 0.25rem;
+            color: #334155;
+            font-weight: 600;
+        }
+        .match-actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-start;
+            gap: 0.375rem;
+            margin-top: 0.5rem;
+        }
+        .match-action,
+        .action-menu-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            height: 1.75rem;
+            padding: 0 0.5rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.375rem;
+            background: #ffffff;
+            color: #334155;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .match-action:hover,
+        .action-menu-toggle:hover {
+            background: #eff6ff;
+            color: #1d4ed8;
+        }
+        .action-menu {
+            display: inline-block;
+        }
+        .action-menu-toggle {
+            list-style: none;
+        }
+        .action-menu-toggle::-webkit-details-marker {
+            display: none;
+        }
+        .action-menu > .action-menu-toggle::before {
+            display: none;
+        }
+        .action-menu[open] > .action-menu-toggle {
+            margin-bottom: 0;
+        }
+        .action-menu[open] > .action-menu-toggle .action-menu-caret {
+            transform: rotate(180deg);
+        }
+        .action-menu-items {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 0.125rem;
+            margin-top: 0.25rem;
+            padding: 0.25rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.375rem;
+            background: #f8fafc;
+        }
+        .action-menu-item {
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            color: #334155;
+            font-size: 11px;
+            text-align: left;
+            white-space: nowrap;
+        }
+        .action-menu-item:hover:not(:disabled) {
+            background: #e0e7ff;
+        }
+        .action-menu-item:disabled {
+            color: #64748b;
+            cursor: not-allowed;
+        }
+        .match-popup-badge {
+            display: inline-block;
+            padding: 0 0.375rem;
+            border-radius: 9999px;
+            background: #f1f5f9;
+            color: #334155;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 10px;
+            font-weight: 600;
+            line-height: 1.6;
+            white-space: nowrap;
+        }
+        .match-disclosure {
+            margin-bottom: 0.75rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+        }
+        .match-disclosure > summary {
+            padding: 0.4rem 0.65rem;
+            color: #334155;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .match-disclosure-body {
+            padding: 0 0.65rem 0.65rem;
+        }
+        .match-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+        }
+        .match-table th,
+        .match-table td {
+            padding: 0.35rem 0.4rem;
+            border-bottom: 1px solid #f1f5f9;
+            text-align: left;
+            vertical-align: top;
+        }
+        .match-table th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: #ffffff;
+            color: #475569;
+            font-size: 10px;
+            font-weight: 700;
+        }
+        .match-table tr[aria-current="true"] td {
+            background: #eff6ff;
+        }
+        .match-cell-button {
+            display: block;
+            width: 100%;
+            min-width: 0;
+            padding: 0;
+            color: #1e293b;
+            text-align: left;
+        }
+        .match-cell-button:hover:not(:disabled) .match-cell-main {
+            color: #1d4ed8;
+            text-decoration: underline;
+        }
+        .match-cell-button[aria-pressed="true"] .match-cell-main {
+            color: #047857;
+        }
+        .match-cell-main {
+            display: block;
+            font-weight: 600;
+            overflow-wrap: anywhere;
+        }
+        .match-cell-sub,
+        .match-mono {
+            color: #475569;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 10px;
+            overflow-wrap: anywhere;
+        }
+        .match-detail-rows {
+            display: grid;
+            grid-template-columns: max-content minmax(0, 1fr);
+            gap: 0.2rem 0.75rem;
+            font-size: 11px;
+        }
+        .match-detail-rows dt {
+            color: #475569;
+        }
+        .match-detail-rows dd {
+            color: #1e293b;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            overflow-wrap: anywhere;
+        }
+        .match-link {
+            color: #1d4ed8;
+            font-size: 11px;
+            text-decoration: underline;
+            text-underline-offset: 2px;
+        }
+        .match-link:disabled {
+            color: #64748b;
+            text-decoration: none;
+            cursor: not-allowed;
+        }
         .feature-hover-summary {
             position: fixed;
             z-index: 45;
@@ -5702,213 +5898,99 @@
                                 </div>
                             </section>
                         </section>
-                        <section v-if="clickedFeature.orthogroupId" aria-labelledby="feature-popup-similarity-heading" class="space-y-3 border-t border-slate-100 pt-3" data-feature-popup-group="similarity">
-                            <div class="flex flex-wrap items-baseline justify-between gap-x-2">
-                                <h3 id="feature-popup-similarity-heading" class="text-xs font-bold text-slate-600 uppercase tracking-wider">Similarity group</h3>
-                                <div class="text-[10px] text-slate-500">{{ clickedFeature.orthogroupId }} · {{ clickedOrthogroupDetail ? clickedOrthogroupDetail.memberCount : clickedFeature.orthogroupMemberCount }} members</div>
+                        <section v-if="clickedFeature.orthogroupId" aria-labelledby="feature-popup-similarity-heading" class="space-y-2 border-t border-slate-100 pt-3" data-feature-popup-group="similarity">
+                            <h3 id="feature-popup-similarity-heading" class="text-xs font-bold text-slate-600 uppercase tracking-wider">Similarity group</h3>
+                            <!-- UX-B03: one summary row, the primary actions, then secondary actions and members on demand. -->
+                            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1" data-similarity-summary>
+                                <span class="match-popup-badge">{{ clickedFeature.orthogroupId }}</span>
+                                <span v-if="clickedOrthogroupDetail && clickedOrthogroupDetail.displayName && clickedOrthogroupDetail.displayName !== clickedOrthogroupDetail.id"
+                                      class="text-sm font-semibold text-slate-700">{{ clickedOrthogroupDetail.displayName }}</span>
+                                <span class="text-xs text-slate-600">{{ clickedOrthogroupDetail ? clickedOrthogroupDetail.countText : `${clickedFeature.orthogroupMemberCount} members` }}</span>
                             </div>
-                        <div v-if="canUseClickedOrthogroupActions" class="grid grid-cols-2 gap-2">
-                            <button type="button" @click="openClickedOrthogroupInEditor"
-                                    class="px-2 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1"
-                                    title="Open similarity-group editor">
-                                <i class="ph ph-sidebar-simple" aria-hidden="true"></i>
-                                <span>Open</span>
-                            </button>
-                            <button type="button" @click="highlightClickedOrthogroup"
-                                    class="px-2 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium flex items-center justify-center gap-1"
-                                    title="Highlight similarity group">
-                                <i class="ph ph-target" aria-hidden="true"></i>
-                                <span>Highlight</span>
-                            </button>
-                            <div class="col-span-2 flex min-w-0 items-center gap-2">
-                                <button type="button"
-                                        data-history-managed
-                                        @click="alignByClickedOrthogroup($event)"
-                                        :disabled="!clickedOrthogroupDetail?.currentMember || similarityAlignmentBusy"
-                                        :aria-busy="similarityAlignmentBusy"
-                                        aria-describedby="clicked-alignment-action-description"
-                                        class="flex-1 min-w-0 px-2 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1"
-                                        title="Align to this exact feature">
-                                    <i class="ph ph-arrows-left-right" aria-hidden="true"></i>
-                                    <span>{{ similarityAlignmentStatus === 'resolving' ? 'Resolving…' : similarityAlignmentStatus === 'applying' ? 'Applying…' : 'Align…' }}</span>
+                            <div v-if="canUseClickedOrthogroupActions" class="grid grid-cols-2 items-start gap-2">
+                                <button type="button" @click="openClickedOrthogroupInEditor"
+                                        class="px-2 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1"
+                                        title="Open similarity-group editor">
+                                    <i class="ph ph-sidebar-simple" aria-hidden="true"></i>
+                                    <span>Show in editor</span>
                                 </button>
-                                <button type="button"
-                                        data-history-managed
-                                        data-similarity-alignment-popup-review
-                                        @click="alignByClickedOrthogroup($event, 'review')"
-                                        :disabled="!clickedOrthogroupDetail?.currentMember || similarityAlignmentBusy"
-                                        :aria-busy="similarityAlignmentBusy"
-                                        aria-describedby="clicked-alignment-action-description"
-                                        class="flex-1 min-w-0 px-2 py-2 bg-slate-100 hover:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-slate-700 rounded-lg text-xs font-medium leading-tight focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"
-                                        title="Review alignment options for this exact feature">Review alignment options…</button>
-                                <help-tip id="clicked-alignment-action-description" label="About Align and Review"
-                                          text="Align applies resolved targets immediately; ambiguity opens review. Review alignment options… lets you inspect or change anchors, Skip, and direction before applying."></help-tip>
-                            </div>
-                        </div>
-                            <div v-if="clickedOrthogroupDetail">
-                            <div class="mb-3">
-                                <div class="text-sm font-semibold text-slate-700 truncate">{{ clickedOrthogroupDetail.displayName }}</div>
-                                <div class="text-[10px] text-slate-500">{{ clickedOrthogroupDetail.scopeLabel }}</div>
-                                <div v-if="clickedOrthogroupDetail.description" class="text-[10px] text-slate-500 line-clamp-2">
-                                    {{ clickedOrthogroupDetail.description }}
+                                <div class="flex min-w-0 flex-col items-stretch gap-1">
+                                    <button type="button"
+                                            data-history-managed
+                                            @click="alignByClickedOrthogroup($event)"
+                                            :disabled="!clickedOrthogroupDetail?.currentMember || similarityAlignmentBusy"
+                                            :aria-busy="similarityAlignmentBusy"
+                                            aria-describedby="clicked-alignment-action-description"
+                                            class="min-w-0 px-2 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1"
+                                            title="Align to this exact feature">
+                                        <i class="ph ph-arrows-left-right" aria-hidden="true"></i>
+                                        <span>{{ similarityAlignmentStatus === 'resolving' ? 'Resolving…' : similarityAlignmentStatus === 'applying' ? 'Applying…' : 'Align…' }}</span>
+                                    </button>
+                                    <div class="flex items-center justify-center gap-1">
+                                        <button type="button"
+                                                data-history-managed
+                                                data-similarity-alignment-popup-review
+                                                @click="alignByClickedOrthogroup($event, 'review')"
+                                                :disabled="!clickedOrthogroupDetail?.currentMember || similarityAlignmentBusy"
+                                                :aria-busy="similarityAlignmentBusy"
+                                                aria-describedby="clicked-alignment-action-description"
+                                                class="match-link focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"
+                                                title="Review alignment options for this exact feature">Review alignment options…</button>
+                                        <help-tip id="clicked-alignment-action-description" label="About Align and Review"
+                                                  text="Align applies resolved targets immediately; ambiguity opens review. Review alignment options… lets you inspect or change anchors, Skip, and direction before applying."></help-tip>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="grid grid-cols-2 gap-2 text-xs text-slate-600 mb-3">
-                                <div>
-                                    <div class="text-[10px] text-slate-500">Record coverage</div>
-                                    <div class="font-medium">{{ clickedOrthogroupDetail.recordCoverage }}</div>
-                                </div>
-                            </div>
-                            <div class="grid grid-cols-2 gap-2 mb-3">
-                                <button type="button"
-                                        @click="copyOrthogroupSequences(clickedOrthogroupDetail.id, 'nt', 'feature-popup')"
-                                        :disabled="!clickedOrthogroupDetail.ntSequenceCount"
-                                        :class="[
-                                          'px-2 py-1.5 rounded-md text-xs flex items-center justify-center gap-1',
-                                          clickedOrthogroupDetail.ntSequenceCount ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                                        ]"
-                                        title="Copy all member nucleotide FASTA"
-                                        aria-live="polite"
-                                        aria-atomic="true">
-                                    <i class="ph ph-copy" aria-hidden="true"></i>
-                                    <span>{{ orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'nt', 'Copy nt', null, 'feature-popup') }}</span>
-                                </button>
-                                <button type="button"
-                                        @click="downloadOrthogroupSequences(clickedOrthogroupDetail.id, 'nt')"
-                                        :disabled="!clickedOrthogroupDetail.ntSequenceCount"
-                                        :class="[
-                                          'px-2 py-1.5 rounded-md text-xs flex items-center justify-center gap-1',
-                                          clickedOrthogroupDetail.ntSequenceCount ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                                        ]"
-                                        title="Download all member nucleotide FASTA">
-                                    <i class="ph ph-download-simple" aria-hidden="true"></i>
-                                    <span>Download nt</span>
-                                </button>
-                                <button type="button"
-                                        @click="copyOrthogroupSequences(clickedOrthogroupDetail.id, 'aa', 'feature-popup')"
-                                        :disabled="!clickedOrthogroupDetail.aaSequenceCount"
-                                        :class="[
-                                          'px-2 py-1.5 rounded-md text-xs flex items-center justify-center gap-1',
-                                          clickedOrthogroupDetail.aaSequenceCount ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                                        ]"
-                                        title="Copy all member amino-acid FASTA"
-                                        aria-live="polite"
-                                        aria-atomic="true">
-                                    <i class="ph ph-copy" aria-hidden="true"></i>
-                                    <span>{{ orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'aa', 'Copy aa', null, 'feature-popup') }}</span>
-                                </button>
-                                <button type="button"
-                                        @click="downloadOrthogroupSequences(clickedOrthogroupDetail.id, 'aa')"
-                                        :disabled="!clickedOrthogroupDetail.aaSequenceCount"
-                                        :class="[
-                                          'px-2 py-1.5 rounded-md text-xs flex items-center justify-center gap-1',
-                                          clickedOrthogroupDetail.aaSequenceCount ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                                        ]"
-                                        title="Download all member amino-acid FASTA">
-                                    <i class="ph ph-download-simple" aria-hidden="true"></i>
-                                    <span>Download aa</span>
-                                </button>
-                            </div>
-                            <div v-if="clickedOrthogroupDetail.currentMember" class="text-xs text-slate-600 mb-3">
-                                <div class="text-[10px] text-slate-500 mb-1">Current member</div>
-                                <div class="font-medium truncate">{{ clickedOrthogroupDetail.currentMember.product || clickedOrthogroupDetail.currentMember.note || clickedOrthogroupDetail.currentMember.displayProteinId || 'Member' }}</div>
-                                <div class="font-mono text-[10px] text-slate-500 break-all">
-                                    {{ clickedOrthogroupDetail.currentMember.displayProteinId || '' }}
-                                </div>
-                                <div class="text-[10px] text-slate-500">
-                                    {{ clickedOrthogroupDetail.currentMember.recordId || '' }}
-                                    {{ Number(clickedOrthogroupDetail.currentMember.start) + 1 }}-{{ clickedOrthogroupDetail.currentMember.end }}
-                                    <span v-if="clickedOrthogroupDetail.currentMember.strand">({{ clickedOrthogroupDetail.currentMember.strand }})</span>
-                                </div>
-                            </div>
-                            <div class="max-h-40 overflow-auto custom-scrollbar border border-slate-100 rounded-lg">
-                                <table class="min-w-[52rem] text-[10px] text-slate-600">
-                                    <thead class="sticky top-0 bg-slate-50 text-slate-500 uppercase">
-                                        <tr>
-                                            <th class="px-2 py-1 text-left font-semibold">Record</th>
-                                            <th class="px-2 py-1 text-left font-semibold">Coordinates (+/-)</th>
-                                            <th class="px-2 py-1 text-left font-semibold">Protein ID</th>
-                                            <th class="px-2 py-1 text-left font-semibold">Product / note</th>
-                                            <th class="px-2 py-1 text-left font-semibold">Seq</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <template v-for="recordGroup in clickedOrthogroupDetail.membersByRecord"
-                                                  :key="`og-${clickedOrthogroupDetail.id}-${recordGroup.recordIndex}`">
-                                            <tr v-for="member in recordGroup.members"
-                                                :key="`${member.featureSvgId}-${member.proteinId}`"
-                                                class="border-t border-slate-100">
-                                                <td class="px-2 py-1 font-mono whitespace-nowrap">{{ member.recordId || recordGroup.recordLabel }}</td>
-                                                <td class="px-2 py-1 font-mono whitespace-nowrap">
-                                                    {{ Number(member.start) + 1 }}..{{ member.end }}
-                                                    <span v-if="member.strand">({{ member.strand }})</span>
-                                                </td>
-                                                <td class="px-2 py-1 font-mono whitespace-nowrap">{{ member.displayProteinId || '' }}</td>
-                                                <td class="px-2 py-1 min-w-[10rem]">{{ member.product || member.note || '' }}</td>
-                                                <td class="px-2 py-1 whitespace-nowrap">
-                                                    <div class="grid grid-cols-2 gap-1 w-24">
-                                                        <button type="button"
-                                                                @click="copyOrthogroupMemberSequence(member, 'nt', clickedOrthogroupDetail.id, 'feature-popup')"
-                                                                :disabled="!hasOrthogroupMemberSequence(member, 'nt')"
-                                                                :class="[
-                                                                  'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
-                                                                  hasOrthogroupMemberSequence(member, 'nt') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                                                                ]"
-                                                                title="Copy nucleotide FASTA"
-                                                                aria-live="polite"
-                                                                aria-atomic="true">
-                                                            <i class="ph ph-copy" aria-hidden="true"></i><span>{{ orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'nt', 'nt', member, 'feature-popup') }}</span>
-                                                        </button>
-                                                        <button type="button"
-                                                                @click="downloadOrthogroupMemberSequence(member, 'nt', clickedOrthogroupDetail.id)"
-                                                                :disabled="!hasOrthogroupMemberSequence(member, 'nt')"
-                                                                :class="[
-                                                                  'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
-                                                                  hasOrthogroupMemberSequence(member, 'nt') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                                                                ]"
-                                                                title="Download nucleotide FASTA">
-                                                            <i class="ph ph-download-simple" aria-hidden="true"></i><span>nt</span>
-                                                        </button>
-                                                        <button type="button"
-                                                                @click="copyOrthogroupMemberSequence(member, 'aa', clickedOrthogroupDetail.id, 'feature-popup')"
-                                                                :disabled="!hasOrthogroupMemberSequence(member, 'aa')"
-                                                                :class="[
-                                                                  'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
-                                                                  hasOrthogroupMemberSequence(member, 'aa') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                                                                ]"
-                                                                title="Copy amino-acid FASTA"
-                                                                aria-live="polite"
-                                                                aria-atomic="true">
-                                                            <i class="ph ph-copy" aria-hidden="true"></i><span>{{ orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'aa', 'aa', member, 'feature-popup') }}</span>
-                                                        </button>
-                                                        <button type="button"
-                                                                @click="downloadOrthogroupMemberSequence(member, 'aa', clickedOrthogroupDetail.id)"
-                                                                :disabled="!hasOrthogroupMemberSequence(member, 'aa')"
-                                                                :class="[
-                                                                  'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
-                                                                  hasOrthogroupMemberSequence(member, 'aa') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                                                                ]"
-                                                                title="Download amino-acid FASTA">
-                                                            <i class="ph ph-download-simple" aria-hidden="true"></i><span>aa</span>
-                                                        </button>
-                                                    </div>
-                                                </td>
+                            <action-menu v-if="clickedOrthogroupDetail" label="More" icon="ph-dots-three" title="Highlight, copy, or download this group"
+                                         :items="[
+                                           ...(canUseClickedOrthogroupActions ? [
+                                             { label: 'Highlight', title: 'Highlight similarity group', icon: 'ph-target', run: highlightClickedOrthogroup },
+                                             { label: 'Clear highlight', title: 'Clear similarity-group highlight', icon: 'ph-eraser', run: clearOrthogroupHighlight }
+                                           ] : []),
+                                           { label: orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'nt', 'Copy nt', null, 'feature-popup'), title: 'Copy all member nucleotide FASTA', icon: 'ph-copy', live: true, disabled: !clickedOrthogroupDetail.ntSequenceCount, run: () => copyOrthogroupSequences(clickedOrthogroupDetail.id, 'nt', 'feature-popup') },
+                                           { label: 'Download nt', title: 'Download all member nucleotide FASTA', icon: 'ph-download-simple', disabled: !clickedOrthogroupDetail.ntSequenceCount, run: () => downloadOrthogroupSequences(clickedOrthogroupDetail.id, 'nt') },
+                                           { label: orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'aa', 'Copy aa', null, 'feature-popup'), title: 'Copy all member amino-acid FASTA', icon: 'ph-copy', live: true, disabled: !clickedOrthogroupDetail.aaSequenceCount, run: () => copyOrthogroupSequences(clickedOrthogroupDetail.id, 'aa', 'feature-popup') },
+                                           { label: 'Download aa', title: 'Download all member amino-acid FASTA', icon: 'ph-download-simple', disabled: !clickedOrthogroupDetail.aaSequenceCount, run: () => downloadOrthogroupSequences(clickedOrthogroupDetail.id, 'aa') }
+                                         ]"></action-menu>
+                            <details v-if="clickedOrthogroupDetail" class="match-disclosure" data-similarity-members>
+                                <summary>{{ clickedOrthogroupDetail.memberCount }} members</summary>
+                                <div class="match-disclosure-body max-h-64 overflow-auto custom-scrollbar">
+                                    <table class="match-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Record</th>
+                                                <th>Location</th>
+                                                <th>Product</th>
+                                                <th>Sequence</th>
                                             </tr>
-                                        </template>
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div v-if="canUseClickedOrthogroupActions" class="mt-2 flex gap-2">
-                                <button @click="highlightClickedOrthogroup"
-                                        class="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-xs">
-                                    Highlight
-                                </button>
-                                <button @click="clearOrthogroupHighlight"
-                                        class="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-xs">
-                                    Clear
-                                </button>
-                            </div>
-                            </div>
+                                        </thead>
+                                        <tbody>
+                                            <template v-for="recordGroup in clickedOrthogroupDetail.membersByRecord"
+                                                      :key="`og-${clickedOrthogroupDetail.id}-${recordGroup.recordIndex}`">
+                                                <tr v-for="member in recordGroup.members"
+                                                    :key="`${member.featureSvgId}-${member.proteinId}`"
+                                                    :aria-current="member === clickedOrthogroupDetail.currentMember ? 'true' : null">
+                                                    <td>{{ member.recordId || recordGroup.recordLabel }}</td>
+                                                    <td class="match-mono whitespace-nowrap">{{ Number(member.start) + 1 }}..{{ member.end }}<span v-if="member.strand"> ({{ member.strand }})</span></td>
+                                                    <td>
+                                                        <div class="text-slate-800">{{ member.product || member.note || '' }}</div>
+                                                        <div class="match-cell-sub">{{ member.displayProteinId || '' }}</div>
+                                                    </td>
+                                                    <td>
+                                                        <action-menu label="FASTA" :title="`FASTA of ${member.displayProteinId || member.recordId || 'this member'}`"
+                                                                     :items="[
+                                                                       { label: orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'nt', 'Copy nt', member, 'feature-popup'), title: 'Copy nucleotide FASTA', icon: 'ph-copy', live: true, disabled: !hasOrthogroupMemberSequence(member, 'nt'), run: () => copyOrthogroupMemberSequence(member, 'nt', clickedOrthogroupDetail.id, 'feature-popup') },
+                                                                       { label: orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'aa', 'Copy aa', member, 'feature-popup'), title: 'Copy amino-acid FASTA', icon: 'ph-copy', live: true, disabled: !hasOrthogroupMemberSequence(member, 'aa'), run: () => copyOrthogroupMemberSequence(member, 'aa', clickedOrthogroupDetail.id, 'feature-popup') },
+                                                                       { label: 'Download nt', title: 'Download nucleotide FASTA', icon: 'ph-download-simple', disabled: !hasOrthogroupMemberSequence(member, 'nt'), run: () => downloadOrthogroupMemberSequence(member, 'nt', clickedOrthogroupDetail.id) },
+                                                                       { label: 'Download aa', title: 'Download amino-acid FASTA', icon: 'ph-download-simple', disabled: !hasOrthogroupMemberSequence(member, 'aa'), run: () => downloadOrthogroupMemberSequence(member, 'aa', clickedOrthogroupDetail.id) }
+                                                                     ]"></action-menu>
+                                                    </td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </details>
                         </section>
                         </div>
                         <div v-else-if="richFeaturePopup && clickedFeature.activeTab === 'details'" class="space-y-3" data-nodrag="true">
@@ -6016,11 +6098,13 @@
                          class="fixed z-50 feature-popup pairwise-match-popup custom-scrollbar bg-white rounded-xl shadow-2xl border border-slate-200 p-4"
                          :style="pairwiseMatchPopupStyle">
                         <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100 cursor-move">
-                            <div class="w-4 h-4 rounded mt-1 border border-slate-200"
+                            <div class="w-4 h-4 shrink-0 rounded mt-1 border border-slate-200"
                                  :style="{ backgroundColor: clickedPairwiseMatch.fill || '#94a3b8' }"></div>
                             <div class="min-w-0">
-                                <div class="text-base font-bold text-slate-700 truncate max-w-[320px]">{{ clickedPairwiseMatch.title }}</div>
-                                <div v-if="clickedPairwiseMatch.subtitle" class="text-xs text-slate-500 mt-0.5 font-mono break-all">
+                                <div class="text-base font-bold text-slate-700 line-clamp-2 break-words" data-match-popup-title>{{ clickedPairwiseMatch.matchKind === 'orthogroup' && clickedPairwiseMatch.group ? clickedPairwiseMatch.group.title : clickedPairwiseMatch.title }}</div>
+                                <span v-if="clickedPairwiseMatch.matchKind === 'orthogroup' && clickedPairwiseMatch.group?.badge"
+                                      class="match-popup-badge mt-0.5">{{ clickedPairwiseMatch.group.badge }}</span>
+                                <div v-if="clickedPairwiseMatch.subtitle && !clickedPairwiseMatch.block" class="text-xs text-slate-500 mt-0.5 font-mono break-all">
                                     {{ clickedPairwiseMatch.subtitle }}
                                 </div>
                             </div>
@@ -6036,282 +6120,264 @@
                              aria-label="Pairwise match details content"
                              tabindex="0"
                              data-nodrag="true">
-                            <div v-if="clickedPairwiseMatch.sequenceBundle"
-                                 class="pairwise-match-popup-section">
-                                <div class="pairwise-match-popup-section-title">{{ clickedPairwiseMatch.sequenceTitle }}</div>
-                                <div v-if="clickedPairwiseMatch.sequenceNote"
-                                     class="mb-2 text-[11px] text-slate-500">
-                                    {{ clickedPairwiseMatch.sequenceNote }}
-                                </div>
-                                <div v-for="entry in clickedPairwiseMatch.sequenceBundle.entries"
-                                     :key="`match-sequence-${entry.span.role}`"
-                                     class="rounded-lg border border-slate-100 px-3 py-2 mb-2">
-                                    <div class="flex items-center gap-2">
-                                        <div class="min-w-0 flex-1">
-                                            <div class="text-xs font-semibold text-slate-700">{{ entry.span.displayRole }} span</div>
-                                            <div class="text-[10px] font-mono text-slate-500 break-all">
-                                                {{ entry.span.recordId }} · {{ entry.span.start }}..{{ entry.span.end }} · {{ entry.orientation }}
-                                                <span v-if="entry.available"> · {{ entry.sequenceLength.toLocaleString() }} bp</span>
-                                            </div>
+                            <template v-if="clickedPairwiseMatch.block">
+                                <!-- UX-B01: one readable summary of the block, then the gene pairs and the block facts, both closed. -->
+                                <section class="match-lead" data-collinear-summary>
+                                    <div><span class="font-semibold">{{ clickedPairwiseMatch.block.query.recordId }}</span> {{ clickedPairwiseMatch.block.query.intervalText }}<span v-if="clickedPairwiseMatch.block.query.lengthText" class="match-muted"> ({{ clickedPairwiseMatch.block.query.lengthText }})</span></div>
+                                    <div v-if="clickedPairwiseMatch.block.query.tableInterval" class="match-lead-note">Table coordinates {{ clickedPairwiseMatch.block.query.tableInterval }}</div>
+                                    <div><span class="match-muted">vs </span><span class="font-semibold">{{ clickedPairwiseMatch.block.subject.recordId }}</span> {{ clickedPairwiseMatch.block.subject.intervalText }}<span v-if="clickedPairwiseMatch.block.subject.lengthText" class="match-muted"> ({{ clickedPairwiseMatch.block.subject.lengthText }})</span></div>
+                                    <div v-if="clickedPairwiseMatch.block.subject.tableInterval" class="match-lead-note">Table coordinates {{ clickedPairwiseMatch.block.subject.tableInterval }}</div>
+                                    <div class="match-lead-facts">{{ clickedPairwiseMatch.block.facts.join(' · ') }}</div>
+                                    <div class="match-actions">
+                                        <button type="button" class="match-action" @click="copyText(clickedPairwiseMatch.block.summaryText)" title="Copy this summary">
+                                            <i class="ph ph-copy" aria-hidden="true"></i><span>Copy</span>
+                                        </button>
+                                        <action-menu v-if="clickedPairwiseMatch.sequenceBundle"
+                                                     label="FASTA" icon="ph-download-simple" title="Copy or download the block span sequences"
+                                                     :items="[
+                                                       ...clickedPairwiseMatch.sequenceBundle.entries.flatMap((entry) => [
+                                                         { label: `Copy ${entry.span.displayRole.toLowerCase()} span`, title: entry.available ? `Copy ${entry.span.displayRole.toLowerCase()} span FASTA` : entry.unavailableReason, icon: 'ph-copy', disabled: !entry.available, run: () => copyText(entry.fasta) },
+                                                         { label: `Download ${entry.span.displayRole.toLowerCase()} span`, title: entry.available ? `Download ${entry.span.displayRole.toLowerCase()} span FASTA` : entry.unavailableReason, icon: 'ph-download-simple', disabled: !entry.available, run: () => downloadText(entry.filename, entry.fasta, 'text/plain;charset=utf-8') }
+                                                       ]),
+                                                       ...(clickedPairwiseMatch.sequenceBundle.entries.length > 1 ? [
+                                                         { label: 'Copy both spans', title: 'Copy both spans FASTA', icon: 'ph-copy', disabled: !clickedPairwiseMatch.sequenceBundle.combinedFasta, run: () => copyText(clickedPairwiseMatch.sequenceBundle.combinedFasta) },
+                                                         { label: 'Download both spans', title: 'Download both spans FASTA', icon: 'ph-download-simple', disabled: !clickedPairwiseMatch.sequenceBundle.combinedFasta, run: () => downloadText(clickedPairwiseMatch.sequenceBundle.combinedFilename, clickedPairwiseMatch.sequenceBundle.combinedFasta, 'text/plain;charset=utf-8') }
+                                                       ] : [])
+                                                     ]"></action-menu>
+                                    </div>
+                                    <div v-for="entry in (clickedPairwiseMatch.sequenceBundle?.entries || []).filter((item) => !item.available)"
+                                         :key="`match-sequence-unavailable-${entry.span.role}`"
+                                         class="mt-1 text-[11px] text-amber-800">{{ entry.span.displayRole }} span: {{ entry.unavailableReason }}</div>
+                                </section>
+                                <details class="match-disclosure" data-collinear-gene-pairs>
+                                    <summary>{{ clickedPairwiseMatch.block.pairsLabel }}</summary>
+                                    <div class="match-disclosure-body">
+                                        <div class="flex justify-end mb-1">
+                                            <button type="button" class="match-action" @click="copyText(clickedPairwiseMatch.block.pairsCopyText)" title="Copy the gene-pair table">
+                                                <i class="ph ph-table" aria-hidden="true"></i><span>Copy table</span>
+                                            </button>
                                         </div>
+                                        <div class="max-h-80 overflow-auto custom-scrollbar">
+                                            <table class="match-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>{{ clickedPairwiseMatch.block.query.recordId || 'Query' }}</th>
+                                                        <th>{{ clickedPairwiseMatch.block.subject.recordId || 'Subject' }}</th>
+                                                        <th>{{ clickedPairwiseMatch.block.groupHeading }}</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr v-for="pair in clickedPairwiseMatch.block.genePairs" :key="`gene-pair-${pair.key}`">
+                                                        <td v-for="(gene, side) in [pair.query, pair.subject]" :key="side">
+                                                            <button v-if="gene" type="button" class="match-cell-button"
+                                                                    :disabled="!gene.canOpen"
+                                                                    :title="gene.canOpen ? `Open ${gene.label}${gene.product ? ` (${gene.product})` : ''}` : gene.product"
+                                                                    @click="openPairwiseFeatureRow(gene, $event)">
+                                                                <span class="match-cell-main">{{ gene.label }}</span>
+                                                                <span class="match-cell-sub">{{ gene.location }}</span>
+                                                            </button>
+                                                        </td>
+                                                        <td>
+                                                            <button v-if="pair.group" type="button" class="match-cell-button"
+                                                                    :aria-pressed="selectedPairwiseBlockOrthogroupId === pair.group.id ? 'true' : 'false'"
+                                                                    :title="`Show the members of ${pair.group.id}`"
+                                                                    @click="selectPairwiseBlockOrthogroup(pair.group)">
+                                                                <span class="match-cell-main">{{ pair.group.displayName || pair.group.id }}</span>
+                                                                <span v-if="pair.group.displayName && pair.group.displayName !== pair.group.id" class="match-cell-sub">{{ pair.group.id }}</span>
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </details>
+                            </template>
+                            <template v-else-if="clickedPairwiseMatch.matchKind !== 'orthogroup'">
+                                <div v-if="clickedPairwiseMatch.sequenceBundle"
+                                     class="pairwise-match-popup-section">
+                                    <div class="pairwise-match-popup-section-title">{{ clickedPairwiseMatch.sequenceTitle }}</div>
+                                    <div v-for="entry in clickedPairwiseMatch.sequenceBundle.entries"
+                                         :key="`match-sequence-${entry.span.role}`"
+                                         class="rounded-lg border border-slate-100 px-3 py-2 mb-2">
+                                        <div class="flex items-center gap-2">
+                                            <div class="min-w-0 flex-1">
+                                                <div class="text-xs font-semibold text-slate-700">{{ entry.span.displayRole }} span</div>
+                                                <div class="text-[10px] font-mono text-slate-500 break-all">
+                                                    {{ entry.span.recordId }} · {{ entry.span.start }}..{{ entry.span.end }} · {{ entry.orientation }}
+                                                    <span v-if="entry.available"> · {{ entry.sequenceLength.toLocaleString() }} bp</span>
+                                                </div>
+                                            </div>
+                                            <button type="button"
+                                                    @click="copyText(entry.fasta)"
+                                                    :disabled="!entry.available"
+                                                    :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', entry.available ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']"
+                                                    :title="entry.available ? `Copy ${entry.span.displayRole.toLowerCase()} span FASTA` : entry.unavailableReason">
+                                                <i class="ph ph-copy" aria-hidden="true"></i><span>Copy</span>
+                                            </button>
+                                            <button type="button"
+                                                    @click="downloadText(entry.filename, entry.fasta, 'text/plain;charset=utf-8')"
+                                                    :disabled="!entry.available"
+                                                    :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', entry.available ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']"
+                                                    :title="entry.available ? `Download ${entry.span.displayRole.toLowerCase()} span FASTA` : entry.unavailableReason">
+                                                <i class="ph ph-download-simple" aria-hidden="true"></i><span>FASTA</span>
+                                            </button>
+                                        </div>
+                                        <div v-if="!entry.available" class="mt-1 text-[10px] text-amber-700">
+                                            {{ entry.unavailableReason }}
+                                        </div>
+                                    </div>
+                                    <div v-if="clickedPairwiseMatch.sequenceBundle.entries.length > 1"
+                                         class="flex items-center justify-end gap-1 pt-1">
+                                        <span class="mr-auto text-[10px] font-semibold uppercase text-slate-500">Both spans</span>
                                         <button type="button"
-                                                @click="copyText(entry.fasta)"
-                                                :disabled="!entry.available"
-                                                :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', entry.available ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']"
-                                                :title="entry.available ? `Copy ${entry.span.displayRole.toLowerCase()} span FASTA` : entry.unavailableReason">
+                                                @click="copyText(clickedPairwiseMatch.sequenceBundle.combinedFasta)"
+                                                :disabled="!clickedPairwiseMatch.sequenceBundle.combinedFasta"
+                                                :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', clickedPairwiseMatch.sequenceBundle.combinedFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']">
                                             <i class="ph ph-copy" aria-hidden="true"></i><span>Copy</span>
                                         </button>
                                         <button type="button"
-                                                @click="downloadText(entry.filename, entry.fasta, 'text/plain;charset=utf-8')"
-                                                :disabled="!entry.available"
-                                                :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', entry.available ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']"
-                                                :title="entry.available ? `Download ${entry.span.displayRole.toLowerCase()} span FASTA` : entry.unavailableReason">
+                                                @click="downloadText(clickedPairwiseMatch.sequenceBundle.combinedFilename, clickedPairwiseMatch.sequenceBundle.combinedFasta, 'text/plain;charset=utf-8')"
+                                                :disabled="!clickedPairwiseMatch.sequenceBundle.combinedFasta"
+                                                :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', clickedPairwiseMatch.sequenceBundle.combinedFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']">
                                             <i class="ph ph-download-simple" aria-hidden="true"></i><span>FASTA</span>
                                         </button>
                                     </div>
-                                    <div v-if="!entry.available" class="mt-1 text-[10px] text-amber-700">
-                                        {{ entry.unavailableReason }}
-                                    </div>
                                 </div>
-                                <div v-if="clickedPairwiseMatch.sequenceBundle.entries.length > 1"
-                                     class="flex items-center justify-end gap-1 pt-1">
-                                    <span class="mr-auto text-[10px] font-semibold uppercase text-slate-500">Both spans</span>
-                                    <button type="button"
-                                            @click="copyText(clickedPairwiseMatch.sequenceBundle.combinedFasta)"
-                                            :disabled="!clickedPairwiseMatch.sequenceBundle.combinedFasta"
-                                            :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', clickedPairwiseMatch.sequenceBundle.combinedFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']">
-                                        <i class="ph ph-copy" aria-hidden="true"></i><span>Copy</span>
-                                    </button>
-                                    <button type="button"
-                                            @click="downloadText(clickedPairwiseMatch.sequenceBundle.combinedFilename, clickedPairwiseMatch.sequenceBundle.combinedFasta, 'text/plain;charset=utf-8')"
-                                            :disabled="!clickedPairwiseMatch.sequenceBundle.combinedFasta"
-                                            :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', clickedPairwiseMatch.sequenceBundle.combinedFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']">
-                                        <i class="ph ph-download-simple" aria-hidden="true"></i><span>FASTA</span>
-                                    </button>
-                                </div>
-                            </div>
-                            <div v-for="section in renderedPairwiseMatchSections"
-                                 :key="`match-section-${section.title}`"
-                                 class="pairwise-match-popup-section">
-                                <div class="pairwise-match-popup-section-title">{{ section.title }}</div>
-                                <template v-if="!section.featureRows || !section.featureRows.length">
-                                    <div v-for="row in section.rows"
-                                         :key="`match-row-${section.title}-${row.label}-${row.value}`"
-                                         class="pairwise-match-popup-row">
-                                        <div class="pairwise-match-popup-key">{{ row.label }}</div>
-                                        <div class="pairwise-match-popup-value">{{ row.value }}</div>
-                                        <button aria-label="Copy" type="button"
-                                                @click="copyText(row.value)"
-                                                class="w-7 h-7 rounded-md text-slate-500 hover:text-blue-600 hover:bg-blue-50 flex items-center justify-center"
-                                                title="Copy">
-                                            <i class="ph ph-copy" aria-hidden="true"></i>
-                                        </button>
-                                    </div>
-                                </template>
-                                <div v-if="section.featureRows && section.featureRows.length"
-                                     class="pairwise-match-feature-list custom-scrollbar">
-                                    <table class="pairwise-match-feature-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Feature</th>
-                                                <th>Record</th>
-                                                <th>Location</th>
-                                                <th>Product</th>
-                                                <th>Copy</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <tr v-for="featureRow in section.featureRows"
-                                                :key="`match-feature-${section.title}-${featureRow.key}`"
-                                                @click="openPairwiseFeatureRow(featureRow, $event)"
-                                                :class="[
-                                                  'pairwise-match-feature-row',
-                                                  featureRow.canOpen ? '' : 'is-disabled'
-                                                ]">
-                                                <td>
-                                                    <div class="pairwise-match-feature-main">{{ featureRow.label }}</div>
-                                                    <div v-if="featureRow.subLabel"
-                                                         class="pairwise-match-feature-sub">
-                                                        {{ featureRow.subLabel }}
-                                                    </div>
-                                                </td>
-                                                <td class="pairwise-match-feature-mono">{{ featureRow.record }}</td>
-                                                <td class="pairwise-match-feature-mono">{{ featureRow.location }}</td>
-                                                <td class="text-slate-700">{{ featureRow.product }}</td>
-                                                <td>
-                                                    <button aria-label="Copy feature row" type="button"
-                                                            @click.stop="copyText(featureRow.copyText)"
-                                                            class="w-7 h-7 rounded-md text-slate-500 hover:text-blue-600 hover:bg-blue-50 flex items-center justify-center"
-                                                            title="Copy feature row">
-                                                        <i class="ph ph-copy" aria-hidden="true"></i>
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                                <div v-if="section.blockOrthogroups && section.blockOrthogroups.length"
-                                     class="mt-3 border border-slate-100 rounded-lg overflow-hidden">
-                                    <div class="bg-slate-50 px-3 py-2 text-[10px] font-semibold uppercase text-slate-500">
-                                        Similarity groups covered
-                                    </div>
-                                    <div class="overflow-auto custom-scrollbar max-h-52">
-                                        <table class="min-w-[54rem] w-full text-xs">
-                                            <thead class="bg-white sticky top-0">
-                                                <tr class="text-[10px] uppercase text-slate-500">
-                                                    <th class="text-left font-semibold px-3 py-2">Group ID</th>
-                                                    <th class="text-left font-semibold px-3 py-2">Display name</th>
-                                                    <th class="text-left font-semibold px-3 py-2">Members</th>
-                                                    <th class="text-left font-semibold px-3 py-2">Record coverage</th>
-                                                    <th class="text-left font-semibold px-3 py-2">Query member</th>
-                                                    <th class="text-left font-semibold px-3 py-2">Subject member</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <tr v-for="group in section.blockOrthogroups"
-                                                    :key="`block-og-${group.id}`"
-                                                    @click="selectPairwiseBlockOrthogroup(group)"
-                                                    :class="[
-                                                      'border-t border-slate-100 cursor-pointer hover:bg-emerald-50/70',
-                                                      selectedPairwiseBlockOrthogroupId === group.id ? 'bg-emerald-50' : ''
-                                                    ]">
-                                                    <td class="font-mono text-slate-600 px-3 py-2 align-top">{{ group.id }}</td>
-                                                    <td class="text-slate-700 px-3 py-2 align-top">{{ group.displayName }}</td>
-                                                    <td class="font-mono text-slate-600 px-3 py-2 align-top">{{ group.memberCount }}</td>
-                                                    <td class="font-mono text-slate-600 px-3 py-2 align-top">{{ group.recordCoverage }}</td>
-                                                    <td class="font-mono text-slate-700 px-3 py-2 align-top break-all">{{ group.queryMember }}</td>
-                                                    <td class="font-mono text-slate-700 px-3 py-2 align-top break-all">{{ group.subjectMember }}</td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                                <div v-if="section.memberRows && section.memberRows.length"
-                                     class="mt-3 border border-slate-100 rounded-lg overflow-hidden">
-                                    <div class="flex items-center justify-between gap-2 bg-slate-50 px-3 py-2">
-                                        <div class="text-[10px] font-semibold uppercase text-slate-500">Similarity-group members</div>
-                                        <div class="flex items-center gap-1">
-                                            <button type="button"
-                                                    @click="copyText(section.memberNtFasta)"
-                                                    :disabled="!section.memberNtFasta"
-                                                    :class="[
-                                                      'h-7 px-2 rounded-md text-[10px] flex items-center justify-center gap-1',
-                                                      section.memberNtFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
-                                                    ]"
-                                                    title="Copy all member nucleotide FASTA">
-                                                <i class="ph ph-copy" aria-hidden="true"></i><span>nt</span>
-                                            </button>
-                                            <button type="button"
-                                                    @click="downloadText(section.memberNtFilename, section.memberNtFasta)"
-                                                    :disabled="!section.memberNtFasta"
-                                                    :class="[
-                                                      'h-7 px-2 rounded-md text-[10px] flex items-center justify-center gap-1',
-                                                      section.memberNtFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
-                                                    ]"
-                                                    title="Download all member nucleotide FASTA">
-                                                <i class="ph ph-download-simple" aria-hidden="true"></i><span>nt</span>
-                                            </button>
-                                            <button type="button"
-                                                    @click="copyText(section.memberAaFasta)"
-                                                    :disabled="!section.memberAaFasta"
-                                                    :class="[
-                                                      'h-7 px-2 rounded-md text-[10px] flex items-center justify-center gap-1',
-                                                      section.memberAaFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
-                                                    ]"
-                                                    title="Copy all member amino-acid FASTA">
-                                                <i class="ph ph-copy" aria-hidden="true"></i><span>aa</span>
-                                            </button>
-                                            <button type="button"
-                                                    @click="downloadText(section.memberAaFilename, section.memberAaFasta)"
-                                                    :disabled="!section.memberAaFasta"
-                                                    :class="[
-                                                      'h-7 px-2 rounded-md text-[10px] flex items-center justify-center gap-1',
-                                                      section.memberAaFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
-                                                    ]"
-                                                    title="Download all member amino-acid FASTA">
-                                                <i class="ph ph-download-simple" aria-hidden="true"></i><span>aa</span>
-                                            </button>
-                                            <button aria-label="Copy member table" type="button"
-                                                    @click="copyText(section.memberCopyText)"
+                                <div v-for="section in clickedPairwiseMatch.sections"
+                                     :key="`match-section-${section.title}`"
+                                     class="pairwise-match-popup-section">
+                                    <div class="pairwise-match-popup-section-title">{{ section.title }}</div>
+                                    <template v-if="!section.featureRows || !section.featureRows.length">
+                                        <div v-for="row in section.rows"
+                                             :key="`match-row-${section.title}-${row.label}-${row.value}`"
+                                             class="pairwise-match-popup-row">
+                                            <div class="pairwise-match-popup-key">{{ row.label }}</div>
+                                            <div class="pairwise-match-popup-value">{{ row.value }}</div>
+                                            <button aria-label="Copy" type="button"
+                                                    @click="copyText(row.value)"
                                                     class="w-7 h-7 rounded-md text-slate-500 hover:text-blue-600 hover:bg-blue-50 flex items-center justify-center"
-                                                    title="Copy member table">
-                                                <i class="ph ph-table" aria-hidden="true"></i>
+                                                    title="Copy">
+                                                <i class="ph ph-copy" aria-hidden="true"></i>
                                             </button>
                                         </div>
-                                    </div>
-                                    <div class="overflow-auto custom-scrollbar max-h-56">
-                                        <table class="min-w-[62rem] w-full text-xs">
-                                            <thead class="bg-white sticky top-0">
-                                                <tr class="text-[10px] uppercase text-slate-500">
-                                                    <th class="text-left font-semibold px-3 py-2">Record</th>
-                                                    <th class="text-left font-semibold px-3 py-2">Coordinates (+/-)</th>
-                                                    <th class="text-left font-semibold px-3 py-2">Protein ID</th>
-                                                    <th class="text-left font-semibold px-3 py-2">Role</th>
-                                                    <th class="text-left font-semibold px-3 py-2">Confidence</th>
-                                                    <th class="text-left font-semibold px-3 py-2">Product / note</th>
-                                                    <th class="text-left font-semibold px-3 py-2">Seq</th>
+                                    </template>
+                                    <div v-if="section.featureRows && section.featureRows.length"
+                                         class="pairwise-match-feature-list custom-scrollbar">
+                                        <table class="pairwise-match-feature-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Feature</th>
+                                                    <th>Record</th>
+                                                    <th>Location</th>
+                                                    <th>Product</th>
+                                                    <th>Copy</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                <tr v-for="member in section.memberRows"
-                                                    :key="`match-member-${section.title}-${member.record}-${member.coordinates}-${member.proteinId}`"
-                                                    class="border-t border-slate-100">
-                                                    <td class="font-mono text-slate-600 px-3 py-2 align-top">{{ member.record }}</td>
-                                                    <td class="font-mono text-slate-600 px-3 py-2 align-top">{{ member.coordinates }}</td>
-                                                    <td class="font-mono text-slate-700 px-3 py-2 align-top break-all">{{ member.proteinId }}</td>
-                                                    <td class="font-mono text-slate-700 px-3 py-2 align-top">{{ member.role }}</td>
-                                                    <td class="font-mono text-slate-600 px-3 py-2 align-top" :title="member.assignmentReason">{{ member.confidence }}</td>
-                                                    <td class="text-slate-700 px-3 py-2 align-top">{{ member.productOrNote }}</td>
-                                                    <td class="px-3 py-2 align-top whitespace-nowrap">
-                                                        <div class="grid grid-cols-2 gap-1 w-24">
-                                                            <button type="button"
-                                                                    @click="copyText(member.ntFasta)"
-                                                                    :disabled="!member.ntFasta"
-                                                                    :class="[
-                                                                      'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
-                                                                      member.ntFasta ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                                                                    ]"
-                                                                    title="Copy nucleotide FASTA">
-                                                                <i class="ph ph-copy" aria-hidden="true"></i><span>nt</span>
-                                                            </button>
-                                                            <button type="button"
-                                                                    @click="downloadText(member.ntFilename, member.ntFasta)"
-                                                                    :disabled="!member.ntFasta"
-                                                                    :class="[
-                                                                      'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
-                                                                      member.ntFasta ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                                                                    ]"
-                                                                    title="Download nucleotide FASTA">
-                                                                <i class="ph ph-download-simple" aria-hidden="true"></i><span>nt</span>
-                                                            </button>
-                                                            <button type="button"
-                                                                    @click="copyText(member.aaFasta)"
-                                                                    :disabled="!member.aaFasta"
-                                                                    :class="[
-                                                                      'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
-                                                                      member.aaFasta ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                                                                    ]"
-                                                                    title="Copy amino-acid FASTA">
-                                                                <i class="ph ph-copy" aria-hidden="true"></i><span>aa</span>
-                                                            </button>
-                                                            <button type="button"
-                                                                    @click="downloadText(member.aaFilename, member.aaFasta)"
-                                                                    :disabled="!member.aaFasta"
-                                                                    :class="[
-                                                                      'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
-                                                                      member.aaFasta ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                                                                    ]"
-                                                                    title="Download amino-acid FASTA">
-                                                                <i class="ph ph-download-simple" aria-hidden="true"></i><span>aa</span>
-                                                            </button>
+                                                <tr v-for="featureRow in section.featureRows"
+                                                    :key="`match-feature-${section.title}-${featureRow.key}`"
+                                                    @click="openPairwiseFeatureRow(featureRow, $event)"
+                                                    :class="[
+                                                      'pairwise-match-feature-row',
+                                                      featureRow.canOpen ? '' : 'is-disabled'
+                                                    ]">
+                                                    <td>
+                                                        <div class="pairwise-match-feature-main">{{ featureRow.label }}</div>
+                                                        <div v-if="featureRow.subLabel"
+                                                             class="pairwise-match-feature-sub">
+                                                            {{ featureRow.subLabel }}
                                                         </div>
+                                                    </td>
+                                                    <td class="pairwise-match-feature-mono">{{ featureRow.record }}</td>
+                                                    <td class="pairwise-match-feature-mono">{{ featureRow.location }}</td>
+                                                    <td class="text-slate-700">{{ featureRow.product }}</td>
+                                                    <td>
+                                                        <button aria-label="Copy feature row" type="button"
+                                                                @click.stop="copyText(featureRow.copyText)"
+                                                                class="w-7 h-7 rounded-md text-slate-500 hover:text-blue-600 hover:bg-blue-50 flex items-center justify-center"
+                                                                title="Copy feature row">
+                                                            <i class="ph ph-copy" aria-hidden="true"></i>
+                                                        </button>
                                                     </td>
                                                 </tr>
                                             </tbody>
                                         </table>
                                     </div>
                                 </div>
-                            </div>
+                            </template>
+                            <!-- UX-B02: one similarity group. The member table is the main content; one menu copies the group. -->
+                            <section v-if="pairwiseGroupView" class="mb-3" data-match-group>
+                                <div v-if="clickedPairwiseMatch.matchKind !== 'orthogroup'" class="flex flex-wrap items-baseline gap-x-2 mb-1">
+                                    <span class="text-sm font-semibold text-slate-700">{{ pairwiseGroupView.title }}</span>
+                                    <span v-if="pairwiseGroupView.badge" class="match-popup-badge">{{ pairwiseGroupView.badge }}</span>
+                                </div>
+                                <p v-if="pairwiseGroupView.description" class="mb-1 text-xs text-slate-600">{{ pairwiseGroupView.description }}</p>
+                                <div class="flex flex-wrap items-start justify-between gap-2 mb-2">
+                                    <span class="pt-1 text-xs font-semibold text-slate-700" data-match-group-count>{{ pairwiseGroupView.countText }}</span>
+                                    <action-menu label="Copy" icon="ph-copy" title="Copy or download the members"
+                                                 :items="[
+                                                   { label: 'Copy nt FASTA', title: 'Copy all member nucleotide FASTA', icon: 'ph-copy', disabled: !pairwiseGroupView.memberNtFasta, run: () => copyText(pairwiseGroupView.memberNtFasta) },
+                                                   { label: 'Download nt FASTA', title: 'Download all member nucleotide FASTA', icon: 'ph-download-simple', disabled: !pairwiseGroupView.memberNtFasta, run: () => downloadText(pairwiseGroupView.memberNtFilename, pairwiseGroupView.memberNtFasta) },
+                                                   { label: 'Copy aa FASTA', title: 'Copy all member amino-acid FASTA', icon: 'ph-copy', disabled: !pairwiseGroupView.memberAaFasta, run: () => copyText(pairwiseGroupView.memberAaFasta) },
+                                                   { label: 'Download aa FASTA', title: 'Download all member amino-acid FASTA', icon: 'ph-download-simple', disabled: !pairwiseGroupView.memberAaFasta, run: () => downloadText(pairwiseGroupView.memberAaFilename, pairwiseGroupView.memberAaFasta) },
+                                                   { label: 'Copy member table', title: 'Copy member table', icon: 'ph-table', disabled: !pairwiseGroupView.memberCopyText, run: () => copyText(pairwiseGroupView.memberCopyText) }
+                                                 ]"></action-menu>
+                                </div>
+                                <div v-if="pairwiseGroupView.memberRows.length" class="max-h-96 overflow-auto custom-scrollbar">
+                                    <table class="match-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Record</th>
+                                                <th>Location</th>
+                                                <th>Product</th>
+                                                <th>Sequence</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="member in pairwiseGroupView.memberRows"
+                                                :key="`match-member-${pairwiseGroupView.id}-${member.record}-${member.coordinates}-${member.proteinId}`">
+                                                <td class="match-mono whitespace-nowrap">{{ member.record }}</td>
+                                                <td class="match-mono whitespace-nowrap">{{ member.coordinates }}</td>
+                                                <td>
+                                                    <div class="text-slate-800">{{ member.productOrNote }}</div>
+                                                    <div class="match-cell-sub" :title="member.assignmentReason">{{ member.proteinId }}<span v-if="member.roleNote"> · {{ member.roleNote }}</span></div>
+                                                </td>
+                                                <td>
+                                                    <action-menu label="FASTA" :title="`FASTA of ${member.proteinId || member.record}`"
+                                                                 :items="[
+                                                                   { label: 'Copy nt', title: 'Copy nucleotide FASTA', icon: 'ph-copy', disabled: !member.ntFasta, run: () => copyText(member.ntFasta) },
+                                                                   { label: 'Copy aa', title: 'Copy amino-acid FASTA', icon: 'ph-copy', disabled: !member.aaFasta, run: () => copyText(member.aaFasta) },
+                                                                   { label: 'Download nt', title: 'Download nucleotide FASTA', icon: 'ph-download-simple', disabled: !member.ntFasta, run: () => downloadText(member.ntFilename, member.ntFasta) },
+                                                                   { label: 'Download aa', title: 'Download amino-acid FASTA', icon: 'ph-download-simple', disabled: !member.aaFasta, run: () => downloadText(member.aaFilename, member.aaFasta) }
+                                                                 ]"></action-menu>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <details v-if="pairwiseGroupView.technicalRows.length" class="match-disclosure mt-2" data-match-group-technical>
+                                    <summary>Technical details</summary>
+                                    <dl class="match-disclosure-body match-detail-rows">
+                                        <template v-for="row in pairwiseGroupView.technicalRows" :key="`match-group-row-${row.label}`">
+                                            <dt>{{ row.label }}</dt>
+                                            <dd>{{ row.value }}</dd>
+                                        </template>
+                                    </dl>
+                                </details>
+                            </section>
+                            <details v-if="clickedPairwiseMatch.block" class="match-disclosure" data-collinear-details>
+                                <summary>Details</summary>
+                                <div class="match-disclosure-body">
+                                    <p class="mb-2 match-muted">{{ clickedPairwiseMatch.block.note }}</p>
+                                    <dl class="match-detail-rows">
+                                        <template v-for="row in clickedPairwiseMatch.block.detailRows" :key="`collinear-detail-${row.label}`">
+                                            <dt>{{ row.label }}</dt>
+                                            <dd>{{ row.value }}</dd>
+                                        </template>
+                                    </dl>
+                                </div>
+                            </details>
                         </div>
                         <button type="button"
                                 class="feature-popup-resize-handle"

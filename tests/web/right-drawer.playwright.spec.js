@@ -681,6 +681,9 @@ test('preview similarity-group copy actions report isolated accessible outcomes'
   });
   expect(openedFeaturePopup).toBe(true);
   const featurePopup = page.locator('.feature-popup');
+  const similaritySection = featurePopup.locator('[data-feature-popup-group="similarity"]');
+  // UX-B03: group copies sit in the "More" menu, member copies in each row's FASTA menu.
+  await similaritySection.locator('summary', { hasText: 'More' }).click();
   const popupGroupAaCopy = featurePopup.locator(
     'button[title="Copy all member amino-acid FASTA"]'
   );
@@ -689,7 +692,7 @@ test('preview similarity-group copy actions report isolated accessible outcomes'
   ).first();
   await popupGroupAaCopy.click();
   await expect(popupGroupAaCopy).toHaveText(/Copied!/);
-  await expect(popupMemberAaCopy).toHaveText(/^\s*aa\s*$/);
+  await expect(popupMemberAaCopy).toHaveText(/^\s*Copy aa\s*$/);
   await featurePopup.getByRole('button', { name: 'Close feature popup' }).click();
 
   expect(await evaluateWithRetainedPromise(page, async () => {
@@ -1044,7 +1047,7 @@ test('adjacent Collinear mixed groups remain selectable after current-session sa
 });
 
 
-test('a collinear ribbon without a collinear group scope fills its Similarity groups covered table (OV-370)', async ({ page }) => {
+test('a collinear ribbon without a collinear group scope pairs its genes by similarity group (OV-370)', async ({ page }) => {
   test.setTimeout(180000);
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
@@ -1055,15 +1058,27 @@ test('a collinear ribbon without a collinear group scope fills its Similarity gr
   const ribbon = page.locator('.gbdraw-preview-surface path[data-match-kind="collinear"][data-collinearity-block-id="block_0024"]').first();
   await expect(ribbon).not.toHaveAttribute('data-collinear-group-scope', /./);
   await ribbon.dispatchEvent('click', { clientX: 500, clientY: 350 });
-  const covered = await page.evaluate(() => window.__GBDRAW_APP__.clickedPairwiseMatch?.blockOrthogroups
-    .map(({ id, memberCount, recordCoverage, queryMember, subjectMember }) => ({
-      id, memberCount, recordCoverage, query: Boolean(queryMember), subject: Boolean(subjectMember)
-    })));
+  const { covered, pairs } = await page.evaluate(() => {
+    const match = window.__GBDRAW_APP__.clickedPairwiseMatch;
+    return {
+      covered: match?.blockOrthogroups.map(({ id, memberCount, recordCoverage }) => ({ id, memberCount, recordCoverage })),
+      pairs: match?.block?.genePairs.map(({ query, subject, group }) => ({
+        group: group?.id || '', query: Boolean(query), subject: Boolean(subject)
+      }))
+    };
+  });
   expect(covered).toHaveLength(15);
-  expect(covered[0]).toEqual({ id: 'og_34', memberCount: '5', recordCoverage: '5', query: true, subject: true });
-  expect(covered.every(({ memberCount, query, subject }) => memberCount && query && subject)).toBe(true);
-  const table = page.locator('table').filter({ hasText: 'Subject member' });
-  await expect(table.locator('tbody tr').first().locator('td').nth(2)).toHaveText('5');
+  expect(covered[0]).toEqual({ id: 'og_34', memberCount: '5', recordCoverage: '5' });
+  expect(covered.every(({ memberCount }) => memberCount)).toBe(true);
+  expect(pairs).toHaveLength(15);
+  expect(pairs.every(({ group, query, subject }) => group && query && subject)).toBe(true);
+  // UX-B01: the gene-pair table opens on demand, one row per pair.
+  const popup = page.getByRole('dialog', { name: 'Pairwise match details', exact: true });
+  const genePairs = popup.locator('[data-collinear-gene-pairs]');
+  await expect(genePairs.locator('> summary')).toContainText('15 gene pairs');
+  await genePairs.locator('> summary').click();
+  await expect(genePairs.locator('tbody tr')).toHaveCount(15);
+  await expect(genePairs.locator('tbody tr').first()).toContainText('og_34');
 });
 
 // Scroll recovery checks keep the same center hit oracle as M01. A short

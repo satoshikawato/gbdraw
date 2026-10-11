@@ -103,7 +103,7 @@ import {
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
 import { appliedFeatureColors, colorValueMode, normalizeOptionalHexColor, toNativeColorInputValue } from '../utils/color-utils.js';
 import { createFeatureEditor } from './feature-editor.js';
-import { PAIRWISE_MATCH_SELECTOR } from './pairwise-match-popup.js';
+import { PAIRWISE_MATCH_SELECTOR, groupCountText } from './pairwise-match-popup.js';
 import { createFeatureSelection } from './feature-selection.js';
 import { createPreviewFeatureSearch } from './feature-search/preview-actions.js';
 import { createSvgStyles, paletteColorsEqual } from './svg-styles.js';
@@ -4470,15 +4470,14 @@ export const createAppSetup = () => {
     const members = orthogroupActions.getEnrichedOrthogroupMembers(group);
     const currentMember = resolveUniqueOrthogroupMemberForFeature(cf?.feat, members);
     const membersByRecord = orthogroupActions.groupOrthogroupMembersByRecord(members);
+    const memberCount = Number(group.member_count || members.length || 0);
+    const recordCoverage = Number(group.record_coverage_count || membersByRecord.length || 0);
     return {
       id: orthogroupId,
       displayName: orthogroupActions.resolveOrthogroupName(group),
-      description: orthogroupActions.resolveOrthogroupDescription(group),
-      scope: orthogroupActions.orthogroupScope(group),
-      scopeLabel: orthogroupActions.orthogroupScopeLabel(group),
-      candidates: Array.isArray(group.nameCandidates) ? group.nameCandidates : [],
-      memberCount: Number(group.member_count || members.length || 0),
-      recordCoverage: Number(group.record_coverage_count || membersByRecord.length || 0),
+      memberCount,
+      recordCoverage,
+      countText: groupCountText(memberCount, recordCoverage),
       ntSequenceCount: orthogroupActions.getOrthogroupSequenceCount(group, 'nt'),
       aaSequenceCount: orthogroupActions.getOrthogroupSequenceCount(group, 'aa'),
       currentMember,
@@ -4698,31 +4697,16 @@ export const createAppSetup = () => {
     if (!selectedId) return null;
     return pairwiseBlockOrthogroups.value.find((group) => String(group?.id || '').trim() === selectedId) || null;
   });
-  const renderedPairwiseMatchSections = computed(() => {
-    const sections = Array.isArray(clickedPairwiseMatch.value?.sections)
-      ? clickedPairwiseMatch.value.sections
-      : [];
-    const selectedGroup = selectedPairwiseBlockOrthogroup.value;
-    if (!selectedGroup) return sections;
-    const selectedSection = {
-      title: 'Selected similarity group',
-      rows: Array.isArray(selectedGroup.detailRows) ? selectedGroup.detailRows : [],
-      memberRows: Array.isArray(selectedGroup.memberRows) ? selectedGroup.memberRows : [],
-      memberCopyText: selectedGroup.memberCopyText || '',
-      memberNtFasta: selectedGroup.memberNtFasta || '',
-      memberAaFasta: selectedGroup.memberAaFasta || '',
-      memberNtFilename: selectedGroup.memberNtFilename || '',
-      memberAaFilename: selectedGroup.memberAaFilename || ''
-    };
-    const output = [];
-    sections.forEach((section) => {
-      output.push(section);
-      if (Array.isArray(section?.blockOrthogroups)) output.push(selectedSection);
-    });
-    return output;
-  });
+  // The group the match popup lists members of: a similarity-group ribbon's
+  // own group, or the group picked in a collinear block's gene-pair table.
+  const pairwiseGroupView = computed(() => (
+    clickedPairwiseMatch.value?.block
+      ? selectedPairwiseBlockOrthogroup.value
+      : clickedPairwiseMatch.value?.group || null
+  ));
   const selectPairwiseBlockOrthogroup = (group) => {
-    selectedPairwiseBlockOrthogroupId.value = String(group?.id || '').trim();
+    const id = String(group?.id || '').trim();
+    selectedPairwiseBlockOrthogroupId.value = selectedPairwiseBlockOrthogroupId.value === id ? '' : id;
   };
   const openPairwiseFeatureRow = (row, event) => {
     if (!row?.canOpen || !row?.feature) return;
@@ -6511,7 +6495,7 @@ export const createAppSetup = () => {
     startPairwiseMatchPopupDrag,
     startPairwiseMatchPopupResize,
     selectedPairwiseBlockOrthogroupId,
-    renderedPairwiseMatchSections,
+    pairwiseGroupView,
     selectPairwiseBlockOrthogroup,
     openPairwiseFeatureRow,
     clickedFeatureSummary,

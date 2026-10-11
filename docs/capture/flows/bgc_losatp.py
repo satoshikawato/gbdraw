@@ -397,9 +397,9 @@ def _inspect_popup(page: Page, *, mode: str) -> dict[str, Any]:
     text = popup.inner_text()
     normalized_text = text.casefold()
     required = (
-        ("Similarity group ID", "Members")
+        ("genes in", "records")
         if mode == "orthogroup"
-        else ("Block ID", "Anchors", "Orientation")
+        else ("identity", "gene pair", "Details")
     )
     for token in required:
         if token.casefold() not in normalized_text:

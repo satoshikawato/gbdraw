@@ -868,7 +868,12 @@ Result** holds **Fill Color**, **Stroke**, **Label text** with **Label
 visibility** and **Apply Label**, **Feature visibility**, and **Legend name**.
 **Layout · applies on Generate** holds **Feature placement** and record
 rotation. The **Similarity group** section follows when the feature belongs to
-one. The simple
+one: one line with the group ID, its name, and **N genes in M records**, then
+**Show in editor** and **Align…**, with **Review alignment options…** under
+**Align…**. **More** holds **Highlight**, **Clear highlight**, and the copy and
+download of all member nucleotide or amino-acid FASTA; **N members** opens the
+member table, where each row's **FASTA** menu copies or downloads that member.
+The simple
 popup shows the same controls in the same order without tabs.
 
 The feature list, feature popup, hover summary, and the feature sections of
@@ -878,8 +883,17 @@ report endpoints and the match details. A Linear match interval is in input-file
 coordinates, as in the feature popup; for a cropped record the popup also shows
 the **Query table interval** or **Subject table interval** (the search-frame
 coordinates of the table row). Match FASTA headers use the same input-file
-`coords=` and `strand=`;
-Similarity-group and Collinear popups add member or anchor context. Sequence
+`coords=` and `strand=`.
+A collinear block popup leads with both spans and their lengths, the
+orientation, the rounded identity, and the number of gene pairs, with **Copy**
+for that summary and a **FASTA** menu for the spans; a cropped record adds
+**Table coordinates**. **N gene pairs** opens one table of query gene, subject
+gene, and group; choosing a group lists its members. **Details** holds the
+block ID, kind, color mode, score, anchors, and how block envelopes relate to
+anchors. A similarity-group ribbon popup is titled with the group name and its
+ID, states **N genes in M records**, and lists the members with one **Copy**
+menu for the group and a **FASTA** menu per member; **Technical details** holds
+the RBH seeds, group paths, and computed description. Sequence
 downloads are available only when the required source sequence and metadata
 are present.
 

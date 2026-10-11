@@ -1160,7 +1160,7 @@ def capture_hepatoplasmataceae_collinear(
             re.compile(r"(?:^|\s)gbdraw-match-selected(?:\s|$)")
         )
         popup_text = popup.inner_text()
-        for token in ("Block ID", "Anchor", "Orientation", "Collinear block spans"):
+        for token in ("identity", "gene pair", "Details"):
             if token.casefold() not in popup_text.casefold():
                 raise AssertionError(f"Collinear popup is missing {token!r}")
         _move_popup_opposite_match(page, popup, first_match)

@@ -53,10 +53,34 @@ write-up of a release.
   diagram heading does. Before, a definition with markup such as
   `<i>Streptomyces</i>` showed the tags, and a File default definition was
   ignored (OV-369).
-- Collinear blocks (web app): the **Similarity groups covered** table of a
-  collinear ribbon fills every column again. Before, a ribbon without a
-  collinear group scope looked its groups up only among scoped collinear groups
-  and showed only the group IDs (OV-370).
+- Collinear blocks (web app): a collinear ribbon pairs its genes by group and
+  shows each group's members again. Before, a ribbon without a collinear group
+  scope looked its groups up only among scoped collinear groups and showed only
+  the group IDs (OV-370).
+- Collinear blocks (web app): the block popup leads with one line: both spans
+  with their lengths in kb, the orientation, the identity rounded to a whole
+  percent, and the number of gene pairs, with **Copy** for that line and one
+  **FASTA** menu for the spans. **N gene pairs** opens one table of query gene,
+  subject gene, and group, replacing the separate group and Query/Subject
+  tables. Block ID, kind, color mode, score, anchors, the exact identity, the
+  aligned length in aa, and the note on block envelopes are under **Details**.
+- Similarity groups (web app): a group ribbon popup is titled with the group
+  name, shows the group ID as a badge and one **N genes in M records** line, and
+  lists the members with one **Copy** menu for the group and a **FASTA** menu
+  per member. RBH seeds, group paths, and a computed description are under
+  **Technical details**; a description you wrote stays under the name. A
+  member's role and confidence are shown only when they are not anchor and
+  high.
+- Feature popup (web app): the **Similarity group** section is one line (group
+  ID, name, **N genes in M records**) with **Show in editor** and **Align…**;
+  **Review alignment options…** is a link under **Align…**. **Highlight**,
+  **Clear highlight**, and the group's FASTA copy and download are under
+  **More**, and the member table opens from **N members**. The **Current
+  member** line and the consensus sentence are gone; the current member's row
+  is marked in the table.
+- Pairwise match popup (web app): a LOSATP pairwise ribbon whose genes are in
+  no similarity group no longer shows a **Similarity group** section holding
+  the query's product as its name (OV-420).
 - Similarity alignment (web app): while an alignment is active, including one
   loaded from a Session, the Similarity Groups drawer selects its group and
   preselects its exact reference, so **Align…** and **Review alignment

@@ -113,6 +113,17 @@ const elementFrom = (attributes) => ({
   getAttribute: (name) => attributes[name] || ''
 });
 
+// The rows a popup payload exposes: the feature rows of the row sections or of
+// a collinear block's gene pairs, and the member rows of every group view.
+const payloadFeatureRows = (payload) => [
+  ...payload.sections.flatMap((entry) => entry.featureRows || []),
+  ...(payload.block?.genePairs || []).flatMap((pair) => [pair.query, pair.subject].filter(Boolean))
+];
+const payloadMemberRows = (payload) => [
+  ...(payload.group?.memberRows || []),
+  ...(payload.blockOrthogroups || []).flatMap((group) => group.memberRows || [])
+];
+
 const sha256 = (value) => createHash('sha256')
   .update(JSON.stringify(value))
   .digest('hex');
@@ -384,7 +395,7 @@ const buildSyntheticCases = () => {
   };
 };
 
-const SYNTHETIC_BASELINES_GZIP = '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';
+const SYNTHETIC_BASELINES_GZIP = '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';
 const SYNTHETIC_BASELINES = SYNTHETIC_BASELINES_GZIP
   ? JSON.parse(gunzipSync(Buffer.from(SYNTHETIC_BASELINES_GZIP, 'base64')).toString('utf8'))
   : {};
@@ -400,15 +411,8 @@ test('compact pairwise payloads and hover rows match the accepted semantic basel
     const hoverRows = popupModule.buildPairwiseMatchHoverRows(payload);
     captured[name] = { payload: canonicalPayload, hoverRows };
     for (const reference of fixture.featureReferences) {
-      const exposed = payload.sections
-        .flatMap((entry) => entry.featureRows || [])
-        .some((row) => row.feature === reference)
-        || (payload.blockOrthogroups || [])
-          .flatMap((group) => group.memberRows || [])
-          .some((row) => row.feature === reference)
-        || payload.sections
-          .flatMap((entry) => entry.memberRows || [])
-          .some((row) => row.feature === reference);
+      const exposed = [...payloadFeatureRows(payload), ...payloadMemberRows(payload)]
+        .some((row) => row.feature === reference);
       assert.equal(exposed, true, `${name} lost a canonical Feature object reference`);
     }
   }
@@ -597,9 +601,7 @@ test('one full payload request traverses each input once and builds one FASTA pa
   });
   assert.equal(metrics.contextCreations, 1);
   assert.equal(metrics.sequenceBundleCalls, 1);
-  const memberRows = payload.sections
-    .find((entry) => entry.title === 'Similarity group')
-    .memberRows;
+  const memberRows = payload.group.memberRows;
   const resolvedMemberCount = memberRows.filter((row) => row.feature).length;
   assert.equal(resolvedMemberCount, 2);
   assert.equal(metrics.fastaCalls, resolvedMemberCount);
@@ -716,7 +718,7 @@ const EXACT_BASELINES = {
       blockId: 'block_0024',
       orthogroupIds: 'og_34;og_35;og_36;og_37;og_38;og_39;og_40;og_41;og_42;og_43;og_44;og_45;og_46;og_47;og_48'
     },
-    digest: '7f55fa2faa8ee3a3fb798334b9b4ac74954e55ffafc5d15e3b7cf57c43f7093f',
+    digest: 'a1b15f0356b7c7aec35188f9487eb3a9cd33488c698714ae042b757d70090666',
     hoverRows: [
       { label: 'Kind', value: 'collinear' },
       { label: 'Identity', value: '43.9684414414' },
@@ -725,7 +727,7 @@ const EXACT_BASELINES = {
       { label: 'Similarity groups', value: '15' },
       { label: 'Block', value: 'block_0024' }
     ],
-    sectionTitles: ['Summary', 'Similarity groups covered', 'Collinearity', 'Query', 'Subject'],
+    sectionTitles: [],
     blockOrthogroupCount: 15,
     memberRowCounts: Array(15).fill(5),
     featureRowCount: 30,
@@ -739,7 +741,7 @@ const EXACT_BASELINES = {
       blockId: 'block_0155',
       orthogroupIds: 'og_274;og_275;og_276;og_277;og_278;og_279;og_280;og_281;og_282;og_283;og_284;og_285;og_286;og_287;og_288;og_289;og_290;og_291;og_292;og_293'
     },
-    digest: '08e079f6f37ce48da62331aed504303e2e6239094c77e4f32f227ea55d02d8c6',
+    digest: 'a86114d1d7195b48815b02e86ffca8a08e21120c2d29abd2e01bfcb2a15e421a',
     hoverRows: [
       { label: 'Kind', value: 'collinear' },
       { label: 'Identity', value: '64.1326369725' },
@@ -748,7 +750,7 @@ const EXACT_BASELINES = {
       { label: 'Similarity groups', value: '20' },
       { label: 'Block', value: 'block_0155' }
     ],
-    sectionTitles: ['Summary', 'Similarity groups covered', 'Collinearity', 'Query', 'Subject'],
+    sectionTitles: [],
     blockOrthogroupCount: 20,
     memberRowCounts: Array(20).fill(5),
     featureRowCount: 40,
@@ -770,11 +772,8 @@ test('exact large-fixture payloads retain canonical digests, structure, and Feat
       `${name} exact-fixture hover summary changed`
     );
     const canonical = sortedCanonical(payload, exactFeatureTokens);
-    const featureRows = payload.sections.flatMap((entry) => entry.featureRows || []);
-    const memberRows = [
-      ...payload.sections.flatMap((entry) => entry.memberRows || []),
-      ...payload.blockOrthogroups.flatMap((group) => group.memberRows || [])
-    ];
+    const featureRows = payloadFeatureRows(payload);
+    const memberRows = payloadMemberRows(payload);
     const exposedFeatures = [...featureRows, ...memberRows]
       .map((row) => row.feature)
       .filter(Boolean);

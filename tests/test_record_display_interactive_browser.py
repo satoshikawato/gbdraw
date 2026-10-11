@@ -369,11 +369,12 @@ def test_standalone_collinear_cluster_block_span_actions(tmp_path, member, sync_
 
 # What a block popup lists, read from the Preview payload and from the standalone DOM alike.
 PREVIEW_BLOCK_ROWS = """() => {
-  const sections = fixtureState.clickedPairwiseMatch.value.sections;
-  const feature = role => sections.find(s => s.title === role).featureRows.map(r => [r.label, r.record, r.location]);
+  // UX-B01: the Preview block popup lists one gene pair per row (query gene | subject gene | group).
+  const pairs = fixtureState.clickedPairwiseMatch.value.block.genePairs;
+  const feature = role => pairs.map(p => p[role]).filter(Boolean).map(r => [r.label, r.record, r.location]);
   return {
-    groups: sections.flatMap(s => s.blockOrthogroups || []).map(g => [g.id, g.queryMember, g.subjectMember]),
-    features: [feature('Query'), feature('Subject')],
+    groups: pairs.filter(p => p.group).map(p => [p.group.id, p.query?.label, p.subject?.label]),
+    features: [feature('query'), feature('subject')],
   };
 }"""
 STANDALONE_BLOCK_ROWS = """() => {
