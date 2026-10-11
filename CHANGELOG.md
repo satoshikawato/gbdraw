@@ -210,6 +210,19 @@ write-up of a release.
   applied could be silently dropped. A pattern edit that is still being
   applied when another change is made stays in its field as an unapplied
   draft, as before (OV-445, OV-443, OV-444, OV-448, #1006).
+- Web: **Load Label TSV** now says when it was not applied because something
+  changed while the table was loading: a label or feature visibility edit
+  (which is kept), a replaced diagram, or changed colors, color rules, Legend,
+  or inputs. Load the table again (OV-447, OV-449, #1008).
+- Web: an edit made while an earlier one is still being applied (for example
+  a color or Legend edit while **Load Label TSV** is still loading its table)
+  now applies at once and is its own Undo step under its own name, and what
+  the earlier edit writes afterwards is an Undo step under that edit's name.
+  Before, the two were one step named after the earlier edit, and what the
+  earlier edit wrote after the later one was lost on Undo then Redo. The steps
+  follow the order of the writes. Text typed in a field, or a Legend or
+  diagram drag, made meanwhile still goes into the earlier edit's step
+  (OV-460).
 - Gallery publication (maintainer tooling): `tools/refresh_gallery_sessions.py`
   publishes a Session that the web app saved. It rebuilds the request from the
   request's own color, whitelist, and priority tables rather than from the

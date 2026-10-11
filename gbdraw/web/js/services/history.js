@@ -148,6 +148,7 @@ const checkpointSvgBytes = (checkpoint) => (
  *   before: any,
  *   closed: boolean,
  *   committed?: boolean,
+ *   runsAction?: boolean,
  *   source: string,
  *   owner?: any,
  *   deferAdapterCommit?: boolean,
@@ -657,7 +658,8 @@ export const createHistoryManager = ({
   /**
    * @param {HistoryTransaction | null} transaction
    * @param {{ label?: string }} [options]
-   * @param {{ label: string } | null} [action] The `runUndoable` action whose `fn` has ended.
+   * @param {{ label: string, stepLabel?: string } | null} [action]
+   *   The `runUndoable` action whose `fn` has ended: its own label, and the name of the step it commits.
    */
   const commitIntent = async (transaction, options = {}, action = null) => {
     if (!transaction) return false;
@@ -680,7 +682,11 @@ export const createHistoryManager = ({
       transaction.closed = true;
       transaction.committed = true;
       if (activeTransaction === transaction) { activeTransaction = null; touchTransaction(); }
-      return recordIntentStep(transaction, afterRecord, options);
+      return recordIntentStep(
+        action ? { ...transaction, label: action.stepLabel ?? transaction.label } : transaction,
+        afterRecord,
+        options
+      );
     }
     if (!action || afterRecord.signature === currentIntentSignature) return false;
     const remainder = {
@@ -718,20 +724,45 @@ export const createHistoryManager = ({
     }
   };
 
+  // The `runUndoable` calls whose `fn` is being called (not awaited) now.
+  let actionCallDepth = 0;
+  /** @param {() => unknown} fn */
+  const callAction = (fn) => {
+    actionCallDepth += 1;
+    try { return fn(); } finally { actionCallDepth -= 1; }
+  };
+
+  /**
+   * One undoable step around `fn`, committed when `fn` ends.
+   * @param {string} label
+   * @param {() => unknown} fn
+   * @param {{ joinsOpenStep?: boolean, owner?: unknown, source?: string, label?: string }} [options]
+   *   `joinsOpenStep`: the call is part of the action that runs on the open step.
+   */
   const runUndoable = async (label, fn, options = {}) => {
     const sessionBusy = mutationAvailability();
     if (sessionBusy) return sessionBusy;
     if (typeof fn !== 'function') return undefined;
     if (restoring.value || capturing.value || activeCheckpoint) return fn();
 
-    const tx = openTransaction() || await begin(label, options);
+    const open = openTransaction();
+    const tx = open || await begin(label, options);
     if (tx) { tx.deferAdapterCommit = true; touchTransaction(); }
+    // OV-460: an edit made while another action is still running on the open
+    // step applies at once and is a step under its own name: it names the
+    // step from here on. A call the running action makes itself keeps the
+    // name: one made synchronously inside its `fn`, or one that says so
+    // (`joinsOpenStep`). Each action commits under the name it started with.
+    if (open?.runsAction && !actionCallDepth && !options.joinsOpenStep) open.label = label;
+    const action = { label, stepLabel: tx?.label };
 
     try {
       const busy = mutationAvailability();
       if (busy) { cancel(tx); return busy; }
-      const result = await fn();
-      await commitIntent(tx, options, { label });
+      // The step closes when an action on it ends, so the mark is never cleared.
+      if (tx) tx.runsAction = true;
+      const result = await callAction(fn);
+      await commitIntent(tx, options, action);
       return result;
     } catch (error) {
       cancel(tx);

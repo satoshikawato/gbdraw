@@ -2434,9 +2434,11 @@ for (const previousSuppressed of [false, true]) {
   assert.equal(history.getRedoCount(),0);
 }
 
-// OV-460: a joined action, a drag end, or a settlement can commit an action's
-// transaction while its `fn` still awaits. What `fn` writes afterwards is
-// recorded as a step under the action's label, so Undo then Redo keeps it.
+// OV-460: an undoable edit made while an async undoable action is still
+// running applies at once and is its own step under its own name. It, a drag
+// end, or a settlement commits the action's transaction while its `fn` still
+// awaits; what `fn` writes afterwards is recorded as a step under the action's
+// label, so Undo then Redo keeps it.
 {
   const START = { label: 'alpha', table: null, color: 'red' };
   const hold = () => {
@@ -2478,7 +2480,8 @@ for (const previousSuppressed of [false, true]) {
     return harness;
   };
 
-  // A second edit joins the open transaction and commits it; the load then writes.
+  // A second edit joins the open transaction and commits it under its own
+  // name; the load then writes.
   {
     const h = await createActionHarness();
     const load = h.heldLoad();
@@ -2488,11 +2491,101 @@ for (const previousSuppressed of [false, true]) {
     await load.done;
     assert.equal(h.history.mutationPending(), false);
     assert.equal(h.history.getUndoCount(), 2, 'the later write is a step');
-    assert.equal(h.history.undoLabel(), 'Load label edits', 'the remainder carries the action\'s label');
-    await h.undoAll();
+    assert.deepEqual(await h.undoAll(), ['Load label edits', 'Change label text'],
+      'the edit and the action\'s later write are each a step under their own label');
     assert.deepEqual(h.intent, START);
     await h.redoAll();
     assert.deepEqual(h.intent, { label: 'EDITED', table: 'applied', color: 'red' }, 'Redo keeps both writes');
+  }
+
+  // The running action ends first: its step keeps its name, and what the
+  // later edit writes afterwards is a step under the edit's name.
+  {
+    const h = await createActionHarness();
+    const load = h.heldLoad();
+    const edit = hold();
+    await tick();
+    const recolor = h.history.runUndoable('Change feature color', async () => {
+      await edit.held;
+      h.intent.color = 'blue';
+    });
+    load.release();
+    await load.done;
+    edit.release();
+    await recolor;
+    assert.deepEqual(await h.undoAll(), ['Change feature color', 'Load label edits']);
+    assert.deepEqual(h.intent, START);
+    await h.redoAll();
+    assert.deepEqual(h.intent, { label: 'alpha', table: 'applied', color: 'blue' });
+  }
+
+  // A call the running action makes itself keeps the step and its name: one
+  // made synchronously inside `fn`, and one made after an await that says so
+  // (`joinsOpenStep`: the rule table commit of a color action, a dialog choice).
+  {
+    const h = await createActionHarness();
+    await h.history.runUndoable('Change feature color', () => {
+      h.intent.color = 'blue';
+      return h.history.runUndoable('Change specific color rules', () => { h.intent.table = 'rule'; });
+    });
+    assert.deepEqual(await h.undoAll(), ['Change feature color']);
+    assert.deepEqual(h.intent, START);
+
+    const prepared = hold();
+    const recolor = h.history.runUndoable('Change feature color', async () => {
+      h.intent.color = 'blue';
+      await prepared.held;
+      await h.history.runUndoable('Change specific color rules', () => { h.intent.table = 'rule'; }, { joinsOpenStep: true });
+    });
+    await tick();
+    prepared.release();
+    await recolor;
+    assert.deepEqual(await h.undoAll(), ['Change feature color']);
+    assert.deepEqual(h.intent, START);
+  }
+
+  // The same color action made while the load runs: its own call and the
+  // call that joins it commit one step under the color action's name.
+  {
+    const h = await createActionHarness();
+    const load = h.heldLoad();
+    const prepared = hold();
+    await tick();
+    const recolor = h.history.runUndoable('Change feature color', async () => {
+      h.intent.color = 'blue';
+      await prepared.held;
+      await h.history.runUndoable('Change specific color rules', () => { h.intent.label = 'rule'; }, { joinsOpenStep: true });
+    });
+    await tick();
+    prepared.release();
+    await recolor;
+    load.release();
+    await load.done;
+    assert.deepEqual(await h.undoAll(), ['Load label edits', 'Change feature color']);
+    assert.deepEqual(h.intent, START);
+    await h.redoAll();
+    assert.deepEqual(h.intent, { label: 'rule', table: 'applied', color: 'blue' });
+  }
+
+  // R11: an action that joins its control's transaction keeps the control's
+  // name when no action runs on that transaction, also while an action whose
+  // step was already committed is still running.
+  {
+    const h = await createActionHarness();
+    const button = async () => h.history.begin('Change setting', { source: 'input-adapter', owner: { tagName: 'BUTTON' } });
+    await button();
+    await h.history.runUndoable('Change feature color', () => { h.intent.color = 'blue'; });
+    assert.deepEqual(await h.undoAll(), ['Change setting']);
+
+    const load = h.heldLoad();
+    await tick();
+    await h.history.runUndoable('Change label text', () => { h.intent.label = 'EDITED'; });
+    await button();
+    await h.history.runUndoable('Change feature color', () => { h.intent.color = 'blue'; });
+    load.release();
+    await load.done;
+    assert.deepEqual(await h.undoAll(), ['Load label edits', 'Change setting', 'Change label text']);
+    assert.deepEqual(h.intent, START);
   }
 
   // The same when the load writes nothing afterwards: no step and no bookkeeping.
