@@ -141,7 +141,8 @@ test('Gallery session colors, record labels, and feature labels survive regenera
     const inspectSettings = (app) => ({
       cdsColor: app.currentColors.CDS,
       labels: app.form.show_labels_linear,
-      recordLabels: app.linearSeqs.map((record) => record.definition),
+      // The BGC Session names its records through File defaults.
+      recordLabels: app.linearSeqs.map((record) => record.definition || record.file_definition),
       rules: app.manualSpecificRules.map(({ feat, qual, val, color, cap }) => ({
         feat, qual, val, color, cap
       }))
@@ -165,7 +166,7 @@ test('Gallery session colors, record labels, and feature labels survive regenera
     window.__GBDRAW_APP__,
     'pyodideReady'
   ))).toBe(false);
-  expect(imported.settings.cdsColor).toBe('#d3d3d3');
+  expect(imported.settings.cdsColor).toBe('#dddddd');
   expect(imported.settings.labels).toBe('first');
   expect(imported.settings.recordLabels[0]).toContain('Streptomyces lividus');
   expect(imported.settings.rules).toHaveLength(4);
@@ -175,7 +176,8 @@ test('Gallery session colors, record labels, and feature labels survive regenera
     const inspectSettings = () => ({
       cdsColor: app.currentColors.CDS,
       labels: app.form.show_labels_linear,
-      recordLabels: app.linearSeqs.map((record) => record.definition),
+      // The BGC Session names its records through File defaults.
+      recordLabels: app.linearSeqs.map((record) => record.definition || record.file_definition),
       rules: app.manualSpecificRules.map(({ feat, qual, val, color, cap }) => ({
         feat, qual, val, color, cap
       }))

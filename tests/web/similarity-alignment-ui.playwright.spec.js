@@ -2281,9 +2281,12 @@ test('choosing Upload BLAST TSV without a file keeps a loaded alignment and the 
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await importSession(page, readFileSync(
-    'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'
-  ), 'BGC0000708-BGC0000713.gbdraw-session.json');
+  // Save another drawer group than the plan's group.
+  const seeded = JSON.parse(readFileSync(
+    'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json', 'utf8'
+  ));
+  seeded.orthogroupState.selectedOrthogroupId = 'og_18';
+  await importSession(page, Buffer.from(JSON.stringify(seeded)), 'BGC0000708-BGC0000713.gbdraw-session.json');
   const plan = () => page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     return { reference: state.similarityAlignmentPlan.value?.reference ?? null,
@@ -2298,9 +2301,7 @@ test('choosing Upload BLAST TSV without a file keeps a loaded alignment and the 
     const { state } = await import('./js/state.js');
     return state.orthogroups.value.map(({ id }) => id);
   });
-  const savedSelection = JSON.parse(readFileSync(
-    'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json', 'utf8'
-  )).orthogroupState.selectedOrthogroupId;
+  const savedSelection = seeded.orthogroupState.selectedOrthogroupId;
   expect(groups[0]).not.toBe(loaded.groupId);
   expect(savedSelection).not.toBe(loaded.groupId);
 

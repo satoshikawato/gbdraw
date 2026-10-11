@@ -2,10 +2,12 @@
   "id": "BGC0000708-BGC0000713",
   "version": 1,
   "title": "Compare five aminoglycoside biosynthetic gene clusters",
-  "summary": "Run LOSATP in the browser, assign CDS-derived proteins from five biosynthetic gene clusters to gbdraw similarity groups, apply antiSMASH gene_kind color rules, and label the first record.",
+  "summary": "Start from five MIBiG gene clusters and the Web defaults, then fix what each preview shows: link the clusters with LOSATP similarity groups, reverse the cluster stored on the other strand, align the rows on a shared gene, color genes by antiSMASH gene_kind, label the first cluster, and finish the figure.",
   "appMode": "Linear",
   "primaryWorkflow": "LOSATP similarity groups with feature color rules",
-  "requirements": ["GenBank features that retain antiSMASH qualifiers such as gene_kind."],
+  "requirements": [
+    "GenBank features that retain antiSMASH qualifiers such as gene_kind."
+  ],
   "downloads": [
     {
       "label": "BGC0000708",
@@ -67,7 +69,13 @@
   "manualSteps": [
     {
       "title": "Switch to Linear mode",
-      "body": "Open gbdraw.app and select Linear mode before adding inputs.",
+      "body": "Open gbdraw.app and select Linear. Linear mode draws each gene cluster as one row and can link the rows by protein similarity.",
+      "replay": [
+        {
+          "type": "click",
+          "selector": "button.app-mode-button[aria-label=\"Linear\"]"
+        }
+      ],
       "operations": [
         {
           "media": {
@@ -79,86 +87,360 @@
       ]
     },
     {
-      "title": "Upload the five GenBank files",
-      "body": "Add the GenBank files in this order, then fill the Organism / strain and Subtitle / title fields exactly as shown. Type the <i> tags literally; the generated SVG uses them to italicize taxon names.",
+      "title": "Add the first cluster",
+      "body": "Under File 1, upload BGC0000708.gbk as the GenBank / DDBJ File. In File defaults, enter the organism and the subtitle; they name every record of the file in the figure. Type the <i> tags literally: the SVG uses them to italicize the taxon name.",
       "table": {
-        "columns": ["Order", "GenBank file", "Organism / strain", "Subtitle", "Reverse complement"],
+        "columns": [
+          "Field",
+          "Value"
+        ],
         "rows": [
-          ["1", "BGC0000708.gbk", "<i>Streptomyces lividus</i> CBS 844.73", "Lividomycin biosynthetic gene cluster", "Off"],
-          ["2", "BGC0000709.gbk", "<i>Streptomyces fradiae</i> ATCC 10745", "Neomycin biosynthetic gene cluster", "Off"],
-          ["3", "BGC0000711.gbk", "<i>Streptomyces fradiae</i> MCIMB 8233", "Neomycin biosynthetic gene cluster", "Off"],
-          ["4", "BGC0000712.gbk", "<i>Streptomyces rimosus</i> subsp. <i>paromomycinus</i> NRRL 2455", "Paromomycin biosynthetic gene cluster", "Off"],
-          ["5", "BGC0000713.gbk", "<i>Streptomyces ribosidificus</i> ATCC 21294", "Ribostamycin biosynthetic gene", "On"]
+          [
+            "GenBank / DDBJ File",
+            "BGC0000708.gbk"
+          ],
+          [
+            "Organism / strain",
+            "<i>Streptomyces lividus</i> CBS 844.73"
+          ],
+          [
+            "Subtitle / title (optional)",
+            "Lividomycin biosynthetic gene cluster"
+          ]
         ]
       },
+      "replay": [
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Default definition for file 1\"]",
+          "value": "<i>Streptomyces lividus</i> CBS 844.73"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Default subtitle for file 1\"]",
+          "value": "Lividomycin biosynthetic gene cluster"
+        }
+      ],
       "operations": [
         {
           "dataDependent": true,
           "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-02-01-record-text-row.webp",
-            "alt": "Linear GenBank row 1 with BGC0000708.gbk and its Organism / strain and Subtitle / title values.",
-            "caption": "Enter the row 1 values from the table, including the literal <i>Streptomyces lividus</i> markup, then repeat the remaining rows in order."
+            "src": "./media/BGC0000708-BGC0000713/manual-02-01-file1-defaults.webp",
+            "alt": "File 1 card with BGC0000708.gbk loaded and File defaults filled with the literal <i>Streptomyces lividus</i> CBS 844.73 and Lividomycin biosynthetic gene cluster.",
+            "caption": "BGC0000708.gbk in File 1, with its File defaults typed in."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
-            "viewport": {"width": 1280, "height": 1000},
+            "viewport": {
+              "width": 1280,
+              "height": 1000
+            },
+            "replayThrough": 1,
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const expected = ['BGC0000708.gbk', 'BGC0000709.gbk', 'BGC0000711.gbk', 'BGC0000712.gbk', 'BGC0000713.gbk']; const names = (app?.linearSeqs || []).map((seq) => seq.gb?.name || ''); if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error('BGC GenBank order was not restored.'); const seq = app.linearSeqs[0]; seq.definition = '<i>Streptomyces lividus</i> CBS 844.73'; seq.record_subtitle = 'Lividomycin biosynthetic gene cluster'; const row = document.querySelector('[data-linear-record-card=\"record-1\"]'); const options = row?.querySelector('[data-linear-record-options=\"record-1\"]'); if (!row || !options) throw new Error('BGC Linear input row 1 was not found.'); options.open = true; const fieldInput = (labelText) => { const label = Array.from(row.querySelectorAll('div')).find((node) => node.textContent?.trim() === labelText && node.nextElementSibling?.matches('input[type=\"text\"]')); const input = label?.nextElementSibling; if (!input) throw new Error(`BGC ${labelText} input was not found.`); return input; }; fieldInput('Organism / strain (optional)').dataset.capture = 'bgc-organism-input'; fieldInput('Subtitle / title (optional)').dataset.capture = 'bgc-subtitle-input'; row.dataset.capture = 'bgc-record-row'; row.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 420; const card = document.querySelector('section[aria-label=\"Linear input file 1\"]'); const header = card?.firstElementChild; const uploader = card?.querySelector(':scope > .space-y-2'); const defaults = card?.querySelector('[data-linear-source-defaults]'); if (!card || !header || !uploader || !defaults) throw new Error('BGC File 1 card was not found.'); header.setAttribute('data-capture', 'bgc-file1-header'); uploader.setAttribute('data-capture', 'bgc-file1-upload'); defaults.setAttribute('data-capture', 'bgc-file1-defaults'); card.scrollIntoView({ block: 'center' });"
               },
-              {"type": "evaluate", "script": "window.__GBDRAW_APP__.sidebarWidth = 600;"}
+              {
+                "type": "wait",
+                "ms": 300
+              }
             ],
-            "selector": "[data-capture='bgc-record-row']",
-            "cropPadding": {"top": 0, "right": 14, "bottom": 14, "left": 14},
+            "clipSelectors": [
+              "[data-capture='bgc-file1-header']",
+              "[data-capture='bgc-file1-upload']",
+              "[data-capture='bgc-file1-defaults']"
+            ],
+            "cropPadding": {
+              "top": 10,
+              "right": 14,
+              "bottom": 14,
+              "left": 14
+            },
             "assertAppState": {
               "mode": "linear",
               "linearSeqs.length": 5,
-              "linearSeqs.0.gb.name": "BGC0000708.gbk",
-              "linearSeqs.0.definition": "<i>Streptomyces lividus</i> CBS 844.73",
-              "linearSeqs.0.record_subtitle": "Lividomycin biosynthetic gene cluster"
+              "linearSeqs.0.gb.name": "BGC0000708.gbk"
             },
             "visibleText": [
+              "File 1",
               "BGC0000708.gbk",
-              "Organism / strain (optional)",
-              "Subtitle / title (optional)"
+              "File defaults (applied to all records)"
             ],
             "visibleControls": [
-              {"selector": "[data-capture='bgc-organism-input']", "value": "<i>Streptomyces lividus</i> CBS 844.73"},
-              {"selector": "[data-capture='bgc-subtitle-input']", "value": "Lividomycin biosynthetic gene cluster"}
+              {
+                "selector": "input[aria-label='Default definition for file 1']",
+                "value": "<i>Streptomyces lividus</i> CBS 844.73"
+              },
+              {
+                "selector": "input[aria-label='Default subtitle for file 1']",
+                "value": "Lividomycin biosynthetic gene cluster"
+              }
             ]
           }
         }
       ]
     },
     {
-      "title": "Configure browser LOSAT",
-      "body": "In Comparison, choose Run LOSAT, open Settings, set LOSAT Mode to LOSATP, and set LOSATP mode to Similarity groups. The runtime controls are in the same Settings panel, under Runtime and reproducibility.",
+      "title": "Add the other four clusters, one at a time",
+      "body": "Click Add sequence, upload the next file into the new File slot, and fill its File defaults before you add the next one. Keep this order: the comparison links adjacent rows.",
       "table": {
-        "columns": ["Setting", "Value"],
+        "columns": [
+          "File",
+          "GenBank file",
+          "Organism / strain",
+          "Subtitle / title"
+        ],
         "rows": [
-          ["Execution", "Auto"],
-          ["Total threads", "Safe"],
-          ["Parallel runs", "Auto"],
-          ["Threads per run", "Auto"],
-          ["LOSAT Mode", "LOSATP"],
-          ["LOSATP mode", "Similarity groups"],
-          ["Bitscore", "50"],
-          ["E-value", "0.01"],
-          ["Minimum Identity", "30"],
-          ["Minimum Length", "0"]
+          [
+            "2",
+            "BGC0000709.gbk",
+            "<i>Streptomyces fradiae</i> ATCC 10745",
+            "Neomycin biosynthetic gene cluster"
+          ],
+          [
+            "3",
+            "BGC0000711.gbk",
+            "<i>Streptomyces fradiae</i> MCIMB 8233",
+            "Neomycin biosynthetic gene cluster"
+          ],
+          [
+            "4",
+            "BGC0000712.gbk",
+            "<i>Streptomyces rimosus</i> subsp. <i>paromomycinus</i> NRRL 2455",
+            "Paromomycin biosynthetic gene cluster"
+          ],
+          [
+            "5",
+            "BGC0000713.gbk",
+            "<i>Streptomyces ribosidificus</i> ATCC 21294",
+            "Ribostamycin biosynthetic gene"
+          ]
         ]
       },
-      "note": "The five records contain related biosynthetic gene clusters. Similarity groups uses retained protein-search hits to form visualization groups across them and draws links between group members; it does not infer phylogeny-based orthology.",
+      "replay": [
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Default definition for file 2\"]",
+          "value": "<i>Streptomyces fradiae</i> ATCC 10745"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Default subtitle for file 2\"]",
+          "value": "Neomycin biosynthetic gene cluster"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Default definition for file 3\"]",
+          "value": "<i>Streptomyces fradiae</i> MCIMB 8233"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Default subtitle for file 3\"]",
+          "value": "Neomycin biosynthetic gene cluster"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Default definition for file 4\"]",
+          "value": "<i>Streptomyces rimosus</i> subsp. <i>paromomycinus</i> NRRL 2455"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Default subtitle for file 4\"]",
+          "value": "Paromomycin biosynthetic gene cluster"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Default definition for file 5\"]",
+          "value": "<i>Streptomyces ribosidificus</i> ATCC 21294"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Default subtitle for file 5\"]",
+          "value": "Ribostamycin biosynthetic gene"
+        }
+      ],
+      "operations": [
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-03-01-file5-defaults.webp",
+            "alt": "File 5 card with BGC0000713.gbk loaded, its File defaults filled, and the Add sequence button below it.",
+            "caption": "The last file, BGC0000713.gbk, in File 5. Add sequence adds the next slot."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 1000
+            },
+            "replayThrough": 3,
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 420; const card = document.querySelector('section[aria-label=\"Linear input file 5\"]'); const header = card?.firstElementChild; const uploader = card?.querySelector(':scope > .space-y-2'); const defaults = card?.querySelector('[data-linear-source-defaults]'); if (!card || !header || !uploader || !defaults) throw new Error('BGC File 5 card was not found.'); header.setAttribute('data-capture', 'bgc-file5-header'); uploader.setAttribute('data-capture', 'bgc-file5-upload'); defaults.setAttribute('data-capture', 'bgc-file5-defaults'); const add = document.querySelector('button[aria-label=\"Add sequence\"]'); if (!add) throw new Error('Add sequence was not found.'); add.setAttribute('data-capture', 'bgc-add-sequence'); card.scrollIntoView({ block: 'center' });"
+              },
+              {
+                "type": "wait",
+                "ms": 300
+              }
+            ],
+            "clipSelectors": [
+              "[data-capture='bgc-file5-header']",
+              "[data-capture='bgc-file5-upload']",
+              "[data-capture='bgc-file5-defaults']",
+              "[data-capture='bgc-add-sequence']"
+            ],
+            "cropPadding": {
+              "top": 10,
+              "right": 14,
+              "bottom": 14,
+              "left": 14
+            },
+            "assertAppState": {
+              "mode": "linear",
+              "linearSeqs.length": 5,
+              "linearSeqs.4.gb.name": "BGC0000713.gbk"
+            },
+            "visibleText": [
+              "File 5",
+              "BGC0000713.gbk",
+              "File defaults (applied to all records)",
+              "Add sequence"
+            ],
+            "visibleControls": [
+              {
+                "selector": "input[aria-label='Default definition for file 5']",
+                "value": "<i>Streptomyces ribosidificus</i> ATCC 21294"
+              },
+              {
+                "selector": "input[aria-label='Default subtitle for file 5']",
+                "value": "Ribostamycin biosynthetic gene"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "title": "Generate with the defaults",
+      "body": "Click Generate Diagram. The preview shows the five clusters, one per row, with each strand on its own lane and every CDS in the same blue. Nothing shows yet which genes the clusters share.",
+      "replay": [
+        {
+          "type": "generate"
+        }
+      ],
+      "operations": [
+        {
+          "title": "Default preview",
+          "dataDependent": true,
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-04-01-preview-defaults.webp",
+            "alt": "Default Linear preview of the five clusters: blue CDS arrows on separate strand lanes, no links between rows, and a CDS legend.",
+            "caption": "With the defaults: five rows, one CDS color, and no links."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {
+              "width": 1600,
+              "height": 1000
+            },
+            "replayThrough": 4,
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; ['.preview-feature-search', '.preview-controls', '.drawer-toggle'].forEach((selector) => document.querySelector(selector)?.style.setProperty('display', 'none', 'important')); const content = String(app?.results?.[0]?.content || ''); if (!(!content.includes('og_'))) throw new Error('The BGC preview is not in the expected tutorial state.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('The BGC preview SVG was not found.'); const width = 1100; const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture', 'bgc-preview');"
+              },
+              {
+                "type": "wait",
+                "ms": 300
+              }
+            ],
+            "selector": "[data-capture='bgc-preview']",
+            "cropPadding": {
+              "top": 12,
+              "right": 12,
+              "bottom": 12,
+              "left": 12
+            },
+            "assertAppState": {
+              "mode": "linear",
+              "linearSeqs.length": 5,
+              "form.show_labels_linear": "none",
+              "adv.arrow_shaft_width_ratio": 1,
+              "linearSeqs.4.region_reverse": false
+            },
+            "visibleText": [
+              "Streptomyces lividus",
+              "Ribostamycin biosynthetic gene",
+              "CDS"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "title": "Link the clusters with LOSATP similarity groups",
+      "body": "Under Comparison, click Run LOSAT and open Settings. Press LOSATP to compare the encoded proteins, and set LOSATP mode to Similarity groups: gbdraw groups similar proteins across all five clusters and links the group members in adjacent rows. Set Minimum identity to 30 so that weak matches are not drawn. Click Generate Diagram; LOSAT runs in the browser and takes a few seconds for these clusters.",
+      "table": {
+        "columns": [
+          "Setting",
+          "Value"
+        ],
+        "rows": [
+          [
+            "LOSAT Mode",
+            "LOSATP"
+          ],
+          [
+            "LOSATP mode",
+            "Similarity groups"
+          ],
+          [
+            "Minimum identity",
+            "30 (default 0)"
+          ]
+        ]
+      },
+      "note": "Similarity groups are visualization groups built from retained protein-search hits; they do not infer phylogeny-based orthology.",
+      "replay": [
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Run LOSAT for all adjacent pairs\"]"
+        },
+        {
+          "type": "evaluate",
+          "script": "document.querySelectorAll('summary[aria-label=\"Comparison Settings\"]').forEach((summary) => { summary.closest('details').open = true; });"
+        },
+        {
+          "type": "click",
+          "selector": "[data-linear-comparison-losat-mode-option='blastp']"
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label=\"LOSATP mode\"]",
+          "value": "orthogroup"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Linear comparison minimum identity\"]",
+          "value": 30
+        },
+        {
+          "type": "generate"
+        }
+      ],
       "operations": [
         {
           "dataDependent": true,
           "title": "Comparison settings",
           "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-03-01-open-pairwise.webp",
-            "alt": "Open Comparison Settings with Run LOSAT active, the LOSATP button pressed, LOSATP mode set to Similarity groups, and result filters 50, 0.01, 30, and 0.",
-            "caption": "Choose Run LOSAT, press LOSATP, select Similarity groups, and set the four result filters."
+            "src": "./media/BGC0000708-BGC0000713/manual-05-01-comparison-settings.webp",
+            "alt": "Comparison card with Run LOSAT active, Settings open, LOSATP pressed, LOSATP mode set to Similarity groups, and Minimum identity 30.",
+            "caption": "Run LOSAT, LOSATP, Similarity groups, and Minimum identity 30."
           },
           "capture": {
             "source": "webapp",
@@ -167,11 +449,13 @@
               "width": 1600,
               "height": 1600
             },
-            "openDetails": ["Settings"],
+            "openDetails": [
+              "Settings"
+            ],
             "actions": [
               {
                 "type": "evaluate",
-                "script": "async () => { const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('orthogroup'); app.adv.min_bitscore = 50; app.adv.evalue = '0.01'; app.adv.identity = 30; app.adv.alignment_length = 0; }"
+                "script": "async () => { const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('orthogroup'); app.adv.identity = 30; }"
               }
             ],
             "selector": "[data-linear-comparison-card]",
@@ -183,10 +467,7 @@
               "linearComparisonPlan.defaultSource": "losat",
               "losatProgram": "blastp",
               "losat.blastp.mode": "orthogroup",
-              "losat.executionMode": "auto",
-              "losat.totalThreadBudget": "safe",
               "adv.min_bitscore": 50,
-              "adv.evalue": "0.01",
               "adv.identity": 30,
               "adv.alignment_length": 0
             },
@@ -197,74 +478,44 @@
               "Selected pairs (4)"
             ],
             "visibleControls": [
-              {"selector": "[data-linear-comparison-losat-mode-option='blastn']", "pressed": false},
-              {"selector": "[data-linear-comparison-losat-mode-option='blastp']", "pressed": true},
-              {"selector": "[data-linear-comparison-losat-mode-option='tblastx']", "pressed": false},
-              {"label": "LOSATP mode", "value": "Similarity groups"},
-              {"label": "Bitscore", "value": 50},
-              {"label": "E-value", "value": "0.01"},
-              {"label": "Minimum identity", "value": 30},
-              {"label": "Minimum length", "value": 0}
-            ]
-          }
-        },
-        {
-          "dataDependent": true,
-          "title": "Runtime and reproducibility",
-          "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-03-02-runtime-reproducibility.webp",
-            "alt": "Runtime and reproducibility controls showing Auto execution, Safe total threads, and automatic parallel runs and threads per run.",
-            "caption": "Review the LOSAT runtime and reproducibility controls at the end of Comparison › Settings."
-          },
-          "capture": {
-            "source": "webapp",
-            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
-            "viewport": {"width": 1600, "height": 1100},
-            "openDetails": ["Settings"],
-            "actions": [
               {
-                "type": "evaluate",
-                "script": "async () => { const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('orthogroup'); app.losatExecution.executionMode = 'auto'; app.losatExecution.totalThreadBudget = 'safe'; app.losatExecution.parallelWorkers = undefined; app.losatExecution.threadsPerJob = 'auto'; }"
+                "selector": "[data-linear-comparison-losat-mode-option='blastn']",
+                "pressed": false
               },
               {
-                "type": "waitForFunction",
-                "script": "() => Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).some((section) => section.textContent.includes('Runtime and reproducibility'))"
+                "selector": "[data-linear-comparison-losat-mode-option='blastp']",
+                "pressed": true
               },
               {
-                "type": "evaluate",
-                "script": "const section = Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).find((node) => node.textContent.includes('Runtime and reproducibility')); if (!section) throw new Error('Runtime and reproducibility section was not found.'); section.dataset.capture = 'bgc-losat-runtime'; section.scrollIntoView({ block: 'center' });"
+                "selector": "[data-linear-comparison-losat-mode-option='tblastx']",
+                "pressed": false
+              },
+              {
+                "label": "LOSATP mode",
+                "value": "Similarity groups"
+              },
+              {
+                "label": "Minimum identity",
+                "value": 30
               }
-            ],
-            "selector": "[data-capture='bgc-losat-runtime']",
-            "cropPadding": 14,
-            "assertAppState": {
-              "mode": "linear",
-              "linearComparisonPlan.mode": "adjacent",
-              "linearComparisonPlan.defaultSource": "losat",
-              "losatExecution.executionMode": "auto",
-              "losatExecution.totalThreadBudget": "safe",
-              "losatExecution.threadsPerJob": "auto"
-            },
-            "visibleText": ["Runtime and reproducibility", "Parallel runs"],
-            "visibleControls": [
-              {"selector": "[data-capture='bgc-losat-runtime'] select[aria-label='LOSAT execution']", "value": "auto"},
-              {"selector": "[data-capture='bgc-losat-runtime'] select[aria-label='LOSAT total threads']", "value": "safe"},
-              {"selector": "[data-capture='bgc-losat-runtime'] select[aria-label='LOSAT threads per run']", "value": "auto"}
             ]
           }
         },
         {
           "dataDependent": true,
-          "title": "LOSATP similarity groups mode",
+          "title": "LOSATP mode",
           "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-03-02-select-losatp-orthogroups.webp",
+            "src": "./media/BGC0000708-BGC0000713/manual-05-02-select-losatp-orthogroups.webp",
             "alt": "Comparison Settings showing all three LOSAT Mode buttons with LOSATP pressed and the LOSATP mode menu open with Similarity groups highlighted.",
-            "caption": "Press LOSATP, then open LOSATP mode and choose the highlighted Similarity groups option."
+            "caption": "Press LOSATP, then choose Similarity groups in LOSATP mode."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
-            "viewport": {"width": 1600, "height": 1100},
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
             "crop": "openSelect",
             "cropPadding": {
               "top": 68,
@@ -272,20 +523,31 @@
               "bottom": 20,
               "left": 140
             },
-            "clipSelectors": ["[data-linear-comparison-losat-mode]"],
+            "clipSelectors": [
+              "[data-linear-comparison-losat-mode]"
+            ],
             "openSelect": {
               "selectedLabel": "Similarity groups",
-              "options": ["Similarity groups", "Collinear blocks", "Pairwise matches"],
+              "options": [
+                "Similarity groups",
+                "Collinear blocks",
+                "Pairwise matches"
+              ],
               "label": "LOSATP mode",
               "hideFollowingSiblings": true
             },
-            "openDetails": ["Settings"],
+            "openDetails": [
+              "Settings"
+            ],
             "actions": [
               {
                 "type": "evaluate",
                 "script": "async () => { const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('orthogroup'); }"
               },
-              {"type": "wait", "ms": 300}
+              {
+                "type": "wait",
+                "ms": 300
+              }
             ],
             "assertAppState": {
               "mode": "linear",
@@ -295,467 +557,265 @@
               "losat.blastp.mode": "orthogroup"
             },
             "visibleControls": [
-              {"selector": "[data-linear-comparison-losat-mode-option='blastn']", "pressed": false},
-              {"selector": "[data-linear-comparison-losat-mode-option='blastp']", "pressed": true},
-              {"selector": "[data-linear-comparison-losat-mode-option='tblastx']", "pressed": false},
-              {"label": "LOSATP mode", "value": "Similarity groups"}
-            ],
-            "visibleText": ["LOSAT Mode"]
-          }
-        },
-        {
-          "dataDependent": true,
-          "title": "First comparison boundary",
-          "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-03-03-first-comparison-boundary.webp",
-            "alt": "Selected pairs editor for sequence 1 to sequence 2 with Run LOSAT selected.",
-            "caption": "Open Selected pairs to inspect or override the source assigned to the sequence 1 to sequence 2 boundary."
-          },
-          "capture": {
-            "source": "webapp",
-            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
-            "viewport": {"width": 1600, "height": 1100},
-            "selector": "[data-edge-key='record-1->record-2']",
-            "cropPadding": {"top": 0, "right": 24, "bottom": 12, "left": 12},
-            "waitForSelector": "[data-edge-key='record-1->record-2']",
-            "openDetails": ["Selected pairs"],
-            "actions": [
               {
-                "type": "evaluate",
-                "script": "async () => { const app = window.__GBDRAW_APP__; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('orthogroup'); }"
-              }
-            ],
-            "assertAppState": {
-              "mode": "linear",
-              "linearSeqs.0.uid": "record-1",
-              "linearSeqs.1.uid": "record-2",
-              "linearComparisonResolution.edges.0.edgeKey": "record-1->record-2",
-              "linearComparisonResolution.edges.0.source": "losat"
-            },
-            "visibleControls": [
+                "selector": "[data-linear-comparison-losat-mode-option='blastn']",
+                "pressed": false
+              },
               {
-                "selector": "[data-edge-key='record-1->record-2'] input[type='radio']:checked",
-                "checked": true
+                "selector": "[data-linear-comparison-losat-mode-option='blastp']",
+                "pressed": true
+              },
+              {
+                "selector": "[data-linear-comparison-losat-mode-option='tblastx']",
+                "pressed": false
+              },
+              {
+                "label": "LOSATP mode",
+                "value": "Similarity groups"
               }
             ],
             "visibleText": [
-              "#1",
-              "Streptomyces lividus CBS 844.73",
-              "#2",
-              "Streptomyces fradiae ATCC 10745",
-              "Run LOSAT"
+              "LOSAT Mode"
             ]
           }
         },
         {
+          "title": "Preview with LOSATP links",
           "dataDependent": true,
-          "title": "First raw LOSAT result",
           "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-03-04-first-raw-result.webp",
-            "alt": "Raw LOSAT result controls for sequence 1 to sequence 2 with the filename field, result status, and Save Raw LOSAT TSV action.",
-            "caption": "Open Advanced comparison and layout to manage the first pair's raw filename, readiness status, and TSV download."
+            "src": "./media/BGC0000708-BGC0000713/manual-05-03-preview-losatp.webp",
+            "alt": "Preview with similarity-group ribbons between adjacent rows; the ribbons between BGC0000712 and BGC0000713 cross in an X.",
+            "caption": "Ribbons now link similar proteins. Between BGC0000712 and BGC0000713 they cross in an X."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
-            "viewport": {"width": 1600, "height": 1100},
-            "selector": "[data-linear-raw-result='record-1->record-2']",
-            "cropPadding": 14,
-            "waitForSelector": "[data-linear-raw-result='record-1->record-2']",
-            "openDetails": ["Advanced comparison and layout"],
+            "viewport": {
+              "width": 1600,
+              "height": 1000
+            },
+            "replayThrough": 5,
             "actions": [
               {
                 "type": "evaluate",
-                "script": "async () => { const app = window.__GBDRAW_APP__; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('orthogroup'); }"
+                "script": "const app = window.__GBDRAW_APP__; ['.preview-feature-search', '.preview-controls', '.drawer-toggle'].forEach((selector) => document.querySelector(selector)?.style.setProperty('display', 'none', 'important')); const content = String(app?.results?.[0]?.content || ''); if (!(content.includes('og_') && !content.includes('Core biosynthetic genes'))) throw new Error('The BGC preview is not in the expected tutorial state.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('The BGC preview SVG was not found.'); const width = 1100; const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture', 'bgc-preview');"
+              },
+              {
+                "type": "wait",
+                "ms": 300
               }
             ],
+            "selector": "[data-capture='bgc-preview']",
+            "cropPadding": {
+              "top": 12,
+              "right": 12,
+              "bottom": 12,
+              "left": 12
+            },
             "assertAppState": {
               "mode": "linear",
-              "linearComparisonResolution.edges.0.edgeKey": "record-1->record-2",
-              "linearComparisonResolution.edges.0.source": "losat"
+              "linearSeqs.length": 5,
+              "losatProgram": "blastp",
+              "losat.blastp.mode": "orthogroup",
+              "adv.identity": 30,
+              "linearSeqs.4.region_reverse": false
             },
-            "visibleControls": [
-              {
-                "selector": "[data-linear-raw-result='record-1->record-2'] input[aria-label='Raw LOSAT filename for #1 to #2']",
-                "value": ""
-              }
-            ],
-            "visibleText": ["Raw LOSAT filename", "Raw result", "Save Raw LOSAT TSV"]
+            "visibleText": [
+              "Streptomyces ribosidificus",
+              "Pairwise match identity"
+            ]
           }
         }
       ]
     },
     {
-      "title": "Set record orientation, comparison layout, and arrow shape",
-      "body": "Before the first generation, reverse-complement BGC0000713, keep features in the middle of each axis, and narrow the arrow shafts. MIBiG stores BGC0000713 on the opposite strand from the other four clusters, so its core genes (rbmA to rbmF) read on the minus strand until you reverse it. A Shaft Width Ratio of 0.6 draws each shaft at 60% of the feature height, so the arrowheads stay visible on short genes and at Gallery thumbnail size.",
+      "title": "Reverse-complement BGC0000713",
+      "body": "The X shows that BGC0000713 runs in the opposite direction: MIBiG stores it on the other strand. Under File 5, open Record options, check Reverse complement, and click Generate Diagram. Generate reuses the LOSAT results, so only the drawing changes.",
       "table": {
-        "columns": ["Setting", "Value"],
+        "columns": [
+          "Setting",
+          "Value"
+        ],
         "rows": [
-          ["Reverse complement", "BGC0000713 only"],
-          ["Track Layout", "Middle"],
-          ["Features › Arrow Geometry › Shaft Width Ratio", "0.6"]
+          [
+            "File 5 › Record options › Reverse complement",
+            "On"
+          ]
         ]
       },
+      "replay": [
+        {
+          "type": "evaluate",
+          "script": "document.querySelectorAll('summary[aria-label=\"Record options for sequence 5\"]').forEach((summary) => { summary.closest('details').open = true; });"
+        },
+        {
+          "type": "check",
+          "selector": "input[aria-label=\"Reverse complement for sequence 5\"]"
+        },
+        {
+          "type": "generate"
+        }
+      ],
       "operations": [
         {
           "dataDependent": true,
-          "title": "Reverse-complement selector",
+          "title": "Reverse complement",
           "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-04-02-reverse-bgc0000713.webp",
-            "alt": "BGC0000713 record card with Record options open and Reverse complement checked in Region.",
-            "caption": "Open BGC0000713 Record options and check Reverse complement for that record only."
+            "src": "./media/BGC0000708-BGC0000713/manual-06-01-reverse-bgc0000713.webp",
+            "alt": "BGC0000713 file card with Record options open and Reverse complement checked in Region.",
+            "caption": "Open Record options of BGC0000713 and check Reverse complement."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
-            "viewport": {"width": 1280, "height": 1000},
+            "viewport": {
+              "width": 1280,
+              "height": 1000
+            },
             "actions": [
-              {"type": "evaluate", "script": "async () => { await window.__GBDRAW_APP__.refreshLinearRecordSelectors(); }"},
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const seq = app.linearSeqs[4]; if (seq?.uid !== 'record-5') throw new Error('BGC0000713 record was not restored as sequence 5.'); seq.region_reverse = true; const row = document.querySelector('[data-linear-record-card=\"record-5\"]'); const options = row?.querySelector('[data-linear-record-options=\"record-5\"]'); if (!row || !options) throw new Error('BGC0000713 Record options were not found.'); options.open = true; const card = row.closest('[data-linear-source-card]'); const uploader = card?.querySelector(':scope > .space-y-2'); if (!card || !uploader) throw new Error('BGC0000713 file card was not found.'); uploader.setAttribute('data-capture', 'bgc0713-file'); row.setAttribute('data-capture', 'bgc0713-record'); card.scrollIntoView({ block: 'start' });"
+                "script": "async () => { await window.__GBDRAW_APP__.refreshLinearRecordSelectors(); }"
               },
-              {"type": "evaluate", "script": "window.__GBDRAW_APP__.sidebarWidth = 600;"},
-              {"type": "waitForFunction", "script": "() => { const select = document.querySelector('[data-linear-record-card=record-5] select'); return Boolean(select) && !select.textContent.includes('Loading records'); }"}
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const seq = app.linearSeqs[4]; if (seq?.uid !== 'record-5') throw new Error('BGC0000713 record was not restored as sequence 5.'); const row = document.querySelector('[data-linear-record-card=\"record-5\"]'); const options = row?.querySelector('[data-linear-record-options=\"record-5\"]'); if (!row || !options) throw new Error('BGC0000713 Record options were not found.'); options.open = true; const card = row.closest('[data-linear-source-card]'); const uploader = card?.querySelector(':scope > .space-y-2'); if (!card || !uploader) throw new Error('BGC0000713 file card was not found.'); uploader.setAttribute('data-capture', 'bgc0713-file'); row.setAttribute('data-capture', 'bgc0713-record'); card.scrollIntoView({ block: 'start' });"
+              },
+              {
+                "type": "evaluate",
+                "script": "window.__GBDRAW_APP__.sidebarWidth = 600;"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => { const select = document.querySelector('[data-linear-record-card=record-5] select'); return Boolean(select) && !select.textContent.includes('Loading records'); }"
+              }
             ],
-            "clipSelectors": ["[data-capture='bgc0713-file']", "[data-capture='bgc0713-record']"],
-            "cropPadding": {"top": 0, "right": 14, "bottom": 14, "left": 14},
+            "clipSelectors": [
+              "[data-capture='bgc0713-file']",
+              "[data-capture='bgc0713-record']"
+            ],
+            "cropPadding": {
+              "top": 0,
+              "right": 14,
+              "bottom": 14,
+              "left": 14
+            },
             "assertAppState": {
               "mode": "linear",
               "linearSeqs.4.uid": "record-5",
               "linearSeqs.4.gb.name": "BGC0000713.gbk",
               "linearSeqs.4.region_reverse": true
             },
-            "visibleText": ["BGC0000713.gbk", "Record options", "Region (optional)", "Reverse complement"],
-            "visibleControls": [
-              {"selector": "input[aria-label='Reverse complement for sequence 5']", "checked": true}
-            ]
-          }
-        },
-        {
-          "title": "Track layout selector",
-          "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-04-03-track-layout-middle.webp",
-            "alt": "Linear Layout card with the Track Layout menu open and the Middle option highlighted.",
-            "caption": "Open Track Layout in the Layout card and choose the highlighted Middle option."
-          },
-          "capture": {
-            "source": "webapp",
-            "crop": "openSelect",
-            "cropPadding": {
-              "top": 54,
-              "right": 80,
-              "bottom": 24,
-              "left": 80
-            },
-            "openSelect": {
-              "selectedLabel": "Middle",
-              "options": ["Above", "Middle", "Below"],
-              "label": "Track Layout"
-            },
-            "openDetails": ["Layout"]
-          }
-        },
-        {
-          "dataDependent": true,
-          "title": "Arrow shaft width",
-          "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-04-04-arrow-shaft-width.webp",
-            "alt": "Features card Arrow Geometry controls with Head Length Ratio left at Auto and Shaft Width Ratio set to 0.6.",
-            "caption": "Open Features, then enter 0.6 in Arrow Geometry › Shaft Width Ratio; leave Head Length Ratio at Auto."
-          },
-          "capture": {
-            "source": "webapp",
-            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
-            "viewport": {"width": 1600, "height": 1100},
-            "openDetails": ["Features"],
-            "actions": [
-              {
-                "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const input = document.querySelector('input[aria-label=\"Arrow shaft width ratio\"]'); const box = input?.closest('.rounded'); if (!input || !box || !box.textContent.includes('Arrow Geometry')) throw new Error('Arrow Geometry controls were not found.'); box.dataset.capture = 'bgc-arrow-geometry'; box.scrollIntoView({ block: 'center' });"
-              }
+            "visibleText": [
+              "BGC0000713.gbk",
+              "Record options",
+              "Region (optional)",
+              "Reverse complement"
             ],
-            "selector": "[data-capture='bgc-arrow-geometry']",
-            "highlightSelector": "input[aria-label='Arrow shaft width ratio']",
-            "cropPadding": 14,
-            "assertAppState": {
-              "mode": "linear",
-              "adv.arrow_shaft_width_ratio": 0.6
-            },
-            "visibleText": ["Arrow Geometry", "Head Length Ratio", "Shaft Width Ratio"],
             "visibleControls": [
               {
-                "selector": "input[aria-label='Arrow shaft width ratio']",
-                "value": "0.6"
+                "selector": "input[aria-label='Reverse complement for sequence 5']",
+                "checked": true
               }
             ]
           }
-        }
-      ]
-    },
-    {
-      "title": "Set labels, colors, and figure layout",
-      "body": "Show labels on the first record, use gene for CDS label text, rotate labels by 45 degrees, and choose the orange palette. Set unmatched CDS features to #dddddd; the table lists the remaining layout values.",
-      "table": {
-        "columns": ["Setting", "Value"],
-        "rows": [
-          ["Show Labels", "First Record Only"],
-          ["CDS qualifier priority", "gene"],
-          ["Label Placement", "Above Feature"],
-          ["Label Rotation", "45"],
-          ["Palette", "orange"],
-          ["Default CDS color", "#dddddd"],
-          ["Show Coordinate Scale", "On"],
-          ["Scale Style", "Ruler (Ticks)"],
-          ["Legend position", "Bottom"],
-          ["Lock Definition Column", "On"]
-        ]
-      },
-      "operations": [
-        {
-          "title": "Show labels selector",
-          "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-05-01-show-labels-first.webp",
-            "alt": "Labels card with the Show Labels menu open and First Record Only highlighted.",
-            "caption": "Open Show Labels and choose First Record Only; keep the CDS qualifier priority set to gene as listed in the table."
-          },
-          "capture": {
-            "source": "webapp",
-            "crop": "openSelect",
-            "cropPadding": {
-              "top": 54,
-              "right": 80,
-              "bottom": 24,
-              "left": 80
-            },
-            "openSelect": {
-              "selectedLabel": "First Record Only",
-              "options": ["None", "All Records", "First Record Only", "Top Similarity Group Record"],
-              "label": "Show Labels"
-            },
-            "openDetails": ["Labels"]
-          }
         },
         {
+          "title": "Preview after reverse complement",
           "dataDependent": true,
-          "title": "Scale style selector",
           "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-05-02-scale-style-ruler.webp",
-            "alt": "Axis and Scale card with Show Coordinate Scale selected and the Scale Style menu open on Ruler.",
-            "caption": "Leave Show Coordinate Scale selected and choose Ruler (Ticks) for Scale Style."
+            "src": "./media/BGC0000708-BGC0000713/manual-06-02-preview-reversed.webp",
+            "alt": "Preview after reverse-complementing BGC0000713: the ribbons between BGC0000712 and BGC0000713 run parallel, but the rows start at different offsets, so the ribbons slant.",
+            "caption": "The BGC0000712 to BGC0000713 ribbons now run parallel. The rows still start at different offsets, so the links slant."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
             "viewport": {
               "width": 1600,
-              "height": 1100
+              "height": 1000
             },
+            "replayThrough": 6,
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.form.show_scale = true; app.form.scale_style = 'ruler';"
-              }
-            ],
-            "crop": "openSelect",
-            "cropPadding": {
-              "top": 145,
-              "right": 130,
-              "bottom": 24,
-              "left": 80
-            },
-            "openSelect": {
-              "selectedLabel": "Ruler (Ticks)",
-              "options": ["Bar (Simple)", "Ruler (Ticks)"],
-              "label": "Scale Style"
-            },
-            "openDetails": ["Axis & Scale"],
-            "assertAppState": {
-              "mode": "linear",
-              "form.show_scale": true,
-              "form.scale_style": "ruler"
-            },
-            "visibleControls": [
-              {
-                "label": "Show Coordinate Scale",
-                "checked": true
+                "script": "const app = window.__GBDRAW_APP__; ['.preview-feature-search', '.preview-controls', '.drawer-toggle'].forEach((selector) => document.querySelector(selector)?.style.setProperty('display', 'none', 'important')); const content = String(app?.results?.[0]?.content || ''); if (!(content.includes('og_'))) throw new Error('The BGC preview is not in the expected tutorial state.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('The BGC preview SVG was not found.'); const width = 1100; const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture', 'bgc-preview');"
               },
               {
-                "label": "Scale Style",
-                "value": "Ruler (Ticks)"
-              }
-            ]
-          }
-        },
-        {
-          "title": "Legend position selector",
-          "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-05-03-legend-position-bottom.webp",
-            "alt": "Legend card with the Position menu open and the Bottom option highlighted.",
-            "caption": "Open Position in the Legend card and choose the highlighted Bottom option."
-          },
-          "capture": {
-            "source": "webapp",
-            "crop": "openSelect",
-            "cropPadding": {
-              "top": 54,
-              "right": 80,
-              "bottom": 24,
-              "left": 80
-            },
-            "openSelect": {
-              "selector": "#legend-position",
-              "selectedLabel": "Bottom",
-              "options": ["Right", "Left", "Top", "Bottom", "None"],
-              "label": "Legend position"
-            },
-            "openDetails": ["Legend ·"]
-          }
-        }
-      ]
-    },
-    {
-      "title": "Add the plot title and record text",
-      "body": "Copy the Plot Title from the table, including the literal <i>Streptomyces</i> markup, and keep Plot Title Position at Bottom (Default).",
-      "table": {
-        "columns": ["Setting", "Value"],
-        "rows": [
-          ["Plot Title", "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp."],
-          ["Plot Title Position", "Bottom (Default)"],
-          ["Default font size", "Auto"],
-          ["Show Replicon", "Off"],
-          ["Accession visibility", "Show"],
-          ["Length / Coordinates visibility", "Show"],
-          ["Definition line: Name", "20; Bold; default color"],
-          ["Definition line: Subtitle", "20; Normal; default color"],
-          ["Definition line: Accession", "20; Normal; #7b7c7d"],
-          ["Definition line: Length / Coordinates", "20; Normal; #7b7c7d"]
-        ]
-      },
-      "operations": [
-        {
-          "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-06-01-title-record-text.webp",
-            "alt": "Plot Title controls with the Streptomyces title and Bottom position.",
-            "caption": "Use the Plot Title field for the title in the table and keep Bottom position."
-          },
-          "capture": {
-            "source": "webapp",
-            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
-            "viewport": {
-              "width": 1600,
-              "height": 1100
-            },
-            "openDetails": ["Titles & Record Labels"],
-            "actions": [
-              {
-                "type": "evaluate",
-                "script": "const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('summary')?.textContent?.includes('Titles & Record Labels')); const section = card?.querySelector('section[aria-labelledby=\"plot-title-settings-heading\"]'); if (!section) throw new Error('BGC title controls not found.'); section.setAttribute('data-capture', 'bgc-title-controls'); section.scrollIntoView({ block: 'center' });"
+                "type": "wait",
+                "ms": 300
               }
             ],
-            "clipSelectors": ["[data-capture='bgc-title-controls']"],
+            "selector": "[data-capture='bgc-preview']",
             "cropPadding": {
-              "top": 16,
-              "right": 16,
-              "bottom": 16,
-              "left": 16
-            }
-          }
-        },
-        {
-          "dataDependent": true,
-          "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-06-02-record-labels.webp",
-            "alt": "Record Labels controls with Default font size and independent definition-line rows.",
-            "caption": "Use the Record Labels rows for the visibility and per-line style values in the table."
-          },
-          "capture": {
-            "source": "webapp",
-            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
-            "viewport": {
-              "width": 1600,
-              "height": 1100
+              "top": 12,
+              "right": 12,
+              "bottom": 12,
+              "left": 12
             },
-            "openDetails": ["Titles & Record Labels"],
-            "actions": [
-              {
-                "type": "evaluate",
-                "script": "const section = document.querySelector('section[aria-labelledby=\"record-label-settings-heading\"]'); const accession = section?.querySelector('select[aria-label=\"Accession visibility\"]')?.closest('.rounded'); const length = section?.querySelector('select[aria-label=\"Length / Coordinates visibility\"]')?.closest('.rounded'); const heading = section?.querySelector('#record-label-settings-heading'); const defaultSize = Array.from(section?.querySelectorAll('label') || []).find((node) => node.textContent.includes('Default font size'))?.closest('div'); if (!heading || !defaultSize || !accession || !length) throw new Error('BGC Record Labels controls not found.'); heading.setAttribute('data-capture', 'bgc-record-label-heading'); defaultSize.setAttribute('data-capture', 'bgc-record-label-default'); accession.setAttribute('data-capture', 'bgc-record-label-accession'); length.setAttribute('data-capture', 'bgc-record-label-length'); accession.scrollIntoView({ block: 'center' });"
-              }
-            ],
-            "clipSelectors": ["[data-capture='bgc-record-label-heading']", "[data-capture='bgc-record-label-default']", "[data-capture='bgc-record-label-accession']", "[data-capture='bgc-record-label-length']"],
-            "cropPadding": 16,
             "assertAppState": {
               "mode": "linear",
-              "adv.linear_accession_visibility": "show",
-              "adv.linear_length_visibility": "show"
+              "linearSeqs.length": 5,
+              "linearSeqs.4.region_reverse": true,
+              "adv.identity": 30
             },
-            "visibleText": ["Record Labels", "Default font size", "Accession", "Length / Coordinates"],
-            "visibleControls": [
-              {"selector": "select[aria-label='Accession visibility']", "value": "Show"},
-              {"selector": "select[aria-label='Length / Coordinates visibility']", "value": "Show"}
+            "visibleText": [
+              "Streptomyces ribosidificus",
+              "Pairwise match identity"
             ]
           }
         }
       ]
     },
     {
-      "title": "Add feature color rules",
-      "body": "After choosing the orange palette and setting the default CDS color to #dddddd, create four CDS rules from the antiSMASH gene_kind qualifier before generating the final figure.",
-      "table": {
-        "columns": ["Feature", "Qualifier", "Value pattern", "Color", "Legend caption"],
-        "rows": [
-          ["CDS", "gene_kind", "biosynthetic$", "#d03535", "Core biosynthetic genes"],
-          ["CDS", "gene_kind", "biosynthetic-additional", "#f787a9", "Additional biosynthetic genes"],
-          ["CDS", "gene_kind", "transport", "#577edb", "Transport-related genes"],
-          ["CDS", "gene_kind", "regulatory", "#57b767", "Regulatory genes"]
-        ]
-      },
-      "note": "Use biosynthetic$ for the core category so it does not also catch biosynthetic-additional.",
-      "operations": [
+      "title": "Align the rows on similarity group og_6",
+      "body": "To line up the shared genes, align the rows on one similarity group. In the preview, click the neoU CDS of BGC0000709 (row 2), which belongs to og_6, and choose Review alignment options…. The dialog has one card per other record. BGC0000708 has two og_6 members: livU (CAG38700.1), the representative member with a reciprocal best hit, is preselected and marked Recommended; the transport protein CAG38692.1 near the left end of the cluster is the other candidate. Keep livU, leave Arrow direction at Keep as is, and click Apply. Apply regenerates the preview, so you do not click Generate Diagram.",
+      "note": "Align… applies the same recommended anchors without the review. Choose Skip in a record card to leave that record where it is. Reset alignment… undoes an alignment; see the Web alignment reference for its scopes.",
+      "replay": [
         {
-          "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-07-01-specific-rules-all.webp",
-            "alt": "SPECIFIC RULES (-t) controls showing four CDS gene_kind rules for biosynthetic$, biosynthetic-additional, transport, and regulatory categories.",
-            "caption": "Enter all four antiSMASH gene_kind rules in the SPECIFIC RULES (-t) controls before clicking Generate Diagram."
-          },
-          "capture": {
-            "source": "webapp",
-            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
-            "viewport": {
-              "width": 1600,
-              "height": 1100
-            },
-            "openDetails": ["Colors"],
-            "actions": [
-              {
-                "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 420; const heading = Array.from(document.querySelectorAll('h4')).find((node) => node.textContent?.includes('SPECIFIC RULES')); const header = heading?.parentElement; const rows = header?.nextElementSibling; if (!header || !rows) throw new Error('BGC specific-rules rows not found.'); header.setAttribute('data-capture', 'bgc-specific-rules-header'); rows.setAttribute('data-capture', 'bgc-specific-rules-rows'); rows.scrollIntoView({ block: 'center' });"
-              }
-            ],
-            "clipSelectors": ["[data-capture='bgc-specific-rules-header']", "[data-capture='bgc-specific-rules-rows']"],
-            "cropPadding": {
-              "top": 16,
-              "right": 16,
-              "bottom": 16,
-              "left": 16
-            }
-          }
+          "type": "evaluate",
+          "script": "const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview'; window.__gbdrawReplayResult = String(app.results?.[0]?.content || '');"
+        },
+        {
+          "type": "waitForSelector",
+          "selector": "[data-gbdraw-feature-id='f94b7f30b_record_2']"
+        },
+        {
+          "type": "click",
+          "selector": "[data-gbdraw-feature-id='f94b7f30b_record_2']",
+          "force": true
+        },
+        {
+          "type": "waitForSelector",
+          "selector": ".feature-popup [data-similarity-alignment-popup-review]"
+        },
+        {
+          "type": "click",
+          "selector": ".feature-popup [data-similarity-alignment-popup-review]"
+        },
+        {
+          "type": "waitForFunction",
+          "timeout": 300000,
+          "script": "() => { const app = window.__GBDRAW_APP__; const row = app?.similarityAlignmentDraft?.rows?.find((item) => item.recordDetail === 'BGC0000708'); const chosen = row?.candidates?.find((candidate) => candidate.key === row?.choice?.candidateKey); return Boolean(row && !app.similarityAlignmentBusy && row.choice?.kind === 'select' && row.choice.candidateKey === row.recommendedKey && String(chosen?.name || '') === 'livU' && document.querySelector('[data-similarity-alignment-dialog]')); }"
+        },
+        {
+          "type": "click",
+          "selector": "[data-similarity-alignment-dialog] button[aria-describedby=\"similarity-alignment-apply-reason\"]"
+        },
+        {
+          "type": "waitForFunction",
+          "timeout": 600000,
+          "script": "() => { const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); return Boolean(app && !app.processing && !app.similarityAlignmentBusy && !document.querySelector('[data-similarity-alignment-dialog]') && content && content !== window.__gbdrawReplayResult); }"
         }
-      ]
-    },
-    {
-      "title": "Generate and align on og_6",
-      "body": "Click Generate Diagram to create the initial comparison. In the preview, click the neoU CDS of BGC0000709 (record 2), which belongs to similarity group og_6, and choose Review alignment options…. The Review alignment dialog shows og_6 as the similarity group, neoU of BGC0000709 as the reference, and one card per target record. BGC0000708 has two og_6 members: livU (CAG38700.1), the representative member with a reciprocal best hit, is preselected and marked Recommended; the transport protein CAG38692.1 near the left end of the cluster is the other candidate. Keep livU, leave Arrow direction at Keep as is, and click Apply. Apply regenerates the preview, so you do not need to click Generate Diagram again. Align… applies the same recommended anchors without the review.",
-      "note": "Choose Skip in a record card to leave that record where it is. The other Arrow direction choices are All right →, All left ←, and Custom; they include the exact reference and selected anchors with known direction, and source strands stay unchanged. Reset alignment… offers Positions only or Positions and directions (the latest Align’s actual direction changes). Both scopes consume the evidence; use Undo before choosing the other scope. See the Web alignment reference for scope, excluded records, later manual edits and retry. Ambiguity opens that review automatically.",
+      ],
       "operations": [
         {
           "title": "Review the og_6 feature",
           "dataDependent": true,
           "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-08-01-align-og6.webp",
+            "src": "./media/BGC0000708-BGC0000713/manual-07-01-align-og6.webp",
             "alt": "The neoU feature of BGC0000709 in og_6 beside its feature popup, whose Similarity group section shows og_6 with 6 genes in 5 records and the Show in editor and Align… buttons above the Review alignment options… link.",
-            "caption": "Click the neoU CDS of BGC0000709 in og_6, then choose Review alignment options…."
+            "caption": "Click neoU of BGC0000709 (og_6), then choose Review alignment options…."
           },
           "capture": {
             "source": "webapp",
@@ -764,10 +824,11 @@
               "width": 1280,
               "height": 900
             },
+            "replayThrough": 6,
             "actions": [
               {
                 "type": "evaluate",
-                "script": "async () => { document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview'; app.zoom = 1.35; const frame = () => new Promise((resolve) => setTimeout(() => requestAnimationFrame(resolve), 300)); await frame(); for (let i = 0; i < 6; i += 1) { const rect = document.querySelector('[data-gbdraw-feature-id=\\'f94b7f30b_record_2\\']')?.getBoundingClientRect(); if (!rect) throw new Error('Pan target [data-gbdraw-feature-id=\\'f94b7f30b_record_2\\'] was not found.'); const dx = 470 - rect.left; const dy = 360 - rect.top; if (Math.abs(dx) < 1 && Math.abs(dy) < 1) break; app.canvasPan.x += dx; app.canvasPan.y += dy; await frame(); } }"
+                "script": "async () => { document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview'; app.zoom = 1.35; const frame = () => new Promise((resolve) => setTimeout(() => requestAnimationFrame(resolve), 300)); await frame(); for (let i = 0; i < 6; i += 1) { const rect = document.querySelector(\"[data-gbdraw-feature-id='f94b7f30b_record_2']\")?.getBoundingClientRect(); if (!rect) throw new Error(\"Pan target [data-gbdraw-feature-id='f94b7f30b_record_2'] was not found.\"); const dx = 470 - rect.left; const dy = 360 - rect.top; if (Math.abs(dx) < 1 && Math.abs(dy) < 1) break; app.canvasPan.x += dx; app.canvasPan.y += dy; await frame(); } }"
               },
               {
                 "type": "click",
@@ -812,6 +873,7 @@
             "assertAppState": {
               "mode": "linear",
               "linearSeqs.length": 5,
+              "linearSeqs.4.region_reverse": true,
               "clickedFeature.feat.gene": "neoU"
             },
             "visibleText": [
@@ -826,7 +888,7 @@
           "title": "Anchor candidates for BGC0000708",
           "dataDependent": true,
           "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-08-02-anchor-candidates.webp",
+            "src": "./media/BGC0000708-BGC0000713/manual-07-02-anchor-candidates.webp",
             "alt": "Review alignment card for BGC0000708 with two og_6 candidates: the transport protein CAG38692.1 and livU CAG38700.1, which is selected and marked Recommended.",
             "caption": "BGC0000708 has two og_6 members; keep the selected, Recommended livU · CAG38700.1."
           },
@@ -837,10 +899,11 @@
               "width": 1280,
               "height": 1100
             },
+            "replayThrough": 6,
             "actions": [
               {
                 "type": "evaluate",
-                "script": "async () => { document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview'; app.zoom = 1.35; const frame = () => new Promise((resolve) => setTimeout(() => requestAnimationFrame(resolve), 300)); await frame(); for (let i = 0; i < 6; i += 1) { const rect = document.querySelector('[data-gbdraw-feature-id=\\'f94b7f30b_record_2\\']')?.getBoundingClientRect(); if (!rect) throw new Error('Pan target [data-gbdraw-feature-id=\\'f94b7f30b_record_2\\'] was not found.'); const dx = 470 - rect.left; const dy = 360 - rect.top; if (Math.abs(dx) < 1 && Math.abs(dy) < 1) break; app.canvasPan.x += dx; app.canvasPan.y += dy; await frame(); } }"
+                "script": "async () => { document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview'; app.zoom = 1.35; const frame = () => new Promise((resolve) => setTimeout(() => requestAnimationFrame(resolve), 300)); await frame(); for (let i = 0; i < 6; i += 1) { const rect = document.querySelector(\"[data-gbdraw-feature-id='f94b7f30b_record_2']\")?.getBoundingClientRect(); if (!rect) throw new Error(\"Pan target [data-gbdraw-feature-id='f94b7f30b_record_2'] was not found.\"); const dx = 470 - rect.left; const dy = 360 - rect.top; if (Math.abs(dx) < 1 && Math.abs(dy) < 1) break; app.canvasPan.x += dx; app.canvasPan.y += dy; await frame(); } }"
               },
               {
                 "type": "click",
@@ -886,7 +949,8 @@
               "similarityAlignmentDraft.rows.0.recordKey": "record-1",
               "similarityAlignmentDraft.rows.0.candidates.length": 2,
               "similarityAlignmentDraft.rows.0.choice.kind": "select",
-              "similarityAlignmentDraft.intent.mode": "keep"
+              "similarityAlignmentDraft.intent.mode": "keep",
+              "similarityAlignmentDraft.rows.0.candidates.1.name": "livU"
             },
             "visibleText": [
               "BGC0000708",
@@ -898,7 +962,7 @@
             ],
             "visibleControls": [
               {
-                "selector": "[data-alignment-record-key='record-1'] input[aria-label^='Select livU']",
+                "selector": "[data-alignment-record-key='record-1'] label:nth-of-type(2) input[type='radio']",
                 "checked": true
               }
             ]
@@ -908,7 +972,7 @@
           "title": "Arrow direction",
           "dataDependent": true,
           "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-08-03-alignment-direction.webp",
+            "src": "./media/BGC0000708-BGC0000713/manual-07-03-alignment-direction.webp",
             "alt": "Arrow direction choices in the Review alignment dialog with Keep as is selected.",
             "caption": "Leave Arrow direction at Keep as is, then click Apply."
           },
@@ -919,10 +983,11 @@
               "width": 1280,
               "height": 1100
             },
+            "replayThrough": 6,
             "actions": [
               {
                 "type": "evaluate",
-                "script": "async () => { document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview'; app.zoom = 1.35; const frame = () => new Promise((resolve) => setTimeout(() => requestAnimationFrame(resolve), 300)); await frame(); for (let i = 0; i < 6; i += 1) { const rect = document.querySelector('[data-gbdraw-feature-id=\\'f94b7f30b_record_2\\']')?.getBoundingClientRect(); if (!rect) throw new Error('Pan target [data-gbdraw-feature-id=\\'f94b7f30b_record_2\\'] was not found.'); const dx = 470 - rect.left; const dy = 360 - rect.top; if (Math.abs(dx) < 1 && Math.abs(dy) < 1) break; app.canvasPan.x += dx; app.canvasPan.y += dy; await frame(); } }"
+                "script": "async () => { document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview'; app.zoom = 1.35; const frame = () => new Promise((resolve) => setTimeout(() => requestAnimationFrame(resolve), 300)); await frame(); for (let i = 0; i < 6; i += 1) { const rect = document.querySelector(\"[data-gbdraw-feature-id='f94b7f30b_record_2']\")?.getBoundingClientRect(); if (!rect) throw new Error(\"Pan target [data-gbdraw-feature-id='f94b7f30b_record_2'] was not found.\"); const dx = 470 - rect.left; const dy = 360 - rect.top; if (Math.abs(dx) < 1 && Math.abs(dy) < 1) break; app.canvasPan.x += dx; app.canvasPan.y += dy; await frame(); } }"
               },
               {
                 "type": "click",
@@ -960,14 +1025,20 @@
               "[data-capture='align-direction-options']",
               "[data-capture='align-direction-scope']"
             ],
-            "cropPadding": {"top": 12, "right": 12, "bottom": 4, "left": 12},
+            "cropPadding": {
+              "top": 12,
+              "right": 12,
+              "bottom": 4,
+              "left": 12
+            },
             "assertAppState": {
               "mode": "linear",
               "similarityAlignmentDraft.rows.length": 4,
               "similarityAlignmentDraft.rows.0.recordKey": "record-1",
               "similarityAlignmentDraft.rows.0.candidates.length": 2,
               "similarityAlignmentDraft.rows.0.choice.kind": "select",
-              "similarityAlignmentDraft.intent.mode": "keep"
+              "similarityAlignmentDraft.intent.mode": "keep",
+              "similarityAlignmentDraft.rows.0.candidates.1.name": "livU"
             },
             "visibleText": [
               "Arrow direction",
@@ -979,12 +1050,12 @@
           }
         },
         {
-          "title": "Final aligned preview",
+          "title": "Aligned preview",
           "dataDependent": true,
           "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-08-04-aligned-preview.webp",
-            "alt": "Final og_6-aligned aminoglycoside BGC comparison with five rows, narrowed arrow shafts, curved similarity-group matches, rotated first-record labels, and a bottom legend.",
-            "caption": "The final og_6-aligned result lines up livU, neoU, and their partners and keeps the core links nearly vertical."
+            "src": "./media/BGC0000708-BGC0000713/manual-07-04-preview-aligned.webp",
+            "alt": "Preview after aligning on og_6: the rows shift so that livU, neoU, and their partners line up, and the links between the core genes run vertically.",
+            "caption": "Aligned on og_6: the core genes line up and their links run vertically. Every CDS is still the same blue."
           },
           "capture": {
             "source": "webapp",
@@ -993,13 +1064,18 @@
               "width": 1600,
               "height": 1000
             },
+            "replayThrough": 7,
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg || !content.includes('og_6') || !content.includes('Core biosynthetic genes') || app?.form?.legend !== 'bottom') throw new Error('Restored BGC SVG does not match the completed tutorial figure.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = 1100; const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture', 'bgc-final-preview');"
+                "script": "const app = window.__GBDRAW_APP__; ['.preview-feature-search', '.preview-controls', '.drawer-toggle'].forEach((selector) => document.querySelector(selector)?.style.setProperty('display', 'none', 'important')); const content = String(app?.results?.[0]?.content || ''); if (!(content.includes('og_') && !content.includes('Core biosynthetic genes'))) throw new Error('The BGC preview is not in the expected tutorial state.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('The BGC preview SVG was not found.'); const width = 1100; const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture', 'bgc-preview');"
+              },
+              {
+                "type": "wait",
+                "ms": 300
               }
             ],
-            "selector": "[data-capture='bgc-final-preview']",
+            "selector": "[data-capture='bgc-preview']",
             "cropPadding": {
               "top": 12,
               "right": 12,
@@ -1009,13 +1085,987 @@
             "assertAppState": {
               "mode": "linear",
               "linearSeqs.length": 5,
-              "form.legend": "bottom",
+              "linearSeqs.4.region_reverse": true
+            },
+            "visibleText": [
+              "Streptomyces lividus",
+              "Pairwise match identity"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "title": "Color the genes by antiSMASH gene kind",
+      "body": "Every CDS is still the same blue, so the figure does not show which genes are biosynthetic. These MIBiG records carry antiSMASH gene_kind qualifiers. Open Colors, choose the orange palette, and set the CDS default color to #dddddd for genes that no rule matches. The palette also turns the ribbons blue, so the red core genes stand out against them. Then add the four SPECIFIC RULES (-t) below, one row at a time, and click Generate Diagram.",
+      "table": {
+        "columns": [
+          "Setting",
+          "Value"
+        ],
+        "rows": [
+          [
+            "Palette",
+            "orange"
+          ],
+          [
+            "Default CDS color",
+            "#dddddd"
+          ]
+        ]
+      },
+      "replay": [
+        {
+          "type": "evaluate",
+          "script": "document.querySelectorAll('summary[aria-label=\"Colors\"]').forEach((summary) => { summary.closest('details').open = true; });"
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label=\"Palette\"]",
+          "value": "orange"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"CDS feature color\"]",
+          "value": "#dddddd"
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label=\"New color rule feature type\"]",
+          "value": "CDS"
+        },
+        {
+          "type": "fill",
+          "selector": "div:has(> div > input[data-new-specific-rule-pattern]) input[aria-label=\"Qualifier name\"]",
+          "value": "gene_kind"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"New color rule pattern\"]",
+          "value": "biosynthetic$"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"New color rule color\"]",
+          "value": "#d03535"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"New color rule legend caption\"]",
+          "value": "Core biosynthetic genes"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Add color rule\"]"
+        },
+        {
+          "type": "waitForFunction",
+          "script": "() => (window.__GBDRAW_APP__?.manualSpecificRules || []).length === 1"
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label=\"New color rule feature type\"]",
+          "value": "CDS"
+        },
+        {
+          "type": "fill",
+          "selector": "div:has(> div > input[data-new-specific-rule-pattern]) input[aria-label=\"Qualifier name\"]",
+          "value": "gene_kind"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"New color rule pattern\"]",
+          "value": "biosynthetic-additional"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"New color rule color\"]",
+          "value": "#f787a9"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"New color rule legend caption\"]",
+          "value": "Additional biosynthetic genes"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Add color rule\"]"
+        },
+        {
+          "type": "waitForFunction",
+          "script": "() => (window.__GBDRAW_APP__?.manualSpecificRules || []).length === 2"
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label=\"New color rule feature type\"]",
+          "value": "CDS"
+        },
+        {
+          "type": "fill",
+          "selector": "div:has(> div > input[data-new-specific-rule-pattern]) input[aria-label=\"Qualifier name\"]",
+          "value": "gene_kind"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"New color rule pattern\"]",
+          "value": "transport"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"New color rule color\"]",
+          "value": "#577edb"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"New color rule legend caption\"]",
+          "value": "Transport-related genes"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Add color rule\"]"
+        },
+        {
+          "type": "waitForFunction",
+          "script": "() => (window.__GBDRAW_APP__?.manualSpecificRules || []).length === 3"
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label=\"New color rule feature type\"]",
+          "value": "CDS"
+        },
+        {
+          "type": "fill",
+          "selector": "div:has(> div > input[data-new-specific-rule-pattern]) input[aria-label=\"Qualifier name\"]",
+          "value": "gene_kind"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"New color rule pattern\"]",
+          "value": "regulatory"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"New color rule color\"]",
+          "value": "#57b767"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"New color rule legend caption\"]",
+          "value": "Regulatory genes"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Add color rule\"]"
+        },
+        {
+          "type": "waitForFunction",
+          "script": "() => (window.__GBDRAW_APP__?.manualSpecificRules || []).length === 4"
+        },
+        {
+          "type": "generate"
+        }
+      ],
+      "operations": [
+        {
+          "title": "Four gene_kind rules",
+          "table": {
+            "columns": [
+              "Feature",
+              "Qualifier",
+              "Value pattern",
+              "Color",
+              "Legend caption"
+            ],
+            "rows": [
+              [
+                "CDS",
+                "gene_kind",
+                "biosynthetic$",
+                "#d03535",
+                "Core biosynthetic genes"
+              ],
+              [
+                "CDS",
+                "gene_kind",
+                "biosynthetic-additional",
+                "#f787a9",
+                "Additional biosynthetic genes"
+              ],
+              [
+                "CDS",
+                "gene_kind",
+                "transport",
+                "#577edb",
+                "Transport-related genes"
+              ],
+              [
+                "CDS",
+                "gene_kind",
+                "regulatory",
+                "#57b767",
+                "Regulatory genes"
+              ]
+            ]
+          },
+          "note": "Value patterns are regular expressions. biosynthetic$ matches only values that end in biosynthetic, so it does not also catch biosynthetic-additional.",
+          "dataDependent": true,
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-08-01-specific-rules-all.webp",
+            "alt": "SPECIFIC RULES (-t) controls showing four CDS gene_kind rules for biosynthetic$, biosynthetic-additional, transport, and regulatory categories.",
+            "caption": "The four gene_kind rules in SPECIFIC RULES (-t)."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
+            "openDetails": [
+              "Colors"
+            ],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 420; const heading = Array.from(document.querySelectorAll('h4')).find((node) => node.textContent?.includes('SPECIFIC RULES')); const header = heading?.parentElement; const rows = header?.parentElement?.querySelector(':scope > div.space-y-1'); if (!header || !rows || rows.getBoundingClientRect().height < 1) throw new Error('BGC specific-rules rows not found.'); header.setAttribute('data-capture', 'bgc-specific-rules-header'); rows.setAttribute('data-capture', 'bgc-specific-rules-rows'); rows.scrollIntoView({ block: 'center' });"
+              }
+            ],
+            "clipSelectors": [
+              "[data-capture='bgc-specific-rules-header']",
+              "[data-capture='bgc-specific-rules-rows']"
+            ],
+            "cropPadding": {
+              "top": 16,
+              "right": 16,
+              "bottom": 16,
+              "left": 16
+            },
+            "assertAppState": {
+              "mode": "linear",
+              "manualSpecificRules.length": 4,
+              "manualSpecificRules.0.qual": "gene_kind",
+              "manualSpecificRules.0.val": "biosynthetic$"
+            },
+            "visibleText": [
+              "SPECIFIC RULES"
+            ],
+            "visibleControls": [
+              {
+                "selector": "input[aria-label='Color rule 1 pattern']",
+                "value": "biosynthetic$"
+              },
+              {
+                "selector": "input[aria-label='Color rule 4 pattern']",
+                "value": "regulatory"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Colored preview",
+          "dataDependent": true,
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-08-02-preview-colors.webp",
+            "alt": "Aligned preview with antiSMASH gene_kind colors: core biosynthetic genes red, additional biosynthetic pink, transport blue, regulatory green, other proteins light gray, and the matching legend.",
+            "caption": "Core biosynthetic genes are red and link through all five clusters. The genes have no names yet."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {
+              "width": 1600,
+              "height": 1000
+            },
+            "replayThrough": 8,
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; ['.preview-feature-search', '.preview-controls', '.drawer-toggle'].forEach((selector) => document.querySelector(selector)?.style.setProperty('display', 'none', 'important')); const content = String(app?.results?.[0]?.content || ''); if (!(content.includes('Core biosynthetic genes') && !content.includes('livE'))) throw new Error('The BGC preview is not in the expected tutorial state.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('The BGC preview SVG was not found.'); const width = 1100; const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture', 'bgc-preview');"
+              },
+              {
+                "type": "wait",
+                "ms": 300
+              }
+            ],
+            "selector": "[data-capture='bgc-preview']",
+            "cropPadding": {
+              "top": 12,
+              "right": 12,
+              "bottom": 12,
+              "left": 12
+            },
+            "assertAppState": {
+              "mode": "linear",
+              "linearSeqs.length": 5,
+              "form.show_labels_linear": "none"
+            },
+            "visibleText": [
+              "Core biosynthetic genes",
+              "Regulatory genes"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "title": "Label the genes of the first cluster",
+      "body": "The colors show the gene kinds, but not the gene names. Label the first row only, so the labels do not crowd the other rows: open Labels, set Show Labels to First Record Only, add a CDS qualifier priority rule gene so labels use the short gene names, place the labels above the features, and rotate them by 45 degrees. Click Generate Diagram.",
+      "table": {
+        "columns": [
+          "Setting",
+          "Value"
+        ],
+        "rows": [
+          [
+            "Show Labels",
+            "First Record Only"
+          ],
+          [
+            "Qualifier priority",
+            "CDS: gene"
+          ],
+          [
+            "Label Placement",
+            "Above Feature"
+          ],
+          [
+            "Label Rotation",
+            "45"
+          ]
+        ]
+      },
+      "replay": [
+        {
+          "type": "evaluate",
+          "script": "document.querySelectorAll('summary[aria-label=\"Labels\"]').forEach((summary) => { summary.closest('details').open = true; });"
+        },
+        {
+          "type": "select",
+          "selector": "#linear-show-labels",
+          "value": "first"
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label=\"New priority rule feature type\"]",
+          "value": "CDS"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"New priority rule qualifier order\"]",
+          "value": "gene"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Add priority rule\"]"
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label=\"Label Placement\"]",
+          "value": "above_feature"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Label Rotation\"]",
+          "value": 45
+        },
+        {
+          "type": "generate"
+        }
+      ],
+      "operations": [
+        {
+          "title": "Show labels selector",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-09-01-show-labels-first.webp",
+            "alt": "Labels card with the Show Labels menu open and First Record Only highlighted.",
+            "caption": "Open Show Labels and choose First Record Only."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "First Record Only",
+              "options": [
+                "None",
+                "All Records",
+                "First Record Only",
+                "Top Similarity Group Record"
+              ],
+              "label": "Show Labels"
+            },
+            "openDetails": [
+              "Labels"
+            ]
+          }
+        },
+        {
+          "title": "Labeled preview",
+          "dataDependent": true,
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-09-02-preview-labels.webp",
+            "alt": "Colored, aligned preview with rotated gene labels (livE to livZ) above the BGC0000708 row.",
+            "caption": "Gene names label the first row. The wide arrow shafts hide the heads of short genes."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {
+              "width": 1600,
+              "height": 1000
+            },
+            "replayThrough": 9,
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; ['.preview-feature-search', '.preview-controls', '.drawer-toggle'].forEach((selector) => document.querySelector(selector)?.style.setProperty('display', 'none', 'important')); const content = String(app?.results?.[0]?.content || ''); if (!(content.includes('livE'))) throw new Error('The BGC preview is not in the expected tutorial state.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('The BGC preview SVG was not found.'); const width = 1100; const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture', 'bgc-preview');"
+              },
+              {
+                "type": "wait",
+                "ms": 300
+              }
+            ],
+            "selector": "[data-capture='bgc-preview']",
+            "cropPadding": {
+              "top": 12,
+              "right": 12,
+              "bottom": 12,
+              "left": 12
+            },
+            "assertAppState": {
+              "mode": "linear",
+              "linearSeqs.length": 5,
+              "form.show_labels_linear": "first",
+              "adv.label_rotation": 45
+            },
+            "visibleText": [
+              "livE",
+              "Core biosynthetic genes"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "title": "Finish the figure",
+      "body": "Narrow the arrow shafts to 60% of the feature height (Shaft Width Ratio 0.6), so arrowheads stay visible on short genes and at thumbnail size. Turn off Separate Strands so each cluster reads as one row of arrows, and enlarge the features, strokes, and text for a figure that is read at a reduced size. Add the ruler scale and the plot title, and click Generate Diagram. Generate keeps the og_6 alignment and reuses the LOSAT results.",
+      "table": {
+        "columns": [
+          "Setting",
+          "Value"
+        ],
+        "rows": [
+          [
+            "Features › Arrow Geometry › Shaft Width Ratio",
+            "0.6"
+          ],
+          [
+            "Features › Feature Height",
+            "75"
+          ],
+          [
+            "Features › Block Stroke Color",
+            "Color, #262626"
+          ],
+          [
+            "Features › Block Stroke Width",
+            "2"
+          ],
+          [
+            "Features › Line Stroke Width",
+            "2"
+          ],
+          [
+            "Layout › Separate Strands",
+            "Off"
+          ],
+          [
+            "Axis & Scale › Axis Stroke Color",
+            "Color, #808080"
+          ],
+          [
+            "Axis & Scale › Axis Stroke Width",
+            "5"
+          ],
+          [
+            "Axis & Scale › Scale Style",
+            "Ruler (Ticks)"
+          ],
+          [
+            "Axis & Scale › Scale Font Size (linked to Ruler Label Font Size)",
+            "20"
+          ],
+          [
+            "Labels › Label Font Size",
+            "18"
+          ],
+          [
+            "Legend › Swatch size",
+            "20"
+          ],
+          [
+            "Legend › Font size",
+            "20"
+          ],
+          [
+            "Titles & Record Labels › Plot Title",
+            "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp."
+          ],
+          [
+            "Definition line: Name / Species",
+            "20; Bold"
+          ],
+          [
+            "Definition line: Subtitle",
+            "20"
+          ],
+          [
+            "Definition line: Accession",
+            "20; #7b7c7d"
+          ],
+          [
+            "Definition line: Length / Coordinates",
+            "20; #7b7c7d"
+          ]
+        ]
+      },
+      "replay": [
+        {
+          "type": "evaluate",
+          "script": "document.querySelectorAll('summary[aria-label=\"Features\"], summary[aria-label=\"Layout\"], summary[aria-label=\"Axis & Scale\"], summary[aria-label=\"Labels\"], summary[aria-label=\"Legend settings\"], summary[aria-label=\"Titles and Record Labels\"]').forEach((summary) => { summary.closest('details').open = true; });"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Arrow shaft width ratio\"]",
+          "value": 0.6
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Feature Height\"]",
+          "value": 75
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label=\"Block stroke color mode\"]",
+          "value": "color"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Block stroke color\"]",
+          "value": "#262626"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Block Stroke Width\"]",
+          "value": 2
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Line Stroke Width\"]",
+          "value": 2
+        },
+        {
+          "type": "uncheck",
+          "selector": "input[aria-label=\"Separate Strands\"]"
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label=\"Axis stroke color mode\"]",
+          "value": "color"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Axis stroke color\"]",
+          "value": "#808080"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Axis Stroke Width\"]",
+          "value": 5
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label=\"Linear scale style\"]",
+          "value": "ruler"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Linear scale font size\"]",
+          "value": 20
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Label Font Size\"]",
+          "value": 18
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Legend swatch size\"]",
+          "value": 20
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Legend font size\"]",
+          "value": 20
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Plot Title\"]",
+          "value": "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp."
+        },
+        {
+          "type": "evaluate",
+          "script": "document.querySelectorAll('summary[aria-label=\"Name / Species style\"], summary[aria-label=\"Subtitle style\"], summary[aria-label=\"Accession style\"], summary[aria-label=\"Length / Coordinates style\"]').forEach((summary) => { summary.closest('details').open = true; });"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Name / Species style size\"]",
+          "value": 20
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Name / Species bold weight\"]"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Subtitle style size\"]",
+          "value": 20
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Accession style size\"]",
+          "value": 20
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Accession definition line fill value\"]",
+          "value": "#7b7c7d"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Length / Coordinates style size\"]",
+          "value": 20
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Length / Coordinates definition line fill value\"]",
+          "value": "#7b7c7d"
+        },
+        {
+          "type": "generate"
+        }
+      ],
+      "operations": [
+        {
+          "dataDependent": true,
+          "title": "Arrow shaft width",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-10-01-arrow-shaft-width.webp",
+            "alt": "Features card Arrow Geometry controls with Head Length Ratio left at Auto and Shaft Width Ratio set to 0.6.",
+            "caption": "Enter 0.6 in Arrow Geometry › Shaft Width Ratio; leave Head Length Ratio at Auto."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
+            "openDetails": [
+              "Features"
+            ],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const input = document.querySelector('input[aria-label=\"Arrow shaft width ratio\"]'); const box = input?.closest('.rounded'); if (!input || !box || !box.textContent.includes('Arrow Geometry')) throw new Error('Arrow Geometry controls were not found.'); box.dataset.capture = 'bgc-arrow-geometry'; box.scrollIntoView({ block: 'center' });"
+              }
+            ],
+            "selector": "[data-capture='bgc-arrow-geometry']",
+            "highlightSelector": "input[aria-label='Arrow shaft width ratio']",
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "linear",
               "adv.arrow_shaft_width_ratio": 0.6
+            },
+            "visibleText": [
+              "Arrow Geometry",
+              "Head Length Ratio",
+              "Shaft Width Ratio"
+            ],
+            "visibleControls": [
+              {
+                "selector": "input[aria-label='Arrow shaft width ratio']",
+                "value": "0.6"
+              }
+            ]
+          }
+        },
+        {
+          "dataDependent": true,
+          "title": "Scale style",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-10-02-scale-style-ruler.webp",
+            "alt": "Axis and Scale card with Show Coordinate Scale selected and the Scale Style menu open on Ruler.",
+            "caption": "Keep Show Coordinate Scale selected and choose Ruler (Ticks) for Scale Style."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 145,
+              "right": 24,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Ruler (Ticks)",
+              "options": [
+                "Bar (Simple)",
+                "Ruler (Ticks)"
+              ],
+              "label": "Scale Style",
+              "selector": "select[aria-label='Linear scale style']"
+            },
+            "openDetails": [
+              "Axis & Scale"
+            ],
+            "assertAppState": {
+              "mode": "linear",
+              "form.show_scale": true,
+              "form.scale_style": "ruler"
+            },
+            "visibleControls": [
+              {
+                "label": "Show Coordinate Scale",
+                "checked": true
+              },
+              {
+                "selector": "select[aria-label='Linear scale style']",
+                "value": "Ruler (Ticks)"
+              }
+            ]
+          }
+        },
+        {
+          "dataDependent": true,
+          "title": "Plot title",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-10-03-plot-title.webp",
+            "alt": "Plot Title controls with the Streptomyces title and Bottom position.",
+            "caption": "Type the plot title, including the literal <i>Streptomyces</i> markup; keep Position at Bottom."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
+            "openDetails": [
+              "Titles & Record Labels"
+            ],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('summary')?.textContent?.includes('Titles & Record Labels')); const section = card?.querySelector('section[aria-labelledby=\"plot-title-settings-heading\"]'); if (!section) throw new Error('BGC title controls not found.'); section.setAttribute('data-capture', 'bgc-title-controls'); section.scrollIntoView({ block: 'center' });"
+              }
+            ],
+            "clipSelectors": [
+              "[data-capture='bgc-title-controls']"
+            ],
+            "cropPadding": {
+              "top": 16,
+              "right": 16,
+              "bottom": 16,
+              "left": 16
+            },
+            "assertAppState": {
+              "mode": "linear",
+              "form.plot_title": "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp."
+            },
+            "visibleControls": [
+              {
+                "selector": "input[aria-label='Plot Title']",
+                "value": "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp."
+              }
+            ]
+          }
+        },
+        {
+          "title": "Finished figure",
+          "dataDependent": true,
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-10-04-preview-final.webp",
+            "alt": "Finished og_6-aligned comparison of the five aminoglycoside clusters with narrow arrow shafts, one row of arrows per cluster, gene_kind colors, rotated labels on BGC0000708, a ruler, a bottom legend, and the plot title.",
+            "caption": "The finished figure, the same as the Gallery image."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {
+              "width": 1600,
+              "height": 1000
+            },
+            "replayThrough": 10,
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; ['.preview-feature-search', '.preview-controls', '.drawer-toggle'].forEach((selector) => document.querySelector(selector)?.style.setProperty('display', 'none', 'important')); const content = String(app?.results?.[0]?.content || ''); if (!(content.includes('Core biosynthetic genes') && content.includes('livE'))) throw new Error('The BGC preview is not in the expected tutorial state.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('The BGC preview SVG was not found.'); const width = 1100; const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture', 'bgc-preview');"
+              },
+              {
+                "type": "wait",
+                "ms": 300
+              }
+            ],
+            "selector": "[data-capture='bgc-preview']",
+            "cropPadding": {
+              "top": 12,
+              "right": 12,
+              "bottom": 12,
+              "left": 12
+            },
+            "assertAppState": {
+              "mode": "linear",
+              "linearSeqs.length": 5,
+              "adv.arrow_shaft_width_ratio": 0.6,
+              "form.separate_strands": false,
+              "form.scale_style": "ruler"
             },
             "visibleText": [
               "Streptomyces lividus",
               "Core biosynthetic genes",
               "Pairwise match identity"
+            ]
+          },
+          "body": "The finished figure matches the Gallery image. The table lists every value that differs from a fresh Linear session, in the order the steps set them.",
+          "table": {
+            "columns": [
+              "Setting",
+              "Value"
+            ],
+            "rows": [
+              [
+                "Mode",
+                "Linear"
+              ],
+              [
+                "Files 1 to 5",
+                "BGC0000708, BGC0000709, BGC0000711, BGC0000712, BGC0000713 (.gbk), File defaults as in steps 2 and 3"
+              ],
+              [
+                "File 5 › Reverse complement",
+                "On"
+              ],
+              [
+                "Comparison",
+                "Run LOSAT; LOSATP; Similarity groups"
+              ],
+              [
+                "Result filters",
+                "Bitscore 50, E-value 1e-2, Minimum identity 30, Minimum length 0"
+              ],
+              [
+                "Alignment",
+                "og_6: reference neoU (BGC0000709); BGC0000708 anchor livU; Arrow direction Keep as is"
+              ],
+              [
+                "Palette; Default CDS color",
+                "orange; #dddddd"
+              ],
+              [
+                "SPECIFIC RULES (-t)",
+                "the four CDS gene_kind rules of step 8"
+              ],
+              [
+                "Labels",
+                "First Record Only; CDS qualifier priority gene; Above Feature; rotation 45; font size 18"
+              ],
+              [
+                "Features › Arrow Geometry › Shaft Width Ratio",
+                "0.6"
+              ],
+              [
+                "Features › Feature Height",
+                "75"
+              ],
+              [
+                "Features › Block Stroke Color",
+                "Color, #262626"
+              ],
+              [
+                "Features › Block Stroke Width",
+                "2"
+              ],
+              [
+                "Features › Line Stroke Width",
+                "2"
+              ],
+              [
+                "Layout › Separate Strands",
+                "Off"
+              ],
+              [
+                "Axis & Scale › Axis Stroke Color",
+                "Color, #808080"
+              ],
+              [
+                "Axis & Scale › Axis Stroke Width",
+                "5"
+              ],
+              [
+                "Axis & Scale › Scale Style",
+                "Ruler (Ticks)"
+              ],
+              [
+                "Axis & Scale › Scale Font Size (linked to Ruler Label Font Size)",
+                "20"
+              ],
+              [
+                "Labels › Label Font Size",
+                "18"
+              ],
+              [
+                "Legend › Swatch size",
+                "20"
+              ],
+              [
+                "Legend › Font size",
+                "20"
+              ],
+              [
+                "Track Layout; Legend position; Lock Definition Column",
+                "Middle; Bottom; On (defaults)"
+              ],
+              [
+                "Titles & Record Labels › Plot Title",
+                "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp."
+              ],
+              [
+                "Definition line: Name / Species",
+                "20; Bold"
+              ],
+              [
+                "Definition line: Subtitle",
+                "20"
+              ],
+              [
+                "Definition line: Accession",
+                "20; #7b7c7d"
+              ],
+              [
+                "Definition line: Length / Coordinates",
+                "20; #7b7c7d"
+              ]
             ]
           }
         }
@@ -1028,9 +2078,9 @@
       "operations": [
         {
           "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-09-01-orthogroup-popup.webp",
-            "alt": "Selected og_18 pairwise ribbon beside the similarity-group popup for livA.",
-            "caption": "Click the og_18 ribbon; the popup shows livA, og_18, 6 genes in 5 records, and the member table."
+            "src": "./media/BGC0000708-BGC0000713/manual-11-01-orthogroup-popup.webp",
+            "alt": "Selected og_18 pairwise ribbon beside its similarity-group popup.",
+            "caption": "Click the og_18 ribbon; the popup shows og_18, 6 genes in 5 records, and the member table."
           },
           "capture": {
             "source": "webapp",
@@ -1058,7 +2108,7 @@
               },
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.pairwise-match-popup'); const target = document.querySelector(\"path[data-gbdraw-pairwise-match-id='comparison3_match1']\"); const text = popup?.textContent || ''; const rect = target?.getBoundingClientRect(); if (!text.includes('og_18') || !text.includes('livA') || !rect) throw new Error('Expected og_18 popup content was not restored.'); const app = window.__GBDRAW_APP__; if (app?.clickedPairwiseMatchPos) { app.clickedPairwiseMatchPos.x = Math.round(rect.right + 24); app.clickedPairwiseMatchPos.y = 206; }"
+                "script": "const popup = document.querySelector('.pairwise-match-popup'); const target = document.querySelector(\"path[data-gbdraw-pairwise-match-id='comparison3_match1']\"); const text = popup?.textContent || ''; const rect = target?.getBoundingClientRect(); if (!text.includes('og_18') || !rect) throw new Error('Expected og_18 popup content was not restored.'); const app = window.__GBDRAW_APP__; if (app?.clickedPairwiseMatchPos) { app.clickedPairwiseMatchPos.x = Math.round(rect.right + 24); app.clickedPairwiseMatchPos.y = 206; }"
               },
               {
                 "type": "wait",
@@ -1073,7 +2123,11 @@
                 "script": "const popup = document.querySelector('.pairwise-match-popup'); const header = popup?.children[0]; const rows = Array.from(popup?.querySelectorAll('tbody tr') || []); const firstMember = rows[0]?.querySelector('td'); const lastMember = rows[rows.length - 1]?.querySelector('td'); if (!popup || !header || rows.length !== 6 || !String(firstMember?.textContent || '').includes('BGC0000708')) throw new Error('Compact og_18 member table not found.'); header.setAttribute('data-capture', 'og18-popup-header'); lastMember.setAttribute('data-capture', 'og18-last-member');"
               }
             ],
-            "clipSelectors": ["path[data-gbdraw-pairwise-match-id='comparison3_match1']", "[data-capture='og18-popup-header']", "[data-capture='og18-last-member']"],
+            "clipSelectors": [
+              "path[data-gbdraw-pairwise-match-id='comparison3_match1']",
+              "[data-capture='og18-popup-header']",
+              "[data-capture='og18-last-member']"
+            ],
             "cropPadding": {
               "top": 24,
               "right": 24,
@@ -1082,7 +2136,6 @@
             },
             "waitForSelector": ".pairwise-match-popup",
             "visibleText": [
-              "livA",
               "og_18",
               "6 genes in 5 records",
               "BGC0000708",
@@ -1099,7 +2152,7 @@
       "operations": [
         {
           "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-10-01-feature-popup.webp",
+            "src": "./media/BGC0000708-BGC0000713/manual-12-01-feature-popup.webp",
             "alt": "Selected livE CDS beside the Qualifiers tab showing gene and gene_kind metadata.",
             "caption": "For livE, gene supplies the label and gene_kind=biosynthetic explains the core biosynthetic color."
           },
@@ -1152,7 +2205,13 @@
                 "script": "const popup = document.querySelector('.feature-popup'); const leaf = (key) => Array.from(popup?.querySelectorAll('*') || []).find((node) => node.children.length === 0 && node.textContent?.trim() === key); const geneRow = leaf('gene')?.closest('.border-b'); const geneKindRow = leaf('gene_kind')?.closest('.border-b'); if (!popup || !geneRow || !geneKindRow) throw new Error('Compact qualifier rows not found.'); popup.children[0]?.setAttribute('data-capture', 'qualifier-popup-header'); popup.children[1]?.setAttribute('data-capture', 'qualifier-popup-tabs'); geneRow.setAttribute('data-capture', 'qualifier-gene-row'); geneKindRow.setAttribute('data-capture', 'qualifier-gene-kind-row'); document.activeElement?.blur();"
               }
             ],
-            "clipSelectors": ["[data-gbdraw-feature-id='fed46a3a6_record_1']", "[data-capture='qualifier-popup-header']", "[data-capture='qualifier-popup-tabs']", "[data-capture='qualifier-gene-row']", "[data-capture='qualifier-gene-kind-row']"],
+            "clipSelectors": [
+              "[data-gbdraw-feature-id='fed46a3a6_record_1']",
+              "[data-capture='qualifier-popup-header']",
+              "[data-capture='qualifier-popup-tabs']",
+              "[data-capture='qualifier-gene-row']",
+              "[data-capture='qualifier-gene-kind-row']"
+            ],
             "highlightSelector": "[data-gbdraw-feature-id='fed46a3a6_record_1']",
             "cropPadding": {
               "top": 24,
@@ -1213,7 +2272,7 @@
   "troubleshooting": [
     {
       "title": "The rows do not line up like the Gallery figure",
-      "body": "Check the input order, the reverse-complement setting for BGC0000713, and the alignment to gbdraw group og_6: neoU of BGC0000709 is the exact reference, and BGC0000708 keeps livU (CAG38700.1), not the transport protein CAG38692.1."
+      "body": "Check the input order, Reverse complement on BGC0000713 (File 5), and the alignment on gbdraw group og_6: neoU of BGC0000709 is the reference, and BGC0000708 keeps livU (CAG38700.1), not the transport protein CAG38692.1."
     },
     {
       "title": "Core genes are not red",
@@ -1229,7 +2288,7 @@
     },
     {
       "title": "The generated diagram differs from the Gallery image",
-      "body": "Check Similarity groups, identity, bit score, E-value, and minimum-length thresholds, track layout, legend position, label rotation, color rules, and record orientation."
+      "body": "Compare your settings with the Full settings table in step 10: LOSATP mode, Minimum identity, record orientation, alignment, color rules, labels, Separate Strands, and the finishing values."
     }
   ],
   "related": [

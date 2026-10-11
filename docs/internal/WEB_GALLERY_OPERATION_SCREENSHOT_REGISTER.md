@@ -1,23 +1,34 @@
 # Web Gallery operation screenshot register
 
-Last updated: 2026-10-10
+Last updated: 2026-10-11
 
 This register records task-specific decisions for Gallery operation media.
 Capture metadata remains the executable source of truth in each tutorial JSON.
 
-## BGC record orientation
+## BGC progressive tutorial (Gallery revision 2026-10-11)
 
-MIBiG stores BGC0000713 on the opposite strand from the other four clusters.
-Since 2026-07-15 the BGC Gallery Session stores a reverse-complemented copy of
-that file instead of the original file with **Reverse complement** on, so a
-reader who starts from the MIBiG files still needs the step. The recipe reads
-the records first, so the **Record** select shows its loaded options rather
-than **Loading records...**.
+The BGC Gallery Session is rebuilt from the five MIBiG files in
+`gbdraw/web/tutorial-data/aminoglycoside-bgc-five` through the Web app (D-08):
+BGC0000713 is the original file with record-level **Reverse complement** on, so
+**Reset Settings** returns to the reader's starting state. The tutorial starts
+from the Web defaults and shows the preview after each Generate (D-01): every
+manual step carries `replay`, and each preview capture uses `replayThrough` of
+its own step. The route that builds the Session runs the same `replay` actions
+(task folder `scripts/b_route.py`). Before each upload it gives the empty slot
+the key `record-<n>`, the key CLI-written Sessions use, instead of the random
+`linear-seq-<uuid>` key; nothing refers to the key yet, so the LOSAT cache and
+protein identities are built from it. Renaming keys after the fact breaks
+those hashes. Earlier BGC media were renamed to their new step numbers or
+deleted.
 
 | Tutorial | Operation media | Decision | Required capture state | Status |
 | --- | --- | --- | --- | --- |
-| `BGC0000708-BGC0000713` | `manual-04-02-reverse-bgc0000713.webp` | Recapture | Exact BGC Session; the BGC0000713 file card from its file name to **Region (optional)**, with **Record options** open and **Reverse complement** checked | Captured at DSF 3; accepted |
-| `BGC0000708-BGC0000713` | `manual-04-04-pairwise-style-curve.webp` | Delete | None; no step referenced it | Deleted |
+| `BGC0000708-BGC0000713` | `manual-02-01-file1-defaults.webp`, `manual-03-01-file5-defaults.webp` | Add (replace `manual-02-01-record-text-row.webp`) | Replay through step 2 or 3; File 1 (or File 5 with **Add sequence**) from its header to **File defaults** | Captured at DSF 3; accepted |
+| `BGC0000708-BGC0000713` | `manual-04-01-preview-defaults.webp`, `manual-05-03-preview-losatp.webp`, `manual-06-02-preview-reversed.webp`, `manual-07-04-preview-aligned.webp`, `manual-08-02-preview-colors.webp`, `manual-09-02-preview-labels.webp`, `manual-10-04-preview-final.webp` | Add (replace `manual-08-04-aligned-preview.webp`) | Replay through the step; the whole SVG at 1100 px, preview controls hidden; state asserted per stage | Captured at DSF 3; accepted |
+| `BGC0000708-BGC0000713` | `manual-05-01-comparison-settings.webp` | Replace `manual-03-01-open-pairwise.webp` | Final Session; **Settings** open; LOSATP, Similarity groups, Minimum identity 30 | Captured at DSF 3; accepted |
+| `BGC0000708-BGC0000713` | `manual-07-01-align-og6.webp`, `manual-07-02-anchor-candidates.webp`, `manual-07-03-alignment-direction.webp` | Recapture (renamed from `manual-08-0x`) | Replay through step 6 (reversed, not yet aligned, default colors) | Captured at DSF 3; accepted |
+| `BGC0000708-BGC0000713` | `manual-08-01-specific-rules-all.webp`, `manual-09-01-show-labels-first.webp`, `manual-10-01-arrow-shaft-width.webp`, `manual-10-02-scale-style-ruler.webp`, `manual-10-03-plot-title.webp`, `manual-11-01-orthogroup-popup.webp`, `manual-12-01-feature-popup.webp` | Recapture (renumbered) | Final Session. The og_18 popup now shows the computed group name: the old Session carried a rename of og_18 to livA that no step taught | Captured at DSF 3; accepted |
+| `BGC0000708-BGC0000713` | `manual-03-02-runtime-reproducibility.webp`, `manual-03-03-first-comparison-boundary.webp`, `manual-03-04-first-raw-result.webp`, `manual-04-03-track-layout-middle.webp`, `manual-06-02-record-labels.webp` | Delete | None: the progressive tutorial shows only controls the reader changes (Track Layout Middle and the record-label visibility are defaults) | Deleted |
 
 ## BGC og_6 alignment and arrow shaft width (Gallery revision 2026-10-10)
 
