@@ -637,32 +637,71 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   assert.equal(rerenders, first + 2, 'a rename of part of the row asks Python');
 });
 
-// OV-445: Add commits after its rules are prepared, so a second Add can start
-// while the first is pending (a double click, or Add on a row filled during
-// the first commit). Each Add keeps its rule and is its own History step
-// (R11): the second builds on the rules the first committed.
+// OV-445, OV-443: a rule commit runs once its rules are prepared, and a newer
+// commit supersedes a pending one. An Add is never dropped that way: a second
+// Add, or an edit made while an Add is pending, waits for it and applies to
+// the table that holds its rule; an Add waits for a pending edit the same way.
+// Each write is its own History step (R11).
+const queuedRuleWrites = () => {
+  const s=setup();
+  s.state.errorLog={value:null};
+  s.state.manualSpecificRules.push(
+    {feat:'CDS',qual:'gene',val:'b',color:'#445566',cap:''},
+    {feat:'CDS',qual:'gene',val:'zz',color:'#778899',cap:''});
+  // Holds the first commit's Legend preparation; later commits run at once.
+  let release, started;
+  const ready=new Promise(resolve=>{started=resolve;});
+  s.setLegendPreparation(()=>new Promise(resolve=>{release=resolve;started();}));
+  const held=async(pending)=>{ await ready; s.setLegendPreparation(async()=>{}); return [pending,()=>release()]; };
+  const table=()=>s.state.manualSpecificRules.map(rule=>`${rule.val} ${rule.color} ${rule.cap}`);
+  return {s,held,table};
+};
+const withDocument=async(run)=>{
+  const previousDocument=globalThis.document;
+  globalThis.document={querySelector:()=>null};
+  try { await run(); } finally { globalThis.document=previousDocument; }
+};
+const added='a #112233 Shared';
+const ruleEdits={
+  color:{run:s=>s.actions.setSpecificRuleField(0,'color','#000000'),label:'Edit specific color rule',
+    table:['b #000000 ','zz #778899 ']},
+  caption:{run:s=>s.actions.setSpecificRuleField(0,'cap','Edited'),label:'Edit specific color rule',
+    table:['b #445566 Edited','zz #778899 ']},
+  pattern:{run:s=>s.actions.setSpecificRuleField(0,'val','b|c'),label:'Edit specific color rule',
+    table:['b|c #445566 ','zz #778899 ']},
+  move:{run:s=>s.actions.moveSpecificRuleUp(1),label:'Move specific color rule',table:['zz #778899 ','b #445566 ']},
+  remove:{run:s=>s.actions.removeSpecificRule(0),label:'Remove specific color rule',table:['zz #778899 ']}
+};
 for (const second of ['a', 'b']) {
-  test(`a second Add while the first is pending adds both rules, one History step each (OV-445, pattern ${second})`, async () => {
-    const s=setup();
-    s.state.errorLog={value:null};
-    const previousDocument=globalThis.document;
-    globalThis.document={querySelector:()=>null};
-    try {
-      let release, started;
-      const ready=new Promise(resolve=>{started=resolve;});
-      s.setLegendPreparation(()=>new Promise(resolve=>{release=resolve;started();}));
-      const first=s.actions.addSpecificRule();
-      await ready;
-      s.setLegendPreparation(async()=>{});
-      s.state.newSpecRule.val=second;
-      const next=s.actions.addSpecificRule();
-      release();
-      assert.deepEqual(await Promise.all([first,next]),[true,true]);
-      assert.deepEqual(s.state.manualSpecificRules.map(rule=>rule.val),['a',second]);
-      assert.deepEqual(s.transactions,['Add specific color rule','Add specific color rule']);
-      assert.equal(s.state.newSpecRule.val,'','the pattern of the last Add is cleared');
-    } finally {
-      globalThis.document=previousDocument;
-    }
-  });
+  test(`a second Add while the first is pending adds both rules, one History step each (OV-445, pattern ${second})`, () => withDocument(async () => {
+    const {s,held,table}=queuedRuleWrites();
+    const [first,release]=await held(s.actions.addSpecificRule());
+    s.state.newSpecRule.val=second;
+    const next=s.actions.addSpecificRule();
+    release();
+    assert.deepEqual(await Promise.all([first,next]),[true,true]);
+    assert.deepEqual(table(),['b #445566 ','zz #778899 ',added,`${second} #112233 Shared`]);
+    assert.deepEqual(s.transactions,['Add specific color rule','Add specific color rule']);
+    assert.equal(s.state.newSpecRule.val,'','the pattern of the last Add is cleared');
+  }));
+}
+for (const [kind, edit] of Object.entries(ruleEdits)) {
+  test(`a ${kind} edit made while an Add is pending applies after it, to the table with its rule (OV-443)`, () => withDocument(async () => {
+    const {s,held,table}=queuedRuleWrites();
+    const [add,release]=await held(s.actions.addSpecificRule());
+    const edited=edit.run(s);
+    release();
+    assert.deepEqual(await Promise.all([add,edited]),[true,true]);
+    assert.deepEqual(table(),[...edit.table,added]);
+    assert.deepEqual(s.transactions,['Add specific color rule',edit.label]);
+  }));
+  test(`an Add made while a ${kind} edit is pending applies after it (OV-443)`, () => withDocument(async () => {
+    const {s,held,table}=queuedRuleWrites();
+    const [edited,release]=await held(edit.run(s));
+    const add=s.actions.addSpecificRule();
+    release();
+    assert.deepEqual(await Promise.all([edited,add]),[true,true]);
+    assert.deepEqual(table(),[...edit.table,added]);
+    assert.deepEqual(s.transactions,[edit.label,'Add specific color rule']);
+  }));
 }

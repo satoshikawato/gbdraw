@@ -109,7 +109,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     && Boolean(ruleFailure.value.input?.isConnected));
   const retrySpecificRuleFailure = () => {
     const busy = state.sessionOperationAvailability?.();
-    return busy || (canRetrySpecificRuleFailure.value ? ruleFailure.value.retry() : false);
+    return busy || afterPendingAdd(() => (canRetrySpecificRuleFailure.value ? ruleFailure.value.retry() : false));
   };
   const editSpecificRuleFailure = () => {
     if (canEditSpecificRuleFailure.value) ruleFailure.value.input.focus();
@@ -268,6 +268,21 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       }
     }
   };
+  // OV-445, OV-443: a newer rule commit supersedes a pending one, which must
+  // never drop an Add. An Add waits for the rule commits in flight, and a rule
+  // edit of this owner made while an Add is pending waits for that Add
+  // (`afterPendingAdd`); each reads the rule table when its turn comes. Edits
+  // made with no Add pending still supersede each other.
+  /** @type {Set<Promise<unknown>>} */
+  const commitsInFlight = new Set();
+  let addsPending = 0;
+  /** @type {Promise<unknown>} */
+  let pendingAdd = Promise.resolve();
+  /**
+   * @template T
+   * @param {() => T} write
+   */
+  const afterPendingAdd = (write) => (addsPending ? pendingAdd.then(write) : write());
   /**
    * `drawing` is the drawing of the action (default: the shown mode's); an
    * action that awaits before it commits passes the drawing it started on.
@@ -278,7 +293,19 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
    * @param {string} [label]
    * @param {CommitSpecificRulesOptions} [options]
    */
-  const commitSpecificRules = async (rules, label = 'Change specific color rules', options = {}) => {
+  const commitSpecificRules = (rules, label = 'Change specific color rules', options = {}) => {
+    const commit = runSpecificRuleCommit(rules, label, options);
+    const settle = () => commitsInFlight.delete(commit);
+    commitsInFlight.add(commit);
+    commit.then(settle, settle);
+    return commit;
+  };
+  /**
+   * @param {Parameters<typeof commitOnce>[1]} rules
+   * @param {string} label
+   * @param {CommitSpecificRulesOptions} options
+   */
+  const runSpecificRuleCommit = async (rules, label, options) => {
     const { drawing = state.activeDrawing(), ...commitOptions } = options;
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
@@ -447,7 +474,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   const retrySpecificRulePattern = (row) => {
     const drawing = state.activeDrawing();
     const draft = patternDrafts.get(row);
-    return draft && !draft.pending ? applySpecificRulePattern(drawing, row, draft.text) : false;
+    return draft && !draft.pending ? afterPendingAdd(() => applySpecificRulePattern(drawing, row, draft.text)) : false;
   };
   /** @param {HTMLInputElement | null} [input] */
   const setSpecificRuleField = (index, field, value, input = null) => {
@@ -457,14 +484,17 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     if (!specificRuleFields.has(field)) return;
     const current = drawing.manualSpecificRules[index];
     if (!current) return;
-    if (field === 'val') return applySpecificRulePattern(drawing, current, value);
-    const nextValue = field === 'color' ? resolveColorToHex(String(value || '#000000')) : String(value ?? '');
-    const nextRule = { ...current, [field]: nextValue };
-    delete nextRule.fromFile;
-    const sourceRows = [...drawing.manualSpecificRules];
-    const rules = sourceRows.map(rule => rule === current ? nextRule : { ...rule });
-    return commitPrepared(drawing, rules, 'Edit specific color rule', () => {}, input, sourceRows)?.finally(() => {
-      if (input?.isConnected && drawing.manualSpecificRules.includes(current)) input.value = current[field] ?? '';
+    return afterPendingAdd(() => {
+      if (field === 'val') return applySpecificRulePattern(drawing, current, value);
+      if (!drawing.manualSpecificRules.includes(current)) return false;
+      const nextValue = field === 'color' ? resolveColorToHex(String(value || '#000000')) : String(value ?? '');
+      const nextRule = { ...current, [field]: nextValue };
+      delete nextRule.fromFile;
+      const sourceRows = [...drawing.manualSpecificRules];
+      const rules = sourceRows.map(rule => rule === current ? nextRule : { ...rule });
+      return commitPrepared(drawing, rules, 'Edit specific color rule', () => {}, input, sourceRows)?.finally(() => {
+        if (input?.isConnected && drawing.manualSpecificRules.includes(current)) input.value = current[field] ?? '';
+      });
     });
   };
 
@@ -472,12 +502,16 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   const moveSpecificRule = (drawing, index, offset) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const sourceRows = [...drawing.manualSpecificRules];
-    const target = index + offset;
-    if (target < 0 || target >= sourceRows.length) return;
-    const [row] = sourceRows.splice(index, 1);
-    sourceRows.splice(target, 0, row);
-    return commitPrepared(drawing, sourceRows.map(rule => ({ ...rule })), 'Move specific color rule', () => {}, null, sourceRows);
+    const row = drawing.manualSpecificRules[index];
+    return afterPendingAdd(() => {
+      const sourceRows = [...drawing.manualSpecificRules];
+      const from = sourceRows.indexOf(row);
+      const target = from + offset;
+      if (from < 0 || target < 0 || target >= sourceRows.length) return;
+      sourceRows.splice(from, 1);
+      sourceRows.splice(target, 0, row);
+      return commitPrepared(drawing, sourceRows.map(rule => ({ ...rule })), 'Move specific color rule', () => {}, null, sourceRows);
+    });
   };
 
   const downloadSpecificRulesTsv = () => {
@@ -605,12 +639,6 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     }
   };
 
-  // OV-445: an Add commits once its rules are prepared, and a newer commit
-  // supersedes a pending one. A second Add waits for the pending Add and builds
-  // on the rules it committed, so each Add keeps its rule as its own History
-  // step (R11).
-  /** @type {Promise<unknown>} */
-  let pendingAdd = Promise.resolve();
   const addSpecificRule = async () => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -641,9 +669,13 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       cap: String(newSpecRule.cap || '')
     };
     const input = document.querySelector?.('[data-new-specific-rule-pattern]');
-    const added = pendingAdd.then(() => commitPrepared(drawing, [...drawing.manualSpecificRules, rule], 'Add specific color rule', () => {
-      if (newSpecRule.val === rule.val) newSpecRule.val = '';
-    }, input));
+    addsPending += 1;
+    const added = pendingAdd
+      .then(() => Promise.allSettled([...commitsInFlight]))
+      .then(() => commitPrepared(drawing, [...drawing.manualSpecificRules, rule], 'Add specific color rule', () => {
+        if (newSpecRule.val === rule.val) newSpecRule.val = '';
+      }, input))
+      .finally(() => { addsPending -= 1; });
     pendingAdd = added.catch(() => {});
     return added;
   };
@@ -895,7 +927,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     canEditFeatureColor,
     clearAllSpecificRules: () => {
       const drawing = state.activeDrawing();
-      return commitPrepared(drawing, [], 'Clear specific color rules');
+      return afterPendingAdd(() => commitPrepared(drawing, [], 'Clear specific color rules'));
     },
     commitSpecificRules,
     followRestoredRules,
@@ -927,8 +959,11 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     runWithRuleMatches,
     removeSpecificRule: (index) => {
       const drawing = state.activeDrawing();
-      const sourceRows = drawing.manualSpecificRules.filter((_, i) => i !== index);
-      return commitPrepared(drawing, sourceRows.map(rule => ({ ...rule })), 'Remove specific color rule', () => {}, null, sourceRows);
+      const row = drawing.manualSpecificRules[index];
+      return afterPendingAdd(() => {
+        const sourceRows = drawing.manualSpecificRules.filter(rule => rule !== row);
+        return commitPrepared(drawing, sourceRows.map(rule => ({ ...rule })), 'Remove specific color rule', () => {}, null, sourceRows);
+      });
     },
     setSpecificRuleField
   };
