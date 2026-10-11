@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `38`
+- Contract revision: `39`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -520,6 +520,19 @@ Status: active Product authority
     source file. `PD-OI-019`, `PD-OI-044`, `PD-OI-070`, and `PD-OI-090` keep
     their scope and are read together with `PD-OI-091`. Session version `46`
     is unchanged; the new field is optional.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 39 changes: `PD-OI-028` gains scenario revision `3`
+  (`A / KEEP_ANCHOR_PLAN`, regrouping comparison settings) from the Product
+  Decision Owner `satoshikawato`'s replies of `2026-10-11` for OV-341 (after a
+  Result filter such as **Minimum identity** regrouped the plan's Similarity
+  Group, every later Generate was blocked with a stale-reference repair).
+  - Reply 1, selecting the recommended outcome: 「A（推奨）整列を保つ」.
+  - Reply 2, on the complete receipt recorded below: 「下書きの文面を承認する」.
+    The receipt is recorded as approved.
+  - The scenario-revision-`2` receipt keeps its full scope; scenario revision
+    `3` adds the regrouping outcome and retires nothing.
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
@@ -1616,12 +1629,23 @@ Scenario revision `5` narrows the `customLayoutRule` below in the same way: a Fi
 ### PD-OI-028: Orientation-independent active alignment plan
 
 - Concern key: `diagram-generation.similarity-alignment.plan-lifecycle`
-- Scenario revision: `2`
-- Supersedes: `PD-OI-028`, scenario revision `1` (`A / PERSISTED_ACTIVE_ALIGNMENT_PLAN`).
+- Scenario revision: `3`
+- Supersedes: `PD-OI-028`, scenario revision `2`
+  (`A / ORIENTATION_INDEPENDENT_ACTIVE_PLAN`), only by adding the scenario-3
+  outcome for regrouping comparison settings; every scenario-2 term stays in
+  force. Scenario revision `2` superseded scenario revision `1`
+  (`A / PERSISTED_ACTIVE_ALIGNMENT_PLAN`).
 - Status: `ACCEPTED`
-- Selected outcome: `A / ORIENTATION_INDEPENDENT_ACTIVE_PLAN`
-- Normative outcome: exactly the approved `PRODUCT_DECISION` receipt below.
-- Decision source: The complete five `PRODUCT_DECISION` texts for the
+- Selected outcomes: `A / ORIENTATION_INDEPENDENT_ACTIVE_PLAN` (scenario
+  revision `2`) and `A / KEEP_ANCHOR_PLAN` (scenario revision `3`)
+- Normative outcome: exactly the two approved `PRODUCT_DECISION` receipts
+  below, read together.
+- Scenario of revision `3`: an active plan exists; the user changes a
+  Generate-time comparison setting (Bitscore, E-value, Minimum identity,
+  Minimum length, or a LOSATP grouping setting) so that a Generate regroups
+  and the plan's reference or a target is no longer a unique member of the
+  plan's Similarity Group; every anchor feature still exists in its record.
+- Decision source (scenario revision `2`): The complete five `PRODUCT_DECISION` texts for the
   record-owned orientation follow-up to issue `#586`, explicitly approved
   as written by `satoshikawato` on `2026-09-26`, with this concern's
   receipt reproduced below. This serialization adds no terms to the
@@ -1639,6 +1663,23 @@ Scenario revision `5` narrows the `customLayoutRule` below in the same way: a Fi
   "acceptedResidualRisk": "After a manual orientation change, the reversed record moves horizontally on the next generation so that its anchor stays aligned. A user who wanted the previous position uses Undo or Reset Align.",
   "owner": "satoshikawato",
   "decisionDate": "2026-09-26"
+}
+```
+
+Scenario revision `3` receipt, approved by `satoshikawato` on `2026-10-11`
+(OV-341):
+
+```json
+{
+  "concern": "diagram-generation.similarity-alignment.plan-lifecycle",
+  "scenarioRevision": 3,
+  "choice": "A / KEEP_ANCHOR_PLAN",
+  "rationale": "An alignment plan identifies anchor features, not groups (PD-OI-028); regrouping alone does not make it stale.",
+  "mustPreserve": "no anchor substitution; repair still blocks when an anchor feature is gone; a no-edit Generate after a successful Generate succeeds.",
+  "mayRetire": "none",
+  "acceptedResidualRisk": "the drawer's Active plan may name a group that no longer lists the reference until the user aligns again.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-11"
 }
 ```
 

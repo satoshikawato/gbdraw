@@ -2211,7 +2211,10 @@ def test_refresh_resolves_web_default_colors_over_their_palette() -> None:
     # The Web stores the Default colors rows that differ from the palette; the
     # CLI replay stores them resolved over it, and `finalize` compares the two
     # (OV-375). A resolved table is left as it is.
-    import tomllib
+    if sys.version_info >= (3, 11):
+        import tomllib
+    else:
+        import tomli as tomllib
 
     rows = "CDS\t#d3d3d3\nskew_low\t#ad72e3\n"
     resource = {

@@ -790,6 +790,9 @@ Generate aligns the same anchors in the new direction. Source replacement,
 crop, selector changes, manual record drag, and comparison changes (a pair's
 source or file, the program, or the mode) clear it with a visible reason.
 Choosing **Upload BLAST TSV** for a pair keeps it until you choose the file.
+Result filters and other Generate-time comparison settings keep it, and a
+Similarity Group that a new setting regroups does not make it stale: the plan
+keeps aligning the same anchor features while they exist in their records.
 An Undo that restores the plan also removes the "Alignment cleared" notice.
 A stale reference requires **Reselect** or **Clear**; a stale target requires
 **Select** or **Skip**. Pending or failed repair keeps the last successful Result.
