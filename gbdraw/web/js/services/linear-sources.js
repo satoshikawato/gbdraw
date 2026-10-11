@@ -147,6 +147,28 @@ export const setLinearSourceDefaultSubtitle = (source, value) => {
   }
 };
 
+/** @typedef {{ sequence: Partial<LinearSeq>, index: number }} LinearSourceRecord An entry of a File's `records`: a row and its position in the row list. */
+/**
+ * The name fields a Linear File card shows.
+ * @typedef {object} LinearFileCardNames
+ * @property {boolean} fileNames Whether the File-level names block shows.
+ * @property {LinearSourceRecord | null} cardRecord The record whose own name
+ *   fields sit on the card; null when each record keeps them in its Record options.
+ */
+// The one decision of which name fields a File card shows. A File with one
+// row shows that record's own names on the card, and the File-level block only
+// while it holds a value, so no stored value is hidden; a File with more rows
+// shows the File-level block and each record's names in its Record options.
+// It reads the rows the File has, not whether its records were inspected.
+/** @param {{ records: readonly LinearSourceRecord[] }} source @returns {LinearFileCardNames} */
+export const linearFileCardNames = (source) => {
+  const cardRecord = source.records.length === 1 ? source.records[0] : null;
+  return {
+    fileNames: !cardRecord || Boolean(getLinearSourceDefaultDefinition(source) || getLinearSourceDefaultSubtitle(source)),
+    cardRecord
+  };
+};
+
 // A record draws its own Definition, else the File default the user entered,
 // else the definition inferred from that record (D-12).
 export const resolveLinearRecordEffectiveDefinition = (sequence, source = null) => {
@@ -161,7 +183,6 @@ export const resolveLinearRecordEffectiveDefinition = (sequence, source = null) 
 // accession or file name. A File that supplies several records adds each
 // record's accession, so two chromosomes of one genome stay apart. The
 // diagram's own record headings are not changed.
-/** @typedef {{ sequence: Partial<LinearSeq> }} LinearSourceRecord An entry of a File's `records`. */
 /**
  * @param {readonly Partial<LinearSeq>[]} sequences
  * @returns {Map<string, { definition: string, name: string, accession: string, label: string }>}

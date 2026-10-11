@@ -76,6 +76,7 @@ import { cloneJsonData } from '../services/json-clone.js';
 import {
   groupLinearSourceRecords,
   linearRecordNames,
+  linearFileCardNames,
   isPristineLinearSource,
   linearSourceHasPrimaryInput,
   linearSourceDepthStatus,
@@ -6167,6 +6168,7 @@ export const createAppSetup = () => {
     linearSourceMoveBlockedReason,
     canMoveLinearSource,
     moveLinearSource,
+    linearFileCardNames,
     getLinearSourceDefaultDefinition,
     setLinearSourceDefaultDefinition,
     getLinearSourceDefaultSubtitle,

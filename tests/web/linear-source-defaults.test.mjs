@@ -22,6 +22,7 @@ const {
   getLinearSourceDefaultSubtitle,
   setLinearSourceDefaultSubtitle,
   inferredDefinitionForRecord,
+  linearFileCardNames,
   resolveLinearRecordEffectiveDefinition,
   resolveLinearRecordEffectiveSubtitle
 } = await import('../../gbdraw/web/js/services/linear-sources.js');
@@ -254,6 +255,66 @@ test('an explicit override equal to the file default survives a save and reload'
   // default when the user later edits it.
   assert.equal(projected.files.linearSeqs[1].definition, shared);
   assert.equal(projected.files.linearSeqs[1].record_subtitle, 'Chromosome 1');
+});
+
+// Which name fields a File card shows is one decision of the File's records
+// and stored File values (web.linear.file-default-definition).
+test('a one-record File shows its record names on the card and no empty File names block', () => {
+  const record = createLinearSeq({ uid: 'only', gb: { name: 'one.gb' }, inferred_definition: 'Inferred' });
+  const [source] = groupLinearSourceRecords([record]);
+  const names = linearFileCardNames(source);
+  assert.equal(names.fileNames, false);
+  assert.equal(names.cardRecord, source.records[0], 'the record entry itself, found by identity');
+  assert.equal(names.cardRecord.sequence, record);
+});
+
+test('a one-record File keeps the File names block while it holds a value', () => {
+  for (const stored of [{ file_definition: 'File organism' }, { file_subtitle: 'File subtitle' }]) {
+    const record = createLinearSeq({ uid: 'only', gb: { name: 'one.gb' }, ...stored });
+    const [source] = groupLinearSourceRecords([record]);
+    const names = linearFileCardNames(source);
+    assert.equal(names.fileNames, true, JSON.stringify(stored));
+    assert.equal(names.cardRecord?.sequence, record, 'the record names stay on the card');
+    // Clearing the stored value hides the block again.
+    setLinearSourceDefaultDefinition(source, '');
+    setLinearSourceDefaultSubtitle(source, '');
+    assert.equal(linearFileCardNames(source).fileNames, false);
+  }
+});
+
+test('a File with two or more records keeps the File names block and per-record names', () => {
+  const file = { name: 'two.gb' };
+  const records = [createLinearSeq({ uid: 'a', gb: file }), createLinearSeq({ uid: 'b', gb: file })];
+  const [source] = groupLinearSourceRecords(records);
+  assert.deepEqual(linearFileCardNames(source), { fileNames: true, cardRecord: null });
+  setLinearSourceDefaultDefinition(source, 'Shared');
+  assert.deepEqual(linearFileCardNames(source), { fileNames: true, cardRecord: null });
+});
+
+test('a File card without an inspected or uploaded file follows the rows it has', () => {
+  // No file and no discovery state is read: one row is the one-record card.
+  const [empty] = groupLinearSourceRecords([createLinearSeq({ uid: 'empty' })]);
+  assert.equal(linearFileCardNames(empty).fileNames, false);
+  assert.equal(linearFileCardNames(empty).cardRecord, empty.records[0]);
+});
+
+test('the File card template takes its name fields from the one decision and one component', async () => {
+  const { readFileSync } = await import('node:fs');
+  const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const lines = html.split('\n');
+  const block = lines.find((line) => line.includes(':data-linear-source-defaults="source.uid"'));
+  assert.match(block, /linearFileCardNames\(source\)\.fileNames/);
+  const uses = lines.filter((line) => line.includes('<linear-record-names'));
+  assert.equal(uses.length, 2, 'on the File card and in Record options');
+  assert.match(uses[0], /v-if="linearFileCardNames\(source\)\.cardRecord"/);
+  assert.match(uses[1], /v-if="!linearFileCardNames\(source\)\.cardRecord"/);
+  // The record's fields exist once: in the component both places render.
+  for (const label of ['`Definition for sequence ${idx + 1}`', '`Subtitle / title for sequence ${idx + 1}`']) {
+    assert.equal(lines.filter((line) => line.includes(label)).length, 1, label);
+  }
+  const template = html.slice(html.indexOf('id="linear-record-names-template"'));
+  assert.ok(template.indexOf('`Definition for sequence ${idx + 1}`') > 0, 'the fields live in the component template');
+  assert.match(template.slice(0, template.indexOf('</script>')), /v-model="seq\.definition"[\s\S]*v-model="seq\.record_subtitle"/);
 });
 
 test('a blank record Definition placeholder previews the inherited definition Generate draws', async () => {

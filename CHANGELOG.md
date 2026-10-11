@@ -54,6 +54,10 @@ write-up of a release.
   Auto window and step values show the value for the current genome once its
   records are read. Text with `<i>` markup shows an italic preview. Removing a
   Linear File asks **Empty this slot** or **Remove file**.
+- Web app (Linear): a File with one record shows that record's **Organism /
+  strain** and **Subtitle / title** on the File card, and **Names for all
+  records in this file** appears there only while it holds a value. A File with
+  two or more records is unchanged.
 - Web app: before the records are inspected, Region Annotations rows name their
   record instead of calling it unavailable (OV-373), and Linear record selects
   say **Not inspected** instead of **Loading records...** (OV-379). After
