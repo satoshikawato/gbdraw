@@ -726,11 +726,8 @@ def capture_gui_quantitative_tracks(
         page.get_by_role("checkbox", name="Percent Ticks", exact=True).check()
 
         custom_slots = open_ancestor_details(
-            page.get_by_role(
-                "button",
-                name="Custom Track Slots",
-                exact=True,
-                include_hidden=True,
+            page.get_by_title(
+                re.compile(r"^(Open|Close) Custom Track Slots$")
             )
         )
         if custom_slots.get_attribute("aria-expanded") != "true":
@@ -870,11 +867,8 @@ def capture_gui_annotation_tracks(
             )
 
         custom_slots = open_ancestor_details(
-            page.get_by_role(
-                "button",
-                name="Custom Track Slots",
-                exact=True,
-                include_hidden=True,
+            page.get_by_title(
+                re.compile(r"^(Open|Close) Custom Track Slots$")
             )
         )
         if custom_slots.get_attribute("aria-expanded") != "true":
