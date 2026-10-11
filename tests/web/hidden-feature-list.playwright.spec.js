@@ -64,10 +64,19 @@ test('a hidden feature stays listed; its checkbox shows it again, live and after
   expect(await listedRows(page)).toEqual([
     ['FL1', true], ['RPT_ONE', true], ['FL2', true], ['dup alpha', true], ['dup beta', true]
   ]);
-  // Every row has the virtual-scroll row height (FEATURE_ROW_HEIGHT_PX).
-  const rowHeights = await page.locator('[data-feature-list-row]')
+  // Every row has the virtual-scroll row height (FEATURE_ROW_HEIGHT_PX); the
+  // one expanded row adds FEATURE_ROW_EXPANDED_EXTRA_PX.
+  const rowHeights = () => page.locator('[data-feature-list-row]')
     .evaluateAll((rows) => rows.map((row) => row.getBoundingClientRect().height));
-  expect(new Set(rowHeights)).toEqual(new Set([83]));
+  expect(new Set(await rowHeights())).toEqual(new Set([36]));
+  const drawer = page.locator('.right-drawer');
+  const alphaRow = drawer.locator('[data-feature-list-row]', { hasText: 'alpha protein' }).first();
+  await alphaRow.getByRole('button', { name: /alpha protein/ }).click();
+  await expect(alphaRow).toHaveAttribute('data-feature-list-expanded', 'true');
+  expect((await rowHeights()).sort()).toEqual([36, 36, 36, 36, 80]);
+  await expect(alphaRow.locator('[data-feature-list-editor]')).toBeVisible();
+  await alphaRow.getByRole('button', { name: /alpha protein/ }).click();
+  expect(new Set(await rowHeights())).toEqual(new Set([36]));
   const shown = await drawnFeatures(page);
 
   // Uncheck: one History step; FL1 is hidden live and stays listed.

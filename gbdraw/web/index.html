@@ -505,6 +505,20 @@
             color: #64748b;
             cursor: not-allowed;
         }
+        .action-menu-section {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.25rem 0.5rem 0.125rem;
+            color: #64748b;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .action-menu-section:not(:first-child) {
+            margin-top: 0.25rem;
+            border-top: 1px solid #e2e8f0;
+        }
         .match-popup-badge {
             display: inline-block;
             padding: 0 0.375rem;
@@ -7040,43 +7054,45 @@
                     </div>
 
                     <div v-show="rightDrawerTab === 'legend'" id="right-drawer-panel-legend" class="flex-1 min-h-0 flex flex-col">
-                        <p class="px-4 py-2 text-[10px] text-slate-500">Live edit: legend text, order, stroke, and removal update the current Result.</p>
-                        <div class="px-3 py-2 border-b border-slate-100 bg-slate-50/50 shrink-0">
-                            <div class="flex items-center justify-between">
-                                <span class="text-[10px] text-slate-500 flex items-center gap-1">
-                                    <i :class="layoutRepositionMode ? 'ph ph-hand-grabbing' : 'ph ph-arrows-out-cardinal'" aria-hidden="true"></i>
-                                    {{ layoutRepositionMode ? 'Drag legend to reposition' : 'Enable layout edit to reposition legend' }}
-                                </span>
-                                <div class="flex items-center gap-1">
-                                    <button aria-label="Sort A-Z" @click="sortLegendEntries('asc')" class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100" title="Sort A-Z" :disabled="!semanticMutationAvailable">
-                                        <i class="ph ph-sort-ascending" aria-hidden="true"></i>
-                                    </button>
-                                    <button aria-label="Sort Z-A" @click="sortLegendEntries('desc')" class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100" title="Sort Z-A" :disabled="!semanticMutationAvailable">
-                                        <i class="ph ph-sort-descending" aria-hidden="true"></i>
-                                    </button>
-                                    <button aria-label="Sort by default" @click="sortLegendEntriesByDefault" class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100" title="Sort by default" :disabled="!semanticMutationAvailable">
-                                        <i class="ph ph-list-numbers" aria-hidden="true"></i>
-                                    </button>
-                                    <button @click="resetLegendPosition" class="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50" title="Reset legend position" :disabled="!semanticMutationAvailable">
-                                        <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i> Reset
-                                    </button>
-                                </div>
-                            </div>
+                        <div class="px-3 py-2 border-b border-slate-100 bg-slate-50/50 shrink-0 flex items-center gap-1" data-legend-tab-toolbar>
+                            <help-tip id="legend-tab-help" label="About the Legend tab" text="Live edit: legend text, order, stroke, and removal update the current Result. To reorder, drag a row by its grip, or focus the grip and press the Up or Down arrow."></help-tip>
+                            <button aria-label="Sort A-Z" @click="sortLegendEntries('asc')" class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100" title="Sort A-Z" :disabled="!semanticMutationAvailable">
+                                <i class="ph ph-sort-ascending" aria-hidden="true"></i>
+                            </button>
+                            <button aria-label="Sort Z-A" @click="sortLegendEntries('desc')" class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100" title="Sort Z-A" :disabled="!semanticMutationAvailable">
+                                <i class="ph ph-sort-descending" aria-hidden="true"></i>
+                            </button>
+                            <button aria-label="Sort by default" @click="sortLegendEntriesByDefault" class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100" title="Sort by default" :disabled="!semanticMutationAvailable">
+                                <i class="ph ph-list-numbers" aria-hidden="true"></i>
+                            </button>
+                            <span class="flex-1"></span>
+                            <button @click="resetLegendPosition" class="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 whitespace-nowrap" :title="layoutRepositionMode ? 'Reset the legend position. Drag the legend in the preview to move it.' : 'Reset the legend position. To move the legend, turn on Layout edit and drag it in the preview.'" :disabled="!semanticMutationAvailable">
+                                <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i> Reset position
+                            </button>
+                            <button @click="resetAllStrokes" class="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 whitespace-nowrap" title="Reset all stroke colors and widths to default" :disabled="!semanticMutationAvailable">
+                                <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i> Reset strokes
+                            </button>
                         </div>
 
-                        <div class="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
-                            <div v-for="(entry, idx) in legendEntries" :key="idx" class="p-2 bg-slate-50 rounded border border-slate-100">
-                                <div class="flex items-center gap-1">
-                                    <div class="flex flex-col shrink-0">
-                                        <button :aria-label="`Move ${entry.caption} up`" @click="moveLegendEntryUp(idx)" :disabled="!semanticMutationAvailable || (idx === 0)" class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none" title="Move up">
-                                            <i class="ph ph-caret-up text-xs" aria-hidden="true"></i>
-                                        </button>
-                                        <button :aria-label="`Move ${entry.caption} down`" @click="moveLegendEntryDown(idx)" :disabled="!semanticMutationAvailable || (idx === legendEntries.length - 1)" class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none" title="Move down">
-                                            <i class="ph ph-caret-down text-xs" aria-hidden="true"></i>
-                                        </button>
-                                    </div>
-                                    <div class="w-6 h-6 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: legendEntryColor(entry) }" :title="legendEntryColor(entry)"></div>
-                                    <input type="text" :value="entry.caption" :aria-label="`Legend entry ${entry.caption} name`" @change="renameLegendEntry(idx, $event.target.value)" class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0" :disabled="!semanticMutationAvailable">
+                        <div class="flex-1 overflow-y-auto p-3 space-y-1.5 custom-scrollbar">
+                            <div v-for="(entry, idx) in legendEntries" :key="idx" data-legend-drawer-row
+                                 class="px-1.5 py-1 bg-slate-50 rounded border"
+                                 :class="legendReorder.over === idx && legendReorder.from !== null && legendReorder.from !== idx ? 'border-blue-400' : 'border-slate-100'"
+                                 @dragover="overLegendReorder($event, idx)" @drop="dropLegendReorder($event, idx)">
+                                <div class="flex items-center gap-1.5">
+                                    <button type="button" :data-legend-reorder-handle="idx" data-history-managed
+                                            :aria-label="`Reorder ${entry.caption}`"
+                                            aria-describedby="legend-tab-help"
+                                            :draggable="semanticMutationAvailable ? 'true' : 'false'"
+                                            :disabled="!semanticMutationAvailable || legendEntries.length < 2"
+                                            @keydown="handleLegendReorderKey($event, idx)"
+                                            @dragstart="startLegendReorder($event, idx)" @dragend="endLegendReorder"
+                                            class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 cursor-grab shrink-0 p-0.5 leading-none rounded"
+                                            title="Drag to reorder, or press the Up or Down arrow">
+                                        <i class="ph ph-dots-six-vertical text-sm" aria-hidden="true"></i>
+                                    </button>
+                                    <div class="w-5 h-5 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: legendEntryColor(entry) }" :title="legendEntryColor(entry)"></div>
+                                    <input type="text" :value="entry.caption" :aria-label="`Legend entry ${entry.caption} name`" @change="renameLegendEntry(idx, $event.target.value)" class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0 bg-white" :disabled="!semanticMutationAvailable">
                                     <button :aria-label="`Stroke options for ${entry.caption}`" data-history-ignore :aria-expanded="isLegendStrokeOptionsOpen(entry.caption) ? 'true' : 'false'" @click="toggleLegendStrokeOptions(entry.caption)" class="text-slate-400 hover:text-slate-600 shrink-0 p-0.5" :title="isLegendStrokeOptionsOpen(entry.caption) ? 'Hide stroke options' : 'Show stroke options'">
                                         <i class="ph text-xs" :class="isLegendStrokeOptionsOpen(entry.caption) ? 'ph-caret-up' : 'ph-sliders-horizontal'" aria-hidden="true"></i>
                                     </button>
@@ -7084,7 +7100,7 @@
                                         <i class="ph ph-trash text-sm" aria-hidden="true"></i>
                                     </button>
                                 </div>
-                                <div v-if="isLegendStrokeOptionsOpen(entry.caption)" class="mt-2 pt-2 border-t border-slate-200 flex items-center gap-2 text-[10px]">
+                            <div v-if="isLegendStrokeOptionsOpen(entry.caption)" class="mt-2 pt-2 border-t border-slate-200 flex items-center gap-2 text-[10px]">
                                     <span class="text-slate-500 shrink-0">Stroke:</span>
                                     <color-value-control
                                         :model-value="getLegendEntryStrokeColor(idx)"
@@ -7116,20 +7132,12 @@
                                 </ul>
                             </div>
                         </div>
-
-                        <div class="px-3 py-2 border-t border-slate-200 shrink-0">
-                            <button @click="resetAllStrokes" class="w-full text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded flex items-center justify-center gap-1" title="Reset all stroke colors and widths to default" :disabled="!semanticMutationAvailable">
-                                <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i>
-                                Reset All Strokes
-                            </button>
-                        </div>
                     </div>
 
                     <div v-if="isFeatureDrawerMounted" id="right-drawer-panel-features" class="flex-1 min-h-0 flex flex-col overflow-y-auto">
-                        <p class="px-4 py-2 text-[10px] text-slate-500">Live edit: feature color, label text, and visibility update the current Result; geometry may rerender automatically.</p>
                         <div class="px-4 py-2 border-b border-slate-100 shrink-0 bg-white">
                             <div class="flex items-center justify-between gap-2">
-                                <p class="text-xs font-semibold text-slate-600">Features ({{ filteredFeatures.length }})</p>
+                                <p class="text-xs font-semibold text-slate-600 flex items-center gap-1"><span>Features ({{ filteredFeatures.length }})</span><help-tip id="features-tab-help" label="About the Features tab" text="Live edit: feature color, label text, and visibility update the current Result; geometry may rerender automatically. Select a row to edit its label or open its details."></help-tip></p>
                                 <span class="text-[10px] text-slate-500 truncate" :title="featureEditorStatus.error || featureEditorStatusText">{{ featureEditorStatusText }}</span>
                             </div>
                         </div>
@@ -7146,58 +7154,74 @@
                                 <i class="ph ph-circle-notch animate-spin" aria-hidden="true"></i> Preparing features...
                             </div>
                             <div v-if="featureListTopSpacerPx > 0" :style="{ height: `${featureListTopSpacerPx}px` }" aria-hidden="true"></div>
-                            <div v-for="feat in visibleFeatureRows" :key="feat.id" @click="openFeatureEditorFromList(feat, $event)" data-feature-list-row class="px-3 py-2 h-[83px] overflow-hidden border-b border-slate-100 text-xs hover:bg-blue-50 cursor-pointer transition-colors space-y-1">
-                                <div class="flex items-center gap-2">
-                                    <span class="w-10 font-mono text-slate-500 shrink-0 text-[10px]">{{ feat.type }}</span>
-                                    <span class="w-16 font-mono text-slate-500 shrink-0 truncate text-[10px]" :title="formatFeatureLocation(feat)">{{ formatFeatureLocation(feat) }}</span>
-                                    <span class="flex-grow truncate text-slate-700" :title="feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)'">
-                                        {{ feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)' }}
-                                    </span>
-                                    <button data-history-ignore @click.stop="openFeatureEditorFromList(feat, $event)" class="text-[10px] px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-100 shrink-0" title="Open feature editor">Edit</button>
+                            <div v-for="feat in visibleFeatureRows" :key="feat.id" data-feature-list-row
+                                 :data-feature-list-expanded="featureListExpandedId === feat.id ? 'true' : null"
+                                 :class="['border-b border-slate-100 text-xs overflow-hidden', featureListExpandedId === feat.id ? 'h-[80px] bg-blue-50/60' : 'h-[36px]']">
+                                <div class="h-[36px] px-3 flex items-center gap-2">
                                     <input type="color"
                                            :value="getFeatureColor(feat)"
-                                           @click.stop
                                            @change="requestFeatureColorChange(feat, $event.target.value)"
                                            :disabled="!semanticMutationAvailable || (!canEditFeatureColor(feat))"
-                                           :title="canEditFeatureColor(feat) ? 'Click to change color' : 'No stable identifier available'"
+                                           :title="canEditFeatureColor(feat) ? 'Change fill color' : 'No stable identifier available'"
                                            :aria-label="`Fill color for ${feat.product || feat.gene || feat.locus_tag || feat.type}`"
-                                           :class="['w-7 h-5 border rounded shrink-0', canEditFeatureColor(feat) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50']">
+                                           :class="['w-5 h-5 rounded shrink-0', canEditFeatureColor(feat) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50']">
+                                    <button type="button" data-history-ignore
+                                            class="flex-1 min-w-0 flex items-center gap-1.5 text-left text-slate-700 rounded hover:text-blue-700"
+                                            :aria-expanded="featureListExpandedId === feat.id ? 'true' : 'false'"
+                                            :title="featureListExpandedId === feat.id ? 'Hide the label editor' : 'Show the label editor'"
+                                            @click="featureListExpandedId = featureListExpandedId === feat.id ? null : feat.id">
+                                        <span v-if="getEditableLabelByFeatureId(featureListState(feat).renderedId)?.text" class="max-w-[5rem] truncate shrink-0 font-semibold text-slate-800">{{ getEditableLabelByFeatureId(featureListState(feat).renderedId).text }}</span>
+                                        <span class="truncate">{{ feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)' }}</span>
+                                    </button>
+                                    <span class="max-w-[7rem] font-mono text-slate-500 shrink-0 truncate text-[10px]" :title="formatFeatureLocation(feat)">{{ formatFeatureLocation(feat) }}</span>
+                                    <label class="flex items-center gap-0.5 shrink-0 text-slate-500 cursor-pointer" title="Show on the diagram">
+                                        <input type="checkbox"
+                                               data-history-managed
+                                               :checked="featureListState(feat).drawn"
+                                               @change="setFeatureVisibility(feat, $event.target.checked ? 'on' : 'off')"
+                                               :disabled="!semanticMutationAvailable"
+                                               :aria-label="`Visibility of ${feat.product || feat.gene || feat.locus_tag || feat.type}`"
+                                               class="w-3 h-3 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                                        <i :class="['ph text-sm', featureListState(feat).drawn ? 'ph-eye' : 'ph-eye-slash text-slate-300']" aria-hidden="true"></i>
+                                    </label>
+                                    <button type="button" data-history-ignore aria-label="Edit" @click="openFeatureEditorFromList(feat, $event)"
+                                            class="shrink-0 p-0.5 rounded text-slate-500 hover:text-blue-700 hover:bg-white" title="Open feature details">
+                                        <i class="ph ph-pencil-simple text-sm" aria-hidden="true"></i>
+                                    </button>
                                 </div>
-                                <p class="text-[10px] text-slate-500 truncate">
-                                    <template v-if="getEditableLabelByFeatureId(featureListState(feat).renderedId)">Label: {{ getEditableLabelByFeatureId(featureListState(feat).renderedId).text }}</template>
-                                    <template v-else>Label: (not editable)</template>
-                                </p>
-                                <label class="flex items-center gap-1 w-max text-[10px] text-slate-500 cursor-pointer" @click.stop>
-                                    <input type="checkbox"
-                                           data-history-managed
-                                           :checked="featureListState(feat).drawn"
-                                           @change="setFeatureVisibility(feat, $event.target.checked ? 'on' : 'off')"
-                                           :disabled="!semanticMutationAvailable"
-                                           :aria-label="`Visibility of ${feat.product || feat.gene || feat.locus_tag || feat.type}`"
-                                           class="w-3 h-3 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
-                                    Visibility
-                                </label>
+                                <div v-if="featureListExpandedId === feat.id" class="h-[44px] px-3 flex items-center gap-2" data-feature-list-editor>
+                                    <span class="font-mono text-[10px] text-slate-500 shrink-0">{{ feat.type }}</span>
+                                    <template v-if="getEditableLabelByFeatureId(featureListState(feat).renderedId)">
+                                        <label class="flex-1 min-w-0 flex items-center gap-1 text-[10px] text-slate-500">
+                                            <span class="shrink-0">Label</span>
+                                            <input type="text" data-history-managed
+                                                   :value="getEditableLabelByFeatureId(featureListState(feat).renderedId).text"
+                                                   @change="requestLabelTextChangeByFeatureId(featureListState(feat).renderedId, $event.target.value)"
+                                                   :disabled="!semanticMutationAvailable"
+                                                   :aria-label="`Label of ${feat.product || feat.gene || feat.locus_tag || feat.type}`"
+                                                   class="flex-1 min-w-0 text-xs border border-slate-200 rounded px-2 py-1 bg-white">
+                                        </label>
+                                    </template>
+                                    <span v-else class="flex-1 min-w-0 truncate text-[10px] text-slate-500">No label on the diagram</span>
+                                </div>
                             </div>
                             <div v-if="featureListBottomSpacerPx > 0" :style="{ height: `${featureListBottomSpacerPx}px` }" aria-hidden="true"></div>
                             <div v-if="!featureExtractionPending && filteredFeatures.length === 0" class="p-4 text-center text-slate-500 text-xs">No features found</div>
                         </div>
                         <div class="px-4 py-2 border-t border-slate-200 shrink-0 bg-slate-50 space-y-2">
-                            <div class="flex items-center justify-between gap-2">
-                                <div class="flex items-center gap-2 shrink-0">
-                                    <button @click="downloadLabelOverrideTable" class="text-[10px] px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white">Export Label TSV</button>
-                                    <button @click="$refs.labelTableInput.click()" :disabled="!semanticMutationAvailable" class="text-[10px] px-2 py-1 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 border border-blue-200">Load Label TSV</button>
-                                    <help-tip label="Help: Label TSV" text="Label TSV value patterns use case-insensitive Python regex. Examples: (?i)NADH and (?P&lt;name&gt;NADH)."></help-tip>
-                                    <input data-history-managed type="file" ref="labelTableInput" accept=".tsv,.txt,text/tab-separated-values,text/plain" class="hidden" @change="loadLabelOverrideTable" :disabled="!semanticMutationAvailable">
-                                    <button @click="resetAllLabelTextOverrides" class="text-[10px] px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-700" :disabled="!semanticMutationAvailable">Reset Label Edits</button>
-                                </div>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <button @click="downloadFeatureEditTable" aria-describedby="help-feature-edits-tsv" class="text-[10px] px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white">Export Feature Edits TSV</button>
-                                <button @click="$refs.featureEditTableInput.click()" :disabled="!semanticMutationAvailable" aria-describedby="help-feature-edits-tsv" class="text-[10px] px-2 py-1 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 border border-blue-200">Load Feature Edits TSV</button>
-                                <help-tip id="help-feature-edits-tsv" label="Help: Feature Edits TSV" text="Per-feature Feature visibility, Label visibility, and label text edits of this diagram's records, in the --feature_override_table format of the CLI and Python API. Load replaces those edits; rows that name no record or feature here are counted and not applied."></help-tip>
-                                <input data-history-managed type="file" ref="featureEditTableInput" accept=".tsv,.txt,text/tab-separated-values,text/plain" class="hidden" @change="loadFeatureEditTable" :disabled="!semanticMutationAvailable">
-                            </div>
-                            <div class="flex items-center justify-between gap-2">
+                            <input data-history-managed type="file" ref="labelTableInput" accept=".tsv,.txt,text/tab-separated-values,text/plain" class="hidden" @change="loadLabelOverrideTable" :disabled="!semanticMutationAvailable">
+                            <input data-history-managed type="file" ref="featureEditTableInput" accept=".tsv,.txt,text/tab-separated-values,text/plain" class="hidden" @change="loadFeatureEditTable" :disabled="!semanticMutationAvailable">
+                            <div class="flex items-start justify-between gap-2">
+                                <action-menu label="Import / export" icon="ph-file-arrow-down" title="Export or load label and feature-edit tables"
+                                             :items="[
+                                               { section: 'Labels', help: 'Label TSV value patterns use case-insensitive Python regex. Examples: (?i)NADH and (?P&lt;name&gt;NADH).', helpLabel: 'Help: Label TSV' },
+                                               { label: 'Export Label TSV', icon: 'ph-download-simple', run: downloadLabelOverrideTable },
+                                               { label: 'Load Label TSV', icon: 'ph-upload-simple', disabled: !semanticMutationAvailable, run: () => $refs.labelTableInput.click() },
+                                               { label: 'Reset Label Edits', icon: 'ph-arrow-counter-clockwise', disabled: !semanticMutationAvailable, run: resetAllLabelTextOverrides },
+                                               { section: 'Features', help: 'Per-feature Feature visibility, Label visibility, and label text edits of this diagram\'s records, in the --feature_override_table format of the CLI and Python API. Load replaces those edits; rows that name no record or feature here are counted and not applied.', helpLabel: 'Help: Feature Edits TSV', helpId: 'help-feature-edits-tsv' },
+                                               { label: 'Export Feature Edits TSV', icon: 'ph-download-simple', describedby: 'help-feature-edits-tsv', run: downloadFeatureEditTable },
+                                               { label: 'Load Feature Edits TSV', icon: 'ph-upload-simple', describedby: 'help-feature-edits-tsv', disabled: !semanticMutationAvailable, run: () => $refs.featureEditTableInput.click() }
+                                             ]"></action-menu>
                                 <label class="inline-flex items-center gap-2 text-[10px] text-slate-600 select-none cursor-pointer">
                                     <input type="checkbox" v-model="autoLabelReflowEnabled" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable">
                                     <span>Auto Reflow</span>

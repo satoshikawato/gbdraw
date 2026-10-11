@@ -12,6 +12,20 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Web app: a click on a Legend row or a record definition in the preview opens
+  a popup while Layout edit is off. The legend-entry popup shows the feature
+  count and the rule behind the color, and edits the color and caption or
+  removes the row. The record popup lists the accession, organism, length,
+  orientation, display start, region, and alignment, and edits the definition
+  text and Reverse complement, which apply on Generate.
+- Web app: the Editor's Features list uses one compact row per feature that
+  expands to its label text field; the label and feature-edit TSV actions move
+  into one **Import / export** menu. The Legend tab reorders rows by a drag
+  grip, also with the Up and Down arrow keys, and its help moves into a help tip.
+- Interactive SVG: the similarity-group section of a match popup shows the
+  group name and gene count, the members, and the identifiers under
+  **Technical details**, as in the web app.
+
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
 - Added circular-record display-start rotation and manual feature lane placement.

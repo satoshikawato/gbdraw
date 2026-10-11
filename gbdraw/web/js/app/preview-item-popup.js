@@ -67,6 +67,8 @@ import {
  * @property {() => boolean} readCircularReverseAvailable Whether the Circular reverse setting is editable.
  * @property {(label: string, apply: () => void) => unknown} runUndoable History's one undoable step.
  * @property {() => unknown} sessionBusy A reason settings cannot change now, else a falsy value.
+ * @property {(index: number, caption: string) => unknown} renameLegendRow
+ *   The Legend panel's rename of row `index`, as one History step.
  */
 
 const NUMBER = new Intl.NumberFormat('en-US');
@@ -228,7 +230,7 @@ const RECORD_FIELDS = {
 /** @param {PreviewItemPopupOptions} options */
 export const createPreviewItemPopup = ({
   state, computed, readLegendEntryColor, readLegendRowRules, countLegendCaptionFeatures,
-  getCommittedRequest, readAlignmentInspector, readCircularReverseAvailable, runUndoable, sessionBusy
+  getCommittedRequest, readAlignmentInspector, readCircularReverseAvailable, runUndoable, sessionBusy, renameLegendRow
 }) => {
   /** @param {string} key @param {boolean} matchesReady */
   const legendView = (key, matchesReady) => {
@@ -350,5 +352,20 @@ export const createPreviewItemPopup = ({
     return true;
   };
 
-  return { view, setRecordField, showRecordSettings };
+  // A rename can change the row's key; the open popup then follows the row by
+  // its new caption (after a Merge or Suffix choice too, when one row has it).
+  /** @param {number} index @param {string} caption */
+  const renameLegendEntry = async (index, caption) => {
+    const result = await renameLegendRow(index, caption);
+    const open = state.clickedPairwiseMatch.value;
+    if (open?.previewItem?.kind !== 'legend-entry') return result;
+    /** @type {LegendEntry[]} */
+    const entries = state.activeDrawing().legendEntries.value || [];
+    const named = entries.filter((entry) => text(entry.caption) === text(caption));
+    const entry = named.length === 1 ? named[0] : entries[index];
+    if (entry) open.previewItem = { kind: 'legend-entry', key: text(legendEntryKey(entry)) };
+    return result;
+  };
+
+  return { view, setRecordField, showRecordSettings, renameLegendRow: renameLegendEntry };
 };
