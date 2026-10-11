@@ -272,6 +272,11 @@ the restored draft. Invalid drafts cannot be saved as valid Sessions.
 
 ### Custom Track Slots
 
+Each Circular row keeps its inner and outer gap in a disclosure under the row;
+for a GC or AT content or skew row it also holds the dinucleotide, the legend
+label and, for skew, the two colors. Its summary names the dinucleotide and says
+when a gap or a skew color is set.
+
 **Use custom stack** draws the saved stack. Turning it on for the first time
 uses the saved default stack as it is, including its **Ticks** row. **Reset**
 and, in Circular, the **Tuckin**, **Middle**, or **Spreadout** button under
@@ -404,8 +409,10 @@ selected record offers that record alone; **All records**, or **Multi-Record
 Canvas** on, offers every record, and each annotation then needs an explicit
 target record, which binds it to that record. When only one record can be the
 target, or the source records are not inspected yet, the row names its record
-instead of offering a select. Each row shows its name, span and fill color;
-**Style of annotation** holds the mark, label, lane, line color and hatch.
+instead of offering a select. Each row shows its name, span and fill color,
+then its target kind (**Coordinates** or **Feature**) and record; the **Style**
+disclosure, whose summary names the mark and label, holds the mark, label, lane,
+**Line color** and hatch.
 
 ## Circular multi-record canvas
 
@@ -1124,6 +1131,13 @@ Info Source recipe write `-p` and only your colors as `-d`. Colors are compared
 ignoring case, with `#abc` equal to `#aabbcc`, and **Auto** is not one of your
 colors.
 
+The Colors card lists, under **Colors in this figure or changed**, the default
+colors of the feature types the loaded features include, GC content and skew
+when they are shown, the comparison colors when a Linear figure compares rows,
+and every one of your colors; the others wait under **More colors (N)**. A color
+you edit stays in the list where you edit it. The lists are regrouped when the
+features, the shown tracks, the palette, or the color table change.
+
 - Choosing another palette while you have your own colors asks **Keep my N
   colors** (the new palette plus your colors), **Use the palette's colors**, or
   **Cancel**, which changes nothing. Without your colors the palette changes at
@@ -1185,6 +1199,11 @@ expressions**, including `(?i)NADH` and `(?P<enzyme>NADH)`. They use the same
 Python matching semantics for live preparation and Generate. This differs from
 Feature Search and Interactive SVG search. TSV columns and pattern semantics
 are specified in [Input formats and TSV schemas](input-formats-and-tsv-schemas.md#styling-tables).
+
+Each specific color rule is one line: its color, then a summary of feature
+type, qualifier, pattern and legend caption. The summary opens the rule's
+editor with those fields and the **Move rule up**, **Move rule down** and
+**Delete rule** buttons.
 
 A rejected edit to an existing Color rule's pattern stays visible in that field as **Not applied**, with its cause and **Retry** / **Revert** controls.
 The displayed text is a temporary draft; the accepted rule, Result and History

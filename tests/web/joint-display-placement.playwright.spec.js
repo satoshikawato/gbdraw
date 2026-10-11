@@ -295,7 +295,8 @@ for (const mode of ['circular', 'linear']) {
     await expect(start).toBeEnabled();
     await expect(start).toHaveValue('71');
     await page.getByRole('button', { name: 'Reset start', exact: true }).click();
-    await expect(start).toHaveValue('');
+    // OV-374: without a requested start the field shows the current start.
+    await expect(start).toHaveValue('1');
     if (mode === 'circular') await (await reveal(page.locator('#circular-track-preset'))).selectOption('middle');
     await (await reveal(page.getByRole('checkbox', { name: 'Separate Strands', exact: true, includeHidden: true }))).uncheck();
     await generateFromControl(page);

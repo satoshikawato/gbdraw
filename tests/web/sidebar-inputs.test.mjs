@@ -12,7 +12,7 @@ await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 const load = (path) => import(pathToFileURL(join(tempRoot, 'js', path)));
 
 const { buildAnnotationRecordCatalog } = await load('app/annotations/record-catalog.js');
-const { annotationRecordOptions, createAnnotationRecordSelector } = await load('app/annotations/record-selector.js');
+const { createAnnotationRecordSelector } = await load('app/annotations/record-selector.js');
 const { coordinateTarget } = await load('app/annotations/target-actions.js');
 const { createLinearRecordSelector } = await load('app/linear-record-selector.js');
 
@@ -29,12 +29,14 @@ test('OV-373: a saved annotation target before Inspect is not called unavailable
     mode: 'circular',
     circularSource: { sourceKey: 'circular', hasInput: true, status: 'deferred', records: [] }
   });
-  const labels = annotationRecordOptions(pending, savedTarget()).map((option) => option.label);
-  assert.equal(labels.some((label) => /unavailable/i.test(label)), false, labels.join(' | '));
-
   const selector = createAnnotationRecordSelector({ getCatalog: () => pending });
   assert.equal(selector.showsSelect(savedTarget()), false);
   assert.equal(selector.captionFor(savedTarget()), 'Record: NC_001879.2');
+
+  // A catalog that failed to read its records says so beside the name.
+  const failed = { status: 'error', records: [], issues: [], requiresSelection: false };
+  assert.equal(createAnnotationRecordSelector({ getCatalog: () => failed }).captionFor(savedTarget()),
+    'Record: NC_001879.2 (record list unavailable)');
 
   // After Inspect the one record resolves; a single-record input needs no select.
   const ready = buildAnnotationRecordCatalog({
@@ -85,4 +87,19 @@ test('OV-379: an unread Linear record select says Not inspected', async () => {
   resolveRead([{ selector: '#1', recordId: 'Rec', recordLength: 9 }]);
   await refresh;
   assert.equal(controller.statusFor(state.linearSeqs[0]), 'ready');
+});
+
+// Auto window and step values name their rule until the genome length is
+// known, then show the value for the longest record the next Generate draws.
+test('Auto window values follow the known Linear record lengths', async () => {
+  const { createAutoValueDisplay } = await load('app/auto-value-display.js');
+  const { withDrawings } = await import(pathToFileURL(join(process.cwd(), 'tests/web/helpers/drawing-state.mjs')));
+  const linear = () => withDrawings({ mode: { value: 'linear' }, form: {}, adv: {} });
+  const unknown = createAutoValueDisplay(linear());
+  assert.equal(unknown.autoValueText('dinucleotideWindow'), 'Auto (by genome size)');
+  assert.equal(unknown.autoValueText('depthWindow'), 'Auto (by genome size)');
+  const known = createAutoValueDisplay(linear(), { linearRecordLengths: () => [40_000, 2_500_000] });
+  assert.equal(known.autoValueText('dinucleotideWindow'), '10 kbp (auto)');
+  assert.equal(known.autoValueText('dinucleotideStep'), '1 kbp (auto)');
+  assert.equal(known.autoValueText('depthWindow'), '1 kbp (auto)');
 });

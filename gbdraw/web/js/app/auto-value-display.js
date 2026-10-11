@@ -146,25 +146,31 @@ const circularRecordLengths = (state) => {
     .filter((value) => Number.isFinite(value) && value > 0);
 };
 
-const activeCircularLengthParam = (state) => {
-  const lengths = circularRecordLengths(state);
+/** @param {number[]} lengths */
+const lengthParamFor = (lengths) => {
   if (lengths.length === 0) return null;
   return Math.max(...lengths) < LENGTH_THRESHOLD_BP ? 'short' : 'long';
 };
 
-const activeLengthParam = (state) => {
+const activeCircularLengthParam = (state) => lengthParamFor(circularRecordLengths(state));
+
+// Linear record lengths come from the app's record reader, registered by
+// `createAutoValueDisplay`; an empty list means they are not known yet.
+/** @type {WeakMap<object, () => number[]>} */
+const linearLengthSources = new WeakMap();
+
+/** The record lengths of the shown mode's next Generate, or [] while unknown. */
+const knownRecordLengths = (state) => {
   const mode = String(state?.mode?.value || state?.mode || 'circular');
-  if (mode === 'circular') return activeCircularLengthParam(state);
-  return null;
+  if (mode === 'circular') return circularRecordLengths(state);
+  return linearLengthSources.get(state)?.() || [];
 };
 
+const activeLengthParam = (state) => lengthParamFor(knownRecordLengths(state));
+
 const maxKnownRecordLength = (state) => {
-  const mode = String(state?.mode?.value || state?.mode || 'circular');
-  if (mode === 'circular') {
-    const lengths = circularRecordLengths(state);
-    return lengths.length ? Math.max(...lengths) : null;
-  }
-  return null;
+  const lengths = knownRecordLengths(state);
+  return lengths.length ? Math.max(...lengths) : null;
 };
 
 const slidingWindowForLength = (length) => {
@@ -314,8 +320,7 @@ const dinucleotideWindowText = (state, drawing, field) => {
   const length = maxKnownRecordLength(state);
   const preset = slidingWindowForLength(length);
   if (preset) return withAuto(formatBp(preset[field]));
-  const values = SLIDING_WINDOW_PRESETS.map((entry) => formatBp(entry[field]));
-  return `${values.join('/')} (auto)`;
+  return 'Auto (by genome size)';
 };
 
 /** @param {DrawingState} drawing */
@@ -335,13 +340,11 @@ const depthWindowText = (state, drawing, field) => {
     const minValue = field === 'window' ? 100 : 1;
     return withAuto(formatBp(Math.max(minValue, source / 10)));
   }
-  return field === 'window'
-    ? '100/1k/10k bp (auto)'
-    : '10/100/1k bp (auto)';
+  return 'Auto (by genome size)';
 };
 
 /** @param {DrawingState} drawing */
-const linearAxisGapText = (drawing) => {
+const linearAxisGapText = (state, drawing) => {
   const layout = String(drawing?.form?.linear_track_layout || 'middle').toLowerCase();
   if (layout === 'middle') return 'ignored';
   const manualHeight = parsePositiveNumber(drawing?.adv?.feature_height);
@@ -353,7 +356,7 @@ const linearAxisGapText = (drawing) => {
       long: DEFAULTS.linear.defaultCdsHeightPx.long * multiplier
     },
     formatPx,
-    null
+    activeLengthParam(state)
   );
 };
 
@@ -407,7 +410,7 @@ const autoTextByKey = (state, drawing, key, context = null) => {
     case 'legendBoxSize': return lengthDependentPx(state, DEFAULTS.legend.boxSizePx);
     case 'legendFontSize': return lengthDependentPx(state, DEFAULTS.legend.fontSizePx);
     case 'linearFeatureHeight': return lengthDependentPx(state, DEFAULTS.linear.defaultCdsHeightPx);
-    case 'linearAxisGap': return linearAxisGapText(drawing);
+    case 'linearAxisGap': return linearAxisGapText(state, drawing);
     case 'circularFeatureWidth': return circularWidthText(state, 'features');
     case 'blockStrokeWidth': return lengthDependentPx(state, DEFAULTS.feature.blockStrokeWidthPx);
     case 'lineStrokeWidth': return lengthDependentPx(state, DEFAULTS.feature.lineStrokeWidthPx);
@@ -444,8 +447,11 @@ const autoTextByKey = (state, drawing, key, context = null) => {
 
 /**
  * @param {Record<string, any>} state the Web state; its shape belongs to `state.js`
+ * @param {{ linearRecordLengths?: () => number[] }} [options] the lengths of the
+ *   records the next Linear Generate draws, or [] while any is unknown
  */
-export const createAutoValueDisplay = (state) => {
+export const createAutoValueDisplay = (state, { linearRecordLengths = () => [] } = {}) => {
+  linearLengthSources.set(state, linearRecordLengths);
   const autoValueText = (key, context = null) => {
     const drawing = state.activeDrawing();
     return autoTextByKey(state, drawing, key, context);

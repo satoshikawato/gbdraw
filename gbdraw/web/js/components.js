@@ -423,7 +423,7 @@ export const SpecificRuleRows = {
 // field (UX-C06, UX-C15); nothing when the text has no markup.
 export const MarkupPreview = {
   props: ['text'],
-  template: `<p v-if="segments.length" class="markup-preview" data-markup-preview><span class="sr-only">Preview: </span><span v-for="(part, index) in segments" :key="index" :class="{ italic: part.italic }">{{ part.text }}</span></p>`,
+  template: `<p v-if="segments.length" class="markup-preview" :title="segments.map((part) => part.text).join('')" data-markup-preview><span class="sr-only">Preview: </span><span v-for="(part, index) in segments" :key="index" :class="{ italic: part.italic }">{{ part.text }}</span></p>`,
   setup(props) {
     return { segments: computed(() => italicSegments(props.text)) };
   }

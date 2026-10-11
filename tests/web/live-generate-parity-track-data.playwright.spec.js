@@ -416,8 +416,8 @@ test.describe('OV-65 Legend styles follow the captions of track data', () => {
     if (await panel.getAttribute('aria-expanded') !== 'true') await panel.click({ timeout: 15_000 });
     await page.getByText('Use custom stack', { exact: true }).locator('input').check({ timeout: 15_000 });
     await settleLive(page);
-    const field = page.getByRole('group', { name: 'Circular track slot gc_content', exact: true })
-      .getByRole('textbox', { name: 'Track legend label' });
+    const field = await reveal(page.getByRole('group', { name: 'Circular track slot gc_content', exact: true })
+      .getByRole('textbox', { name: 'Track legend label', includeHidden: true }));
     await field.fill('Custom GC', { timeout: 15_000 });
     await field.blur();
     await settleLive(page);

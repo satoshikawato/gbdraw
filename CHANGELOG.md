@@ -16,11 +16,12 @@ write-up of a release.
   Custom Track Slots cards are more compact. Each setting that applies on
   Generate keeps a short **Applies on Generate** marker. The Colors card uses
   plain names (**Default colors file**, **Specific rules file**), shows the
-  colors this figure draws first and the rest under **More colors**, and opens
-  each specific rule from a one-line summary. Annotation rows and track slots
-  keep their less used options in a disclosure. Text with `<i>` markup shows an
-  italic preview. Removing a Linear File asks **Empty this slot** or **Remove
-  file**.
+  colors this figure draws and the colors you changed first and the rest under
+  **More colors**, and opens each specific rule from a one-line summary.
+  Annotation rows and track slots keep their less used options in a disclosure.
+  Auto window and step values show the value for the current genome once its
+  records are read. Text with `<i>` markup shows an italic preview. Removing a
+  Linear File asks **Empty this slot** or **Remove file**.
 - Web app: before the records are inspected, Region Annotations rows name their
   record instead of calling it unavailable (OV-373), and Linear record selects
   say **Not inspected** instead of **Loading records...** (OV-379). After

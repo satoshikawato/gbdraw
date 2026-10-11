@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -162,7 +161,7 @@ def _configure_slots(page: Page) -> tuple[dict[str, Any], ...]:
         "group", name="Circular track slot gc_content", exact=True
     )
     gc_content.get_by_role("textbox", name="Circular track slot gc_content Width value", exact=True).fill("42px")
-    gc_content.get_by_label("Track dinucleotide", exact=True).fill("GC")
+    open_ancestor_details(gc_content.get_by_label("Track dinucleotide", exact=True)).fill("GC")
     gc_content.get_by_label("Track legend label", exact=True).fill(
         "GC content (%)"
     )
@@ -175,7 +174,7 @@ def _configure_slots(page: Page) -> tuple[dict[str, Any], ...]:
         "group", name="Circular track slot gc_skew", exact=True
     )
     gc_skew.get_by_role("textbox", name="Circular track slot gc_skew Width value", exact=True).fill("34px")
-    gc_skew.get_by_label("Track dinucleotide", exact=True).fill("GC")
+    open_ancestor_details(gc_skew.get_by_label("Track dinucleotide", exact=True)).fill("GC")
     gc_skew.get_by_label("Track legend label", exact=True).fill("GC skew")
 
     slots = _track_slot_snapshot(page)

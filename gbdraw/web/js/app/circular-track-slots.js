@@ -136,9 +136,9 @@ const formatPresetName = (preset) => PRESET_LABELS[normalizeCircularTrackPreset(
 
 const laneDirectionLabel = (laneDirection) => {
   const lane = normalizeLaneDirection(laneDirection);
-  if (lane === 'outside') return 'feature stack outside axis';
-  if (lane === 'split') return 'feature stack centered on axis';
-  return 'feature stack inside axis';
+  if (lane === 'outside') return 'Features outside axis';
+  if (lane === 'split') return 'Features centered on axis';
+  return 'Features inside axis';
 };
 
 const previewWidthPxForRenderer = (renderer, lengthParam) => {
@@ -600,6 +600,13 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     const details = /** @type {HTMLDetailsElement} */ (event.currentTarget);
     if (details.open) openSlotOptions.add(String(slot?.id));
     else openSlotOptions.delete(String(slot?.id));
+  };
+  // What the closed disclosure holds; a GC or AT track names its dinucleotide.
+  /** @param {{ renderer?: unknown, params?: { nt?: unknown } } | null | undefined} slot */
+  const circularTrackSlotOptionsSummary = (slot) => {
+    if (slot?.renderer !== 'dinucleotide_content' && slot?.renderer !== 'dinucleotide_skew') return 'Gaps';
+    const nt = String(slot?.params?.nt || '').trim().toUpperCase() || 'GC';
+    return `${nt} · legend label, gaps${slot.renderer === 'dinucleotide_skew' ? ', colors' : ''}`;
   };
   let nextEditorKey = 1;
   const circularTrackSlotEditorKey = (slot) => {
@@ -1693,10 +1700,9 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     if (!Boolean(drawing.form.suppress_skew)) {
       place('GC skew', getPresetRadiusRatio(slotLike('gc_skew', 'dinucleotide_skew'), 'dinucleotide_skew', preset, lengthParam, drawing));
     }
-    const lanePiece = laneDirectionLabel(lane).replace('feature stack', 'Features');
     return {
       label: formatPresetName(preset),
-      detail: [lanePiece, inside.length ? `${inside.join(', ')} inside` : '', outside.length ? `${outside.join(', ')} outside` : '']
+      detail: [laneDirectionLabel(lane), inside.length ? `${inside.join(', ')} inside` : '', outside.length ? `${outside.join(', ')} outside` : '']
         .filter(Boolean).join(' · ')
     };
   };
@@ -1720,6 +1726,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     circularTrackSlotEditorKey,
     circularTrackSlotOptionsOpen,
     setCircularTrackSlotOptionsOpen,
+    circularTrackSlotOptionsSummary,
     circularTrackRendererLabel,
     normalizeCircularTrackSlots: normalizeSlotsInPlace,
     syncCircularConservationSlots,

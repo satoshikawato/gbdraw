@@ -98,15 +98,10 @@ export const reconcileAnnotationRecordBindings = (sets, catalog) => {
   });
 };
 
-// OV-373: a loaded Session reads no record bytes, so a catalog can wait for
-// discovery. A record an annotation names is then not inspected, not unavailable.
-const discoveryPending = (catalog) => catalog?.status !== 'ready'
-  && (Array.isArray(catalog?.issues) ? catalog.issues : [])
-    .some((issue) => issue?.context?.reason === 'DISCOVERY_PENDING');
-
+// The select shows only for a ready catalog (`showsSelect`), so its options
+// need no wording for a catalog that is not ready.
 export const annotationRecordOptions = (catalog, annotation) => {
   const records = Array.isArray(catalog?.records) ? catalog.records : [];
-  const pending = discoveryPending(catalog);
   const currentValue = annotationRecordValue(catalog, annotation);
   const options = records.map((record) => ({
     value: record.key,
@@ -116,23 +111,18 @@ export const annotationRecordOptions = (catalog, annotation) => {
   const selectedIsMissing = Boolean(currentValue) && !options.some((option) => option.value === currentValue);
   const savedSelector = annotationRecordSelectorValue(annotation?.target?.record) || 'saved target';
   return [
-    {
-      value: '',
-      label: catalog?.status !== 'ready'
-        ? (pending ? 'Not inspected' : 'Record list unavailable')
-        : (records.length > 1 ? 'Select target record' : 'Automatic (single record)'),
-      synthetic: false
-    },
+    { value: '', label: records.length > 1 ? 'Select target record' : 'Automatic (single record)', synthetic: false },
     ...(selectedIsMissing
-      ? [{
-          value: currentValue,
-          label: `${savedSelector} (${pending ? 'not inspected' : 'target record unavailable'})`,
-          synthetic: true
-        }]
+      ? [{ value: currentValue, label: `${savedSelector} (target record unavailable)`, synthetic: true }]
       : []),
     ...options
   ];
 };
+
+// OV-373: a loaded Session reads no record bytes, so a catalog can wait for
+// discovery; a record an annotation names is then not inspected, not unavailable.
+const discoveryPending = (catalog) => (Array.isArray(catalog?.issues) ? catalog.issues : [])
+  .some((issue) => issue?.context?.reason === 'DISCOVERY_PENDING');
 
 /**
  * @typedef {object} AnnotationRecordSelectorOptions
@@ -168,7 +158,9 @@ export const createAnnotationRecordSelector = ({ getCatalog }) => {
     if (!named) return '';
     const record = current.status === 'ready' ? resolvedRecord(current, annotation) : null;
     const name = record?.recordId || annotationRecordSelectorValue(annotation?.target?.record);
-    return name ? `Record: ${name}` : '';
+    if (!name) return '';
+    const unread = current.status !== 'ready' && !discoveryPending(current) ? ' (record list unavailable)' : '';
+    return `Record: ${name}${unread}`;
   };
   return {
     showsSelect,
@@ -178,7 +170,6 @@ export const createAnnotationRecordSelector = ({ getCatalog }) => {
     setValue: (annotation, value) => setAnnotationRecordValue(catalog(), annotation, value),
     isRequired: () => Boolean(catalog().requiresSelection),
     isMissing,
-    isDisabled: () => catalog().status !== 'ready',
     missingMessage: () => 'Choose the record that this annotation targets.'
   };
 };

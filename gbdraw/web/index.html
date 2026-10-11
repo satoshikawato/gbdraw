@@ -1505,8 +1505,8 @@
             .group-heading { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ui-muted); }
             .input-label { @apply flex items-center gap-1; margin-bottom: 3px; font-size: 12px; font-weight: 500; line-height: 1.3; color: var(--ui-text-2); }
             .ui-hint { font-size: 11px; line-height: 1.45; color: var(--ui-muted); }
-            /* UX-C11: one marker for settings that the next Generate applies (R1). */
             .markup-preview { @apply mt-0.5 truncate text-[10px] text-slate-600; }
+            /* One marker for settings that the next Generate applies. */
             .apply-note { @apply inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-1.5 py-px text-[10px] font-medium leading-4 text-slate-500; }
 
             .form-input { @apply block w-full rounded-lg border bg-slate-50 p-2 text-sm transition-all focus:border-blue-500 focus:ring-blue-500; border-color: var(--ui-line); color: var(--ui-text-2); }
@@ -1736,7 +1736,7 @@
                                         <div class="grid grid-cols-2 gap-2">
                                             <div>
                                                 <label class="text-[9px] block">Start</label>
-                                                <input type="number" min="1" step="1" v-model.number="form.circular_region_start" :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled" aria-label="Circular region start" :aria-describedby="`help-circular-region${circularSingleRecordPresentationEnabled ? '' : ' circular-record-presentation-reason'}`" placeholder="1" class="form-input px-1 py-0.5 text-xs">
+                                                <input type="number" min="1" step="1" v-model.number="form.circular_region_start" :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled" aria-label="Circular region start" :aria-describedby="`help-circular-region${circularSingleRecordPresentationEnabled ? '' : ' circular-record-presentation-reason'}`" placeholder="Start (1)" class="form-input px-1 py-0.5 text-xs">
                                             </div>
                                             <div>
                                                 <label class="text-[9px] block">End</label>
@@ -1801,13 +1801,13 @@
                                     </div>
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>
-                                            <span class="input-label text-[10px]">Depth Window <help-tip id="help-circular-depth-window" text="Window size for depth aggregation. Leave blank for automatic depth aggregation."></help-tip></span>
+                                            <span class="input-label text-[10px]">Depth Window <help-tip id="help-circular-depth-window" text="Window size for depth aggregation. Blank: a tenth of the GC window, at least 100 bp."></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_window_size, 'depthWindow')" :text="autoValueText('depthWindow')">
                                                 <input type="number" min="1" step="1" v-model.number="adv.depth_window_size" aria-label="Depth Window" aria-describedby="help-circular-depth-window" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                         <div>
-                                            <span class="input-label text-[10px]">Depth Step <help-tip id="help-circular-depth-step" text="Step size for depth aggregation. Leave blank for automatic depth aggregation."></help-tip></span>
+                                            <span class="input-label text-[10px]">Depth Step <help-tip id="help-circular-depth-step" text="Step size for depth aggregation. Blank: a tenth of the GC step, at least 1 bp."></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_step_size, 'depthStep')" :text="autoValueText('depthStep')">
                                                 <input type="number" min="1" step="1" v-model.number="adv.depth_step_size" aria-label="Depth Step" aria-describedby="help-circular-depth-step" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
@@ -2224,7 +2224,7 @@
                                     <div class="grid grid-cols-2 gap-2">
                                         <div>
                                             <label class="text-[9px] block">Start</label>
-                                            <input type="number" min="1" :value="seq.region_start ?? ''" @change="setLinearRecordCrop(seq, 'region_start', $event.target.value)" :aria-label="`Region start for sequence ${idx + 1}`" :aria-describedby="`help-linear-region-${seq.uid}`" placeholder="1" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="1" :value="seq.region_start ?? ''" @change="setLinearRecordCrop(seq, 'region_start', $event.target.value)" :aria-label="`Region start for sequence ${idx + 1}`" :aria-describedby="`help-linear-region-${seq.uid}`" placeholder="Start (1)" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
                                         </div>
                                         <div>
                                             <label class="text-[9px] block">End</label>
@@ -2288,13 +2288,13 @@
                                     </div>
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>
-                                            <span class="input-label text-[10px]">Depth Window <help-tip id="help-linear-depth-window" text="Window size for depth aggregation. Leave blank for automatic depth aggregation."></help-tip></span>
+                                            <span class="input-label text-[10px]">Depth Window <help-tip id="help-linear-depth-window" text="Window size for depth aggregation. Blank: a tenth of the GC window, at least 100 bp."></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_window_size, 'depthWindow')" :text="autoValueText('depthWindow')">
                                                 <input type="number" min="1" step="1" v-model.number="adv.depth_window_size" aria-label="Depth Window" aria-describedby="help-linear-depth-window" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                         <div>
-                                            <span class="input-label text-[10px]">Depth Step <help-tip id="help-linear-depth-step" text="Step size for depth aggregation. Leave blank for automatic depth aggregation."></help-tip></span>
+                                            <span class="input-label text-[10px]">Depth Step <help-tip id="help-linear-depth-step" text="Step size for depth aggregation. Blank: a tenth of the GC step, at least 1 bp."></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_step_size, 'depthStep')" :text="autoValueText('depthStep')">
                                                 <input type="number" min="1" step="1" v-model.number="adv.depth_step_size" aria-label="Depth Step" aria-describedby="help-linear-depth-step" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
@@ -2762,7 +2762,7 @@
                         </div>
 
                         <template v-if="mode === 'circular'">
-                            <p class="apply-note" data-applies-on-generate="species-strain"><i class="ph ph-clock" aria-hidden="true"></i> Applies on Generate</p>
+                            <p class="apply-note" data-applies-on-generate="species-strain"><i class="ph ph-clock" aria-hidden="true"></i> Applies on Generate: species and strain</p>
                             <div class="grid grid-cols-2 gap-1.5">
                                 <div>
                                     <span class="input-label"><label for="circular-species">Species</label> <help-tip id="help-species" text="Species name used in the circular center label when no custom plot title is set."></help-tip></span>
@@ -2960,6 +2960,13 @@
                                         <input type="color" :value="(item.style || set.defaultStyle).fill || '#94a3b8'" @input="setAnnotationStyle(set, item, 'fill', $event.target.value)" class="form-input h-6 w-6 p-0" title="Fill color" aria-label="Annotation fill color" :disabled="!semanticMutationAvailable">
                                         <button aria-label="Delete annotation" type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeAnnotation(set, item)" title="Delete annotation" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                     </div>
+                                    <div class="flex min-w-0 items-center gap-2">
+                                        <select :value="item.target.kind" @change="setAnnotationTargetKind(item, $event.target.value)" aria-label="Annotation target kind" class="form-input w-auto shrink-0 px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable">
+                                            <option value="coordinateSpan">Coordinates</option><option value="featureSpan">Feature</option>
+                                            <option v-if="item.target.kind === 'featureIdentity'" value="featureIdentity" disabled>Selected feature</option>
+                                        </select>
+                                        <p v-if="item.target.kind !== 'featureIdentity' && annotationRecordCaption(item)" data-annotation-record-caption class="min-w-0 truncate text-[9px] text-slate-500" :title="annotationRecordCaption(item)">{{ annotationRecordCaption(item) }}</p>
+                                    </div>
                                     <div v-if="item.target.kind !== 'featureIdentity' && annotationRecordShowsSelect(item)">
                                         <label class="mb-0.5 flex items-center gap-1 text-[9px] text-slate-500">
                                             Target record
@@ -2968,7 +2975,7 @@
                                         <select
                                             :value="annotationRecordValue(item)"
                                             @change="setAnnotationRecord(item, $event.target.value)"
-                                            :disabled="!semanticMutationAvailable || (annotationRecordDisabled(item))"
+                                            :disabled="!semanticMutationAvailable"
                                             :class="annotationRecordMissing(item) ? 'border-red-400 bg-red-50' : ''"
                                             class="form-input px-1 py-0.5 text-[10px] disabled:bg-slate-100 disabled:text-slate-500"
                                             aria-label="Annotation target record"
@@ -2981,26 +2988,19 @@
                                         </select>
                                         <p v-if="annotationRecordMissing(item)" class="mt-0.5 text-[9px] text-red-600">{{ annotationRecordMissingMessage(item) }}</p>
                                     </div>
-                                    <p v-else-if="item.target.kind !== 'featureIdentity' && annotationRecordCaption(item)" data-annotation-record-caption class="text-[9px] text-slate-500">{{ annotationRecordCaption(item) }}</p>
                                     <details class="text-[10px]" data-annotation-style>
-                                        <summary :aria-label="`Style of annotation ${item.id}`" class="cursor-pointer text-[10px] text-slate-500"><i class="ph ph-pencil-simple" aria-hidden="true"></i> <span class="capitalize">{{ item.mark }}</span><template v-if="item.label"> · {{ item.label }}</template></summary>
+                                        <summary class="cursor-pointer text-[10px] text-slate-500"><span>Style: <span class="capitalize">{{ item.mark }}</span><template v-if="item.label"> · {{ item.label }}</template></span></summary>
                                         <div class="mt-1 space-y-1">
                                             <div class="grid grid-cols-2 gap-1">
-                                                <select :value="item.target.kind" @change="setAnnotationTargetKind(item, $event.target.value)" aria-label="Annotation target kind" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable">
-                                                    <option value="coordinateSpan">Coordinates</option><option value="featureSpan">Feature</option>
-                                                    <option v-if="item.target.kind === 'featureIdentity'" value="featureIdentity" disabled>Selected feature</option>
-                                                </select>
                                                 <select v-model="item.mark" aria-label="Annotation mark" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option value="highlight">Highlight (behind features)</option><option value="band">Band (annotation lane)</option><option value="line">Line</option><option value="bracket">Bracket</option></select>
-                                            </div>
-                                            <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-1">
                                                 <input v-model="item.label" aria-label="Annotation label" class="form-input px-1 py-0.5 text-[10px]" placeholder="Label" :disabled="!semanticMutationAvailable">
+                                            </div>
+                                            <div class="flex flex-wrap items-center gap-2">
                                                 <div class="flex items-center gap-0.5">
                                                     <input type="number" min="0" v-model.number="item.lane" :disabled="!semanticMutationAvailable || (item.mark === 'highlight')" class="form-input w-14 px-1 py-0.5 text-[10px] disabled:bg-slate-100 disabled:text-slate-400" placeholder="Auto" aria-label="Annotation lane" :aria-describedby="`help-annotation-lane-${item.id}`">
                                                     <help-tip :id="`help-annotation-lane-${item.id}`" label="Help: Annotation lane" text="Collision-avoidance row for Line, Bracket, and Band. Leave blank for Auto; use 0 for the first row, 1 for the second, and so on. Highlight always covers the full feature band."></help-tip>
                                                 </div>
-                                            </div>
-                                            <div class="flex items-center gap-2">
-                                                <label class="flex items-center gap-1 text-[10px] text-slate-600">Line <input type="color" :value="(item.style || set.defaultStyle).stroke" @input="setAnnotationStyle(set, item, 'stroke', $event.target.value)" class="form-input h-6 w-8 p-0" title="Stroke color" aria-label="Annotation stroke color" :disabled="!semanticMutationAvailable"></label>
+                                                <label class="flex items-center gap-1 text-[10px] text-slate-600">Line color <input type="color" :value="(item.style || set.defaultStyle).stroke" @input="setAnnotationStyle(set, item, 'stroke', $event.target.value)" class="form-input h-6 w-8 p-0" :disabled="!semanticMutationAvailable"></label>
                                                 <label class="flex items-center gap-1 text-[10px]"><input type="checkbox" :checked="Boolean((item.style || set.defaultStyle).hatch)" @change="setAnnotationStyle(set, item, 'hatch', $event.target.checked ? { angle: 45, spacing: 5, color: (item.style || set.defaultStyle).stroke, width: 1, cross: false } : null)" :disabled="!semanticMutationAvailable"> Hatch</label>
                                             </div>
                                         </div>
@@ -3863,19 +3863,19 @@
                                                             >
                                                         </div>
                                                     </div>
-                                                    <div v-if="entry.slot.renderer === 'dinucleotide_content' || entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
-                                                        <div class="track-slot-field">
-                                                            <span class="track-slot-field-label">dinucleotide <help-tip :id="`help-circular-slot-dinucleotide-${entry.index}`" text="Two-base code used for this content/skew track, such as GC or AT."></help-tip></span>
-                                                            <input :value="entry.slot.params.nt" @input="setCircularTrackSlotNt(entry.slot, $event.target.value)" :aria-label="`Circular track slot ${entry.slot.id} Track dinucleotide`" :aria-describedby="`help-circular-slot-dinucleotide-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" placeholder="GC" :disabled="!semanticMutationAvailable">
-                                                        </div>
-                                                        <div class="track-slot-field">
-                                                            <span class="track-slot-field-label">legend label <help-tip :id="`help-circular-slot-legend-label-${entry.index}`" text="Base text shown in the diagram legend. Leave blank to use the auto label shown here; two-color tracks add (+) and (-)."></help-tip></span>
-                                                            <input v-model.trim="entry.slot.params.legend_label" :aria-label="`Circular track slot ${entry.slot.id} Track legend label`" :aria-describedby="`help-circular-slot-legend-label-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" :placeholder="circularTrackSlotLegendLabelPlaceholder(entry.slot)" :disabled="!semanticMutationAvailable">
-                                                        </div>
-                                                    </div>
                                                     <details class="track-slot-more" :data-track-slot-more="entry.slot.id" :open="circularTrackSlotOptionsOpen(entry.slot)" @toggle="setCircularTrackSlotOptionsOpen(entry.slot, $event)">
-                                                        <summary class="cursor-pointer text-[10px] text-slate-500">{{ entry.slot.renderer === 'dinucleotide_skew' ? 'Gaps and colors' : 'Gaps' }}<span v-if="entry.slot.inner_gap_px || entry.slot.outer_gap_px" class="text-slate-700"> · set</span><span v-if="entry.slot.renderer === 'dinucleotide_skew' && (circularTrackSlotHasSkewColorOverride(entry.slot, 'positive_color') || circularTrackSlotHasSkewColorOverride(entry.slot, 'negative_color'))" class="text-slate-700"> · custom colors</span></summary>
+                                                        <summary class="cursor-pointer text-[10px] text-slate-500"><span>{{ circularTrackSlotOptionsSummary(entry.slot) }}<span v-if="entry.slot.inner_gap_px || entry.slot.outer_gap_px" class="text-slate-700"> · gaps set</span><span v-if="entry.slot.renderer === 'dinucleotide_skew' && (circularTrackSlotHasSkewColorOverride(entry.slot, 'positive_color') || circularTrackSlotHasSkewColorOverride(entry.slot, 'negative_color'))" class="text-slate-700"> · custom colors</span></span></summary>
                                                         <div class="mt-1 space-y-1">
+                                                            <div v-if="entry.slot.renderer === 'dinucleotide_content' || entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
+                                                                <div class="track-slot-field">
+                                                                    <span class="track-slot-field-label">dinucleotide <help-tip :id="`help-circular-slot-dinucleotide-${entry.index}`" text="Two-base code used for this content/skew track, such as GC or AT."></help-tip></span>
+                                                                    <input :value="entry.slot.params.nt" @input="setCircularTrackSlotNt(entry.slot, $event.target.value)" :aria-label="`Circular track slot ${entry.slot.id} Track dinucleotide`" :aria-describedby="`help-circular-slot-dinucleotide-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" placeholder="GC" :disabled="!semanticMutationAvailable">
+                                                                </div>
+                                                                <div class="track-slot-field">
+                                                                    <span class="track-slot-field-label">legend label <help-tip :id="`help-circular-slot-legend-label-${entry.index}`" text="Base text shown in the diagram legend. Leave blank to use the auto label shown here; two-color tracks add (+) and (-)."></help-tip></span>
+                                                                    <input v-model.trim="entry.slot.params.legend_label" :aria-label="`Circular track slot ${entry.slot.id} Track legend label`" :aria-describedby="`help-circular-slot-legend-label-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" :placeholder="circularTrackSlotLegendLabelPlaceholder(entry.slot)" :disabled="!semanticMutationAvailable">
+                                                                </div>
+                                                            </div>
                                                             <div class="grid grid-cols-2 gap-1">
                                                                 <div class="track-slot-field">
                                                                     <span class="track-slot-field-label">inner gap <help-tip :id="`help-circular-slot-inner-gap-${entry.index}`" text="Physical radial gap on the side closer to the center, in pixels (px optional; nonnegative). Leave blank for auto."></help-tip></span>
@@ -4133,6 +4133,7 @@
                     <details>
                         <summary aria-label="Legend settings"><i class="ph ph-list-bullets" aria-hidden="true"></i> Legend · {{ legendPositionLabel(form.legend) }} <help-tip text="Adjust legend position and typography."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
+                            <p class="apply-note" data-applies-on-generate="legend"><i class="ph ph-clock" aria-hidden="true"></i> Applies on Generate</p>
                             <div>
                                 <span class="input-label text-[10px] mb-1"><label for="legend-position">Position</label> <help-tip id="help-legend-position" text="Position of the legend. 'None' hides the legend."></help-tip></span>
                                 <select id="legend-position" v-model="form.legend" class="form-input text-xs py-1" aria-label="Legend position" aria-describedby="help-legend-position" :disabled="!semanticMutationAvailable">
@@ -4147,7 +4148,6 @@
                                     <option value="none">None</option>
                                 </select>
                             </div>
-                            <p class="apply-note" data-applies-on-generate="legend"><i class="ph ph-clock" aria-hidden="true"></i> Applies on Generate</p>
                             <div class="grid grid-cols-2 gap-1.5">
                                 <div>
                                     <span class="input-label text-[10px]">Swatch size <help-tip id="help-legend-swatch-size" text="Size of the color boxes in the legend."></help-tip></span>
@@ -4213,7 +4213,7 @@
                                     <option v-for="p in paletteNames" :value="p">{{ p }}</option>
                                 </select>
                                 <div class="mb-1 flex items-center justify-between gap-2">
-                                    <span class="input-label text-[10px] !mb-0">Colors in this figure</span>
+                                    <span class="input-label text-[10px] !mb-0">Colors in this figure or changed</span>
                                     <span data-default-color-application-help class="apply-note">{{ hasPendingPaletteDraft ? 'Applies on Generate' : 'Live edit' }}</span>
                                 </div>
                                 <div class="grid grid-cols-2 gap-1.5 bg-white p-2 rounded border border-slate-200">
@@ -4267,7 +4267,7 @@
                             <div data-history-managed>
                                 <p v-if="ruleMatchingPending" role="status" class="text-xs text-slate-500">Checking color rules…</p>
                                 <div class="flex items-center justify-between mb-2">
-                                    <h4 class="group-heading" aria-label="SPECIFIC RULES">SPECIFIC RULES <help-tip text="Color features whose qualifier value matches a regular expression, for example NADH or (?i)nadh. Choose a suggested qualifier or type any qualifier name. When rules use the same qualifier, the first matching row wins; Move rule up and down changes that order. Rules on different qualifiers are tried in the order the qualifiers appear on the feature."></help-tip></h4>
+                                    <h4 class="group-heading" aria-label="SPECIFIC RULES">SPECIFIC RULES <help-tip text="Color features whose qualifier value matches a regular expression, case-insensitive (for example NADH). Choose a suggested qualifier or type any qualifier name. When rules use the same qualifier, the first matching row wins; Move rule up and down changes that order. Rules on different qualifiers are tried in the order the qualifiers appear on the feature."></help-tip></h4>
                                     <div v-if="manualSpecificRules.length > 0" class="flex items-center gap-2">
                                         <button @click="downloadSpecificRulesTsv" class="text-[10px] text-blue-600 hover:text-blue-700 hover:underline"><i class="ph ph-download-simple" aria-hidden="true"></i> TSV</button>
                                         <button @click="clearAllSpecificRules" class="text-[10px] text-red-600 hover:text-red-700 hover:underline" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i> Clear All</button>
@@ -5796,7 +5796,7 @@
                                 </option>
                             </datalist>
                             <div v-if="specificRuleLegendOptions.length > 0" class="mt-1">
-                                <p class="ui-hint mb-1">Suggestions from SPECIFIC RULES (-t)</p>
+                                <p class="ui-hint mb-1">Suggestions from the legend captions of your color rules</p>
                                 <select :disabled="!semanticMutationAvailable" @change="selectLegendNameOption($event.target.value); $event.target.value = ''"
                                         class="w-full text-xs border border-slate-200 rounded-md px-2 py-1 bg-slate-50 text-slate-600">
                                     <option value="">Select legend text...</option>
@@ -5808,7 +5808,7 @@
                                 </select>
                             </div>
                             <p v-else class="ui-hint mt-1">
-                                No SPECIFIC RULES (-t) legend text available yet
+                                No color rule has a legend caption yet
                             </p>
                         </div>
                             </div>
@@ -8052,13 +8052,13 @@
       <span class="shrink-0 text-[10px] text-slate-500">{{ row.selector }} · {{ Number(row.recordLength).toLocaleString('en-US') }} bp</span>
     </div>
     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-      <label class="flex items-center gap-1.5"><input data-history-managed type="checkbox" class="form-checkbox" :disabled="!controlAvailable" :checked="surface.effectiveCircular" @change="controller.setTopology(row, $event.target.checked)" :aria-label="`Circular record ${row.recordId} ${row.selector}`"> Circular record</label>
+      <label class="flex items-center gap-1.5"><input ref="topology" data-history-managed type="checkbox" class="form-checkbox" :disabled="!controlAvailable" :checked="surface.effectiveCircular" @change="controller.setTopology(row, $event.target.checked)" :aria-label="`Circular record ${row.recordId} ${row.selector}`"> Circular record</label>
       <span class="ui-hint">(file: {{ row.detectedTopology }})</span>
-      <button v-if="draft.topologyOverride != null" data-history-managed type="button" :disabled="!controlAvailable" class="ml-auto text-[10px] text-blue-600" @click="controller.setTopology(row, null)">Reset to detected</button>
+      <button v-if="draft.topologyOverride != null" data-history-managed type="button" :disabled="!controlAvailable" class="ml-auto text-[10px] text-blue-600" @click="$refs.topology.focus(); controller.setTopology(row, null)">Reset to detected</button>
     </div>
     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-      <label class="flex items-center gap-1.5">Display start <input data-history-managed type="number" min="1" :max="row.recordLength" :value="surface.displayStart" :disabled="!controlAvailable || !surface.startEnabled" @change="setStart($event)" :aria-label="`Display start ${row.recordId} ${row.selector}`" class="form-input form-input-compact w-24"></label>
-      <button v-if="draft.startCoordinate != null" data-history-managed type="button" :disabled="!controlAvailable" @click="controller.resetStart(row)" class="ml-auto text-[10px] text-blue-600">Reset start</button>
+      <label class="flex items-center gap-1.5">Display start <input ref="start" data-history-managed type="number" min="1" :max="row.recordLength" :value="surface.displayStart" :disabled="!controlAvailable || !surface.startEnabled" @change="setStart($event)" :aria-label="`Display start ${row.recordId} ${row.selector}`" class="form-input form-input-compact w-24"></label>
+      <button v-if="draft.startCoordinate != null" data-history-managed type="button" :disabled="!controlAvailable" @click="$refs.start.focus(); controller.resetStart(row)" class="ml-auto text-[10px] text-blue-600">Reset start</button>
     </div>
     <div v-if="error" role="alert" class="text-red-600">{{ error }}</div>
     <div v-if="!surface.startEnabled" class="ui-hint">{{ surface.disabledReason }}</div>

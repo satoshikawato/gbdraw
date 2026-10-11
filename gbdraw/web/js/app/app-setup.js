@@ -1801,7 +1801,20 @@ export const createAppSetup = () => {
     state, state.drawings.circular
   ));
   const losatSettings = createLosatSettings({ state });
-  const autoValueDisplay = createAutoValueDisplay(state);
+  // Auto values follow the longest record the next Linear Generate draws, once
+  // every drawn record is read and none is cropped; until then they name their rule.
+  const autoValueDisplay = createAutoValueDisplay(state, {
+    linearRecordLengths: () => {
+      const lengths = state.drawings.linear.drawnLinearSeqs.value.map((seq) => {
+        if (String(seq.region_start ?? '').trim() || String(seq.region_end ?? '').trim()) return NaN;
+        const records = linearRecordSelector.recordsFor(seq);
+        const selection = resolveDisambiguatedRecordSelection(records, seq.region_record_id);
+        const record = selection.record || (selection.status === 'unspecified' && records.length === 1 ? records[0] : null);
+        return Number(record?.recordLength);
+      });
+      return lengths.length && lengths.every((length) => length > 0) ? lengths : [];
+    }
+  });
   const depthTrackDefaultColors = [
     '#4A90E2',
     '#E45756',
@@ -5866,7 +5879,10 @@ export const createAppSetup = () => {
     : computed(() => state.activeDrawing()[key]));
 
   // UX-C03: the default colors of the feature types the shown figure draws,
-  // and those changed from the palette, come first; the others wait under More.
+  // and the user's own default colors, come first; the others wait under More.
+  // The values are read untracked, so editing a color never moves it to the
+  // other grid; the grouping follows the drawn types, the palette, the keys,
+  // and a replaced color table (Reset, palette change, Session load).
   const defaultColorGroups = computed(() => {
     const drawing = state.activeDrawing();
     /** @type {Record<string, string>} */
@@ -5878,11 +5894,12 @@ export const createAppSetup = () => {
     const circular = mode.value === 'circular';
     if (circular ? !drawing.form.suppress_gc : drawing.form.show_gc) drawn.add('gc_content');
     if (circular ? !drawing.form.suppress_skew : drawing.form.show_skew) ['skew_high', 'skew_low'].forEach((key) => drawn.add(key));
-    if (!circular && state.linearSeqs.length > 1) COMPARISON_COLOR_KEYS.forEach((key) => drawn.add(key));
-    /** @type {Record<string, string>} */
-    const palette = state.paletteDefinitions.value?.[drawing.selectedPalette.value] || {};
-    const primary = keys.filter((key) => key === 'default' || drawn.has(key) || colors[key] !== palette[key]);
-    return { primary, more: keys.filter((key) => !primary.includes(key)) };
+    if (!circular && state.linearSeqs.length > 1 && linearComparisonGlobalAction.value !== 'none') {
+      COMPARISON_COLOR_KEYS.forEach((key) => drawn.add(key));
+    }
+    resultsManager.userDefaultColorRows(drawing, toRaw(colors)).forEach(([key]) => drawn.add(key));
+    const primary = keys.filter((key) => key === 'default' || drawn.has(key));
+    return { primary, more: keys.filter((key) => !drawn.has(key) && key !== 'default') };
   });
 
   return {
@@ -5998,7 +6015,6 @@ export const createAppSetup = () => {
     setAnnotationRecord: annotationEditor.setRecordValue,
     annotationRecordRequired: annotationEditor.recordIsRequired,
     annotationRecordMissing: annotationEditor.recordIsMissing,
-    annotationRecordDisabled: annotationEditor.recordIsDisabled,
     annotationRecordMissingMessage: annotationEditor.recordMissingMessage,
     annotationRecordShowsSelect: annotationEditor.recordShowsSelect,
     annotationRecordCaption: annotationEditor.recordCaptionFor,
@@ -6142,6 +6158,7 @@ export const createAppSetup = () => {
     circularTrackSlotEditorKey: circularTrackSlotEditor.circularTrackSlotEditorKey,
     circularTrackSlotOptionsOpen: circularTrackSlotEditor.circularTrackSlotOptionsOpen,
     setCircularTrackSlotOptionsOpen: circularTrackSlotEditor.setCircularTrackSlotOptionsOpen,
+    circularTrackSlotOptionsSummary: circularTrackSlotEditor.circularTrackSlotOptionsSummary,
     updateCircularTrackSlotMeasure: circularTrackSlotEditor.updateCircularTrackSlotMeasure,
     circularTrackRendererLabel: circularTrackSlotEditor.circularTrackRendererLabel,
     resetCircularTrackSlotsFromSimpleControls: circularTrackSlotEditor.resetCircularTrackSlotsFromSimpleControls,

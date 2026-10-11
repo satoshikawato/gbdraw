@@ -154,9 +154,9 @@ export const recordDisplaySurface = (row, draft = {}, { cropped = false, reverse
       : !lengthKnown ? 'Record length is unavailable.'
         : !effectiveCircular ? 'Display start requires a circular record.' : '',
     currentStart,
-    // OV-374: the Display start field shows the start the record is drawn
-    // from, the requested one or the current one, never an empty field.
-    displayStart: draft.startCoordinate != null && startEnabled ? draft.startCoordinate : currentStart
+    // OV-374: the Display start field shows the requested start, kept while
+    // the field is disabled, or else the current one; never an empty field.
+    displayStart: draft.startCoordinate ?? currentStart
   };
 };
 

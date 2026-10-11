@@ -888,9 +888,9 @@ def capture_gui_annotation_tracks(
         skew_slot = page.get_by_role(
             "group", name="Circular track slot gc_skew", exact=True
         )
-        track_nt = skew_slot.get_by_label(
+        track_nt = open_ancestor_details(skew_slot.get_by_label(
             "Circular track slot gc_skew Track dinucleotide", exact=True
-        )
+        ))
         track_nt.fill("AT")
         expect(track_nt).to_have_value("AT")
         track_legend = skew_slot.get_by_label(
