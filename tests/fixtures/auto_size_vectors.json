@@ -132,11 +132,11 @@
       }
     },
     {
-      "name": "Linear labels take the largest size over the records; the class follows the longest",
+      "name": "Linear labels follow the class of the longest record, like the other sizes",
       "mode": "linear",
       "recordLengths": [200000, 20000],
       "expected": {
-        "labels.font_size.linear": 24,
+        "labels.font_size.linear": 5,
         "canvas.linear.default_cds_height": 20,
         "objects.scale.interval": 50000
       }

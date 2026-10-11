@@ -170,9 +170,31 @@ def test_circular_track_width_per_renderer(renderer: str, factor_index: int, sca
     )
 
 
-def test_linear_label_font_takes_the_largest_size_over_the_records(cfg: GbdrawConfig) -> None:
-    assert linear_label_font_size([200_000], cfg) == 5.0
-    assert linear_label_font_size([200_000, 20_000], cfg) == 24.0
+@pytest.mark.parametrize(
+    ("scope_lengths", "size"),
+    [
+        ((200_000, 20_000), "long"),
+        ((20_000, 200_000), "long"),
+        ((20_000, 99_999), "short"),
+        ((200_000, 100_000), "long"),
+    ],
+)
+def test_linear_label_font_follows_the_longest_record_in_the_label_scope(
+    cfg: GbdrawConfig, scope_lengths: tuple[int, ...], size: str
+) -> None:
+    assert linear_label_font_size(scope_lengths, cfg) == getattr(cfg.labels.font_size.linear, size)
+
+
+def test_linear_label_font_of_a_scope_limited_to_the_short_record_stays_short(cfg: GbdrawConfig) -> None:
+    lengths = (20_000, 200_000)
+    profile = LinearRenderProfile(apply_config_overrides(cfg, {"labels.linear.scope": "first"}))
+    canvas = LinearCanvasConfigurator(
+        num_of_entries=len(lengths), longest_genome=max(lengths), profile=profile, legend="none"
+    )
+    assert canvas.length_param == "long"
+    assert _resolve_linear_diagram_label_font_size(
+        [_record(length) for length in lengths], canvas_config=canvas, profile=profile
+    ) == cfg.labels.font_size.linear.short
 
 
 def test_drawn_extent_size_class_follows_the_longest_record(cfg: GbdrawConfig) -> None:

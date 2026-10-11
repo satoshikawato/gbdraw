@@ -20,10 +20,15 @@ write-up of a release.
   size explicitly to keep the previous look. What changes:
   - A Linear diagram whose longest record is 50,000 to 99,999 bp now gets the
     short styles (larger labels, features, strokes, and legend).
-  - A Linear diagram whose label scope (`--show_labels`) holds a record of
-    50,000 to 99,999 bp beside a record of 100 kb or longer now draws every
-    label at the short size (24 pt) while the features keep the long sizes,
-    as it already did for a record under 50 kb.
+  - A Linear diagram with records of both size classes now sizes its labels
+    like its features, by the longest record in the label scope
+    (`--show_labels`): with `--show_labels all`, a record under 100 kb beside
+    one of 100 kb or longer gets the long label size (5 pt). Before, one
+    record under 50 kb in the scope made every label 24 pt on 20 px features
+    (OV-482). With the scope limited to a short record, as with
+    `--show_labels first`, the labels keep the short size; a label filter
+    such as a whitelist does not change the scope. A Session saved earlier
+    is drawn by this rule too and keeps its stored boundary.
   - A Circular record of 50,000 to 74,999 bp drawn alone or beside shorter
     records now gets the short styles.
   - On a Circular Multi-Record Canvas, a record of 50,000 to 74,999 bp beside
