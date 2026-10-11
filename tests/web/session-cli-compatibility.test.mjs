@@ -399,8 +399,12 @@ await test('a request whose Circular slot objects name a renderer by alias loads
     slot('features', 'features'), slot('c', 'content'), slot('g', 'GC_Content'), slot('s', 'skew')
   ];
   session.renderRequest.diagramOptions.tracks.circularTrackAxisIndex = 0;
+  // Without the Web `config`, the form's slots come from the request alone.
+  delete session.config;
   const result = await load(Buffer.from(JSON.stringify(session)));
   assert.equal(result.status, 'ok', JSON.stringify(result.error));
+  assert.deepEqual(state.drawings.circular.adv.circular_track_slots.map(({ id, renderer }) => [id, renderer]),
+    [['features', 'features'], ['c', 'dinucleotide_content'], ['g', 'dinucleotide_content'], ['s', 'dinucleotide_skew']]);
   const { getCommittedCanonicalRenderRequest } = await import('../../gbdraw/web/js/services/config.js');
   const { drawnTracks } = await import('../../gbdraw/web/js/services/track-legend-rows.js');
   assert.deepEqual(drawnTracks(getCommittedCanonicalRenderRequest()).map(({ slotId, kind }) => [slotId, kind]),
