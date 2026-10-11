@@ -1578,8 +1578,10 @@
             .ui-hint { font-size: 11px; line-height: 1.45; color: var(--ui-muted); }
             .markup-preview { @apply mt-0.5 text-slate-600; font-size: 11px; overflow-wrap: anywhere; }
             /* A File-level names block its card does not show stays while the focus is in it, so
-               clearing its last value does not remove the field being edited. */
-            .linear-file-names-unused:not(:focus-within) { display: none; }
+               clearing its last value does not remove the field being edited; the record's names
+               take its place when the focus leaves. A card shows one names block. */
+            .linear-file-names-unused:not(:focus-within),
+            .linear-file-names-unused:focus-within + [data-linear-record-names] { display: none; }
             /* One marker for settings that the next Generate applies. */
             .apply-note { @apply inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-1.5 py-px font-medium leading-4 text-slate-500; font-size: 11px; }
 

@@ -53,13 +53,15 @@ the rich feature popup are shared. A saved Session keeps each mode's settings
 A Circular GenBank upload uses **GenBank/DDBJ File**. Each Linear **File** card
 starts with its **GenBank / DDBJ File** uploader, or its matched GFF3 and FASTA
 uploaders, followed by its name fields and a closed **Record options**
-disclosure. A File with one record shows that record's own **Organism /
-strain** and **Subtitle / title** on the card. A File with two or more records
-shows **Names for all records in this file**, and each record keeps its own
-name fields in its **Record options**. On a one-record File, **Names for all
-records in this file** appears only while it holds a value, for example from a
-loaded Session; a record draws its own value, else the File value, else the
-inferred definition. Use the up and down buttons in a File header to
+disclosure. The card shows one names block. A File with one record shows that
+record's own **Organism / strain** and **Subtitle / title** on the card. A File
+with two or more records, or a one-record File that holds a File-level name
+(for example from a loaded Session), shows **Names for all records in this
+file**, and each record keeps its own name fields in its **Record options**.
+Clearing the File-level name of a one-record File puts the record's fields on
+the card once the focus leaves the block. A record draws its own value, else
+the File value, else the inferred definition. Use the up and down buttons in a
+File header to
 move that source. Every record in a multi-record GenBank or GFF3 + FASTA source
 moves together, while the record order inside the source stays unchanged. When
 each File uses its own consecutive rows, the File moves as one block of rows and

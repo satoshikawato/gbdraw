@@ -155,18 +155,16 @@ export const setLinearSourceDefaultSubtitle = (source, value) => {
  * @property {LinearSourceRecord | null} cardRecord The record whose own name
  *   fields sit on the card; null when each record keeps them in its Record options.
  */
-// The one decision of which name fields a File card shows. A File with one
-// row shows that record's own names on the card, and the File-level block only
-// while it holds a value, so no stored value is hidden; a File with more rows
-// shows the File-level block and each record's names in its Record options.
+// The one decision of which name fields a File card shows: one block. A File
+// with one row and no File-level value shows that record's own names on the
+// card. Any other File shows the File-level block, so no stored value is
+// hidden, and each record's names in its Record options.
 // It reads the rows the File has, not whether its records were inspected.
 /** @param {{ records: readonly LinearSourceRecord[] }} source @returns {LinearFileCardNames} */
 export const linearFileCardNames = (source) => {
-  const cardRecord = source.records.length === 1 ? source.records[0] : null;
-  return {
-    fileNames: !cardRecord || Boolean(getLinearSourceDefaultDefinition(source) || getLinearSourceDefaultSubtitle(source)),
-    cardRecord
-  };
+  const fileValue = Boolean(getLinearSourceDefaultDefinition(source) || getLinearSourceDefaultSubtitle(source));
+  const cardRecord = source.records.length === 1 && !fileValue ? source.records[0] : null;
+  return { fileNames: !cardRecord, cardRecord };
 };
 
 // A record draws its own Definition, else the File default the user entered,

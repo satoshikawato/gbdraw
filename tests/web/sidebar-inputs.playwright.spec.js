@@ -244,7 +244,7 @@ test('a one-record File shows its record names on the File card', async ({ page 
   await expect(fileNames).toBeHidden();
 });
 
-test('a one-record File keeps the File names block while it holds a value', async ({ page }) => {
+test('a one-record File that holds a File names value keeps the File names block alone', async ({ page }) => {
   test.setTimeout(240000);
   await openLinearWithFile(page, 'one.gb', namedGenbank('ONE_REC', 'Aeromonas hydrophila'), 1);
   // A one-record card has no field for a File value; a Session can hold one.
@@ -259,11 +259,16 @@ test('a one-record File keeps the File names block while it holds a value', asyn
   const card = page.locator('[data-linear-source-card]').first();
   const fileNames = card.locator('[data-linear-source-defaults]');
   const fileDefinition = page.getByLabel('Default definition for file 1', { exact: true });
-  const names = card.locator(':scope > [data-linear-record-names]');
+  const cardNames = card.locator(':scope > [data-linear-record-names]');
+  const names = card.locator('[data-linear-record-options] [data-linear-record-names]');
   const definition = page.getByLabel('Definition for sequence 1', { exact: true });
   await expect(fileNames).toBeVisible();
   await expect(fileNames).toContainText('Names for all records in this file');
   await expect(fileDefinition).toHaveValue('File organism');
+  // One names block: the record's own fields stay in Record options.
+  await expect(cardNames).toHaveCount(0);
+  await expect(definition).toBeHidden();
+  await card.getByRole('button', { name: 'Record options for sequence 1', exact: true }).click();
   await expect(definition).toBeVisible();
   await expect(definition).toHaveValue('');
   await expect(definition).toHaveAttribute('placeholder', 'File organism');
@@ -279,18 +284,24 @@ test('a one-record File keeps the File names block while it holds a value', asyn
     return app.resolveLinearRecordEffectiveDefinition(app.linearSeqs[0], app.linearSourceGroups[0]);
   })).toBe('File organism');
 
-  // Clearing the last File value keeps the block while the focus is in it.
+  // Clearing the last File value keeps the block, alone, while the focus is in it.
   await fileDefinition.fill('');
   await expect(fileDefinition).toBeFocused();
   await expect(fileNames).toBeVisible();
-  await definition.focus();
+  await expect(definition).toBeHidden();
+  // When the focus leaves, the record's own fields take its place on the card.
+  await fileDefinition.blur();
   await expect(fileNames).toBeHidden();
+  await expect(cardNames).toHaveCount(1);
+  await expect(names).toHaveCount(0);
+  await expect(definition).toBeVisible();
   const inferred = await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].inferred_definition);
   await expect(definition).toHaveAttribute('placeholder', inferred || 'e.g., Escherichia coli O157:H7 Sakai');
-  // Undo brings the value back, and the block with it.
+  // Undo brings the value back, and the File block with it.
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect(fileNames).toBeVisible();
   await expect(fileDefinition).toHaveValue('File organism');
+  await expect(cardNames).toHaveCount(0);
 });
 
 // Unchanged behaviour: this case passes before and after the one-record change.

@@ -268,17 +268,16 @@ test('a one-record File shows its record names on the card and no empty File nam
   assert.equal(names.cardRecord.sequence, record);
 });
 
-test('a one-record File keeps the File names block while it holds a value', () => {
+test('a one-record File that holds a File-level value keeps the File names block alone', () => {
   for (const stored of [{ file_definition: 'File organism' }, { file_subtitle: 'File subtitle' }]) {
-    const record = createLinearSeq({ uid: 'only', gb: { name: 'one.gb' }, ...stored });
+    const record = createLinearSeq({ uid: 'only', gb: { name: 'one.gb' }, definition: 'Own', ...stored });
     const [source] = groupLinearSourceRecords([record]);
-    const names = linearFileCardNames(source);
-    assert.equal(names.fileNames, true, JSON.stringify(stored));
-    assert.equal(names.cardRecord?.sequence, record, 'the record names stay on the card');
-    // Clearing the stored value hides the block again.
+    // One names block: the record's names stay in Record options.
+    assert.deepEqual(linearFileCardNames(source), { fileNames: true, cardRecord: null }, JSON.stringify(stored));
+    // Clearing the stored value puts the record's names on the card instead.
     setLinearSourceDefaultDefinition(source, '');
     setLinearSourceDefaultSubtitle(source, '');
-    assert.equal(linearFileCardNames(source).fileNames, false);
+    assert.deepEqual(linearFileCardNames(source), { fileNames: false, cardRecord: source.records[0] });
   }
 });
 
