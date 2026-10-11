@@ -50,10 +50,9 @@ test('feature list, popup, hover, and Location search use 1-based INSDC location
     const app = window.__GBDRAW_APP__;
     await app.openFeatureEditorFromList(app.extractedFeatures.find((feature) => feature.svg_id === id), null);
   }, ids.LOC_0002);
-  await expect(page.getByRole('dialog', { name: /^Feature details:/ }))
-    .toContainText(`LOCTEST: ${SPLIT}`);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.clickedFeature.detailRows
-    .find((row) => row.key === 'location').value)).toBe(SPLIT);
+  // The header line names the record and the location with grouped digits (UX-B12).
+  await expect(page.locator('[data-feature-popup-summary]')).toHaveText('LOCTEST · 1,101..1,200; 1..200 (+)');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.clickedFeature.location)).toBe(SPLIT);
   // The CDS has a gene and a locus tag but no protein_id, so Details has no
   // Protein ID row (GX-08); before, the row showed the locus tag.
   const details = page.getByRole('dialog', { name: /^Feature details:/ });

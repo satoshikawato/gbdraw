@@ -29,7 +29,7 @@ import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
 import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
-import { createRecordDisplayControls } from './record-display-options.js';
+import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from './record-display-options.js';
 import { isCurrentFeature } from '../services/feature-identity.js';
 import {
   createFeatureRecordRotationAction,
@@ -112,7 +112,7 @@ import { createPaletteLoader } from './palettes.js';
 import { afterPaint, createRunAnalysis } from './run-analysis.js';
 import { createSimilarityAlignmentActions } from './similarity-alignment.js';
 import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
-import { popupViewportBottom } from '../utils/popup-bounds.js';
+import { placePopupNearPoint, popupViewportBounds } from '../utils/popup-bounds.js';
 import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
 import {
@@ -3008,9 +3008,20 @@ export const createAppSetup = () => {
     recordActionsExpanded.value = !recordActionsExpanded.value;
     if (recordActionsExpanded.value) featureRecordRotation.readRecords();
   };
+  // UX-B09: a record that rotation cannot use (a linear or cropped record)
+  // shows the rotation row disabled with this reason; a record a Session Load
+  // left unread is read when the row opens.
+  const featureRecordRotationUnavailable = computed(() => {
+    const { targetFailure, disabledReason } = featureRecordRotation.draft;
+    return targetFailure && targetFailure !== RECORD_TARGET_NOT_DISCOVERED && !recordActionsExpanded.value
+      ? disabledReason : '';
+  });
+  // Cancel discards the draft and starts a fresh one for the open popup, as
+  // opening the popup does, so a record found unusable stays explained.
   const cancelRecordActions = () => {
     featureRecordRotation.cancel();
     recordActionsExpanded.value = false;
+    if (clickedFeature.value?.feat) featureRecordRotation.open({ feature: clickedFeature.value.feat });
   };
   historySnapshots.setGeneratedArtifactRuntimeOwner({
     capture: () => ({
@@ -4322,12 +4333,14 @@ export const createAppSetup = () => {
     if (!palette || similarityAlignmentCompact.value) return;
     const margin = 12;
     const maxX = Math.max(margin, window.innerWidth - palette.offsetWidth - margin);
-    const maxY = Math.max(margin, popupViewportBottom() - palette.offsetHeight - margin);
+    const { top, bottom } = popupViewportBounds();
+    const minY = top + margin;
+    const maxY = Math.max(minY, bottom - palette.offsetHeight - margin);
     similarityAlignmentPalettePosition.x = Math.min(
       Math.max(similarityAlignmentPalettePosition.x ?? maxX, margin), maxX
     );
     similarityAlignmentPalettePosition.y = Math.min(
-      Math.max(similarityAlignmentPalettePosition.y ?? margin, margin), maxY
+      Math.max(similarityAlignmentPalettePosition.y ?? minY, minY), maxY
     );
   };
   const similarityAlignmentPaletteStyle = computed(() => similarityAlignmentCompact.value ? {} : ({
@@ -4628,68 +4641,61 @@ export const createAppSetup = () => {
     return Math.min(Math.max(numeric, safeMin), safeMax);
   };
 
-  // The popup's size follows the app-level rich popup preference.
-  const getFeaturePopupConstraints = (left = clickedFeaturePos.x, top = clickedFeaturePos.y) => {
-    const viewportWidth = Math.max(1, window.innerWidth || 1);
-    const viewportHeight = popupViewportBottom();
-    const availableWidth = Math.max(1, viewportWidth - (FEATURE_POPUP_MARGIN * 2));
-    const availableHeight = Math.max(1, viewportHeight - (FEATURE_POPUP_MARGIN * 2));
-    const desiredMinWidth =
-      richFeaturePopup.value === false ? FEATURE_POPUP_SIMPLE_MIN_WIDTH : FEATURE_POPUP_RICH_MIN_WIDTH;
+  // A popup's size limits at its position, inside the popup bounds.
+  const popupConstraints = (left, top, desiredMinWidth, desiredMinHeight) => {
+    const bounds = popupViewportBounds();
+    const availableWidth = Math.max(1, bounds.right - (FEATURE_POPUP_MARGIN * 2));
+    const availableHeight = Math.max(1, bounds.bottom - bounds.top - (FEATURE_POPUP_MARGIN * 2));
     const minWidth = Math.min(desiredMinWidth, availableWidth);
-    const minHeight = Math.min(FEATURE_POPUP_MIN_HEIGHT, availableHeight);
+    const minHeight = Math.min(desiredMinHeight, availableHeight);
     return {
       minWidth,
       minHeight,
-      maxWidth: Math.max(minWidth, viewportWidth - left - FEATURE_POPUP_MARGIN),
-      maxHeight: Math.max(minHeight, viewportHeight - top - FEATURE_POPUP_MARGIN)
+      maxWidth: Math.max(minWidth, bounds.right - left - FEATURE_POPUP_MARGIN),
+      maxHeight: Math.max(minHeight, bounds.bottom - top - FEATURE_POPUP_MARGIN)
     };
   };
+  // The popup's size follows the app-level rich popup preference.
+  const getFeaturePopupConstraints = (left = clickedFeaturePos.x, top = clickedFeaturePos.y) => popupConstraints(
+    left, top,
+    richFeaturePopup.value === false ? FEATURE_POPUP_SIMPLE_MIN_WIDTH : FEATURE_POPUP_RICH_MIN_WIDTH,
+    FEATURE_POPUP_MIN_HEIGHT
+  );
+  const getPairwiseMatchPopupConstraints = (left = clickedPairwiseMatchPos.x, top = clickedPairwiseMatchPos.y) => popupConstraints(
+    left, top, PAIRWISE_MATCH_POPUP_MIN_WIDTH, PAIRWISE_MATCH_POPUP_MIN_HEIGHT
+  );
 
-  const featurePopupStyle = computed(() => {
-    const style = {
-      top: `${clickedFeaturePos.y}px`,
-      left: `${clickedFeaturePos.x}px`,
-      maxHeight: `${getFeaturePopupConstraints().maxHeight}px`
-    };
-    if (featurePopupSize.width > 0) {
-      style.width = `${featurePopupSize.width}px`;
-    }
-    if (featurePopupSize.height > 0) {
-      style.height = `${featurePopupSize.height}px`;
-    }
-    return style;
+  const popupStyle = (pos, size, constraints) => ({
+    top: `${pos.y}px`,
+    left: `${pos.x}px`,
+    maxHeight: `${pos.maxHeight > 0 ? Math.min(pos.maxHeight, constraints.maxHeight) : constraints.maxHeight}px`,
+    ...(size.width > 0 ? { width: `${size.width}px` } : {}),
+    ...(size.height > 0 ? { height: `${size.height}px` } : {})
   });
+  const featurePopupStyle = computed(() => popupStyle(clickedFeaturePos, featurePopupSize, getFeaturePopupConstraints()));
+  const pairwiseMatchPopupStyle = computed(() => popupStyle(clickedPairwiseMatchPos, pairwiseMatchPopupSize, getPairwiseMatchPopupConstraints()));
 
-  const getPairwiseMatchPopupConstraints = (left = clickedPairwiseMatchPos.x, top = clickedPairwiseMatchPos.y) => {
-    const viewportWidth = Math.max(1, window.innerWidth || 1);
-    const viewportHeight = popupViewportBottom();
-    const availableWidth = Math.max(1, viewportWidth - (FEATURE_POPUP_MARGIN * 2));
-    const availableHeight = Math.max(1, viewportHeight - (FEATURE_POPUP_MARGIN * 2));
-    const minWidth = Math.min(PAIRWISE_MATCH_POPUP_MIN_WIDTH, availableWidth);
-    const minHeight = Math.min(PAIRWISE_MATCH_POPUP_MIN_HEIGHT, availableHeight);
-    return {
-      minWidth,
-      minHeight,
-      maxWidth: Math.max(minWidth, viewportWidth - left - FEATURE_POPUP_MARGIN),
-      maxHeight: Math.max(minHeight, viewportHeight - top - FEATURE_POPUP_MARGIN)
-    };
+  // OV-371: a popup opened at a clicked point was placed with an expected
+  // size; once rendered it is placed again with its own size and content height.
+  const placeRenderedPopup = (pos, element, bodySelector) => {
+    const point = pos.anchor;
+    pos.anchor = null;
+    if (!point || !element) return;
+    const body = element.querySelector(bodySelector);
+    const height = element.offsetHeight + (body ? body.scrollHeight - body.clientHeight : 0);
+    Object.assign(pos, placePopupNearPoint({ point, width: element.offsetWidth, height, bounds: popupViewportBounds() }));
   };
+  watch(clickedFeature, () => placeRenderedPopup(clickedFeaturePos, featurePopupRef.value, '.feature-popup-body'), { flush: 'post' });
+  watch(clickedPairwiseMatch, () => placeRenderedPopup(clickedPairwiseMatchPos, pairwiseMatchPopupRef.value, '.pairwise-match-popup-body'), { flush: 'post' });
 
-  const pairwiseMatchPopupStyle = computed(() => {
-    const style = {
-      top: `${clickedPairwiseMatchPos.y}px`,
-      left: `${clickedPairwiseMatchPos.x}px`,
-      maxHeight: `${getPairwiseMatchPopupConstraints().maxHeight}px`
-    };
-    if (pairwiseMatchPopupSize.width > 0) {
-      style.width = `${pairwiseMatchPopupSize.width}px`;
-    }
-    if (pairwiseMatchPopupSize.height > 0) {
-      style.height = `${pairwiseMatchPopupSize.height}px`;
-    }
-    return style;
-  });
+  // A drag keeps the popup inside the popup bounds (OV-384: below the header).
+  const dragPopupTo = (pos, element, x, y) => {
+    const bounds = popupViewportBounds();
+    const margin = FEATURE_POPUP_MARGIN;
+    pos.x = clampNumber(x, margin, bounds.right - (element?.offsetWidth || 0) - margin);
+    pos.y = clampNumber(y, bounds.top + margin, bounds.bottom - (element?.offsetHeight || 0) - margin);
+    pos.maxHeight = 0;
+  };
 
   const pairwiseBlockOrthogroups = computed(() => (
     Array.isArray(clickedPairwiseMatch.value?.blockOrthogroups)
@@ -4750,16 +4756,8 @@ export const createAppSetup = () => {
 
   const onPairwiseMatchPopupDrag = (event) => {
     if (!pairwiseMatchPopupDrag.active || pairwiseMatchPopupResize.active) return;
-    const popup = pairwiseMatchPopupRef.value;
-    const width = popup?.offsetWidth || 420;
-    const height = popup?.offsetHeight || 360;
-    const margin = FEATURE_POPUP_MARGIN;
-    const maxX = Math.max(margin, window.innerWidth - width - margin);
-    const maxY = Math.max(margin, popupViewportBottom() - height - margin);
-    const nextX = event.clientX - pairwiseMatchPopupDrag.offsetX;
-    const nextY = event.clientY - pairwiseMatchPopupDrag.offsetY;
-    clickedPairwiseMatchPos.x = Math.min(Math.max(nextX, margin), maxX);
-    clickedPairwiseMatchPos.y = Math.min(Math.max(nextY, margin), maxY);
+    dragPopupTo(clickedPairwiseMatchPos, pairwiseMatchPopupRef.value,
+      event.clientX - pairwiseMatchPopupDrag.offsetX, event.clientY - pairwiseMatchPopupDrag.offsetY);
   };
 
   const endPairwiseMatchPopupDrag = () => {
@@ -4814,6 +4812,7 @@ export const createAppSetup = () => {
     document.removeEventListener('mousemove', onPairwiseMatchPopupDrag);
     document.removeEventListener('mouseup', endPairwiseMatchPopupDrag);
 
+    clickedPairwiseMatchPos.maxHeight = 0;
     pairwiseMatchPopupResize.active = true;
     pairwiseMatchPopupResize.startX = event.clientX;
     pairwiseMatchPopupResize.startY = event.clientY;
@@ -4829,16 +4828,8 @@ export const createAppSetup = () => {
 
   const onFeaturePopupDrag = (event) => {
     if (!featurePopupDrag.active || featurePopupResize.active) return;
-    const popup = featurePopupRef.value;
-    const width = popup?.offsetWidth || 360;
-    const height = popup?.offsetHeight || 260;
-    const margin = 12;
-    const maxX = Math.max(margin, window.innerWidth - width - margin);
-    const maxY = Math.max(margin, popupViewportBottom() - height - margin);
-    const nextX = event.clientX - featurePopupDrag.offsetX;
-    const nextY = event.clientY - featurePopupDrag.offsetY;
-    clickedFeaturePos.x = Math.min(Math.max(nextX, margin), maxX);
-    clickedFeaturePos.y = Math.min(Math.max(nextY, margin), maxY);
+    dragPopupTo(clickedFeaturePos, featurePopupRef.value,
+      event.clientX - featurePopupDrag.offsetX, event.clientY - featurePopupDrag.offsetY);
   };
 
   const onFeaturePopupResize = (event) => {
@@ -4893,6 +4884,7 @@ export const createAppSetup = () => {
     document.removeEventListener('mousemove', onFeaturePopupDrag);
     document.removeEventListener('mouseup', endFeaturePopupDrag);
 
+    clickedFeaturePos.maxHeight = 0;
     featurePopupResize.active = true;
     featurePopupResize.startX = event.clientX;
     featurePopupResize.startY = event.clientY;
@@ -4947,13 +4939,34 @@ export const createAppSetup = () => {
     }
   );
 
-  // Popup header line "<record ID>: <location> · <gene>", from payload fields
-  // only; the gene is shown when it differs from the label above it.
+  // UX-B12: the popup header names the gene (else the feature label), then
+  // its product, then "<record ID> · <location>" with grouped digits (parts
+  // joined by "; ", since a grouped number holds a comma), all from payload
+  // fields only.
+  const clickedFeatureHeading = computed(() => {
+    const cf = clickedFeature.value;
+    const title = String(cf?.gene || cf?.label || '');
+    return { title, product: cf?.product && cf.product !== title ? cf.product : '' };
+  });
   const clickedFeatureSummary = computed(() => {
     const cf = clickedFeature.value;
-    const located = [cf?.recordId, cf?.location || ''].filter(Boolean).join(': ');
-    return cf?.gene && cf.gene !== cf.label ? `${located} · ${cf.gene}` : located;
+    const location = String(cf?.location || '').replaceAll(', ', '; ')
+      .replace(/\d{4,}/g, (digits) => Number(digits).toLocaleString('en-US'));
+    return [cf?.recordId, location].filter(Boolean).join(' · ');
   });
+
+  // One Copy per tab (UX-B05): the header lines and the rows, or every qualifier.
+  const copyClickedFeatureDetails = () => {
+    const cf = clickedFeature.value;
+    if (!cf) return;
+    const { title, product } = clickedFeatureHeading.value;
+    copyTextToClipboard([title, product, clickedFeatureSummary.value, ...cf.detailRows.map((row) => `${row.label}: ${row.value}`)]
+      .filter(Boolean).join('\n'));
+  };
+  const copyClickedFeatureQualifiers = () => {
+    const rows = clickedFeature.value?.qualifierRows || [];
+    copyTextToClipboard(rows.flatMap((row) => row.values.map((value) => `/${row.key}="${value}"`)).join('\n'));
+  };
 
   const downloadText = (filename, text, type = 'text/plain;charset=utf-8') => {
     const value = String(text ?? '');
@@ -5867,6 +5880,7 @@ export const createAppSetup = () => {
     featureRecordRotationDraft: featureRecordRotation.draft,
     recordActionsExpanded,
     toggleRecordActions,
+    featureRecordRotationUnavailable,
     cancelRecordActions,
     setFeatureRecordRotationPosition: featureRecordRotation.setPosition,
     setFeatureRecordRotationReference: featureRecordRotation.setReference,
@@ -6501,6 +6515,9 @@ export const createAppSetup = () => {
     selectPairwiseBlockOrthogroup,
     openPairwiseFeatureRow,
     clickedFeatureSummary,
+    clickedFeatureHeading,
+    copyClickedFeatureDetails,
+    copyClickedFeatureQualifiers,
       copyText: copyTextToClipboard,
     downloadText,
     canUseClickedOrthogroupActions,

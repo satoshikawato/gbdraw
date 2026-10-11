@@ -412,9 +412,13 @@ const labelReflowLastError = ref(null);
 // SVG Feature Click state
 const svgContainer = ref(null);
 const clickedFeature = ref(null); // {id, svg_id, label, location, color, feat}
-const clickedFeaturePos = reactive({ x: 0, y: 0 });
+// A popup's position. A popup opened at a clicked point keeps that `anchor`
+// until it is placed with its rendered size (OV-371); `maxHeight` (0: none)
+// keeps a popup placed above the point from growing over it.
+/** @typedef {{ x: number, y: number, maxHeight: number, anchor: { x: number, y: number } | null }} PopupPosition */
+const clickedFeaturePos = /** @type {PopupPosition} */ (reactive({ x: 0, y: 0, maxHeight: 0, anchor: null }));
 const clickedPairwiseMatch = ref(null); // {title, subtitle, sections}
-const clickedPairwiseMatchPos = reactive({ x: 0, y: 0 });
+const clickedPairwiseMatchPos = /** @type {PopupPosition} */ (reactive({ x: 0, y: 0, maxHeight: 0, anchor: null }));
 const pairwiseMatchPopupRef = ref(null);
 const pairwiseMatchPopupDrag = reactive({ active: false, offsetX: 0, offsetY: 0 });
 const pairwiseMatchPopupSize = reactive({ width: 0, height: 0 });

@@ -120,6 +120,17 @@ export const LABEL_ABSENCE_REASONS = Object.freeze({
   embedded_only: ' With "Label Rendering" = "Embedded Only", a label is drawn only when it fits inside its feature.'
 });
 const LABEL_ABSENT_PREFIX = 'This feature has no label in the current Result.';
+// The popup's one-line note names the same reasons in a few words (UX-A03).
+export const LABEL_ABSENCE_CAUSES = Object.freeze({
+  hidden: 'the feature is hidden',
+  underlay: 'drawn as Underlay',
+  scope_none: 'Show Labels = None',
+  scope_first: 'Show Labels = First Record Only',
+  scope_orthogroup_top: 'Show Labels = Top Similarity Group Record',
+  whitelist: 'not in the label whitelist',
+  blacklist: 'matches the label blacklist',
+  embedded_only: 'does not fit; Label Rendering = Embedded Only'
+});
 // No reason found: the Show Labels scope and the label filters decide the rest.
 const LABEL_ABSENCE_UNKNOWN = ' The current Show Labels and label filter settings draw none.';
 
@@ -1199,7 +1210,8 @@ export const createFeatureLabelActions = ({
   };
 
   // The popup note when the displayed Result draws no label for the clicked
-  // feature: why the diagram cannot draw it (Owner Q1, Q2), or that On shows it.
+  // feature: why the diagram cannot draw it (Owner Q1, Q2), or that On shows it,
+  // in one line (UX-A03).
   const clickedFeatureLabelHint = computed(() => {
     const drawing = state.activeDrawing();
     const clicked = clickedFeature.value;
@@ -1216,14 +1228,14 @@ export const createFeatureLabelActions = ({
     if (clicked.labelKey && blocker !== 'hidden') return '';
     let next = '';
     if (normalizeVisibilityMode(rowOf(drawing, clicked.feat)?.labelVisibility) === 'on') {
-      next = ` Its Label visibility "On" applies when ${blocker === 'hidden' ? 'the feature is shown' : 'the label can be drawn'}.`;
+      next = ` On applies when ${blocker === 'hidden' ? 'the feature is shown' : 'the label can be drawn'}.`;
     } else if (!blocker && draft === 'default') {
       next = ' Choose On to show it.';
     } else if (!blocker) {
       return '';
     }
-    const reason = labelAbsenceReason(drawing, feature, diagramOptions);
-    return `${LABEL_ABSENT_PREFIX}${LABEL_ABSENCE_REASONS[reason] || ''}${next}`;
+    const cause = LABEL_ABSENCE_CAUSES[labelAbsenceReason(drawing, feature, diagramOptions)];
+    return `No label shown${cause ? ` (${cause})` : ''}.${next}`;
   });
 
   // The Label Not Shown dialog: the same reason sentence as the popup note.

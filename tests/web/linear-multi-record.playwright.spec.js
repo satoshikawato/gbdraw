@@ -3953,7 +3953,7 @@ test('@comparison-contract record rotation adds zero LOSATP source jobs and surv
   const popupStart = await page.evaluate(() => (
     window.__GBDRAW_APP__.featureRecordRotationDraft.startCoordinate
   ));
-  await actions.getByRole('button', { name: 'Apply and regenerate' }).click();
+  await actions.getByRole('button', { name: 'Apply now' }).click();
   await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, {
     timeout: 240000
   });

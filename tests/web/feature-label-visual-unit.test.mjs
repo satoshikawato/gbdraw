@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { LABEL_ABSENCE_REASONS, createFeatureLabelActions } from '../../gbdraw/web/js/app/feature-editor/label-actions.js';
+import { LABEL_ABSENCE_CAUSES, LABEL_ABSENCE_REASONS, createFeatureLabelActions } from '../../gbdraw/web/js/app/feature-editor/label-actions.js';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
@@ -287,9 +287,11 @@ for (const [reason, options, sentence] of absenceCases) {
   test(`the Label Not Shown dialog names the reason "${reason || 'unknown'}" as the popup note does`, async () => {
     const { actions, state } = absenceHarness(options);
     const none = 'This feature has no label in the current Result.';
-    // The popup note, before the edit is applied.
+    // The popup note, before the edit is applied, names the same reason in a few words (UX-A03).
     state.clickedFeature.value.labelText = '';
-    assert.equal(actions.clickedFeatureLabelHint.value.startsWith(`${none}${sentence}`), true);
+    const cause = LABEL_ABSENCE_CAUSES[reason];
+    assert.equal(actions.clickedFeatureLabelHint.value.startsWith(`No label shown${cause ? ` (${cause})` : ''}.`), true,
+      actions.clickedFeatureLabelHint.value);
     state.clickedFeature.value.labelText = 'Renamed';
     const applied = actions.updateClickedFeatureLabelText();
     assert.equal(state.hiddenLabelTextDialog.show, true);
@@ -313,6 +315,7 @@ test('every reason the resolver can return has a sentence, and every sentence a 
   }
   returned.delete('');
   assert.deepEqual([...returned].sort(), Object.keys(LABEL_ABSENCE_REASONS).sort());
+  assert.deepEqual(Object.keys(LABEL_ABSENCE_CAUSES).sort(), Object.keys(LABEL_ABSENCE_REASONS).sort());
   Object.values(LABEL_ABSENCE_REASONS).forEach((sentence) => assert.equal(typeof sentence, 'string'));
 });
 
@@ -336,7 +339,8 @@ for (const [reason, options] of [['underlay', { type: 'repeat_region' }], ['hidd
 }
 
 // Owner decisions Q1 and Q2 (2026-10-04): the popup note names why the
-// committed request draws no label, and On only where it can be drawn.
+// committed request draws no label, and On only where it can be drawn, in one
+// line (UX-A03).
 test('the popup note names why the diagram draws no label for the feature', () => {
   const featureId = 'feature:one/[a]';
   const diagramOptions = { featureShapes: { repeat_region: 'underlay' }, configOverrides: { 'labels.rendering': 'auto' } };
@@ -344,33 +348,32 @@ test('the popup note names why the diagram draws no label for the feature', () =
   const { state, actions } = harness;
   const clicked = state.clickedFeature.value;
   const hint = () => actions.clickedFeatureLabelHint.value;
-  const none = 'This feature has no label in the current Result.';
-  const onDrawable = ' Its Label visibility "On" applies when the label can be drawn.';
+  const onDrawable = ' On applies when the label can be drawn.';
 
   clicked.labelKey = 'label-1';
   assert.equal(hint(), '');
   clicked.labelKey = '';
-  assert.equal(hint(), `${none} Choose On to show it.`);
+  assert.equal(hint(), 'No label shown. Choose On to show it.');
   clicked.labelVisibility = 'off';
   assert.equal(hint(), '');
   clicked.labelVisibility = 'on';
   setRow(state, featureId, { labelVisibility: 'on' });
-  assert.equal(hint(), `${none}${onDrawable}`);
+  assert.equal(hint(), `No label shown.${onDrawable}`);
 
   clicked.feat = featureFor(featureId, 'repeat_region');
-  assert.equal(hint(), `${none} Labels are not drawn for features drawn as "Underlay".${onDrawable}`);
+  assert.equal(hint(), `No label shown (drawn as Underlay).${onDrawable}`);
   delete state.featureOverrides[keyFor(featureId)];
   clicked.labelVisibility = 'default';
-  assert.equal(hint(), `${none} Labels are not drawn for features drawn as "Underlay".`);
+  assert.equal(hint(), 'No label shown (drawn as Underlay).');
 
   clicked.feat = featureFor(featureId);
   diagramOptions.configOverrides['labels.rendering'] = 'embedded_only';
-  assert.equal(hint(), `${none} With "Label Rendering" = "Embedded Only", a label is drawn only when it fits inside its feature.`);
+  assert.equal(hint(), 'No label shown (does not fit; Label Rendering = Embedded Only).');
 
   // A hidden feature hides its label too, so the note shows with a label key.
   setRow(state, featureId, { featureVisibility: 'off', labelVisibility: 'on' });
   clicked.labelKey = 'label-1';
-  assert.equal(hint(), `${none} The feature is hidden. Its Label visibility "On" applies when the feature is shown.`);
+  assert.equal(hint(), 'No label shown (the feature is hidden). On applies when the feature is shown.');
 });
 
 test('Label visibility On for an underlay feature waits for Keep without label or Cancel', async () => {

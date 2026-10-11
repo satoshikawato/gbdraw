@@ -31,13 +31,14 @@ for (const mode of ['circular', 'linear']) {
       const actions = page.locator('.feature-popup')
         .getByRole('region', { name: 'Rotate record using this feature', exact: true });
       // HmmtDNA is circular; the lambda seed is a linear record, whose one
-      // reason replaces the controls.
-      const first = mode === 'circular'
-        ? actions.getByRole('radio', { name: 'Start of the record', exact: true })
-        : actions.getByText('Record rotation requires an effectively circular record.', { exact: true });
-      for (const control of [first,
-        actions.getByRole('button', { name: 'Apply on Generate', exact: true }),
-        actions.getByRole('button', { name: 'Apply and regenerate', exact: true })]) {
+      // reason replaces the controls and the Apply buttons (UX-B09).
+      const controls = mode === 'circular'
+        ? [actions.getByRole('radio', { name: 'Start of the record', exact: true }),
+          actions.getByRole('button', { name: 'Apply when I Generate', exact: true }),
+          actions.getByRole('button', { name: 'Apply now', exact: true })]
+        : [actions.getByText('Record rotation requires an effectively circular record.', { exact: true })];
+      if (mode === 'linear') await expect(actions.getByRole('button', { name: 'Apply now', exact: true })).toHaveCount(0);
+      for (const control of [...controls, actions.getByRole('button', { name: 'Cancel', exact: true })]) {
         await control.scrollIntoViewIfNeeded();
         await expect(control).toBeVisible();
         const box = await control.boundingBox();
@@ -46,6 +47,13 @@ for (const mode of ['circular', 'linear']) {
       }
       await actions.getByRole('button', { name: 'Cancel', exact: true }).click();
       await expect(actions).toBeHidden();
+      if (mode === 'linear') {
+        // Once the records are read, the row stays disabled with its reason.
+        const toggle = page.locator('.feature-popup #feature-record-actions-toggle');
+        await expect(toggle).toBeDisabled();
+        await expect(page.locator('#feature-record-rotation-unavailable'))
+          .toHaveText('Record rotation requires an effectively circular record.');
+      }
       await agree(page, info, 'pointer-label-applied');
       await page.screenshot({ path: info.outputPath('popup-after.png') });
       await closeEditor(page);

@@ -869,18 +869,33 @@ A normal feature click opens its identity, location, strand, qualifiers, and
 available sequence actions. The first popup after a page or Session load can
 wait several seconds while the Python runtime starts and matches the color
 rules; the toolbar shows **Preparing feature details…** meanwhile, and **Save
-Session** and **Load Session** stay available. The popup header shows the feature label, its
-`<record ID>: <location>`, and the gene when it differs from the label. **Edit** groups controls by when they apply. **Appearance · updates the current
-Result** holds **Fill Color**, **Stroke**, **Label text** with **Label
-visibility** and **Apply Label**, **Feature visibility**, and **Legend name**.
-**Layout · applies on Generate** holds **Feature placement** and record
-rotation. The **Similarity group** section follows when the feature belongs to
-one: one line with the group ID, its name, and **N genes in M records**, then
-**Show in editor** and **Align…**, with **Review alignment options…** under
-**Align…**. **More** holds **Highlight**, **Clear highlight**, and the copy and
-download of all member nucleotide or amino-acid FASTA; **N genes** opens the
-member table, where each row's **FASTA** menu copies or downloads that member.
-The simple
+Session** and **Load Session** stay available. The popup opens inside the
+window below the app header, beside the clicked feature or match when there is
+room, else below or above it; on a narrow screen it may cover the clicked
+point. Dragging it keeps its title bar below the header, so header buttons such
+as **Undo** stay reachable. The popup header shows the gene name (or the label
+when the feature has no gene), the product on up to two lines when it differs,
+and `<record ID> · <location> (<strand>)` with thousands separators; parts of a
+split location are separated by `; `.
+
+**Edit** has three groups. **Appearance** changes the current Result:
+**Fill Color**, **Stroke**, the **Label** row (label text, **Label visibility**,
+and **Apply Label** on one line), **Feature visibility**, and **Legend name**,
+which can also be chosen from the legend rules. When the feature has no label,
+one line names the reason, for example `No label shown (Show Labels = None).
+Choose On to show it.` The **Similarity group** section follows when the
+feature belongs to one: one line with the group ID, its name, and **N genes in
+M records**, then **Show in editor** and **Align…**, with **Review alignment
+options…** under **Align…**. **More** holds **Highlight**, **Clear highlight**,
+and the copy and download of all member nucleotide or amino-acid FASTA;
+**N genes** opens the member table, where each row's **FASTA** menu copies or
+downloads that member. **Layout** holds **Feature placement**, marked
+**Applies on Generate**, and record rotation.
+
+**Details** lists the feature type, length, and protein ID, which the header
+does not show, with one **Copy details** button for the header and these rows.
+**Qualifiers** lists each qualifier key beside its values, with one **Copy
+qualifiers** button that copies them as `/key="value"` lines. The simple
 popup shows the same controls in the same order without tabs.
 
 The feature list, feature popup, hover summary, and the feature sections of
@@ -1223,7 +1238,10 @@ using this feature** in the **Layout** group of **Edit**. The section is closed
 when the popup opens, in both rich and simple layouts. After **Load Session**,
 which reads no record bytes, expanding it reads the source records and shows
 **Reading records…** until the preview is ready; a failed read shows its own
-reason. Under **Put this feature at**, choose:
+reason. When the record cannot be rotated (a cropped source, a non-circular
+topology, or an unknown length), the expanded section shows the reason with
+only **Cancel**; once the records are read, the toggle is disabled with the
+reason under it. Under **Put this feature at**, choose:
 
 - **Start of the record** (default): the feature's first base in display order
   becomes base 1. That is its 5′ end when the feature reads forward in the
@@ -1248,16 +1266,16 @@ They stay unavailable, with a reason, for cropped sources and for locations
 whose exact traversal or outgoing boundary cannot be established. A choice that
 is unavailable for this feature is disabled with its own reason. Two buttons apply the previewed start and orientation:
 
-- **Apply on Generate** writes them to that record's display start and
+- **Apply when I Generate** writes them to that record's display start and
   orientation, the same values **Record rotation** in Input Genomes edits, and
   leaves the current Result unchanged. Repeat it on other records, then select
   **Generate Diagram** once to draw them all. Applying again to the same record
   replaces its earlier value. Each use is one Undo step. Until Generate, Input Genomes shows the pending Generate notice. Reopening the
 rotation section for that record shows **Pending for Generate:** with the staged
 start and orientation.
-- **Apply and regenerate** updates only that feature's record and the current
+- **Apply now** updates only that feature's record and the current
   Result as one undoable action. Other pending form edits, including values
-  that **Apply on Generate** set for other records, remain pending.
+  that **Apply when I Generate** set for other records, remain pending.
 
 **Cancel** inside the section resets and closes it while
 keeping the feature popup open. Cancel, a failed render, or a stale/replaced

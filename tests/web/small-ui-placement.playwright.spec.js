@@ -178,3 +178,100 @@ test('feature and match popups stay above the footer when opened low or dragged 
     await page.context().close();
   }
 });
+
+// OV-371: a feature or ribbon clicked at 1600x1000 opened its popup at the
+// lower right, 520 px tall with its content scrolled, over the clicked item.
+// OV-384: the popup (z-50) could lie over the header (z-40) and cover its
+// buttons, such as Undo, when opened near the top-left or dragged up.
+const BGC = 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json';
+const LIVE = 'fed46a3a6_record_1';
+
+// Clicks the first visible point of an SVG element, as a pointer would.
+const clickShape = (page, selector) => page.locator(selector).first().evaluate((element) => {
+  const box = element.getBoundingClientRect();
+  const steps = [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8, 0.1, 0.9];
+  for (const fy of steps) {
+    for (const fx of steps) {
+      const [x, y] = [box.left + box.width * fx, box.top + box.height * fy];
+      const hit = document.elementFromPoint(x, y);
+      if (hit === element || element.contains(hit)) {
+        element.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: x, clientY: y }));
+        return { x, y };
+      }
+    }
+  }
+  throw new Error('no visible point');
+});
+
+const popupBounds = (page, popup, bodySelector) => popup.evaluate((element, selector) => {
+  const box = element.getBoundingClientRect();
+  const body = element.querySelector(selector);
+  return {
+    top: box.top, bottom: box.bottom, left: box.left, right: box.right,
+    header: document.querySelector('header.app-header').getBoundingClientRect().bottom,
+    footer: document.querySelector('[data-app-footer]').getBoundingClientRect().top,
+    width: innerWidth,
+    scrolls: body.scrollHeight > body.clientHeight + 1
+  };
+}, bodySelector);
+
+const expectPlaced = (placed, point, name) => {
+  expect(placed.top, `${name} below the header`).toBeGreaterThanOrEqual(placed.header);
+  expect(placed.bottom, `${name} above the footer`).toBeLessThanOrEqual(placed.footer + 0.5);
+  expect(placed.left, `${name} inside the window`).toBeGreaterThanOrEqual(0);
+  expect(placed.right, `${name} inside the window`).toBeLessThanOrEqual(placed.width);
+  const covers = point.x >= placed.left && point.x <= placed.right && point.y >= placed.top && point.y <= placed.bottom;
+  expect(covers, `${name} leaves the clicked point visible`).toBe(false);
+  // The popup opens as tall as its content needs, up to the space it has.
+  if (placed.scrolls) expect(placed.bottom - placed.top, `${name} uses the height it has`).toBeGreaterThan(placed.footer - placed.header - 48);
+};
+
+test('OV-371 feature and ribbon popups open inside the window beside the clicked item', async ({ browser }) => {
+  test.setTimeout(300000);
+  const page = await load(browser, BGC, { width: 1600, height: 1000 });
+  try {
+    await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
+    const feature = await clickShape(page, `[data-gbdraw-feature-id="${LIVE}"]`);
+    const featurePopup = page.locator('.feature-popup[role="dialog"]').first();
+    // The first popup after a Session load waits for the Python runtime.
+    await expect(featurePopup).toBeVisible({ timeout: 180000 });
+    expectPlaced(await popupBounds(page, featurePopup, '.feature-popup-body'), feature, 'feature popup');
+    await page.keyboard.press('Escape');
+    await expect(featurePopup).toHaveCount(0);
+
+    const ribbon = await clickShape(page, 'path[data-match-kind]');
+    const matchPopup = page.getByRole('dialog', { name: 'Pairwise match details', exact: true });
+    await expect(matchPopup).toBeVisible();
+    expectPlaced(await popupBounds(page, matchPopup, '.pairwise-match-popup-body'), ribbon, 'match popup');
+  } finally {
+    await page.context().close();
+  }
+});
+
+test('OV-384 the feature popup never covers the header buttons', async ({ browser }) => {
+  test.setTimeout(300000);
+  const page = await load(browser, BGC, { width: 1600, height: 1000 });
+  try {
+    const popup = page.locator('.feature-popup[role="dialog"]').first();
+    const undoReachable = () => page.getByRole('button', { name: 'Undo', exact: true }).evaluate((button) => {
+      const box = button.getBoundingClientRect();
+      return button.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2));
+    });
+    const headerBottom = async () => (await page.locator('header.app-header').boundingBox()).height;
+    // Opened at a point above the window (the Gallery test of #986 did this).
+    await page.locator(`[data-gbdraw-feature-id="${LIVE}"]`).first().dispatchEvent('click', { clientX: -100, clientY: -100 });
+    await expect(popup).toBeVisible({ timeout: 180000 });
+    expect((await popup.boundingBox()).y, 'opened near the top-left').toBeGreaterThanOrEqual(await headerBottom());
+    expect(await undoReachable(), 'Undo reachable with the popup opened near the top-left').toBe(true);
+    // Dragged up past the header.
+    const box = await popup.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + 6);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 300, 0, { steps: 6 });
+    await page.mouse.up();
+    expect((await popup.boundingBox()).y, 'dragged up').toBeGreaterThanOrEqual(await headerBottom());
+    expect(await undoReachable(), 'Undo reachable with the popup dragged up').toBe(true);
+  } finally {
+    await page.context().close();
+  }
+});

@@ -706,6 +706,45 @@
             background: #eff6ff;
             color: #2563eb;
         }
+        .feature-popup-heading {
+            margin-bottom: 0.5rem;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #475569;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        /* UX-B12: the product line under the title wraps to two lines. */
+        .feature-popup-product {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        /* A one-line note under a popup control (UX-A03). */
+        .feature-popup-note {
+            margin-top: 0.25rem;
+            font-size: 0.75rem;
+            line-height: 1rem;
+            color: #b45309;
+        }
+        /* Details and Qualifiers: each value beside its key (UX-B05). */
+        .feature-popup-fields {
+            display: grid;
+            grid-template-columns: minmax(6rem, max-content) minmax(0, 1fr);
+            gap: 0.375rem 1rem;
+            font-size: 0.8125rem;
+            line-height: 1.25rem;
+        }
+        .feature-popup-fields dt {
+            color: #64748b;
+        }
+        .feature-popup-fields dd {
+            margin: 0;
+            color: #1e293b;
+            overflow-wrap: anywhere;
+            user-select: text;
+        }
         .feature-popup-grid {
             display: grid;
             grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -1358,6 +1397,11 @@
             .preview-workspace:has(.alignment-review-panel) {
                 grid-template-rows: minmax(200px, calc(var(--compact-preview-space) * 0.5)) clamp(15rem, 29dvh, 18rem) auto;
             }
+            /* The open Editor takes the room the canvas does not need: the canvas
+               keeps 13rem and the dock still ends above the Generate bar. */
+            .preview-workspace:has(> .right-drawer[aria-hidden="false"]) {
+                grid-template-rows: 13rem auto auto;
+            }
             .preview-viewport {
                 position: relative;
                 grid-area: 1 / 1;
@@ -1374,7 +1418,7 @@
                 inset: auto;
                 width: 100%;
                 min-height: 0;
-                max-height: clamp(11rem, calc(var(--compact-preview-space) * 0.4), 18rem);
+                max-height: clamp(11rem, calc(var(--compact-preview-space) - 7rem), 30rem);
                 border-left: 0;
                 border-top: 1px solid #e2e8f0;
                 transform: none;
@@ -1386,9 +1430,8 @@
                 overflow-y: auto;
             }
             .right-drawer > .flex-1 > .overflow-y-auto {
-                height: 8rem;
                 min-height: 8rem;
-                flex: none;
+                flex: 1 1 auto;
             }
             .preview-workspace .drawer-toggle {
                 top: 0.5rem;
@@ -5563,7 +5606,8 @@
                         <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100">
                             <div class="w-4 h-4 rounded mt-1 shrink-0" :style="{ backgroundColor: clickedFeature.color }"></div>
                             <div class="min-w-0 flex-1">
-                                <div tabindex="-1" data-dialog-initial-focus class="text-base font-bold text-slate-700 truncate max-w-[260px]">{{ clickedFeature.label }}</div>
+                                <div tabindex="-1" data-dialog-initial-focus class="text-base font-bold text-slate-700 truncate" data-feature-popup-title>{{ clickedFeatureHeading.title }}</div>
+                                <div v-if="clickedFeatureHeading.product" class="feature-popup-product text-sm text-slate-600" data-feature-popup-product>{{ clickedFeatureHeading.product }}</div>
                                 <div class="text-xs text-slate-500 mt-0.5 break-all" data-feature-popup-summary>{{ clickedFeatureSummary }}</div>
                             </div>
                             <button @click="closeFeaturePopup" class="text-slate-500 hover:text-slate-600 ml-auto text-xl shrink-0" aria-label="Close feature popup">
@@ -5611,7 +5655,7 @@
                         <div class="feature-popup-body custom-scrollbar" data-nodrag="true">
                         <div v-if="!richFeaturePopup || clickedFeature.activeTab === 'edit'" class="space-y-3">
                         <section aria-labelledby="feature-popup-appearance-heading" data-feature-popup-group="appearance">
-                            <h3 id="feature-popup-appearance-heading" class="mb-2 text-xs font-bold text-slate-600"><span class="uppercase tracking-wider">Appearance</span> <span class="font-normal text-slate-500">· updates the current Result</span></h3>
+                            <h3 id="feature-popup-appearance-heading" class="feature-popup-heading">Appearance</h3>
                             <div class="feature-popup-grid">
                         <div>
                             <label class="text-xs font-medium text-slate-500 block mb-1">Fill Color</label>
@@ -5663,62 +5707,47 @@
                                 </button>
                             </div>
                         </div>
-                        <div>
-                            <div class="flex items-center justify-between mb-1">
-                                <label class="text-xs font-medium text-slate-500 block">Label text</label>
-                                <span v-if="clickedFeature.hasEditableLabel" class="text-[10px] font-mono text-slate-500">
-                                    {{ clickedFeature.labelKey }}
-                                </span>
                             </div>
-                            <div class="mb-2">
-                                <label class="text-[10px] font-medium text-slate-500 block mb-1">Label visibility</label>
-                                <select v-model="clickedFeature.labelVisibility"
-                                        class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" :disabled="!semanticMutationAvailable">
-                                    <option value="default">Default (follow Show Labels and filters)</option>
-                                    <option value="on">On (always show)</option>
-                                    <option value="off">Off (always hide)</option>
-                                </select>
-                                <p class="ui-hint mt-1">
-                                    On and Off apply to this feature regardless of Show Labels and label filters.
-                                </p>
-                                <p v-if="clickedFeatureLabelHint" data-label-visibility-hint
-                                   class="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mt-1">
-                                    {{ clickedFeatureLabelHint }}
-                                </p>
-                            </div>
-                            <input type="text"
-                                   v-model="clickedFeature.labelText"
-                                   @keydown.enter.prevent="updateClickedFeatureLabelText"
-                                   data-history-managed
-                                   :disabled="!semanticMutationAvailable || (!clickedFeature.hasEditableLabel)"
-                                   :placeholder="clickedFeature.hasEditableLabel ? 'Edit label text' : 'No editable label'"
-                                   :class="[
-                                     'w-full text-sm border rounded-lg px-3 py-2 focus:outline-none',
-                                     clickedFeature.hasEditableLabel
-                                       ? 'border-slate-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100'
-                                       : 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
-                                   ]">
-                            <p v-if="clickedFeature.hasEditableLabel" class="ui-hint mt-1">
-                                Source: <span class="font-mono">{{ clickedFeature.labelSourceText }}</span>
-                            </p>
-                            <p v-else class="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mt-2">
-                                {{ clickedFeature.labelUnavailableReason }}
-                            </p>
-                            <div class="mt-2 flex justify-end">
-                                <button @click="updateClickedFeatureLabelText"
-                                        data-history-managed
-                                        :disabled="!semanticMutationAvailable || (!clickedFeature.hasEditableLabel)"
-                                        :class="[
-                                          'px-3 py-1.5 text-xs rounded-md',
-                                          clickedFeature.hasEditableLabel
-                                            ? 'bg-blue-600 text-white hover:bg-blue-700'
-                                            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                                        ]">
-                                    Apply Label
-                                </button>
-                            </div>
-                        </div>
-                            <div class="space-y-3">
+                            <fieldset class="mt-3 min-w-0" data-feature-popup-label>
+                                <legend class="text-xs font-medium text-slate-500 mb-1">Label</legend>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <input type="text"
+                                           v-model="clickedFeature.labelText"
+                                           @keydown.enter.prevent="updateClickedFeatureLabelText"
+                                           data-history-managed
+                                           aria-label="Label text"
+                                           :disabled="!semanticMutationAvailable || (!clickedFeature.hasEditableLabel)"
+                                           :placeholder="clickedFeature.hasEditableLabel ? 'Edit label text' : 'No editable label'"
+                                           :class="[
+                                             'min-w-[12rem] flex-1 text-sm border rounded-lg px-3 py-1.5 focus:outline-none',
+                                             clickedFeature.hasEditableLabel
+                                               ? 'border-slate-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100'
+                                               : 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
+                                           ]">
+                                    <select v-model="clickedFeature.labelVisibility"
+                                            aria-label="Label visibility"
+                                            title="Label visibility: Default follows Show Labels and the label filters"
+                                            class="text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" :disabled="!semanticMutationAvailable">
+                                        <option value="default">Default (Show Labels)</option>
+                                        <option value="on">On (always show)</option>
+                                        <option value="off">Off (always hide)</option>
+                                    </select>
+                                    <button @click="updateClickedFeatureLabelText"
+                                            data-history-managed
+                                            :disabled="!semanticMutationAvailable || (!clickedFeature.hasEditableLabel)"
+                                            :class="[
+                                              'px-3 py-1.5 text-xs rounded-md',
+                                              clickedFeature.hasEditableLabel
+                                                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                            ]">
+                                        Apply Label
+                                    </button>
+                                </div>
+                                <p v-if="clickedFeatureLabelHint" data-label-visibility-hint class="feature-popup-note">{{ clickedFeatureLabelHint }}</p>
+                                <p v-else-if="!clickedFeature.hasEditableLabel" class="feature-popup-note">{{ clickedFeature.labelUnavailableReason }}</p>
+                            </fieldset>
+                            <div class="feature-popup-grid mt-3">
                         <div>
                             <label class="text-xs font-medium text-slate-500 block mb-1">Feature visibility</label>
                             <select v-model="clickedFeature.featureVisibility"
@@ -5726,24 +5755,20 @@
                                     data-history-managed
                                     aria-label="Feature visibility"
                                     class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" :disabled="!semanticMutationAvailable || !clickedFeature.identityEditable">
-                                <option value="default">Default (follow feature filters)</option>
-                                <option value="on">On (force show)</option>
-                                <option value="off">Off (hide and exclude from matching)</option>
-                                <option value="exclude_matching">Exclude from matching (leave visibility unchanged)</option>
+                                <option value="default">Default (feature filters)</option>
+                                <option value="on">On (always show)</option>
+                                <option value="off">Off (hide; leave out of protein search)</option>
+                                <option value="exclude_matching">Leave out of protein search (keep visibility)</option>
                             </select>
-                            <p class="ui-hint mt-1">
-                                Choose a scope when similarity-group, product, or protein ID rules are available.
-                            </p>
-                            <p v-if="!clickedFeature.identityEditable" class="text-[10px] text-amber-700 mt-1">
+                            <p v-if="!clickedFeature.identityEditable" class="feature-popup-note">
                                 Generate the diagram again to edit this feature's visibility.
                             </p>
-                            <p v-else-if="!featureListState(clickedFeature.feat).drawn" data-feature-hidden-note
-                               class="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mt-1">
+                            <p v-else-if="!featureListState(clickedFeature.feat).drawn" data-feature-hidden-note class="feature-popup-note">
                                 This feature is hidden. Choose On to show it.
                             </p>
                         </div>
                         <div>
-                            <label class="text-xs font-medium text-slate-500 block mb-1">Legend name (optional)</label>
+                            <label class="text-xs font-medium text-slate-500 block mb-1">Legend name</label>
                             <input type="text"
                                    v-model="clickedFeature.legendName"
                                    list="specific-rule-legend-name-options"
@@ -5752,151 +5777,26 @@
                                    data-history-managed
                                    aria-label="Feature legend name"
                                    :placeholder="clickedFeature.label"
-                                   class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" :disabled="!semanticMutationAvailable">
+                                   class="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" :disabled="!semanticMutationAvailable">
+                            <select v-if="specificRuleLegendOptions.length > 0"
+                                    :disabled="!semanticMutationAvailable" @change="selectLegendNameOption($event.target.value); $event.target.value = ''"
+                                    aria-label="Legend names from legend rules"
+                                    class="mt-1 w-full text-xs border border-slate-200 rounded-md px-2 py-1 bg-slate-50 text-slate-600">
+                                <option value="">Choose from legend rules…</option>
+                                <option v-for="entry in specificRuleLegendOptions"
+                                        :key="`specific-rule-select-${entry.caption}`"
+                                        :value="entry.caption">
+                                    {{ entry.caption }}
+                                </option>
+                            </select>
                             <datalist id="specific-rule-legend-name-options">
                                 <option v-for="entry in specificRuleLegendOptions"
                                         :key="`specific-rule-cap-${entry.caption}`"
-                                        :value="entry.caption"
-                                        :label="entry.color ? `${entry.caption} (${entry.color})` : entry.caption">
+                                        :value="entry.caption">
                                 </option>
                             </datalist>
-                            <div v-if="specificRuleLegendOptions.length > 0" class="mt-1">
-                                <p class="ui-hint mb-1">Suggestions from SPECIFIC RULES (-t)</p>
-                                <select :disabled="!semanticMutationAvailable" @change="selectLegendNameOption($event.target.value); $event.target.value = ''"
-                                        class="w-full text-xs border border-slate-200 rounded-md px-2 py-1 bg-slate-50 text-slate-600">
-                                    <option value="">Select legend text...</option>
-                                    <option v-for="entry in specificRuleLegendOptions"
-                                            :key="`specific-rule-select-${entry.caption}`"
-                                            :value="entry.caption">
-                                        {{ entry.caption }}{{ entry.color ? ` (${entry.color})` : '' }}
-                                    </option>
-                                </select>
-                            </div>
-                            <p v-else class="ui-hint mt-1">
-                                No SPECIFIC RULES (-t) legend text available yet
-                            </p>
                         </div>
                             </div>
-                            </div>
-                        </section>
-                        <section aria-labelledby="feature-popup-layout-heading" class="border-t border-slate-100 pt-3" data-feature-popup-group="layout" data-nodrag="true">
-                            <h3 id="feature-popup-layout-heading" class="mb-2 text-xs font-bold text-slate-600"><span class="uppercase tracking-wider">Layout</span> <span class="font-normal text-slate-500">· applies on Generate</span></h3>
-                            <label class="block text-xs font-medium text-slate-500 mb-2">Feature placement
-                                <select data-history-managed aria-label="Feature placement" :disabled="!semanticMutationAvailable" :value="featurePlacementActions.valueFor(clickedFeature.feat)" @change="featurePlacementActions.setPlacement([clickedFeature.feat], $event.target.value)" class="mt-1 block max-w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700">
-                                    <option v-for="choice in featurePlacementActions.choices([clickedFeature.feat])" :key="choice.value" :value="choice.value" :disabled="!choice.enabled">{{ choice.label }}{{ choice.reason ? ' — ' + choice.reason : '' }}</option>
-                                </select>
-                            </label>
-                            <button v-if="clickedFeature?.feat" type="button" id="feature-record-actions-toggle" @click="toggleRecordActions"
-                                    :aria-expanded="recordActionsExpanded"
-                                    aria-controls="feature-record-actions"
-                                    class="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-100">
-                                <span>Rotate record using this feature</span>
-                                <i :class="recordActionsExpanded ? 'ph ph-caret-up' : 'ph ph-caret-down'" aria-hidden="true"></i>
-                            </button>
-                            <section id="feature-record-actions" v-if="recordActionsExpanded && featureRecordRotationDraft.active"
-                                     class="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-3"
-                                     :aria-busy="featureRecordRotationDraft.reading"
-                                     aria-labelledby="feature-record-actions-toggle">
-                                <template v-if="!featureRecordRotationDraft.targetFailure">
-                                <fieldset class="min-w-0">
-                                    <legend class="mb-1 text-xs font-medium text-slate-600">Put this feature at</legend>
-                                    <div v-for="choice in featureRecordRotationDraft.positionChoices" :key="choice.value"
-                                         class="flex flex-wrap items-baseline gap-x-2 py-0.5">
-                                        <label class="inline-flex items-center gap-2 text-xs" :class="choice.enabled ? 'text-slate-700' : 'text-slate-400'">
-                                            <input type="radio"
-                                                   name="feature-record-rotation-position"
-                                                   :value="choice.value"
-                                                   :checked="featureRecordRotationDraft.position === choice.value"
-                                                   @change="setFeatureRecordRotationPosition(choice.value)"
-                                                   :disabled="!semanticMutationAvailable || !choice.enabled || featureRecordRotationDraft.pending"
-                                                   :aria-describedby="!choice.enabled && choice.message ? `feature-record-rotation-${choice.value}-reason` : null">
-                                            <span>{{ choice.label }}</span>
-                                        </label>
-                                        <span v-if="!choice.enabled && choice.message" :id="`feature-record-rotation-${choice.value}-reason`"
-                                              class="text-[10px] text-amber-700">{{ choice.message }}</span>
-                                    </div>
-                                    <div v-if="featureRecordRotationDraft.position === 'custom'"
-                                         class="mt-1 ml-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
-                                        <label for="feature-record-rotation-reference">Record starts at</label>
-                                        <select id="feature-record-rotation-reference"
-                                                :value="featureRecordRotationDraft.reference"
-                                                @change="setFeatureRecordRotationReference($event.target.value)"
-                                                :disabled="!semanticMutationAvailable || featureRecordRotationDraft.pending"
-                                                class="min-w-0 max-w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs disabled:bg-slate-100 disabled:text-slate-400">
-                                            <option v-for="choice in featureRecordRotationDraft.referenceChoices"
-                                                    :key="choice.value"
-                                                    :value="choice.value"
-                                                    :disabled="!choice.enabled">{{ choice.label }}{{ choice.message ? ' — ' + choice.message : '' }}</option>
-                                        </select>
-                                        <span class="inline-flex items-center gap-1">
-                                            <label for="feature-record-rotation-offset">shifted by</label>
-                                            <input id="feature-record-rotation-offset"
-                                                   type="text"
-                                                   inputmode="numeric"
-                                                   :value="featureRecordRotationDraft.offsetText"
-                                                   @input="setFeatureRecordRotationOffset($event.target.value)"
-                                                   :disabled="!semanticMutationAvailable || featureRecordRotationDraft.pending"
-                                                   aria-label="Shifted by (bp)"
-                                                   aria-describedby="feature-record-rotation-offset-error feature-record-rotation-offset-help"
-                                                   :aria-invalid="Boolean(featureRecordRotationDraft.offsetError)"
-                                                   class="w-20 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs">
-                                            <span>bp</span>
-                                            <help-tip id="feature-record-rotation-offset-help" label="About the offset"
-                                                      text="The offset counts along this feature’s strand: a positive offset moves the record start downstream (toward the 3′ end), a negative offset upstream. For a feature without a strand it counts along the original record."></help-tip>
-                                        </span>
-                                        <span id="feature-record-rotation-offset-error"
-                                              v-if="featureRecordRotationDraft.offsetError"
-                                              class="basis-full text-[10px] text-red-700">{{ featureRecordRotationDraft.offsetError }}</span>
-                                    </div>
-                                </fieldset>
-                                <div class="mt-3">
-                                    <label class="flex items-start gap-2 text-xs text-slate-700">
-                                        <input type="checkbox"
-                                               :checked="featureRecordRotationDraft.orientForward"
-                                               @change="setFeatureRecordRotationOrientForward($event.target.checked)"
-                                               :disabled="!semanticMutationAvailable || !featureRecordRotationDraft.orientCapability.enabled || featureRecordRotationDraft.pending"
-                                               aria-describedby="feature-record-rotation-orient-note"
-                                               class="mt-0.5 rounded border-slate-300">
-                                        <span>Show this feature on the forward strand</span>
-                                    </label>
-                                    <p id="feature-record-rotation-orient-note" class="ml-5 text-[10px]"
-                                       :class="featureRecordRotationDraft.orientCapability.enabled ? 'text-slate-500' : 'text-amber-700'">{{ featureRecordRotationDraft.orientCapability.enabled ? 'Reverse-complements the record when this feature is on the − strand.' : featureRecordRotationDraft.orientCapability.message }}</p>
-                                </div>
-                                <p v-if="featureRecordRotationDraft.pendingPreview" id="feature-record-rotation-pending" data-record-rotation-pending
-                                   class="mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 break-words">{{ featureRecordRotationDraft.pendingPreview }}</p>
-                                <p v-if="featureRecordRotationDraft.preview" data-record-rotation-preview
-                                   class="mt-3 flex items-start justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
-                                    <span id="feature-record-rotation-preview" class="min-w-0 break-words">{{ featureRecordRotationDraft.preview }}</span>
-                                    <help-tip id="feature-record-rotation-coordinate-note" label="About these coordinates"
-                                              text="Coordinates refer to the original record."></help-tip>
-                                </p>
-                                </template>
-                                <p id="feature-record-rotation-reason"
-                                   v-if="featureRecordRotationDraft.disabledReason"
-                                   class="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-800">{{ featureRecordRotationDraft.disabledReason }}</p>
-                                <p aria-live="polite"
-                                   class="mt-2 min-h-4 text-[10px]"
-                                   :class="featureRecordRotationDraft.statusKind === 'error' ? 'text-red-700' : featureRecordRotationDraft.statusKind === 'success' ? 'text-emerald-700' : 'text-slate-500'">{{ featureRecordRotationDraft.status }}</p>
-                                <div class="mt-3 flex flex-wrap justify-end gap-2">
-                                    <button type="button"
-                                            @click.stop="cancelRecordActions"
-                                            :disabled="featureRecordRotationDraft.pending"
-                                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:text-slate-400">Cancel</button>
-                                    <button type="button"
-                                            data-history-managed
-                                            @click="stageFeatureRecordRotation"
-                                            :disabled="!semanticMutationAvailable || (!featureRecordRotationDraft.canApply || featureRecordRotationDraft.pending)"
-                                            aria-describedby="feature-record-rotation-reason feature-record-rotation-pending feature-record-rotation-preview"
-                                            class="rounded-md border border-blue-300 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:border-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed">Apply on Generate</button>
-                                    <button type="button"
-                                            @click="applyFeatureRecordRotation"
-                                            :disabled="!semanticMutationAvailable || (!featureRecordRotationDraft.canApply || featureRecordRotationDraft.pending)"
-                                            aria-describedby="feature-record-rotation-reason feature-record-rotation-pending feature-record-rotation-preview"
-                                            class="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed">
-                                        {{ featureRecordRotationDraft.pending ? 'Regenerating…' : 'Apply and regenerate' }}
-                                    </button>
-                                </div>
-                            </section>
                         </section>
                         <section v-if="clickedFeature.orthogroupId" aria-labelledby="feature-popup-similarity-heading" class="space-y-2 border-t border-slate-100 pt-3" data-feature-popup-group="similarity">
                             <h3 id="feature-popup-similarity-heading" class="text-xs font-bold text-slate-600 uppercase tracking-wider">Similarity group</h3>
@@ -5995,41 +5895,160 @@
                                 </div>
                             </details>
                         </section>
+                        <section aria-labelledby="feature-popup-layout-heading" class="border-t border-slate-100 pt-3" data-feature-popup-group="layout" data-nodrag="true">
+                            <h3 id="feature-popup-layout-heading" class="feature-popup-heading">Layout</h3>
+                            <label class="block text-xs font-medium text-slate-500 mb-2">Feature placement <span class="ui-hint font-normal">Applies on Generate</span>
+                                <select data-history-managed aria-label="Feature placement" :disabled="!semanticMutationAvailable" :value="featurePlacementActions.valueFor(clickedFeature.feat)" @change="featurePlacementActions.setPlacement([clickedFeature.feat], $event.target.value)" class="mt-1 block max-w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700">
+                                    <option v-for="choice in featurePlacementActions.choices([clickedFeature.feat])" :key="choice.value" :value="choice.value" :disabled="!choice.enabled">{{ choice.label }}{{ choice.reason ? ' — ' + choice.reason : '' }}</option>
+                                </select>
+                            </label>
+                            <button v-if="clickedFeature?.feat" type="button" id="feature-record-actions-toggle" @click="toggleRecordActions"
+                                    :aria-expanded="recordActionsExpanded"
+                                    aria-controls="feature-record-actions"
+                                    :disabled="Boolean(featureRecordRotationUnavailable)"
+                                    :aria-describedby="featureRecordRotationUnavailable ? 'feature-record-rotation-unavailable' : null"
+                                    class="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:bg-white disabled:text-slate-400 disabled:hover:bg-white">
+                                <span>Rotate record using this feature</span>
+                                <i v-if="!featureRecordRotationUnavailable" :class="recordActionsExpanded ? 'ph ph-caret-up' : 'ph ph-caret-down'" aria-hidden="true"></i>
+                            </button>
+                            <p v-if="clickedFeature?.feat && featureRecordRotationUnavailable" id="feature-record-rotation-unavailable" class="feature-popup-note">{{ featureRecordRotationUnavailable }}</p>
+                            <section id="feature-record-actions" v-if="recordActionsExpanded && featureRecordRotationDraft.active"
+                                     class="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-3"
+                                     :aria-busy="featureRecordRotationDraft.reading"
+                                     aria-labelledby="feature-record-actions-toggle">
+                                <template v-if="!featureRecordRotationDraft.targetFailure">
+                                <fieldset class="min-w-0">
+                                    <legend class="mb-1 text-xs font-medium text-slate-600">Put this feature at</legend>
+                                    <div v-for="choice in featureRecordRotationDraft.positionChoices" :key="choice.value"
+                                         class="flex flex-wrap items-baseline gap-x-2 py-0.5">
+                                        <label class="inline-flex items-center gap-2 text-xs" :class="choice.enabled ? 'text-slate-700' : 'text-slate-400'">
+                                            <input type="radio"
+                                                   name="feature-record-rotation-position"
+                                                   :value="choice.value"
+                                                   :checked="featureRecordRotationDraft.position === choice.value"
+                                                   @change="setFeatureRecordRotationPosition(choice.value)"
+                                                   :disabled="!semanticMutationAvailable || !choice.enabled || featureRecordRotationDraft.pending"
+                                                   :aria-describedby="!choice.enabled && choice.message ? `feature-record-rotation-${choice.value}-reason` : null">
+                                            <span>{{ choice.label }}</span>
+                                        </label>
+                                        <span v-if="!choice.enabled && choice.message" :id="`feature-record-rotation-${choice.value}-reason`"
+                                              class="text-[10px] text-amber-700">{{ choice.message }}</span>
+                                    </div>
+                                    <div v-if="featureRecordRotationDraft.position === 'custom'"
+                                         class="mt-1 ml-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
+                                        <label for="feature-record-rotation-reference">Record starts at</label>
+                                        <select id="feature-record-rotation-reference"
+                                                :value="featureRecordRotationDraft.reference"
+                                                @change="setFeatureRecordRotationReference($event.target.value)"
+                                                :disabled="!semanticMutationAvailable || featureRecordRotationDraft.pending"
+                                                class="min-w-0 max-w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs disabled:bg-slate-100 disabled:text-slate-400">
+                                            <option v-for="choice in featureRecordRotationDraft.referenceChoices"
+                                                    :key="choice.value"
+                                                    :value="choice.value"
+                                                    :disabled="!choice.enabled">{{ choice.label }}{{ choice.message ? ' — ' + choice.message : '' }}</option>
+                                        </select>
+                                        <span class="inline-flex items-center gap-1">
+                                            <label for="feature-record-rotation-offset">shifted by</label>
+                                            <input id="feature-record-rotation-offset"
+                                                   type="text"
+                                                   inputmode="numeric"
+                                                   :value="featureRecordRotationDraft.offsetText"
+                                                   @input="setFeatureRecordRotationOffset($event.target.value)"
+                                                   :disabled="!semanticMutationAvailable || featureRecordRotationDraft.pending"
+                                                   aria-label="Shifted by (bp)"
+                                                   aria-describedby="feature-record-rotation-offset-error feature-record-rotation-offset-help"
+                                                   :aria-invalid="Boolean(featureRecordRotationDraft.offsetError)"
+                                                   class="w-20 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs">
+                                            <span>bp</span>
+                                            <help-tip id="feature-record-rotation-offset-help" label="About the offset"
+                                                      text="The offset counts along this feature’s strand: a positive offset moves the record start downstream (toward the 3′ end), a negative offset upstream. For a feature without a strand it counts along the original record."></help-tip>
+                                        </span>
+                                        <span id="feature-record-rotation-offset-error"
+                                              v-if="featureRecordRotationDraft.offsetError"
+                                              class="basis-full text-[10px] text-red-700">{{ featureRecordRotationDraft.offsetError }}</span>
+                                    </div>
+                                </fieldset>
+                                <div class="mt-3">
+                                    <label class="flex items-start gap-2 text-xs text-slate-700">
+                                        <input type="checkbox"
+                                               :checked="featureRecordRotationDraft.orientForward"
+                                               @change="setFeatureRecordRotationOrientForward($event.target.checked)"
+                                               :disabled="!semanticMutationAvailable || !featureRecordRotationDraft.orientCapability.enabled || featureRecordRotationDraft.pending"
+                                               aria-describedby="feature-record-rotation-orient-note"
+                                               class="mt-0.5 rounded border-slate-300">
+                                        <span>Show this feature on the forward strand</span>
+                                    </label>
+                                    <p id="feature-record-rotation-orient-note" class="ml-5 text-[10px]"
+                                       :class="featureRecordRotationDraft.orientCapability.enabled ? 'text-slate-500' : 'text-amber-700'">{{ featureRecordRotationDraft.orientCapability.enabled ? 'Reverse-complements the record when this feature is on the − strand.' : featureRecordRotationDraft.orientCapability.message }}</p>
+                                </div>
+                                <p v-if="featureRecordRotationDraft.pendingPreview" id="feature-record-rotation-pending" data-record-rotation-pending
+                                   class="mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 break-words">{{ featureRecordRotationDraft.pendingPreview }}</p>
+                                <p v-if="featureRecordRotationDraft.preview" data-record-rotation-preview
+                                   class="mt-3 flex items-start justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
+                                    <span id="feature-record-rotation-preview" class="min-w-0 break-words">{{ featureRecordRotationDraft.preview }}</span>
+                                    <help-tip id="feature-record-rotation-coordinate-note" label="About these coordinates"
+                                              text="Coordinates refer to the original record."></help-tip>
+                                </p>
+                                </template>
+                                <p id="feature-record-rotation-reason"
+                                   v-if="featureRecordRotationDraft.disabledReason"
+                                   class="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-800">{{ featureRecordRotationDraft.disabledReason }}</p>
+                                <p aria-live="polite"
+                                   class="mt-2 min-h-4 text-[10px]"
+                                   :class="featureRecordRotationDraft.statusKind === 'error' ? 'text-red-700' : featureRecordRotationDraft.statusKind === 'success' ? 'text-emerald-700' : 'text-slate-500'">{{ featureRecordRotationDraft.status }}</p>
+                                <div class="mt-3 flex flex-wrap justify-end gap-2">
+                                    <button type="button"
+                                            @click.stop="cancelRecordActions"
+                                            :disabled="featureRecordRotationDraft.pending"
+                                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:text-slate-400">Cancel</button>
+                                    <template v-if="!featureRecordRotationDraft.targetFailure">
+                                    <button type="button"
+                                            data-history-managed
+                                            @click="stageFeatureRecordRotation"
+                                            :disabled="!semanticMutationAvailable || (!featureRecordRotationDraft.canApply || featureRecordRotationDraft.pending)"
+                                            aria-describedby="feature-record-rotation-reason feature-record-rotation-pending feature-record-rotation-preview"
+                                            class="rounded-md border border-blue-300 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:border-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed">Apply when I Generate</button>
+                                    <button type="button"
+                                            @click="applyFeatureRecordRotation"
+                                            :disabled="!semanticMutationAvailable || (!featureRecordRotationDraft.canApply || featureRecordRotationDraft.pending)"
+                                            aria-describedby="feature-record-rotation-reason feature-record-rotation-pending feature-record-rotation-preview"
+                                            class="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed">
+                                        {{ featureRecordRotationDraft.pending ? 'Applying…' : 'Apply now' }}
+                                    </button>
+                                    </template>
+                                </div>
+                            </section>
+                        </section>
                         </div>
-                        <div v-else-if="richFeaturePopup && clickedFeature.activeTab === 'details'" class="space-y-3" data-nodrag="true">
-                            <div class="max-h-[24rem] overflow-auto custom-scrollbar border border-slate-100 rounded-lg">
-                                <div v-for="row in clickedFeature.detailRows"
-                                     :key="`feature-detail-${row.key}`"
-                                     class="grid grid-cols-[7rem_minmax(0,1fr)_2rem] gap-2 items-start px-3 py-2 border-b border-slate-100 last:border-b-0">
-                                    <div class="text-[10px] font-medium uppercase text-slate-500">{{ row.label }}</div>
-                                    <div class="font-mono text-xs text-slate-700 break-all">{{ row.value }}</div>
-                                    <button aria-label="Copy" type="button"
-                                            @click="copyText(row.value)"
-                                            class="w-7 h-7 rounded-md text-slate-500 hover:text-blue-600 hover:bg-blue-50 flex items-center justify-center"
-                                            title="Copy">
-                                        <i class="ph ph-copy" aria-hidden="true"></i>
+                        <div v-else-if="richFeaturePopup && clickedFeature.activeTab === 'details'" class="space-y-2" data-nodrag="true">
+                            <div class="flex justify-end -mb-1">
+                                <button type="button" @click="copyClickedFeatureDetails" class="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                                        title="Copy the name, product, location, and these details">
+                                    <i class="ph ph-copy" aria-hidden="true"></i><span>Copy details</span>
+                                </button>
+                            </div>
+                            <dl class="feature-popup-fields" data-feature-popup-details>
+                                <template v-for="row in clickedFeature.detailRows" :key="`feature-detail-${row.key}`">
+                                    <dt>{{ row.label }}</dt>
+                                    <dd>{{ row.value }}</dd>
+                                </template>
+                            </dl>
+                        </div>
+                        <div v-else-if="richFeaturePopup && clickedFeature.activeTab === 'qualifiers'" class="space-y-2" data-nodrag="true">
+                            <template v-if="clickedFeature.qualifierRows.length > 0">
+                                <div class="flex justify-end -mb-1">
+                                    <button type="button" @click="copyClickedFeatureQualifiers" class="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                                            title="Copy every qualifier as /key=&quot;value&quot; lines">
+                                        <i class="ph ph-copy" aria-hidden="true"></i><span>Copy qualifiers</span>
                                     </button>
                                 </div>
-                            </div>
-                        </div>
-                        <div v-else-if="richFeaturePopup && clickedFeature.activeTab === 'qualifiers'" class="space-y-3" data-nodrag="true">
-                            <div v-if="clickedFeature.qualifierRows.length > 0" class="max-h-[28rem] overflow-auto custom-scrollbar border border-slate-100 rounded-lg">
-                                <div v-for="row in clickedFeature.qualifierRows"
-                                     :key="`feature-qualifier-${row.key}`"
-                                     class="border-b border-slate-100 last:border-b-0">
-                                    <div class="bg-slate-50 px-3 py-2 flex items-center gap-2">
-                                        <div class="font-mono text-xs font-semibold text-slate-600 truncate">{{ row.key }}</div>
-                                        <span class="text-[10px] text-slate-500">{{ row.values.length }}</span>
-                                        <button aria-label="Copy qualifier value" type="button"
-                                                @click="copyText(row.copyText)"
-                                                class="ml-auto w-7 h-7 rounded-md text-slate-500 hover:text-blue-600 hover:bg-blue-50 flex items-center justify-center"
-                                                title="Copy qualifier value">
-                                            <i class="ph ph-copy" aria-hidden="true"></i>
-                                        </button>
-                                    </div>
-                                    <pre class="px-3 py-2 max-h-32 overflow-auto custom-scrollbar font-mono text-xs text-slate-700 whitespace-pre-wrap break-all">{{ row.displayValue }}</pre>
-                                </div>
-                            </div>
+                                <dl class="feature-popup-fields" data-feature-popup-qualifiers>
+                                    <template v-for="row in clickedFeature.qualifierRows" :key="`feature-qualifier-${row.key}`">
+                                        <dt class="font-mono">{{ row.key }}</dt>
+                                        <dd><div v-for="(value, index) in row.values" :key="index">{{ value }}</div></dd>
+                                    </template>
+                                </dl>
+                            </template>
                             <div v-else class="text-sm text-slate-500 border border-slate-100 rounded-lg px-3 py-4">
                                 No qualifiers available.
                             </div>

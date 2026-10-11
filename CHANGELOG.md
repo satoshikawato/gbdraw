@@ -12,6 +12,22 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Web app feature popup: the header shows the gene name, the product on up to
+  two lines, and the record and location with thousands separators. **Edit**
+  groups **Appearance** (fill, stroke, the label text with its visibility and
+  one **Apply Label**, feature visibility, legend name) before **Similarity
+  group** and **Layout**; the always-shown hints, the label key, and the source
+  label line are gone, and a missing label is explained in one line.
+  **Details** and **Qualifiers** list each field beside its value with one copy
+  button per tab. The record rotation buttons are now **Apply when I Generate**
+  and **Apply now**, and a record that cannot rotate shows its reason under a
+  disabled toggle.
+- Web app popups: feature and match popups open inside the window beside the
+  clicked item instead of clipped at the bottom right (OV-371), and a popup no
+  longer covers the header buttons when opened or dragged (OV-384).
+- Web app on a phone: the docked Editor uses most of the space between the
+  canvas and the Generate bar (about 400 px instead of 200 px at 390x844).
+
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
 - Added circular-record display-start rotation and manual feature lane placement.
