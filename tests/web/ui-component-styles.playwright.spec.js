@@ -428,10 +428,15 @@ test('the loader\'s finished frame is the logo asset (reduced motion)', async ({
   const loader = await openBootSplash(page);
   await expect(loader).toBeVisible();
   expect(await loader.evaluate((element) => element.getAnimations().length)).toBe(0);
-  await page.evaluate(() => {
+  // The reference is the logo asset itself, cropped to the loader's viewBox.
+  await page.evaluate(async () => {
     const loader = document.querySelector('#app-boot-splash .gbdraw-loader');
     Object.assign(loader.style, { width: '128px', height: '128px' });
-    const logo = Object.assign(document.createElement('img'), { src: './assets/gbdraw-logo.svg', id: 'reference-logo' });
+    const asset = await (await fetch('./assets/gbdraw-logo.svg')).text();
+    const cropped = asset.replace(/viewBox="[^"]+"/, `viewBox="${loader.getAttribute('viewBox')}"`);
+    const logo = Object.assign(document.createElement('img'), {
+      src: URL.createObjectURL(new Blob([cropped], { type: 'image/svg+xml' })), id: 'reference-logo'
+    });
     Object.assign(logo.style, { width: '128px', height: '128px' });
     loader.after(logo);
   });
@@ -440,6 +445,7 @@ test('the loader\'s finished frame is the logo asset (reduced motion)', async ({
     .map((png) => `data:image/png;base64,${png.toString('base64')}`);
   const scratch = await context.newPage();
   const { inked, differing } = await scratch.evaluate(async (sources) => {
+    let width = 0;
     const dark = await Promise.all(sources.map(async (source) => {
       const image = new Image();
       image.src = source;
@@ -448,12 +454,15 @@ test('the loader\'s finished frame is the logo asset (reduced motion)', async ({
       const context = canvas.getContext('2d');
       context.drawImage(image, 0, 0);
       const { data } = context.getImageData(0, 0, image.width, image.height);
+      width = image.width;
       return Array.from({ length: data.length / 4 }, (_, index) => data[index * 4] < 128);
     }));
-    return {
-      inked: dark[1].filter(Boolean).length,
-      differing: dark[0].filter((value, index) => value !== dark[1][index]).length
-    };
+    // The loader outlines each part with a 0.175-unit hairline (under 0.2 px here), so
+    // a dark pixel counts as matching when the other image is dark within 1 px.
+    const nearDark = (pixels, index) => [-width - 1, -width, -width + 1, -1, 0, 1, width - 1, width, width + 1]
+      .some((offset) => pixels[index + offset]);
+    const unmatched = (from, to) => from.filter((value, index) => value && !nearDark(to, index)).length;
+    return { inked: dark[1].filter(Boolean).length, differing: unmatched(dark[0], dark[1]) + unmatched(dark[1], dark[0]) };
   }, shots);
   expect(inked).toBeGreaterThan(1000);
   expect(differing / inked).toBeLessThan(0.01);
@@ -498,7 +507,7 @@ test('every Vue loading place shows the loader: black, white on the Generate but
       ariaHidden: loader.getAttribute('aria-hidden'),
       masks: [...loader.querySelectorAll('g[mask]')].map((group) => group.getAttribute('mask'))
     })));
-  const set = (flags) => page.evaluate((flags) => Object.assign(window.__GBDRAW_APP__, flags), flags);
+  const set = (flags) => page.evaluate((flags) => { Object.assign(window.__GBDRAW_APP__, flags); }, flags);
   const black = 'rgb(0, 0, 0)';
   try {
     await set({ sessionSavePending: true, exampleSessionPending: true });

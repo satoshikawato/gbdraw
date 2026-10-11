@@ -161,7 +161,8 @@
            logo paths: pen A the right half, pen B the left half and the bar. The pen
            interval [from, to] runs along the combined stroke in user units: pen A covers
            0-132.782, pen B starts at 124.169, the stroke ends at 344.523. Each pen's
-           pathLength fixes those units. Loop 2.22 s: draw 0.9 s, hold 0.26 s, erase
+           pathLength fixes those units. The viewBox crops the logo's empty margin.
+           Loop 2.22 s: draw 0.9 s, hold 0.26 s, erase
            0.9 s from the start, rest 0.16 s. */
         @property --gbdraw-loader-from { syntax: '<number>'; inherits: true; initial-value: 0; }
         @property --gbdraw-loader-to { syntax: '<number>'; inherits: true; initial-value: 344.523; }
@@ -172,6 +173,10 @@
             vertical-align: -0.125em;
             color: #000;
             fill: currentColor;
+            /* A hairline stroke in the fill color closes the antialiasing seam where
+               the two logo parts meet at the top of the ring; the pens override it. */
+            stroke: currentColor;
+            stroke-width: 0.35;
             --gbdraw-loader-from: 0;
             --gbdraw-loader-to: 344.523;
             animation: gbdraw-loader-stroke 2.22s infinite;
@@ -7966,7 +7971,7 @@
 <div id="app-boot-splash" role="status" aria-live="polite">
     <div class="boot-card">
         <img src="./assets/gbdraw-logo-title.png" alt="gbdraw" class="boot-logo">
-        <svg class="gbdraw-loader" viewBox="0 0 135.46666 135.46667" aria-hidden="true" focusable="false">
+        <svg class="gbdraw-loader" viewBox="12.7 13.1 115.2 109.2" aria-hidden="true" focusable="false">
             <mask id="gbdraw-loader-boot-a"><path class="gbdraw-loader-pen gbdraw-loader-pen-a" pathLength="132.782" d="M 92.398 110.009 A 49.333 48.883 0 0 0 63.431 18.978"/></mask>
             <mask id="gbdraw-loader-boot-b"><path class="gbdraw-loader-pen gbdraw-loader-pen-b" pathLength="220.354" d="M 72.031 18.978 A 49.333 48.883 0 1 0 67.731 116.558 L 129.5 116.557"/></mask>
             <g mask="url(#gbdraw-loader-boot-a)"><path transform="matrix(-1,0,0,1,135.46331,2.057498)" d="m 67.732299,11.443229 c -30.079258,0 -54.625089,24.290851 -54.625089,54.173954 0,13.704239 5.172481,26.222963 13.663249,35.771457 h 15.75356 C 31.125119,93.518214 23.69106,80.448212 23.69106,65.617183 c 0,-24.110799 19.629436,-43.591654 44.041239,-43.591654 z"/></g>
@@ -8086,7 +8091,7 @@
     </script>
 
 <script type="text/x-template" id="gbdraw-loader-template">
-    <svg class="gbdraw-loader" viewBox="0 0 135.46666 135.46667" aria-hidden="true" focusable="false">
+    <svg class="gbdraw-loader" viewBox="12.7 13.1 115.2 109.2" aria-hidden="true" focusable="false">
         <mask :id="ids.a"><path class="gbdraw-loader-pen gbdraw-loader-pen-a" pathLength="132.782" d="M 92.398 110.009 A 49.333 48.883 0 0 0 63.431 18.978"/></mask>
         <mask :id="ids.b"><path class="gbdraw-loader-pen gbdraw-loader-pen-b" pathLength="220.354" d="M 72.031 18.978 A 49.333 48.883 0 1 0 67.731 116.558 L 129.5 116.557"/></mask>
         <g :mask="`url(#${ids.a})`"><path transform="matrix(-1,0,0,1,135.46331,2.057498)" d="m 67.732299,11.443229 c -30.079258,0 -54.625089,24.290851 -54.625089,54.173954 0,13.704239 5.172481,26.222963 13.663249,35.771457 h 15.75356 C 31.125119,93.518214 23.69106,80.448212 23.69106,65.617183 c 0,-24.110799 19.629436,-43.591654 44.041239,-43.591654 z"/></g>
