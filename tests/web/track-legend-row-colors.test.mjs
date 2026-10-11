@@ -6,13 +6,15 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import { compileDirectEditorMutationPlan, draftLegendPanelColors } from '../../gbdraw/web/js/app/candidate-render.js';
+import { compileDirectEditorMutationPlan, draftLegendPanelColors, draftLegendRowColors } from '../../gbdraw/web/js/app/candidate-render.js';
 import { buildLinearTrackSlotPayload, normalizeLinearTrackSlots } from '../../gbdraw/web/js/services/linear-track-slot-model.js';
 import { drawnTracks, loadedTracks, skewTrackColor, trackLegendRows, trackRowColor } from '../../gbdraw/web/js/services/track-legend-rows.js';
 import { fixture as paintFixture } from './helpers/svg-style-fixture.mjs';
 
 const readJson = (path) => JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8'));
 const HMMT_AT_SKEW = readJson('../../gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json');
+// Python's rows of a Result by their keys, where a case reads no drawn fill.
+const drawnRows = (keys) => new Map(keys.map((key) => [key, { key, color: null }]));
 const requestOf = ({ mode, dinucleotide, slots }) => ({
   mode, diagramOptions: { dinucleotide, tracks: mode === 'linear' ? { linearTrackSlots: slots } : { circularTrackSlots: slots } }
 });
@@ -85,7 +87,7 @@ test('the tracks of the HmmtDNA_ATskew Gallery Session name the slot and the own
 // Web app reads the whole table of the Result: each key's palette key, slot
 // and fill, and no track for a row whose palette key the vector leaves null.
 const readRows = (tracks, expected, palette) => {
-  const rows = trackLegendRows(tracks, expected.map(([key]) => key));
+  const rows = trackLegendRows(tracks, drawnRows(expected.map(([key]) => key)));
   assert.equal(rows.size, expected.filter(([, paletteKey]) => paletteKey).length, 'no key beside the rows of the Result');
   return expected.map(([key, , , fill]) => {
     const row = rows.get(key);
@@ -129,11 +131,12 @@ test('a palette edit paints the skew track of a request without slots', () => {
 // A Result loaded without a request (a Session 27 to 30, which the Web shows
 // from its saved settings) is described by the track settings it was loaded
 // with. Its SVG is the old writer's: the skew group carries no slot id.
+const asSaved = (track) => ({ ...track, saved: true });
 test('the tracks of a Result loaded without a request are those of its loaded settings', () => {
   for (const mode of ['circular', 'linear']) {
     for (const dinucleotide of ['GC', 'AT']) {
       const tracks = loadedTracks({ mode, dinucleotide, slots: null });
-      assert.deepEqual(tracks, drawnTracks(requestOf({ mode, dinucleotide, slots: null })), `${mode} ${dinucleotide}`);
+      assert.deepEqual(tracks, drawnTracks(requestOf({ mode, dinucleotide, slots: null })).map(asSaved), `${mode} ${dinucleotide}`);
       assert.deepEqual(['positive', 'negative'].map((side) => skewTrackColor(tracks, null, side, PALETTE)),
         [PALETTE.skew_high, PALETTE.skew_low], `${mode} ${dinucleotide}`);
     }
@@ -150,9 +153,34 @@ test('the tracks of a Result loaded without a request are those of its loaded se
   const tracks = loadedTracks({ mode: 'linear', dinucleotide: 'AT', slots });
   assert.deepEqual(tracks, drawnTracks(requestOf({
     mode: 'linear', dinucleotide: 'AT', slots: slots.filter((slot) => slot.enabled).map(buildLinearTrackSlotPayload)
-  })));
+  })).map(asSaved));
   assert.deepEqual(tracks.map(({ slotId, label, positiveColor }) => [slotId, label, positiveColor]),
     [[null, 'AT content', null], ['own', 'AT skew', '#ff0000'], ['named', 'Skew', null]]);
+});
+
+// The loaded settings are the Session's saved draft: a slot added after the
+// last Generate did not draw the Result. Such a track claims a row in its own
+// color only where Python drew the row in that color; a request's track drew
+// its rows, so it claims them as before.
+test('a saved slot claims a row in its own color only where the Result drew the row in it', () => {
+  const slots = normalizeLinearTrackSlots([
+    { id: 'features', renderer: 'features', enabled: true, side: 'overlay', params: {} },
+    { id: 'own', renderer: 'dinucleotide_skew', enabled: true, side: 'below', params: { positive_color: '#ff0000', negative_color: '#0000ff' } }
+  ], 'GC', 'middle');
+  const saved = loadedTracks({ mode: 'linear', dinucleotide: 'GC', slots });
+  const requested = drawnTracks(requestOf({ mode: 'linear', dinucleotide: 'GC', slots: slots.map(buildLinearTrackSlotPayload) }));
+  const KEYS = ['GC skew (+)', 'GC skew (-)'];
+  const rowColors = (tracks, drawn) => {
+    const draft = draftLegendRowColors({
+      rules: [], originalLegendOrder: KEYS, paletteColors: PALETTE, drawnTracks: tracks,
+      pythonRows: new Map(KEYS.map((key, index) => [key, { key, color: drawn[index] }]))
+    });
+    return KEYS.map((key) => draft.colorOf(key));
+  };
+  const palette = [PALETTE.skew_high, PALETTE.skew_low];
+  assert.deepEqual(rowColors(saved, palette), rowColors([], palette), 'drawn in the palette colors: the rows stay unclaimed');
+  assert.deepEqual(rowColors(saved, ['#FF0000', 'blue']), ['#ff0000', '#0000ff'], 'drawn in the slot\'s colors');
+  assert.deepEqual(rowColors(requested, palette), ['#ff0000', '#0000ff'], 'a request\'s track is not affected');
 });
 
 // What the tracks read of a request is checked: a request of an older schema
@@ -177,7 +205,7 @@ test('a request without tracks draws the default tracks, and a value that is no 
 
 // A user may delete a Legend row: the rows that are left keep their tracks.
 test('the rows left after a Legend row is deleted keep their slots', () => {
-  const rows = trackLegendRows(TRACKS, ['GC content', 'GC skew (-)', 'AT skew (+)', 'AT skew (-)', 'GC skew (-) (2)']);
+  const rows = trackLegendRows(TRACKS, drawnRows(['GC content', 'GC skew (-)', 'AT skew (+)', 'AT skew (-)', 'GC skew (-) (2)']));
   assert.deepEqual([...rows.values()].map(({ key, slotId }) => [key, slotId]), [
     ['GC content', 'gc_content'], ['GC skew (-)', 'gc_skew'], ['GC skew (-) (2)', 'gc_skew_3'], ['AT skew (+)', 'a_skew_2'], ['AT skew (-)', 'a_skew_2']
   ]);

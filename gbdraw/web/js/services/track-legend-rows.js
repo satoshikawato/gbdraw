@@ -2,8 +2,9 @@
 import { normalizeCircularTrackSlot, normalizeNt, parseCircularTrackSlotSpec } from './circular-track-slot-model.js';
 import { parseLinearTrackSlotSpecs } from './linear-track-slot-model.js';
 import { normalizeOptionalText } from './track-slot-display.js';
+import { samePaint } from '../utils/color-utils.js';
 
-/** @import { PythonLegendKey } from './legend-svg.js' */
+/** @import { PythonLegendKey, PythonLegendRow } from './legend-svg.js' */
 
 // OV-484: the content and skew tracks a request draws, and the Legend rows
 // Python drew for them in a Result, each with the track slot that draws it and
@@ -44,11 +45,16 @@ import { normalizeOptionalText } from './track-slot-display.js';
  * @property {string} label The label of its Legend rows.
  * @property {string | null} positiveColor A skew slot's own `positive_color`; null: the palette's.
  * @property {string | null} negativeColor A skew slot's own `negative_color`; null: the palette's.
+ * @property {true} [saved] The track is read from a Session's saved settings (`loadedTracks`), which the
+ *   Result need not have been drawn with: it has a row in its own color only where Python drew the row in it.
  */
 
 /**
- * The track settings a Result was drawn with, where no request states them: the Web shows a
- * Session 27 to 30 (gbdraw 0.13.0 and earlier) from its saved settings and its saved preview.
+ * The track settings a Session 27 to 30 (gbdraw 0.13.0 and earlier) was saved with. Such a Session has
+ * no request, and the Web shows its saved preview, so they stand in for the request that drew the
+ * Result. They are the saved draft: a track setting changed after the last Generate did not draw the
+ * Result (a slot's own color is checked against the drawn row; where the saved dinucleotide is not the
+ * drawn one, the rows have no track until Generate).
  * @typedef {object} LoadedTrackSettings
  * @property {'circular' | 'linear'} mode
  * @property {string} dinucleotide
@@ -143,12 +149,12 @@ export const drawnTracks = (request) => {
 
 /**
  * The content and skew tracks of a Result that was loaded without a request, from the track
- * settings Load recorded for it. No settings name no track.
+ * settings its Session was saved with (`DrawnTrack.saved`). No settings name no track.
  * @param {LoadedTrackSettings | null} settings
  * @returns {readonly DrawnTrack[]}
  */
 export const loadedTracks = (settings) => (
-  settings ? slotTracks(settings.mode, normalizeNt(settings.dinucleotide), settings.slots) : []
+  settings ? slotTracks(settings.mode, normalizeNt(settings.dinucleotide), settings.slots).map((track) => ({ ...track, saved: true })) : []
 );
 
 /**
@@ -177,11 +183,12 @@ const trackSideFill = (track, side) => {
  * forms the Result leaves open) is no track's row here and keeps the color
  * Python drew.
  * @param {readonly DrawnTrack[]} tracks `drawnTracks` of the request that drew the Result.
- * @param {Iterable<string>} pythonKeys The keys of the Legend rows Python drew in the Result.
+ * @param {ReadonlyMap<PythonLegendKey, PythonLegendRow>} pythonRows The Legend rows Python drew in the Result.
  * @returns {TrackLegendRows}
  */
-export const trackLegendRows = (tracks, pythonKeys) => {
-  const drawnKeys = new Set(pythonKeys);
+export const trackLegendRows = (tracks, pythonRows) => {
+  /** @type {Set<string>} */
+  const drawnKeys = new Set(pythonRows.keys());
   /** @param {string} preferred @returns {PythonLegendKey[]} The drawn keys Python numbered from one preferred key. */
   const numberedKeys = (preferred) => {
     const keys = [];
@@ -196,7 +203,11 @@ export const trackLegendRows = (tracks, pythonKeys) => {
   /** @param {PythonLegendKey[]} keys @param {DrawnTrack[]} drawers @param {'positive' | 'negative'} side */
   const give = (keys, drawers, side) => {
     if (keys.length !== drawers.length) return;
-    keys.forEach((key, index) => rows.set(key, { key, slotId: drawers[index].slotId, ...trackSideFill(drawers[index], side) }));
+    keys.forEach((key, index) => {
+      const row = { key, slotId: drawers[index].slotId, ...trackSideFill(drawers[index], side) };
+      if (drawers[index].saved && row.ownColor && !samePaint(row.ownColor, pythonRows.get(key)?.color)) return;
+      rows.set(key, row);
+    });
   };
   tracksByLabel.forEach((group, label) => {
     const oneRowKeys = numberedKeys(label);

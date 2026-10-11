@@ -1017,8 +1017,9 @@ const setCommittedCanonicalSession = (next) => {
   committedCanonicalSession = next;
   committedCanonicalRevision.value += 1;
 };
-// OV-484: the track settings a Result loaded without a request was drawn with
-// (a Session 27 to 30). Load is the one writer, and only a Load replaces or
+// OV-484: the track settings a Session without a request (a Session 27 to 30)
+// was saved with, which stand in for the request that drew its Result (they are
+// the saved draft). Load is the one writer, and only a Load replaces or
 // clears the record; it is read while the Result's mode has no committed
 // request, so Generate, a History step and a mode switch leave it as it is.
 /** @type {LoadedTrackSettings | null} */
@@ -5786,14 +5787,12 @@ const importSessionDocument = async (e, options = {}) => {
     await nextTick();
     if (!currentSchemaSession) {
       const committed = cloneCanonicalSession(data);
-      if (!committed) {
-        /** @type {LoadedTrackSettings['mode']} */
-        const mode = state.mode.value;
-        const { adv } = state.drawings[mode];
+      if (!committed && logicalImportedResults.length > 0) {
+        const { adv } = shownDrawing;
         loadedTrackSettings = Object.freeze({
-          mode,
+          mode: displayMode,
           dinucleotide: adv.nt,
-          slots: adv[`${mode}_track_slots_enabled`] ? cloneJsonData(adv[`${mode}_track_slots`]) : null
+          slots: adv[`${displayMode}_track_slots_enabled`] ? cloneJsonData(adv[`${displayMode}_track_slots`]) : null
         });
       }
       setCommittedCanonicalSession(committed);

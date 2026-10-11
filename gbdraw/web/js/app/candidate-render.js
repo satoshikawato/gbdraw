@@ -7,7 +7,7 @@
 /** @import { DrawingState, LegendCaption, LegendEntry, RecordedLegendColor } from '../state.js' */
 /** @import { DisplayedLegendState } from '../services/feature-visibility.js' */
 /** @import { AddressedFeature } from '../services/feature-override-identity.js' */
-import { appliedFeatureColors, normalizeDefaultColor, resolveColorToHex } from '../utils/color-utils.js';
+import { appliedFeatureColors, normalizeDefaultColor, samePaint } from '../utils/color-utils.js';
 import { defaultLegendCaptionOrder, isLegendOrderEdited, legendEntryKey } from '../services/legend-svg.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { biologicalFeatureKey } from '../services/feature-catalog.js';
@@ -178,9 +178,6 @@ export const namedLegendCaption = (override, rules) => (
     : ''
 );
 
-const samePaint = (left, right) => (
-  text(resolveColorToHex(text(left))).toLowerCase() === text(resolveColorToHex(text(right))).toLowerCase()
-);
 
 // The color Python gives a Legend row it draws by itself: a track's row by
 // the slot that draws it (`trackRowColor`: the slot's own color, else the
@@ -220,7 +217,7 @@ const drawnRulesFirst = (rules, features) => {
  * @returns {{ ruleCaptions: PythonLegendKey[], colorOf: (key: PythonLegendKey) => SwatchColor | null }}
  */
 export const draftLegendRowColors = ({ rules, pythonRows = new Map(), features = [], originalLegendOrder, paletteColors, drawnTracks }) => {
-  const trackRows = trackLegendRows(drawnTracks, pythonRows.keys());
+  const trackRows = trackLegendRows(drawnTracks, pythonRows);
   const rowOf = ruleLegendCaptions({ rules: [...rules], pythonRows, features, originalLegendOrder: [...originalLegendOrder] });
   /** @type {Map<PythonLegendKey, string>} */
   const ruleColors = new Map();

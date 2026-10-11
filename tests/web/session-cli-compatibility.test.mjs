@@ -386,6 +386,27 @@ await test('a 0.13.0 CLI Linear protein sidecar keeps the adjacent LOSATP plan i
   assert.deepEqual([none.plan, none.comparisons], [DEFAULT_PLAN, []]);
 });
 
+// OV-491: Python's encoder writes a Circular slot object with the renderer
+// name the request gave, which may be an alias (gbdraw/tracks/circular.py
+// `_RENDERER_ALIASES`). Load reads it as the track Python draws.
+await test('a request whose Circular slot objects name a renderer by alias loads as those tracks (OV-491)', async () => {
+  const session = JSON.parse(gunzipSync(await readFile(path.join(
+    root, 'tests/fixtures/sessions/HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz'
+  ))));
+  const slot = (id, renderer) => ({ kind: 'circularTrackSlot', id, renderer, enabled: true, side: null, radius: null,
+    width: null, z: 0, params: {}, innerGapPx: null, outerGapPx: null });
+  session.renderRequest.diagramOptions.tracks.circularTrackSlots = [
+    slot('features', 'features'), slot('c', 'content'), slot('g', 'GC_Content'), slot('s', 'skew')
+  ];
+  session.renderRequest.diagramOptions.tracks.circularTrackAxisIndex = 0;
+  const result = await load(Buffer.from(JSON.stringify(session)));
+  assert.equal(result.status, 'ok', JSON.stringify(result.error));
+  const { getCommittedCanonicalRenderRequest } = await import('../../gbdraw/web/js/services/config.js');
+  const { drawnTracks } = await import('../../gbdraw/web/js/services/track-legend-rows.js');
+  assert.deepEqual(drawnTracks(getCommittedCanonicalRenderRequest()).map(({ slotId, kind }) => [slotId, kind]),
+    [['c', 'content'], ['g', 'content'], ['s', 'skew']]);
+});
+
 // A Session 27 to 30 has no request, so Load records the track settings its
 // Result was drawn with; a Session with a request records none.
 await test('Load of a 0.13.0 Session records the track settings of its Result', async () => {
@@ -399,7 +420,9 @@ await test('Load of a 0.13.0 Session records the track settings of its Result', 
   assert.equal(getLoadedTrackSettings(), null);
   state.mode.value = 'circular';
   // Linear Custom Track Slots of a Session 30 load (the schema 1 slots are
-  // migrated), so its skew slot with its own colors describes the Result.
+  // migrated). This file's Result was drawn with the slots off, so the record
+  // is the saved draft: a slot added after the last Generate (the owner gives
+  // such a track a row in its own color only where the row was drawn in it).
   const session = JSON.parse(await read('BGC0000708-BGC0000713.v30.gbdraw-session.json.gz'));
   session.config.adv.linear_track_slots_enabled = true;
   session.config.adv.linear_track_slots.push({ id: 'own', renderer: 'dinucleotide_skew', enabled: true, side: 'below',
@@ -421,6 +444,11 @@ await test('Load of a 0.13.0 Session records the track settings of its Result', 
   assert.equal(getLoadedTrackSettings().slots[1].params.positive_color, '#ff0000');
   assert.equal((await load(await read('HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz'))).status, 'ok');
   assert.ok(getCommittedCanonicalRenderRequest());
+  assert.equal(getLoadedTrackSettings(), null);
+  // A Session 30 without a Result shows none, so it records nothing.
+  const settingsOnly = JSON.parse(await read('scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz'));
+  settingsOnly.results = [];
+  assert.equal((await load(Buffer.from(JSON.stringify(settingsOnly)))).status, 'ok');
   assert.equal(getLoadedTrackSettings(), null);
 });
 

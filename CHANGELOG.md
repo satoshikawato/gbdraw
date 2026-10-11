@@ -65,10 +65,11 @@ write-up of a release.
   that still waits for Generate (OV-488).
   A Session whose request names a Circular track slot's renderer by the alias
   `content`, `gc_content`, `conservation` or `circular_comparison` (a Python
-  API request) now loads it as that track, not as a skew track (OV-489). A
-  Linear content or skew slot without a dinucleotide (a CLI or Python API
-  Session) now loads, and shows in the Source recipe, with the Session's
-  dinucleotide, not GC (OV-490).
+  API request) now loads it as that track: a spec string was read as a skew
+  track (OV-489), and a slot object, also with `skew` or `gc_skew`, stopped
+  the Load (OV-491). A Linear content or skew slot without a dinucleotide (a
+  CLI or Python API Session) now loads, and shows in the Source recipe, with
+  the Session's dinucleotide, not GC (OV-490).
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 

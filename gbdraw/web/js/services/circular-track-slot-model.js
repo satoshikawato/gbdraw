@@ -32,6 +32,13 @@ const RENDERER_ALIASES = Object.freeze({
   conservation: 'sequence_conservation',
   circular_comparison: 'sequence_conservation'
 });
+// The renderer a Circular slot names: the one change point of the alias lookup,
+// for the slot normalizer and for Load's projection of a request's slot objects.
+/** @param {unknown} name @returns {string} */
+export const circularRendererName = (name) => {
+  const named = String(name ?? '').trim().toLowerCase();
+  return RENDERER_ALIASES[named] || named;
+};
 
 export const DEFAULT_SLOT_IDS = {
   features: 'features',
@@ -643,8 +650,7 @@ export const applyCircularGeometryShortcuts = (slots, values = {}) => {
 export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', preset = 'tuckin') => {
   const source = slot && typeof slot === 'object' && !Array.isArray(slot) ? slot : {};
   assertCurrentCircularTrackSlotShape(source);
-  const named = String(source.renderer ?? '').trim().toLowerCase();
-  const resolved = RENDERER_ALIASES[named] || named;
+  const resolved = circularRendererName(source.renderer);
   const renderer = SUPPORTED_RENDERERS.includes(resolved) ? resolved : 'dinucleotide_skew';
   const fallbackId = DEFAULT_SLOT_IDS[renderer] || `slot_${index + 1}`;
   const inheritsPresetDefaults = isLegacyDefaultWebSlotShape(source, renderer, defaultNt, preset);
