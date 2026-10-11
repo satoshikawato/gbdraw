@@ -140,6 +140,7 @@ export const validateRecordDisplayDrafts = (drafts, { scoped = false } = {}) => 
   return drafts;
 };
 
+/** @param {{ topologyOverride?: boolean | null, startCoordinate?: number | null }} [draft] the row's requested display */
 export const recordDisplaySurface = (row, draft = {}, { cropped = false, reverse = false } = {}) => {
   const override = draft.topologyOverride ?? null;
   if (override !== null && typeof override !== 'boolean') throw new Error('Topology override must be boolean or null.');

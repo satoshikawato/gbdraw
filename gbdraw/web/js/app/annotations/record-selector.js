@@ -1,6 +1,7 @@
 // @ts-check
 /**
  * @import { AnnotationRecordCatalog } from './record-catalog.js'
+ * @import { AnnotationItem } from '../../services/annotation-state.js'
  */
 import {
   annotationRecordSelectorValue,
@@ -121,6 +122,7 @@ export const annotationRecordOptions = (catalog, annotation) => {
 
 // OV-373: a loaded Session reads no record bytes, so a catalog can wait for
 // discovery; a record an annotation names is then not inspected, not unavailable.
+/** @param {AnnotationRecordCatalog} catalog */
 const discoveryPending = (catalog) => (Array.isArray(catalog?.issues) ? catalog.issues : [])
   .some((issue) => issue?.context?.reason === 'DISCOVERY_PENDING');
 
@@ -147,10 +149,12 @@ export const createAnnotationRecordSelector = ({ getCatalog }) => {
   // A single-record input needs no record select: the row names
   // its record in a caption, and only several records or a missing target
   // show the select.
+  /** @param {AnnotationItem} annotation */
   const showsSelect = (annotation) => {
     const current = catalog();
     return current.status === 'ready' && (current.records.length > 1 || isMissing(annotation));
   };
+  /** @param {AnnotationItem} annotation */
   const captionFor = (annotation) => {
     if (showsSelect(annotation)) return '';
     const current = catalog();

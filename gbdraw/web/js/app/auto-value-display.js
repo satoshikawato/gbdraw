@@ -136,6 +136,15 @@ const normalizeLengthParam = (value) => {
   return text === 'short' || text === 'long' ? text : null;
 };
 
+/**
+ * What the record-length readers take from the Web state (`state.js`): the
+ * shown mode and the Circular record list, both Vue refs.
+ * @typedef {object} RecordLengthState
+ * @property {{ value?: string }} [mode]
+ * @property {{ value?: { record_length?: number, length?: number }[] }} [circularRecordList]
+ */
+
+/** @param {RecordLengthState} state */
 const circularRecordLengths = (state) => {
   const recordsRef = state?.circularRecordList;
   const records = Array.isArray(recordsRef?.value)
@@ -152,6 +161,7 @@ const lengthParamFor = (lengths) => {
   return Math.max(...lengths) < LENGTH_THRESHOLD_BP ? 'short' : 'long';
 };
 
+/** @param {RecordLengthState} state */
 const activeCircularLengthParam = (state) => lengthParamFor(circularRecordLengths(state));
 
 // Linear record lengths come from the app's record reader, registered by
@@ -159,13 +169,17 @@ const activeCircularLengthParam = (state) => lengthParamFor(circularRecordLength
 /** @type {WeakMap<object, () => number[]>} */
 const linearLengthSources = new WeakMap();
 
-/** The record lengths of the shown mode's next Generate, or [] while unknown. */
+/**
+ * The record lengths of the shown mode's next Generate, or [] while unknown.
+ * @param {RecordLengthState} state
+ */
 const knownRecordLengths = (state) => {
   const mode = String(state?.mode?.value || state?.mode || 'circular');
   if (mode === 'circular') return circularRecordLengths(state);
   return linearLengthSources.get(state)?.() || [];
 };
 
+/** @param {RecordLengthState} state */
 const activeLengthParam = (state) => lengthParamFor(knownRecordLengths(state));
 
 const maxKnownRecordLength = (state) => {
@@ -343,7 +357,7 @@ const depthWindowText = (state, drawing, field) => {
   return 'Auto (by genome size)';
 };
 
-/** @param {DrawingState} drawing */
+/** @param {RecordLengthState} state @param {DrawingState} drawing */
 const linearAxisGapText = (state, drawing) => {
   const layout = String(drawing?.form?.linear_track_layout || 'middle').toLowerCase();
   if (layout === 'middle') return 'ignored';

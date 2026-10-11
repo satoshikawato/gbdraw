@@ -438,6 +438,7 @@ export const SpecificRuleRows = {
 export const MarkupPreview = {
   props: ['text'],
   template: `<p v-if="segments.length" class="markup-preview" :title="segments.map((part) => part.text).join('')" data-markup-preview><span class="sr-only">Preview: </span><span v-for="(part, index) in segments" :key="index" :class="{ italic: part.italic }">{{ part.text }}</span></p>`,
+  /** @param {{ text?: string | null }} props */
   setup(props) {
     return { segments: computed(() => italicSegments(props.text)) };
   }

@@ -1688,6 +1688,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     const inside = [];
     /** @type {string[]} */
     const outside = [];
+    /** @param {string} name @param {number | null} ratio */
     const place = (name, ratio) => {
       if (ratio !== null) (ratio < 1 ? inside : outside).push(name);
     };
