@@ -20,7 +20,9 @@ const SUPPORTED_RENDERERS = [
   'spacer'
 ];
 
-// The renderer names a spec string may use (gbdraw/tracks/circular.py `_RENDERER_ALIASES`; OV-489).
+// The renderer names a slot may use beside the supported ones, as Python reads
+// them on a spec string and on a slot object (gbdraw/tracks/circular.py
+// `_RENDERER_ALIASES`, `_normalize_renderer`; OV-489).
 /** @type {Readonly<Record<string, string>>} */
 const RENDERER_ALIASES = Object.freeze({
   gc_content: 'dinucleotide_content',
@@ -641,7 +643,9 @@ export const applyCircularGeometryShortcuts = (slots, values = {}) => {
 export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', preset = 'tuckin') => {
   const source = slot && typeof slot === 'object' && !Array.isArray(slot) ? slot : {};
   assertCurrentCircularTrackSlotShape(source);
-  const renderer = SUPPORTED_RENDERERS.includes(source.renderer) ? source.renderer : 'dinucleotide_skew';
+  const named = String(source.renderer ?? '').trim().toLowerCase();
+  const resolved = RENDERER_ALIASES[named] || named;
+  const renderer = SUPPORTED_RENDERERS.includes(resolved) ? resolved : 'dinucleotide_skew';
   const fallbackId = DEFAULT_SLOT_IDS[renderer] || `slot_${index + 1}`;
   const inheritsPresetDefaults = isLegacyDefaultWebSlotShape(source, renderer, defaultNt, preset);
   const params = inheritsPresetDefaults ? {} : cloneParams(source.params);
@@ -781,10 +785,9 @@ export const parseCircularTrackSlotSpec = (spec, index = 0, defaultNt = 'GC', pr
   const atIndex = text.indexOf('@');
   const head = (atIndex < 0 ? text : text.slice(0, atIndex)).trim();
   const separatorIndex = head.indexOf(':');
-  const renderer = (separatorIndex < 0 ? head : head.slice(separatorIndex + 1)).trim().toLowerCase();
   const source = {
     id: separatorIndex < 0 ? '' : head.slice(0, separatorIndex).trim(),
-    renderer: RENDERER_ALIASES[renderer] || renderer,
+    renderer: separatorIndex < 0 ? head : head.slice(separatorIndex + 1).trim(),
     enabled: true,
     params: {}
   };

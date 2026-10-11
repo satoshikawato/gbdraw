@@ -13,8 +13,10 @@ import { normalizeOptionalText } from './track-slot-display.js';
 // shape of a row's caption. A content track has no color of its own: every
 // one takes the palette's gc_content, which the painter reads directly.
 //
-// The slots are read through the slot parsers Session load uses, so a spec
-// string of a CLI or Python API request and a slot object give the same track.
+// The slots are read through the slot model's parser and normalizer
+// (`parseCircularTrackSlotSpec`, `normalizeCircularTrackSlot`,
+// `parseLinearTrackSlotSpecs`), so a spec string of a Python API request and a
+// slot object give the same track.
 // Python allocates the row keys (gbdraw/legend/table.py `prepare_legend_table`
 // without explicit slots; `_sync_legend_table_for_circular_slots` and
 // `_sync_legend_table_for_linear_slots` in gbdraw/diagrams/*/assemble.py with
@@ -36,7 +38,8 @@ import { normalizeOptionalText } from './track-slot-display.js';
 /**
  * A content or skew track a request draws.
  * @typedef {object} DrawnTrack
- * @property {string | null} slotId The track slot that draws it; null: a default track (no explicit slot draws it).
+ * @property {string | null} slotId The track slot that draws it; null: a default track, which no explicit slot
+ *   draws (Python tags its group with a preset slot id of its own).
  * @property {'content' | 'skew'} kind
  * @property {string} label The label of its Legend rows.
  * @property {string | null} positiveColor A skew slot's own `positive_color`; null: the palette's.
@@ -83,9 +86,10 @@ const trackRequestView = (request) => {
 
 /**
  * The content and skew tracks the request that drew a Result draws, in
- * Python's order. None for a value that is no request and for slot entries
- * the slot parsers reject (as Session load would): no track is named, so no
- * row and no track takes a color here.
+ * Python's order. None for a value that is no request (null: the Result of a
+ * Session 27 to 30, which holds none, so the slots that drew it are not known
+ * here) and for slot entries the slot parsers reject (as Session load would):
+ * no track is named, so no row and no skew track takes a color here.
  * @param {unknown} request
  * @returns {readonly DrawnTrack[]}
  */
@@ -195,8 +199,10 @@ export const trackLegendRows = (tracks, pythonKeys) => {
 export const trackRowColor = (row, palette) => row.ownColor || palette[row.paletteKey] || '';
 
 /**
- * The fill of one side of a skew track of a Result, by the slot that draws it
- * (`data-gbdraw-slot-id`; null: the default skew track); '' for a track the
+ * The fill of one side of a skew track of a Result, by the slot id of its
+ * group (`data-gbdraw-slot-id`). The default skew track of a request without
+ * explicit slots is the only skew track of its Result, so it answers for every
+ * skew group, whatever preset id Python tagged it with. '' for a group the
  * request names no slot for, which keeps its drawn color.
  * @param {readonly DrawnTrack[]} tracks `drawnTracks` of the request that drew the Result.
  * @param {string | null} slotId
@@ -205,6 +211,6 @@ export const trackRowColor = (row, palette) => row.ownColor || palette[row.palet
  * @returns {string}
  */
 export const skewTrackColor = (tracks, slotId, side, palette) => {
-  const track = tracks.find((candidate) => candidate.kind === 'skew' && candidate.slotId === slotId);
+  const track = tracks.find((candidate) => candidate.kind === 'skew' && (candidate.slotId === null || candidate.slotId === slotId));
   return track ? trackRowColor(trackSideFill(track, side), palette) : '';
 };

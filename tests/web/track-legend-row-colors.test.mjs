@@ -109,6 +109,22 @@ test('the track rows of a request without slots are Python\'s default rows', () 
   }
 });
 
+// A request without explicit slots draws one skew track, whose group Python
+// tags with its preset slot id (`gc_skew`, whatever the dinucleotide): the
+// default track answers for it, in both modes.
+test('a palette edit paints the skew track of a request without slots', () => {
+  for (const mode of ['circular', 'linear']) {
+    for (const dinucleotide of ['GC', 'AT']) {
+      const tracks = drawnTracks(requestOf({ mode, dinucleotide, slots: null }));
+      assert.deepEqual(['positive', 'negative'].map((side) => skewTrackColor(tracks, 'gc_skew', side, PALETTE)),
+        [PALETTE.skew_high, PALETTE.skew_low], `${mode} ${dinucleotide}`);
+    }
+  }
+  const { actions, skewFills } = paintFixture({ default: '#d3d3d3', skew_high: '#abcdef', skew_low: '#fedcba' }, []);
+  actions.applyPaletteToSvg();
+  assert.deepEqual(skewFills, ['#abcdef', '#fedcba']);
+});
+
 // What the tracks read of a request is checked: a request of an older schema
 // may lack `tracks`, and a value that is no request names no track.
 test('a request without tracks draws the default tracks, and a value that is no request names none', () => {
@@ -119,7 +135,7 @@ test('a request without tracks draws the default tracks, and a value that is no 
   assert.deepEqual(drawnTracks({ mode: 'circular', diagramOptions: {} }), defaults);
   assert.deepEqual(drawnTracks({ mode: 'linear', diagramOptions: { tracks: { linearTrackSlots: null } } }), defaults);
   for (const [reason, value] of [
-    ['no request', null], ['no diagramOptions', { mode: 'circular' }], ['an unknown mode', { mode: 'grid', diagramOptions: {} }],
+    ['no request (a Session 27 to 30)', null], ['no diagramOptions', { mode: 'circular' }], ['an unknown mode', { mode: 'grid', diagramOptions: {} }],
     ['tracks that is no object', { mode: 'circular', diagramOptions: { tracks: [] } }],
     ['slots that are no list', { mode: 'circular', diagramOptions: { tracks: { circularTrackSlots: 'gc_skew:dinucleotide_skew' } } }],
     ['a slot entry that is no spec', { mode: 'circular', diagramOptions: { tracks: { circularTrackSlots: [7] } } }],

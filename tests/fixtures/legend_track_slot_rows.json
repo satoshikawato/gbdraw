@@ -214,6 +214,125 @@
       ]
     },
     {
+      "name": "circular: slot objects whose renderer is an alias",
+      "mode": "circular",
+      "dinucleotide": "GC",
+      "palette": {
+        "gc_content": "#a0a0a0",
+        "skew_high": "#111111",
+        "skew_low": "#222222"
+      },
+      "slots": [
+        {
+          "kind": "circularTrackSlot",
+          "id": "features",
+          "renderer": "features",
+          "enabled": true,
+          "side": null,
+          "radius": null,
+          "width": null,
+          "z": 0,
+          "params": {},
+          "innerGapPx": null,
+          "outerGapPx": null
+        },
+        {
+          "kind": "circularTrackSlot",
+          "id": "c",
+          "renderer": "content",
+          "enabled": true,
+          "side": null,
+          "radius": null,
+          "width": null,
+          "z": 0,
+          "params": {},
+          "innerGapPx": null,
+          "outerGapPx": null
+        },
+        {
+          "kind": "circularTrackSlot",
+          "id": "g",
+          "renderer": "gc_content",
+          "enabled": true,
+          "side": null,
+          "radius": null,
+          "width": null,
+          "z": 0,
+          "params": {
+            "nt": "AT"
+          },
+          "innerGapPx": null,
+          "outerGapPx": null
+        },
+        {
+          "kind": "circularTrackSlot",
+          "id": "s",
+          "renderer": "skew",
+          "enabled": true,
+          "side": null,
+          "radius": null,
+          "width": null,
+          "z": 0,
+          "params": {},
+          "innerGapPx": null,
+          "outerGapPx": null
+        },
+        {
+          "kind": "circularTrackSlot",
+          "id": "t",
+          "renderer": "gc_skew",
+          "enabled": true,
+          "side": null,
+          "radius": null,
+          "width": null,
+          "z": 0,
+          "params": {
+            "nt": "AT"
+          },
+          "innerGapPx": null,
+          "outerGapPx": null
+        }
+      ],
+      "rows": [
+        [
+          "GC content",
+          "gc_content",
+          "c",
+          "#a0a0a0"
+        ],
+        [
+          "AT content",
+          "gc_content",
+          "g",
+          "#a0a0a0"
+        ],
+        [
+          "GC skew (+)",
+          "skew_high",
+          "s",
+          "#111111"
+        ],
+        [
+          "GC skew (-)",
+          "skew_low",
+          "s",
+          "#222222"
+        ],
+        [
+          "AT skew (+)",
+          "skew_high",
+          "t",
+          "#111111"
+        ],
+        [
+          "AT skew (-)",
+          "skew_low",
+          "t",
+          "#222222"
+        ]
+      ]
+    },
+    {
       "name": "circular: two skew slots of one label, the second with one own color, and a disabled slot",
       "mode": "circular",
       "dinucleotide": "GC",

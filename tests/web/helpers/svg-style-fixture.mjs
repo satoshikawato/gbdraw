@@ -8,8 +8,9 @@ import { drawnTracks } from '../../../gbdraw/web/js/services/track-legend-rows.j
 
 const ref = value => ({ value });
 globalThis.XMLSerializer = class { serializeToString(svg) { return svg.snapshot(); } };
-// `slots`: the Circular track slots of the request that drew the Result (services/track-legend-rows.js).
-export const fixture = (colors, rules, { slots = ['gc_skew:dinucleotide_skew'] } = {}) => {
+// `slots`: the Circular track slots of the request that drew the Result (services/track-legend-rows.js);
+// null: none, so Python drew the default tracks, the skew group under its preset slot id.
+export const fixture = (colors, rules, { slots = null } = {}) => {
   const tracks = drawnTracks({ mode: 'circular', diagramOptions: { dinucleotide: 'GC', tracks: { circularTrackSlots: slots } } });
   const attrs = { id: 'f1', 'data-gbdraw-feature-id': 'f1', 'data-gbdraw-feature-part': 'block', fill: '#000000' };
   const feature = { svg_id: 'f1', type: 'unlisted_type', start: 1, end: 10, qualifiers: { gene: ['sample'] } };

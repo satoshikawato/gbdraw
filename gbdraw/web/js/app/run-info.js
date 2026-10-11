@@ -1331,7 +1331,8 @@ const trackSlotForRecipe = (slot, mode, options) => {
         options.configOverrides?.['canvas.circular.track_type']
       );
     } else {
-      const parsed = parseLinearTrackSlotSpec(slot);
+      // A slot that names no dinucleotide states the request's, as Python read it (OV-490).
+      const parsed = parseLinearTrackSlotSpec(slot, options.dinucleotide || 'GC');
       validateTrackParams('linear', parsed.renderer, parsed.params || {});
       token = buildLinearTrackSlotSpec(linearTrackSlotForRecipe(parsed), { includeEnabled: true });
     }

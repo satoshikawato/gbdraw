@@ -815,6 +815,30 @@ for (const { edit, states, setup, run, knownMismatch } of CASES) {
   });
 }
 
+// OV-484: a request without explicit track slots draws its skew track under
+// Python's preset slot id. A palette change repaints that track as the next
+// Generate draws it (the semantic snapshot does not read track fills).
+for (const mode of ['circular', 'linear']) {
+  test(`Palette change repaints the skew track of a request without track slots: ${mode}`, async ({ page }) => {
+    test.setTimeout(90_000);
+    await open(page, { mode, results: 'single', reflow: 'off' });
+    if (mode === 'linear') {
+      await page.evaluate(() => { window.__GBDRAW_APP__.form.show_skew = true; });
+      await generate(page);
+    }
+    const skewFills = () => page.evaluate(() => [...document.querySelectorAll('svg g[data-gbdraw-slot-renderer="dinucleotide_skew"]')]
+      .map((group) => [...group.querySelectorAll('path')].map((path) => String(path.getAttribute('fill') || '').toLowerCase())
+        .filter((fill) => fill && fill !== 'none' && fill !== 'white')));
+    const drawn = await skewFills();
+    expect(drawn.flat().length, 'the Result draws a skew track').toBeGreaterThan(0);
+    await switchPalette(page, 'alpine_retreat');
+    const live = await skewFills();
+    expect(live, 'the palette repaints the skew track').not.toEqual(drawn);
+    await generate(page);
+    expect(live, 'the skew track of the live edit is the one Generate draws').toEqual(await skewFills());
+  });
+}
+
 // OV-144 (D-07, PD-OI-062): the executor's record of Python's strokes travels
 // with a Result through Save Session and Load, so a stroke edit removed after
 // Load leaves a batch Result that showed it when that Result is shown again.
