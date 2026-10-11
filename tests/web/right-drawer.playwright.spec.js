@@ -977,7 +977,7 @@ test('adjacent Collinear mixed groups remain selectable after current-session sa
     await expect(paths).toHaveCount(1);
     const geometry = await paths.evaluateAll((elements) => elements.map((element) => element.getAttribute('d')));
     for (const [id, expectedMembers] of [['og_1', ['a0', 'a1', 'b0']], ['og_2', ['a3', 'a4']]]) {
-      const entry = drawer.locator('button').filter({ has: page.locator('.font-mono', { hasText: new RegExp(`^${id}$`) }) });
+      const entry = drawer.locator(`[data-similarity-group-row="${id}"]`);
       await expect(entry).toHaveCount(1);
       await entry.click();
       expect(await page.evaluate(() => window.__GBDRAW_APP__.selectedOrthogroupId)).toBe(id);
@@ -1333,12 +1333,13 @@ test('similarity-group rows update every displayed field and retain current clic
     state.selectedOrthogroupId.value = 's05_row_1';
     window.__GBDRAW_APP__.openRightDrawerTab('orthogroups');
   });
-  const row = (id) => page.locator('.right-drawer button').filter({
-    has: page.locator('div.font-mono').filter({ hasText: new RegExp(`^${id}$`) })
-  });
+  const row = (id) => page.locator(`.right-drawer [data-similarity-group-row="${id}"]`);
   await expect(row('s05_row_1')).toContainText('First group');
-  await expect(row('s05_row_1')).toContainText('2 members');
+  await expect(row('s05_row_1')).toContainText('2 genes · 1 record');
+  // UX-B06: the usual cross-record scope is not repeated on every row.
+  await expect(row('s05_row_1')).not.toContainText('Cross-record similarity group');
   await expect(row('s05_row_1')).toHaveClass(/bg-emerald-50/);
+  await expect(row('s05_row_1')).toHaveAttribute('aria-current', 'true');
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     state.sessionSavePending.value = true;
@@ -1351,8 +1352,7 @@ test('similarity-group rows update every displayed field and retain current clic
   });
   await expect(row('s05_row_1')).toContainText('Updated group');
   await expect(row('s05_row_1')).toContainText('Record-specific similarity group');
-  await expect(row('s05_row_1')).toContainText('3 members');
-  await expect(row('s05_row_1')).toContainText('2 records');
+  await expect(row('s05_row_1')).toContainText('3 genes · 2 records');
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     state.activeDrawing().orthogroupNameOverrides.s05_row_1 = 'Renamed group';
@@ -1367,7 +1367,7 @@ test('similarity-group rows update every displayed field and retain current clic
   });
   await expect(row('s05_row_1')).toContainText('Updated group');
   await expect(row('s05_row_1')).not.toContainText('Edited');
-  await expect(row('s05_row_1')).toContainText('1 members');
+  await expect(row('s05_row_1')).toContainText('1 gene · 2 records');
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     state.orthogroups.value[0].member_count = { legacyCount: 7 };
@@ -1397,12 +1397,35 @@ test('similarity-group rows update every displayed field and retain current clic
     const { state } = await import('./js/state.js');
     state.orthogroups.value[0].id = 's05_row_changed';
     // The existing click binding reads current source identity even before Vue paints.
-    const previousRow = [...document.querySelectorAll('.right-drawer button')].find(
-      (button) => button.querySelector('div.font-mono')?.textContent === 's05_row_1'
-    );
+    const previousRow = document.querySelector('.right-drawer [data-similarity-group-row="s05_row_1"]');
     previousRow.click();
     return window.__GBDRAW_APP__.selectedOrthogroupId;
   }).then((selected) => expect(selected).toBe('s05_row_changed'));
   await expect(row('s05_row_1')).toHaveCount(0);
   await expect(row('s05_row_changed')).toContainText('Updated group');
+});
+
+// D-24 (Q7): without Similarity groups the tab stays visible and disabled, and
+// says why in its tooltip and accessible description.
+test('an unavailable Similarity groups tab states why in its tooltip', async ({ page }) => {
+  expect((await loadGallerySession(page, 'HmmtDNA_basic_circular.gbdraw-session.json')).status).toBe('ok');
+  await page.locator('.drawer-toggle').click();
+  const tab = page.locator('.right-drawer').getByRole('button', { name: 'Similarity groups' });
+  const reason = 'Similarity groups appear after a Linear comparison with Similarity groups turned on.';
+  await expect(tab).toBeVisible();
+  await expect(tab).toBeDisabled();
+  await expect(tab).toHaveAttribute('title', reason);
+  await expect(tab).toHaveAccessibleDescription(reason);
+});
+
+// OV-427: the drawer's Display name and Description fields are named by their labels.
+test('the similarity-group name fields are named by their visible labels', async ({ page }) => {
+  expect((await loadGallerySession(page, 'majanivirus_orthogroup.gbdraw-session.json.gz')).status).toBe('ok');
+  await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('orthogroups'));
+  const drawer = page.locator('.right-drawer');
+  await expect(drawer.getByRole('textbox', { name: 'Display name', exact: true })).toBeVisible();
+  await expect(drawer.getByRole('textbox', { name: 'Description', exact: true })).toBeVisible();
+  // One scroll region holds the detail; the list beside it scrolls on its own (UX-B06).
+  await expect(drawer.locator('[data-similarity-group-detail]')).toHaveCSS('overflow-y', 'auto');
+  await expect(drawer.locator('[data-similarity-group-detail] .overflow-auto')).toHaveCount(0);
 });

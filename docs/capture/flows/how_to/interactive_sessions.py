@@ -879,7 +879,7 @@ def _capture_bgc_popups(
         ).click()
         orthogroup_editor = page.locator(".right-drawer")
         expect(orthogroup_editor).to_be_visible()
-        for token in ("23 similarity groups", "og_1", "5 members", "5 records"):
+        for token in ("23 similarity groups", "og_1", "5 genes · 5 records"):
             expect(orthogroup_editor).to_contain_text(token)
         capture.assert_clean()
     finally:

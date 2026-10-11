@@ -524,11 +524,13 @@ def _verify_direction_reset(page: Page) -> None:
     for combined in (True, False):
         page.get_by_role("button", name="Reset alignment…", exact=True).click()
         reset = page.get_by_role("dialog", name="Reset alignment", exact=True)
-        expect(reset.get_by_role("radio", name="Reset positions", exact=True)).to_be_checked()
-        expect(reset.get_by_role("list", name="Alignment direction restoration targets").get_by_role("listitem")).to_have_count(1)
+        expect(reset.get_by_role("radio", name="Positions only", exact=True)).to_be_checked()
         if combined:
-            reset.get_by_role("radio", name="Reset positions and alignment direction changes", exact=True).check()
-        reset.get_by_role("button", name="Reset", exact=True).click()
+            reset.get_by_role("radio", name="Positions and directions (1 record)", exact=True).check()
+            expect(reset.get_by_role("list", name="Alignment direction restoration targets").get_by_role("listitem")).to_have_count(1)
+        reset.get_by_role(
+            "button", name="Reset positions and directions" if combined else "Reset positions", exact=True
+        ).click()
         expect(reset).to_be_hidden(timeout=GENERATION_TIMEOUT_MS)
         restored = snapshot()
         assert restored["plan"] is None and restored["receipt"] is None
