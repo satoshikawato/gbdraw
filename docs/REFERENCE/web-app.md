@@ -928,8 +928,8 @@ split location are separated by `; `.
 heading says (**Updates the current Result**):
 **Fill Color**, **Stroke**, the **Label** row (label text, **Label visibility**,
 and **Apply Label** on one line), **Feature visibility**, and **Legend name**,
-which can also be chosen from the legend rules. When the feature has no label,
-one line names the reason, for example `No label shown (Show Labels = None).
+which can also be chosen from the legend captions of the color rules. When the
+feature has no label, one line names the reason, for example `No label shown (Show Labels = None).
 Choose On to show it.` The **Similarity group** section follows when the
 feature belongs to one: one line with the group ID, its name, and **N genes in
 M records**, then **Show in editor** and **Align…**, with **Review alignment

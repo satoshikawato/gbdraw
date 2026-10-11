@@ -5929,9 +5929,9 @@
                                    class="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" :disabled="!semanticMutationAvailable">
                             <select v-if="specificRuleLegendOptions.length > 0"
                                     :disabled="!semanticMutationAvailable" @change="selectLegendNameOption($event.target.value); $event.target.value = ''"
-                                    aria-label="Legend names from legend rules"
+                                    aria-label="Legend captions of color rules"
                                     class="mt-1 w-full text-xs border border-slate-200 rounded-md px-2 py-1 bg-slate-50 text-slate-600">
-                                <option value="">Choose from legend rules…</option>
+                                <option value="">Choose from color rules…</option>
                                 <option v-for="entry in specificRuleLegendOptions"
                                         :key="`specific-rule-select-${entry.caption}`"
                                         :value="entry.caption">
