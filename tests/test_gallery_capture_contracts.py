@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import tools.capture_gallery_tutorial_screenshots as capture_tool
 from tools.capture_gallery_tutorial_screenshots import (
     DEFAULT_MAX_FILE_SIZE_KB,
     DEFAULT_MAX_IMAGE_HEIGHT,
@@ -14,6 +15,7 @@ from tools.capture_gallery_tutorial_screenshots import (
     TutorialContext,
     ValidationResult,
     add_capture_contract_validation,
+    add_step_replay_validation,
     iter_operation_contexts,
     load_ready_examples,
     resolve_gallery_reference,
@@ -570,3 +572,67 @@ def test_web_app_readiness_waits_for_palette_without_starting_worker() -> None:
     assert "diagramGenerationWorkerReady" not in script
     assert "pyodideReady" not in script
     assert timeout == 120000
+
+
+def _manual_context(step_index: int) -> TutorialContext:
+    return TutorialContext(
+        example_id="current-example",
+        tutorial_path=Path("tutorial.json"),
+        section="manualSteps",
+        step_index=step_index,
+        step_title="Generate",
+        operation_index=1,
+    )
+
+
+@pytest.mark.parametrize("replay_through", [0, 3, "2", True])
+def test_replay_capture_names_a_step_up_to_its_own(replay_through: object) -> None:
+    result = ValidationResult(errors=[], warnings=[])
+    operation = {"capture": {"source": "webapp", "replayThrough": replay_through}}
+
+    add_capture_contract_validation(result, _manual_context(2), {}, operation)
+
+    assert result.errors == [
+        "current-example / manualSteps / step 2 / Generate / operation 1: "
+        "capture.replayThrough must name a manual step from 1 to this step."
+    ]
+
+
+def test_step_replay_accepts_reader_actions_only() -> None:
+    result = ValidationResult(errors=[], warnings=[])
+    step = {"replay": [{"type": "fill"}, {"type": "generate"}, {"type": "resetSettings"}, {"type": "upload"}]}
+
+    add_step_replay_validation(result, _manual_context(1), step)
+
+    assert len(result.errors) == 2
+    assert "replay action 3" in result.errors[0]
+    assert "replay action 4" in result.errors[1]
+
+
+def test_replay_resets_then_performs_steps_through_the_named_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tutorial = tmp_path / "tutorial.json"
+    tutorial.write_text(
+        json.dumps(
+            {
+                "manualSteps": [
+                    {"replay": [{"type": "fill", "value": "one"}]},
+                    {"title": "no replay"},
+                    {"replay": [{"type": "generate"}]},
+                    {"replay": [{"type": "fill", "value": "four"}]},
+                ]
+            }
+        )
+    )
+    performed: list[dict[str, object]] = []
+    monkeypatch.setattr(capture_tool, "resolve_gallery_reference", lambda reference: tutorial)
+    monkeypatch.setattr(capture_tool, "apply_capture_action", lambda page, action: performed.append(action))
+
+    capture_tool.replay_tutorial_steps(object(), {"tutorial": "./tutorials/x.json"}, 3)
+
+    assert performed == [
+        {"type": "resetSettings"},
+        {"type": "fill", "value": "one"},
+        {"type": "generate"},
+    ]
