@@ -322,7 +322,7 @@ test('docked search and controls remain reachable across Preview sizes and Edito
   await search.fill('tRNA');
   await search.press('Enter');
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.previewFeatureSearchMatches.length)).toBeGreaterThan(0);
-  await page.getByRole('checkbox', { name: /Regex/ }).check();
+  await page.getByRole('checkbox', { name: 'Regular expression', exact: true }).check();
   await search.fill('tRNA|rRNA');
   await search.press('Enter');
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.previewFeatureSearchMatches.length)).toBeGreaterThan(1);
