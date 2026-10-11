@@ -121,6 +121,14 @@ write-up of a release.
   new data yet. Before, the alignment was cleared at once with "Alignment
   cleared: comparison configuration changed." Choosing a file, another
   program or mode, or any other comparison change still clears it (OV-380).
+- Similarity alignment (web app): a Result filter or grouping setting that
+  moves the alignment reference or a target out of its Similarity Group (for
+  example a higher **Minimum identity**) keeps the alignment, and every later
+  **Generate Diagram** draws it while its anchor features exist. Before, the
+  Generate after such a change was blocked with "Alignment needs repair". When
+  an anchor feature itself is gone, the repair notice now says whether the
+  reference or an aligned target feature is gone instead of "The clicked
+  feature is not a unique member of this Similarity Group." (OV-341, OV-342).
 - Feature popup (web app): while the first popup after a page or Session load
   waits for Python to match the color rules, the toolbar shows **Preparing
   feature details…**, and **Save Session** and **Load Session** stay available.

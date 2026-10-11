@@ -57,15 +57,6 @@ const nullableInteger = (value, path) => {
 
 const sameJson = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 
-const sameKeyedPlan = (left, right) => {
-  if (left?.schema !== 2 || right?.schema !== 2 ||
-      !Array.isArray(left.records) || !Array.isArray(right.records)) return false;
-  const keyed = (plan) => ({ ...plan, records: [...plan.records].sort(
-    (a, b) => String(a?.recordKey || '').localeCompare(String(b?.recordKey || ''))
-  ) });
-  return sameJson(keyed(left), keyed(right));
-};
-
 const anchorKey = (anchor) => JSON.stringify(anchor);
 
 const strandLabel = (strand) => (
@@ -180,6 +171,22 @@ const catalogFeatureFacts = (catalog) => {
 // A record's name for one-line summaries: its accession, else its definition.
 /** @param {{ name?: string, detail?: string } | undefined} names */
 const shortRecordName = (names) => names?.detail || names?.name || '';
+
+/**
+ * The one catalog feature that a plan anchor names, or null when none or
+ * several match. Generate validation and Reset share this lookup.
+ * @template {{ recordKey?: unknown, biologicalFeatureId?: unknown, sourceFeatureIndex?: unknown }} T
+ * @param {T[]} features
+ * @param {AnchorIdentity | null} anchor
+ * @returns {T | null}
+ */
+const uniqueCatalogFeature = (features, anchor) => {
+  if (!anchor) return null;
+  const matches = features.filter((feature) => feature.recordKey === anchor.recordKey
+    && feature.biologicalFeatureId === anchor.biologicalFeatureId
+    && (anchor.sourceFeatureIndex === null || feature.sourceFeatureIndex === anchor.sourceFeatureIndex));
+  return matches.length === 1 ? matches[0] : null;
+};
 
 // Presentation label or definition plus accession; the display position is
 // appended only to tell otherwise identical records apart.
@@ -940,6 +947,8 @@ const anchorsAgree = (left, right) => {
  * @property {any} translations
  */
 
+/** @typedef {ReturnType<typeof anchorFromSource>} AnchorIdentity */
+
 /**
  * What `captureArtifact` records to tell whether a draft's source artifact changed.
  * @typedef {object} AlignmentArtifactStamp
@@ -1486,14 +1495,11 @@ export const createSimilarityAlignmentActions = ({
       if (orientations.some((direction, index) => direction.reverseComplement
         !== baseReverseComplement(current.request.records[index]))) {
         const plan = current.request.layout.similarityAlignment;
-        const catalogFeatures = (state.featureCatalog?.value?.items || [])
-          .flatMap(item => item.biologicalFeatures || []);
+        const catalogFeatures = catalogBiologicalFeatures(state.featureCatalog?.value);
         const members = plan.records.filter(record => record.anchor).map(({anchor}) => {
-          const matches = catalogFeatures.filter(feature => feature.recordKey === anchor.recordKey
-            && feature.biologicalFeatureId === anchor.biologicalFeatureId
-            && (anchor.sourceFeatureIndex === null || feature.sourceFeatureIndex === anchor.sourceFeatureIndex));
-          if (matches.length !== 1) throw new Error('Alignment Reset source anchor is unavailable or ambiguous.');
-          return {...matches[0], ...anchor};
+          const feature = uniqueCatalogFeature(catalogFeatures, anchor);
+          if (!feature) throw new Error('Alignment Reset source anchor is unavailable or ambiguous.');
+          return {...feature, ...anchor};
         });
         const request = buildHelperRequest({group:{id:plan.groupId}, members,
           reference:plan.reference, request:current.request, catalog:state.featureCatalog?.value,
@@ -1613,17 +1619,40 @@ export const createSimilarityAlignmentActions = ({
     }
     // The plan is Linear draft state: only a Linear request draws it.
     if (state.mode.value !== 'linear') return { status: 'ok' };
-    const group = getOrthogroupById(plan.groupId);
-    if (!group) {
-      // A saved Result can retain its exact plan after comparison groups have
-      // left the editor catalog. The typed render still validates every anchor.
-      if (sameKeyedPlan(plan, currentRequest()?.layout?.similarityAlignment)) {
-        repair.value = null;
-        return { status: 'ok' };
-      }
-      return markStaleReference('The saved Similarity Group is no longer available.');
+    // A plan names anchor features, not group membership (PD-OI-028, OV-341):
+    // it is stale only when an anchor feature no longer resolves in the shown
+    // Result's feature catalog. A Result without a catalog (an older Session)
+    // cannot be checked here; the typed render validates every anchor.
+    const catalogFeatures = catalogBiologicalFeatures(state.featureCatalog?.value);
+    /** @type {{ recordKey: string, status: string, anchor: AnchorIdentity | null }[]} */
+    const decisions = plan.records;
+    const resolves = (/** @type {AnchorIdentity | null} */ anchor) => (
+      !catalogFeatures.length || uniqueCatalogFeature(catalogFeatures, anchor) !== null);
+    if (!resolves(plan.reference)) {
+      return markStaleReference('The alignment reference feature is no longer found in its record.');
     }
-    const members = getEnrichedOrthogroupMembers(group);
+    const goneRecordKeys = new Set(decisions
+      .filter(({ status, anchor }) => status === 'aligned' && !resolves(anchor))
+      .map(({ recordKey }) => recordKey));
+    const group = getOrthogroupById(plan.groupId);
+    const members = group ? getEnrichedOrthogroupMembers(group) : [];
+    const currentAnchors = members.map((member) => {
+      try { return anchorFromSource(member, 'Current Similarity Group member'); } catch (_error) { return null; }
+    }).filter(Boolean);
+    const inGroup = (/** @type {AnchorIdentity | null} */ anchor) => currentAnchors.filter((candidate) => anchorsAgree(candidate, anchor)).length === 1;
+    // A comparison setting regrouped the plan's group, or the group left the
+    // catalog: the typed render still validates every anchor.
+    const regrouped = !inGroup(plan.reference) || decisions.some(({ recordKey, status, anchor }) => (
+      status === 'aligned' && !goneRecordKeys.has(recordKey) && !inGroup(anchor)));
+    if (regrouped && goneRecordKeys.size === 0) {
+      repair.value = null;
+      return { status: 'ok' };
+    }
+    // Target repair offers this group's members and keeps the other choices,
+    // so it needs the reference and every remaining target in the group.
+    if (regrouped) {
+      return markStaleReference('An aligned target feature is no longer found in its record.');
+    }
     let request;
     try {
       request = buildHelperRequest({
@@ -1640,19 +1669,8 @@ export const createSimilarityAlignmentActions = ({
       return markStaleReference(cause?.message || cause);
     }
     setReviewNames(request, members, currentRequest());
-    const currentAnchors = members.map((member) => {
-      try { return anchorFromSource(member, 'Current Similarity Group member'); } catch (_error) { return null; }
-    }).filter(Boolean);
-    const staleRecordKeys = new Set(
-      plan.records
-        .filter(({ status, anchor }) => (
-          status === 'aligned'
-          && !currentAnchors.some((candidate) => anchorsAgree(candidate, anchor))
-        ))
-        .map(({ recordKey }) => recordKey)
-    );
-    if (staleRecordKeys.size > 0) {
-      return prepareStaleTargetRepair(plan, request, staleRecordKeys, expectedActionId);
+    if (goneRecordKeys.size > 0) {
+      return prepareStaleTargetRepair(plan, request, goneRecordKeys, expectedActionId);
     }
     try {
       const helper = await runHelperOperation(resolveOperation, { request });
