@@ -153,6 +153,16 @@ test('a loaded Session shows its File cards folded to one line each, and the hea
   await page.keyboard.press('Enter');
   await expect.poll(async () => (await foldState(page)).map((card) => card.uid)).toEqual(['record-1', 'record-2', 'record-3', 'record-4', 'record-5']);
   await expectFolded(page, [false, true, true, true, true]);
+  // Space on a move button of a folded card moves the card as well, and unfolds nothing.
+  for (const [name, order] of [
+    ['Move File 2 down', ['record-1', 'record-3', 'record-2', 'record-4', 'record-5']],
+    ['Move File 3 up', ['record-1', 'record-2', 'record-3', 'record-4', 'record-5']]
+  ]) {
+    await page.getByRole('button', { name, exact: true }).focus();
+    await page.keyboard.press('Space');
+    await expect.poll(async () => (await foldState(page)).map((card) => card.uid)).toEqual(order);
+    await expectFolded(page, [false, true, true, true, true]);
+  }
   // A press on the disabled move button, or between the two, folds nothing either.
   await first.getByRole('button', { name: 'Move File 1 up', exact: true }).click({ force: true });
   const gap = await first.locator('[data-linear-source-move="up"]').evaluate((button) => {
@@ -376,6 +386,9 @@ test('a loaded GFF3 + FASTA Session folds a card that holds both of its files', 
   const download = await pending;
   const saved = testInfo.outputPath(download.suggestedFilename());
   await download.saveAs(saved);
+  // A fresh page is on GenBank: the load rule reads the input type of the Session it loads.
+  await openLinear(page);
+  await expect(page.getByRole('radio', { name: 'GenBank', exact: true }).first()).toBeChecked();
   await page.locator('input[accept^=".json,"]').setInputFiles(saved);
   await sessionSettled(page);
   await expect(cards(page)).toHaveCount(1);
