@@ -71,6 +71,11 @@ last drawn record of a file asks whether to remove the file. In 0.13.0, a
 Linear File card drew every record or the one record named in Record ID, and
 Multi-Record Canvas drew every record.
 
+A row of icon buttons above the settings lists the sections of the current
+mode. A button opens its section and brings it to the top, so a section far
+down the panel (**Labels** in Linear mode with several files) is one click
+away. The section title shows on hover and on keyboard focus.
+
 Each change of a checkbox, radio button, or button is one **Undo** step. Undo
 and Redo are unavailable while Generate runs, and the header says why. Error
 messages name the field, track row, Depth series, table line, or setting
