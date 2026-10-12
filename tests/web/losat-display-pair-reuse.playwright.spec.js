@@ -70,7 +70,7 @@ const chooseLosatp = async (page, mode) => {
 };
 
 const openLayoutControls = (page) => (
-  page.getByRole('button', { name: 'Advanced comparison and layout' }).press('Enter')
+  page.getByRole('button', { name: 'Advanced comparison and layout', exact: true }).press('Enter')
 );
 
 const setRows = async (page, rows) => {

@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `42`
+- Contract revision: `43`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -37,7 +37,8 @@ Status: active Product authority
   `PD-OI-071`, `PD-OI-072`, `PD-OI-073`, `PD-OI-074`, `PD-OI-075`,
   `PD-OI-076`, `PD-OI-077`, `PD-OI-078`, `PD-OI-079`, `PD-OI-080`,
   `PD-OI-081`, `PD-OI-082`, `PD-OI-083`, `PD-OI-084`, `PD-OI-085`,
-  `PD-OI-086`, `PD-OI-087`, `PD-OI-088`, `PD-OI-089`, `PD-OI-090`, and `PD-OI-091`
+  `PD-OI-086`, `PD-OI-087`, `PD-OI-088`, `PD-OI-089`, `PD-OI-090`, `PD-OI-091`,
+  and `PD-OI-092`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -664,6 +665,41 @@ Status: active Product authority
     dock, Editor, popup and view terms. `PD-OI-031`, `PD-OI-037`,
     `PD-OI-038`, `PD-OI-054` and all four accepted issue `#598` decisions
     are unchanged.
+- Revision 43 changes: `PD-OI-092` is added
+  (`A / PINNED-ICON-SECTION-INDEX`, concern `web.settings-pane.section-index`).
+  It comes from the Product Decision Owner `satoshikawato`'s replies of
+  `2026-10-12` on reaching a settings section in the left settings pane of
+  the Web app. Each quotation below is the part of a reply that carries the
+  answer.
+  - Reply 1, to a measurement shown with images of the pane: in Linear with
+    five records the Labels section was 4,009 px and the Comparison section
+    2,070 px down the pane.
+    「これも重要だね。もしかすると「今」もこの部分は改善が必要かも。」
+  - Reply 2, to images of the pane with one pinned row above it: a section
+    index whose icons jump to a section and open it, with an entry of its own
+    for the Linear Comparison section. 「この形で進めていいです。」
+    The same images showed a button that switches the pane to a second
+    display; that part is not in this record.
+  - Reply 3, to the question whether the index shows icons only or icons with
+    names.
+    「目次はアイコンでいいです。マウスオーバーすると説明(あるいはタイトル）が浮かび上がるようにしてほしい。」
+  - Reply 4, to the request to approve the receipt text as written or to name
+    what to change, asked with Before/After images of the built index.
+    「そのまま承認します。」
+    The page that asked showed the Rationale and the Accepted residual risk as
+    recorded below, the Must preserve text as a list whose `〔…〕` headings were
+    set in bold without the brackets, the Choice as its identifier with a
+    description, May retire as 「なし（none）」, and the Owner. It gave the
+    decision date as the day of the confirmation and did not show the concern
+    key or the scenario revision. The receipt is recorded byte for byte.
+  - The distances in the Rationale (3,909 px and 1,972 px) are those of the
+    Web app on the day of the confirmation; a change to the Linear File cards
+    had shortened the pane since Reply 1.
+  - No other record is amended or retired. The record names what it leaves
+    unchanged in its Must preserve.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -4777,6 +4813,50 @@ Decision date: 2026-10-10
   "acceptedResidualRisk": "record が数百あると Linear の card が数百並び、画面が重くなることがある（#526 から変わらない）。OFF の record の設定は Session に残るので、Session が大きくなる（Delete settings で消せる）。CLI には ON/OFF の option はなく、--record_id と --records_table で同じ図を描く。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-10"
+}
+```
+
+### PD-OI-092: Settings pane section index
+
+- Concern key: `web.settings-pane.section-index`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / PINNED-ICON-SECTION-INDEX`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its JSON representation below.
+- Decision source: the Owner replies quoted verbatim in the Revision 43 entry
+  above. The Owner approved the receipt text below as written. The receipt
+  reproduces its fields without translation or additional terms. Dependent
+  runtime requires this authority merged into its base, or merged together
+  with it through the reviewed static Product Contract co-change route; this
+  record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `36d65d6268ae779c31e4862e915aaf2c2f0d264e1655159f807ba45f85b3f2af`.
+
+```text
+PRODUCT_DECISION
+Concern: web.settings-pane.section-index
+Scenario revision: 1
+Choice: A / PINNED-ICON-SECTION-INDEX
+Rationale: 設定ペインは長く、下の section までのスクロールが長い（Linear で record が 5 つのとき、Labels は 3,909 px、Comparison は 1,972 px 下）。今の縦並びのまま、どの section にも 1 回のクリックで届くようにする。
+Must preserve: 〔目次〕設定ペインの一番上に、設定をスクロールしても動かない目次の行を置く。目次は section ごとのアイコンのボタンで、card と同じ順に並ぶ。Circular は Input Genomes、Region Annotations、Pairwise Comparisons、Layout、Titles & Record Labels、Legend、Colors、Features、Labels、Axis & Scale、Dinucleotide content/skew の 11 個。Linear は Input Genomes、Comparison、Advanced comparison and layout、Region Annotations、Layout、Titles & Record Labels、Legend、Colors、Features、Labels、Axis & Scale、Dinucleotide content/skew の 12 個。Basic（Input Genomes のすぐ下）と About & Citation は目次に入れない。〔押したとき〕その section が閉じていれば開き、設定の表示範囲の上端までスクロールし（設定の終わり近くの section は、スクロールできるところまで）、キーボードのフォーカスをその section の見出しに移す。目次は section を閉じない。〔名前と印〕ボタンにマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前がボタンの下に浮かび上がる。ボタンのアクセシブル名は「Go to ＜section の名前＞」。表示範囲の上端にある section のボタンに印が付く（押した直後は、次にスクロールするまで押したボタンに印が付く）。〔変えないもの〕card の順と中身、既定で開いている section、Generate Diagram が設定の最後の Tab stop で下に固定されていること、設定ペインの幅のドラッグ変更。目次の操作は設定の値、Session、Undo の履歴、図を変えない。
+May retire: none
+Accepted residual risk: 設定の表示範囲が 44 px 低くなる。Tab stop が Circular で 11、Linear で 12 増える（設定の最初の入力まで Tab が長くなる）。ボタンは 22 × 26 px と小さい。設定ペインを狭めると目次は 2 行になる。スマートフォンの幅では目次は固定されず、設定の先頭に置かれる。設定ペインの上端が写っている Gallery と docs の capture（107 枚のうち約 11 枚）は撮り直すまで古い。
+Owner: satoshikawato
+Decision date: 2026-10-12
+```
+
+```json
+{
+  "concern": "web.settings-pane.section-index",
+  "scenarioRevision": 1,
+  "choice": "A / PINNED-ICON-SECTION-INDEX",
+  "rationale": "設定ペインは長く、下の section までのスクロールが長い（Linear で record が 5 つのとき、Labels は 3,909 px、Comparison は 1,972 px 下）。今の縦並びのまま、どの section にも 1 回のクリックで届くようにする。",
+  "mustPreserve": "〔目次〕設定ペインの一番上に、設定をスクロールしても動かない目次の行を置く。目次は section ごとのアイコンのボタンで、card と同じ順に並ぶ。Circular は Input Genomes、Region Annotations、Pairwise Comparisons、Layout、Titles & Record Labels、Legend、Colors、Features、Labels、Axis & Scale、Dinucleotide content/skew の 11 個。Linear は Input Genomes、Comparison、Advanced comparison and layout、Region Annotations、Layout、Titles & Record Labels、Legend、Colors、Features、Labels、Axis & Scale、Dinucleotide content/skew の 12 個。Basic（Input Genomes のすぐ下）と About & Citation は目次に入れない。〔押したとき〕その section が閉じていれば開き、設定の表示範囲の上端までスクロールし（設定の終わり近くの section は、スクロールできるところまで）、キーボードのフォーカスをその section の見出しに移す。目次は section を閉じない。〔名前と印〕ボタンにマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前がボタンの下に浮かび上がる。ボタンのアクセシブル名は「Go to ＜section の名前＞」。表示範囲の上端にある section のボタンに印が付く（押した直後は、次にスクロールするまで押したボタンに印が付く）。〔変えないもの〕card の順と中身、既定で開いている section、Generate Diagram が設定の最後の Tab stop で下に固定されていること、設定ペインの幅のドラッグ変更。目次の操作は設定の値、Session、Undo の履歴、図を変えない。",
+  "mayRetire": "none",
+  "acceptedResidualRisk": "設定の表示範囲が 44 px 低くなる。Tab stop が Circular で 11、Linear で 12 増える（設定の最初の入力まで Tab が長くなる）。ボタンは 22 × 26 px と小さい。設定ペインを狭めると目次は 2 行になる。スマートフォンの幅では目次は固定されず、設定の先頭に置かれる。設定ペインの上端が写っている Gallery と docs の capture（107 枚のうち約 11 枚）は撮り直すまで古い。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-12"
 }
 ```
 

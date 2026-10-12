@@ -162,6 +162,17 @@ layout**. In both
 modes, **Generate Diagram** is the last keyboard stop of the settings panel,
 after every section, and its bar stays fixed at the bottom of the panel.
 
+A row of icon buttons above the settings lists the sections of the current
+mode in the same order, without **Basic** and **About & Citation**. A button
+opens its section, brings it to the top of the settings, or as far as the
+settings scroll when the section is near the end, and moves the keyboard focus
+to its heading; it never closes a section and changes no setting. The section
+title appears below a button on hover and on keyboard focus, and a screen
+reader announces the button as "Go to" followed by that title. The button of
+the section at the top of the settings is marked. The row stays in place while
+the settings scroll; a narrow panel wraps it onto a second line, and at phone
+width it is the first row of the settings and scrolls with the page.
+
 ### Save and Load Sessions
 
 **Save Session** asks for a **Session title** when none is set and downloads

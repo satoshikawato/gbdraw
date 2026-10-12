@@ -232,13 +232,20 @@ test('a one-record File shows its record names on the File card', async ({ page 
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearRecordOptions(window.__GBDRAW_APP__.linearSeqs[0])[0].label))
     .toBe('Not inspected');
 
-  // Inspect leaves the name fields where they are.
-  const before = await definition.boundingBox();
+  // Inspect leaves the name fields where they are in the settings. The click
+  // on Inspect records may scroll the settings, so the place is read from the
+  // top of the scrolled content.
+  const placeInSettings = async () => {
+    const box = await definition.boundingBox();
+    const scrolled = await page.locator('#settings-sections').evaluate((area) => area.scrollTop);
+    return { ...box, y: box.y + scrolled };
+  };
+  const before = await placeInSettings();
   await card.getByRole('button', { name: 'Record options for sequence 1', exact: true }).click();
   await card.getByRole('button', { name: 'Inspect records', exact: true }).click({ timeout: 15000 });
   await expect(card.locator('[data-record-rotation]')).toHaveCount(1, { timeout: 180000 });
   await expect(definition).toBeVisible();
-  expect(await definition.boundingBox()).toEqual(before);
+  expect(await placeInSettings()).toEqual(before);
   await expect(fileNames).toBeHidden();
 });
 

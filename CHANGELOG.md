@@ -158,6 +158,12 @@ write-up of a release.
   Auto window and step values show the value for the current genome once its
   records are read. Text with `<i>` markup shows an italic preview. Removing a
   Linear File asks **Empty this slot** or **Remove file**.
+- Web app settings panel: a row of icon buttons above the settings lists the
+  sections of the current mode. A button opens its section, brings it to the
+  top, and moves the keyboard focus to its heading; the section title shows on
+  hover and on keyboard focus, and the section at the top is marked. Linear
+  mode has entries for **Comparison** and **Advanced comparison and layout**.
+  Dragging the panel's resize handle no longer selects page text (OV-534).
 - Web app (Linear): a name typed on an empty File card is kept when its file is
   chosen. For a file with several records it becomes the File-level name
   (OV-486).
