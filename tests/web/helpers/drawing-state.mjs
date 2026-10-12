@@ -67,7 +67,7 @@ export const TRANSIENT_KEYS = Object.freeze([
   'resultPanelTab', 'matchSequenceRegistry', 'svgContent', 'svgResultIdentity', 'zoom', 'layoutRepositionMode',
   'isPanning', 'panStart', 'canvasPan', 'canvasContainerRef', 'suppressCircularMultiRecordDefaults',
   'selectedAnnotation', 'losatThreadingStatus', 'selectedOrthogroupAlignmentFeature', 'selectedOrthogroupId',
-  'orthogroupSearch', 'orthogroupSortMode', 'showRightDrawer', 'rightDrawerTab', 'linearReorderNotice',
+  'orthogroupSearch', 'orthogroupSortMode', 'showRightDrawer', 'rightDrawerTab', 'linearReorderNotice', 'linearFoldedSources',
   'newSpecRule', 'specificRuleQualifierSuggestions', 'selectedSpecificPreset', 'specificRulePresetLoading',
   'featuresBySvgId', 'selectedFeatureIds', 'selectedFeatureAnchorId', 'featureSelectionStatus',
   'featureSelectionSuppressNextClick', 'featureSelectionDrag', 'selectedFeatureCount', 'selectedFeatures',

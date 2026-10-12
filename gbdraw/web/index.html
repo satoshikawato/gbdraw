@@ -1973,6 +1973,16 @@
                take its place when the focus leaves. A card shows one names block. */
             .linear-file-names-unused:not(:focus-within),
             .linear-file-names-unused:focus-within + [data-linear-record-names] { display: none; }
+            /* A File card folds to its header line: File N, the file names in the uploader's
+               ready or failed look, the problems the card marks, the move buttons, the caret.
+               An open card shows the same line without the names and the marks. */
+            [data-linear-source-card]:has(> .linear-file-fold:not([open])) { padding-block: 6px; }
+            .linear-file-fold > summary::before { order: 1; }
+            .linear-file-fold > summary:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; border-radius: 4px; }
+            .linear-file-fold-line { @apply flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1; flex: 1 1 0; }
+            .linear-file-fold[open] > summary > .linear-file-fold-line > * { display: none; }
+            .linear-file-fold-names { @apply flex min-w-0 items-center gap-1; flex: 1 1 1.5rem; }
+            .linear-file-chip { @apply inline-flex min-w-0 items-center gap-1 rounded-md border px-1.5 font-bold text-green-700; line-height: 18px; }
             /* One marker for settings that the next Generate applies. */
             .apply-note { @apply inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-1.5 py-px font-medium leading-4 text-slate-500; font-size: 11px; }
 
@@ -2016,10 +2026,10 @@
             .upload-zone { @apply relative flex cursor-pointer select-none flex-col items-center justify-center text-center transition-colors; min-height: 2rem; padding: 6px 10px; border: 1px dashed var(--ui-line-strong); border-radius: 8px; background-color: #f8fafc; }
             .upload-zone i { font-size: 15px; line-height: 1; }
             .upload-zone:hover { border-color: var(--ui-accent); background-color: var(--ui-accent-soft); }
-            .upload-zone.ready { border-style: solid; border-color: #86efac; background-color: #f0fdf4; }
+            .upload-zone.ready, .linear-file-chip { border-style: solid; border-color: #86efac; background-color: #f0fdf4; }
             /* A chosen file whose inspection failed (UI-08): no check; the message stays below the zone. */
-            .upload-zone.failed { border-style: solid; border-color: var(--ui-danger-line); background-color: var(--ui-danger-soft); }
-            .upload-zone-failed-label { color: var(--ui-danger); }
+            .upload-zone.failed, .linear-file-chip.failed { border-style: solid; border-color: var(--ui-danger-line); background-color: var(--ui-danger-soft); }
+            .upload-zone-failed-label, .linear-file-chip.failed { color: var(--ui-danger); }
             .upload-zone:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; border-color: #3b82f6; }
 
             details > summary { @apply flex cursor-pointer select-none list-none items-center gap-2 transition-colors; font-size: 12px; font-weight: 600; line-height: 1.25; color: var(--ui-text-2); }
@@ -2405,9 +2415,36 @@
                                 class="min-w-0 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm"
                                 :aria-label="`Linear input file ${sourceIndex + 1}`"
                             >
-                                <div class="mb-2 flex min-w-0 items-center justify-between gap-2 text-[10px] font-semibold text-slate-500">
+                            <details
+                                class="linear-file-fold min-w-0"
+                                :data-linear-source-fold="source.uid"
+                                :open="!isLinearSourceFolded(source)"
+                                @toggle="syncLinearSourceFold(source, $event)"
+                            >
+                                <summary
+                                    class="min-w-0 text-[10px] font-semibold text-slate-500"
+                                    :aria-label="`File ${sourceIndex + 1}: ${linearSourceFileNames(source).join(' + ') || 'no file'}`"
+                                    :aria-describedby="linearSourceGencodeRequired(source) ? `linear-file-gencode-${source.uid}` : null"
+                                >
                                     <span class="shrink-0">File {{ sourceIndex + 1 }}</span>
-                                    <div v-if="linearSourceGroups.length > 1" class="flex shrink-0 items-center gap-1">
+                                    <span class="linear-file-fold-line">
+                                        <span class="linear-file-fold-names">
+                                            <span
+                                                v-for="(name, nameIndex) in linearSourceFileNames(source)"
+                                                :key="nameIndex"
+                                                class="linear-file-chip"
+                                                :class="{ failed: linearSourceInspectionFailed(source) }"
+                                                :title="name"
+                                            >
+                                                <i :class="linearSourceInspectionFailed(source) ? 'ph ph-warning-circle' : 'ph ph-check-circle'" aria-hidden="true"></i>
+                                                <span class="truncate">{{ name }}</span>
+                                            </span>
+                                            <span v-if="!linearSourceFileNames(source).length" class="truncate font-normal">No file</span>
+                                        </span>
+                                        <span v-if="linearSourceGencodeRequired(source)" :id="`linear-file-gencode-${source.uid}`" class="shrink-0 font-normal text-red-700">Gencode required</span>
+                                    </span>
+                                    <!-- A press on or between the move buttons never folds the card. -->
+                                    <div v-if="linearSourceGroups.length > 1" class="flex shrink-0 items-center gap-1" @click.prevent>
                                         <button
                                             type="button"
                                             class="btn btn-secondary px-1.5 py-0.5 text-xs"
@@ -2431,14 +2468,14 @@
                                             <i class="ph ph-arrow-down" aria-hidden="true"></i>
                                         </button>
                                     </div>
-                                </div>
+                                </summary>
                             <div v-if="lInputType === 'gb'" class="space-y-2">
                                 <file-uploader
                                     label="GenBank / DDBJ File"
                                     :test-id="`linear-genbank-${sourceIndex + 1}`"
                                     accept=".gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"
                                     :model-value="source.sequence.gb"
-                                    :inspection-failed="Boolean(linearRecordSelectorError(source.sequence))"
+                                    :inspection-failed="linearSourceInspectionFailed(source)"
                                     :request-clear="true"
                                     @update:model-value="setLinearSeqPrimaryFile(source.index, 'gb', $event)"
                                     @clear-request="requestLinearSourceRemoval(source, $event)"
@@ -2449,7 +2486,7 @@
                                     label="GFF3"
                                     accept=".gff,.gff3,.txt,text/plain,text/*"
                                     :model-value="source.sequence.gff"
-                                    :inspection-failed="Boolean(linearRecordSelectorError(source.sequence))"
+                                    :inspection-failed="linearSourceInspectionFailed(source)"
                                     :request-clear="true"
                                     @update:model-value="setLinearSeqPrimaryFile(source.index, 'gff', $event)"
                                     @clear-request="requestLinearSourceRemoval(source, $event)"
@@ -2458,7 +2495,7 @@
                                     label="FASTA"
                                     accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"
                                     :model-value="source.sequence.fasta"
-                                    :inspection-failed="Boolean(linearRecordSelectorError(source.sequence))"
+                                    :inspection-failed="linearSourceInspectionFailed(source)"
                                     :request-clear="true"
                                     @update:model-value="setLinearSeqPrimaryFile(source.index, 'fasta', $event)"
                                     @clear-request="requestLinearSourceRemoval(source, $event)"
@@ -2569,7 +2606,7 @@
                             <details :data-linear-source-records="source.uid" :open="source.records.length === 1" class="min-w-0">
                                 <summary v-show="source.records.length > 1" role="button" :aria-label="`Records for file ${sourceIndex + 1}`" class="mt-1 text-xs font-normal text-slate-500">
                                     Number of records: {{ source.records.length }} · {{ recordSelection.drawnCount('linear', source.records.map(({ sequence }) => sequence.uid)) }} drawn
-                                    <span v-if="hasActiveLinearLosatIntent && losatProgram === 'tblastx' && source.records.some(({ sequence }) => !(Number(sequence.losat_gencode) >= 1))" class="ml-1 text-red-700">Gencode required</span>
+                                    <span v-if="linearSourceGencodeRequired(source)" class="ml-1 text-red-700">Gencode required</span>
                                 </summary>
                                 <div
                                     v-for="({ sequence: seq, index: idx }) in source.records"
@@ -2591,7 +2628,7 @@
                                         class="ml-auto rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700"
                                     >OFF</span>
                                     <span
-                                        v-if="hasActiveLinearLosatIntent && losatProgram === 'tblastx' && !(Number(seq.losat_gencode) >= 1)"
+                                        v-if="linearRecordGencodeRequired(seq)"
                                         :class="recordSelection.isDrawn('linear', seq.uid) ? 'ml-auto' : ''"
                                         class="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700"
                                     >Gencode required</span>
@@ -2708,6 +2745,7 @@
                                 </div>
                             </details>
                             </div>
+                            </details>
                             </section>
                         </div>
                         <div :class="linearSourceGroups.length > 1 ? 'grid-cols-2' : 'grid-cols-1'" class="grid min-w-0 gap-2" role="group" aria-label="Linear File actions">

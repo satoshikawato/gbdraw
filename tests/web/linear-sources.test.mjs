@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
 import {
+  dropMissingFoldedLinearSources,
+  foldLoadedLinearSources,
   groupLinearSourceRecords,
   isPristineLinearSource,
   linearRecordNames,
@@ -12,6 +14,8 @@ import {
   planLinearSourceRemoval,
   planLosatSourceJobs,
   prepareLosatSourceBatches,
+  restoreFoldedLinearSources,
+  setLinearSourceFolded,
   splitLosatSourceResult
 } from '../../gbdraw/web/js/services/linear-sources.js';
 import { readFileSync } from 'node:fs';
@@ -506,4 +510,62 @@ test('every record of a File is named by the File definition plus its accession'
   ]);
   // The cards (and the diagram headings they draw) are not changed.
   assert.equal(JSON.stringify(sequences), before);
+});
+
+// The folded File cards: view state keyed by source uid.
+const foldFile = (name) => ({ name });
+const foldSources = () => {
+  const a = foldFile('a.gbk');
+  const b = foldFile('b.gbk');
+  return groupLinearSourceRecords([
+    sourceRecord('a1', a), sourceRecord('a2', a), sourceRecord('b1', b), sourceRecord('empty', null)
+  ]);
+};
+
+test('a press on a File card header folds and unfolds that card alone', () => {
+  const folded = new Set();
+  setLinearSourceFolded(folded, 'a1', true);
+  setLinearSourceFolded(folded, 'a1', true);
+  assert.deepEqual([...folded], ['a1']);
+  setLinearSourceFolded(folded, 'b1', true);
+  setLinearSourceFolded(folded, 'a1', false);
+  setLinearSourceFolded(folded, 'a1', false);
+  assert.deepEqual([...folded], ['b1']);
+});
+
+test('a loaded Session folds the File cards that hold a file and leaves the others open', () => {
+  const folded = new Set(['stale', 'empty']);
+  foldLoadedLinearSources(folded, foldSources());
+  assert.deepEqual([...folded], ['a1', 'b1'], 'by the uid of each File, not of each record');
+  foldLoadedLinearSources(folded, groupLinearSourceRecords([sourceRecord('only', null)]));
+  assert.deepEqual([...folded], [], 'a Session without files folds nothing');
+});
+
+test('a rolled-back load returns the fold state it replaced', () => {
+  const folded = new Set(['a1']);
+  const before = [...folded];
+  foldLoadedLinearSources(folded, groupLinearSourceRecords([sourceRecord('x', foldFile('x.gbk'))]));
+  restoreFoldedLinearSources(folded, before);
+  assert.deepEqual([...folded], ['a1']);
+});
+
+test('a File card that left the list is forgotten, and the others keep their state', () => {
+  const folded = new Set(['a1', 'b1', 'gone']);
+  dropMissingFoldedLinearSources(folded, foldSources());
+  assert.deepEqual([...folded], ['a1', 'b1']);
+  // A record uid that is not its File's uid names no card.
+  folded.add('a2');
+  dropMissingFoldedLinearSources(folded, foldSources());
+  assert.deepEqual([...folded], ['a1', 'b1']);
+});
+
+test('the fold state follows a File through Move up and Move down', () => {
+  const sequences = foldSources().flatMap(({ records }) => records.map(({ sequence }) => sequence));
+  const folded = new Set();
+  setLinearSourceFolded(folded, 'b1', true);
+  const moved = groupLinearSourceRecords(moveLinearSourceGroup(sequences, 1, -1));
+  assert.deepEqual(moved.map(({ uid }) => uid), ['b1', 'a1', 'empty']);
+  dropMissingFoldedLinearSources(folded, moved);
+  assert.deepEqual(moved.map(({ uid }) => folded.has(uid)), [true, false, false]);
+  assert.equal(moved[0].sequence.gb.name, 'b.gbk');
 });

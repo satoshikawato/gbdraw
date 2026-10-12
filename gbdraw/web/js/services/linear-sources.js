@@ -78,6 +78,56 @@ export const isPristineLinearSource = (source) => {
   );
 };
 
+// The Linear File cards shown folded to their header line, by source uid, so
+// the state follows a card through Move up and Move down. It is view state:
+// no Session, History step, Undo, or Reset Settings holds or changes it.
+/** @typedef {Set<string>} FoldedLinearSources */
+/** @typedef {LinearSourceView & { uid: string }} FoldableLinearSource */
+
+/**
+ * What a card's disclosure reports: the user's press on the header line, or a
+ * path that opened the card to show a setting.
+ * @param {FoldedLinearSources} folded
+ * @param {string} uid
+ * @param {boolean} isFolded
+ */
+export const setLinearSourceFolded = (folded, uid, isFolded) => {
+  if (isFolded) folded.add(uid);
+  else folded.delete(uid);
+};
+
+/**
+ * The fold state a Session load that was rolled back returns to.
+ * @param {FoldedLinearSources} folded
+ * @param {readonly string[]} uids
+ */
+export const restoreFoldedLinearSources = (folded, uids) => {
+  folded.clear();
+  uids.forEach((uid) => folded.add(uid));
+};
+
+/**
+ * The one rule of which cards a loaded Session shows folded: those that hold
+ * a file. A card without a file stays open.
+ * @param {FoldedLinearSources} folded
+ * @param {readonly FoldableLinearSource[]} sources
+ */
+export const foldLoadedLinearSources = (folded, sources) => restoreFoldedLinearSources(
+  folded, sources.filter(linearSourceHasPrimaryInput).map(({ uid }) => uid)
+);
+
+/**
+ * Forgets the cards that left the list.
+ * @param {FoldedLinearSources} folded
+ * @param {readonly FoldableLinearSource[]} sources
+ */
+export const dropMissingFoldedLinearSources = (folded, sources) => {
+  const present = new Set(sources.map(({ uid }) => uid));
+  folded.forEach((uid) => {
+    if (!present.has(uid)) folded.delete(uid);
+  });
+};
+
 /**
  * @typedef {{ allowed: false, reason: string, sourceIndex?: number }
  *   | { allowed: true, intent: string, sourceIndex: number, insertionIndex: number,

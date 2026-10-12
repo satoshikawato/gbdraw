@@ -111,6 +111,7 @@ import {
   reconcileLinearComparisonPlan,
   resolveLinearComparisonPlan
 } from './linear-comparisons.js';
+import { foldLoadedLinearSources, groupLinearSourceRecords, restoreFoldedLinearSources } from './linear-sources.js';
 import { buildSessionResources as assembleSessionResources } from './session-resources.js';
 import { ARTIFACT_SLOT_KEYS, createArtifactSlot } from './artifact-slot.js';
 import {
@@ -4117,6 +4118,7 @@ const captureSessionImportTransientState = () => ({
     state.suppressCircularMultiRecordDefaults.value
   ),
   linearReorderNotice: state.linearReorderNotice.value,
+  linearFoldedSources: [...state.linearFoldedSources],
   rightDrawer: captureRightDrawerState(state),
   showCanvasControls: Boolean(state.showCanvasControls.value),
   isPanning: Boolean(state.isPanning.value),
@@ -4173,6 +4175,7 @@ const restoreSessionImportTransientState = (snapshot) => {
   state.suppressCircularMultiRecordDefaults.value =
     snapshot.suppressCircularMultiRecordDefaults;
   state.linearReorderNotice.value = snapshot.linearReorderNotice;
+  restoreFoldedLinearSources(state.linearFoldedSources, snapshot.linearFoldedSources);
   restoreRightDrawerState(state, snapshot.rightDrawer);
   state.showCanvasControls.value = snapshot.showCanvasControls;
   state.isPanning.value = snapshot.isPanning;
@@ -5713,6 +5716,10 @@ const importSessionDocument = async (e, options = {}) => {
       linearRecordRows: candidateFiles.linearRecordRows,
       linearComparisonPlan: candidateFiles.linearComparisonPlan
     });
+    // The loaded File cards are new to the user: view state, reset with the document.
+    foldLoadedLinearSources(
+      state.linearFoldedSources, groupLinearSourceRecords(/** @type {LinearSeq[]} */ (state.linearSeqs))
+    );
     // The comparisons are the Linear drawing's.
     restoreImportedComparisonIntent(
       state.drawings.linear.importedComparisonIntent,
