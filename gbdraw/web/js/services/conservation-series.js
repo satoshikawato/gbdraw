@@ -1,6 +1,25 @@
 // @ts-check
 import { interpolateColor, resolveColorToHex } from '../utils/color-utils.js';
 
+/** @import { FileLike } from './session-resource-backing.js' */
+
+/**
+ * One comparison ring: the source file it reads and how it is drawn.
+ * @typedef {{
+ *   sourceKey: string, fileName: string, sourceIndex: number, label: string, color: string, losat_gencode: number
+ * }} ConservationSeriesEntry
+ */
+/**
+ * A series entry as a Session or an older draft holds it: every field is unvalidated.
+ * @typedef {{
+ *   sourceKey?: unknown, fileName?: unknown, sourceIndex?: unknown, label?: unknown, name?: unknown,
+ *   color?: unknown, losat_gencode?: unknown
+ * }} RawConservationSeriesEntry
+ */
+/** @typedef {{ series?: RawConservationSeriesEntry[] | null, labels?: unknown }} CircularConservationLike */
+/** @typedef {{ file: FileLike, sourceKey: string, sourceIndex: number, fileName: string, defaultLabel: string }} ConservationSourceDescriptor */
+/** @typedef {ConservationSourceDescriptor & Omit<ConservationSeriesEntry, 'sourceKey' | 'fileName' | 'sourceIndex'> & { orderIndex: number }} OrderedConservationSource */
+
 export const CONSERVATION_SLOT_MANAGER = 'circular_conservation';
 
 const CONSERVATION_SERIES_COLOR_BLEND_TO_WHITE = 0.18;
@@ -20,8 +39,19 @@ const CONSERVATION_SERIES_COLORS = CONSERVATION_SERIES_BASE_COLORS.map((color) =
   interpolateColor(color, '#ffffff', CONSERVATION_SERIES_COLOR_BLEND_TO_WHITE)
 );
 
+/**
+ * @template T
+ * @param {T | T[] | null | undefined} files
+ * @returns {T[]}
+ */
 export const normalizeFileList = (files) => (Array.isArray(files) ? files.filter(Boolean) : (files ? [files] : []));
 
+/**
+ * @template {FileLike} T
+ * @param {T[] | null | undefined} files
+ * @param {CircularConservationLike | null | undefined} circularConservation
+ * @returns {(T | null)[]}
+ */
 export const orderedOptionalConservationFiles = (files, circularConservation) => {
   const sourceFiles = Array.isArray(files) ? files : [];
   const series = Array.isArray(circularConservation?.series)
@@ -29,7 +59,9 @@ export const orderedOptionalConservationFiles = (files, circularConservation) =>
     : [];
   if (series.length === 0) return [...sourceFiles];
 
+  /** @type {Set<number>} */
   const used = new Set();
+  /** @type {(T | null)[]} */
   const ordered = [];
   series.forEach((entry, seriesIndex) => {
     const fileName = String(entry?.fileName || '').trim();
@@ -58,18 +90,31 @@ export const orderedOptionalConservationFiles = (files, circularConservation) =>
   return ordered;
 };
 
+/**
+ * @param {FileLike | null | undefined} file
+ * @param {unknown} index
+ */
 export const defaultConservationSeriesLabel = (file, index) => {
   const raw = String(file?.name || `Series ${Number(index) + 1}`).trim();
   const withoutExtension = raw.replace(/\.[^.]+$/, '').trim();
   return withoutExtension || `Series ${Number(index) + 1}`;
 };
 
+/**
+ * @param {unknown} value
+ * @returns {string[]}
+ */
 export const parseConservationLabelText = (value) =>
   String(value || '')
     .split(/[\n,]+/)
     .map((label) => label.trim())
     .filter(Boolean);
 
+/**
+ * @param {unknown} value
+ * @param {unknown} index
+ * @returns {string}
+ */
 export const normalizeConservationSeriesColor = (value, index) => {
   const fallback = CONSERVATION_SERIES_COLORS[Number(index) % CONSERVATION_SERIES_COLORS.length];
   const resolved = resolveColorToHex(String(value || fallback).trim());
@@ -81,11 +126,19 @@ export const normalizeConservationSeriesColor = (value, index) => {
   return /^#[0-9a-fA-F]{6}$/.test(color) ? color.toLowerCase() : fallback;
 };
 
+/**
+ * @param {unknown} value
+ * @param {number} [fallback]
+ */
 const normalizePositiveInteger = (value, fallback = 1) => {
   const numeric = Number(value);
   return Number.isInteger(numeric) && numeric > 0 ? numeric : fallback;
 };
 
+/**
+ * @param {FileLike} file `normalizeFileList` drops falsy entries
+ * @param {unknown} index
+ */
 const fileSignature = (file, index) => {
   const fileName = String(file?.name || `source_${Number(index) + 1}`).trim();
   const size = Number.isFinite(Number(file?.size)) ? Number(file.size) : 0;
@@ -93,7 +146,12 @@ const fileSignature = (file, index) => {
   return `${fileName}|${size}|${lastModified}`;
 };
 
+/**
+ * @param {FileLike | FileLike[] | null | undefined} sourceFiles
+ * @returns {ConservationSourceDescriptor[]}
+ */
 export const conservationSourceDescriptors = (sourceFiles) => {
+  /** @type {Map<string, number>} */
   const seen = new Map();
   return normalizeFileList(sourceFiles).map((file, index) => {
     const signature = fileSignature(file, index);
@@ -111,6 +169,13 @@ export const conservationSourceDescriptors = (sourceFiles) => {
   });
 };
 
+/**
+ * @param {ConservationSourceDescriptor} descriptor
+ * @param {RawConservationSeriesEntry | null} previousEntry
+ * @param {number} orderIndex
+ * @param {string | null} [legacyLabel]
+ * @returns {ConservationSeriesEntry}
+ */
 const mergeSeriesEntry = (descriptor, previousEntry, orderIndex, legacyLabel = null) => {
   const rawLabel = previousEntry?.label ?? previousEntry?.name ?? legacyLabel ?? descriptor.defaultLabel;
   return {
@@ -123,6 +188,14 @@ const mergeSeriesEntry = (descriptor, previousEntry, orderIndex, legacyLabel = n
   };
 };
 
+/**
+ * @param {{
+ *   sourceFiles: FileLike | FileLike[] | null | undefined,
+ *   previousSeries: RawConservationSeriesEntry[] | null | undefined,
+ *   legacyLabels: string[] | null | undefined
+ * }} options
+ * @returns {ConservationSeriesEntry[]}
+ */
 export const reconcileConservationSeries = ({
   sourceFiles,
   previousSeries,
@@ -130,13 +203,17 @@ export const reconcileConservationSeries = ({
 }) => {
   const descriptors = conservationSourceDescriptors(sourceFiles);
   const descriptorByKey = new Map(descriptors.map((descriptor) => [descriptor.sourceKey, descriptor]));
+  /** @type {Map<string, ConservationSourceDescriptor[]>} */
   const descriptorsByFileName = new Map();
   descriptors.forEach((descriptor) => {
     if (!descriptorsByFileName.has(descriptor.fileName)) descriptorsByFileName.set(descriptor.fileName, []);
-    descriptorsByFileName.get(descriptor.fileName).push(descriptor);
+    // Set just above when absent.
+    /** @type {ConservationSourceDescriptor[]} */ (descriptorsByFileName.get(descriptor.fileName)).push(descriptor);
   });
 
+  /** @type {Set<string>} */
   const usedKeys = new Set();
+  /** @type {ConservationSeriesEntry[]} */
   const nextSeries = [];
   const previous = Array.isArray(previousSeries) ? previousSeries : [];
   const fallbackLabels = Array.isArray(legacyLabels) ? legacyLabels : [];
@@ -178,6 +255,14 @@ export const reconcileConservationSeries = ({
 // itself (first record's DEFINITION, then organism), read by the Python ring
 // reader. Only the row's file-name default is replaced, so a typed label wins;
 // a FASTA file names no label and keeps the file-name default.
+/**
+ * @param {{
+ *   series: ConservationSeriesEntry[] | null | undefined,
+ *   sourceFiles: FileLike | FileLike[] | null | undefined,
+ *   file: FileLike | null | undefined,
+ *   recordLabel: unknown
+ * }} options
+ */
 export const applyComparisonSequenceRecordLabel = ({ series, sourceFiles, file, recordLabel }) => {
   const label = String(recordLabel ?? '').trim();
   if (!label || !file || !Array.isArray(series)) return false;
@@ -190,17 +275,26 @@ export const applyComparisonSequenceRecordLabel = ({ series, sourceFiles, file, 
   return true;
 };
 
+/**
+ * @param {FileLike | FileLike[] | null | undefined} sourceFiles
+ * @param {CircularConservationLike | null | undefined} circularConservation
+ * @returns {OrderedConservationSource[]}
+ */
 export const orderedConservationSources = (sourceFiles, circularConservation) => {
   const descriptors = conservationSourceDescriptors(sourceFiles);
   const legacyLabels = parseConservationLabelText(circularConservation?.labels);
   const descriptorByKey = new Map(descriptors.map((descriptor) => [descriptor.sourceKey, descriptor]));
+  /** @type {Map<string, ConservationSourceDescriptor[]>} */
   const descriptorsByFileName = new Map();
   descriptors.forEach((descriptor) => {
     if (!descriptorsByFileName.has(descriptor.fileName)) descriptorsByFileName.set(descriptor.fileName, []);
-    descriptorsByFileName.get(descriptor.fileName).push(descriptor);
+    // Set just above when absent.
+    /** @type {ConservationSourceDescriptor[]} */ (descriptorsByFileName.get(descriptor.fileName)).push(descriptor);
   });
 
+  /** @type {Set<string>} */
   const usedKeys = new Set();
+  /** @type {OrderedConservationSource[]} */
   const entries = [];
   const series = Array.isArray(circularConservation?.series) ? circularConservation.series : [];
   series.forEach((entry, seriesIndex) => {
@@ -245,6 +339,12 @@ export const orderedConservationSources = (sourceFiles, circularConservation) =>
   return entries;
 };
 
+/**
+ * @template T
+ * @param {T[]} series
+ * @param {unknown} index
+ * @param {unknown} direction
+ */
 export const moveConservationSeriesEntry = (series, index, direction) => {
   const idx = Number(index);
   const step = Math.sign(Number(direction));
@@ -256,6 +356,11 @@ export const moveConservationSeriesEntry = (series, index, direction) => {
   return true;
 };
 
+/**
+ * @param {{ label?: unknown, fileName?: unknown } | null | undefined} entry
+ * @param {unknown} index
+ * @param {Set<string>} [existingIds]
+ */
 export const safeConservationSlotId = (entry, index, existingIds = new Set()) => {
   const source = String(entry?.label || entry?.fileName || `comparison_${Number(index) + 1}`).trim();
   const cleaned = source
@@ -273,6 +378,7 @@ export const safeConservationSlotId = (entry, index, existingIds = new Set()) =>
   return id;
 };
 
+/** @param {{ renderer?: unknown, params?: { managed?: unknown } | null } | null | undefined} slot */
 export const isManagedConservationSlot = (slot) => (
   slot?.renderer === 'sequence_conservation' &&
   String(slot?.params?.managed || '').trim() === CONSERVATION_SLOT_MANAGER

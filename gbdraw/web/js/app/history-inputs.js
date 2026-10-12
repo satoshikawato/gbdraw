@@ -43,17 +43,21 @@ const controlLabel = (element) => {
 /**
  * @typedef {{ closed: boolean, deferAdapterCommit?: boolean }} HistoryInputsTransaction
  *   The part of an open History step that the input adapter reads.
- *
+ */
+/**
+ * @template {HistoryInputsTransaction} [T=HistoryInputsTransaction]
  * @typedef {object} HistoryInputsHistory
- *   The two History functions the input adapter calls (R11).
- * @property {(label: string, options: { source: string, owner: unknown }) => Promise<HistoryInputsTransaction | null>} begin
+ *   The two History functions the input adapter calls (R11); `T` is the step History opens.
+ * @property {(label: string, options: { source: string, owner: unknown }) => Promise<T | null>} begin
  *   Opens one step for a control; resolves to null while History is busy.
- * @property {(transaction: HistoryInputsTransaction) => Promise<unknown>} commit
+ * @property {(transaction: T) => Promise<unknown>} commit
  *   Closes the step that `begin` opened.
- *
+ */
+/**
+ * @template {HistoryInputsTransaction} [T=HistoryInputsTransaction]
  * @typedef {object} HistoryInputsOptions
  * @property {HTMLElement | null} [root] The element that hosts the controls; `#app` by default.
- * @property {HistoryInputsHistory | null} [history] History's begin and commit; without it the adapter does nothing.
+ * @property {HistoryInputsHistory<T> | null} [history] History's begin and commit; without it the adapter does nothing.
  * @property {() => Promise<unknown>} nextTick
  *   Vue `nextTick`: a commit waits for the state a handler updated.
  */
@@ -101,7 +105,8 @@ export const createDialogChoice = ({ mutationPending, runUndoable, ref }) => {
 };
 
 /**
- * @param {HistoryInputsOptions} options
+ * @template {HistoryInputsTransaction} T
+ * @param {HistoryInputsOptions<T>} options
  * @returns {() => void} Removes the listeners.
  */
 export const setupHistoryInputs = ({ root, history, nextTick }) => {

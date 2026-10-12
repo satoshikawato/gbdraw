@@ -3,6 +3,16 @@ import { normalizeDefaultColor, normalizeSpecificRuleColor } from '../utils/colo
 import { diagnosticError } from '../utils/error-normalization.js';
 import { normalizeTsvCell } from '../utils/tsv-cell.js';
 
+/**
+ * A row of a pre-normalization table (Sessions 31-39) that was repaired or dropped.
+ * @typedef {{ row: number, repair: string }} TableRepair
+ */
+/** @typedef {{ feat: string, qual: string, val: string, color: string, cap: string, fromFile: true }} ParsedSpecificRule */
+/**
+ * What the serializers read of a row; a row that is not an object writes nothing.
+ * @typedef {{ feat?: unknown, qual?: unknown, val?: unknown, color?: unknown, cap?: unknown, key?: unknown, order?: unknown }} EditorTableRow
+ */
+
 const SPECIFIC_RULE_COLUMNS = Object.freeze(['feature_type', 'qualifier', 'pattern', 'color']);
 
 // The request fields of each editor table: the Web writes the `File` form, and
@@ -26,6 +36,11 @@ export const editorTableRef = (options, table) => EDITOR_TABLE_OPTIONS[table]
 // Python reads these tables with a fixed column count and rejects any other row
 // (gbdraw/io/table_text.py::read_literal_table), so the import does too (R4). The
 // diagnostic is the one the Label override parser uses.
+/**
+ * @param {string[]} parts
+ * @param {number} columnCount
+ * @param {number} row
+ */
 const requireColumnCount = (parts, columnCount, row) => {
   if (parts.length !== columnCount) {
     throw diagnosticError('TABLE_INVALID', { row, columnCount, reason: 'FIELDS' });
@@ -37,6 +52,14 @@ const requireColumnCount = (parts, columnCount, row) => {
 // a line break a short row. For them (`repairs`), a row is read as the current
 // writer writes it: the extra cells join the last field with one space, and a row
 // without its required fields (`complete`) is dropped; `repairs` lists each one.
+/**
+ * @param {string} line
+ * @param {number} columnCount
+ * @param {number} row
+ * @param {TableRepair[] | null} repairs
+ * @param {(cells: string[]) => unknown} complete
+ * @returns {string[] | null}
+ */
 const tableCells = (line, columnCount, row, repairs, complete) => {
   const parts = line.split('\t');
   if (!repairs) {
@@ -52,15 +75,24 @@ const tableCells = (line, columnCount, row, repairs, complete) => {
   if (parts.length > columnCount) repairs.push({ row, repair: 'joined' });
   return cells;
 };
+/**
+ * @param {string} key
+ * @param {string} color
+ */
 const isColorHeader = (key, color) => key.toLowerCase() === 'feature_type' && color.toLowerCase() === 'color';
 
 // A color outside the Default colors domain stops the import at its line, as
 // Python stops (OV-272); a blank color cell keeps the palette color, as Python
 // keeps the built-in one.
+/**
+ * @param {string} text
+ * @param {{ legacyRows?: boolean }} [options]
+ */
 export const parseColorTable = (text, { legacyRows = false } = {}) => {
+  /** @type {Record<string, string>} */
   const colors = {};
   let count = 0;
-  /** @type {Array<{ row: number, repair: string }> | null} */
+  /** @type {TableRepair[] | null} */
   const repairs = legacyRows ? [] : null;
   const lines = text.split(/\r?\n/);
 
@@ -83,9 +115,13 @@ export const parseColorTable = (text, { legacyRows = false } = {}) => {
   return { colors, count, repairs: repairs || [] };
 };
 
+/** @param {string | null | undefined} text */
 export const parseSpecificRules = (text) => {
+  /** @type {ParsedSpecificRule[]} */
   const rules = [];
+  /** @type {ParsedSpecificRule[]} */
   const rulesWithCaptions = [];
+  /** @type {Set<string>} */
   const identities = new Set();
   const lines = String(text ?? '').split(/\r?\n/);
 
@@ -115,6 +151,7 @@ export const parseSpecificRules = (text) => {
       throw diagnosticError('TABLE_INVALID', { row: lineNo, field: 'color', reason: 'COLOR' });
     }
 
+    /** @type {ParsedSpecificRule} */
     const rule = {
       feat,
       qual,
@@ -133,6 +170,7 @@ export const parseSpecificRules = (text) => {
   return { rules, rulesWithCaptions, count: rules.length };
 };
 
+/** @param {ReadonlyArray<EditorTableRow | null | undefined> | null | undefined} rules */
 export const serializeSpecificRules = (rules) => {
   const rows = (Array.isArray(rules) ? rules : [])
     .map((rule) => [
@@ -148,6 +186,7 @@ export const serializeSpecificRules = (rules) => {
   return rows.length > 0 ? `${rows.join('\n')}\n` : '';
 };
 
+/** @param {ReadonlyArray<EditorTableRow | null | undefined> | null | undefined} rules */
 export const serializeLabelWhitelistRules = (rules) => {
   const rows = (Array.isArray(rules) ? rules : [])
     .map((rule) => [rule?.feat, rule?.qual, rule?.key].map(normalizeTsvCell))
@@ -157,6 +196,7 @@ export const serializeLabelWhitelistRules = (rules) => {
   return rows.length > 0 ? `${rows.join('\n')}\n` : '';
 };
 
+/** @param {ReadonlyArray<EditorTableRow | null | undefined> | null | undefined} rules */
 export const serializeQualifierPriorityRules = (rules) => {
   const rows = (Array.isArray(rules) ? rules : [])
     .map((rule) => [rule?.feat, rule?.order].map(normalizeTsvCell))
@@ -166,8 +206,14 @@ export const serializeQualifierPriorityRules = (rules) => {
   return rows.length > 0 ? `${rows.join('\n')}\n` : '';
 };
 
+/**
+ * @param {string} text
+ * @param {{ legacyRows?: boolean }} [options]
+ */
 export const parsePriorityRules = (text, { legacyRows = false } = {}) => {
+  /** @type {{ feat: string, order: string }[]} */
   const rules = [];
+  /** @type {TableRepair[] | null} */
   const repairs = legacyRows ? [] : null;
   const lines = text.split(/\r?\n/);
 
@@ -183,8 +229,14 @@ export const parsePriorityRules = (text, { legacyRows = false } = {}) => {
   return { rules, count: rules.length, repairs: repairs || [] };
 };
 
+/**
+ * @param {string} text
+ * @param {{ legacyRows?: boolean }} [options]
+ */
 export const parseWhitelistRules = (text, { legacyRows = false } = {}) => {
+  /** @type {{ feat: string, qual: string, key: string }[]} */
   const rules = [];
+  /** @type {TableRepair[] | null} */
   const repairs = legacyRows ? [] : null;
   const lines = text.split(/\r?\n/);
 
@@ -202,6 +254,7 @@ export const parseWhitelistRules = (text, { legacyRows = false } = {}) => {
   return { rules, count: rules.length, repairs: repairs || [] };
 };
 
+/** @param {string} text */
 export const parseBlacklistWords = (text) => {
   const words = text
     .split(/[\r\n,]+/)

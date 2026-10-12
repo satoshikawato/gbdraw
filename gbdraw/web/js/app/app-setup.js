@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
+/** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { DrawingState, LegendEntry, LinearSeq, PopupPosition } from '../state.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { EditorPaintState } from './result-paint-record.js' */
@@ -2288,7 +2289,12 @@ export const createAppSetup = () => {
     });
     depthTrackAutoLabels.length = depthFileSlotsFromValue(nextFiles).length;
   };
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {number} index
+   * @param {FileLike | null} file
+   * @param {FileLike | null} [previousFile]
+   */
   const updateDepthTrackLabelFromFile = (drawing, index, file, previousFile = null) => {
     if (!file) return;
     const config = drawing.adv.depth_tracks[index];

@@ -1145,7 +1145,8 @@ const savedLegendRenames = (edits) => {
 const recordSavedLegendKeys = (svg, renames) => {
   let recorded = false;
   const keyRecord = resultBaseAttribute('data-legend-key');
-  const groups = getAllFeatureLegendGroups(svg);
+  // A Result's root is an `<svg>`; the transform list types its argument as an Element.
+  const groups = getAllFeatureLegendGroups(/** @type {SVGSVGElement} */ (svg));
   const rows = groups.flatMap((group) => Array.from(group.querySelectorAll('g[data-legend-key]')));
   const drawnKeys = new Set(rows.flatMap((row) => [text(row.getAttribute('data-legend-key')), text(row.getAttribute(keyRecord))]));
   groups.forEach((group) => {

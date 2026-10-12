@@ -6,22 +6,49 @@ import {
 
 const FASTA_LINE_WIDTH = 60;
 
+/**
+ * The feature-like record a FASTA header reads: a catalog row, a popup payload,
+ * or an orthogroup or pairwise member payload. Every field is read by name and
+ * may be missing.
+ * @typedef {{ [key: string]: unknown }} FastaFeature
+ */
+
+/**
+ * The sequences a caller already holds for a feature; they win over the feature's own fields.
+ * @typedef {object} FastaSequences
+ * @property {unknown} [nucleotideSequence]
+ * @property {unknown} [nucleotide_sequence]
+ * @property {unknown} [aminoAcidSequence]
+ * @property {unknown} [amino_acid_sequence]
+ */
+
+/** @param {unknown} value */
 const normalizeHeaderText = (value) =>
   String(value || '').replace(/\s+/g, ' ').trim();
 
+/** @param {unknown} value */
 const normalizeFastaId = (value) => {
   const text = normalizeHeaderText(value).replace(/^>+/, '').replace(/\s+/g, '_');
   return text || '';
 };
 
+/** @param {unknown} key */
 const camelizeKey = (key) =>
   String(key || '').replace(/_([a-z])/g, (_, char) => char.toUpperCase());
 
+/**
+ * @param {FastaFeature | null | undefined} feature
+ * @param {string} key
+ * @returns {string[]}
+ */
 const getQualifierValues = (feature, key) => {
   const normalizedKey = String(key || '').trim().toLowerCase();
-  const qualifiers = feature?.qualifiers && typeof feature.qualifiers === 'object' && !Array.isArray(feature.qualifiers)
-    ? feature.qualifiers
-    : {};
+  // The checks leave an object that is not an array; its values are read as opaque.
+  const qualifiers = /** @type {Record<string, unknown>} */ (
+    feature?.qualifiers && typeof feature.qualifiers === 'object' && !Array.isArray(feature.qualifiers)
+      ? feature.qualifiers
+      : {}
+  );
   if (!normalizedKey) return [];
   if (Object.prototype.hasOwnProperty.call(qualifiers, normalizedKey)) {
     return normalizeStringArray(qualifiers[normalizedKey]);
@@ -30,6 +57,11 @@ const getQualifierValues = (feature, key) => {
   return matchingKey ? normalizeStringArray(qualifiers[matchingKey]) : [];
 };
 
+/**
+ * @param {FastaFeature | null | undefined} feature
+ * @param {string} key
+ * @returns {string[]}
+ */
 const getFeatureValues = (feature, key) => {
   if (!feature || typeof feature !== 'object') return [];
   const candidateKeys = [key, camelizeKey(key)];
@@ -42,6 +74,10 @@ const getFeatureValues = (feature, key) => {
   return getQualifierValues(feature, key);
 };
 
+/**
+ * @param {FastaFeature | null | undefined} feature
+ * @param {string[]} keys
+ */
 const firstFeatureText = (feature, keys) => {
   for (const key of keys) {
     const value = getFeatureValues(feature, key)
@@ -52,6 +88,10 @@ const firstFeatureText = (feature, keys) => {
   return '';
 };
 
+/**
+ * @param {FastaFeature | null | undefined} feature
+ * @param {string[]} keys
+ */
 const firstFeatureDisplayText = (feature, keys) => {
   for (const key of keys) {
     const value = getFeatureValues(feature, key)
@@ -62,8 +102,13 @@ const firstFeatureDisplayText = (feature, keys) => {
   return '';
 };
 
+/** @param {unknown} value */
 const sequenceText = (value) => String(value || '').replace(/\s+/g, '').trim();
 
+/**
+ * @param {unknown} sequence
+ * @param {unknown} [width]
+ */
 export const wrapFastaSequence = (sequence, width = FASTA_LINE_WIDTH) => {
   const text = sequenceText(sequence);
   if (!text) return '';
@@ -87,9 +132,11 @@ export const formatFastaEntry = ({ id, description, sequence }) => {
   return `${header}\n${wrappedSequence}`;
 };
 
+/** @param {FastaFeature | null | undefined} feature */
 const getFeatureOrganism = (feature) =>
   firstFeatureText(feature, ['organism', 'source_organism', 'record_organism']);
 
+/** @param {FastaFeature | null | undefined} feature */
 const getFeatureDescription = (feature) => {
   const label = firstFeatureDisplayText(feature, [
     'product',
@@ -107,8 +154,14 @@ const getFeatureDescription = (feature) => {
   return /\[[^\]]+\]\s*$/.test(label) ? label : `${label} [${organism}]`;
 };
 
+/** @param {unknown} strand */
 const strandIsMinus = (strand) => String(strand || '').trim() === '-';
 
+/**
+ * @param {unknown} startRaw
+ * @param {unknown} endRaw
+ * @param {unknown} strandRaw
+ */
 const formatLocationToken = (startRaw, endRaw, strandRaw) => {
   const start = Number(startRaw);
   const end = Number(endRaw);
@@ -120,6 +173,7 @@ const formatLocationToken = (startRaw, endRaw, strandRaw) => {
     : `${startOneBased}-${endOneBased}`;
 };
 
+/** @param {FastaFeature | null | undefined} feature */
 const getFeatureLocationToken = (feature) => {
   const parts = Array.isArray(feature?.location_parts) ? feature.location_parts : [];
   const partTokens = parts
@@ -135,11 +189,13 @@ const getFeatureLocationToken = (feature) => {
   return location || 'feature';
 };
 
+/** @param {FastaFeature | null | undefined} feature */
 const getNucleotideFastaId = (feature) => {
   const recordId = firstFeatureText(feature, ['record_id', 'recordId']) || 'record';
   return `${recordId}:${getFeatureLocationToken(feature)}`;
 };
 
+/** @param {FastaFeature | null | undefined} feature */
 const getProteinFastaId = (feature) =>
   firstFeatureDisplayText(feature, [
     'source_protein_id',
@@ -153,6 +209,10 @@ const getProteinFastaId = (feature) =>
     'name'
   ]) || getNucleotideFastaId(feature);
 
+/**
+ * @param {FastaFeature | null | undefined} feature
+ * @param {FastaSequences} [sequences]
+ */
 export const buildFeatureSequenceFastas = (feature, sequences = {}) => {
   const nucleotideSequence = sequenceText(
     sequences.nucleotideSequence ?? sequences.nucleotide_sequence ?? feature?.nucleotide_sequence ?? feature?.nucleotideSequence

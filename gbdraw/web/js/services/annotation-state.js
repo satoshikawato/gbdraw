@@ -2,6 +2,8 @@
 import { diagnosticError } from '../utils/error-normalization.js';
 import { featureIdentityKeyOf, rowBelongsToRequest } from './feature-placement.js';
 
+/** @import { FeatureRequestRecord } from './feature-placement.js' */
+
 /**
  * A record named by a target: a 0-based position or a record ID.
  * @typedef {{ kind: 'recordId', value: string } | { kind: 'recordIndex', index: number }} AnnotationRecordSelector
@@ -44,11 +46,29 @@ const DEFAULT_STYLE = Object.freeze({
   labelOffset: 4
 });
 
+/**
+ * @param {unknown} value
+ * @param {string} fallback
+ */
 const cleanId = (value, fallback) => String(value || '').trim() || fallback;
+/**
+ * @template T
+ * @param {T} value
+ * @returns {T}
+ */
 const clone = (value) => JSON.parse(JSON.stringify(value));
+/** @param {unknown} value */
 const normalizeEnvelope = (value) => value === 'segments' ? 'segments' : 'outer_bounds';
-const normalizeCircularPath = (value) => ['forward', 'reverse'].includes(value) ? value : 'shortest';
+/** @param {string | undefined} value */
+const normalizeCircularPath = (value) => (
+  /** @type {(string | undefined)[]} */ (['forward', 'reverse']).includes(value) ? value : 'shortest'
+);
+/**
+ * @param {Partial<AnnotationTarget> | null | undefined} target A target from a Session, a table, or the editor.
+ * @returns {AnnotationTarget}
+ */
 const normalizeTarget = (target) => {
+  /** @type {Partial<AnnotationTarget>} */
   const source = target && typeof target === 'object' ? clone(target) : {};
   // One feature named by its original-source identity (request schema 9,
   // design Q4); Python resolves it after crop and reverse complement. A
@@ -88,7 +108,9 @@ const normalizeTarget = (target) => {
     end,
     coordinateSpace: source.coordinateSpace === 'local' ? 'local' : 'source',
     wrapsOrigin: start > end,
-    outOfBounds: ['skip', 'error'].includes(source.outOfBounds) ? source.outOfBounds : 'clip'
+    outOfBounds: /** @type {(string | undefined)[]} */ (['skip', 'error']).includes(source.outOfBounds)
+      ? source.outOfBounds
+      : 'clip'
   };
 };
 
@@ -112,16 +134,23 @@ export const createAnnotationSet = (overrides = {}) => ({
   legendLabel: overrides.legendLabel == null ? null : String(overrides.legendLabel)
 });
 
+/**
+ * @param {Partial<AnnotationSet>[] | null | undefined} sets
+ * @returns {AnnotationSet[]}
+ */
 export const normalizeAnnotationSets = (sets) => {
+  /** @type {Set<string>} */
   const usedSetIds = new Set();
   return (Array.isArray(sets) ? sets : []).map((rawSet, setIndex) => {
     const set = createAnnotationSet(rawSet);
     let setId = cleanId(set.id, `annotations_${setIndex + 1}`);
     while (usedSetIds.has(setId)) setId = `${setId}_${setIndex + 1}`;
     usedSetIds.add(setId);
+    /** @type {Set<string>} */
     const usedItemIds = new Set();
     set.id = setId;
     set.annotations = set.annotations.map((rawItem, itemIndex) => {
+      /** @type {Partial<Omit<AnnotationItem, 'lane'>> & { lane?: number | string | null }} */ // a blank lane is '' in a table or Session
       const item = rawItem && typeof rawItem === 'object' ? clone(rawItem) : {};
       let id = cleanId(item.id, `region_${itemIndex + 1}`);
       while (usedItemIds.has(id)) id = `${id}_${itemIndex + 1}`;
@@ -130,7 +159,9 @@ export const normalizeAnnotationSets = (sets) => {
         id,
         target: normalizeTarget(item.target),
         label: String(item.label || ''),
-        mark: ['line', 'bracket', 'band', 'highlight'].includes(item.mark) ? item.mark : 'bracket',
+        mark: /** @type {(string | undefined)[]} */ (['line', 'bracket', 'band', 'highlight']).includes(item.mark)
+          ? /** @type {string} */ (item.mark) // listed above, so defined
+          : 'bracket',
         lane: item.lane == null || item.lane === '' ? null : Math.max(0, Number(item.lane) || 0),
         style: item.style == null ? null : createDefaultAnnotationStyle(item.style),
         legendLabel: item.legendLabel == null ? null : String(item.legendLabel),
@@ -141,6 +172,10 @@ export const normalizeAnnotationSets = (sets) => {
   });
 };
 
+/**
+ * @param {ReadonlyArray<{ id?: unknown } | null | undefined> | null | undefined} sets
+ * @param {string} [base]
+ */
 export const uniqueAnnotationSetId = (sets, base = 'annotations') => {
   const ids = new Set((Array.isArray(sets) ? sets : []).map((set) => String(set?.id || '')));
   const stem = cleanId(base, 'annotations');
@@ -160,7 +195,11 @@ export const ANNOTATION_RECORD_BINDING_KEY = '_gbdraw_web_target_record_key';
 // the targets of its own records, and the others stay in the drawing's draft
 // for the records that draw them (design Q4 3.2, R2). A target bound to an OFF
 // record (`omittedRecordKeys` of the record catalog) waits the same way.
-/** @param {Iterable<string>} [omittedRecordKeys] */
+/**
+ * @param {Partial<AnnotationSet>[] | null | undefined} sets
+ * @param {FeatureRequestRecord[]} [records]
+ * @param {Iterable<string>} [omittedRecordKeys]
+ */
 export const annotationOptionsPayload = (sets, records = [], omittedRecordKeys = []) => {
   const omitted = new Set(omittedRecordKeys);
   return {
@@ -178,4 +217,5 @@ export const annotationOptionsPayload = (sets, records = [], omittedRecordKeys =
 };
 
 // The draft sets of a request's annotation sets.
+/** @param {Partial<AnnotationSet>[] | null | undefined} sets */
 export const draftAnnotationSetsOfRequest = (sets) => normalizeAnnotationSets(Array.isArray(sets) ? sets : []);

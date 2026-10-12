@@ -1222,7 +1222,7 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {(ownerSet: Record<string, any>, options: { selectedResultIndex: number, installResults: (results: any[]) => void }) => void} installGeneratedArtifactOwnerSet
  * @property {(handle: Record<string, any>) => any} restoreGeneratedArtifactHandle
  * @property {((artifactIdentity: any, options: { results: any[] }) => void) | null} [setGeneratedArtifactIdentity]
- * @property {((label: string, execute: (handle?: Record<string, any>) => any, options: Record<string, any>) => Promise<any>) | null} [runGeneratedArtifactReplacement]
+ * @property {((label: string, execute: (handle?: Record<string, any> | null) => any, options: Record<string, any>) => Promise<any>) | null} [runGeneratedArtifactReplacement]
  *   History's undoable replacement of the generated artifact.
  * @property {RunAnalysisPreviewRuntime | null} [previewRuntime]
  * @property {() => Promise<void>} [nextTick] Vue `nextTick`.
@@ -1558,6 +1558,7 @@ export const createRunAnalysis = ({
   // UJ-08: the shown Generate failure about the source inputs, and its mode.
   /** @type {{ error: any, mode: string } | null} */
   let sourceInputFailure = null;
+  /** @type {ReadonlySet<string | undefined>} The failure code is undefined when no failure is shown. */
   const SOURCE_INPUT_FAILURES = new Set(['INPUT_REQUIRED', 'FASTA_REQUIRED', 'INPUT_UNREADABLE', 'NO_RECORDS']);
   /**
    * Record discovery read every source input of `drawingMode`: a shown

@@ -1,4 +1,28 @@
 // @ts-check
+/**
+ * A feature or Orthogroup member row: Python and JSON fields read by name.
+ * @typedef {{
+ *   [field: string]: unknown,
+ *   selector?: FeatureSelector | null,
+ *   qualifiers?: unknown,
+ *   location_parts?: unknown
+ * }} FeatureLike
+ */
+/**
+ * The selector a Python feature row carries beside its fields.
+ * @typedef {{
+ *   [field: string]: unknown,
+ *   hash?: unknown,
+ *   location?: unknown,
+ *   record_location?: unknown,
+ *   qualifiers?: unknown
+ * }} FeatureSelector
+ */
+
+/**
+ * @param {unknown} value
+ * @returns {string[]}
+ */
 export const normalizeStringArray = (value) => {
   if (Array.isArray(value)) {
     return value
@@ -9,6 +33,7 @@ export const normalizeStringArray = (value) => {
   return [String(value)];
 };
 
+/** @param {FeatureLike | null | undefined} feature */
 export const getFeatureCaption = (feature) => {
   const caption = firstNonInternalProteinDisplayText(
     feature?.label,
@@ -24,6 +49,10 @@ export const getFeatureCaption = (feature) => {
 
 // Python owns `location_parts[].display` (1-based INSDC). A feature without
 // parts is one part spanning its own interval.
+/**
+ * @param {FeatureLike | null | undefined} feature
+ * @returns {(FeatureLike | null | undefined)[]}
+ */
 const featureLocationParts = (feature) => (
   Array.isArray(feature?.location_parts) && feature.location_parts.length
     ? feature.location_parts
@@ -32,6 +61,7 @@ const featureLocationParts = (feature) => (
 
 // The 1-based coordinates of every part, without the strand. Also the location
 // of the fallback caption of an unnamed feature, here and in the rule editor.
+/** @param {FeatureLike | null | undefined} feature */
 export const formatFeatureRange = (feature) => featureLocationParts(feature).map((part) => {
   const display = String(part?.display || '').trim();
   if (display) return display;
@@ -40,12 +70,14 @@ export const formatFeatureRange = (feature) => featureLocationParts(feature).map
   return Number.isFinite(start) && Number.isFinite(end) ? `${start + 1}..${end}` : '';
 }).filter(Boolean).join(', ');
 
+/** @param {FeatureLike | null | undefined} feature */
 export const formatFeatureLocation = (feature) => {
   const range = formatFeatureRange(feature);
   const strand = String(feature?.strand || '').trim();
   return range && strand ? `${range} (${strand})` : range;
 };
 
+/** @param {FeatureLike | null | undefined} feature */
 export const formatFeatureLength = (feature) => {
   let length = 0;
   for (const part of featureLocationParts(feature)) {
@@ -57,6 +89,10 @@ export const formatFeatureLength = (feature) => {
   return `${Math.round(length).toLocaleString()} bp`;
 };
 
+/**
+ * @param {...unknown} values
+ * @returns {string}
+ */
 const firstFeatureText = (...values) => {
   for (const value of values) {
     if (Array.isArray(value)) {
@@ -75,6 +111,7 @@ const LINEAR_RENDERED_RECORD_SUFFIX = /_record_\d+$/i;
 // duplicated record's or feature's rendered id.
 const RENDERED_INSTANCE_SUFFIX = /__instance_.*$/;
 
+/** @param {FeatureLike} feature */
 const renderedFeatureId = (feature) => firstFeatureText(
   feature.rendered_svg_id,
   feature.renderedSvgId,
@@ -84,6 +121,7 @@ const renderedFeatureId = (feature) => firstFeatureText(
   feature.svgId
 );
 
+/** @param {FeatureLike | null | undefined} feature */
 export const getFeatureHashCandidates = (feature) => {
   if (!feature || typeof feature !== 'object') return [];
 
@@ -96,6 +134,7 @@ export const getFeatureHashCandidates = (feature) => {
 // The hash in a feature's rendered ID: no record or instance suffix. A feature
 // catalog before the one feature-hash builder (OV-401) drew a cropped or
 // reverse-complemented record with its drawn location's hash here.
+/** @param {FeatureLike | null | undefined} feature */
 export const getRenderedFeatureHash = (feature) => (
   !feature || typeof feature !== 'object'
     ? ''
@@ -107,12 +146,18 @@ export const getRenderedFeatureHash = (feature) => (
 // The hash Python's `hash` rule qualifier matches (`get_feature_hash`): the
 // feature's source-record hash, which duplicates of one record share
 // (PD-OI-069), whatever crop or orientation its record is drawn with.
+/** @param {FeatureLike | null | undefined} feature */
 export const getFeatureColorRuleHash = (feature) => (
   !feature || typeof feature !== 'object'
     ? ''
     : firstFeatureText(feature.selector?.hash) || getRenderedFeatureHash(feature)
 );
 
+/**
+ * @param {FeatureLike | null | undefined} feature
+ * @param {...string} keys
+ * @returns {string}
+ */
 const directFeatureValue = (feature, ...keys) => {
   if (!feature || typeof feature !== 'object') return '';
   for (const key of keys) {
@@ -130,6 +175,7 @@ const UNSUPPORTED_HISTORICAL_PROTEIN_ID_RE =
 const GENERATED_PROTEIN_ID_RE =
   /^(?:gbd_r\d+_(?:cds\d+|unit\d+)|p_.+_\d+_\d+_-?\d+_[0-9a-f]{12}(?:_\d+)?)$/i;
 
+/** @param {unknown} value */
 export const isInternalProteinDisplayId = (value) => {
   const text = firstFeatureText(value);
   return Boolean(
@@ -144,6 +190,10 @@ export const isInternalProteinDisplayId = (value) => {
   );
 };
 
+/**
+ * @param {...unknown} values
+ * @returns {string}
+ */
 const firstNonInternalProteinDisplayText = (...values) => {
   for (const value of values) {
     if (Array.isArray(value)) {
@@ -157,6 +207,11 @@ const firstNonInternalProteinDisplayText = (...values) => {
   return '';
 };
 
+/**
+ * @param {FeatureLike | null | undefined} feature
+ * @param {...string} keys
+ * @returns {string}
+ */
 const directFeatureDisplayValue = (feature, ...keys) => {
   if (!feature || typeof feature !== 'object') return '';
   for (const key of keys) {
@@ -166,11 +221,17 @@ const directFeatureDisplayValue = (feature, ...keys) => {
   return '';
 };
 
+/**
+ * @param {FeatureLike | null | undefined} feature
+ * @param {unknown} key
+ * @returns {string}
+ */
 const getFeatureQualifierDisplayValue = (feature, key) => {
   const normalizedKey = String(key || '').trim().toLowerCase();
   if (!feature || !normalizedKey) return '';
+  /** @type {{ [name: string]: unknown }} */
   const qualifiers = feature.qualifiers && typeof feature.qualifiers === 'object' && !Array.isArray(feature.qualifiers)
-    ? feature.qualifiers
+    ? /** @type {{ [name: string]: unknown }} */ (feature.qualifiers) // an object of qualifier values, checked just above
     : {};
   if (Object.prototype.hasOwnProperty.call(qualifiers, normalizedKey)) {
     return firstNonInternalProteinDisplayText(qualifiers[normalizedKey]);
@@ -181,6 +242,12 @@ const getFeatureQualifierDisplayValue = (feature, key) => {
     : '';
 };
 
+/**
+ * @param {FeatureLike | null | undefined} feature
+ * @param {FeatureLike | null} [member]
+ * @param {string} [fallback]
+ * @returns {string}
+ */
 export const resolveDisplayProteinId = (feature, member = null, fallback = '') =>
   firstNonInternalProteinDisplayText(
     directFeatureDisplayValue(feature, 'displayProteinId', 'display_protein_id'),
@@ -231,6 +298,12 @@ export const resolveFeatureProteinId = (feature, member = null) =>
     directFeatureDisplayValue(member, 'proteinId', 'protein_id')
   );
 
+/**
+ * @param {FeatureLike | null | undefined} feature
+ * @param {FeatureLike | null} [member]
+ * @param {string} [fallback]
+ * @returns {string}
+ */
 export const resolveInternalProteinId = (feature, member = null, fallback = '') => firstFeatureText(
   directFeatureValue(feature, 'proteinId', 'protein_id'),
   directFeatureValue(member, 'proteinId', 'protein_id'),

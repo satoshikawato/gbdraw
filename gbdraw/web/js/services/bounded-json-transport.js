@@ -3,6 +3,28 @@ const CLONE_LIMIT = 128 * 1024;
 const STRING_UNITS = 128 * 1024;
 const BYTE_CHUNK = 256 * 1024;
 const PART_OVERHEAD = 64;
+
+/** @typedef {null | boolean | number | string | Uint8Array | BoundedJsonValue[] | { [key: string]: BoundedJsonValue }} BoundedJsonValue */
+/** @typedef {(string | number)[]} BoundedJsonPath */
+/** @typedef {{ [key: string]: BoundedJsonValue }} BoundedJsonRecord An object, or an array read through its own keys. */
+/**
+ * One transport message. The receiver validates every field, so each member lists what the sender writes.
+ * @typedef {{ kind: 'value', path: BoundedJsonPath, value: BoundedJsonValue, whole?: boolean }
+ *   | { kind: 'bytes-start', path: BoundedJsonPath, length: number }
+ *   | { kind: 'bytes-chunk', offset: number, bytes: Uint8Array }
+ *   | { kind: 'bytes-end' }
+ *   | { kind: 'batch', path: BoundedJsonPath, index: number, value: BoundedJsonValue[] }
+ *   | { kind: 'string-start', path: BoundedJsonPath }
+ *   | { kind: 'string-chunk', units: Uint16Array }
+ *   | { kind: 'string-end' }} BoundedJsonSinglePart
+ */
+/** @typedef {BoundedJsonSinglePart | { kind: 'parts', parts: BoundedJsonSinglePart[] }} BoundedJsonPart */
+
+/**
+ * @param {BoundedJsonValue} value
+ * @param {number} remaining
+ * @returns {number}
+ */
 const cloneUpperBound = (value, remaining) => {
   if (value instanceof Uint8Array) return remaining + 1;
   if (value === null) return 4;
@@ -12,7 +34,8 @@ const cloneUpperBound = (value, remaining) => {
   for (const key of Object.keys(value)) {
     bytes += Array.isArray(value) ? 1 : key.length * 6 + 4;
     if (bytes > remaining) return bytes;
-    bytes += cloneUpperBound(value[key], remaining - bytes);
+    // An array is walked through its own keys, so it is indexed like a record here.
+    bytes += cloneUpperBound(/** @type {BoundedJsonRecord} */ (value)[key], remaining - bytes);
     if (bytes > remaining) return bytes;
   }
   return bytes;
@@ -22,8 +45,14 @@ const cloneUpperBound = (value, remaining) => {
 // Borrowed values remain unchanged; the receiver always gets the complete graph.
 // Consecutive parts share one message up to CLONE_LIMIT (a full byte or string chunk travels
 // alone), so messages and ACKs follow the payload size, not its number of keys.
+/**
+ * @param {BoundedJsonValue} value
+ * @param {(message: BoundedJsonPart, buffers: Transferable[]) => void | Promise<void>} sendPart
+ * @param {{ consume?: boolean }} [options]
+ * @returns {Promise<void>}
+ */
 export const sendBoundedJson = async (value, sendPart, { consume = false } = {}) => {
-  /** @type {any[]} */
+  /** @type {BoundedJsonSinglePart[]} */
   let parts = [];
   /** @type {Transferable[]} */
   let transfers = [];
@@ -32,6 +61,7 @@ export const sendBoundedJson = async (value, sendPart, { consume = false } = {})
   let bytes = 0;
   const flush = async () => {
     if (parts.length) {
+      /** @type {BoundedJsonPart} */
       const message = parts.length === 1 ? parts[0] : { kind: 'parts', parts };
       const buffers = transfers;
       parts = [];
@@ -42,12 +72,22 @@ export const sendBoundedJson = async (value, sendPart, { consume = false } = {})
     // Every queued release belongs to a part acknowledged by now.
     releases.splice(0).forEach((release) => release());
   };
+  /**
+   * @param {BoundedJsonSinglePart} part
+   * @param {number} size
+   * @param {Transferable[]} [buffers]
+   */
   const emit = async (part, size, buffers = []) => {
     if (parts.length && bytes + size > CLONE_LIMIT) await flush();
     parts.push(part);
     transfers.push(...buffers);
     bytes += size;
   };
+  /**
+   * @param {BoundedJsonValue} current
+   * @param {BoundedJsonPath} path
+   * @returns {Promise<void>}
+   */
   const walk = async (current, path) => {
     const pathBytes = PART_OVERHEAD + cloneUpperBound(path, CLONE_LIMIT);
     if (current instanceof Uint8Array) {
@@ -73,6 +113,7 @@ export const sendBoundedJson = async (value, sendPart, { consume = false } = {})
     } else if (Array.isArray(current)) {
       await emit({ kind: 'value', path, value: [] }, pathBytes);
       for (let index = 0; index < current.length;) {
+        /** @type {BoundedJsonValue[]} */
         const batch = [];
         let batchBytes = 2;
         while (index + batch.length < current.length && batch.length < 64) {
@@ -96,9 +137,10 @@ export const sendBoundedJson = async (value, sendPart, { consume = false } = {})
       }
     } else {
       await emit({ kind: 'value', path, value: {} }, pathBytes);
-      for (const key of Object.keys(current)) {
-        await walk(current[key], [...path, key]);
-        if (consume) releases.push(() => { delete current[key]; });
+      // A scalar fits CLONE_LIMIT and took the first branch, so only an object reaches this one.
+      for (const key of Object.keys(/** @type {BoundedJsonRecord} */ (current))) {
+        await walk(/** @type {BoundedJsonRecord} */ (current)[key], [...path, key]);
+        if (consume) releases.push(() => { delete (/** @type {BoundedJsonRecord} */ (current))[key]; });
       }
     }
   };
@@ -106,28 +148,41 @@ export const sendBoundedJson = async (value, sendPart, { consume = false } = {})
   await flush();
 };
 
+/**
+ * @returns {{ receivePart: (part: BoundedJsonPart) => void, getValue: () => BoundedJsonValue }}
+ */
 export const createBoundedJsonReceiver = () => {
+  /** @type {BoundedJsonValue | undefined} */
   let candidate;
-  /** @type {{ path: any, chunks: string[] } | null} */
+  /** @type {{ path: BoundedJsonPath, chunks: string[] } | null} */
   let pendingString = null;
   /** @type {{ bytes: Uint8Array, offset: number } | null} */
   let pendingBytes = null;
+  /** @param {BoundedJsonPath} path */
   const resolvePath = (path) => {
     if (!Array.isArray(path)) throw new Error('Invalid bounded JSON transport path.');
-    let value = candidate;
+    // A path addresses containers. A primitive parent has no own key, or fails when `assignValue` defines on it,
+    // and rejects the part, so the walk treats every value as a container.
+    let value = /** @type {BoundedJsonRecord | undefined} */ (candidate);
     for (const key of path) {
       if (!value || !Object.hasOwn(value, key)) throw new Error('Invalid bounded JSON transport parent.');
-      value = value[key];
+      value = /** @type {BoundedJsonRecord} */ (value[key]);
     }
     return value;
   };
+  /**
+   * @param {BoundedJsonPath} path
+   * @param {BoundedJsonValue} value
+   */
   const assignValue = (path, value) => {
     if (!Array.isArray(path)) throw new Error('Invalid bounded JSON transport path.');
     if (path.length === 0) { candidate = value; return; }
     const parent = resolvePath(path.slice(0, -1));
     // Preserve own unsafe keys for the admission validator without invoking prototype setters.
-    Object.defineProperty(parent, path.at(-1), { value, enumerable: true, writable: true, configurable: true });
+    // `path` is not empty here; `defineProperty` throws for a missing or primitive parent, which rejects the part.
+    Object.defineProperty(/** @type {BoundedJsonRecord} */ (parent), /** @type {string | number} */ (path.at(-1)), { value, enumerable: true, writable: true, configurable: true });
   };
+  /** @param {BoundedJsonPart} part A nested `parts` message reaches the final `else` and is rejected. */
   const receiveOne = (part) => {
     if (part.kind === 'value') assignValue(part.path, part.value);
     else if (part.kind === 'bytes-start') {
@@ -170,6 +225,7 @@ export const createBoundedJsonReceiver = () => {
     } else throw new Error('Invalid bounded JSON transport part.');
   };
   // One message carries one part or a `parts` list of them, never a nested list.
+  /** @param {BoundedJsonPart} part */
   const receivePart = (part) => {
     if (part.kind === 'parts' && Array.isArray(part.parts)) part.parts.forEach(receiveOne);
     else receiveOne(part);

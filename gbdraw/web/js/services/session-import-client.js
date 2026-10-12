@@ -3,6 +3,24 @@ import { createBoundedJsonReceiver } from './bounded-json-transport.js';
 import { recordSessionLifecycleEvent } from './runtime-test-hooks.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 
+/** @import { BoundedJsonPart, BoundedJsonValue } from './bounded-json-transport.js' */
+
+/**
+ * What the Worker measured, in milliseconds.
+ * @typedef {{ readMs: number, parseMs: number, replyMs: number }} SessionImportTimings
+ */
+/**
+ * The reassembled, still unvalidated JSON of a Session file.
+ * @typedef {{ data: BoundedJsonValue, characters: number, timings: SessionImportTimings }} SessionImportCandidate
+ */
+/**
+ * A message of the Session import Worker: a transport part, the final result, or a diagnostic.
+ * @typedef {(BoundedJsonPart & { operationId: number, status: 'part' })
+ *   | { operationId: number, status: 'ok', characters: number, timings: SessionImportTimings }
+ *   | { operationId: number, status: 'error', error?: { code?: string, stage?: string, context?: Record<string, unknown> } }
+ * } SessionImportReply
+ */
+
 let nextOperationId = 1;
 
 // A Worker that cannot start, crashes or replies unreadably leaves no import path.
@@ -19,6 +37,10 @@ export const importSessionFile = (file, { signal } = {}) => new Promise((resolve
   let worker = null;
   let settled = false;
   const assembly = createBoundedJsonReceiver();
+  /**
+   * @param {Error | null} error
+   * @param {SessionImportCandidate} [reply]
+   */
   const settle = (error, reply) => {
     if (settled) return;
     settled = true;
@@ -40,11 +62,13 @@ export const importSessionFile = (file, { signal } = {}) => new Promise((resolve
   const cancel = () => settle(Object.assign(
     new Error('Session loading was canceled.'), { name: 'AbortError', code: 'SESSION_IMPORT_CANCELED', stage: 'transport' }
   ));
+  /** @param {ErrorEvent} event */
   const crash = (event) => {
     event.preventDefault?.();
     settle(unavailable());
   };
   const unreadable = () => settle(unavailable());
+  /** @param {MessageEvent<SessionImportReply>} event */
   const receive = ({ data: reply }) => {
     if (reply?.operationId !== operationId || settled) return;
     if (reply.status === 'part') {

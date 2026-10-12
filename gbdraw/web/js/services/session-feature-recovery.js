@@ -3,7 +3,7 @@ import {
   buildLinearRegionExtractionContext,
   extractFeatureMetadataForPreview
 } from './feature-metadata-extraction.js';
-import { normalizeUserFacingError, retryCanSucceed } from '../utils/error-normalization.js';
+import { normalizeCaughtError, retryCanSucceed } from '../utils/error-normalization.js';
 import { cloneJsonValue } from './json-clone.js';
 import { enrichFeatureWithOrthogroup } from './orthogroup-feature-metadata.js';
 import {
@@ -768,7 +768,7 @@ export const extractSessionSourceFeatures = async ({
     });
     return payload?.errors?.length || !Array.isArray(payload?.extractedFeatures) ? null : payload;
   } catch (error) {
-    if (retryCanSucceed(normalizeUserFacingError(error))) throw error;
+    if (retryCanSucceed(normalizeCaughtError(error))) throw error;
     return null;
   }
 };

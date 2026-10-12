@@ -1,13 +1,28 @@
 // @ts-check
+/**
+ * The root of a Result's SVG as these repairs read it. An SVG root names its
+ * elements by `getElementById`; a root parsed as a generic element may not.
+ * @typedef {ParentNode & { getElementById?: (elementId: string) => Element | null }} SvgResultRoot
+ */
+
 const PAIRWISE_LEGEND_SELECTOR =
   '[data-gbdraw-role="comparison-legend"][data-gbdraw-orientation="h"], '
   + '[data-gbdraw-role="comparison-legend"][data-gbdraw-orientation="v"], '
   + '#pairwise_legend, #pairwise_legend_h, #pairwise_legend_v';
 
+/**
+ * @param {ParentNode | null | undefined} svg
+ * @param {unknown[]} baseIds Element ids; a group matches the id or `<id>_…`.
+ * @param {unknown[]} [slotRenderers] Slot renderer names, tried before the base ids.
+ * @returns {Element[]}
+ */
 export const getGroupsByBaseIds = (svg, baseIds, slotRenderers = []) => {
   if (!svg) return [];
+  /** @type {Set<Element>} */
   const seen = new Set();
+  /** @type {Element[]} */
   const groups = [];
+  /** @param {string} selector */
   const addGroups = (selector) => {
     svg.querySelectorAll(selector).forEach((group) => {
       if (seen.has(group)) return;
@@ -25,6 +40,7 @@ export const getGroupsByBaseIds = (svg, baseIds, slotRenderers = []) => {
   return groups;
 };
 
+/** @param {unknown} value */
 const parseTranslate = (value) => {
   const number = '([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?)';
   const match = String(value || '').match(
@@ -33,6 +49,10 @@ const parseTranslate = (value) => {
   return match ? { x: Number(match[1]), y: Number(match[2]) } : { x: 0, y: 0 };
 };
 
+/**
+ * @param {SvgResultRoot | null | undefined} svg
+ * @returns {Element[]}
+ */
 const featureLegendGroups = (svg) => {
   const legend = svg?.getElementById?.('legend');
   if (!legend) return [];
@@ -47,6 +67,10 @@ const featureLegendGroups = (svg) => {
   return [legend.querySelector('#feature_legend') || legend];
 };
 
+/**
+ * @param {SvgResultRoot | null | undefined} svg
+ * @returns {boolean} Whether the legend changed.
+ */
 export const normalizeLegacyLegendEntryGroups = (svg) => {
   const documentOwner = svg?.ownerDocument || globalThis.document;
   if (!documentOwner?.createElementNS) return false;
@@ -55,11 +79,13 @@ export const normalizeLegacyLegendEntryGroups = (svg) => {
     if (targetGroup.querySelectorAll('g[data-legend-key]').length > 0) return;
     const texts = Array.from(targetGroup.querySelectorAll('text'));
     const paths = Array.from(targetGroup.querySelectorAll('path'));
+    /** @type {SVGGElement[]} */
     const additions = [];
     texts.forEach((textElement) => {
       const caption = textElement.textContent?.trim();
       if (!caption) return;
       const textPosition = parseTranslate(textElement.getAttribute('transform'));
+      /** @type {SVGPathElement | null} */
       let bestPath = null;
       let bestX = -Infinity;
       paths.forEach((path) => {
@@ -88,6 +114,10 @@ export const normalizeLegacyLegendEntryGroups = (svg) => {
   return changed;
 };
 
+/**
+ * @param {SvgResultRoot | null | undefined} svg
+ * @returns {boolean} Whether an id changed.
+ */
 export const ensureUniqueSkewClipPathIds = (svg) => {
   if (!svg) return false;
   const skewGroups = getGroupsByBaseIds(
@@ -139,6 +169,10 @@ export const ensureUniqueSkewClipPathIds = (svg) => {
   return changed;
 };
 
+/**
+ * @param {SvgResultRoot | null | undefined} svg
+ * @returns {boolean} Whether an id changed.
+ */
 export const ensureUniquePairwiseGradientIds = (svg) => {
   if (!svg) return false;
   const legendGroup = svg.getElementById?.('legend');
@@ -146,6 +180,10 @@ export const ensureUniquePairwiseGradientIds = (svg) => {
   const verticalLegend = legendGroup?.querySelector('#legend_vertical');
   if (!horizontalLegend || !verticalLegend) return false;
   let changed = false;
+  /**
+   * @param {Element} legend
+   * @param {string} suffix
+   */
   const fixGradientId = (legend, suffix) => {
     const pairwiseLegend = legend.querySelector(PAIRWISE_LEGEND_SELECTOR);
     if (!pairwiseLegend) return;
@@ -168,6 +206,7 @@ export const ensureUniquePairwiseGradientIds = (svg) => {
   return changed;
 };
 
+/** @param {SvgResultRoot | null | undefined} svg */
 export const normalizeSvgResultIds = (svg) => {
   const skewChanged = ensureUniqueSkewClipPathIds(svg);
   const gradientChanged = ensureUniquePairwiseGradientIds(svg);

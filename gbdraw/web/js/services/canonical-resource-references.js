@@ -5,10 +5,16 @@ const RESOURCE_REFERENCE_FIELDS = new Set([
   'fastaResourceId'
 ]);
 
+/** @param {string} field */
 export const isCanonicalResourceReferenceField = (field) => (
   RESOURCE_REFERENCE_FIELDS.has(field)
 );
 
+/**
+ * @param {unknown} value
+ * @param {Set<string>} [target]
+ * @returns {Set<string>}
+ */
 export const collectCanonicalResourceIds = (value, target = new Set()) => {
   if (Array.isArray(value)) {
     value.forEach((item) => collectCanonicalResourceIds(item, target));

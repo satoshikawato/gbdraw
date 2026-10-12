@@ -8,6 +8,41 @@ import {
 } from './feature-placement.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 
+/** @import { AnnotationRecordSelector, AnnotationSet, AnnotationTarget } from './annotation-state.js' */
+
+/**
+ * A feature of a Session's saved feature catalog (schema 3, 4, or 5), unvalidated.
+ * @typedef {{
+ *   recordKey?: unknown, biologicalFeatureId?: unknown, svgId?: unknown, stableFeatureId?: unknown,
+ *   sourceFeatureIndex?: unknown, record_id?: unknown, recordId?: unknown
+ * }} SavedCatalogFeature
+ */
+/** @typedef {{ recordKeys?: unknown[], features?: (SavedCatalogFeature | null)[], biologicalFeatures?: (SavedCatalogFeature | null)[] } | null} SavedCatalogItem */
+/** @typedef {{ items?: SavedCatalogItem[] }} SavedCatalog */
+/**
+ * The identities a saved diagram drew, by rendered ID and as a list, for the old keys to resolve against.
+ * @typedef {{
+ *   renderedById: Map<string, Set<string>>, biological: IndexedFeature[], byHash?: Map<string, Set<string>>
+ * }} FeatureEditIndex
+ */
+/**
+ * A source feature of a Session before feature catalogs, read again, unvalidated.
+ * @typedef {{
+ *   svg_id?: unknown, svgId?: unknown, fileIdx?: unknown, record_idx?: unknown, recordIndex?: unknown,
+ *   source_feature_index?: unknown, sourceFeatureIndex?: unknown, feature_index?: unknown,
+ *   stable_feature_id?: unknown, stableFeatureId?: unknown, stable_svg_id?: unknown,
+ *   drawn_selector?: { hash?: unknown } | null, drawnSelector?: { hash?: unknown } | null
+ * }} LegacySourceFeature
+ */
+/**
+ * A request record as the hash readers read it.
+ * @typedef {{
+ *   recordKey?: unknown, cardinality?: unknown, region?: unknown,
+ *   presentation?: { reverseComplement?: unknown } | null, display?: { startCoordinate?: unknown } | null
+ * }} LegacyRequestRecord
+ */
+/** @typedef {{ input: number, recordIndex: number, sourceIndex: number | null, sourceHash: string, drawnHash: string }} DescribedSourceFeature */
+
 // Session 44 and older kept per-feature edits in four maps keyed by rendered
 // SVG ID. Session 46 keys them by original-source feature identity
 // (`features.featureOverrides`, design Q4 4.3). This reader maps each old key
@@ -38,10 +73,12 @@ export const RENDERED_ID_FEATURE_EDIT_FIELDS = Object.freeze([
   'labelTextFeatureOverrideSources'
 ]);
 
+/** @param {number} count */
 export const FEATURE_EDIT_MIGRATION_WARNING = (count) => (
   `${count} feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.`
 );
 
+/** @param {number} count */
 export const FEATURE_VISIBILITY_NARROWED_NOTICE = (count) => (
   `${count} Feature visibility edit(s) from an older Session hid every feature with the same hash, such as each copy`
   + ' of a duplicated record. Each now applies only to the feature that was edited, so the next Generate draws the others.'
@@ -62,6 +99,7 @@ export const FEATURE_VISIBILITY_NARROWED_NOTICE = (count) => (
  * @returns {value is Record<string, any>}
  */
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+/** @param {unknown} value */
 const text = (value) => String(value ?? '').trim();
 const RENDERED_PART_SUFFIX = /__(?:part|line)\d+$/;
 const INSTANCE_SUFFIX = /__instance_([A-Za-z0-9_.-]+?)_[0-9a-f]{16}$/;
@@ -69,6 +107,7 @@ const INSTANCE_SUFFIX = /__instance_([A-Za-z0-9_.-]+?)_[0-9a-f]{16}$/;
 // Reads `<h>[_record_<n>][__instance_<s>_<digest>]...` (gbdraw/features/ids.py,
 // gbdraw/svg/ids.py::instance_svg_id): the stable hash, the one-based record
 // position in its Result, and the source feature index of a duplicate.
+/** @param {unknown} renderedId */
 const parseRenderedId = (renderedId) => {
   let rest = text(renderedId).replace(RENDERED_PART_SUFFIX, '');
   /** @type {number | null} */
@@ -90,8 +129,15 @@ const parseRenderedId = (renderedId) => {
   return { stableId: rest, recordOrdinal, sourceIndex };
 };
 
+/**
+ * @param {SavedCatalog | null | undefined} catalog
+ * @param {string} mode
+ * @returns {FeatureEditIndex}
+ */
 const catalogIndex = (catalog, mode) => {
+  /** @type {Map<string, Set<string>>} */
   const renderedById = new Map();
+  /** @type {IndexedFeature[]} */
   const biological = [];
   (isObject(catalog) && Array.isArray(catalog.items) ? catalog.items : []).forEach((item) => {
     const recordKeys = Array.isArray(item?.recordKeys) ? item.recordKeys.map(text) : [];
@@ -100,7 +146,7 @@ const catalogIndex = (catalog, mode) => {
       const svgId = text(feature?.svgId).replace(RENDERED_PART_SUFFIX, '');
       if (!key || !svgId) return;
       if (!renderedById.has(svgId)) renderedById.set(svgId, new Set());
-      renderedById.get(svgId).add(key);
+      /** @type {Set<string>} */ (renderedById.get(svgId)).add(key); // set just above
     });
     (Array.isArray(item?.biologicalFeatures) ? item.biologicalFeatures : []).forEach((feature) => {
       const recordKey = text(feature?.recordKey);
@@ -110,7 +156,7 @@ const catalogIndex = (catalog, mode) => {
       biological.push({
         key,
         stableId: text(feature?.stableFeatureId) || biologicalFeatureId,
-        sourceIndex: Number.isSafeInteger(feature?.sourceFeatureIndex) ? feature.sourceFeatureIndex : null,
+        sourceIndex: Number.isSafeInteger(feature?.sourceFeatureIndex) ? /** @type {number} */ (feature?.sourceFeatureIndex) : null,
         recordOrdinal: recordKeys.indexOf(recordKey) + 1
       });
     });
@@ -135,16 +181,26 @@ const LINEAR_RECORD_SUFFIX = /_record_([1-9]\d*)(?=__|$)/;
 
 // A request record drawn cropped, reverse-complemented, or rotated: its drawn
 // hashes are not its source hashes.
+/** @param {LegacyRequestRecord | null | undefined} record */
 const drawnTransformed = (record) => Boolean(record?.region || record?.presentation?.reverseComplement
   || Number.isSafeInteger(record?.display?.startCoordinate));
 
+/**
+ * @param {unknown} value
+ * @returns {number | null}
+ */
 const nonnegativeInteger = (value) => (
   value !== null && value !== '' && Number.isSafeInteger(Number(value)) && Number(value) >= 0 ? Number(value) : null
 );
 
+/**
+ * @param {{ features?: LegacySourceFeature[], biologicalFeatures?: LegacySourceFeature[], records?: LegacyRequestRecord[], mode?: string }} [input]
+ * @returns {FeatureEditIndex}
+ */
 const legacyIndex = ({ features = [], biologicalFeatures = [], records = [], mode = 'circular' } = {}) => {
   const linear = mode === 'linear';
   const requestRecords = Array.isArray(records) ? records : [];
+  /** @param {LegacySourceFeature | null | undefined} feature */
   const describe = (feature) => {
     const svgOrdinal = Number(text(feature?.svg_id ?? feature?.svgId).match(LINEAR_RECORD_SUFFIX)?.[1]) || null;
     const fileIdx = nonnegativeInteger(feature?.fileIdx);
@@ -157,40 +213,62 @@ const legacyIndex = ({ features = [], biologicalFeatures = [], records = [], mod
       drawnHash: text(feature?.drawn_selector?.hash ?? feature?.drawnSelector?.hash)
     };
   };
-  const listed = (Array.isArray(features) ? features : []).map(describe)
-    .filter((entry) => entry.input !== null && entry.recordIndex !== null && entry.sourceHash);
+  // The filters drop an entry without an input or a record index.
+  const listed = /** @type {DescribedSourceFeature[]} */ ((Array.isArray(features) ? features : []).map(describe)
+    .filter((entry) => entry.input !== null && entry.recordIndex !== null && entry.sourceHash));
   const sources = (Array.isArray(biologicalFeatures) && biologicalFeatures.length > 0
-    ? biologicalFeatures.map(describe).filter((entry) => entry.input !== null && entry.recordIndex !== null && entry.sourceHash)
+    ? /** @type {DescribedSourceFeature[]} */ (biologicalFeatures.map(describe).filter((entry) => entry.input !== null && entry.recordIndex !== null && entry.sourceHash))
     : listed);
+  /** @type {Map<number, number>} */
   const recordCounts = new Map();
   [...listed, ...sources].forEach(({ input, recordIndex }) => {
     // `listed` and `sources` were filtered above to entries whose `recordIndex` is not null.
     recordCounts.set(input, Math.max(recordCounts.get(input) || 1, /** @type {number} */ (recordIndex) + 1));
   });
+  /**
+   * @param {number} input
+   * @param {number} recordIndex
+   */
   const recordOf = (input, recordIndex) => (
     linear ? requestRecords[input] : requestRecords[requestRecords.length > 1 ? recordIndex : 0]
   );
+  /**
+   * @param {number} input
+   * @param {number} recordIndex
+   */
   const recordKeyOf = (input, recordIndex) => {
     const record = recordOf(input, recordIndex);
     const recordKey = text(record?.recordKey);
     if (!recordKey) return '';
-    return record.cardinality === 'all' && (linear || requestRecords.length === 1) && recordCounts.get(input) > 1
+    return record.cardinality === 'all' && (linear || requestRecords.length === 1) && /** @type {number} */ (recordCounts.get(input)) > 1 // every input of `listed` and `sources` has a count
       ? `${recordKey}:${recordIndex + 1}`
       : recordKey;
   };
+  /** @type {number[]} */
   const offsets = [];
   for (let input = 0, offset = 0; input < requestRecords.length; input += 1) {
     offsets[input] = offset;
     offset += recordCounts.get(input) || 1;
   }
+  /**
+   * @param {number} input
+   * @param {number} recordIndex
+   */
   const ordinalOf = (input, recordIndex) => (linear ? (offsets[input] ?? 0) + recordIndex + 1 : recordIndex + 1);
+  /**
+   * @param {number} input
+   * @param {number} recordIndex
+   */
   const transformed = (input, recordIndex) => drawnTransformed(recordOf(input, recordIndex));
+  /** @type {Map<string, number>} */
   const hashCounts = new Map();
   sources.forEach((entry) => {
     const id = JSON.stringify([recordKeyOf(entry.input, entry.recordIndex), entry.sourceHash]);
     hashCounts.set(id, (hashCounts.get(id) || 0) + 1);
   });
+  /** @type {IndexedFeature[]} */
   const biological = [];
+  /** @type {Set<string>} */
   const seen = new Set();
   listed.forEach((entry) => {
     const drawnHash = entry.drawnHash || (transformed(entry.input, entry.recordIndex) ? '' : entry.sourceHash);
@@ -395,6 +473,11 @@ export const migrateSessionHashRules = ({ rules, mode, catalog = null, legacy = 
 // Rule 2: otherwise it names the one feature with its hash in the record
 // position (and source index) its suffixes give: the source hash of a catalog
 // feature, the drawn hash of a feature of a Session without a catalog.
+/**
+ * @param {unknown} renderedId
+ * @param {FeatureEditIndex} index
+ * @returns {string[]}
+ */
 const resolveOldKey = (renderedId, index) => {
   const drawn = index.renderedById.get(text(renderedId).replace(RENDERED_PART_SUFFIX, ''));
   if (drawn?.size) return [...drawn];
@@ -410,12 +493,23 @@ const resolveOldKey = (renderedId, index) => {
 // a Feature visibility edit: every feature drawn with, or whose source has,
 // that hash (each copy of a duplicated record, each feature at the same
 // coordinates). Owner decision Q1 = A keeps the edit on the one it named.
+/**
+ * @param {FeatureEditIndex} index
+ * @param {string} hash
+ * @returns {Set<string>}
+ */
 const identitiesWithHash = (index, hash) => {
   if (!index.byHash) {
-    index.byHash = new Map();
+    /** @type {Map<string, Set<string>>} */
+    const byHash = new Map();
+    index.byHash = byHash;
+    /**
+     * @param {string} stableId
+     * @param {string} key
+     */
     const add = (stableId, key) => {
-      if (!index.byHash.has(stableId)) index.byHash.set(stableId, new Set());
-      index.byHash.get(stableId).add(key);
+      if (!byHash.has(stableId)) byHash.set(stableId, new Set());
+      /** @type {Set<string>} */ (byHash.get(stableId)).add(key); // set just above
     };
     index.renderedById.forEach((keys, svgId) => keys.forEach((key) => add(parseRenderedId(svgId).stableId, key)));
     index.biological.forEach(({ stableId, key }) => add(stableId, key));
@@ -465,6 +559,7 @@ export const migrateRenderedIdFeatureEdits = ({ features, mode, catalog = null, 
     return { featureOverrides: rows, droppedCount, narrowedVisibilityCount, migratedLabelEdits };
   }
   const index = catalog ? catalogIndex(catalog, mode) : legacyIndex({ ...legacy, mode });
+  /** @param {string} key */
   const rowFor = (key) => {
     if (!rows[key]) {
       // `key` comes from `scopedIdentityKey` through the index.
@@ -481,6 +576,10 @@ export const migrateRenderedIdFeatureEdits = ({ features, mode, catalog = null, 
     }
     return rows[key];
   };
+  /**
+   * @param {string} field
+   * @param {(row: FeatureOverrideDraftRow, value: unknown) => boolean} assign
+   */
   const migrateMap = (field, assign) => {
     Object.entries(isObject(features[field]) ? features[field] : {}).forEach(([oldKey, value]) => {
       const keys = resolveOldKey(oldKey, index);
@@ -519,7 +618,8 @@ export const migrateRenderedIdFeatureEdits = ({ features, mode, catalog = null, 
   });
   // A source text alone is kept only for a feature a bulk label edit can reach.
   Object.entries(rows).forEach(([key, row]) => {
-    if (['featureVisibility', 'labelVisibility', 'labelText', 'labelSourceText'].every((field) => row[field] === null)) {
+    if (/** @type {(keyof FeatureOverrideDraftRow)[]} */ (['featureVisibility', 'labelVisibility', 'labelText', 'labelSourceText'])
+      .every((field) => row[field] === null)) {
       delete rows[key];
     }
   });
@@ -552,6 +652,7 @@ export const migrateSessionFeatureEdits = ({ features, mode, catalog = null, leg
   };
 };
 
+/** @param {number} count */
 export const ANNOTATION_TARGET_MIGRATION_NOTICE = (count) => (
   `${count} annotation(s) from an older Session named a feature by hash=. Each now names that feature by its source,`
   + ' so it stays on the feature when the crop or orientation changes.'
@@ -560,8 +661,13 @@ export const ANNOTATION_TARGET_MIGRATION_NOTICE = (count) => (
 // The records the renderer binds an annotation target in (the request's drawn
 // records in order, gbdraw/annotations/resolve.py::_bind_record) and the
 // source features by source hash, from the Session's saved feature catalog.
+/**
+ * @param {SavedCatalog | null | undefined} catalog
+ */
 const annotationCatalogIndex = (catalog) => {
+  /** @type {Map<string, Set<string>>} */
   const recordIds = new Map();
+  /** @type {Map<string, Map<string, { recordKey: string, biologicalFeatureId: string }>>} */
   const featuresByHash = new Map();
   (isObject(catalog) && Array.isArray(catalog.items) ? catalog.items : []).forEach((item) => {
     (Array.isArray(item?.recordKeys) ? item.recordKeys : []).forEach((recordKey) => {
@@ -574,19 +680,24 @@ const annotationCatalogIndex = (catalog) => {
       recordIds.get(recordKey)?.add(text(feature?.record_id ?? feature?.recordId));
       const hash = text(feature?.stableFeatureId) || biologicalFeatureId.replace(/~\d+$/, '');
       if (!featuresByHash.has(hash)) featuresByHash.set(hash, new Map());
-      featuresByHash.get(hash).set(JSON.stringify([recordKey, biologicalFeatureId]), { recordKey, biologicalFeatureId });
+      /** @type {Map<string, { recordKey: string, biologicalFeatureId: string }>} */ (featuresByHash.get(hash)).set(JSON.stringify([recordKey, biologicalFeatureId]), { recordKey, biologicalFeatureId });
     });
   });
   return { recordKeys: [...recordIds.keys()], recordIds, featuresByHash };
 };
 
+/**
+ * @param {AnnotationRecordSelector | null | undefined} selector
+ * @param {ReturnType<typeof annotationCatalogIndex>} index
+ * @returns {string}
+ */
 const boundRecordKey = (selector, { recordKeys, recordIds }) => {
   if (selector == null) return recordKeys.length === 1 ? recordKeys[0] : '';
   if (selector.kind === 'recordIndex') return recordKeys[selector.index] || '';
   if (selector.kind !== 'recordId') return '';
   // A record without catalog features has no known ID, so the binding is not certain.
-  if (recordKeys.some((recordKey) => recordIds.get(recordKey).size !== 1)) return '';
-  const matches = recordKeys.filter((recordKey) => recordIds.get(recordKey).has(text(selector.value)));
+  if (recordKeys.some((recordKey) => /** @type {Set<string>} */ (recordIds.get(recordKey)).size !== 1)) return '';
+  const matches = recordKeys.filter((recordKey) => /** @type {Set<string>} */ (recordIds.get(recordKey)).has(text(selector.value)));
   return matches.length === 1 ? matches[0] : '';
 };
 
@@ -612,20 +723,24 @@ export const migrateSessionAnnotationTargets = ({ annotationSets, mode, catalog 
   const index = annotationCatalogIndex(catalog);
   const requestRecords = Array.isArray(records) ? records : [];
   let migratedCount = 0;
+  // A missing target gives no selector, so the reads after the `selector` check
+  // never reach it: the casts below state that.
+  /** @param {Partial<AnnotationTarget> | null | undefined} target */
   const identityTarget = (target) => {
     const selector = target?.kind === 'featureSpan' && Array.isArray(target.selectors) && target.selectors.length === 1
       ? target.selectors[0] : null;
     if (selector?.key !== 'hash') return null;
-    const recordKey = boundRecordKey(target.record, index);
+    const recordKey = boundRecordKey(/** @type {Partial<AnnotationTarget>} */ (target).record, index);
     const matches = [...(index.featuresByHash.get(text(selector.value))?.values() || [])];
     const request = requestRecords.find((record) => recordKeyBelongsToRequest(recordKey, [record]));
     if (!recordKey || matches.length !== 1 || matches[0].recordKey !== recordKey
       || !request || drawnTransformed(request)) return null;
     const migrated = { kind: 'featureIdentity', scope: mode, ...matches[0],
-      envelope: target.envelope, circularPath: target.circularPath };
+      envelope: /** @type {Partial<AnnotationTarget>} */ (target).envelope,
+      circularPath: /** @type {Partial<AnnotationTarget>} */ (target).circularPath };
     return scopedIdentityKeyOf(migrated) ? migrated : null;
   };
-  const migratedSets = (Array.isArray(annotationSets) ? annotationSets : []).map((set) => (
+  const migratedSets = (Array.isArray(annotationSets) ? annotationSets : []).map((/** @type {Partial<AnnotationSet> | null | undefined} */ set) => (
     !Array.isArray(set?.annotations) ? set : {
       ...set,
       annotations: set.annotations.map((annotation) => {

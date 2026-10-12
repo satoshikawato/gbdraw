@@ -502,7 +502,7 @@ export const displayedDrawnFeatures = (state, drawing) => ({
 /**
  * What `displayedLegendRowContext` reads of the app state.
  * @typedef {Parameters<typeof displayedDrawnFeatures>[0] & {
- *   svgContainer?: { value?: { querySelector?: (selector: string) => Element | null } | null },
+ *   svgContainer?: { value?: { querySelector?: (selector: 'svg') => SVGSVGElement | null } | null },
  *   originalLegendOrder?: { value?: readonly string[] }
  * }} DisplayedLegendState
  */

@@ -21,6 +21,22 @@ const GENBANK_LOCUS_PATTERN = /^LOCUS {7} *(\S+)(?:\s+(\d+)\s+(?:bp|aa)\b)?/;
 // Biopython's _FeatureConsumer, which gbdraw.io.genome uses. Returns null for a
 // chunk without a LOCUS line and throws for a layout it cannot decide, so the
 // caller declines to the Python reader.
+/**
+ * @typedef {{
+ *   locus: string,
+ *   accession: string,
+ *   version: string,
+ *   recordId: string,
+ *   organism: string,
+ *   recordLength: number | null,
+ *   topology: string
+ * }} GenBankHeader
+ */
+
+/**
+ * @param {unknown} chunk
+ * @returns {GenBankHeader | null}
+ */
 export const scanGenBankHeader = (chunk) => {
   const lines = String(chunk || '').split(/\r?\n/);
   const locusIndex = lines.findIndex((line) => line.startsWith('LOCUS'));
@@ -31,23 +47,27 @@ export const scanGenBankHeader = (chunk) => {
   if (!locusMatch || (locusTokens.length > 1 && !locusMatch[2])) {
     throw new Error('This LOCUS line needs the Python reader.');
   }
+  /** @type {string[]} */
   const header = [];
   for (const rawLine of lines.slice(locusIndex + 1)) {
     const line = rawLine.trimEnd();
     if (line === '//' || GENBANK_HEADER_ENDS.has(line.slice(0, GENBANK_INDENT).trimEnd())) break;
     if (line) header.push(line);
   }
+  /** @type {string[]} */
   const accessions = [];
   let recordId = '';
   let version = '';
   /** @type {number | null} */
   let versionSuffix = null;
   let organism = '';
+  /** @param {string} text */
   const addAccessions = (text) => {
     const tokens = text.replace(/;/g, ' ').split(/\s+/).filter(Boolean);
     tokens.forEach((token) => { if (!accessions.includes(token)) accessions.push(token); });
     if (!recordId && tokens.length > 0) recordId = accessions[0];
   };
+  /** @param {number} index */
   const continuation = (index) => header[index + 1]?.startsWith(GENBANK_SPACER);
   for (let index = 0; index < header.length; index += 1) {
     const keyword = header[index].slice(0, GENBANK_INDENT).trim();
@@ -91,6 +111,10 @@ export const scanGenBankHeader = (chunk) => {
 
 // The record ID the loader gives one GenBank record chunk, with the header
 // values it is built from.
+/**
+ * @param {unknown} chunk
+ * @returns {Pick<GenBankHeader, 'locus' | 'accession' | 'version' | 'recordId'> | null}
+ */
 export const genbankHeaderIds = (chunk) => {
   const header = scanGenBankHeader(chunk);
   if (!header) return null;
@@ -100,6 +124,7 @@ export const genbankHeaderIds = (chunk) => {
 
 // The number of records the loader reads from GenBank text: one per line that
 // starts with "LOCUS" and seven spaces (GENBANK_RECORD_START).
+/** @param {unknown} text */
 export const countGenBankRecords = (text) => {
   const source = String(text || '');
   let count = 0;
