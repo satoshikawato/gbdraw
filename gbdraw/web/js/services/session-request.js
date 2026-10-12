@@ -189,6 +189,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 /** @import { RecordDisplayRowView } from './record-display-model.js' */
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { DepthFileSlots } from './depth-track-state.js' */
+/** @import { CatalogStateView } from './feature-catalog.js' */
 
 // The drawing a request reads its settings and edits from: a `DrawingState`
 // (state.js), Generate's drawing with the rules it admits, or a Gallery
@@ -301,7 +302,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 /**
  * A comparison a Session committed with its resource, as the draft holds it.
  * @typedef {ResourceBackedComparison & {
- *   file?: ResourceEntry | null, edgeKey?: unknown, mode?: string, settings?: RequestDiagramOptions
+ *   file?: ResourceEntry | null, edgeKey?: unknown, mode?: string, settings?: ProteinSettingsBaseline
  * }} RequestCanonicalComparison
  */
 /**
@@ -315,12 +316,19 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
  * @property {number} [subjectRecordIndex]
  */
 /**
+ * What the label projection of a request reads of `state`: the displayed
+ * Result's catalog features (`resultRenderedFeatures`) and its labels.
+ * @typedef {CatalogStateView & {
+ *   editableLabels?: RequestRef<{ featureId?: unknown, sourceText?: unknown }[]>
+ * }} RequestLabelState
+ */
+/**
  * What the generated tables of a request read of `state` (state.js), or of
  * the state a Gallery Session's request is rebuilt from.
- * @typedef {object} RequestTableState
- * @property {RequestRef<Record<string, Record<string, string>>>} paletteDefinitions
- * @property {RequestRef<{ featureId?: unknown, sourceText?: unknown }[]>} [editableLabels]
- * @property {Partial<Record<'d_color' | 't_color' | 'whitelist' | 'qualifier_priority', ResourceEntry | null>>} [canonicalPublicationFiles]
+ * @typedef {RequestLabelState & {
+ *   paletteDefinitions: RequestRef<Record<string, Record<string, string>>>,
+ *   canonicalPublicationFiles?: Partial<Record<'d_color' | 't_color' | 'whitelist' | 'qualifier_priority', ResourceEntry | null>>
+ * }} RequestTableState
  */
 /**
  * What the request reads of `state` (state.js), or of the state a Gallery
@@ -332,8 +340,12 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
  * }} RequestState
  */
 /**
- * The `diagramOptions` bag a request builds up before it is the typed options.
- * @typedef {Record<string, any> & Pick<CanonicalRenderRequest['diagramOptions'], 'featurePlacements' | 'featureOverrides'>} RequestDiagramOptions
+ * The settings of a committed generated protein comparison, as
+ * `generatedProteinSettings` reads them for its baseline.
+ * @typedef {{
+ *   alignOrthogroupFeature?: unknown, losatpBin?: string, ncbiBlastpBin?: string | null,
+ *   collinearityParams?: { kind?: string, parameters?: { mergeOrientation?: string } }
+ * } & Record<string, unknown>} ProteinSettingsBaseline
  */
 /**
  * @typedef {object} ResourceBuilder
@@ -1693,7 +1705,7 @@ const ALL_GENERATED_TABLES = Object.freeze({
 // displayed Result's labels and the recorded label sources, as identity row
 // text, and the `* * label` rows of the rest (CW-02: built once per request).
 /**
- * @param {{ editableLabels?: RequestRef<{ featureId?: unknown, sourceText?: unknown }[]> }} state
+ * @param {RequestLabelState} state
  * @param {RequestDrawing} drawing
  */
 export const requestLabelProjection = (state, drawing) => {
@@ -1711,7 +1723,6 @@ export const requestLabelProjection = (state, drawing) => {
  * @param {RequestTableState} state
  * @param {RequestDrawing} drawing
  * @param {ResourceBuilder} resources
- * @param {RequestDiagramOptions} diagramOptions
  * @param {Readonly<Record<string, boolean>>} [tables]
  * @param {ReturnType<typeof requestLabelProjection>} [labelProjection]
  */
@@ -1738,7 +1749,6 @@ const addGeneratedTableResources = (
  * @param {RequestTableState} state
  * @param {RequestDrawing} drawing
  * @param {ResourceBuilder} resources
- * @param {RequestDiagramOptions} diagramOptions
  */
 const addColorTableResources = (state, drawing, resources, diagramOptions) => {
   const paletteName = String(drawing.selectedPalette.value || 'default');
@@ -1777,7 +1787,6 @@ const addColorTableResources = (state, drawing, resources, diagramOptions) => {
  * @param {RequestTableState} state
  * @param {RequestDrawing} drawing
  * @param {ResourceBuilder} resources
- * @param {RequestDiagramOptions} diagramOptions
  */
 const addLabelWhitelistResource = (state, drawing, resources, diagramOptions) => {
   const publicationFiles = state.canonicalPublicationFiles || {};
@@ -1803,7 +1812,6 @@ const addLabelWhitelistResource = (state, drawing, resources, diagramOptions) =>
  * @param {RequestTableState} state
  * @param {RequestDrawing} drawing
  * @param {ResourceBuilder} resources
- * @param {RequestDiagramOptions} diagramOptions
  */
 const addQualifierPriorityResource = (state, drawing, resources, diagramOptions) => {
   const publicationFiles = state.canonicalPublicationFiles || {};
@@ -1826,7 +1834,7 @@ const addQualifierPriorityResource = (state, drawing, resources, diagramOptions)
 // The label table carries rules only: a saved table, else the bulk label edits
 // no displayed label resolves. Per-feature label edits are `featureOverrides`.
 /**
- * @param {{ editableLabels?: RequestRef<{ featureId?: unknown, sourceText?: unknown }[]> }} state
+ * @param {RequestLabelState} state
  * @param {RequestDrawing} drawing
  * @param {{ rows: string[] }} [labelProjection]
  */
@@ -1839,7 +1847,6 @@ export const requestLabelTableTsv = (state, drawing, labelProjection = requestLa
  * @param {RequestTableState} state
  * @param {RequestDrawing} drawing
  * @param {ResourceBuilder} resources
- * @param {RequestDiagramOptions} diagramOptions
  * @param {{ rows: string[] }} labelProjection
  */
 const addLabelOverrideResource = (state, drawing, resources, diagramOptions, labelProjection) => {
@@ -1870,7 +1877,7 @@ const logicalDepthTrackCountForRequest = ({ state, filesData, recordCount }) => 
 
 /**
  * @param {{ state: RequestState, drawing: RequestDrawing, filesData: RequestFilesData,
- *   resources: ResourceBuilder, diagramOptions: RequestDiagramOptions, recordCount: number }} input
+ *   resources: ResourceBuilder, diagramOptions: Record<string, any>, recordCount: number }} input
  */
 const buildDepthResources = ({ state, drawing, filesData, resources, diagramOptions, recordCount }) => {
   if (
@@ -2188,10 +2195,7 @@ const buildTrackPlan = ({
 /**
  * @param {RequestDrawing} drawing
  * @param {{ threadsPerJob?: unknown } | undefined} losatExecution
- * @param {{
- *   alignOrthogroupFeature?: unknown, losatpBin?: string, ncbiBlastpBin?: string | null,
- *   collinearityParams?: { kind?: string, parameters?: { mergeOrientation?: string } }
- * } & Record<string, unknown>} [baseline]
+ * @param {ProteinSettingsBaseline} [baseline]
  */
 const generatedProteinSettings = (drawing, losatExecution, baseline = {}) => {
   const { alignOrthogroupFeature: _legacyAlignment, ...currentBaseline } = baseline;
@@ -2328,7 +2332,12 @@ const comparisonEndpointKey = (queryRecordIndex, subjectRecordIndex) => (
   `${Number(queryRecordIndex)}->${Number(subjectRecordIndex)}`
 );
 
-/** @param {{ comparison: Record<string, any>, edge: LinearComparisonResolvedEdge, resources: ResourceBuilder }} input */
+/**
+ * @param {{
+ *   comparison: { kind?: unknown, rows?: unknown, columns?: unknown, text?: unknown },
+ *   edge: LinearComparisonResolvedEdge, resources: ResourceBuilder
+ * }} input
+ */
 const addResolvedComparisonResource = ({
   comparison,
   edge,
@@ -3023,7 +3032,7 @@ const projectCanonicalRenderInput = ({
       );
   const labelProjection = generatedLabelProjection || requestLabelProjection(state, drawing);
   // The option keys are not checked yet; the two keys every request has are.
-  /** @type {RequestDiagramOptions} */
+  /** @type {Record<string, any> & Pick<CanonicalRenderRequest['diagramOptions'], 'featurePlacements' | 'featureOverrides'>} */
   const diagramOptions = {
     featurePlacements: requestFeaturePlacements(drawing.featurePlacementOverrides, state.mode.value, records),
     // Per-feature edits by source identity (design Q4); the rows of other

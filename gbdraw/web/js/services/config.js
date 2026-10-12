@@ -298,7 +298,6 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { CanonicalRenderEnvelope } from './session-request.js' */
 /** @import { CanonicalLinearLayout, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { FeatureCatalog } from './feature-catalog.js' */
-/** @import { SequenceSourceInput } from './match-sequences.js' */
 /** @import { LegacyResultNormalization, SavedResultEdits, SvgResultEntry } from './svg-result-ingestion.js' */
 /** @import { SessionResourceSource } from './session-resources.js' */
 /** @import { LoadedTrackSettings } from './track-legend-rows.js' */
@@ -2461,9 +2460,9 @@ const buildLoadedArtifactSlot = (set, {
       originalSvgStroke: editorState.originalSvgStroke
     },
     legendInventory: editorState.legend.originalOrder,
-    matchSequenceOwner: state.matchSequenceRegistry?.buildSourceOwner?.(/** @type {SequenceSourceInput[]} */ ([
+    matchSequenceOwner: state.matchSequenceRegistry?.buildSourceOwner?.([
       ...(features.sequenceSources || []), ...restoredSequenceSources
-    ])) || null,
+    ]) || null,
     runtimeState: { canonical: {
       committedCanonicalSession: adoptRuntimeCanonicalSession({
         renderRequest: set.renderRequest, resources, webFiles: isPlainObject(webFiles) ? webFiles : {}
@@ -5834,10 +5833,10 @@ const importSessionDocument = async (e, options = {}) => {
       state.collinearGroups.value = currentCatalogFeatureState.collinearGroups;
       synchronizeRestoredFeatureSummaryStatus({ generationId: 'session-load' });
     }
-    state.matchSequenceRegistry?.reset?.(/** @type {SequenceSourceInput[]} */ ([
+    state.matchSequenceRegistry?.reset?.([
       ...catalogSequenceSources,
       ...restoredFileSequenceSources
-    ]));
+    ]);
 
     // Group names are the Linear drawing's (Session 46 `webEdits`).
     applyOrthogroupStateData(

@@ -15,7 +15,6 @@ import {
   FEATURE_CATALOG_SCHEMA,
   LEGACY_FEATURE_CATALOG_SCHEMA
 } from '../contracts/schema.generated.js';
-/** @import { SequenceSourceInput } from './match-sequences.js' */
 /** @import { OrthogroupFeatureIndex } from './orthogroup-feature-metadata.js' */
 /** @import { RenderedFeatureId } from './legend-svg.js' */
 /** @import { RenderedIdentityCollection } from './session-feature-metadata.js' */
@@ -94,7 +93,7 @@ export { FEATURE_CATALOG_SCHEMA };
  * @property {OrthogroupFeatureIndex} featureOrthogroupIndex
  * @property {FeatureCatalogRow[]} annotations
  * @property {FeatureCatalogRow[]} comparisonMatches
- * @property {SequenceSourceInput[]} sequenceSources
+ * @property {FeatureCatalogRow[]} sequenceSources Clones of the catalog rows; admission checks only `sequence`.
  * @property {RenderedIdentityCollection[]} renderedIdentitiesByResult
  * @property {Map<string, FeatureCatalogRow>[]} renderedFeaturesByResult Each Result's rendered features by rendered ID.
  * @property {FeatureCatalogRow[][]} biologicalFeaturesByResult
