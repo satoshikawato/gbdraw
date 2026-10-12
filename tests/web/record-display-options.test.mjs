@@ -12,7 +12,7 @@ import { createDefaultForm, createDefaultAdv } from '../../gbdraw/web/js/service
 import { adoptCurrentSessionResources, createCombinedSessionResourceFileView, createSessionResourceFileView } from '../../gbdraw/web/js/services/session-resource-backing.js';
 import { readFileBytes } from '../../gbdraw/web/js/services/file-content-cache.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
-import { withDrawings } from './helpers/drawing-state.mjs';
+import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 
 const source = {};
 const records = [
@@ -446,6 +446,32 @@ test('alignment intent changes only its target direction and preserves pending d
   assert.equal(effectiveRecordReverseComplement({...rows[0],reverse:false},model.state.recordDisplayDrafts[0]),false);
   model.controls.restoreAlignmentOrientationIntent(checkpoint);
   assert.deepEqual(model.state.recordDisplayDrafts,pending);
+});
+
+// OV-579: each mode has its own drawing, and a draft names no mode. The
+// alignment checkpoint is of the Linear drawing's drafts.
+test('an alignment checkpoint restores the Linear drafts and leaves the Circular drawing as it is', () => {
+  const model = compositeControls({ linear: true });
+  const circular = { form: createDefaultForm(), adv: createDefaultAdv('circular'), featurePlacementOverrides: {},
+    // Not yet on its record's row (OV-278): only an edit of the Circular drawing moves it.
+    recordDisplayDrafts: [{ sourceUid: 'circular', selector: '#1', recordId: 'second', topologyOverride: null,
+      startCoordinate: 7, reverseComplementOverride: null, anchorIntent: null }] };
+  withModeDrawings(model.state, { circular, linear: model.state });
+  const circularBefore = structuredClone(circular.recordDisplayDrafts);
+  const rows = model.controls.allRows.value.filter((row) => row.scope === 'linear');
+  model.controls.setStart(rows[0], 25);
+  // A row override, as a card that drew several records wrote it.
+  model.state.recordDisplayDrafts[0].reverseComplementOverride = true;
+  const pending = structuredClone(model.state.recordDisplayDrafts);
+  const directions = [{ recordKey: 'record-1', reverseComplement: true }];
+  const checkpoint = model.controls.captureAlignmentOrientationIntent(directions);
+  model.controls.commitAlignmentOrientations(directions);
+  assert.equal(model.state.linearSeqs[0].region_reverse, true);
+  assert.equal(model.state.recordDisplayDrafts[0].reverseComplementOverride, null);
+  model.controls.restoreAlignmentOrientationIntent(checkpoint);
+  assert.equal(model.state.linearSeqs[0].region_reverse, false);
+  assert.deepEqual({ linear: model.state.recordDisplayDrafts, circular: circular.recordDisplayDrafts },
+    { linear: pending, circular: circularBefore });
 });
 
 
