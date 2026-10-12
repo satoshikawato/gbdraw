@@ -229,6 +229,32 @@ test('replacing a cropped Linear file with a multi-record file expands it and cl
   await generateAndWaitForResult(page);
 });
 
+// Record Layout (like Generate) reads the records of every File. Asked for
+// before the records of a replacing file are read, it must not turn the
+// replaced file's record name into the new File's name.
+test('a replaced Linear file keeps no record name when Record Layout starts before its records are read', async ({ page }) => {
+  test.setTimeout(120_000);
+  await openLinear(page);
+  await uploadLinear(page, 0, 'first.gb', FIRST_RECORD_TEXT);
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.linearSeqs[0].definition = 'Genome A custom';
+    app.setLinearRecordLayoutEnabled(false);
+  });
+  // The replacement and the request run in one task, so the request is made
+  // before the record discovery of the new file returns.
+  await evaluateWithRetainedPromise(page, async (text) => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearSeqPrimaryFile(0, 'gb', new File([text], 'two.gb', { type: 'text/plain' }));
+    await app.setLinearRecordLayoutEnabled(true);
+  }, BATCH_TEXT);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length), { timeout: 30_000 }).toBe(2);
+  const cleared = { definition: '', file: '' };
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((sequence) => (
+    { definition: sequence.definition || '', file: sequence.file_definition || '' }
+  )))).toEqual([cleared, cleared]);
+});
+
 // The shared record-discovery vector (G-D) supplies the loader's per-record
 // inferred definitions for one file whose records name different organisms.
 const TWO_ORGANISMS = JSON.parse(readFileSync('tests/fixtures/record_metadata_inference_cases.json', 'utf8'))

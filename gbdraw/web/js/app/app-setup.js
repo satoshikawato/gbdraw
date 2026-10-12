@@ -1315,8 +1315,12 @@ export const createAppSetup = () => {
   };
   const materializeAutomaticLinearRecords = async () => {
     if (mode.value !== 'linear') return;
+    // A row that already waits for its discovery keeps what its writer said
+    // about its names (a replacing file does not own the row's record name).
     linearSeqs.forEach((seq) => {
-      if (!seq.region_record_id) pendingLinearRecordExpansions.set(seq.uid, true);
+      if (!seq.region_record_id && !pendingLinearRecordExpansions.has(seq.uid)) {
+        pendingLinearRecordExpansions.set(seq.uid, true);
+      }
     });
     await linearRecordSelector.refresh();
   };
