@@ -16,6 +16,10 @@ export const CircularMeasureInput = {
     disabled: { type: Boolean, default: false }
   },
   emits: ['update:modelValue'],
+  /**
+   * @param {{ modelValue: unknown, slotId: string, field: string, controlId: string, autoText: string, disabled: boolean }} props
+   * @param {{ emit: (event: 'update:modelValue', value: unknown) => void }} context
+   */
   setup(props, { emit }) {
     const { computed, ref } = window.Vue;
     // Only Auto has a local next-input preference. Manual units come from the slot.
@@ -24,7 +28,7 @@ export const CircularMeasureInput = {
     const view = computed(() => readCircularMeasure(props.modelValue, label.value));
     const selectedUnit = computed({
       get: () => view.value.isAuto ? autoUnit.value : view.value.selectedUnit,
-      set: (unit) => {
+      set: (/** @type {string} */ unit) => {
         if (view.value.isAuto) {
           autoUnit.value = unit;
           return;
@@ -35,7 +39,7 @@ export const CircularMeasureInput = {
     });
     const valueText = computed({
       get: () => view.value.valueText,
-      set: (text) => emit('update:modelValue', writeCircularMeasureValue(text, selectedUnit.value))
+      set: (/** @type {string} */ text) => emit('update:modelValue', writeCircularMeasureValue(text, selectedUnit.value))
     });
     const accessibleName = computed(() => `Circular track slot ${props.slotId} ${label.value}`);
     const describedBy = computed(() => [

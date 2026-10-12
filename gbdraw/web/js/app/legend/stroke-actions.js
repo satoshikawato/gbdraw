@@ -31,6 +31,7 @@ export const createLegendStrokeActions = ({ state }) => {
   /** @param {string} caption */
   const drawnSwatchStroke = (caption) => drawnLegendRowStroke(svgContainer.value?.querySelector?.('svg'), caption);
 
+  /** @param {number} idx */
   const getLegendEntryStrokeColor = (idx) => {
     const drawing = state.activeDrawing();
     const entry = drawing.legendEntries.value[idx];
@@ -40,6 +41,7 @@ export const createLegendStrokeActions = ({ state }) => {
     return '';
   };
 
+  /** @param {number} idx */
   const getLegendEntryStrokeWidth = (idx) => {
     const drawing = state.activeDrawing();
     const entry = drawing.legendEntries.value[idx];

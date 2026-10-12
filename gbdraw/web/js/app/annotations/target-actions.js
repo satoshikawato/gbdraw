@@ -4,15 +4,18 @@ import { featureIdentityKeyOf } from '../../services/feature-placement.js';
 
 /**
  * @import { AnnotationRecordSelector } from '../../services/annotation-state.js'
+ * @typedef {string | { key?: unknown, value?: unknown }} FeatureSelectorInput One `key=value` selector of a feature target.
+ * @typedef {Record<string, unknown>} SelectedFeatureRow A selected feature, by its snake_case or camelCase identity fields.
  */
 
+/** @param {unknown} value */
 const cleanNullable = (value) => {
   const text = String(value ?? '').trim();
   return text || null;
 };
 
 /**
- * @param {any} value A table cell, a record ID, or `#<n>`.
+ * @param {unknown} value A table cell, a record ID, or `#<n>`.
  * @returns {{ selector: AnnotationRecordSelector | null, error: string }}
  */
 export const parseAnnotationRecordSelectorValue = (value) => {
@@ -40,14 +43,15 @@ export const parseAnnotationRecordSelectorValue = (value) => {
   return { selector: { kind: 'recordIndex', index }, error: '' };
 };
 
+/** @param {unknown} value */
 export const isSafeRecordIdSelector = (value) => {
   const parsed = parseAnnotationRecordSelectorValue(value);
   return !parsed.error && parsed.selector?.kind === 'recordId';
 };
 
 /**
- * @param {any} recordId
- * @param {any} recordIndex
+ * @param {unknown} recordId
+ * @param {unknown} recordIndex
  * @returns {AnnotationRecordSelector | null}
  */
 export const annotationRecordSelector = (recordId, recordIndex) => {
@@ -59,6 +63,7 @@ export const annotationRecordSelector = (recordId, recordIndex) => {
   return null;
 };
 
+/** @param {AnnotationRecordSelector | null | undefined} selector */
 export const annotationRecordSelectorValue = (selector) => {
   if (selector?.kind === 'recordId') return cleanNullable(selector.value) || '';
   if (selector?.kind === 'recordIndex') {
@@ -68,6 +73,7 @@ export const annotationRecordSelectorValue = (selector) => {
   return '';
 };
 
+/** @param {unknown} value */
 export const annotationRecordSelectorFromValue = (value) => {
   const parsed = parseAnnotationRecordSelectorValue(value);
   if (parsed.error) throw new Error(parsed.error);
@@ -75,7 +81,7 @@ export const annotationRecordSelectorFromValue = (value) => {
 };
 
 /**
- * @param {{ start: any, end: any, recordId?: string | null, recordIndex?: number | null, coordinateSpace?: string }} params
+ * @param {{ start: unknown, end: unknown, recordId?: string | null, recordIndex?: number | null, coordinateSpace?: string }} params
  */
 export const coordinateTarget = ({ start, end, recordId = null, recordIndex = null, coordinateSpace = 'source' }) => ({
   kind: 'coordinateSpan',
@@ -87,6 +93,7 @@ export const coordinateTarget = ({ start, end, recordId = null, recordIndex = nu
   outOfBounds: 'clip'
 });
 
+/** @param {FeatureSelectorInput} value */
 const parseFeatureSelector = (value) => {
   if (value && typeof value === 'object') {
     return { key: value.key == null ? null : String(value.key), value: String(value.value || '') };
@@ -99,12 +106,13 @@ const parseFeatureSelector = (value) => {
 };
 
 /**
- * @param {{ selector?: any, selectors?: any[] | null, recordId?: string | null, recordIndex?: number | null, extent?: string, circularPath?: string }} params
+ * The `.filter` cast reads `.value` of a string selector as undefined, which keeps the string.
+ * @param {{ selector?: unknown, selectors?: FeatureSelectorInput[] | null, recordId?: string | null, recordIndex?: number | null, extent?: string, circularPath?: string }} params
  */
 export const featureTarget = ({ selector, selectors = null, recordId = null, recordIndex = null, extent = 'outer_bounds', circularPath = 'shortest' }) => ({
   kind: 'featureSpan',
   record: annotationRecordSelector(recordId, recordIndex),
-  selectors: (Array.isArray(selectors) ? selectors : String(selector || '').split(';')).filter((value) => String(value?.value ?? value).trim()).map(parseFeatureSelector),
+  selectors: (Array.isArray(selectors) ? selectors : String(selector || '').split(';')).filter((value) => String(/** @type {{ value?: unknown }} */ (value)?.value ?? value).trim()).map(parseFeatureSelector),
   envelope: extent === 'segments' ? 'segments' : 'outer_bounds',
   circularPath: ['forward', 'reverse'].includes(circularPath) ? circularPath : 'shortest'
 });
@@ -114,7 +122,9 @@ export const featureTarget = ({ selector, selectors = null, recordId = null, rec
 // Q4, OV-03); the target is of the drawing of the Result's mode (R2). Null when
 // a selected feature has none: a Result without a feature catalog (a Session
 // before 40 until Generate).
+/** @param {unknown} features Selected feature rows; anything but an array selects none. */
 export const featureTargetsFromSelection = (features) => {
+  /** @type {SelectedFeatureRow[]} */
   const selected = Array.isArray(features) ? features : [];
   if (!selected.every((feature) => featureIdentityKeyOf(feature))) return null;
   return selected.map((feature) => ({

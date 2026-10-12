@@ -71,7 +71,7 @@ export {
  * The preview owner's pan and zoom interaction, which pauses feature hover.
  * @typedef {object} PreviewTransformInteractionPort
  * @property {() => boolean} [isActive]
- * @property {(listener: (change: { active: boolean, kind: string, event: Event, reconcile: boolean }) => void) => (() => void) | void} [subscribe]
+ * @property {(listener: (change: { active: boolean, kind: string, event: Event | null, reconcile: boolean }) => void) => (() => void) | void} [subscribe]
  */
 
 /**
@@ -1589,7 +1589,8 @@ export const createFeatureSvgActions = ({
     reconcile
   }) => {
     if (active) {
-      delegatedFeatureHandlers?.beginPreviewTransformInteraction?.(event, kind);
+      // A start (`active`) carries the event that began it; only the end carries null.
+      delegatedFeatureHandlers?.beginPreviewTransformInteraction?.(/** @type {Event} */ (event), kind);
       return;
     }
     delegatedFeatureHandlers?.endPreviewTransformInteraction?.({ reconcile });
