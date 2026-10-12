@@ -302,6 +302,7 @@ class _Par:
         self.arcslope = ctx.opt("arcslope", 1.9)         # Q: the arc radius of two neighbours differs by at most this many px
         self.qgap = ctx.opt("qgap", 20.0)                 # Q: boxes at most this many px apart are one run (labels with room stay on their own ray)
         self.qnq = ctx.opt("qnq", 0.34)                  # Q: a run is built in arc coordinates when every ray is within acos(qnq) degrees of the horizontal
+        self.qrhomax = ctx.opt("qrhomax", 120.0)         # Q2: a long run's arc may move out this many px
         self.maxturn = ctx.opt("maxturn", 40.0)          # Q: a bent leader turns at most this many degrees
         self.rhomax = ctx.opt("rhomax", 40.0)            # Q: the arc of a run moves out at most this many px from its smallest radius
         if self.port:
@@ -786,6 +787,7 @@ class _Eng:
     def __init__(self, ctx: Ctx, geo: _Geo, par: _Par):
         self.ctx, self.geo, self.par = ctx, geo, par
         self.cache: dict = {}
+        self.qcache: dict = {}
         self.stats = {"pushed": 0, "push_max": 0.0, "forced": 0}
 
     def lab(self, it: Item, shore: str, sx: int) -> _Lab:
@@ -1603,7 +1605,7 @@ class _Eng:
         return None
 
     # ---- prototype Q: a side cluster in arc coordinates
-    def arc_geom(self, L: _Lab, rho, phi):
+    def arc_geom(self, L: _Lab, rho, phi, pole: bool = False, lv: int = 0):
         """The seat of label L whose leader ends on the circle of radius rho at angle phi (radians, + towards +y) from the label's own ray.
         The last piece S -> end points at a contact point the arrival rule allows (middle of the short side within 45 degrees, the facing
         vertex 45 to 70, a long-side point beyond).  (box q0, box centre y, end q, end y, contact point index or -1)."""
@@ -1617,7 +1619,11 @@ class _Eng:
         dy = np.where(seen, vy / np.maximum(ln, 1e-9), L.ny)
         cq, cy = aq + par.lgap * dq, ay + par.lgap * dy
         deg = np.degrees(np.arctan2(np.abs(dy), np.abs(dq)))
-        j = np.where(dq <= 0.05, -1, np.where(deg <= 45.0, 4, np.where(deg <= 70.0, np.where(dy > 0, 0, 2), np.where(dy > 0, 6, 9))))
+        if pole:                                           # Q2: beyond 70 degrees a long-side point (lv: 0, 1, 2 = the 0.25, 0.5, 0.75 point) needs no direction along the stack
+            jl = np.where(dy > 0, 6, 9) + lv
+            j = np.where(deg > 70.0, jl, np.where(dq <= 0.05, -1, np.where(deg <= 45.0, 4, np.where(dy > 0, 0, 2))))
+        else:
+            j = np.where(dq <= 0.05, -1, np.where(deg <= 45.0, 4, np.where(deg <= 70.0, np.where(dy > 0, 0, 2), np.where(dy > 0, 6, 9))))
         fq, fy = PORTS_ARR[np.maximum(j, 0), 0], PORTS_ARR[np.maximum(j, 0), 1]
         return cq - fq * L.w, cy - (fy - 0.5) * L.h, aq, ay, j
 
@@ -1712,6 +1718,135 @@ class _Eng:
         self.q_why = "iter"
         return None
 
+    @staticmethod
+    def _lv(L: _Lab) -> int:
+        """Q2: the long-side point of a steep leader: the box overhangs the ring axis least (the 0.25 point right of the axis, the 0.75 point left of it)."""
+        return 0 if L.Sq >= 0 else 2
+
+    def arc_tables(self, L: _Lab, rho: float, lv: int):
+        """Q2: what label L can reach from radius rho: the arc track (angle grid: box centre rows, valid = arrival point, static, turn <= maxturn)
+        and the ray track (outward along its own ray: rows, valid = static).  Cached."""
+        key = (id(L), round(float(rho), 2), lv)
+        if key not in self.qcache:
+            par = self.par
+            phis = np.linspace(-0.35, 0.35, 701)
+            q0, yc, aq, ay, j = self.arc_geom(L, rho, phis, True, self._lv(L))
+            vq, vy = aq - L.Sq, ay - L.Sy
+            ln = np.hypot(vq, vy)
+            turn = np.where(ln < par.nostraight, 0.0, np.degrees(np.arccos(np.clip((vq * L.nq + vy * L.ny) / np.maximum(ln, 1e-9), -1.0, 1.0))))
+            ok = self.arc_static(L, q0, yc, aq, ay, j) & (turn <= par.maxturn)
+            ts = np.arange(0.0, 300.0, 0.5)
+            q0r, ycr, aqr, ayr, jr = self.arc_geom(L, rho + ts, np.zeros_like(ts), True, self._lv(L))
+            self.qcache[key] = (phis, yc, ok, ts, ycr, self.arc_static(L, q0r, ycr, aqr, ayr, jr))
+        return self.qcache[key]
+
+    def arc_chain2(self, chain: list, labs: list, recs: list, bg: _Placed, pend: _Pending):
+        """Prototype Q round 2: as arc_chain for any run of a column (pole labels too).  The row (box centre y) is the stack variable.  From its natural
+        place a label changes its row on the arc track (bent leader, turn <= maxturn) or, when its ray is steeper than 45 degrees and the row
+        moves toward the pole, on the ray track (outward along its own ray, straight).  One bounded L1 fit over the run (pool adjacent violators,
+        clipped by the monotone envelope of the per-label reach); a label whose reach is too short or that fails a test raises its radius (smooth,
+        up to `qrhomax` px).  Returns {k: (box, points)} or None (self.q_why)."""
+        par = self.par
+        ks = sorted(chain, key=lambda k: recs[k][1][1] + recs[k][1][3])
+        Ls = [labs[k] for k in ks]
+        n = len(ks)
+        self.q_why = "short"
+        if n < 2 or any(L.shore != "out" for L in Ls):
+            return None
+        self.q_why = "nat"
+        steep = [abs(L.ny) > 0.7071 for L in Ls]
+        pw = [-1.0 if L.Sy < 0 else 1.0 for L in Ls]
+        rs = [math.hypot(*L.S) for L in Ls]
+        grid = np.arange(0.0, 80.5, 0.5)
+        sep = np.array([0.5 * (Ls[i].h + Ls[i + 1].h) + par.gap + 1e-3 for i in range(n - 1)])
+        cum = np.concatenate([[0.0], np.cumsum(sep)])
+        mid = 350
+        lvs = (0,)
+        why = "iter"
+        for lv in lvs:
+            r0 = []
+            for L, r in zip(Ls, rs):
+                rho = r + grid
+                q0, yc, aq, ay, j = self.arc_geom(L, rho, np.zeros_like(rho), True, self._lv(L))
+                ok = self.arc_static(L, q0, yc, aq, ay, j)
+                r0.append(float(rho[int(np.argmax(ok))]) if ok.any() else r + 10.0)   # a straight leader at its natural place may be refused (a wide label on a steep ray): the arc track decides
+            if r0 is None:
+                continue
+            r0 = np.array(r0)
+            r = r0.copy()
+            self.q_dbg = {}
+            done = False
+            for _it in range(80):
+                env = _lipschitz(r, par.arcslope)
+                tabs = [self.arc_tables(L, env[i], self._lv(L)) for i, L in enumerate(Ls)]
+                nat = np.array([t[1][mid] for t in tabs])
+                lo, hi = np.empty(n), np.empty(n)
+                bad = set()
+                for i, (phis, yc, ok, ts, ycr, okr) in enumerate(tabs):
+                    if not ok.any() and not okr.any():
+                        bad.add(i)
+                        lo[i], hi[i] = nat[i], nat[i]
+                        continue
+                    lo[i], hi[i] = (yc[ok].min(), yc[ok].max()) if ok.any() else (nat[i], nat[i])
+                    if steep[i] and okr.any():                                # toward the pole the ray track reaches as far as it is valid
+                        if pw[i] < 0:
+                            lo[i] = ycr[okr].min()
+                        else:
+                            hi[i] = ycr[okr].max()
+                    lo[i], hi[i] = min(lo[i], nat[i]), max(hi[i], nat[i])
+                lo_e = np.maximum.accumulate(lo - cum)
+                hi_e = np.minimum.accumulate((hi - cum)[::-1])[::-1]
+                if (lo_e > hi_e + 1e-9).any():                      # the reach of two labels does not meet the rows between them
+                    for k in np.nonzero(lo_e > hi_e + 1e-9)[0]:
+                        bad.add(int(np.argmax((lo - cum)[:k + 1])))
+                        bad.add(int(k + np.argmin((hi - cum)[k:])))
+                    z = np.clip(_pav_l1(nat - cum), np.minimum(lo_e, hi_e), np.maximum(lo_e, hi_e))
+                else:
+                    z = np.clip(_pav_l1(nat - cum), lo_e, hi_e)
+                yc_t = z + cum
+                new = {}
+                pl = bg.copy()
+                for i, L in enumerate(Ls):
+                    phis, yc, ok, ts, ycr, okr = tabs[i]
+                    on_ray = steep[i] and okr.any() and (yc_t[i] - nat[i]) * pw[i] > 1e-6
+                    if on_ray:
+                        o = np.argsort(ycr[okr])
+                        t = float(np.interp(yc_t[i], ycr[okr][o], ts[okr][o]))
+                        seat = tuple(float(v[0]) for v in map(np.atleast_1d, self.arc_geom(L, env[i] + t, 0.0, True, self._lv(L))))
+                    else:
+                        phi = float(np.interp(yc_t[i], np.maximum.accumulate(yc[ok]), phis[ok])) if ok.any() else 0.0
+                        seat = tuple(float(v[0]) for v in map(np.atleast_1d, self.arc_geom(L, env[i], phi, True, self._lv(L))))
+                    q0, ycc, aq, ay, j = seat
+                    x0 = q0 if L.sx > 0 else -(q0 + L.w)
+                    box = (x0, ycc - 0.5 * L.h, x0 + L.w, ycc + 0.5 * L.h)
+                    att = (L.sx * aq, ay)
+                    new[ks[i]] = (box, [L.it.anchor, L.S, att])
+                    pl.add(box, L.S, att, L)
+                    if j < 0 or not self.arc_static(L, q0, ycc, aq, ay, j)[0]:
+                        bad.add(i)
+                        self.q_dbg[i] = "[static]"
+                    elif not on_ray and abs(_sturn_arr(L.it.anchor, L.S, np.array([att]))[0]) > par.maxturn:
+                        bad.add(i)
+                        self.q_dbg[i] = "[turn]"
+                base = len(bg.labs())
+                for i, L in enumerate(Ls):
+                    if i in bad:
+                        continue
+                    box, pts = new[ks[i]]
+                    bx, at = np.array([box], dtype=float), np.array([pts[-1]], dtype=float)
+                    if not self.legal(L, bx, at, np.array([L.S], dtype=float), _View(pl, base + i), pend, min(L.Sy, bx[0, 1]) - par.lpad - 1.0, max(L.Sy, bx[0, 3]) + par.lpad + 1.0)[0]:
+                        bad.add(i)
+                        self.q_dbg[i] = "[legal]"
+                if not bad:
+                    return new
+                for i in bad:
+                    r[i] = max(r[i], env[i]) + 3.0
+                if (r - r0).max() > par.qrhomax:
+                    why = "rho:" + ",".join(f"{Ls[i].it.text}{self.q_dbg.get(i, '[reach]')}" for i in sorted(bad))
+                    break
+        self.q_why = why
+        return None
+
     def cluster(self, recs: list, shore: str) -> tuple[list, dict]:
         """R3 to R6 as one construction.  A chain of one stack (boxes at most gap + 3 px apart; a lone label is a chain of one) is seated again
         as a whole: every label takes one of its seats (chain_nodes) so that the sum of the leader costs is least and the leaders read
@@ -1753,6 +1888,8 @@ class _Eng:
                         if j not in chain:
                             bg.add(r[1], labs[j].S, r[2][-1], labs[j])
                     new = self.arc_chain(chain, labs, recs, bg, pend)
+                    if new is None and par.arcfirst == 2:           # Q2: the runs round 1 could not build (pole labels, long runs)
+                        new = self.arc_chain2(chain, labs, recs, bg, pend)
                     if new is None:
                         info["q_kept"] = info.get("q_kept", 0) + 1
                         info.setdefault("q_kept_names", []).append([self.q_why] + [labs[c].it.text for c in chain])
