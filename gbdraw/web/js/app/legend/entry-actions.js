@@ -595,7 +595,8 @@ export const createLegendEntryActions = ({
     let entries = [...(drawing.legendEntries.value || [])];
     for (const entry of returning) {
       const caption = legendCaption(entry);
-      const color = String(drawing.legendColorOverrides[caption] || legendRowRules(legendEntryKey(entry), context)[0]?.color || entry.color);
+      const recorded = Object.hasOwn(drawing.legendColorOverrides, caption) ? drawing.legendColorOverrides[caption] : undefined;
+      const color = String(recorded || legendRowRules(legendEntryKey(entry), context)[0]?.color || entry.color);
       entries = withEntryAtDefaultPlace(entries, { ...entry, color }, inventory);
     }
     drawing.deletedLegendEntries.value = deleted.filter((/** @type {unknown} */ _, /** @type {number} */ index) => !picked.has(index));

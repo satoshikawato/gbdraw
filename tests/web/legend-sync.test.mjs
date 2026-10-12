@@ -866,3 +866,39 @@ const mockLegendEntry = (caption, color, x) => {
   assert.equal(shownRows(), drawnRows, 'a rule commit leaves the Result to the executor');
   assert.equal(commits, 0);
 }
+
+// OV-531: Restore reads the color override by the row's caption, which is free
+// text. A caption that names an inherited member of a plain object
+// (`constructor`) has no override; an own entry still wins.
+{
+  const ref = (value) => ({ value });
+  const svg = new MockElement('svg');
+  const state = {
+    results: ref([{ name: 'diagram.svg', content: 'unchanged' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: () => svg }),
+    adv: {},
+    legendEntries: ref([]),
+    deletedLegendEntries: ref([
+      { caption: 'constructor', originalCaption: 'constructor', color: '#112233', featureIds: [] },
+      { caption: 'Alpha', originalCaption: 'Alpha', color: '#445566', featureIds: [] },
+      { caption: 'Zed', originalCaption: 'Zed', color: '#778899', featureIds: [] }
+    ]),
+    dormantLegendEntries: ref([]),
+    originalLegendOrder: ref([]),
+    originalLegendColors: ref({}),
+    legendStrokeOverrides: {},
+    legendColorOverrides: { Alpha: '#aabbcc' },
+    manualSpecificRules: [],
+    skipCaptureBaseConfig: ref(false)
+  };
+  const actions = createLegendEntryActions({
+    state: withDrawings(state),
+    commitActiveResultEdit: () => true,
+    readShownLegendColor: (entry) => entry?.color
+  });
+  await actions.restoreDeletedLegendEntries();
+  const colors = Object.fromEntries(state.legendEntries.value.map((entry) => [entry.caption, entry.color]));
+  assert.deepEqual(colors, { constructor: '#112233', Alpha: '#aabbcc', Zed: '#778899' },
+    'a caption named like an inherited member keeps its recorded color; an own override and an unknown caption read as before');
+}
