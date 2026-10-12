@@ -638,13 +638,9 @@ export const normalizeCaughtError = (value, options) => (
 // A failure whose own recovery changes no input (B11, R6): the runtime failed,
 // not the request, so the same request can succeed on Retry.
 const PLAIN_RETRY_ACTIONS = new Set(['retry', 'reload', 'save-session']);
-/**
- * @param {UserFacingError | null} error The model. A null one (a falsy caught value that skipped
- *   `normalizeCaughtError`, as in `extractSessionSourceFeatures`) throws here.
- */
+/** @param {UserFacingError} error */
 export const retryCanSucceed = (error) =>
-  /** @type {UserFacingError} */ (error).actions.includes('retry')
-  && /** @type {UserFacingError} */ (error).actions.every((action) => PLAIN_RETRY_ACTIONS.has(action));
+  error.actions.includes('retry') && error.actions.every((action) => PLAIN_RETRY_ACTIONS.has(action));
 
 // A live edit rerenders the committed Session with the current editor tables, so
 // repeating the edit sends the same request. Retry is offered only when it can
